@@ -8,12 +8,17 @@ import { codeRotateSeconds, sessionMinutes, type NetworkCheck } from '../config'
 import type { Env } from '../env';
 import { logError } from '../log';
 import { recordMetric, zagrebDayHour } from '../metrics';
-import { areaName, isAreaSlug, isVenueType } from '../pairing/areas';
+import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../shared/city/frame';
+import { placeFromStop, type ScreenPlace } from '../../shared/city/place';
+import { districtOf } from '../feed/geo/districts';
+import { areaName, CITY_AREA, isAreaSlug, isVenueType, type AreaSlug } from '../pairing/areas';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
+import { canonicalPlace, enrichPlace, isTramRoute, parseFrame, parsePlaceInput, resolvePlace, storedPlaceOf } from '../pairing/place';
 import { screenStop, withDistrict } from '../pairing/stops';
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256, randomBytes, randomId, signDataToken } from '../pairing/tokens';
 import { parsePresentationCommand, type PresentationCommand, type PresentationResult, type PresentationState, type PresentationTarget } from '../presentation';
 import {
+  BEACON_CAPABILITIES,
   CODES_PER_BATCH,
   CODE_GRACE_MS,
   KEEPALIVE_REQUEST,
@@ -26,6 +31,7 @@ import {
   type ScanOk,
   type VenueType,
   type ScreenMetadata,
+  type ScreenSetError,
   type ScreenStop,
 } from '../protocol';
 import { indexStub } from './index-do';
@@ -55,6 +61,14 @@ const SECRET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16,64}$/;
 // SCREEN_SET_MIN_MS lives in protocol.ts (the settings panel's send queue reads it
 // too); re-exported here for the callers that import it from the DO.
 export { SCREEN_SET_MIN_MS };
+/**
+ * How much earlier than SCREEN_SET_MIN_MS after the last accepted frame the DO still takes
+ * the next one. The panel spaces its sends by SCREEN_SET_MIN_MS on its own clock; the DO
+ * measures on arrival, so a first frame that was delayed in transit (or woke a hibernated
+ * object) would otherwise make a correctly spaced second frame look early and be refused
+ * for nothing. Half a second keeps the window a real limit.
+ */
+export const SCREEN_SET_ARRIVAL_SLACK_MS = 500;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -76,13 +90,33 @@ export interface BeaconCreateInput {
   kind?: 'temporary' | 'venue';
   screenExpiresAt?: number;
   stop?: ScreenStop;
+  /**
+   * The resolved place (worker/pairing/place.ts), null for the whole city. A stop place names
+   * the same stop as stopId. Omitted by callers from before place-v2: the record then has no
+   * 'place' meta and screenMetadata() derives the place from the stop on read.
+   */
+  place?: ScreenPlace | null;
+  /** Kadar 4 / 6 / 8; omitted reads back as DEFAULT_FRAME_STOPS. */
+  frame?: FrameStops;
 }
 
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
 
 type ChallengeAttachment = { phase: 'challenge'; nonce: string; issuedAt: number; attempts: number };
-type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1; capabilities?: string[]; screenSetAt?: number };
+type AuthedAttachment = { phase: 'authed'; presentationVersion?: 1; capabilities?: string[] };
 type SocketAttachment = ChallengeAttachment | AuthedAttachment;
+
+/**
+ * A 'screen-set' as parseClient hands it on. Version 2 keeps its place and frame unchecked:
+ * setScreen() validates them so that it can answer the precise word ('bad-place',
+ * 'bad-frame') instead of the generic refusal of an unreadable frame.
+ */
+type ScreenSetFrame =
+  | Extract<BeaconClientMessage, { t: 'screen-set'; version: 1 }>
+  | { t: 'screen-set'; version: 2; place: unknown; frame: unknown };
+type ClientFrame = Exclude<BeaconClientMessage, { t: 'screen-set' }> | ScreenSetFrame;
+/** What a valid 'screen-set' writes: the area, the stop, the place and (version 2 only) the frame. */
+type ScreenTarget = { area: AreaSlug; stop: ScreenStop | null; place: ScreenPlace | null; frame?: FrameStops };
 
 type MetaRow = { key: string; value: string };
 type CodeRow = { code: string; slot_start: number; slot_end: number; used: number };
@@ -103,15 +137,27 @@ function frame(message: BeaconServerMessage): string {
   return JSON.stringify(message);
 }
 
-function parseClient(message: string | ArrayBuffer): BeaconClientMessage | null {
+/** The capabilities an 'auth' frame announced, kept only when whitelisted (BEACON_CAPABILITIES order). */
+function knownCapabilities(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return BEACON_CAPABILITIES.filter((capability) => raw.includes(capability));
+}
+
+function parseClient(message: string | ArrayBuffer): ClientFrame | null {
   if (typeof message !== 'string' || message.length > 512) return null;
   try {
     const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown; stopId?: unknown; area?: unknown; place?: unknown; frame?: unknown };
-    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}),
-      ...(Array.isArray(parsed.capabilities)&&parsed.capabilities.includes('city-v1')?{capabilities:['city-v1']}: {}) };
+    if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) {
+      const capabilities = knownCapabilities(parsed.capabilities);
+      return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}),
+        ...(capabilities.length ? { capabilities } : {}) };
+    }
     if (parsed.t === 'screen-set' && parsed.version === 1 && typeof parsed.area === 'string'
       && (parsed.stopId === null || typeof parsed.stopId === 'string')) {
       return { t: 'screen-set', version: 1, stopId: parsed.stopId as string | null, area: parsed.area };
+    }
+    if (parsed.t === 'screen-set' && parsed.version === 2) {
+      return { t: 'screen-set', version: 2, place: parsed.place, frame: parsed.frame };
     }
     if (parsed.version === 1 && Number.isSafeInteger(parsed.revision) && (parsed.revision as number) >= 0) {
       if (parsed.t === 'presented' && (parsed.status === 'displayed' || parsed.status === 'unavailable')) return { t: 'presented', version: 1, revision: parsed.revision as number, status: parsed.status };
@@ -173,17 +219,46 @@ export class BeaconDO extends DurableObject<Env> {
     return this.meta('revoked') === '1' || (expiry > 0 && this.now() >= expiry);
   }
 
+  /**
+   * What the screen is set to, as every reader gets it: the codes frame, the scan grant, the
+   * room's 'joined' frame. `place`, `placeSet` and `frame` are always present, enriched on read
+   * (worker/pairing/place.ts enrichPlace): a record from before place-v2 derives its place from
+   * the stored stop; a stored null (an empty field, "Cijeli grad") reads as Trg bana Jelačića
+   * with placeSet false; a missing frame reads as DEFAULT_FRAME_STOPS. Nothing is migrated.
+   */
   screenMetadata(): ScreenMetadata {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
     const raw = this.meta('stop');
-    const stop = raw ? JSON.parse(raw) as ScreenStop : null;
+    const stored = raw ? JSON.parse(raw) as ScreenStop : null;
+    const stop = stored ? withDistrict(stored) : null;
     const area = this.meta('area');
+    const { place, placeSet } = enrichPlace(this.storedPlace(), stop);
     return {
       kind: this.meta('kind') === 'temporary' ? 'temporary' : 'venue',
       expiresAt: expiry || null,
-      stop: stop ? withDistrict(stop) : null,
+      stop,
       ...(area ? { area } : {}),
+      place,
+      placeSet,
+      frame: parseFrame(Number(this.meta('frame'))) ?? DEFAULT_FRAME_STOPS,
     };
+  }
+
+  /**
+   * The 'place' meta: '' is a stored null (the field left empty, "Cijeli grad"); an absent
+   * key is undefined (a record from before place-v2), and so is a value that no longer reads
+   * as a place (a stop the table has since lost), which then falls back to the stored stop.
+   * Only the known fields come back.
+   */
+  private storedPlace(): ScreenPlace | null | undefined {
+    const raw = this.meta('place');
+    if (raw === null) return undefined;
+    if (raw === '') return null;
+    try {
+      return storedPlaceOf(JSON.parse(raw)) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private authenticatedSockets(): WebSocket[] {
@@ -337,6 +412,12 @@ export class BeaconDO extends DurableObject<Env> {
       input.operatorLabel.trim().length === 0 ||
       input.operatorLabel.length > OPERATOR_LABEL_MAX ||
       (input.stopId !== null && !STOP_ID_SHAPE.test(input.stopId)) ||
+      // A place must be one the server would store (a stop place exactly as its table makes
+      // it) and name the same stop as stopId; a stored null carries no stop id and no stop.
+      (input.place !== undefined && input.place !== null
+        && (canonicalPlace(input.place) === null || (input.place.stopId ?? null) !== input.stopId)) ||
+      (input.place === null && (input.stopId !== null || input.stop !== undefined)) ||
+      (input.frame !== undefined && parseFrame(input.frame) === null) ||
       typeof input.secret !== 'string' ||
       !SECRET_SHAPE.test(input.secret)
       || (input.kind !== undefined && input.kind !== 'temporary' && input.kind !== 'venue')
@@ -357,6 +438,10 @@ export class BeaconDO extends DurableObject<Env> {
       this.setMeta('kind', input.kind ?? 'venue');
       if (input.screenExpiresAt) this.setMeta('screenExpiresAt', String(input.screenExpiresAt));
       if (input.stop) this.setMeta('stop', JSON.stringify(input.stop));
+      // Written only when the caller knows about places: a record without them is read the
+      // way a record from before place-v2 is (screenMetadata()).
+      if (input.place !== undefined) this.setMeta('place', input.place ? JSON.stringify(canonicalPlace(input.place)) : '');
+      if (input.frame !== undefined) this.setMeta('frame', String(input.frame));
     });
     if (input.screenExpiresAt) await this.ctx.storage.setAlarm(input.screenExpiresAt);
     return { created: true };
@@ -444,8 +529,8 @@ export class BeaconDO extends DurableObject<Env> {
       // bundle from before the wall's button went may still send this frame; it is read and ignored.
       return;
     }
-    if (parsed.t === 'screen-set' && parsed.version === 1) {
-      await this.setScreen(ws, attachment, parsed.stopId, parsed.area);
+    if (parsed.t === 'screen-set') {
+      await this.setScreen(ws, parsed);
       return;
     }
     if (parsed.t === 'more') {
@@ -602,42 +687,90 @@ export class BeaconDO extends DurableObject<Env> {
       await indexStub(this.env).register(minted.map((s) => ({ code: s.code, kind: 'kiosk' as const, ownerId: beaconId, expiresAt: s.slotEnd + CODE_GRACE_MS })));
     }
 
-    ws.send(frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now(), screen: this.screenMetadata() }));
+    ws.send(this.codesFrame());
+  }
+
+  /** The union of live codes and the screen as it stands, as every 'codes' frame carries them. */
+  private codesFrame(): string {
+    return frame({ t: 'codes', batch: this.liveSlots(this.now()), serverNow: this.now(), screen: this.screenMetadata() });
   }
 
   /**
-   * The screen's own settings panel changed what this screen frames: a stop
-   * (null for none) and one area. Both are validated here -- the browser is
-   * not trusted with either -- and the answer is an ordinary 'codes' frame
-   * carrying the new metadata, the same path a DO-side stop change takes, so
-   * the kiosk re-frames itself through applyScreen() and nothing else.
+   * The screen's own settings panel changed what this screen frames. Version 1
+   * (old bundles, kept indefinitely) sends a stop (null for none) and one area;
+   * version 2 sends a place (null for the whole city) and a frame, and the area
+   * follows from the place. Everything is validated here -- the browser is not
+   * trusted with a stop's point, an area or a frame -- and the answer is an
+   * ordinary 'codes' frame carrying the new metadata, the same path a DO-side
+   * stop change takes, so the kiosk re-frames itself through applyScreen() and
+   * nothing else.
    *
-   * Only an authenticated kiosk socket reaches this, at most once every
-   * SCREEN_SET_MIN_MS: a repeat inside the window writes nothing and mints
-   * nothing, so a stuck panel can neither rewrite the meta in a loop nor pull
-   * code batches. It is still answered -- with 'screen-set-rate', one small
-   * frame -- because a panel that hears nothing at all cannot tell a refusal
-   * from a screen that has stopped listening.
+   * Only an authenticated kiosk socket reaches this, and the screen changes at
+   * most once every SCREEN_SET_MIN_MS (less SCREEN_SET_ARRIVAL_SLACK_MS). The
+   * window belongs to the beacon, stored beside the screen it guards, not to a
+   * socket: reconnecting or opening a second socket does not open a new one,
+   * so a public wall cannot be rewritten faster than that by anyone holding
+   * its secret. A frame inside the window writes nothing and mints nothing,
+   * so a stuck panel can neither rewrite the meta in a loop nor pull code
+   * batches. It is still answered -- with 'screen-set-rate', one small frame
+   * -- because a panel that hears nothing at all cannot tell a refusal from a
+   * screen that has stopped listening.
+   *
+   * An accepted change is sent to every authenticated socket of the beacon,
+   * not only to the sender, so no open screen keeps a stale copy. A refusal
+   * ('bad-*' or 'screen-set-rate') is one error frame and nothing else: no
+   * meta written, no codes frame, the socket kept open, the window left where
+   * the last accepted change put it. The DO's state is therefore exactly the
+   * screen every socket last received, which is what a panel repaints from;
+   * nothing in the answer asks a kiosk to send again.
    */
-  private async setScreen(ws: WebSocket, attachment: AuthedAttachment, stopId: string | null, area: string): Promise<void> {
+  private async setScreen(ws: WebSocket, message: ScreenSetFrame): Promise<void> {
     if (this.isRevoked()) return;
-    if (!isAreaSlug(area)) { ws.send(frame({ t: 'error', error: 'bad-area' })); return; }
-    const stop = stopId === null ? null : screenStop(stopId);
-    if (stopId !== null && !stop) { ws.send(frame({ t: 'error', error: 'bad-stop' })); return; }
+    const target = this.screenTarget(message);
+    if ('error' in target) { ws.send(frame({ t: 'error', error: target.error })); return; }
     const now = this.now();
-    if (attachment.screenSetAt !== undefined && now - attachment.screenSetAt < SCREEN_SET_MIN_MS) {
+    const lastSet = Number(this.meta('screenSetAt') ?? 'NaN');
+    if (Number.isFinite(lastSet) && now - lastSet < SCREEN_SET_MIN_MS - SCREEN_SET_ARRIVAL_SLACK_MS) {
       ws.send(frame({ t: 'error', error: 'screen-set-rate' }));
       return;
     }
-    ws.serializeAttachment({ ...attachment, screenSetAt: now } satisfies AuthedAttachment);
     this.ctx.storage.transactionSync(() => {
-      this.setMeta('area', area);
-      this.setMeta('stopId', stop?.id ?? '');
-      // An empty blob is no stop: screenMetadata() reads the absence, and the
-      // row stays so the key is written in one shape either way.
-      this.setMeta('stop', stop ? JSON.stringify(stop) : '');
+      this.setMeta('screenSetAt', String(now));
+      this.setMeta('area', target.area);
+      this.setMeta('stopId', target.stop?.id ?? '');
+      // An empty blob is no stop (and no place): screenMetadata() reads the
+      // absence, and the row stays so the key is written in one shape either way.
+      this.setMeta('stop', target.stop ? JSON.stringify(target.stop) : '');
+      this.setMeta('place', target.place ? JSON.stringify(target.place) : '');
+      // Version 1 carries no frame: the one a version 2 panel chose stays.
+      if (target.frame !== undefined) this.setMeta('frame', String(target.frame));
     });
     await this.sendBatch(ws);
+    const others = this.authenticatedSockets().filter((socket) => socket !== ws);
+    if (others.length === 0) return;
+    const codes = this.codesFrame();
+    for (const socket of others) {
+      try { socket.send(codes); } catch (error) { logError('beacon-screen-broadcast-failed', error); }
+    }
+  }
+
+  /** What a 'screen-set' asks for, or the word it is refused with. Reads the stop table, writes nothing. */
+  private screenTarget(message: ScreenSetFrame): ScreenTarget | { error: ScreenSetError } {
+    if (message.version === 1) {
+      if (!isAreaSlug(message.area)) return { error: 'bad-area' };
+      const stop = message.stopId === null ? null : screenStop(message.stopId);
+      if (message.stopId !== null && !stop) return { error: 'bad-stop' };
+      return { area: message.area, stop, place: stop ? placeFromStop(stop, isTramRoute) : null };
+    }
+    // The place must be explicit: null for the whole city, else an input resolveable here.
+    const input = message.place === null ? null : parsePlaceInput(message.place);
+    const place = input ? resolvePlace(input) : null;
+    if (message.place !== null && !place) return { error: 'bad-place' };
+    const frameStops = parseFrame(message.frame);
+    if (frameStops === null) return { error: 'bad-frame' };
+    const stop = place?.stopId ? screenStop(place.stopId) : null;
+    const area = place ? (districtOf(place.lon, place.lat) ?? CITY_AREA.slug) : CITY_AREA.slug;
+    return { area, stop, place, frame: frameStops };
   }
 
   // --- RPC: redeem -----------------------------------------------------------
