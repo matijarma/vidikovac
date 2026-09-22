@@ -51,8 +51,8 @@ describe('public-screen design invariants', () => {
     // The height is rows only -- no bare rem cap that could land mid-row.
     expect(list).toMatch(/max-height: calc\(var\(--k-suggest-row\) \* 4\)/);
     expect(list).not.toMatch(/max-height:\s*\d/);
-    // Inside the panel the list is part of its row, never a layer over the rows below it.
-    expect(list).toContain('position: static');
+    // Inside the panel the box is part of its row, never a layer over the rows below it.
+    expect(rule('.k-settings .k-suggest-box')).toContain('position: static');
     // A row that fills its fixed box clips inside it rather than growing past it.
     expect(rule('.k-settings .k-suggest > li')).toContain('height: 100%');
     // The list is still a scroller, so nothing below the last whole row is unreachable,

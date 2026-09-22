@@ -859,9 +859,11 @@ button.k-strip-verdict { cursor: pointer; }
    touch panel reaches the rest), but on a screen nobody touches a row cut
    through the middle reads as a rendering fault, so the rows are one control
    high with no gap between them and the box is an exact number of rows: a
-   cut can only ever fall between two. Inside the panel the list is part of
-   the row, never a layer over the rows below it. */
-.k-settings .k-suggest { --k-suggest-row: var(--k-control); position: static; flex: none; display: grid; grid-auto-rows: var(--k-suggest-row); gap: 0; max-height: calc(var(--k-suggest-row) * 4); overflow-y: auto; scrollbar-gutter: stable; }
+   cut can only ever fall between two. Inside the panel the box is part of
+   the Mjesto row, never a layer over the rows below it: the rows scroll, and
+   a layer would be cut at their edge. */
+.k-settings .k-suggest-box { position: static; }
+.k-settings .k-suggest { --k-suggest-row: var(--k-control); flex: none; display: grid; grid-auto-rows: var(--k-suggest-row); gap: 0; max-height: calc(var(--k-suggest-row) * 4); overflow-y: auto; scrollbar-gutter: stable; }
 .k-settings .k-suggest[hidden] { display: none; }
 .k-settings .k-suggest > li { height: 100%; overflow: hidden; }
 .k-settings .k-btn { margin-top: calc(var(--k-gap) * 0.5); }
