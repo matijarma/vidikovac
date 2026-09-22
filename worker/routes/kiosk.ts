@@ -28,14 +28,13 @@ export const handleKiosk: RouteHandler = async (request, env, ctx, url) => {
   if (url.pathname !== '/api/kiosk/sentences') return null;
   if (request.method !== 'POST') return json({ error: 'method-not-allowed' }, 405, { ...PRIVATE, allow: 'POST' });
   if (!isSameOrigin(request, url)) return json({ error: 'forbidden' }, 403, PRIVATE);
-  if (env.RL_OPEN) {
-    try {
-      const { success } = await env.RL_OPEN.limit({ key: `kiosk-sentences:${clientIp(request) || 'no-ip'}` });
-      if (!success) return json({ error: 'rate-limited' }, 429, PRIVATE);
-    } catch {
-      // Optional paid inference fails closed when its cost guard cannot answer.
-      return json({ error: 'rate-limited' }, 429, PRIVATE);
-    }
+  if (!env.RL_OPEN) return json({ error: 'rate-limited' }, 429, PRIVATE);
+  try {
+    const { success } = await env.RL_OPEN.limit({ key: `kiosk-sentences:${clientIp(request) || 'no-ip'}` });
+    if (!success) return json({ error: 'rate-limited' }, 429, PRIVATE);
+  } catch {
+    // Optional paid inference fails closed when its cost guard cannot answer.
+    return json({ error: 'rate-limited' }, 429, PRIVATE);
   }
   let parsed: SentenceRequest | null = null;
   try {

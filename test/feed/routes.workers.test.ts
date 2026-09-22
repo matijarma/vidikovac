@@ -69,6 +69,17 @@ describe('POST /api/kiosk/sentences', () => {
     expect(limit).toHaveBeenCalledWith({ key: 'kiosk-sentences:192.0.2.1' });
     expect((await sentenceCall(payload(), {}, { RL_OPEN: { limit: async () => { throw new Error('limiter down'); } } })).status).toBe(429);
   });
+  it('never bypasses a missing limiter binding to call AI or KV', async () => {
+    const run = vi.fn(async () => ({ response: 'must not run' }));
+    const get = vi.fn(async () => null);
+    const response = await sentenceCall(payload(), {}, {
+      APP_ENV: 'production', RL_OPEN: undefined, AI: { run } as unknown as Ai,
+      FEED: { get } as unknown as KVNamespace,
+    });
+    expect(response.status).toBe(429);
+    expect(run).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
+  });
 });
 
 function snapshot(module: ModuleId): ModuleSnapshot {

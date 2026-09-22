@@ -5,7 +5,7 @@ import { distanceM, located } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState } from '../../../shared/city/types';
 import {
-  acceptSentence, sentenceWithPeriod, stableSentenceFacts, writeSentence,
+  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, writeSentence,
   type SentenceFact, type SentenceKicker, type WrittenSentence,
 } from '../../../shared/kiosk/sentence';
 import { zagrebIso } from '../../../worker/feed/time';
@@ -50,10 +50,10 @@ export const SENTENCE_COPY_HR = {
   sunrise: 'Sunce izlazi u {time}.',
   sunriseAt: 'Izlazak sunca je u {time}.',
   sunriseTime: 'U {time} izlazi sunce.',
-  lastTram: 'Zadnji tramvaj {route} polazi u {time}.',
-  firstTram: 'Prvi tramvaj {route} polazi u {time}.',
-  event: '{time} počinje {title}, {venue}.',
-  opening: '{name} se otvara {time}.',
+  lastTram: 'Zadnji tramvaj {route} polazi {time}.',
+  firstTram: 'Prvi tramvaj {route} polazi {time}.',
+  event: '{time} počinje događanje „{title}“ ({venue}).',
+  opening: '{name}: rad počinje {time}.',
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
   outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
@@ -74,8 +74,8 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   sunrise: 'The sun rises at {time}.',
   sunriseAt: 'Sunrise is at {time}.',
   sunriseTime: 'At {time} the sun rises.',
-  lastTram: 'The last tram {route} leaves at {time}.',
-  firstTram: 'The first tram {route} leaves at {time}.',
+  lastTram: 'The last tram {route} leaves {time}.',
+  firstTram: 'The first tram {route} leaves {time}.',
   event: '{title} starts {time}, {venue}.',
   opening: '{name} opens {time}.',
   pharmacy: '24/7 duty pharmacy: {address}.',
@@ -88,7 +88,10 @@ function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<strin
     sentence?: Partial<Record<keyof typeof SENTENCE_COPY_HR, string>>;
   };
   const source = strings.sentence?.[key] ?? (i18n.getLocale().startsWith('en') ? SENTENCE_COPY_EN : SENTENCE_COPY_HR)[key];
-  return source.replace(/\{(\w+)\}/g, (all, name: string) => String(vars[name] ?? all));
+  const values = Object.fromEntries(Object.entries(vars).map(([name, value]) => [name,
+    typeof value === 'number' ? String(value) : value === '' ? '' : sentenceValue(value)]));
+  if (Object.values(values).some(value => value === null)) return '';
+  return source.replace(/\{(\w+)\}/g, (all, name: string) => values[name] ?? all);
 }
 
 /** Additive metadata supplied by the selection builder, not parsed UI text. */
@@ -145,9 +148,10 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const facts: SentenceFact[] = [];
   const add = (id: string, kind: SentenceKicker, text: string, validUntil: number) => {
     text = sentenceWithPeriod(text);
-    if (validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
+    validUntil = sentenceDeadline(text, validUntil, now);
+    if (!text || validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
     const fact: SentenceFact = { id, kind, text, validUntil };
-    // Long facts may be shortened by AI; apply every other acceptance rule now.
+    // A long weather fact can still supply one complete shorter claim to AI.
     if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now }).ok) return;
     facts.push(fact);
   };
@@ -217,10 +221,9 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     } else if ((row.kind === 'last' || row.kind === 'first') && row.services) {
       for (const service of row.services) {
         if (kindOfRoute(service.routeId) !== 'tram' || service.atMs <= now) continue;
-        const label = timedLabel(service.atMs, input).replace(/^(?:u|at) /, '');
-        // Different-day labels go before the clock, without a second "u".
-        const text = copy(i18n, row.kind === 'last' ? 'lastTram' : 'firstTram', { route: service.routeName, time: label })
-          .replace('u sutra u ', 'sutra u ').replace('at tomorrow at ', 'tomorrow at ');
+        const text = copy(i18n, row.kind === 'last' ? 'lastTram' : 'firstTram', {
+          route: service.routeName, time: timedLabel(service.atMs, input),
+        });
         add(`${row.id}:${service.routeId}`, atNight ? 'nocas' : 'promet', text,
           Math.min(service.atMs, atNight ? nightEnd(now) : nextMidnight(now)));
       }
@@ -294,15 +297,19 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       }
       previousNow = now;
       for (const [text, at] of lastSeen) if (now - at >= noRepeat && text !== current?.text) lastSeen.delete(text);
-      const valid = (s: WrittenSentence) => (s.validUntil === null || (Number.isFinite(s.validUntil) && s.validUntil > now))
+      const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
-      const held = current && sentences.find(s => s.text === current!.text && valid(s));
+      const held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
       // Retain object identity on ordinary refreshes, but update a shortened deadline.
-      if (held && current && (held.validUntil !== current.validUntil || held.kicker !== current.kicker
-        || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) current = held;
+      if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
+        || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {
+        current = held.validUntil! <= current.validUntil! ? held
+          : { ...held, validUntil: current.validUntil };
+      }
       if (suspended) {
         if (held && current) { lastSeen.set(current.text, now); return current; }
+        if (current) lastSeen.set(current.text, now);
         current = null;
         return null;
       }
@@ -312,7 +319,10 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const next = choices[0] ?? (held ? current : null);
       if (next !== current) {
         if (current) lastSeen.set(current.text, now);
-        current = next;
+        // Timeless source descriptions are only leased for this display rhythm.
+        // Their fact deadline still bounds the 20-minute source selection turn.
+        current = next && next.refs.some(ref => ref.startsWith('always:')) && next.kicker === 'kultura'
+          ? { ...next, validUntil: Math.min(next.validUntil!, now + rhythm) } : next;
         heldSince = now;
         if (current) kickers.set(current.kicker, now);
       }
