@@ -781,8 +781,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
           // Ruling 30: the far window names interchanges, not the busiest
           // corners -- route count put Elka and Savski gaj-rotor on the
           // picture and left Trg bana Jelačića, Glavni kolodvor and Savski
-          // most off it. Nearer in, the rank is still what names a stop.
-          prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['>=', ['get', 'rank'], prozor.stopLabelMinRank],
+          // most off it. Nearer in (a quarter, the wall's frame) the rank
+          // names a stop, and an interchange is always worth its name.
+          prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['any', ['get', 'tramInterchange'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank]],
           ['!=', ['get', 'id'], screenStopId ?? '']]
         : stopLabelFilter(stops),
       layout: {

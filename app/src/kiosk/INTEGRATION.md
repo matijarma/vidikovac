@@ -13,7 +13,12 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 `CityMapOptions`, the fields of `KioskMapView`:
 
 - `center` / `zoom` -- the camera the screen's own configuration asks for, in
-  this order: a configured stop keeps its centred street-level camera; a
+  this order: a place somebody chose (`placeSet` true) frames N stops around
+  it on a wall, the square of side 2R on the field's shorter side
+  (`map/frame.ts` `frameView`, R measured per place along the tram lines by
+  `shared/city/frame.ts` `frameRadiusM`, Kadar 4 / 6 / 8); a phone's band, and
+  a stop from a caller before place-v2, keep the centred street-level camera;
+  the read-path default place (`placeSet` false) keeps the whole-city window; a
   configured gradska cetvrt sits on its seat until its outline lands and is
   then fitted to the outline; a screen with neither -- which is every screen
   the one-button start makes -- opens on `CITY_WINDOW`, the whole city fitted
@@ -25,9 +30,11 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 - `selectedRoute` and `follow` -- the route the phone selected; `follow` asks the
   camera to keep that route's vehicles in frame.
 - `cityLabels` -- false on the city window, so the city's own places draw as
-  dots and badges with no names; true the moment somebody explores and on every
-  paired presentation, whose one subject has to be named on the wall. Changed
-  live through the handle's `setCityLabels`.
+  dots and badges with no names; `'venues'` on the framed wall, where tonight's
+  venues are named and the BAJS discs carry their counts without names; true
+  the moment somebody explores and on every paired presentation, whose one
+  subject has to be named on the wall. Changed live through the handle's
+  `setCityLabels`.
 - `hitTolerancePx` -- 28 on the kiosk (`KIOSK_HIT_TOLERANCE_PX`), against the
   map's 8 px default: a finger on a wall is not a mouse on a desk, and on the
   city window the stop rings it aims at are three pixels across.
@@ -54,7 +61,8 @@ it: the network, the stops and the vehicles are always on the window. Only a
 paired presentation of something that is not transport still clears them. What
 does vary with the camera is the buses: below `CITY_DETAIL_ZOOM` (14) the
 handle is told `setModes(new Set([tram]))` and the network kinds follow, at 14
-and above both modes draw. Three hundred bus capsules over the whole city would
+and above both modes draw. The framed wall is a neighbourhood and carries its
+buses at every zoom [O-71]. Three hundred bus capsules over the whole city would
 bury the trams the picture is about.
 
 The integrated `createCityMap` (the same-origin vector map) reads these, plus

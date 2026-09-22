@@ -27,6 +27,9 @@ import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
+// WP2 step 4: the framed wall (mapview.ts kioskCityLabels, map/frame.ts frameView).
+import { kioskCityLabels } from '../../app/src/kiosk/mapview';
+import { frameView } from '../../app/src/map/frame';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '12', '13', '14', '17', '31', '32', '34'] };
@@ -891,6 +894,145 @@ describe('the on-duty pharmacy on the map (R-KP18)', () => {
     expect(pharmaciesByDistance(null).find((p) => p.label === 'Ljekarna ZEUS')!.name).toBe('Ljekarna ZEUS');
     // The strip names the pharmacy by its address either way: the map and the strip can never name two different ones.
     expect(safetyStrip(MODULES, stopAt(80), i18n, hr, NOW).pharmacy.label).toBe('Trg bana J. Jelačića 3');
+  });
+});
+
+// WP2 step 4: a wall with a chosen place (today its configured stop) frames N
+// stops around it (Kadar 4 / 6 / 8, the radius measured per place by
+// shared/city/frame.ts and handed in once), and the frame is a neighbourhood.
+describe('the kiosk\u2019s framed wall', () => {
+  const stub = () => {
+    const calls = { setModes: vi.fn(), setCityLabels: vi.fn((_on: unknown) => undefined), setProzor: vi.fn(), setOutline: vi.fn(), update: vi.fn((_points: unknown, _lines: unknown) => undefined), setView: vi.fn() };
+    const factory = vi.fn((_options: unknown) => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
+    const adapter = createKioskMapAdapter(factory);
+    return { calls, factory, adapter, maps: createMapSlots(adapter.factory) };
+  };
+  const CITY: CityState = { ...emptyCity() };
+  const zet = MODULES.find((m) => m.module === 'zet-rt')!;
+  // kiosk.ts passes placeSet from the screen's record (a v1 screen's stop is one somebody chose).
+  const base = { stop: STOP, placeSet: true, city: CITY, snapshots: { 'zet-rt': zet, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
+  const first = (s: ReturnType<typeof stub>) => s.factory.mock.calls[0]![0] as Record<string, unknown>;
+  /** CityMapOptions.cityLabels as one of Section B's three answers (true / false are the older switch for 'all' / 'none'). */
+  const labelsOf = (on: unknown) => (on === undefined || on === true ? 'all' : on === false ? 'none' : on);
+
+  it('frames Kadar 6 on the place with buses, every stop, ranked names with the interchanges, the street names, the pharmacy named and the venues alone named', () => {
+    const s = stub();
+    requestKioskMap(s.maps, { ...base, frame: 6 }, s.adapter);
+    const options = first(s);
+    const zoom = frameView(STOP, 2000, 1300, 880).zoom;
+    expect(options.center).toEqual([STOP.lon, STOP.lat]);
+    expect(options.zoom).toBe(zoom);
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: false, placeTitles: true, stopRadius: false, overlapZoom: zoom - 0.1, labelPadding: labelPadding(1300, 880, 4000), majorStreetNames: true });
+    expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
+    // The pharmacy's name is worth its room on a neighbourhood's picture, below the detail zoom too: a stop 400 m
+    // south of Trg bana J. Jelačića 3 (outside its own frontage) frames at z13.4 and names it.
+    const south = { ...STOP, lon: 15.9776, lat: 45.8131 - 400 / 111_320 };
+    const near = stub();
+    requestKioskMap(near.maps, { ...base, stop: south }, near.adapter);
+    expect(first(near).zoom).toBeLessThan(CITY_DETAIL_ZOOM);
+    expect((first(near).points as { place?: string; title: string }[]).find((p) => p.place === 'pharmacy')!.title).toBe('Gradska ljekarna Zagreb');
+    // The same stop as the read-path default place keeps the whole-city window, where an address is a detail.
+    const far = stub();
+    requestKioskMap(far.maps, { ...base, stop: south, placeSet: false }, far.adapter);
+    expect((first(far).points as { place?: string; title: string }[]).find((p) => p.place === 'pharmacy')!.title).toBe('');
+    // Section B's CityLabels: the venues named, the BAJS discs counted and unnamed.
+    expect(labelsOf(options.cityLabels)).toBe('venues');
+    expect(labelsOf(s.calls.setCityLabels.mock.calls.at(-1)![0])).toBe('venues');
+    expect(kioskCityLabels(true, true)).toBe('venues');
+    // The DO's applyScreen moves the place: the frame follows it on the same map, and still draws every stop in it (R-KP19).
+    const moved = { ...STOP, id: '200_1', lon: 15.99, lat: 45.8, routes: ['7', '109'] };
+    requestKioskMap(s.maps, { ...base, frame: 6, stop: moved }, s.adapter);
+    expect(s.calls.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.8], zoom: frameView(moved, 2000, 1300, 880).zoom }));
+    expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ stopRoutes: null }));
+    expect(s.factory).toHaveBeenCalledTimes(1);
+    // A caller from before place-v2 (no placeSet) keeps the stop's centred street-level camera and its routes' dots.
+    const legacy = stub();
+    requestKioskMap(legacy.maps, { ...base, placeSet: undefined }, legacy.adapter);
+    expect(first(legacy).zoom).toBe(fieldZoom(1300, STOP.lat, FIELD_SPAN_M));
+    expect(first(legacy).prozor).toMatchObject({ stopRoutes: STOP.routes, stopRadius: true });
+  });
+
+  it('frames Kadar 4 and 8 closer and wider, and a measured radius wins over the Kadar\u2019s fallback', () => {
+    const at = (extra: Record<string, unknown>) => {
+      const s = stub();
+      requestKioskMap(s.maps, { ...base, ...extra }, s.adapter);
+      return first(s);
+    };
+    expect(at({ frame: 4 }).zoom).toBe(frameView(STOP, 1300, 1300, 880).zoom);
+    expect(at({ frame: 8 }).zoom).toBe(frameView(STOP, 2700, 1300, 880).zoom);
+    const measured = at({ frame: 6, radiusM: 2182 });
+    expect(measured.zoom).toBe(frameView(STOP, 2182, 1300, 880).zoom);
+    expect((measured.prozor as { labelPadding: number }).labelPadding).toBe(labelPadding(1300, 880, 2 * 2182));
+  });
+
+  it('keeps its buses on the frame at every camera, not only from the detail zoom', () => {
+    const s = stub();
+    requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610 }, s.adapter);
+    expect(first(s).zoom).toBe(FIELD_MIN_ZOOM); // the compact wall's Kadar 8 sits on the floor
+    expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
+    requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610, cameraZoom: 12.9 }, s.adapter);
+    expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
+    expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'], stopLabelTramInterchanges: false }));
+  });
+
+  it('frames a chosen address place on the address, and keeps the whole-city window for the read-path default place', () => {
+    const address = { kind: 'address' as const, name: 'Ilica 1', lon: 15.9738, lat: 45.8131 };
+    const s = stub();
+    requestKioskMap(s.maps, { ...base, place: address }, s.adapter);
+    expect(first(s).center).toEqual([address.lon, address.lat]);
+    // An empty field reads back as Trg with placeSet false: the list has its place, the map keeps the whole city with every stop on it.
+    const d = stub();
+    requestKioskMap(d.maps, { ...base, place: { kind: 'tram', name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id }, placeSet: false }, d.adapter);
+    const window = first(d);
+    expect(window.center).toEqual(cityWindowView(1300, 880).center);
+    expect(window.zoom).toBe(FIELD_MIN_ZOOM);
+    expect(window.prozor).toMatchObject({ networkKinds: ['tram'], stopRoutes: null, stopRadius: true, stopLabelTramInterchanges: true });
+    expect(labelsOf(window.cityLabels)).toBe('none'); // as the whole-city window has always carried it
+    expect(kioskCityLabels(false, true)).toBe('none');
+    expect(d.calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+  });
+
+  it('is the wall\u2019s own: a phone\u2019s band, a person exploring and a paired presentation are not framed', () => {
+    const phone = stub();
+    requestKioskMap(phone.maps, { ...base, handheld: true, spanM: HANDHELD_SPAN_M, widthPx: 356, heightPx: 420 }, phone.adapter);
+    expect(first(phone).zoom).toBe(fieldZoom(356, STOP.lat, HANDHELD_SPAN_M));
+    expect(first(phone).prozor).toMatchObject({ stopRoutes: STOP.routes, stopRadius: true });
+    expect(labelsOf(first(phone).cityLabels)).toBe('none');
+    const exploring = stub();
+    requestKioskMap(exploring.maps, { ...base, exploring: true }, exploring.adapter);
+    expect(labelsOf(first(exploring).cityLabels)).toBe('all');
+    expect(kioskCityLabels(false, false)).toBe('all');
+    expect(first(exploring).prozor).toMatchObject({ stopRoutes: STOP.routes });
+  });
+
+  it('empties the vehicle points when the vehicles are hidden, and nothing else: the stops and the network stay', () => {
+    const s = stub();
+    requestKioskMap(s.maps, { ...base, vehiclesVisible: false }, s.adapter);
+    const points = first(s).points as { id: string; at?: number }[];
+    expect(points.filter((p) => p.id.startsWith('vehicle:'))).toEqual([]);
+    expect(points.some((p) => p.id === 'stop:106_1')).toBe(true);
+    expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
+    expect(s.calls.setModes).not.toHaveBeenCalledWith(new Set());
+    expect((first(s).prozor as { networkKinds: string[] }).networkKinds).toEqual(['tram', 'bus']);
+    requestKioskMap(s.maps, { ...base, vehiclesVisible: true }, s.adapter);
+    expect((s.calls.update.mock.calls.at(-1)![0] as { id: string }[]).filter((p) => p.id.startsWith('vehicle:')).map((p) => p.id)).toEqual(['vehicle:1', 'vehicle:2']);
+  });
+
+  it('honours the wall\u2019s Prikaz: the schema on the invitation, the boot renderer otherwise', () => {
+    const schema = stub();
+    requestKioskMap(schema.maps, { ...base, view: 'schema' }, schema.adapter);
+    expect(first(schema).renderer).toBe('schema');
+    const map = stub();
+    requestKioskMap(map.maps, { ...base, view: 'map' }, map.adapter);
+    expect(first(map).renderer).toBe('map');
+    // ?prikaz=shema at boot still holds with the setting on karta.
+    const boot = stub();
+    requestKioskMap(boot.maps, { ...base, renderer: 'schema', view: 'map' }, boot.adapter);
+    expect(first(boot).renderer).toBe('schema');
+    // A paired presentation keeps the boot renderer.
+    const paired = stub();
+    requestKioskMap(paired.maps, { ...base, view: 'schema', phase: 'paired' }, paired.adapter);
+    expect(first(paired).renderer).toBe('map');
   });
 });
 
