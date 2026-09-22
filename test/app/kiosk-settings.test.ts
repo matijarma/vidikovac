@@ -575,14 +575,16 @@ describe('what the wall reads from the screen record', () => {
     }
     expect(wallPlaceOf({ ...base, frame: 5 as never }, isTram).frame).toBe(6);
   });
-  it('spans the measured frame around a chosen place, the table radius before the stops load, the city otherwise', () => {
+  it('uses the frame fallback without line order, a handheld band, or the whole-city window', () => {
     const place = { kind: 'address' as const, name: 'Ilica', lon: 15.97, lat: 45.81 };
     const stops = ring(place, [300, 600, 900, 1200, 1500, 1800, 2100, 2400]);
     const wall = { place, placeSet: true, frame: 6 as const };
     const measured = frameSpanM(frameRadiusM(place, frameStopsFrom(stops, isTram), 6));
     expect(wallSpanM({ handheld: false, wall, stops, isTram })).toBe(measured);
-    expect(measured).toBeCloseTo(2 * 1800, 0);
-    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 4 }, stops, isTram })).toBeCloseTo(2 * 1200, 0);
+    // A ring supplies no tram call order. The integrated camera measures the
+    // along-line radius in kiosk.ts once the network arrives (decision 6).
+    expect(measured).toBe(2 * FRAME_RADIUS_M[6]);
+    expect(wallSpanM({ handheld: false, wall: { ...wall, frame: 4 }, stops, isTram })).toBe(2 * FRAME_RADIUS_M[4]);
     expect(wallSpanM({ handheld: false, wall, stops: null, isTram })).toBe(2 * FRAME_RADIUS_M[6]);
     expect(wallSpanM({ handheld: true, wall, stops, isTram })).toBe(HANDHELD_SPAN_M);
     expect(wallSpanM({ handheld: false, wall: { ...wall, placeSet: false }, stops, isTram })).toBe(FIELD_SPAN_M);

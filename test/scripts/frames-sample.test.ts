@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { closeSync, existsSync, openSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -225,9 +226,18 @@ describe('frames-sample refusals', () => {
 
   it('exits non-zero from the command line when --out is under recordings/', () => {
     const out = join(root, 'recordings', 'sample');
-    const cli = spawnSync(process.execPath, ['scripts/frames-sample.mjs', input, '--from', '151500', '--to', '154459', '--out', out], { cwd: REPO, encoding: 'utf8' });
-    expect(cli.status).toBe(2);
-    expect(cli.stderr).toMatch(/refusing --out .*recordings\//);
+    // A regular file also captures stderr in sandboxes where spawnSync's
+    // pipe polling returns EPERM after the child has correctly exited.
+    const log = join(root, 'cli-stderr.txt');
+    const stderr = openSync(log, 'w');
+    let status: number | null;
+    try {
+      status = spawnSync(process.execPath, ['scripts/frames-sample.mjs', input, '--from', '151500', '--to', '154459', '--out', out],
+        { cwd: REPO, stdio: ['ignore', 'ignore', stderr] }).status;
+    } finally { closeSync(stderr); }
+    expect(status).toBe(2);
+    expect(readFileSync(log, 'utf8')).toMatch(/refusing --out .*recordings\//);
+    expect(existsSync(out)).toBe(false);
   });
 });
 
