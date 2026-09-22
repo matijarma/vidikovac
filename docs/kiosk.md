@@ -174,8 +174,9 @@ Poruka **Prikazano na zaslonu** pojavljuje se tek nakon potvrde iscrtavanja
 sa zaslona. Ako potvrda ne stigne u osam sekundi, telefon kaže da prikaz
 nije potvrđen i nudi ponovni pokušaj.
 
-**Vrati pregled grada** završava prikazivanje, ne osobnu sesiju. Kratak
-prekid veze telefona ne briše sadržaj javnog zaslona. Ponovno povezivanje
+**Vrati pregled grada** završava prikazivanje, ne osobnu sesiju.
+Na zaslonu nema gumba za prekid: prikaz završava izlagačev telefon, istek ili potvrđeno preuzimanje.
+Kratak prekid veze telefona ne briše sadržaj javnog zaslona. Ponovno povezivanje
 zaslona vraća važeći prikaz uz novu potvrdu. Istek sesije izlagača vraća
 pregled grada. „Podijeli grad” daje drugoj osobi vlastitih pet minuta u
 zasebnoj sesiji, bez daljnjeg dijeljenja i bez upravljanja javnim zaslonom.

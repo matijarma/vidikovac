@@ -88,6 +88,28 @@ describe('screen-owned explicit presentation', () => {
     a.phone.ws.close(1000, 'done'); b.phone.ws.close(1000, 'done'); s.kiosk.ws.close(1000, 'done');
   });
 
+  it('a screen socket cannot end a presentation; the presenter\'s phone can (T6)', async () => {
+    const s = await screen();
+    const a = await s.scanner(0);
+    await s.stub.present(a.scan.roomId, { version: 1, requestId: 'show', expectedRevision: 0, action: 'present', target: { layer: 'kultura' } });
+    expect(((await s.kiosk.inbox.nextOfType('presentation')).presentation as ScreenPresentation).revision).toBe(1);
+    // The frame a kiosk bundle with the old wall button sent: read and ignored, never a bad-frame error.
+    s.kiosk.ws.send(JSON.stringify({ t: 'presentation-stop', version: 1, revision: 1 }));
+    // One socket's frames are handled in order, so once this ack reaches the phone the stop was seen.
+    s.kiosk.ws.send(JSON.stringify({ t: 'presented', version: 1, revision: 1, status: 'displayed' }));
+    const ack = await a.phone.inbox.nextWhere(f => f.t === 'presentation' && (f.state as PresentationState).status === 'displayed');
+    expect(ack.state).toMatchObject({ revision: 1, owner: 'self', target: { layer: 'kultura' } });
+    expect(await s.stub.presentationStatus(a.scan.roomId)).toMatchObject({ revision: 1, owner: 'self', target: { layer: 'kultura' }, status: 'displayed' });
+    const stop = await s.stub.present(a.scan.roomId, { version: 1, requestId: 'stop', expectedRevision: 1, action: 'stop' });
+    expect(stop.state).toMatchObject({ revision: 2, owner: null, target: null });
+    const ended = await s.kiosk.inbox.nextWhere(f => {
+      if (f.t === 'error') throw new Error(`the screen was answered ${String(f.error)}`);
+      return f.t === 'presentation' && (f.presentation as ScreenPresentation).revision === 2;
+    });
+    expect((ended.presentation as ScreenPresentation).target).toBeNull();
+    a.phone.ws.close(1000, 'done'); s.kiosk.ws.close(1000, 'done');
+  });
+
   it('holds presentation through phone disconnect, restores it on screen reload, and expires it', async () => {
     const s = await screen();
     const a = await s.scanner(0);

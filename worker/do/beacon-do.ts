@@ -438,8 +438,10 @@ export class BeaconDO extends DurableObject<Env> {
       }
       return;
     }
-    if (attachment.presentationVersion === 1 && parsed.t === 'presentation-stop') {
-      if (parsed.revision === this.presentationRecord().revision) this.clearPresentation();
+    if (parsed.t === 'presentation-stop') {
+      // A screen never ends a presentation (T6, principle 8): the presenter's phone does, through
+      // present(roomId, { action: 'stop' }), or the grant's expiry, or a confirmed takeover. A kiosk
+      // bundle from before the wall's button went may still send this frame; it is read and ignored.
       return;
     }
     if (parsed.t === 'screen-set' && parsed.version === 1) {
