@@ -11,6 +11,7 @@ const css = read('app/src/ui/kiosk.css').replace(/\/\*[\s\S]*?\*\//g, '');
 const cityCss = read('app/src/ui/kiosk-city.css').replace(/\/\*[\s\S]*?\*\//g, '');
 const tokens = read('app/src/ui/tokens.css');
 const invitation = read('app/src/kiosk/invitation.ts');
+const timeline = read('app/src/kiosk/timeline.ts');
 const ruleIn = (sheet: string, selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)}`).exec(sheet)?.[1] ?? '';
@@ -30,8 +31,8 @@ describe('public-screen design invariants', () => {
     expect(windowRule('.kiosk .k-city-window').replace(/\s/g,'')).toContain('grid-template-columns:minmax(0,1fr)var(--k-side-w)');
     expect(cityCss).toContain(".kiosk[data-portrait='1'] .k-city-window");
     expect(cityCss).toContain(".kiosk[data-size=handheld] .k-city-window");
-    // The events card takes the aside's slack: no dead space between the exceptions and the card.
-    expect(windowRule('.kiosk .k-city-window .k-overview')).toContain('grid-template-rows:auto minmax(0,1fr) auto');
+    // Two regions in the aside: "U blizini" takes the slack above the card.
+    expect(windowRule('.kiosk .k-city-window .k-overview')).toContain('grid-template-rows:minmax(0,1fr) auto');
     expect(cityCss).not.toContain('.k-discovery-slot');
     // The three panels the front page draws, and no shell of the ones it dropped.
     for (const dead of ['k-local', 'k-local-facts', 'k-neighborhood', 'k-context-stack', 'k-column', 'k-bottom', 'k-provision', 'k-front'])
@@ -40,6 +41,54 @@ describe('public-screen design invariants', () => {
   // Postavke's stop list on a wall: it may scroll, but it may not show half a
   // row. The rows are a fixed height and the box is an exact number of them
   // plus the gaps, so the cut always lands between two rows.
+  // "U blizini" (kiosk/timeline.ts): whole rows from the row budget, never a
+  // hidden one; the read tier for title and time, the walk-up tier for the
+  // rest; one fade for a new row, none where motion is unwanted.
+  it('draws the timeline as whole 64-92 px rows that are sliced, never hidden', () => {
+    const rows = windowRule('.kiosk .k-nearby-rows');
+    expect(rows).toContain('grid-auto-rows:calc(var(--k-nearby-row,64px) * var(--k-zoom,1))');
+    expect(rows).toContain('overflow:hidden');
+    expect(rows).toContain('align-content:start');
+    const row = windowRule('.kiosk .k-nearby .nearby-row');
+    expect(row).toContain('min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1))');
+    // The time column is the widest time shown; an engine without subgrid keeps the fixed column declared first.
+    expect(row).toMatch(/grid-template-columns:4\.8em [^;]+;grid-template-columns:subgrid/);
+    expect(windowRule('.kiosk .k-nearby-host')).toContain('grid-template-rows:minmax(0,1fr)');
+    expect(cityCss).toContain(".kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}");
+    expect(cityCss).toContain('.kiosk[data-size=handheld] .k-nearby-host{order:2}');
+    expect(windowRule('.kiosk[data-size=handheld] .k-nearby-rows')).toContain('overflow:visible');
+    // The component slices; it never hides a row.
+    expect(timeline).not.toMatch(/\.hidden\s*=\s*true/);
+    expect(timeline).not.toMatch(/setAttribute\('hidden'/);
+    expect(timeline).toContain('reconcile(list, next)');
+    // The highlight is gone from both sheets.
+    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(/\.k-highlight(?![\w-])/);
+  });
+  it('sets row title and time on the read tier and the rest of the timeline on the walk-up tier', () => {
+    const nearby = windowRule('.kiosk .k-nearby');
+    expect(nearby).toContain('--k-nearby-title-size:var(--k-main-size)');
+    expect(nearby).toContain('--k-nearby-sub-size:max(var(--k-sub-size),var(--k-sup-size))');
+    expect(windowRule('.kiosk .k-nearby .nearby-title')).toContain('font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby .nearby-when')).toContain('font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby .nearby-sub')).toContain('font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby-day')).toContain('font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby-heading')).toContain('font-size:var(--k-nearby-sub-size)');
+    // The section head and the row titles are two classes, with two rule sets.
+    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(/\.k-nearby-title(?![\w-])/);
+    // Blue a tracked departure, grey the timetable, the third ink "uvijek".
+    expect(windowRule(".kiosk .k-nearby .nearby-when")).toContain('color:var(--k-ink-2)');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-live='1'] .nearby-when")).toContain('color:var(--k-action)');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-always='1'] .nearby-when")).toContain('color:var(--k-ink-3)');
+    // The pharmacy row's mark is the green cross.
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-kind='pharmacy'] .k-nearby-mark::after")).toContain('var(--k-green)');
+  });
+  it('fades a new row in once, and not at all under reduced motion or lagano', () => {
+    expect(windowRule(".k-nearby .nearby-row[data-enter='1']")).toContain('animation:k-nearby-in 220ms var(--ease-enter) both');
+    expect(cityCss).toContain('@keyframes k-nearby-in{from{opacity:0}}');
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+    expect(reduced).toContain(".kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
+    expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
+  });
   it('bounds the settings stop list to whole rows', () => {
     const list = rule('.k-settings .k-stop-list');
     expect(list).toContain('--k-stop-row');

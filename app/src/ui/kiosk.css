@@ -719,10 +719,12 @@ button.k-strip-verdict { cursor: pointer; }
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
   .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'], .kiosk .k-ticker[data-swap='1'] { animation: none; }
   .kiosk .k-code-ghost { display: none; }
+  .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
 :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'], :root[data-lagano='1'] .k-ticker[data-swap='1'] { animation: none; }
 :root[data-lagano='1'] .k-code-ghost { display: none; }
+:root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes
