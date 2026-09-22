@@ -681,6 +681,42 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura', () => {
     expect(section.querySelector('[data-filter-key=q]')).not.toBeNull();
     expect(section.querySelectorAll('[data-testid=event-category] option').length).toBeGreaterThan(1);
   });
+  it('kultura says "do d. m." in the time column of a multi-day all-day item, never "cijeli dan", and names the end once', () => {
+    const extra: ModuleSnapshot['items'] = [
+      // "od 11. do 25. rujna": the parser's range, Zagreb midnight to 23:59 of the last day.
+      { id: 'kulturpunkt:8', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Festival u Tvornici', at: '2026-09-10T22:00:00Z', until: '2026-09-25T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'festival', precision: 'range' } },
+      // A range that begins next week keeps its own day head; an October end reads "do 4. 10.".
+      { id: 'kulturpunkt:9', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Sajam knjiga', at: '2026-09-13T22:00:00Z', until: '2026-10-04T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'sajam', precision: 'range' } },
+      // A timed start that runs on keeps its time; the end stays on the second line.
+      { id: 'kulturpunkt:10', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Radionica keramike', at: '2026-09-12T16:00:00Z', until: '2026-09-13T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'radionica', precision: 'time' } },
+    ];
+    const dogadanja = { ...SNAPSHOTS.dogadanja!, items: [...SNAPSHOTS.dogadanja!.items, ...extra] };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const row = (title: string): Element => [...section.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes(title))!;
+    const lead = (title: string): string => text(row(title).querySelector('.ev-lead'));
+    const sub = (title: string): string => text(row(title).querySelector('.row-sub'));
+
+    expect(lead('Festival u Tvornici')).toBe('do 25. 9.');
+    expect(row('Festival u Tvornici').querySelector('.ev-lead .ev-allday')).not.toBeNull();
+    expect(text(row('Festival u Tvornici'))).not.toContain('cijeli dan');
+    expect(text(row('Festival u Tvornici')).match(/do 25\. 9\./g)).toHaveLength(1); // not repeated on the second line
+    expect(sub('Festival u Tvornici')).toBe('Kulturpunkt');
+    // Day and month stay together, so the 3.5rem column breaks after "do", never inside the date.
+    expect(row('Festival u Tvornici').querySelector('.ev-allday')!.textContent).toBe('do 25.\u00a09.');
+
+    expect(lead('Sajam knjiga')).toBe('do 4. 10.');
+    expect(sub('Sajam knjiga')).not.toContain('do 4. 10.');
+
+    expect(lead('Radionica keramike')).toBe('18:00');
+    expect(sub('Radionica keramike')).toBe('Kulturpunkt · do 13. 9.');
+
+    // A single-day day-precision entry still reads "cijeli dan".
+    expect(lead('Novo dječje igralište')).toBe('cijeli dan');
+
+    const en = renderLayer('kultura', ctx({ i18n: createDefaultI18n('en'), snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const enRow = [...en.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes('Festival u Tvornici'))!;
+    expect(text(enRow.querySelector('.ev-lead'))).toBe('until 25. 9.');
+  });
   it('filter chips are a labelled group holding a native list, and no <li> in a workspace is orphaned from a list (axe: listitem)', () => {
 
     for(const layer of ['kultura','uprava-i-pravo'] as const){
