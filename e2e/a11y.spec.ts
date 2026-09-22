@@ -6,6 +6,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { APP_URL, E2E_STOP_ID, health, localContext, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
+import { installWallFixture } from './experience-fixtures';
 
 // The two sizes newdesignsystem.md and Vidikovac.dc.html were drawn at: kiosk 1080p
 // and the /d phone artboard (390×844). Every surface is swept at whichever
@@ -222,9 +223,10 @@ async function assertTextPath(page: Page, surface: string, interactiveTransport 
 }
 
 test.describe('the moving map has a text path (R-F5)', () => {
-  test('/kiosk/ has readable passive content beside its named map, and every interactive control has a name', async ({ page, request }) => {
+  test('/kiosk/ has readable passive content beside its named map, no control inside the invitation, and a named settings path', async ({ page, request }) => {
     await stubTeaser(page, zetSnapshot('e2e-a11y-kiosk', 0));
-    // The screen's stop: the readable route board is the transit statement's badge row, which is the stop's own lines.
+    await installWallFixture(page);
+    // The screen's stop: the "U blizini" list reads that stop's departures.
     const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
     await page.setViewportSize(KIOSK);
     // One fixed window (R-KP1): the map and the column are there from the first paint, nothing rotates away.
@@ -233,11 +235,31 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await waitForFrames(page, '[data-testid=kiosk-map]');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
     await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
-    // A public screen's route board is glanceable, not a hidden interactive
-    // phone list. Its actual controls still need a complete keyboard path.
+    // A public screen's list is glanceable, not a hidden interactive phone
+    // list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
-    await expect(page.getByTestId('kiosk-highlight').getByRole('heading')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Zaustavi izmjenu' })).toBeVisible();
+    // The passive content is text a screen reader reaches: the list under its
+    // heading and the header's one sentence.
+    await expect(page.getByTestId('nearby').getByRole('heading')).toBeVisible();
+    await expect(page.getByTestId('nearby-head')).toHaveText(/^U blizini · \d+(,\d)? km · ~\d+ min$/);
+    await expect(page.getByTestId('kiosk-sentence-text')).not.toBeEmpty();
+    // No operator chrome on the visible wall (brief §10, principle 8): not one
+    // visible control inside the invitation, and none of the retired ones anywhere.
+    await expect(page.locator('[data-testid=kiosk-invitation] :is(button, [role=button], input, select, textarea):visible')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zaustavi izmjenu' })).toHaveCount(0);
+    await expect(page.locator('[data-testid=kiosk-settings], [data-testid=kiosk-theme], [data-action^=pause]')).toHaveCount(0);
+    // The settings path is hidden in plain sight and named: the brand is a
+    // button called "Postavke zaslona" (a long press opens it on a touch
+    // screen, Enter or Space from a keyboard), and Escape closes the panel.
+    const brand = page.getByRole('button', { name: 'Postavke zaslona' });
+    await expect(brand).toHaveCount(1);
+    await expect(brand).toHaveAttribute('data-testid', 'kiosk-brand');
+    await brand.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('kiosk-settings-panel')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('kiosk-settings-panel')).toBeHidden();
+    await expect(page.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(page.locator('.k-map-legend')).toContainText('Tramvajska linija');
     await expect(page.locator('[data-action=kiosk-explore], #kiosk-city-search')).toHaveCount(0);
   });

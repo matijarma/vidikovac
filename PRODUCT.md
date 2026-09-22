@@ -46,11 +46,16 @@ WCAG AA rendered contrast, visible keyboard focus, 44px minimum targets, 48px pr
 On 20 September 2026 the owner approved the passive-view refinement. This
 supersedes the kiosk touch-discovery, 90-second exploration reset, separate
 header ticker and competing rotating-card rules below. The wall is useful
-without interaction: one anchored geographic map, compact current conditions,
-one map-linked highlight held for 20 seconds, and a permanently reserved QR
-invitation. Mobility and city-life subjects alternate when both are available.
-Safety remains persistent. Highlighting can be paused and does not send a
-presentation command, change a personal selection or move the camera.
+without interaction. On 22 September 2026 the owner replaced its conditions
+card and rotating highlight: beside one anchored geographic map the wall shows
+"U blizini", one time-ordered list around the place (at most three
+departures, blue for a tracked vehicle and grey for the timetable, then the
+timed items and one "uvijek" row), above a permanently reserved QR
+invitation, and the header carries one sentence of at most 80 characters with
+a coloured kicker, changing with the screen's rhythm (every 20 seconds by
+default). Safety remains persistent. Inside the invitation nothing is a
+control but the QR; the list and the sentence never send a presentation
+command, change a personal selection or move the camera.
 
 Search, filters, saved choices and general discovery belong on personal
 devices. A handheld opening `/kiosk/` sees the code/setup information before a
@@ -98,10 +103,11 @@ shows only tonight's venues, unnamed. A tapped stop says first
 which vehicles come next and in how many minutes: trips with a tracked vehicle
 show a countdown derived from the schedule and ZET's own reported delay, the
 rest keep their timetable clock time, and the list says which is which. The
-header carries one line of city news at a time, whose long source texts are
-condensed once, server-side, into a single machine-written sentence that is a
-derived reading and never a republished source. Kvart is removed from every
-surface.
+header carried one line of city news at a time; since 22 September 2026 it
+carries one sentence written from the wall's own facts, by Workers AI or,
+without the model, from fixed templates, and shown only while those facts
+hold. It is a derived reading and never a republished source. Kvart is removed
+from every surface.
 
 This supersedes two earlier rules. "Transport stays available in discovery but
 does not dominate default city cartography" no longer holds for the public

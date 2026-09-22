@@ -76,8 +76,30 @@ for (const theme of ['light', 'dark'] as const) {
         const map = rect('.k-geography');
         if (map.width < 200 || map.height < 200) out.push('the map is not the page');
         if (map.left < front.left - 1 || map.right > front.right + 1 || map.bottom > front.bottom + 1) out.push('the map leaves the window');
-        const qr = rect('[data-testid=kiosk-qr]');
-        if (qr.width < 239 || qr.height < 239) out.push('QR below scannable floor');
+        // The code itself, not its plate: at least 240 CSS px at every wall size (WP1, the 264 px plate).
+        const code = document.querySelector('[data-testid=kiosk-qr] svg')?.getBoundingClientRect();
+        if (!code || code.width < 240 || code.height < 240) out.push(`QR code below the 240px floor: ${code ? Math.floor(Math.min(code.width, code.height)) : 'none'}`);
+        // The aside is the "U blizini" list over the QR card: each fits its box, beside or under the map,
+        // and the list is whole rows, sliced by its budget, never hidden and never cut by its own edge.
+        for (const region of document.querySelectorAll<HTMLElement>('.k-nearby, .k-panel--card')) {
+          const name = region.dataset.testid ?? region.className;
+          const box = region.getBoundingClientRect();
+          if (box.left < map.right - 1 && box.top < map.bottom - 1) out.push(`${name}: over the map`);
+          if (region.scrollHeight > region.clientHeight + 1) out.push(`${name}: vertical overflow`);
+          if (region.scrollWidth > region.clientWidth + 1) out.push(`${name}: horizontal overflow`);
+          if (!region.textContent?.trim()) out.push(`${name}: empty`);
+        }
+        const list = document.querySelector<HTMLElement>('[data-testid=nearby-rows]');
+        if (!list) out.push('no U blizini list');
+        else {
+          const rows = [...list.querySelectorAll<HTMLElement>('.nearby-row')];
+          const bottom = list.getBoundingClientRect().bottom;
+          if (rows.length === 0) out.push('U blizini: no row');
+          if (list.scrollHeight > list.clientHeight + 1) out.push('U blizini: rows overflow the list');
+          if (rows.some(row => row.getBoundingClientRect().bottom > bottom + 1)) out.push('U blizini: a row cut by the list');
+          if (rows.filter(row => row.dataset.kind === 'departure').length > 3) out.push('U blizini: more than three departures');
+        }
+        if (document.querySelectorAll('.nearby-row[hidden]').length) out.push('hidden rows');
         for (const panel of document.querySelectorAll<HTMLElement>('.k-panel[data-panel]')) {
           // Nothing is drawn over the picture: every card is beside the map or under it.
           const box = panel.getBoundingClientRect();

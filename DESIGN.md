@@ -78,21 +78,35 @@ honour reduced motion. Do not animate layout width for countdown bars.
 ### Public screen
 
 **20 September passive-view contract, superseding the historical composition
-below:** one steady geographic map beside a reserved 520–760px information
-column at 1×, scaled for 4K. Conditions, one attributed highlight and the QR
+below, as amended on 22 September:** one steady geographic map beside a
+reserved 520–760px information column at 1×, scaled for 4K; the conditions
+card and the rotating highlight are gone. The "U blizini" list and the QR card
 occupy independent grid regions. No kiosk discovery/search/filter list or
 idle map-navigation controls. The map has a legend of three plain items (tram
 route, BAJS bike count, culture tonight), never a caveat, and no legend
 stands where no map is drawn (lagano).
-Highlights hold for 20 seconds, alternate mobility and city life, and use
-real cultural/heritage records when events are quiet. A separate geometry
-overlay identifies the subject without fitting or moving the camera.
-Presentation suspends the sequence; safety and QR remain available.
+The list is one time axis around the place: at most three departures, blue
+"za N min" for a tracked vehicle and a grey clock time for the timetable; then
+the timed rows (a closure's end, an event with its venue and the tram to it,
+the next sunset or sunrise, never both, the evening's last departures as one
+row from four hours ahead, the first morning tram from 22:00 until it leaves,
+tomorrow's openings when the evening empties); then one "uvijek" row, the
+place's naming story or a protected building nearby, alternating, and the
+24/7 pharmacy at night. No row carries a source, freshness or caveat caption.
+Rows are whole and at least 64–92px tall from the item count, so fewer items
+make larger rows; a row whose words need two lines is taller. Nothing is cut
+with an ellipsis: a long row prints its shorter complete label, or leaves the
+list. Each row keeps its node: a new row enters at the bottom, fades in once
+and takes its place in time on the next update, a past one leaves at the top,
+and nothing moves without a change. The map highlights what the header
+sentence names without fitting or moving the camera. Presentation suspends
+the sentence and the list; safety and QR remain available.
 
-Portrait puts the map above conditions, highlight and invitation, allocating
-space to legible content and the 240px QR before the map. Handheld `/kiosk/`
-puts setup/code information first and uses handheld symbols in its compact
-preview. Short opacity transitions only; pause/resume and reduced motion
+Portrait puts the map above the "U blizini" list and the invitation,
+allocating space to legible content and a QR code of at least 240px before
+the map. Handheld `/kiosk/` puts setup/code information first and uses
+handheld symbols in its compact preview. Short opacity transitions only;
+reduced motion and lagano drop the transitions, never the rows, and
 preserve useful information. The settings panel is a column of
 click-toggles, each naming its current state and changing it at once; there
 is no draft and no save action (22 September 2026).
@@ -121,21 +135,33 @@ names. Buses join the whole-city window only once the camera is in a
 neighbourhood. Compact landscape and portrait keep the same grammar in their
 own arrangements.
 
-The other column carries weather, a transit-exceptions card, an events card
-that fills the room it is given, and the pairing card. Weather is an
-observation with today's and tomorrow's ranges. The transit card names only
-what a rider would change a plan over and says so plainly when there is
-nothing to name. The events card never renders empty: it holds at least one
-whole row, and the card above it yields lines before that floor is broken.
+The other column carries the "U blizini" list over the pairing card. The
+list's head names the circle it covers, measured per place, and its walking
+time ("U blizini · 2,2 km · ~16 min"). The list never renders empty: a
+departure row always exists, timetable when no vehicle is tracked, and when
+the evening empties the rows grow and the horizon reaches into the next
+morning instead of padding. Weather, transit exceptions and events are no
+longer cards on the wall: weather speaks through the header sentence,
+closures and events are timed rows, and the paired compositions keep their
+own panels.
 
-The header carries one line of city news at a time: a coloured kicker and one
-sentence, replaced on a fixed period with a short crossfade, instant under
-reduced motion. No marquee and no scrolling text. Session and pairing
-notices outrank it. Long source texts are condensed once, server-side, into a
-single sentence; the original title is the fallback and stays on the phone.
+The header's middle carries one sentence at a time: a coloured kicker (Promet,
+Kultura, Vrijeme, Bicikli, Noćas, Radovi) and at most 80 characters, replaced
+at the screen's rhythm (20 seconds by default) with a short crossfade, instant
+under reduced motion. No marquee, no scrolling text and never an ellipsis: a
+sentence that does not fit its line is skipped, not cut. Session and pairing
+notices outrank it. Workers AI writes the sentences from the wall's own facts,
+the list's rows plus weather, closures and bikes, and a sentence is shown only
+when its claims are those facts and only while they hold (a last-tram line
+leaves when the tram has left). Fixed templates over the same facts are always
+in the pool, so the header never waits for the model and still speaks when it
+is unavailable. No sentence repeats verbatim within ten minutes.
 
-Keep location/date/time in the header and safety/on-duty pharmacy in the
-footer. The QR stays at least 240 CSS pixels at the design display sizes, with
+Keep location/date/time in the header and safety in the footer, where the
+on-duty pharmacy is a green cross, "24/7" and its short address and the
+sources are named without a time. The QR card holds the lead, the code and
+the address to type it at, with no benefit line and no copy button, beside a
+QR code of at least 240 CSS pixels on a 264px plate at the design sizes, with
 the code under the text at a fixed size, never stretched across a column.
 Starting a screen is one optional field, "Adresa ili stajalište", a line
 under it saying what the screen will show, and "Pokreni"; place, frame, view,
@@ -168,8 +194,9 @@ Overview content has deliberate budgets. A fitting routine may not hide
 every row of a populated panel to make a screenshot test pass. A genuine
 empty, loading or unavailable source is stated explicitly.
 
-Quiet-day discovery uses a real cultural or heritage record with its own
-attribution. Touch exploration has search, categories, list/details and
+On the wall, quiet-day discovery is the "uvijek" row: a real street-register
+or heritage record, shown without a caption; its attribution is on the phone
+and `/izvori`. Touch exploration has search, categories, list/details and
 an explicit return action; 90-second inactivity restores the overview.
 Refreshes preserve focus and scroll. Remote presentation makes the map inert.
 

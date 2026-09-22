@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APP_URL, E2E_STOP_ID, localContext, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
-import { installKioskFeedFixture } from './experience-fixtures';
+import { installKioskFeedFixture, installWallFixture } from './experience-fixtures';
 
 const sizes = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }];
 const layers = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'] as const;
@@ -64,14 +64,30 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('stale transit stays visibly stale through basics and does not claim fresh data', async ({ page, request }) => {
+// The wall of 22 September says freshness by selection, never by caption
+// (brief §10, principle 5): a stale ZET feed leaves the place's timetable
+// departures on the list as grey clock times, at most three, and no row, card
+// or head names a fetch time or the word "zastarjelo". The fixture board's trip
+// ids are no tracked vehicle's, so not one row may claim a live countdown.
+const CAPTION_RE = /zastarjel|Dohvaćeno|nepotvrđen|nije provjera|Obuhvat|registra|Čekamo/i;
+test('stale transit keeps its timetable rows through basics and never captions them', async ({ page, request }) => {
   await page.setViewportSize(sizes[0]!);
   await installKioskFeedFixture(page, 'stale');
+  await installWallFixture(page);
   const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
   await page.goto(kioskUrl);
-  await expect(page.getByTestId('kiosk-panel-promet')).toHaveAttribute('data-state', 'stale');
-  await expect(page.locator('[data-testid=kiosk-panel-promet] .k-panel-credit')).toContainText('zastarjelo');
+  const departures = page.locator('[data-testid=nearby] .nearby-row[data-kind=departure]');
+  const assertRows = async () => {
+    await expect.poll(() => departures.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+    expect(await departures.count()).toBeLessThanOrEqual(3);
+    await expect(page.locator('[data-testid=nearby] .nearby-row[data-live]')).toHaveCount(0);
+    for (const when of await departures.locator('.nearby-when').allInnerTexts()) expect(when.trim()).toMatch(/^\d{2}:\d{2}$/);
+    for (const region of ['nearby', 'kiosk-invite']) await expect(page.getByTestId(region)).not.toContainText(CAPTION_RE);
+  };
+  await assertRows();
   await page.getByTestId('kiosk-essentials-open').click();
+  await expect(page.getByTestId('kiosk-essentials')).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByTestId('kiosk-panel-promet')).toHaveAttribute('data-state', 'stale');
+  await expect(page.getByTestId('kiosk-invitation')).toBeVisible();
+  await assertRows();
 });

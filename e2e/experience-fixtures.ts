@@ -7,6 +7,7 @@ import { MODULE_IDS, MODULES, teaserSubset } from '../worker/feed/registry';
 import type { Role, RoomServerMessage, ScreenStop } from '../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import type { PresentationState } from '../worker/presentation';
+import type { DepartureBoard } from '../shared/city/types';
 
 export type FixtureState = 'ready' | 'empty' | 'down' | 'stale';
 const FIXTURE_ROOM = '0000000000000000';
@@ -43,6 +44,62 @@ export async function experienceSnapshots(state: FixtureState = 'ready'): Promis
     result[id] = snapshot;
   }));
   return result;
+}
+
+/** The wall's own requests beside the teaser (WP1): the place's departures and the header sentences. */
+export interface WallFixtureOptions {
+  /** The page's clock as the board should read it; the real clock when omitted. Pass the fake
+   *  clock's instant (plus whatever the spec has fast-forwarded) when `page.clock` is installed. */
+  now?: () => number;
+}
+
+/** Departures on the wall fixture's board: one every five minutes, so six fill the next half hour. */
+export const WALL_BOARD_ROWS = 6;
+const WALL_SLOT_MS = 300_000;
+/** A plausible terminus per line of FIXTURE_STOP. Fixture data, not interface copy. */
+const WALL_HEADSIGNS: Readonly<Record<string, string>> = { '6': 'Sopot', '11': 'Dubec', '12': 'Dubrava', '13': 'Žitnjak', '14': 'Zapruđe', '17': 'Borongaj' };
+
+/**
+ * FIXTURE_STOP's ZET board at `now`: WALL_BOARD_ROWS timetable departures on a
+ * five-minute grid, the first at least a minute ahead and the last within 31
+ * minutes. The trip ids are the grid slots, so a board fetched a minute later
+ * names the same trips and the wall's rows keep their nodes. No trip id is a
+ * tracked vehicle's, so every row is a grey timetable time. Any other stop
+ * answers an empty live board, so a sibling platform never doubles a row.
+ */
+export function wallDepartures(now: number, stopId: string = FIXTURE_STOP.id, operator: DepartureBoard['operator'] = 'zet'): DepartureBoard {
+  const base = { operator, stopId, status: 'live' as const, generatedAt: new Date(now).toISOString() };
+  if (operator !== 'zet' || stopId !== FIXTURE_STOP.id) return { ...base, stopName: stopId, departures: [] };
+  const first = Math.floor(now / WALL_SLOT_MS) + 1;
+  const departures = Array.from({ length: WALL_BOARD_ROWS }, (_, i) => {
+    const slot = first + i;
+    const routeId = FIXTURE_STOP.routes[slot % FIXTURE_STOP.routes.length]!;
+    return {
+      operator, tripId: `wall-fixture-${slot}`, routeId, routeName: routeId,
+      headsign: WALL_HEADSIGNS[routeId] ?? 'Črnomerec', at: new Date(slot * WALL_SLOT_MS + 60_000).toISOString(),
+    };
+  });
+  return { ...base, stopName: FIXTURE_STOP.name, departures };
+}
+
+/**
+ * Stubs the two requests the wall makes besides the teaser: `/api/city/departures`
+ * answers wallDepartures at the page's clock, `/api/kiosk/sentences` answers no
+ * model sentence, so the header shows the deterministic templates and no run
+ * ever reaches Workers AI. Call it after installCityFixture when a spec uses
+ * both: the route registered last answers.
+ */
+export async function installWallFixture(page: Page, options: WallFixtureOptions = {}): Promise<void> {
+  const now = options.now ?? Date.now;
+  await page.route((url) => url.pathname === '/api/city/departures', (route) => {
+    const url = new URL(route.request().url());
+    const operator = url.searchParams.get('operator') === 'hz' ? 'hz' : 'zet';
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(wallDepartures(now(), url.searchParams.get('stop') ?? '', operator)) });
+  });
+  await page.route((url) => url.pathname === '/api/kiosk/sentences', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', headers: { 'cache-control': 'private, no-store' },
+    body: JSON.stringify({ generatedAt: new Date(now()).toISOString(), sentences: [] }),
+  }));
 }
 
 export interface FixtureSession {
