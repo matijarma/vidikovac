@@ -2,8 +2,7 @@
 // contracts; `fetchImpl` is injectable so tests never touch the network.
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { DataToken, ScanFail, ScanOk, ScanRequest } from '../../worker/protocol';
-import type { SentenceRequest, SentenceResponse, WrittenSentence } from '../../shared/kiosk/sentence';
-import { readWrittenSentences, stableSentenceFacts } from '../../shared/kiosk/sentence';
+import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { normalizeCode } from './code';
 
 export interface TeaserResponse { modules: ModuleSnapshot[] }
@@ -18,7 +17,7 @@ export class DataError extends Error {
 }
 
 /** Bounds response-body reading too, without requiring AbortSignal.timeout. */
-async function requestJson<T>(
+export async function requestJson<T>(
   url: string, init: RequestInit, fetchImpl: typeof fetch,
 ): Promise<{ response: Response; body: T }> {
   const controller = new AbortController();
@@ -81,15 +80,10 @@ export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: stri
  */
 export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch): Promise<WrittenSentence[]> {
   try {
-    const stableRequest = { ...request, facts: stableSentenceFacts(request.facts, Date.now()) };
-    if (!stableRequest.facts.length) return [];
-    const { body } = await requestJson<SentenceResponse>('/api/kiosk/sentences', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(stableRequest),
-      cache: 'no-store',
-    }, fetchImpl);
-    return readWrittenSentences(body?.sentences, { facts: stableRequest.facts, budget: request.budget, now: Date.now() }).slice(0, 8);
+    // scan/fetchData are shared by every page. Optional sentence inference
+    // must not put its validator into all of those pages' initial bundles.
+    const { fetchSentenceResponse } = await import('./city/sentence-api');
+    return await fetchSentenceResponse(request, fetchImpl);
   } catch {
     return [];
   }

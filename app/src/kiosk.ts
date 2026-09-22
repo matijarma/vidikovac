@@ -42,12 +42,13 @@ import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase
 import { essentialsRows } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, stripMarkup } from './kiosk/frame';
-import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, feedStateOf, requestKioskMap, vehiclePoints } from './kiosk/mapview';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
-import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
+import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
+import type { PairedContext, PairedHandle } from './kiosk/paired';
 import { mountPlaceField } from './kiosk/place-field';
 import type { StreetGeo } from './kiosk/places';
 import { readRhythm, readView, writeRhythm, writeView, type Rhythm, type WallView } from './kiosk/prefs';
@@ -83,6 +84,7 @@ export const MAJOR_LABELS_LAYER = 'roads_labels_major';
  *  answer must not silence the statement until the stop changes; an hour
  *  keeps a broken source from being hammered by the 10 s poll. */
 export const LASTRUN_DOWN_RETRY_MS = 3_600_000;
+export type PairedRenderer = Pick<typeof import('./kiosk/paired'), 'mountPaired' | 'fitRows'>;
 
 export interface KioskDeps {
   cityStore?: CityStore;
@@ -122,6 +124,8 @@ export interface KioskDeps {
   createBoards?: () => BoardCache;
   createBeacon?: (deps: BeaconClientDeps) => BeaconClient;
   createSession?: (options: { roomId: string; ticket: string }) => SessionClient;
+  /** Presentation code loads on demand; a synchronous renderer is injectable in controller tests. */
+  loadPaired?: () => PairedRenderer | Promise<PairedRenderer>;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
   requestFullscreen?: () => Promise<void>;
@@ -195,6 +199,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const createScreen = deps.createScreen ?? ((input: StartScreenInput) => createTemporaryScreen(input));
   const makeBeacon = deps.createBeacon ?? ((d: BeaconClientDeps) => createBeaconClient(d));
   const makeSession = deps.createSession ?? ((o: { roomId: string; ticket: string }) => createSessionClient(o));
+  const loadPaired = deps.loadPaired ?? (() => import('./kiosk/paired'));
 
   /** A tram route by the static table (GTFS route_type 0): what makes a stop place a tram place and what the frame counts. */
   const isTram = (routeId: string): boolean => routeType(routeId) === 0;
@@ -275,6 +280,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // A Ritam change replaces the sequence's cadence, not its ten-minute memory.
   const shownSentences = new Map<string, number>();
   let paired: PairedHandle | null = null;
+  let pairedRenderer: PairedRenderer | null = null;
+  let pairedRendererPending: Promise<PairedRenderer> | null = null;
+  let pairedMount = 0;
   let presentation: ScreenPresentation | null = null;
   let acknowledgedRevision = -1;
   let acknowledgedStatus: 'displayed' | 'unavailable' | null = null;
@@ -819,7 +827,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
   function fitAll(): void {
     invitation?.fit();
-    if (paired) fitRows(paired.element, s.paired.coverage);
+    if (paired) pairedRenderer?.fitRows(paired.element, s.paired.coverage);
   }
 
   // --- Codes: the rotation's slot into the QR and the readable code -------------
@@ -905,6 +913,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   // --- Phases -------------------------------------------------------------------
   function clearStage(): void {
+    pairedMount += 1;
     parkMap();
     start?.destroy(); start = null;
     invitation?.destroy(); invitation = null;
@@ -929,11 +938,55 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else if (next === 'invitation') {
       invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, reducedMotion, codeBase: deps.codeBase });
     }
-    else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, onShell: paintCode });
+    else if (next === 'paired') mountPairedPhase();
     else mountNotice(next);
     paintContext();
     paintLocal();
     paintCode();
+  }
+  /** A public overview does not load the six presented-view compositions.
+   * Loading keeps scanning and safety available; stale loads cannot remount a
+   * cancelled presentation, and no success receipt precedes the actual render. */
+  function mountPairedPhase(): void {
+    const generation = pairedMount;
+    const current = (): boolean => !disposed && phase === 'paired' && pairedMount === generation;
+    const mount = (renderer: PairedRenderer): void => {
+      paired?.destroy();
+      paired = renderer.mountPaired(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, onShell: paintCode });
+    };
+    if (pairedRenderer) { mount(pairedRenderer); return; }
+    const placeholder = document.createElement('section');
+    placeholder.className = 'k-paired';
+    placeholder.dataset.testid = 'kiosk-layer';
+    placeholder.dataset.layer = activeLayer;
+    placeholder.dataset.presentationStatus = 'loading';
+    placeholder.innerHTML = `<div class="k-main"><p class="k-board-note" role="status">${escapeHtml(i18n.t('status.loading'))}</p></div>
+      <aside class="k-side"><div class="k-present-invite" data-testid="kiosk-join">${cardMarkup(s, deps.codeBase)}</div></aside>`;
+    stage.appendChild(placeholder);
+    paired = { element: placeholder, mapHost: null, update: () => {}, destroy: () => placeholder.remove() };
+    const failed = (): void => {
+      if (!current()) return;
+      placeholder.dataset.presentationStatus = 'unavailable';
+      setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'));
+      acknowledgePresentation();
+    };
+    let result: PairedRenderer | Promise<PairedRenderer>;
+    try { result = pairedRendererPending ?? loadPaired(); } catch { failed(); return; }
+    if (!('then' in result)) {
+      pairedRenderer = result;
+      mount(result);
+      return;
+    }
+    pairedRendererPending ??= Promise.resolve(result).then(renderer => {
+      pairedRenderer = renderer;
+      return renderer;
+    }, error => { pairedRendererPending = null; throw error; });
+    void pairedRendererPending.then(renderer => {
+      if (!current()) return;
+      mount(renderer);
+      paintLocal();
+      paintCode();
+    }, failed);
   }
   function mountNotice(kind: 'expired' | 'revoked'): void {
     notice = document.createElement('section');

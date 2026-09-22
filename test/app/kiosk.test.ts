@@ -26,6 +26,7 @@ import { decodeNetwork, type Network } from '../../shared/motion/network';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { nearbyHead } from '../../app/src/city/nearby';
 import { routeType } from '../../app/src/kiosk/stops';
+import * as pairedRenderer from '../../app/src/kiosk/paired';
 import { frameView } from '../../app/src/map/frame';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
@@ -71,7 +72,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'fetchSentences' | 'loadNetwork' | 'mapFactory' | 'createScreen' | 'loadStops' | 'loadStreets' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference; rhythm?: Rhythm } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'fetchSentences' | 'loadNetwork' | 'loadPaired' | 'mapFactory' | 'createScreen' | 'loadStops' | 'loadStreets' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference; rhythm?: Rhythm } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -132,6 +133,7 @@ function mount(opts: MountOptions = {}) {
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), fetchSentences, loadNetwork: opts.loadNetwork ?? (async () => null), mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadStreets, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
     theme: themeFake.theme,
+    loadPaired: opts.loadPaired ?? (() => pairedRenderer),
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
       const joined = { phase: 'live' as const, role: 'kiosk' as const, expiresAt: NOW + 600_000, dataToken: 'dt1', participants: 2, secondsLeft: 600 };
@@ -358,6 +360,64 @@ describe('the integrated companion sentence', () => {
 });
 
 describe('versioned explicit public presentation', () => {
+  it('loads presented-view code only on an explicit request and acknowledges after the renderer arrives', async () => {
+    let deliver!: (renderer: typeof pairedRenderer) => void;
+    const pending = new Promise<typeof pairedRenderer>(resolve => { deliver = resolve; });
+    const loadPaired = vi.fn(() => pending);
+    const k = mount({ stored: STORED, loadPaired });
+    await flush();
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onPaired?.(NOW + 600_000);
+    expect(loadPaired).not.toHaveBeenCalled();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(loadPaired).toHaveBeenCalledTimes(1);
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.presentationStatus).toBe('loading');
+    expect(q(k.root, '[data-testid=kiosk-qr] svg')).not.toBeNull();
+    expect(q(k.root, '[data-testid=strip-pharmacy]')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
+    deliver(pairedRenderer);
+    await flush();
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.presentationStatus).toBe('displayed');
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(1, 'displayed');
+    k.handle.destroy();
+  });
+
+  it('a late renderer cannot resurrect a cancelled presentation and is reused by the next one', async () => {
+    let deliver!: (renderer: typeof pairedRenderer) => void;
+    const pending = new Promise<typeof pairedRenderer>(resolve => { deliver = resolve; });
+    const loadPaired = vi.fn(() => pending);
+    const k = mount({ stored: STORED, loadPaired });
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 2, target: null, expiresAt: null });
+    const invitation = q(k.root, '[data-testid=kiosk-invitation]');
+    deliver(pairedRenderer);
+    await flush();
+    expect(q(k.root, '[data-testid=kiosk-invitation]')).toBe(invitation);
+    expect(q(k.root, '[data-testid=kiosk-layer]')).toBeNull();
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalledWith(1, 'displayed');
+    k.handlers.onPresentation?.({ version: 1, revision: 3, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '7' } }, expiresAt: NOW + 600_000, dataToken: 'dt2' });
+    await flush();
+    expect(loadPaired).toHaveBeenCalledTimes(1);
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(3, 'displayed');
+    k.handle.destroy();
+  });
+
+  it('a failed presentation chunk keeps the QR and sends only an unavailable receipt', async () => {
+    const loadPaired = vi.fn(async () => { throw new Error('chunk unavailable'); });
+    const k = mount({ stored: STORED, loadPaired });
+    k.handlers.onCodes(batch(NOW), NOW);
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'zrak-i-nebo' }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.presentationStatus).toBe('unavailable');
+    expect(q(k.root, '[data-testid=kiosk-qr] svg')).not.toBeNull();
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(1, 'unavailable');
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalledWith(1, 'displayed');
+    expect(loadPaired).toHaveBeenCalledTimes(1);
+    k.handle.destroy();
+  });
+
   it('the initial idle state preserves the mounted overview and a recent scan notice', async () => {
     const k = mount({ stored: STORED });
     await flush();

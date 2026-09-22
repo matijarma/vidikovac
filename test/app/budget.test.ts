@@ -123,6 +123,12 @@ function print(entry: string, rows: Measured[], total: number): void {
 }
 
 describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', () => {
+  it('keeps optional sentence HTTP and presented-view code out of the initial screen graphs', () => {
+    for (const module of ['src/city/sentence-api.ts', 'src/kiosk/paired.ts']) {
+      expect(manifest[module]?.isDynamicEntry, module).toBe(true);
+      for (const entry of LIGHTWEIGHT_ENTRIES) expect(staticGraph(entry), entry).not.toContain(module);
+    }
+  });
   for (const entry of LIGHTWEIGHT_ENTRIES) {
     it(`/${entry.replace('index.html', '')} transfers under ${BUDGET_BYTES} bytes gzipped`, () => {
       expect(existsSync(join(outDir, entry)), `${entry} must be built`).toBe(true);

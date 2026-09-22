@@ -32,14 +32,7 @@ import { locatedEvents } from '../../../shared/city/events';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */
-export const KIOSK_LAYER_MODULES: Record<LayerId, ModuleId[]> = {
-  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'dogadanja', 'glasnik'],
-  'u-pokretu': ['zet-rt', 'prometnice'],
-  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc'],
-  sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
-  'uprava-i-pravo': ['glasnik', 'dogadanja'],
-  kultura: ['dogadanja'],
-};
+export { KIOSK_LAYER_MODULES } from './layer-modules';
 
 export const PAIRED_MAP_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['u-pokretu']);
 
