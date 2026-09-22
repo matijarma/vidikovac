@@ -3,7 +3,7 @@ import { parseAir,parseBikes,parseConsultations } from '../../worker/city/live';
 import { normalizeReference } from '../../worker/city/normalize';
 import { REFERENCE_SOURCES } from '../../worker/city/sources';
 import { matchStreet } from '../../shared/city/geo';
-import { activeVenues,locatedEvents,resolveVenues } from '../../shared/city/events';
+import { activeVenues,eventInWindow,locatedEvents,resolveVenues,TONIGHT_FROM_HOUR } from '../../shared/city/events';
 import { departuresFrom,scheduleInstant } from '../../worker/city/schedules';
 import { parseSelection } from '../../worker/public-selection';
 import { emptyCity,type Place } from '../../shared/city/types';
@@ -65,6 +65,55 @@ describe('place and time',()=>{
   it('ongoing exhibitions remain one known program, expired events leave',()=>{
     const rows=locatedEvents([{...event,at:'2026-09-01T12:00:00Z',until:'2026-09-30T12:00:00Z'},{...event,id:'past',at:'2026-09-17T12:00:00Z'}],[place],now);
     expect(rows).toHaveLength(1);expect(rows[0].ongoing).toBe(true);
+  });
+  it("'tonight' is a timed programme of this evening or one on right now, never an all-day listing or a finished matinee",()=>{
+    const at=(zagreb:string)=>Date.parse(`2026-09-18T${zagreb}:00+02:00`);
+    const show=(start:string,until?:string,precision='time'):FeedItem=>({...event,at:new Date(at(start)).toISOString(),...(until?{until:new Date(at(until)).toISOString()}:{}),data:{...event.data,precision}});
+    expect(TONIGHT_FROM_HOUR).toBe(17);
+    // At 14:32: tonight's 20:00 concert is on the map, the ended 12:00 matinee is not.
+    expect(eventInWindow(show('20:00'),at('14:32'),'tonight')).toBe(true);
+    expect(eventInWindow(show('17:00'),at('14:32'),'tonight')).toBe(true);
+    expect(eventInWindow(show('12:00'),at('14:32'),'tonight')).toBe(false);
+    expect(eventInWindow(show('12:00','13:30'),at('14:32'),'tonight')).toBe(false);
+    // An afternoon event that has not started yet is not this evening's; the same one still running at 17:30 is.
+    expect(eventInWindow(show('16:00','18:00'),at('14:32'),'tonight')).toBe(false);
+    expect(eventInWindow(show('16:00','18:00'),at('17:30'),'tonight')).toBe(true);
+    expect(eventInWindow(show('16:00','18:00'),at('18:30'),'tonight')).toBe(false);
+    // An all-day exhibition or a festival's date range is not an occasion of the evening.
+    expect(eventInWindow(show('00:00','23:59','day'),at('18:00'),'tonight')).toBe(false);
+    expect(eventInWindow({...show('10:00',undefined,'range'),until:'2026-09-30T18:00:00Z'},at('18:00'),'tonight')).toBe(false);
+    // Tomorrow evening, a concert already over, and an item dated by publication are all out.
+    expect(eventInWindow({...show('20:00'),at:new Date(at('20:00')+86_400_000).toISOString()},at('14:32'),'tonight')).toBe(false);
+    expect(eventInWindow(show('20:00','22:00'),at('22:30'),'tonight')).toBe(false);
+    expect(eventInWindow({...show('20:00'),dateBasis:'published'},at('14:32'),'tonight')).toBe(false);
+    // A programme running past midnight is still on: whatever day it began, running now is tonight.
+    const run=(start:string,until:string):FeedItem=>({...event,at:start,until,data:{...event.data,precision:'time'}});
+    const late=run('2026-09-22T21:00:00Z','2026-09-22T23:00:00Z'); // 22 Sep 23:00 → 23 Sep 01:00 Zagreb
+    expect(eventInWindow(late,Date.parse('2026-09-22T22:30:00Z'),'tonight')).toBe(true); // 00:30
+    expect(eventInWindow(late,Date.parse('2026-09-22T21:30:00Z'),'tonight')).toBe(true); // 23:30
+    expect(eventInWindow(late,Date.parse('2026-09-22T23:30:00Z'),'tonight')).toBe(false); // 01:30, over
+    // Spring forward (29 Mar 2026, 02:00 CET → 03:00 CEST): 28 Mar 23:00 CET → 29 Mar 04:00 CEST.
+    const spring=run('2026-03-28T22:00:00Z','2026-03-29T02:00:00Z');
+    expect(eventInWindow(spring,Date.parse('2026-03-29T00:59:00Z'),'tonight')).toBe(true); // 01:59 CET
+    expect(eventInWindow(spring,Date.parse('2026-03-29T01:00:00Z'),'tonight')).toBe(true); // 03:00 CEST, the skipped hour behind it
+    expect(eventInWindow(spring,Date.parse('2026-03-29T02:01:00Z'),'tonight')).toBe(false); // 04:01 CEST, over
+    // Fall back (25 Oct 2026, 03:00 CEST → 02:00 CET): 24 Oct 23:00 CEST → 25 Oct 03:00 CET; 02:30 happens twice.
+    const autumn=run('2026-10-24T21:00:00Z','2026-10-25T02:00:00Z');
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T00:30:00Z'),'tonight')).toBe(true); // 02:30 CEST, the first
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T01:30:00Z'),'tonight')).toBe(true); // 02:30 CET, the repeat
+    expect(eventInWindow(autumn,Date.parse('2026-10-25T02:30:00Z'),'tonight')).toBe(false); // 03:30 CET, over
+    // An upcoming programme is read in Zagreb wall time on both DST days: 17:00 is the evening, 16:00 is not.
+    expect(eventInWindow(run('2026-03-29T15:00:00Z','2026-03-29T17:00:00Z'),Date.parse('2026-03-29T08:00:00Z'),'tonight')).toBe(true); // 17:00 CEST
+    expect(eventInWindow(run('2026-03-29T14:00:00Z','2026-03-29T15:00:00Z'),Date.parse('2026-03-29T08:00:00Z'),'tonight')).toBe(false); // 16:00 CEST
+    expect(eventInWindow(run('2026-10-25T16:00:00Z','2026-10-25T18:00:00Z'),Date.parse('2026-10-25T09:00:00Z'),'tonight')).toBe(true); // 17:00 CET
+    expect(eventInWindow(run('2026-10-25T15:00:00Z','2026-10-25T15:30:00Z'),Date.parse('2026-10-25T09:00:00Z'),'tonight')).toBe(false); // 16:00 CET
+    // Tomorrow's late programme is not tonight's, even a few hours ahead: 23 Sep 17:30 at 22 Sep 23:30.
+    expect(eventInWindow(run('2026-09-23T15:30:00Z','2026-09-23T17:00:00Z'),Date.parse('2026-09-22T21:30:00Z'),'tonight')).toBe(false);
+    // The other windows answer as before.
+    expect(eventInWindow(show('12:00','13:30'),at('14:32'),'today')).toBe(false);
+    expect(eventInWindow(show('16:00','18:00'),at('14:32'),'today')).toBe(true);
+    expect(eventInWindow(show('00:00','23:59','day'),at('18:00'),'week')).toBe(true);
+    expect(locatedEvents([show('20:00'),{...show('12:00'),id:'matinee'}],[place],at('14:32'),'tonight').map(e=>e.item.id)).toEqual(['e1']);
   });
   it('quiet venues are searchable but not default event pins',()=>{
     const city={...emptyCity(),places:[place]},o={group:'living' as const,category:'',window:'week' as const,query:'',center:{lon:15.97,lat:45.81},radius:5000,now};

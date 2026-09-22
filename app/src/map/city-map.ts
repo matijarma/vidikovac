@@ -28,6 +28,7 @@ import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { markAlpha, vehicleKind, type VehicleKind } from './vehicle-mark';
 import { tr } from '../transport/strings';
+import type { CityLabels } from './city-layers';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
@@ -722,10 +723,12 @@ export interface CityMapOptions {
   attributionCompact?: boolean;
   /** false leaves the city, region and country names off the basemap, for a map inset too small to carry them. No surface asks for it today. */
   placeLabels?: boolean;
-  /** false leaves the city places' own names off (map/city-layers.ts): the
-   *  public screen draws badges and dots alone until a person explores.
-   *  Default true. Changed live with setCityLabels. */
-  cityLabels?: boolean;
+  /** Which of the city places' own names are drawn (map/city-layers.ts
+   *  CityLabels): 'all' (default), 'venues' on the framed wall (a venue with
+   *  a programme tonight is named, a BAJS station is its counted disc alone),
+   *  'none' on the unframed window onto the whole city. true and false are
+   *  the older switch for 'all' and 'none'. Changed live with setCityLabels. */
+  cityLabels?: CityLabels | boolean;
   /** How far from a mark a tap may land and still pick it, CSS px. The public
    *  screen raises it: a finger on a wall is not a mouse on a desk, and its
    *  stop rings are small at city zoom. Default HIT_TOLERANCE_PX. */
@@ -756,6 +759,11 @@ export interface CityMapOptions {
   onCamera?: (camera: MapCamera) => void;
 }
 
+/** CityMapOptions.cityLabels as one of its three answers. */
+export function cityLabelsOf(on: CityLabels | boolean | undefined): CityLabels {
+  return on === undefined || on === true ? 'all' : on === false ? 'none' : on;
+}
+
 export interface CityMapHandle {
   update(points: MapPoint[], lines: MapLine[]): void;
   /** Stops stepping the model and requesting frames (a frozen dashboard,
@@ -781,8 +789,8 @@ export interface CityMapHandle {
   /** After the container's box changed while it sat outside the layout. */
   resize?(): void;
   setModes?(modes: ReadonlySet<number> | null): void;
-  /** The city places' own names on or off, on the one live map. */
-  setCityLabels?(on: boolean): void;
+  /** Which of the city places' own names are drawn, on the one live map. */
+  setCityLabels?(on: CityLabels | boolean): void;
   /** The kinds of city point this chapter lights; null lights every one. */
   setEmphasis?(emphasis: readonly PlaceKind[] | null): void;
   /** "Only this line on the map": the reader's own switch, per device. A
@@ -1014,7 +1022,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
-  let cityLabels = options.cityLabels !== false;
+  let cityLabels: CityLabels = cityLabelsOf(options.cityLabels);
   let hitTolerance = options.hitTolerancePx ?? profile.hitTolerancePx;
   let closuresVisible = options.closures !== false;
   let stop: ScreenStop | null = options.stop ?? null;
@@ -1999,8 +2007,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setCityLabels(on) {
-      if (on === cityLabels) return;
-      cityLabels = on;
+      const next = cityLabelsOf(on);
+      if (next === cityLabels) return;
+      cityLabels = next;
       applyCityOverlays();
     },
     setEmphasis,

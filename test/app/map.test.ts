@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { districtBySlug } from '../../app/src/kiosk/districts';
 import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
 import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
-import { BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM, BIKE_SPENT_BADGES, BIKE_SPENT_OPACITY, cityLayers } from '../../app/src/map/city-layers';
+import { BIKE_COUNT_PX, BIKE_DISC_RADIUS_PX, BIKE_FAR_RADIUS_PX, cityLayers } from '../../app/src/map/city-layers';
 import * as basemap from '../../app/src/map/basemap';
 import {
+  cityLabelsOf,
   createCityMap,
   linesToGeoJson,
   OSM_ATTRIBUTION,
@@ -272,11 +273,11 @@ describe('the stage options: cooperative gestures, compact attribution, padding-
 // view carries no selection and no padding -- the enlarged screen-stop ring is
 // the anchor. The paired phase keeps today's Promet contract (R-KP8). Pure: no
 // map, no DOM, no clock.
-// The city's own places on the public screen's window: a BAJS station is one
-// dot among a hundred at city zoom and a thing to walk to once the camera is
-// in a neighbourhood, so its mark and its count follow the camera; a station
-// with no bike, none to rent or a source gone quiet recedes behind the ones a
-// person can use. Every other kind of city place is untouched.
+// The city's own places on a map somebody reads from a step away: a BAJS
+// station is a disc with its count in it at every zoom (grey with "0", grey
+// and blank when the count is not known), a venue's disc carries its
+// programme count, and nothing is ever a merged cluster. The unframed window
+// onto the whole city keeps a station a small dot without its number.
 describe('the city places’ marks', () => {
   /** Enough of the MapLibre expression language to read these layers back. */
   function evaluate(expr: unknown, props: Record<string, unknown>, zoom: number): unknown {
@@ -290,7 +291,9 @@ describe('the city places’ marks', () => {
       case '*': return (rest as unknown[]).reduce((n, x) => (n as number) * (ev(x) as number), 1);
       case '==': return ev(rest[0]) === ev(rest[1]);
       case '>': return (ev(rest[0]) as number) > (ev(rest[1]) as number);
+      case '!': return !ev(rest[0]);
       case 'all': return rest.every((x) => ev(x) === true);
+      case 'any': return rest.some((x) => ev(x) === true);
       case 'in': return (ev(rest[1]) as unknown[]).includes(ev(rest[0]));
       case 'min': return Math.min(...rest.map((x) => ev(x) as number));
       case '+': return rest.reduce((n: number, x) => n + (ev(x) as number), 0);
@@ -299,69 +302,102 @@ describe('the city places’ marks', () => {
         for (let i = 0; i + 1 < rest.length; i += 2) if (ev(rest[i]) === true) return ev(rest[i + 1]);
         return ev(rest[rest.length - 1]);
       }
-      case 'interpolate': {
-        const flat = rest.slice(2);
-        const stops: [number, unknown][] = [];
-        for (let i = 0; i + 1 < flat.length; i += 2) stops.push([flat[i] as number, flat[i + 1]]);
-        if (zoom <= stops[0]![0]) return ev(stops[0]![1]);
-        const last = stops[stops.length - 1]!;
-        if (zoom >= last[0]) return ev(last[1]);
-        for (let i = 0; i + 1 < stops.length; i++) {
-          const [z0, a] = stops[i]!, [z1, b] = stops[i + 1]!;
-          if (zoom >= z0 && zoom <= z1) return (ev(a) as number) + (((ev(b) as number) - (ev(a) as number)) * (zoom - z0)) / (z1 - z0);
+      case 'match': {
+        const v = ev(rest[0]);
+        for (let i = 1; i + 1 < rest.length; i += 2) {
+          const k = rest[i];
+          if (Array.isArray(k) ? k.includes(v) : k === v) return ev(rest[i + 1]);
         }
-        return Number.NaN;
+        return ev(rest[rest.length - 1]);
       }
       default: throw new Error(`unhandled expression ${op}`);
     }
   }
-  const layers = cityLayers(basemap.overlayPalette('light'), null, 2);
-  const byId = (id: string) => layers.find((l) => l.id === id)!;
-  const bike = (badge: string) => ({ category: 'bikes', badge, eventCount: 0, priority: 2 });
+  const palette = basemap.overlayPalette('light');
+  const layers = cityLayers(palette, null, 2);
+  const byId = (id: string, from = layers) => from.find((l) => l.id === id)!;
+  const bike = (badge: string, spent = false, extra: Record<string, unknown> = {}) => ({ category: 'bikes', badge, spent, eventCount: 0, priority: 2, ...extra });
   const venue = { category: 'culture', badge: '3', eventCount: 3, priority: 0 };
+  const plain = { category: 'water', badge: '', eventCount: 0, priority: 3 };
 
-  it('sizes a BAJS station and its count from the camera: small on the whole city, a thing to walk to in a neighbourhood', () => {
-    expect([BIKE_FAR_ZOOM, BIKE_NEAR_ZOOM]).toEqual([13, 14]);
-    const radius = byId('city-place-dots').paint!['circle-radius'];
-    const size = byId('city-place-badges').layout!['text-size'];
-    // At the screen's symbol scale 2: 3 and 5 px before the scale, 7 and 8 for the count, which is invisible far out.
-    const opacity = byId('city-place-badges').paint!['text-opacity'];
-    expect(evaluate(radius, bike('7'), 13)).toBe(6);
-    expect(evaluate(radius, bike('7'), 14)).toBe(10);
-    expect(evaluate(size, bike('7'), 13)).toBe(14);
-    expect(evaluate(size, bike('7'), 14)).toBe(16);
-    expect(evaluate(opacity, bike('7'), 13)).toBe(0);
-    expect(evaluate(opacity, bike('7'), 14)).toBe(1);
-    // Below the far stop and above the near one the ramp holds its ends; between them it interpolates.
-    expect(evaluate(radius, bike('7'), 12.7)).toBe(6);
-    expect(evaluate(radius, bike('7'), 16)).toBe(10);
-    expect(evaluate(radius, bike('7'), 13.5)).toBe(8);
-    // A station's ring is a hairline; every other mark keeps its 2 px stroke.
-    const stroke = byId('city-place-dots').paint!['circle-stroke-width'];
-    expect(evaluate(stroke, bike('7'), 14)).toBe(1);
-    expect(evaluate(stroke, venue, 14)).toBe(2);
-    // Every other kind of place keeps exactly the mark it had, at every zoom; a cluster is a small counted dot.
+  it('draws a BAJS station as a 20 px disc with its count in it at every zoom on the wall’s scale', () => {
+    expect([BIKE_DISC_RADIUS_PX, BIKE_COUNT_PX]).toEqual([10, 12]);
+    const dots = byId('city-place-dots'), badges = byId('city-place-badges');
+    // Nothing on these layers follows the camera any more.
+    expect(JSON.stringify([dots, badges])).not.toContain('"zoom"');
     for (const zoom of [12.7, 13, 13.5, 14, 16]) {
-      expect(evaluate(radius, venue, zoom), `venue @${zoom}`).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
-      expect(evaluate(radius, { category: 'cluster', badge: '+4', eventCount: 0 }, zoom), `cluster @${zoom}`).toBe(22);
-      expect(evaluate(radius, { category: 'water', badge: '', eventCount: 0 }, zoom), `plain @${zoom}`).toBe(16);
-      expect(evaluate(size, venue, zoom), `venue text @${zoom}`).toBe(24);
-      expect(evaluate(opacity, venue, zoom), `venue text opacity @${zoom}`).toBe(1);
+      expect(evaluate(dots.paint!['circle-radius'], bike('7'), zoom), `bike @${zoom}`).toBe(20);
+      expect(evaluate(dots.paint!['circle-radius'], bike('0', true), zoom), `spent bike @${zoom}`).toBe(20);
+      expect(evaluate(badges.layout!['text-size'], bike('7'), zoom), `count @${zoom}`).toBe(24);
+      expect(evaluate(badges.layout!['text-field'], bike('7'), zoom), `count text @${zoom}`).toBe('7');
+      // Every other kind of place keeps exactly the mark it had.
+      expect(evaluate(dots.paint!['circle-radius'], venue, zoom), `venue @${zoom}`).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
+      expect(evaluate(dots.paint!['circle-radius'], plain, zoom), `plain @${zoom}`).toBe(16);
+      expect(evaluate(badges.layout!['text-size'], venue, zoom), `venue text @${zoom}`).toBe(24);
     }
+    // Full strength at every zoom: no opacity ramp is left to fade a count away.
+    for (const key of ['circle-opacity', 'circle-stroke-opacity']) expect(dots.paint![key], key).toBeUndefined();
+    expect(badges.paint!['text-opacity']).toBeUndefined();
+    // A count is never dropped by a collision.
+    expect(badges.layout!['text-allow-overlap']).toBe(true);
+    // A station's ring is a hairline; every other mark keeps its 2 px stroke.
+    expect(evaluate(dots.paint!['circle-stroke-width'], bike('7'), 14)).toBe(1);
+    expect(evaluate(dots.paint!['circle-stroke-width'], venue, 14)).toBe(2);
   });
 
-  it('lets a station with nothing to give recede: no bike, none to rent, or a source gone quiet', () => {
-    expect(BIKE_SPENT_BADGES).toEqual(['0', '—', '?']);
-    const dots = byId('city-place-dots').paint!, badges = byId('city-place-badges').paint!;
-    for (const badge of BIKE_SPENT_BADGES) {
-      expect(evaluate(dots['circle-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
-      expect(evaluate(dots['circle-stroke-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
-      expect(evaluate(badges['text-opacity'], bike(badge), 14), badge).toBe(BIKE_SPENT_OPACITY);
+  it('greys a station with nothing to give instead of fading it: a "0", a blank disc, and the phone’s older badges', () => {
+    const color = byId('city-place-dots').paint!['circle-color'], ink = byId('city-place-badges').paint!['text-color'];
+    expect(evaluate(color, bike('7'), 14)).toBe(palette.bike);
+    expect(evaluate(ink, bike('7'), 14)).toBe(palette.bikeText);
+    for (const spent of [bike('0', true), bike('', true)]) {
+      expect(evaluate(color, spent, 14), JSON.stringify(spent)).toBe(palette.other);
+      expect(evaluate(ink, spent, 14), JSON.stringify(spent)).toBe(palette.otherText);
     }
-    expect(evaluate(dots['circle-opacity'], bike('7'), 14)).toBe(1);
-    expect(evaluate(dots['circle-opacity'], bike('0'), 14)).toBe(BIKE_SPENT_OPACITY);
+    // discover()'s points carry bikeAvailability's words and no `spent`: the same grey.
+    for (const badge of ['0', '—', '?']) expect(evaluate(color, { category: 'bikes', badge, eventCount: 0 }, 14), badge).toBe(palette.other);
     // A "0" that is not a station's count is not a spent station: only the bikes read this.
-    expect(evaluate(dots['circle-opacity'], { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(1);
+    expect(evaluate(color, { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(palette.event);
+    expect(evaluate(color, venue, 14)).toBe(palette.event);
+    expect(evaluate(ink, venue, 14)).toBe(palette.halo);
+    expect(evaluate(color, { category: 'air', badge: '', eventCount: 0 }, 14)).toBe(palette.other);
+    expect(evaluate(color, plain, 14)).toBe(palette.place);
+  });
+
+  it('keeps a station of the unframed whole-city window a small dot without its number', () => {
+    const far = bike('7', false, { far: true });
+    expect(BIKE_FAR_RADIUS_PX).toBe(3);
+    expect(evaluate(byId('city-place-dots').paint!['circle-radius'], far, 12.7)).toBe(6);
+    expect(evaluate(byId('city-place-badges').layout!['text-field'], far, 12.7)).toBe('');
+    expect(evaluate(byId('city-place-dots').paint!['circle-color'], bike('0', true, { far: true }), 12.7)).toBe(palette.other);
+    // `far` on anything but a station changes nothing.
+    expect(evaluate(byId('city-place-dots').paint!['circle-radius'], { ...venue, far: true }, 12.7)).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
+    expect(evaluate(byId('city-place-badges').layout!['text-field'], { ...venue, far: true }, 12.7)).toBe('3');
+  });
+
+  it('names what the surface asks for: every place, the venues alone on the framed wall, or none on the whole city', () => {
+    const labels = (mode: Parameters<typeof cityLayers>[3]) => byId('city-place-labels', cityLayers(palette, null, 2, mode));
+    const all = labels('all');
+    expect(all.layout!.visibility).toBe('visible');
+    expect(all.filter).toBeUndefined();
+    expect(all.layout!['text-field']).toEqual(['get', 'title']);
+    expect(all.minzoom).toBe(13);
+    const venues = labels('venues');
+    expect(venues.layout!.visibility).toBe('visible');
+    expect(evaluate(venues.filter, venue, 14)).toBe(true);
+    expect(evaluate(venues.filter, bike('7'), 14)).toBe(false);
+    expect(evaluate(venues.filter, { category: 'air', badge: '' }, 14)).toBe(false);
+    expect(labels('none').layout!.visibility).toBe('none');
+    // The badges and the dots do not depend on the mode: a count is not a name.
+    expect(byId('city-place-badges', cityLayers(palette, null, 2, 'none'))).toEqual(byId('city-place-badges'));
+    // The older boolean switch still means every name or none.
+    expect(cityLayers(palette, null, 2, true)).toEqual(cityLayers(palette, null, 2, 'all'));
+    expect(cityLayers(palette, null, 2, false)).toEqual(cityLayers(palette, null, 2, 'none'));
+    expect(cityLayers(palette, null, 2)).toEqual(cityLayers(palette, null, 2, 'all'));
+    expect([cityLabelsOf(undefined), cityLabelsOf(true), cityLabelsOf(false), cityLabelsOf('venues')]).toEqual(['all', 'all', 'none', 'venues']);
+  });
+
+  it('has no cluster mark left on any layer', () => {
+    expect(JSON.stringify(cityLayers(palette, 'x', 1, 'venues'))).not.toContain('cluster');
   });
 });
 
