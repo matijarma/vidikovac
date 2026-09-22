@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SILENCE_HOLD_S } from '../../shared/motion/plan';
+import { evalPathPlan, SILENCE_HOLD_S } from '../../shared/motion/plan';
 import { isPathMotion } from '../../shared/motion/wire';
 import { createEngine } from '../../worker/twin/engine';
 import type { TripJoin } from '../../worker/twin/publish';
@@ -70,5 +70,48 @@ describe('runTick with a silent leader', () => {
       expect(bPlan[bPlan.length - 1][1]).toBeGreaterThan(600);
     }
     expect(silentTicks).toBeGreaterThanOrEqual(3);
+  });
+
+  // The other half of the freeze: a hold from a fresher leader may not pull
+  // a silent follower behind where it was already drawn. B, behind A, last
+  // reported 330 m (in T300's zone) and was published at 350 m; A stands
+  // fresh at 360 m. buildPlan floors B's anchor at 350 and holds it there
+  // (T300 its stop); the register's hold, asked for 325 m, keeps it at 350.
+  it('keeps a silent follower at its published floor through a hold from a fresher leader', () => {
+    const frames: [header: number, a: [number, number], b: [number, number]][] = [
+      [T, [200, T - 2], [100, T - 2]],
+      [T + 10, [280, T + 8], [180, T + 8]],
+      [T + 20, [330, T + 18], [260, T + 18]],
+      [T + 30, [360, T + 28], [330, T + 28]],
+      [T + 40, [360, T + 38], [330, T + 28]],
+      [T + 50, [360, T + 48], [330, T + 28]],
+    ];
+    let state: TwinState = emptyState();
+    const tick = (header: number, [ax, aAt]: [number, number], [bx, bAt]: [number, number]) => {
+      const nowMs = (header + 2) * 1000;
+      const feed = { headerTs: header, vehicles: [vehicle('A', ax, aAt), vehicle('B', bx, bAt)], tripUpdates: [] };
+      const result = runTick({ state, feed, nowMs, joins, routes, engine, validUntilMs: nowMs + 10_000 });
+      state = result.state;
+      return result;
+    };
+    for (const [header, a, b] of frames) tick(header, a, b);
+    // The last published plan drew B at 350 m by the next header (within the
+    // floor's 25 m of its 330 m fix), as a plan of B's running on would have.
+    const pathIdx = net.paths.findIndex((p) => p.id === '1_0');
+    state.published.B.push({ headerSec: T + 50, plan: { on: 'path', pathIdx, knots: [[-22, 330], [10, 350], [90, 350]] } });
+
+    const result = tick(T + 60, [360, T + 58], [330, T + 28]);
+    expect(T + 62 - (T + 28)).toBeGreaterThan(SILENCE_HOLD_S);
+    const b = result.payload.items.find((item) => item.id === 'vehicle:B')!;
+    expect(b.data?.behind).toBe('A');
+    expect(b.data?.nextStopId).toBe('T300');
+    const plan = b.motion && isPathMotion(b.motion) ? b.motion.plan : [];
+    expect(plan.length).toBeGreaterThan(0);
+    // Never back from where it was drawn, never forward past its hold.
+    expect(evalPathPlan(plan as [number, number][], 0)).toBeCloseTo(350, 1);
+    for (const [t, s] of plan) {
+      expect(s, `B at +${t} s`).toBeGreaterThanOrEqual(350 - 0.1);
+      expect(s, `B at +${t} s`).toBeLessThanOrEqual(350 + 0.1);
+    }
   });
 });

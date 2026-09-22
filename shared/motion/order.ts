@@ -185,7 +185,10 @@ export function arcOnPath(path: Path, edge: number, arc: number, nearS: number |
 //     past the arc its own plan holds at, its next stop: the follower's plan
 //     is an extrapolation too, and T8 forbids extrapolating a silent tram
 //     past its next stop by any route. The client's clamp keeps the order
-//     on screen: the follower's mark waits a tram length behind.
+//     on screen: the follower's mark waits a tram length behind. Nor does a
+//     hold pull a silent vehicle behind its planner's anchor, which carries
+//     the published floor: frozen between its hold and where it was drawn,
+//     a silent tram moves neither forward nor back.
 //
 // Buses are exempt: they overtake. Plans never run backwards: a hold or a
 // push keeps every plan monotone.
@@ -260,6 +263,10 @@ interface Framed {
   /** The highest arc a push may lift this vehicle's plan to: its own hold
    *  arc while it is silent (T8), else no bound beyond the path's end. */
   ceilingS: number;
+  /** The lowest arc a hold may pull this vehicle's plan to: its own fix,
+   *  and while it is silent also its planner's anchor, which carries the
+   *  published floor (plan.ts), so a silent tram is never drawn back. */
+  floorS: number;
 }
 
 function endRelation(track: Track): void {
@@ -336,14 +343,15 @@ function monotone(knots: PathKnot[]): void {
 
 /** Clamps the follower one tram length behind the leader's plan, never
  *  behind the follower's own fix: that fix is evidence (R-P2), and a
- *  contradiction it makes is counted, not overwritten. */
+ *  contradiction it makes is counted, not overwritten. Never behind a silent
+ *  follower's published floor either (its `floorS`). */
 function hold(follower: Framed, leader: Framed): boolean {
   withBreakpoints(follower.knots, leader.knots.map((k) => k[0]));
   let changed = false;
   for (const knot of follower.knots) {
     const ahead = mapArcNear(leader.path, evalPathPlan(leader.knots, knot[0]), follower.path, follower.s);
     if (ahead === null) continue;
-    const ceiling = Math.max(ahead - HEADWAY_M, follower.s);
+    const ceiling = Math.max(ahead - HEADWAY_M, follower.floorS);
     if (knot[1] > ceiling) {
       knot[1] = Math.max(0, ceiling);
       changed = true;
@@ -401,10 +409,14 @@ export function enforceOrder(
     const fix = lastFix(track);
     if (!fix) continue;
     // buildPlan held a silent vehicle at its next stop (T8): the last knot of
-    // its monotone plan is that hold, and the most any push may lift it to.
+    // its monotone plan is that hold, and the most any push may lift it to;
+    // the first is its anchor, the published floor applied, and the least
+    // any hold may pull it to.
     const knots = track.plan.knots;
-    const ceilingS = nowSec - fix.atSec > SILENCE_HOLD_S && knots.length > 0 ? knots[knots.length - 1][1] : Number.POSITIVE_INFINITY;
-    framed.push({ track, path: net.paths[track.plan.pathIdx], pathIdx: track.plan.pathIdx, knots, fixSec: fix.atSec, s: track.match.s, ceilingS });
+    const silent = nowSec - fix.atSec > SILENCE_HOLD_S && knots.length > 0;
+    const ceilingS = silent ? knots[knots.length - 1][1] : Number.POSITIVE_INFINITY;
+    const floorS = silent ? Math.max(track.match.s, knots[0][1]) : track.match.s;
+    framed.push({ track, path: net.paths[track.plan.pathIdx], pathIdx: track.plan.pathIdx, knots, fixSec: fix.atSec, s: track.match.s, ceilingS, floorS });
   }
   framed.sort((a, b) => a.track.id.localeCompare(b.track.id));
   const byId = new Map(framed.map((f) => [f.track.id, f] as const));
