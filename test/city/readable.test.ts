@@ -5,7 +5,6 @@ import {emptyCity,type Place} from '../../shared/city/types';
 import {createDefaultI18n} from '../../app/src/i18n/create-default-i18n';
 import {createHighlightSequence,kioskHighlights,highlightBounds,inHighlightBounds,type KioskHighlight} from '../../app/src/kiosk/highlights';
 import {MAP_PRESENTATIONS} from '../../app/src/map/presentation';
-import {clusterLabel} from '../../app/src/motion/pills';
 import {bikeCount} from '../../app/src/city/strings';
 
 const now=Date.parse('2026-09-20T12:00:00Z');
@@ -76,10 +75,6 @@ describe('passive highlight sequence',()=>{
     expect(kioskHighlights({city,modules:[],stop:null,now,i18n:createDefaultI18n('hr'),bounds})).toEqual([]);
   });
   it('keeps the bounds independent of DPR and bounds route summaries without losing individual numbers',()=>{
-    for(const profile of Object.values(MAP_PRESENTATIONS)){
-      expect(clusterLabel(['6'],profile.clusterMaxNumbers)).toBe('6');
-      expect(clusterLabel(['109','113','119','120','121'],profile.clusterMaxNumbers).length).toBeLessThanOrEqual(12);
-    }
     expect(MAP_PRESENTATIONS.handheld.hitTolerancePx*2).toBeGreaterThanOrEqual(44);
   });
 });

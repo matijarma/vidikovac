@@ -12,14 +12,13 @@ export const PILL_BASE_WIDTHS_PX: readonly number[] = [18, 24, 31, 38];
 /** A cluster label ("6·11·12·14") can run past four characters; each one
  *  beyond the hand-tuned table widens the pill instead of clipping it. */
 export const PILL_EXTRA_CHAR_PX = 7;
-/** A cluster label's hard cap: past this many characters the pill stops
- *  growing and the label itself is what shortens (clusterLabel's "+n").
- *  Nineteen is the longest label clusterLabel can write, and it is a *bus*
- *  cluster that writes it: four three-digit ZET routes (12), their three
- *  separators (15), the space and the "+" (17) and a two-digit tail (19) --
- *  "109·113·119·120 +12". A cap below that clamped the capsule to a width
- *  the number no longer fits in, and the label spilled past its own pill. */
-export const PILL_MAX_CHARS_CLUSTER = 19;
+/** A merged pill names every line in it and grows with them [O-35]: a
+ *  count of hidden lines tells someone waiting for a tram nothing. This is
+ *  only the hard cap, the widest capsule there is (290 px): all fifteen
+ *  tram lines, "1·2·3·4·5·6·7·8·9·11·12·13·14·15·17", are 35 characters
+ *  and fit whole; ten three-digit bus routes are 39. A bus hub past forty
+ *  keeps the whole lines that fit (clusterLabel), never a count. */
+export const PILL_MAX_CHARS_CLUSTER = 40;
 
 export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
 /** The tram's plate (the badge rule of signage.css: a tram is a plate, a bus
@@ -40,10 +39,6 @@ export const NOSE_WIDTH_PX = 9;
  *  overlap: two pills that almost touch still read as one cluster, not a
  *  hairline gap that flickers between joined and apart frame to frame. */
 export const CLUSTER_PADDING_PX = 2;
-/** clusterLabel shows at most this many distinct numbers before folding the
- *  rest into "+n" -- a stop with a dozen trams reads as a count, not a wall
- *  of digits. */
-export const CLUSTER_MAX_NUMBERS = 4;
 /** The separator between distinct labels in a cluster's name. */
 export const CLUSTER_SEPARATOR = '·';
 
@@ -102,7 +97,7 @@ export const PILL_INKS: { light: PillInks; dark: PillInks } = {
 };
 
 /** A label is "numeric" when it is only digits: a route number, not the K of
- *  a night line or a cluster's own "+n" tail. */
+ *  a night line. */
 function isNumeric(label: string): boolean {
   return /^\d+$/.test(label);
 }
@@ -118,15 +113,21 @@ function compareClusterLabel(a: string, b: string): number {
   return a.localeCompare(b, 'hr');
 }
 
-/** A cluster's name: distinct labels, numeric order, capped at
- *  CLUSTER_MAX_NUMBERS then folded into a "+n" tail (a stop with a dozen
- *  trams reads as "6·11·12·14 +2", not a wall of digits). */
-export function clusterLabel(labels: string[], maxNumbers = CLUSTER_MAX_NUMBERS): string {
+/** A cluster's name: every distinct line, numbers ascending then letters,
+ *  joined by CLUSTER_SEPARATOR -- every line number, the pill grows
+ *  [O-35]. Nothing is folded into a count. Only past the capsule's hard cap
+ *  (PILL_MAX_CHARS_CLUSTER, a bus hub; every tram line together fits) does
+ *  the name stop at the last whole line that fits: a shorter list, never a
+ *  number cut in half and never a count in place of the lines. */
+export function clusterLabel(labels: readonly string[]): string {
   const distinct = [...new Set(labels)].sort(compareClusterLabel);
-  const cap=Math.max(1,Math.min(CLUSTER_MAX_NUMBERS,maxNumbers));
-  if (distinct.length <= cap) return distinct.join(CLUSTER_SEPARATOR);
-  const shown = distinct.slice(0, cap).join(CLUSTER_SEPARATOR);
-  return `${shown} +${distinct.length - cap}`;
+  let label = distinct[0] ?? '';
+  for (const line of distinct.slice(1)) {
+    const next = label + CLUSTER_SEPARATOR + line;
+    if (next.length > PILL_MAX_CHARS_CLUSTER) break;
+    label = next;
+  }
+  return label;
 }
 
 /** A vehicle's pill in screen px: the box `clusterPills` tests for overlap is
@@ -177,7 +178,7 @@ function intersects(a: Box, b: Box): boolean {
  *  own single, so a tap never loses the mark it was aimed at. */
 export function clusterPills<T extends PillPoint>(
   points: readonly T[],
-  opts: { selectedId?: string | null; maxNumbers?: number } = {},
+  opts: { selectedId?: string | null } = {},
 ): Array<Single<T> | Cluster<T>> {
   const selectedId = opts.selectedId ?? null;
   const rest = selectedId === null ? points : points.filter((p) => p.id !== selectedId);
@@ -225,7 +226,7 @@ export function clusterPills<T extends PillPoint>(
       id: `cluster:${ids.join(',')}`,
       x,
       y,
-      label: clusterLabel(members.map((m) => m.label),opts.maxNumbers),
+      label: clusterLabel(members.map((m) => m.label)),
       members,
     });
   }
