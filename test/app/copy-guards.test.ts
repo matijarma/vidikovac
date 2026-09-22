@@ -12,6 +12,7 @@ import hr from '../../app/src/i18n/hr.json';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { stopDetailMarkup } from '../../app/src/transport/view';
+import { kioskStrings } from '../../app/src/kiosk/strings';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
@@ -149,6 +150,27 @@ describe('theme words', () => {
   it('are sentence case and agree with "tema" in Croatian; the kiosk keeps its lower-case mid-sentence words', () => {
     expect(hr.common.theme).toEqual({ label: 'Tema', auto: 'Automatski', light: 'Svijetla', dark: 'Tamna', solar: 'Po suncu' });
     expect(hr.kiosk.header.themeWord).toEqual({ auto: 'automatski', light: 'svijetla', dark: 'tamna', solar: 'po suncu' });
+  });
+});
+
+// The wall map's legend (WP2 step 6, kiosk.legend.*): three plain items, and
+// no caveat of the "? nepotvrđeno" kind the old hard-coded legend carried. A
+// BAJS disc whose count is unknown is grey and blank on the map, so the legend
+// never needs to explain a question mark.
+describe('the wall legend kiosk.legend.* (WP2)', () => {
+  it('names the three items in both languages', () => {
+    expect(hr.kiosk.legend).toEqual({ tram: 'Tramvajska linija', bikes: 'BAJS: broj bicikala', culture: 'Kultura večeras' });
+    expect(en.kiosk.legend).toEqual({ tram: 'Tram route', bikes: 'BAJS: bikes available', culture: 'Culture tonight' });
+  });
+  it.each([['hr', hr], ['en', en]] as const)('%s: no question mark, no caveat, no ellipsis, never "zid"', (name, catalogue) => {
+    for (const [key, value] of Object.entries(catalogue.kiosk.legend)) {
+      expect(value, `kiosk.legend.${key} (${name})`).not.toMatch(/\?|nepotvrđen|unconfirmed|…|\.\.\./);
+      expect(value, `kiosk.legend.${key} (${name})`).not.toMatch(/(?<![\p{L}\p{N}_])zid/iu);
+    }
+  });
+  it('the kiosk adapter reads the legend from the catalogue', () => {
+    expect(kioskStrings('hr').legend).toEqual(hr.kiosk.legend);
+    expect(kioskStrings('en').legend).toEqual(en.kiosk.legend);
   });
 });
 

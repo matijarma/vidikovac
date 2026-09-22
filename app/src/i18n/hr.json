@@ -862,6 +862,11 @@
       "codeWaiting": "čekanje koda",
       "progressLabel": "Preostalo vrijeme ovog koda"
     },
+    "legend": {
+      "tram": "Tramvajska linija",
+      "bikes": "BAJS: broj bicikala",
+      "culture": "Kultura večeras"
+    },
     "weather": {
       "title": "Vrijeme sada",
       "humidity": "vlaga {value} %",

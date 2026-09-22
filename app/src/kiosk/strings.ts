@@ -52,6 +52,14 @@ export interface KioskStrings {
     copyCode: string;
     progressLabel: string;
   };
+  /** The wall map's legend (WP2, kiosk.legend.*): three plain items, the tram
+   *  route, the BAJS disc's count and tonight's culture, never a caveat. The
+   *  invitation mounts it only where there is a map. */
+  legend: {
+    tram: string;
+    bikes: string;
+    culture: string;
+  };
   weather: {
     title: string;
     humidity: string;
@@ -366,6 +374,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     status: group('status', ['offline', 'reconnecting', 'dataDown']),
     invitation: { ...group('invite', ['lead', 'support', 'typeCode', 'qrLabel', 'qrWaiting', 'codeWaiting', 'progressLabel']), copyCode: i18n.t('session.shareCopy') },
+    legend: group('legend', ['tram', 'bikes', 'culture']),
     weather: {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
