@@ -26,6 +26,8 @@ import type { TwinState } from './state';
 export interface TripJoin {
   direction: 0 | 1;
   headsign: string;
+  /** GTFS service_id; absent when the source has no service information. */
+  service?: string;
   /** The GTFS shape id, or null for a pattern whose trips carry none (line 1). */
   shapeId: string | null;
   /** The id of the path the pattern runs, resolved once when the index loaded

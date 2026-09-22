@@ -4,7 +4,7 @@ import type { Env } from '../../worker/env';
 import { TwinDO, twinStub } from '../../worker/do/twin-do';
 import { metricsStub, zagrebDayHour } from '../../worker/metrics';
 import { FEED_TICK_MS, TICK_CUSHION_MS, TICK_MIN_DELAY_MS, nextTickAt } from '../../worker/twin/clock';
-import { LEARN_FLUSH_MS } from '../../worker/twin/persist';
+import { ensureSchema, indexCheckedAt, indexFeedVersion, indexNeedsBackfill, LEARN_FLUSH_MS, lookupTrips } from '../../worker/twin/persist';
 import { setTwinIndexSourceForTest, setTwinNetworkSourceForTest, setTwinUpstreamForTest } from '../../worker/twin/seams';
 import { recordingKey } from '../../worker/twin/record';
 import { evalPathPlan } from '../../shared/motion/plan';
@@ -258,7 +258,7 @@ describe('TwinDO', () => {
     await stub.publish(); // the index is in memory, and its rows reach SQLite
 
     const warm = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
-    expect(warm.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+    expect(warm.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc', service: 'wd' });
 
     // Memory gone and the index asset unreadable: only the SQLite copy answers.
     await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
@@ -267,13 +267,79 @@ describe('TwinDO', () => {
     const report = await stub.tick();
     expect(report).toMatchObject({ indexLoaded: false, networkLoaded: true });
     const cold = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
-    expect(cold.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc' });
+    expect(cold.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc', service: 'wd' });
     // (The plans themselves are free-plane while the index is missing -- the
     // engine needs both assets -- so it is the join that is worth asserting:
     // the moment the index returns, that join already names the right path.)
   });
 
-  it('evicts a vehicle silent for five minutes', async () => {
+  it('migrates an existing trip table without losing rows and leaves unknown legacy services absent', async () => {
+    const stub = freshTwin();
+    const migrated = await runInDurableObject(stub, (_instance: TwinDO, state) => {
+      const sql = state.storage.sql;
+      sql.exec('ALTER TABLE trips DROP COLUMN service');
+      sql.exec("INSERT INTO trips VALUES ('legacy', 0, 'legacy-block', 100)");
+      ensureSchema(sql);
+      ensureSchema(sql); // an already-migrated database is safe too
+      sql.exec("INSERT INTO patterns VALUES (0, '1', 0, '1_0', 'Terminus', '[]', '[]', '[]')");
+      const before = lookupTrips(sql, ['legacy']).get('legacy');
+      sql.exec("UPDATE trips SET service = 'wd' WHERE trip_id = 'legacy'");
+      return { before, after: lookupTrips(sql, ['legacy']).get('legacy') };
+    });
+    expect(migrated.before).toMatchObject({ shapeId: '1_0', startSec: 100, block: 'legacy-block' });
+    expect(migrated.before).not.toHaveProperty('service');
+    expect(migrated.after).toMatchObject({ service: 'wd' });
+  });
+
+  it.each(['missing-column', 'unmarked-column'])('backfills a same-version %s index before a later cold lookup', async (legacy) => {
+    setTwinUpstreamForTest(scriptedUpstream([
+      frame(T0, [tram('a', 't9', '9', 400, T0 - 5)]),
+      frame(T0 + 10, [tram('a', 't9', '9', 500, T0 + 4)]),
+    ]).upstream);
+    const stub = freshTwin();
+    await pinClock(stub, T0 * 1000 + 2_000);
+    await stub.publish();
+
+    // Keep the feed version and fresh checked-at time. Simulate either a
+    // pre-service database or the earlier migration that left empty rows.
+    const upgraded = await runInDurableObject(stub, (instance: TwinDO, state) => {
+      const sql = state.storage.sql;
+      sql.exec("DELETE FROM meta WHERE key = 'index_schema_version'");
+      if (legacy === 'missing-column') sql.exec('ALTER TABLE trips DROP COLUMN service');
+      else sql.exec("UPDATE trips SET service = ''");
+      ensureSchema(sql);
+      ensureSchema(sql);
+      instance.forgetForTest();
+      return {
+        feedVersion: indexFeedVersion(sql),
+        checkedAt: indexCheckedAt(sql),
+        pending: indexNeedsBackfill(sql),
+        join: lookupTrips(sql, ['t9']).get('t9'),
+      };
+    });
+    expect(upgraded).toMatchObject({ feedVersion: INDEX.feedVersion, checkedAt: T0 * 1000 + 2_000, pending: true });
+    expect(upgraded.join).not.toHaveProperty('service');
+
+    await stub.publish(); // same version, same clock, but backfill is pending
+    const refreshed = await runInDurableObject(stub, (_instance: TwinDO, state) => {
+      ensureSchema(state.storage.sql); // must not re-arm a completed backfill
+      return {
+        feedVersion: indexFeedVersion(state.storage.sql),
+        pending: indexNeedsBackfill(state.storage.sql),
+        join: lookupTrips(state.storage.sql, ['t9']).get('t9'),
+      };
+    });
+    expect(refreshed).toMatchObject({ feedVersion: INDEX.feedVersion, pending: false, join: { service: 'wd' } });
+
+    await runInDurableObject(stub, (instance: TwinDO) => instance.forgetForTest());
+    setTwinIndexSourceForTest(async () => null);
+    await pinClock(stub, (T0 + 10) * 1000 + 2_000);
+    expect(await stub.tick()).toMatchObject({ indexLoaded: false, networkLoaded: true });
+    const cold = await runInDurableObject(stub, (instance: TwinDO) => instance.joinsForTest(['t9']));
+    expect(cold.t9).toMatchObject({ shapeId: null, pathId: 'path:9:0:abc', service: 'wd' });
+  });
+
+  it('evicts a vehicle silent for more than three minutes', async () => {
     const { upstream } = scriptedUpstream([
       frame(T0, [tram('a', 't1a', '1', 400, T0 - 5), tram('b', 't1b', '1', 100, T0 - 5)]),
       frame(T0 + 320, [tram('a', 't1a', '1', 1400, T0 + 318)]),

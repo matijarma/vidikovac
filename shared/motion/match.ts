@@ -1,14 +1,19 @@
 // Map matching for the twin: where on the rail graph (a tram) or on its
 // route's polylines (a bus) a reported fix puts the vehicle. The trip's own
-// path is the prior; geometry only decides where the prior is silent or has
-// been proven wrong twice. Nothing here draws anything: the match is the
+// path is checked at every fix; geometry decides where it no longer fits.
+// Nothing here draws anything: the match is the
 // planner's anchor (plan.ts) and the ordering register's frame (order.ts).
 //
 // Rules (plan "Engine core", R-TE22, the reviewer's A10):
-//   - candidates come from the edges within NEAR_M of the fix, on-path first;
+//   - return to the trip's own path within NEAR_M after cumulative forward
+//     longitudinal movement beyond scatter; backward/off-path fixes reset it;
+//   - use only the route's own paths, excluding known non-running services;
+//     prefer the prior, current path, edge sequence, direction, then trip count;
 //   - a fix off its path by more than NEAR_M once is noise and stays on the
 //     path; twice in a row it is a detour, and the path is re-derived from
 //     the edge the vehicle is actually on;
+//   - off the route's rails, stay unplaced (free plane) and retry each fix;
+//     another line's path is never a substitute for missing own-route rails;
 //   - two fixes further than OFF_GRAPH_M from every edge put the vehicle off
 //     the graph (a balloon loop, a depot track, a works detour no shape
 //     draws), a fix within NEAR_M of an edge brings it back;
@@ -65,9 +70,12 @@ export const ARC_PRIOR_WEIGHT = 0.5;
  *  first placement: the fold whose platform is the next one wins over the
  *  fold a whole circuit earlier, and nothing else changes. */
 export const NEXT_STOP_DISTANCE_WEIGHT = 0.01;
-/** Ground movement in one interval that is motion, not scatter: a vehicle
- *  that moved this far against its rail's direction is on the wrong fold. */
+/** Movement beyond scatter: fold placement uses one ground interval, D4
+ *  uses one longitudinal interval, and prior return accumulates forward metres. */
 export const FOLD_MOVE_M = 50;
+/** Smaller longitudinal intervals are noise, not accumulated return progress
+ *  or reversals. Also covers the sub-metre rounding of a legacy stored fix. */
+const PRIOR_RETURN_NOISE_M = 1;
 /** Consecutive fixes moving against the rail the vehicle is read on before
  *  the path is re-derived to the other direction (D4). One is a stray or a
  *  platform shuffle; two in a row, both further than FOLD_MOVE_M, is a tram
@@ -83,10 +91,21 @@ export interface Prior {
   direction: 0 | 1 | null;
 }
 
+export interface PathRank {
+  /** Empty for paths no indexed trip uses, including terminus loops. */
+  services: ReadonlySet<string>;
+  trips: number;
+}
+
+export interface MatchContext {
+  /** Services observed in the frame's joins; null/empty means unknown. */
+  runningServices: ReadonlySet<string> | null;
+}
+
 export interface Matcher {
   priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior;
   /** Pushes the fix into the track and matches it; returns the new match. */
-  matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null): Match;
+  matchFix(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Match;
   /** Stops strictly between two arcs of a geometry key (`p<path>` or
    *  `b<shape>`), by id, for the speed estimate's per-stop dwell charge. */
   stopsBetween(key: string, fromS: number, toS: number): string[];
@@ -100,7 +119,21 @@ interface Candidate {
   score: number;
 }
 
-export function createMatcher(net: GraphNetwork): Matcher {
+/** Matcher-owned, optional on older tracks. Kept on the track (not in a
+ *  matcher cache) so the existing state serialization preserves progress. */
+interface TramTrack extends Track {
+  priorReturn?: {
+    pathIdx: number;
+    fromPathIdx: number;
+    atSec: number;
+    forwardM: number;
+    /** Last raw point, preserved by persist.ts's track spread while the fix
+     *  history is rounded. Absent in older state rows. */
+    baseline?: XY;
+  };
+}
+
+export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: readonly PathRank[] } = {}): Matcher {
   const shapeIndexById = new Map<string, number>(net.shapes.map((shape, idx) => [shape.id, idx] as const));
   const pathIndexById = new Map<string, number>(net.paths.map((path, idx) => [path.id, idx] as const));
   const pathsByEdge = new Map<number, number[]>();
@@ -147,7 +180,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
   function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior {
     if (shapeId !== null) {
       const shapeIdx = shapeIndexById.get(shapeId);
-      if (shapeIdx !== undefined) {
+      if (shapeIdx !== undefined && net.shapes[shapeIdx].route === routeId) {
         const pathIdx = net.pathOfShape(shapeIdx);
         const shapeDir = net.shapes[shapeIdx].direction;
         return { pathIdx, shapeIdx, routeId, direction: shapeDir === 0 || shapeDir === 1 ? shapeDir : direction };
@@ -158,7 +191,7 @@ export function createMatcher(net: GraphNetwork): Matcher {
     // sequence, which is the one the timetable has segments for.
     if (pathId) {
       const own = pathIndexById.get(pathId);
-      if (own !== undefined) return { pathIdx: own, shapeIdx: null, routeId, direction };
+      if (own !== undefined && pathEligible(own, routeId)) return { pathIdx: own, shapeIdx: null, routeId, direction };
     }
     if (direction !== null) {
       const synthetic = net.paths.findIndex((p) => p.shape === null && p.route === routeId && p.direction === direction);
@@ -167,16 +200,17 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return { pathIdx: null, shapeIdx: null, routeId, direction };
   }
 
-  /** The path to adopt for a vehicle found on `edge`: the route's own path
-   *  running the edge the way the vehicle moves, else any path of the route
-   *  on the edge, else any path at all (a diversion over another line's
-   *  rails), preferring the direction of movement throughout. */
-  function adoptPath(edge: number, sOnEdge: number, routeId: string, dir: XY | null, direction: 0 | 1 | null): number | null {
-    const candidates = pathsByEdge.get(edge) ?? [];
-    if (candidates.length === 0) return null;
-    const own = candidates.filter((p) => net.paths[p].route === routeId);
-    const pool = own.length > 0 ? own : candidates;
-    if (direction === null) return pool[0];
+  function pathEligible(pathIdx: number, routeId: string, ctx?: MatchContext): boolean {
+    if (net.paths[pathIdx]?.route !== routeId) return false;
+    const running = ctx?.runningServices;
+    const services = pathRanks?.[pathIdx]?.services;
+    if (!running?.size || !services?.size) return true;
+    for (const service of services) if (running.has(service)) return true;
+    return false;
+  }
+
+  function wantedDirection(edge: number, sOnEdge: number, dir: XY | null, prior: Prior): 0 | 1 | null {
+    if (prior.direction === null) return null;
     // Every path runs the edge in the edge's own direction (edges are
     // directed), so agreement is a property of the EDGE, not of the paths
     // over it: what it chooses among them is the service direction the
@@ -184,18 +218,44 @@ export function createMatcher(net: GraphNetwork): Matcher {
     // running the direction its prior named; moving against it, it is
     // running the other one -- which is what a terminus turnaround is.
     const agrees = edgeTangentAgrees(edge, sOnEdge, dir);
-    const wanted = agrees ? direction : direction === 0 ? 1 : 0;
-    return pool.find((p) => net.paths[p].direction === wanted) ?? pool[0];
+    return agrees ? prior.direction : prior.direction === 0 ? 1 : 0;
   }
 
-  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, routeId: string, direction: 0 | 1 | null, restrictToRoute: boolean, nextStopId: string | null): Candidate[] {
+  /** Lexicographic path preference; direction is no evidence for an unknown
+   *  trip. The final index tie-break makes the answer independent of the
+   *  edge index's insertion order, even when no trip counts are available. */
+  function comparePaths(a: number, b: number, edge: number, wanted: 0 | 1 | null, track: Track, prior: Prior): number {
+    const continues = (idx: number): boolean => track.match.edge !== null
+      && net.paths[idx].edges.some((e, i, edges) => e === track.match.edge && edges[i + 1] === edge);
+    return Number(b === prior.pathIdx) - Number(a === prior.pathIdx)
+      || Number(b === track.match.pathIdx) - Number(a === track.match.pathIdx)
+      || Number(continues(b)) - Number(continues(a))
+      || (wanted === null ? 0 : Number(net.paths[b].direction === wanted) - Number(net.paths[a].direction === wanted))
+      || (pathRanks?.[b]?.trips ?? 0) - (pathRanks?.[a]?.trips ?? 0)
+      || a - b;
+  }
+
+  /** Only own-route, running paths can be adopted. No foreign-path fallback. */
+  function adoptPath(edge: number, sOnEdge: number, track: Track, prior: Prior, dir: XY | null, ctx?: MatchContext): number | null {
+    const wanted = wantedDirection(edge, sOnEdge, dir, prior);
+    let best: number | null = null;
+    for (const pathIdx of pathsByEdge.get(edge) ?? []) {
+      if (!pathEligible(pathIdx, prior.routeId, ctx)) continue;
+      if (best === null || comparePaths(pathIdx, best, edge, wanted, track, prior) < 0) best = pathIdx;
+    }
+    return best;
+  }
+
+  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
-    if (restrictToRoute) for (const pathIdx of pathsByRoute.get(routeId) ?? []) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
+    for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
+      if (pathEligible(pathIdx, prior.routeId, ctx)) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
+    }
     const out: Candidate[] = [];
     for (const hit of hits) {
-      if (restrictToRoute && routeEdges.size > 0 && !routeEdges.has(hit.edge)) continue;
-      const pathIdx = adoptPath(hit.edge, hit.s, routeId, dir, direction);
+      if (!routeEdges.has(hit.edge)) continue;
+      const pathIdx = adoptPath(hit.edge, hit.s, track, prior, dir, ctx);
       if (pathIdx === null) continue;
       const path = net.paths[pathIdx];
       // A path that runs this edge twice (a circuit, a balloon) offers two
@@ -223,6 +283,8 @@ export function createMatcher(net: GraphNetwork): Matcher {
 
   /** What the vehicle's last interval says about where it is now. */
   interface Motion {
+    /** Raw displacement, including slow movement below the direction dead zone. */
+    delta: XY;
     /** Unit direction of the ground movement, null under the dead zone. */
     dir: XY | null;
     /** Metres moved on the ground since the previous fix. */
@@ -296,18 +358,23 @@ export function createMatcher(net: GraphNetwork): Matcher {
    *  turned, and the other track is three to six metres away -- well inside
    *  the near band, so nothing here ever looked like a detour. Null when no
    *  such rail is within reach, and then the vehicle keeps its projection. */
-  function turnaroundMatch(fromPathIdx: number, p: XY, dir: XY, routeId: string): Match | null {
+  function turnaroundMatch(fromPathIdx: number, p: XY, motion: Motion, track: Track, prior: Prior, ctx?: MatchContext): Match | null {
     const current = net.paths[fromPathIdx];
     let best: { pathIdx: number; edge: number; s: number; d: number } | null = null;
     for (const hit of net.edgesNear(p, NEAR_M)) {
-      if (!edgeTangentAgrees(hit.edge, hit.s, dir)) continue;
       for (const pathIdx of pathsByEdge.get(hit.edge) ?? []) {
         const path = net.paths[pathIdx];
-        if (path.route !== routeId || pathIdx === fromPathIdx) continue;
+        if (pathIdx === fromPathIdx || !pathEligible(pathIdx, prior.routeId, ctx)) continue;
         if (path.direction === current.direction) continue;
         const s = arcOnPath(path, hit.edge, hit.s, null);
         if (s === null) continue;
-        if (best === null || hit.d < best.d) best = { pathIdx, edge: hit.edge, s, d: hit.d };
+        // D4 must not bypass the prior-return gate through a large lateral
+        // diagonal. Measure forward metres on the candidate's own tangent.
+        if (pathForwardM(pathIdx, s, motion.delta) < FOLD_MOVE_M) continue;
+        if (best === null || hit.d < best.d
+          || (hit.d === best.d && comparePaths(pathIdx, best.pathIdx, hit.edge, wantedDirection(hit.edge, hit.s, motion.dir, prior), track, prior) < 0)) {
+          best = { pathIdx, edge: hit.edge, s, d: hit.d };
+        }
       }
     }
     if (best === null) return null;
@@ -321,6 +388,11 @@ export function createMatcher(net: GraphNetwork): Matcher {
     return dot(tangent(geo.pts, geo.cum, s), dir) >= 0;
   }
 
+  function pathForwardM(pathIdx: number, s: number, delta: XY): number {
+    const geo = net.pathGeometry(pathIdx);
+    return dot(tangent(geo.pts, geo.cum, s), delta);
+  }
+
   function onPathMatch(track: Track, pathIdx: number, p: XY, motion: Motion, nextStopId: string | null): Match {
     const path = net.paths[pathIdx];
     const geo = net.pathGeometry(pathIdx);
@@ -332,16 +404,34 @@ export function createMatcher(net: GraphNetwork): Matcher {
 
   function motionOf(track: Track, fix: PlaneFix, prev: PlaneFix | null): Motion {
     const p = { x: fix.x, y: fix.y };
+    const delta = prev ? { x: p.x - prev.x, y: p.y - prev.y } : { x: 0, y: 0 };
     const groundM = prev ? dist(prev, p) : 0;
-    const dir: XY | null = prev && groundM >= DEAD_ZONE_M ? normalise({ x: p.x - prev.x, y: p.y - prev.y }) : null;
-    return { dir, groundM, dtSec: prev ? fix.atSec - prev.atSec : 0, speed: track.speed };
+    const dir: XY | null = prev && groundM >= DEAD_ZONE_M ? normalise(delta) : null;
+    return { delta, dir, groundM, dtSec: prev ? fix.atSec - prev.atSec : 0, speed: track.speed };
   }
 
-  function matchTram(track: Track, fix: PlaneFix, prior: Prior, nextStopId: string | null, prev: PlaneFix | null): Match {
+  function matchTram(track: TramTrack, fix: PlaneFix, prior: Prior, nextStopId: string | null, prev: PlaneFix | null, ctx?: MatchContext): Match {
     const p = { x: fix.x, y: fix.y };
     const motion = motionOf(track, fix, prev);
     const dir = motion.dir;
     const dtSec = motion.dtSec;
+    const previousReturn = track.priorReturn;
+    // Every early exit or off-path fix breaks the run unless the eligible
+    // near-prior check below explicitly carries its progress forward.
+    delete track.priorReturn;
+
+    // Route and service evidence can change without a new trip or prior.
+    // Reject stale/foreign matches before even the off-graph noise hold.
+    const invalidMatch = track.match.pathIdx !== null && !pathEligible(track.match.pathIdx, prior.routeId, ctx);
+    if (prior.pathIdx !== null && !pathEligible(prior.pathIdx, prior.routeId, ctx)) {
+      prior = { ...prior, pathIdx: null, shapeIdx: null };
+    }
+    if (invalidMatch) {
+      track.match = noMatch();
+      track.offPathCount = 0;
+      track.againstCount = 0;
+      resetOrder(track);
+    }
 
     // A new prior (a new trip, or the twin re-deriving from the index) starts
     // the vehicle over ON THAT PATH: only the path-derived state goes. The
@@ -371,9 +461,69 @@ export function createMatcher(net: GraphNetwork): Matcher {
     if (track.offGraph && !within) return track.match; // between the bands: still off, until a fix lands on an edge
     if (track.offGraph && within) track.offGraph = false;
 
+    // Check the eligible own path before the adopted path on every fresh
+    // fix. Slow genuine returns accumulate; lateral scatter adds no metres.
+    // A backward interval >=1 m or off-prior fix breaks the run. Standing
+    // and sub-metre intervals preserve progress but never add to it, and a
+    // single >=50 m interval still wins.
+    if (prior.pathIdx !== null && track.match.pathIdx !== null && track.match.pathIdx !== prior.pathIdx) {
+      const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
+      const continued = previousReturn?.pathIdx === prior.pathIdx
+        && previousReturn.fromPathIdx === track.match.pathIdx
+        && previousReturn.atSec === prev?.atSec;
+      // Never repeatedly subtract rounded history from an unrounded fix:
+      // after restoration that would turn a stationary point into progress.
+      const baseline = (continued ? previousReturn.baseline : null) ?? prev;
+      const delta = baseline ? { x: p.x - baseline.x, y: p.y - baseline.y } : motion.delta;
+      const longitudinalM = pathForwardM(prior.pathIdx, own.s, delta);
+      const forwardM = Math.abs(longitudinalM) < PRIOR_RETURN_NOISE_M ? 0 : longitudinalM;
+      if (prev !== null && own.residual <= NEAR_M && forwardM >= 0) {
+        const total = (continued ? previousReturn.forwardM : 0) + forwardM;
+        if (total >= FOLD_MOVE_M) {
+          resetOrder(track);
+          track.match = own;
+          track.offPathCount = 0;
+          track.againstCount = 0;
+          return track.match;
+        }
+        // Advance even for ignored noise, so it cannot later add up as one
+        // apparent interval. JSON preserves this raw point without rounding.
+        track.priorReturn = { pathIdx: prior.pathIdx, fromPathIdx: track.match.pathIdx, atSec: fix.atSec, forwardM: total, baseline: p };
+      }
+    }
+
+    // Unplaced fixes carry their nearest edge as evidence, not as a path to
+    // animate along. Re-derive on every such fix, including while standing.
+    const rederive = (): Match => {
+      delete track.priorReturn;
+      const best = candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx)[0];
+      if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
+      track.offPathCount = 0;
+      track.againstCount = 0;
+      track.match = best
+        ? { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d }
+        : { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
+      return track.match;
+    };
+
+    // Eligibility invalidation drops the old match, not the new context's
+    // eligible prior. Give that prior the same near-band placement as a new trip.
     const working = track.match.pathIdx ?? prior.pathIdx;
     if (working !== null) {
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
+      const unplaced = track.match.pathIdx === null && track.match.edge !== null;
+      if (unplaced) {
+        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir)) {
+          resetOrder(track);
+          track.match = onPath;
+          track.offPathCount = 0;
+          track.againstCount = 0;
+          return track.match;
+        }
+        // Never take the one-stray-fix branch with an unplaced track: doing
+        // so alternates a remote projection and free-plane on every fix.
+        return rederive();
+      }
       if (onPath.residual <= NEAR_M) {
         track.offPathCount = 0;
         // (D4) Two consecutive fixes moving AGAINST the rail the vehicle is
@@ -381,12 +531,13 @@ export function createMatcher(net: GraphNetwork): Matcher {
         // agrees: the tram turned at its terminus and is running back on the
         // other track while ZET still names the outbound trip. Re-derive
         // rather than read its own line backwards.
-        const against = dir !== null && motion.groundM >= FOLD_MOVE_M && !pathTangentAgrees(working, onPath.s, dir);
+        const against = pathForwardM(working, onPath.s, motion.delta) <= -FOLD_MOVE_M;
         track.againstCount = against ? (track.againstCount ?? 0) + 1 : 0;
         if (dir !== null && track.againstCount >= FOLD_FIXES) {
           track.againstCount = 0;
-          const turned = turnaroundMatch(working, p, dir, prior.routeId);
+          const turned = turnaroundMatch(working, p, motion, track, prior, ctx);
           if (turned) {
+            delete track.priorReturn;
             resetOrder(track);
             track.match = turned;
             return track.match;
@@ -395,6 +546,9 @@ export function createMatcher(net: GraphNetwork): Matcher {
         track.match = onPath;
         return track.match;
       }
+      // An invalidated path gets no one-stray-fix hold. If the eligible
+      // prior cannot explain this fix, immediately try other eligible rails.
+      if (invalidMatch) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.
@@ -402,27 +556,11 @@ export function createMatcher(net: GraphNetwork): Matcher {
         return track.match;
       }
       // A detour: the path is re-derived from the edge the vehicle is on.
-      const best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, false, nextStopId)[0];
-      track.offPathCount = 0;
-      if (!best) {
-        track.match = { ...onPath }; // nothing within reach: keep the projection, the residual says how far off
-        return track.match;
-      }
-      if (best.pathIdx !== track.match.pathIdx) resetOrder(track);
-      track.match = { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d };
-      return track.match;
+      return rederive();
     }
 
-    // No path known (R-TE22): the route's own edges decide, then any edge.
-    let best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, true, nextStopId)[0];
-    if (!best) best = candidatesFor(track, p, dir, dtSec, prior.routeId, prior.direction, false, nextStopId)[0];
-    if (!best) {
-      // Between NEAR_M and OFF_GRAPH_M of every edge with no path to stand on: the free plane, not yet off-graph.
-      track.match = { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
-      return track.match;
-    }
-    track.match = { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d };
-    return track.match;
+    // No prior, or already unplaced without one: own-route rails or free plane.
+    return rederive();
   }
 
   function matchBus(track: Track, fix: PlaneFix, prior: Prior, prev: PlaneFix | null): Match {
@@ -493,10 +631,20 @@ export function createMatcher(net: GraphNetwork): Matcher {
   return {
     priorFor,
     stopsBetween,
-    matchFix(track, fix, prior, nextStopId) {
+    matchFix(track, fix, prior, nextStopId, ctx) {
       const prev = lastFix(track);
-      if (!pushFix(track, fix)) return track.match;
-      const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev);
+      if (!pushFix(track, fix)) {
+        if (track.kind !== 'tram' || prev === null) return track.match;
+        const eligiblePrior = prior.pathIdx !== null && pathEligible(prior.pathIdx, prior.routeId, ctx) ? prior.pathIdx : null;
+        const currentEligible = track.match.pathIdx === null || pathEligible(track.match.pathIdx, prior.routeId, ctx);
+        if (currentEligible && eligiblePrior === track.priorPath) return track.match;
+        // A repeated GPS timestamp is not motion evidence, but changed
+        // route/service evidence can invalidate the match or restore a prior.
+        const match = matchTram(track, prev, prior, nextStopId, null, ctx);
+        annotate(prev, match);
+        return match;
+      }
+      const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev, ctx);
       annotate(fix, match);
       return match;
     },

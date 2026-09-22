@@ -27,12 +27,15 @@ export const INDEX_RECHECK_MS = 60 * 60 * 1000;
  *  row-write budget); the state row carries the unflushed minute meanwhile. */
 export const LEARN_FLUSH_MS = 60_000;
 
-/** Rows per multi-row INSERT: 20 trips × 4 columns keeps a statement at 80
+/** Rows per multi-row INSERT: 20 trips × 5 columns keeps a statement at 100
  *  bound parameters, comfortably under SQLite's conservative limits. */
 const TRIP_ROWS_PER_INSERT = 20;
 const PATTERN_ROWS_PER_INSERT = 10;
 const BLOCK_ROWS_PER_INSERT = 40;
 const LOOKUP_CHUNK = 50;
+/** Version of the persisted index contents, independent of the GTFS feed.
+ *  Version 1 includes trip services; an older/missing marker needs backfill. */
+const INDEX_SCHEMA_VERSION = '1';
 
 /** Coordinates in the state row keep the feed's own precision (~1.1 m);
  *  arcs a decimetre. The plane coordinates are recomputed on load. */
@@ -61,6 +64,7 @@ export interface IndexTrip {
   pattern: number;
   block: string;
   start: number;
+  service: string;
 }
 
 export interface IndexRows {
@@ -107,9 +111,21 @@ export function ensureSchema(sql: SqlStorage): void {
        trip_id TEXT PRIMARY KEY,
        pattern INTEGER NOT NULL,
        block TEXT NOT NULL,
-       start INTEGER NOT NULL
+       start INTEGER NOT NULL,
+       service TEXT NOT NULL DEFAULT ''
      )`,
   );
+  // Existing objects keep their index rows across deploys. Only a duplicate
+  // column is harmless; a storage failure must still fail schema setup.
+  try {
+    sql.exec("ALTER TABLE trips ADD COLUMN service TEXT NOT NULL DEFAULT ''");
+    metaSet(sql, 'index_schema_version', '0');
+  } catch (error) {
+    if (!(error instanceof Error) || !/duplicate column name:\s*service\b/i.test(error.message)) throw error;
+  }
+  // Also repair databases migrated by the earlier build, whose service
+  // column exists but whose same-version index rows were never refreshed.
+  sql.exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('index_schema_version', '0')");
   sql.exec('CREATE TABLE IF NOT EXISTS blocks (block TEXT PRIMARY KEY, trips TEXT NOT NULL)');
   // C1: one histogram per (edge, hour band, day type) and per (stop, hour band, day type).
   sql.exec(
@@ -255,6 +271,10 @@ export function indexFeedVersion(sql: SqlStorage): string | null {
   return metaGet(sql, 'feed_version');
 }
 
+export function indexNeedsBackfill(sql: SqlStorage): boolean {
+  return metaGet(sql, 'index_schema_version') !== INDEX_SCHEMA_VERSION;
+}
+
 export function indexCheckedAt(sql: SqlStorage): number | null {
   const value = metaGet(sql, 'index_checked_at');
   const parsed = value === null ? Number.NaN : Number(value);
@@ -273,7 +293,8 @@ function insertBatched(sql: SqlStorage, table: string, columns: string[], rows: 
   }
 }
 
-/** Replaces the whole index in one transaction and records its feed version. */
+/** Replaces the index and records its feed/schema versions atomically.
+ *  A failed replacement must leave the backfill marker pending. */
 export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): void {
   const sql = storage.sql;
   storage.transactionSync(() => {
@@ -287,9 +308,10 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
       rows.patterns.map((p, idx) => [idx, p.route, p.direction, p.shape, p.headsign, JSON.stringify(p.stops), JSON.stringify(p.sched), JSON.stringify(p.dwell)]),
       PATTERN_ROWS_PER_INSERT,
     );
-    insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start]), TRIP_ROWS_PER_INSERT);
+    insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start', 'service'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start, t.service]), TRIP_ROWS_PER_INSERT);
     insertBatched(sql, 'blocks', ['block', 'trips'], rows.blocks.map((b) => [b.id, JSON.stringify(b.trips)]), BLOCK_ROWS_PER_INSERT);
     metaSet(sql, 'feed_version', rows.feedVersion);
+    metaSet(sql, 'index_schema_version', INDEX_SCHEMA_VERSION);
   });
 }
 
@@ -304,8 +326,8 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdO
   for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
     const chunk = unique.slice(i, i + LOOKUP_CHUNK);
     const rows = sql
-      .exec<{ trip_id: string; pattern: number; block: string; start: number; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
-        `SELECT t.trip_id, t.pattern, t.block, t.start, p.route, p.direction, p.shape, p.headsign, p.stops
+      .exec<{ trip_id: string; pattern: number; block: string; start: number; service: string; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
+        `SELECT t.trip_id, t.pattern, t.block, t.start, t.service, p.route, p.direction, p.shape, p.headsign, p.stops
            FROM trips t JOIN patterns p ON p.idx = t.pattern
           WHERE t.trip_id IN (${chunk.map(() => '?').join(', ')})`,
         ...chunk,
@@ -333,6 +355,7 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdO
         startSec: row.start,
         pattern: row.pattern,
         block: row.block,
+        ...(row.service ? { service: row.service } : {}),
         ...(pathId === null ? {} : { pathId }),
       });
     }

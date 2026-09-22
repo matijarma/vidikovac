@@ -97,7 +97,7 @@ export function indexRowsFromIndex(index: TripIndex): IndexRows {
     dwell: p.dwell,
   }));
   const trips: IndexTrip[] = [];
-  for (const [id, record] of index.tripsById) trips.push({ id, pattern: record.pattern, block: record.block, start: record.start });
+  for (const [id, record] of index.tripsById) trips.push({ id, pattern: record.pattern, block: record.block, start: record.start, service: record.service });
   const blocks = [...index.blocks].map(([id, tripIds]) => ({ id, trips: tripIds }));
   return { feedVersion: index.feedVersion, patterns, trips, blocks };
 }
