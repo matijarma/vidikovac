@@ -418,11 +418,11 @@ describe('start: one field, one line, Pokreni', () => {
     expect(k.handle.phase()).toBe('setup');
     expect(q(k.root, '[data-testid=kiosk-setup]')).not.toBeNull();
     expect(text(q(k.root, 'h1'))).toBe('Pokreni gradski zaslon');
-    const field = q(k.root, '[data-testid=kiosk-setup] input[data-testid=setup-place]') as HTMLInputElement;
+    const field = k.root.querySelector<HTMLInputElement>('[data-testid=kiosk-setup] input[data-testid=setup-place]')!;
     expect(field.getAttribute('role')).toBe('combobox');
     expect(text(field.closest('label'))).toBe('Adresa ili stajalište');
     expect(field.value).toBe('');
-    expect(q(k.root, '[data-testid=setup-suggestions]')!.hidden).toBe(true);
+    expect(k.root.querySelector<HTMLElement>('[data-testid=setup-suggestions]')!.hidden).toBe(true);
     expect(text(q(k.root, '[data-testid=setup-preview]'))).toBe('Na zaslonu: cijeli grad.');
     expect(text(q(k.root, '[data-testid=setup-create]'))).toBe('Pokreni');
     // One optional field and nothing else to decide: no district, no stop list, no paragraphs around it.
@@ -525,8 +525,8 @@ describe('start: the field turns what is typed into the screen’s place', () =>
       setTimeout: (fn, ms) => { const t: Timer = { fn, ms, cleared: false }; timers.push(t); return t; },
       clearTimeout: (h) => { (h as Timer).cleared = true; },
     });
-    const input = q(host, '[data-testid=setup-place]') as HTMLInputElement;
-    const list = q(host, '[data-testid=setup-suggestions]')!;
+    const input = host.querySelector<HTMLInputElement>('[data-testid=setup-place]')!;
+    const list = host.querySelector<HTMLElement>('[data-testid=setup-suggestions]')!;
     return {
       host, handle, input, list, timers, createScreen, loadStops, loadStreets, onCreated,
       focus: () => { input.dispatchEvent(new FocusEvent('focus')); },
@@ -536,10 +536,10 @@ describe('start: the field turns what is typed into the screen’s place', () =>
       tick: (ms: number) => { for (const t of [...timers]) if (t.ms === ms && !t.cleared) { t.cleared = true; t.fn(); } },
       rows: () => [...list.querySelectorAll<HTMLElement>(':scope > [data-testid=setup-suggestion]')],
       names: () => [...list.querySelectorAll('.k-suggest-name')].map(text),
-      status: () => text(q(host, '.k-suggest-status')),
-      preview: () => text(q(host, '[data-testid=setup-preview]')),
-      error: () => text(q(host, '[data-testid=setup-error]')),
-      submit: () => submit(host),
+      status: () => text(host.querySelector<HTMLElement>('.k-suggest-status')),
+      preview: () => text(host.querySelector<HTMLElement>('[data-testid=setup-preview]')),
+      error: () => text(host.querySelector<HTMLElement>('[data-testid=setup-error]')),
+      submit: () => { host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); },
     };
   }
 
@@ -555,7 +555,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     expect(h.preview()).toBe('');
     h.tick(PAUSE_MS);
     expect(h.names()).toEqual(['Zapruđe']);
-    expect(text(q(h.list, '.k-suggest-meta'))).toBe('linije 7');
+    expect(text(h.list.querySelector('.k-suggest-meta'))).toBe('linije 7');
     expect(h.rows()[0]!.dataset.kind).toBe('stop');
     expect(h.rows()[0]!.getAttribute('role')).toBe('option');
     expect(h.input.getAttribute('aria-expanded')).toBe('true');
@@ -602,10 +602,10 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     await flush();
     expect(h.createScreen).not.toHaveBeenCalled();
     expect(h.error()).toBe(NO_MATCH);
-    expect(q(h.host, '[data-testid=setup-retry]')!.hidden).toBe(true);
-    expect(text(q(h.host, '[data-testid=setup-create]'))).toBe('Pokreni');
+    expect(h.host.querySelector<HTMLElement>('[data-testid=setup-retry]')!.hidden).toBe(true);
+    expect(text(h.host.querySelector<HTMLElement>('[data-testid=setup-create]'))).toBe('Pokreni');
     h.type('');
-    expect(q(h.host, '[data-testid=setup-error]')!.hidden).toBe(true);
+    expect(h.host.querySelector<HTMLElement>('[data-testid=setup-error]')!.hidden).toBe(true);
     expect(h.preview()).toBe('Na zaslonu: cijeli grad.');
     h.submit();
     await flush();
@@ -628,7 +628,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     h.tick(PAUSE_MS);
     expect(h.rows()).toHaveLength(2);
     h.key('Escape');
-    expect(q(h.host, '.k-suggest-box')!.hidden).toBe(true);
+    expect(h.host.querySelector<HTMLElement>('.k-suggest-box')!.hidden).toBe(true);
     expect(h.input.value).toBe('Zapr');
     h.type('Zapru');
     h.tick(PAUSE_MS);
