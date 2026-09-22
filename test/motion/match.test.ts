@@ -447,6 +447,79 @@ describe('own-path return and service eligibility', () => {
   });
 });
 
+describe('terminal placement continuity', () => {
+  it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1150, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'out', direction: 0, edges: [0] },
+        { id: 'back', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('terminal', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    for (const [i, x] of [950, 990, 1070, 1100, 1100, 1100].entries()) {
+      m.matchFix(t, fix(x, 0, 1000 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('out');
+      expect(t.offGraph).toBe(false);
+    }
+    expect(t.match.s).toBe(1000);
+    // Actual return movement is still a turnaround, not a permanent hold.
+    m.matchFix(t, fix(980, 6, 1060), p, null);
+    m.matchFix(t, fix(880, 6, 1070), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('back');
+  });
+
+  it('places a new trip on nearby eligible rails without a remote-prior tick', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 600) },
+        { from: 1, to: 2, pts: straight(600, 1600) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('new-departure', '1', 'trip', 'tram');
+    m.matchFix(t, fix(0, 0, 1000), m.priorFor('departure', '1', 0), null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+    expect(t.match.residual).toBe(0);
+    expect(t.match.s).toBe(0);
+  });
+
+  it('does not return to a clipped departure endpoint while approaching it', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(-200, 0) },
+        { from: 1, to: 2, pts: straight(0, 1000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('approaching', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    for (const [i, x] of [-140, -80, -20, 0].entries()) {
+      m.matchFix(t, fix(x, 0, 1000 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+    }
+    // Genuine motion onto the shared departure rail still restores the prior.
+    m.matchFix(t, fix(60, 0, 1040), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+});
+
 describe('parallel-street stability', () => {
   it('does not alternate paths when residuals alternate across streets 40 m apart', () => {
     const parallel = syntheticNetwork({

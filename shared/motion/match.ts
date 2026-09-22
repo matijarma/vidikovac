@@ -477,7 +477,16 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const delta = baseline ? { x: p.x - baseline.x, y: p.y - baseline.y } : motion.delta;
       const longitudinalM = pathForwardM(prior.pathIdx, own.s, delta);
       const forwardM = Math.abs(longitudinalM) < PRIOR_RETURN_NOISE_M ? 0 : longitudinalM;
-      if (prev !== null && own.residual <= NEAR_M && forwardM >= 0) {
+      // A tangent at a clipped endpoint is not evidence of entering the
+      // path. At Kvaternikov trg the arrival loop passes the departure
+      // path's start: accumulating approach motion there returned a tram
+      // before it had finished the loop, then immediately re-derived it.
+      const insidePrior = own.s > 0.5 && own.s < net.paths[prior.pathIdx].len - 0.5;
+      // A wrong-direction arrival rail is different: return as soon as the
+      // prior fits, including at its endpoint (Mandlova -> Ravnice). Waiting
+      // until past the endpoint only prolongs a known backward match.
+      const againstCurrent = pathForwardM(track.match.pathIdx, track.match.s, delta) <= -PRIOR_RETURN_NOISE_M;
+      if (prev !== null && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
           resetOrder(track);
@@ -546,9 +555,30 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         track.match = onPath;
         return track.match;
       }
+      // The indexed trip's endpoint can stop short of the terminal rails.
+      // A near-end excursion is not evidence for running an entire sibling
+      // service in reverse. Hold the endpoint within the existing off-graph
+      // band, unless an explicit terminus loop fits. Beyond that band the
+      // usual off-graph/free-plane rules still apply.
+      const atOwnEnd = working === prior.pathIdx
+        && (onPath.s <= 0.5 || onPath.s >= net.paths[working].len - 0.5);
+      if (track.match.pathIdx === working && atOwnEnd && onPath.residual <= OFF_GRAPH_M) {
+        const loop = candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx)
+          .some(candidate => net.paths[candidate.pathIdx].direction === -1);
+        if (!loop) {
+          track.match = onPath;
+          track.offPathCount = 0;
+          track.againstCount = 0;
+          return track.match;
+        }
+      }
       // An invalidated path gets no one-stray-fix hold. If the eligible
       // prior cannot explain this fix, immediately try other eligible rails.
       if (invalidMatch) return rederive();
+      // A new trip has no established placement to protect from a stray.
+      // Prefer an eligible nearby rail immediately to publishing a remote
+      // prior for one tick (Mandlova departures were placed 631 m away).
+      if (track.match.pathIdx === null && candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx).length > 0) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.

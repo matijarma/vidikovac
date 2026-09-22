@@ -184,7 +184,18 @@ export function runTick(input: TickInput): TickResult {
       const before = lastFix(track)?.atSec ?? null;
       track.tripStartSec = tripStartOf(join, raw.startDate);
       if (engine && prior) {
+        const oldPathIdx = track.match.pathIdx;
+        const oldOrder = track.order;
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null, ctx);
+        // Matching can reset path-local state, but two eligible placements
+        // are still the same vehicle. Preserve the live queue and let the
+        // register's shared-rail check retire divergent relations. Losing
+        // both witnesses here let two returning departure paths establish
+        // the opposite order in one tick (20 Sep, 10:43:14 / 21:45:19).
+        const oldServices = oldPathIdx === null ? undefined : engine.pathRanks[oldPathIdx]?.services;
+        const oldEligible = oldPathIdx !== null && engine.net.paths[oldPathIdx]?.route === routeId
+          && (!ctx.runningServices?.size || !oldServices?.size || [...oldServices].some(service => ctx.runningServices!.has(service)));
+        if (oldEligible && track.match.pathIdx !== null && !track.offGraph) track.order = oldOrder;
       } else {
         pushFix(track, fix);
       }

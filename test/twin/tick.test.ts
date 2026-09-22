@@ -45,6 +45,42 @@ describe('runTick on the corridor', () => {
   const routes = { '1': { shortName: '1', longName: 'Trunk east', type: 0 }, '2': { shortName: '2', longName: 'Trunk north', type: 0 }, '109': { shortName: '109', longName: 'Bus', type: 3 } };
   const tramById = new Map(sim.trams.map((t) => [t.id, t]));
 
+  it('preserves the queue through an eligible shared-rail prior return', () => {
+    const spec = corridorSpec();
+    spec.routes[0].paths!.push({ id: 'sibling', direction: 0, edges: [0, 1], synthetic: true });
+    const n = syntheticNetwork(spec);
+    const e = createEngine(n, corridorIndex(n, [
+      { tripId: 'tA', pathId: '1_0' }, { tripId: 'tB', pathId: '1_0' },
+    ]));
+    const joins = new Map<string, TripJoin>(['tA', 'tB'].map(id => [id, {
+      direction: 0, headsign: 'End', shapeId: '1_0', service: 'wd',
+    }]));
+    let state = emptyState();
+    const tick = (offset: number) => {
+      const result = runTick({
+        state, engine: e, routes, joins, nowMs: (start + offset + 2) * 1000, validUntilMs: 0,
+        feed: { headerTs: start + offset, tripUpdates: [], vehicles: [
+          { vehicleId: 'A', tripId: 'tA', routeId: '1', ...lonLatOf({ x: 800 + offset * 5, y: 0 }), atSec: start + offset },
+          { vehicleId: 'B', tripId: 'tB', routeId: '1', ...lonLatOf({ x: 600 + offset * 5, y: 0 }), atSec: start + offset },
+        ] },
+      });
+      state = result.state;
+      return result;
+    };
+    tick(0);
+    tick(10);
+    expect(state.tracks.B.order.leader).toBe('A');
+    const since = state.tracks.B.order.since;
+    state.tracks.B.match.pathIdx = n.paths.findIndex(p => p.id === 'sibling');
+    state.tracks.B.match.shapeIdx = null;
+    const result = tick(20);
+    expect(n.paths[state.tracks.B.match.pathIdx!].id).toBe('1_0');
+    expect(state.tracks.B.order.leader).toBe('A');
+    expect(state.tracks.B.order.since).toBe(since);
+    expect(result.payload.items.find(i => i.id === 'vehicle:B')?.data?.behind).toBe('A');
+    expect(result.order?.established).toBe(0);
+  });
+
   it('learns path services and trip counts from the resolved trip records, leaving unused paths eligible', () => {
     const rankedIndex = corridorIndex(net, [
       { tripId: 'weekday-a', pathId: '1_0' },
