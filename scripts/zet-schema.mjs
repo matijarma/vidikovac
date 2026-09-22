@@ -448,7 +448,8 @@ export async function main(argv = process.argv.slice(2)) {
     const match = matchSchemaPath(decoded, input.net, i);
     // A terminus loop path (scripts/gtfs-shapes.mjs LOOP_DIRECTION) is not laid
     // along the artwork at all: the placer draws a vehicle on it at the
-    // terminus circle of its first stop, so it needs no exemption.
+    // terminus circle of the loop's first stop that exists on ZET's schematic
+    // (stops[0], else stops[1]), so it needs no exemption.
     const loop = match.reason === 'loop-path';
     const exemption = loop ? 'loop-path' : input.overrides.unmappedPaths?.[path.id];
     if (!match.placeable && !loop && !(match.reason === 'too-few-stops' && exemption)) {
@@ -486,7 +487,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(`${report.matched}/${report.names} feed names matched; ${report.allowlisted.length} explicitly absent [${report.allowlisted.join(', ')}]; ${report.artworkOnly.length} artwork-only labels retained; ${report.unassignedGroups.length} unresolved groups.`);
     const loops = report.paths.filter(p => p.excluded === 'loop-path');
     const excluded = report.paths.filter(p => p.excluded && p.excluded !== 'loop-path');
-    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length - loops.length} paths placeable with strictly monotone legs; exclusions [${excluded.map(p => p.id).join(', ')}]; ${loops.length} terminus loops drawn at their first stop's circle. Full coverage: --verbose.`);
+    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length - loops.length} paths placeable with strictly monotone legs; exclusions [${excluded.map(p => p.id).join(', ')}]; ${loops.length} terminus loops drawn at a terminus circle. Full coverage: --verbose.`);
   }
   console.log(`zet-schema.json: ${Buffer.byteLength(text)} bytes raw, ${gzipSync(text).byteLength} bytes gzip; feed ${schema.feedVersion}.`);
 }

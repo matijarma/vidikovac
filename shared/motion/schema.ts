@@ -448,13 +448,15 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
   return result;
 }
 
-/** Where a vehicle on a terminus loop path is drawn: at the circle of the
- *  loop's first stop, the platform its last trip ended at, on its own line;
- *  where the artwork prints no stop of that name (Mandlova, the depot), at
- *  the circle of the loop's other end, the platform the next trip leaves
- *  from. The whole loop is one point of the artwork, so the arc does not
- *  move it, and it has no track to point along. Null when the line's
- *  artwork names neither. */
+/** The rule (WP0; DESIGN.md takes the same sentence): a loop vehicle is
+ *  drawn at the terminus circle of the loop's first stop that exists on
+ *  ZET's schematic (stops[0], else stops[1]), on its own line. stops[0] is
+ *  the platform its last trip ended at, stops[1] the one its next trip leaves
+ *  from; the second is reached only where the artwork prints no stop of the
+ *  first's name (Mandlova, the depot, for four loops on feed 000395). The
+ *  whole loop is one point of the artwork, so the arc does not move the
+ *  vehicle, and it has no track to point along. Null when the line's artwork
+ *  names neither stop. */
 export function loopPlacement(schema: Schema, net: GraphNetwork, pathIdx: number): SchemaPlacement | null {
   const path = net.paths[pathIdx];
   if (!path || path.direction !== LOOP_PATH_DIRECTION) return null;
