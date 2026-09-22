@@ -120,6 +120,61 @@ describe('frameRadiusM', () => {
     }
   });
 
+  it('never frames less for a wider Kadar: a line that curves back, and lines of different lengths', () => {
+    // North 400 m a stop to the sixth, then back south-east: the eighth stop lies nearer by air than the sixth.
+    const curve = [at('c0', 'P', 0), ...[400, 800, 1200, 1600, 2000, 2400].map((d, i) => at(`c${i + 1}`, `C${i + 1}`, d)), at('c7', 'C7', 1900, 500), at('c8', 'C8', 1400, 800), at('c9', 'C9', 900, 1000)];
+    const curved = table(curve, [curve.map((r) => r.id)]);
+    const [c4, c6, c8] = FRAME_STOPS.map((n) => frameRadiusM(PLACE, curved, n));
+    expect(Math.hypot(1400, 800)).toBeLessThan(2400); // the bare eighth stop
+    expect(c6).toBeCloseTo(2400, 3);
+    expect(c8).toBe(c6);
+    expect(c4).toBeLessThan(c6!);
+    // A long line north every 300 m and a short one south every 700 m that ends after five stops: at Kadar 6 only
+    // the long line reaches its sixth stop (1800 m), while Kadar 4's median of 1200 and 2800 m is 2000 m.
+    const long = northLine(300, 10);
+    const short = [at('q0', 'P', -20), ...Array.from({ length: 5 }, (_, i) => at(`q${i + 1}`, `Q${i + 1}`, -700 * (i + 1)))];
+    const mixed = table([...long.rows, ...short], [long.line, short.map((r) => r.id)]);
+    const [m4, m6, m8] = FRAME_STOPS.map((n) => frameRadiusM(PLACE, mixed, n));
+    expect(m4).toBeCloseTo(2000, -1);
+    expect(m6).toBe(m4);
+    expect(m8).toBeGreaterThanOrEqual(m6!);
+  });
+
+  it('starts from the nearest tram platform, in a stable order, and falls back when that stop has no line order', () => {
+    // The place's own tram platform has no line order; a line runs two kilometres away: the frame does not borrow it.
+    const far = [at('f0', 'Far', 2000), ...Array.from({ length: 8 }, (_, i) => at(`f${i + 1}`, `F${i + 1}`, 2000 + 300 * (i + 1)))];
+    const lonely = table([at('p', 'P', 0), ...far], [far.map((r) => r.id)]);
+    expect(FRAME_STOPS.map((n) => frameRadiusM(PLACE, lonely, n))).toEqual([1300, 2000, 2700]);
+    // Two tram stops of different names, each 100 m from the place, each on its own line: the platform with the
+    // smaller id wins whatever the table's order.
+    const west = [at('a', 'West', 0, -100), ...Array.from({ length: 6 }, (_, i) => at(`w${i + 1}`, `W${i + 1}`, 300 * (i + 1), -100))];
+    const east = [at('b', 'East', 0, 100), ...Array.from({ length: 6 }, (_, i) => at(`e${i + 1}`, `E${i + 1}`, 500 * (i + 1), 100))];
+    const lines = [west.map((r) => r.id), east.map((r) => r.id)];
+    const one = frameRadiusM(PLACE, table([...west, ...east], lines), 4);
+    const other = frameRadiusM(PLACE, table([...east, ...west], lines), 4);
+    expect(one).toBe(other);
+    expect(one).toBeCloseTo(Math.hypot(1200, 100), 0);
+  });
+
+  it('is always a finite number of metres: rows with a broken position are never counted, a place without one takes the table', () => {
+    const buses = Array.from({ length: 10 }, (_, i) => north(`B${i + 1}`, 400 * (i + 1), false));
+    const broken: FrameStop[] = [
+      { name: 'X1', lon: Number.NaN, lat: 45.8, tram: false },
+      { name: 'X2', lon: 16, lat: Number.POSITIVE_INFINITY, tram: false },
+      { name: 'X3', lon: null as unknown as number, lat: undefined as unknown as number, tram: false },
+      { name: 'X4', lon: Number.NaN, lat: Number.NaN, tram: true },
+    ];
+    for (const n of FRAME_STOPS) {
+      const r = frameRadiusM(PLACE, [...broken, ...buses], n);
+      expect(Number.isFinite(r)).toBe(true);
+      expect(r).toBeCloseTo(Math.min(FRAME_RADIUS_MAX_M, 400 * n), 3);
+    }
+    expect(frameRadiusM(PLACE, broken, 6)).toBe(FRAME_RADIUS_MAX_M);
+    const { rows, line } = northLine(300, 10);
+    expect(frameRadiusM(PLACE, [...broken, ...table(rows, [line])], 4)).toBeCloseTo(1200, 3);
+    expect(FRAME_STOPS.map((n) => frameRadiusM({ lon: Number.NaN, lat: 45.8 }, table(rows, [line]), n))).toEqual([1300, 2000, 2700]);
+  });
+
   it('counts bus stops by air only when no tram stop lies within 3 km, the place\u2019s own stop included', () => {
     const buses = Array.from({ length: 10 }, (_, i) => north(`B${i + 1}`, 400 * (i + 1), false));
     expect(frameRadiusM(PLACE, [...buses, north('Far tram', 3200)], 4)).toBeCloseTo(1600, 3);
@@ -182,6 +237,20 @@ describe('the frame over the real network', () => {
     const mid = sorted.length >> 1;
     return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
   };
+
+  it('is finite, within the bounds and monotone in N at every stop of the table', () => {
+    let checked = 0;
+    for (const stop of rows) {
+      const [r4, r6, r8] = FRAME_STOPS.map((n) => frameRadiusM(stop, stops, n));
+      for (const r of [r4!, r6!, r8!]) {
+        if (!(Number.isFinite(r) && r >= FRAME_RADIUS_MIN_M && r <= FRAME_RADIUS_MAX_M)) throw new Error(`${stop.id} ${stop.name}: ${r}`);
+      }
+      if (!(r4! <= r6! && r6! <= r8!)) throw new Error(`${stop.id} ${stop.name}: ${r4} / ${r6} / ${r8}`);
+      checked++;
+    }
+    expect(checked).toBe(rows.length);
+    expect(checked).toBeGreaterThan(2500);
+  }, 60_000);
 
   it('knows the order of every tram platform a line calls at', () => {
     expect(frameLinesOf(net).length).toBeGreaterThan(100);
