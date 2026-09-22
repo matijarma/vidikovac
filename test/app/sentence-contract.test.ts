@@ -1,7 +1,7 @@
 // Seam S6: app/src/city/sentence.ts (signatures; WP1 fills the facts, the
 // templates and the sequence) and fetchSentences in app/src/api.ts, which is
 // real: it posts to /api/kiosk/sentences and answers [] on any failure.
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { emptyCity } from '../../shared/city/types';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
@@ -43,6 +43,8 @@ describe('sentence client seam', () => {
 });
 
 describe('fetchSentences', () => {
+  beforeEach(() => vi.spyOn(Date, 'now').mockReturnValue(NOW));
+  afterEach(() => vi.restoreAllMocks());
   it('posts the request to /api/kiosk/sentences and returns the sentences', async () => {
     const f = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('/api/kiosk/sentences');

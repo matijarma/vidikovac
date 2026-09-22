@@ -216,7 +216,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       }), expires);
     } else if (row.kind === 'closure' && row.atMs !== null) {
       add(row.id, 'radovi', copy(i18n, 'closureUntil', {
-        street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs),
+        // The template owns the final full stop, including after a Croatian ordinal date.
+        street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),
       }), Math.min(row.atMs, nextMidnight(now)));
     } else if ((row.kind === 'last' || row.kind === 'first') && row.services) {
       for (const service of row.services) {

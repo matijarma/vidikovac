@@ -386,6 +386,18 @@ describe('facts and standalone deterministic fallback', () => {
       .some(f => f.id.startsWith('dep:'))).toBe(false);
   });
 
+  it.each(['hr', 'en'])('uses one final full stop for a later closure date in %s', locale => {
+    const facts = sentenceFacts(input({
+      locale, i18n: createDefaultI18n(locale),
+      rows: [row({ atMs: Date.parse('2026-09-25T18:00:00+02:00') })],
+    }));
+    const fact = facts.find(fact => fact.id === 'closure:ilica')!;
+    expect(fact.text).toBe(locale === 'hr'
+      ? 'Ilica: zatvoreno za promet do 25. 9.'
+      : 'Ilica is closed to traffic until 25. 9.');
+    expect(acceptSentence(fact.text, { facts, now: NOW })).toEqual({ ok: true });
+  });
+
   it('keeps stale selected closures, dates future events, and drops a long fill intact', () => {
     const facts = sentenceFacts(input({ rows: [
       row({}),

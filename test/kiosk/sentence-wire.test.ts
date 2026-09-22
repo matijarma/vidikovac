@@ -1,5 +1,5 @@
 // Seam S4: shared/kiosk/sentence.ts, the header sentence's wire contract and
-// the acceptance stub (length and ellipsis today; WP1 adds the model rules).
+// the complete-claim acceptance contract implemented by WP1.
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   SENTENCE_KICKERS,
@@ -34,11 +34,11 @@ describe('sentence wire types', () => {
   });
 });
 
-describe('acceptSentence (stub)', () => {
-  it('accepts 1 to 80 characters', () => {
+describe('acceptSentence', () => {
+  it('requires a grounded claim even within the 1 to 80 character budget', () => {
     expect(acceptSentence('Ilica zatvorena do 18:00.', CTX)).toEqual<SentenceVerdict>({ ok: true });
-    expect(acceptSentence('x', CTX)).toEqual({ ok: true });
-    expect(acceptSentence('š'.repeat(80), CTX)).toEqual({ ok: true });
+    expect(acceptSentence('x', CTX)).toEqual({ ok: false, reason: 'unrelated' });
+    expect(acceptSentence('š'.repeat(80), CTX)).toEqual({ ok: false, reason: 'unrelated' });
   });
 
   it('refuses an empty, an over-long or a cut sentence', () => {
