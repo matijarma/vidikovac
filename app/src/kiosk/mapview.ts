@@ -11,8 +11,12 @@
 // DERIVED from the field's measured width so that FIELD_SPAN_M of ground
 // spans it (R-KP2), no padding and no selection (R-KP11: the enlarged
 // screen-stop ring is the anchor, a `selectedStop` would draw a second ring
-// over it). A paired screen keeps today's Promet contract (R-KP8): street
-// zoom, the stop selected, the phone's route followed or its stop selected.
+// over it). A wall whose place somebody chose is framed instead (WP2): N
+// stops around the place (Kadar 4 / 6 / 8), the radius measured along the
+// tram lines (shared/city/frame.ts) and fitted by map/frame.ts frameView, a
+// neighbourhood with its buses and its names. A paired screen keeps today's
+// Promet contract (R-KP8): street zoom, the stop selected, the phone's route
+// followed or its stop selected.
 // Both phases ride the `prozor` profile and the `prozor` overlay set
 // (contract 2), because one map lives for the screen's life.
 //
@@ -38,6 +42,8 @@ import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
 import { bikeAvailability } from '../../../shared/city/bikes';
 import { activeVenues, locatedEvents } from '../../../shared/city/events';
 import { located, matchStreet } from '../../../shared/city/geo';
+import { DEFAULT_FRAME_STOPS, FRAME_RADIUS_M, frameSpanM, type FrameStops } from '../../../shared/city/frame';
+import type { ScreenPlace } from '../../../shared/city/place';
 import type { MapSelection } from '../map/city-map';
 import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { PresentationTarget } from '../../../worker/presentation';
@@ -46,6 +52,7 @@ import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
+import { boundsView, frameView } from '../map/frame';
 import type { ProzorOptions } from '../map/overlays';
 import { EARTH_CIRCUMFERENCE_M, metresPerPixel } from '../map/scale';
 import { vehicleFixes } from '../motion/fixes';
@@ -512,6 +519,33 @@ export function cityWindowPoints(city: CityState, dogadanja: readonly FeedItem[]
   return out;
 }
 
+// --- STUB: WP2 Section B's app/src/city/curated.ts (lane/w-WP2-B) -----------
+//
+// requestKioskMap draws the city's places through curatedCityPoints on every
+// invitation window, framed or not, with the options that say which. Section B
+// owns the module (every BAJS station a counted disc, venues only with a
+// programme tonight, air optional); until it lands this stub keeps the
+// signature and answers with today's window points, so the frame's wiring
+// here is testable on its own. At the merge (review.local/companion/plan/WP2/
+// mapview-after-B-C.patch): delete this block and cityWindowPoints, and
+// `import { curatedCityPoints, CURATED_WALL, type CuratedOptions } from
+// '../city/curated'`; B carries the unframed window's flag as
+// CuratedOptions.far (props.far on each BAJS point), as CURATED_FAR does here.
+
+/** Section B's CuratedOptions, with the ruling's `far` flag: the unframed whole-city window's dot without a count. */
+interface CuratedOptions {
+  venues: 'week' | 'today' | 'tomorrow' | 'tonight';
+  air: boolean;
+  far?: boolean;
+}
+const CURATED_WALL: CuratedOptions = Object.freeze({ venues: 'tonight', air: false });
+/** The unframed whole-city window (ruling of 22 Sep): today's thinning, small BAJS dots without numbers and no venue names. */
+const CURATED_FAR: CuratedOptions = Object.freeze({ ...CURATED_WALL, far: true });
+function curatedCityPoints(city: CityState, dogadanja: readonly FeedItem[], now: number, o: CuratedOptions = CURATED_WALL): MapPoint[] {
+  void o;
+  return cityWindowPoints(city, dogadanja, now);
+}
+
 // --- The kvart outline ------------------------------------------------------
 //
 // One district's boundary, fetched at runtime from
@@ -613,6 +647,37 @@ export interface FieldInput {
   heightPx: number;
   /** FIELD_SPAN_M on a wall, HANDHELD_SPAN_M on a phone's band. */
   spanM: number;
+  /** The place the screen is about (shared/city/place.ts); absent, the stop is the place. */
+  place?: Pick<ScreenPlace, 'lon' | 'lat'> | null;
+  /** ScreenMetadata.placeSet. True: somebody chose the place, and a wall frames it. False: the
+   *  place is the read-path default (an empty field or "Cijeli grad" reads back as Trg bana
+   *  Jelačića): the list uses it, the map keeps the whole-city window [O-65]. Absent (a caller
+   *  from before place-v2): a stop keeps its centred street-level camera, as it always had. */
+  placeSet?: boolean;
+  /** The frame's measured radius, metres (shared/city/frame.ts frameRadiusM, computed once by the
+   *  caller for the camera, the "U blizini" circle and the pill); absent, FRAME_RADIUS_M[frame]. */
+  radiusM?: number;
+  /** Kadar 4 / 6 / 8; absent, DEFAULT_FRAME_STOPS. Read only for the fallback radius. */
+  frame?: FrameStops;
+  /** A phone's band keeps its glance at the stop (spanM) instead of the frame. */
+  handheld?: boolean;
+}
+
+/** Where the field's camera stands: the place, else the stop; null for the read-path default
+ *  place, whose map keeps the whole-city window (or its configured quarter). */
+export function fieldAnchor(input: Pick<FieldInput, 'stop' | 'place' | 'placeSet'>): { lon: number; lat: number } | null {
+  return input.placeSet === false ? null : input.place ?? input.stop ?? null;
+}
+
+/** The point a wall frames: a place somebody chose (placeSet true), else null. Framed is
+ *  placeSet, never Boolean(place): the read-path default place is always present. */
+export function framedPlace(input: Pick<FieldInput, 'stop' | 'place' | 'placeSet'>): { lon: number; lat: number } | null {
+  return input.placeSet === true ? fieldAnchor(input) : null;
+}
+
+/** The frame's radius for this input: the measured one, or the Kadar's fallback. */
+export function frameRadiusOf(input: Pick<FieldInput, 'radiusM' | 'frame'>): number {
+  return input.radiusM ?? FRAME_RADIUS_M[input.frame ?? DEFAULT_FRAME_STOPS];
 }
 
 /** The whole-city window a screen opens on when nobody has configured it:
@@ -626,25 +691,9 @@ export const CITY_WINDOW = Object.freeze({ west: 15.925, south: 45.775, east: 16
  *  need room to draw beside their point. */
 export const CITY_WINDOW_PADDING_PX = 24;
 
-/** The camera that fits a lon/lat box in a widthPx x heightPx field with
- *  `paddingPx` of clearance on every side: the box's centre, and the zoom at
- *  which its ground fits -- one axis at a time, the tighter of the two
- *  winning, because a fit that honoured only the width would crop the top and
- *  the bottom off. Each axis is the inverse of metresPerPixel (map/scale.ts),
- *  the same arithmetic fieldZoom states for a span; in Web Mercator a ground
- *  metre costs the same pixels north to south as east to west at a given
- *  latitude, so one metres-per-pixel serves both. Never past the overzoom
- *  ceiling and never below `minZoom`; a field not yet laid out (0 px) is
- *  minZoom, never NaN. */
-function boundsView(bounds: { west: number; south: number; east: number; north: number }, widthPx: number, heightPx: number, paddingPx: number, minZoom: number): { center: [number, number]; zoom: number } {
-  const lat = (bounds.south + bounds.north) / 2;
-  const across = EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180);
-  const groundW = (across * (bounds.east - bounds.west)) / 360;
-  const groundH = (EARTH_CIRCUMFERENCE_M * (bounds.north - bounds.south)) / 360;
-  const axis = (px: number, groundM: number): number => Math.log2((across * Math.max(1, px - 2 * paddingPx)) / (512 * groundM));
-  const fit = Math.min(axis(widthPx, groundW), axis(heightPx, groundH));
-  return { center: [(bounds.west + bounds.east) / 2, lat], zoom: Math.min(FIELD_MAX_ZOOM, Math.max(minZoom, Number.isFinite(fit) ? fit : minZoom)) };
-}
+// The box fit itself (boundsView) lives in map/frame.ts with the frame's own
+// camera, so the whole-city window, a quarter's outline and the frame are one
+// arithmetic, and the phone's Karta (WP4) reads the same.
 
 /** CITY_WINDOW fitted to this field. Every box the kiosk lays out today is
  *  smaller than the window's 8.5 x 7.0 km asks for, so every one of them
@@ -652,7 +701,7 @@ function boundsView(bounds: { west: number; south: number; east: number; north: 
  *  to south: the floor is the marks' own, and a window with no plates and no
  *  stop rings on it would not be the city, live. */
 export function cityWindowView(widthPx: number, heightPx: number): { center: [number, number]; zoom: number } {
-  return boundsView(CITY_WINDOW, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM);
+  return boundsView(CITY_WINDOW, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM);
 }
 
 /** A district's outline fitted to this field, for the screen whose area is
@@ -661,22 +710,30 @@ export function cityWindowView(widthPx: number, heightPx: number): { center: [nu
 export function outlineView(outline: MapOutline, widthPx: number, heightPx: number): { center: [number, number]; zoom: number } {
   const coordinates = outline.polygons.flat(2);
   const lons = coordinates.map((p) => p[0]), lats = coordinates.map((p) => p[1]);
-  return boundsView({ west: Math.min(...lons), south: Math.min(...lats), east: Math.max(...lons), north: Math.max(...lats) }, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM);
+  return boundsView({ west: Math.min(...lons), south: Math.min(...lats), east: Math.max(...lons), north: Math.max(...lats) }, widthPx, heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM);
 }
 
 /** The invitation's window (R-KP1, R-KP2, R-KP11): the kiosk's points lit,
  *  the quarter drawn, no selection, no follow, no padding -- on the frame the
- *  screen's own configuration asks for. A configured stop keeps its centred
- *  camera at the derived zoom; a configured gradska cetvrt sits on its seat
+ *  screen's own configuration asks for. A chosen place (placeSet) on a wall is
+ *  framed: N stops around it, the square of side 2R on the field's shorter
+ *  side (map/frame.ts frameView, R measured per place by shared/city/frame.ts).
+ *  A phone's band, and a stop from a caller before place-v2, keep the centred
+ *  camera at the derived zoom. A configured gradska cetvrt sits on its seat
  *  until its outline lands (requestKioskMap re-frames on the real rings); a
- *  screen with neither -- which is every screen the one-button setup makes --
- *  opens on the whole city. */
+ *  screen with neither, or with the read-path default place, opens on the
+ *  whole city. */
 export function fieldView(input: FieldInput): KioskView {
   const view: KioskView = { zoom: FIELD_MIN_ZOOM, emphasis: KIOSK_EMPHASIS, outline: true };
   const district = districtBySlug(input.district);
-  if (input.stop) {
-    view.zoom = fieldZoom(input.widthPx, input.stop.lat, input.spanM);
-    view.center = [input.stop.lon, input.stop.lat];
+  const place = fieldAnchor(input);
+  if (place && framedPlace(input) && !input.handheld) {
+    const frame = frameView(place, frameRadiusOf(input), input.widthPx, input.heightPx, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM);
+    view.zoom = frame.zoom;
+    view.center = frame.center;
+  } else if (place) {
+    view.zoom = fieldZoom(input.widthPx, place.lat, input.spanM);
+    view.center = [place.lon, place.lat];
   } else if (district) {
     view.zoom = fieldZoom(input.widthPx, district.seat.lat, DISTRICT_SPAN_M);
     view.center = [district.seat.lon, district.seat.lat];
@@ -751,9 +808,33 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  CITY_DETAIL_ZOOM the buses with them. The map is created once with the
  *  first request's set and hears every later one through setProzor (R-KP19),
  *  so the stop's routes, the measured field's threshold, its padding and the
- *  camera's own band reach the picture without a second map. */
-export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean): ProzorOptions {
-  return { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), placeTitles: placeTitles(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
+ *  camera's own band reach the picture without a second map.
+ *
+ *  The FRAME is a neighbourhood, and its rules are keyed on being framed, not
+ *  on the zoom (Kadar 4 / 6 / 8 must never flip the naming grammar, though
+ *  Kadar 8 on a compact wall sits on the whole city's z12.7): every stop in
+ *  the frame is drawn, not only the screen's own routes', at the fixed
+ *  neighbourhood dot; the ranked stop names with every tram interchange
+ *  (map/overlays.ts); the place marks titled; the major street names on. */
+export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean, framed = false): ProzorOptions {
+  const options: ProzorOptions = { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), placeTitles: placeTitles(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
+  return framed ? { ...options, stopRoutes: null, stopLabelTramInterchanges: false, placeTitles: true, stopRadius: false, majorStreetNames: true } : options;
+}
+
+/** What the city's own places say on the kiosk map (ruling of 22 Sep; Section B's city-layers
+ *  CityLabels): the framed wall names the venues with a programme tonight and none of the BAJS
+ *  discs (a disc carries its count); the unframed whole-city window names nothing; a person
+ *  exploring and a paired presentation name everything. */
+export type KioskCityLabels = 'all' | 'venues' | 'none';
+export function kioskCityLabels(framed: boolean, cityWindow: boolean): KioskCityLabels {
+  return framed ? 'venues' : cityWindow ? 'none' : 'all';
+}
+/** The mode as CityMapOptions.cityLabels takes it: 'all' and 'none' as the booleans it has always
+ *  taken (Section B keeps accepting them), 'venues' as Section B's widened `CityLabels | boolean`.
+ *  Until lane/w-WP2-B lands the option is typed boolean, so 'venues' rides through this one cast;
+ *  at the merge pass kioskCityLabels(...) straight through. */
+function cityLabelsOption(mode: KioskCityLabels): boolean {
+  return mode === 'venues' ? (mode as unknown as boolean) : mode === 'all';
 }
 
 export interface KioskMapInput {
@@ -798,12 +879,34 @@ export interface KioskMapInput {
   renderer?: CityMapOptions['renderer'];
   target?: PresentationTarget;
   stops?: readonly ScreenStop[];
+  /** The place the screen is about (shared/city/place.ts): what the invitation frames. Absent, the stop is the place. */
+  place?: ScreenPlace | null;
+  /** ScreenMetadata.placeSet: true frames the wall on the place (kiosk.ts passes
+   *  `credentials.screen?.placeSet ?? Boolean(stop)`, a v1 screen's stop being one somebody
+   *  chose); false is the read-path default place (Trg bana Jelačića for an empty field), whose
+   *  list and departures use it while the map keeps the whole-city window [O-65]. Framed is
+   *  this, never Boolean(place). Absent: a stop keeps today's centred camera. */
+  placeSet?: boolean;
+  /** Kadar 4 / 6 / 8 (credentials.screen?.frame ?? DEFAULT_FRAME_STOPS). */
+  frame?: FrameStops;
+  /** The measured frame radius, metres: shared/city/frame.ts frameRadiusM for the place, computed
+   *  once by the caller so the camera, the "U blizini" circle and the pill read one number. Absent,
+   *  FRAME_RADIUS_M[frame]. */
+  radiusM?: number;
+  /** False empties the vehicle points (the motion model's evidence) and nothing else: the network,
+   *  the stops and the city's places stay. Never a setModes(new Set()), which drops the stops too. */
+  vehiclesVisible?: boolean;
+  /** The wall's Prikaz setting (WP3's toggle): 'schema' puts the invitation on the schematic network,
+   *  the whole network without zoom [O-72]. 'map' or absent leaves the boot renderer (?prikaz=). */
+  view?: 'map' | 'schema';
 }
 
 /** Builds the request for this render and asks the slots for the one map.
  *  Null when the page has no map factory (lightweight, or a browser with
  *  no WebGL), in which case the composition shows its list instead. */
 export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: KioskMapAdapter): HTMLElement | null {
+  // The wall's Prikaz: the schematic network instead of the geographic frame [O-72].
+  if (input.view === 'schema' && input.phase === 'invitation') input = { ...input, renderer: 'schema' };
   // A city place cannot be located on the transit diagram. Preserve an
   // explicitly configured diagram for transport, use geography for city subjects.
   if(input.renderer==='schema'&&(
@@ -811,7 +914,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     input.localSelection?.kind==='place'||input.localSelection?.kind==='street'||
     (input.exploring&&input.localGroup!=='transport')
   ))input={...input,renderer:'map'};
-  let points = vehiclePoints(input.snapshots['zet-rt'], input.now);
+  let points = input.vehiclesVisible === false ? [] : vehiclePoints(input.snapshots['zet-rt'], input.now);
   const route = input.selection?.kind === 'route' ? input.selection.id : null;
   // A relayed route is the one line the phone asked about, and the picture
   // narrows to it. Nothing else narrows: the invitation is the city live, and
@@ -819,7 +922,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   // trams in a city of two hundred.
   if (route) points = points.filter(point => point.routeId === route);
   if (input.stop) points.push({...stopPlace(input.stop),...(input.city?{title:''}:{})});
-  const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM });
+  const field = fieldView({ stop: input.stop, district: input.district ?? null, widthPx: input.widthPx, heightPx: input.heightPx, spanM: input.spanM, place: input.place, placeSet: input.placeSet, radiusM: input.radiusM, frame: input.frame, handheld: input.handheld });
   /** The whole-city window's own rules -- no names on the city's places, every
    *  BAJS station and every active venue as a badge, the pharmacy's street
    *  address dropped -- belong to the INVITATION nobody has touched. A person
@@ -827,12 +930,20 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
    *  paired presentation is a phone putting ONE subject on the wall, which
    *  must be named there: both keep the names and the points they always had. */
   const cityWindow = input.phase === 'invitation' && !input.exploring;
+  /** The wall framed on its place: N stops around it (Kadar 4 / 6 / 8), a
+   *  neighbourhood with its buses, its counted BAJS discs, tonight's venues
+   *  named, the ranked stop names with the interchanges and the street names.
+   *  Keyed on the chosen place (placeSet), never on a place being present: the
+   *  read-path default keeps the whole-city window. A phone's band, a person
+   *  exploring and a paired presentation are not the frame. */
+  const framed = framedPlace(input) !== null && input.handheld !== true && cityWindow;
+  const radiusM = frameRadiusOf(input);
   /** The frame is a neighbourhood, not the whole city: the details that only
    *  make sense close up (the pharmacy's street address) are worth their room. */
-  const closeUp = !cityWindow || field.zoom >= CITY_DETAIL_ZOOM;
+  const closeUp = !cityWindow || framed || field.zoom >= CITY_DETAIL_ZOOM;
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp));
   if(input.city){
-    if(cityWindow)points.push(...cityWindowPoints(input.city,input.snapshots.dogadanja?.items??[],input.now));
+    if(cityWindow)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR));
     else{
       const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
         center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
@@ -876,12 +987,13 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const outline = selectedPlace?.polygons?{id:selectedPlace.id,polygons:selectedPlace.polygons}:kvartOutline(district);
   // A configured quarter frames its own rings once they land; until then
   // fieldView's seat camera holds the frame.
-  if (input.phase !== 'paired' && !input.stop && district && outline?.id === district) {
+  if (input.phase !== 'paired' && !fieldAnchor(input) && district && outline?.id === district) {
     const fit = outlineView(outline, input.widthPx, input.heightPx);
     view.center = fit.center;
     view.zoom = fit.zoom;
   }
-  const buses = busesVisible(input.cameraZoom ?? view.zoom);
+  // The frame carries its buses at every hour [O-71]; elsewhere they join from CITY_DETAIL_ZOOM.
+  const buses = framed || busesVisible(input.cameraZoom ?? view.zoom);
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
     stop: input.stop,
@@ -892,10 +1004,14 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     locale: input.locale,
     outline: input.renderer !== 'schema' ? outline : null,
     // The names of the city's own places are a reader's, not a passer-by's:
-    // off on the window, on the moment somebody explores and on every paired
-    // presentation, whose one subject has to be named on the wall.
-    cityLabels: !cityWindow,
-    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? input.stop, field.zoom, labelPadding(input.widthPx, input.heightPx, input.spanM), buses),
+    // off on the whole-city window, the venues alone on the frame, all of them
+    // the moment somebody explores and on every paired presentation, whose one
+    // subject has to be named on the wall (kioskCityLabels).
+    cityLabels: cityLabelsOption(kioskCityLabels(framed, cityWindow)),
+    // The frame's street-name padding is for the ground it shows: 2R across,
+    // not the field's span. The read-path default place's window draws every
+    // stop, as the whole-city window always has: its stop is the list's.
+    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed),
   };
   // The invitation IS the transit picture: the network, the stops and the
   // vehicles are always on it. Only a paired presentation of something that

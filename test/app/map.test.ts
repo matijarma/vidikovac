@@ -19,6 +19,11 @@ import {
 import { createMapSlots } from '../../app/src/map/map-slots';
 import * as overlays from '../../app/src/map/overlays';
 import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
+// WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
+import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
+import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
+import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView } from '../../app/src/map/frame';
+import { distanceM } from '../../shared/city/geo';
 
 describe('open raster basemap', () => {
   it('uses the OpenStreetMap tile URL and attributes it in the style', () => {
@@ -392,6 +397,37 @@ describe('the field camera and the paired camera', () => {
     expect(KIOSK_EMPHASIS).toEqual(['event', 'quake', 'assembly', 'pharmacy']);
   });
 
+  it('frames a chosen place on a wall: Kadar 6\u2019s 2 km on the field\u2019s shorter side unless a measured radius is handed in; a phone\u2019s band keeps its glance', () => {
+    const view = fieldView({ stop: STOP, placeSet: true, district: null, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M });
+    expect(view).toEqual({ ...frameView(STOP, 2000, 1400, 888), emphasis: KIOSK_EMPHASIS, outline: true });
+    expect(view.center).toEqual([STOP.lon, STOP.lat]);
+    // The measured radius wins over the Kadar's fallback, and the Kadar picks the fallback.
+    const wall = { stop: STOP, placeSet: true, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M };
+    expect(fieldView({ ...wall, radiusM: 2182 }).zoom).toBe(frameView(STOP, 2182, 1250, 870).zoom);
+    expect(fieldView({ ...wall, frame: 8 }).zoom).toBeCloseTo(13.02, 2);
+    expect(fieldView({ ...wall, frame: 4 }).zoom).toBeCloseTo(14.07, 2);
+    // A phone's band keeps its glance at the stop: the handheld span across its width.
+    expect(fieldView({ ...wall, widthPx: 356, heightPx: 420, spanM: HANDHELD_SPAN_M, handheld: true })).toEqual({ zoom: fieldZoom(356, STOP.lat, HANDHELD_SPAN_M), emphasis: KIOSK_EMPHASIS, outline: true, center: [STOP.lon, STOP.lat] });
+  });
+
+  it('frames the chosen place itself, and keeps the whole-city window for the read-path default place', () => {
+    const place = { lon: 15.9951, lat: 45.8147 };
+    // An address place: the frame is centred on it, not on the stop the list reads.
+    expect(fieldView({ stop: STOP, place, placeSet: true, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M }).center).toEqual([place.lon, place.lat]);
+    // placeSet false (an empty field reads back as Trg): the list has its place, the map the whole city, or the configured quarter.
+    const fallback = fieldView({ stop: STOP, place: STOP, placeSet: false, district: null, widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M });
+    expect(fallback).toEqual({ ...cityWindowView(1250, 870), emphasis: KIOSK_EMPHASIS, outline: true });
+    const seat = districtBySlug('maksimir')!.seat;
+    expect(fieldView({ stop: STOP, placeSet: false, district: 'maksimir', widthPx: 1250, heightPx: 870, spanM: FIELD_SPAN_M }).center).toEqual([seat.lon, seat.lat]);
+    // Framed is placeSet, never the presence of a place.
+    expect(framedPlace({ stop: STOP, place: STOP, placeSet: false })).toBeNull();
+    expect(framedPlace({ stop: STOP })).toBeNull();
+    expect(framedPlace({ stop: STOP, placeSet: true })).toBe(STOP);
+    expect(framedPlace({ stop: STOP, place, placeSet: true })).toBe(place);
+    expect(framedPlace({ stop: null, placeSet: true })).toBeNull();
+    expect([frameRadiusOf({}), frameRadiusOf({ frame: 4 }), frameRadiusOf({ frame: 8, radiusM: 1234 })]).toEqual([2000, 1300, 1234]);
+  });
+
   // The screen a person sets up with one button has no stop and no district:
   // it opens on the whole city (CITY_WINDOW, Crnomerec to Maksimir, the Sava
   // to Mirogoj), fitted to whatever box the composition gives it.
@@ -444,6 +480,47 @@ describe('the field camera and the paired camera', () => {
     expect(fieldView({ stop: null, district: 'zagreb', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual(cityWindowView(1300, 880).center);
     // A stop outranks both.
     expect(fieldView({ stop: STOP, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual([STOP.lon, STOP.lat]);
+  });
+
+  // The frame (WP2 step 4): the square of side 2R around the place on the
+  // field's shorter side, R measured per place (shared/city/frame.ts).
+  it('frameView fits the square of side 2R on the field\u2019s shorter side: the wall frames Kadar 4 / 6 / 8 at z14.07 / 13.45 / 13.02', () => {
+    const wide = [1300, 2000, 2700].map((r) => frameView(STOP, r, 1250, 870).zoom);
+    expect(wide[0]).toBeCloseTo(14.07, 2);
+    expect(wide[1]).toBeCloseTo(13.45, 2);
+    expect(wide[2]).toBeCloseTo(13.02, 2);
+    expect(Math.abs(wide[1]! - 13.45)).toBeLessThanOrEqual(0.01);
+    // The design boxes: the compact wall clamps Kadar 8 to the floor, the totem is taller than it is wide.
+    const at = (c: 'wide' | 'compact' | 'portrait', r: number) => frameView(STOP, r, FIELD_DESIGN_WIDTH[c], FIELD_DESIGN_HEIGHT[c]).zoom;
+    expect([at('wide', 1300), at('wide', 2000), at('wide', 2700)]).toEqual(wide);
+    expect(at('compact', 1300)).toBeCloseTo(13.53, 2);
+    expect(at('compact', 2000)).toBeCloseTo(12.90, 2);
+    expect(at('compact', 2700)).toBe(FIELD_MIN_ZOOM);
+    expect(frameView(STOP, 2700, 794, 610).zoom).toBe(12.7);
+    expect(at('portrait', 1300)).toBeCloseTo(14.24, 2);
+    expect(at('portrait', 2000)).toBeCloseTo(13.62, 2);
+    expect(at('portrait', 2700)).toBeCloseTo(13.18, 2);
+    // The centre is the place itself; a box not yet laid out is the floor, never NaN; defaults are the kiosk's field limits.
+    expect(frameView(STOP, 2000, 1250, 870).center).toEqual([STOP.lon, STOP.lat]);
+    expect(frameView(STOP, 2000, 0, 0).zoom).toBe(12.7);
+    expect([FRAME_PADDING_PX, FRAME_MIN_ZOOM, FRAME_MAX_ZOOM]).toEqual([CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM]);
+    expect(frameView(STOP, 100, 1250, 870).zoom).toBe(FIELD_MAX_ZOOM);
+    // At the derived zoom the square's 2R fills the shorter side less the clearance, and fits the longer one.
+    const ppm = 1 / metresPerPixel(wide[1]!, STOP.lat);
+    expect(4000 * ppm).toBeCloseTo(870 - 2 * 24, 0);
+    expect(4000 * ppm).toBeLessThan(1250 - 2 * 24);
+  });
+
+  it('frameBounds lays out 2R of ground across and up at the place\u2019s latitude, and boundsView is the window\u2019s own fit', () => {
+    const box = frameBounds(STOP, 2000);
+    expect(distanceM({ lon: box.west, lat: STOP.lat }, { lon: box.east, lat: STOP.lat })).toBeCloseTo(4000, -1);
+    expect(Math.abs(distanceM({ lon: box.west, lat: STOP.lat }, { lon: box.east, lat: STOP.lat }) - 4000)).toBeLessThan(12);
+    expect(Math.abs(distanceM({ lon: STOP.lon, lat: box.south }, { lon: STOP.lon, lat: box.north }) - 4000)).toBeLessThan(12);
+    // In the metres the camera counts (EARTH_CIRCUMFERENCE_M, map/scale.ts) the square is 2R to the metre.
+    const across = (EARTH_CIRCUMFERENCE_M * Math.cos((STOP.lat * Math.PI) / 180) * (box.east - box.west)) / 360;
+    expect(Math.abs(across - 4000)).toBeLessThan(1);
+    expect(Math.abs((EARTH_CIRCUMFERENCE_M * (box.north - box.south)) / 360 - 4000)).toBeLessThan(1);
+    expect(boundsView(CITY_WINDOW, 1300, 880, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM)).toEqual(cityWindowView(1300, 880));
   });
 
   it('the worker\u2019s teaser box reaches past the field by one stop spacing (TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400, D2): a vehicle has given the motion model one fix of its own before it enters the picture', () => {
