@@ -39,8 +39,9 @@
 // (servedGaps).
 //
 // Reuses the zero-dependency zip reader and CSV parser from gtfs-routes.mjs;
-// run locally with `npm run build:network` (or `-- --zip <archive>` to build
-// from a downloaded archive) and commit both generated files.
+// run locally with `npm run build:network` (or `-- --zip <archive> --built-at
+// <its Last-Modified>` to build from a downloaded archive) and commit both
+// generated files.
 // The Worker never downloads the 15 MB archive -- a local build step, and the
 // trip index (scripts/gtfs-trips.mjs) must be cut from the same feed version
 // (R-TE16: `npm run build:network && npm run build:trips`).
@@ -51,7 +52,7 @@ import { createHash } from 'node:crypto';
 import { createInflateRaw } from 'node:zlib';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -169,6 +170,19 @@ export const LOOP_DIRECTION = -1;
 export const LOOP_ID_PREFIX = 'loop:';
 export const LOOP_PAIR_MAX_METRES = 400;
 export const LOOP_MAX_METRES = 1500;
+// How much of the two boundary edges a loop keeps: from this far before the
+// arriving platform to this far past the departing one (along the rails, from
+// where the platform projects). The rest of a long boundary edge (3.3 km into
+// Mihaljevac, 3.2 km out of Dubec) is no part of the turn, so the edge is cut
+// there and the loop runs only the terminal end. 70 m holds a 32 m tram
+// standing at the platform, and puts the new node past SERVED_STOP_MAX_METRES
+// from the platform, so no link of it lands on the node; the cut then moves
+// further out until every platform served over that edge is
+// LOOP_CUT_CLEAR_METRES away. A boundary edge that would keep less than
+// LOOP_CUT_MIN_METRES on the far side is kept whole: a sliver buys nothing.
+export const LOOP_LEAD_METRES = 70;
+export const LOOP_CUT_CLEAR_METRES = 65;
+export const LOOP_CUT_MIN_METRES = 10;
 // F8c NODES those crossings, one reported leg at a time. The search is
 // deliberately narrow, because a node where two tracks cross grows turns in
 // every direction and the graph must not sprout turns no tram takes:
@@ -1803,6 +1817,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
       }
       return plane;
     };
+    const ARC_QUANTUM = 0.1; // the wire's decimetre
     /** The nearer of a polyline's two ends to `p`, with its arc. */
     const nearestEnd = (p, plane, cum) => {
       const first = plane[0];
@@ -1867,11 +1882,32 @@ export async function buildNetwork(zipBuf, opts = {}) {
         // last, which is as far forward as this path can put it.
         let arc = candidates.find((c) => c > cursor);
         if (arc === undefined) arc = candidates[candidates.length - 1];
-        if (arc === undefined) {
-          if (plane === null) {
-            plane = planeOfEdges(edgeSeq);
-            cum = cumulative(plane);
+        if (plane === null) {
+          plane = planeOfEdges(edgeSeq);
+          cum = cumulative(plane);
+        }
+        if (arc !== undefined) {
+          // A link says where on the path the stop is; the geometry must agree,
+          // because not every link was measured: a shape's sample trip has its
+          // first and last stop linked to the shape's ends whatever the
+          // distance, and a synthetic path's terminus may be linked up to
+          // TERMINUS_STOP_MAX_METRES off. So the platform must lie within
+          // SERVED_STOP_MAX_METRES of the point it is served at, or, when a
+          // trip of this path starts or ends there, within
+          // TERMINUS_STOP_MAX_METRES; otherwise it is dropped and reported
+          // like a stop no link reached (and on a shape the build refuses it).
+          const at = plane.length >= 2 ? pointAtArc(plane, cum, arc) : null;
+          const d = at ? Math.hypot(stopPlane[si].x - at.x, stopPlane[si].y - at.y) : 0;
+          if (d > SERVED_STOP_MAX_METRES) {
+            if (termini?.has(stopId) && d <= TERMINUS_STOP_MAX_METRES) {
+              const len = cum[cum.length - 1];
+              servedTerminus.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: round1(d), at: arc <= ARC_QUANTUM ? 'start' : arc >= len - ARC_QUANTUM ? 'end' : 'side' });
+            } else {
+              servedDropped.push({ path: label, route: routeId, stop: stopId, name: stops[si].name, metres: round1(d) });
+              return null;
+            }
           }
+        } else {
           const near = plane.length >= 2 ? nearestOnPolyline(stopPlane[si], plane, cum) : null;
           // A trip's own first or last platform past the end of the drawn rails
           // (Zapruđe 1780_18 lies 130 m beyond the end of 8_18 and 8_42): the
@@ -2023,7 +2059,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
         for (const link of links[k]) if (!byEdge.has(link.edge)) byEdge.set(link.edge, link.s);
         routed.set(routedStops[k], byEdge);
       }
-      const served = servedFor(label, pattern.route, edgesOnPath, covered, routed, covered);
+      const served = servedFor(label, pattern.route, edgesOnPath, covered, routed, covered, new Set([covered[0], covered[covered.length - 1]]));
       // The honest measure of what the feed's shapes fail to draw: a hop whose
       // routed arc runs far past the straight line between its two platforms
       // means the graph has no node where the line turns (HOP_DETOUR_FACTOR).
@@ -2069,6 +2105,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
       const lengthOf = (edgeSeq) => edgeSeq.reduce((n, e) => n + edgeLen[e], 0);
       const ends = new Map(); // route -> Map<L stopIdx, Map<last edge, arc of L on it | null>>
       const starts = new Map(); // route -> Map<F stopIdx, Map<first edge, arc of F on it | null>>
+      const arrivingIds = new Map(); // `${L}|${edge}` -> the ids of the paths that end at L on that edge
       const note = (byRoute, route, stopIdx, edge, arcOnEdge) => {
         let byStop = byRoute.get(route);
         if (!byStop) byRoute.set(route, (byStop = new Map()));
@@ -2077,10 +2114,15 @@ export async function buildNetwork(zipBuf, opts = {}) {
         if (!byEdge.has(edge) || (byEdge.get(edge) === null && arcOnEdge !== null)) byEdge.set(edge, arcOnEdge);
       };
       const routePaths = [
-        ...shapes.filter((sh) => sh.e.length > 0).map((sh) => ({ route: sh.route, e: sh.e, served: sh.served })),
-        ...paths.map((pa) => ({ route: pa.route, e: pa.e, served: pa.served })),
+        ...shapes.filter((sh) => sh.e.length > 0).map((sh) => ({ id: sh.id, route: sh.route, e: sh.e, served: sh.served })),
+        ...paths.map((pa) => ({ id: pa.id, route: pa.route, e: pa.e, served: pa.served })),
       ];
-      for (const { route, e, served } of routePaths) {
+      for (const { id, route, e, served } of routePaths) {
+        if (served.length > 0) {
+          const key = `${served[served.length - 1][0]}|${e[e.length - 1]}`;
+          if (!arrivingIds.has(key)) arrivingIds.set(key, []);
+          arrivingIds.get(key).push(id);
+        }
         if (served.length === 0) continue;
         const lastEdge = e[e.length - 1];
         const [lIdx, lDm] = served[served.length - 1];
@@ -2094,6 +2136,33 @@ export async function buildNetwork(zipBuf, opts = {}) {
         note(starts, route, fIdx, firstEdge, onFirst <= edgeLen[firstEdge] + ARC_EPS ? Math.min(edgeLen[firstEdge], onFirst) : null);
       }
       const byStopId = (map) => [...map.keys()].sort((a, b) => stops[a].id.localeCompare(stops[b].id));
+      // Where a boundary edge may be cut: at least LOOP_CUT_CLEAR_METRES from
+      // every platform a path over that edge serves, so the new node draws no
+      // platform's link to itself (a link to an edge's end stands in for a
+      // projection past it, and the served list would take the earlier arc).
+      const servedOn = new Map(); // edge -> stop indices served by a path over it
+      for (const { e, served } of routePaths) {
+        for (const edge of e) {
+          if (!servedOn.has(edge)) servedOn.set(edge, new Set());
+          for (const [si] of served) servedOn.get(edge).add(si);
+        }
+      }
+      const clearAt = (edge, arc) => {
+        const p = pointAtArc(edgePlane[edge], edgeCum[edge], arc);
+        for (const si of servedOn.get(edge) ?? []) if (Math.hypot(stopPlane[si].x - p.x, stopPlane[si].y - p.y) < LOOP_CUT_CLEAR_METRES) return false;
+        return true;
+      };
+      const CUT_STEP_METRES = 5;
+      /** The loop's start on its arriving edge: `arc`, or earlier until clear. */
+      const cutBefore = (edge, arc) => {
+        for (let at = arc; at > LOOP_CUT_MIN_METRES; at -= CUT_STEP_METRES) if (clearAt(edge, at)) return at;
+        return 0;
+      };
+      /** The loop's end on its departing edge: `arc`, or later until clear. */
+      const cutAfter = (edge, arc) => {
+        for (let at = arc; at < edgeLen[edge] - LOOP_CUT_MIN_METRES; at += CUT_STEP_METRES) if (clearAt(edge, at)) return at;
+        return edgeLen[edge];
+      };
       const usedIds = new Set();
       for (const route of [...ends.keys()].sort(compareRouteIds)) {
         const arrivalsAt = ends.get(route);
@@ -2111,26 +2180,39 @@ export async function buildNetwork(zipBuf, opts = {}) {
             const arrivals = arrivalsAt.get(L);
             // One route per arriving edge: two variants that reach L along
             // different rails each need their own way round.
-            for (const lastEdge of [...arrivals.keys()].sort((a, b) => a - b)) {
+            const viaOf = (edge) => [...(arrivingIds.get(`${L}|${edge}`) ?? [])].sort()[0] ?? '';
+            for (const lastEdge of [...arrivals.keys()].sort((a, b) => viaOf(a).localeCompare(viaOf(b)) || a - b)) {
               const named = { route, from: stops[L].id, fromName: stops[L].name, to: stops[F].id, toName: stops[F].name, apart: round1(apart) };
               const leg = routeBetween(graph.edges, outgoing, edgeLen, [{ edge: lastEdge, s: edgeLen[lastEdge] }], targets);
               if (!leg) {
                 loopSkipped.push({ ...named, reason: 'no directed route' });
                 continue;
               }
-              if (leg.cost > LOOP_MAX_METRES) {
-                loopSkipped.push({ ...named, reason: 'too long', metres: round1(leg.cost) });
+              const e = leg.path;
+              const onL = arrivals.get(lastEdge);
+              const onF = departures.get(leg.end.edge);
+              // Only the terminal end of the two boundary edges belongs to the
+              // loop: from LOOP_LEAD_METRES before the arriving platform (or the
+              // edge's last LOOP_LEAD_METRES when the platform is not on it) and
+              // to LOOP_LEAD_METRES past the departing one. Longer boundary edges
+              // are cut there (splitLoopEdges), so the length the cap is held to
+              // is the length the exported path has.
+              const departEdge = e[e.length - 1];
+              const projL = nearestOnPolyline(stopPlane[L], edgePlane[lastEdge], edgeCum[lastEdge]).arc;
+              const projF = nearestOnPolyline(stopPlane[F], edgePlane[departEdge], edgeCum[departEdge]).arc;
+              const cutFirst = cutBefore(lastEdge, (onL !== null ? Math.min(onL, projL) : edgeLen[lastEdge]) - LOOP_LEAD_METRES);
+              const cutLast = cutAfter(departEdge, (onF !== null ? Math.max(onF, projF) : 0) + LOOP_LEAD_METRES);
+              const metres = lengthOf(e) - cutFirst - (edgeLen[departEdge] - cutLast);
+              if (metres > LOOP_MAX_METRES) {
+                loopSkipped.push({ ...named, reason: 'too long', metres: round1(metres) });
                 continue;
               }
-              const e = leg.path;
               const key = e.join(',');
               if (seen.has(key)) {
                 loopDuplicates.push(named);
                 continue;
               }
-              const lastOffset = lengthOf(e) - edgeLen[e[e.length - 1]];
-              const onL = arrivals.get(lastEdge);
-              const onF = departures.get(leg.end.edge);
+              const lastOffset = lengthOf(e) - edgeLen[departEdge];
               const served = [];
               if (onL !== null) served.push([L, Math.round(onL * 10)]);
               if (onF !== null) served.push([F, Math.round((lastOffset + onF) * 10)]);
@@ -2142,11 +2224,15 @@ export async function buildNetwork(zipBuf, opts = {}) {
               seen.add(key);
               // Named by what it joins, like a synthetic path by what it visits;
               // a second way round between the same two platforms is named by
-              // the arriving path's edge as well.
+              // the arriving path as well (the first of them by id), which no
+              // cut of the graph renumbers.
               let id = `${LOOP_ID_PREFIX}${route}:${stopSequenceHash([stops[L].id, stops[F].id])}`;
-              if (usedIds.has(id)) id = `${LOOP_ID_PREFIX}${route}:${stopSequenceHash([stops[L].id, stops[F].id, String(lastEdge)])}`;
+              if (usedIds.has(id)) id = `${LOOP_ID_PREFIX}${route}:${stopSequenceHash([stops[L].id, stops[F].id, viaOf(lastEdge)])}`;
               usedIds.add(id);
-              loopPaths.push({ id, route, dir: LOOP_DIRECTION, e, stops: [stops[L].id, stops[F].id], served, metres: round1(leg.cost), ...named });
+              const cuts = [];
+              if (cutFirst > LOOP_CUT_MIN_METRES) cuts.push({ edge: lastEdge, at: cutFirst });
+              if (edgeLen[departEdge] - cutLast > LOOP_CUT_MIN_METRES) cuts.push({ edge: departEdge, at: cutLast });
+              loopPaths.push({ id, route, dir: LOOP_DIRECTION, e, stops: [stops[L].id, stops[F].id], served, metres: round1(metres), between: round1(leg.cost), cuts, ...named });
             }
           }
         }
@@ -2351,6 +2437,96 @@ export async function buildNetwork(zipBuf, opts = {}) {
     graph = connected;
     derived = deriveFromGraph(graph);
   }
+
+  // --- Terminus loops keep only the terminal end of their two boundary edges
+  // (LOOP_LEAD_METRES): each long boundary edge is cut at a vertex of its own
+  // rails there, the loops and everything else are derived once more, and a
+  // loop is then held to LOOP_MAX_METRES on the path it exports. Cutting an
+  // edge moves no rail: every path over it runs the two halves instead. The
+  // first half keeps the edge's index and the others are appended, so no
+  // other edge index moves.
+  const cutsByEdge = new Map();
+  for (const loop of derived.loopPaths) {
+    for (const cut of loop.cuts) {
+      if (!cutsByEdge.has(cut.edge)) cutsByEdge.set(cut.edge, []);
+      cutsByEdge.get(cut.edge).push(cut.at);
+    }
+  }
+  let loopCuts = [];
+  if (cutsByEdge.size > 0) {
+    const edges = graph.edges.map((e) => e);
+    const pieces = new Map(); // edge -> its pieces' indices, in travel order
+    let nodeCount = graph.nodeCount;
+    for (const edge of [...cutsByEdge.keys()].sort((a, b) => a - b)) {
+      const e = graph.edges[edge];
+      if (e.owners.size === 0) continue; // a connector is never cut
+      const simple = derived.edgeUnits[edge].map(unitsToMetres);
+      const simpleCum = cumulative(simple);
+      const len = simpleCum[simpleCum.length - 1];
+      const arcs = [];
+      for (const arc of [...cutsByEdge.get(edge)].sort((a, b) => a - b)) {
+        if (arc <= LOOP_CUT_MIN_METRES || arc >= len - LOOP_CUT_MIN_METRES) continue;
+        if (arcs.length > 0 && arc - arcs[arcs.length - 1] < LOOP_CUT_MIN_METRES) continue;
+        arcs.push(arc);
+      }
+      const units = e.units.map((u) => [u[0], u[1]]);
+      const cutKeys = [];
+      for (const arc of arcs) {
+        // The point at that arc of the wire's geometry, placed on the edge's
+        // own rails: an existing vertex within a metre, else the lattice
+        // point nearest the projection (JUNCTION_MAX_OFFSET_METRES).
+        const p = pointAtArc(simple, simpleCum, arc);
+        const raw = units.map(unitsToMetres);
+        const near = nearestOnPolyline(p, raw, cumulative(raw));
+        const a = raw[near.seg];
+        const b = raw[near.seg + 1];
+        const q = { x: a.x + (b.x - a.x) * near.t, y: a.y + (b.y - a.y) * near.t };
+        let idx;
+        if (Math.hypot(q.x - a.x, q.y - a.y) <= 1) idx = near.seg;
+        else if (Math.hypot(q.x - b.x, q.y - b.y) <= 1) idx = near.seg + 1;
+        else {
+          const u = unitsFromMetres(q);
+          if (unitKey(u) === unitKey(units[near.seg])) idx = near.seg;
+          else if (unitKey(u) === unitKey(units[near.seg + 1])) idx = near.seg + 1;
+          else {
+            units.splice(near.seg + 1, 0, u);
+            idx = near.seg + 1;
+          }
+        }
+        if (idx > 0 && idx < units.length - 1) cutKeys.push(unitKey(units[idx]));
+      }
+      const cutAt = [...new Set(cutKeys)].map((key) => units.findIndex((u, i) => i > 0 && unitKey(u) === key)).sort((x, y) => x - y);
+      if (cutAt.length === 0) continue;
+      const bounds = [0, ...cutAt, units.length - 1];
+      const nodes = [e.from, ...cutAt.map(() => nodeCount++), e.to];
+      const list = [];
+      for (let k = 0; k + 1 < bounds.length; k++) {
+        const piece = { from: nodes[k], to: nodes[k + 1], units: units.slice(bounds[k], bounds[k + 1] + 1), owners: new Set(e.owners) };
+        const index = k === 0 ? edge : edges.length;
+        if (k === 0) edges[edge] = piece;
+        else edges.push(piece);
+        list.push(index);
+      }
+      pieces.set(edge, list);
+      loopCuts.push({ edge, pieces: list, at: arcs.map(round1) });
+    }
+    if (pieces.size > 0) {
+      graph = { ...graph, edges, nodeCount, shapeEdges: graph.shapeEdges.map((seq) => seq.flatMap((e) => pieces.get(e) ?? [e])) };
+      derived = deriveFromGraph(graph);
+    }
+  }
+  // Held to the cap on the path it exports: the loop's own edges, end to end.
+  {
+    const edgeLength = (e) => cumulative(derived.edgeUnits[e].map(unitsToMetres)).at(-1);
+    const kept = [];
+    for (const loop of derived.loopPaths) {
+      const metres = loop.e.reduce((n, e) => n + edgeLength(e), 0);
+      const { route, from, fromName, to, toName, apart } = loop;
+      if (metres > LOOP_MAX_METRES) derived.loopSkipped.push({ route, from, fromName, to, toName, apart, reason: 'too long', metres: round1(metres) });
+      else kept.push({ ...loop, metres: round1(metres) });
+    }
+    derived.loopPaths = kept;
+  }
   // A connector is a turn named for its lines. Every path that runs it must
   // belong to one of them, and some path must: one nothing runs is stale.
   for (const connector of connectors) {
@@ -2470,7 +2646,8 @@ export async function buildNetwork(zipBuf, opts = {}) {
     spikePoints: graph.report.spikePoints,
     busUnsharedShare,
     paths: paths.length,
-    loopPaths: loopPaths.map(({ id, route, from, fromName, to, toName, apart, metres, e, served }) => ({ id, route, from, fromName, to, toName, apart, metres, edges: e.length, served: served.length })),
+    loopPaths: loopPaths.map(({ id, route, from, fromName, to, toName, apart, metres, between, e, served }) => ({ id, route, from, fromName, to, toName, apart, metres, between, edges: e.length, served: served.length })),
+    loopCuts,
     loopPairs: derived.loopPairs,
     loopSkipped: derived.loopSkipped,
     loopDuplicates: derived.loopDuplicates,
@@ -2535,18 +2712,21 @@ function renderNetworkMeta({ feedVersion, builtAt, routeCount, edgeCount, byteSi
  * trip index are cut from one feed version); otherwise the live archive is
  * downloaded. `metaOut: null` writes the artefact alone.
  *
- * `builtAt` is the ARCHIVE's time, not the wall clock's: the download's
- * Last-Modified, or the file's modification time for `zipPath` (`curl -R`
- * keeps the server's). Two builds from the same archive are then the same
- * bytes, and the static-feed watch (worker/feed/static-watch.ts), which calls
- * a feed newer when its Last-Modified is later than BUILT_AT, stays exact:
- * the archive the artefact was cut from is never later than itself. `now`
- * overrides it (tests).
+ * `builtAt` is the ARCHIVE's publication time as ZET's server states it, its
+ * Last-Modified, never the wall clock and never a file's own time: a download
+ * reads the header; a build from `zipPath` must be told it (`builtAt`, the
+ * CLI's `--built-at`), since a copied or re-downloaded file need not keep the
+ * server's time. Two builds from the same archive bytes and the same stamp are
+ * then the same bytes on any machine, and the static-feed watch
+ * (worker/feed/static-watch.ts), which calls a feed newer when the live
+ * Last-Modified is later than BUILT_AT, stays exact. `now` overrides it
+ * (tests).
  */
 export async function main({
   fetchImpl = fetch,
   url = GTFS_URL,
   zipPath = null,
+  builtAt: builtAtArg = null,
   out = OUTPUT_PATH,
   metaOut = META_OUTPUT_PATH,
   log = console.log,
@@ -2555,15 +2735,23 @@ export async function main({
   diagramBusCount = DIAGRAM_BUS_COUNT,
   overrides = null,
 } = {}) {
+  const stampOf = (text, what) => {
+    const ms = text === null || text === undefined ? NaN : Date.parse(text);
+    if (!Number.isFinite(ms)) throw new Error(`${what} ${JSON.stringify(text)} is not a time`);
+    return new Date(ms);
+  };
   let buf;
-  let fallbackMtime;
-  let archiveTime = null;
+  let fallbackMtime = null; // names the feed only when feed_info.txt does not
+  let stamp = builtAtArg === null ? null : stampOf(builtAtArg, '--built-at');
   if (zipPath) {
-    const file = resolve(cwd, zipPath);
+    if (stamp === null && now === null) {
+      throw new Error(
+        '--zip needs --built-at <the archive\'s Last-Modified, e.g. 2026-09-01T08:50:29Z>: builtAt is what the static-feed watch ' +
+          'compares the live archive\'s Last-Modified with, and a file on disk does not carry the server\'s time reliably.',
+      );
+    }
     log(`Reading ${zipPath}`);
-    buf = new Uint8Array(await readFile(file));
-    archiveTime = (await stat(file)).mtime;
-    fallbackMtime = archiveTime.toUTCString();
+    buf = new Uint8Array(await readFile(resolve(cwd, zipPath)));
   } else {
     log(`Fetching ${url}`);
     const res = await fetchImpl(url, {
@@ -2573,12 +2761,12 @@ export async function main({
     });
     if (!res.ok) throw new Error(`GTFS download failed: HTTP ${res.status}`);
     fallbackMtime = res.headers.get('last-modified');
-    const modified = fallbackMtime === null ? NaN : Date.parse(fallbackMtime);
-    if (Number.isFinite(modified)) archiveTime = new Date(modified);
+    if (stamp === null && fallbackMtime !== null) stamp = stampOf(fallbackMtime, 'Last-Modified');
     buf = new Uint8Array(await res.arrayBuffer());
     log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
   }
-  const builtAt = now ?? (() => archiveTime ?? new Date());
+  if (fallbackMtime === null && stamp !== null) fallbackMtime = stamp.toISOString();
+  const builtAt = now ?? (() => stamp ?? new Date());
 
   // The overrides live beside the script, not beside its output: they belong
   // to the build, so `cwd` (which tests point at a temp directory) must not
@@ -2627,8 +2815,9 @@ export async function main({
       `(${report.loopSkipped.length} skipped, ${report.loopDuplicates.length} the same rails as a loop already built)`,
   );
   for (const l of report.loopPaths) {
-    log(`Loop ${l.id}: ${l.fromName} ${l.from} -> ${l.toName} ${l.to} (${l.apart} m apart), ${l.metres} m between the two paths, ${l.served} platform(s) served`);
+    log(`Loop ${l.id}: ${l.fromName} ${l.from} -> ${l.toName} ${l.to} (${l.apart} m apart), ${l.metres} m long, ${l.between} m between the two paths, ${l.served} platform(s) served`);
   }
+  for (const c of report.loopCuts) log(`Edge ${c.edge} cut at ${c.at.join(', ')} m for the loops that end or start on it: pieces ${c.pieces.join(', ')}`);
   for (const l of report.loopSkipped) {
     log(`Loop skipped on route ${l.route}: ${l.fromName} ${l.from} -> ${l.toName} ${l.to} (${l.apart} m apart): ${l.reason}${l.metres === undefined ? '' : ` (${l.metres} m, past ${LOOP_MAX_METRES} m)`}`);
   }
@@ -2696,10 +2885,11 @@ export async function main({
 const invokedDirectly =
   typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (invokedDirectly) {
-  // `--zip <archive>` builds from a file instead of the download; `--out
-  // <file>` writes the artefact there and, unless `--meta-out <file>` names a
-  // place for it, leaves network-meta.ts alone, so a determinism check
-  // (`--zip <archive> --out /tmp/zn.json`, then compare) touches nothing.
+  // `--zip <archive> --built-at <Last-Modified>` builds from a file instead of
+  // the download; `--out <file>` writes the artefact there and, unless
+  // `--meta-out <file>` names a place for it, leaves network-meta.ts alone, so
+  // a determinism check (`--zip <archive> --built-at <time> --out
+  // /tmp/zn.json`, then compare) touches nothing.
   const flag = (name) => {
     const i = process.argv.indexOf(name);
     if (i === -1) return null;
@@ -2710,7 +2900,7 @@ if (invokedDirectly) {
   Promise.resolve()
     .then(() => {
       const out = flag('--out');
-      return main({ zipPath: flag('--zip'), ...(out ? { out, metaOut: flag('--meta-out') } : {}) });
+      return main({ zipPath: flag('--zip'), builtAt: flag('--built-at'), ...(out ? { out, metaOut: flag('--meta-out') } : {}) });
     })
     .catch((err) => {
       console.error(err instanceof Error ? err.message : String(err));
