@@ -45,6 +45,42 @@ describe('runTick on the corridor', () => {
   const routes = { '1': { shortName: '1', longName: 'Trunk east', type: 0 }, '2': { shortName: '2', longName: 'Trunk north', type: 0 }, '109': { shortName: '109', longName: 'Bus', type: 3 } };
   const tramById = new Map(sim.trams.map((t) => [t.id, t]));
 
+  it('publishes actual fixes through a directed gap and keeps that decision across cold restores', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: [{ x: 600, y: 0 }, { x: 1600, y: 0 }] },
+        { from: 2, to: 3, pts: [{ x: 600, y: 6 }, { x: 0, y: 6 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [0] },
+        { id: 'arrival', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const idx = corridorIndex(n, [{ tripId: 'gap', pathId: 'departure' }]);
+    const joins = new Map<string, TripJoin>([['gap', { direction: 0, headsign: 'End', shapeId: 'departure', service: 'wd' }]]);
+    let state = emptyState();
+    for (const [offset, x] of [[0, 0], [10, 100], [20, 200], [40, 200], [50, 300], [60, 400], [90, 650]]) {
+      const ll = lonLatOf({ x, y: 6 });
+      const result = runTick({
+        state, engine: createEngine(n, idx), routes, joins, nowMs: (start + offset + 2) * 1000, validUntilMs: 0,
+        feed: { headerTs: start + offset, tripUpdates: [], vehicles: [
+          { vehicleId: 'gap', tripId: 'gap', routeId: '1', ...ll, atSec: start + offset },
+        ] },
+      });
+      const pin = result.payload.items.find(i => i.id === 'vehicle:gap')!;
+      expect(pin).toBeDefined(); // Never hide a vehicle to avoid a correction.
+      if (offset >= 20 && offset < 90) {
+        expect(result.state.tracks.gap.match.pathIdx).toBeNull();
+        expect(isFreeMotion(pin.motion!)).toBe(true);
+        expect(pin.geo!.coordinates[0]).toBeCloseTo(ll.lon, 5);
+        expect(pin.geo!.coordinates[1]).toBeCloseTo(ll.lat, 5);
+      }
+      if (offset === 90) expect(n.paths[result.state.tracks.gap.match.pathIdx!].id).toBe('departure');
+      state = deserializeState(serializeState(result.state));
+    }
+  });
+
   it('preserves the queue through an eligible shared-rail prior return', () => {
     const spec = corridorSpec();
     spec.routes[0].paths!.push({ id: 'sibling', direction: 0, edges: [0, 1], synthetic: true });

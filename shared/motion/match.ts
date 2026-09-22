@@ -14,6 +14,8 @@
 //     the edge the vehicle is actually on;
 //   - off the route's rails, stay unplaced (free plane) and retry each fix;
 //     another line's path is never a substitute for missing own-route rails;
+//   - a confirmed backward adopted rail with no directed departure fit
+//     also uses real free-plane fixes until eligible forward rails fit;
 //   - two fixes further than OFF_GRAPH_M from every edge put the vehicle off
 //     the graph (a balloon loop, a depot track, a works detour no shape
 //     draws), a fix within NEAR_M of an edge brings it back;
@@ -125,6 +127,9 @@ interface Candidate {
 /** Matcher-owned, optional on older tracks. Kept on the track (not in a
  *  matcher cache) so the existing state serialization preserves progress. */
 interface TramTrack extends Track {
+  /** A confirmed wrong-way adopted rail has no directed placement. Keep
+   *  its observed bearing while unplaced, including through standing fixes. */
+  unplacedDirection?: XY;
   priorReturn?: {
     pathIdx: number;
     fromPathIdx: number;
@@ -249,7 +254,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     return best;
   }
 
-  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
+  function candidatesFor(track: TramTrack, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
     for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
@@ -258,6 +263,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const out: Candidate[] = [];
     for (const hit of hits) {
       if (!routeEdges.has(hit.edge)) continue;
+      if (track.unplacedDirection && !edgeTangentAgrees(hit.edge, hit.s, dir ?? track.unplacedDirection)) continue;
       const pathIdx = adoptPath(hit.edge, hit.s, track, prior, dir, ctx);
       if (pathIdx === null) continue;
       const path = net.paths[pathIdx];
@@ -444,6 +450,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       prior = { ...prior, pathIdx: null, shapeIdx: null };
     }
     if (invalidMatch) {
+      delete track.unplacedDirection;
       track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
@@ -456,6 +463,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // relation the new path leaves behind is dropped by the register's own
     // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
+      delete track.unplacedDirection;
       track.priorPath = prior.pathIdx;
       track.match = noMatch();
       track.offPathCount = 0;
@@ -467,6 +475,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (anyNear.length === 0) {
       track.offGraphCount++;
       if (track.offGraphCount >= OFF_GRAPH_FIXES) {
+        delete track.unplacedDirection;
         track.offGraph = true;
         track.match = noMatch();
         resetOrder(track);
@@ -506,6 +515,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       if (prev !== null && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
+          delete track.unplacedDirection;
           resetOrder(track);
           track.match = own;
           track.offPathCount = 0;
@@ -529,6 +539,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       track.match = best
         ? { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d }
         : { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
+      if (best) delete track.unplacedDirection;
       return track.match;
     };
 
@@ -539,7 +550,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
       const unplaced = track.match.pathIdx === null && track.match.edge !== null;
       if (unplaced) {
-        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir)) {
+        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir ?? track.unplacedDirection ?? null)) {
+          delete track.unplacedDirection;
           resetOrder(track);
           track.match = onPath;
           track.offPathCount = 0;
@@ -563,10 +575,19 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
           track.againstCount = 0;
           const turned = turnaroundMatch(working, p, motion, track, prior, ctx);
           if (turned) {
+            delete track.unplacedDirection;
             delete track.priorReturn;
             resetOrder(track);
             track.match = turned;
             return track.match;
+          }
+          if (working !== prior.pathIdx) {
+            // An adopted arrival rail running backwards is not a usable
+            // departure path. At Mandlova the directed departure is absent
+            // until Ravnice. Publish real fixes through that gap instead of
+            // planning forward on the wrong-way rail and freezing the mark.
+            track.unplacedDirection = dir;
+            return rederive();
           }
         }
         track.match = onPath;
@@ -595,7 +616,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // A new trip has no established placement to protect from a stray.
       // Prefer an eligible nearby rail immediately to publishing a remote
       // prior for one tick (Mandlova departures were placed 631 m away).
-      if (track.match.pathIdx === null && candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0) return rederive();
+      if (track.match.pathIdx === null && (onPath.residual > OFF_GRAPH_M
+        || candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0)) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.

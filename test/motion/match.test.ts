@@ -448,6 +448,60 @@ describe('own-path return and service eligibility', () => {
 });
 
 describe('terminal placement continuity', () => {
+  it('stays unplaced through a missing directed departure instead of running an adopted arrival backwards', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(600, 1600) },
+        { from: 2, to: 3, pts: straight(600, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [0] },
+        // Same direction_id is not evidence that the actual rail points the
+        // same way (the recorded Mandlova variants have this shape).
+        { id: 'arrival', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('missing-departure', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(0, 6, 1000), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(100, 6, 1010), p, null);
+    m.matchFix(t, fix(200, 6, 1020), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    for (const [i, x] of [200, 200, 300, 400, 500].entries()) {
+      m.matchFix(t, fix(x, 6, 1030 + i * 20), p, null);
+      expect(t.match.pathIdx).toBeNull();
+      expect(t.offGraph).toBe(false);
+    }
+    m.matchFix(t, fix(650, 0, 1140), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+
+  it('does not seed a remote prior when the first fix is outside the near band of every eligible rail', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 600) },
+        { from: 1, to: 2, pts: straight(600, 1600) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('off-departure', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(0, 80, 1000), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    expect(t.match.edge).toBe(0);
+    expect(t.offGraph).toBe(false);
+    m.matchFix(t, fix(0, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+  });
+
   it('uses the recent approach direction when a diverted tram stops between opposite rails', () => {
     const n = syntheticNetwork({
       edges: [
