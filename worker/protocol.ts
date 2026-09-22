@@ -1,7 +1,12 @@
 // Wire contract between the Worker, the Durable Objects and the browser code.
 // Shared by worker/ and app/src/ (imported by relative path from both), so it
 // must stay free of runtime dependencies.
+import type { FrameStops } from '../shared/city/frame';
+import type { ScreenPlace, ScreenPlaceInput } from '../shared/city/place';
 import type { PresentationCommand, PresentationResult, PresentationState, ScreenPresentation } from './presentation';
+
+export type { FrameStops } from '../shared/city/frame';
+export type { ScreenPlace, ScreenPlaceInput } from '../shared/city/place';
 
 /** Crockford base32: 0-9 and A-Z without I, L, O, U. 32 symbols, `byte % 32` is unbiased. */
 export const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -37,7 +42,37 @@ export interface ScreenMetadata {
   stop: ScreenStop | null;
   /** The area the screen is set to: one of the 17 gradske četvrti, or 'zagreb' for the whole city. */
   area?: string;
+  /**
+   * What the screen is about: a tram or bus stop, or a typed address (shared/city/place.ts).
+   * Stored as null when the operator left the field empty or chose "Cijeli grad"; the read
+   * path then enriches it with Trg bana Jelačića (DEFAULT_PLACE_STOP_ID), so the list and
+   * the departures always have a place. Absent on records and clients from before place-v2.
+   */
+  place?: ScreenPlace | null;
+  /**
+   * False when the place is the read-path default (the field was left empty or "Cijeli grad"
+   * was chosen): `place` then carries Trg bana Jelačića for the list and the departures, but
+   * the map keeps the whole-city window. True when the operator chose the place.
+   */
+  placeSet?: boolean;
+  /** How many tram stops around the place the wall frames (Kadar 4 / 6 / 8; shared/city/frame.ts). */
+  frame?: FrameStops;
 }
+
+/** Capabilities a kiosk socket may announce in its 'auth' frame; the DO keeps only these. */
+export const BEACON_CAPABILITIES = ['city-v1', 'place-v2'] as const;
+export type BeaconCapability = (typeof BEACON_CAPABILITIES)[number];
+
+/** One 'screen-set' per socket per this window; the rest are answered 'screen-set-rate' and change nothing (a settings panel must not be a way to mint batches). */
+export const SCREEN_SET_MIN_MS = 5_000;
+
+/**
+ * The error words a 'screen-set' can be answered with ({ t: 'error', error }). 'bad-area' and
+ * 'bad-stop' answer version 1; 'bad-place' and 'bad-frame' only ever answer version 2;
+ * 'screen-set-rate' answers either inside SCREEN_SET_MIN_MS.
+ */
+export type ScreenSetError = 'bad-area' | 'bad-stop' | 'bad-place' | 'bad-frame' | 'screen-set-rate';
+export const SCREEN_SET_ERRORS: readonly ScreenSetError[] = ['bad-area', 'bad-stop', 'bad-place', 'bad-frame', 'screen-set-rate'];
 
 /** Minted code slot, sent to the beacon client in batches. */
 export interface CodeSlot {
@@ -93,6 +128,9 @@ export interface CreateBeaconRequest {
   operatorLabel: string;
   /** Optional GTFS stop id shown on the kiosk teaser. */
   stopId?: string;
+  /** The screen's place (place-v2); the server resolves a stop's name and point from its own table. */
+  place?: ScreenPlaceInput;
+  frame?: FrameStops;
 }
 
 export interface CreateBeaconResponse {
@@ -112,7 +150,14 @@ export type BeaconClientMessage =
   // The screen's own settings panel: the stop it centres on (null for none)
   // and the area it frames. The DO validates both (screenStop, isAreaSlug),
   // stores them and answers with a 'codes' frame carrying the new screen.
+  // Version 1 stays accepted indefinitely (open tabs and venue screens keep
+  // sending it); errors 'bad-area', 'bad-stop', 'screen-set-rate'.
   | { t: 'screen-set'; version: 1; stopId: string | null; area: string }
+  // Version 2 (capability 'place-v2'): the place (null = the whole city, read
+  // back as Trg bana Jelačića with placeSet false) and the frame. A stop place
+  // carries only its id; the DO fills name and point from its own table.
+  // Errors 'bad-place', 'bad-frame', 'screen-set-rate'.
+  | { t: 'screen-set'; version: 2; place: ScreenPlaceInput | null; frame: FrameStops }
   | { t: 'more' } // request the next code batch
   | { t: 'ping' } // keepalive, answered by the DO's auto-response without waking it
   | { t: 'pong' };

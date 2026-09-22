@@ -31,22 +31,34 @@ export default defineConfig({
     locale: 'hr-HR',
     timezoneId: 'Europe/Zagreb',
   },
-  // Two projects. `chromium` is the desk: every behavioural spec, at whatever
+  // Three projects. `chromium` is the desk: every behavioural spec, at whatever
   // viewport each test sets. `mobile` is a Pixel 7 (isMobile, hasTouch, a real
   // device scale factor) and runs only the phone gates and the fixture-backed
   // session sweep, so the wall clock grows by minutes, not by a second run of
-  // the whole suite. Both share the servers, the single worker and the env
-  // switches above.
+  // the whole suite. `accept` is the companion acceptance tier (e2e/accept/**),
+  // red by design until the packages it measures land; `npm run e2e` names
+  // chromium and mobile only and `npm run accept:e2e` runs this one. All three
+  // share the servers, the single worker and the env switches above.
+  // Fold-back rule: when every accept spec is green, drop the --project filters
+  // from "e2e" in package.json and the e2e/accept ignores below, so the tier
+  // becomes plain regression.
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: ['**/mobile.spec.ts', '**/a11y-session.spec.ts'],
+      testIgnore: ['**/mobile.spec.ts', '**/a11y-session.spec.ts', 'e2e/accept/**'],
     },
     {
       name: 'mobile',
       use: { ...devices['Pixel 7'] },
       testMatch: ['**/mobile.spec.ts', '**/a11y-session.spec.ts', '**/schema.spec.ts'],
+      testIgnore: ['e2e/accept/**'],
+    },
+    {
+      name: 'accept',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: ['e2e/accept/**/*.spec.ts'],
+      timeout: 300_000,
     },
   ],
   webServer: MANAGED_SERVERS

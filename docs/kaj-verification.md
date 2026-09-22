@@ -1761,6 +1761,44 @@ Odluke i nalazi koje krug ostavlja vlasniku; nijedna nije prepreka objavi, sve s
     a izvještaj otkucaja nosi samo drugi prolaz -- pa izvještaj podbroji zadržavanje koje je mjerilo
     ispravno izbrojilo. Nalaz opažanja, ne kvarenja podataka.
 
+### Kapija paketa WP0: vlastite tračnice, tišina vozila, puni natpis skupine (22. rujna 2026.)
+
+Paket WP0 mijenja tri stvari koje se vide na karti: tramvaj vozi samo po stazama svoje linije, a
+izvan njih crta se na očitanim položajima; vozilo koje u ZET-ovu feedu šuti dulje od 30 s stoji na
+idućem stajalištu, blijedi i nakon 180 s nestaje s karte; spojena oznaka ispisuje svaku liniju.
+Mjeri se ocjenjivačem staza nad dva snimljena dana, 20. i 21. rujna 2026. (8.296 i 5.738 okvira).
+Ocjenjivač je zasad u lokalnom stablu pregleda, izvan repozitorija
+(`review.local/companion/replay/grade-branches.mjs`); u `scripts/` ga premješta paket WP6. Jedan
+dan: `node review.local/companion/replay/grade-branches.mjs <direktorij-okvira> --out
+branches-<dan>`, a svaki redak čita jedan ključ iz `branches-<dan>.json`. Polazište je motor prije
+WP0 (`b300af3`); rezultat na spojenoj grani upisuje integracijski prolaz.
+
+| Redak | Mjera | Ključ u `branches-<dan>.json` | ned 20. 9. prije WP0 | pon 21. 9. prije WP0 | Prag |
+|---|---|---|---|---|---|
+| A | promjene staze unutar iste vožnje na 100 vozilo-sati tramvaja, bez okretanja do 150 m od okretišta i bez ulaska u okretišnu petlju i izlaska iz nje | `(totals.pathChangesSameTrip - flips.atTerminus - loops.events) / tramVehicleHours * 100` | 165,6 | 136,5 | ≤ 5 |
+| A′ | isto u kvadratu središta, 17:15 do 17:44 | `teaserBox.window.per100vh` | 220 | 131 | ≤ 5 |
+| B | preuzimanja staze druge linije | `otherRoute.onto` | 441 | 483 | 0 |
+| C | vozilo-sati na tuđoj stazi; svježa očitanja na tuđoj stazi dok je vlastita unutar 60 m | `otherRoute.ticks.foreignVehicleHours`, `otherRoute.ticks.foreignFreshFixesWithPriorWithin60m` | 85,4; 13.707 | 116,4; 19.700 | 0; 0 |
+| D | ponovna izvođenja u kojima je vlastita staza vozila taj brid, a odabrana je druga inačica | `rederive.priorInPoolButOtherAdopted` | 469 | 620 | 0 |
+| E | promjene smjera dalje od 300 m od okretišta | `flips.terminalDistanceHist.le600 + gt600` | 179 | 196 | 0 |
+| F | vožnje unatrag po luku od 500 m i više | `backward.runsOver500m` | 275 | 191 | 0 |
+| G | ponovna postavljanja oznake na klijentu za više od 50 m unutar iste vožnje; p95 pomaka | `client.sameTripPathToPathOver50`, `client.sameTripPathToPathJumpP95` | 1.990; 683 m | 1.922; 629 m | 0; < 50 m |
+| H | vidljiva korekcija pri ponovnom izvođenju, p95 | `rederive.planGapM.p95` | 324 m | 387 m | < 60 m |
+| U | tramvaj bez staze, a ne izvan grafa (slobodna ravnina na tračnicama), udio vozilo-sati | `unplaced.shareOfTramVehicleHours` | 0,000359 | 0,000538 | ≤ 0,03 |
+| S1 | objavljena vozila čije je zadnje očitanje starije od `EVICT_S` | `silence.publishedOlderThanEvict` | 0 uz 300 s | 0 uz 300 s | 0 uz 180 s |
+| S2 | tramvaji tihi dulje od 30 s čiji objavljeni plan 60 s unaprijed prelazi iduće posluženo stajalište | `silence.extrapolatedPastNextStop` | 26.764 | 30.645 | 0 |
+
+Uz ocjenjivač vrijede reci kapije kruga F na 20. rujna (`node scripts/replay-twin.mjs
+<direktorij-okvira>`): slike unatrag 0, obrati 0, preticanja 0 (polazište 5), vidljiva križanja
+najviše 2.478 (pola polaznih 4.956; stalni cilj ostaje 0) i otkucaj p50 ispod 60 ms. Rezultati
+vrijede samo ako se snimljene vožnje razrješuju prema isporučenom indeksu vožnji: nepoznatih
+vožnji (`servicesSeen['?'] / tramTrips`) smije biti najviše 1 % na svakom danu.
+
+`EVICT_S` je 180 s, a ne 120 s: u ponedjeljak 21. rujna 3.505 tišina iste vožnje trajalo je od 120
+do 180 s, u 91 % njih vozilo se pomaknulo najviše 50 m, a 90 % ih je bilo unutar 150 m od
+okretišta. Prag od 120 s dnevno bi oko 3.200 puta skinuo s karte tramvaj koji mirno stoji na
+okretištu.
+
 ## Javni zaslon Prozor (16. 9. 2026.)
 
 Plan `C:/Users/MatijaRadeljak/.claude/plans/observe-the-layout-and-valiant-fiddle.md`, grana i

@@ -1,3 +1,15 @@
+// Key-group ownership for the companion run (docs/companion-2026-09-22.md
+// §15.2 S9). A package adds keys only inside its own groups, in hr.json and
+// en.json together (the i18n test holds parity), never reorders a group, and
+// only WP5 deletes:
+//   WP1  kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.*
+//   WP2  kiosk.legend.{tram,bikes,culture}
+//   WP3  kiosk.setup.*, kiosk.settings.*
+//   WP4  sada.*, directory.*, arrivals.timetable, layers.u-pokretu
+//   WP5  deletions, in every group
+// Never: a top-level nearby.*, a sentence.kicker.* (the kickers live under
+// kiosk.sentence.kicker.*), a time.untilDate (events.untilDate says it).
+//
 // Kiosk copy lives in the one catalogue (i18n/hr.json, en.json) under
 // `kiosk.*`; this is the thin typed adapter that builds the KioskStrings tree
 // every composition reads as `s.group.leaf`, once per locale. Shared

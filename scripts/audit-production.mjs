@@ -10,13 +10,17 @@
 // Optional environment:
 //   AUDIT_APP_URL   the deployment to audit; default https://zagreb.aningfilm.hr
 //   AUDIT_KIOSK_URL a screen that already exists, by its provisioning URL, so the
-//                   run creates none (the same value e2e takes as E2E_KIOSK_URL)
+//                   run creates none (the same value e2e takes as E2E_KIOSK_URL);
+//                   the normal path, and required unless AUDIT_ALLOW_SCREEN_CREATE=1
+//   AUDIT_ALLOW_SCREEN_CREATE=1  explicit consent to create one temporary screen on a
+//                   deployed origin (one of the five per hour); a local origin needs none
 //   AUDIT_OUT       where screenshots, text dumps, audit.log and result.json land;
 //                   default review.local/audit-<timestamp>/ (gitignored through *.local)
 //
-// What it does. It creates ONE temporary self-service screen through the kiosk wizard, the evaluator's own
-// path (the Worker allows SCREEN_QUOTA_PER_HOUR self-service screens per hour per network, so run this at most
-// a few times an hour), then walks the journey a person walks: landing, /s/, /hitno, scan, confirm, unlock,
+// What it does. It opens the screen named by AUDIT_KIOSK_URL, or, only with AUDIT_ALLOW_SCREEN_CREATE=1 (or on a
+// local origin), creates ONE temporary self-service screen through the kiosk wizard, the evaluator's own path (the
+// Worker allows SCREEN_QUOTA_PER_HOUR self-service screens per hour per network); without either it refuses and
+// exits 2 before loading anything. Then it walks the journey a person walks: landing, /s/, /hitno, scan, confirm, unlock,
 // all seven domains, the Promet interactions, Još, the session sheet and share, dark, English, landscape,
 // 200% text, a Pixel 7 in dark, a throttled Pixel 7, a 1440 desktop, the 60 s expiry warning and the frozen
 // state, and the kiosk invitation (1366 and 1920) and paired compositions. WebKit (an emulated iPhone 13) is
@@ -58,6 +62,14 @@ const HEADERS = clientId && clientSecret ? { 'CF-Access-Client-Id': clientId, 'C
 const ORIGIN = new URL(process.env.AUDIT_APP_URL ?? DEFAULT_APP_URL).origin;
 /** A screen that already exists: its provisioning URL, so the journey needs no screen creation. */
 const KIOSK_URL = process.env.AUDIT_KIOSK_URL ? new URL(process.env.AUDIT_KIOSK_URL, ORIGIN).toString() : null;
+// Creating a screen spends one of the Worker's five self-service screens per hour on the live site, so
+// without an existing screen the run stops here: before the rule loader, any browser or any request.
+// A local origin (wrangler dev) creates only local screens and is not refused.
+const LOCAL_ORIGIN = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(ORIGIN).hostname);
+if (!KIOSK_URL && !LOCAL_ORIGIN && process.env.AUDIT_ALLOW_SCREEN_CREATE !== '1') {
+  console.error('creating screens on production is refused; set AUDIT_KIOSK_URL to an existing screen (or AUDIT_ALLOW_SCREEN_CREATE=1 to spend one of the five per hour)');
+  process.exit(2);
+}
 const root = resolve(import.meta.dirname, '..');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT = resolve(root, process.env.AUDIT_OUT ?? `review.local/audit-${stamp}`);
@@ -426,8 +438,10 @@ try {
 
   // KIOSK: a screen to audit. AUDIT_KIOSK_URL names one that already exists (its
   // provisioning URL, the same value e2e takes as E2E_KIOSK_URL); without it the
-  // run creates one temporary self-service screen (one of SCREEN_QUOTA_PER_HOUR),
-  // which needs an Access identity the runner's credentials may not carry.
+  // run reaches this point only with AUDIT_ALLOW_SCREEN_CREATE=1 or on a local
+  // origin (the guard after KIOSK_URL refuses otherwise), and then creates one
+  // temporary self-service screen (one of SCREEN_QUOTA_PER_HOUR), which needs an
+  // Access identity the runner's credentials may not carry.
   kiosk = await newCtx(chrome, 'kiosk', { viewport: { width: 1366, height: 768 }, colorScheme: 'light' });
   if (KIOSK_URL) {
     log(`screen from AUDIT_KIOSK_URL (no screen created)`);

@@ -10,7 +10,7 @@ const registryMissing = await import('../../worker/feed/registry').then(
 const EXPECTED: Record<string, { url: string; text: string; licence: string }> = {
   prometnice: {
     url: 'https://data.zagreb.hr/dataset/prometnice',
-    text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena {datum}",
+    text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
     licence: 'Otvorena dozvola (NN 67/17)',
   },
   'ckan-geo': {

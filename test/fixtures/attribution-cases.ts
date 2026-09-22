@@ -57,11 +57,11 @@ export const ATTRIBUTION_CASES: readonly AttributionCase[] = [
     expected: 'Izvor: Službeni glasnik Grada Zagreba, 25/2026, akt 48210',
   },
   {
-    name: 'prometnice template falls back to the fetch time (R-25: no sourceUpdatedAt in data.json)',
+    name: 'prometnice prints no date: the module has none (data.json carries no change date, T3)',
     attribution: ATTRIBUTION.prometnice,
     snapshot: { fetchedAt: FETCHED_AT },
     expected:
-      "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena dohvaćeno 11. 9. 2026. 15:20",
+      "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
   },
   {
     name: 'ckan-geo template names the dataset from the item category',
@@ -70,6 +70,14 @@ export const ATTRIBUTION_CASES: readonly AttributionCase[] = [
     item: CKAN_ITEM,
     expected:
       "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zborno mjesto civilne zaštite', posljednja izmjena 11. 9. 2026. 15:00",
+  },
+  {
+    name: 'a {datum} template with only fetchedAt prints no date: the fetch time is never the publisher\'s change date',
+    attribution: ATTRIBUTION['ckan-geo'],
+    snapshot: { fetchedAt: FETCHED_AT },
+    item: CKAN_ITEM,
+    expected:
+      "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zborno mjesto civilne zaštite'",
   },
 ];
 

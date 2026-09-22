@@ -843,7 +843,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         if (!slot) { closeShare(); return; }
         codeLine.textContent = formatCode(slot.code);
         read.textContent = i18n.t('session.shareReadAloud', { spelled: speakableCode(slot.code) });
-        qrBox.replaceChildren(createQr({ payload: codeUrl(slot.code), ariaLabel: i18n.t('kiosk.qrLabel', { code: speakableCode(slot.code) }), unavailableText: formatCode(slot.code) }).element);
+        qrBox.replaceChildren(createQr({ payload: codeUrl(slot.code), ariaLabel: i18n.t('kiosk.invite.qrLabel', { code: speakableCode(slot.code) }), unavailableText: formatCode(slot.code) }).element);
         paintProgress(true);
       },
       onMore: () => {},

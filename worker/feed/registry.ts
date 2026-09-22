@@ -26,7 +26,7 @@ export const ATTRIBUTION: Record<ModuleId, Attribution> = {
     licence: OPEN_LICENCE,
   },
   prometnice: {
-    text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena {datum}",
+    text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
     url: 'https://data.zagreb.hr/dataset/prometnice',
     licence: OPEN_LICENCE,
   },

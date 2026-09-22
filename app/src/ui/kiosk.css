@@ -57,6 +57,12 @@
    which owns the page scroll -- each with a safe fallback (the body simply
    does not scroll). */
 
+:root {
+  /* 3-metre legibility floors (WP1 rows, WP6 e2e/legibility.ts): read tier 40 px; walk-up tier 28 px (sub lines, date, legend, kicker, lead, card hint, typed address). */
+  --k-main-size: 40px;
+  --k-sub-size: 28px;
+}
+
 .kiosk-body { margin: 0; overflow: hidden; background: var(--tone-surface-canvas); }
 
 .kiosk {
@@ -250,7 +256,6 @@
 .k-paired[data-focus='1'] .k-main > .k-block { height: 100%; padding: calc(var(--k-pad) * 2); border: 1px solid var(--k-line); }
 .k-paired[data-focus='1'] .k-select-main--item { font-size: calc(var(--k-main-size) * 1.4); line-height: 1.15; max-width: 30ch; }
 .k-paired[data-focus='1'] .k-select-sub--long { max-height: none; -webkit-line-clamp: unset; font-size: var(--k-sup-size); line-height: 1.5; max-width: 64ch; }
-.k-return { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.75em; border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); color: var(--k-action); font: inherit; font-size: var(--k-credit-size); cursor: pointer; }
 .k-head-mid { gap: calc(var(--k-gap) * 0.6); min-width: 0; }
 .k-head-mid[role='status'] { font-size: var(--k-credit-size); color: var(--k-green); }
 .k-session { border-radius: var(--k-radius-s); font-size: var(--k-label-size); min-width: 0; white-space: normal; }

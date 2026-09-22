@@ -122,7 +122,6 @@ describe('public-screen design invariants', () => {
   it('retains accessible controls instead of shrinking their hit areas', () => {
     expect(tokens).toContain('--target: 2.75rem');
     expect(tokens).toContain('--target-primary: 3rem');
-    expect(rule('.k-return')).toContain('min-height: 44px');
     expect(rule('.k-theme')).toContain('min-width: 44px');
   });
 });

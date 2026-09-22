@@ -18,6 +18,7 @@ import {
   CODE_GRACE_MS,
   KEEPALIVE_REQUEST,
   KEEPALIVE_RESPONSE,
+  SCREEN_SET_MIN_MS,
   type BeaconClientMessage,
   type BeaconServerMessage,
   type CodeSlot,
@@ -51,8 +52,9 @@ const STOP_ID_SHAPE = /^[0-9A-Za-z_-]{1,32}$/;
 // generously since the exact byte count is the admin route's concern, not
 // BeaconDO's — only the character set and a sane length are enforced here.
 const SECRET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{16,64}$/;
-/** One 'screen-set' per socket per this window; the rest are answered 'screen-set-rate' and change nothing (a settings panel must not be a way to mint batches). */
-export const SCREEN_SET_MIN_MS = 5_000;
+// SCREEN_SET_MIN_MS lives in protocol.ts (the settings panel's send queue reads it
+// too); re-exported here for the callers that import it from the DO.
+export { SCREEN_SET_MIN_MS };
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -104,7 +106,7 @@ function frame(message: BeaconServerMessage): string {
 function parseClient(message: string | ArrayBuffer): BeaconClientMessage | null {
   if (typeof message !== 'string' || message.length > 512) return null;
   try {
-    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown; stopId?: unknown; area?: unknown };
+    const parsed = JSON.parse(message) as { t?: unknown; hmac?: unknown; presentationVersion?: unknown; version?: unknown; revision?: unknown; status?: unknown; capabilities?:unknown; stopId?: unknown; area?: unknown; place?: unknown; frame?: unknown };
     if (parsed.t === 'auth' && typeof parsed.hmac === 'string' && parsed.hmac.length <= 64) return { t: 'auth', hmac: parsed.hmac, ...(parsed.presentationVersion === 1 ? { presentationVersion: 1 } : {}),
       ...(Array.isArray(parsed.capabilities)&&parsed.capabilities.includes('city-v1')?{capabilities:['city-v1']}: {}) };
     if (parsed.t === 'screen-set' && parsed.version === 1 && typeof parsed.area === 'string'
@@ -436,11 +438,13 @@ export class BeaconDO extends DurableObject<Env> {
       }
       return;
     }
-    if (attachment.presentationVersion === 1 && parsed.t === 'presentation-stop') {
-      if (parsed.revision === this.presentationRecord().revision) this.clearPresentation();
+    if (parsed.t === 'presentation-stop') {
+      // A screen never ends a presentation (T6, principle 8): the presenter's phone does, through
+      // present(roomId, { action: 'stop' }), or the grant's expiry, or a confirmed takeover. A kiosk
+      // bundle from before the wall's button went may still send this frame; it is read and ignored.
       return;
     }
-    if (parsed.t === 'screen-set') {
+    if (parsed.t === 'screen-set' && parsed.version === 1) {
       await this.setScreen(ws, attachment, parsed.stopId, parsed.area);
       return;
     }
