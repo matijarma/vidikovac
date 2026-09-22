@@ -82,13 +82,24 @@ describe('the replay harness over a recorded corridor run', () => {
     // wants it on. The bound that matters is the signed one -- plans 50 m or
     // more AHEAD of their tram, which the round forbids, against plans that
     // far behind, which read as GPS lag.
+    //
+    // T8 took the unsigned p95 past the last bucket: a tram whose newest fix
+    // is more than 30 s old is held at its next stop, and at this
+    // simulator's 2 to 25 s latency that is about one plan in six (about one
+    // tram tick in eleven on ZET's feed), each of them far behind a punctual
+    // tram by design. test/motion/engine-envelope.test.ts pins the moving
+    // fleet's unsigned p95 on its own; here the median stays within 25 m,
+    // the ahead tail stays under a tenth, and the behind tail under a fifth.
     const at30 = report.hindsight[30];
     expect(at30.samples).toBeGreaterThan(50);
+    expect(at30.p50).not.toBeNull();
+    expect(at30.p50!.upperBoundM).toBeLessThanOrEqual(25);
     expect(at30.p95).not.toBeNull();
-    expect(at30.p95!.upperBoundM).toBeLessThanOrEqual(100);
     const signed = report.hindsightSign[30];
+    const graded = signed.ahead_ge50 + signed.within50 + signed.behind_ge50;
     expect(signed.behind_ge50).toBeGreaterThan(signed.ahead_ge50);
-    expect(signed.ahead_ge50 / (signed.ahead_ge50 + signed.within50 + signed.behind_ge50)).toBeLessThan(0.1);
+    expect(signed.ahead_ge50 / graded).toBeLessThan(0.1);
+    expect(signed.behind_ge50 / graded).toBeLessThan(0.2);
 
     // Every vehicle's first published plan is already moving, not standing.
     expect(report.neverMoved).toBe(0);

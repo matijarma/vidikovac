@@ -8,12 +8,14 @@
 import type { DwellRecent } from '../../shared/motion/dwell';
 import type { PublishedPlan } from '../../shared/motion/hindsight';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
+import { EVICT_S } from '../../shared/motion/plan';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
 
-/** Silence after which a vehicle leaves the twin, in seconds; the planner's
- *  own eviction age (plan.ts EVICT_S) and the module's maxStale agree. */
-export const TRACK_STALE_S = 300;
+/** Silence after which a vehicle leaves the twin, in seconds: the planner's
+ *  eviction age itself (plan.ts EVICT_S, 180 s, T8), so the twin drops a
+ *  track at the moment its confidence reaches 0 and clients drop the mark. */
+export const TRACK_STALE_S = EVICT_S;
 
 /** The next stop of one trip as ZET's TripUpdate names it, plus every delay
  *  the update carried (the per-route median row is built from those). */

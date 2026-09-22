@@ -24,6 +24,22 @@
 // published (the wire's own leader) rather than whatever this frame's plans
 // happen to say.
 //
+// Silence (T8) is the twin's to reason about and the screen's to show. A
+// vehicle with no fix for more than 30 s (SILENCE_HOLD_S) gets a plan that
+// holds at its next stop and never runs past it, so its mark converges
+// there, stops, and `held` reads true once it stands in the stop's zone.
+// The twin's `confidence` is the fade: whole while fixes arrive, then
+// linear to 0 at EVICT_S (180 s) of the vehicle's silence. The client
+// multiplies it by silenceDecay of the plan's own age, so a client that
+// misses polls fades its marks on the same curve. Below
+// HEADING_CONFIDENCE_THRESHOLD (0.3, about 130 s of silence for a tram on
+// its rails) the heading is unknown and the mark stops pointing. Opacity
+// follows the same confidence through markAlpha (app/src/map/vehicle-mark.ts),
+// floored so a fading tram stays visible until it is gone. Gone is EVICT_S
+// after the wire's `at`, the vehicle's own last report, not after the last
+// poll: the twin drops the track at the same age, so a mark leaves the map
+// when the twin forgets the vehicle and its confidence has reached 0.
+//
 // Before any plan exists (the artefact not yet loaded, a test feeding bare
 // fixes, a twin that only knows the position), a fix is a point to converge
 // towards in the free plane and hold at -- still never a jump.

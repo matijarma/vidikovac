@@ -10,8 +10,10 @@
 //   - a dwell at every stop (learned or scheduled, else a default);
 //   - the stretches beyond on expected times;
 //   - a path end is a terminus: the plan holds there, never runs off;
-//   - stale evidence keeps moving on those expectations (D2) while the
-//     confidence fades, so a tram in a GPS shadow keeps behaving like a tram;
+//   - silence (T8, replacing D2's "stale evidence keeps moving"): a vehicle
+//     with no fix for more than SILENCE_HOLD_S is held at its next stop and
+//     never planned past it, while its confidence falls linearly to nothing
+//     at EVICT_S, when the twin and every client drop it;
 //   - off every geometry, the free plane: a straight line from the previous
 //     fix to the latest over their own interval, then a hold.
 
@@ -63,12 +65,26 @@ export const TRIP_START_MAX_AHEAD_S = 45 * 60;
  *  the history allows and still be believed: a tick's worth of latency
  *  between the fix and the update. */
 export const ETA_SLACK_S = 10;
-/** Silence decay re-reasoned for a 10 s tick: two thirds of vehicles refresh
- *  each tick, so 30 s without a fix is ordinary; after that confidence halves
- *  every minute and is gone at the module's eviction age. */
+/** Silence (T8). Two thirds of vehicles refresh each 10 s tick, so 30 s
+ *  without a fix is ordinary: up to here the plan is the plan and the
+ *  confidence is whole. Past it the vehicle is silent: buildPlan holds it at
+ *  its next stop, never past it, and silenceDecay fades it linearly to 0 at
+ *  EVICT_S. */
 export const SILENCE_HOLD_S = 30;
+/** @deprecated Unused since T8 made the fade linear; still exported only
+ *  because a local replay investigation imports it. */
 export const SILENCE_HALFLIFE_S = 60;
-export const EVICT_S = 300;
+/** The silence after which a vehicle leaves the twin (worker/twin/state.ts
+ *  TRACK_STALE_S) and every client's map (integrator.ts), in seconds.
+ *
+ *  180 s rather than the ~120 s T8 first proposed (brief §17 Q2, owner
+ *  ruling of 22 Sep), because of what ZET's trams do when they fall silent.
+ *  Monday 21 Sep, same trip across the gap: 3,505 silences of 120 to 180 s,
+ *  91 % of them standing within 50 m and 90 % within 150 m of a terminal,
+ *  against 72 of 180 to 300 s and 29 over 300 s. A drop at 120 s would
+ *  blink about 3,200 standing terminus trams a day off the map and back at
+ *  their next fix. */
+export const EVICT_S = 180;
 /** Confidence with movement evidence on geometry, with a single fix on
  *  geometry, and the cap off every geometry (nothing verifies a free fit). */
 export const CONFIDENCE_ON_GEOMETRY = 0.9;
@@ -165,10 +181,13 @@ export interface Bands {
   dayType: DayType;
 }
 
+/** The share of its confidence a vehicle keeps after `silenceSec` without a
+ *  fix (T8): whole up to SILENCE_HOLD_S, then falling linearly to 0 at
+ *  EVICT_S, so a fading mark is gone exactly when it is dropped. */
 export function silenceDecay(silenceSec: number): number {
-  if (silenceSec >= EVICT_S) return 0;
   if (silenceSec <= SILENCE_HOLD_S) return 1;
-  return Math.pow(0.5, (silenceSec - SILENCE_HOLD_S) / SILENCE_HALFLIFE_S);
+  if (silenceSec >= EVICT_S) return 0;
+  return 1 - (silenceSec - SILENCE_HOLD_S) / (EVICT_S - SILENCE_HOLD_S);
 }
 
 /** Linear interpolation between knots; held flat before the first and after the last. */
@@ -343,7 +362,11 @@ export function buildPlan(
     track.confidence = 0;
     return;
   }
-  const decay = silenceDecay(nowSec - last.atSec);
+  const silenceSec = nowSec - last.atSec;
+  const decay = silenceDecay(silenceSec);
+  // T8: past SILENCE_HOLD_S the evidence is too old to move on. The plan
+  // still reaches the next stop, and holds there to the horizon.
+  const silent = silenceSec > SILENCE_HOLD_S;
   const rel = (tSec: number): number => Math.round(tSec - headerSec);
   const horizonEnd = nowSec + PLAN_AHEAD_S;
 
@@ -411,6 +434,9 @@ export function buildPlan(
     halts.sort((a, b) => a.s - b.s);
     return halts;
   };
+  /** The speed a vehicle short of a platform's point is taken to reach it at. */
+  const approachSpeedTo = (stopS: number): number =>
+    ownSpeed ?? (Math.min(stopS, 300) > 0 ? Math.min(stopS, 300) / segmentTime(Math.max(0, stopS - 300), stopS) : DEFAULT_CRUISE_MS);
 
   // At a platform: when the tram moves on decides everything after. The
   // history says how long it has stood (dwellRemaining); ZET's ETA for the
@@ -418,7 +444,23 @@ export function buildPlan(
   // already names the stop beyond says it has left by the header at the
   // latest (the update is current, the fix may be 30 s old).
   const here = geometry.stopAt(s);
-  if (here) {
+  if (here && silent) {
+    // T8 at a platform: a silent vehicle stays at the stop it was last seen
+    // at, whatever the dwell history says. This comes before dwellRemaining,
+    // which may know nothing of the stand (null) and would otherwise hand
+    // the tram to the run below, past the very platform it stands at. Up to
+    // the stop point when the fix fell short of it; never back to it from
+    // beyond, since no plan runs backwards.
+    if (s < here.s) {
+      const arrive = t + (here.s - s) / approachSpeedTo(here.s);
+      knots.push([rel(arrive), round1(here.s)]);
+      t = arrive;
+      s = here.s;
+    }
+    nextStop = { stopId: here.stopId, s: round1(here.s), etaSec: Math.round(t) };
+    knots.push([rel(Math.max(horizonEnd, t)), round1(s)]);
+    t = horizonEnd;
+  } else if (here) {
     const aheadOfHere = geometry.stopsAhead(here.s);
     const haltsBeyond = haltsAfter(here.s);
     /** Seconds from leaving this platform to arriving at arc toS, every dwell and junction wait on the way included. */
@@ -434,7 +476,7 @@ export function buildPlan(
     };
     const dwellHere = dwellOf(here.stopId);
     const beyond = next && next.stopId !== here.stopId ? aheadOfHere.find((ahead) => ahead.stopId === next.stopId) ?? null : null;
-    const approachSpeed = ownSpeed ?? (Math.min(here.s, 300) > 0 ? Math.min(here.s, 300) / segmentTime(Math.max(0, here.s - 300), here.s) : DEFAULT_CRUISE_MS);
+    const approachSpeed = approachSpeedTo(here.s);
     const remaining = dwellRemaining(track, here, dwellHere, approachSpeed, counts);
     if (remaining !== null) {
       // The dwell that is left; a stand already past it ends a tick from now (R-TE48).
@@ -483,6 +525,14 @@ export function buildPlan(
         t = departure;
       }
     }
+  } else if (standing && silent) {
+    // T8 off a platform: a silent vehicle last seen standing (a signal, a
+    // queue, a layover track) stays where it stood. Its next stop is still
+    // the first platform ahead, but the plan does not reach it, so no time.
+    const ahead = geometry.stopsAhead(s)[0];
+    if (ahead) nextStop = { stopId: ahead.stopId, s: round1(ahead.s), etaSec: null };
+    knots.push([rel(horizonEnd), round1(s)]);
+    t = horizonEnd;
   } else if (standing) {
     // Standing off any platform: about as long again, within bounds (R-TE47),
     // and never before a trip that has not started (R-TE49).
@@ -537,6 +587,13 @@ export function buildPlan(
     if (stop.stopId !== null) {
       if (!nextStop) nextStop = { stopId: stop.stopId, s: round1(stop.s), etaSec: Math.round(arrive) };
       firstPlatformAhead = false;
+      if (silent) {
+        // T8: a silent vehicle is never planned past its next stop. It
+        // arrives (after any junction wait booked before it) and holds.
+        if (arrive < horizonEnd) knots.push([rel(horizonEnd), round1(target)]);
+        t = horizonEnd;
+        break;
+      }
     } else if (stop.holdSec > 0) {
       if (counts) counts.junction_wait++;
     }
