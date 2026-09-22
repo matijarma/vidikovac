@@ -1375,7 +1375,7 @@ describe('terminus loops', () => {
     const skipped = (from: string, to: string) => net.report.loopSkipped.find((l: any) => l.from === from && l.to === to);
     expect(skipped('N_end', 'N_start')).toMatchObject({ route: 'LN', reason: 'no directed route' });
     expect(skipped('T_end', 'T_start')).toMatchObject({ route: 'LT', reason: 'too long' });
-    expect(skipped('T_end', 'T_start').metres).toBeGreaterThan(LOOP_MAX_METRES);
+    expect((skipped('T_end', 'T_start') as { metres: number }).metres).toBeGreaterThan(LOOP_MAX_METRES);
     expect(net.report.loopSkipped).toHaveLength(11);
 
     // The decoder reads the loop as a path like any other, direction -1,
@@ -1418,7 +1418,7 @@ describe('the command-line build from an archive on disk', () => {
     await expect(stat(join(dir, 'motion'))).rejects.toThrow(); // no meta written anywhere
     // A download is stamped with its Last-Modified: the same bytes, the same
     // artefact. Without the header it is refused unless --built-at stands in.
-    const download = (headers: Record<string, string>) => async () => new Response(makeFullZip(), { status: 200, headers });
+    const download = (headers: Record<string, string>) => async () => new Response(makeFullZip() as Uint8Array<ArrayBuffer>, { status: 200, headers });
     const header = 'Tue, 01 Sep 2026 08:50:29 GMT';
     const fetched = await main({ fetchImpl: download({ 'last-modified': header }), cwd: dir, out: 'd.json', metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
     expect(fetched.builtAt).toBe(stamp);

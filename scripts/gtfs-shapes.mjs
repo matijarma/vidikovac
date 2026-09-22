@@ -2737,15 +2737,15 @@ function renderNetworkMeta({ feedVersion, builtAt, routeCount, edgeCount, byteSi
 export async function main({
   fetchImpl = fetch,
   url = GTFS_URL,
-  zipPath = null,
-  builtAt: builtAtArg = null,
+  zipPath = /** @type {string | null} */ (null),
+  builtAt: builtAtArg = /** @type {string | null} */ (null),
   out = OUTPUT_PATH,
-  metaOut = META_OUTPUT_PATH,
+  metaOut = /** @type {string | null} */ (META_OUTPUT_PATH),
   log = console.log,
   cwd = process.cwd(),
-  now = null,
+  now = /** @type {(() => Date) | null} */ (null),
   diagramBusCount = DIAGRAM_BUS_COUNT,
-  overrides = null,
+  overrides = /** @type {NonNullable<Parameters<typeof buildNetwork>[1]>['overrides'] | null} */ (null),
 } = {}) {
   const stampOf = (text, what) => {
     const ms = text === null || text === undefined ? NaN : Date.parse(text);
