@@ -6,6 +6,7 @@ import { at } from '../../shared/motion/polyline';
 import { isFreeMotion, isPathMotion } from '../../shared/motion/wire';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import { createEngine } from '../../worker/twin/engine';
+import { deserializeState, serializeState } from '../../worker/twin/persist';
 import { emptyState, type TwinState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
 import { simulate } from '../motion/simulator';
@@ -116,6 +117,30 @@ describe('runTick on the corridor', () => {
     expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
     const pin = changed.payload.items.find((item) => item.id === 'vehicle:changing')!;
     expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
+  });
+
+  it('preserves slow prior-return progress across state restoration and matcher recreation', () => {
+    const slowJoins = new Map<string, TripJoin>([
+      ['slow', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    let state = emptyState();
+    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40],
+      ...Array.from({ length: 8 }, (_, i) => [1270 + i * 20, 40])];
+    for (const [i, [x, y]] of points.entries()) {
+      const feed = {
+        headerTs: start + i * 10,
+        vehicles: [{ vehicleId: 'slow', tripId: 'slow', routeId: '1', ...lonLatOf({ x, y }), atSec: start + i * 10 }],
+        tripUpdates: [],
+      };
+      const result = runTick({ state, feed, nowMs: (feed.headerTs + 2) * 1000, joins: slowJoins, routes, engine: createEngine(net, index), validUntilMs: 0 });
+      if (i >= 3) {
+        const expected = i < 6 ? '1_1' : '1_0';
+        expect(net.paths[result.state.tracks.slow.match.pathIdx!].id).toBe(expected);
+        const pin = result.payload.items.find((item) => item.id === 'vehicle:slow')!;
+        expect(isPathMotion(pin.motion!) && pin.motion.path).toBe(expected);
+      }
+      state = deserializeState(serializeState(result.state));
+    }
   });
 
   it('publishes path plans whose position at the header is the pin, keeps the trunk order, re-plans on an unchanged frame, and grades itself from the second frame', () => {

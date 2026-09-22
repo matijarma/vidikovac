@@ -192,6 +192,71 @@ describe('matchFix at a terminus turnaround under the old trip id', () => {
       s = turned.match.s;
     }
   });
+
+  it('keeps a turnaround through consecutive diagonal scatter without oscillating back to the prior', () => {
+    const turned = newTrack('diagonals', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    // Each diagonal exceeds 50 m on the ground but advances only 20 m
+    // along either rail. Two eastbound intervals are still only 40 m.
+    for (let cycle = 0; cycle < 3; cycle++) {
+      for (const [i, [x, y]] of [[1270, 0], [1290, 60], [1270, 0], [1250, 60]].entries()) {
+        matcher.matchFix(turned, fix(x, y, 2040 + (cycle * 4 + i) * 10), outbound, null);
+        expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+      }
+    }
+  });
+
+  it.each([0, 60])('returns to the prior during eight slow forward fixes at %d m residual', (y) => {
+    const turned = newTrack('slow-return', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    const paths: Array<number | null> = [];
+    for (let i = 1; i <= 8; i++) {
+      matcher.matchFix(turned, fix(1250 + i * 20, y, 2030 + i * 10), outbound, null);
+      paths.push(turned.match.pathIdx);
+    }
+    expect(paths).toEqual([pathIdx('1_1'), pathIdx('1_1'), ...Array(6).fill(pathIdx('1_0'))]);
+    expect(turned.match.s).toBeCloseTo(1410);
+  });
+
+  it.each([
+    ['backward', 1285, 60],
+    ['off-prior', 1290, 61],
+    ['off-graph', 1290, 400],
+  ] as const)('resets accumulated prior-return progress on a %s fix', (_reason, x, y) => {
+    const turned = newTrack('reset-return', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030], [1270, 60, 2040], [1290, 60, 2050]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1')); // 40 m, below threshold
+    matcher.matchFix(turned, fix(x, y, 2060), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    for (const [i, dx] of [20, 40, 50].entries()) {
+      matcher.matchFix(turned, fix(x + dx, 60, 2070 + i * 10), outbound, null);
+      expect(turned.match.pathIdx).toBe(pathIdx(dx < 50 ? '1_1' : '1_0'));
+    }
+  });
+
+  it('counts neither standing nor repeated fixes as additional prior-return progress', () => {
+    const turned = newTrack('standing-return', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030], [1270, 60, 2040], [1290, 60, 2050]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    matcher.matchFix(turned, fix(1390, 60, 2050), outbound, null); // ignored duplicate
+    matcher.matchFix(turned, fix(1290, 60, 2060), outbound, null); // standing: still 40 m
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    matcher.matchFix(turned, fix(1300, 60, 2070), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_0')); // exactly 50 m in total
+  });
 });
 
 describe('own-path return and service eligibility', () => {
@@ -333,14 +398,14 @@ describe('parallel-street stability', () => {
     track.priorPath = prior.pathIdx;
     track.match = { pathIdx: 1, shapeIdx: 1, edge: 1, s: 400, residual: 0 };
     track.fixes.push(fix(400, 40, 1000));
-    // Alternating 5/35 m residuals: slow movement and scatter keep the
-    // sibling, then a clear forward interval returns once to the prior.
+    // Alternating 5/35 m residuals do not cause oscillation. The third
+    // 20 m interval reaches the cumulative threshold and returns just once.
     const paths: Array<number | null> = [track.match.pathIdx];
     for (let i = 1; i <= 12; i++) {
       const x = i <= 6 ? 400 + i * 20 : 520 + (i - 6) * 100;
       m.matchFix(track, fix(x, i % 2 ? 5 : 35, 1000 + i * 10), prior, null);
       paths.push(track.match.pathIdx);
-      expect(track.match.pathIdx).toBe(i <= 6 ? 1 : 0);
+      expect(track.match.pathIdx).toBe(i < 3 ? 1 : 0);
     }
     expect(paths.slice(1).filter((path, i) => path !== paths[i])).toHaveLength(1);
   });
