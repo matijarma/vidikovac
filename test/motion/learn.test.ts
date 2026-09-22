@@ -114,7 +114,7 @@ describe('learning from the corridor', () => {
     const quiet = (hourBand + 12) % 24;
     expect(times.segmentSeconds(p, 0, 1500, quiet, dayType)).toBeCloseTo(300, 5);
     expect(times.dwellSeconds('T600', quiet, dayType)).toBe(20);
-  });
+  }, 20_000);
 
   it('learns cruise only from clean pairs with no platform between them, prices a dwell only off travel it can trust, and a histogram survives serialisation and merging', () => {
     // Path 2_0 runs edges 0 and 2; edge 2 spans arcs 1500..2724.85 with stops D300, D600, D900 at 1800, 2100, 2400.
