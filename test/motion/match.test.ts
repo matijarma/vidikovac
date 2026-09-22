@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMatcher } from '../../shared/motion/match';
+import { createMatcher, type MatchContext, type PathRank } from '../../shared/motion/match';
 import { newTrack, type PlaneFix } from '../../shared/motion/track';
 import { corridorSpec, lonLatOf, straight, syntheticNetwork, type SynthSpec, type SynthStop } from './synthetic-network';
 
@@ -54,7 +54,7 @@ describe('matchFix on the corridor', () => {
 
     // A detour: route 1's tram leaves edge 1 for edge 2 (200 m off its path).
     // One stray fix is noise and stays on the path; the second re-derives the
-    // path to one that runs the edge it is on.
+    // match as unplaced: route 1 does not run route 2's branch.
     const detour = newTrack('c', '1', 'trip-c', 'tram');
     const prior1 = matcher.priorFor('1_0', '1', 0);
     matcher.matchFix(detour, fix(1300, 0, 1000), prior1, 'T1500');
@@ -63,9 +63,22 @@ describe('matchFix on the corridor', () => {
     expect(detour.match.pathIdx).toBe(pathIdx('1_0'));
     expect(detour.offPathCount).toBe(1);
     matcher.matchFix(detour, fix(1560, 400, 1030), prior1, null);
-    expect(detour.match.pathIdx).toBe(pathIdx('2_0'));
+    expect(detour.match.pathIdx).toBeNull();
     expect(detour.match.edge).toBe(2);
     expect(detour.offPathCount).toBe(0);
+    expect(detour.offGraph).toBe(false);
+    for (const [y, t] of [[600, 1040], [800, 1050], [800, 1060]]) {
+      matcher.matchFix(detour, fix(1560, y, t), prior1, null);
+      expect(detour.match.pathIdx).toBeNull();
+      expect(detour.match.shapeIdx).toBeNull();
+      expect(detour.match.edge).toBe(2);
+      expect(detour.match.residual).toBeCloseTo(0);
+      expect(detour.offGraph).toBe(false);
+      expect(detour.fixes.at(-1)).not.toHaveProperty('arc');
+    }
+    matcher.matchFix(detour, fix(1700, 4, 1070), prior1, null);
+    expect(detour.match.pathIdx).toBe(pathIdx('1_0'));
+    expect(detour.match.s).toBeCloseTo(1700);
 
     // Off-graph: two fixes 400 m from every edge, then one back on the trunk.
     const lost = newTrack('d', '1', 'trip-d', 'tram');
@@ -148,10 +161,175 @@ describe('matchFix at a terminus turnaround under the old trip id', () => {
     // tram runs west: the turnaround is read forwards, not as a reversal.
     const afterTurn = turned.match.s;
     expect(afterTurn).toBeCloseTo(250, 0);
-    matcher.matchFix(turned, fix(1150, 60, 2040), outbound, null);
+    matcher.matchFix(turned, fix(1250, 60, 2040), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1')); // a standing fix cannot undo D4
+    matcher.matchFix(turned, fix(1150, 60, 2050), outbound, null);
     expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
     expect(turned.match.s).toBeGreaterThan(afterTurn);
     expect(before).toBeCloseTo(1400, 0);
+  });
+});
+
+describe('own-path return and service eligibility', () => {
+  it.each([0, 60])('returns from an adopted path on the first agreeing moving fix at %d m residual, but not on a standing fix', (residual) => {
+    const track = newTrack('return', '1', 'trip', 'tram');
+    const prior = matcher.priorFor('1_0', '1', 0);
+    matcher.matchFix(track, fix(600, 0, 1000), prior, null);
+    // A previously adopted path on the shared trunk, as in the dossier.
+    const adopted = pathIdx('path:9:0:abc');
+    track.match = { pathIdx: adopted, shapeIdx: null, edge: 0, s: 600, residual: 0 };
+    matcher.matchFix(track, fix(600, 0, 1010), prior, null);
+    expect(track.match.pathIdx).toBe(adopted);
+    track.order.leader = 'old-leader';
+    track.offPathCount = 1;
+    track.againstCount = 1;
+    matcher.matchFix(track, fix(700, residual, 1020), prior, null);
+    expect(track.match.pathIdx).toBe(prior.pathIdx);
+    expect(track.match.s).toBeCloseTo(700);
+    expect(track.offPathCount).toBe(0);
+    expect(track.againstCount).toBe(0);
+    expect(track.order.leader).toBeNull();
+  });
+
+  it('excludes non-running services, retries unplaced fixes immediately, and permits missing service evidence', () => {
+    const pathRanks: PathRank[] = net.paths.map(() => ({ services: new Set<string>(), trips: 0 }));
+    pathRanks[pathIdx('path:9:0:abc')] = { services: new Set(['sat', 'sun']), trips: 10 };
+    const m = createMatcher(net, { pathRanks });
+    const prior = m.priorFor(null, '9', null);
+    const track = newTrack('service', '9', 'unknown', 'tram');
+    const ctx = { runningServices: new Set(['wd']) };
+    m.matchFix(track, fix(500, 0, 1000), prior, null, ctx);
+    expect(track.match.pathIdx).toBeNull();
+    m.matchFix(track, fix(600, 0, 1010), prior, null, ctx);
+    expect(track.match.pathIdx).toBeNull();
+    expect(track.offGraph).toBe(false);
+    // No movement and no off-path wait needed when valid rails become known.
+    m.matchFix(track, fix(600, 0, 1020), prior, null, { runningServices: new Set(['wd', 'sun']) });
+    expect(track.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+
+    for (const context of [undefined, { runningServices: null }, { runningServices: new Set<string>() }]) {
+      const unknownDay = newTrack('unknown-day', '9', 'unknown', 'tram');
+      m.matchFix(unknownDay, fix(500, 0, 1000), prior, null, context);
+      expect(unknownDay.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+    }
+    const noRanks = createMatcher(net);
+    const legacy = newTrack('legacy', '9', 'unknown', 'tram');
+    noRanks.matchFix(legacy, fix(500, 0, 1000), prior, null, ctx);
+    expect(legacy.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+    const unindexed = newTrack('unindexed', '2', 'unknown', 'tram');
+    m.matchFix(unindexed, fix(500, 0, 1000), m.priorFor(null, '2', null), null, ctx);
+    expect(unindexed.match.pathIdx).toBe(pathIdx('2_0')); // empty path service set
+  });
+
+  it('never borrows a foreign path when a route has no paths of its own', () => {
+    const track = newTrack('no-route', '999', 'unknown', 'tram');
+    matcher.matchFix(track, fix(600, 0, 1000), matcher.priorFor(null, '999', null), null);
+    expect(track.match.pathIdx).toBeNull();
+    expect(track.match.edge).toBe(0);
+    expect(track.offGraph).toBe(false);
+  });
+
+  it('does not use a non-running opposite-direction path for a D4 turnaround', () => {
+    const pathRanks = net.paths.map((path) => ({ services: new Set([path.direction === 1 ? 'sat' : 'wd']), trips: 1 }));
+    const m = createMatcher(net, { pathRanks });
+    const prior = m.priorFor('1_0', '1', 0);
+    const track = newTrack('turn', '1', 'outbound', 'tram');
+    for (const [x, y, t] of [[1300, 0, 1000], [1400, 0, 1010], [1350, 60, 1020], [1250, 60, 1030]]) {
+      m.matchFix(track, fix(x, y, t), prior, null, { runningServices: new Set(['wd']) });
+    }
+    expect(track.match.pathIdx).toBe(prior.pathIdx);
+  });
+});
+
+describe('ranked own-route adoption', () => {
+  // All variants run edge 1. Only `continuing` runs edge 0 immediately
+  // before it. `remote` is a prior that cannot explain a fix on edge 1.
+  const rankedNet = syntheticNetwork({
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1000) },
+      { from: 1, to: 2, pts: Array.from({ length: 21 }, (_, i) => ({ x: 1000 + 50 * i, y: 0 })) },
+      { from: 3, to: 1, pts: [{ x: 1000, y: 1000 }, { x: 1000, y: 0 }] },
+      { from: 4, to: 5, pts: straight(0, 2000, 100) },
+    ],
+    routes: [{
+      id: '7', type: 0, paths: [
+        { id: 'popular', direction: 0, edges: [2, 1] },
+        { id: 'continuing', direction: 1, edges: [0, 1] },
+        { id: 'current', direction: 0, edges: [1] },
+        { id: 'remote', direction: 0, edges: [3] },
+      ],
+    }],
+    stops: [],
+  });
+  const ranks = (counts = [100, 1, 2, 1]): PathRank[] => counts.map((trips) => ({ services: new Set(['wd']), trips }));
+  const ctx: MatchContext = { runningServices: new Set(['wd']) };
+
+  it('prefers the prior over current path, edge sequence, direction, and trip count when re-deriving', () => {
+    const m = createMatcher(rankedNet, { pathRanks: ranks() });
+    const prior = m.priorFor('current', '7', 0);
+    const track = newTrack('prior-first', '7', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: 1, shapeIdx: 1, edge: 0, s: 1000, residual: 0 };
+    track.fixes.push(fix(1200, 0, 1000));
+    // A standing fix blocks the separate own-path return check. The
+    // stale current arc forces re-derivation; prior still wins on this edge.
+    track.offPathCount = 1;
+    m.matchFix(track, fix(1200, 0, 1001), prior, null, ctx);
+    expect(track.match.pathIdx).toBe(prior.pathIdx);
+    expect(track.match.s).toBeCloseTo(200);
+  });
+
+  it('prefers the current path before a more popular variant when the prior is absent from the pool', () => {
+    const m = createMatcher(rankedNet, { pathRanks: ranks() });
+    const prior = m.priorFor('remote', '7', 0);
+    const track = newTrack('current-first', '7', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: 2, shapeIdx: 2, edge: 1, s: 0, residual: 0 };
+    track.fixes.push(fix(1100, 0, 1000));
+    track.offPathCount = 1;
+    m.matchFix(track, fix(1200, 0, 1001), prior, null, ctx);
+    expect(track.match.pathIdx).toBe(2);
+    expect(track.match.s).toBeCloseTo(200);
+    expect(track.offPathCount).toBe(0); // actually went through re-derivation
+  });
+
+  it('prefers the immediate edge sequence before direction or trip count on an unplaced fix', () => {
+    const m = createMatcher(rankedNet, { pathRanks: ranks() });
+    const prior = m.priorFor('remote', '7', 0);
+    const track = newTrack('edge-first', '7', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: null, shapeIdx: null, edge: 0, s: 0, residual: 0 };
+    m.matchFix(track, fix(1500, 0, 1000), prior, null, ctx);
+    expect(track.match.pathIdx).toBe(1); // direction 1 and only one trip
+  });
+
+  it('prefers direction, then trip count, and skips direction for an unknown trip before the lowest-index tie-break', () => {
+    const m = createMatcher(rankedNet, { pathRanks: ranks([10, 100, 20, 1]) });
+    const known = newTrack('direction', '7', 'unknown', 'tram');
+    m.matchFix(known, fix(1500, 0, 1000), m.priorFor(null, '7', 0), null, ctx);
+    expect(known.match.pathIdx).toBe(2); // direction 0, then more trips than path 0
+    const unknown = newTrack('count', '7', 'unknown', 'tram');
+    m.matchFix(unknown, fix(1500, 0, 1000), m.priorFor(null, '7', null), null, ctx);
+    expect(unknown.match.pathIdx).toBe(1); // unknown direction: most trips
+    const tied = createMatcher(rankedNet, { pathRanks: ranks([5, 5, 5, 5]) });
+    const first = newTrack('index', '7', 'unknown', 'tram');
+    tied.matchFix(first, fix(1500, 0, 1000), tied.priorFor(null, '7', null), null, ctx);
+    expect(first.match.pathIdx).toBe(0);
+  });
+
+  it('filters service eligibility before applying current-path or popularity preference', () => {
+    const pathRanks = ranks();
+    pathRanks[0].services = new Set(['sat']);
+    pathRanks[1].services = new Set(['sat']);
+    const m = createMatcher(rankedNet, { pathRanks });
+    const prior = m.priorFor('remote', '7', 0);
+    const track = newTrack('eligible', '7', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: 1, shapeIdx: 1, edge: 0, s: 1000, residual: 0 };
+    track.fixes.push(fix(1100, 0, 1000));
+    track.offPathCount = 1;
+    m.matchFix(track, fix(1200, 0, 1001), prior, null, ctx);
+    expect(track.match.pathIdx).toBe(2);
   });
 });
 

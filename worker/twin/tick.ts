@@ -18,7 +18,8 @@ import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellDropped, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
 import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
+import type { MatchContext } from '../../shared/motion/match';
+import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, EVICT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
 import { junctionWaitsAt } from '../../shared/motion/junction';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
@@ -29,7 +30,10 @@ import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { kindOf, type Engine } from './engine';
 import type { DecodedFeed, RawFix } from './feed-decode';
 import { buildPayload, type TripJoin } from './publish';
-import { nextStopOf, TRACK_STALE_S, type TwinState } from './state';
+import { nextStopOf, type TwinState } from './state';
+
+/** The twin and the client evict from the same report-age limit. */
+const TRACK_STALE_S = EVICT_S;
 
 export interface TickInput {
   state: TwinState;
@@ -149,6 +153,9 @@ export function runTick(input: TickInput): TickResult {
   let newFixes = 0;
 
   if (feed) {
+    const running = new Set<string>();
+    for (const join of joins.values()) if (join.service) running.add(join.service);
+    const ctx: MatchContext = { runningServices: running.size > 0 ? running : null };
     for (const raw of dedupe(feed.vehicles, feed.headerTs ?? nowSec).values()) {
       const routeId = raw.routeId ?? tracks[raw.vehicleId]?.routeId ?? '';
       const tripId = raw.tripId ?? null;
@@ -177,7 +184,7 @@ export function runTick(input: TickInput): TickResult {
       const before = lastFix(track)?.atSec ?? null;
       track.tripStartSec = tripStartOf(join, raw.startDate);
       if (engine && prior) {
-        engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null);
+        engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null, ctx);
       } else {
         pushFix(track, fix);
       }

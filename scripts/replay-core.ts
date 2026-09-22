@@ -330,6 +330,7 @@ function joinsFor(index: TripIndex, tripIds: Iterable<string>, patternPathIds: r
       headsign: pattern.headsign,
       shapeId: pattern.shape === '' ? null : pattern.shape,
       startSec: record.start,
+      service: record.service,
       ...(pathId === null ? {} : { pathId }),
     });
   }

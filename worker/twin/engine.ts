@@ -8,7 +8,7 @@
 import { createDwellTable, type DwellOverride, type DwellRecent, type DwellTable } from '../../shared/motion/dwell';
 import { createJunctionTable, type JunctionTable } from '../../shared/motion/junction';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
-import { createMatcher, type Matcher } from '../../shared/motion/match';
+import { createMatcher, type Matcher, type PathRank } from '../../shared/motion/match';
 import type { GraphNetwork } from '../../shared/motion/network';
 import { learnedTimes, mapPatternsToPaths, scheduleTimes, type TimesProvider } from '../../shared/motion/times';
 import type { VehicleKind } from '../../shared/motion/track';
@@ -43,6 +43,8 @@ export interface Engine {
    *  trip's join carries it and the matcher's prior and the timetable pick
    *  the same path for a shapeless variant (F8). */
   patternPathIds: readonly (string | null)[];
+  /** Services and trip counts from the index, aligned with net.paths. */
+  pathRanks: readonly PathRank[];
 }
 
 /** A timetable that knows nothing: under the learned wrapper it leaves null
@@ -61,6 +63,15 @@ export interface EngineOptions {
 export function createEngine(net: GraphNetwork, index: TripIndex, learned: LearnedAggregates = emptyAggregates(), options: EngineOptions = {}): Engine {
   const schedule = scheduleTimes(net, index);
   const dwellRecent = options.dwellRecent ?? {};
+  const mapping = mapPatternsToPaths(net, index);
+  const pathRanks = net.paths.map(() => ({ services: new Set<string>(), trips: 0 }));
+  for (const record of index.tripsById.values()) {
+    const pathIdx = mapping.pathOf[record.pattern];
+    if (pathIdx == null) continue;
+    const rank = pathRanks[pathIdx];
+    if (record.service) rank.services.add(record.service);
+    rank.trips++;
+  }
   return {
     net,
     index,
@@ -71,8 +82,9 @@ export function createEngine(net: GraphNetwork, index: TripIndex, learned: Learn
     dwell: createDwellTable({ net, schedule, aggregates: learned, overrides: options.overrides ?? [], recent: dwellRecent }),
     dwellRecent,
     junctions: createJunctionTable({ net, aggregates: learned }),
-    matcher: createMatcher(net),
-    patternPathIds: mapPatternsToPaths(net, index).pathIdOf,
+    matcher: createMatcher(net, { pathRanks }),
+    patternPathIds: mapping.pathIdOf,
+    pathRanks,
   };
 }
 

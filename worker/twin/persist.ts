@@ -27,7 +27,7 @@ export const INDEX_RECHECK_MS = 60 * 60 * 1000;
  *  row-write budget); the state row carries the unflushed minute meanwhile. */
 export const LEARN_FLUSH_MS = 60_000;
 
-/** Rows per multi-row INSERT: 20 trips × 4 columns keeps a statement at 80
+/** Rows per multi-row INSERT: 20 trips × 5 columns keeps a statement at 100
  *  bound parameters, comfortably under SQLite's conservative limits. */
 const TRIP_ROWS_PER_INSERT = 20;
 const PATTERN_ROWS_PER_INSERT = 10;
@@ -61,6 +61,7 @@ export interface IndexTrip {
   pattern: number;
   block: string;
   start: number;
+  service: string;
 }
 
 export interface IndexRows {
@@ -107,9 +108,17 @@ export function ensureSchema(sql: SqlStorage): void {
        trip_id TEXT PRIMARY KEY,
        pattern INTEGER NOT NULL,
        block TEXT NOT NULL,
-       start INTEGER NOT NULL
+       start INTEGER NOT NULL,
+       service TEXT NOT NULL DEFAULT ''
      )`,
   );
+  // Existing objects keep their index rows across deploys. Only a duplicate
+  // column is harmless; a storage failure must still fail schema setup.
+  try {
+    sql.exec("ALTER TABLE trips ADD COLUMN service TEXT NOT NULL DEFAULT ''");
+  } catch (error) {
+    if (!(error instanceof Error) || !/duplicate column name:\s*service\b/i.test(error.message)) throw error;
+  }
   sql.exec('CREATE TABLE IF NOT EXISTS blocks (block TEXT PRIMARY KEY, trips TEXT NOT NULL)');
   // C1: one histogram per (edge, hour band, day type) and per (stop, hour band, day type).
   sql.exec(
@@ -287,7 +296,7 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
       rows.patterns.map((p, idx) => [idx, p.route, p.direction, p.shape, p.headsign, JSON.stringify(p.stops), JSON.stringify(p.sched), JSON.stringify(p.dwell)]),
       PATTERN_ROWS_PER_INSERT,
     );
-    insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start]), TRIP_ROWS_PER_INSERT);
+    insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start', 'service'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start, t.service]), TRIP_ROWS_PER_INSERT);
     insertBatched(sql, 'blocks', ['block', 'trips'], rows.blocks.map((b) => [b.id, JSON.stringify(b.trips)]), BLOCK_ROWS_PER_INSERT);
     metaSet(sql, 'feed_version', rows.feedVersion);
   });
@@ -304,8 +313,8 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdO
   for (let i = 0; i < unique.length; i += LOOKUP_CHUNK) {
     const chunk = unique.slice(i, i + LOOKUP_CHUNK);
     const rows = sql
-      .exec<{ trip_id: string; pattern: number; block: string; start: number; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
-        `SELECT t.trip_id, t.pattern, t.block, t.start, p.route, p.direction, p.shape, p.headsign, p.stops
+      .exec<{ trip_id: string; pattern: number; block: string; start: number; service: string; route: string; direction: number; shape: string | null; headsign: string; stops: string }>(
+        `SELECT t.trip_id, t.pattern, t.block, t.start, t.service, p.route, p.direction, p.shape, p.headsign, p.stops
            FROM trips t JOIN patterns p ON p.idx = t.pattern
           WHERE t.trip_id IN (${chunk.map(() => '?').join(', ')})`,
         ...chunk,
@@ -333,6 +342,7 @@ export function lookupTrips(sql: SqlStorage, tripIds: readonly string[], pathIdO
         startSec: row.start,
         pattern: row.pattern,
         block: row.block,
+        ...(row.service ? { service: row.service } : {}),
         ...(pathId === null ? {} : { pathId }),
       });
     }

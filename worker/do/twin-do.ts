@@ -468,6 +468,7 @@ export class TwinDO extends DurableObject<Env> {
           headsign: pattern.headsign,
           shapeId: pattern.shape === '' ? null : pattern.shape,
           startSec: record.start,
+          service: record.service,
           ...(pathId === null ? {} : { pathId }),
         });
       }
