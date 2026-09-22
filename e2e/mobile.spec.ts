@@ -545,8 +545,8 @@ test('the expiry notices sit in the banners row without covering content: expiri
 });
 
 // --- 10. desktop first paint ------------------------------------------------------------------------
-/** The desk's directory (D10): Promet ahead of the four extra domains, in this order. */
-const DESK_DIRECTORY: readonly LayerId[] = ['u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo'];
+/** The desk's directory (D10, [O-60]): the same four rows as the phone's Još, the week's agenda first. */
+const DESK_DIRECTORY: readonly LayerId[] = ['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost'];
 
 test('at 1440 the desk paints before the session joins, keeps the screen control in the header and opens the domain directory', async ({ page }) => {
   await page.setViewportSize(DESK);
@@ -561,9 +561,10 @@ test('at 1440 the desk paints before the session joins, keeps the screen control
   await expect(more, 'Još must stand in the desk status line before any data arrives').toBeVisible();
   await more.click();
   const rows = page.locator('[data-testid=dash-view] .dir-item[data-layer]');
-  await expect(rows, 'the directory lists Promet and the four extra domains').toHaveCount(DESK_DIRECTORY.length);
+  await expect(rows, 'the directory lists the four extra domains').toHaveCount(DESK_DIRECTORY.length);
   expect(await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), 'the directory rows in order').toEqual(DESK_DIRECTORY);
   for (const layer of DESK_DIRECTORY) await expect(page.getByTestId(`dir-${layer}`), `the directory row dir-${layer}`).toBeVisible();
   await expect(page.getByTestId('kvart-aside'), 'the kvart aside is gone entirely, not merely hidden').toHaveCount(0);
-  await expect(page.locator('.ki-domains [data-layer]')).toHaveCount(6);
+  await expect(page.getByTestId('dir-kultura').locator('.row-title'), 'the agenda row names the week').toHaveText('Događanja ovaj tjedan');
+  await expect(page.locator('.ki-domains [data-layer]'), 'the desk has no six-domain bar').toHaveCount(0);
 });
