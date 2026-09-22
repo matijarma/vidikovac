@@ -730,39 +730,35 @@ describe('the committed artefact', () => {
     }
 
     // Complete: recomputed here over the decoded graph, every pair (L, F) of a
-    // line within LOOP_PAIR_MAX_METRES whose arriving edge reaches one of the
-    // departing edges over drawn rails, the whole path at most LOOP_MAX_METRES,
-    // has a loop of that line with those two boundary edges.
+    // line within LOOP_PAIR_MAX_METRES whose arriving edge reaches one of F's
+    // departing edges over drawn rails with the whole exported path -- both
+    // boundary edges included -- at most LOOP_MAX_METRES, over the departing
+    // edge that makes it shortest, has a loop of that line from L to F that
+    // starts on that arriving edge and ends on one of F's departing edges.
     const outgoing = new Map<number, number[]>();
     net.edges.forEach((edge, idx) => outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), idx]));
-    /** Cheapest edge chain from the end of `from` to the start of any of `to`. */
-    const cheapest = (from: number, to: Set<number>) => {
-      const best = new Map<number, { cost: number; edges: number[] }>([[net.edges[from].to, { cost: 0, edges: [from] }]]);
+    /** Cheapest interior cost from the end of edge `from` to every node within the cap. */
+    const reach = (from: number) => {
+      const cost = new Map<number, number>([[net.edges[from].to, 0]]);
       const open = [net.edges[from].to];
-      let found: { cost: number; edges: number[] } | null = null;
       while (open.length > 0) {
-        open.sort((a, b) => best.get(a)!.cost - best.get(b)!.cost);
+        open.sort((a, b) => cost.get(a)! - cost.get(b)!);
         const node = open.shift()!;
-        const here = best.get(node)!;
-        if (found && here.cost >= found.cost) break;
         for (const e of outgoing.get(node) ?? []) {
-          if (to.has(e)) {
-            if (!found || here.cost < found.cost) found = { cost: here.cost, edges: [...here.edges, e] };
-            continue;
-          }
           const next = net.edges[e].to;
-          const cost = here.cost + net.edges[e].len;
-          if (cost > LOOP_MAX_METRES) continue;
-          if (!best.has(next) || cost < best.get(next)!.cost) {
-            best.set(next, { cost, edges: [...here.edges, e] });
+          const c = cost.get(node)! + net.edges[e].len;
+          if (c > LOOP_MAX_METRES) continue;
+          if (!cost.has(next) || c < cost.get(next)!) {
+            cost.set(next, c);
             if (!open.includes(next)) open.push(next);
           }
         }
       }
-      return found;
+      return cost;
     };
     const missing: string[] = [];
     let pairs = 0;
+    let qualifying = 0;
     for (const route of new Set(own.map(({ path }) => path.route))) {
       const mine = own.filter(({ path }) => path.route === route);
       const ends = new Map<string, Set<number>>();
@@ -780,18 +776,21 @@ describe('the committed artefact', () => {
           if (L === F || Math.hypot(at(L).x - at(F).x, at(L).y - at(F).y) > LOOP_PAIR_MAX_METRES) continue;
           pairs++;
           for (const E of lastEdges) {
-            const chain = cheapest(E, firstEdges);
-            if (!chain) continue;
-            const metres = chain.edges.reduce((n, e) => n + net.edges[e].len, 0);
-            if (metres > LOOP_MAX_METRES) continue;
-            const D = chain.edges.at(-1)!;
-            if (!loops.some(({ path }) => path.route === route && path.edges[0] === E && path.edges.at(-1) === D)) {
-              missing.push(`${route} ${L} -> ${F} over ${E} ... ${D} (${Math.round(metres)} m)`);
+            const cost = reach(E);
+            let shortest = Infinity;
+            for (const D of firstEdges) {
+              const interior = cost.get(net.edges[D].from);
+              if (interior !== undefined) shortest = Math.min(shortest, net.edges[E].len + interior + net.edges[D].len);
             }
+            if (shortest > LOOP_MAX_METRES) continue;
+            qualifying++;
+            const found = loops.some(({ path }) => path.route === route && path.stops![0] === L && path.stops![1] === F && path.edges[0] === E && firstEdges.has(path.edges.at(-1)!));
+            if (!found) missing.push(`${route} ${L} -> ${F} from edge ${E} (${Math.round(shortest)} m)`);
           }
         }
       }
     }
+    expect(qualifying).toBe(loops.length); // one loop per qualifying pair and arriving edge, none left over
     expect(pairs).toBeGreaterThan(50);
     expect(missing).toEqual([]);
   });
@@ -1417,6 +1416,16 @@ describe('the command-line build from an archive on disk', () => {
     expect(JSON.parse(a)).toMatchObject({ feedVersion: '000123', builtAt: stamp });
     expect(first.builtAt).toBe(stamp);
     await expect(stat(join(dir, 'motion'))).rejects.toThrow(); // no meta written anywhere
+    // A download is stamped with its Last-Modified: the same bytes, the same
+    // artefact. Without the header it is refused unless --built-at stands in.
+    const download = (headers: Record<string, string>) => async () => new Response(makeFullZip(), { status: 200, headers });
+    const header = 'Tue, 01 Sep 2026 08:50:29 GMT';
+    const fetched = await main({ fetchImpl: download({ 'last-modified': header }), cwd: dir, out: 'd.json', metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
+    expect(fetched.builtAt).toBe(stamp);
+    expect(await readFile(join(dir, 'd.json'), 'utf8')).toBe(a);
+    await expect(main({ fetchImpl: download({}), cwd: dir, out: 'e.json', metaOut: null, log: () => {}, overrides: FULL_OVERRIDES })).rejects.toThrow(/no Last-Modified header.*--built-at/);
+    const told = await main({ fetchImpl: download({}), builtAt: header, cwd: dir, out: 'e.json', metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
+    expect(told.builtAt).toBe(stamp);
     // Without a stamp a file build does not guess one.
     await expect(main({ zipPath: join(dir, 'a.zip'), cwd: dir, out: 'c.json', metaOut: null, log: () => {}, overrides: FULL_OVERRIDES })).rejects.toThrow(/--zip needs --built-at/);
     await expect(main({ zipPath: join(dir, 'a.zip'), builtAt: 'yesterday', cwd: dir, out: 'c.json', metaOut: null, log: () => {}, overrides: FULL_OVERRIDES })).rejects.toThrow(/not a time/);
