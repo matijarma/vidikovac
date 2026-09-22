@@ -1077,8 +1077,8 @@
       "save": "Save",
       "saving": "Saving…",
       "saveOffline": "The change was not sent: the screen has no connection to the server right now. Try again.",
-      "saveRefused": "The server did not accept the choice. Choose an area and a stop again.",
-      "saveBusy": "Wait a moment, then save again.",
+      "saveRefused": "The server did not accept the place. Choose again.",
+      "saveBusy": "Wait a moment, then choose again.",
       "saved": "Saved.",
       "area": "Area",
       "areaWhole": "The whole city",
@@ -1093,7 +1093,16 @@
       "forget": "Forget this screen",
       "forgetAsk": "Forget this screen? Its codes stop working.",
       "forgetYes": "Forget",
-      "forgetNo": "Cancel"
+      "forgetNo": "Cancel",
+      "place": "Place",
+      "placeChange": "Change",
+      "frame": "Frame",
+      "frameValue": "Frame: {count} stops from here",
+      "view": "View",
+      "viewMap": "View: map",
+      "viewSchema": "View: network diagram",
+      "rhythm": "Rhythm",
+      "rhythmValue": "Rhythm: {seconds} s"
     }
   },
   "presentation": {

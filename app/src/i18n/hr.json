@@ -1114,8 +1114,8 @@
       "save": "Spremi",
       "saving": "Spremanje…",
       "saveOffline": "Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.",
-      "saveRefused": "Poslužitelj nije prihvatio odabir. Odaberi područje i stajalište ponovno.",
-      "saveBusy": "Pričekaj koji trenutak pa spremi ponovno.",
+      "saveRefused": "Poslužitelj nije prihvatio mjesto. Odaberi ponovno.",
+      "saveBusy": "Pričekaj koji trenutak pa odaberi ponovno.",
       "saved": "Spremljeno.",
       "area": "Područje",
       "areaWhole": "Cijeli grad",
@@ -1130,7 +1130,16 @@
       "forget": "Zaboravi zaslon",
       "forgetAsk": "Zaboraviti ovaj zaslon? Kodovi prestaju vrijediti.",
       "forgetYes": "Zaboravi",
-      "forgetNo": "Odustani"
+      "forgetNo": "Odustani",
+      "place": "Mjesto",
+      "placeChange": "Promijeni",
+      "frame": "Kadar",
+      "frameValue": "Kadar: {count} stajališta odavde",
+      "view": "Prikaz",
+      "viewMap": "Prikaz: karta",
+      "viewSchema": "Prikaz: shema",
+      "rhythm": "Ritam",
+      "rhythmValue": "Ritam: {seconds} s"
     }
   },
   "presentation": {
