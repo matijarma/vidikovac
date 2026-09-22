@@ -17,9 +17,9 @@ import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synt
 // the wrong order while their marks converge; what it must do is move from
 // the very first frame, face along the track, carry the twin's headsign and
 // next stop, hold at the estimate before any plan exists, and forget a
-// vehicle five minutes after its last report.
+// vehicle three minutes after its last report (EVICT_S, T8).
 describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
-  it('never jumps, never reverses beyond the allowance, keeps the plan order on a shared path, moves from the first frame, and evicts on silence', () => {
+  it('never jumps, never reverses beyond the allowance, keeps the plan order on a shared path, moves from the first frame, and evicts after three minutes of silence', () => {
     const net = syntheticNetwork(corridorSpec());
     const matcher = createMatcher(net);
     const cruise = 10;
@@ -193,10 +193,10 @@ describe('the integrator over the corridor (4 trams, 5 min at 60 Hz)', () => {
     expect(worstBackwardPerPlan).toBeLessThan(1e-6);
     expect(orderViolations).toBe(0);
 
-    // Silence: five minutes after the last report a vehicle is gone, not faded forever.
+    // Silence: three minutes after the last report a vehicle is gone, not faded forever.
     const lastAt = Math.max(...[...tracks.values()].map((tr) => lastFix(tr)?.atSec ?? 0)) * 1000;
-    expect(integrator.step(lastAt + 299_000).length).toBeGreaterThan(0);
-    expect(integrator.step(lastAt + 301_000)).toHaveLength(0);
+    expect(integrator.step(lastAt + 179_000).length).toBeGreaterThan(0);
+    expect(integrator.step(lastAt + 181_000)).toHaveLength(0);
     expect(integrator.size()).toBe(0);
   }, 30_000); // five simulated minutes at 60 Hz: seconds of work, not the default five
 

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { toPlane } from '../../shared/motion/geo';
 import { enforceOrder, HEADWAY_M } from '../../shared/motion/order';
 import { createMatcher } from '../../shared/motion/match';
-import { buildPlan, evalPathPlan } from '../../shared/motion/plan';
+import { buildPlan, evalPathPlan, SILENCE_HOLD_S } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
 import type { TimesProvider } from '../../shared/motion/times';
-import { newTrack, type Plan, type Track } from '../../shared/motion/track';
+import { lastFix, newTrack, type Plan, type Track } from '../../shared/motion/track';
 import { simulate } from './simulator';
 import { corridorSpec, syntheticNetwork } from './synthetic-network';
 
@@ -26,6 +26,14 @@ import { corridorSpec, syntheticNetwork } from './synthetic-network';
 // ahead tail) from 40 m to 30 m. Those two are what this test now pins,
 // because "a mark ahead that has to come back reads as a broken app" is the
 // failure the round forbids and "a mark behind reads as GPS lag" is not.
+//
+// T8 splits the fleet. A tram whose newest fix is more than SILENCE_HOLD_S
+// old when its plan is made is held at its next stop, so that plan sits
+// behind a punctual tram by design: here about one plan in six, since the
+// simulator's 2 to 25 s latency is harsher than ZET's (about one tram tick in
+// eleven carries a fix that old on Monday 21 Sep). Such a plan must never be
+// ahead of its tram; the unsigned bound is the moving fleet's, where T8
+// changes nothing.
 describe('the engine on the corridor (20 min, 6 trams)', () => {
   it('keeps order on the shared trunk, never reverses, knows every direction from the first fix, moves from the first plan, and keeps its 30 s error behind the tram', () => {
     const net = syntheticNetwork(corridorSpec());
@@ -51,6 +59,8 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
     const tramById = new Map(sim.trams.map((t) => [t.id, t]));
     const tracks = new Map<string, Track>();
     const plansByFrame: Map<string, Plan>[] = [];
+    /** Per frame, the trams whose plan was made silent (T8). */
+    const silentByFrame: Set<string>[] = [];
     let directionUnknownAfterFirstFix = 0;
     let firstPlansStill = 0;
     let reversals = 0;
@@ -77,8 +87,11 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
       enforceOrder([...tracks.values()], net, nowSec, frame.headerSec);
 
       const plans = new Map<string, Plan>();
+      const silent = new Set<string>();
       for (const track of tracks.values()) {
         if (!track.plan || track.plan.on === 'free') continue;
+        const fix = lastFix(track);
+        if (fix && nowSec - fix.atSec > SILENCE_HOLD_S) silent.add(track.id);
         plans.set(track.id, track.plan);
         const knots = track.plan.knots;
         for (let i = 1; i < knots.length; i++) if (knots[i][1] < knots[i - 1][1] - 1e-6) reversals++;
@@ -90,6 +103,7 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
         }
       }
       plansByFrame.push(plans);
+      silentByFrame.push(silent);
     }
 
     // Overtakes: for every pair whose truth is on the shared trunk (edge 0,
@@ -119,6 +133,8 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
     // positive is the plan AHEAD of the tram).
     const errors: number[] = [];
     const signed: number[] = [];
+    const movingErrors: number[] = [];
+    const silentSigned: number[] = [];
     sim.frames.forEach((frame, k) => {
       if (k < 3) return;
       const older = plansByFrame[k - 3];
@@ -131,18 +147,24 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
         const predicted = evalPathPlan(plan.knots as [number, number][], frame.headerSec - sim.frames[k - 3].headerSec);
         errors.push(Math.abs(predicted - truth.s));
         signed.push(predicted - truth.s);
+        if (silentByFrame[k - 3].has(id)) silentSigned.push(predicted - truth.s);
+        else movingErrors.push(Math.abs(predicted - truth.s));
       }
     });
     errors.sort((a, b) => a - b);
     signed.sort((a, b) => a - b);
+    movingErrors.sort((a, b) => a - b);
     const p95 = errors[Math.floor(errors.length * 0.95)];
+    const movingP95 = movingErrors[Math.floor(movingErrors.length * 0.95)];
+    const silentAheadBy50 = silentSigned.filter((d) => d >= 50).length;
     const p50 = errors[Math.floor(errors.length * 0.5)];
     const signedP95 = signed[Math.floor(signed.length * 0.95)];
     const aheadBy50 = signed.filter((d) => d >= 50).length;
     const behindBy50 = signed.filter((d) => d <= -50).length;
     console.log(
       `envelope: pairs ${pairs}, overtakes ${overtakes}, reversals ${reversals}, hindsight n=${errors.length} p50 ${p50.toFixed(1)} m p95 ${p95.toFixed(1)} m, ` +
-        `signed p95 ${signedP95.toFixed(1)} m, ahead>=50 m ${aheadBy50}, behind>=50 m ${behindBy50}, unknown direction ${directionUnknownAfterFirstFix}, still first plans ${firstPlansStill}`,
+        `signed p95 ${signedP95.toFixed(1)} m, ahead>=50 m ${aheadBy50}, behind>=50 m ${behindBy50}, unknown direction ${directionUnknownAfterFirstFix}, still first plans ${firstPlansStill}, ` +
+        `moving p95 ${movingP95.toFixed(1)} m (n=${movingErrors.length}), silent n=${silentSigned.length} ahead>=50 m ${silentAheadBy50}`,
     );
 
     expect(pairs).toBeGreaterThan(50);
@@ -155,7 +177,11 @@ describe('the engine on the corridor (20 min, 6 trams)', () => {
     expect(aheadBy50).toBeLessThanOrEqual(6); // 9 before F11
     expect(signedP95).toBeLessThanOrEqual(40); // 40 before F11
     expect(behindBy50).toBeGreaterThan(aheadBy50); // the error sits on the side that reads as GPS lag
-    // And the unsigned error stays inside a stop spacing's third either way.
-    expect(p95).toBeLessThan(100);
+    // A silent tram's plan (T8) is held behind, never ahead.
+    expect(silentSigned.length).toBeGreaterThan(0);
+    expect(silentAheadBy50).toBe(0);
+    // And the moving fleet's unsigned error stays inside a stop spacing's third either way.
+    expect(movingErrors.length).toBeGreaterThan(150);
+    expect(movingP95).toBeLessThan(100);
   });
 });

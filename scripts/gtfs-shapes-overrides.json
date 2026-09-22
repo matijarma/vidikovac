@@ -1,18 +1,53 @@
 {
-  "_comment": "Build-time overrides for scripts/gtfs-shapes.mjs (npm run build:network). JSON carries no comments, so this key holds the file's purpose, the way scripts/zet-schema-overrides.json's allowlists carry a reason per entry. unreachableStops: platforms a shapeless tram pattern calls at that lie further than SERVED_STOP_MAX_METRES (60 m) from every rail edge the feed's shapes draw, and that are not a first or last stop the TERMINUS_STOP_MAX_METRES (200 m) override already reaches. Without an entry here such a stop FAILS the build by name, because an interior stop off the rails is normally a wrong coordinate or a missing shape, not something to route past silently. An entry says the stop is genuinely off the graph and the synthetic path should be routed past it: the path will neither run to it nor serve it. Each entry is { id, name, reason } -- the id is what matches, the name is for the reader. On feed 000395 the list is empty: every stop of every shapeless tram pattern is within 60 m of a rail once the router reads the served radius (F8b). longLegs: hops of a synthetic path whose routed arc still runs past HOP_DETOUR_FACTOR (2x) the straight line AND HOP_DETOUR_EXCESS_METRES (500 m) longer after F8c has noded every crossing the reported legs could turn at. Without an entry the build FAILS, because a detour that long is a missing junction, not a route. An entry is { route, from, to, reason } and matches on the two platforms' names AND the route, so a long leg that appears between the same two platforms on another line still fails the build; leave route out only to allow the leg on every line that runs it. The reason must say why the graph cannot express the turn, with the measurement that shows it.",
+  "_comment": "Build-time overrides for scripts/gtfs-shapes.mjs (npm run build:network). JSON carries no comments, so this key holds the file's purpose, the way scripts/zet-schema-overrides.json's allowlists carry a reason per entry. unreachableStops: platforms a shapeless tram pattern calls at that lie further than SERVED_STOP_MAX_METRES (60 m) from every rail edge the feed's shapes draw, and that are not a first or last stop the TERMINUS_STOP_MAX_METRES (200 m) override already reaches. Without an entry here such a stop FAILS the build by name, because an interior stop off the rails is normally a wrong coordinate or a missing shape, not something to route past silently. An entry says the stop is genuinely off the graph and the synthetic path should be routed past it: the path will neither run to it nor serve it. Each entry is { id, name, reason } -- the id is what matches, the name is for the reader. On feed 000395 the list is empty: every stop of every shapeless tram pattern is within 60 m of a rail once the router reads the served radius (F8b). servedGaps: the same rule for the tram SHAPES. Every platform a trip of a shape calls at must lie within 60 m of that shape's rails, or be a first or last stop of one of its trips within 200 m of the shape's start or end (then it is served at that end: Zapruđe 1780_18, 130 m past the end of 8_18 and 8_42). Anything else FAILS the build by name unless an entry { path, stop, reason } names it; the stop is then left out of that shape's served list. On feed 000395 the list is empty. connectors: a turn no shape draws and no crossing can express, because the two tracks end and start a few metres apart without ever meeting. An entry { from: [lon, lat], to: [lon, lat], routes, reason } adds one directed edge from the node where some edge ENDS within 2.5 m of `from` to the node where some edge STARTS within 2.5 m of `to`; the build fails if either point matches no node or more than one, if no path then runs the connector, or if a path of a line not named in `routes` does. The reason must say what the feed fails to draw, with the measurement. longLegs: hops of a synthetic path whose routed arc still runs past HOP_DETOUR_FACTOR (2x) the straight line AND HOP_DETOUR_EXCESS_METRES (500 m) longer after F8c has noded every crossing the reported legs could turn at. Without an entry the build FAILS, because a detour that long is a missing junction, not a route. An entry is { route, from, to, reason } and matches on the two platforms' names AND the route, so a long leg that appears between the same two platforms on another line still fails the build; leave route out only to allow the leg on every line that runs it. The reason must say why the graph cannot express the turn, with the measurement that shows it. On feed 000395 the list is empty: the two Botanički vrt -> Zrinjevac legs of routes 6 and 9 it held until September 2026 run the Glavni kolodvor connector instead.",
   "unreachableStops": [],
-  "longLegs": [
+  "servedGaps": [],
+  "connectors": [
     {
-      "route": "6",
-      "from": "Botanički vrt",
-      "to": "Zrinjevac",
-      "reason": "The west-to-north turn at Glavni kolodvor is drawn by no shape in feed 000395, and unlike the other eight reported legs it cannot be noded: the eastbound Mihanovićeva track ENDS at the junction (its node takes only the eastward continuation) and the northbound Trg kralja Tomislava track STARTS 6.79 m away (its node is fed only from the east), so the two polylines never cross and no split point lies on both -- 6.79 m is far past SNAP_METRES (2.5 m), and merging the two nodes instead would grow three U-turns no tram makes. Routes 6 and 9 therefore keep a 3,242 m plan for 511 m of ground on this hop until a shape draws the turn. Their westbound counterpart (Zrinjevac -> Botanički vrt, routes 6 and 17) IS noded: there the southbound track overshoots and really does cross the westbound one."
+      "from": [
+        15.97801,
+        45.80556
+      ],
+      "to": [
+        15.97806,
+        45.80561
+      ],
+      "routes": [
+        "6",
+        "9"
+      ],
+      "reason": "The west-to-north turn at Glavni kolodvor, drawn by no shape in feed 000395: the eastbound Mihanovićeva track ENDS at node 106 (which takes only the eastward continuation) and the northbound Trg kralja Tomislava track STARTS 6.79 m away at node 120 (fed only from the east), so the two polylines never cross and no junction can be noded; 6.79 m is far past SNAP_METRES (2.5 m), and merging the two nodes would grow three U-turns no tram makes. Without the connector routes 6 and 9 planned 3,242 m of arc for the 511 m Botanički vrt -> Zrinjevac hop, round the block; with it the hop runs the turn."
     },
     {
-      "route": "9",
-      "from": "Botanički vrt",
-      "to": "Zrinjevac",
-      "reason": "The west-to-north turn at Glavni kolodvor is drawn by no shape in feed 000395, and unlike the other eight reported legs it cannot be noded: the eastbound Mihanovićeva track ENDS at the junction (its node takes only the eastward continuation) and the northbound Trg kralja Tomislava track STARTS 6.79 m away (its node is fed only from the east), so the two polylines never cross and no split point lies on both -- 6.79 m is far past SNAP_METRES (2.5 m), and merging the two nodes instead would grow three U-turns no tram makes. Routes 6 and 9 therefore keep a 3,242 m plan for 511 m of ground on this hop until a shape draws the turn. Their westbound counterpart (Zrinjevac -> Botanički vrt, routes 6 and 17) IS noded: there the southbound track overshoots and really does cross the westbound one."
+      "from": [
+        15.97522,
+        45.84256
+      ],
+      "to": [
+        15.97519,
+        45.84269
+      ],
+      "routes": [
+        "14",
+        "15",
+        "33"
+      ],
+      "reason": "The top of the Mihaljevac turning loop. Its east side is drawn up to node 168, where line 15 goes on north to Gračansko dolje, and its west side from node 171, where line 15 comes back down; the 14.66 m between the two is the one stretch of the loop no shape draws. Recorded fixes of line 14 on 21 Sep 2026 run up the east side to about 80 m north of platform 177_3, across, and down the west side to 177_4, so the loop path through this connector is the ground the trams cover, its top 15 to 25 m longer than the real crossing and well inside the matcher's 60 m. Without it no loop path can be routed at Mihaljevac, and turning trams were matched onto line 15's paths (108 foreign adoptions there on 20 Sep, 155 on 21 Sep)."
+    },
+    {
+      "from": [
+        16.03715,
+        45.82441
+      ],
+      "to": [
+        16.03714,
+        45.82442
+      ],
+      "routes": [
+        "12"
+      ],
+      "reason": "A 1.36 m digitisation joint in line 12's Dubrava loop: the arriving shape 12_1 ends at node 67 and the departing shape 12_11 starts at node 68, end to start, which the near-duplicate pass (it merges parallel runs, not endpoints) never joins. Without it no loop path joins platform 209_12 to 209_13, 19.4 m apart."
     }
-  ]
+  ],
+  "longLegs": []
 }

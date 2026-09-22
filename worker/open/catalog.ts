@@ -82,7 +82,7 @@ export const OPEN_DATASETS: readonly OpenDataset[] = [
     keywords: ['promet', 'prometnice', 'zatvaranja', 'radovi', 'Grad Zagreb'],
     ttl: 180,
     source: {
-      text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba', posljednja izmjena {datum}",
+      text: "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
       url: 'https://data.zagreb.hr/dataset/prometnice',
       licence: 'Otvorena dozvola (NN 67/17)',
     },

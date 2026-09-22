@@ -6,6 +6,7 @@ import { at } from '../../shared/motion/polyline';
 import { isFreeMotion, isPathMotion, type PathMotion } from '../../shared/motion/wire';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import { createEngine } from '../../worker/twin/engine';
+import { deserializeState, serializeState } from '../../worker/twin/persist';
 import { emptyState, type TwinState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
 import { simulate } from '../motion/simulator';
@@ -43,6 +44,151 @@ describe('runTick on the corridor', () => {
   const joins = corridorJoins(sim);
   const routes = { '1': { shortName: '1', longName: 'Trunk east', type: 0 }, '2': { shortName: '2', longName: 'Trunk north', type: 0 }, '109': { shortName: '109', longName: 'Bus', type: 3 } };
   const tramById = new Map(sim.trams.map((t) => [t.id, t]));
+
+  it('learns path services and trip counts from the resolved trip records, leaving unused paths eligible', () => {
+    const rankedIndex = corridorIndex(net, [
+      { tripId: 'weekday-a', pathId: '1_0' },
+      { tripId: 'weekday-b', pathId: '1_0' },
+      { tripId: 'weekend', pathId: '1_0' },
+      { tripId: 'north', pathId: '2_0' },
+    ]);
+    rankedIndex.tripsById.get('weekend')!.service = 'sat';
+    // Count actual indexed trips, not a possibly stale pattern summary.
+    rankedIndex.patterns[rankedIndex.tripsById.get('weekday-a')!.pattern].trips = 999;
+    const rankedEngine = createEngine(net, rankedIndex);
+    const rank = (id: string) => rankedEngine.pathRanks[net.paths.findIndex((path) => path.id === id)];
+    expect(rankedEngine.pathRanks).toHaveLength(net.paths.length);
+    expect(rank('1_0')).toEqual({ services: new Set(['wd', 'sat']), trips: 3 });
+    expect(rank('2_0')).toEqual({ services: new Set(['wd']), trips: 1 });
+    expect(rank('path:9:0:abc')).toEqual({ services: new Set(), trips: 0 });
+    expect(rankedEngine.patternPathIds[rankedIndex.tripsById.get('weekday-a')!.pattern]).toBe('1_0');
+  });
+
+  it('passes services from all joins before matching the first vehicle and publishes unplaced fixes on the free plane', () => {
+    const serviceIndex = corridorIndex(net, [
+      { tripId: 'weekday', pathId: '1_0' },
+      { tripId: 'weekend', pathId: 'path:9:0:abc' },
+    ]);
+    serviceIndex.tripsById.get('weekend')!.service = 'sat';
+    const serviceEngine = createEngine(net, serviceIndex);
+    const serviceJoins = new Map<string, TripJoin>([
+      ['weekday', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    const feed = (offset: number) => ({
+      headerTs: start + offset,
+      vehicles: [
+        { vehicleId: 'unknown', tripId: 'unknown-trip', routeId: '9', ...lonLatOf({ x: 500 + offset, y: 0 }), atSec: start + offset },
+        { vehicleId: 'known', tripId: 'weekday', routeId: '1', ...lonLatOf({ x: 900 + offset, y: 0 }), atSec: start + offset },
+      ],
+      tripUpdates: [],
+    });
+    let state = emptyState();
+    for (const offset of [0, 10, 20]) {
+      const result = runTick({ state, feed: feed(offset), nowMs: (start + offset + 2) * 1000, joins: serviceJoins, routes, engine: serviceEngine, validUntilMs: 0 });
+      state = result.state;
+      expect(state.tracks.unknown.match.pathIdx).toBeNull();
+      expect(state.tracks.unknown.offGraph).toBe(false);
+      const pin = result.payload.items.find((item) => item.id === 'vehicle:unknown')!;
+      expect(isFreeMotion(pin.motion!)).toBe(true);
+      expect(pin.geo!.coordinates[0]).toBeCloseTo(lonLatOf({ x: 500 + offset, y: 0 }).lon, 5);
+    }
+    // No service information is unknown, not an empty allowed-service list.
+    const result = runTick({ state, feed: feed(30), nowMs: (start + 32) * 1000, joins: new Map(), routes, engine: serviceEngine, validUntilMs: 0 });
+    expect(net.paths[result.state.tracks.unknown.match.pathIdx!].id).toBe('path:9:0:abc');
+    const weekdayAgain = runTick({ state: result.state, feed: feed(40), nowMs: (start + 42) * 1000, joins: serviceJoins, routes, engine: serviceEngine, validUntilMs: 0 });
+    expect(weekdayAgain.state.tracks.unknown.match.pathIdx).toBeNull();
+    expect(isFreeMotion(weekdayAgain.payload.items.find((item) => item.id === 'vehicle:unknown')!.motion!)).toBe(true);
+  });
+
+  it.each([0, 10])('re-matches a route change with null priors even with a %d-second GPS interval', (interval) => {
+    const feed = (routeId: string, offset: number, atOffset: number) => ({
+      headerTs: start + offset,
+      vehicles: [{ vehicleId: 'changing', tripId: 'unknown', routeId, ...lonLatOf({ x: 600, y: 0 }), atSec: start + atOffset }],
+      tripUpdates: [],
+    });
+    const first = runTick({ state: emptyState(), feed: feed('9', 0, 0), nowMs: (start + 2) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    expect(first.state.tracks.changing.priorPath).toBeNull();
+    expect(net.paths[first.state.tracks.changing.match.pathIdx!].route).toBe('9');
+    const changed = runTick({ state: first.state, feed: feed('1', 10, interval), nowMs: (start + 12) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    const track = changed.state.tracks.changing;
+    expect(track.routeId).toBe('1');
+    expect(track.priorPath).toBeNull();
+    expect(net.paths[track.match.pathIdx!].route).toBe('1');
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+    const pin = changed.payload.items.find((item) => item.id === 'vehicle:changing')!;
+    expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
+  });
+
+  it.each([0, 10])('publishes the eligible prior after route 9 to 1 at a %d-second GPS interval', (interval) => {
+    const changeJoins = new Map<string, TripJoin>([
+      ['changing-trip', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    const feed = (routeId: string, offset: number, atOffset: number) => ({
+      headerTs: start + offset,
+      vehicles: [{ vehicleId: 'changing', tripId: 'changing-trip', routeId, ...lonLatOf({ x: 600, y: 55 }), atSec: start + atOffset }],
+      tripUpdates: [],
+    });
+    const first = runTick({ state: emptyState(), feed: feed('9', 0, 0), nowMs: (start + 2) * 1000, joins: changeJoins, routes, engine, validUntilMs: 0 });
+    expect(net.paths[first.state.tracks.changing.match.pathIdx!].route).toBe('9');
+    const changed = runTick({ state: first.state, feed: feed('1', 10, interval), nowMs: (start + 12) * 1000, joins: changeJoins, routes, engine, validUntilMs: 0 });
+    const track = changed.state.tracks.changing;
+    expect(track.routeId).toBe('1');
+    expect(net.paths[track.match.pathIdx!].id).toBe('1_0');
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+    const pin = changed.payload.items.find((item) => item.id === 'vehicle:changing')!;
+    expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
+  });
+
+  it.each([0, 70])('returns on the third 20 m advance across restoration and engine recreation, with %d stationary fixes after advance two', (standingFixes) => {
+    const slowJoins = new Map<string, TripJoin>([
+      ['slow', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    let state = emptyState();
+    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40], [1270, 40], [1290, 40],
+      ...Array.from({ length: standingFixes }, () => [1290, 40]),
+      ...Array.from({ length: 6 }, (_, i) => [1310 + i * 20, 40])];
+    for (const [i, [x, y]] of points.entries()) {
+      const feed = {
+        headerTs: start + i * 10,
+        vehicles: [{ vehicleId: 'slow', tripId: 'slow', routeId: '1', ...lonLatOf({ x, y }), atSec: start + i * 10 }],
+        tripUpdates: [],
+      };
+      const result = runTick({ state, feed, nowMs: (feed.headerTs + 2) * 1000, joins: slowJoins, routes, engine: createEngine(net, index), validUntilMs: 0 });
+      if (i >= 3) {
+        const expected = i < 6 + standingFixes ? '1_1' : '1_0';
+        expect(net.paths[result.state.tracks.slow.match.pathIdx!].id).toBe(expected);
+        const pin = result.payload.items.find((item) => item.id === 'vehicle:slow')!;
+        expect(isPathMotion(pin.motion!) && pin.motion.path).toBe(expected);
+      }
+      state = deserializeState(serializeState(result.state));
+    }
+  });
+
+  it('retains the turnaround through 70 stationary fixes with state restoration and engine recreation between every fix', () => {
+    const standingJoins = new Map<string, TripJoin>([
+      ['standing', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    let state = emptyState();
+    // Two 20 m advances leave the return short of its 50 m threshold.
+    // Restoring rounds the fix at (1290,40) ~0.154 m behind the raw fix.
+    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40], [1270, 40], [1290, 40],
+      ...Array.from({ length: 70 }, () => [1290, 40])];
+    for (const [i, [x, y]] of points.entries()) {
+      const feed = {
+        headerTs: start + i * 10,
+        vehicles: [{ vehicleId: 'standing', tripId: 'standing', routeId: '1', ...lonLatOf({ x, y }), atSec: start + i * 10 }],
+        tripUpdates: [],
+      };
+      const result = runTick({ state, feed, nowMs: (feed.headerTs + 2) * 1000, joins: standingJoins, routes, engine: createEngine(net, index), validUntilMs: 0 });
+      expect(result.newFixes).toBe(1); // fresh timestamps, not ignored duplicates
+      if (i >= 3) {
+        expect(net.paths[result.state.tracks.standing.match.pathIdx!].id, `fix ${i}`).toBe('1_1');
+        const pin = result.payload.items.find((item) => item.id === 'vehicle:standing')!;
+        expect(isPathMotion(pin.motion!) && pin.motion.path, `published fix ${i}`).toBe('1_1');
+      }
+      state = deserializeState(serializeState(result.state));
+    }
+  });
 
   it('publishes path plans whose position at the header is the pin, keeps the trunk order, re-plans on an unchanged frame, and grades itself from the second frame', () => {
     let state: TwinState = emptyState();
@@ -162,7 +308,7 @@ describe('runTick on the corridor', () => {
     expect(state.tracks['A'].fixes.length).toBe(1);
   });
 
-  it('gives a bus a shape plan, an unknown route a free plan, evicts five minutes of silence, and still publishes free plans without any geometry', () => {
+  it('gives a bus a shape plan, an unknown route a free plan, evicts three minutes of silence, and still publishes free plans without any geometry', () => {
     const T = start;
     const busAt = (x: number) => lonLatOf({ x, y: -30 });
     const farAt = (x: number) => lonLatOf({ x, y: 5000 });
@@ -193,9 +339,18 @@ describe('runTick on the corridor', () => {
     expect(ufo.geo?.coordinates[1]).toBeCloseTo(ulat, 5);
     expect(ufo.data).not.toHaveProperty('headsign');
 
-    // Silence: only the bus reports for five minutes; the other vehicle is gone.
-    result = runTick({ state, feed: { headerTs: T + 320, vehicles: [feed(T + 320, 900, 0).vehicles[0]], tripUpdates: [] }, nowMs: (T + 322) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    // The ufo last reported at T+7: T+170 is still inside 180 seconds,
+    // T+190 is outside. Keep the later frame to verify it stays gone.
+    result = runTick({ state, feed: { headerTs: T + 170, vehicles: [feed(T + 170, 800, 0).vehicles[0]], tripUpdates: [] }, nowMs: (T + 172) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    state = result.state;
+    expect(result.evicted).toBe(0);
+    expect(result.payload.items.some((item) => item.id === 'vehicle:ufo')).toBe(true);
+    result = runTick({ state, feed: { headerTs: T + 190, vehicles: [feed(T + 190, 850, 0).vehicles[0]], tripUpdates: [] }, nowMs: (T + 192) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    state = result.state;
     expect(result.evicted).toBe(1);
+    expect(result.payload.items.some((item) => item.id === 'vehicle:ufo')).toBe(false);
+    result = runTick({ state, feed: { headerTs: T + 320, vehicles: [feed(T + 320, 900, 0).vehicles[0]], tripUpdates: [] }, nowMs: (T + 322) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    expect(result.evicted).toBe(0);
     expect(result.payload.items.some((item) => item.id === 'vehicle:ufo')).toBe(false);
 
     // No geometry loaded at all: every vehicle rides a free plan from its own last fixes, the pin at its latest fix.

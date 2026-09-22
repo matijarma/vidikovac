@@ -21,7 +21,7 @@ import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { bodiesToGeoJson } from '../motion/bodies';
-import { clusterPills, createLineColours, type Cluster, type PillPoint } from '../motion/pills';
+import { clusterPills, createLineColours, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
@@ -274,11 +274,13 @@ function bearingGap(a: number, b: number): number {
 
 /** The number on the front of the vehicle: the network's own short name,
  *  else the static GTFS table's, else the route id itself; '' for a vehicle
- *  whose route nobody knows. */
+ *  whose route nobody knows. Held to the widest capsule (pills.ts's
+ *  pillLabel), so a standalone or selected pill obeys the same cap as a
+ *  cluster's name. */
 export function vehicleLabel(v: { short?: string; routeId?: string }): string {
-  if (v.short) return v.short;
+  if (v.short) return pillLabel(v.short);
   if (v.routeId === undefined) return '';
-  return ZET_ROUTES[v.routeId]?.shortName || v.routeId;
+  return pillLabel(ZET_ROUTES[v.routeId]?.shortName || v.routeId);
 }
 
 /** Draw order among the vehicle marks (overlays.ts reads `sort` straight as
@@ -320,7 +322,6 @@ export interface VehicleGeoJsonOptions {
    *  and with the collision pass no longer thinning anything, a busy hub would
    *  pile up worse than before. */
   symbolScale?: number;
-  clusterMaxNumbers?: number;
   /** The line the map is about (F5). A cluster of several routes has no one
    *  route id and carries '' -- which, under a selection, is every route but
    *  the lit one, so a merged mark standing partly *on* the lit line took the
@@ -445,7 +446,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   }
   const merged: VehicleFeature[] = [...alone];
   for (const points of byKind.values()) {
-    for (const group of clusterPills(points, { selectedId, maxNumbers: options.clusterMaxNumbers })) {
+    for (const group of clusterPills(points, { selectedId })) {
       merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
   }
@@ -1239,7 +1240,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
       const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, clusterMaxNumbers: profile.clusterMaxNumbers });
+      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
       lastPushedSignature = signature;

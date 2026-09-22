@@ -135,7 +135,6 @@ export interface SchemaViewport {
 }
 
 export interface SchemaMarkViewport extends SchemaViewport {
-  clusterMaxNumbers?: number;
   density: number;
   symbolScale?: number;
 }
@@ -284,7 +283,7 @@ export function clusterSchemaMarks(
     else byKind.set(mark.kind, [point]);
   }
   for (const [kind, points] of byKind) {
-    for (const group of clusterPills(points, { selectedId, maxNumbers: viewport.clusterMaxNumbers })) {
+    for (const group of clusterPills(points, { selectedId })) {
       if (group.kind === 'single') {
         out.push(group.point.mark);
         continue;

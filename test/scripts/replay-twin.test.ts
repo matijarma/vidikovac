@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEngine } from '../../worker/twin/engine';
-import { createGrader, formatTable, ORDER_FIX_WINDOW_S, ORDER_MIN_GAP_M, phantomStops, REGRESSION_M, replayDirectory, type ReplayReport, type TickSnapshot } from '../../scripts/replay-core';
+import { createGrader, formatTable, ORDER_FIX_WINDOW_S, ORDER_MIN_GAP_M, phantomStops, REGRESSION_M, REPLAY_NOW_CUSHION_S, replayDirectory, type ReplayReport, type TickSnapshot } from '../../scripts/replay-core';
+import { evalPathPlan, SILENCE_HOLD_S } from '../../shared/motion/plan';
 import type { PathKnot } from '../../shared/motion/track';
 import { simulate } from '../motion/simulator';
 import { corridorSpec, syntheticNetwork } from '../motion/synthetic-network';
@@ -82,13 +83,54 @@ describe('the replay harness over a recorded corridor run', () => {
     // wants it on. The bound that matters is the signed one -- plans 50 m or
     // more AHEAD of their tram, which the round forbids, against plans that
     // far behind, which read as GPS lag.
+    //
+    // T8 took the whole fleet's unsigned p95 past the last bucket: a tram
+    // whose newest fix is more than 30 s old is held at its next stop, and at
+    // this simulator's 2 to 25 s latency that is about one plan in six (about
+    // one tram tick in eleven on ZET's feed), each far behind a punctual tram
+    // by design. So the report's own rows keep the median and the two tails,
+    // and the unsigned bound moves to the plans T8 does not touch, graded
+    // below the way the harness grades (every fresh fix against the newest
+    // snapshot at least 30 s older that planned it on the same trip and path)
+    // and split by whether that plan was made for a silent tram.
     const at30 = report.hindsight[30];
     expect(at30.samples).toBeGreaterThan(50);
+    expect(at30.p50).not.toBeNull();
+    expect(at30.p50!.upperBoundM).toBeLessThanOrEqual(25);
     expect(at30.p95).not.toBeNull();
-    expect(at30.p95!.upperBoundM).toBeLessThanOrEqual(100);
     const signed = report.hindsightSign[30];
+    const graded = signed.ahead_ge50 + signed.within50 + signed.behind_ge50;
     expect(signed.behind_ge50).toBeGreaterThan(signed.ahead_ge50);
-    expect(signed.ahead_ge50 / (signed.ahead_ge50 + signed.within50 + signed.behind_ge50)).toBeLessThan(0.1);
+    expect(signed.ahead_ge50 / graded).toBeLessThan(0.1);
+    expect(signed.behind_ge50 / graded).toBeLessThan(0.2);
+
+    const freshErrors: number[] = [];
+    const silentSigned: number[] = [];
+    snapshots.forEach((snapshot, k) => {
+      for (const v of snapshot.vehicles) {
+        if (!v.fresh) continue;
+        for (let j = k - 1; j >= 0; j--) {
+          const published = snapshots[j];
+          if (published.headerSec > v.fixSec - 30) continue;
+          const planned = published.vehicles.find((p) => p.id === v.id && p.tripId === v.tripId && p.pathIdx === v.pathIdx);
+          if (planned) {
+            const signedM = evalPathPlan(planned.knots, v.fixSec - published.headerSec) - v.fixS;
+            if (published.headerSec + REPLAY_NOW_CUSHION_S - planned.fixSec > SILENCE_HOLD_S) silentSigned.push(signedM);
+            else freshErrors.push(Math.abs(signedM));
+          }
+          break;
+        }
+      }
+    });
+    freshErrors.sort((a, b) => a - b);
+    const freshP95 = freshErrors[Math.floor(freshErrors.length * 0.95)];
+    // A plan made while the tram was reporting: T8 changes nothing, so it
+    // keeps the bound the whole fleet had before (the 100 m bucket).
+    expect(freshErrors.length).toBeGreaterThan(200);
+    expect(freshP95).toBeLessThan(100);
+    // A plan made for a silent tram is held behind, never ahead.
+    expect(silentSigned.length).toBeGreaterThan(0);
+    expect(silentSigned.filter((d) => d >= 50)).toHaveLength(0);
 
     // Every vehicle's first published plan is already moving, not standing.
     expect(report.neverMoved).toBe(0);

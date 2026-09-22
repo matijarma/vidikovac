@@ -12,8 +12,11 @@ export function vehicleKind(type: number): VehicleKind {
 }
 
 /** Icon opacity floor: a vehicle the model is unsure of (a single fix, a
- *  free-plane guess) still has to be visible -- the same floor the schematic
- *  uses, so both renderers read alike. */
+ *  free-plane guess, a tram fading through its silence) still has to be
+ *  visible -- the same floor the schematic uses, so both renderers read
+ *  alike. A silent vehicle's confidence falls linearly to 0 at EVICT_S
+ *  (180 s, T8), where the integrator drops it: it never lingers at the
+ *  floor, it fades to it and leaves. */
 export const MIN_ICON_ALPHA = 0.55;
 
 /** The model's confidence (0 to 1) as the alpha every mark of the vehicle carries. */

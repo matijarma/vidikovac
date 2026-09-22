@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
-import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
+import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehicleLabel, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
 import { PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
@@ -222,6 +222,26 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(fc.features[1]!.properties).toMatchObject({ kind: 'bus', short: '109', bearing: 0, hasHeading: false, sort: 1 });
     expect(fc.features[1]!.properties.alpha).toBeLessThan(fc.features[0]!.properties.alpha);
     expect(fc.features[2]!.properties).toMatchObject({ short: '', bearing: 180, hasHeading: false, held: true });
+  });
+
+  it('holds a standalone or selected pill to the 40-character cap a cluster obeys, and never empties it', () => {
+    const long = '9'.repeat(45);
+    const capped = '9'.repeat(PILL_MAX_CHARS_CLUSTER);
+    const bus = (id: string, extra: Partial<Drawn>, lon: number): Drawn =>
+      ({ id, type: 3, p: toPlane(lon, 45.81), heading: null, speed: 0, confidence: 1, onShape: null, ...extra });
+    // One vehicle carries an oversized short name, the other only an oversized route id.
+    const drawn = [bus('a', { routeId: 'r', short: long }, 15.97), bus('b', { routeId: long }, 15.99)];
+    // No camera: nothing merges, both are standalone pills.
+    expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.short)).toEqual([capped, capped]);
+    // With a camera their widest capsules overlap, but the selected one keeps its own mark, and the rest stays alone.
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    const selected = vehiclesToGeoJson(drawn, { project, selectedId: 'a' }).features;
+    expect(selected.map((f) => [f.properties.id, f.properties.short, f.properties.cluster])).toEqual([['b', capped, false], ['a', capped, false]]);
+    // The shared formatter the schema's marks use too.
+    expect(vehicleLabel({ short: long })).toBe(capped);
+    expect(vehicleLabel({ routeId: long })).toBe(capped);
+    expect(vehicleLabel({ short: '6' })).toBe('6');
+    expect(vehicleLabel({})).toBe('');
   });
 
   it('merges pills that overlap on screen into one cluster mark, leaves a vehicle standing on its own alone, and never absorbs the selected one', () => {

@@ -226,8 +226,8 @@ export interface ProzorOptions {
 
 /** Every SDF image the overlays reference, generated once per map. One pill
  *  and one plate per label length a *cluster* can take, not only a route
- *  number's four: a merged mark writes "6·11·12·14 +2" and must have a capsule
- *  that long to write it in. */
+ *  number's four: a merged mark writes every line, "6·11·12·14·221·K", and
+ *  must have a capsule that long to write it in (up to pills.ts's cap). */
 export function overlayImages(): OverlayImage[] {
   const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
   const pills = lengths.map((n) => ({ id: pillImageId(n), image: sdfRoundedRect(pillWidthPx(n), PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
@@ -443,9 +443,10 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'text-font': [MAP_FONTS.medium],
       'text-size': 12 * s,
       // A pill's number is one line, always: in ems, and a hundred of them is
-      // wider than any label can be. MapLibre's default is 10 em, which broke
-      // a bus cluster ("109·113·119·120 +3") at its space and hung the tail
-      // under the capsule instead of inside it.
+      // wider than any label can be (forty characters at most). MapLibre may
+      // break a line after the "·" that joins a cluster's lines, and its
+      // default of 10 em hung the tail of a long cluster under the capsule
+      // instead of inside it.
       'text-max-width': 100,
       'text-allow-overlap': true,
       'text-ignore-placement': true,

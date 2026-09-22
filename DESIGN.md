@@ -162,8 +162,9 @@ and a separate subject board. Events and civic selections lead with their
 title and source-supported details. A legacy phone that still sends the
 retired `kvart` layer renders as the plain Sada overview, never a district.
 
-Safety, the invitation and return-to-overview action remain available.
-Private browsing never automatically changes the presentation. The
+Safety and the invitation remain available; the return-to-overview action
+is the presenter's, on the phone. The screen shows no control that ends a
+presentation. Private browsing never automatically changes the presentation. The
 controller distinguishes a pending request from a kiosk-confirmed render.
 
 ### Phone and desktop
@@ -224,7 +225,12 @@ redundant second unlock button.
 Missing is not zero. A request time is not an observation or event time.
 An unavailable safety source is not an all-clear. Vehicle positions are
 estimates; a route's median delay is a reading of the line, not a forecast for
-one rider's vehicle. BAJS counts require a recent observation; air is a
+one rider's vehicle. A vehicle silent in ZET's feed for more than 30 s is held
+at its next stop and fades; after 180 s it leaves the map. A tram is drawn only
+on its own line's rails; off them it is drawn at its reported positions. On the
+schematic, a tram on a terminus loop is drawn at the circle of the loop's first
+stop, or of its other end where ZET's artwork does not print the first
+(Mandlova). BAJS counts require a recent observation; air is a
 preliminary station observation. A ZET arrival is an estimate and is labelled
 one: a countdown only where a tracked vehicle carries that trip, built from
 the scheduled departure and ZET's own reported delay for that vehicle, with

@@ -41,7 +41,7 @@ export function cityTeaserBody(item: FeedItem, i18n: I18n): string {
     source === 'komunalne'
       ? i18n.t('panels.cityWorkChanged', { time: zagrebWeekdayDate(item.at) })
       : source.startsWith('zet-')
-        ? i18n.t('kiosk.teaserPublished', { time: zagrebDateTime(item.at) })
+        ? i18n.t('kiosk.story.published', { time: zagrebDateTime(item.at) })
         : zagrebWeekdayDate(item.at);
   return [item.title, when].filter(Boolean).join(' · ');
 }

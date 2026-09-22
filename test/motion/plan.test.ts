@@ -38,7 +38,7 @@ const at = (track: Track, tSec: number, headerSec: number) => evalPathPlan(knots
 // The planner: from the last matched fix, to the next stop at the
 // TripUpdate's time when plausible, else at own speed blended with the
 // timetable; a dwell at each stop; expected times beyond; a terminus hold;
-// stale evidence continues on expected times with fading confidence (D2);
+// a silent vehicle held at its next stop while its confidence fades (T8);
 // the free plane for a vehicle off every geometry.
 describe('buildPlan', () => {
   it('anchors at the last fix, honours a plausible ETA, dwells, continues on expected times, holds at the terminus, fades with silence, and lerps in the free plane', () => {
@@ -72,16 +72,24 @@ describe('buildPlan', () => {
     expect(at(rushed, 1014, headerSec)).toBeLessThan(260);
     expect(at(rushed, 1022, headerSec)).toBeCloseTo(300, 0);
 
-    // Stale evidence (D2): the last fix is 102 s old; the plan still moves on
-    // expected times and the confidence has faded but not died.
+    // Silence (T8): the last fix is 102 s old. The plan reaches the next stop
+    // (T300) and is flat there to the horizon, never past it; the confidence
+    // has faded linearly (whole to 30 s, 0 at 180 s) but not died.
     const stale = tramOn1('c', [[100, 900], [200, 910]]);
     buildPlan(stale, net, eightMs, null, nowSec, headerSec, BANDS);
-    expect(at(stale, nowSec, headerSec)).toBeGreaterThan(600);
-    expect(at(stale, nowSec + 30, headerSec)).toBeGreaterThan(at(stale, nowSec, headerSec));
-    expect(silenceDecay(102)).toBeCloseTo(Math.pow(0.5, (102 - 30) / 60), 3);
+    expect(at(stale, nowSec, headerSec)).toBeCloseTo(300, 0);
+    expect(at(stale, nowSec + 30, headerSec)).toBe(at(stale, nowSec, headerSec));
+    expect(at(stale, nowSec + 90, headerSec)).toBe(at(stale, nowSec, headerSec));
+    for (const [, s] of knotsOf(stale)) expect(s).toBeLessThanOrEqual(300);
+    expect(stale.next).toMatchObject({ stopId: 'T300', s: 300 });
+    expect(silenceDecay(102)).toBeCloseTo(1 - 72 / 150, 3);
+    expect(stale.confidence).toBeCloseTo(0.9 * (1 - 72 / 150), 3);
     expect(stale.confidence).toBeGreaterThan(0);
     expect(stale.confidence).toBeLessThan(0.5);
     expect(silenceDecay(20)).toBe(1);
+    expect(silenceDecay(30)).toBe(1);
+    expect(silenceDecay(105)).toBeCloseTo(0.5, 6);
+    expect(silenceDecay(180)).toBe(0);
     expect(silenceDecay(300)).toBe(0);
 
     // The terminus: path 1_0 ends at 2700 m; the plan reaches it and holds.
@@ -110,6 +118,56 @@ describe('buildPlan', () => {
     const { lon: endLon } = lonLatOf({ x: 780, y: 440 });
     expect(later[0]).toBeCloseTo(endLon, 5);
     expect(lost.confidence).toBeLessThanOrEqual(0.5);
+  });
+
+  // T8: a vehicle silent for more than 30 s is held at its next stop and never
+  // planned past it -- wherever it was last seen: running, at a platform the
+  // dwell history reads as already left, or standing off every platform.
+  it('holds a silent tram at its next stop: after a run, at the platform it was leaving, and where it stood', () => {
+    const headerSec = 2000;
+    const nowSec = 2000;
+    const flat = (track: Track, s: number) => {
+      for (const dt of [0, 30, 60, 90]) expect(at(track, nowSec + dt, headerSec), `at +${dt} s`).toBeCloseTo(s, 1);
+      for (const [, ks] of knotsOf(track)) expect(ks).toBeLessThanOrEqual(s + 0.05);
+    };
+
+    // 45 s silent, running at 10 m/s, 100 m before T600: the plan reaches 600 and holds.
+    const running = tramOn1('silent-run', [[400, nowSec - 55], [500, nowSec - 45]]);
+    buildPlan(running, net, eightMs, null, nowSec, headerSec, BANDS);
+    flat(running, 600);
+    expect(running.next?.stopId).toBe('T600');
+    expect(running.confidence).toBeCloseTo(0.9 * (1 - 15 / 150), 3);
+    // The same tram 25 s after its last fix is not silent yet: it dwells at T600 and runs on.
+    const fresh = tramOn1('fresh-run', [[400, nowSec - 35], [500, nowSec - 25]]);
+    buildPlan(fresh, net, eightMs, null, nowSec, headerSec, BANDS);
+    expect(at(fresh, nowSec + 60, headerSec)).toBeGreaterThan(600);
+    expect(fresh.confidence).toBeCloseTo(0.9, 6);
+
+    // 45 s silent, last seen 20 m past T300 and moving: the dwell history
+    // says it has left (dwellRemaining null), but the hold does not ask it.
+    // It stays where it was seen, in T300's zone, never run on to T600 and
+    // never drawn back to the stop point.
+    const leaving = tramOn1('silent-leave', [[280, nowSec - 55], [320, nowSec - 45]]);
+    buildPlan(leaving, net, eightMs, null, nowSec, headerSec, BANDS);
+    flat(leaving, 320);
+    expect(leaving.next?.stopId).toBe('T300');
+
+    // The same, but the last published plan had already drawn it at 350 m:
+    // the floor lifts the anchor out of T300's zone, and the platform is
+    // still read off the observed fix. Held at the floor, never run on to
+    // T600, never drawn back.
+    const floored = tramOn1('silent-floor', [[290, nowSec - 55], [330, nowSec - 45]]);
+    buildPlan(floored, net, eightMs, null, nowSec, headerSec, BANDS, { publishedArcS: 350 });
+    expect(knotsOf(floored)[0][1]).toBeCloseTo(350, 1); // the floor did apply
+    flat(floored, 350);
+    expect(floored.next?.stopId).toBe('T300');
+
+    // 45 s silent, last seen standing between T300 and T600: it stays there;
+    // the next stop is still T600, with no planned time since the plan does not reach it.
+    const stood = tramOn1('silent-stand', [[440, nowSec - 65], [450, nowSec - 55], [452, nowSec - 45]]);
+    buildPlan(stood, net, eightMs, null, nowSec, headerSec, BANDS);
+    flat(stood, 452);
+    expect(stood.next).toMatchObject({ stopId: 'T600', etaSec: null });
   });
 
   // F8: the plan books a dwell only where the line actually calls. The trunk

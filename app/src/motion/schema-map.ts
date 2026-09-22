@@ -197,7 +197,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   }
   function markViewport(): SchemaMarkViewport {
     const profile=MAP_PRESENTATIONS[options.presentationProfile??'desktop'];
-    return { ...viewport(), density, symbolScale: options.symbolScale??profile.symbolScale, clusterMaxNumbers:profile.clusterMaxNumbers };
+    return { ...viewport(), density, symbolScale: options.symbolScale??profile.symbolScale };
   }
   /** One mark per vehicle: the accessible list's membership and the keyboard
    *  walk are per vehicle even where the canvas merges the pills. */

@@ -97,7 +97,7 @@ function mount(opts: MountOptions = {}) {
   if (opts.stored) raw[BEACON_STORAGE_KEY] = opts.stored;
   const storage = { getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
   let beaconStatus: 'live' | 'offline' = 'live';
-  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => beaconStatus, close: vi.fn(), acknowledgePresentation: vi.fn(), stopPresentation: vi.fn(), setScreen: vi.fn() };
+  const beacon = { connect: vi.fn(), requestMore: vi.fn(), status: () => beaconStatus, close: vi.fn(), acknowledgePresentation: vi.fn(), setScreen: vi.fn() };
   let handlers: Parameters<NonNullable<KioskDeps['createBeacon']>>[0] | null = null;
   const timers: Timer[] = [];
   const sessions: { close: ReturnType<typeof vi.fn> }[] = [];
@@ -258,9 +258,7 @@ describe('versioned explicit public presentation', () => {
     expect(text(q(k.root, '.k-present-board .k-select-main'))).toContain('Črnomerec');
     expect(k.beacon.acknowledgePresentation).toHaveBeenCalledWith(1, 'displayed');
     expect(k.root.innerHTML).not.toContain('v1-test-token');
-    expect(q(k.root, '[data-testid=kiosk-stop-presentation]')).not.toBeNull();
-    q(k.root, '[data-testid=kiosk-stop-presentation]')!.click();
-    expect(k.beacon.stopPresentation).toHaveBeenCalledWith(1);
+    expect(q(k.root, '[data-testid=kiosk-stop-presentation]'), 'no control at the screen ends a presentation (T6)').toBeNull();
   });
   it('a second scan and an older frame cannot replace an active presentation', async () => {
     const k = mount({ stored: STORED });

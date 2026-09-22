@@ -370,12 +370,14 @@ it('keeps a mark whose centre has just left the canvas, so a pill at the edge is
   const cssX = mark!.x / DENSITY;
   expect(cssX).toBeLessThan(0);
   expect(cssX).toBeGreaterThan(-PILL_EDGE_MARGIN_PX);
-  // A step further in the centre is past the phone's margin: no ink left on the canvas, so no mark.
-  expect(await edgeMark({}, 2, 1)).toBeUndefined();
+  // A step further in and panned to the clamp, the centre is past the phone's
+  // margin (half the widest, forty-character capsule plus its ring): no ink
+  // left on the canvas, so no mark.
+  expect(await edgeMark({}, 2, 4)).toBeUndefined();
   // The same centre on the public screen, where every pill is painted at
   // symbolScale 2: half of a doubled capsule still lies on the glass, and a
   // flat 56 CSS px blinked a wide cluster out with ink showing (M3).
-  const kiosk = await edgeMark({ symbolScale: 2 }, 2, 1);
+  const kiosk = await edgeMark({ symbolScale: 2 }, 2, 4);
   expect(kiosk).toBeDefined();
   expect(kiosk!.x / DENSITY).toBeLessThan(-PILL_EDGE_MARGIN_PX);
   expect(kiosk!.x / DENSITY).toBeGreaterThan(-2 * PILL_EDGE_MARGIN_PX);

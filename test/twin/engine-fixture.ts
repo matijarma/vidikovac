@@ -52,7 +52,7 @@ export function corridorIndex(net: GraphNetwork, trips: { tripId: string; pathId
 export function corridorJoins(sim: Simulation): Map<string, TripJoin> {
   // The join carries the path id the index resolved (F8), so a trip whose
   // pattern has no shape still adopts its own synthetic path.
-  return new Map(sim.trams.map((tram) => [tram.tripId, { direction: tram.direction, headsign: `Kraj ${tram.pathIdx}`, shapeId: tram.shapeId, pathId: tram.pathId }]));
+  return new Map(sim.trams.map((tram) => [tram.tripId, { direction: tram.direction, headsign: `Kraj ${tram.pathIdx}`, shapeId: tram.shapeId, pathId: tram.pathId, service: 'wd' }]));
 }
 
 /** One simulator frame as the decoded feed the twin folds. */

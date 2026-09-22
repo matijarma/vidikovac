@@ -394,19 +394,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     layer.className = 'k-session-layer';
     layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`;
     sessionLabel.replaceChildren(until, layer);
-    if (presentation?.target && !headMid.querySelector('[data-testid=kiosk-stop-presentation]')) {
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'k-return';
-      back.dataset.testid = 'kiosk-stop-presentation';
-      back.textContent = i18n.t('presentation.stop');
-      back.addEventListener('click', () => { if (presentation) beacon?.stopPresentation?.(presentation.revision); });
-      headMid.appendChild(back);
-    }
+    // No control here ends the presentation (T6, principle 8): the presenter's phone, expiry or a
+    // confirmed takeover does, so nobody at the screen can end a stranger's presentation.
   }
   function removeSessionLabel(): void {
     sessionLabel?.remove(); sessionLabel = null; sessionExpiresAt = null;
-    headMid.querySelector('[data-testid=kiosk-stop-presentation]')?.remove();
   }
 
   // --- Safety strip: always present, sharing the visible source state --------
