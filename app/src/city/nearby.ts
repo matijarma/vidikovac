@@ -28,7 +28,7 @@ import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState, DepartureBoard, Place, StreetStory } from '../../../shared/city/types';
 import type { FeedItem } from '../../../worker/feed/schema';
 import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
-import { firstDepartureOn, lastDeparture, type LastRunSnapshot } from '../core/lastrun';
+import { firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, nightService, type LastRunSnapshot } from '../core/lastrun';
 import { ZET_ROUTES } from '../data/routes';
 import { zagrebDayKey, zagrebHour, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -97,6 +97,13 @@ export interface NearbyInput {
 
 /** §12 bounds and the ladder's clock (§4). */
 export const MAX_DEPARTURES = 3;
+/** A countdown only this close (arrivalsAt's own horizon, passed explicitly); past it a departure is a timetable time. */
+export const COUNTDOWN_HORIZON_MIN = 10;
+/** A departure stays listed this long after its time, as arrivalsAt keeps it. */
+const DEPARTURE_GRACE_MS = 60_000;
+/** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
+const MORNING_FROM_MIN = 3 * 60;
+const MORNING_UNTIL_MIN = 12 * 60;
 export const LAST_DEPARTURES_AHEAD_MS = 4 * 3_600_000;
 export const FIRST_TRAM_FROM_HOUR = 22;
 /** The pharmacy takes the timeless row from 22:00 to 06:00. */
@@ -183,13 +190,38 @@ export function rowBudget(availablePx: number, count: number): { rowPx: number; 
 function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   if (input.boards.length === 0) return [];
   const stopIds = [...new Set([...input.boards.map((b) => b.stopId), ...(input.place.stopId ? [input.place.stopId] : [])])];
+  const { now } = input;
   // With ZET sending no positions every departure is a timetable time, whatever vehicles the caller still holds (§4.8).
-  const { rows } = arrivalsAt(input.boards, outage ? [] : input.fixes, input.now, { stopIds, rows: MAX_DEPARTURES });
+  const { rows } = arrivalsAt(input.boards, outage ? [] : input.fixes, now, {
+    stopIds, horizonMin: COUNTDOWN_HORIZON_MIN, pastGraceS: DEPARTURE_GRACE_MS / 1000, rows: Number.MAX_SAFE_INTEGER,
+  });
   const operatorOf = new Map<string, 'zet' | 'hz'>();
-  for (const board of input.boards) for (const d of board.departures) if (d.tripId) operatorOf.set(d.tripId, d.operator);
-  return rows.slice(0, MAX_DEPARTURES).map((arrival) => {
-    // Blue is a tracked vehicle inside the countdown horizon; past it the ETA is a clock time like any timetable row.
-    const live = arrival.live && arrival.minutes !== null;
+  const scheduledOf = new Map<string, number>();
+  for (const board of input.boards) for (const d of board.departures) {
+    if (!d.tripId) continue;
+    operatorOf.set(d.tripId, d.operator);
+    const at = Date.parse(d.at);
+    if (Number.isFinite(at) && at < (scheduledOf.get(d.tripId) ?? Infinity)) scheduledOf.set(d.tripId, at);
+  }
+  // Blue is a tracked vehicle inside the countdown horizon. Past it the row is grey, and a grey row is the
+  // timetable: its scheduled instant and an arrival without the vehicle, before the rows are ordered and cut,
+  // so a delayed tram never reads as a timetable time it does not have (17:57 ten minutes late is 17:57, not 18:07).
+  const shown = rows
+    .map((arrival): ArrivalRow | null => {
+      if (!arrival.live || arrival.minutes !== null) return arrival;
+      const scheduled = scheduledOf.get(arrival.tripId);
+      if (scheduled === undefined) return null;
+      const { vehicleId: _vehicle, ...timetable } = arrival;
+      void _vehicle;
+      const ahead = scheduled - now;
+      return { ...timetable, atMs: scheduled, live: false, minutes: ahead <= COUNTDOWN_HORIZON_MIN * MINUTE_MS ? Math.max(0, Math.round(ahead / MINUTE_MS)) : null };
+    })
+    // A timetable time already past (its tram is late) is not a departure to wait for.
+    .filter((arrival): arrival is ArrivalRow => arrival !== null && arrival.atMs >= now - DEPARTURE_GRACE_MS)
+    .sort((a, b) => a.atMs - b.atMs || a.routeName.localeCompare(b.routeName))
+    .slice(0, MAX_DEPARTURES);
+  return shown.map((arrival) => {
+    const live = arrival.live;
     return {
       id: `dep:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`,
       kind: 'departure',
@@ -330,10 +362,16 @@ function lastTramRows(input: NearbyInput): NearbyRow[] {
   const { now, lastRun, place, i18n } = input;
   if (lastRun?.status !== 'live') return [];
   const services: NearbyService[] = [];
-  for (const routeId of Object.keys(lastRun.routes).filter(isTram)) {
+  const today = zagrebDayKey(now);
+  // Night lines are the night service, not the evening's last trams.
+  for (const routeId of Object.keys(lastRun.routes).filter((r) => isTram(r) && !nightService(lastRun, r))) {
     const last = lastDeparture(lastRun, routeId, now);
-    // A night line's service ends in the small hours: it is the night service, not the evening's last tram.
-    if (!last || last.at - now > LAST_DEPARTURES_AHEAD_MS || isMorning(last.at)) continue;
+    if (!last || last.at - now > LAST_DEPARTURES_AHEAD_MS) continue;
+    // The service date it belongs to (yesterday's while its rolled time is still ahead), read in GTFS time:
+    // a last run in that service day's morning is a line that only pulls out early here, not an evening's last tram.
+    const serviceDate = [shiftDay(today, -1), today].find((day) => lastDepartureOn(lastRun, routeId, day)?.at === last.at);
+    const minutes = serviceDate ? gtfsMinutes(lastRun.routes[routeId]?.[serviceDate]) : null;
+    if (minutes === null || minutes < MORNING_UNTIL_MIN) continue;
     services.push({ routeId, routeName: shortName(routeId), atMs: last.at });
   }
   if (services.length === 0) return [];
@@ -363,10 +401,14 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
   // From 22:00 the next morning is tomorrow's service date; after midnight it is today's.
   const serviceDate = hour >= FIRST_TRAM_FROM_HOUR ? shiftDay(today, 1) : today;
   const services: NearbyService[] = [];
-  for (const routeId of Object.keys(lastRun.routes).filter(isTram)) {
+  // Night lines' service days start around midnight and run past 26:00: never the morning's first tram.
+  for (const routeId of Object.keys(lastRun.routes).filter((r) => isTram(r) && !nightService(lastRun, r))) {
+    // GTFS time on that service date: 03:00 to 12:00 is the morning of the date itself; 24:00 or later
+    // (line 33's "28:15" at 112_1) is the calendar day after it, so a different morning.
+    const minutes = gtfsMinutes(lastRun.first?.[routeId]?.[serviceDate]);
+    if (minutes === null || minutes < MORNING_FROM_MIN || minutes >= MORNING_UNTIL_MIN) continue;
     const first = firstDepartureOn(lastRun, routeId, serviceDate);
-    // A night line's service day starts around midnight: its first run is not the morning's first tram.
-    if (first && isMorning(first.at)) services.push({ routeId, routeName: shortName(routeId), atMs: first.at });
+    if (first) services.push({ routeId, routeName: shortName(routeId), atMs: first.at });
   }
   if (services.length === 0) return [];
   services.sort(byService);
@@ -666,12 +708,6 @@ function isTram(routeId: string): boolean {
 
 function shortName(routeId: string): string {
   return ZET_ROUTES[routeId]?.shortName || routeId;
-}
-
-/** 03:00 to 12:00 in Zagreb: where a night line's last run and a day line's first run fall. */
-function isMorning(at: number): boolean {
-  const hour = zagrebHour(at);
-  return hour !== null && hour >= 3 && hour < 12;
 }
 
 function byService(a: NearbyService, b: NearbyService): number {

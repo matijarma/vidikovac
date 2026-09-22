@@ -107,6 +107,38 @@ export function lastDeparture(snapshot: LastRunSnapshot | null | undefined, rout
 }
 
 /**
+ * A GTFS 'HH:MM' as minutes from the start of its service day (noon minus twelve hours); the
+ * hours may pass 24, and 24:00 or later belongs to the calendar day after the service date.
+ * Null for anything else.
+ */
+export function gtfsMinutes(time: string | undefined): number | null {
+  const m = GTFS_TIME.exec(time ?? '');
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/** From here on a line's service is extended-hour night service: 26:00 is 02:00 the next morning. */
+export const NIGHT_SERVICE_FROM_MIN = 26 * 60;
+
+/**
+ * True when the stop's file shows `routeId` as extended-hour night service: on some service
+ * date its last departure from this stop is at or after NIGHT_SERVICE_FROM_MIN. ZET's day
+ * trams end by 25:06 at every stop; the night trams run to 27:25–30:09.
+ */
+export function nightService(snapshot: LastRunSnapshot | null | undefined, routeId: string): boolean {
+  if (!snapshot || snapshot.status !== 'live') return false;
+  return Object.values(snapshot.routes[routeId] ?? {}).some((time) => (gtfsMinutes(time) ?? 0) >= NIGHT_SERVICE_FROM_MIN);
+}
+
+/** The last departure of `routeId` on the service date `serviceDate`, resolved to its instant, or null (no clock check). */
+export function lastDepartureOn(snapshot: LastRunSnapshot | null | undefined, routeId: string, serviceDate: string): { at: number } | null {
+  if (!snapshot || snapshot.status !== 'live') return null;
+  const time = snapshot.routes[routeId]?.[serviceDate];
+  if (!time) return null;
+  const at = serviceInstant(serviceDate, time);
+  return Number.isFinite(at) ? { at } : null;
+}
+
+/**
  * The first departure of `routeId` on the service date `serviceDate` (YYYY-MM-DD), resolved to
  * its instant, or null: on a down snapshot, for a line or a date the file's `first` table does
  * not carry, and for a file cut before `first` existed. It does not look at the clock; the

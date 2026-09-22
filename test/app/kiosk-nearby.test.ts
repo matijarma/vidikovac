@@ -3,6 +3,7 @@
 // bounds of the brief §12. Eight scenes on fake clocks (the evening peak, late
 // evening, the last trams, after the last tram, the quiet hour, the morning
 // peak, midday and a ZET outage), then each builder and bound on its own.
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveVehicleRef } from '../../shared/city/arrivals';
 import { distanceM } from '../../shared/city/geo';
@@ -25,7 +26,7 @@ import {
 } from '../../app/src/city/nearby';
 import type { FeedSnapshots, ScreenStop } from '../../app/src/core/contracts';
 import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun';
-import { zagrebTime } from '../../app/src/format';
+import { zagrebDayKey, zagrebHour, zagrebTime } from '../../app/src/format';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { sunTimes } from '../../app/src/ui/solar';
 
@@ -278,6 +279,31 @@ describe('departures', () => {
     expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(3);
     expect(rows.filter((r) => r.live).map((r) => r.id)).toEqual(['dep:t6', 'dep:t13']);
   });
+  it('shows a tracked departure past the countdown horizon as its timetable time, ordered and cut by it', () => {
+    const peak = at('2026-09-22T15:45:00Z'); // Tue 17:45
+    // Line 17 is due 17:57 but tracked ten minutes late (ETA 18:07, past the horizon); line 14 at 18:00 carries no vehicle.
+    const boards = [board(peak, [['6', 3], ['13', 7], ['17', 12], ['14', 15], ['1', 18]])];
+    const fixes: LiveVehicleRef[] = [
+      { id: 'v6', tripId: 't6', routeId: '6', delaySeconds: 60 },
+      { id: 'v13', tripId: 't13', routeId: '13', delaySeconds: 0 },
+      { id: 'v17', tripId: 't17', routeId: '17', delaySeconds: 600 },
+    ];
+    const deps = selectNearby(input(peak, { boards, fixes })).filter((r) => r.kind === 'departure');
+    expect(ids(deps)).toEqual(['dep:t6', 'dep:t13', 'dep:t17']); // by 17:57, not by 18:07 (which would have let 14 in)
+    const late = deps[2]!;
+    expect(late).toMatchObject({ atMs: at('2026-09-22T15:57:00Z'), live: false, source: 'zet-gtfs' });
+    expect(zagrebTime(late.atMs)).toBe('17:57');
+    expect(late.arrival).toMatchObject({ tripId: 't17', atMs: at('2026-09-22T15:57:00Z'), live: false, minutes: null });
+    expect(late.arrival).not.toHaveProperty('vehicleId');
+    expect(deps[0]).toMatchObject({ live: true, atMs: peak + 4 * MIN, arrival: { live: true, minutes: 4, vehicleId: 'v6' } });
+  });
+  it('drops a late tram whose timetable time has passed rather than listing a time already gone', () => {
+    const peak = at('2026-09-22T15:45:00Z');
+    // Due 17:40, tracked twenty minutes late: blue would be za 15 min (past the horizon), grey would be 17:40, already gone.
+    const boards = [board(peak, [['17', -5], ['6', 3], ['13', 7], ['14', 12]])];
+    const fixes: LiveVehicleRef[] = [{ id: 'v17', tripId: 't17', routeId: '17', delaySeconds: 1200 }];
+    expect(ids(selectNearby(input(peak, { boards, fixes })).filter((r) => r.kind === 'departure'))).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+  });
   it('invents no row: no boards, no departures; a board with nothing ahead, none either', () => {
     expect(selectNearby(input(now, { boards: [] })).some((r) => r.kind === 'departure')).toBe(false);
     expect(selectNearby(input(now, { boards: [board(now, [['6', -5]])] })).some((r) => r.kind === 'departure')).toBe(false);
@@ -351,6 +377,11 @@ describe('the last trams', () => {
     expect(lastRow(at('2026-09-22T22:31:00Z'))).toMatchObject([{ sub: '14 00:31' }]);
     expect(lastRow(at('2026-09-22T22:31:01Z'))).toEqual([]);
   });
+  it('leaves out night service and a line that only pulls out early here', () => {
+    const routes: LastRunRoutes = { ...LAST, '11': perDay('04:20') };
+    const row = one(selectNearby(input(at('2026-09-22T20:40:00Z'), { lastRun: { ...LASTRUN, routes } })), 'last');
+    expect(row.services!.map((s) => s.routeId)).toEqual(['1', '12', '17', '6', '13', '14']); // no 11 (04:20 is a morning run), no 31 or 34
+  });
   it('needs a live stop file', () => {
     expect(selectNearby(input(at('2026-09-22T20:40:00Z'), { lastRun: null })).some((r) => r.kind === 'last' || r.kind === 'first')).toBe(false);
     expect(selectNearby(input(at('2026-09-22T20:40:00Z'), { lastRun: { status: 'down', fetchedAt: '2026-09-22T20:00:00Z' } })).some((r) => r.kind === 'last')).toBe(false);
@@ -365,6 +396,35 @@ describe('the first tram', () => {
     expect(firstRow(at('2026-09-23T02:12:00Z'))).toMatchObject([{ id: 'first:2026-09-23' }]); // 04:12
     expect(firstRow(at('2026-09-23T02:13:00Z'))).toEqual([]); // 04:13: it has left
     expect(firstRow(at('2026-09-23T10:00:00Z'))).toEqual([]); // midday
+  });
+  it('reads GTFS time against the service date: 24:00 or later is the next day’s small hours, and night service never counts', () => {
+    const tuesday = at('2026-09-22T20:40:00Z'); // Tue 22:40: the morning is Wednesday's
+    const routes: LastRunRoutes = { ...LAST, '15': perDay('24:40'), '33': perDay('28:15') };
+    const first: LastRunRoutes = { ...FIRST, '12': perDay('24:05'), '15': perDay('24:10'), '33': perDay('28:15') };
+    const row = one(selectNearby(input(tuesday, { lastRun: { ...LASTRUN, routes, first } })), 'first');
+    // 12's "24:05" on Wednesday's service date is Thursday 00:05; 15's "24:10" likewise; 33 is a night line.
+    expect(row.services!.map((s) => s.routeId)).toEqual(['17', '1', '11', '6', '14', '13']);
+    expect(row.atMs).toBe(at('2026-09-23T02:24:00Z'));
+  });
+  it('the committed file of 112_1 on 22 September at 22:40: line 33’s "28:15" is not Wednesday’s first tram', () => {
+    const file = JSON.parse(readFileSync(new URL('../../app/public/data/lastrun/112_1.json', import.meta.url), 'utf8')) as { generatedAt: string; validUntil: string; routes: LastRunRoutes; first: LastRunRoutes };
+    const snapshot: LastRunSnapshot = { status: 'live', fetchedAt: file.generatedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes, first: file.first };
+    const day = zagrebDayKey(file.generatedAt);
+    const next = zagrebDayKey(Date.parse(`${day}T12:00:00Z`) + 86_400_000);
+    expect(file.first['33']?.[next]).toMatch(/^2[4-9]:\d\d$/); // the counterexample is in the artefact: the next morning's 04:xx under the next date
+    const stop: ScreenPlace = { kind: 'tram', name: 'Branim. tržnica', lon: 15.99198, lat: 45.80614, stopId: '112_1' };
+    const lateEvening = Date.parse(`${day}T20:40:00Z`);
+    const row = one(selectNearby({ ...input(lateEvening), place: stop, boards: [], fixes: [], snapshots: {}, city: emptyCity(), lastRun: snapshot }), 'first');
+    const lines = row.services!.map((s) => s.routeId);
+    expect(lines).not.toContain('33');
+    expect(lines).not.toContain('31');
+    expect(lines.length).toBeGreaterThan(0);
+    for (const service of row.services!) {
+      expect(zagrebDayKey(service.atMs), service.routeId).toBe(next);
+      expect(zagrebHour(service.atMs), service.routeId).toBeGreaterThanOrEqual(3);
+      expect(zagrebHour(service.atMs), service.routeId).toBeLessThan(12);
+    }
+    expect(row.atMs).toBe(Math.min(...row.services!.map((s) => s.atMs)));
   });
   it('is absent for a stop file cut before the first table existed', () => {
     const { first: _dropped, ...withoutFirst } = LASTRUN as LastRunSnapshot & { first: LastRunRoutes };

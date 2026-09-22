@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { firstDeparture, firstDepartureOn, lastDeparture, lastRunExpired, loadLastRun, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
+import { firstDeparture, firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, lastRunExpired, loadLastRun, nightService, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
 import { lastRunProducer } from '../../app/src/experience/producers';
 import { bucketOf, columnsFor } from '../../app/src/experience/timeband';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -100,6 +100,25 @@ describe('firstDeparture: the next morning’s first departure ahead of now', ()
     expect(firstDepartureOn(live(TABLE, undefined, FIRST), '31', '2026-09-11')).toEqual({ at: at('2026-09-11T22:23:00Z') }); // Sat 00:23
     expect(firstDepartureOn(live(TABLE, undefined, FIRST), '11', '2026-09-11')).toBeNull();
     expect(firstDepartureOn(live(TABLE), '6', '2026-09-11')).toBeNull();
+  });
+});
+
+describe('GTFS service time helpers', () => {
+  it('gtfsMinutes counts from the service day’s start and lets hours pass 24', () => {
+    expect(gtfsMinutes('04:16')).toBe(256);
+    expect(gtfsMinutes('28:15')).toBe(28 * 60 + 15);
+    expect(gtfsMinutes('kasno')).toBeNull();
+    expect(gtfsMinutes(undefined)).toBeNull();
+  });
+  it('nightService: a line leaving at or after 26:00 on some service date; day lines end before', () => {
+    const snapshot = live({ ...TABLE, '33': { '2026-09-11': '28:15' } }, undefined, FIRST);
+    expect(nightService(snapshot, '33')).toBe(true);
+    expect(nightService(snapshot, '6')).toBe(false); // 24:20 at the latest
+    expect(nightService(null, '33')).toBe(false);
+  });
+  it('lastDepartureOn resolves one service date without the clock', () => {
+    expect(lastDepartureOn(live(TABLE), '6', '2026-09-11')).toEqual({ at: at('2026-09-11T22:15:00Z') });
+    expect(lastDepartureOn(live(TABLE), '17', '2026-09-12')).toBeNull();
   });
 });
 
