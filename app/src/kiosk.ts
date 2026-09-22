@@ -7,7 +7,7 @@
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { CITY_AREA } from '../../worker/pairing/areas';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
-import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
+import { fetchData as fetchDataImpl, fetchSentences as fetchSentencesImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
 import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
 import { codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
@@ -16,6 +16,11 @@ import { createCityStore, type CityStore } from './core/city-store';
 import { arrivalsAt } from '../../shared/city/arrivals';
 import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
+import { dynamicPlaces } from './city/discovery';
+import { selectNearby, type NearbyRow } from './city/nearby';
+import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS } from './city/sentence';
+import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
+import { readWrittenSentences, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
 import { matchStreet } from '../../shared/city/geo';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
@@ -23,7 +28,7 @@ import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/las
 import type { MapMode } from './core/map-mode-store';
 import { createTemporaryScreen, loadStops as loadStopsImpl, loadStreets as loadStreetsImpl } from './core/screens';
 import type { I18n } from './i18n/i18n';
-import { withNetwork, withTimers, type MapFactory } from './map/city-map';
+import { withNetwork, withTimers, type MapFactory, type MapHighlight } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
@@ -31,7 +36,6 @@ import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameS
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
-import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
@@ -41,25 +45,23 @@ import { frameStrip, stripMarkup } from './kiosk/frame';
 import { mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, feedStateOf, fieldView, FIELD_SPAN_M, HANDHELD_SPAN_M, requestKioskMap, vehiclePoints } from './kiosk/mapview';
-import { arrivalFrontRows, ARRIVAL_ROWS, platformIds, type BoardSubject, type StopArrivals } from './kiosk/arrivals';
-import type { FrontRow } from './kiosk/front';
+import { busesVisible, createKioskMapAdapter, feedStateOf, requestKioskMap, vehiclePoints } from './kiosk/mapview';
+import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { fitRows, KIOSK_LAYER_MODULES, mountPaired, type PairedContext, type PairedHandle } from './kiosk/paired';
 import { mountPlaceField } from './kiosk/place-field';
 import type { StreetGeo } from './kiosk/places';
 import { readRhythm, readView, writeRhythm, writeView, type Rhythm, type WallView } from './kiosk/prefs';
 import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type SettingsHandle, type WallPlace } from './kiosk/settings';
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
-import { routeType } from './kiosk/stops';
+import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
-import { createHighlightSequence, highlightBounds, kioskHighlights, type KioskHighlight } from './kiosk/highlights';
 
 export type { KioskPhase } from './kiosk/credentials';
 export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
 
 /** The paired compositions refresh their layer's modules on this tick; nothing else moves on it. */
 export const REFRESH_MS = 20_000;
-/** The code's remaining-time bar and the clock repaint once a second; the column follows the minute. */
+/** The code bar and clock tick once a second; time-sensitive rows and sentences are revalidated with them. */
 export const CODE_TICK_MS = 1_000;
 /** How long the basics panel waits, untouched, before the invitation returns. */
 export const ESSENTIALS_IDLE_MS = 90_000;
@@ -67,8 +69,13 @@ export const ESSENTIALS_IDLE_MS = 90_000;
 export const PROGRESS_STEPS = 10;
 /** A slot change crossfades the code digits: the old ones fade out beside the new for this long. */
 export const CODE_SWAP_MS = 180;
-/** A ticker item changes with a crossfade of this length; instant under reduced motion and lagano. */
-export const TICKER_SWAP_MS = 220;
+/** A changed header sentence fades in once; no transition under reduced motion or lagano. */
+export const SENTENCE_SWAP_MS = 220;
+export { SENTENCE_REFRESH_MS } from './city/sentence';
+/** A cached pre-place record still has a useful list before the DO enriches it. */
+const DEFAULT_WALL_PLACE: ScreenPlace = {
+  kind: 'tram', name: 'Trg bana J. Jelačića', ...CITY_CENTRE, stopId: DEFAULT_PLACE_STOP_ID,
+};
 /** The MapLibre layer whose placed names the e2e counts (contract 3): the prozor profile keeps at most eight major street names in the field. */
 export const MAJOR_LABELS_LAYER = 'roads_labels_major';
 /** A down last-run answer is asked for again on the first paint this long
@@ -83,7 +90,7 @@ export interface KioskDeps {
   hash: string;
   /** T5.3: the same controller entries/kiosk.ts already resolved (solar by
    *  default, or ?tema=) before this component ever sees it; the header
-   *  button only ever calls setPreference, which does the persisting. */
+   *  settings toggle only calls setPreference, which does the persisting. */
   theme: ThemeController;
   /** Where the ordinary credentials live; defaults to localStorage, null disables persistence. */
   storage?: StorageLike | null;
@@ -99,6 +106,8 @@ export interface KioskDeps {
   mapFactory?: MapFactory;
   loadNetwork?: () => Promise<Network | null>;
   fetchTeaser?: (stopId?: string) => Promise<TeaserResponse>;
+  /** Optional inference only; local templates are painted before this settles. */
+  fetchSentences?: (request: SentenceRequest) => Promise<WrittenSentence[]>;
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
   /** The stop's last-departure table (core/lastrun.ts); the real loader by default, behind FLAGS.FEED_LASTRUN. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
@@ -140,7 +149,11 @@ function shellMarkup(s: KioskStrings): string {
   return `<p class="k-alert" role="alert" data-testid="kiosk-alert" hidden></p>
     <header class="k-head">
       <div class="k-head-brand"><button type="button" class="k-brand" data-testid="kiosk-brand" aria-label="${escapeAttribute(`${s.appName} · ${s.settings.open}`)}">${escapeHtml(s.appName)}</button><p class="k-context" data-testid="kiosk-context"></p></div>
-      <div class="k-head-mid" data-testid="kiosk-head-mid"></div>
+      <div class="k-head-mid" data-testid="kiosk-head-mid">
+        <p class="k-sentence" data-testid="kiosk-sentence" hidden><span class="k-sentence-kicker" data-testid="kiosk-sentence-kicker"></span><span class="k-sentence-text" data-testid="kiosk-sentence-text"></span></p>
+        <span class="k-sentence k-sentence-probe" aria-hidden="true"><span class="k-sentence-kicker"></span><span class="k-sentence-text"></span></span>
+        <p class="k-pairing-notice" hidden></p>
+      </div>
       <div class="k-head-when"><p class="k-date" data-testid="kiosk-date"></p><div class="k-clock-row"><time class="k-clock" data-testid="kiosk-clock"></time></div></div>
     </header>
     <section class="k-stage" data-testid="kiosk-stage"></section>
@@ -174,6 +187,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const mapMode: MapMode = lightweight ? 'map' : deps.mapMode ?? 'map';
   const reducedMotion = Boolean(deps.reducedMotion);
   const fetchTeaser = deps.fetchTeaser ?? ((stopId?: string) => fetchTeaserImpl(fetch, stopId));
+  const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
   const fetchLastRun = deps.loadLastRun ?? ((stopId: string) => loadLastRunImpl(stopId));
   const loadStops = deps.loadStops ?? (() => loadStopsImpl());
@@ -201,6 +215,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const alertBox = q('[data-testid=kiosk-alert]');
   const contextEl = q('[data-testid=kiosk-context]');
   const headMid = q('[data-testid=kiosk-head-mid]');
+  const sentenceEl = q('[data-testid=kiosk-sentence]');
+  const sentenceKicker = q('[data-testid=kiosk-sentence-kicker]');
+  const sentenceText = q('[data-testid=kiosk-sentence-text]');
+  const sentenceProbe = q('.k-sentence-probe');
+  const probeKicker = q('.k-sentence-probe .k-sentence-kicker');
+  const probeText = q('.k-sentence-probe .k-sentence-text');
+  const pairingNote = q('.k-pairing-notice');
   const dateEl = q('[data-testid=kiosk-date]');
   const brand = q<HTMLButtonElement>('[data-testid=kiosk-brand]');
   const clockEl = q('[data-testid=kiosk-clock]');
@@ -242,26 +263,23 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let start: StartHandle | null = null;
   let settings: SettingsHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  const highlightSequence = createHighlightSequence();
-  let highlightsPaused = false;
-  let ambient: KioskHighlight | null = null;
-  let highlightItems: KioskHighlight[] = [];
-  let highlightDataKey = '';
-  let highlightModules: readonly ModuleSnapshot[] | null = null;
-  let highlightCity: ReturnType<CityStore['snapshot']> | null = null;
+  let sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+  let wallItems: NearbyRow[] = [];
+  let facts: SentenceFact[] = [];
+  let modelSentences: WrittenSentence[] = [];
+  let currentSentence: WrittenSentence | null = null;
+  let sentenceFetchKey = '';
+  let sentencesFetchedAt = -Infinity;
+  let sentenceFetchSeq = 0;
+  let sentenceSwapTimer: unknown = null;
+  // A Ritam change replaces the sequence's cadence, not its ten-minute memory.
+  const shownSentences = new Map<string, number>();
   let paired: PairedHandle | null = null;
   let presentation: ScreenPresentation | null = null;
   let acknowledgedRevision = -1;
   let acknowledgedStatus: 'displayed' | 'unavailable' | null = null;
   let presentationLoaded = false;
   let pairingNoticeUntil = 0;
-  element.addEventListener('click',event=>{
-    if(phase!=='invitation'||presentation?.target)return;
-    const target=(event.target as Element)?.closest<HTMLElement>('[data-action]');
-    if(!target)return;
-    const action=target.dataset.action;
-    if(action==='pause-highlights'){highlightsPaused=!highlightsPaused;paintTicker();return;}
-  });
   let notice: HTMLElement | null = null;
   let mapContainer: HTMLElement | null = null;
   let essentialsIdle: unknown = null;
@@ -286,19 +304,30 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let frameNetwork: Network | null = null;
   let frameNetworkAsked = false;
   let frameTable: { stops: readonly ScreenStop[]; network: Network | null; table: FrameStop[] } | null = null;
+  function placeForNearby(): ScreenPlace {
+    if (wall.place) return wall.place;
+    const defaultStop = stops?.find(candidate => candidate.id === DEFAULT_PLACE_STOP_ID);
+    return defaultStop ? placeFromStop(defaultStop, isTram) : DEFAULT_WALL_PLACE;
+  }
+  function stopForNearby(): ScreenStop | null {
+    const place = placeForNearby();
+    if (!place.stopId) return null;
+    return stops?.find(candidate => candidate.id === place.stopId)
+      ?? (stop?.id === place.stopId ? stop : { id: place.stopId, name: place.name, lon: place.lon, lat: place.lat, routes: [] });
+  }
   function wallRadiusM(): number {
-    if (!wall.place || !stops?.length) return FRAME_RADIUS_M[wall.frame];
+    if (!stops?.length) return FRAME_RADIUS_M[wall.frame];
     if (frameTable?.stops !== stops || frameTable.network !== frameNetwork) {
       frameTable = { stops, network: frameNetwork, table: frameStopsFrom(stops, isTram, frameNetwork ? frameLinesOf(frameNetwork) : []) };
     }
-    return frameRadiusM(wall.place, frameTable.table, wall.frame);
+    return frameRadiusM(placeForNearby(), frameTable.table, wall.frame);
   }
 
   // --- Alerts: the beacon socket and the teaser fetch fail independently -------
   type AlertSource = 'beacon' | 'teaser';
   const alerts = new Map<AlertSource, string>();
   function renderAlert(): void {
-    const text = alerts.get('beacon') ?? alerts.get('teaser');
+    const text = alerts.get('beacon') ?? (phase === 'invitation' ? undefined : alerts.get('teaser'));
     alertBox.hidden = text === undefined;
     alertBox.textContent = text ?? '';
   }
@@ -319,40 +348,126 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   /** "Povezano": the pairing notice owns the header's middle for a few seconds,
    *  and it owns the status role with it. The two are cleared together -- the
-   *  role is what tells the ticker the middle is taken, so a role left behind
+   *  role is what tells the sentence the middle is taken, so a role left behind
    *  is a screen that never says another word between its brand and its
    *  clock. */
   function clearPairingNotice(): void {
     pairingNoticeUntil = 0;
     if (headMid.getAttribute('role') !== 'status') return;
-    headMid.textContent = '';
+    pairingNote.hidden = true;
+    pairingNote.textContent = '';
     headMid.removeAttribute('role');
   }
 
-  /** One passive sequence. The legacy function name remains internal only;
-   * the header no longer rotates. Never runs a presentation command. */
-  function paintTicker(): void {
-    const composition=compositionOf(layout);
-    const width=invitation?.measureWidth()||FIELD_DESIGN_WIDTH[composition];
-    const height=invitation?.measureHeight()||FIELD_DESIGN_HEIGHT[composition];
-    const camera=fieldView({stop,district:null,widthPx:width,heightPx:height,spanM:composition==='handheld'?HANDHELD_SPAN_M:FIELD_SPAN_M,place:wall.place,placeSet:wall.placeSet,frame:wall.frame,radiusM:wallRadiusM(),handheld:composition==='handheld'});
-    const actualCamera=phase==='invitation'?mapAdapter.handle()?.camera?.():null;
-    const boardTimes=stop?platformIds(stop,stops).map(id=>boards.get('zet',id)?.generatedAt).filter((value):value is string=>Boolean(value)).sort():[];
-    const bounds=!lightweight&&mapAdapter.handle()?.status?.()==='ready'?highlightBounds(actualCamera?.center??camera.center??[15.97726,45.81286],actualCamera?.zoom??camera.zoom,width,height):undefined;
-    const city=cityStore.snapshot();
-    const dataKey=JSON.stringify([Math.floor(now()/60_000),stop?.id,boardTimes,bounds]);
-    if(dataKey!==highlightDataKey||highlightModules!==teaser||highlightCity!==city){
-      highlightDataKey=dataKey;highlightModules=teaser;highlightCity=city;
-      const answer=stop?arrivalsAtStop(platformIds(stop,stops)):undefined;
-      highlightItems=kioskHighlights({modules:teaser,city,stop,now:now(),i18n,bounds,
-        arrivals:answer?.rows,arrivalStatus:answer?.status,arrivalUpdatedAt:boardTimes[0]});
-    }
-    const suspended=phase!=='invitation'||Boolean(presentation?.target);
-    ambient=highlightSequence.read(highlightItems,now(),highlightsPaused||suspended);
-    if(!suspended)invitation?.highlight(ambient,highlightsPaused,reducedMotion||lightweight);
-    mapAdapter.handle()?.setHighlight?.(suspended?null:ambient?.map??null);
+  function sentenceSuspended(): boolean {
+    return phase !== 'invitation' || Boolean(presentation?.target) || sessionLabel !== null || headMid.getAttribute('role') === 'status';
   }
-  /** The modules the strip and the ticker both read from: the
+  function outage(): boolean {
+    return feedStateOf(byModule(teaser)['zet-rt']) === 'down';
+  }
+  function setText(node: HTMLElement, value: string): void {
+    if (node.textContent !== value) node.textContent = value;
+  }
+  /** The probe is laid out even while the live sentence yields to a notice.
+   * Its kicker, gap, font and available width are the live sentence's exact twins. */
+  function sentenceOverflows(sentence: WrittenSentence): boolean {
+    setText(probeKicker, s.sentence.kicker[sentence.kicker]);
+    setText(probeText, sentence.text);
+    return sentenceProbe.clientWidth > 0
+      && (probeText.scrollWidth > probeText.clientWidth + 1 || sentenceProbe.scrollWidth > sentenceProbe.clientWidth + 1);
+  }
+  function paintSentence(): void {
+    const hidden = sentenceSuspended() || currentSentence === null;
+    const previous = sentenceText.textContent;
+    if (sentenceEl.hidden !== hidden) sentenceEl.hidden = hidden;
+    if (hidden || !currentSentence) {
+      if (sentenceSwapTimer !== null) { clearTimer(sentenceSwapTimer); sentenceSwapTimer = null; }
+      delete sentenceEl.dataset.swap;
+      return;
+    }
+    const next = currentSentence;
+    const deadline = String(next.validUntil);
+    if (sentenceEl.dataset.kicker !== next.kicker) sentenceEl.dataset.kicker = next.kicker;
+    if (sentenceEl.dataset.validUntil !== deadline) sentenceEl.dataset.validUntil = deadline;
+    setText(sentenceKicker, s.sentence.kicker[next.kicker]);
+    setText(sentenceText, next.text);
+    if (previous && previous !== next.text && !reducedMotion && !lightweight) {
+      if (sentenceSwapTimer !== null) clearTimer(sentenceSwapTimer);
+      sentenceEl.dataset.swap = '1';
+      sentenceSwapTimer = oneShot(() => { sentenceSwapTimer = null; delete sentenceEl.dataset.swap; }, SENTENCE_SWAP_MS);
+    }
+  }
+  /** Geometry follows the accepted sentence's refs; it never chooses a camera. */
+  function sentenceHighlight(): MapHighlight | null {
+    if (sentenceSuspended() || !currentSentence) return null;
+    for (const ref of currentSentence.refs) {
+      const row = wallItems.find(item => item.id === ref || ref.startsWith(`${item.id}:`));
+      if (row?.map) return row.map;
+      const city = cityStore.snapshot();
+      const place = [...city.places, ...dynamicPlaces(city, now())].find(item => item.id === ref);
+      if (place?.lon !== undefined && place.lat !== undefined) {
+        return { id: place.id, geometry: { type: 'Point', coordinates: [place.lon, place.lat] } };
+      }
+    }
+    return null;
+  }
+  /** Select once for both readers. The selector rebuilds timetable departures
+   * without live fixes during an outage; grey never means a relabelled ETA. */
+  function paintWall(): void {
+    const at = now();
+    const budget = SENTENCE_BUDGET[compositionOf(layout)];
+    if (phase === 'invitation' && !presentation?.target) {
+      const place = placeForNearby();
+      const subject = stopForNearby();
+      const snapshots = byModule(teaser);
+      const city = cityStore.snapshot();
+      const radiusM = wallRadiusM();
+      const held = (subject ? platformIds(subject, stops) : [])
+        .map(id => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
+      wallItems = selectNearby({
+        place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
+        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined,
+      });
+      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n });
+      invitation?.update(invitationModel());
+    } else {
+      wallItems = [];
+      facts = [];
+    }
+    // Old answers are never trusted against the facts they were requested with.
+    modelSentences = readWrittenSentences(modelSentences, { facts, budget, now: at });
+    for (const [text, shownAt] of shownSentences) {
+      if (at - shownAt >= SENTENCE_NO_REPEAT_MS && text !== currentSentence?.text) shownSentences.delete(text);
+    }
+    const pool = [...modelSentences, ...templateSentences(facts, i18n, budget, at)]
+      .filter(sentence => sentence.text === currentSentence?.text || !shownSentences.has(sentence.text));
+    const next = sentenceSequence.read(pool, at, sentenceSuspended(), sentenceOverflows);
+    if (currentSentence && next?.text !== currentSentence.text) shownSentences.set(currentSentence.text, at);
+    currentSentence = next;
+    if (next && !sentenceSuspended()) shownSentences.set(next.text, at);
+    paintSentence();
+    mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
+    // Templates above paint synchronously, including the cold and failed-network paths.
+    ensureSentences();
+  }
+  function ensureSentences(): void {
+    if (disposed || lightweight || phase !== 'invitation' || presentation?.target) return;
+    const at = now();
+    const stable = modelSentenceFacts(facts, at);
+    if (!stable.length) return;
+    const budget = SENTENCE_BUDGET[compositionOf(layout)];
+    const key = JSON.stringify([locale, budget, placeForNearby(), stable.map(fact => [fact.id, fact.kind, fact.text])]);
+    if (key === sentenceFetchKey && at - sentencesFetchedAt < SENTENCE_REFRESH_MS) return;
+    sentenceFetchKey = key;
+    sentencesFetchedAt = at;
+    const seq = ++sentenceFetchSeq;
+    void fetchSentences({ locale: locale.startsWith('en') ? 'en' : 'hr', budget, facts: stable }).then(answer => {
+      if (disposed || seq !== sentenceFetchSeq || phase !== 'invitation') return;
+      modelSentences = readWrittenSentences(answer, { facts, budget: SENTENCE_BUDGET[compositionOf(layout)], now: now() });
+      paintWall();
+    }, () => { /* Optional inference never replaces the useful local templates with an error. */ });
+  }
+  /** The modules the strip reads from: the
    *  session's own copy once paired (fresher, when it has one), the open
    *  teaser otherwise -- the same choice paintStrip has always made. */
   function currentSafetyModules(): ModuleSnapshot[] {
@@ -508,6 +623,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // against it lands off centre. The camera waits for the close (onClose
     // repaints after showStage has re-measured).
     if (settings?.isOpen()) return;
+    invitation?.setFrame(wall.frame);
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
     // A phase without a map keeps the container parked, and the feed state
@@ -539,6 +655,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // shema, or ?prikaz=shema at boot, is the whole network without zoom.
       place: wall.place, placeSet: wall.placeSet, frame: wall.frame, radiusM: wallRadiusM(),
       view: mapMode === 'schema' ? 'schema' : view,
+      vehiclesVisible: feedStateOf(snapshots['zet-rt']) !== 'down',
       ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
     }, mapAdapter);
     if (!container) return;
@@ -546,10 +663,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // call order: once it lands the frame is measured, and the map is asked again once.
     if (!frameNetworkAsked) {
       frameNetworkAsked = true;
-      void loadNetworkOnce().then((net) => { if (net && !disposed) { frameNetwork = net; paintMap(); } });
+      void loadNetworkOnce().then((net) => { if (net && !disposed) { frameNetwork = net; paintLocal(); } });
     }
     container.inert=true;
-    mapAdapter.handle()?.setHighlight?.(phase==='invitation'?ambient?.map??null:null);
+    mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
     mapContainer = container;
     if (container.parentElement !== host) {
       // The box changed while the container sat outside the layout; resumeMap re-measures it.
@@ -594,7 +711,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  generated set) stays until the stop changes. */
   function ensureLastRun(): void {
     if (!FLAGS.FEED_LASTRUN) return;
-    const id = stop?.id ?? null;
+    const id = (phase === 'invitation' ? placeForNearby().stopId : stop?.id) ?? null;
     if (id !== lastRunStop) {
       lastRunStop = id;
       lastRun = null;
@@ -609,7 +726,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       if (disposed || lastRunStop !== id) return;
       lastRunFetch = 'done';
       lastRun = snapshot;
-      invitation?.update(invitationModel());
+      paintWall();
     }, () => {
       // The loader answers down itself; a rejection here is the injected dependency's, and the table stays absent until the stop changes.
       if (!disposed && lastRunStop === id) lastRunFetch = 'done';
@@ -639,7 +756,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const presented = presentation?.target;
     if (presented) return presented.selection?.kind === 'stop' ? [{ id: presented.selection.id }] : [];
     const out: { id: string; name?: string }[] = [];
-    if (stop) out.push(stop);
+    const local = phase === 'invitation' ? stopForNearby() : stop;
+    if (local) out.push(local);
     if (selection?.kind === 'stop') out.push({ id: selection.id });
     return out;
   }
@@ -667,23 +785,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // many it trimmed, and that count is this one.
     return arrivalsAt(held, fleet, at, { stopIds });
   }
-  /** The configured stop's board as the Promet card's rows -- four across a
-   *  wide screen, three in a narrow one -- with what the card needs to caption
-   *  it (the stop, its platforms) and to count what it could not show. Null
-   *  when the screen has no stop, and when the board has nothing to say: the
-   *  card is then the city's exceptions, exactly as it is today. */
-  function configuredBoard(): { rows: FrontRow[]; board: BoardSubject } | null {
-    if (!stop) return null;
-    const ids = platformIds(stop, stops);
-    const answer = arrivalsAtStop(ids);
-    const rows = arrivalFrontRows(answer, s, compositionOf(layout) === 'wide' ? ARRIVAL_ROWS.wide : ARRIVAL_ROWS.compact);
-    if (rows.length === 0) return null;
-    return { rows, board: { status: answer.status, total: answer.rows.length, platforms: ids.length } };
-  }
-
   function invitationModel(): InvitationModel {
-    const board = configuredBoard();
-    return { modules: teaser, stop, now: now(), lastRun, composition: compositionOf(layout),city:cityStore.snapshot(), ...(board ? { prometRows: board.rows, prometBoard: board.board } : {}) };
+    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, outage: outage(),
+      modules: teaser, stop: stopForNearby(), now: now(), composition: compositionOf(layout) };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -703,10 +807,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintLocal(): void {
     ensureLastRun();
     paintedMinute = Math.floor(now() / 60_000);
-    invitation?.update(invitationModel());
     paired?.update(pairedContext());
     if(presentation?.target)showSessionLabel(presentation.expiresAt);
-    paintTicker();
+    paintWall();
     paintStrip();
     paintMap();
     if (!basics.hidden) paintEssentials();
@@ -726,29 +829,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintCode(): void {
     const slot = codesAllowed() ? currentSlot : null;
     const qrBox = element.querySelector<HTMLElement>('[data-testid=kiosk-qr]');
-    const codeEl = element.querySelector<HTMLElement>('[data-testid=pair-code]');
+    const codeEl = element.querySelector<HTMLElement>('[data-testid=kiosk-code]');
     const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]');
     const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]');
     const link = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]');
-    const corner = element.querySelector<HTMLElement>('[data-testid=corner-qr]');
-    const joinCode = element.querySelector<HTMLElement>('[data-testid=join-code]');
-    const copy = element.querySelector<HTMLButtonElement>('[data-testid=pair-copy]');
-    if (copy) {
-      copy.disabled = !slot;
-      copy.innerHTML = iconMarkup('copy');
-      copy.setAttribute('aria-label', s.invitation.copyCode);
-      copy.title = s.invitation.copyCode;
-    }
-    const copyStatus = element.querySelector<HTMLElement>('[data-testid=pair-copy-status]');
-    if (copyStatus) copyStatus.textContent = '';
     if (!slot) {
       if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)}</p>`;
       if (codeA) codeA.textContent = '····';
       if (codeB) codeB.textContent = '····';
       if (codeEl) codeEl.dataset.state = 'waiting';
       if (link) { link.hidden = true; link.removeAttribute('href'); link.textContent = ''; }
-      if (corner) corner.replaceChildren();
-      if (joinCode) joinCode.textContent = screenDead ? s.notice.endsAfterSession : s.invitation.codeWaiting;
       paintProgress();
       return;
     }
@@ -762,41 +852,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (codeB) codeB.textContent = display.slice(5);
     if (codeEl) codeEl.dataset.state = 'live';
     if (link) { link.href = payload; link.textContent = payload; link.hidden = false; }
-    if (corner) corner.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
-    if (joinCode) joinCode.textContent = display;
-    if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous, joinCode);
+    if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous);
     paintProgress();
   }
-  stage.addEventListener('click', async (event) => {
-    const button = (event.target as Element).closest<HTMLButtonElement>('[data-testid=pair-copy]');
-    const slot = codesAllowed() ? currentSlot : null;
-    if (!button || !slot || button.disabled) return;
-    button.disabled = true;
-    let copied = false;
-    try { await navigator.clipboard.writeText(formatCode(slot.code)); copied = true; } catch { /* manual selection remains available */ }
-    if (disposed || !button.isConnected) return;
-    button.disabled = !codesAllowed() || !currentSlot;
-    if (currentSlot?.code !== slot.code) return; // a rotated code has its own label
-    const message = i18n.t(copied ? 'session.shareCopied' : 'export.copyFailed');
-    button.innerHTML = iconMarkup(copied ? 'check-circle' : 'alert-circle');
-    button.title = message;
-    button.setAttribute('aria-label', message);
-    const status = element.querySelector<HTMLElement>('[data-testid=pair-copy-status]');
-    if (status) status.textContent = message;
-    if (!copied) {
-      const code = element.querySelector('[data-testid=pair-code]');
-      if (code) {
-        const range = document.createRange();
-        range.selectNodeContents(code);
-        const selected = window.getSelection();
-        selected?.removeAllRanges(); selected?.addRange(range);
-      }
-    }
-  });
-  /** The outgoing digits stay 180 ms as a ghost over the live code, fading, while the new ones fade in (data-swap); the join code fades in the same beat.
+  /** The outgoing digits stay 180 ms as a ghost over the live code, fading, while the new ones fade in (data-swap).
    *  The ghost repeats the live code's three spans (digits, the dimmed dash with its margins, digits) so both copies sit on the same pixels and the
-   *  crossfade never reads as the second half sliding sideways; it carries no testid, so `pair-code` stays one element mid-swap. */
-  function swapCode(codeEl: HTMLElement, previous: string, joinCode: HTMLElement | null): void {
+   *  crossfade never reads as the second half sliding sideways; it carries no testid, so `kiosk-code` stays one element mid-swap. */
+  function swapCode(codeEl: HTMLElement, previous: string): void {
     const box = codeEl.parentElement;
     if (!box || !box.classList.contains('k-code-box')) return;
     box.querySelector('.k-code-ghost')?.remove();
@@ -809,13 +871,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       : `<span>${escapeHtml(previous.slice(0, dash))}</span><span class="k-code-dash">·</span><span>${escapeHtml(previous.slice(dash + 1))}</span>`;
     box.appendChild(ghost);
     codeEl.dataset.swap = '1';
-    if (joinCode) joinCode.dataset.swap = '1';
     if (swapTimer !== null) clearTimer(swapTimer);
     swapTimer = oneShot(() => {
       swapTimer = null;
       ghost.remove();
       delete codeEl.dataset.swap;
-      if (joinCode) delete joinCode.dataset.swap;
     }, CODE_SWAP_MS);
   }
   /** The remaining share of the current slot; quantised where motion is unwanted. */
@@ -857,6 +917,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // back at once, never behind a panel waiting out its 90 s.
     closeSettings(false);
     phase = next;
+    renderAlert();
     // The sheet reads the phase for the stage's room: the invitation is edge to edge, the wizard and the notices keep their padding.
     element.dataset.phase = next;
     element.dataset.mode = next === 'paired' ? 'unlocked' : 'teaser';
@@ -866,7 +927,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else removeSessionLabel();
     if (next === 'setup') mountStartPhase();
     else if (next === 'invitation') {
-      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase });
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, reducedMotion, codeBase: deps.codeBase });
     }
     else if (next === 'paired') paired = mountPaired(stage, { strings: s, i18n, locale, lightweight, codeBase: deps.codeBase, onShell: paintCode });
     else mountNotice(next);
@@ -932,7 +993,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       themePreference: () => deps.theme.getPreference(),
       cycleTheme,
       rhythm: () => rhythm,
-      setRhythm: (next) => { rhythm = next; writeRhythm(storage, next); paintContext(); },
+      setRhythm: (next) => {
+        rhythm = next;
+        writeRhythm(storage, next);
+        sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+        paintContext();
+        paintWall();
+      },
       view: () => view,
       setView: (next) => { view = next; writeView(storage, next); paintContext(); },
       save: (input) => {
@@ -946,7 +1013,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         showStage();
         // The camera held while the panel covered the stage; the box is real
         // again. A phase change (restoreFocus false) repaints on its own.
-        if (restoreFocus) { paintMap(); brand.focus(); }
+        if (restoreFocus) { paintLocal(); brand.focus(); }
       },
       now,
       setTimeout: oneShot,
@@ -974,6 +1041,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     setPhase('invitation');
     startBeacon(creds);
+    void ensureStops();
+    ensureArrivals();
     armExpiry();
     if (pollingStarted) void loadTeaser();
   }
@@ -993,8 +1062,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       onPaired: () => {
         if (!current() || phase !== 'invitation') return;
         pairingNoticeUntil = now() + 4500;
-        headMid.textContent = i18n.t('presentation.connected');
+        pairingNote.textContent = i18n.t('presentation.connected');
+        pairingNote.hidden = false;
         headMid.setAttribute('role', 'status');
+        paintWall();
       },
       onPresentation: (next) => { if (current()) applyPresentation(next); },
       onRevoked: () => {
@@ -1008,7 +1079,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         if (status === 'offline') showAlert(s.status.offline, 'beacon');
         else if (status === 'replaced') showAlert(i18n.t('presentation.replaced'), 'beacon');
         else if (status === 'connecting' && beaconWasLive) showAlert(s.status.reconnecting, 'beacon');
-        else if (status === 'live') { beaconWasLive = true; clearAlert('beacon');void cityStore.start().then(()=>cityStore.ensure(['heritage'])); }
+        else if (status === 'live') {
+          beaconWasLive = true;
+          clearAlert('beacon');
+          void cityStore.start().then(() => {
+            if (!disposed) return cityStore.ensure(['heritage', 'streets', 'settlements', 'markets']);
+          });
+        }
       },
     });
     beacon.connect();
@@ -1027,11 +1104,13 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     session?.close(); session = null;
     unlockedToken = null;
     sessionSnapshots = {};
+    sentenceFetchSeq += 1;
+    sentenceFetchKey = '';
+    modelSentences = [];
     selection = null;
     activeLayer = 'grad-sada';
     removeSessionLabel();
-    headMid.replaceChildren();
-    headMid.removeAttribute('role');
+    clearPairingNotice();
   }
 
   function applyPresentation(next: ScreenPresentation): void {
@@ -1050,10 +1129,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     presentation = next;
     presentationLoaded = false;
-    pairingNoticeUntil = 0;
-    headMid.textContent = '';
-    headMid.removeAttribute('role');
-    sessionLabel = null;
+    clearPairingNotice();
+    removeSessionLabel();
     if (!next.target) { endSession(); presentation = next; return; }
     session?.close(); session = null;
     unlockedToken = next.dataToken ?? null;
@@ -1098,7 +1175,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     armExpiry();
     // The screen follows its stop at once (the field's name, the camera, the last-run table dropped), then asks for that stop's own teaser.
     paintLocal();
-    if (stop?.id !== before) { ensureArrivals(); void loadTeaser(); }
+    ensureArrivals();
+    if (!stops?.length) void ensureStops();
+    if (stop?.id !== before) void loadTeaser();
   }
 
   // --- Expiry: past 24 h a temporary screen issues no codes; a session runs on ---
@@ -1182,16 +1261,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (presentation?.target) presentationLoaded = true;
     paintLocal();
   }
-  async function ensureStops(): Promise<void> {
-    try {
-      stops = await loadStops();
-      // The sibling platforms of a named stop are only knowable now.
-      if (!disposed) { ensureArrivals(); paintLocal(); }
-    } catch {
-      // Resolved failure is distinct from a stop list still loading. A later
-      // explicit request may retry; this one must not claim a rendered stop.
+  let stopsPending: Promise<void> | null = null;
+  function ensureStops(): Promise<void> {
+    if (stops?.length) return Promise.resolve();
+    if (stopsPending) return stopsPending;
+    stopsPending = loadStops().then(loaded => {
+      // Sibling platforms and the measured circle become knowable together.
+      if (!disposed) { stops = loaded; ensureArrivals(); paintLocal(); }
+    }, () => {
+      // A later explicit request can retry; no per-tick retries.
       if (!disposed) { stops = []; paintLocal(); }
-    }
+    }).finally(() => { stopsPending = null; });
+    return stopsPending;
   }
 
   // --- The stop-scoped teaser poll, aligned to the realtime feed's own tick -------
@@ -1284,6 +1365,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     layout = next;
     if (crossed && phase === 'invitation') { setPhase('invitation'); return; }
     if (changed) { paintLocal(); return; }
+    paintWall();
     paintMap();
     fitAll();
   });
@@ -1292,21 +1374,20 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintClock();
     paintProgress();
     // The notice's own end comes before the repaint that reads the middle: the
-    // second it stops speaking is the second the ticker has the room back.
+    // second it stops speaking is the second the sentence has the room back.
     if (pairingNoticeUntil > 0 && now() >= pairingNoticeUntil) clearPairingNotice();
-    paintTicker();
     if (presentation?.target && presentation.expiresAt !== null && rotation.serverNow() >= presentation.expiresAt) {
       presentation = { ...presentation, target: null, dataToken: undefined };
       endSession();
     }
     if (presentation?.target) acknowledgePresentation();
-    // The column names the ZET time in a context: it repaints when the minute turns, never every second.
+    // Revalidate times each second without fetching; keyed rows only change when their content does.
     const minute = Math.floor(now() / 60_000);
     if (minute !== paintedMinute && invitation) {
       paintedMinute = minute;
       ensureLastRun();
-      invitation.update(invitationModel());
     }
+    paintWall();
     sampleMajorLabelsOnceReady();
   }, CODE_TICK_MS);
   const refreshTimer = setTimer(() => {
@@ -1329,6 +1410,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       clearTimer(refreshTimer);
       clearTimer(codeTimer);
       if (swapTimer !== null) { clearTimer(swapTimer); swapTimer = null; }
+      if (sentenceSwapTimer !== null) { clearTimer(sentenceSwapTimer); sentenceSwapTimer = null; }
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
       disarmExpiry();
       disarmEssentialsIdle();

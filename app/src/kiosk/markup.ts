@@ -50,10 +50,8 @@ export function hintMarkup(strings: KioskStrings, codeBase?: string): string {
 export function codeBlockMarkup(strings: KioskStrings): string {
   return `<div class="k-invite-code">
           <div class="k-code-row">
-            <div class="k-code-box"><p class="k-code" data-testid="pair-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">·</span><span data-testid="code-b">····</span></p></div>
-            <button type="button" class="k-code-copy" data-testid="pair-copy" aria-label="${escapeAttribute(strings.invitation.copyCode)}" title="${escapeAttribute(strings.invitation.copyCode)}" disabled>${iconMarkup('copy')}</button>
+            <div class="k-code-box"><p class="k-code" data-testid="kiosk-code" data-state="waiting"><span data-testid="code-a">····</span><span class="k-code-dash">·</span><span data-testid="code-b">····</span></p></div>
           </div>
-          <span class="k-visually-hidden" data-testid="pair-copy-status" role="status"></span>
           <a class="k-visually-hidden" data-testid="pair-url" href="" hidden></a>
           <div class="k-progress" data-testid="code-progress" role="progressbar" aria-label="${escapeAttribute(strings.invitation.progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="k-progress-bar"></div></div>
         </div>`;

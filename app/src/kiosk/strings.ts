@@ -44,13 +44,10 @@ export interface KioskStrings {
   };
   invitation: {
     lead: string;
-    support: string;
     /** `{host}` is the code base's hostname with `/s`, filled by the composition. */
     typeCode: string;
     qrLabel: string;
     qrWaiting: string;
-    codeWaiting: string;
-    copyCode: string;
     progressLabel: string;
   };
   /** The wall map's legend (WP2, kiosk.legend.*): three plain items, the tram
@@ -154,17 +151,6 @@ export interface KioskStrings {
     /** "+2 linije kasne": the exceptions the card had no room for. */
     moreLate: PluralForms;
   };
-  /** The retired header ticker's five kicker words, printed uppercase by the
-   *  sheet: the weather, the network, the works, tonight, the city. The header
-   *  sentence's kickers (`sentence.kicker`) replace them; ready to delete with
-   *  the ticker module, its last reader. */
-  ticker: {
-    weather: string;
-    transit: string;
-    works: string;
-    tonight: string;
-    city: string;
-  };
   /** The wall's "U blizini" list (WP1, kiosk.nearby.*): its head, the pill
    *  template "{km} km · ~{min} min" (the measured radius and its walking
    *  minutes), the untimed row's word "uvijek", "do" before a closure's end
@@ -221,14 +207,10 @@ export interface KioskStrings {
     closuresUnknown: string;
     closuresStale: string;
     closuresNearest: string;
-    /** No reader since the footer shows the green cross (WP1): ready to delete. */
-    pharmacy: string;
     hitno: string;
     basics: string;
     /** "DHMZ · EMSC": the sources, the calm trail, never with a time. */
     sources: string;
-    /** "DHMZ · EMSC · {time}": no reader since the footer prints no confirmation time (WP1): ready to delete. */
-    confirmed: string;
     /** "Sigurnost: {verdict}. Otvori Osnovno": the verdict button's name while the invitation shows. */
     openBasics: string;
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
@@ -436,7 +418,7 @@ function build(code: SupportedLocale): KioskStrings {
       themeWord: record(THEME_PREFERENCES, (pref) => `kiosk.header.themeWord.${pref}`),
     },
     status: group('status', ['offline', 'reconnecting', 'dataDown']),
-    invitation: { ...group('invite', ['lead', 'support', 'typeCode', 'qrLabel', 'qrWaiting', 'codeWaiting', 'progressLabel']), copyCode: i18n.t('session.shareCopy') },
+    invitation: group('invite', ['lead', 'typeCode', 'qrLabel', 'qrWaiting', 'progressLabel']),
     legend: group('legend', ['tram', 'bikes', 'culture']),
     weather: {
       ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
@@ -460,7 +442,6 @@ function build(code: SupportedLocale): KioskStrings {
       notices: forms('front', 'notices'),
       moreLate: forms('front', 'moreLate'),
     },
-    ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
     nearby: group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote']),
     sentence: {
       ...group('sentence', [
@@ -478,7 +459,7 @@ function build(code: SupportedLocale): KioskStrings {
       tonightMore: forms('say', 'tonightMore'),
     },
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'pharmacy', 'basics', 'sources', 'confirmed', 'openBasics']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'basics', 'sources', 'openBasics']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),

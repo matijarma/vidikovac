@@ -1,55 +1,50 @@
-// Passive overview. Map, conditions, highlight and QR each own a layout
-// region. Polling never replaces the map or the independently rotating QR.
+// The passive public overview: one map, the nearby timeline and the QR.
+// Each has its own region and lifetime; a feed refresh never remounts them.
+import type { FrameStops } from '../../../shared/city/frame';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
-import type { CityState } from '../../../shared/city/types';
+import type { NearbyRow } from '../city/nearby';
 import type { ScreenStop } from '../core/contracts';
-import type { LastRunSnapshot } from '../core/lastrun';
 import type { I18n } from '../i18n/i18n';
-import { reconcile } from '../ui/dom/reconcile';
 import { escapeHtml as e } from '../ui/dom/escape';
 import { mountField } from './field';
-import { weatherPanel, panelMarkup, type FrontRow } from './front';
-import type { BoardSubject } from './arrivals';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
-import type { KioskHighlight } from './highlights';
+import { mountTimeline } from './timeline';
 
-export const FRONT_PANEL_IDS = ['weather'] as const;
+/** The ol's design-height fallback only; its measured box wins after layout. */
+export const NEARBY_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = {
+  wide: 480, compact: 250, portrait: 490, handheld: Number.POSITIVE_INFINITY,
+};
 export interface InvitationDeps {
-  strings: KioskStrings; i18n: I18n; locale: string; lightweight: boolean; codeBase?: string;
+  strings: KioskStrings; i18n: I18n; locale: string; lightweight: boolean;
+  reducedMotion: boolean; codeBase?: string;
 }
 export interface InvitationModel {
-  city?: CityState; modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
-  now: number; lastRun: LastRunSnapshot | null; composition: Composition;
-  prometRows?: FrontRow[]; prometBoard?: BoardSubject;
+  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops; outage: boolean;
+  modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
+  now: number; composition: Composition;
 }
 export interface InvitationHandle {
   element: HTMLElement; readonly mapHost: HTMLElement | null;
   update(model: InvitationModel): void;
-  highlight(item: KioskHighlight | null, paused: boolean, reduced: boolean): void;
+  setFrame(frame: FrameStops): void;
   measureWidth(): number; measureHeight(): number; setMajorLabels(count: number): void;
   fit(): void; destroy(): void;
 }
+/** Shared with presented content: scanning remains possible in every phase. */
 export function cardMarkup(s: KioskStrings, codeBase?: string): string {
   return `<article class="k-invite" data-testid="kiosk-invite">
-    <div class="k-invite-side"><h1 class="k-lead">${e(s.invitation.lead)}</h1><p class="k-invite-benefit">${e(s.invitation.support)}</p>${hintMarkup(s,codeBase)}${codeBlockMarkup(s)}</div>
+    <div class="k-invite-side"><h1 class="k-lead">${e(s.invitation.lead)}</h1>${codeBlockMarkup(s)}${hintMarkup(s,codeBase)}</div>
     <div class="k-qr" data-testid="kiosk-qr"><p class="k-qr-waiting">${e(s.invitation.qrWaiting)}</p></div></article>`;
 }
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const {strings:s,i18n,locale,lightweight}=deps;
-  const en=locale.startsWith('en');
   const element=document.createElement('section');
   element.className='k-city-window';
   element.dataset.testid='kiosk-invitation';
-  element.innerHTML=`<p class="k-handheld-info">${en?'For a public display, open /kiosk/ on that device and choose Start screen. This code opens a personal session; scanning does not change the public display.':'Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni zaslon. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz.'}</p><div class="k-geography"></div>
-    <aside class="k-overview">
-      <section class="k-panel" data-panel="weather" data-testid="kiosk-panel-weather"></section>
-      <section class="k-highlight" data-testid="kiosk-highlight">
-        <header class="k-highlight-head"><p class="k-highlight-kicker"></p><button class="k-highlight-pause btn-quiet" type="button" data-action="pause-highlights" aria-pressed="false"></button></header>
-        <div class="k-highlight-content"></div></section>
-      <div class="k-panel--card">${cardMarkup(s,deps.codeBase)}</div>
-    </aside>`;
+  element.innerHTML=`<p class="k-handheld-info">${e(s.handheld.info)}</p><div class="k-geography"></div>
+    <aside class="k-overview"><div class="k-nearby-host"></div><div class="k-panel--card">${cardMarkup(s,deps.codeBase)}</div></aside>`;
   host.appendChild(element);
   const geography=element.querySelector<HTMLElement>('.k-geography')!;
   const field=mountField(geography,{lightweight});
@@ -60,42 +55,38 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     legend.innerHTML=`<span><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
     geography.appendChild(legend);
   }
-  const weather=element.querySelector<HTMLElement>('[data-panel=weather]')!;
-  const content=element.querySelector<HTMLElement>('.k-highlight-content')!;
-  const pause=element.querySelector<HTMLButtonElement>('.k-highlight-pause')!;
-  const kicker=element.querySelector<HTMLElement>('.k-highlight-kicker')!;
-  let lastKey:string|null=null;
+  const note=document.createElement('p');
+  note.className='k-map-note';
+  note.dataset.testid='map-note';
+  note.hidden=true;
+  note.textContent=s.nearby.outageNote;
+  geography.appendChild(note);
+  let model:InvitationModel|null=null;
+  const timeline=mountTimeline(element.querySelector<HTMLElement>('.k-nearby-host')!,{
+    i18n,
+    reduced:deps.reducedMotion||lightweight,
+    designHeightPx:()=>NEARBY_DESIGN_HEIGHT[model?.composition??'wide'],
+  });
+  const mapHost=element.querySelector<HTMLElement>('[data-testid=kiosk-map-host]')!;
+  function setFrame(frame:FrameStops):void {
+    const value=String(frame);
+    if(mapHost.dataset.frame!==value)mapHost.dataset.frame=value;
+  }
   function fit():void {
-    for(const region of [weather,content])region.dataset.overflow=String(region.clientHeight>0&&region.scrollHeight>region.clientHeight+1);
+    if(model)timeline.update(model.items,model.radiusM,model.now);
   }
   return {
     element,mapHost:field.mapHost,
-    update(model){
+    update(next){
+      model=next;
       field.update({modules:model.modules,stop:model.stop,strings:s,i18n,locale});
-      const next=document.createElement('div');
-      const panel=weatherPanel({...model,strings:s,i18n,locale,lightweight});
-      next.innerHTML=panelMarkup(panel);
-      reconcile(weather,next);
-      weather.dataset.state=panel.state??'loading';
-      fit();
-    },
-    highlight(item,paused,reduced){
-      const key=item?.id??'empty';
-      const next=document.createElement('div');
-      kicker.textContent=item?.kicker??(en?'The city, live':'Grad uživo');
-      next.innerHTML=item?`<h2>${e(item.what)}</h2><p class="k-highlight-where">${e(item.where)}</p><p class="k-highlight-when">${e(item.when)}</p><p class="k-highlight-credit">${e(item.source)} · ${e(item.freshness)}</p>`:
-        `<h2>${en?'Waiting for city information':'Čekamo gradske podatke'}</h2><p>${en?'The code still opens a personal session. Unavailable sources are marked on your phone.':'Kod i dalje otvara osobnu sesiju. Nedostupni izvori označeni su na telefonu.'}</p>`;
-      reconcile(content,next);
-      if(lastKey!==null&&lastKey!==key&&!reduced)content.animate?.([{opacity:0},{opacity:1}],{duration:180,easing:'ease-out'});
-      lastKey=key;
-      content.dataset.highlight=key;
-      pause.textContent=paused?(en?'Resume':'Nastavi'):(en?'Pause':'Zaustavi');
-      pause.setAttribute('aria-label',paused?(en?'Resume highlights':'Nastavi izmjenu'):(en?'Pause highlights':'Zaustavi izmjenu'));
-      pause.setAttribute('aria-pressed',String(paused));
+      setFrame(model.frame);
+      const hidden=lightweight||!model.outage;
+      if(note.hidden!==hidden)note.hidden=hidden;
       fit();
     },
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),
-    setMajorLabels:count=>field.setMajorLabels(count),fit,
-    destroy(){field.destroy();element.remove();},
+    setFrame,setMajorLabels:count=>field.setMajorLabels(count),fit,
+    destroy(){timeline.destroy();field.destroy();element.remove();},
   };
 }
