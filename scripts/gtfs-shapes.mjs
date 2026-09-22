@@ -247,7 +247,8 @@ export function chainDecodeXY(flat) {
 /** Edge geometry is one chain across the WHOLE edges array (each edge's
  *  first point is a delta from the previous edge's last point), so a
  *  junction where one edge starts where another ends costs two zeros, not a
- *  coordinate. Returns the absolute [x, y] units per edge. */
+ *  coordinate. Returns the absolute [x, y] units per edge.
+ * @returns {[number, number][][]} */
 export function decodeEdgeChain(dList) {
   const flat = [];
   for (const d of dList) flat.push(...d);
@@ -329,6 +330,7 @@ function clamp01(x) {
  * column-major object of arrays, one array per key, index-aligned. Repeating
  * each object's key names on every row would cost tens of kilobytes of raw
  * JSON that carries no information; fromColumnar is the exact inverse.
+ * @returns {Record<string, unknown[]>}
  */
 export function toColumnar(rows, keys) {
   const out = {};
@@ -1404,7 +1406,10 @@ export async function streamTripEndpoints(buf, entry) {
  * Builds the version 2 artefact from a fully-loaded GTFS zip buffer.
  * @param {Uint8Array} zipBuf
  * @param {{ now?: () => Date, diagramBusCount?: number, fallbackMtime?: string | null, log?: (s: string) => void,
- *   overrides?: { unreachableStops?: ({ id: string, name?: string, reason?: string } | string)[] } }} [opts]
+ *   overrides?: { unreachableStops?: ({ id: string, name?: string, reason?: string } | string)[],
+ *     servedGaps?: { path: string, stop: string, reason: string }[],
+ *     connectors?: { from: [number, number], to: [number, number], routes: string[], reason: string }[],
+ *     longLegs?: { route?: string, from: string, to: string, reason: string }[] } }} [opts]
  *   `overrides` is the parsed OVERRIDES_PATH file; main() reads it, tests pass their own.
  */
 export async function buildNetwork(zipBuf, opts = {}) {

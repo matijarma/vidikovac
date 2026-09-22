@@ -10,6 +10,7 @@ import { delayWord, vehicleCount } from '../../app/src/layers/shared';
 import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-summary';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
+import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import { createSchematicHost } from '../../app/src/motion/schematic-host';
 import type { LayerContext } from '../../app/src/layers/types';
@@ -298,14 +299,14 @@ describe('u-pokretu', () => {
   });
   it('builds the map from vehicle points and closure lines and prints the delay table', () => {
     const update = vi.fn();
-    const factory = vi.fn(() => ({ update, destroy: vi.fn() }));
+    const factory = vi.fn((_options: CityMapOptions) => ({ update, destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
     const section = renderLayer('u-pokretu', ctx({ maps }));
     expect(factory).toHaveBeenCalledTimes(1);
     const options = factory.mock.calls[0]![0];
     expect(options.points).toHaveLength(3);
-    expect(options.points[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
-    expect(options.lines[0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
+    expect(options.points![0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
+    expect(options.lines![0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
     expect(options.ariaLabel).toContain('Karta');
     const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
     expect(rows[0]).toContain('kasni 2 min');
@@ -362,9 +363,9 @@ describe('u-pokretu', () => {
   });
   // T10: the full map.
   it('hands the map each vehicle report as evidence, dated, with its trip and route type (R-P2)', () => {
-    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
+    const factory = vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn() }));
     renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never) }));
-    const point = factory.mock.calls[0]![0].points[0];
+    const point = factory.mock.calls[0]![0].points![0];
     // No `at` on the pin: dated at the snapshot's own fetch time, never `now`.
     expect(point).toMatchObject({ id: 'vehicle:1', lon: 15.97, lat: 45.81, routeId: '6', at: NOW - 60_000 });
     expect(point.title).toContain('6');

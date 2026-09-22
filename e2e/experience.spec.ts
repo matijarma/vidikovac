@@ -192,7 +192,7 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string, ...args: unknown[]) {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...args: unknown[]) {
       if (['webgl', 'webgl2', 'experimental-webgl'].includes(type)) return null;
       return Reflect.apply(original, this, [type, ...args]);
     } as typeof original;

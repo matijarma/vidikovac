@@ -15,7 +15,7 @@ interface ZipInput {
 
 /** Builds a valid zip (local headers, central directory, EOCD) with no library.
  *  Copied from test/scripts/gtfs-routes.test.ts's helper of the same shape. */
-function makeZip(files: ZipInput[]): Uint8Array {
+function makeZip(files: ZipInput[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
@@ -157,7 +157,7 @@ const FEED_INFO_TXT =
   'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version\n' +
   'ZET,https://www.zet.hr,hr,20260901,20301231,000777\n';
 
-function makeFullZip(opts: { extraTripsRow?: string } = {}): Uint8Array {
+function makeFullZip(opts: { extraTripsRow?: string } = {}): Uint8Array<ArrayBuffer> {
   const tripsTxt = TRIPS_TXT + (opts.extraTripsRow ?? '');
   return makeZip([
     { name: 'trips.txt', data: tripsTxt, method: 8 },

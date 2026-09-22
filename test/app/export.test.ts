@@ -131,6 +131,7 @@ describe('icsForItems', () => {
       { ...EVENT, dateBasis: 'unknown', at: undefined, data: { source: 'kvartovske' } },
       { ...EVENT, dateBasis: 'updated', data: { source: 'komunalne', precision: 'day' } },
       { ...EVENT, dateBasis: 'published', data: { source: 'zet-promet', precision: 'time' } },
+      // @ts-expect-error a module and a kind outside the schema on purpose: the verdict must rest on dateBasis alone
       { ...EVENT, module: 'hrt-news', kind: 'news', dateBasis: 'published' },
       { ...EVENT, module: 'glasnik', kind: 'act', dateBasis: undefined },
       { ...EVENT, module: 'dhmz-now', kind: 'observation', dateBasis: 'observed' },

@@ -18,7 +18,7 @@ describe('scan', () => {
     const fail = await scan('ABCDEFGH', (async () => json({ error: 'code-used', message: 'Iskorišten.' }, 409)) as unknown as typeof fetch);
     expect(fail).toEqual({ error: 'code-used', message: 'Iskorišten.' });
     const net = await scan('ABCDEFGH', (async () => { throw new TypeError('Failed to fetch'); }) as unknown as typeof fetch);
-    expect('error' in net && net.error).toBe('rate-limited' === 'x' ? 'x' : net.error);
+    expect('error' in net && net.error).toBe('error' in net ? net.error : undefined);
     expect(net).toMatchObject({ error: 'bad-request' });
   });
 });

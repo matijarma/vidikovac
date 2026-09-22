@@ -34,7 +34,7 @@ describe('slot arithmetic', () => {
 
 describe('createRotation', () => {
   it('rotates on wall-clock boundaries using the serverNow offset and requests more once per batch', () => {
-    let fn: (() => void) | null = null;
+    let fn = null as (() => void) | null; // assigned inside setInterval below, so no narrowing to null
     let local = 500; // device clock is far from the server clock on purpose
     const onSlot = vi.fn(); const onMore = vi.fn();
     const r = createRotation({ now: () => local, onSlot, onMore, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => { fn = null; } });
@@ -56,7 +56,7 @@ describe('createRotation', () => {
   // blanked the screen until the new slots opened; a reconnect replays codes the
   // screen is already showing, so replacing the batch there is a ten-minute gap.
   it('keeps the current code when a future batch arrives, and rotates into it', () => {
-    let fn: (() => void) | null = null;
+    let fn = null as (() => void) | null; // assigned inside setInterval below, so no narrowing to null
     let local = 1_000_000;
     const onSlot = vi.fn();
     const r = createRotation({ now: () => local, onSlot, onMore: () => {}, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => {} });
@@ -75,7 +75,7 @@ describe('createRotation', () => {
   });
 
   it('still has a current code when a reconnect replays a batch it already holds', () => {
-    let fn: (() => void) | null = null;
+    let fn = null as (() => void) | null; // assigned inside setInterval below, so no narrowing to null
     let local = 1_000_000;
     const onSlot = vi.fn();
     const r = createRotation({ now: () => local, onSlot, onMore: () => {}, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => {} });
@@ -88,7 +88,7 @@ describe('createRotation', () => {
   });
 
   it('reports null when the batch has run out', () => {
-    let fn: (() => void) | null = null;
+    let fn = null as (() => void) | null; // assigned inside setInterval below, so no narrowing to null
     let local = 0;
     const onSlot = vi.fn();
     createRotation({ now: () => local, onSlot, onMore: () => {}, setInterval: (f) => { fn = f; return 1; }, clearInterval: () => {} }).setBatch(batch(0, 1), 0);

@@ -304,7 +304,7 @@ describe('createSessionClient', () => {
   });
   it('drops outbound messages when the socket is not open', () => {
     const { client, sock } = boot();
-    client.sendView('vijesti');
+    client.sendView('u-pokretu');
     expect(sock.sent).toEqual([]);
   });
   it('ignores malformed frames', () => {

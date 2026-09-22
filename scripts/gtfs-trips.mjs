@@ -293,7 +293,7 @@ export function chainDecodeDeltas(deltas) {
  * Builds the trip index artefact from a fully loaded GTFS zip buffer.
  * @param {Uint8Array} zipBuf
  * @param {{ now?: () => Date, fallbackFeedVersion?: string | null, log?: (s: string) => void }} [opts]
- * @returns {Promise<{ artefact: object, report: object }>}
+ * @returns {Promise<{ artefact: import('../shared/motion/trips').TripIndexWire, report: { patterns: number, trips: number, blocks: number, multiRouteBlocks: number, tripsWithoutShapeByRoute: Record<string, number> } }>}
  */
 export async function buildTripIndex(zipBuf, opts = {}) {
   const { now = () => new Date(), fallbackFeedVersion = null, log = () => {} } = opts;

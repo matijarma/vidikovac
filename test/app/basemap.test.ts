@@ -449,7 +449,7 @@ describe('the prozor basemap profile: the ground under the figure, readable from
     // The overlays are drawn at the screen's own symbol scale with the kiosk's
     // option set, and a route number on a plate is read across the same room
     // as a street name.
-    const prozor: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 24 };
+    const prozor: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, stopRadius: false, labelPadding: 24 };
     for (const layer of overlayLayers(OVERLAY_LIGHT, { scale: KIOSK_SYMBOL_SCALE, prozor })) {
       if (layer.type !== 'symbol' || layer.layout?.['text-size'] === undefined) continue;
       for (const zoom of ZOOMS) {

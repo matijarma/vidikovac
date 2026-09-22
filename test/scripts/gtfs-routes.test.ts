@@ -19,7 +19,7 @@ interface ZipInput {
 }
 
 /** Builds a valid zip (local headers, central directory, EOCD) with no library. */
-function makeZip(files: ZipInput[]): Uint8Array {
+function makeZip(files: ZipInput[]): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
@@ -187,7 +187,7 @@ describe('routesFromZip and main', () => {
       return new Response(zip, { status: 200 });
     };
     const logs: string[] = [];
-    const result = await main({ fetchImpl, cwd: dir, out: 'data/zet-routes.json', log: (s: string) => logs.push(s) });
+    const result = await main({ fetchImpl: fetchImpl as unknown as typeof fetch, cwd: dir, out: 'data/zet-routes.json', log: (s: string) => logs.push(s) });
     expect(calls).toEqual(['https://www.zet.hr/gtfs-scheduled/latest']);
     expect(result.count).toBe(3);
     const written = JSON.parse(await readFile(join(dir, 'data/zet-routes.json'), 'utf8'));

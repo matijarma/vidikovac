@@ -19,7 +19,7 @@ function makeContext(now: Date = FETCH_NOW): FetchContext {
   };
 }
 
-function byId(items: { id: string }[], id: string) {
+function byId<T extends { id: string }>(items: T[], id: string): T {
   const item = items.find((row) => row.id === id);
   if (!item) throw new Error(`item ${id} not found`);
   return item;

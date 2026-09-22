@@ -358,7 +358,7 @@ describe('buildNetwork', () => {
     // The CLI writes the artefact and the meta constants for the same feed.
     const dir = await mkdtemp(join(tmpdir(), 'zet-network-'));
     const result = await main({
-      fetchImpl: async () => new Response(makeFullZip(), { status: 200 }),
+      fetchImpl: async () => new Response(makeFullZip() as Uint8Array<ArrayBuffer>, { status: 200 }),
       cwd: dir,
       out: 'data/zet-network.json',
       metaOut: 'motion/network-meta.ts',

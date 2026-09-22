@@ -125,6 +125,6 @@ describe('TwinDO learning', () => {
       }
     }
     expect(fastest).toBeGreaterThan(7.5);
-    expect(evalPathPlan((payload.items.find((item) => item.motion && 'path' in item.motion)!.motion as PathMotion).plan, 0)).toBeGreaterThanOrEqual(0);
+    expect(evalPathPlan((payload.items.find((item) => item.motion && 'path' in item.motion)!.motion as PathMotion).plan as [number, number][], 0)).toBeGreaterThanOrEqual(0);
   });
 });

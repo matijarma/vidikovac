@@ -163,7 +163,8 @@ export function compareRouteIds(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** routes.txt rows (header first) -> { [route_id]: { shortName, longName, type } }, keys sorted. */
+/** routes.txt rows (header first) -> { [route_id]: { shortName, longName, type } }, keys sorted.
+ * @returns {Record<string, { shortName: string, longName: string, type: number }>} */
 export function buildRoutesIndex(rows) {
   if (rows.length === 0) throw new Error('routes.txt is empty');
   const header = rows[0];

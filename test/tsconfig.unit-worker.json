@@ -1,0 +1,23 @@
+// Unit tests of worker code (vitest project `unit`, node): @cloudflare/workers-types
+// and node, no lib.dom. The worker folders, plus the tests elsewhere whose imports
+// reach worker code that names workers-only types (bindings, R2, Durable Objects).
+// Keep this list and the exclude list of tsconfig.json in step:
+// scripts/typecheck-tests.mjs fails when a test is in neither or in both.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": [
+    "./feed/**/*.test.ts",
+    "./open/**/*.test.ts",
+    "./pairing/**/*.test.ts",
+    "./smoke/**/*.test.ts",
+    "./twin/**/*.test.ts",
+    "./docs/prijava.test.ts",
+    "./e2e/local-network.test.ts",
+    "./scripts/frames-sample.test.ts"
+  ],
+  "exclude": ["./**/*.workers.test.ts", "./pairing/place-contract.test.ts"]
+}

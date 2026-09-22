@@ -310,7 +310,7 @@ export async function buildLastRun(zipBuf, { stopIds, today, generatedAt, days =
 export async function main({
   fetchImpl = fetch,
   url = GTFS_URL,
-  zipPath = null,
+  zipPath = /** @type {string | null} */ (null),
   out = OUTPUT_DIR,
   stopsPath = STOPS_PATH,
   cwd = process.cwd(),

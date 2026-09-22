@@ -104,7 +104,7 @@ describe('TwinDO', () => {
     expect(motion).not.toHaveProperty('history');
     const [lon, lat] = (() => {
       const pathIdx = NET.paths.findIndex((p) => p.id === '1_0');
-      const p = NET.toPathPoint(pathIdx, evalPathPlan(motion.plan, 0));
+      const p = NET.toPathPoint(pathIdx, evalPathPlan(motion.plan as [number, number][], 0));
       return [lonLatOf(p).lon, lonLatOf(p).lat];
     })();
     expect(a.geo!.coordinates[0]).toBeCloseTo(lon, 4);
@@ -137,7 +137,7 @@ describe('TwinDO', () => {
     expect(graded).toBeGreaterThan(0);
     const payload = await stub.publish();
     const a = pin(payload, 'a')!;
-    expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(600); // the plan has followed the tram east
+    expect(evalPathPlan((a.motion as PathMotion).plan as [number, number][], 0)).toBeGreaterThan(600); // the plan has followed the tram east
     // The histogram reached MetricsDO as counted cells, not one write per vehicle.
     const after = (await metricsStub(testEnv).query(day)).filter((r) => r.event === 'twin_hindsight');
     expect(after.reduce((sum, r) => sum + r.count, 0) - before).toBe(graded);
@@ -237,7 +237,7 @@ describe('TwinDO', () => {
     const a = pin(restored, 'a')!;
     expect((a.motion as PathMotion).path).toBe('1_0');
     expect(a.data).toMatchObject({ direction: 0, headsign: 'Kraj 1_0' });
-    expect(evalPathPlan((a.motion as PathMotion).plan, 0)).toBeGreaterThan(450);
+    expect(evalPathPlan((a.motion as PathMotion).plan as [number, number][], 0)).toBeGreaterThan(450);
     await pinClock(stub, (T0 + 20) * 1000 + 2_000);
     expect(await stub.tick()).toMatchObject({ cold: true });
   });
