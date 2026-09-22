@@ -51,7 +51,9 @@ describe('the timetable over the committed artefacts', () => {
     });
 
     const times = scheduleTimes(net, index);
-    const tram = net.paths.map((p, i) => [p, i] as const).filter(([p]) => net.routes.get(p.route)?.type === 0);
+    // Terminus loops (direction -1, scripts/gtfs-shapes.mjs) run between two
+    // trips, not a timetable of their own: no pattern maps to one.
+    const tram = net.paths.map((p, i) => [p, i] as const).filter(([p]) => net.routes.get(p.route)?.type === 0 && p.direction !== -1);
     expect(tram).toHaveLength(152);
     const withSegments = tram.filter(([, i]) => hasSegments(times, i));
     const without = tram.filter(([, i]) => !hasSegments(times, i)).map(([p]) => p.id);
