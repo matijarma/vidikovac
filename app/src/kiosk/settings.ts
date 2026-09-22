@@ -47,8 +47,6 @@ export const SAVE_TIMEOUT_MS = 8_000;
 export const SETTINGS_SEND_DELAY_MS = 800;
 /** A finger that moves further than this while holding the brand is a swipe, not a press. */
 export const LONG_PRESS_SLOP_PX = 12;
-/** Trg bana Jelačića: where "nearest first" starts from while the screen is the whole city. */
-const CITY_CENTRE = { lon: 15.97726, lat: 45.81286 };
 /** The theme toggle's glyph per preference, moved from the header with the toggle itself. */
 const THEME_ICON: Record<ThemePreference, IconName> = { auto: 'sun-moon', light: 'sun', dark: 'moon', solar: 'sunset' };
 
@@ -279,8 +277,9 @@ export interface SettingsScreen extends SettingsState {
 /** What the Mjesto row hands the shared "Adresa ili stajalište" field (kiosk/place-field.ts). */
 export interface PlaceFieldOptions {
   initial: ScreenPlace | null;
-  /** Where "nearest first" starts: the place shown, or the city centre. */
-  near: { lon: number; lat: number };
+  /** Where "nearest first" starts and distances are counted from: the place shown. Absent for the
+   *  whole city, where the field ranks from the city centre (places.ts) and prints no distance. */
+  near?: { lon: number; lat: number };
   /** A picked suggestion as a derived place; null and the typed text when the field was cleared or matched nothing. */
   onChange: (place: ScreenPlace | null, unresolved: string) => void;
 }
@@ -485,7 +484,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     placeToggle.setAttribute('aria-expanded', 'true');
     field = deps.placeField(placeHost, {
       initial: shown,
-      near: shown ?? CITY_CENTRE,
+      ...(shown ? { near: shown } : {}),
       // Only a picked place is a change; clearing the field or typing what matches nothing is not
       // the whole city -- "Cijeli grad" is its own button.
       onChange: (place) => {

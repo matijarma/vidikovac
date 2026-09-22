@@ -401,7 +401,8 @@ describe('Postavke: Mjesto through the shared field', () => {
     const p = panel({ screen: { place: null } });
     p.handle.open();
     p.click('toggle-place');
-    expect(p.fields[0]!.options.near).toEqual({ lon: 15.97726, lat: 45.81286 });
+    // The whole city: the field ranks from its own city centre and prints no distance.
+    expect(p.fields[0]!.options).not.toHaveProperty('near');
     p.fields[0]!.options.onChange({ kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, '');
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Ilica 25');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
