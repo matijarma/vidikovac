@@ -44,8 +44,9 @@ rute `/api/admin/*` i `/stats`.
    za odabrano mjesto „Na zaslonu: Kvaternikov trg i 6 stajališta uokolo”,
    a za prazno polje „Na zaslonu: cijeli grad.” Upisani tekst koji nije
    odabran među prijedlozima vrijedi samo kad je točno ime stajališta ili
-   jedne ulice; inače polje javlja da takvog stajališta ni ulice nema i
-   zaslon se ne stvara. Zatim pritisnuti **Pokreni**.
+   jedne ulice; inače se ispod polja pojavljuje rečenica da takvog
+   stajališta ni ulice nema, a zaslon se ne stvara. Zatim pritisnuti
+   **Pokreni**.
 
    S praznim poljem zaslon šalje `POST /api/screens` s praznim tijelom, kao
    i dosad, i dobiva redovnu postavu zaslona koja vrijedi 24 sata: prozor
