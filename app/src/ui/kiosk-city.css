@@ -2,20 +2,50 @@
 .k-handheld-info{display:none}
 .kiosk .k-city-window{display:grid;grid-template-columns:minmax(0,1fr) var(--k-side-w);gap:var(--k-gap);height:100%;min-height:0}
 .kiosk .k-city-window .k-geography{display:grid;grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--k-line);border-radius:var(--k-radius)}
-.kiosk .k-city-window .k-overview{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:var(--k-gap);min-height:0;min-width:0}
+.kiosk .k-city-window .k-overview{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:var(--k-gap);min-height:0;min-width:0}
 .kiosk .k-city-window .k-invite{grid-template-columns:var(--k-qr) minmax(0,1fr);grid-template-areas:'qr side';justify-items:stretch}
 .k-map-legend{display:flex;flex-wrap:wrap;gap:calc(var(--k-gap) * .5) var(--k-gap);padding:calc(var(--k-gap) * .65);background:var(--k-surface);font-size:var(--k-credit-size)}
 .k-map-legend span{display:inline-flex;align-items:center;gap:.4em}
 .k-legend-tram{padding:.05em .3em;border-radius:3px;color:var(--k-action-ink);background:var(--k-action)}
 .k-legend-bike{color:var(--tone-bike)}.k-legend-culture{color:var(--k-violet)}
-.k-highlight{display:flex;flex-direction:column;gap:calc(var(--k-gap) * .5);min-height:0;padding:var(--k-gap);background:var(--k-surface);border-radius:var(--k-radius-s)}
-.k-highlight-content{display:grid;align-content:start;gap:calc(var(--k-gap) * .55);min-height:0}
-.k-highlight-kicker{color:var(--k-violet);font-size:var(--k-label-size);font-weight:700}
-.k-highlight h2{font-size:var(--k-main-size);line-height:1.2;overflow-wrap:anywhere}
-.k-highlight-where,.k-highlight-when{font-size:var(--k-sup-size);line-height:1.3;overflow-wrap:anywhere}
-.k-highlight-credit{font-size:var(--k-credit-size);line-height:1.4;color:var(--k-ink-2)}
-.k-highlight-head{display:flex;align-items:center;justify-content:space-between;gap:var(--k-gap);flex:none}
-.k-highlight-pause{flex:none;min-height:44px;font-size:var(--k-credit-size)}
+/* "U blizini" (kiosk/timeline.ts): the aside's list over the QR card. Whole rows, whole words: nothing here is cut
+   with an ellipsis or clipped. Titles and subs wrap and a row takes the height its words need, never less than
+   --k-nearby-row (64-92 px at the design size, times the zoom); timeline.ts measures the rows, prints a shorter
+   complete label where one runs long and drops whole rows until they fit the box, so the box's overflow never
+   cuts one. Every wall composition holds the 3-metre floors: title and time at least 40 px (read tier), sub,
+   day word and head at least 28 px (walk-up tier), whatever the composition's own --k-main-size says; a row's
+   type grows with it through --k-nearby-scale, never below them. The time column is the widest time of the
+   rows shown (subgrid; older engines keep a fixed column). Blue is a tracked departure, grey the timetable;
+   no word says which. */
+.kiosk .k-nearby-host{display:grid;grid-template-rows:minmax(0,1fr);min-width:0;min-height:0}
+.kiosk .k-nearby{--k-nearby-read-floor:40px;--k-nearby-walk-floor:28px;--k-nearby-title-size:max(var(--k-nearby-read-floor),var(--k-main-size));--k-nearby-sub-size:max(var(--k-nearby-walk-floor),var(--k-sup-size));--k-nearby-mark-w:calc(var(--k-nearby-title-size) * .7);display:grid;grid-template-rows:auto minmax(0,1fr);gap:calc(var(--k-gap) * .5);min-width:0;min-height:0;padding:var(--k-gap) var(--k-gap) calc(var(--k-gap) * .5);background:var(--k-surface);border-radius:var(--k-radius-s)}
+.kiosk .k-nearby-heading{margin:0;font-size:calc(var(--k-nearby-sub-size));font-weight:700;line-height:1.2;overflow-wrap:break-word;color:var(--k-ink)}
+.kiosk .k-nearby-heading-pill{font-weight:500;color:var(--k-ink-2)}
+.kiosk .k-nearby-rows{display:grid;grid-template-columns:max-content var(--k-nearby-mark-w) minmax(0,1fr);grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto);column-gap:calc(var(--k-gap) * .6);align-content:start;min-height:0;margin:0;padding:0;overflow:hidden;list-style:none}
+.kiosk .k-nearby .nearby-row{position:relative;box-sizing:border-box;display:grid;grid-column:1/-1;grid-template-columns:4.8em var(--k-nearby-mark-w) minmax(0,1fr);grid-template-columns:subgrid;column-gap:calc(var(--k-gap) * .6);align-items:center;min-width:0;min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1));padding:calc(var(--k-gap) * .2) 0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))}
+.kiosk .k-nearby-at{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;min-width:0;white-space:nowrap}
+.kiosk .k-nearby .nearby-when{font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--k-ink-2)}
+.kiosk .k-nearby .nearby-row[data-live='1'] .nearby-when{color:var(--k-action)}
+.kiosk .k-nearby .nearby-row[data-always='1'] .nearby-when{font-weight:600;color:var(--k-ink-3)}
+.kiosk .k-nearby-day{font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));font-weight:600;line-height:1.15;color:var(--k-ink-3)}
+.kiosk .k-nearby-mark{position:relative;align-self:stretch}
+.kiosk .k-nearby-mark::before{content:'';position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;background:var(--k-line)}
+.kiosk .k-nearby .nearby-row:first-child .k-nearby-mark::before{top:50%}
+.kiosk .k-nearby .nearby-row:last-child .k-nearby-mark::before{bottom:50%}
+.kiosk .k-nearby .nearby-row:only-child .k-nearby-mark::before{display:none}
+.kiosk .k-nearby-mark::after{content:'';position:absolute;top:50%;left:50%;width:.4em;height:.4em;margin:-.2em 0 0 -.2em;border-radius:50%;background:var(--k-action);box-shadow:0 0 0 .12em var(--k-surface)}
+.kiosk .k-nearby .nearby-row[data-kind='closure'] .k-nearby-mark::after{background:var(--tone-state-warning)}
+.kiosk .k-nearby .nearby-row[data-kind='event'] .k-nearby-mark::after,.kiosk .k-nearby .nearby-row[data-kind='opening'] .k-nearby-mark::after{background:var(--k-violet)}
+.kiosk .k-nearby .nearby-row[data-kind='solar'] .k-nearby-mark::after{background:var(--k-amber)}
+.kiosk .k-nearby .nearby-row[data-kind='always'] .k-nearby-mark::after{background:var(--k-surface);box-shadow:inset 0 0 0 .1em var(--k-ink-3),0 0 0 .12em var(--k-surface)}
+.kiosk .k-nearby .nearby-row[data-kind='pharmacy'] .k-nearby-mark::after{width:.5em;height:.5em;margin:-.25em 0 0 -.25em;border-radius:0;background:linear-gradient(var(--k-green),var(--k-green)) center/100% 34% no-repeat,linear-gradient(var(--k-green),var(--k-green)) center/34% 100% no-repeat,var(--k-surface);box-shadow:0 0 0 .12em var(--k-surface)}
+.kiosk .k-nearby-text{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.kiosk .k-nearby .nearby-title{min-width:0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
+.kiosk .k-nearby .nearby-sub{min-width:0;font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));line-height:1.15;overflow-wrap:break-word;color:var(--k-ink-2)}
+.kiosk .k-nearby .nearby-title .k-line-badge{margin-right:.3em;vertical-align:.1em}
+/* Below the specificity of kiosk.css's reduced-motion and lagano rules, which load first and still win. */
+.k-nearby .nearby-row[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
+@keyframes k-nearby-in{from{opacity:0}}
 .kiosk .k-map-canvas{pointer-events:none}
 .kiosk .k-map-canvas .maplibregl-ctrl-group{display:none}
 .kiosk .k-present-board .city-detail{padding:var(--k-pad);font-size:var(--k-hint-size);max-height:100%;overflow:auto}
@@ -25,18 +55,8 @@
 .kiosk[data-size=wide]{--k-side-w:calc(680px * var(--k-zoom))}
 .kiosk[data-size=compact]{--k-side-w:calc(560px * var(--k-zoom))}
 .kiosk:not([data-size=handheld]){--k-qr:max(240px,calc(240px * var(--k-sign-zoom)))}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-highlight{padding:12px}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-highlight h2{font-size:24px;line-height:1.15}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-highlight-where,
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-highlight-when{font-size:18px;line-height:1.25}
-.kiosk[data-size=compact]:not([data-portrait='1']) .k-highlight-credit{font-size:14px;line-height:1.25}
-.kiosk:not([data-size=handheld]) .k-highlight h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
-.kiosk:not([data-size=handheld]) .k-highlight-where{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kiosk:not([data-size=handheld]) .k-highlight-when,.kiosk:not([data-size=handheld]) .k-highlight-credit{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .kiosk[data-portrait='1'] .k-city-window{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
-.kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto}
-.kiosk[data-portrait='1'] .k-highlight{min-height:calc(240px * var(--k-zoom))}
-.kiosk[data-portrait='1'] .k-highlight-pause{margin-top:0}
+.kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}
 .kiosk[data-portrait='1'] .k-invite-code{margin-top:0}
 /* Handheld is a setup/transfer page, never a miniature wall. */
 .kiosk[data-size=handheld] .k-city-window{display:flex;flex-direction:column;height:auto}
@@ -46,9 +66,11 @@
 .kiosk[data-size=handheld] .k-geography{order:1;height:240px;flex:none}
 .kiosk[data-size=handheld] .k-field{height:100%;min-height:0}
 .kiosk[data-size=handheld] [data-panel=weather]{order:2}
-.kiosk[data-size=handheld] .k-highlight{order:3}
+.kiosk[data-size=handheld] .k-nearby-host{order:2}
+/* A phone is read in the hand, not from 3 m: the list takes the handheld tiers and every row in flow. */
+.kiosk[data-size=handheld] .k-nearby{--k-nearby-title-size:var(--k-main-size);--k-nearby-sub-size:var(--k-sup-size)}
+.kiosk[data-size=handheld] .k-nearby-rows{grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto);overflow:visible}
 .kiosk[data-size=handheld] .k-city-window .k-invite{grid-template-columns:minmax(0,1fr);grid-template-areas:'side' 'qr';justify-items:center}
-.kiosk[data-size=handheld] .k-highlight h2{font-size:1.5rem}
 .kiosk[data-size=handheld] .k-map-legend{font-size:12px}
 /* Settings has a fixed action area and an independently scrolling body. */
 .k-settings{display:flex;flex-direction:column;min-height:0;overflow:hidden}

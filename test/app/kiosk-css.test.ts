@@ -11,6 +11,7 @@ const css = read('app/src/ui/kiosk.css').replace(/\/\*[\s\S]*?\*\//g, '');
 const cityCss = read('app/src/ui/kiosk-city.css').replace(/\/\*[\s\S]*?\*\//g, '');
 const tokens = read('app/src/ui/tokens.css');
 const invitation = read('app/src/kiosk/invitation.ts');
+const timeline = read('app/src/kiosk/timeline.ts');
 const ruleIn = (sheet: string, selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]+)}`).exec(sheet)?.[1] ?? '';
@@ -30,16 +31,85 @@ describe('public-screen design invariants', () => {
     expect(windowRule('.kiosk .k-city-window').replace(/\s/g,'')).toContain('grid-template-columns:minmax(0,1fr)var(--k-side-w)');
     expect(cityCss).toContain(".kiosk[data-portrait='1'] .k-city-window");
     expect(cityCss).toContain(".kiosk[data-size=handheld] .k-city-window");
-    // The events card takes the aside's slack: no dead space between the exceptions and the card.
-    expect(windowRule('.kiosk .k-city-window .k-overview')).toContain('grid-template-rows:auto minmax(0,1fr) auto');
+    // Two regions in the aside: "U blizini" takes the slack above the card.
+    expect(windowRule('.kiosk .k-city-window .k-overview')).toContain('grid-template-rows:minmax(0,1fr) auto');
     expect(cityCss).not.toContain('.k-discovery-slot');
     // The three panels the front page draws, and no shell of the ones it dropped.
     for (const dead of ['k-local', 'k-local-facts', 'k-neighborhood', 'k-context-stack', 'k-column', 'k-bottom', 'k-provision', 'k-front'])
       for (const sheet of [css, cityCss]) expect(sheet, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
   });
-  // Postavke's suggestion list on a wall: it may scroll, but it may not show
-  // half a row. The rows are one control high with no gap, and the box is an
-  // exact number of them, so the cut always lands between two rows.
+  // "U blizini" (kiosk/timeline.ts): whole rows and whole words. A row is at
+  // least the row budget tall and grows with its words; timeline.ts fits the
+  // rows to the box by measuring, so nothing is hidden, clipped or ellipsised.
+  // The read tier for title and time, the walk-up tier for the rest, in every
+  // wall composition; one fade for a new row, none where motion is unwanted.
+  const timelineRules = cityCss.split('\n').filter((line) => /k-nearby|nearby-(row|title|when|sub)/.test(line) && !line.startsWith('.kiosk[data-size=handheld]')).join('\n');
+  it('draws the timeline as whole rows at least 64-92 px tall that are sliced, never hidden', () => {
+    const rows = windowRule('.kiosk .k-nearby-rows');
+    expect(rows).toContain('grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto)');
+    expect(rows).toContain('align-content:start');
+    const row = windowRule('.kiosk .k-nearby .nearby-row');
+    expect(row).toContain('min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1))');
+    expect(row).toContain('box-sizing:border-box');
+    // The time column is the widest time shown; an engine without subgrid keeps the fixed column declared first.
+    expect(row).toMatch(/grid-template-columns:4\.8em [^;]+;grid-template-columns:subgrid/);
+    expect(windowRule('.kiosk .k-nearby-host')).toContain('grid-template-rows:minmax(0,1fr)');
+    expect(cityCss).toContain(".kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}");
+    expect(cityCss).toContain('.kiosk[data-size=handheld] .k-nearby-host{order:2}');
+    expect(windowRule('.kiosk[data-size=handheld] .k-nearby-rows')).toContain('overflow:visible');
+    // The component slices and fits; it never hides a row.
+    expect(timeline).not.toMatch(/\.hidden\s*=\s*true/);
+    expect(timeline).not.toMatch(/setAttribute\('hidden'/);
+    expect(timeline).toContain('reconcile(list, next)');
+    // The highlight is gone from both sheets.
+    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(/\.k-highlight(?![\w-])/);
+  });
+  it('never cuts a word: no ellipsis, no clipped title, sub or head, no one-line squeeze', () => {
+    expect(timelineRules.length).toBeGreaterThan(0);
+    expect(timelineRules).not.toContain('text-overflow');
+    expect(timelineRules).not.toContain('line-clamp');
+    expect(timelineRules).not.toContain("data-lines");
+    for (const selector of ['.kiosk .k-nearby .nearby-title', '.kiosk .k-nearby .nearby-sub', '.kiosk .k-nearby-heading', '.kiosk .k-nearby .nearby-row', '.kiosk .k-nearby-text']) {
+      const rule = windowRule(selector);
+      expect(rule, selector).not.toBe('');
+      expect(rule, selector).not.toContain('nowrap');
+      expect(rule, selector).not.toContain('overflow:hidden');
+    }
+    for (const selector of ['.kiosk .k-nearby .nearby-title', '.kiosk .k-nearby .nearby-sub', '.kiosk .k-nearby-heading']) expect(windowRule(selector), selector).toContain('overflow-wrap:break-word');
+    // The time never breaks inside itself ("za 4 min"), and its column is as wide as the widest time, so nothing is cut.
+    expect(windowRule('.kiosk .k-nearby-at')).toContain('white-space:nowrap');
+    expect(windowRule('.kiosk .k-nearby-rows')).toContain('grid-template-columns:max-content');
+  });
+  it('sets row title and time on the read tier and the rest of the timeline on the walk-up tier, in every wall composition', () => {
+    const nearby = windowRule('.kiosk .k-nearby');
+    expect(nearby).toContain('--k-nearby-read-floor:40px');
+    expect(nearby).toContain('--k-nearby-walk-floor:28px');
+    expect(nearby).toContain('--k-nearby-title-size:max(var(--k-nearby-read-floor),var(--k-main-size))');
+    expect(nearby).toContain('--k-nearby-sub-size:max(var(--k-nearby-walk-floor),var(--k-sup-size))');
+    expect(windowRule('.kiosk .k-nearby .nearby-title')).toContain('font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby .nearby-when')).toContain('font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby .nearby-sub')).toContain('font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby-day')).toContain('font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1))');
+    expect(windowRule('.kiosk .k-nearby-heading')).toContain('font-size:calc(var(--k-nearby-sub-size))');
+    // Only a phone leaves the wall floors (test/app/kiosk-timeline.test.ts computes the sizes per composition).
+    expect(windowRule('.kiosk[data-size=handheld] .k-nearby')).toContain('--k-nearby-title-size:var(--k-main-size)');
+    // The section head and the row titles are two classes, with two rule sets.
+    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(/\.k-nearby-title(?![\w-])/);
+    // Blue a tracked departure, grey the timetable, the third ink "uvijek".
+    expect(windowRule(".kiosk .k-nearby .nearby-when")).toContain('color:var(--k-ink-2)');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-live='1'] .nearby-when")).toContain('color:var(--k-action)');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-always='1'] .nearby-when")).toContain('color:var(--k-ink-3)');
+    // The pharmacy row's mark is the green cross.
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-kind='pharmacy'] .k-nearby-mark::after")).toContain('var(--k-green)');
+  });
+  it('fades a new row in once, and not at all under reduced motion or lagano', () => {
+    expect(windowRule(".k-nearby .nearby-row[data-enter='1']")).toContain('animation:k-nearby-in 220ms var(--ease-enter) both');
+    expect(cityCss).toContain('@keyframes k-nearby-in{from{opacity:0}}');
+    const reduced = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+    expect(reduced).toContain(".kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
+    expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
+  });
+  // Postavke's suggestion list stays an exact number of whole control rows.
   it('bounds the settings suggestion list to whole rows', () => {
     const list = rule('.k-settings .k-suggest');
     expect(list).toContain('--k-suggest-row: var(--k-control)');
