@@ -432,7 +432,7 @@ describe('the committed artefact', () => {
   // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
   // Both pins stand again. WP0 adds three connectors and sixteen terminus
   // loops, cutting seven long edges where the loops leave them: 582,808 B raw,
-  // 136,853 B gzip, 0.3 % more of each; the pins stand.
+  // 136,897 B gzip, 0.3 % and 0.4 % more; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
