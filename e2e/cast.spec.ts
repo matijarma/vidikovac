@@ -33,8 +33,10 @@ test('phone: navigation is private; one explicit request waits for acknowledgeme
 test('desktop: the visible transport selection is the public target, with no competing map sidebar', async ({ page }) => {
   const fixture = await open(page, true);
   await expect(page.getByTestId('kvart-aside')).toHaveCount(0);
-  // No domain bar at the desk: Karta stands beside Sada, so its search is already on the page.
+  // No domain bar at the desk: the temporary header link opens Karta until the desk pair stands it beside Sada.
   await expect(page.locator('.ki-domains')).toHaveCount(0);
+  const karta = page.getByTestId('desk-karta');
+  if (await karta.count()) await karta.click();
   await page.getByTestId('transport-search').fill('6');
   await page.locator('[data-action=select-route][data-id="6"]').first().click();
   expect(frames(fixture)).toEqual([]);

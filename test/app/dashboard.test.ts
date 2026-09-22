@@ -271,7 +271,7 @@ describe('session states', () => {
     const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
     expect(sheet).not.toBeNull();
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
-    click(sheet, '[data-testid=share-city]');
+    click(sheet, '[data-testid=share-city-sheet]');
     expect(scanner.session.client.share).toHaveBeenCalledTimes(1);
     click(scanner.root, '[data-testid=session-label]');
     click(sheet, '[data-testid=toggle-refresh]');
@@ -296,7 +296,7 @@ describe('session states', () => {
     const peer = mount();
     peer.session.join('phone');
     click(peer.root, '[data-testid=session-label]');
-    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
+    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toBeNull();
   });
   it('the header share button "Podijeli grad" stands beside the session pill for the scanner, labelled, and asks the room for the code in one tap [O-61]', () => {
     const { root, session } = mount();
@@ -316,6 +316,10 @@ describe('session states', () => {
     share.click();
     expect(session.client.share).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-testid=session-sheet]'), 'the header button opens no sheet on the way').toBeNull();
+    // The sheet's own row has its own probe, so one test id never names two controls.
+    click(root, '[data-testid=session-label]');
+    expect(document.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toHaveLength(1);
   });
   it('the header share button is absent for a peer, after a share refusal and after the freeze, and present at the desk', () => {
     const peer = mount();
@@ -362,10 +366,10 @@ describe('session states', () => {
     expect(body).not.toContain('skenirano sa zaslona');
     expect(body).not.toContain('Sesija i postavke');
     expect(body).not.toContain('Vrijedi do');
-    for (const testid of ['share-city', 'toggle-refresh', 'toggle-countdown', 'refresh-now']) {
+    for (const testid of ['share-city-sheet', 'toggle-refresh', 'toggle-countdown', 'refresh-now']) {
       expect(sheet.querySelector(`[data-testid=${testid}]`)?.classList.contains('sheet-btn'), testid).toBe(true);
     }
-    expect(text(sheet.querySelector('[data-testid=share-city]'))).toBe('Podijeli grad Pet minuta za osobu pokraj tebe, jednom.');
+    expect(text(sheet.querySelector('[data-testid=share-city-sheet]'))).toBe('Podijeli grad Pet minuta za osobu pokraj tebe, jednom.');
     expect(text(sheet.querySelector('[data-testid=toggle-refresh]'))).toBe('Zaustavi osvježavanje');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Sakrij odbrojavanje');
     expect(text(sheet.querySelector('[data-testid=refresh-now]'))).toBe('Osvježi sada');
@@ -488,7 +492,7 @@ describe('session states', () => {
     session.error('share-not-allowed');
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.');
     click(root, '[data-testid=session-label]');
-    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
+    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toBeNull();
   });
 });
 describe('polling on the feed store', () => {
@@ -1178,9 +1182,9 @@ describe('the status line', () => {
     expect(keys(scanner.root)).toEqual(['wordmark', 'screen', 'share', 'session', 'safety']);
     scanner.handle.destroy();
     const desk = mount({ wide: true });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'more', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'karta', 'more', 'safety']);
     desk.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'more', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'karta', 'more', 'safety']);
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
     expect(desk.root.querySelectorAll('.ki-domains [data-layer]')).toHaveLength(0);
     expect(desk.root.querySelector('.ki-domains')).toBeNull();
@@ -1219,11 +1223,29 @@ describe('the status line', () => {
     expect(text(status)).not.toContain('°C');
     live.handle.destroy();
   });
+  it('the desk reaches Karta through one labelled header link until the desk pair shows it beside Sada (temporary, WP4 chunk E removes it)', () => {
+    const { root, session } = mount({ wide: true });
+    session.join();
+    const karta = root.querySelector<HTMLAnchorElement>('[data-testid=status-line] [data-testid=desk-karta]')!;
+    expect(karta).not.toBeNull();
+    expect(text(karta)).toBe('Karta');
+    expect(karta.getAttribute('href')).toBe('#layer=u-pokretu');
+    expect(karta.getAttribute('aria-current')).toBe('false');
+    karta.click();
+    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(root.querySelector('[data-testid=desk-karta]')?.getAttribute('aria-current')).toBe('page');
+    expect(session.sent).toEqual([]);
+    session.expire();
+    expect(root.querySelector('[data-testid=desk-karta]')?.getAttribute('tabindex')).toBe('-1');
+    // The phone has its tab instead.
+    const phone = mount();
+    expect(phone.root.querySelector('[data-testid=desk-karta]')).toBeNull();
+    expect(phone.root.querySelector('.ki-tabs [data-layer=u-pokretu]')).not.toBeNull();
+  });
   it('desktop transport navigation exposes the single search field in lightweight mode', () => {
-    // No domain bar at the desk: Karta opens from the remembered layer (and, with the desk pair, beside Sada).
-    sessionStorage.setItem(LAYER_STORAGE_KEY, 'u-pokretu');
     const { root, session } = mount({ wide: true, lightweight: true });
     session.join();
+    click(root, '[data-testid=desk-karta]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
     expect(root.querySelector('[data-testid=transport-search]')).not.toBeNull();
     expect(session.sent).toEqual([]);

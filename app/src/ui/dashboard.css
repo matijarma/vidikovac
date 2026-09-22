@@ -179,7 +179,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 @media (min-width: 60rem) {
   .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
   html:has(.ki) { scroll-padding-block: 3.5rem 0; }
-  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
   .ki-wordmark-text { font-size: var(--type-title); }
   .ki-screen { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
   .ki-screen > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
@@ -188,8 +188,13 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-head > [data-key='screen'] { grid-column: 3; }
   .ki-head > [data-key='share'] { grid-column: 4; }
   .ki-head > [data-key='session'] { grid-column: 5; }
-  .ki-head > [data-key='more'] { grid-column: 6; }
-  .ki-head > [data-key='safety'] { grid-column: 7; }
+  .ki-head > [data-key='karta'] { grid-column: 6; }
+  .ki-head > [data-key='more'] { grid-column: 7; }
+  .ki-head > [data-key='safety'] { grid-column: 8; }
+  /* TEMPORARY until WP4 chunk E's desk pair: the labelled way into Karta, Još's twin (chrome.ts deskKartaMarkup). Chunk E deletes it with the 'karta' column. */
+  .ki-desk-karta { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--tone-text-muted); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+  .ki-desk-karta[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
+  .ki-desk-karta[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
   .present { padding: var(--sp-5) var(--sp-8); }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
@@ -212,7 +217,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-tabbar, .ki-fab { display: none; }
   .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-6) 0; }
   .ki-main { grid-area: main; padding: var(--sp-3) var(--sp-6) var(--sp-10); }   /* spec §3: page inset 24 px, band to content 12 px */
-  @media (hover: hover) { .ki-more:hover, .ki-clock:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } .ki-search:hover { border-color: var(--tone-stroke-strong); } }
+  @media (hover: hover) { .ki-more:hover, .ki-desk-karta:hover, .ki-clock:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } .ki-search:hover { border-color: var(--tone-stroke-strong); } }
 }
 @media (min-width: 90rem) {
   .ki-main { padding-inline: var(--sp-8); }
@@ -222,7 +227,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 /* Press feedback: a touch has no hover, so :active stands in for it, instant
    on press with no transition, releasing over the usual duration on lift. */
 @media (hover: none) {
-  .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-more:active, .ki-share:active { background-color: var(--tone-surface-2); transition: none; }
+  .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-more:active, .ki-share:active, .ki-desk-karta:active { background-color: var(--tone-surface-2); transition: none; }
   .ki-fab:active { filter: brightness(0.92); transition: none; }
 }
 

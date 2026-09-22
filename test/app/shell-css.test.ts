@@ -209,13 +209,20 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
     expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+  it('keeps the status line a real box with eight columns on one row, each control placed by its key; the tab bar and the FAB leave; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;');
+    // Eight while the temporary Karta link stands (chunk E returns to seven with the desk pair).
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto auto;');
     expect(rule('.ki-head', DESKTOP)).not.toContain('grid-template-rows');
-    for (const [key, column] of [['screen', 3], ['share', 4], ['session', 5], ['more', 6], ['safety', 7]] as const) {
+    for (const [key, column] of [['screen', 3], ['share', 4], ['session', 5], ['karta', 6], ['more', 7], ['safety', 8]] as const) {
       expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-column: ${column}; }`);
     }
+    // The temporary Karta link is a 44 px labelled target like Još.
+    const karta = rule('.ki-desk-karta', DESKTOP);
+    expect(karta).toContain('min-block-size: var(--target)');
+    expect(karta).toContain('font-size: var(--type-control)');
+    expect(karta).toContain('touch-action: manipulation');
+    expect(rule(".ki-desk-karta[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
     expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
     expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--type-title)');
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
@@ -332,6 +339,7 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     expect(dash).toContain('.ki-safety:active');
     expect(dash).toContain('.ki-more:active');
     expect(dash).toContain('.ki-share:active');
+    expect(dash).toContain('.ki-desk-karta:active');
     expect(dash).toContain('.ki-fab:active');
     const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
     expect(base).toContain('.btn:active');

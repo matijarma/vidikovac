@@ -121,10 +121,8 @@ for (const scene of [
     await expect(page.locator('#layer-grad-sada')).toBeVisible();
     if (scene.zoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
     for (const layer of ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost']) {
-      // The desk has no domain bar: Karta stands beside Sada there, so only the phone opens it on its own.
-      if (scene.name === 'desktop' && layer === 'u-pokretu') continue;
-      // A phone tab (Sada, Karta), the wordmark's way home to Sada at the desk, else Još and the domain's row.
-      const direct = page.locator(`.ki-tab[data-layer="${layer}"]:visible, .ki-wordmark[data-layer="${layer}"]:visible`).first();
+      // A phone tab (Sada, Karta), at the desk the wordmark's way home to Sada or the temporary Karta link, else Još and the domain's row.
+      const direct = page.locator(`.ki-tab[data-layer="${layer}"]:visible, .ki-wordmark[data-layer="${layer}"]:visible, [data-testid=desk-karta][data-layer="${layer}"]:visible`).first();
       if (await direct.count()) await direct.click();
       else {
         await page.locator('[data-testid=tab-more]:visible, [data-testid=status-more]:visible').first().click();
