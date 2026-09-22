@@ -444,20 +444,26 @@ export function buildPlan(
   // already names the stop beyond says it has left by the header at the
   // latest (the update is current, the fix may be 30 s old).
   const here = geometry.stopAt(s);
-  if (here && silent) {
+  // T8's platform is read off the evidence: the zone the observed fix lies
+  // in, before the published floor raised the anchor (a fix 30 m past a stop
+  // point, floored 20 m further, is still a tram at that stop, not one on its
+  // way to the next). Failing that, the zone the floored anchor lies in,
+  // which can only be a stop ahead of the fix.
+  const silentHere = silent ? geometry.stopAt(track.match.s) ?? here : null;
+  if (silentHere) {
     // T8 at a platform: a silent vehicle stays at the stop it was last seen
     // at, whatever the dwell history says. This comes before dwellRemaining,
     // which may know nothing of the stand (null) and would otherwise hand
     // the tram to the run below, past the very platform it stands at. Up to
-    // the stop point when the fix fell short of it; never back to it from
+    // the stop point when the anchor fell short of it; never back to it from
     // beyond, since no plan runs backwards.
-    if (s < here.s) {
-      const arrive = t + (here.s - s) / approachSpeedTo(here.s);
-      knots.push([rel(arrive), round1(here.s)]);
+    if (s < silentHere.s) {
+      const arrive = t + (silentHere.s - s) / approachSpeedTo(silentHere.s);
+      knots.push([rel(arrive), round1(silentHere.s)]);
       t = arrive;
-      s = here.s;
+      s = silentHere.s;
     }
-    nextStop = { stopId: here.stopId, s: round1(here.s), etaSec: Math.round(t) };
+    nextStop = { stopId: silentHere.stopId, s: round1(silentHere.s), etaSec: Math.round(t) };
     knots.push([rel(Math.max(horizonEnd, t)), round1(s)]);
     t = horizonEnd;
   } else if (here) {
