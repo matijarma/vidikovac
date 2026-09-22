@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { main, parseArgs, refusalFor, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
+import { main, parseArgs, realPathOf, refusalFor, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
 import { decodeFeed } from '../../worker/twin/feed-decode';
 import { recordingKey } from '../../worker/twin/record';
 
@@ -168,6 +168,50 @@ describe('frames-sample refusals', () => {
 
   it('refuses to write over the input directory', async () => {
     await expect(run([input, '--from', '151500', '--to', '154459', '--out', input])).rejects.toThrow(/input directory/);
+  });
+
+  it('refuses an --out inside the input directory, as written or through a symlink', async () => {
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(input, 'sample')])).rejects.toThrow(/inside it/);
+    await symlink(input, join(root, 'alias'));
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'alias')])).rejects.toThrow(/input directory/);
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'alias', 'sample')])).rejects.toThrow(/inside it/);
+    // The input read through the link is the input too.
+    await expect(run([join(root, 'alias'), '--from', '151500', '--to', '154459', '--out', input])).rejects.toThrow(/input directory/);
+    expect((await readdir(input)).sort()).toEqual([...CLOCKS.map((c) => nameOf(at(c))), '151510-oops.pb', 'notes.txt'].sort());
+    expect(refusalFor(join(root, 'day-2'), input)).toBeNull();
+  });
+
+  it('refuses an --out that reaches a recordings/ directory through a symlink, itself or an ancestor', async () => {
+    const hidden = join(root, 'recordings', 'real');
+    await mkdir(hidden, { recursive: true });
+    await symlink(hidden, join(root, 'link'));
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'link')])).rejects.toThrow(/recordings\//);
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'link', 'deeper', 'sample')])).rejects.toThrow(/recordings\//);
+    expect(await readdir(hidden)).toEqual([]);
+    expect(realPathOf(join(root, 'link', 'deeper', 'sample'))).toBe(join(realPathOf(hidden)!, 'deeper', 'sample'));
+  });
+
+  it('refuses a dangling symlink as --out', async () => {
+    await symlink(join(root, 'recordings', 'gone'), join(root, 'dangling'));
+    expect(realPathOf(join(root, 'dangling'))).toBeNull();
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'dangling')])).rejects.toThrow(/symlink to nothing/);
+  });
+
+  it('refuses to write through a destination file that is a symlink, before writing or removing anything', async () => {
+    const out = join(root, 'sample');
+    await mkdir(out);
+    const victim = join(root, 'victim.bin');
+    await writeFile(victim, 'keep me');
+    await symlink(victim, join(out, nameOf(at('151505'))));
+    await writeFile(join(out, '120000-1789992000.pb'), 'stale');
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', out])).rejects.toThrow(/is a symlink/);
+    expect(await readFile(victim, 'utf8')).toBe('keep me');
+    expect((await readdir(out)).sort()).toEqual(['120000-1789992000.pb', nameOf(at('151505'))].sort());
+
+    await rm(join(out, nameOf(at('151505'))));
+    await symlink(victim, join(out, 'README.md'));
+    await expect(run([input, '--from', '151500', '--to', '154459', '--out', out])).rejects.toThrow(/README\.md: it is a symlink/);
+    expect(await readFile(victim, 'utf8')).toBe('keep me');
   });
 
   it('refuses a malformed, inverted or empty window and a missing --out', async () => {

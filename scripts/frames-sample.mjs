@@ -23,18 +23,22 @@
 // to them. Stale `.pb` files already in <dir> are removed, so the
 // directory always holds exactly one window.
 //
-// Refusals (exit 2, nothing written): an --out anywhere under a directory
-// named `recordings` (.gitignore ignores `recordings/` at any depth, and a
-// sample git cannot see is no fixture), an --out that is the input
-// directory itself, a malformed or inverted window. Any other failure
-// exits 1.
+// Refusals (exit 2, nothing written or removed): an --out anywhere under a
+// directory named `recordings` (.gitignore ignores `recordings/` at any
+// depth, and a sample git cannot see is no fixture), an --out that is the
+// input directory or anywhere inside it, a dangling symlink as --out, a
+// destination file that is a symlink, a malformed or inverted window. The
+// paths are compared after resolving symlinks on every existing component,
+// so a link cannot smuggle the output into a recording and the stale-frame
+// cleanup can never reach the input's frames. Any other failure exits 1.
 //
 // The committed sample is a repository test fixture only [O-73]: never
 // served by the Worker (its static assets are app/dist) and never
 // downloaded by a client.
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
-import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { relative, resolve, sep } from 'node:path';
+import { constants, lstatSync, realpathSync } from 'node:fs';
+import { lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const FeedMessage = GtfsRealtimeBindings.transit_realtime.FeedMessage;
@@ -97,13 +101,75 @@ export function parseArgs(argv) {
   return { input: positional[0], from, to, out: flags.out, allModes: flags.allModes };
 }
 
-/** Why `out` must not be written, or null. Both paths are resolved first. */
+/** Refused writes never follow a symlink, even one created after the checks. */
+const WRITE_FLAGS = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NOFOLLOW ?? 0);
+
+function isMissing(err) {
+  return err?.code === 'ENOENT' || err?.code === 'ENOTDIR';
+}
+
+/**
+ * The real path of `path`: symlinks resolved on its longest existing
+ * prefix, the components that do not exist yet appended as written (they
+ * cannot be links). Null for a dangling symlink, whose target cannot be
+ * judged.
+ */
+export function realPathOf(path) {
+  let head = resolve(path);
+  const tail = [];
+  for (;;) {
+    try {
+      return join(realpathSync(head), ...tail);
+    } catch (err) {
+      if (!isMissing(err)) throw err;
+      try {
+        if (lstatSync(head).isSymbolicLink()) return null;
+      } catch (inner) {
+        if (!isMissing(inner)) throw inner;
+      }
+      const parent = dirname(head);
+      if (parent === head) return resolve(path);
+      tail.unshift(basename(head));
+      head = parent;
+    }
+  }
+}
+
+function underIgnoredDir(path) {
+  return path.split(sep).some((segment) => segment.toLowerCase() === IGNORED_DIR);
+}
+
+/** True when `path` is `root` or lies inside it. */
+function within(path, root) {
+  const rel = relative(root, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/** Why `out` must not be written, or null. Both paths are compared as written and after resolving symlinks. */
 export function refusalFor(out, input) {
-  const segments = resolve(out).split(sep);
-  if (segments.some((segment) => segment.toLowerCase() === IGNORED_DIR)) {
+  const realOut = realPathOf(out);
+  if (realOut === null) return `refusing --out ${out}: it is a symlink to nothing, so where the sample would land cannot be checked`;
+  if (underIgnoredDir(resolve(out)) || underIgnoredDir(realOut)) {
     return `refusing --out ${out}: it lies under a "${IGNORED_DIR}/" directory, which .gitignore ignores at any depth, so the sample could never be committed`;
   }
-  if (resolve(out) === resolve(input)) return `refusing --out ${out}: it is the input directory, and the sample would overwrite the recording`;
+  const realIn = realPathOf(input) ?? resolve(input);
+  if (within(realOut, realIn) || within(resolve(out), resolve(input))) {
+    return `refusing --out ${out}: it is the input directory or inside it, and the sample would write into the recording`;
+  }
+  return null;
+}
+
+/** Why one of the files the run writes cannot be written, or null: a symlinked destination would be written through. */
+async function destinationRefusal(out, names) {
+  for (const name of names) {
+    try {
+      if ((await lstat(resolve(out, name))).isSymbolicLink()) {
+        return `refusing to write ${join(out, name)}: it is a symlink, and the sample would be written through it`;
+      }
+    } catch (err) {
+      if (!isMissing(err)) throw err;
+    }
+  }
   return null;
 }
 
@@ -311,6 +377,8 @@ export async function main({
     }
   }
 
+  const destination = await destinationRefusal(out, [...names, 'README.md']);
+  if (destination !== null) throw new SampleRefusal(destination);
   await mkdir(out, { recursive: true });
   const keepNames = new Set(names);
   let removed = 0;
@@ -319,7 +387,7 @@ export async function main({
     await unlink(resolve(out, name));
     removed += 1;
   }
-  for (const { name, data } of written) await writeFile(resolve(out, name), data);
+  for (const { name, data } of written) await writeFile(resolve(out, name), data, { flag: WRITE_FLAGS });
 
   const ordered = [...headers].sort((a, b) => a - b);
   const gaps = ordered.slice(1).map((ts, i) => ts - ordered[i]);
@@ -351,7 +419,7 @@ export async function main({
     bytes,
     sourceBytes,
   };
-  await writeFile(resolve(out, 'README.md'), renderReadme(summary), 'utf8');
+  await writeFile(resolve(out, 'README.md'), renderReadme(summary), { encoding: 'utf8', flag: WRITE_FLAGS });
   log(
     `${summary.frames} frames ${summary.day} ${args.from}-${args.to} UTC -> ${summary.outRel}: ${bytes} B ` +
       `(${args.allModes ? 'all modes' : 'tram only'}, from ${sourceBytes} B; ${removed} stale frames removed); ` +
