@@ -446,8 +446,12 @@ export async function main(argv = process.argv.slice(2)) {
   const decoded = decodeSchema(schema);
   report.paths = input.net.paths.map((path, i) => {
     const match = matchSchemaPath(decoded, input.net, i);
-    const exemption = input.overrides.unmappedPaths?.[path.id];
-    if (!match.placeable && !(match.reason === 'too-few-stops' && exemption)) {
+    // A terminus loop path (scripts/gtfs-shapes.mjs LOOP_DIRECTION) is not laid
+    // along the artwork at all: the placer draws a vehicle on it at the
+    // terminus circle of its first stop, so it needs no exemption.
+    const loop = match.reason === 'loop-path';
+    const exemption = loop ? 'loop-path' : input.overrides.unmappedPaths?.[path.id];
+    if (!match.placeable && !loop && !(match.reason === 'too-few-stops' && exemption)) {
       throw new Error(`Path ${path.id}: ${match.reason}; ${match.stops.length}/${match.sourceStops} stops matched`);
     }
     for (const leg of match.legs) {
@@ -480,7 +484,9 @@ export async function main(argv = process.argv.slice(2)) {
   else {
     for (const line of report.lines) console.log(`Line ${line.route.padStart(2)} ${line.colour}: ${line.votes.filter(v => v === line.route).length} badge votes, ${line.circles} stops, projected [${line.projected.join(', ')}], GTFS termini [${line.termini.join(' / ')}]`);
     console.log(`${report.matched}/${report.names} feed names matched; ${report.allowlisted.length} explicitly absent [${report.allowlisted.join(', ')}]; ${report.artworkOnly.length} artwork-only labels retained; ${report.unassignedGroups.length} unresolved groups.`);
-    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length} paths placeable with strictly monotone legs; exclusions [${report.paths.filter(p => p.excluded).map(p => p.id).join(', ')}]. Full coverage: --verbose.`);
+    const loops = report.paths.filter(p => p.excluded === 'loop-path');
+    const excluded = report.paths.filter(p => p.excluded && p.excluded !== 'loop-path');
+    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length - loops.length} paths placeable with strictly monotone legs; exclusions [${excluded.map(p => p.id).join(', ')}]; ${loops.length} terminus loops drawn at their first stop's circle. Full coverage: --verbose.`);
   }
   console.log(`zet-schema.json: ${Buffer.byteLength(text)} bytes raw, ${gzipSync(text).byteLength} bytes gzip; feed ${schema.feedVersion}.`);
 }

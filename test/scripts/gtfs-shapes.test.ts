@@ -2,15 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   BUS_ON_FRAC_SCALE,
+  CONNECTOR_SNAP_METRES,
   EDGE_KEYS,
   HOP_DETOUR_EXCESS_METRES,
   HOP_DETOUR_FACTOR,
   LINE_KEYS,
+  LOOP_DIRECTION,
+  LOOP_ID_PREFIX,
+  LOOP_MAX_METRES,
+  LOOP_PAIR_MAX_METRES,
   ORIGIN,
   PATH_KEYS,
   ROUTE_KEYS,
@@ -20,6 +25,8 @@ import {
   SNAP_METRES,
   STOP_KEYS,
   STOP_SHAPE_MAX_METRES,
+  TERMINUS_STOP_MAX_METRES,
+  TERMINUS_TRIM_STOPS,
   buildNetwork,
   buildRailGraph,
   decodeEdgeChain,
@@ -33,7 +40,10 @@ import {
   toMetres,
 } from '../../scripts/gtfs-shapes.mjs';
 import { FEED_VERSION } from '../../app/src/motion/network-meta';
+import { toLonLat } from '../../shared/motion/geo';
 import { decodeNetwork } from '../../shared/motion/network';
+import { mapPatternsToPaths } from '../../shared/motion/times';
+import { decodeTripIndex } from '../../shared/motion/trips';
 
 // The wire is struct-of-arrays; the tests read it back as rows.
 const routesOf = (net: any): any[] => fromColumnar(net.routes, ROUTE_KEYS);
@@ -188,6 +198,13 @@ const STOP_TIMES_TXT =
   't1_trip_2,07:00:00,07:00:00,S_close,1,,,\nt1_trip_2,07:04:00,07:04:00,S_close2,2,,,\n';
 const FEED_INFO_TXT = 'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version\nZET,https://www.zet.hr,hr,20260901,20301231,000123\n';
 
+/** T2's trip calls at S_close, a kilometre off T2's own rails: a shape's own
+ *  platform off its drawn rails fails the build unless the overrides file
+ *  names the gap, so every build of the full feed allows that one. */
+const FULL_OVERRIDES = {
+  servedGaps: [{ path: 'T2_shape', stop: 'S_close', reason: 'Test: T2 calls at a platform a kilometre off its rails.' }],
+};
+
 function makeFullZip(opts: { withFeedInfo?: boolean; stopTimes?: string } = {}): Uint8Array {
   const files: ZipInput[] = [
     { name: 'routes.txt', data: ROUTES_TXT, method: 8 },
@@ -255,7 +272,7 @@ describe('the rail graph', () => {
 
 describe('buildNetwork', () => {
   it('cuts a synthetic feed into the version 3 artefact: trams on the graph, buses as polylines, stops at exact arcs and terminal flags, a synthetic path through its stops, a served list per path, a decodable superset, and it refuses a path it cannot route', async () => {
-    const net = await buildNetwork(makeFullZip(), { diagramBusCount: 1 });
+    const net = await buildNetwork(makeFullZip(), { diagramBusCount: 1, overrides: FULL_OVERRIDES });
     expect(net.version).toBe(3);
     expect(net.feedVersion).toBe('000123');
     for (const key of SHAPE_KEYS) expect(net.shapes[key]).toHaveLength(4);
@@ -310,8 +327,9 @@ describe('buildNetwork', () => {
     // F8, the served list: the platforms a path's own trips call at, in arc
     // order, as [stopIdx, decimetres]. T1's own trip calls at both platforms
     // on its edge. T2's trip also calls at S_close, which lies over a
-    // kilometre off T2's rails: dropped and reported, never invented at an
-    // arc of its own. A bus shape runs no path and serves nothing.
+    // kilometre off T2's rails: dropped, never invented at an arc of its own,
+    // and allowed only because the overrides file names the gap. A bus shape
+    // runs no path and serves nothing.
     const servedIds = (row: any) => row.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
     expect(servedIds(t1)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
     // S_t2_side has no edge link (50 m off the rails) but lies inside the
@@ -325,8 +343,12 @@ describe('buildNetwork', () => {
     expect(servedIds(t2)[2][1]).toBeCloseTo(t2Len, 0);
     expect(b1.served).toEqual([]);
     expect(servedIds(path)).toEqual([['S_close', expect.closeTo(t1Len / 2, 0)], ['S_close2', expect.closeTo(0.8 * t1Len, 0)]]);
-    const dropped = (await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).report.servedDropped;
-    expect(dropped).toEqual([{ path: 'T2_shape', route: 'T2', stop: 'S_close', name: 'Blizu', metres: expect.any(Number) }]);
+    const { report } = await buildNetwork(makeFullZip(), { diagramBusCount: 1, overrides: FULL_OVERRIDES });
+    expect(report.servedDropped).toEqual([{ path: 'T2_shape', route: 'T2', stop: 'S_close', name: 'Blizu', metres: expect.any(Number) }]);
+    expect(report.servedGapsAllowed).toEqual([
+      { path: 'T2_shape', route: 'T2', stop: 'S_close', name: 'Blizu', metres: expect.any(Number), allowed: FULL_OVERRIDES.servedGaps[0].reason },
+    ]);
+    expect(report.servedGapsAllowed[0].metres).toBeGreaterThan(1000);
 
     // Terminal: the first or last stop of some trip, wherever it is.
     expect(stops.filter((s: any) => s.terminal === 1).map((s: any) => s.id).sort()).toEqual(['S_close', 'S_close2', 'S_t2_end', 'S_t2_start']);
@@ -365,6 +387,7 @@ describe('buildNetwork', () => {
       diagramBusCount: 1,
       log: () => {},
       now: () => new Date('2026-09-12T12:00:00.000Z'),
+      overrides: FULL_OVERRIDES,
     });
     expect(result).toMatchObject({ routeCount: 5, edgeCount: 2, pathCount: 1 });
     expect(JSON.parse(await readFile(join(dir, 'data/zet-network.json'), 'utf8'))).toMatchObject({ version: 3, feedVersion: '000123', builtAt: '2026-09-12T12:00:00.000Z' });
@@ -374,12 +397,27 @@ describe('buildNetwork', () => {
 
     // A shapeless pattern whose stop is off the rails fails the build, naming the route.
     const offRails = STOP_TIMES_TXT.replace('t3_trip_1,09:03:00,09:03:00,S_close2,2,,,', 't3_trip_1,09:03:00,09:03:00,S_far,2,,,');
-    await expect(buildNetwork(makeFullZip({ stopTimes: offRails }), { diagramBusCount: 1 })).rejects.toThrow(/T3/);
+    await expect(buildNetwork(makeFullZip({ stopTimes: offRails }), { diagramBusCount: 1, overrides: FULL_OVERRIDES })).rejects.toThrow(/T3/);
     // Without feed_info.txt the archive's mtime names the feed; without either the build refuses.
-    expect((await buildNetwork(makeFullZip({ withFeedInfo: false }), { fallbackMtime: '2026-08-15T00:00:00.000Z', diagramBusCount: 1 })).feedVersion).toBe('2026-08-15T00:00:00.000Z');
+    expect((await buildNetwork(makeFullZip({ withFeedInfo: false }), { fallbackMtime: '2026-08-15T00:00:00.000Z', diagramBusCount: 1, overrides: FULL_OVERRIDES })).feedVersion).toBe('2026-08-15T00:00:00.000Z');
     await expect(buildNetwork(makeFullZip({ withFeedInfo: false }), {})).rejects.toThrow(/feedVersion/);
   });
 });
+
+// Measured on feed 000395 (WP0): the platforms of a tram pattern that lie
+// more than SERVED_STOP_MAX_METRES from the pattern's own path, by path and
+// stop. A first or last stop within TERMINUS_STOP_MAX_METRES: Zapruđe 1780_18,
+// 130 m past the end of line 8's rails, and Zapadni kolodvor on two of line
+// 1's paths. Trimmed off a synthetic path's end: line 1 out of Zapadni
+// kolodvor and past Talovčeva, where no shape draws the rails.
+const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:8:0:dce55b90 1780_18'];
+const TRIMMED_CASES = ['path:1:0:102900d1 317_1', 'path:1:1:7e51cfc2 293_4', 'path:1:1:7e51cfc2 317_2'];
+// The terminus loops of feed 000395, in artefact order: route by route, pair by pair.
+const LOOP_IDS = [
+  'loop:4:1369ad96', 'loop:4:1269ac03', 'loop:4:6e88c388', 'loop:4:d83eecfe', 'loop:7:315c5606', 'loop:7:cd010eb3', 'loop:9:4fe49f14',
+  'loop:11:1369ad96', 'loop:11:8ccb8d4a', 'loop:12:6f4d59d2', 'loop:14:c03b6e9a', 'loop:14:347c5094', 'loop:14:8a6925ba', 'loop:15:1f4622f6',
+  'loop:17:4fe49f14', 'loop:33:c03b6e9a', 'loop:34:6e88c388',
+];
 
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');
@@ -394,7 +432,8 @@ describe('the committed artefact', () => {
   // 0.8 %, and still 11 % inside both pins, which again stand. F8c nodes
   // three crossings (six edges become twelve) and shortens nine plans:
   // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
-  // Both pins stand again.
+  // Both pins stand again. WP0 adds three connectors and seventeen terminus
+  // loops: 582,473 B raw, 136,758 B gzip, 0.3 % more of each; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -420,8 +459,13 @@ describe('the committed artefact', () => {
 
     const net = decodeNetwork(parsed);
     expect(net.graphHash).toBe(parsed.graphHash);
-    expect(net.edges).toHaveLength(293); // F8c: 287 plus two halves for each of the three junctions noded
-    expect(net.paths.filter((p) => p.shape === null)).toHaveLength(52); // F8b's seven brought this to 52; F8c moved none
+    // F8c: 287 plus two halves for each of the three junctions noded; WP0: plus
+    // the three connectors of gtfs-shapes-overrides.json (Glavni kolodvor, the
+    // top of the Mihaljevac loop, a joint in line 12's Dubrava loop).
+    expect(net.edges).toHaveLength(296);
+    // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
+    // none. The terminus loops are counted in their own test below.
+    expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
     expect(net.routes.size).toBeGreaterThan(100); // the real ZET feed has 154 routes
     const trams = [...net.routes.entries()].filter(([, r]) => r.type === 0);
     expect(trams.length).toBeGreaterThanOrEqual(15);
@@ -455,8 +499,9 @@ describe('the committed artefact', () => {
 
     // F8: every tram path -- shape path and synthetic alike -- knows the
     // platforms its own trips call at, and that list is a strict, arc-ordered
-    // subset of what lies geometrically on its edges.
-    const tramPaths = net.paths.filter((p) => net.routes.get(p.route)?.type === 0);
+    // subset of what lies geometrically on its edges. (A terminus loop serves
+    // only its two ends, sometimes one: its own test below.)
+    const tramPaths = net.paths.filter((p) => net.routes.get(p.route)?.type === 0 && p.direction !== LOOP_DIRECTION);
     expect(tramPaths).toHaveLength(152);
     for (const path of tramPaths) {
       const idx = net.paths.indexOf(path);
@@ -475,19 +520,21 @@ describe('the committed artefact', () => {
   });
 
 
-  // F8c: no synthetic path plans a hop the long way round any more, except
-  // the one the graph cannot express and the overrides file names with its
-  // reason. Before F8c nine hops of routes 6, 9, 13 and 17 ran 4.2 to 6.4
-  // times the straight line between their two platforms -- the rail graph had
-  // no node where the line turned, because no shape in the feed draws that
-  // turn -- and a plan 2 km long for 300 m of ground puts a phantom tram on
-  // rails other lines share, where the ordering law then constrains real ones.
-  it('plans no hop the long way round, bar the turns the overrides file says the feed cannot draw', () => {
+  // F8c: no synthetic path plans a hop the long way round any more. Before
+  // F8c nine hops of routes 6, 9, 13 and 17 ran 4.2 to 6.4 times the straight
+  // line between their two platforms -- the rail graph had no node where the
+  // line turned, because no shape in the feed draws that turn -- and a plan
+  // 2 km long for 300 m of ground puts a phantom tram on rails other lines
+  // share, where the ordering law then constrains real ones. F8c noded three
+  // crossings; the last two legs, Botanički vrt -> Zrinjevac on routes 6 and
+  // 9, stood allowlisted at 3,242 m until the Glavni kolodvor connector (WP0).
+  it('plans no hop the long way round, and allowlists none', () => {
     const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
     const overrides = JSON.parse(readFileSync(resolve(process.cwd(), 'scripts/gtfs-shapes-overrides.json'), 'utf8'));
     const long: string[] = [];
     for (const path of net.paths) {
       if (path.shape !== null) continue; // a shape path runs geometry that was drawn, not routed
+      if (path.direction === LOOP_DIRECTION) continue; // a terminus loop's one hop is the turn itself
       const served = path.served ?? [];
       for (let k = 1; k < served.length; k++) {
         const a = net.stops[served[k - 1].stop];
@@ -499,18 +546,8 @@ describe('the committed artefact', () => {
         }
       }
     }
-    // Each one left is allowlisted by its route and its two platforms, with a
-    // reason: the same detour appearing on a third line would still fail.
-    const allowed = overrides.longLegs as { route: string; from: string; to: string; reason: string }[];
-    expect(allowed.every((entry) => typeof entry.route === 'string' && entry.route.length > 0)).toBe(true);
-    expect(allowed.every((entry) => entry.reason.length > 60)).toBe(true);
-    expect(long).toEqual([
-      '6 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
-      '9 Botanički vrt -> Zrinjevac (3242 m of arc for 511 m of ground)',
-    ]);
-    for (const leg of long) {
-      expect(allowed.some((entry) => leg.startsWith(`${entry.route} `) && leg.includes(`${entry.from} -> ${entry.to}`)), leg).toBe(true);
-    }
+    expect(long).toEqual([]);
+    expect(overrides.longLegs ?? []).toEqual([]);
 
     // And the three crossings that were noded are nodes: route 13 turns out
     // of Šubićeva into Kralja Zvonimira, and route 6 out of the southbound
@@ -526,6 +563,40 @@ describe('the committed artefact', () => {
     expect(hop('path:13:1:129fd87e', 'Šubićeva', 'Trg žrt. fašizma')).toBeLessThan(400); // was 1779 m
     expect(hop('path:13:0:096d3646', 'Trg žrt. fašizma', 'Šubićeva')).toBeLessThan(700); // was 2122 m
     expect(hop('path:6:0:840b2879', 'Zrinjevac', 'Botanički vrt')).toBeLessThan(900); // was 3261 m
+    // ...and the turn no crossing could express runs the Glavni kolodvor
+    // connector: west to north in one hop, as the ground runs.
+    expect(hop('path:6:1:e641be7c', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m
+    expect(hop('path:9:0:892fe989', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m
+  });
+
+  // WP0: the connectors of gtfs-shapes-overrides.json are in the graph, each
+  // one directed edge between the two nodes its points name, run only by the
+  // lines it names -- and by at least one path of them.
+  it('carries each connector the overrides file names as one short edge, run only by its own lines', () => {
+    const parsed = JSON.parse(readFileSync(artefactPath).toString('utf8'));
+    const net = decodeNetwork(parsed);
+    const overrides = JSON.parse(readFileSync(resolve(process.cwd(), 'scripts/gtfs-shapes-overrides.json'), 'utf8'));
+    const connectors = overrides.connectors as { from: [number, number]; to: [number, number]; routes: string[]; reason: string }[];
+    expect(connectors.length).toBe(3);
+    const near = (p: { x: number; y: number }, point: [number, number]) => {
+      const [lon, lat] = toLonLat(p);
+      const a = toMetres(lon, lat);
+      const b = toMetres(point[0], point[1]);
+      return Math.hypot(a.x - b.x, a.y - b.y) <= CONNECTOR_SNAP_METRES;
+    };
+    for (const connector of connectors) {
+      expect(connector.reason.length, JSON.stringify(connector.from)).toBeGreaterThan(100);
+      const found = net.edges
+        .map((edge, idx) => ({ edge, idx }))
+        .filter(({ edge }) => near(edge.pts[0], connector.from) && near(edge.pts[edge.pts.length - 1], connector.to));
+      expect(found, `connector ${connector.from} -> ${connector.to}`).toHaveLength(1);
+      const [{ edge, idx }] = found;
+      expect(edge.pts).toHaveLength(2);
+      expect(edge.len).toBeLessThan(20);
+      const users = net.paths.filter((p) => p.edges.includes(idx));
+      expect(users.length).toBeGreaterThan(0);
+      for (const user of users) expect(connector.routes, `${user.id} runs the connector at ${connector.from}`).toContain(user.route);
+    }
   });
 
   // F8b: no shapeless tram pattern is left without rails of its own. Before
@@ -564,6 +635,106 @@ describe('the committed artefact', () => {
       const idx = net.paths.indexOf(exact);
       expect(net.stopsOnPath(idx).map((e) => e.stop.id), `served of ${exact.id}`).toEqual(pattern.stops);
     }
+  });
+
+  // WP0: the build refuses a platform a shape's own trips call at that lies
+  // off that shape (servedGaps), and routes every shapeless pattern through
+  // its own stops; this is the same promise read back through the trip index
+  // the twin uses. Every tram pattern's resolved path passes within the served
+  // radius of each of its platforms, bar two kinds of end the feed's shapes do
+  // not reach: a terminus set back past the drawn rails (Zapruđe 1780_18,
+  // 130 m past the end of line 8's shapes) and the stretch the builder trims
+  // off a synthetic path where no shape draws the rails at all (line 1 out of
+  // Zapadni kolodvor, TERMINUS_TRIM_STOPS).
+  it('lays every tram pattern of the trip index within the served radius of its own path, bar a set-back terminus and the trimmed ends', () => {
+    const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
+    const index = decodeTripIndex(JSON.parse(readFileSync(resolve(process.cwd(), 'app/public/data/zet-trips.json'), 'utf8')));
+    const mapping = mapPatternsToPaths(net, index);
+    const byId = new Map(net.stops.map((stop) => [stop.id, stop] as const));
+    const off: string[] = [];
+    const terminus = new Set<string>();
+    const trimmed = new Set<string>();
+    let tramPatterns = 0;
+    index.patterns.forEach((pattern, patternIdx) => {
+      if (net.routes.get(pattern.route)?.type !== 0) return;
+      tramPatterns++;
+      const pathIdx = mapping.pathOf[patternIdx];
+      expect(pathIdx, `pattern ${patternIdx} of route ${pattern.route} has no path`).not.toBeNull();
+      const path = net.paths[pathIdx!];
+      expect(path.direction).not.toBe(LOOP_DIRECTION); // a loop is never a pattern's path
+      pattern.stops.forEach((stopId, k) => {
+        const stop = byId.get(stopId)!;
+        const { d } = net.projectOntoPath(pathIdx!, stop.p);
+        if (d <= SERVED_STOP_MAX_METRES) return;
+        const last = pattern.stops.length - 1;
+        if ((k === 0 || k === last) && d <= TERMINUS_STOP_MAX_METRES) {
+          terminus.add(`${path.id} ${stopId}`);
+          return;
+        }
+        const nearEnd = k < TERMINUS_TRIM_STOPS || k > last - TERMINUS_TRIM_STOPS;
+        if (path.shape === null && nearEnd && !(path.stops ?? []).includes(stopId)) {
+          trimmed.add(`${path.id} ${stopId}`);
+          return;
+        }
+        off.push(`${path.id} (route ${pattern.route}) ${stopId} "${stop.name}" ${Math.round(d)} m`);
+      });
+    });
+    expect(tramPatterns).toBe(152); // 100 by shape, 49 exact synthetic, 3 trimmed (times.test.ts)
+    expect(off).toEqual([]);
+    // Pinned by name, measured on feed 000395, so a new such case fails here
+    // rather than passing unnoticed.
+    expect([...terminus].sort()).toEqual(TERMINUS_CASES);
+    expect([...trimmed].sort()).toEqual(TRIMMED_CASES);
+  });
+
+  // WP0: terminus loops. A loop runs from one path's last edge to another
+  // path's first, of the same line, between a trip's last platform and the
+  // next trip's first; only where the feed's shapes draw the rails between
+  // them, which on feed 000395 is the minority -- at Borongaj, Žitnjak,
+  // Savišće, Črnomerec, Ljubljanica, Prečko, Savski most, Park Maksimir,
+  // Sopot, Gračansko dolje and most of Zapruđe the arriving shape ends and the
+  // departing one starts 40 to 255 m apart with no drawn track between (the
+  // build log names each). Eight of these are joins of length 0 to 2 m, where
+  // one path ends on the node the next starts from; they still give a tram a
+  // path that continues its edges from one trip to the next.
+  it('joins a trip\'s last platform to the next trip\'s first over the drawn rails: loop paths of the line\'s own edges, each short between the two paths it joins', () => {
+    const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
+    const loops = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.id.startsWith(LOOP_ID_PREFIX));
+    expect(loops.map(({ path }) => path.id)).toEqual(LOOP_IDS);
+    expect(net.paths.filter((p) => p.direction === LOOP_DIRECTION).length).toBe(loops.length);
+    const own = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.direction !== LOOP_DIRECTION && net.routes.get(path.route)?.type === 0);
+    for (const { path, idx } of loops) {
+      expect(path).toMatchObject({ direction: LOOP_DIRECTION, shape: null });
+      expect(path.id.startsWith(`${LOOP_ID_PREFIX}${path.route}:`)).toBe(true);
+      const [L, F] = path.stops!;
+      expect(path.stops).toHaveLength(2);
+      expect(L).not.toBe(F);
+      const at = (id: string) => net.stops.find((stop) => stop.id === id)!.p;
+      expect(Math.hypot(at(L).x - at(F).x, at(L).y - at(F).y)).toBeLessThanOrEqual(LOOP_PAIR_MAX_METRES);
+      // It starts on the last edge of an own-line path that ends at L...
+      const arriving = own.filter(({ path: p, idx: i }) => p.route === path.route && p.edges.at(-1) === path.edges[0] && net.stopsOnPath(i).at(-1)?.stop.id === L);
+      expect(arriving.length, `${path.id}: no path of line ${path.route} ends at ${L} on edge ${path.edges[0]}`).toBeGreaterThan(0);
+      // ...and ends on the first edge of an own-line path that starts at F.
+      const departing = own.filter(({ path: p, idx: i }) => p.route === path.route && p.edges[0] === path.edges.at(-1) && net.stopsOnPath(i)[0]?.stop.id === F);
+      expect(departing.length, `${path.id}: no path of line ${path.route} starts at ${F} on edge ${path.edges.at(-1)}`).toBeGreaterThan(0);
+      // Between the two it is a loop, not a detour through the network.
+      const between = path.len - net.edges[path.edges[0]].len - net.edges[path.edges.at(-1)!].len;
+      expect(between, path.id).toBeLessThanOrEqual(LOOP_MAX_METRES);
+      for (let k = 1; k < path.edges.length; k++) expect(net.edges[path.edges[k]].from).toBe(net.edges[path.edges[k - 1]].to);
+      // It serves its two ends and nothing else, L no later than F (a join of
+      // length 0 has both at one arc).
+      const served = net.stopsOnPath(idx);
+      expect(served.length, path.id).toBeGreaterThan(0);
+      expect(served.every(({ stop }) => stop.id === L || stop.id === F), path.id).toBe(true);
+      if (served.length === 2) {
+        expect(new Set(served.map(({ stop }) => stop.id))).toEqual(new Set([L, F]));
+        const arcOf = (id: string) => served.find(({ stop }) => stop.id === id)!.s;
+        expect(arcOf(L), path.id).toBeLessThanOrEqual(arcOf(F));
+      }
+    }
+    // One loop at least at every terminus whose rails the feed draws.
+    const termini = new Set(loops.map(({ path }) => net.stops.find((stop) => stop.id === path.stops![0])!.name));
+    expect([...termini].sort()).toEqual(['Dubec', 'Dubrava', 'Mandlova', 'Mihaljevac', 'Ravnice', 'Trg žrt. fašizma', 'Zapruđe']);
   });
 });
 
@@ -796,7 +967,7 @@ describe('noding a crossing a pattern needs', () => {
     // Every artefact names the graph it was cut from, and the name follows the edges.
     expect(net.graphHash).toMatch(/^[0-9a-f]{16}$/);
     expect(net.graphHash).toBe(graphHashOf(edgesOf(net)));
-    expect((await buildNetwork(makeFullZip(), { diagramBusCount: 1 })).graphHash).not.toBe(net.graphHash);
+    expect((await buildNetwork(makeFullZip(), { diagramBusCount: 1, overrides: FULL_OVERRIDES })).graphHash).not.toBe(net.graphHash);
   });
 });
 
@@ -889,5 +1060,263 @@ describe('a crossing no pattern turns at', () => {
         expect(metres, `arc of ${stop.id} on edge ${edge}`).toBeLessThanOrEqual(polylineLength(plane) + 1);
       }
     }
+  });
+});
+
+// WP0: connectors. Two tracks of the kind that meet at Glavni kolodvor: one
+// runs east and ENDS, the other STARTS 5.9 m away and runs north, and no shape
+// draws a turn between them, so a pattern that turns there is routed the long
+// way round -- here over a 1.3 km bypass -- and the build refuses that leg. A
+// connector in the overrides file joins the two nodes.
+// Units: one x unit is ~0.78 m near ORIGIN, one y unit ~1.11 m.
+const CN_EAST: [number, number][] = [[0, 0], [150, 0], [300, 0]]; // ends at node (300, 0)
+const CN_NORTH: [number, number][] = [[305, 4], [305, 100], [305, 200]]; // starts 5.9 m away
+const CN_BYPASS: [number, number][] = [[300, 0], [300, -300], [700, -300], [700, 4], [305, 4]]; // the long way round
+const CN_ASIDE: [number, number][] = [[0, 300], [0, 400], [0, 500]]; // unrelated track, for a connector nothing runs
+const CN_STOPS = [
+  { id: 'C_w', name: 'Zapadno', ...xjLonLat(100, 0) },
+  { id: 'C_n', name: 'Sjeverno', ...xjLonLat(305, 150) },
+];
+const cnPoint = ([x, y]: [number, number]): [number, number] => {
+  const p = xjLonLat(x, y);
+  return [p.lon, p.lat];
+};
+const CN_CONNECTOR = { from: cnPoint([300, 0]), to: cnPoint([305, 4]), routes: ['CT'], reason: 'Test: the east track ends 5.9 m from where the north one starts.' };
+
+/** Route CR draws the three tracks; route CT runs the turn with no shape_id. */
+function makeConnectorZip(): Uint8Array {
+  const rows = (id: string, pts: [number, number][]) =>
+    pts.map(([x, y], i) => { const p = xjLonLat(x, y); return `${id},${p.lat},${p.lon},${i + 1},\n`; }).join('');
+  return makeZip([
+    { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nCR,0,"96","Spoj s oblikom",,0,,,\nCT,0,"97","Spoj bez oblika",,0,,,\n', method: 8 },
+    { name: 'trips.txt', data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\nCR,wd,cr_e,,,0,,CR_east\nCR,wd,cr_n,,,0,,CR_north\nCR,wd,cr_b,,,0,,CR_bypass\nCR,wd,cr_a,,,0,,CR_aside\nCT,wd,ct_1,,,0,,\n', method: 8 },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows('CR_east', CN_EAST)}${rows('CR_north', CN_NORTH)}${rows('CR_bypass', CN_BYPASS)}${rows('CR_aside', CN_ASIDE)}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + CN_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    { name: 'stop_times.txt', data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\nct_1,08:00:00,08:00:00,C_w,1,,,\nct_1,08:05:00,08:05:00,C_n,2,,,\n', method: 8 },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('a connector the overrides file names', () => {
+  it('joins two tracks that end and start metres apart, so a pattern turning there routes in one hop, and refuses a connector that matches no node, runs no path or carries a line it does not name', async () => {
+    // Without it the pattern runs the bypass, and the build refuses the leg.
+    await expect(buildNetwork(makeConnectorZip(), { diagramBusCount: 0 })).rejects.toThrow(/Zapadno -> Sjeverno.*gtfs-shapes-overrides\.json/s);
+
+    const net = await buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [CN_CONNECTOR] } });
+    const shapes = shapesOf(net);
+    const east = shapes.find((s: any) => s.id === 'CR_east').e;
+    const north = shapes.find((s: any) => s.id === 'CR_north').e;
+    expect(net.edges.from).toHaveLength(5); // four tracks and the connector, appended last
+    const [connector] = net.report.connectors;
+    expect(connector).toMatchObject({ edge: 4, routes: ['CT'], usedBy: [expect.stringContaining('path:CT:0:')] });
+    expect(connector.metres).toBeGreaterThan(5);
+    expect(connector.metres).toBeLessThan(7);
+    // The connector runs from the east track's end node to the north track's start node.
+    const edges = edgesOf(net);
+    expect(edges[4].from).toBe(edges[east.at(-1)].to);
+    expect(edges[4].to).toBe(edges[north[0]].from);
+    const [path] = pathsOf(net);
+    expect(path.e).toEqual([...east, 4, ...north]);
+    expect(net.report.longLegs).toEqual([]);
+    const stops = stopsOf(net);
+    expect(path.served.map(([i]: [number, number]) => stops[i].id)).toEqual(['C_w', 'C_n']);
+    const [[, fromDm], [, toDm]] = path.served;
+    const a = toMetres(CN_STOPS[0].lon, CN_STOPS[0].lat);
+    const b = toMetres(CN_STOPS[1].lon, CN_STOPS[1].lat);
+    expect((toDm - fromDm) / 10).toBeLessThan(1.5 * Math.hypot(a.x - b.x, a.y - b.y)); // the turn, as the ground runs
+
+    // A point more than CONNECTOR_SNAP_METRES from every node is refused by name.
+    await expect(
+      buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [{ ...CN_CONNECTOR, from: cnPoint([150, 40]) }] } }),
+    ).rejects.toThrow(new RegExp(`no node\\(s\\) where an edge ends within ${CONNECTOR_SNAP_METRES} m.*gtfs-shapes-overrides\\.json`));
+    // A connector the pattern runs, named for another line, is refused.
+    await expect(
+      buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [{ ...CN_CONNECTOR, routes: ['CR'] }] } }),
+    ).rejects.toThrow(/run by path:CT:0:\w+ \(route CT\), a line it does not name/);
+    // And one that nothing runs is stale.
+    const stale = { from: cnPoint([0, 500]), to: cnPoint([0, 300]), routes: ['CR'], reason: 'Test: a turn no pattern takes.' };
+    await expect(
+      buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [CN_CONNECTOR, stale] } }),
+    ).rejects.toThrow(/no path runs it/);
+  });
+});
+
+// WP0: the served-gap rule. Route GR's one shape runs 444 m north. Its
+// sample trip calls at the two ends and the middle; a second trip ends at a
+// platform 130 m past the end of the drawn rails (the Zapruđe case); a third,
+// in the second feed, calls at a platform 80 m off the middle of the line.
+const GP_SHAPE: [number, number][] = [[0, 0], [0, 200], [0, 400]];
+const GP_STOPS = [
+  { id: 'G_a', name: 'Jug', ...xjLonLat(0, 0) },
+  { id: 'G_mid', name: 'Sredina', ...xjLonLat(0, 200) },
+  { id: 'G_end', name: 'Sjever', ...xjLonLat(0, 400) },
+  { id: 'G_past', name: 'Iza kraja', ...xjLonLat(0, 517) }, // 130 m past the end
+  { id: 'G_off', name: 'Sa strane', ...xjLonLat(103, 200) }, // 80 m east of the middle
+];
+const GP_OVERRIDES = { servedGaps: [{ path: 'G1', stop: 'G_off', reason: 'Test: the line calls at a platform off its drawn rails.' }] };
+
+function makeGapZip(opts: { withOffStop?: boolean } = {}): Uint8Array {
+  const rows = GP_SHAPE.map(([x, y], i) => { const p = xjLonLat(x, y); return `G1,${p.lat},${p.lon},${i + 1},\n`; }).join('');
+  const calls: [string, string[]][] = [
+    ['g_1', ['G_a', 'G_mid', 'G_end']],
+    ['g_2', ['G_a', 'G_mid', 'G_past']],
+    ...(opts.withOffStop ? ([['g_3', ['G_a', 'G_off', 'G_end']]] as [string, string[]][]) : []),
+  ];
+  return makeZip([
+    { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nGR,0,"98","Crta s peronima",,0,,,\n', method: 8 },
+    { name: 'trips.txt', data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\n' + calls.map(([trip]) => `GR,wd,${trip},,,0,,G1\n`).join(''), method: 8 },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + GP_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    {
+      name: 'stop_times.txt',
+      data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
+        calls.flatMap(([trip, ids]) => ids.map((id, i) => `${trip},0${8 + i}:00:00,0${8 + i}:00:00,${id},${i + 1},,,\n`)).join(''),
+      method: 8,
+    },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('the platforms a shape\'s own trips call at', () => {
+  it('serve a terminus set back past the drawn rails at the path\'s end, and fail the build on a platform off the rails unless the overrides file names the gap', async () => {
+    const net = await buildNetwork(makeGapZip(), { diagramBusCount: 0 });
+    const stops = stopsOf(net);
+    const [shape] = shapesOf(net);
+    const served = shape.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
+    const len = polylineLength(GP_SHAPE.map(([x, y]) => toMetres(xjLonLat(x, y).lon, xjLonLat(x, y).lat)));
+    // G_past lies 130 m past the end: served at the end, beside G_end.
+    expect(served.map(([id]: [string]) => id)).toEqual(['G_a', 'G_mid', 'G_end', 'G_past']);
+    expect(served[3][1]).toBeCloseTo(len, 0);
+    expect(net.report.servedTerminus).toEqual([{ path: 'G1', route: 'GR', stop: 'G_past', name: 'Iza kraja', metres: expect.closeTo(130, 0), at: 'end' }]);
+    expect(net.report.servedDropped).toEqual([]);
+
+    // A platform 80 m off the middle of the line is no terminus: the build
+    // names the shape and the stop, and where to allow it.
+    await expect(buildNetwork(makeGapZip({ withOffStop: true }), { diagramBusCount: 0 })).rejects.toThrow(
+      /G1 \(route GR\) calls at G_off "Sa strane", \d+\.\d m off its rails.*servedGaps in scripts\/gtfs-shapes-overrides\.json/,
+    );
+    // Allowlisted, it is left out of the served list and reported with the reason.
+    const allowed = await buildNetwork(makeGapZip({ withOffStop: true }), { diagramBusCount: 0, overrides: GP_OVERRIDES });
+    expect(shapesOf(allowed)[0].served.map(([i]: [number, number]) => stopsOf(allowed)[i].id)).toEqual(['G_a', 'G_mid', 'G_end', 'G_past']);
+    expect(allowed.report.servedGapsAllowed).toEqual([
+      { path: 'G1', route: 'GR', stop: 'G_off', name: 'Sa strane', metres: expect.any(Number), allowed: GP_OVERRIDES.servedGaps[0].reason },
+    ]);
+    expect(allowed.report.servedGapsAllowed[0].metres).toBeGreaterThan(SERVED_STOP_MAX_METRES);
+    expect(allowed.report.servedGapsAllowed[0].metres).toBeLessThan(90);
+  });
+});
+
+// WP0: terminus loops over drawn rails. Route LR arrives north on L_in and
+// leaves south on L_out, 31 m to the east; the loop between them is drawn by
+// route LX's shape, 142 m round. Route LN is the same terminus with no loop
+// drawn at all, and route LT's loop is drawn, but three kilometres round.
+const LP_TRACKS: Record<string, [number, number][]> = {
+  L_in: [[0, 0], [0, 150], [0, 300]],
+  L_loop: [[0, 300], [0, 350], [40, 350], [40, 300]],
+  L_out: [[40, 300], [40, 150], [40, 0]],
+  N_in: [[400, 0], [400, 150], [400, 300]],
+  N_out: [[440, 300], [440, 150], [440, 0]],
+  T_in: [[800, 0], [800, 150], [800, 300]],
+  T_loop: [[800, 300], [800, 1700], [840, 1700], [840, 300]],
+  T_out: [[840, 300], [840, 150], [840, 0]],
+};
+const LP_ROUTE: Record<string, string> = { L_in: 'LR', L_out: 'LR', L_loop: 'LX', N_in: 'LN', N_out: 'LN', T_in: 'LT', T_out: 'LT', T_loop: 'LX' };
+const LP_CALLS: [string, string, [string, number, number][]][] = [
+  ['li', 'L_in', [['L_s', 0, 10], ['L_end', 0, 290]]],
+  ['lo', 'L_out', [['L_start', 40, 290], ['L_s2', 40, 10]]],
+  ['ni', 'N_in', [['N_s', 400, 10], ['N_end', 400, 290]]],
+  ['no', 'N_out', [['N_start', 440, 290], ['N_s2', 440, 10]]],
+  ['ti', 'T_in', [['T_s', 800, 10], ['T_end', 800, 290]]],
+  ['to', 'T_out', [['T_start', 840, 290], ['T_s2', 840, 10]]],
+];
+
+function makeLoopZip(): Uint8Array {
+  const rows = Object.entries(LP_TRACKS)
+    .map(([id, pts]) => pts.map(([x, y], i) => { const p = xjLonLat(x, y); return `${id},${p.lat},${p.lon},${i + 1},\n`; }).join(''))
+    .join('');
+  const stops = LP_CALLS.flatMap(([, , calls]) => calls.map(([id, x, y]) => ({ id, ...xjLonLat(x, y) })));
+  const trips = [...LP_CALLS.map(([trip, shape]) => [trip, shape]), ['lx_1', 'L_loop'], ['lx_2', 'T_loop']];
+  return makeZip([
+    {
+      name: 'routes.txt',
+      data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\n' +
+        ['LR', 'LN', 'LT', 'LX'].map((id) => `${id},0,"${id}","${id}",,0,,,\n`).join(''),
+      method: 8,
+    },
+    {
+      name: 'trips.txt',
+      data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\n' +
+        trips.map(([trip, shape]) => `${LP_ROUTE[shape]},wd,${trip},,,${shape.endsWith('_out') ? 1 : 0},,${shape}\n`).join(''),
+      method: 8,
+    },
+    { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows}`, method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + stops.map((s) => `${s.id},,${s.id},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    {
+      name: 'stop_times.txt',
+      data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
+        LP_CALLS.flatMap(([trip, , calls]) => calls.map(([id], i) => `${trip},0${8 + i}:00:00,0${8 + i}:00:00,${id},${i + 1},,,\n`)).join(''),
+      method: 8,
+    },
+    { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+  ]);
+}
+
+describe('terminus loops', () => {
+  it('join a trip\'s last platform to the next trip\'s first over the rails the feed draws, and name the pairs whose loop is not drawn or runs too far', async () => {
+    const net = await buildNetwork(makeLoopZip(), { diagramBusCount: 0 });
+    const shapes = shapesOf(net);
+    const edgeOf = (id: string) => shapes.find((s: any) => s.id === id).e;
+    const paths = pathsOf(net);
+    expect(paths).toHaveLength(1); // no shapeless pattern here: the one path is the loop
+    const [loop] = paths;
+    expect(loop).toMatchObject({ id: `${LOOP_ID_PREFIX}LR:${stopSequenceHash(['L_end', 'L_start'])}`, route: 'LR', dir: LOOP_DIRECTION, stops: ['L_end', 'L_start'] });
+    expect(loop.e).toEqual([...edgeOf('L_in').slice(-1), ...edgeOf('L_loop'), ...edgeOf('L_out').slice(0, 1)]);
+    const stops = stopsOf(net);
+    const served = loop.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
+    expect(served.map(([id]: [string]) => id)).toEqual(['L_end', 'L_start']);
+    expect(net.report.loopPaths.map((l: any) => l.id)).toEqual([loop.id]);
+    const [{ metres }] = net.report.loopPaths;
+    expect(metres).toBeGreaterThan(130); // the drawn loop, ~142 m round
+    expect(metres).toBeLessThan(155);
+    // Each sample trip's end platform is linked at its shape's end (the
+    // stop-transfer override), so the two served arcs are the loop apart.
+    expect(served[1][1] - served[0][1]).toBeCloseTo(metres, 0);
+    // Four pairs per route lie within LOOP_PAIR_MAX_METRES (each path's end
+    // with either path's start); only LR's arrival -> departure has a loop.
+    expect(net.report.loopPairs).toBe(12);
+    const skipped = (from: string, to: string) => net.report.loopSkipped.find((l: any) => l.from === from && l.to === to);
+    expect(skipped('N_end', 'N_start')).toMatchObject({ route: 'LN', reason: 'no directed route' });
+    expect(skipped('T_end', 'T_start')).toMatchObject({ route: 'LT', reason: 'too long' });
+    expect(skipped('T_end', 'T_start').metres).toBeGreaterThan(LOOP_MAX_METRES);
+    expect(net.report.loopSkipped).toHaveLength(11);
+
+    // The decoder reads the loop as a path like any other, direction -1,
+    // serving its two platforms, and no pattern resolves to it.
+    const decoded = decodeNetwork(net);
+    const idx = decoded.paths.findIndex((p) => p.id === loop.id);
+    expect(decoded.paths[idx]).toMatchObject({ direction: LOOP_DIRECTION, shape: null, stops: ['L_end', 'L_start'] });
+    expect(decoded.stopsOnPath(idx).map((e) => e.stop.id)).toEqual(['L_end', 'L_start']);
+  });
+});
+
+// WP0: `--zip`, and the same bytes from the same archive. builtAt is the
+// archive's own time (its file's mtime here), so a second build is a
+// byte-for-byte copy of the first, and `metaOut: null` leaves the meta alone.
+describe('the command-line build from an archive on disk', () => {
+  it('reads the archive, stamps it with the archive\'s own time, and writes the same bytes twice', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'zet-network-zip-'));
+    const zip = join(dir, 'feed.zip');
+    await writeFile(zip, makeFullZip());
+    const archiveTime = new Date('2026-09-01T08:50:29.000Z');
+    await utimes(zip, archiveTime, archiveTime);
+    const run = (out: string) => main({ zipPath: zip, cwd: dir, out, metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
+    const first = await run('a.json');
+    const second = await run('b.json');
+    expect(first.metaTarget).toBeNull();
+    const a = await readFile(join(dir, 'a.json'), 'utf8');
+    expect(await readFile(join(dir, 'b.json'), 'utf8')).toBe(a);
+    expect(JSON.parse(a)).toMatchObject({ feedVersion: '000123', builtAt: archiveTime.toISOString() });
+    expect(second.builtAt).toBe(archiveTime.toISOString());
+    await expect(stat(join(dir, 'motion'))).rejects.toThrow(); // no meta written anywhere
   });
 });

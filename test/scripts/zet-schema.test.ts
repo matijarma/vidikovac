@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { extractArtwork, identifyLines, matchStopName } from '../../scripts/zet-schema.mjs';
 import { FEED_VERSION } from '../../app/src/motion/network-meta';
 import { decodeNetwork } from '../../shared/motion/network';
-import { decodeSchema, matchSchemaPath } from '../../shared/motion/schema';
+import { createSchemaPlacer, decodeSchema, LOOP_PATH_DIRECTION, matchSchemaPath, pointAt } from '../../shared/motion/schema';
 
 const root = resolve(import.meta.dirname, '../..');
 const read = (path: string) => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
@@ -70,6 +70,12 @@ describe('the ZET artwork build', () => {
     const decoded = decodeSchema(schema);
     for (let i = 0; i < net.paths.length; i++) {
       const match = matchSchemaPath(decoded, net, i);
+      // A terminus loop (scripts/gtfs-shapes.mjs) is not laid along the
+      // artwork at all; the placer draws it at its terminus circle (below).
+      if (net.paths[i].direction === LOOP_PATH_DIRECTION) {
+        expect(match, net.paths[i].id).toMatchObject({ placeable: false, reason: 'loop-path', legs: [] });
+        continue;
+      }
       if (!match.placeable) {
         expect(match.reason, net.paths[i].id).toBe('too-few-stops');
         expect(overrides.unmappedPaths[net.paths[i].id], net.paths[i].id).toBeTruthy();
@@ -86,6 +92,42 @@ describe('the ZET artwork build', () => {
     // Pin the measured artifact with headroom, not the source SVG's 1.1 MB.
     expect(bytes.byteLength).toBeLessThan(65_000);
     expect(gzipSync(bytes).byteLength).toBeLessThan(20_000);
+  });
+});
+
+// WP0: a vehicle on a terminus loop is drawn on the diagram at the circle of
+// the loop's first stop -- the platform its last trip ended at -- on its own
+// line, wherever along the loop it is: the artwork draws a terminus as one
+// point, and a loop has no legs to lay along it. Where the artwork prints no
+// such stop (Mandlova, the depot, is explicitly absent from it) the loop's
+// other end stands in, so no tram on a loop drops off the diagram.
+describe('a vehicle on a terminus loop on the diagram', () => {
+  it('sits on its own line at the circle of the loop\'s first stop, or its last where the first is not printed, whatever its arc, with no track to point along', () => {
+    const net = decodeNetwork(read('app/public/data/zet-network.json'));
+    const schema = decodeSchema(read('app/public/data/zet-schema.json'));
+    const placer = createSchemaPlacer(schema, net);
+    const loops = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.direction === LOOP_PATH_DIRECTION);
+    expect(loops).toHaveLength(17);
+    const names: string[] = [];
+    for (const { path, idx } of loops) {
+      const line = schema.lines.find((l) => l.route === path.route)!;
+      const entryFor = (stopId: string) => {
+        const name = net.stops.find((stop) => stop.id === stopId)!.name;
+        return line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
+      };
+      const entry = entryFor(path.stops![0]) ?? entryFor(path.stops![1]);
+      expect(entry, `${path.id}: neither end is on line ${path.route}'s artwork`).toBeTruthy();
+      names.push(entry!.name);
+      const circle = pointAt(line, entry!.u);
+      for (const s of [0, path.len / 2, path.len]) {
+        const at = placer.place(idx, s);
+        expect(at, path.id).toMatchObject({ x: circle.x, y: circle.y, line: path.route, colour: line.colour });
+        expect(at!.track, path.id).toBeUndefined();
+      }
+    }
+    // Four loops leave Mandlova for Dubrava and are drawn at Dubrava.
+    expect(names.filter((name) => name === 'Dubrava')).toHaveLength(6);
+    expect(names).not.toContain('Mandlova');
   });
 });
 

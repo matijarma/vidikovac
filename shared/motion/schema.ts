@@ -223,7 +223,12 @@ export interface SchemaPathLeg {
 }
 export type SchemaPathFailure =
   | 'invalid-path' | 'non-tram' | 'missing-line' | 'too-few-stops'
-  | 'non-increasing-arc' | 'ambiguous-stops' | 'no-progress';
+  | 'non-increasing-arc' | 'ambiguous-stops' | 'no-progress' | 'loop-path';
+
+/** The direction a terminus loop path carries (scripts/gtfs-shapes.mjs
+ *  LOOP_DIRECTION): stops [L, F], from one trip's last platform to the next
+ *  trip's first, which the artwork draws as one terminus. */
+export const LOOP_PATH_DIRECTION = -1;
 export interface SchemaPathMatch {
   pathIdx: number | null;
   route: string | null;
@@ -291,6 +296,9 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
   const line = schema.lines.find((l) => l.route === path.route);
   if (!line) return fail('missing-line');
   result.line = line;
+  // A terminus loop has no legs to lay along the artwork: it is where the
+  // line turns, and the placer puts it on the terminus circle instead.
+  if (path.direction === LOOP_PATH_DIRECTION) return fail('loop-path');
   // The GEOMETRIC list, not the served one (F8): this is artwork placement,
   // not planning. Every platform the rails pass is a legitimate anchor for
   // the arc -> u mapping -- only names printed on this line become anchors
@@ -440,13 +448,40 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
   return result;
 }
 
+/** Where a vehicle on a terminus loop path is drawn: at the circle of the
+ *  loop's first stop, the platform its last trip ended at, on its own line;
+ *  where the artwork prints no stop of that name (Mandlova, the depot), at
+ *  the circle of the loop's other end, the platform the next trip leaves
+ *  from. The whole loop is one point of the artwork, so the arc does not
+ *  move it, and it has no track to point along. Null when the line's
+ *  artwork names neither. */
+export function loopPlacement(schema: Schema, net: GraphNetwork, pathIdx: number): SchemaPlacement | null {
+  const path = net.paths[pathIdx];
+  if (!path || path.direction !== LOOP_PATH_DIRECTION) return null;
+  const line = schema.lines.find((l) => l.route === path.route);
+  if (!line) return null;
+  for (const stopId of path.stops ?? []) {
+    const name = net.stops.find((stop) => stop.id === stopId)?.name;
+    // Its own printed circle first, then a projection onto the line.
+    const entry = line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
+    if (entry) return { ...pointAt(line, entry.u), sign: 1, colour: line.colour, line: line.route, chord: false };
+  }
+  return null;
+}
+
 /** Cached stop brackets, including cached rejection of unplaceable paths. */
 export function createSchemaPlacer(schema: Schema, net: GraphNetwork): SchemaPlacer {
   const cache = new Map<number, { match: SchemaPathMatch; positions: number[] }>();
+  const loops = new Map<number, SchemaPlacement | null>();
   return {
     place(pathIdx, s) {
       if (typeof pathIdx !== 'number' || !Number.isInteger(pathIdx) || pathIdx < 0 || !net.paths[pathIdx]
         || typeof s !== 'number' || !Number.isFinite(s)) return null;
+      if (net.paths[pathIdx].direction === LOOP_PATH_DIRECTION) {
+        if (!loops.has(pathIdx)) loops.set(pathIdx, loopPlacement(schema, net, pathIdx));
+        const at = loops.get(pathIdx) ?? null;
+        return at ? { ...at } : null;
+      }
       let cached = cache.get(pathIdx);
       if (!cached) {
         const match = matchSchemaPath(schema, net, pathIdx);
