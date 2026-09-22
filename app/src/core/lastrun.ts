@@ -1,5 +1,7 @@
 // The last scheduled departure per line from the screen's stop (plan A.6, D7,
-// Task T3.1). The source is ZET's static GTFS, cut by scripts/gtfs-lastrun.mjs
+// Task T3.1), and the first one of the morning beside it (WP1 step 1: the wall's
+// "Prvi tramvaj" row from 22:00 until it leaves). The source is ZET's static
+// GTFS, cut by scripts/gtfs-lastrun.mjs
 // into one small JSON per stop under /data/lastrun/<stopId>.json and fetched
 // once per session; nothing here reads the real-time feed, and the tile that
 // reads this says "po rasporedu · ZET GTFS", never an arrival.
@@ -25,6 +27,8 @@ export interface LastRunLive {
   /** The last instant the file speaks for; after it, no departure is known and nothing is shown. */
   validUntil: string;
   routes: LastRunRoutes;
+  /** The earliest departure per line and service date, same shape as `routes`; absent in a file cut before it existed. */
+  first?: LastRunRoutes;
 }
 export interface LastRunDown {
   status: 'down';
@@ -37,6 +41,7 @@ interface LastRunFile {
   generatedAt: string;
   validUntil: string;
   routes: LastRunRoutes;
+  first?: LastRunRoutes;
 }
 
 const HOUR_MS = 3_600_000;
@@ -101,15 +106,45 @@ export function lastDeparture(snapshot: LastRunSnapshot | null | undefined, rout
   return null;
 }
 
+/**
+ * The first departure of `routeId` on the service date `serviceDate` (YYYY-MM-DD), resolved to
+ * its instant, or null: on a down snapshot, for a line or a date the file's `first` table does
+ * not carry, and for a file cut before `first` existed. It does not look at the clock; the
+ * caller decides whether that morning is still ahead.
+ */
+export function firstDepartureOn(snapshot: LastRunSnapshot | null | undefined, routeId: string, serviceDate: string): { at: number } | null {
+  if (!snapshot || snapshot.status !== 'live') return null;
+  const time = snapshot.first?.[routeId]?.[serviceDate];
+  if (!time) return null;
+  const at = serviceInstant(serviceDate, time);
+  return Number.isFinite(at) ? { at } : null;
+}
+
+/**
+ * The next first departure of `routeId` that still lies ahead of `now`: today's service date
+ * first (Saturday 00:10 still waits for Saturday's 04:16), then tomorrow's (Friday 22:40 gets
+ * Saturday's 04:16), mirroring lastDeparture. Null once `validUntil` has passed, on a down
+ * snapshot, without a `first` table and for a line the stop does not know.
+ */
+export function firstDeparture(snapshot: LastRunSnapshot | null | undefined, routeId: string, now: number): { at: number } | null {
+  if (!snapshot || snapshot.status !== 'live') return null;
+  if (!(now < Date.parse(snapshot.validUntil))) return null;
+  const today = zagrebDayKey(now);
+  for (const day of [today, shiftDayKey(today, 1)]) {
+    const first = firstDepartureOn(snapshot, routeId, day);
+    if (first && first.at >= now) return first;
+  }
+  return null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** The file's shape, checked field by field; anything else is a down answer, never a half-read table. */
-function parseFile(body: unknown): LastRunFile | null {
-  if (!isRecord(body) || typeof body.generatedAt !== 'string' || typeof body.validUntil !== 'string' || !isRecord(body.routes)) return null;
+/** One `routeId -> service date -> 'HH:MM'` table, checked entry by entry; null when any entry is not a string. */
+function parseRoutes(body: Record<string, unknown>): Record<string, Record<string, string>> | null {
   const routes: Record<string, Record<string, string>> = {};
-  for (const [routeId, table] of Object.entries(body.routes)) {
+  for (const [routeId, table] of Object.entries(body)) {
     if (!isRecord(table)) return null;
     const days: Record<string, string> = {};
     for (const [day, time] of Object.entries(table)) {
@@ -118,7 +153,22 @@ function parseFile(body: unknown): LastRunFile | null {
     }
     routes[routeId] = days;
   }
-  return { generatedAt: body.generatedAt, validUntil: body.validUntil, routes };
+  return routes;
+}
+
+/**
+ * The file's shape, checked field by field; anything else is a down answer, never a half-read
+ * table. `first` is optional (a file cut before it existed still reads), but when present it
+ * is checked like `routes`.
+ */
+function parseFile(body: unknown): LastRunFile | null {
+  if (!isRecord(body) || typeof body.generatedAt !== 'string' || typeof body.validUntil !== 'string' || !isRecord(body.routes)) return null;
+  const routes = parseRoutes(body.routes);
+  if (!routes) return null;
+  if (body.first === undefined) return { generatedAt: body.generatedAt, validUntil: body.validUntil, routes };
+  const first = isRecord(body.first) ? parseRoutes(body.first) : null;
+  if (!first) return null;
+  return { generatedAt: body.generatedAt, validUntil: body.validUntil, routes, first };
 }
 
 async function fetchSnapshot(stopId: string, fetchImpl: typeof fetch): Promise<LastRunSnapshot | null> {
@@ -129,7 +179,7 @@ async function fetchSnapshot(stopId: string, fetchImpl: typeof fetch): Promise<L
     if (!response.ok) return { status: 'down', fetchedAt };
     const file = parseFile(await response.json());
     if (!file) return { status: 'down', fetchedAt };
-    return { status: 'live', fetchedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes };
+    return { status: 'live', fetchedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes, ...(file.first ? { first: file.first } : {}) };
   } catch {
     return { status: 'down', fetchedAt };
   }

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Builds app/public/data/lastrun/<stopId>.json, one small file per stop in
 // app/public/data/stops.json: for every line that departs from the stop, the
-// latest scheduled departure per GTFS service date, over 21 days from the run
-// plus the service day before it (a reader at 00:10 still asks about
+// latest scheduled departure per GTFS service date (`routes`) and the earliest
+// one (`first`, the wall's "Prvi tramvaj" row, WP1 step 1), over 21 days from
+// the run plus the service day before it (a reader at 00:10 still asks about
 // yesterday's service). The app fetches one file per session behind
 // FEED_LASTRUN (plan A.6, D7, Task T3.1) and never bundles any of them.
 //
@@ -193,13 +194,23 @@ function inflateLines(buf, entry) {
 
 /**
  * Streams stop_times.txt once more and keeps, per stop, line and service, the
- * latest departure in seconds. A row is a departure only when a passenger can
- * board there: never the trip's last stop (its arrival at the terminus, by
- * stop_sequence, so file order does not matter) and never a pickup_type 1 row.
- * @returns {Promise<Map<string, Map<string, Map<string, number>>>>}
+ * latest and the earliest departure in seconds. A row is a departure only when
+ * a passenger can board there: never the trip's last stop (its arrival at the
+ * terminus, by stop_sequence, so file order does not matter) and never a
+ * pickup_type 1 row.
+ * @returns {Promise<{ latest: Map<string, Map<string, Map<string, number>>>; earliest: Map<string, Map<string, Map<string, number>>> }>}
  */
-export async function streamLatestDepartures(buf, entry, { trips, endpoints, stopIds }) {
+export async function streamDepartureBounds(buf, entry, { trips, endpoints, stopIds }) {
   const latest = new Map();
+  const earliest = new Map();
+  const keep = (table, stopId, routeId, serviceId, seconds, better) => {
+    let byRoute = table.get(stopId);
+    if (!byRoute) table.set(stopId, (byRoute = new Map()));
+    let byService = byRoute.get(routeId);
+    if (!byService) byRoute.set(routeId, (byService = new Map()));
+    const known = byService.get(serviceId);
+    if (known === undefined || better(seconds, known)) byService.set(serviceId, seconds);
+  };
   let header = null;
   let idx = null;
   for await (const line of inflateLines(buf, entry)) {
@@ -230,14 +241,10 @@ export async function streamLatestDepartures(buf, entry, { trips, endpoints, sto
     if (seconds === null) continue;
     const trip = trips.get(tripId);
     if (!trip) continue;
-    let byRoute = latest.get(stopId);
-    if (!byRoute) latest.set(stopId, (byRoute = new Map()));
-    let byService = byRoute.get(trip.routeId);
-    if (!byService) byRoute.set(trip.routeId, (byService = new Map()));
-    const known = byService.get(trip.serviceId);
-    if (known === undefined || seconds > known) byService.set(trip.serviceId, seconds);
+    keep(latest, stopId, trip.routeId, trip.serviceId, seconds, (a, b) => a > b);
+    keep(earliest, stopId, trip.routeId, trip.serviceId, seconds, (a, b) => a < b);
   }
-  return latest;
+  return { latest, earliest };
 }
 
 function feedVersionOf(text) {
@@ -255,9 +262,11 @@ function feedVersionOf(text) {
  * `today` is the run's Zagreb date; the window is the day before it plus
  * `days` from it. `validUntil` is the last instant a file speaks for: its
  * latest resolved departure, or the midnight ending the window for a stop
- * with none. Routes are ordered as gtfs-routes orders them, dates ascending.
+ * with none. Routes are ordered as gtfs-routes orders them, dates ascending;
+ * `first` carries the same lines and dates as `routes`, with the earliest
+ * departure of each service date instead of the latest.
  * @param {Uint8Array} zipBuf
- * @returns {Promise<Map<string, { generatedAt: string; validUntil: string; source: string; routes: Record<string, Record<string, string>> }>>}
+ * @returns {Promise<Map<string, { generatedAt: string; validUntil: string; source: string; routes: Record<string, Record<string, string>>; first: Record<string, Record<string, string>> }>>}
  */
 export async function buildLastRun(zipBuf, { stopIds, today, generatedAt, days = HORIZON_DAYS, log = () => {} }) {
   const entries = readZipEntries(zipBuf);
@@ -278,31 +287,41 @@ export async function buildLastRun(zipBuf, { stopIds, today, generatedAt, days =
   log('Streaming stop_times.txt for every trip’s last stop');
   const endpoints = await streamTripEndpoints(zipBuf, stopTimes);
   log('Streaming stop_times.txt for the departures');
-  const latest = await streamLatestDepartures(zipBuf, stopTimes, { trips, endpoints, stopIds: new Set(stopIds) });
+  const { latest, earliest } = await streamDepartureBounds(zipBuf, stopTimes, { trips, endpoints, stopIds: new Set(stopIds) });
 
   const files = new Map();
   for (const stopId of stopIds) {
     const byRoute = latest.get(stopId) ?? new Map();
+    const firstByRoute = earliest.get(stopId) ?? new Map();
     const routes = {};
+    const first = {};
     let lastInstant = -Infinity;
     for (const routeId of [...byRoute.keys()].sort(compareRouteIds)) {
       const byService = byRoute.get(routeId);
+      const firstByService = firstByRoute.get(routeId) ?? new Map();
       const table = {};
+      const firstTable = {};
       for (const day of window) {
         let best = -1;
+        let earliestSeconds = Infinity;
         for (const serviceId of active.get(day)) {
           const seconds = byService.get(serviceId);
           if (seconds !== undefined && seconds > best) best = seconds;
+          const early = firstByService.get(serviceId);
+          if (early !== undefined && early < earliestSeconds) earliestSeconds = early;
         }
         if (best < 0) continue;
         const minute = Math.floor(best / 60) * 60; // what the file states, so validUntil agrees with what the app resolves
         table[day] = formatGtfsTime(minute);
         lastInstant = Math.max(lastInstant, serviceInstant(day, minute));
+        // Whole minutes, as `routes` states them: 04:37:30 is written 04:37.
+        if (earliestSeconds < Infinity) firstTable[day] = formatGtfsTime(Math.floor(earliestSeconds / 60) * 60);
       }
       if (Object.keys(table).length > 0) routes[routeId] = table;
+      if (Object.keys(firstTable).length > 0) first[routeId] = firstTable;
     }
     const validUntil = new Date(lastInstant > -Infinity ? lastInstant : zagrebNoon(window.at(-1)) + 12 * HOUR_MS).toISOString();
-    files.set(stopId, { generatedAt, validUntil, source: SOURCE, routes });
+    files.set(stopId, { generatedAt, validUntil, source: SOURCE, routes, first });
   }
   return files;
 }
