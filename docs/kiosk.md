@@ -110,10 +110,10 @@ rute `/api/admin/*` i `/stats`.
    iz stajališta.
 
    Mjesto kadrira i kartu pozivnice. Odabrano mjesto sjeda u sredinu, a
-   polumjer kadra je zračna udaljenost do četvrtog, šestog ili osmog
-   najbližeg tramvajskog stajališta oko mjesta (prema Kadru; peroni istog
-   imena broje se jednom, a stajalište koje je samo mjesto ne broji se),
-   izmjerena za svako mjesto posebno i uvijek između 500 m i 3 km. Gdje u
+   polumjer kadra mjeri se do četvrtog, šestog ili osmog stajališta niz
+   tramvajske linije koje ondje staju (prema Kadru; peroni istog
+   imena broje se jednom). Mjeri se za svako mjesto posebno i uvijek je
+   između 500 m i 3 km. Gdje u
    krugu od 3 km nema tramvajskog stajališta, broje se autobusna. Zaslon
    bez odabranog mjesta (prazno polje ili **Cijeli grad**) drži prozor
    cijeloga grada. Zaglavlje čita isti odgovor i uvijek imenuje mjesto:
@@ -379,15 +379,16 @@ verzija ne tvrdi da su fizičke postave već testirane.
 
 `/kiosk/?prikaz=shema` umjesto geografske karte prikazuje ponovno iscrtanu ZET-ovu
 tramvajsku shemu. `?prikaz=karta` izričito bira gradsku kartu; bez parametra vrijedi
-lokalna postavka `kajima:map-mode:v1`, zadano gradska karta. Parametar ostaje u URL-u
+lokalna postavka `kajima:map-mode:v1`, zadano gradska karta. Na pregledu grada
+prekidač **Prikaz** čita i postavku `vidikovac-kiosk-view`: izbor sheme
+uključuje shemu, a izričiti `?prikaz=shema` ima prednost pred izborom karte.
+Parametar ostaje u URL-u
 nakon uklanjanja jednokratnih podataka za postavljanje. Prozor zadržava jedno
 polje i ploče naslovnice: `prikaz` bira samo renderer, a umirovljeni `prizor`
 ne vraća rotaciju poglavlja.
 
-Zaslon sa stajalištem koje postoji na shemi pokazuje čitljiv kadar oko njega,
-s nazivima od najmanje 24 CSS px. Bez prepoznatog stajališta, a tako je na
-zaslonu pokrenutom s praznim poljem ili s adresom kao mjestom, pokazuje
-cijelu mrežu bez sitnih naziva. Shema nije interaktivna na zaslonu i zanemaruje
+Shema na pregledu grada pokazuje cijelu mrežu bez zumiranja, neovisno o
+odabranom mjestu i Kadru. Shema nije interaktivna na zaslonu i zanemaruje
 geografsku kameru. Ploče ne prekrivaju polje pa nema donje tračnice ni
 dodatnog odmaka kadra.
 Prikazuje samo tramvaje čija se postojeća staza može smjestiti na nacrt.
@@ -403,10 +404,9 @@ Spojena oznaka ispisuje svaku liniju, nikad „+N”, i širi se s natpisom: svi
 petnaest tramvajskih linija stane u jednu oznaku, a tek na autobusnom čvorištu
 s natpisom duljim od četrdeset znakova oznaka zadržava samo cijele linije koje
 stanu.
-Drugo: shema na zaslonu vozi **isti sudarni prolaz naziva kao svaka druga
-površina**, samo sa svojim stajalištem prvim u rangu -- zaslon koji pokaže baš
-svaki naziv pokaže ih jedne preko drugih. Donja granica naziva od 24 CSS px i
-kadar oko vlastitog stajališta ostaju nepromijenjeni. Prekidača „samo ova linija”
+Drugo: shema na zaslonu primjenjuje **isti sudarni prolaz naziva kao svaka
+druga površina**. Pregled grada pritom pokazuje cijelu mrežu, bez zasebnog
+kadra oko mjesta. Prekidača „samo ova linija”
 na zaslonu nema.
 
 ## Razvoj i automatska provjera

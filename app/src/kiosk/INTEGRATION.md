@@ -18,13 +18,10 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
   (`map/frame.ts` `frameView`, R measured per place along the tram lines by
   `shared/city/frame.ts` `frameRadiusM`, Kadar 4 / 6 / 8); a phone's band, and
   a stop from a caller before place-v2, keep the centred street-level camera;
-  the read-path default place (`placeSet` false) keeps the whole-city window; a
-  configured gradska cetvrt sits on its seat until its outline lands and is
-  then fitted to the outline; a screen with neither -- which is every screen
-  the one-button start makes -- opens on `CITY_WINDOW`, the whole city fitted
+  the read-path default place (`placeSet` false) keeps `CITY_WINDOW`, the whole city fitted
   to the field with 24 px of clearance and floored at `FIELD_MIN_ZOOM` (12.7).
-  The district reaches the client as `ScreenMetadata.area`; `'zagreb'` is the
-  whole city and names no district.
+  The controller passes `district: null`; `ScreenMetadata.area` is derived
+  metadata, not a selectable camera.
 - `selectedStop` -- the screen's stop, or the stop the driver's phone selected.
   There is no default stop any more: a screen may have none for its whole life.
 - `selectedRoute` and `follow` -- the route the phone selected; `follow` asks the
@@ -120,6 +117,10 @@ where given) and closure lines.
 `map`) for this boot only. The entry preserves a valid `prikaz` when clearing
 the provisioning fragment and one-time `tema`. It does not overwrite the
 device preference. Prozor has no chapter pin or rotation.
+The invitation additionally reads `vidikovac-kiosk-view` from the Prikaz
+toggle. Either an explicit schema boot or that local schema choice shows the
+whole network on a wall, without a stop crop; handheld and presented
+transport retain their existing renderer contract.
 
 `KioskDeps.mapMode` reaches `requestKioskMap()` as `renderer`, and
 `KioskMapExtras` carries it to the factory alongside the stop and the
