@@ -119,6 +119,26 @@ describe('runTick on the corridor', () => {
     expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
   });
 
+  it.each([0, 10])('publishes the eligible prior after route 9 to 1 at a %d-second GPS interval', (interval) => {
+    const changeJoins = new Map<string, TripJoin>([
+      ['changing-trip', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    const feed = (routeId: string, offset: number, atOffset: number) => ({
+      headerTs: start + offset,
+      vehicles: [{ vehicleId: 'changing', tripId: 'changing-trip', routeId, ...lonLatOf({ x: 600, y: 55 }), atSec: start + atOffset }],
+      tripUpdates: [],
+    });
+    const first = runTick({ state: emptyState(), feed: feed('9', 0, 0), nowMs: (start + 2) * 1000, joins: changeJoins, routes, engine, validUntilMs: 0 });
+    expect(net.paths[first.state.tracks.changing.match.pathIdx!].route).toBe('9');
+    const changed = runTick({ state: first.state, feed: feed('1', 10, interval), nowMs: (start + 12) * 1000, joins: changeJoins, routes, engine, validUntilMs: 0 });
+    const track = changed.state.tracks.changing;
+    expect(track.routeId).toBe('1');
+    expect(net.paths[track.match.pathIdx!].id).toBe('1_0');
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+    const pin = changed.payload.items.find((item) => item.id === 'vehicle:changing')!;
+    expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
+  });
+
   it('preserves slow prior-return progress across state restoration and matcher recreation', () => {
     const slowJoins = new Map<string, TripJoin>([
       ['slow', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],

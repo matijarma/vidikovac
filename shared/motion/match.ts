@@ -487,8 +487,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       return track.match;
     };
 
-    if (invalidMatch) return rederive();
-
+    // Eligibility invalidation drops the old match, not the new context's
+    // eligible prior. Give that prior the same near-band placement as a new trip.
     const working = track.match.pathIdx ?? prior.pathIdx;
     if (working !== null) {
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
@@ -527,6 +527,9 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         track.match = onPath;
         return track.match;
       }
+      // An invalidated path gets no one-stray-fix hold. If the eligible
+      // prior cannot explain this fix, immediately try other eligible rails.
+      if (invalidMatch) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.
@@ -612,9 +615,12 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     matchFix(track, fix, prior, nextStopId, ctx) {
       const prev = lastFix(track);
       if (!pushFix(track, fix)) {
-        if (track.kind !== 'tram' || prev === null || track.match.pathIdx === null || pathEligible(track.match.pathIdx, prior.routeId, ctx)) return track.match;
+        if (track.kind !== 'tram' || prev === null) return track.match;
+        const eligiblePrior = prior.pathIdx !== null && pathEligible(prior.pathIdx, prior.routeId, ctx) ? prior.pathIdx : null;
+        const currentEligible = track.match.pathIdx === null || pathEligible(track.match.pathIdx, prior.routeId, ctx);
+        if (currentEligible && eligiblePrior === track.priorPath) return track.match;
         // A repeated GPS timestamp is not motion evidence, but changed
-        // route/service evidence must still invalidate the old match.
+        // route/service evidence can invalidate the match or restore a prior.
         const match = matchTram(track, prev, prior, nextStopId, null, ctx);
         annotate(prev, match);
         return match;

@@ -339,6 +339,57 @@ describe('own-path return and service eligibility', () => {
     expect(track.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
   });
 
+  it.each([0, 10])('prefers an eligible prior after a route change with a %d-second GPS interval', (interval) => {
+    const track = newTrack('eligible-route-change', '9', 'trip', 'tram');
+    matcher.matchFix(track, fix(600, 55, 1000), matcher.priorFor(null, '9', 0), null);
+    expect(track.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+    const prior = matcher.priorFor('1_0', '1', 0);
+    track.routeId = '1';
+    matcher.matchFix(track, fix(600, 55, 1000 + interval), prior, null);
+    expect(track.match.pathIdx).toBe(prior.pathIdx); // 55 m prior beats the 5 m opposite rail
+    expect(track.match.residual).toBeCloseTo(55);
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+  });
+
+  it('immediately re-derives an invalidated match when its eligible prior is outside the near band', () => {
+    const track = newTrack('remote-route-change', '9', 'trip', 'tram');
+    matcher.matchFix(track, fix(600, 90, 1000), matcher.priorFor(null, '9', 0), null);
+    track.routeId = '1';
+    matcher.matchFix(track, fix(600, 90, 1010), matcher.priorFor('1_0', '1', 0), null);
+    expect(track.match.pathIdx).toBe(pathIdx('1_1')); // not a 90 m stray-fix hold on the prior
+    expect(track.offPathCount).toBe(0);
+  });
+
+  it.each([0, 10])('prefers a newly running prior over closer eligible rails after invalidation (%d-second interval)', (interval) => {
+    const spec = corridorSpec();
+    spec.routes[0].paths!.push({ id: 'weekday-return', direction: 1, edges: [5], synthetic: true });
+    const serviceNet = syntheticNetwork(spec);
+    const pathRanks = serviceNet.paths.map((path) => ({ services: new Set([path.id === '1_1' ? 'sat' : 'wd']), trips: 1 }));
+    const m = createMatcher(serviceNet, { pathRanks });
+    const prior = m.priorFor('1_0', '1', 0);
+    const track = newTrack('prior-resumes', '1', 'trip', 'tram');
+    m.matchFix(track, fix(600, 55, 1000), prior, null, { runningServices: new Set(['sat']) });
+    expect(serviceNet.paths[track.match.pathIdx!].id).toBe('1_1');
+    expect(track.priorPath).toBeNull();
+    m.matchFix(track, fix(600, 55, 1000 + interval), prior, null, { runningServices: new Set(['wd']) });
+    expect(track.match.pathIdx).toBe(prior.pathIdx);
+    expect(track.priorPath).toBe(prior.pathIdx);
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+  });
+
+  it.each([0, 10])('places a newly eligible prior even if the adopted path remains eligible (%d-second interval)', (interval) => {
+    const pathRanks = net.paths.map((path) => ({ services: new Set([path.id === '1_0' ? 'wd' : 'sat']), trips: 1 }));
+    const m = createMatcher(net, { pathRanks });
+    const prior = m.priorFor('1_0', '1', 0);
+    const track = newTrack('prior-now-eligible', '1', 'trip', 'tram');
+    m.matchFix(track, fix(600, 55, 1000), prior, null, { runningServices: new Set(['sat']) });
+    expect(track.match.pathIdx).toBe(pathIdx('1_1'));
+    m.matchFix(track, fix(600, 55, 1000 + interval), prior, null, { runningServices: new Set(['sat', 'wd']) });
+    expect(track.match.pathIdx).toBe(prior.pathIdx);
+    expect(track.priorPath).toBe(prior.pathIdx);
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+  });
+
   it.each(['foreign', 'non-running'])('does not return to a %s prior on an agreeing moving fix', (reason) => {
     const pathRanks = net.paths.map(() => ({ services: new Set(['wd']), trips: 1 }));
     pathRanks[pathIdx('1_0')].services = new Set(['sat']);
