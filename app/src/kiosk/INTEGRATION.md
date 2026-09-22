@@ -72,28 +72,35 @@ the kiosk drives:
   outage; a `stale` snapshot is the twin's last-good copy (R-TE5), whose
   vehicles carry their own history and confidence, so the motion keeps going
   and fades on its own. A map created during an outage is told before its
-  first frame.
+  first frame. On the wall a `down` feed also draws no vehicle at all:
+  `paintMap` passes `vehiclesVisible: false` into `requestKioskMap`, which
+  empties only the vehicle points, so the network, the stops, BAJS, closures
+  and places stay on the picture.
 
-The field (`field.ts`) is the front page's left column (`invitation.ts`,
-`front.ts`): the map takes the whole of it, with nothing drawn over it, so the
-camera needs none of the old board-height offset (`boardCentre`) a
-lines-board-over-map arrangement needed; `padding` on `setView` stays unused.
+The field (`field.ts`) is the front page's left column (`invitation.ts`):
+the map takes the whole of it, with nothing drawn over it but, while ZET's
+feed is down, one quiet note (`map-note`), so the camera needs none of the
+old board-height offset (`boardCentre`) a lines-board-over-map arrangement
+needed; `padding` on `setView` stays unused.
 Lagano is the one place the lines board still lies in the map's cell, as
 `kiosk-lines`'s own contract below says. The kiosk never calls the factory
 twice for one screen and never reaches into MapLibre itself.
 
-Contract testids across this hand-off (global constraints, contract 8):
-`kiosk-live` names the field's section; `kiosk-map-host` and `kiosk-map` name
-the map container inside it, and `kiosk-map-host` carries
-`data-major-labels="<count>"` once the style idles. `kiosk-panel-<id>` names
-each panel. The front page carries three of them -- weather, promet, tonight --
-beside the pairing card; `city` and `around` keep their producers and are drawn
-only in the paired compositions, since closures are on the map and in the
-header line and the gazette is in the header line. `kiosk-ticker` names the
-header's one line of city news; `kiosk-lines` the lines panel's list (also the
-lagano board's, unchanged); `kiosk-lastrun` the promet panel's last-departures
-line from 20:00, which exists only while that panel is a configured stop's
-board and not the city's exceptions.
+Contract testids across this hand-off (global constraints, contract 8; the
+whole probe list is `docs/companion-2026-09-22.md` §15.6): `kiosk-live` names
+the field's section; `kiosk-map-host` and `kiosk-map` name the map container
+inside it, and `kiosk-map-host` carries `data-major-labels="<count>"` once the
+style idles; `map-note` is the outage note over the map. The front page carries
+no panel: beside the field it has the "U blizini" list (`nearby` >
+`nearby-head` + `nearby-rows` > `li.nearby-row`, drawn by `kiosk/timeline.ts`
+from `city/nearby.ts` `selectNearby`) over the pairing card (`kiosk-invite`,
+`kiosk-qr`). `kiosk-panel-<id>` names each panel of the paired compositions,
+which keep weather, promet, tonight, `city` and `around` with their producers.
+`kiosk-sentence` (with `kiosk-sentence-kicker` and `kiosk-sentence-text`) names
+the header's one sentence; `kiosk-lines` the lines panel's list (also the
+lagano board's, unchanged); `kiosk-lastrun` the paired promet panel's
+last-departures line from 20:00, while that panel is a configured stop's board.
+On the front page the evening's last departures are one row of the list.
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn
@@ -138,15 +145,29 @@ for a schema field. The schema renderer itself does not load MapLibre.
 
 ## Header
 
-The header's middle cell (`.k-head-mid`) is the city's one line of news: a
-coloured kicker (VRIJEME / PROMET / RADOVI / VECERAS / GRAD) and one sentence,
-built by the pure `kiosk/ticker.ts` from the teaser's own modules and swapped
-on the 1 s tick with a short crossfade -- instant under reduced motion and in
-lagano. The session pill and the pairing notice still take that cell when they
-are present, and the notice's `role="status"` is cleared when it expires, so
-the line is never silenced for the screen's life. An item's sentence is
-`item.brief ?? item.title`: the Worker's condensed reading when it made one,
-the item's own title otherwise, never a truncation.
+The header's middle cell (`.k-head-mid`) carries one sentence
+(`kiosk-sentence[data-kicker][data-valid-until]`): a coloured kicker (Promet /
+Kultura / Vrijeme / Bicikli / Noćas / Radovi) and at most 80 characters (64 on
+the compact, portrait and handheld compositions), swapped at the screen's
+rhythm (`kiosk/prefs.ts` `readRhythm()`, 20 s by default) with a short
+crossfade, instant under reduced motion and in lagano. The pure
+`city/sentence.ts` turns the list's own rows plus weather, closures and bikes
+into facts (`sentenceFacts`), writes the template sentences from them
+(`templateSentences`, the fallback that always exists) and sequences the pool
+(`createSentenceSequence`: a sentence past its `validUntil` is skipped, none
+repeats verbatim within ten minutes). `fetchSentences` (`api.ts`) asks
+`POST /api/kiosk/sentences` for model sentences when the facts change and at
+the latest every `SENTENCE_REFRESH_MS`, never in lagano; the Worker writes them
+with Workers AI, checks each against the facts with `shared/kiosk/sentence.ts`
+`acceptSentence`, keeps them in KV for 20 minutes and answers an empty list
+under `APP_ENV=test`, and the client checks them again against the current
+facts before they join the templates. A sentence that would overflow the cell
+is measured on a permanently laid-out, visually hidden probe and skipped,
+never cut. The session pill and the pairing notice still take that cell when
+they are present, and the notice's `role="status"` is cleared when it
+expires, so the sentence is never silenced for the screen's life; a
+presentation suspends it. The map highlights what the current sentence names
+(`setHighlight`), never moving the camera.
 
 The header's right end carries the gear that opens **Postavke** (area, stop,
 theme, screen expiry and "Zaboravi zaslon"). It is the only setup surface on
