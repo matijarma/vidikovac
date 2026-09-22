@@ -65,8 +65,8 @@ describe('the overlay layer list', () => {
       expect(pills.layout![key], key).toBe(true);
     }
     expect(pills.layout!['text-optional']).toBe(false); // number and pill are one mark
-    // A cluster's label is one line or it is nothing: MapLibre's default 10 em
-    // broke "109·113·119·120 +3" at the space and hung the tail under the capsule.
+    // A cluster's label is one line or it is nothing: MapLibre may break after
+    // the "·" joining its lines, and its default 10 em hung the tail under the capsule.
     expect(pills.layout!['text-max-width']).toBe(100);
     // What reads as "several here": the ink ring around a merged pill.
     expect(pills.paint!['icon-halo-color']).toEqual(['case', ['get', 'cluster'], OVERLAY_LIGHT.selection, OVERLAY_LIGHT.halo]);
