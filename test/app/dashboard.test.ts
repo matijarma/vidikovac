@@ -131,7 +131,7 @@ function click(root: Root, selector: string): HTMLElement {
 }
 /** Opens a domain the tab bar does not carry, the way a reader does: Još, then its directory row. */
 function openViaMore(root: Root, layer: LayerId): void {
-  const primary = root.querySelector<HTMLElement>(`.ki-tabs [data-layer="${layer}"], .ki-domains [data-layer="${layer}"]`);
+  const primary = root.querySelector<HTMLElement>(`.ki-tabs [data-layer="${layer}"]`);
   if (primary) { primary.click(); return; }
   click(root, '[data-testid=tab-more]');
   click(root, `[data-testid=dir-${layer}]`);
@@ -147,13 +147,15 @@ describe('parseSessionHash', () => {
   });
 });
 describe('shell and navigation', () => {
-  it('renders the wordmark, one session element, the safety shortcut and four phone tabs; no kvart select, no sidebar, no canvas', () => {
+  it('renders the wordmark, one session element, the safety shortcut and three phone tabs Sada · Karta · Još; no kvart select, no sidebar, no canvas', () => {
     const { root } = mount();
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(root.querySelectorAll('[data-testid=session-label]')).toHaveLength(1);
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('data-layer')).toBe('sigurnost');
-    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Karta', 'Događanja', 'Još']);
-    expect(root.querySelector('.ki-tabs [data-layer=kultura]')).not.toBeNull();
+    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Karta', 'Još']);
+    // Događanja is a Još row now [O-51], never a tab.
+    expect(root.querySelector('.ki-tabs [data-layer=kultura]')).toBeNull();
+    expect(root.querySelector('[data-testid=tab-more]')).not.toBeNull();
     expect(root.querySelectorAll('.ki-side-link')).toHaveLength(0);
     expect(root.querySelector('[data-testid=kvart-select]')).toBeNull();
     expect(root.querySelector('main#ki-main')).not.toBeNull();
@@ -169,6 +171,9 @@ describe('shell and navigation', () => {
     openViaMore(root, 'kultura');
     expect(text(title)).toBe('Kaj ima? · Događanja');
     expect(document.title).toBe('Kaj ima? · Događanja');
+    // One word for the map everywhere: the tab, the title and the kiosk pill say Karta (layers.u-pokretu).
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
+    expect(document.title).toBe('Kaj ima? · Karta');
   });
   it('opens a domain from the tab bar: the workspace swaps, the tab is current, and the room is told nothing (D5: casting is explicit)', () => {
     const { root, session } = mount();
@@ -180,13 +185,20 @@ describe('shell and navigation', () => {
     expect(root.querySelector('.ki-tabs [data-layer=u-pokretu]')?.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
   });
-  it('Još opens the labelled directory of the four extra domains, Događanja third, and names the open one on its tab', () => {
+  it('Još opens the labelled directory: Spremljeno, then the week’s agenda with its count line, Vrijeme, Grad and Sigurnost, then the settings; it names the open domain on its tab', async () => {
     const { root, session } = mount();
     session.join();
     click(root, '[data-testid=tab-more]');
+    await flush();
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
+    expect([...root.querySelectorAll('#layer-directory h3')].map((h) => text(h))).toEqual(['Spremljeno', 'Odredišta', 'Osobne postavke']);
+    expect(text(root.querySelector('[data-testid=saved-section] .city-meta'))).toBe('Spremi liniju, stajalište ili mjesto na karti. Ovdje ih možeš ponovno otvoriti na ovom uređaju.');
+    // The fixture's two dated events fall inside the page's seven-day window; nothing is running.
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-title'))).toBe('Događanja ovaj tjedan');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('2 događanja');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toMatch(/događanj/);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
@@ -277,13 +289,54 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
-    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Map', 'Events', 'More']);
+    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Map', 'More']);
+    expect(text(scanner.root.querySelector('[data-testid=share-city]'))).toBe('Share the city');
     scanner.handle.destroy();
 
     const peer = mount();
     peer.session.join('phone');
     click(peer.root, '[data-testid=session-label]');
     expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
+  });
+  it('the header share button "Podijeli grad" stands beside the session pill for the scanner, labelled, and asks the room for the code in one tap [O-61]', () => {
+    const { root, session } = mount();
+    expect(root.querySelector('[data-testid=share-city]'), 'nothing to share before the join').toBeNull();
+    session.join();
+    const share = root.querySelector<HTMLButtonElement>('[data-testid=status-line] [data-testid=share-city]')!;
+    expect(share).not.toBeNull();
+    expect(share.tagName).toBe('BUTTON');
+    expect(share.dataset.action).toBe('share-city');
+    expect(share.dataset.key).toBe('share');
+    expect(text(share)).toBe('Podijeli grad');
+    expect(share.getAttribute('aria-label')).toBe('Podijeli grad');
+    expect(share.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(share.querySelector('svg use')?.getAttribute('href')).toBe('#icon-share-2');
+    // Beside the pill: the share button is the session element's previous sibling.
+    expect(share.nextElementSibling?.getAttribute('data-testid')).toBe('session-label');
+    share.click();
+    expect(session.client.share).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-testid=session-sheet]'), 'the header button opens no sheet on the way').toBeNull();
+  });
+  it('the header share button is absent for a peer, after a share refusal and after the freeze, and present at the desk', () => {
+    const peer = mount();
+    peer.session.join('phone');
+    expect(peer.root.querySelector('[data-testid=share-city]')).toBeNull();
+    peer.handle.destroy();
+    const refused = mount();
+    refused.session.join();
+    expect(refused.root.querySelector('[data-testid=share-city]')).not.toBeNull();
+    refused.session.error('share-not-allowed');
+    expect(refused.root.querySelector('[data-testid=share-city]')).toBeNull();
+    refused.handle.destroy();
+    const frozen = mount();
+    frozen.session.join();
+    frozen.session.expire();
+    expect(frozen.root.querySelector('[data-testid=share-city]')).toBeNull();
+    frozen.handle.destroy();
+    const desk = mount({ wide: true });
+    desk.session.join();
+    expect(text(desk.root.querySelector('[data-testid=status-line] [data-testid=share-city]'))).toBe('Podijeli grad');
+    desk.handle.destroy();
   });
   it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, the theme words read from the catalogue in preference order, and the four pages', () => {
     const stop = { id: 's1', name: 'Trg bana J. Jelačića', lon: 15.98, lat: 45.81, routes: ['6', '11'] };
@@ -857,7 +910,7 @@ describe('the sticky header and notices in flow', () => {
     session.join();
     session.expire();
     const tabs = [...root.querySelectorAll<HTMLElement>('.ki-tab[aria-disabled="true"]')];
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(3);
     for (const tab of tabs) expect(tab.getAttribute('tabindex')).toBe('-1');
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('tabindex')).toBeNull();
   });
@@ -920,7 +973,7 @@ describe('the sticky header and notices in flow', () => {
       scrollTo.mockClear();
       const desk = mount({ wide: true });
       click(desk.root, '[data-testid=status-more]');
-      click(desk.root, '.ki-domains [data-layer=kultura]');
+      click(desk.root, '[data-testid=dir-kultura]');
       expect(desk.root.querySelector('#layer-kultura')).not.toBeNull();
       expect(scrollTo).not.toHaveBeenCalled();
       desk.handle.destroy();
@@ -1105,15 +1158,26 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
 describe('the status line', () => {
   const keys = (root: Root): string[] => [...root.querySelector('[data-testid=status-line]')!.children].map((el) => (el as HTMLElement).dataset.key ?? '');
 
-  it('paints three keyed controls on the phone and six at the desk, in the documented order, from the one builder', () => {
+  it('paints the keyed controls in the documented order from the one builder: Zaslon and Podijeli grad beside the pill on both surfaces, one row at the desk without the clock or a domain bar', () => {
+    const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
     const phone = mount();
     expect(keys(phone.root)).toEqual(['wordmark', 'session', 'safety']);
     expect(phone.root.querySelector('[data-testid=tab-more]')).not.toBeNull();
+    phone.session.join();
+    expect(keys(phone.root)).toEqual(['wordmark', 'share', 'session', 'safety']);
     phone.handle.destroy();
+    const scanner = mount();
+    scanner.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    expect(keys(scanner.root)).toEqual(['wordmark', 'screen', 'share', 'session', 'safety']);
+    scanner.handle.destroy();
     const desk = mount({ wide: true });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'clock', 'session', 'more', 'domains']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'more', 'safety']);
+    desk.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'more', 'safety']);
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
-    expect([...desk.root.querySelectorAll('.ki-domains [data-layer]')].map(el => el.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
+    expect(desk.root.querySelectorAll('.ki-domains [data-layer]')).toHaveLength(0);
+    expect(desk.root.querySelector('.ki-domains')).toBeNull();
+    expect(desk.root.querySelector('[data-testid=status-clock]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=status-search]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=tab-more]'), 'the desk has no tab bar').toBeNull();
     expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
@@ -1137,33 +1201,22 @@ describe('the status line', () => {
     expect(safety.querySelector('.ki-nav-label')).toBeNull();
     expect(text(safety)).toBe('');
   });
-  it('the desktop clock links the time, the temperature and the sun glyph from the shared weather group into Vrijeme, and stands alone when dhmz-now is down', async () => {
+  it('the desk header carries no clock and no weather: the time and the weather are the feed’s, never a second header row [O-56]', async () => {
     const live = mount({ wide: true });
     live.session.join();
     await flush();
-    const clock = live.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
-    expect(clock.getAttribute('href')).toBe('#layer=zrak-i-nebo');
-    expect(clock.dataset.layer).toBe('zrak-i-nebo');
-    expect(text(clock.querySelector('time'))).toBe('14:32');
-    expect(clock.querySelector('.tb-temp')).toBeNull();
-    expect(text(live.root.querySelector('.day-weather-now strong'))).toBe('21 °C');
-    expect(clock.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
+    const status = live.root.querySelector<HTMLElement>('[data-testid=status-line]')!;
+    expect(status.querySelector('[data-testid=status-clock]')).toBeNull();
+    expect(status.querySelector('time')).toBeNull();
+    expect(status.querySelector('.ki-weather')).toBeNull();
+    expect(text(status)).not.toContain('°C');
     live.handle.destroy();
-    const down = mount({ wide: true, snapshot: (module) => { if (module === 'dhmz-now') throw new Error('down'); return snapshotOf(module); } });
-    down.session.join();
-    await flush();
-    const lone = down.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
-    expect(lone.children).toHaveLength(1);
-    expect(lone.firstElementChild?.tagName).toBe('TIME');
-    expect(text(lone)).toBe('14:32');
-    expect(lone.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
-    expect(text(lone)).not.toContain('–');
-    down.handle.destroy();
   });
   it('desktop transport navigation exposes the single search field in lightweight mode', () => {
+    // No domain bar at the desk: Karta opens from the remembered layer (and, with the desk pair, beside Sada).
+    sessionStorage.setItem(LAYER_STORAGE_KEY, 'u-pokretu');
     const { root, session } = mount({ wide: true, lightweight: true });
     session.join();
-    click(root, '.ki-domains [data-layer=u-pokretu]');
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
     expect(root.querySelector('[data-testid=transport-search]')).not.toBeNull();
     expect(session.sent).toEqual([]);
@@ -1180,8 +1233,9 @@ describe('explicit casting (D5)', () => {
     session.join('scanner', screen);
     expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
     for (const layer of ['u-pokretu', 'kultura', 'grad-sada'] as const) {
-      click(root, `.ki-tabs [data-layer="${layer}"]`);
+      openViaMore(root, layer);
       expect(root.querySelectorAll('[data-testid=screen-control]')).toHaveLength(1);
+      expect(root.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
     }
     expect(session.sent).toEqual([]);
     expect(session.presentations).toEqual([]);
@@ -1227,7 +1281,8 @@ describe('explicit casting (D5)', () => {
     const { root, session } = mount({ wide: true });
     session.join('scanner', screen);
     await flush();
-    click(root, '.ki-domains [data-layer=kultura]');
+    click(root, '[data-testid=status-more]');
+    click(root, '[data-testid=dir-kultura]');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(session.sent).toEqual([]);
@@ -1299,9 +1354,10 @@ describe('explicit casting (D5)', () => {
 
 
 describe('the desktop directory (D10)', () => {
-  it('the desk lists five domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
+  it('the desk lists the same four domains under Još as the phone, the week’s agenda first with its count line, and has no tab bar and no domain bar', async () => {
     const today = { id: 'kp:3', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Večer poezije', at: '2026-09-11T17:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'knjizevnost', precision: 'time' } };
-    const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today]) : snapshotOf(module) });
+    const running = { id: 'kp:4', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Izložba plakata', at: '2026-09-09T08:00:00Z', until: '2026-09-20T18:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'izlozba', precision: 'range' } };
+    const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today, running]) : snapshotOf(module) });
     session.join();
     await flush();
     expect(root.querySelector('[data-testid=tab-more]')).toBeNull();
@@ -1309,11 +1365,17 @@ describe('the desktop directory (D10)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(more.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect(root.querySelectorAll('.dir-item[data-layer]')).toHaveLength(0);
+    await flush();
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
     expect(root.querySelector('[data-testid=saved-section]')).not.toBeNull();
-    expect(root.querySelector('.ki-domains [data-layer=kultura]')).not.toBeNull();
-    click(root, '.ki-domains [data-layer=u-pokretu]');
-    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(root.querySelector('.ki-domains')).toBeNull();
+    // Three dated starts this week (today's evening one included) and one exhibition running: the page's own count line.
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-title'))).toBe('Događanja ovaj tjedan');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('3 događanja · 1 u tijeku');
+    click(root, '[data-testid=dir-kultura]');
+    expect(root.querySelector('#layer-kultura')).not.toBeNull();
+    // The row and the page count the same things.
+    expect(text(root.querySelector('[data-testid=ev-count]'))).toContain('3 događanja · 1 u tijeku');
     expect(root.querySelector('[data-testid=status-more]')?.getAttribute('aria-expanded')).toBe('false');
   });
 });

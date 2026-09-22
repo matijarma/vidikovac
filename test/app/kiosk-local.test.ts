@@ -92,7 +92,7 @@ describe('kiosk copy', () => {
     expect(hr.header.unlockedUntil).toBe(i18n.t('shared.unlockedUntil'));
     expect(hr.safety.hitno).toBe(i18n.t('shared.safetyPage'));
     expect(hr.safety.label).toBe(i18n.t('shared.safetyPage'));
-    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Promet', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' });
+    expect(hr.layers).toEqual({ 'grad-sada': 'Sada', 'u-pokretu': 'Karta', 'zrak-i-nebo': 'Vrijeme', sigurnost: 'Sigurnost', 'uprava-i-pravo': 'Grad', kultura: 'Događanja' });
     expect(hr.weather.compass.NW).toBe(i18n.t('motion.compass.NW'));
     expect(kioskStrings('en').status.offline).toBe('Screen offline; no code can be issued');
     expect(hr.setup.errorAccess).toBe('Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.');

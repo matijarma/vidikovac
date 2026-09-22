@@ -65,7 +65,7 @@
   },
   "layers": {
     "grad-sada": "Sada",
-    "u-pokretu": "Promet",
+    "u-pokretu": "Karta",
     "zrak-i-nebo": "Vrijeme",
     "sigurnost": "Sigurnost",
     "uprava-i-pravo": "Grad",
@@ -526,7 +526,16 @@
     "eventsSummary_one": "{count} događanje danas",
     "eventsSummary_few": "{count} događanja danas",
     "eventsSummary_other": "{count} događanja danas",
-    "noSummary": "Otvori za detalje"
+    "noSummary": "Otvori za detalje",
+    "eventsWeek": "Događanja ovaj tjedan",
+    "saved": "Spremljeno",
+    "savedEmpty": "Spremi liniju, stajalište ili mjesto na karti. Ovdje ih možeš ponovno otvoriti na ovom uređaju.",
+    "savedRecord": "Spremljeni zapis {id}",
+    "route": "Linija",
+    "stop": "Stajalište",
+    "remove": "Ukloni",
+    "destinations": "Odredišta",
+    "preferences": "Osobne postavke"
   },
   "session": {
     "unlocked": "Otključano · {label} · do {time}",

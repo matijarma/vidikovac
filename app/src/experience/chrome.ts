@@ -1,8 +1,9 @@
-// The shell around the workspace: one status line for both surfaces (three
-// keyed controls on the phone, six at the desk), the phone tab bar, the
-// "Na zaslon" FAB, and the banners for the session's own states. Pure markup
-// builders over a ShellState; the dashboard reconciles each region in place.
-// The rail and the sidebar are gone (plan D4, D10).
+// The shell around the workspace: one status line for both surfaces (the
+// wordmark, Zaslon, "Podijeli grad", the session pill and the safety control,
+// plus Još at the desk), the phone tab bar Sada · Karta · Još, and the banners
+// for the session's own states. Pure markup builders over a ShellState; the
+// dashboard reconciles each region in place. The rail, the sidebar and the
+// desk's six-domain bar are gone (plan D4, D10; companion WP4).
 import type { LayerId, Role } from '../../../worker/protocol';
 import type { CastReason } from '../core/contracts';
 import type { NotifyFlags, NotifyKey } from '../core/notify-store';
@@ -15,13 +16,14 @@ import { iconMarkup, type IconName } from '../ui/icons';
 import { weatherStatusMarkup, type WeatherStatus } from './weather-status';
 import type { PresentationState } from '../../../worker/presentation';
 import { presentationButton } from './presentation';
-import { ct } from '../city/strings';
 
 export type Surface = 'phone' | 'desktop';
 /** A phone tab: a domain, a shell surface and never a LayerId (D9). */
 export type PhoneTab = { kind: 'layer'; layer: LayerId };
-export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }, { kind: 'layer', layer: 'kultura' }];
-export const MORE_LAYERS: readonly LayerId[] = ['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo'];
+/** Sada · Karta, then Još [O-51]: Događanja is a Još row now, no longer a tab. */
+export const PHONE_TABS: readonly PhoneTab[] = [{ kind: 'layer', layer: 'grad-sada' }, { kind: 'layer', layer: 'u-pokretu' }];
+/** Još's destinations in the owner's order [O-60]: the week's agenda first, then Vrijeme, Grad and Sigurnost. */
+export const MORE_LAYERS: readonly LayerId[] = ['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost'];
 
 export const LAYER_ICONS: Record<LayerId, IconName> = {
   'grad-sada': 'home',
@@ -83,8 +85,8 @@ export function snapshotLine(i18n: I18n, frozenAt: number): string {
   return i18n.t('session.snapshotAt', { time: zagrebTime(frozenAt) });
 }
 
+/** The domain's one word, the same in the tab, the title and the kiosk pill: "Karta" for u-pokretu (layers.*). */
 function layerLabel(i18n: I18n, layer: LayerId): string {
-  if(layer==='u-pokretu')return ct(i18n,'map');
   return i18n.t(`layers.${layer}`);
 }
 
@@ -101,21 +103,35 @@ function frozenAttrs(s: ShellState): string {
 /**
  * The status line: ONE builder paints keyed children by surface, so the DOM is
  * honest for axe and the target rule (CSS orders and sizes, never hides a
- * control that exists). Phone: wordmark · session · safety. Desktop:
- * wordmark · spacer · clock · session · Još · domain nav. Both surfaces add
- * the Zaslon button while the session has a screen.
+ * control that exists). Phone: wordmark · Zaslon · Podijeli grad · session ·
+ * safety. Desktop: wordmark · spacer · Zaslon · Podijeli grad · session · Još
+ * · safety, one row with no clock and no domain bar (the desk is the phone,
+ * wider [O-56]). Zaslon stands while a scanner's session has a screen, the
+ * share button while the session can share [O-61].
  */
-export function statusLineMarkup(i18n: I18n, s: ShellState, now: number, weather: WeatherStatus | null): string {
+export function statusLineMarkup(i18n: I18n, s: ShellState): string {
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
   // becomes the way home instead (the session is over), as on the empty page.
   const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' });
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
   const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
-  if (s.surface === 'phone') return `${wordmark}${display}${session}${safety}`;
-  const domains: LayerId[] = ['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost'];
-  const navigation = `<nav class="ki-domains" data-key="domains" aria-label="${escapeAttribute(i18n.t('nav.label'))}"><ul>${domains.map(layer => layerTab(i18n, s, layer)).join('')}</ul></nav>`;
-  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${clockMarkup(i18n, s, now, null)}${display}${session}${moreButtonMarkup(i18n, s)}${navigation}`;
+  const share = shareButtonMarkup(i18n, s);
+  if (s.surface === 'phone') return `${wordmark}${display}${share}${session}${safety}`;
+  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${display}${share}${session}${moreButtonMarkup(i18n, s)}${safety}`;
+}
+
+/**
+ * "Podijeli grad" [O-61]: a labelled header button beside the session pill on
+ * every screen of a session that can share (the scanner, live, not refused);
+ * it asks the room for the code and opens the code and QR dialog. The word is
+ * visible; where the header is too narrow for it the icon stays and the
+ * aria-label keeps the name. '' when the session cannot share.
+ */
+export function shareButtonMarkup(i18n: I18n, s: ShellState): string {
+  if (!s.canShare) return '';
+  const label = escapeAttribute(i18n.t('session.share'));
+  return `<button type="button" class="ki-share" data-key="share" data-action="share-city" data-testid="share-city" aria-haspopup="dialog" aria-label="${label}" title="${label}">${iconMarkup('share-2')}<span>${escapeHtml(i18n.t('session.share'))}</span></button>`;
 }
 
 /**
@@ -132,19 +148,19 @@ export function wordmarkMarkup(i18n: I18n, home: { href: string; layer?: LayerId
   return `<a class="ki-wordmark" data-key="wordmark" href="${escapeAttribute(home.href)}"${nav} aria-label="${escapeAttribute(label)}"><span class="ki-wordmark-text">${escapeHtml(stem)}${mark ? '<span class="ki-wordmark-mark">?</span>' : ''}</span></a>`;
 }
 
-/** Desktop: Još opens the directory of every domain but Sada (D10). Current while the directory or an extra domain is open. */
+/** Desktop: Još opens the directory of the MORE domains (D10). Current while the directory is open. */
 export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
-  const inMore = MORE_LAYERS.includes(s.layer);
   const current = s.directory;
   return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
 }
 
-/** Desktop: the search launcher, a pill that reads like a field and opens Promet's search. */
+/** Desktop: the search launcher, a pill that reads like a field and opens Karta's search. Unused since the desk lost its second row (WP5 deletes it). */
 export function searchLaunchMarkup(i18n: I18n, s: ShellState): string {
   return `<button type="button" class="ki-search" data-key="search" data-action="search" data-testid="status-search" aria-label="${escapeAttribute(i18n.t('transport.search'))}"${frozenAttrs(s)}>${iconMarkup('search', undefined, 'icon icon-sm')}<span>${escapeHtml(i18n.t('transport.search'))}</span></button>`;
 }
 
 /**
+ * Unused since the desk header lost its clock [O-56] (WP5 deletes it with its CSS).
  * Desktop: the clock, wrapping the shared weather group (weather-status.ts) in
  * the link into Vrijeme. Without an observation the time stands alone: never a
  * dash (D11). The aria says time, condition, temperature, sunset, then the way.
@@ -169,7 +185,7 @@ export function safetyMarkup(i18n: I18n, s: ShellState): string {
   return `<a class="ki-safety" data-key="safety" href="${s.frozen ? '/hitno' : '#layer=sigurnost'}"${s.frozen ? '' : ' data-action="nav"'} data-layer="sigurnost" data-testid="safety-shortcut" aria-label="${escapeAttribute(i18n.t('nav.safety'))}" title="${escapeAttribute(i18n.t('nav.safetyHint'))}" aria-current="${current ? 'page' : 'false'}">${iconMarkup('shield')}</a>`;
 }
 
-/** A domain tab; frozen it keeps its handler (navigate() declines) so its hash never replaces the fragment. */
+/** A phone tab; frozen it keeps its handler (navigate() declines) so its hash never replaces the fragment. */
 function layerTab(i18n: I18n, s: ShellState, layer: LayerId): string {
   const current = s.layer === layer && !s.directory;
   if (s.frozen && layer === 'sigurnost') {
@@ -178,7 +194,7 @@ function layerTab(i18n: I18n, s: ShellState, layer: LayerId): string {
   return `<li><a class="ki-tab" href="#layer=${layer}" data-action="nav" data-layer="${layer}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup(LAYER_ICONS[layer])}<span class="ki-nav-label">${escapeHtml(layerLabel(i18n, layer))}</span></a></li>`;
 }
 
-/** The phone tab bar: Sada, Promet, Događanja and Još, which names the open extra domain. Nothing at the desk. */
+/** The phone tab bar: Sada, Karta and Još, which names the open extra domain. Nothing at the desk. */
 export function tabbarMarkup(i18n: I18n, s: ShellState): string {
   if (s.surface === 'desktop') return '';
   const inMore = MORE_LAYERS.includes(s.layer);

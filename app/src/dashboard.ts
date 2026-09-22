@@ -355,9 +355,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
     element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
     element.dataset.loading = String(s.loading);
-    // The weather group is status (D11): the desk's clock wraps it; the phone's band head carries it.
-    const weather = s.surface === 'desktop' ? weatherStatus(i18n, store.snapshot().snapshots, now()) : null;
-    paintRegion(regions.status, statusLineMarkup(i18n, s, now(), weather));
+    // One status row on both surfaces: no clock, so no weather here; weather is a row of the feed [O-56].
+    paintRegion(regions.status, statusLineMarkup(i18n, s));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
     const fab = fabMarkup(i18n, s);
     paintRegion(regions.fab, fab);

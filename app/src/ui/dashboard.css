@@ -1,11 +1,10 @@
 /* Kaj ima? - the /d/ shell. One DOM for both surfaces; the grid places the
-   same regions differently. Phone: a sticky 52 px status line (wordmark, the
-   session pill, an icon-only safety control), banners in
-   flow, the workspace, a fixed tab bar and, for a scanner with a screen, the
-   "Na zaslon" FAB above it. Desktop (>= 60rem): the same status line at 56 px
-   with Još, the search launcher, the clock with the weather group and the
-   bell, spanning one full workspace column (plan D4, D10:
-   the rail is gone; every domain is reached through Još and the tiles). */
+   same regions differently. Phone: a sticky 52 px status line (wordmark,
+   Zaslon, the labelled "Podijeli grad", the session pill, an icon-only safety
+   control), banners in flow, the workspace and a fixed tab bar Sada · Karta ·
+   Još. Desktop (>= 60rem): the same status line as one 56 px row with Još,
+   spanning one full workspace column (plan D4, D10; companion WP4: the
+   six-domain bar and the clock are gone, every other domain is a Još row). */
 .ki {
   --ki-top: calc(3.25rem + env(safe-area-inset-top, 0px));
   --ki-tabs: calc(3.5rem + env(safe-area-inset-bottom, 0px));
@@ -17,11 +16,11 @@
   min-height: 100svh;
   background: var(--tone-surface-canvas);
 }
-/* The status line never scrolls away: three keyed controls on one 44 px line, 3.25rem tall plus the notch. */
+/* The status line never scrolls away: up to five keyed controls on one 44 px line, 3.25rem tall plus the notch. */
 .ki-head {
   grid-area: status;
   position: sticky; inset-block-start: 0; z-index: var(--z-sticky);
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; column-gap: var(--sp-1);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; align-items: center; column-gap: var(--sp-1);
   min-block-size: var(--ki-top);
   padding-block-start: env(safe-area-inset-top, 0px);
   padding-inline: max(var(--sp-3), env(safe-area-inset-left, 0px)) max(var(--sp-2), env(safe-area-inset-right, 0px));
@@ -33,6 +32,10 @@
 .ki-screen { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-width: var(--target); min-height: var(--target); padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); background: transparent; color: var(--tone-text-muted); cursor: pointer; }
 .ki-screen[data-active='true'], .ki-screen[aria-expanded='true'] { background: var(--tone-tint-action); color: var(--tone-action-brand); border-color: var(--tone-stroke); }
 .ki-screen > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+/* "Podijeli grad" [O-61]: the Zaslon box with its word visible in the brand tone, a 44 px target beside the pill. */
+.ki-share { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-inline-size: var(--target); min-block-size: var(--target); padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-md); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); background: transparent; color: var(--tone-action-brand); white-space: nowrap; cursor: pointer; touch-action: manipulation; }
+.ki-share > span { position: static; }
+@media (hover: hover) { .ki-share:hover { background: var(--tone-surface-2); } }
 .ki-presentation { grid-area: presentation; min-width: 0; background: var(--tone-surface-1); border-bottom: 1px solid var(--tone-stroke); }
 .ki-presentation:empty { display: none; }
 .present { max-width: 68rem; margin: 0 auto; padding: var(--sp-4); display: grid; gap: var(--sp-3); }
@@ -98,7 +101,12 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    the spec's 40 px reading is the icon). The aria-label carries the word at every width. */
 .ki-safety { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--target); min-inline-size: var(--target); border-radius: var(--r-md); color: var(--tone-text-muted); background: transparent; text-decoration: none; touch-action: manipulation; }
 .ki-safety[aria-current='page'] { background: var(--tone-tint-urgency); }
-/* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only and the session ring leaves, so the three controls still fit. Ceiling 56 px × scale. */
+/* A header narrower than the five controls with the share word (about 20.5rem; a 320 px phone,
+   or text zoom): the share button keeps its glyph, its title and its aria-label; the word waits. */
+@container header (max-width: 21rem) {
+  .ki-share > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+/* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only and the session ring leaves, so the controls still fit. Ceiling 56 px × scale. */
 @container header (max-width: 18rem) {
   .ki-head { column-gap: var(--sp-1); padding-inline: var(--sp-2); }
   .ki-wordmark { min-inline-size: 44px; justify-content: center; }
@@ -108,13 +116,14 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 }
 @media (max-width: 59.99rem) {
   .ki-head > [data-key='screen'] { grid-column: 3; }
-  .ki-head > [data-key='session'] { grid-column: 4; }
-  .ki-head > [data-key='safety'] { grid-column: 5; }
+  .ki-head > [data-key='share'] { grid-column: 4; }
+  .ki-head > [data-key='session'] { grid-column: 5; }
+  .ki-head > [data-key='safety'] { grid-column: 6; }
 }
 
-/* Phone tab bar: four labelled targets, 44 px and up, safe-area aware. */
+/* Phone tab bar: Sada · Karta · Još, three labelled targets, 44 px and up, safe-area aware. */
 .ki-tabbar { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: var(--z-sticky); background: var(--tone-surface-1); box-shadow: inset 0 1px 0 var(--tone-stroke); padding-block-end: env(safe-area-inset-bottom, 0px); container-type: inline-size; container-name: tabs; }
-.ki-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
+.ki-tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: 0; list-style: none; }
 .ki-tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; inline-size: 100%; min-block-size: 3.5rem; padding: var(--sp-1) 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); text-decoration: none; cursor: pointer; touch-action: manipulation; }
 .ki-tab .icon { width: 1.5rem; height: 1.5rem; }
 .ki-tab[aria-current='page'] { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
@@ -163,23 +172,24 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .banner-notice[data-kind='expiring20'] { background: var(--tone-tint-urgency); }
 .banner-dismiss { margin-inline-start: auto; flex: none; min-inline-size: var(--target); }
 
-/* Desktop: the status line spans the page at 56 px over one full workspace
-   column (spec §3, D4, D10). The same keyed controls as the phone plus Još,
-   the search launcher taking the room, the clock with the weather group and
-   the bell; the tab bar and the FAB leave. */
+/* Desktop: the status line spans the page as one 56 px row over one full
+   workspace column (spec §3, D4, D10): wordmark, the spacer, Zaslon, Podijeli
+   grad, the session pill, Još and the safety control. No six-domain bar and
+   no clock [O-56]; the tab bar and the FAB leave. */
 @media (min-width: 60rem) {
-  .ki { --ki-top: 6.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
-  html:has(.ki) { scroll-padding-block: 6.5rem 0; }
-  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-rows: 3.5rem 3rem; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
+  .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
+  html:has(.ki) { scroll-padding-block: 3.5rem 0; }
+  .ki-head { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto; column-gap: var(--sp-3); padding-inline: var(--sp-6); }
   .ki-wordmark-text { font-size: var(--type-title); }
   .ki-screen { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
   .ki-screen > span { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
-  .ki-domains { grid-column: 1 / -1; grid-row: 2; }
-  .ki-domains ul { display: flex; gap: var(--sp-5); list-style: none; margin: 0; padding: 0; }
-  .ki-domains .ki-tab { flex-direction: row; gap: var(--sp-2); min-height: 3rem; padding: 0 var(--sp-1); }
-  .ki-domains .ki-tab .icon { width: 1.125rem; height: 1.125rem; }
-  .ki-domains .ki-tab[aria-current='page']::before { inset-block-start: auto; inset-block-end: 0; height: 3px; border-radius: 2px 2px 0 0; }
-  .ki-domains .ki-tab[aria-current='page'] { color: var(--tone-action-brand); }
+  .ki-share { padding-inline: var(--sp-3); border-color: var(--tone-stroke); }
+  /* Placed by key, so a session without Zaslon or the share button keeps the rest flush right. */
+  .ki-head > [data-key='screen'] { grid-column: 3; }
+  .ki-head > [data-key='share'] { grid-column: 4; }
+  .ki-head > [data-key='session'] { grid-column: 5; }
+  .ki-head > [data-key='more'] { grid-column: 6; }
+  .ki-head > [data-key='safety'] { grid-column: 7; }
   .present { padding: var(--sp-5) var(--sp-8); }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
@@ -212,7 +222,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 /* Press feedback: a touch has no hover, so :active stands in for it, instant
    on press with no transition, releasing over the usual duration on lift. */
 @media (hover: none) {
-  .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-more:active { background-color: var(--tone-surface-2); transition: none; }
+  .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-more:active, .ki-share:active { background-color: var(--tone-surface-2); transition: none; }
   .ki-fab:active { filter: brightness(0.92); transition: none; }
 }
 
