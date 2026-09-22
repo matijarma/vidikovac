@@ -152,6 +152,16 @@ describe('buildPlan', () => {
     flat(leaving, 320);
     expect(leaving.next?.stopId).toBe('T300');
 
+    // The same, but the last published plan had already drawn it at 350 m:
+    // the floor lifts the anchor out of T300's zone, and the platform is
+    // still read off the observed fix. Held at the floor, never run on to
+    // T600, never drawn back.
+    const floored = tramOn1('silent-floor', [[290, nowSec - 55], [330, nowSec - 45]]);
+    buildPlan(floored, net, eightMs, null, nowSec, headerSec, BANDS, { publishedArcS: 350 });
+    expect(knotsOf(floored)[0][1]).toBeCloseTo(350, 1); // the floor did apply
+    flat(floored, 350);
+    expect(floored.next?.stopId).toBe('T300');
+
     // 45 s silent, last seen standing between T300 and T600: it stays there;
     // the next stop is still T600, with no planned time since the plan does not reach it.
     const stood = tramOn1('silent-stand', [[440, nowSec - 65], [450, nowSec - 55], [452, nowSec - 45]]);
