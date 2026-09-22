@@ -8,21 +8,22 @@
 .k-map-legend span{display:inline-flex;align-items:center;gap:.4em}
 .k-legend-tram{padding:.05em .3em;border-radius:3px;color:var(--k-action-ink);background:var(--k-action)}
 .k-legend-bike{color:var(--tone-bike)}.k-legend-culture{color:var(--k-violet)}
-/* "U blizini" (kiosk/timeline.ts): the aside's list over the QR card. Whole rows only: the list is an exact number of
-   --k-nearby-row tracks (64-92 px at the design size, times the zoom); the rows beyond the budget are sliced in JS, never
-   hidden. Title and time on the read tier (--k-main-size), sub, day word and head on the walk-up tier (--k-sub-size, 28 px
-   floor); a stacked row's type grows with it through --k-nearby-scale, never below the floors. Below 80 px a row is one
-   line (data-lines='1') and the sub follows the title only while it fits: a sub with less than 6em wraps onto the clipped
-   second line rather than into an ellipsis stub. The time column is the widest time of the rows shown (subgrid; older
-   engines keep a fixed column). Blue is a tracked departure, grey the timetable; no word says which. */
+/* "U blizini" (kiosk/timeline.ts): the aside's list over the QR card. Whole rows, whole words: nothing here is cut
+   with an ellipsis or clipped. Titles and subs wrap and a row takes the height its words need, never less than
+   --k-nearby-row (64-92 px at the design size, times the zoom); timeline.ts measures the rows, prints a shorter
+   complete label where one runs long and drops whole rows until they fit the box, so the box's overflow never
+   cuts one. Every wall composition holds the 3-metre floors: title and time at least 40 px (read tier), sub,
+   day word and head at least 28 px (walk-up tier), whatever the composition's own --k-main-size says; a row's
+   type grows with it through --k-nearby-scale, never below them. The time column is the widest time of the
+   rows shown (subgrid; older engines keep a fixed column). Blue is a tracked departure, grey the timetable;
+   no word says which. */
 .kiosk .k-nearby-host{display:grid;grid-template-rows:minmax(0,1fr);min-width:0;min-height:0}
-.kiosk .k-nearby{--k-nearby-title-size:var(--k-main-size);--k-nearby-sub-size:max(var(--k-sub-size),var(--k-sup-size));--k-nearby-mark-w:calc(var(--k-nearby-title-size) * .7);display:grid;grid-template-rows:auto minmax(0,1fr);gap:calc(var(--k-gap) * .5);min-width:0;min-height:0;padding:var(--k-gap) var(--k-gap) calc(var(--k-gap) * .5);background:var(--k-surface);border-radius:var(--k-radius-s)}
-.kiosk .k-nearby-heading{margin:0;overflow:hidden;font-size:var(--k-nearby-sub-size);font-weight:700;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;color:var(--k-ink)}
+.kiosk .k-nearby{--k-nearby-read-floor:40px;--k-nearby-walk-floor:28px;--k-nearby-title-size:max(var(--k-nearby-read-floor),var(--k-main-size));--k-nearby-sub-size:max(var(--k-nearby-walk-floor),var(--k-sup-size));--k-nearby-mark-w:calc(var(--k-nearby-title-size) * .7);display:grid;grid-template-rows:auto minmax(0,1fr);gap:calc(var(--k-gap) * .5);min-width:0;min-height:0;padding:var(--k-gap) var(--k-gap) calc(var(--k-gap) * .5);background:var(--k-surface);border-radius:var(--k-radius-s)}
+.kiosk .k-nearby-heading{margin:0;font-size:calc(var(--k-nearby-sub-size));font-weight:700;line-height:1.2;overflow-wrap:break-word;color:var(--k-ink)}
 .kiosk .k-nearby-heading-pill{font-weight:500;color:var(--k-ink-2)}
-.kiosk .k-nearby-rows{display:grid;grid-template-columns:max-content var(--k-nearby-mark-w) minmax(0,1fr);grid-auto-rows:calc(var(--k-nearby-row,64px) * var(--k-zoom,1));column-gap:calc(var(--k-gap) * .6);align-content:start;min-height:0;margin:0;padding:0;overflow:hidden;list-style:none}
-.kiosk .k-nearby .nearby-row{position:relative;display:grid;grid-column:1/-1;grid-template-columns:4.8em var(--k-nearby-mark-w) minmax(0,1fr);grid-template-columns:subgrid;column-gap:calc(var(--k-gap) * .6);align-items:center;min-width:0;min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1));overflow:hidden;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))}
+.kiosk .k-nearby-rows{display:grid;grid-template-columns:max-content var(--k-nearby-mark-w) minmax(0,1fr);grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto);column-gap:calc(var(--k-gap) * .6);align-content:start;min-height:0;margin:0;padding:0;overflow:hidden;list-style:none}
+.kiosk .k-nearby .nearby-row{position:relative;box-sizing:border-box;display:grid;grid-column:1/-1;grid-template-columns:4.8em var(--k-nearby-mark-w) minmax(0,1fr);grid-template-columns:subgrid;column-gap:calc(var(--k-gap) * .6);align-items:center;min-width:0;min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1));padding:calc(var(--k-gap) * .2) 0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1))}
 .kiosk .k-nearby-at{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;min-width:0;white-space:nowrap}
-.kiosk .k-nearby[data-lines='1'] .k-nearby-at{flex-direction:row-reverse;align-items:baseline;justify-content:flex-start;column-gap:.3em}
 .kiosk .k-nearby .nearby-when{font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--k-ink-2)}
 .kiosk .k-nearby .nearby-row[data-live='1'] .nearby-when{color:var(--k-action)}
 .kiosk .k-nearby .nearby-row[data-always='1'] .nearby-when{font-weight:600;color:var(--k-ink-3)}
@@ -38,12 +39,9 @@
 .kiosk .k-nearby .nearby-row[data-kind='solar'] .k-nearby-mark::after{background:var(--k-amber)}
 .kiosk .k-nearby .nearby-row[data-kind='always'] .k-nearby-mark::after{background:var(--k-surface);box-shadow:inset 0 0 0 .1em var(--k-ink-3),0 0 0 .12em var(--k-surface)}
 .kiosk .k-nearby .nearby-row[data-kind='pharmacy'] .k-nearby-mark::after{width:.5em;height:.5em;margin:-.25em 0 0 -.25em;border-radius:0;background:linear-gradient(var(--k-green),var(--k-green)) center/100% 34% no-repeat,linear-gradient(var(--k-green),var(--k-green)) center/34% 100% no-repeat,var(--k-surface);box-shadow:0 0 0 .12em var(--k-surface)}
-.kiosk .k-nearby-text{display:flex;flex-direction:column;justify-content:center;min-width:0;overflow:hidden}
-.kiosk .k-nearby[data-lines='1'] .k-nearby-text{flex-flow:row wrap;align-items:baseline;align-content:flex-start;column-gap:.5em;height:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1) * 1.15)}
-.kiosk .k-nearby .nearby-title{min-width:0;max-width:100%;overflow:hidden;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;letter-spacing:-.01em;white-space:nowrap;text-overflow:ellipsis;color:var(--k-ink)}
-.kiosk .k-nearby .nearby-sub{min-width:0;overflow:hidden;font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));line-height:1.15;white-space:nowrap;text-overflow:ellipsis;color:var(--k-ink-2)}
-.kiosk .k-nearby[data-lines='1'] .nearby-title{flex:0 1 auto}
-.kiosk .k-nearby[data-lines='1'] .nearby-sub{flex:1 1 6em}
+.kiosk .k-nearby-text{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.kiosk .k-nearby .nearby-title{min-width:0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
+.kiosk .k-nearby .nearby-sub{min-width:0;font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));line-height:1.15;overflow-wrap:break-word;color:var(--k-ink-2)}
 .kiosk .k-nearby .nearby-title .k-line-badge{margin-right:.3em;vertical-align:.1em}
 /* Below the specificity of kiosk.css's reduced-motion and lagano rules, which load first and still win. */
 .k-nearby .nearby-row[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
@@ -69,7 +67,8 @@
 .kiosk[data-size=handheld] .k-field{height:100%;min-height:0}
 .kiosk[data-size=handheld] [data-panel=weather]{order:2}
 .kiosk[data-size=handheld] .k-nearby-host{order:2}
-.kiosk[data-size=handheld] .k-nearby{--k-nearby-sub-size:var(--k-sup-size)}
+/* A phone is read in the hand, not from 3 m: the list takes the handheld tiers and every row in flow. */
+.kiosk[data-size=handheld] .k-nearby{--k-nearby-title-size:var(--k-main-size);--k-nearby-sub-size:var(--k-sup-size)}
 .kiosk[data-size=handheld] .k-nearby-rows{grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto);overflow:visible}
 .kiosk[data-size=handheld] .k-city-window .k-invite{grid-template-columns:minmax(0,1fr);grid-template-areas:'side' 'qr';justify-items:center}
 .kiosk[data-size=handheld] .k-map-legend{font-size:12px}
