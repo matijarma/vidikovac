@@ -27,6 +27,7 @@ import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
+import type { FeedItem } from '../../worker/feed/schema';
 
 const MIN = 60_000;
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -40,7 +41,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
   return {
     at: Date.UTC(2026, 8, 21, 15, 45), place: 'Kvaternikov trg', sentence: 'Tramvaj 6 kreće za dvije minute.', kicker: 'promet', kickerText: 'Promet',
     validUntil: '2026-09-21T15:45:20.000Z', sentenceChars: 32, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM,
-    departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
+    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: LEAD_TEXT, strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
     pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
@@ -143,6 +144,40 @@ describe('one reading of the wall', () => {
     }
   });
 
+  it('a hidden, an offscreen and a clipped departure are not on the wall: they never satisfy "a departure in every reading"', () => {
+    const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+    const at = (top: number): DOMRect => ({ x: 0, y: top, left: 0, top, right: 300, bottom: top + 60, width: 300, height: 60, toJSON: () => ({}) }) as DOMRect;
+    const li = (id: string, extra = ''): string => `<li class="nearby-row" data-id="${id}" data-kind="departure" data-when="2026-09-21T15:47:00.000Z"${extra}><span class="nearby-title">6 Sopot</span><time>2 min</time></li>`;
+    document.body.innerHTML = `<section data-testid="nearby"><ol data-testid="nearby-rows" style="overflow: hidden">${li('hidden', ' hidden')}${li('none', ' style="display: none"')}${li('offscreen')}${li('clipped')}</ol></section>`;
+    const boxes: Record<string, DOMRect> = { hidden: at(0), none: at(0), offscreen: at(innerHeight + 200), clipped: at(320) };
+    for (const id of Object.keys(boxes)) document.querySelector<HTMLElement>(`[data-id=${id}]`)!.getBoundingClientRect = () => boxes[id];
+    const list = document.querySelector<HTMLElement>('[data-testid=nearby-rows]')!;
+    list.getBoundingClientRect = () => ({ ...at(0), bottom: 300, height: 300 }) as DOMRect;
+    document.querySelector<HTMLElement>('[data-testid=nearby]')!.getBoundingClientRect = () => ({ ...at(0), bottom: 300, height: 300 }) as DOMRect;
+    const none = shippedFn(WALL_SAMPLE_SPEC);
+    expect(none).toMatchObject({ departures: 0, hiddenRows: 4, rows: [] });
+    expect(sampleFailures(none)).toContain('0 departure rows (target 1–3)');
+    expect(summariseRotation([none]).departuresEverySample).toBe(false);
+    // The same row moved inside the list's box is on the wall.
+    boxes.clipped = at(200);
+    const one = shippedFn(WALL_SAMPLE_SPEC);
+    expect(one.rows.map((r) => r.id)).toEqual(['clipped']);
+    expect(one).toMatchObject({ departures: 1, hiddenRows: 3 });
+  });
+
+  it('a clock anywhere in the footer is caught, not only in its sources', () => {
+    const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+    document.body.innerHTML = '<footer data-testid="safety-strip"><span data-testid="strip-verdict">Mirno od 17:30</span><span data-testid="strip-pharmacy">24/7 Ilica 1</span><span data-testid="strip-sources">DHMZ · EMSC</span></footer>';
+    const s = shippedFn(WALL_SAMPLE_SPEC);
+    expect(s.stripHasClock).toBe(true);
+    expect(sampleFailures(s)).toContain('the footer prints a clock time: "Mirno od 17:30 24/7 Ilica 1 DHMZ · EMSC"');
+    document.querySelector('[data-testid=strip-verdict]')!.textContent = 'Mirno';
+    expect(shippedFn(WALL_SAMPLE_SPEC).stripHasClock).toBe(false);
+    // A clock split across elements is still a clock.
+    document.querySelector('[data-testid=strip-verdict]')!.innerHTML = 'Mirno od <b>17</b>:30';
+    expect(shippedFn(WALL_SAMPLE_SPEC).stripHasClock).toBe(true);
+  });
+
   it('a wall without the new probes reads as empty, never throws, and each gap is a named failure', () => {
     const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
     document.body.innerHTML = '<main class="kiosk"><p class="k-brand">Kaj ima?</p></main>';
@@ -194,6 +229,21 @@ describe('the ten-minute rotation', () => {
       '1 closure row(s) left the list and came back (target 0)',
       '1 reading(s) with a "+N" vehicle pill (target 0)',
     ]);
+  });
+
+  it('an empty sentence, a sentence over 80 characters and an untimed row anywhere in the rotation are failures', () => {
+    const at = (i: number) => Date.UTC(2026, 8, 21, 15, 45) + i * 2000;
+    const rows = ['A.', 'B.', 'C.'].map((text, i) => sample({ at: at(i), sentence: text, sentenceChars: text.length, validUntil: iso(at(i) + 20_000) }));
+    expect(rotationFailures(summariseRotation(rows))).toEqual([]);
+    const empty = [...rows, sample({ at: at(3), sentence: '', sentenceChars: 0, validUntil: null })];
+    expect(rotationFailures(summariseRotation(empty))).toEqual(['1 reading(s) with an empty sentence (target 1–80 characters in every reading)']);
+    const long = 'x'.repeat(81);
+    const tooLong = [...rows, sample({ at: at(3), sentence: long, sentenceChars: 81, validUntil: iso(at(3) + 20_000) })];
+    expect(summariseRotation(tooLong)).toMatchObject({ longSentences: 1, sentenceCharsMax: 81 });
+    expect(rotationFailures(summariseRotation(tooLong))).toEqual(['1 reading(s) with a sentence over 80 characters (longest 81)']);
+    const untimed = [...rows, sample({ at: at(3), sentence: 'C.', validUntil: rows[2].validUntil, rows: [row({ id: 'd', when: iso(at(3) + 2 * MIN) }), row({ id: 'story', kind: 'always', when: null, always: false })] })];
+    expect(summariseRotation(untimed).rowsWithoutTime).toBe(1);
+    expect(rotationFailures(summariseRotation(untimed))).toEqual(['1 row reading(s) with neither data-when nor data-always="1" (target 0: every row has a time or "uvijek")']);
   });
 
   it('one reading without a departure turns departuresEverySample false', () => {
@@ -357,6 +407,37 @@ describe('the departures board and the last-run file', () => {
     expect(arrivalsAt([departuresBoard({ now, vehicles: [] })], vehicles, now, { stopIds: ['106_1'] }).rows.some((r) => r.live)).toBe(false);
     const night = departuresBoard({ now: SCENES.afterLast0045.now, vehicles: snapshots['zet-rt'].items });
     expect(night.departures.some((d) => tracked.some((t) => t.tripId === d.tripId))).toBe(false);
+  });
+
+  it('a tracked row keeps its own line\'s service window: at 23:44 line 12 (last 23:45) is passed over for a line still running', async () => {
+    const snapshots = await experienceSnapshots('ready');
+    const items = snapshots['zet-rt'].items;
+    const eligible = trackedTrips(items, FIXTURE_STOP.routes);
+    expect(eligible[0].routeId).toBe('12');
+    const lastOf = (routeId: string, day: string) => scheduleInstant(day, gtfsSeconds(FIXTURE_LAST_DEPARTURES[routeId]));
+    const firstOf = (day: string) => scheduleInstant(day, gtfsSeconds(FIXTURE_FIRST_TRAM));
+    const runs = (routeId: string, at: number) => ['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23'].some((day) => at >= firstOf(day) && at <= lastOf(routeId, day));
+    for (const now of [Date.UTC(2026, 8, 21, 21, 44), Date.UTC(2026, 8, 21, 21, 40), SCENES.lastTrams2240.now, SCENES.morning0745.now, SCENES.afterLast0045.now]) {
+      const b = departuresBoard({ now, vehicles: items });
+      for (const d of b.departures) {
+        expect(FIXTURE_STOP.routes, iso(now)).toContain(d.routeId);
+        expect(runs(d.routeId, Date.parse(d.at)), `${iso(now)} line ${d.routeId} at ${d.at}`).toBe(true);
+      }
+    }
+    const b = departuresBoard({ now: Date.UTC(2026, 8, 21, 21, 44), vehicles: items });
+    const live = b.departures.filter((d) => eligible.some((t) => t.tripId === d.tripId));
+    expect(live).toHaveLength(2);
+    expect(live.map((d) => d.routeId)).not.toContain('12');
+    expect(live.every((d) => Date.parse(d.at) - Date.UTC(2026, 8, 21, 21, 44) <= 10 * MIN)).toBe(true);
+    expect(new Set(b.departures.map((d) => d.tripId)).size).toBe(b.departures.length);
+  });
+
+  it('a vehicle on a line the stop does not serve is never a tracked row', () => {
+    const foreign: Pick<FeedItem, 'id' | 'data'>[] = [{ id: 'vehicle:1', data: { tripId: 'bus-trip', routeId: '268', routeShortName: '268' } }, { id: 'route:6', data: { tripId: 'x', routeId: '6' } }];
+    expect(trackedTrips(foreign, FIXTURE_STOP.routes)).toEqual([]);
+    const b = departuresBoard({ now: SCENES.morning0745.now, vehicles: foreign });
+    expect(b.departures.every((d) => d.tripId.startsWith('fixture-') && FIXTURE_STOP.routes.includes(d.routeId))).toBe(true);
+    expect(trackedTrips([{ id: 'vehicle:2', data: { tripId: 't', routeId: '6' } }, { id: 'vehicle:3', data: { tripId: 't', routeId: '6' } }], ['6'])).toHaveLength(1);
   });
 
   it('the last-run file parses through the app\'s own loader and agrees with the board', async () => {
