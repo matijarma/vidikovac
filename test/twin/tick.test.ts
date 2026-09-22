@@ -94,6 +94,28 @@ describe('runTick on the corridor', () => {
     // No service information is unknown, not an empty allowed-service list.
     const result = runTick({ state, feed: feed(30), nowMs: (start + 32) * 1000, joins: new Map(), routes, engine: serviceEngine, validUntilMs: 0 });
     expect(net.paths[result.state.tracks.unknown.match.pathIdx!].id).toBe('path:9:0:abc');
+    const weekdayAgain = runTick({ state: result.state, feed: feed(40), nowMs: (start + 42) * 1000, joins: serviceJoins, routes, engine: serviceEngine, validUntilMs: 0 });
+    expect(weekdayAgain.state.tracks.unknown.match.pathIdx).toBeNull();
+    expect(isFreeMotion(weekdayAgain.payload.items.find((item) => item.id === 'vehicle:unknown')!.motion!)).toBe(true);
+  });
+
+  it.each([0, 10])('re-matches a route change with null priors even with a %d-second GPS interval', (interval) => {
+    const feed = (routeId: string, offset: number, atOffset: number) => ({
+      headerTs: start + offset,
+      vehicles: [{ vehicleId: 'changing', tripId: 'unknown', routeId, ...lonLatOf({ x: 600, y: 0 }), atSec: start + atOffset }],
+      tripUpdates: [],
+    });
+    const first = runTick({ state: emptyState(), feed: feed('9', 0, 0), nowMs: (start + 2) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    expect(first.state.tracks.changing.priorPath).toBeNull();
+    expect(net.paths[first.state.tracks.changing.match.pathIdx!].route).toBe('9');
+    const changed = runTick({ state: first.state, feed: feed('1', 10, interval), nowMs: (start + 12) * 1000, joins: new Map(), routes, engine, validUntilMs: 0 });
+    const track = changed.state.tracks.changing;
+    expect(track.routeId).toBe('1');
+    expect(track.priorPath).toBeNull();
+    expect(net.paths[track.match.pathIdx!].route).toBe('1');
+    expect(track.fixes).toHaveLength(interval === 0 ? 1 : 2);
+    const pin = changed.payload.items.find((item) => item.id === 'vehicle:changing')!;
+    expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
   });
 
   it('publishes path plans whose position at the header is the pin, keeps the trunk order, re-plans on an unchanged frame, and grades itself from the second frame', () => {

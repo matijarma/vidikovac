@@ -5,8 +5,8 @@
 // planner's anchor (plan.ts) and the ordering register's frame (order.ts).
 //
 // Rules (plan "Engine core", R-TE22, the reviewer's A10):
-//   - return to the trip's own path within NEAR_M on an agreeing moving fix;
-//   - adopt only the route's own paths, excluding known non-running services;
+//   - return to the trip's own path within NEAR_M on forward movement beyond scatter;
+//   - use only the route's own paths, excluding known non-running services;
 //     prefer the prior, current path, edge sequence, direction, then trip count;
 //   - a fix off its path by more than NEAR_M once is noise and stays on the
 //     path; twice in a row it is a detour, and the path is re-derived from
@@ -162,7 +162,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
   function priorFor(shapeId: string | null, routeId: string, direction: 0 | 1 | null, pathId?: string | null): Prior {
     if (shapeId !== null) {
       const shapeIdx = shapeIndexById.get(shapeId);
-      if (shapeIdx !== undefined) {
+      if (shapeIdx !== undefined && net.shapes[shapeIdx].route === routeId) {
         const pathIdx = net.pathOfShape(shapeIdx);
         const shapeDir = net.shapes[shapeIdx].direction;
         return { pathIdx, shapeIdx, routeId, direction: shapeDir === 0 || shapeDir === 1 ? shapeDir : direction };
@@ -173,7 +173,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // sequence, which is the one the timetable has segments for.
     if (pathId) {
       const own = pathIndexById.get(pathId);
-      if (own !== undefined) return { pathIdx: own, shapeIdx: null, routeId, direction };
+      if (own !== undefined && pathEligible(own, routeId)) return { pathIdx: own, shapeIdx: null, routeId, direction };
     }
     if (direction !== null) {
       const synthetic = net.paths.findIndex((p) => p.shape === null && p.route === routeId && p.direction === direction);
@@ -182,7 +182,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     return { pathIdx: null, shapeIdx: null, routeId, direction };
   }
 
-  function pathEligible(pathIdx: number, ctx?: MatchContext): boolean {
+  function pathEligible(pathIdx: number, routeId: string, ctx?: MatchContext): boolean {
+    if (net.paths[pathIdx]?.route !== routeId) return false;
     const running = ctx?.runningServices;
     const services = pathRanks?.[pathIdx]?.services;
     if (!running?.size || !services?.size) return true;
@@ -221,7 +222,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const wanted = wantedDirection(edge, sOnEdge, dir, prior);
     let best: number | null = null;
     for (const pathIdx of pathsByEdge.get(edge) ?? []) {
-      if (net.paths[pathIdx].route !== prior.routeId || !pathEligible(pathIdx, ctx)) continue;
+      if (!pathEligible(pathIdx, prior.routeId, ctx)) continue;
       if (best === null || comparePaths(pathIdx, best, edge, wanted, track, prior) < 0) best = pathIdx;
     }
     return best;
@@ -231,7 +232,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
     for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
-      if (pathEligible(pathIdx, ctx)) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
+      if (pathEligible(pathIdx, prior.routeId, ctx)) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
     }
     const out: Candidate[] = [];
     for (const hit of hits) {
@@ -344,7 +345,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       if (!edgeTangentAgrees(hit.edge, hit.s, dir)) continue;
       for (const pathIdx of pathsByEdge.get(hit.edge) ?? []) {
         const path = net.paths[pathIdx];
-        if (path.route !== prior.routeId || pathIdx === fromPathIdx || !pathEligible(pathIdx, ctx)) continue;
+        if (pathIdx === fromPathIdx || !pathEligible(pathIdx, prior.routeId, ctx)) continue;
         if (path.direction === current.direction) continue;
         const s = arcOnPath(path, hit.edge, hit.s, null);
         if (s === null) continue;
@@ -387,6 +388,19 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const dir = motion.dir;
     const dtSec = motion.dtSec;
 
+    // Route and service evidence can change without a new trip or prior.
+    // Reject stale/foreign matches before even the off-graph noise hold.
+    const invalidMatch = track.match.pathIdx !== null && !pathEligible(track.match.pathIdx, prior.routeId, ctx);
+    if (prior.pathIdx !== null && !pathEligible(prior.pathIdx, prior.routeId, ctx)) {
+      prior = { ...prior, pathIdx: null, shapeIdx: null };
+    }
+    if (invalidMatch) {
+      track.match = noMatch();
+      track.offPathCount = 0;
+      track.againstCount = 0;
+      resetOrder(track);
+    }
+
     // A new prior (a new trip, or the twin re-deriving from the index) starts
     // the vehicle over ON THAT PATH: only the path-derived state goes. The
     // ordering register stays (E3, D14) -- the tram is the same tram, and a
@@ -415,12 +429,14 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (track.offGraph && !within) return track.match; // between the bands: still off, until a fix lands on an edge
     if (track.offGraph && within) track.offGraph = false;
 
-    // Check the own path before the adopted path, on every fresh fix. A
-    // standing fix must not undo a D4 turnaround onto the parallel return
-    // track. No extra return delay: the first agreeing moving fix is enough.
+    // Check the eligible own path before the adopted path on every fresh
+    // fix. Lateral scatter and a small forward shuffle cannot undo D4.
+    // Require FOLD_MOVE_M along the prior's tangent, not just on the ground.
     if (prior.pathIdx !== null && track.match.pathIdx !== null && track.match.pathIdx !== prior.pathIdx) {
       const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
-      if (dir !== null && own.residual <= NEAR_M && pathTangentAgrees(prior.pathIdx, own.s, dir)) {
+      const geo = net.pathGeometry(prior.pathIdx);
+      const forwardM = dir === null ? 0 : motion.groundM * dot(tangent(geo.pts, geo.cum, own.s), dir);
+      if (own.residual <= NEAR_M && forwardM >= FOLD_MOVE_M) {
         resetOrder(track);
         track.match = own;
         track.offPathCount = 0;
@@ -441,6 +457,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         : { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
       return track.match;
     };
+
+    if (invalidMatch) return rederive();
 
     const working = track.match.pathIdx ?? prior.pathIdx;
     if (working !== null) {
@@ -563,7 +581,14 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     stopsBetween,
     matchFix(track, fix, prior, nextStopId, ctx) {
       const prev = lastFix(track);
-      if (!pushFix(track, fix)) return track.match;
+      if (!pushFix(track, fix)) {
+        if (track.kind !== 'tram' || prev === null || track.match.pathIdx === null || pathEligible(track.match.pathIdx, prior.routeId, ctx)) return track.match;
+        // A repeated GPS timestamp is not motion evidence, but changed
+        // route/service evidence must still invalidate the old match.
+        const match = matchTram(track, prev, prior, nextStopId, null, ctx);
+        annotate(prev, match);
+        return match;
+      }
       const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev, ctx);
       annotate(fix, match);
       return match;

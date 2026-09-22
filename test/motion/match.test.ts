@@ -47,9 +47,11 @@ describe('matchFix on the corridor', () => {
     expect(matcher.priorFor(null, '9', 0).pathIdx).toBe(pathIdx('path:9:0:abc'));
     // F8: the path id the trip index resolved wins over the route-and-
     // direction guess, so a shapeless variant runs the path the timetable
-    // has segments for; an id the network does not know is ignored.
-    expect(matcher.priorFor(null, '2', 1, 'path:9:0:abc').pathIdx).toBe(pathIdx('path:9:0:abc'));
+    // has segments for; unknown ids and another route's paths are ignored.
+    expect(matcher.priorFor(null, '9', 1, 'path:9:0:abc').pathIdx).toBe(pathIdx('path:9:0:abc'));
+    expect(matcher.priorFor(null, '2', 1, 'path:9:0:abc').pathIdx).toBeNull();
     expect(matcher.priorFor(null, '2', 1, 'path:nowhere').pathIdx).toBeNull();
+    expect(matcher.priorFor('1_0', '2', 1)).toMatchObject({ pathIdx: null, shapeIdx: null });
     expect(matcher.priorFor('2_0', '2', 0, 'path:9:0:abc').pathIdx).toBe(pathIdx('2_0')); // a real shape still wins
 
     // A detour: route 1's tram leaves edge 1 for edge 2 (200 m off its path).
@@ -168,24 +170,49 @@ describe('matchFix at a terminus turnaround under the old trip id', () => {
     expect(turned.match.s).toBeGreaterThan(afterTurn);
     expect(before).toBeCloseTo(1400, 0);
   });
+
+  it('keeps a turnaround through lateral and forward scatter, then a slow westbound departure', () => {
+    const turned = newTrack('scatter', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    // The first sideways fix reproduced the reviewed bug. The larger
+    // lateral move also exceeds 50 m on the ground, but not longitudinally.
+    for (const [x, y, t] of [[1250, 40, 2040], [1250, -10, 2050], [1270, 40, 2060], [1290, 40, 2070]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+      expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+    }
+    let s = turned.match.s;
+    for (const [i, x] of [1260, 1230, 1200, 1170, 1140].entries()) {
+      matcher.matchFix(turned, fix(x, 40, 2080 + i * 10), outbound, null);
+      expect(turned.match.pathIdx).toBe(pathIdx('1_1'));
+      expect(turned.match.s).toBeGreaterThan(s);
+      s = turned.match.s;
+    }
+  });
 });
 
 describe('own-path return and service eligibility', () => {
-  it.each([0, 60])('returns from an adopted path on the first agreeing moving fix at %d m residual, but not on a standing fix', (residual) => {
+  it.each([0, 60])('returns from an eligible sibling on the first forward movement beyond scatter at %d m residual', (residual) => {
+    const spec = corridorSpec();
+    spec.routes[0].paths!.push({ id: 'sibling', direction: 0, edges: [0, 1], synthetic: true });
+    const returnNet = syntheticNetwork(spec);
+    const m = createMatcher(returnNet);
     const track = newTrack('return', '1', 'trip', 'tram');
-    const prior = matcher.priorFor('1_0', '1', 0);
-    matcher.matchFix(track, fix(600, 0, 1000), prior, null);
-    // A previously adopted path on the shared trunk, as in the dossier.
-    const adopted = pathIdx('path:9:0:abc');
+    const prior = m.priorFor('1_0', '1', 0);
+    m.matchFix(track, fix(600, 0, 1000), prior, null);
+    const adopted = returnNet.paths.findIndex((path) => path.id === 'sibling');
     track.match = { pathIdx: adopted, shapeIdx: null, edge: 0, s: 600, residual: 0 };
-    matcher.matchFix(track, fix(600, 0, 1010), prior, null);
+    m.matchFix(track, fix(600, 0, 1010), prior, null);
     expect(track.match.pathIdx).toBe(adopted);
     track.order.leader = 'old-leader';
     track.offPathCount = 1;
     track.againstCount = 1;
-    matcher.matchFix(track, fix(700, residual, 1020), prior, null);
+    m.matchFix(track, fix(650, residual, 1020), prior, null);
     expect(track.match.pathIdx).toBe(prior.pathIdx);
-    expect(track.match.s).toBeCloseTo(700);
+    expect(track.match.s).toBeCloseTo(650);
     expect(track.offPathCount).toBe(0);
     expect(track.againstCount).toBe(0);
     expect(track.order.leader).toBeNull();
@@ -221,6 +248,52 @@ describe('own-path return and service eligibility', () => {
     expect(unindexed.match.pathIdx).toBe(pathIdx('2_0')); // empty path service set
   });
 
+  it.each([false, true])('invalidates a weekend path as service evidence changes (explicit prior: %s)', (explicit) => {
+    const pathRanks = net.paths.map(() => ({ services: new Set(['sat']), trips: 1 }));
+    const m = createMatcher(net, { pathRanks });
+    const prior = m.priorFor(null, '9', null, explicit ? 'path:9:0:abc' : null);
+    const track = newTrack('context-change', '9', 'trip', 'tram');
+    const weekday = { runningServices: new Set(['wd']) };
+    // Even a valid index prior is not eligible under known contrary service evidence.
+    m.matchFix(track, fix(500, 0, 990), prior, null, weekday);
+    expect(track.match.pathIdx).toBeNull();
+    m.matchFix(track, fix(500, 0, 1000), prior, null);
+    expect(track.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+    track.order.leader = 'old-leader';
+    track.againstCount = 1;
+    for (const t of [1000, 1010, 1020]) {
+      m.matchFix(track, fix(500, 0, t), prior, null, weekday);
+      expect(track.match.pathIdx).toBeNull();
+      expect(track.match.shapeIdx).toBeNull();
+      expect(track.offPathCount).toBe(0);
+      expect(track.againstCount).toBe(0);
+      expect(track.order.leader).toBeNull();
+      expect(track.fixes.at(-1)).not.toHaveProperty('arc');
+    }
+    m.matchFix(track, fix(500, 0, 1030), prior, null, { runningServices: new Set(['sat']) });
+    expect(track.match.pathIdx).toBe(pathIdx('path:9:0:abc'));
+  });
+
+  it.each(['foreign', 'non-running'])('does not return to a %s prior on an agreeing moving fix', (reason) => {
+    const pathRanks = net.paths.map(() => ({ services: new Set(['wd']), trips: 1 }));
+    pathRanks[pathIdx('1_0')].services = new Set(['sat']);
+    const m = createMatcher(net, { pathRanks });
+    const prior = { pathIdx: pathIdx(reason === 'foreign' ? 'path:9:0:abc' : '1_0'), shapeIdx: null, routeId: '1', direction: 0 as const };
+    const track = newTrack('bad-prior', '1', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: pathIdx('1_1'), shapeIdx: shapeIdx('1_1'), edge: 5, s: 900, residual: 0 };
+    track.fixes.push(fix(600, 60, 1000));
+    m.matchFix(track, fix(700, 60, 1010), prior, null, { runningServices: new Set(['wd']) });
+    expect(track.match.pathIdx).toBe(pathIdx('1_1'));
+  });
+
+  it.each([0, 400])('discards a persisted foreign match before an off-graph noise hold (y = %d)', (y) => {
+    const track = newTrack('foreign-state', '1', 'trip', 'tram');
+    track.match = { pathIdx: pathIdx('path:9:0:abc'), shapeIdx: null, edge: 0, s: 600, residual: 0 };
+    matcher.matchFix(track, fix(600, y, 1000), matcher.priorFor(null, '1', null), null);
+    expect(track.match.pathIdx).toBe(y === 0 ? pathIdx('1_0') : null);
+  });
+
   it('never borrows a foreign path when a route has no paths of its own', () => {
     const track = newTrack('no-route', '999', 'unknown', 'tram');
     matcher.matchFix(track, fix(600, 0, 1000), matcher.priorFor(null, '999', null), null);
@@ -238,6 +311,38 @@ describe('own-path return and service eligibility', () => {
       m.matchFix(track, fix(x, y, t), prior, null, { runningServices: new Set(['wd']) });
     }
     expect(track.match.pathIdx).toBe(prior.pathIdx);
+  });
+});
+
+describe('parallel-street stability', () => {
+  it('does not alternate paths when residuals alternate across streets 40 m apart', () => {
+    const parallel = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 2700) },
+        { from: 2, to: 3, pts: straight(0, 2700, 40) },
+      ],
+      routes: [{ id: '7', type: 0, paths: [
+        { id: 'prior', direction: 0, edges: [0] },
+        { id: 'sibling', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(parallel);
+    const prior = m.priorFor('prior', '7', 0);
+    const track = newTrack('parallel', '7', 'trip', 'tram');
+    track.priorPath = prior.pathIdx;
+    track.match = { pathIdx: 1, shapeIdx: 1, edge: 1, s: 400, residual: 0 };
+    track.fixes.push(fix(400, 40, 1000));
+    // Alternating 5/35 m residuals: slow movement and scatter keep the
+    // sibling, then a clear forward interval returns once to the prior.
+    const paths: Array<number | null> = [track.match.pathIdx];
+    for (let i = 1; i <= 12; i++) {
+      const x = i <= 6 ? 400 + i * 20 : 520 + (i - 6) * 100;
+      m.matchFix(track, fix(x, i % 2 ? 5 : 35, 1000 + i * 10), prior, null);
+      paths.push(track.match.pathIdx);
+      expect(track.match.pathIdx).toBe(i <= 6 ? 1 : 0);
+    }
+    expect(paths.slice(1).filter((path, i) => path !== paths[i])).toHaveLength(1);
   });
 });
 
