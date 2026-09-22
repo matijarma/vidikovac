@@ -120,6 +120,8 @@ export async function routeSceneTeaser(page: Pick<Page, 'route'>, snapshots: Rea
 }
 
 // --- map tiles -----------------------------------------------------------------------------------
+/** The bridge to the public basemap (scripts/review-maps.mjs fulfillPublicMap, GET only). */
+const REVIEW_MAPS = '../../scripts/review-maps.mjs';
 /** True when the run opted into the public basemap (GET only, through scripts/review-maps.mjs). */
 export const publicTiles = (env: NodeJS.ProcessEnv = process.env): boolean => env.ACCEPT_TILES === 'public';
 
@@ -131,7 +133,8 @@ export const publicTiles = (env: NodeJS.ProcessEnv = process.env): boolean => en
 export async function routeTiles(page: Pick<Page, 'route'>): Promise<void> {
   await page.route('**/maps/zagreb-v1/**', async (route: Route) => {
     if (publicTiles() && route.request().method() === 'GET') {
-      const { fulfillPublicMap } = await import('../../scripts/review-maps.mjs');
+      // Loaded only on opt-in, and through a specifier variable so no test program needs the script's types.
+      const { fulfillPublicMap } = (await import(REVIEW_MAPS)) as { fulfillPublicMap: (route: Route) => Promise<void> };
       return fulfillPublicMap(route);
     }
     return route.fulfill({ status: 404, body: '' });

@@ -351,7 +351,7 @@ describe('calm motion, run from the shipped text', () => {
     expect(start(CALM_MOTION_SPEC)).toBe(3);
     const ol = document.querySelector('ol')!;
     ol.firstElementChild!.remove();
-    ol.append(li('d'));
+    ol.appendChild(li('d'));
     document.querySelector('time')!.textContent = '1 min';
     await Promise.resolve();
     const r = read(CALM_MOTION_SPEC);
