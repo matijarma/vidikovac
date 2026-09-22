@@ -16,7 +16,7 @@
 // expressed in the other's frame is not a constraint.
 
 import type { GraphNetwork, Path } from './network';
-import { evalPathPlan } from './plan';
+import { evalPathPlan, SILENCE_HOLD_S } from './plan';
 import { lastFix, resetOrder, type PathKnot, type Track } from './track';
 import { VEHICLE_LENGTH_M } from './vehicle';
 
@@ -181,6 +181,11 @@ export function arcOnPath(path: Path, edge: number, arc: number, nearS: number |
 //     fix; a PUSH raises a stale leader's knots at times at or after the
 //     follower's fix -- that fix is a lower bound on where the leader was
 //     FROM THEN ON, not before, so the leader's anchor never moves (D6).
+//     A push never lifts a SILENT leader (T8: no fix for SILENCE_HOLD_S)
+//     past the arc its own plan holds at, its next stop: the follower's plan
+//     is an extrapolation too, and T8 forbids extrapolating a silent tram
+//     past its next stop by any route. The client's clamp keeps the order
+//     on screen: the follower's mark waits a tram length behind.
 //
 // Buses are exempt: they overtake. Plans never run backwards: a hold or a
 // push keeps every plan monotone.
@@ -252,6 +257,9 @@ interface Framed {
   fixSec: number;
   /** The arc of the vehicle's own last fix: evidence, never the plan. */
   s: number;
+  /** The highest arc a push may lift this vehicle's plan to: its own hold
+   *  arc while it is silent (T8), else no bound beyond the path's end. */
+  ceilingS: number;
 }
 
 function endRelation(track: Track): void {
@@ -348,7 +356,8 @@ function hold(follower: Framed, leader: Framed): boolean {
 /** Raises the stale leader to a tram length ahead of the follower, from the
  *  follower's fix time on and never at the anchor: the fix says where the
  *  leader must already have been AT THAT MOMENT, and says nothing at all
- *  about where it was a minute earlier (D6's teleport). */
+ *  about where it was a minute earlier (D6's teleport). Never above the
+ *  leader's ceiling: a silent leader stays at its next stop (T8). */
 function push(leader: Framed, follower: Framed, tFrom: number): boolean {
   withBreakpoints(leader.knots, [tFrom, ...follower.knots.map((k) => k[0]).filter((t) => t > tFrom)]);
   let changed = false;
@@ -357,7 +366,7 @@ function push(leader: Framed, follower: Framed, tFrom: number): boolean {
     if (knot[0] < tFrom) continue;
     const behind = mapArcNear(follower.path, evalPathPlan(follower.knots, knot[0]), leader.path, leader.s);
     if (behind === null) continue;
-    const floor = Math.min(behind + HEADWAY_M, leader.path.len);
+    const floor = Math.min(behind + HEADWAY_M, leader.path.len, leader.ceilingS);
     if (knot[1] < floor) {
       knot[1] = floor;
       changed = true;
@@ -391,7 +400,11 @@ export function enforceOrder(
     if (track.match.edge === null || track.match.pathIdx !== track.plan.pathIdx) continue;
     const fix = lastFix(track);
     if (!fix) continue;
-    framed.push({ track, path: net.paths[track.plan.pathIdx], pathIdx: track.plan.pathIdx, knots: track.plan.knots, fixSec: fix.atSec, s: track.match.s });
+    // buildPlan held a silent vehicle at its next stop (T8): the last knot of
+    // its monotone plan is that hold, and the most any push may lift it to.
+    const knots = track.plan.knots;
+    const ceilingS = nowSec - fix.atSec > SILENCE_HOLD_S && knots.length > 0 ? knots[knots.length - 1][1] : Number.POSITIVE_INFINITY;
+    framed.push({ track, path: net.paths[track.plan.pathIdx], pathIdx: track.plan.pathIdx, knots, fixSec: fix.atSec, s: track.match.s, ceilingS });
   }
   framed.sort((a, b) => a.track.id.localeCompare(b.track.id));
   const byId = new Map(framed.map((f) => [f.track.id, f] as const));

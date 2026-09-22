@@ -400,6 +400,41 @@ describe('the ordering register', () => {
     expect(isMonotone(A)).toBe(true);
   });
 
+  // T8 through the register: a push is the follower's plan, an extrapolation
+  // like any other, and it may not carry a SILENT leader past the next stop
+  // its own plan holds it at. (Twenty-five seconds of silence, above, is not
+  // silence yet; forty-seven is.)
+  it('never pushes a silent leader past the next stop its own plan holds it at', () => {
+    const matcher = createMatcher(net);
+    const A = tram('A');
+    const B = tram('B');
+    feed(net, matcher, A, '1_0', 0, [[1000, 1965], [1050, 1975]], 1980);
+    feed(net, matcher, B, '1_0', 0, [[500, 1970], [600, 1980]], 1980);
+    enforceOrder([A, B], net, 1982, 1980);
+    feed(net, matcher, A, '1_0', 0, [[1150, 1985]], 1990);
+    feed(net, matcher, B, '1_0', 0, [[700, 1990]], 1990);
+    enforceOrder([A, B], net, 1992, 1990);
+    expect(B.order.leader).toBe('A');
+
+    // A falls silent at 1150 m, running for T1200; B keeps reporting behind it.
+    for (const [x, at] of [[800, 2000], [900, 2010], [1000, 2020], [1100, 2030]] as const) {
+      feed(net, matcher, B, '1_0', 0, [[x, at]], at);
+      buildPlan(A, net, times, null, at + 2, at, BANDS);
+      enforceOrder([A, B], net, at + 2, at);
+      // Silent for 17 to 47 s: past 30 s it is held at T1200, and stays there.
+      if (at + 2 - 1985 > 30) {
+        for (const [, s] of A.plan!.on === 'path' ? A.plan!.knots : []) expect(s, `A at header ${at}`).toBeLessThanOrEqual(1200 + 1e-6);
+        expect(A.next?.stopId).toBe('T1200');
+      }
+    }
+    // The world the rule is about: B's own plan would carry a tram length
+    // ahead of it well past T1200 inside the horizon.
+    expect(planAt(B, 2030 + 90, 2030) + HEADWAY_M).toBeGreaterThan(1200 + HEADWAY_M);
+    expect(B.order.leader).toBe('A');
+    expect(isMonotone(A)).toBe(true);
+    expect(planAt(A, 2030 + 90, 2030)).toBeCloseTo(1200, 1);
+  });
+
   it('leaves the anchor alone even when the follower fix falls in the leader own anchor second', () => {
     // The time bound alone does not protect the anchor when the two fixes
     // round onto the same relative second: `knot[0] < tFrom` is then false
