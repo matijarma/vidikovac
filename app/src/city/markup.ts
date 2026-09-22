@@ -1,6 +1,5 @@
 import type { CityState, Place, StreetStory, DepartureBoard } from '../../../shared/city/types';
 import { located, distanceM } from '../../../shared/city/geo';
-import { locationLabel, type LocationContext } from './location';
 import { airIndexLabel } from './air';
 import type { LocatedEvent } from '../../../shared/city/events';
 import type { I18n } from '../i18n/i18n';
@@ -9,6 +8,8 @@ import { zagrebTime, zagrebWeekdayDate } from '../format';
 import { ct, type CityWord } from './strings';
 import { publicItemKey } from '../core/contracts';
 import {bikeAvailability} from '../../../shared/city/bikes';
+/** What a distance is measured from: the phone's place (city/place.ts PlaceContext) or a map reference (city/location.ts). */
+export interface DistanceReference { lon: number; lat: number; name: string }
 const button=(action:string,id:string,label:string)=>`<button type="button" class="city-row" data-action="${action}" data-id="${a(id)}"><span>${e(label)}</span><span aria-hidden="true">↗</span></button>`;
 const SAFE_FACTS: Record<string,[string,string]> = {
   payment:['Naplata','Payment'],maintenance:['Stanje prema registru','Recorded condition'],type:['Vrsta','Type'],sport:['Sport','Sport'],
@@ -26,7 +27,7 @@ export function referenceDate(value:string):string{
 export function placeCategory(i18n:I18n,p:Place):string {
   return p.sourceId==='bajs'?'BAJS':p.sourceId==='air'?ct(i18n,'air'):ct(i18n,p.category as CityWord);
 }
-export function placesMarkup(i18n:I18n,places:readonly Place[],events:readonly LocatedEvent[],limit=20,bikeMode:'rent'|'return'='rent',reference?:LocationContext):string {
+export function placesMarkup(i18n:I18n,places:readonly Place[],events:readonly LocatedEvent[],limit=20,bikeMode:'rent'|'return'='rent',reference?:DistanceReference):string {
   return `<div class="city-results" data-testid="city-results">${places.slice(0,limit).map(p=>{
     const at=events.filter(x=>x.venueIds.includes(p.id));
     return `<button type="button" class="city-row" data-action="select-place" data-id="${a(p.id)}" id="city-result-${a(p.id)}">
@@ -40,7 +41,7 @@ export function eventLinks(i18n:I18n,events:readonly LocatedEvent[],interactive=
   const publishers:Record<string,string>={kulturpunkt:'Kulturpunkt · CC BY-SA 3.0 HR',etnografski:'Etnografski muzej',kvartovske:'Grad Zagreb · Otvorena dozvola'};
   return events.map(x=>`<${tag} class="city-event"${interactive?` type="button" data-action="nav" data-layer="kultura" data-selection="${a(JSON.stringify({kind:'item',module:'dogadanja',id:publicItemKey('dogadanja',x.item.id)}))}"`:''}><time>${e(x.ongoing?ct(i18n,'ongoing'):x.item.data?.precision==='time'?`${zagrebWeekdayDate(x.item.at!)} · ${zagrebTime(x.item.at!)}`:zagrebWeekdayDate(x.item.at!))}</time><strong>${e(x.item.title)}</strong><span class="city-meta">${e(publishers[String(x.item.data?.source)]??ct(i18n,'source'))}${interactive?' ↗':''}${x.location==='multiple'?` · ${ct(i18n,'multiVenue')}`:''}</span></${tag}>`).join('');
 }
-export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly LocatedEvent[],saved=false,publicDisplay=false,reference?:LocationContext):string {
+export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly LocatedEvent[],saved=false,publicDisplay=false,reference?:DistanceReference):string {
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const en=i18n.getLocale().startsWith('en');
@@ -51,7 +52,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${publicDisplay?'':`<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n,'back'))}</button>`}
     <p class="city-kicker">${e(placeCategory(i18n,p))}</p><h3 tabindex="-1" id="city-detail-title">${e(p.name)}</h3>
     ${p.address?`<p>${e(p.address)}</p>`:''}${!located(p)?`<p class="city-meta">${e(ct(i18n,'noLocation'))}</p>`:''}
-    ${reference&&located(p)?`<p class="city-meta">${e(Math.round(distanceM(reference,p)).toLocaleString(en?'en-GB':'hr-HR'))} m · ${e(locationLabel(i18n,reference))}</p>`:''}
+    ${reference&&located(p)?`<p class="city-meta">${e(Math.round(distanceM(reference,p)).toLocaleString(en?'en-GB':'hr-HR'))} m${reference.name.trim()?` · ${e(reference.name.trim())}`:''}</p>`:''}
     ${bike}${air}${facts?`<dl class="city-facts">${facts}</dl>`:''}
     ${p.hours?`<p class="city-meta">${e(p.hours)}</p>`:''}
     ${p.description?`<div class="city-description" lang="hr">${en?`<p class="city-meta">${ct(i18n,'sourceLanguage')}</p>`:''}<p>${e(p.description)}</p></div>`:''}

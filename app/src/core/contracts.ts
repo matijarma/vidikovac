@@ -9,6 +9,7 @@ import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 import type { CityState } from '../../../shared/city/types';
 import type { LocationContext } from '../city/location';
+import type { PlaceContext } from '../city/place';
 import type { BoardCache } from '../city/boards';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
@@ -51,6 +52,9 @@ export interface CastState {
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
   location?: LocationContext;
+  /** The phone's place (city/place.ts resolvePlace): the screen's place or stop, a saved stop, the stop
+   *  nearest the reference, or Trg bana J. Jelačića; titles Sada and names the stop its departures come from. */
+  place?: PlaceContext;
   setLocation?: (location: LocationContext) => void;
   boards?: BoardCache;
   onLocalData?: () => void;
@@ -72,7 +76,7 @@ export interface ExperienceActions {
   /** Read-only: a layer only checks and lists what is saved, it never mutates the store directly. */
   saved?: Pick<SavedStore, 'list' | 'has'>;
   cast?: CastState;
-  /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the saved stop's walking row (D16). */
+  /** The stop catalogue (`loadStops`), fetched once per session: the place and its departures stop are resolved from it (D16). */
   stops?: readonly ScreenStop[];
   /** The nearest bike-share and parking stations (plan T3.2, D7): undefined until
    *  FEED_BIKES / FEED_PARKING turn on with their worker module. */

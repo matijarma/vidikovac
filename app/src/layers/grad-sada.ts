@@ -20,7 +20,6 @@ import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/es
 import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
 import { dayOpportunities } from '../city/day';
-import { defaultLocation, locationLabel } from '../city/location';
 import { nextDepartures } from '../city/next-departures';
 
 export function renderGradSada(ctx: LayerContext): HTMLElement {
@@ -54,7 +53,6 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
 <header class="day-heading"><div><p class="day-date">${escapeHtml(zagrebWeekdayDate(ctx.now))} · <time class="day-clock" datetime="${new Date(ctx.now).toISOString()}">${escapeHtml(model.clock)}</time></p><h2 class="day-title layer-title" id="layer-title-grad-sada" tabindex="-1">${escapeHtml(i18n.t('cityOverview.title'))}</h2></div>${weatherMarkup}</header>
 <div class="day-overview" data-testid="tb">
   <section class="day-now" aria-labelledby="day-now-title"><header class="day-section-head"><h3 id="day-now-title">${escapeHtml(i18n.t('cityOverview.nearby'))}</h3>${link('u-pokretu', i18n.t('layers.u-pokretu'))}</header>
-    <p class="city-meta" data-testid="location-context">${escapeHtml(locationLabel(i18n,ctx.location??defaultLocation(ctx.screen)))}</p>
     ${nextDepartures(ctx)}
     ${dayOpportunities(ctx)}
     <div class="day-facts" data-testid="tb-lane-sada" data-col="sada" aria-busy="${sada.busy}">${local.map(tile => tileMarkup(i18n, tile)).join('')}</div>

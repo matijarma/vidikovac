@@ -21,6 +21,7 @@ import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { defaultLocation, type LocationContext } from './city/location';
+import { resolvePlace } from './city/place';
 import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
@@ -405,6 +406,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onDispose:fn=>workspaceDisposals.add(fn),
       i18n, snapshots: feed.snapshots, now: frozenAt??now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
       location: locationContext ?? defaultLocation(screen()),
+      // Sada's title and the stop its departures come from (city/place.ts), resolved on every draw.
+      place: resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }),
       setLocation: value => { locationContext=value; },
       boards, onLocalData: repaintLocalData,
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
@@ -421,7 +424,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function repaintLocalData():void { if(!disposed&&!frozen)render(); }
   function render(): void {
-    if (screen().stop || saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
+    ensureStops();
     ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
@@ -500,7 +503,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The stop's last-departure file, once per stop and only behind FEED_LASTRUN; a failed answer leaves the tile absent. */
   function ensureLastRun(): void {
     if (!FLAGS.FEED_LASTRUN) return;
-    const stop = session.snapshot().screen?.stop;
+    // The stop the departures block boards: the screen's, a saved one, or the one nearest the place.
+    const stop = resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }).departuresStop;
     if (!stop || stop.id === lastRunStop) return;
     lastRunStop = stop.id;
     // A new stop: the previous stop's schedule leaves the band at once rather than posing as this one until the fetch answers.
