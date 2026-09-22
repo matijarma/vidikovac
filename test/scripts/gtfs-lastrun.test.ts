@@ -200,6 +200,19 @@ describe('buildLastRun', () => {
     expect(HORIZON_DAYS).toBe(21);
     expect(days.every((d) => d >= '2026-09-13' && d <= '2026-10-04')).toBe(true);
   });
+  it('writes the earliest departure per line and service date beside the latest, under the same rules (WP1 step 1)', async () => {
+    const files = await buildLastRun(feed(), { stopIds: STOP_IDS, today: TODAY, generatedAt: GENERATED_AT });
+    const s1 = files.get('S1')!;
+    expect(Object.keys(s1.first)).toEqual(['6', '11']);
+    expect(s1.first['6']['2026-09-14']).toBe('22:10'); // the earlier of two weekday trips; routes keeps 23:50
+    expect(s1.routes['6']['2026-09-14']).toBe('23:50');
+    expect(s1.first['6']['2026-09-19']).toBe('24:15'); // one Saturday trip: first and last are the same
+    expect(Object.keys(s1.first['6'])).toEqual(Object.keys(s1.routes['6']));
+    expect(s1.first['11']['2026-09-17']).toBe('21:00'); // HOL's 20:00 is pickup_type 1, never a first departure
+    expect(files.get('S3')!.first['11']['2026-09-17']).toBe('20:05');
+    expect(files.get('S2')!.first).toEqual({}); // arrivals only
+    expect(files.get('S9')!.first).toEqual({});
+  });
   it('never counts a trip’s last stop (an arrival) nor a no-pickup row as a departure', async () => {
     const files = await buildLastRun(feed(), { stopIds: STOP_IDS, today: TODAY, generatedAt: GENERATED_AT });
     expect(files.get('S2')!.routes).toEqual({}); // every trip ends at S2

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { lastDeparture, lastRunExpired, loadLastRun, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
+import { firstDeparture, firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, lastRunExpired, loadLastRun, nightService, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
 import { lastRunProducer } from '../../app/src/experience/producers';
 import { bucketOf, columnsFor } from '../../app/src/experience/timeband';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { zagrebDayKey, zagrebTime } from '../../app/src/format';
+import { zagrebDayKey, zagrebHour, zagrebTime } from '../../app/src/format';
 
 // The last scheduled departure per line from the screen's stop (plan A.6, D7,
 // Task T3.1): one static JSON per stop, written by scripts/gtfs-lastrun.mjs
@@ -18,8 +18,8 @@ const at = (iso: string): number => Date.parse(iso);
 const FRI_AFTERNOON = at('2026-09-11T12:32:00Z'); // Fri 11. 9. 14:32 CEST: the unit fixture
 const SAT_0010 = at('2026-09-11T22:10:00Z');      // Sat 12. 9. 00:10 CEST: yesterday's service still rolling
 
-function live(routes: LastRunRoutes, validUntil = '2026-09-13T22:30:00Z'): LastRunSnapshot {
-  return { status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil, routes };
+function live(routes: LastRunRoutes, validUntil = '2026-09-13T22:30:00Z', first?: LastRunRoutes): LastRunSnapshot {
+  return { status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil, routes, ...(first ? { first } : {}) };
 }
 
 const TABLE: LastRunRoutes = {
@@ -64,6 +64,61 @@ describe('lastDeparture: the current service day’s last departure ahead of now
   it('reads a winter service date in CET: "24:10" on 15. 1. is 16. 1. 00:10 CET', () => {
     const snapshot = live({ '6': { '2026-01-15': '24:10' } }, '2026-01-17T00:00:00Z');
     expect(lastDeparture(snapshot, '6', at('2026-01-15T19:00:00Z'))).toEqual({ at: at('2026-01-15T23:10:00Z') });
+  });
+});
+
+// The first departure of the morning (WP1 step 1): the same service-date table, earliest per day.
+const FIRST: LastRunRoutes = {
+  '6': { '2026-09-11': '04:20', '2026-09-12': '04:16', '2026-09-13': '05:02' },
+  '11': { '2026-09-12': '04:40' },
+  '31': { '2026-09-11': '24:23' }, // a night tram: its service day starts after midnight
+};
+const FRI_2240 = at('2026-09-11T20:40:00Z'); // Fri 11. 9. 22:40 CEST
+
+describe('firstDeparture: the next morning’s first departure ahead of now', () => {
+  it('Fri 22:40: Friday’s 04:20 has left, so Saturday’s service date answers with 04:16', () => {
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '6', FRI_2240)).toEqual({ at: at('2026-09-12T02:16:00Z') });
+    expect(zagrebTime(firstDeparture(live(TABLE, undefined, FIRST), '6', FRI_2240)!.at)).toBe('04:16');
+  });
+  it('Sat 00:10: the same day’s 04:16 is still ahead', () => {
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '6', SAT_0010)).toEqual({ at: at('2026-09-12T02:16:00Z') });
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '11', SAT_0010)).toEqual({ at: at('2026-09-12T02:40:00Z') });
+  });
+  it('Sat 04:17: once it has left, the next service date’s first departure answers', () => {
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '6', at('2026-09-12T02:17:00Z'))).toEqual({ at: at('2026-09-13T03:02:00Z') });
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '11', at('2026-09-12T02:41:00Z'))).toBeNull(); // no Sunday entry
+  });
+  it('is null without a first table, for an unknown line, past validUntil and on a down snapshot', () => {
+    expect(firstDeparture(live(TABLE), '6', FRI_2240)).toBeNull();
+    expect(firstDeparture(live(TABLE, undefined, FIRST), '99', FRI_2240)).toBeNull();
+    expect(firstDeparture(live(TABLE, '2026-09-11T20:00:00Z', FIRST), '6', FRI_2240)).toBeNull();
+    expect(firstDeparture({ status: 'down', fetchedAt: '2026-09-11T12:00:00Z' }, '6', FRI_2240)).toBeNull();
+    expect(firstDeparture(null, '6', FRI_2240)).toBeNull();
+  });
+  it('firstDepartureOn reads one service date in GTFS hours, whatever the clock says', () => {
+    expect(firstDepartureOn(live(TABLE, undefined, FIRST), '6', '2026-09-11')).toEqual({ at: at('2026-09-11T02:20:00Z') });
+    expect(firstDepartureOn(live(TABLE, undefined, FIRST), '31', '2026-09-11')).toEqual({ at: at('2026-09-11T22:23:00Z') }); // Sat 00:23
+    expect(firstDepartureOn(live(TABLE, undefined, FIRST), '11', '2026-09-11')).toBeNull();
+    expect(firstDepartureOn(live(TABLE), '6', '2026-09-11')).toBeNull();
+  });
+});
+
+describe('GTFS service time helpers', () => {
+  it('gtfsMinutes counts from the service day’s start and lets hours pass 24', () => {
+    expect(gtfsMinutes('04:16')).toBe(256);
+    expect(gtfsMinutes('28:15')).toBe(28 * 60 + 15);
+    expect(gtfsMinutes('kasno')).toBeNull();
+    expect(gtfsMinutes(undefined)).toBeNull();
+  });
+  it('nightService: a line leaving at or after 26:00 on some service date; day lines end before', () => {
+    const snapshot = live({ ...TABLE, '33': { '2026-09-11': '28:15' } }, undefined, FIRST);
+    expect(nightService(snapshot, '33')).toBe(true);
+    expect(nightService(snapshot, '6')).toBe(false); // 24:20 at the latest
+    expect(nightService(null, '33')).toBe(false);
+  });
+  it('lastDepartureOn resolves one service date without the clock', () => {
+    expect(lastDepartureOn(live(TABLE), '6', '2026-09-11')).toEqual({ at: at('2026-09-11T22:15:00Z') });
+    expect(lastDepartureOn(live(TABLE), '17', '2026-09-12')).toBeNull();
   });
 });
 
@@ -113,6 +168,16 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
     const offline = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     expect(await loadLastRun('400_4', asFetch(offline))).toMatchObject({ status: 'down' });
   });
+  it('reads the first table when the file carries one and refuses a malformed one', async () => {
+    const withFirst = vi.fn(answer(200, JSON.stringify({ ...FILE, first: FIRST })));
+    expect(await loadLastRun('700_1', asFetch(withFirst))).toMatchObject({ status: 'live', routes: TABLE, first: FIRST });
+    const without = await loadLastRun('700_2', asFetch(vi.fn(answer(200))));
+    expect(without && 'first' in without).toBe(false);
+    const broken = vi.fn(answer(200, JSON.stringify({ ...FILE, first: { '6': { '2026-09-12': 416 } } })));
+    expect(await loadLastRun('700_3', asFetch(broken))).toMatchObject({ status: 'down' });
+    const notATable = vi.fn(answer(200, JSON.stringify({ ...FILE, first: 'early' })));
+    expect(await loadLastRun('700_4', asFetch(notATable))).toMatchObject({ status: 'down' });
+  });
   it('recovers after a down answer: the next call fetches again (the kiosk asks an hour later, R-KP23) and caches the live file', async () => {
     const fetchImpl = vi.fn(answer(503, ''));
     const fetched = at('2026-09-11T12:00:00Z');
@@ -145,8 +210,8 @@ describe('loadLastRun: the stop’s file, once per stop', () => {
 });
 
 describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelačića)', () => {
-  const file = JSON.parse(readFileSync(new URL('../../app/public/data/lastrun/106_1.json', import.meta.url), 'utf8')) as { generatedAt: string; validUntil: string; source: string; routes: LastRunRoutes };
-  const snapshot: LastRunSnapshot = { status: 'live', fetchedAt: file.generatedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes };
+  const file = JSON.parse(readFileSync(new URL('../../app/public/data/lastrun/106_1.json', import.meta.url), 'utf8')) as { generatedAt: string; validUntil: string; source: string; routes: LastRunRoutes; first: LastRunRoutes };
+  const snapshot: LastRunSnapshot = { status: 'live', fetchedAt: file.generatedAt, sourceUpdatedAt: file.generatedAt, validUntil: file.validUntil, routes: file.routes, first: file.first };
   // 14:32 Zagreb on the day the file was generated: inside its window whatever day the script last ran.
   const now = Date.parse(`${zagrebDayKey(file.generatedAt)}T12:32:00Z`);
 
@@ -154,10 +219,25 @@ describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelači
     expect(file.source).toBe('ZET GTFS');
     expect(Date.parse(file.validUntil)).toBeGreaterThan(now);
     for (const line of ['6', '11', '12', '13', '14', '17']) expect(Object.keys(file.routes), line).toContain(line);
-    for (const table of Object.values(file.routes)) for (const [day, time] of Object.entries(table)) {
+    for (const table of [...Object.values(file.routes), ...Object.values(file.first)]) for (const [day, time] of Object.entries(table)) {
       expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(time).toMatch(/^\d{2}:\d{2}$/);
     }
+  });
+  it('carries the first departure beside the last one for every line and date, never later than it', () => {
+    expect(Object.keys(file.first)).toEqual(Object.keys(file.routes));
+    for (const [routeId, table] of Object.entries(file.routes)) {
+      expect(Object.keys(file.first[routeId]!), routeId).toEqual(Object.keys(table));
+      for (const [day, last] of Object.entries(table)) expect(file.first[routeId]![day]! <= last, `${routeId} ${day}`).toBe(true);
+    }
+  });
+  it('at 22:40 on the day the file was generated, the next first tram of line 6 leaves in the small hours of the next morning', () => {
+    const late = Date.parse(`${zagrebDayKey(file.generatedAt)}T20:40:00Z`);
+    const first = firstDeparture(snapshot, '6', late);
+    expect(first).not.toBeNull();
+    expect(zagrebDayKey(first!.at)).not.toBe(zagrebDayKey(late));
+    expect(zagrebHour(first!.at)).toBeGreaterThanOrEqual(3);
+    expect(zagrebHour(first!.at)).toBeLessThan(7);
   });
   it('gives the Sada band two Zadnji polazak tiles in večeras with xs badges, and never the word dolazak', () => {
     const hr = createDefaultI18n('hr');

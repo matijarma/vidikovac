@@ -1028,6 +1028,17 @@
       "sjednica-skupstine": "sjednica Skupštine",
       "sjednica-odbora": "sjednica odbora"
     },
+    "nearby": {
+      "title": "U blizini",
+      "pill": "{km} km · ~{min} min",
+      "always": "uvijek",
+      "until": "do",
+      "sunrise": "Izlazak sunca",
+      "sunset": "Zalazak sunca",
+      "lastTrams": "Zadnji tramvaji",
+      "firstTram": "Prvi tramvaj",
+      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu."
+    },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",
       "closures": "Zatvorene prometnice",
