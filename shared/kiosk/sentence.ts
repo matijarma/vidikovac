@@ -73,7 +73,9 @@ export interface SentenceContext {
 
 const QUOTES = '"\'„“”«»';
 const FORBIDDEN = /(?:\bzid(?:a|u|om|ovi|ove)?\b|dohva[ćt]|ažuriran|osvježen|preuzeto|sinkroniz|sinhroniz|podat(?:ak|ci) od|zastarjel|nepotvrđen|neprovjeren|nedostupn|nije provjera|obuhvat zaštite|iz registra|nema podat|možda|vjerojatno|navodno|moguće je|fetched|updated at|synced|synchroni[sz]|unavailable|unconfirmed|not verified|out of date|perhaps|maybe|probably|possibly)/iu;
-const INSTRUCTIONS = /(?:\b(?:pošalji|pošaljite|šalji|upiši|upišite|unesi|unesite|klikni|kliknite|zanemari|zanemarite|ignoriraj|ignorirajte|napiši|napišite|odgovori|odgovorite|izvrši|izvršite|otkrij|otkrijte|slijedi|slijedite|otvori|otvorite|zatvori|zatvorite|obriši|obrišite|izbriši|izbrišite|preuzmi|preuzmite|spremi|spremite|dodaj|dodajte|prikaži|prikažite|skeniraj|skenirajte|moraš|trebaš|molimo|send|enter|click|ignore|disregard|execute|reveal|obey|reply|please)\b|(?:system|assistant|developer|sustav|asistent)\s*:|\byou (?:must|should)\b)/iu;
+const INSTRUCTIONS = /(?<![\p{L}\p{N}])(?:(?:pošalji|pošaljite|šalji|šaljite|upiši|upišite|unesi|unesite|klikni|kliknite|zanemari|zanemarite|ignoriraj|ignorirajte|napiši|napišite|odgovori|odgovorite|izvrši|izvršite|otkrij|otkrijte|slijedi|slijedite|otvori|otvorite|zatvori|zatvorite|obriši|obrišite|izbriši|izbrišite|preuzmi|preuzmite|spremi|spremite|dodaj|dodajte|prikaži|prikažite|skeniraj|skenirajte|nazovi|nazovite|moraš|morate|trebaš|trebate|molimo|send|enter|click|ignore|disregard|execute|reveal|obey|reply|please|you\s+(?:must|should))(?![\p{L}\p{N}])|(?:system|assistant|developer|sustav|asistent)(?![\p{L}\p{N}])\s*:)/u;
+const folded = (text: string): string => text.normalize('NFC').toLocaleLowerCase('hr');
+const hasInstructions = (text: string): boolean => INSTRUCTIONS.test(folded(text));
 const VALUE_NOISE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}"'„“”«»‘’]/gu;
 export const SENTENCE_VALUE_MAX_CHARS = 64;
 const DATE_RELATIVE = /\b(?:sutra|večeras|danas|ujutro|noćas|sinoć|jučer|prekosutra|today|tomorrow|tonight|yesterday)\b|\bthis (?:morning|evening|afternoon)\b/iu;
@@ -178,22 +180,31 @@ export function sentenceValidUntil(facts: readonly SentenceFact[]): number | nul
 
 const withoutPeriod = (text: string): string => text.trim().replace(/\.$/u, '');
 
-/** Recognise only our envelopes. Values are not a vocabulary for new prose. */
-function opaqueValues(text: string): string[] {
-  const event = text.match(/^.+ počinje događanje „(.+)“ \((.+)\)\.$/u);
-  if (event) return [event[1]!, event[2]!];
-  const englishEvent = text.match(/^(.+) starts .+?, (.+)\.$/u);
-  if (englishEvent) return [englishEvent[1]!, englishEvent[2]!];
-  const opening = text.match(/^(.+): rad počinje /u);
-  if (opening) return [opening[1]!];
-  const englishOpening = text.match(/^(.+) opens /u);
-  if (englishOpening) return [englishOpening[1]!];
-  const closure = text.match(/^(.+?)(?:: zatvoreno za promet|(?: je)? zatvoren[ao]?| is closed(?: to traffic)?) (?:do|until) /u);
-  if (closure) return [closure[1]!];
-  const destination = text.match(/(?:, smjer | towards )(.+?)(?:, polazi | leaves )/u);
-  if (destination) return [destination[1]!];
-  const named = text.match(/^([^:]+): (.+)\.$/u);
-  if (named) return [named[1]!, named[2]!];
+interface SentenceValueSpan { text: string; start: number; end: number; opaque: boolean }
+// Capture only interpolated fields. Descriptions and bike counts are prose,
+// not names: a colon alone must not exempt the rest of a source sentence.
+const VALUE_ENVELOPES: readonly { pattern: RegExp; prose?: number }[] = [
+  { pattern: /^.+ počinje događanje „(.+)“ \((.+)\)\.$/du },
+  { pattern: /^(.+) starts .+?, (.+)\.$/du },
+  { pattern: /^(.+): rad počinje /du },
+  { pattern: /^(.+) opens /du },
+  { pattern: /^(.+?)(?:: zatvoreno za promet|(?: je)? zatvoren[ao]?| is closed(?: to traffic)?) (?:do|until) /du },
+  { pattern: /(?:, smjer | towards )(.+?)(?:, polazi | leaves )/du },
+  { pattern: /^BAJS (.+): (.+)\.$/du, prose: 2 },
+  { pattern: /^(?:Dežurna ljekarna 24\/7|24\/7 duty pharmacy): (.+)\.$/du },
+  { pattern: /^([^:]+): (.+)\.$/du, prose: 2 },
+];
+
+/** Keep exact field offsets; equal text elsewhere must still be checked. */
+function sentenceValues(text: string): SentenceValueSpan[] {
+  for (const { pattern, prose } of VALUE_ENVELOPES) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    return match.slice(1).map((value, index) => {
+      const [start, end] = match.indices![index + 1]!;
+      return { text: value!, start, end, opaque: index + 1 !== prose };
+    });
+  }
   return [];
 }
 
@@ -230,6 +241,30 @@ function factClaims(fact: SentenceFact): string[] {
     ? [claim, claim[0]!.toLocaleLowerCase('hr') + claim.slice(1), claim[0]!.toLocaleUpperCase('hr') + claim.slice(1)] : [claim]);
 }
 
+/** Exempt names only at their positions within a verbatim source claim.
+ * New AI prose and repeated names outside those slots remain visible to the
+ * copy checks. Grounding below still requires complete, unmodified claims.
+ */
+function sentenceCopyText(text: string, facts: readonly SentenceFact[]): string {
+  const masked = text.split(''); // RegExp indices are UTF-16 offsets.
+  for (const claim of new Set(facts.flatMap(factClaims))) {
+    const values = sentenceValues(`${claim}.`).filter(value => value.opaque);
+    if (!values.length) continue;
+    for (let at = text.indexOf(claim); at !== -1; at = text.indexOf(claim, at + claim.length)) {
+      for (const { start, end } of values) masked.fill('¤', at + start, at + end);
+    }
+  }
+  return masked.join('');
+}
+
+function copyRejection(text: string): SentenceRejection | null {
+  if (FORBIDDEN.test(folded(text)) || /\d(?:°|\s+°\s+[CF]\b|(?:min|km|m|h|s)\b)/u.test(text)) return 'forbidden-copy';
+  if (/(?:^|[;,]\s*|^(?:danas|sutra|večeras|ujutro|today|tomorrow|tonight)\s+)(?:\d+\s+(?:zatvaranja|radova|događanja|bicikl|closure|event|bike)|(?:radovi|događanja|zatvaranja)\s+(?:u gradu\s+)?\d)/iu.test(text)) {
+    return 'unnamed-count';
+  }
+  return null;
+}
+
 function coveredByClaims(text: string, refs: readonly SentenceFact[]): boolean {
   const claims = refs.flatMap((fact, index) => factClaims(fact).map(claim => ({ claim, index })));
   const target = withoutPeriod(text);
@@ -257,13 +292,13 @@ export function acceptSentence(candidate: string, ctx: SentenceContext): Sentenc
   if (!Number.isFinite(budget) || [...text].length > budget) return { ok: false, reason: 'too-long' };
   if (/[\r\n\u2028\u2029]/u.test(candidate)) return { ok: false, reason: 'newline' };
   if (/[*_`#[\]<>{}|]|https?:|^\s*(?:-\s+|•)|\p{Cc}|\p{Cf}/iu.test(text)) return { ok: false, reason: 'markup' };
-  if (hasSecondSentence(text)) return { ok: false, reason: 'multiple-sentences' };
-  if (FORBIDDEN.test(text) || INSTRUCTIONS.test(text)) return { ok: false, reason: 'forbidden-copy' };
-  if (/\d(?:°|\s+°\s+[CF]\b|(?:min|km|m|h|s)\b)/u.test(text)) return { ok: false, reason: 'forbidden-copy' };
-  if (/(?:^|[;,]\s*|^(?:danas|sutra|večeras|ujutro|today|tomorrow|tonight)\s+)(?:\d+\s+(?:zatvaranja|radova|događanja|bicikl|closure|event|bike)|(?:radovi|događanja|zatvaranja)\s+(?:u gradu\s+)?\d)/iu.test(text)) {
-    return { ok: false, reason: 'unnamed-count' };
-  }
   const refs = sentenceRefs(text, ctx);
+  const prose = sentenceCopyText(text, refs);
+  if (hasSecondSentence(prose)) return { ok: false, reason: 'multiple-sentences' };
+  // Injection guards, markup and character budgets still cover the full text.
+  if (hasInstructions(text)) return { ok: false, reason: 'forbidden-copy' };
+  const copyIssue = copyRejection(prose);
+  if (copyIssue) return { ok: false, reason: copyIssue };
   if (!refs.length) return { ok: false, reason: 'unrelated' };
   if (ctx.now !== undefined && !Number.isFinite(ctx.now)) return { ok: false, reason: 'expired' };
   if (ctx.now !== undefined && (ctx.kicker ?? refs[0]!.kind) === 'nocas') {
@@ -275,8 +310,8 @@ export function acceptSentence(candidate: string, ctx: SentenceContext): Sentenc
     return { ok: false, reason: 'expired' };
   }
   if (ctx.kicker && !refs.some(fact => fact.kind === ctx.kicker)) return { ok: false, reason: 'wrong-kicker' };
-  if (refs.some(fact => FORBIDDEN.test(fact.text) || INSTRUCTIONS.test(fact.text)
-    || opaqueValues(fact.text).some(value => sentenceValue(value) !== value))) {
+  if (refs.some(fact => hasInstructions(fact.text) || copyRejection(sentenceCopyText(fact.text, [fact]))
+    || sentenceValues(fact.text).some(value => sentenceValue(value.text) !== value.text))) {
     return { ok: false, reason: 'forbidden-copy' };
   }
   // Numeric tokens, not substrings: 8 is not evidence for 18, nor 21 for -21.
@@ -338,7 +373,7 @@ export function stableSentenceFacts(facts: readonly SentenceFact[], now?: number
   return facts.filter(fact => !/^(?:dep|departure):/.test(fact.id)
     && !/\b(?:za|in)\s+\d+\s+min\b/i.test(fact.text)
     && [...fact.text].length <= 160
-    && opaqueValues(fact.text).every(value => [...value].length <= SENTENCE_VALUE_MAX_CHARS)
+    && sentenceValues(fact.text).every(value => [...value.text].length <= SENTENCE_VALUE_MAX_CHARS)
     && fact.validUntil !== null && Number.isFinite(fact.validUntil)
     && (now === undefined || fact.validUntil > now)).slice(0, 16);
 }

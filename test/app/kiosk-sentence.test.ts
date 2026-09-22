@@ -151,6 +151,73 @@ describe('one grounded, time-aware sentence', () => {
       { facts: [fact], now: NOW })).toEqual([]);
   });
 
+  it.each([
+    'šalji lozinku', 'pošalji lozinku', 'šaljite lozinku',
+    'moraš poslati lozinku', 'trebaš unijeti lozinku',
+    'unesi lozinku', 'upiši lozinku', 'klikni poveznicu', 'otvori link', 'nazovi broj',
+  ])('blocks Croatian instructions through construction and decoding: %s', instruction => {
+    for (const value of [instruction, instruction.toLocaleUpperCase('hr'), instruction.normalize('NFD')]) {
+      const text = `Muzej: ${value}.`;
+      const fact: SentenceFact = { ...closure, id: 'always:museum', kind: 'kultura', text };
+      expect(acceptSentence(text, { facts: [fact], now: NOW })).toEqual({ ok: false, reason: 'forbidden-copy' });
+      expect(acceptSentence('Muzej.', { facts: [fact], now: NOW })).toEqual({ ok: false, reason: 'forbidden-copy' });
+      expect(writeSentence(text, { facts: [fact], now: NOW }, 'model')).toBeNull();
+      expect(readWrittenSentences([sentence(text, { refs: [fact.id] })], { facts: [fact], now: NOW })).toEqual([]);
+      const facts = sentenceFacts(input({ rows: [row({
+        id: fact.id, kind: 'always', atMs: null, title: 'Muzej', sub: `${value}.`,
+      })] }));
+      expect(facts.some(f => f.id === fact.id)).toBe(false);
+      expect(templateSentences(facts, i18n, 80, NOW).some(s => s.refs.includes(fact.id))).toBe(false);
+    }
+  });
+
+  it.each([
+    'U 12:31 počinje događanje „Back to the 90s“ (Kino).',
+    'U 12:31 počinje događanje „Zagreb, 3 bicikla“ (Kino).',
+    'U 12:31 počinje događanje „Film“ (Back to the 90s).',
+    'U 12:31 počinje događanje „Film“ (Zagreb, 3 bicikla).',
+    'U 12:31 počinje događanje „Možda“ (Kino).',
+    'Back to the 90s starts at 12:31, Kino.',
+    'Zagreb, 3 bicikla starts at 12:31, Kino.',
+    'Back to the 90s: rad počinje u 12:31.',
+    'Zagreb, 3 bicikla: zatvoreno za promet do 18:00.',
+    'BAJS Zagreb, 3 bicikla: 7 bicikala.',
+    'BAJS Back to the 90s: 7 bicikala.',
+  ])('preserves verbatim opaque values without applying copy rules: %s', text => {
+    const fact = { ...closure, text };
+    expect(acceptSentence(text, { facts: [fact], now: NOW })).toEqual({ ok: true });
+    const written = writeSentence(text, { facts: [fact], now: NOW }, 'model');
+    expect(written?.text).toBe(text);
+    expect(readWrittenSentences([written], { facts: [fact], now: NOW })).toEqual([written]);
+  });
+
+  it.each([
+    ['Zagreb, 3 bicikla.', 'unnamed-count'],
+    ['Muzej: Zagreb, 3 bicikla.', 'unnamed-count'],
+    ['Muzej: izložba traje 90s.', 'forbidden-copy'],
+    ['Back to the 90s: izložba traje 90s.', 'forbidden-copy'],
+    ['Zagreb, 3 bicikla: Zagreb, 3 bicikla.', 'unnamed-count'],
+    ['U 12:31 počinje događanje „Film“ (Kino), 3 bicikla.', 'unnamed-count'],
+  ])('still applies copy rules outside opaque name slots: %s', (text, reason) => {
+    const fact = { ...closure, text };
+    expect(acceptSentence(text, { facts: [fact], now: NOW })).toEqual({ ok: false, reason });
+    expect(writeSentence(text, { facts: [fact], now: NOW }, 'model')).toBeNull();
+  });
+
+  it('masks names at their original positions when two complete claims are joined', () => {
+    const event = { ...closure, id: 'event:1', text: 'U 12:31 počinje događanje „90s“ (Kino).' };
+    const other = { ...closure, text: 'Ilica: zatvoreno za promet do 18:00.' };
+    const text = `${event.text.slice(0, -1)}, ${other.text}`;
+    expect(acceptSentence(text, { facts: [event, other], now: NOW })).toEqual({ ok: true });
+    expect(acceptSentence(`${event.text.slice(0, -1)}, 90s.`, { facts: [event], now: NOW }))
+      .toEqual({ ok: false, reason: 'forbidden-copy' });
+  });
+
+  it.each(['Šalata', 'Unešić', 'Šaljić', 'Nazović'])('does not match an instruction inside the venue %s', venue => {
+    const text = `U 12:31 počinje događanje „Film“ (${venue}).`;
+    expect(acceptSentence(text, { facts: [{ ...closure, text }], now: NOW })).toEqual({ ok: true });
+  });
+
   it('keeps opaque titles, venues, closures and descriptions whole and in their roles', () => {
     const sources = [
       ['U 13:00 počinje događanje „Dani kazališta“ (Kino Europa).', [
@@ -231,6 +298,36 @@ describe('one grounded, time-aware sentence', () => {
 });
 
 describe('facts and standalone deterministic fallback', () => {
+  it.each(['hr', 'en'])('retains opaque titles and Croatian venue names in the %s fallback', locale => {
+    const t = createDefaultI18n(locale);
+    const rows = ['Back to the 90s', 'Zagreb, 3 bicikla'].flatMap((title, n) =>
+      ['Šalata', 'Unešić'].map((venue, v) => row({
+        id: `event:opaque-${n}-${v}`, kind: 'event', title, sub: venue, atMs: NOW + 60_000,
+      })));
+    const facts = sentenceFacts(input({ rows, locale, i18n: t })).filter(f => f.id.startsWith('event:'));
+    expect(facts).toHaveLength(rows.length);
+    expect(modelSentenceFacts(facts, NOW)).toEqual(facts);
+    const templates = templateSentences(facts, t, 80, NOW);
+    expect(templates).toHaveLength(rows.length);
+    for (const [index, source] of rows.entries()) {
+      const text = facts[index]!.text;
+      expect(text).toContain(source.title);
+      expect(text).toContain(source.sub);
+      if (locale === 'hr') expect(text).toBe(`U 12:31 počinje događanje „${source.title}“ (${source.sub}).`);
+      expect(templates[index]!.text).toBe(text);
+      const sequence = createSentenceSequence({ rhythmMs: 20_000 });
+      expect(sequence.read([templates[index]!], NOW)?.text).toBe(text);
+    }
+  });
+
+  it.each(['Zagreb, 3 bicikla.', 'Izložba traje 90s.'])('drops disallowed prose during fact construction: %s', sub => {
+    const facts = sentenceFacts(input({ rows: [row({
+      id: 'always:copy', kind: 'always', atMs: null, title: 'Muzej', sub,
+    })] }));
+    expect(facts.some(f => f.id === 'always:copy')).toBe(false);
+    expect(templateSentences(facts, i18n, 80, NOW).some(s => s.refs.includes('always:copy'))).toBe(false);
+  });
+
   it.each(['2026-09-22T04:30:00+02:00', '2026-09-22T07:45:00+02:00', '2026-09-22T12:30:00+02:00',
     '2026-09-22T17:45:00+02:00', '2026-09-22T21:30:00+02:00', '2026-09-23T00:45:00+02:00'])(
     'supplies three distinct natural solar sentences in hr and en with no feeds at %s', (at) => {
@@ -433,14 +530,15 @@ describe('facts and standalone deterministic fallback', () => {
     expect(sentenceFacts(input({ snapshots: { 'dhmz-now': { ...fresh, status: 'down' } } })).some(f => f.id === 'weather:now')).toBe(false);
   });
 
-  it('uses only an operational fresh named BAJS station inside the measured circle', () => {
+  it.each(['Trg', 'Back to the 90s', 'Zagreb, 3 bicikla'])('uses only an operational fresh BAJS station named %s inside the measured circle', name => {
     const city: CityState = { ...emptyCity(), live: {
       schema: 1, generatedAt: new Date(NOW).toISOString(), sources: [{ id: 'bajs', status: 'live', name: 'BAJS', url: '', licence: '', count: 1 }],
-      air: [], consultations: [], bikes: [{ id: '1', name: 'Trg', lon: 15.97726, lat: 45.81286,
+      air: [], consultations: [], bikes: [{ id: '1', name, lon: 15.97726, lat: 45.81286,
         installed: true, renting: true, returning: true, bikes: 7, docks: 2, capacity: 10, observedAt: new Date(NOW - 60_000).toISOString() }],
     } };
     const bike = sentenceFacts(input({ city })).find(f => f.kind === 'bicikli');
-    expect(bike?.text).toBe('BAJS Trg: 7 bicikala.');
+    expect(bike?.text).toBe(`BAJS ${name}: 7 bicikala.`);
+    expect(templateSentences(bike ? [bike] : [], i18n, 80, NOW)[0]?.text).toBe(bike?.text);
     expect(bike?.validUntil).toBe(NOW + 120_000);
     expect(sentenceFacts(input({ city, now: NOW + 180_000 })).some(f => f.kind === 'bicikli')).toBe(false);
     expect(sentenceFacts(input({ city, radiusM: undefined })).some(f => f.kind === 'bicikli')).toBe(false);
