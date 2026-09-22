@@ -1,0 +1,1200 @@
+{
+ "label": "kiosk-1920x1080",
+ "at": "2026-09-21T15:38:39.816Z",
+ "zagreb": "17:38:39",
+ "surface": "kiosk",
+ "theme": "light",
+ "vw": 1920,
+ "vh": 1080,
+ "scrollY": 0,
+ "url": "https://zagreb.aningfilm.hr/kiosk/",
+ "title": "Kaj ima? · zaslon",
+ "map": {
+  "status": "ready",
+  "zoom": "12.70",
+  "frames": "36",
+  "feed": "live"
+ },
+ "elements": [
+  {
+   "i": 0,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk",
+   "classes": "k-brand",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Kaj ima?",
+   "fullText": "Kaj ima?",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 24,
+    "y": 26,
+    "w": 110,
+    "h": 35
+   },
+   "clip": {
+    "top": 26,
+    "bottom": 61,
+    "h": 35
+   },
+   "path": "main>div[kiosk].kiosk>header.k-head>div.k-head-brand>p.k-brand",
+   "fontSize": 28,
+   "dataset": {}
+  },
+  {
+   "i": 1,
+   "tag": "p",
+   "testid": "kiosk-date",
+   "nearestTestid": "kiosk-date",
+   "classes": "k-date",
+   "role": null,
+   "ariaLabel": null,
+   "text": "pon 21. 9.",
+   "fullText": "pon 21. 9.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1534,
+    "y": 30,
+    "w": 101,
+    "h": 28
+   },
+   "clip": {
+    "top": 30,
+    "bottom": 57,
+    "h": 28
+   },
+   "path": "main>div[kiosk].kiosk>header.k-head>div.k-head-when>p[kiosk-date].k-date",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 2,
+   "tag": "button",
+   "testid": "kiosk-settings",
+   "nearestTestid": "kiosk-settings",
+   "classes": "k-theme",
+   "role": null,
+   "ariaLabel": "Postavke zaslona",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1655,
+    "y": 21,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 21,
+    "bottom": 65,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>header.k-head>div.k-head-when>div.k-clock-row>button[kiosk-settings].k-theme",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 3,
+   "tag": "button",
+   "testid": "kiosk-theme",
+   "nearestTestid": "kiosk-theme",
+   "classes": "k-theme",
+   "role": null,
+   "ariaLabel": "Tema: po suncu",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1711,
+    "y": 21,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 21,
+    "bottom": 65,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>header.k-head>div.k-head-when>div.k-clock-row>button[kiosk-theme].k-theme",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 4,
+   "tag": "time",
+   "testid": "kiosk-clock",
+   "nearestTestid": "kiosk-clock",
+   "classes": "k-clock",
+   "role": null,
+   "ariaLabel": null,
+   "text": "17:38",
+   "fullText": "17:38",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1767,
+    "y": 17,
+    "w": 129,
+    "h": 53
+   },
+   "clip": {
+    "top": 17,
+    "bottom": 70,
+    "h": 53
+   },
+   "path": "main>div[kiosk].kiosk>header.k-head>div.k-head-when>div.k-clock-row>time[kiosk-clock].k-clock",
+   "fontSize": 48,
+   "dataset": {}
+  },
+  {
+   "i": 5,
+   "tag": "canvas",
+   "testid": null,
+   "nearestTestid": "kiosk-map",
+   "classes": "maplibregl-canvas",
+   "role": "img",
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": true,
+   "control": false,
+   "rect": {
+    "x": 25,
+    "y": 113,
+    "w": 1170,
+    "h": 820
+   },
+   "clip": {
+    "top": 113,
+    "bottom": 933,
+    "h": 820
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>section[kiosk-live].k-field>div[kiosk-map-host].k-map-host>div[kiosk-map].k-map-canvas.maplibregl-map>div.maplibregl-canvas-container>canvas.maplibregl-canvas",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 6,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "kiosk-map",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "© OpenStreetMap contributors",
+   "fullText": "© OpenStreetMap contributors",
+   "href": "https://www.openstreetmap.org/copyright",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 958,
+    "y": 916,
+    "w": 163,
+    "h": 14
+   },
+   "clip": {
+    "top": 916,
+    "bottom": 930,
+    "h": 14
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>section[kiosk-live].k-field>div[kiosk-map-host].k-map-host>div[kiosk-map].k-map-canvas.maplibregl-map>div.maplibregl-control-container>div.maplibregl-ctrl-bottom-right>details.maplibregl-ctrl.maplibregl-ctrl-attrib>div.maplibregl-ctrl-attrib-inner>a",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 7,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "kiosk-map",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Protomaps",
+   "fullText": "Protomaps",
+   "href": "https://protomaps.com",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1132,
+    "y": 916,
+    "w": 58,
+    "h": 14
+   },
+   "clip": {
+    "top": 916,
+    "bottom": 930,
+    "h": 14
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>section[kiosk-live].k-field>div[kiosk-map-host].k-map-host>div[kiosk-map].k-map-canvas.maplibregl-map>div.maplibregl-control-container>div.maplibregl-ctrl-bottom-right>details.maplibregl-ctrl.maplibregl-ctrl-attrib>div.maplibregl-ctrl-attrib-inner>a",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 8,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-invitation",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Tramvajska linija",
+   "fullText": "6 Tramvajska linija",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 38,
+    "y": 946,
+    "w": 163,
+    "h": 24
+   },
+   "clip": {
+    "top": 946,
+    "bottom": 970,
+    "h": 24
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>p.k-map-legend>span",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 9,
+   "tag": "b",
+   "testid": null,
+   "nearestTestid": "kiosk-invitation",
+   "classes": "k-legend-tram",
+   "role": null,
+   "ariaLabel": null,
+   "text": "6",
+   "fullText": "6",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 38,
+    "y": 946,
+    "w": 22,
+    "h": 24
+   },
+   "clip": {
+    "top": 946,
+    "bottom": 970,
+    "h": 24
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>p.k-map-legend>span>b.k-legend-tram",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 10,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-invitation",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "BAJS: broj bicikala, ? nepotvrđeno",
+   "fullText": "● BAJS: broj bicikala, ? nepotvrđeno",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 221,
+    "y": 946,
+    "w": 299,
+    "h": 24
+   },
+   "clip": {
+    "top": 946,
+    "bottom": 970,
+    "h": 24
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>p.k-map-legend>span",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 11,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-invitation",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Događanja ovaj tjedan",
+   "fullText": "● Događanja ovaj tjedan",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 540,
+    "y": 946,
+    "w": 206,
+    "h": 24
+   },
+   "clip": {
+    "top": 946,
+    "bottom": 970,
+    "h": 24
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>div.k-geography>p.k-map-legend>span",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 12,
+   "tag": "h2",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-panel-kicker",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Vrijeme",
+   "fullText": "Vrijeme",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1241,
+    "y": 125,
+    "w": 88,
+    "h": 24
+   },
+   "clip": {
+    "top": 125,
+    "bottom": 149,
+    "h": 24
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>header.k-panel-head>h2.k-panel-kicker",
+   "fontSize": 20,
+   "dataset": {}
+  },
+  {
+   "i": 13,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-panel-meta",
+   "role": null,
+   "ariaLabel": null,
+   "text": "DHMZ · 17:00",
+   "fullText": "DHMZ · 17:00",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1760,
+    "y": 126,
+    "w": 111,
+    "h": 23
+   },
+   "clip": {
+    "top": 126,
+    "bottom": 149,
+    "h": 23
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>header.k-panel-head>p.k-panel-meta",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 14,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-temp",
+   "role": null,
+   "ariaLabel": null,
+   "text": "20,9 °C",
+   "fullText": "20,9 °C",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1297,
+    "y": 164,
+    "w": 150,
+    "h": 44
+   },
+   "clip": {
+    "top": 164,
+    "bottom": 208,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>div.k-weather-current>div.k-weather-main>span.k-temp",
+   "fontSize": 44,
+   "dataset": {}
+  },
+  {
+   "i": 15,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-condition",
+   "role": null,
+   "ariaLabel": null,
+   "text": "umjereno oblačno",
+   "fullText": "umjereno oblačno",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1241,
+    "y": 208,
+    "w": 303,
+    "h": 28
+   },
+   "clip": {
+    "top": 208,
+    "bottom": 236,
+    "h": 28
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>div.k-weather-current>p.k-condition",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 16,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-fr-lead",
+   "role": null,
+   "ariaLabel": null,
+   "text": "danas",
+   "fullText": "danas",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1579,
+    "y": 164,
+    "w": 142,
+    "h": 23
+   },
+   "clip": {
+    "top": 164,
+    "bottom": 187,
+    "h": 23
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>ul.k-panel-rows>li.k-fr>span.k-fr-lead",
+   "fontSize": 20,
+   "dataset": {}
+  },
+  {
+   "i": 17,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-fr-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "16 do 21 °C",
+   "fullText": "16 do 21 °C",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1579,
+    "y": 187,
+    "w": 142,
+    "h": 26
+   },
+   "clip": {
+    "top": 187,
+    "bottom": 214,
+    "h": 26
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>ul.k-panel-rows>li.k-fr>span.k-fr-main>span.k-fr-title",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 18,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-fr-lead",
+   "role": null,
+   "ariaLabel": null,
+   "text": "sutra",
+   "fullText": "sutra",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1729,
+    "y": 164,
+    "w": 142,
+    "h": 23
+   },
+   "clip": {
+    "top": 164,
+    "bottom": 187,
+    "h": 23
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>ul.k-panel-rows>li.k-fr>span.k-fr-lead",
+   "fontSize": 20,
+   "dataset": {}
+  },
+  {
+   "i": 19,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-panel-weather",
+   "classes": "k-fr-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "10 do 21 °C",
+   "fullText": "10 do 21 °C",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1729,
+    "y": 187,
+    "w": 142,
+    "h": 26
+   },
+   "clip": {
+    "top": 187,
+    "bottom": 214,
+    "h": 26
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-panel-weather].k-panel>ul.k-panel-rows>li.k-fr>span.k-fr-main>span.k-fr-title",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 20,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "k-highlight-kicker",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Promjena u prometu",
+   "fullText": "Promjena u prometu",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1236,
+    "y": 298,
+    "w": 199,
+    "h": 25
+   },
+   "clip": {
+    "top": 298,
+    "bottom": 323,
+    "h": 25
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>header.k-highlight-head>p.k-highlight-kicker",
+   "fontSize": 20,
+   "dataset": {}
+  },
+  {
+   "i": 21,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "k-highlight-pause btn-quiet",
+   "role": null,
+   "ariaLabel": "Zaustavi izmjenu",
+   "text": "Zaustavi",
+   "fullText": "Zaustavi",
+   "action": "pause-highlights",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1770,
+    "y": 289,
+    "w": 106,
+    "h": 44
+   },
+   "clip": {
+    "top": 289,
+    "bottom": 333,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>header.k-highlight-head>button.k-highlight-pause.btn-quiet",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 22,
+   "tag": "h2",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zatvorena prometnica",
+   "fullText": "Zatvorena prometnica",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1236,
+    "y": 343,
+    "w": 640,
+    "h": 48
+   },
+   "clip": {
+    "top": 343,
+    "bottom": 391,
+    "h": 48
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>div.k-highlight-content>h2",
+   "fontSize": 40,
+   "dataset": {}
+  },
+  {
+   "i": 23,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "k-highlight-where",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Petra i Tome Erdödyja",
+   "fullText": "Petra i Tome Erdödyja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1236,
+    "y": 402,
+    "w": 640,
+    "h": 36
+   },
+   "clip": {
+    "top": 402,
+    "bottom": 438,
+    "h": 36
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>div.k-highlight-content>p.k-highlight-where",
+   "fontSize": 28,
+   "dataset": {}
+  },
+  {
+   "i": 24,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "k-highlight-when",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Do 22. 9. 09:54",
+   "fullText": "Do 22. 9. 09:54",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1236,
+    "y": 449,
+    "w": 640,
+    "h": 36
+   },
+   "clip": {
+    "top": 449,
+    "bottom": 486,
+    "h": 36
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>div.k-highlight-content>p.k-highlight-when",
+   "fontSize": 28,
+   "dataset": {}
+  },
+  {
+   "i": 25,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-highlight",
+   "classes": "k-highlight-credit",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Grad Zagreb · Dohvaćeno 17:36",
+   "fullText": "Grad Zagreb · Dohvaćeno 17:36",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1236,
+    "y": 497,
+    "w": 640,
+    "h": 25
+   },
+   "clip": {
+    "top": 497,
+    "bottom": 522,
+    "h": 25
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>section[kiosk-highlight].k-highlight>div.k-highlight-content>p.k-highlight-credit",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 26,
+   "tag": "h1",
+   "testid": null,
+   "nearestTestid": "kiosk-invite",
+   "classes": "k-lead",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Skeniraj za 10 minuta grada.",
+   "fullText": "Skeniraj za 10 minuta grada.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1490,
+    "y": 730,
+    "w": 392,
+    "h": 34
+   },
+   "clip": {
+    "top": 730,
+    "bottom": 764,
+    "h": 34
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>h1.k-lead",
+   "fontSize": 28,
+   "dataset": {}
+  },
+  {
+   "i": 27,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-invite",
+   "classes": "k-invite-benefit",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Tvoji polasci, mjesta, događanja i spremljeni izbori. Bez računa i instalacije.",
+   "fullText": "Tvoji polasci, mjesta, događanja i spremljeni izbori. Bez računa i instalacije.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1490,
+    "y": 773,
+    "w": 392,
+    "h": 41
+   },
+   "clip": {
+    "top": 773,
+    "bottom": 813,
+    "h": 41
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>p.k-invite-benefit",
+   "fontSize": 15,
+   "dataset": {}
+  },
+  {
+   "i": 28,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "kiosk-invite",
+   "classes": "k-hint",
+   "role": null,
+   "ariaLabel": null,
+   "text": "ili upiši kod na",
+   "fullText": "ili upiši kod na zagreb.aningfilm.hr/s",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1490,
+    "y": 822,
+    "w": 392,
+    "h": 68
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 890,
+    "h": 68
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>p.k-hint",
+   "fontSize": 26,
+   "dataset": {}
+  },
+  {
+   "i": 29,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "kiosk-invite",
+   "classes": "k-hint-host",
+   "role": null,
+   "ariaLabel": null,
+   "text": "zagreb .aningfilm .hr /s",
+   "fullText": "zagreb.aningfilm.hr/s",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1490,
+    "y": 856,
+    "w": 392,
+    "h": 34
+   },
+   "clip": {
+    "top": 856,
+    "bottom": 890,
+    "h": 34
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>p.k-hint>span.k-hint-host",
+   "fontSize": 26,
+   "dataset": {}
+  },
+  {
+   "i": 30,
+   "tag": "span",
+   "testid": "code-a",
+   "nearestTestid": "code-a",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "ABCD",
+   "fullText": "ABCD",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1490,
+    "y": 916,
+    "w": 89,
+    "h": 41
+   },
+   "clip": {
+    "top": 916,
+    "bottom": 958,
+    "h": 41
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>div.k-invite-code>div.k-code-row>div.k-code-box>p[pair-code].k-code>span[code-a]",
+   "fontSize": 36,
+   "dataset": {}
+  },
+  {
+   "i": 31,
+   "tag": "span",
+   "testid": "code-b",
+   "nearestTestid": "code-b",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "EFGH",
+   "fullText": "EFGH",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 1626,
+    "y": 916,
+    "w": 89,
+    "h": 41
+   },
+   "clip": {
+    "top": 916,
+    "bottom": 958,
+    "h": 41
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>div.k-invite-code>div.k-code-row>div.k-code-box>p[pair-code].k-code>span[code-b]",
+   "fontSize": 36,
+   "dataset": {}
+  },
+  {
+   "i": 32,
+   "tag": "button",
+   "testid": "pair-copy",
+   "nearestTestid": "pair-copy",
+   "classes": "k-code-copy",
+   "role": null,
+   "ariaLabel": "Kopiraj kod",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1838,
+    "y": 915,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 915,
+    "bottom": 959,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>div.k-invite-code>div.k-code-row>button[pair-copy].k-code-copy",
+   "fontSize": 13.3333,
+   "dataset": {}
+  },
+  {
+   "i": 33,
+   "tag": "a",
+   "testid": "pair-url",
+   "nearestTestid": "pair-url",
+   "classes": "k-visually-hidden",
+   "role": null,
+   "ariaLabel": null,
+   "text": "https://zagreb.aningfilm.hr/s/#ABCD-EFGH",
+   "fullText": "https://zagreb.aningfilm.hr/s/#ABCD-EFGH",
+   "href": "https://zagreb.aningfilm.hr/s/#ABCD-EFGH",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1490,
+    "y": 915,
+    "w": 1,
+    "h": 1
+   },
+   "clip": {
+    "top": 915,
+    "bottom": 916,
+    "h": 1
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div.k-invite-side>div.k-invite-code>a[pair-url].k-visually-hidden",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 34,
+   "tag": "svg",
+   "testid": null,
+   "nearestTestid": "kiosk-qr",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": true,
+   "control": false,
+   "rect": {
+    "x": 1242,
+    "y": 742,
+    "w": 216,
+    "h": 216
+   },
+   "clip": {
+    "top": 742,
+    "bottom": 958,
+    "h": 216
+   },
+   "path": "main>div[kiosk].kiosk>section[kiosk-stage].k-stage>section[kiosk-invitation].k-city-window>aside.k-overview>div.k-panel--card>article[kiosk-invite].k-invite>div[kiosk-qr].k-qr>div.qr>svg",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 35,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "safety-strip",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sigurnost",
+   "fullText": "Sigurnost",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 60,
+    "y": 1031,
+    "w": 134,
+    "h": 26
+   },
+   "clip": {
+    "top": 1031,
+    "bottom": 1058,
+    "h": 26
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>span.k-strip-label>span",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 36,
+   "tag": "button",
+   "testid": "kiosk-essentials-open",
+   "nearestTestid": "kiosk-essentials-open",
+   "classes": "k-strip-verdict",
+   "role": null,
+   "ariaLabel": "Sigurnost: mirno. Otvori Osnovno",
+   "text": "",
+   "fullText": "mirno",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 214,
+    "y": 1023,
+    "w": 135,
+    "h": 44
+   },
+   "clip": {
+    "top": 1023,
+    "bottom": 1067,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>button[kiosk-essentials-open].k-strip-verdict",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 37,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "strip-verdict",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "mirno",
+   "fullText": "mirno",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 257,
+    "y": 1033,
+    "w": 76,
+    "h": 30
+   },
+   "clip": {
+    "top": 1033,
+    "bottom": 1063,
+    "h": 30
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>button[kiosk-essentials-open].k-strip-verdict>span[strip-verdict]>span",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 38,
+   "tag": "span",
+   "testid": "strip-sources",
+   "nearestTestid": "strip-sources",
+   "classes": "k-strip-item",
+   "role": null,
+   "ariaLabel": null,
+   "text": "DHMZ · EMSC · 17:34",
+   "fullText": "DHMZ · EMSC · 17:34",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 369,
+    "y": 1031,
+    "w": 233,
+    "h": 26
+   },
+   "clip": {
+    "top": 1031,
+    "bottom": 1058,
+    "h": 26
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>div[strip-items].k-strip-items>span[strip-sources].k-strip-item",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 39,
+   "tag": "span",
+   "testid": "strip-pharmacy",
+   "nearestTestid": "strip-pharmacy",
+   "classes": "k-strip-item",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Dežurna ljekarna:",
+   "fullText": "Dežurna ljekarna: Trg bana J. Jelačića 3",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 622,
+    "y": 1031,
+    "w": 426,
+    "h": 26
+   },
+   "clip": {
+    "top": 1031,
+    "bottom": 1058,
+    "h": 26
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>div[strip-items].k-strip-items>span[strip-pharmacy].k-strip-item",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 40,
+   "tag": "strong",
+   "testid": null,
+   "nearestTestid": "strip-pharmacy",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Trg bana J. Jelačića 3",
+   "fullText": "Trg bana J. Jelačića 3",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 803,
+    "y": 1029,
+    "w": 224,
+    "h": 30
+   },
+   "clip": {
+    "top": 1029,
+    "bottom": 1059,
+    "h": 30
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>div[strip-items].k-strip-items>span[strip-pharmacy].k-strip-item>strong",
+   "fontSize": 22,
+   "dataset": {}
+  },
+  {
+   "i": 41,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "safety-strip",
+   "classes": "k-strip-hitno",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sigurnost",
+   "fullText": "Sigurnost",
+   "href": "/hitno",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 1749,
+    "y": 1023,
+    "w": 147,
+    "h": 44
+   },
+   "clip": {
+    "top": 1023,
+    "bottom": 1067,
+    "h": 44
+   },
+   "path": "main>div[kiosk].kiosk>footer[safety-strip].k-strip>a.k-strip-hitno",
+   "fontSize": 22,
+   "dataset": {}
+  }
+ ]
+}

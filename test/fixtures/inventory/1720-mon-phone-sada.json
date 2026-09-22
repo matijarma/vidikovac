@@ -1,0 +1,1365 @@
+{
+ "label": "phone-sada",
+ "at": "2026-09-21T15:38:51.555Z",
+ "zagreb": "17:38:51",
+ "surface": "phone",
+ "scenario": "right after redemption",
+ "vw": 390,
+ "vh": 844,
+ "scrollY": 0,
+ "url": "https://zagreb.aningfilm.hr/d/#room=…",
+ "title": "Kaj ima? · Sada",
+ "theme": "light",
+ "map": null,
+ "elements": [
+  {
+   "i": 0,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "status-line",
+   "classes": "ki-wordmark-text",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Kaj ima",
+   "fullText": "Kaj ima?",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 12,
+    "y": 14,
+    "w": 58,
+    "h": 24
+   },
+   "clip": {
+    "top": 14,
+    "bottom": 38,
+    "h": 24
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>a.ki-wordmark>span.ki-wordmark-text",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 1,
+   "tag": "button",
+   "testid": "screen-control",
+   "nearestTestid": "screen-control",
+   "classes": "ki-screen",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Zaslon",
+   "action": "presentation",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 213,
+    "y": 4,
+    "w": 65,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[screen-control].ki-screen",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 2,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "screen-control",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zaslon",
+   "fullText": "Zaslon",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 222,
+    "y": 15,
+    "w": 47,
+    "h": 21
+   },
+   "clip": {
+    "top": 15,
+    "bottom": 36,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[screen-control].ki-screen>span",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 3,
+   "tag": "button",
+   "testid": "session-label",
+   "nearestTestid": "session-label",
+   "classes": "ki-session",
+   "role": null,
+   "ariaLabel": "Otključano do 17:48, otvori postavke",
+   "text": "",
+   "fullText": "Otključano · Kaj ima? · Zagreb · do 17:489:55",
+   "action": "session",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 282,
+    "y": 4,
+    "w": 52,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session",
+   "fontSize": 16,
+   "dataset": {
+    "state": "live"
+   }
+  },
+  {
+   "i": 4,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "session-label",
+   "classes": "ki-session-sentence",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Otključano · Kaj ima? · Zagreb · do 17:48",
+   "fullText": "Otključano · Kaj ima? · Zagreb · do 17:48",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 286,
+    "y": 19,
+    "w": 1,
+    "h": 1
+   },
+   "clip": {
+    "top": 19,
+    "bottom": 20,
+    "h": 1
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session>span.ki-session-text>span.ki-session-sentence",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 5,
+   "tag": "span",
+   "testid": "countdown",
+   "nearestTestid": "countdown",
+   "classes": "ki-session-time tabular",
+   "role": null,
+   "ariaLabel": null,
+   "text": "9:55",
+   "fullText": "9:55",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 286,
+    "y": 19,
+    "w": 32,
+    "h": 14
+   },
+   "clip": {
+    "top": 19,
+    "bottom": 33,
+    "h": 14
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session>span.ki-session-text>span[countdown].ki-session-time.tabular",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 6,
+   "tag": "a",
+   "testid": "safety-shortcut",
+   "nearestTestid": "safety-shortcut",
+   "classes": "ki-safety",
+   "role": null,
+   "ariaLabel": "Sigurnost",
+   "text": "",
+   "fullText": "",
+   "href": "#layer=sigurnost",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 338,
+    "y": 4,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>a[safety-shortcut].ki-safety",
+   "fontSize": 16,
+   "dataset": {
+    "layer": "sigurnost"
+   }
+  },
+  {
+   "i": 7,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "dash-view",
+   "classes": "day-date",
+   "role": null,
+   "ariaLabel": null,
+   "text": "pon 21. 9. 2026. ·",
+   "fullText": "pon 21. 9. 2026. · 17:38",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 86,
+    "w": 146,
+    "h": 18
+   },
+   "clip": {
+    "top": 86,
+    "bottom": 104,
+    "h": 18
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>div>p.day-date",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 8,
+   "tag": "time",
+   "testid": null,
+   "nearestTestid": "dash-view",
+   "classes": "day-clock",
+   "role": null,
+   "ariaLabel": null,
+   "text": "17:38",
+   "fullText": "17:38",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 106,
+    "y": 86,
+    "w": 32,
+    "h": 17
+   },
+   "clip": {
+    "top": 86,
+    "bottom": 103,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>div>p.day-date>time.day-clock",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 9,
+   "tag": "h2",
+   "testid": null,
+   "nearestTestid": "dash-view",
+   "classes": "day-title layer-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sada u gradu.",
+   "fullText": "Sada u gradu.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 112,
+    "w": 146,
+    "h": 28
+   },
+   "clip": {
+    "top": 112,
+    "bottom": 140,
+    "h": 28
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>div>h2.day-title.layer-title",
+   "fontSize": 24,
+   "dataset": {}
+  },
+  {
+   "i": 10,
+   "tag": "a",
+   "testid": "tb-weather",
+   "nearestTestid": "tb-weather",
+   "classes": "day-weather",
+   "role": null,
+   "ariaLabel": "umjereno oblačno, 20,9 °C, zalazak 18:57",
+   "text": "",
+   "fullText": "20,9 °Cumjereno oblačnoDHMZ · 17:00",
+   "href": "#layer=zrak-i-nebo",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 242,
+    "y": 72,
+    "w": 132,
+    "h": 82
+   },
+   "clip": {
+    "top": 72,
+    "bottom": 154,
+    "h": 82
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>a[tb-weather].day-weather",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "zrak-i-nebo",
+    "status": "live"
+   }
+  },
+  {
+   "i": 11,
+   "tag": "strong",
+   "testid": null,
+   "nearestTestid": "tb-weather",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "20,9 °C",
+   "fullText": "20,9 °C",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 282,
+    "y": 72,
+    "w": 92,
+    "h": 34
+   },
+   "clip": {
+    "top": 72,
+    "bottom": 106,
+    "h": 34
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>a[tb-weather].day-weather>span.day-weather-now>strong",
+   "fontSize": 28,
+   "dataset": {}
+  },
+  {
+   "i": 12,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tb-weather",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "umjereno oblačno",
+   "fullText": "umjereno oblačno",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 259,
+    "y": 110,
+    "w": 115,
+    "h": 21
+   },
+   "clip": {
+    "top": 110,
+    "bottom": 131,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>a[tb-weather].day-weather>span",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 13,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tb-weather",
+   "classes": "day-weather-source",
+   "role": null,
+   "ariaLabel": null,
+   "text": "DHMZ · 17:00",
+   "fullText": "DHMZ · 17:00",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 296,
+    "y": 135,
+    "w": 78,
+    "h": 20
+   },
+   "clip": {
+    "top": 135,
+    "bottom": 154,
+    "h": 20
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>header.day-heading>a[tb-weather].day-weather>span.day-weather-source",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 14,
+   "tag": "h3",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Ovdje i sada",
+   "fullText": "Ovdje i sada",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 194,
+    "w": 100,
+    "h": 21
+   },
+   "clip": {
+    "top": 194,
+    "bottom": 214,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>header.day-section-head>h3",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 15,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "day-link",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Promet",
+   "fullText": "Promet",
+   "href": "#layer=u-pokretu",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 306,
+    "y": 182,
+    "w": 68,
+    "h": 44
+   },
+   "clip": {
+    "top": 182,
+    "bottom": 226,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>header.day-section-head>a.day-link",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "u-pokretu"
+   }
+  },
+  {
+   "i": 16,
+   "tag": "p",
+   "testid": "location-context",
+   "nearestTestid": "location-context",
+   "classes": "city-meta",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Gradska referentna točka: Trg bana Jelačića",
+   "fullText": "Gradska referentna točka: Trg bana Jelačića",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 238,
+    "w": 358,
+    "h": 19
+   },
+   "clip": {
+    "top": 238,
+    "bottom": 257,
+    "h": 19
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>p[location-context].city-meta",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 17,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "day-stop-prompt",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Odaberi i spremi stajalište na karti za sljedeće polaske ovdje.",
+   "fullText": "Odaberi i spremi stajalište na karti za sljedeće polaske ovdje.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 257,
+    "w": 358,
+    "h": 66
+   },
+   "clip": {
+    "top": 257,
+    "bottom": 323,
+    "h": 66
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>p.day-stop-prompt",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 18,
+   "tag": "strong",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "BAJS · 2 bicikla",
+   "fullText": "BAJS · 2 bicikla",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 29,
+    "y": 348,
+    "w": 332,
+    "h": 24
+   },
+   "clip": {
+    "top": 348,
+    "bottom": 372,
+    "h": 24
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div.day-opportunities>a.day-opportunity>strong",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 19,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "VLAŠKA UL. ↗",
+   "fullText": "VLAŠKA UL. ↗",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 29,
+    "y": 376,
+    "w": 332,
+    "h": 20
+   },
+   "clip": {
+    "top": 376,
+    "bottom": 395,
+    "h": 20
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div.day-opportunities>a.day-opportunity>span",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 20,
+   "tag": "strong",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zrak · Prihvatljiva",
+   "fullText": "Zrak · Prihvatljiva",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 29,
+    "y": 429,
+    "w": 332,
+    "h": 24
+   },
+   "clip": {
+    "top": 429,
+    "bottom": 453,
+    "h": 24
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div.day-opportunities>a.day-opportunity>strong",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 21,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Đorđićeva ulica (Poliklinika za zaštitu djece i mladih Grada Zagreba) · 14:00 ↗",
+   "fullText": "Đorđićeva ulica (Poliklinika za zaštitu djece i mladih Grada Zagreba) · 14:00 ↗",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 29,
+    "y": 457,
+    "w": 332,
+    "h": 39
+   },
+   "clip": {
+    "top": 457,
+    "bottom": 496,
+    "h": 39
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div.day-opportunities>a.day-opportunity>span",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 22,
+   "tag": "a",
+   "testid": "tile-closures",
+   "nearestTestid": "tile-closures",
+   "classes": "tl",
+   "role": null,
+   "ariaLabel": "Zatvaranja, 39 zatvaranja",
+   "text": "",
+   "fullText": "Zatvaranja39 zatvaranja",
+   "href": "#layer=u-pokretu",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 16,
+    "y": 509,
+    "w": 358,
+    "h": 69
+   },
+   "clip": {
+    "top": 509,
+    "bottom": 579,
+    "h": 69
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-closures].tl",
+   "fontSize": 16,
+   "dataset": {
+    "layer": "u-pokretu"
+   }
+  },
+  {
+   "i": 23,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-closures",
+   "classes": "tl-label kicker",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zatvaranja",
+   "fullText": "Zatvaranja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 65,
+    "y": 522,
+    "w": 280,
+    "h": 20
+   },
+   "clip": {
+    "top": 522,
+    "bottom": 542,
+    "h": 20
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-closures].tl>span.tl-main>span.tl-label.kicker",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 24,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-closures",
+   "classes": "tl-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "39 zatvaranja",
+   "fullText": "39 zatvaranja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 65,
+    "y": 544,
+    "w": 280,
+    "h": 22
+   },
+   "clip": {
+    "top": 544,
+    "bottom": 566,
+    "h": 22
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-closures].tl>span.tl-main>span.tl-title",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 25,
+   "tag": "a",
+   "testid": "tile-works",
+   "nearestTestid": "tile-works",
+   "classes": "tl",
+   "role": null,
+   "ariaLabel": "Radovi, 4 rada u tijeku, Radovi u gradu",
+   "text": "",
+   "fullText": "RadoviRadovi u gradu4",
+   "href": "#layer=uprava-i-pravo",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 16,
+    "y": 587,
+    "w": 358,
+    "h": 69
+   },
+   "clip": {
+    "top": 587,
+    "bottom": 656,
+    "h": 69
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-works].tl",
+   "fontSize": 16,
+   "dataset": {
+    "layer": "uprava-i-pravo"
+   }
+  },
+  {
+   "i": 26,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-works",
+   "classes": "tl-label kicker",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Radovi",
+   "fullText": "Radovi",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 65,
+    "y": 600,
+    "w": 272,
+    "h": 20
+   },
+   "clip": {
+    "top": 600,
+    "bottom": 619,
+    "h": 20
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-works].tl>span.tl-main>span.tl-label.kicker",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 27,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-works",
+   "classes": "tl-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Radovi u gradu",
+   "fullText": "Radovi u gradu",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 65,
+    "y": 622,
+    "w": 272,
+    "h": 22
+   },
+   "clip": {
+    "top": 622,
+    "bottom": 643,
+    "h": 22
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-works].tl>span.tl-main>span.tl-title",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 28,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-works",
+   "classes": "tl-trail",
+   "role": null,
+   "ariaLabel": null,
+   "text": "4",
+   "fullText": "4",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 349,
+    "y": 613,
+    "w": 8,
+    "h": 18
+   },
+   "clip": {
+    "top": 613,
+    "bottom": 631,
+    "h": 18
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-works].tl>span.tl-trail",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 29,
+   "tag": "a",
+   "testid": "tile-safety",
+   "nearestTestid": "tile-safety",
+   "classes": "tl",
+   "role": null,
+   "ariaLabel": "Sigurnost, Nema hitnih upozorenja, potvrđeno 17:34",
+   "text": "",
+   "fullText": "SigurnostNema hitnih upozorenjapotvrđeno 17:34",
+   "href": "#layer=sigurnost",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 16,
+    "y": 664,
+    "w": 358,
+    "h": 67
+   },
+   "clip": {
+    "top": 664,
+    "bottom": 732,
+    "h": 67
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-safety].tl",
+   "fontSize": 16,
+   "dataset": {
+    "layer": "sigurnost"
+   }
+  },
+  {
+   "i": 30,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-safety",
+   "classes": "tl-label kicker",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sigurnost",
+   "fullText": "Sigurnost",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 52,
+    "y": 676,
+    "w": 207,
+    "h": 20
+   },
+   "clip": {
+    "top": 676,
+    "bottom": 696,
+    "h": 20
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-safety].tl>span.tl-main>span.tl-label.kicker",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 31,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-safety",
+   "classes": "tl-title",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Nema hitnih upozorenja",
+   "fullText": "Nema hitnih upozorenja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 52,
+    "y": 698,
+    "w": 207,
+    "h": 22
+   },
+   "clip": {
+    "top": 698,
+    "bottom": 720,
+    "h": 22
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-safety].tl>span.tl-main>span.tl-title",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 32,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tile-safety",
+   "classes": "tl-trail",
+   "role": null,
+   "ariaLabel": null,
+   "text": "potvrđeno 17:34",
+   "fullText": "potvrđeno 17:34",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 271,
+    "y": 689,
+    "w": 99,
+    "h": 18
+   },
+   "clip": {
+    "top": 689,
+    "bottom": 707,
+    "h": 18
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-now>div[tb-lane-sada].day-facts>a[tile-safety].tl>span.tl-trail",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 33,
+   "tag": "h3",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Što slijedi",
+   "fullText": "Što slijedi",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 16,
+    "y": 764,
+    "w": 83,
+    "h": 21
+   },
+   "clip": {
+    "top": 764,
+    "bottom": 784,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>header.day-section-head>h3",
+   "fontSize": 18,
+   "dataset": {}
+  },
+  {
+   "i": 34,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "tb",
+   "classes": "day-link",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Događanja",
+   "fullText": "Događanja",
+   "href": "#layer=kultura",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 284,
+    "y": 752,
+    "w": 90,
+    "h": 44
+   },
+   "clip": {
+    "top": 752,
+    "bottom": 796,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>header.day-section-head>a.day-link",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "kultura"
+   }
+  },
+  {
+   "i": 35,
+   "tag": "button",
+   "testid": "day-next-all",
+   "nearestTestid": "day-next-all",
+   "classes": "day-time",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zatim",
+   "fullText": "Zatim",
+   "action": "filter",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 16,
+    "y": 808,
+    "w": 66,
+    "h": 44
+   },
+   "clip": {
+    "top": 808,
+    "bottom": 844,
+    "h": 36
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>div[tb-seg].day-times>button[day-next-all].day-time",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 36,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "tb-seg",
+   "classes": "day-time",
+   "role": null,
+   "ariaLabel": null,
+   "text": "popodne",
+   "fullText": "popodne",
+   "action": "filter",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 86,
+    "y": 808,
+    "w": 82,
+    "h": 44
+   },
+   "clip": {
+    "top": 808,
+    "bottom": 844,
+    "h": 36
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>div[tb-seg].day-times>button.day-time",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 37,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "tb-seg",
+   "classes": "day-time",
+   "role": null,
+   "ariaLabel": null,
+   "text": "večeras",
+   "fullText": "večeras",
+   "action": "filter",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 172,
+    "y": 808,
+    "w": 77,
+    "h": 44
+   },
+   "clip": {
+    "top": 808,
+    "bottom": 844,
+    "h": 36
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>div[tb-seg].day-times>button.day-time",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 38,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "tb-seg",
+   "classes": "day-time",
+   "role": null,
+   "ariaLabel": null,
+   "text": "sutra",
+   "fullText": "sutra",
+   "action": "filter",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 253,
+    "y": 808,
+    "w": 60,
+    "h": 44
+   },
+   "clip": {
+    "top": 808,
+    "bottom": 844,
+    "h": 36
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer.ws>div[tb].day-overview>section.day-ahead>div[tb-seg].day-times>button.day-time",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 39,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Sada",
+   "href": "#layer=grad-sada",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 0,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "grad-sada"
+   }
+  },
+  {
+   "i": 40,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sada",
+   "fullText": "Sada",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 32,
+    "y": 822,
+    "w": 34,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 41,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Karta",
+   "href": "#layer=u-pokretu",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 98,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "u-pokretu"
+   }
+  },
+  {
+   "i": 42,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Karta",
+   "fullText": "Karta",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 128,
+    "y": 822,
+    "w": 36,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 43,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Događanja",
+   "href": "#layer=kultura",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 195,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "kultura"
+   }
+  },
+  {
+   "i": 44,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Događanja",
+   "fullText": "Događanja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 209,
+    "y": 822,
+    "w": 70,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 45,
+   "tag": "button",
+   "testid": "tab-more",
+   "nearestTestid": "tab-more",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Još",
+   "action": "directory",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 293,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>button[tab-more].ki-tab",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 46,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tab-more",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Još",
+   "fullText": "Još",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 330,
+    "y": 822,
+    "w": 22,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>button[tab-more].ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  }
+ ]
+}
