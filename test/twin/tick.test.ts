@@ -139,13 +139,14 @@ describe('runTick on the corridor', () => {
     expect(isPathMotion(pin.motion!) && pin.motion.path).toBe('1_0');
   });
 
-  it('preserves slow prior-return progress across state restoration and matcher recreation', () => {
+  it.each([0, 70])('returns on the third 20 m advance across restoration and engine recreation, with %d stationary fixes after advance two', (standingFixes) => {
     const slowJoins = new Map<string, TripJoin>([
       ['slow', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
     ]);
     let state = emptyState();
-    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40],
-      ...Array.from({ length: 8 }, (_, i) => [1270 + i * 20, 40])];
+    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40], [1270, 40], [1290, 40],
+      ...Array.from({ length: standingFixes }, () => [1290, 40]),
+      ...Array.from({ length: 6 }, (_, i) => [1310 + i * 20, 40])];
     for (const [i, [x, y]] of points.entries()) {
       const feed = {
         headerTs: start + i * 10,
@@ -154,10 +155,36 @@ describe('runTick on the corridor', () => {
       };
       const result = runTick({ state, feed, nowMs: (feed.headerTs + 2) * 1000, joins: slowJoins, routes, engine: createEngine(net, index), validUntilMs: 0 });
       if (i >= 3) {
-        const expected = i < 6 ? '1_1' : '1_0';
+        const expected = i < 6 + standingFixes ? '1_1' : '1_0';
         expect(net.paths[result.state.tracks.slow.match.pathIdx!].id).toBe(expected);
         const pin = result.payload.items.find((item) => item.id === 'vehicle:slow')!;
         expect(isPathMotion(pin.motion!) && pin.motion.path).toBe(expected);
+      }
+      state = deserializeState(serializeState(result.state));
+    }
+  });
+
+  it('retains the turnaround through 70 stationary fixes with state restoration and engine recreation between every fix', () => {
+    const standingJoins = new Map<string, TripJoin>([
+      ['standing', { direction: 0, headsign: 'Terminus', shapeId: '1_0', service: 'wd' }],
+    ]);
+    let state = emptyState();
+    // Two 20 m advances leave the return short of its 50 m threshold.
+    // Restoring rounds the fix at (1290,40) ~0.154 m behind the raw fix.
+    const points = [[1300, 0], [1400, 0], [1340, 40], [1250, 40], [1270, 40], [1290, 40],
+      ...Array.from({ length: 70 }, () => [1290, 40])];
+    for (const [i, [x, y]] of points.entries()) {
+      const feed = {
+        headerTs: start + i * 10,
+        vehicles: [{ vehicleId: 'standing', tripId: 'standing', routeId: '1', ...lonLatOf({ x, y }), atSec: start + i * 10 }],
+        tripUpdates: [],
+      };
+      const result = runTick({ state, feed, nowMs: (feed.headerTs + 2) * 1000, joins: standingJoins, routes, engine: createEngine(net, index), validUntilMs: 0 });
+      expect(result.newFixes).toBe(1); // fresh timestamps, not ignored duplicates
+      if (i >= 3) {
+        expect(net.paths[result.state.tracks.standing.match.pathIdx!].id, `fix ${i}`).toBe('1_1');
+        const pin = result.payload.items.find((item) => item.id === 'vehicle:standing')!;
+        expect(isPathMotion(pin.motion!) && pin.motion.path, `published fix ${i}`).toBe('1_1');
       }
       state = deserializeState(serializeState(result.state));
     }

@@ -73,6 +73,9 @@ export const NEXT_STOP_DISTANCE_WEIGHT = 0.01;
 /** Movement beyond scatter: fold placement uses one ground interval, D4
  *  uses one longitudinal interval, and prior return accumulates forward metres. */
 export const FOLD_MOVE_M = 50;
+/** Smaller longitudinal intervals are noise, not accumulated return progress
+ *  or reversals. Also covers the sub-metre rounding of a legacy stored fix. */
+const PRIOR_RETURN_NOISE_M = 1;
 /** Consecutive fixes moving against the rail the vehicle is read on before
  *  the path is re-derived to the other direction (D4). One is a stray or a
  *  platform shuffle; two in a row, both further than FOLD_MOVE_M, is a tram
@@ -119,7 +122,15 @@ interface Candidate {
 /** Matcher-owned, optional on older tracks. Kept on the track (not in a
  *  matcher cache) so the existing state serialization preserves progress. */
 interface TramTrack extends Track {
-  priorReturn?: { pathIdx: number; fromPathIdx: number; atSec: number; forwardM: number };
+  priorReturn?: {
+    pathIdx: number;
+    fromPathIdx: number;
+    atSec: number;
+    forwardM: number;
+    /** Last raw point, preserved by persist.ts's track spread while the fix
+     *  history is rounded. Absent in older state rows. */
+    baseline?: XY;
+  };
 }
 
 export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: readonly PathRank[] } = {}): Matcher {
@@ -359,7 +370,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         if (s === null) continue;
         // D4 must not bypass the prior-return gate through a large lateral
         // diagonal. Measure forward metres on the candidate's own tangent.
-        if (pathForwardM(pathIdx, s, motion) < FOLD_MOVE_M) continue;
+        if (pathForwardM(pathIdx, s, motion.delta) < FOLD_MOVE_M) continue;
         if (best === null || hit.d < best.d
           || (hit.d === best.d && comparePaths(pathIdx, best.pathIdx, hit.edge, wantedDirection(hit.edge, hit.s, motion.dir, prior), track, prior) < 0)) {
           best = { pathIdx, edge: hit.edge, s, d: hit.d };
@@ -377,9 +388,9 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     return dot(tangent(geo.pts, geo.cum, s), dir) >= 0;
   }
 
-  function pathForwardM(pathIdx: number, s: number, motion: Motion): number {
+  function pathForwardM(pathIdx: number, s: number, delta: XY): number {
     const geo = net.pathGeometry(pathIdx);
-    return dot(tangent(geo.pts, geo.cum, s), motion.delta);
+    return dot(tangent(geo.pts, geo.cum, s), delta);
   }
 
   function onPathMatch(track: Track, pathIdx: number, p: XY, motion: Motion, nextStopId: string | null): Match {
@@ -452,15 +463,21 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
 
     // Check the eligible own path before the adopted path on every fresh
     // fix. Slow genuine returns accumulate; lateral scatter adds no metres.
-    // A backward or off-prior fix breaks the run. Standing fixes preserve
-    // progress but never add to it, and a single >=50 m interval still wins.
+    // A backward interval >=1 m or off-prior fix breaks the run. Standing
+    // and sub-metre intervals preserve progress but never add to it, and a
+    // single >=50 m interval still wins.
     if (prior.pathIdx !== null && track.match.pathIdx !== null && track.match.pathIdx !== prior.pathIdx) {
       const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
-      const forwardM = pathForwardM(prior.pathIdx, own.s, motion);
+      const continued = previousReturn?.pathIdx === prior.pathIdx
+        && previousReturn.fromPathIdx === track.match.pathIdx
+        && previousReturn.atSec === prev?.atSec;
+      // Never repeatedly subtract rounded history from an unrounded fix:
+      // after restoration that would turn a stationary point into progress.
+      const baseline = (continued ? previousReturn.baseline : null) ?? prev;
+      const delta = baseline ? { x: p.x - baseline.x, y: p.y - baseline.y } : motion.delta;
+      const longitudinalM = pathForwardM(prior.pathIdx, own.s, delta);
+      const forwardM = Math.abs(longitudinalM) < PRIOR_RETURN_NOISE_M ? 0 : longitudinalM;
       if (prev !== null && own.residual <= NEAR_M && forwardM >= 0) {
-        const continued = previousReturn?.pathIdx === prior.pathIdx
-          && previousReturn.fromPathIdx === track.match.pathIdx
-          && previousReturn.atSec === prev.atSec;
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
           resetOrder(track);
@@ -469,7 +486,9 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
           track.againstCount = 0;
           return track.match;
         }
-        track.priorReturn = { pathIdx: prior.pathIdx, fromPathIdx: track.match.pathIdx, atSec: fix.atSec, forwardM: total };
+        // Advance even for ignored noise, so it cannot later add up as one
+        // apparent interval. JSON preserves this raw point without rounding.
+        track.priorReturn = { pathIdx: prior.pathIdx, fromPathIdx: track.match.pathIdx, atSec: fix.atSec, forwardM: total, baseline: p };
       }
     }
 
@@ -512,7 +531,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         // agrees: the tram turned at its terminus and is running back on the
         // other track while ZET still names the outbound trip. Re-derive
         // rather than read its own line backwards.
-        const against = pathForwardM(working, onPath.s, motion) <= -FOLD_MOVE_M;
+        const against = pathForwardM(working, onPath.s, motion.delta) <= -FOLD_MOVE_M;
         track.againstCount = against ? (track.againstCount ?? 0) + 1 : 0;
         if (dir !== null && track.againstCount >= FOLD_FIXES) {
           track.againstCount = 0;

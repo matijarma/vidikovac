@@ -257,6 +257,23 @@ describe('matchFix at a terminus turnaround under the old trip id', () => {
     matcher.matchFix(turned, fix(1300, 60, 2070), outbound, null);
     expect(turned.match.pathIdx).toBe(pathIdx('1_0')); // exactly 50 m in total
   });
+
+  it.each([-0.5, 0.5])('ignores %d m longitudinal steps without accumulating or losing prior-return progress', (step) => {
+    const turned = newTrack('submetre-return', '1', 'trip-out', 'tram');
+    const outbound = matcher.priorFor('1_0', '1', 0);
+    for (const [x, y, t] of [[1300, 0, 2000], [1400, 0, 2010], [1350, 60, 2020], [1250, 60, 2030], [1270, 60, 2040], [1290, 60, 2050]]) {
+      matcher.matchFix(turned, fix(x, y, t), outbound, null);
+    }
+    expect(turned.match.pathIdx).toBe(pathIdx('1_1')); // 40 m, below threshold
+    // Even one-sided sub-metre drift must not add up, and every ignored
+    // interval advances the baseline so it cannot later count as a big step.
+    for (let i = 1; i <= 70; i++) {
+      matcher.matchFix(turned, fix(1290 + i * step, 60, 2050 + i * 10), outbound, null);
+      expect(turned.match.pathIdx, `sub-metre fix ${i}`).toBe(pathIdx('1_1'));
+    }
+    matcher.matchFix(turned, fix(1300 + 70 * step, 60, 2760), outbound, null);
+    expect(turned.match.pathIdx).toBe(pathIdx('1_0')); // the genuine 10 m completes the original 40 m
+  });
 });
 
 describe('own-path return and service eligibility', () => {
