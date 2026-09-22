@@ -1406,7 +1406,10 @@ export async function streamTripEndpoints(buf, entry) {
  * Builds the version 2 artefact from a fully-loaded GTFS zip buffer.
  * @param {Uint8Array} zipBuf
  * @param {{ now?: () => Date, diagramBusCount?: number, fallbackMtime?: string | null, log?: (s: string) => void,
- *   overrides?: { unreachableStops?: ({ id: string, name?: string, reason?: string } | string)[], longLegs?: { route?: string, from: string, to: string, reason: string }[] } }} [opts]
+ *   overrides?: { unreachableStops?: ({ id: string, name?: string, reason?: string } | string)[],
+ *     servedGaps?: { path: string, stop: string, reason: string }[],
+ *     connectors?: { from: [number, number], to: [number, number], routes: string[], reason: string }[],
+ *     longLegs?: { route?: string, from: string, to: string, reason: string }[] } }} [opts]
  *   `overrides` is the parsed OVERRIDES_PATH file; main() reads it, tests pass their own.
  */
 export async function buildNetwork(zipBuf, opts = {}) {
