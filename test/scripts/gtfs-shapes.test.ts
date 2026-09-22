@@ -14,6 +14,7 @@ import {
   LINE_KEYS,
   LOOP_DIRECTION,
   LOOP_ID_PREFIX,
+  LOOP_LEAD_METRES,
   LOOP_MAX_METRES,
   LOOP_PAIR_MAX_METRES,
   ORIGIN,
@@ -136,7 +137,7 @@ function makeZip(files: ZipInput[]): Uint8Array {
 
 // A small synthetic feed: T1 a straight tram shape with a collinear midpoint
 // (two trips, only one of which has stop_times),
-// T2 an L-shaped tram shape whose trip's terminus stops sit 200 m off it
+// T2 an L-shaped tram shape whose trip's terminus stops sit 186 to 189 m off it
 // (the override), T3 a tram route whose trip has no shape_id (a synthetic
 // path over T1's edge), B1 a zig-zag bus with a stop on it, B2 a quiet bus.
 const ROUTES_TXT =
@@ -177,8 +178,11 @@ const SHAPES_TXT =
 const S_CLOSE = { id: 'S_close', name: 'Blizu', lon: T1_LON, lat: (T1_LAT_0 + T1_LAT_1) / 2 };
 const S_CLOSE2 = { id: 'S_close2', name: 'Blizu dva', lon: T1_LON, lat: T1_LAT_0 + 0.8 * (T1_LAT_1 - T1_LAT_0) };
 const S_FAR = { id: 'S_far', name: 'Daleko', lon: 16.2, lat: 45.9 };
-const S_T2_START = { id: 'S_t2_start', name: 'T2 pocetak', lon: T2_A.lon, lat: T2_A.lat - 0.0018 };
-const S_T2_END = { id: 'S_t2_end', name: 'T2 kraj', lon: T2_C.lon + 0.0026, lat: T2_C.lat };
+// 189 m and 186 m off T2's two ends: past the 40 m radius, so only the
+// terminus override links them, and inside TERMINUS_STOP_MAX_METRES, which
+// the served list holds every linked platform to.
+const S_T2_START = { id: 'S_t2_start', name: 'T2 pocetak', lon: T2_A.lon, lat: T2_A.lat - 0.0017 };
+const S_T2_END = { id: 'S_t2_end', name: 'T2 kraj', lon: T2_C.lon + 0.0024, lat: T2_C.lat };
 // 50 m east of T2's first leg: past the 40 m geometric radius, so it gets no
 // onEdge link at all, and inside SERVED_STOP_MAX_METRES, so the served list
 // still places it (one x unit is ~0.78 m here).
@@ -314,7 +318,7 @@ describe('buildNetwork', () => {
     expect(byId.S_close.on).toEqual([]);
     expect(byId.S_far.on).toEqual([]);
     expect(byId.S_far.onEdge).toEqual([]);
-    expect(byId.S_t2_start.onEdge).toEqual([[t2.e[0], 0]]); // the terminus override, 200 m off the rails
+    expect(byId.S_t2_start.onEdge).toEqual([[t2.e[0], 0]]); // the terminus override, 189 m off the rails
     expect(byId.S_t2_end.onEdge).toEqual([[t2.e[0], expect.closeTo(t2Len, 0)]]);
     const busOn = byId.S_bus.on.find((e: any) => e[0] === shapes.indexOf(b1));
     expect(busOn[1]).toBeGreaterThan(0.5);
@@ -412,12 +416,6 @@ describe('buildNetwork', () => {
 // kolodvor and past Talovčeva, where no shape draws the rails.
 const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:8:0:dce55b90 1780_18'];
 const TRIMMED_CASES = ['path:1:0:102900d1 317_1', 'path:1:1:7e51cfc2 293_4', 'path:1:1:7e51cfc2 317_2'];
-// The terminus loops of feed 000395, in artefact order: route by route, pair by pair.
-const LOOP_IDS = [
-  'loop:4:1369ad96', 'loop:4:1269ac03', 'loop:4:6e88c388', 'loop:4:d83eecfe', 'loop:7:315c5606', 'loop:7:cd010eb3', 'loop:9:4fe49f14',
-  'loop:11:1369ad96', 'loop:11:8ccb8d4a', 'loop:12:6f4d59d2', 'loop:14:c03b6e9a', 'loop:14:347c5094', 'loop:14:8a6925ba', 'loop:15:1f4622f6',
-  'loop:17:4fe49f14', 'loop:33:c03b6e9a', 'loop:34:6e88c388',
-];
 
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');
@@ -432,8 +430,9 @@ describe('the committed artefact', () => {
   // 0.8 %, and still 11 % inside both pins, which again stand. F8c nodes
   // three crossings (six edges become twelve) and shortens nine plans:
   // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
-  // Both pins stand again. WP0 adds three connectors and seventeen terminus
-  // loops: 582,473 B raw, 136,758 B gzip, 0.3 % more of each; the pins stand.
+  // Both pins stand again. WP0 adds three connectors and sixteen terminus
+  // loops, cutting seven long edges where the loops leave them: 582,808 B raw,
+  // 136,853 B gzip, 0.3 % more of each; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -461,8 +460,9 @@ describe('the committed artefact', () => {
     expect(net.graphHash).toBe(parsed.graphHash);
     // F8c: 287 plus two halves for each of the three junctions noded; WP0: plus
     // the three connectors of gtfs-shapes-overrides.json (Glavni kolodvor, the
-    // top of the Mihaljevac loop, a joint in line 12's Dubrava loop).
-    expect(net.edges).toHaveLength(296);
+    // top of the Mihaljevac loop, a joint in line 12's Dubrava loop) and the
+    // seven pieces the terminus loops cut off their long boundary edges.
+    expect(net.edges).toHaveLength(303);
     // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
     // none. The terminus loops are counted in their own test below.
     expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
@@ -689,37 +689,33 @@ describe('the committed artefact', () => {
 
   // WP0: terminus loops. A loop runs from one path's last edge to another
   // path's first, of the same line, between a trip's last platform and the
-  // next trip's first; only where the feed's shapes draw the rails between
-  // them, which on feed 000395 is the minority -- at Borongaj, Žitnjak,
-  // Savišće, Črnomerec, Ljubljanica, Prečko, Savski most, Park Maksimir,
-  // Sopot, Gračansko dolje and most of Zapruđe the arriving shape ends and the
-  // departing one starts 40 to 255 m apart with no drawn track between (the
-  // build log names each). Eight of these are joins of length 0 to 2 m, where
-  // one path ends on the node the next starts from; they still give a tram a
-  // path that continues its edges from one trip to the next.
-  it('joins a trip\'s last platform to the next trip\'s first over the drawn rails: loop paths of the line\'s own edges, each short between the two paths it joins', () => {
+  // next trip's first -- only where the feed's shapes (or a connector) draw the
+  // rails between them. The properties, not the list: every such pair whose
+  // rails are drawn within LOOP_MAX_METRES has its loop, and every loop is its
+  // own line's, joins the two paths it names and is at most LOOP_MAX_METRES
+  // long as the artefact carries it, boundary edges included.
+  it('joins every trip\'s last platform to the next trip\'s first over the line\'s drawn rails, each loop at most LOOP_MAX_METRES long', () => {
     const net = decodeNetwork(JSON.parse(readFileSync(artefactPath).toString('utf8')));
-    const loops = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.id.startsWith(LOOP_ID_PREFIX));
-    expect(loops.map(({ path }) => path.id)).toEqual(LOOP_IDS);
-    expect(net.paths.filter((p) => p.direction === LOOP_DIRECTION).length).toBe(loops.length);
+    const loops = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.direction === LOOP_DIRECTION);
+    expect(loops.length).toBeGreaterThan(0);
+    console.log(`zet-network.json: ${loops.length} terminus loops`);
     const own = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.direction !== LOOP_DIRECTION && net.routes.get(path.route)?.type === 0);
+    const at = (id: string) => net.stops.find((stop) => stop.id === id)!.p;
     for (const { path, idx } of loops) {
-      expect(path).toMatchObject({ direction: LOOP_DIRECTION, shape: null });
-      expect(path.id.startsWith(`${LOOP_ID_PREFIX}${path.route}:`)).toBe(true);
+      expect(path).toMatchObject({ shape: null });
+      expect(path.id.startsWith(`${LOOP_ID_PREFIX}${path.route}:`), path.id).toBe(true);
       const [L, F] = path.stops!;
       expect(path.stops).toHaveLength(2);
       expect(L).not.toBe(F);
-      const at = (id: string) => net.stops.find((stop) => stop.id === id)!.p;
       expect(Math.hypot(at(L).x - at(F).x, at(L).y - at(F).y)).toBeLessThanOrEqual(LOOP_PAIR_MAX_METRES);
-      // It starts on the last edge of an own-line path that ends at L...
+      // Its own line's: it starts on the last edge of a path of that line that
+      // ends at L, and ends on the first edge of one that starts at F.
       const arriving = own.filter(({ path: p, idx: i }) => p.route === path.route && p.edges.at(-1) === path.edges[0] && net.stopsOnPath(i).at(-1)?.stop.id === L);
       expect(arriving.length, `${path.id}: no path of line ${path.route} ends at ${L} on edge ${path.edges[0]}`).toBeGreaterThan(0);
-      // ...and ends on the first edge of an own-line path that starts at F.
       const departing = own.filter(({ path: p, idx: i }) => p.route === path.route && p.edges[0] === path.edges.at(-1) && net.stopsOnPath(i)[0]?.stop.id === F);
       expect(departing.length, `${path.id}: no path of line ${path.route} starts at ${F} on edge ${path.edges.at(-1)}`).toBeGreaterThan(0);
-      // Between the two it is a loop, not a detour through the network.
-      const between = path.len - net.edges[path.edges[0]].len - net.edges[path.edges.at(-1)!].len;
-      expect(between, path.id).toBeLessThanOrEqual(LOOP_MAX_METRES);
+      // The whole exported path, boundary edges and all, is the turn.
+      expect(path.len, path.id).toBeLessThanOrEqual(LOOP_MAX_METRES);
       for (let k = 1; k < path.edges.length; k++) expect(net.edges[path.edges[k]].from).toBe(net.edges[path.edges[k - 1]].to);
       // It serves its two ends and nothing else, L no later than F (a join of
       // length 0 has both at one arc).
@@ -732,9 +728,72 @@ describe('the committed artefact', () => {
         expect(arcOf(L), path.id).toBeLessThanOrEqual(arcOf(F));
       }
     }
-    // One loop at least at every terminus whose rails the feed draws.
-    const termini = new Set(loops.map(({ path }) => net.stops.find((stop) => stop.id === path.stops![0])!.name));
-    expect([...termini].sort()).toEqual(['Dubec', 'Dubrava', 'Mandlova', 'Mihaljevac', 'Ravnice', 'Trg žrt. fašizma', 'Zapruđe']);
+
+    // Complete: recomputed here over the decoded graph, every pair (L, F) of a
+    // line within LOOP_PAIR_MAX_METRES whose arriving edge reaches one of the
+    // departing edges over drawn rails, the whole path at most LOOP_MAX_METRES,
+    // has a loop of that line with those two boundary edges.
+    const outgoing = new Map<number, number[]>();
+    net.edges.forEach((edge, idx) => outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), idx]));
+    /** Cheapest edge chain from the end of `from` to the start of any of `to`. */
+    const cheapest = (from: number, to: Set<number>) => {
+      const best = new Map<number, { cost: number; edges: number[] }>([[net.edges[from].to, { cost: 0, edges: [from] }]]);
+      const open = [net.edges[from].to];
+      let found: { cost: number; edges: number[] } | null = null;
+      while (open.length > 0) {
+        open.sort((a, b) => best.get(a)!.cost - best.get(b)!.cost);
+        const node = open.shift()!;
+        const here = best.get(node)!;
+        if (found && here.cost >= found.cost) break;
+        for (const e of outgoing.get(node) ?? []) {
+          if (to.has(e)) {
+            if (!found || here.cost < found.cost) found = { cost: here.cost, edges: [...here.edges, e] };
+            continue;
+          }
+          const next = net.edges[e].to;
+          const cost = here.cost + net.edges[e].len;
+          if (cost > LOOP_MAX_METRES) continue;
+          if (!best.has(next) || cost < best.get(next)!.cost) {
+            best.set(next, { cost, edges: [...here.edges, e] });
+            if (!open.includes(next)) open.push(next);
+          }
+        }
+      }
+      return found;
+    };
+    const missing: string[] = [];
+    let pairs = 0;
+    for (const route of new Set(own.map(({ path }) => path.route))) {
+      const mine = own.filter(({ path }) => path.route === route);
+      const ends = new Map<string, Set<number>>();
+      const starts = new Map<string, Set<number>>();
+      for (const { path, idx } of mine) {
+        const served = net.stopsOnPath(idx);
+        if (served.length === 0) continue;
+        const L = served.at(-1)!.stop.id;
+        const F = served[0].stop.id;
+        ends.set(L, (ends.get(L) ?? new Set()).add(path.edges.at(-1)!));
+        starts.set(F, (starts.get(F) ?? new Set()).add(path.edges[0]));
+      }
+      for (const [L, lastEdges] of ends) {
+        for (const [F, firstEdges] of starts) {
+          if (L === F || Math.hypot(at(L).x - at(F).x, at(L).y - at(F).y) > LOOP_PAIR_MAX_METRES) continue;
+          pairs++;
+          for (const E of lastEdges) {
+            const chain = cheapest(E, firstEdges);
+            if (!chain) continue;
+            const metres = chain.edges.reduce((n, e) => n + net.edges[e].len, 0);
+            if (metres > LOOP_MAX_METRES) continue;
+            const D = chain.edges.at(-1)!;
+            if (!loops.some(({ path }) => path.route === route && path.edges[0] === E && path.edges.at(-1) === D)) {
+              missing.push(`${route} ${L} -> ${F} over ${E} ... ${D} (${Math.round(metres)} m)`);
+            }
+          }
+        }
+      }
+    }
+    expect(pairs).toBeGreaterThan(50);
+    expect(missing).toEqual([]);
   });
 });
 
@@ -1155,8 +1214,9 @@ const GP_STOPS = [
 ];
 const GP_OVERRIDES = { servedGaps: [{ path: 'G1', stop: 'G_off', reason: 'Test: the line calls at a platform off its drawn rails.' }] };
 
-function makeGapZip(opts: { withOffStop?: boolean } = {}): Uint8Array {
+function makeGapZip(opts: { withOffStop?: boolean; startAt?: [number, number] } = {}): Uint8Array {
   const rows = GP_SHAPE.map(([x, y], i) => { const p = xjLonLat(x, y); return `G1,${p.lat},${p.lon},${i + 1},\n`; }).join('');
+  const stops = GP_STOPS.map((s) => (s.id === 'G_a' && opts.startAt ? { ...s, ...xjLonLat(...opts.startAt) } : s));
   const calls: [string, string[]][] = [
     ['g_1', ['G_a', 'G_mid', 'G_end']],
     ['g_2', ['G_a', 'G_mid', 'G_past']],
@@ -1166,7 +1226,7 @@ function makeGapZip(opts: { withOffStop?: boolean } = {}): Uint8Array {
     { name: 'routes.txt', data: 'route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color\nGR,0,"98","Crta s peronima",,0,,,\n', method: 8 },
     { name: 'trips.txt', data: 'route_id,service_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id\n' + calls.map(([trip]) => `GR,wd,${trip},,,0,,G1\n`).join(''), method: 8 },
     { name: 'shapes.txt', data: `shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled\n${rows}`, method: 8 },
-    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + GP_STOPS.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
+    { name: 'stops.txt', data: 'stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station\n' + stops.map((s) => `${s.id},,${s.name},,${s.lat},${s.lon},,,0,\n`).join(''), method: 8 },
     {
       name: 'stop_times.txt',
       data: 'trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,drop_off_type\n' +
@@ -1203,6 +1263,21 @@ describe('the platforms a shape\'s own trips call at', () => {
     ]);
     expect(allowed.report.servedGapsAllowed[0].metres).toBeGreaterThan(SERVED_STOP_MAX_METRES);
     expect(allowed.report.servedGapsAllowed[0].metres).toBeLessThan(90);
+  });
+
+  // The sample trip's first and last stop are linked to the shape's ends
+  // whatever the distance (the stop-transfer override); the served list checks
+  // the geometry anyway, so a link can never carry a platform past the rule.
+  it('hold a linked platform to the same bound: a sample trip\'s first stop 1.55 km off the rails fails the build, 150 m off is a set-back terminus', async () => {
+    await expect(buildNetwork(makeGapZip({ startAt: [2000, 0] }), { diagramBusCount: 0 })).rejects.toThrow(
+      /G1 \(route GR\) calls at G_a "Jug", 155\d\.\d m off its rails/,
+    );
+    const setBack = await buildNetwork(makeGapZip({ startAt: [0, -135] }), { diagramBusCount: 0 }); // 150 m short of the start
+    expect(setBack.report.servedTerminus).toEqual(
+      expect.arrayContaining([{ path: 'G1', route: 'GR', stop: 'G_a', name: 'Jug', metres: expect.closeTo(150, 0), at: 'start' }]),
+    );
+    expect(shapesOf(setBack)[0].served[0]).toEqual([stopsOf(setBack).findIndex((st: any) => st.id === 'G_a'), 0]);
+    await expect(buildNetwork(makeGapZip({ startAt: [0, -190] }), { diagramBusCount: 0 })).rejects.toThrow(/calls at G_a "Jug", 21\d\.\d m off its rails/);
   });
 });
 
@@ -1270,17 +1345,31 @@ describe('terminus loops', () => {
     expect(paths).toHaveLength(1); // no shapeless pattern here: the one path is the loop
     const [loop] = paths;
     expect(loop).toMatchObject({ id: `${LOOP_ID_PREFIX}LR:${stopSequenceHash(['L_end', 'L_start'])}`, route: 'LR', dir: LOOP_DIRECTION, stops: ['L_end', 'L_start'] });
+    // The two boundary edges are cut LOOP_LEAD_METRES before the arriving
+    // platform and after the departing one, measured where each platform
+    // projects: L_in (334 m) now ends in an 81 m piece, L_out starts with
+    // one, and the loop runs only those.
+    expect(edgeOf('L_in')).toHaveLength(2);
+    expect(edgeOf('L_out')).toHaveLength(2);
     expect(loop.e).toEqual([...edgeOf('L_in').slice(-1), ...edgeOf('L_loop'), ...edgeOf('L_out').slice(0, 1)]);
+    const along = (pts: [number, number][]) => polylineLength(pts.map(([x, y]) => toMetres(xjLonLat(x, y).lon, xjLonLat(x, y).lat)));
+    const inLength = along(LP_TRACKS.L_in);
+    const endAt = along([[0, 0], [0, 290]]); // L_end, 11 m short of L_in's end
+    const startAt = along([[40, 300], [40, 290]]); // L_start, 11 m into L_out
+    expect(net.report.loopCuts.map((c: any) => c.at)).toEqual([[expect.closeTo(endAt - LOOP_LEAD_METRES, 0)], [expect.closeTo(startAt + LOOP_LEAD_METRES, 0)]]);
     const stops = stopsOf(net);
     const served = loop.served.map(([i, dm]: [number, number]) => [stops[i].id, dm / 10]);
     expect(served.map(([id]: [string]) => id)).toEqual(['L_end', 'L_start']);
     expect(net.report.loopPaths.map((l: any) => l.id)).toEqual([loop.id]);
-    const [{ metres }] = net.report.loopPaths;
-    expect(metres).toBeGreaterThan(130); // the drawn loop, ~142 m round
-    expect(metres).toBeLessThan(155);
+    const [{ metres, between }] = net.report.loopPaths;
+    expect(between).toBeGreaterThan(130); // the drawn loop, ~142 m round...
+    expect(between).toBeLessThan(155);
+    // ...and the two terminal ends it keeps of its boundary edges.
+    expect(metres).toBeCloseTo(inLength - (endAt - LOOP_LEAD_METRES) + between + startAt + LOOP_LEAD_METRES, 0);
     // Each sample trip's end platform is linked at its shape's end (the
     // stop-transfer override), so the two served arcs are the loop apart.
-    expect(served[1][1] - served[0][1]).toBeCloseTo(metres, 0);
+    expect(served[0][1]).toBeCloseTo(inLength - (endAt - LOOP_LEAD_METRES), 0);
+    expect(served[1][1] - served[0][1]).toBeCloseTo(between, 0);
     // Four pairs per route lie within LOOP_PAIR_MAX_METRES (each path's end
     // with either path's start); only LR's arrival -> departure has a loop.
     expect(net.report.loopPairs).toBe(12);
@@ -1295,28 +1384,41 @@ describe('terminus loops', () => {
     const decoded = decodeNetwork(net);
     const idx = decoded.paths.findIndex((p) => p.id === loop.id);
     expect(decoded.paths[idx]).toMatchObject({ direction: LOOP_DIRECTION, shape: null, stops: ['L_end', 'L_start'] });
+    expect(decoded.paths[idx].len).toBeCloseTo(metres, 0); // the length the cap held is the length it has
     expect(decoded.stopsOnPath(idx).map((e) => e.stop.id)).toEqual(['L_end', 'L_start']);
+    // The shapes over the cut edges run both pieces, end to end.
+    for (const id of ['L_in', 'L_out']) {
+      const [a, b] = edgeOf(id);
+      expect(edgesOf(net)[a].to).toBe(edgesOf(net)[b].from);
+    }
   });
 });
 
-// WP0: `--zip`, and the same bytes from the same archive. builtAt is the
-// archive's own time (its file's mtime here), so a second build is a
-// byte-for-byte copy of the first, and `metaOut: null` leaves the meta alone.
+// WP0: `--zip`, and the same bytes from the same archive on any machine.
+// builtAt is the archive's Last-Modified, handed in with `builtAt` (the CLI's
+// --built-at): never the file's own time, which a copy need not keep.
 describe('the command-line build from an archive on disk', () => {
-  it('reads the archive, stamps it with the archive\'s own time, and writes the same bytes twice', async () => {
+  it('reads the archive, stamps it with the Last-Modified it is given, writes the same bytes from two copies with different file times, and refuses to guess a stamp', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'zet-network-zip-'));
-    const zip = join(dir, 'feed.zip');
-    await writeFile(zip, makeFullZip());
-    const archiveTime = new Date('2026-09-01T08:50:29.000Z');
-    await utimes(zip, archiveTime, archiveTime);
-    const run = (out: string) => main({ zipPath: zip, cwd: dir, out, metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
-    const first = await run('a.json');
-    const second = await run('b.json');
+    const stamp = '2026-09-01T08:50:29.000Z';
+    const copies = ['a.zip', 'b.zip'];
+    for (const [k, name] of copies.entries()) {
+      await writeFile(join(dir, name), makeFullZip());
+      const time = new Date(Date.UTC(2026, 8, 1 + 10 * k));
+      await utimes(join(dir, name), time, time);
+    }
+    const run = (zip: string, out: string) =>
+      main({ zipPath: join(dir, zip), builtAt: 'Tue, 01 Sep 2026 08:50:29 GMT', cwd: dir, out, metaOut: null, diagramBusCount: 1, log: () => {}, overrides: FULL_OVERRIDES });
+    const first = await run('a.zip', 'a.json');
+    await run('b.zip', 'b.json');
     expect(first.metaTarget).toBeNull();
     const a = await readFile(join(dir, 'a.json'), 'utf8');
     expect(await readFile(join(dir, 'b.json'), 'utf8')).toBe(a);
-    expect(JSON.parse(a)).toMatchObject({ feedVersion: '000123', builtAt: archiveTime.toISOString() });
-    expect(second.builtAt).toBe(archiveTime.toISOString());
+    expect(JSON.parse(a)).toMatchObject({ feedVersion: '000123', builtAt: stamp });
+    expect(first.builtAt).toBe(stamp);
     await expect(stat(join(dir, 'motion'))).rejects.toThrow(); // no meta written anywhere
+    // Without a stamp a file build does not guess one.
+    await expect(main({ zipPath: join(dir, 'a.zip'), cwd: dir, out: 'c.json', metaOut: null, log: () => {}, overrides: FULL_OVERRIDES })).rejects.toThrow(/--zip needs --built-at/);
+    await expect(main({ zipPath: join(dir, 'a.zip'), builtAt: 'yesterday', cwd: dir, out: 'c.json', metaOut: null, log: () => {}, overrides: FULL_OVERRIDES })).rejects.toThrow(/not a time/);
   });
 });
