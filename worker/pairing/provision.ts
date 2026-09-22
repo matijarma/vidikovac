@@ -29,7 +29,10 @@ export interface ProvisionInput {
 export async function provisionScreen(env: Env, input: ProvisionInput, origin: string): Promise<CreateBeaconResponse> {
   const secret = randomId(20);
   const stop = input.stopId ? screenStop(input.stopId) : null;
-  const place = input.place !== undefined ? input.place : stop ? placeFromStop(stop, isTramRoute) : null;
+  // No place given: the stop's, else none (null). A stop id the table does not know (the
+  // admin route checks only its shape) leaves the place absent, the pre-place-v2 shape, since
+  // a stored null may not carry a stop id; both read as Trg with placeSet false.
+  const place = input.place !== undefined ? input.place : stop ? placeFromStop(stop, isTramRoute) : input.stopId === null ? null : undefined;
   const frame = input.frame ?? DEFAULT_FRAME_STOPS;
   // The same enrichment BeaconDO.screenMetadata() applies on every read, so the create
   // response, the scan grant and the room's 'joined' frame carry one and the same screen.
@@ -41,7 +44,7 @@ export async function provisionScreen(env: Env, input: ProvisionInput, origin: s
       operatorLabel: input.operatorLabel, stopId: input.stopId, kind: input.kind,
       ...(stop ? { stop } : {}),
       ...(input.expiresAt ? { screenExpiresAt: input.expiresAt } : {}),
-      place, frame,
+      ...(place !== undefined ? { place } : {}), frame,
     };
     if (!(await beaconStub(env, beaconId).create(record)).created) continue;
     try {

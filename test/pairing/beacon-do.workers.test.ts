@@ -545,6 +545,11 @@ describe('BeaconDO legacy records', () => {
         beaconId: randomId(5), venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', secret: randomId(20),
         stopId: '236_2', stop: kvaternikov, place: null,
       })).rejects.toThrow('beacon-create-invalid');
+      // The stop id alone, without its stop object, is refused the same way.
+      await expect(instance.create({
+        beaconId: randomId(5), venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', secret: randomId(20),
+        stopId: '236_2', place: null,
+      })).rejects.toThrow('beacon-create-invalid');
     });
     // Should a record ever hold both, the stored null still wins on read.
     await setMetaOf(legacy.beaconId, 'place', '');

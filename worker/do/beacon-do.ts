@@ -413,10 +413,10 @@ export class BeaconDO extends DurableObject<Env> {
       input.operatorLabel.length > OPERATOR_LABEL_MAX ||
       (input.stopId !== null && !STOP_ID_SHAPE.test(input.stopId)) ||
       // A place must be one the server would store (a stop place exactly as its table makes
-      // it) and name the same stop as stopId; a stored null carries no stop.
+      // it) and name the same stop as stopId; a stored null carries no stop id and no stop.
       (input.place !== undefined && input.place !== null
         && (canonicalPlace(input.place) === null || (input.place.stopId ?? null) !== input.stopId)) ||
-      (input.place === null && input.stop !== undefined) ||
+      (input.place === null && (input.stopId !== null || input.stop !== undefined)) ||
       (input.frame !== undefined && parseFrame(input.frame) === null) ||
       typeof input.secret !== 'string' ||
       !SECRET_SHAPE.test(input.secret)
