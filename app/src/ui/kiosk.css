@@ -187,6 +187,11 @@
 /* The brand group is the header's yielding part: the wordmark never shrinks, the chip ellipsises; the session pill keeps its own width (a flex item's automatic minimum), so it can never be squeezed under a neighbour. */
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
+/* The brand is also the one way into Postavke: a press held on it (kiosk/settings.ts bindLongPress). It
+   looks like the wordmark and nothing else -- no pointer, no hover, no selection or callout under a held
+   finger -- and keeps the WCAG hit floor for the operator who knows it is there. */
+button.k-brand { display: inline-flex; align-items: center; min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: var(--k-radius-s); background: none; color: inherit; font-family: inherit; line-height: inherit; text-align: left; cursor: default; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
+button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset: 2px; }
 /* The stop chip: ink on paper, paper on night (kajimafix 03.1); the accent is kept for badges and the invitation card. */
 .k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding-left: var(--k-gap); border-left: 1px solid var(--k-line); color: var(--k-ink-2); font-size: var(--k-hint-size); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-context:empty { display: none; }
@@ -202,9 +207,6 @@
 .kiosk[data-size='compact'][data-mode='unlocked'] .k-context { max-width: 22vw; }
 .k-clock-row { display: flex; align-items: center; gap: calc(var(--k-gap) * 0.6); }
 .k-clock { display: block; font-size: var(--k-clock-size); font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-/* T5.3: the WCAG floor, literal and unscaled -- a secondary control beside the clock. A glyph alone (kajimafix 03.1); its sentence lives in the name and the tooltip. */
-.k-theme { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--k-ink-2); font: inherit; font-size: var(--k-hint-size); cursor: pointer; }
-.k-theme .k-icon { color: inherit; }
 .kiosk .k-weather-icon { width: var(--k-icon-lg); height: var(--k-icon-lg); flex: none; color: var(--k-amber); }
 .k-temp { font-size: var(--k-main-size); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 

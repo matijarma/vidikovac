@@ -9,18 +9,19 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import type { CodeSlot, ScreenMetadata } from '../../worker/protocol';
+import { SCREEN_SET_MIN_MS, type CodeSlot, type ScreenMetadata } from '../../worker/protocol';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { ScreenError } from '../../app/src/core/screens';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
-import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS } from '../../app/src/kiosk/settings';
+import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS } from '../../app/src/kiosk/settings';
+import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { TICKER_PERIOD_MS } from '../../app/src/kiosk/ticker';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { cityWindowView, DISTRICT_SPAN_M, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
-import { districtBySlug } from '../../app/src/kiosk/districts';
+import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
+import { FRAME_RADIUS_M, frameSpanM } from '../../shared/city/frame';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES, type ThemeController, type ThemePreference } from '../../app/src/ui/theme';
 import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
@@ -65,7 +66,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'loadStreets' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -108,6 +109,8 @@ function mount(opts: MountOptions = {}) {
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => modules.find((m) => m.module === module) ?? snap(module, []));
   const createScreen = opts.createScreen ?? vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: CITY_SCREEN }));
   const loadStops = opts.loadStops ?? vi.fn(async () => STOPS);
+  /** The offline street index: empty unless a test hands one in, so the place field never fetches. */
+  const loadStreets = opts.loadStreets ?? vi.fn(async () => []);
   /** The stop's last-departure table: none by default (the stop is not in the generated set), so nothing reaches the wire from here. */
   const loadLastRun = opts.loadLastRun ?? vi.fn(async () => null);
   const requestFullscreen = vi.fn(async () => {});
@@ -120,7 +123,7 @@ function mount(opts: MountOptions = {}) {
     i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
-    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
+    fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadStreets, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
     theme: themeFake.theme,
     createBeacon: (deps) => { handlers = deps; return beacon; },
     createSession: () => {
@@ -136,7 +139,7 @@ function mount(opts: MountOptions = {}) {
   /** The timers mountKiosk arms synchronously (the 1 s and 20 s ticks); the teaser poll arms itself only after the first load settles. */
   const armedAtMount = new Set(timers);
   return {
-    root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, loadLastRun, requestFullscreen, requestWakeLock,
+    root, handle, beacon, timers, raw, sessions, fetchData, createScreen, loadStops, loadStreets, loadLastRun, requestFullscreen, requestWakeLock,
     theme: themeFake.theme, themeCalls: themeFake.calls, themeListenerCount: themeFake.listenerCount,
     goOffline: () => { beaconStatus = 'offline'; },
     get handlers() { return handlers!; },
@@ -450,6 +453,26 @@ describe('start: one field, one line, Pokreni', () => {
     expect(k.root.innerHTML).not.toContain('S3CR3TXYZ');
     expect(q(k.root, '[data-testid=kiosk-setup]')).toBeNull();
   });
+  it('through the kiosk: the first touch loads both lists, typing suggests after the pause on the kiosk timers, and the pick is what Pokreni posts', async () => {
+    const createScreen = vi.fn(async (_input: object) => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: SCREEN }));
+    const k = mount({ createScreen });
+    const field = k.root.querySelector<HTMLInputElement>('[data-testid=setup-place]')!;
+    field.dispatchEvent(new FocusEvent('focus'));
+    await flush();
+    expect(k.loadStops).toHaveBeenCalledTimes(1);
+    expect(k.loadStreets).toHaveBeenCalledTimes(1);
+    field.value = 'Zapr';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    k.tick(120);
+    const rows = k.root.querySelectorAll<HTMLElement>('[data-testid=setup-suggestions] > [data-testid=setup-suggestion]');
+    expect(text(rows[0]!.querySelector('.k-suggest-name'))).toBe('Zapruđe');
+    rows[0]!.click();
+    expect(text(k.root.querySelector('[data-testid=setup-preview]'))).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    k.root.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(createScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+    expect(k.handle.phase()).toBe('invitation');
+  });
   it('a 403 ends in the refused-connection sentence with no retry, a 429 counts its retry down, a network failure offers one; nothing loops', async () => {
     const attempts: unknown[] = [new ScreenError('evaluation-access-required', 403), new ScreenError('screen-limit', 429, 90), new TypeError('Failed to fetch')];
     const createScreen = vi.fn(async () => { throw attempts.shift(); });
@@ -759,30 +782,72 @@ describe('start: the field turns what is typed into the screen’s place', () =>
 });
 
 describe('settings: the panel on the screen itself', () => {
-  const open = (k: ReturnType<typeof mount>) => { q(k.root, '[data-testid=kiosk-settings]')!.click(); };
+  const brand = (k: ReturnType<typeof mount>) => q(k.root, '[data-testid=kiosk-brand]') as HTMLButtonElement;
+  const press = (k: ReturnType<typeof mount>, type: string, init: PointerEventInit = {}) => brand(k).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, ...init }));
+  /** A press held on the brand: Postavke open after LONG_PRESS_MS on the kiosk's own clock. */
+  const open = (k: ReturnType<typeof mount>) => { press(k, 'pointerdown'); k.tick(LONG_PRESS_MS); press(k, 'pointerup'); };
   const panel = (k: ReturnType<typeof mount>) => q(k.root, '[data-testid=kiosk-settings-panel]');
+  const toggle = (k: ReturnType<typeof mount>, name: string) => q(panel(k)!, `[data-testid=toggle-${name}]`) as HTMLButtonElement;
+  const TRG_PLACE = { kind: 'tram' as const, name: 'Trg bana J. Jelačića', lon: STOP.lon, lat: STOP.lat, stopId: '106_1' };
+  const ZAPRUDE_PLACE = { kind: 'tram' as const, name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' };
+  /** The DO's answer to a v2 frame for the fixture stops: the screen as it stores and enriches it. */
+  const answer = (k: ReturnType<typeof mount>, place: typeof TRG_PLACE | null, frame: 4 | 6 | 8) => k.handlers.onContext?.({
+    kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: place ? STOPS.find((stop) => stop.id === place.stopId)! : null,
+    area: place ? 'gornji-grad-medvescak' : 'zagreb', place: place ?? TRG_PLACE, placeSet: place !== null, frame,
+  });
 
-  it('opens from the header gear with the screen’s own area and stop, the whole city first in the list', async () => {
+  it('the invitation header has no button except the brand', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    expect(panel(k)).toBeNull(); // built on the first press, not at mount
+    const buttons = [...k.root.querySelectorAll<HTMLElement>('.k-head button')];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.dataset.testid).toBe('kiosk-brand');
+    expect(buttons[0]!.getAttribute('aria-label')).toBe('Kaj ima? · Postavke zaslona');
+    expect(text(buttons[0]!)).toBe('Kaj ima?');
+    expect(q(k.root, '[data-testid=kiosk-settings]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk-theme]')).toBeNull();
+  });
+
+  it('opens on a press held on the brand, with the screen’s own place and frame; a tap opens nothing', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    brand(k).click();
+    press(k, 'pointerdown');
+    k.tick(CODE_TICK_MS);
+    press(k, 'pointerup');
+    k.tick(LONG_PRESS_MS);
+    expect(panel(k)).toBeNull(); // built on the first long press, not at mount
     open(k);
     await flush();
     const box = panel(k)!;
     expect(box.hidden).toBe(false);
-    expect([...box.querySelectorAll('.k-settings-row')].map((el) => (el as HTMLElement).dataset.row)).toEqual(['area', 'stop', 'theme', 'screen']);
-    const area = q(box, '[data-testid=settings-area]') as HTMLSelectElement;
-    expect(area.options).toHaveLength(18);
-    expect(area.options[0]!.textContent).toBe('Cijeli grad');
-    expect(area.value).toBe('gornji-grad-medvescak');
-    // The stop list carries "no stop" and the screen's own stop, checked.
-    expect(k.loadStops).toHaveBeenCalledTimes(1);
-    const chosen = q(box, 'input[name=settings-stop]:checked') as HTMLInputElement;
-    expect(chosen.value).toBe('106_1');
-    expect(text(box.querySelector('input[name=settings-stop]')!.parentElement)).toBe('Bez stajališta');
+    expect([...box.querySelectorAll('.k-settings-row')].map((el) => (el as HTMLElement).dataset.row)).toEqual(['place', 'frame', 'view', 'theme', 'rhythm', 'screen']);
+    // A screen from before place-v2 names its stop: that stop is its place.
+    expect(text(q(box, '[data-testid=settings-place]'))).toBe('Trg bana J. Jelačića');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 6 stajališta odavde');
+    expect(toggle(k, 'frame').dataset.value).toBe('6');
+    expect(text(toggle(k, 'view'))).toBe('Prikaz: karta');
+    expect(text(toggle(k, 'theme'))).toBe('Tema: po suncu');
+    expect(text(toggle(k, 'rhythm'))).toBe('Ritam: 20 s');
     // Twenty hours from 14:32 is tomorrow morning, so the day goes with the clock.
     expect(text(q(box, '[data-testid=settings-expiry]'))).toBe('Vrijedi do sub 12. 9. 10:32');
-    expect(text(q(box, '[data-testid=settings-theme]'))).toBe('Tema: po suncu');
+    // Nothing to save and nothing loaded: the place field loads its lists when it is used.
+    expect(q(box, '[data-testid=settings-save]')).toBeNull();
+    expect(k.loadStops).not.toHaveBeenCalled();
+  });
+
+  it('a short press or a moved finger does not open settings; Enter on the brand does at once', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    press(k, 'pointerdown');
+    press(k, 'pointerup');
+    k.tick(LONG_PRESS_MS);
+    press(k, 'pointerdown', { clientX: 10, clientY: 10 });
+    press(k, 'pointermove', { clientX: 30, clientY: 10 });
+    k.tick(LONG_PRESS_MS);
+    expect(panel(k)).toBeNull();
+    brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(panel(k)!.hidden).toBe(false);
   });
 
   // A temporary screen is good for 24 hours, so its end is almost always
@@ -814,101 +879,180 @@ describe('settings: the panel on the screen itself', () => {
     expect(text(q(panel(venue)!, '[data-testid=settings-expiry]'))).toBe('Vrijedi do opoziva.');
   });
 
-  it('saves the chosen area and stop as one screen-set frame and closes; the DO’s answer re-frames the header', async () => {
-    const k = mount({ stored: STORED_CITY });
-    await flush();
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
-    open(k);
-    await flush();
-    const box = panel(k)!;
-    const area = q(box, '[data-testid=settings-area]') as HTMLSelectElement;
-    area.value = 'trnje';
-    area.dispatchEvent(new Event('change', { bubbles: true }));
-    const search = q(box, '[data-testid=settings-search]') as HTMLInputElement;
-    search.value = 'zapr';
-    search.dispatchEvent(new Event('input', { bubbles: true }));
-    const zaprude = q(box, 'input[name=settings-stop][value=200_1]') as HTMLInputElement;
-    zaprude.checked = true;
-    zaprude.dispatchEvent(new Event('change', { bubbles: true }));
-    q(box, '[data-testid=settings-save]')!.click();
-    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
-    expect(k.beacon.setScreen).toHaveBeenCalledWith('200_1', 'trnje');
-    // The panel waits for the answer rather than claiming the change itself.
-    expect(box.hidden).toBe(false);
-    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(true);
-    expect(text(q(box, '[data-testid=settings-save]'))).toBe('Spremanje…');
-    // Nothing is painted from the panel: the DO's answer is what re-frames the screen.
-    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOPS[2]!, area: 'trnje' });
-    expect(box.hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
-    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!).screen).toMatchObject({ area: 'trnje', stop: { id: '200_1' } });
-  });
-
-  it('names the četvrt in the header when the screen has an area and no stop', async () => {
-    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }) });
-    await flush();
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trnje');
-  });
-
-  it('chooses no stop at all, and says so when the socket cannot carry the change', async () => {
+  it('Kadar click changes the text at once and sends one v2 frame after the debounce; the DO’s answer sets data-frame on the shell', async () => {
     const k = mount({ stored: STORED });
     await flush();
+    const shell = q(k.root, '[data-testid=kiosk]')!;
+    expect(shell.dataset.frame).toBe('6');
+    expect(shell.dataset.placeKind).toBe('tram');
     open(k);
-    await flush();
-    const box = panel(k)!;
-    const none = box.querySelector('input[name=settings-stop]') as HTMLInputElement;
-    none.checked = true;
-    none.dispatchEvent(new Event('change', { bubbles: true }));
-    k.goOffline();
-    q(box, '[data-testid=settings-save]')!.click();
+    toggle(k, 'frame').click();
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 8 stajališta odavde');
     expect(k.beacon.setScreen).not.toHaveBeenCalled();
-    expect(box.hidden).toBe(false);
-    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    expect((q(box, '[data-testid=settings-save]') as HTMLButtonElement).disabled).toBe(false);
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    expect(k.beacon.setScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '106_1' }, frame: 8 });
+    // Nothing is painted from the panel: the DO's answer is what re-frames the screen.
+    expect(shell.dataset.frame).toBe('6');
+    answer(k, TRG_PLACE, 8);
+    expect(shell.dataset.frame).toBe('8');
+    // Toggles stay open: the panel is still there for the next click.
+    expect(panel(k)!.hidden).toBe(false);
+    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!).screen).toMatchObject({ frame: 8, place: { stopId: '106_1' }, placeSet: true });
+    k.tick(SCREEN_SET_MIN_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
   });
 
-  it('a refused pair and a repeat inside the DO\u2019s window each keep the panel open with their own sentence', async () => {
+  it('three quick clicks send one frame carrying the last value', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    open(k); await flush();
+    open(k);
+    toggle(k, 'frame').click(); // 8
+    toggle(k, 'frame').click(); // 4
+    toggle(k, 'place').click();
+    q(panel(k)!, '[data-testid=settings-place-city]')!.click(); // the whole city
+    expect(text(q(panel(k)!, '[data-testid=settings-place]'))).toBe('Cijeli grad');
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen.mock.calls).toEqual([[{ place: null, frame: 4 }]]);
+  });
+
+  it('a second change inside five seconds waits for the window', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k);
+    toggle(k, 'frame').click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    answer(k, TRG_PLACE, 8);
+    toggle(k, 'frame').click();
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 4 stajališta odavde');
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    k.tick(SCREEN_SET_MIN_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
+    expect(k.beacon.setScreen).toHaveBeenLastCalledWith({ place: { kind: 'stop', stopId: '106_1' }, frame: 4 });
+  });
+
+  it('a refusal repaints the toggle from the DO’s truth, and a repeat inside the DO’s window says so', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k);
     const box = panel(k)!;
-    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
-    saveBtn.click();
+    toggle(k, 'frame').click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
     // An error word that belongs to something else on the socket is not this panel's.
-    k.handlers.onError?.('bad-frame');
-    expect(saveBtn.disabled).toBe(true);
-    k.handlers.onError?.('bad-stop');
+    k.handlers.onError?.('auth-required');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 8 stajališta odavde');
+    expect(q(box, '[data-testid=settings-error]')!.hidden).toBe(true);
+    k.handlers.onError?.('bad-place');
     expect(box.hidden).toBe(false);
-    expect(saveBtn.disabled).toBe(false);
-    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio odabir. Odaberi područje i stajalište ponovno.');
-    saveBtn.click();
-    k.handlers.onError?.('screen-set-rate');
-    expect(box.hidden).toBe(false);
-    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa spremi ponovno.');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 6 stajališta odavde');
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Poslužitelj nije prihvatio mjesto. Odaberi ponovno.');
+    // Nothing is re-sent by the clock.
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    k.tick(SCREEN_SET_MIN_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
+    toggle(k, 'frame').click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    k.tick(SCREEN_SET_MIN_MS);
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(2);
+    k.handlers.onError?.('screen-set-rate');
+    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Pričekaj koji trenutak pa odaberi ponovno.');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 6 stajališta odavde');
   });
 
-  it('a save with no answer in eight seconds gives the button back, and the late answer still closes the panel', async () => {
+  it('a frame with no answer in eight seconds says so and goes back; the late answer is still the truth', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    open(k); await flush();
+    open(k);
     const box = panel(k)!;
-    const saveBtn = q(box, '[data-testid=settings-save]') as HTMLButtonElement;
-    saveBtn.click();
-    expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
-    expect(saveBtn.disabled).toBe(true);
+    toggle(k, 'frame').click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
     k.tick(SAVE_TIMEOUT_MS);
     expect(box.hidden).toBe(false);
-    expect(saveBtn.disabled).toBe(false);
-    expect(text(saveBtn)).toBe('Spremi');
     expect(text(q(box, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
-    // Nothing is re-sent by the clock: one press is one screen-set.
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 6 stajališta odavde');
     expect(k.beacon.setScreen).toHaveBeenCalledTimes(1);
-    // The DO's answer is the truth whenever it lands: late, it re-frames the
-    // screen and closes the panel that is still open on it.
-    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'gornji-grad-medvescak' });
-    expect(box.hidden).toBe(true);
+    answer(k, TRG_PLACE, 8);
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 8 stajališta odavde');
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.frame).toBe('8');
+  });
+
+  it('says so when the socket cannot carry the change, and sends nothing', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k);
+    k.goOffline();
+    toggle(k, 'frame').click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).not.toHaveBeenCalled();
+    expect(panel(k)!.hidden).toBe(false);
+    expect(text(q(panel(k)!, '[data-testid=settings-error]'))).toBe('Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.');
+    expect(text(toggle(k, 'frame'))).toBe('Kadar: 6 stajališta odavde');
+  });
+
+  it('"Cijeli grad" sends place null; the chip then names the place the DO lists for the whole city', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    open(k);
+    toggle(k, 'place').click();
+    // Promijeni opens the shared "Adresa ili stajalište" field inside the row.
+    expect(toggle(k, 'place').getAttribute('aria-expanded')).toBe('true');
+    expect(q(panel(k)!, '[data-testid=setup-place]')).not.toBeNull();
+    q(panel(k)!, '[data-testid=settings-place-city]')!.click();
+    expect(q(panel(k)!, '[data-testid=setup-place]')).toBeNull();
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledWith({ place: null, frame: 6 });
+    answer(k, null, 6);
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.placeKind).toBe('city');
+    expect(text(q(panel(k)!, '[data-testid=settings-place]'))).toBe('Cijeli grad');
+  });
+
+  it('a stop typed in full in the field is the new place, sent as its id alone', async () => {
+    const k = mount({ stored: STORED_CITY });
+    await flush();
+    open(k);
+    toggle(k, 'place').click();
+    const input = q(panel(k)!, '[data-testid=setup-place]') as HTMLInputElement;
+    input.dispatchEvent(new FocusEvent('focus'));
+    await flush();
+    expect(k.loadStops).toHaveBeenCalledTimes(1);
+    input.value = 'Zapruđe';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(q(panel(k)!, '[data-testid=settings-place]'))).toBe('Zapruđe');
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+    answer(k, ZAPRUDE_PLACE, 6);
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
+  });
+
+  it('keeps Ritam and Prikaz in this browser, on the shell at once and never on the wire', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const shell = q(k.root, '[data-testid=kiosk]')!;
+    expect(shell.dataset.rhythm).toBe('20');
+    expect(shell.dataset.view).toBe('map');
+    open(k);
+    toggle(k, 'rhythm').click();
+    toggle(k, 'view').click();
+    expect(shell.dataset.rhythm).toBe('30');
+    expect(shell.dataset.view).toBe('schema');
+    expect(k.raw['vidikovac-kiosk-rhythm']).toBe('30');
+    expect(k.raw['vidikovac-kiosk-view']).toBe('schema');
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    k.tick(SCREEN_SET_MIN_MS);
+    expect(k.beacon.setScreen).not.toHaveBeenCalled();
+  });
+
+  it('names the place the DO lists in the header, and Zagreb for a record that names none', async () => {
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }) });
+    await flush();
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
+    answer(k, null, 6);
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
   });
 
   it('an expiring screen takes the stage back from an open panel, so the notice is what shows', async () => {
@@ -922,15 +1066,18 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(true);
     expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(false);
     expect(text(q(k.root, '[data-testid=kiosk-notice]'))).toContain('Ovaj privremeni zaslon je istekao.');
-    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
+    // The brand stays the wordmark; over a notice a long press opens nothing.
+    open(k);
+    expect(panel(k)!.hidden).toBe(true);
   });
 
-  it('closes on Escape, on the close button and after 90 seconds untouched', async () => {
+  it('closes on Escape, on the close button and after 90 seconds untouched, and gives the focus back to the brand', async () => {
     const k = mount({ stored: STORED });
     await flush();
     open(k); await flush();
     panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(brand(k));
     open(k);
     q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
     expect(panel(k)!.hidden).toBe(true);
@@ -946,7 +1093,6 @@ describe('settings: the panel on the screen itself', () => {
     k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'grad-sada' }, expiresAt: NOW + 600_000, dataToken: 'dt' });
     await flush();
     expect(k.handle.phase()).toBe('paired');
-    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
     open(k);
     expect(panel(k)).toBeNull();
     k.handlers.onPresentation?.({ version: 1, revision: 2, target: null, expiresAt: null });
@@ -966,27 +1112,13 @@ describe('settings: the panel on the screen itself', () => {
     expect(k.beacon.close).toHaveBeenCalled();
   });
 
-  it('a stop list that fails to load is one sentence in the panel, and the rest of it still works', async () => {
-    const loadStops = vi.fn(async () => { throw new Error('stops-unavailable'); });
-    const k = mount({ stored: STORED, loadStops });
-    await flush();
-    open(k);
-    await flush();
-    const box = panel(k)!;
-    expect(text(q(box, '[data-testid=settings-error]'))).toBe('Popis stanica nije dostupan.');
-    expect(box.querySelectorAll('input[name=settings-stop]')).toHaveLength(0);
-    expect(loadStops).toHaveBeenCalledTimes(1);
-    q(box, '[data-testid=settings-save]')!.click();
-    expect(k.beacon.setScreen).toHaveBeenCalledWith('106_1', 'gornji-grad-medvescak');
-  });
-
-  it('cycles the theme from the panel, through the one controller the header button uses', async () => {
+  it('cycles the theme from the panel, through the one controller the header glyph used', async () => {
     const k = mount({ stored: STORED, themeInitial: 'auto' });
     await flush();
     open(k); await flush();
-    q(panel(k)!, '[data-testid=settings-theme]')!.click();
+    toggle(k, 'theme').click();
     expect(k.themeCalls).toEqual(['light']);
-    expect(text(q(panel(k)!, '[data-testid=settings-theme]'))).toBe('Tema: svijetla');
+    expect(text(toggle(k, 'theme'))).toBe('Tema: svijetla');
   });
 });
 
@@ -1120,7 +1252,8 @@ describe('invitation: the screen a passer-by sees', () => {
   it('stores fresher screen metadata from the beacon beside the same secret and names the stop, nothing else', () => {
     const k = mount({ hash: '#BEACON01.tajna' });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna' });
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    // Credentials that carry no screen yet name the city until the DO says which place (WP3).
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     // Without a stop the field is labelled by the lines title, never left nameless.
     expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ove stanice');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
@@ -2002,56 +2135,68 @@ describe('the field, the column and the one map', () => {
     expect(text(q(k.root, '[data-testid=kiosk-panel-weather] .k-weather-current .k-temp'))).toBe('21 °C');
   });
 
-  // What Postavke set the screen to is what the invitation frames when no stop
-  // does. The header chip and the camera read the one answer, so a screen set
-  // to the whole city cannot name a quarter in words and show one in picture.
-  it('frames the invitation on the četvrt the screen was set to', async () => {
+  // The place the operator chose frames the invitation at its Kadar, measured
+  // around the place (shared/city/frame.ts; the table's radius until the stop
+  // list has loaded). The header chip and the camera read the one answer
+  // (kiosk/settings.ts wallPlaceOf), so a screen cannot name one place in
+  // words and show another in the picture.
+  it('frames the invitation on the screen’s place at its frame', async () => {
     const map = spyMap();
-    const seat = districtBySlug('trnje')!.seat;
-    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, area: 'trnje' } }), mapFactory: map.factory as never });
+    const zaprude = { kind: 'tram' as const, name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' };
+    const k = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, stop: STOPS[2], place: zaprude, placeSet: true, frame: 8 } }), mapFactory: map.factory as never });
     await flush();
     const options = map.factory.mock.calls[0]![0] as Record<string, unknown>;
-    // The seat camera holds the frame until the quarter's own rings land (mapview.ts fieldView).
-    expect(options.center).toEqual([seat.lon, seat.lat]);
-    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, seat.lat, DISTRICT_SPAN_M));
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Trnje');
+    expect(options.center).toEqual([15.99, 45.77]);
+    expect(options.zoom).toBe(fieldZoom(FIELD_DESIGN_WIDTH.wide, 45.77, frameSpanM(FRAME_RADIUS_M[8])));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.frame).toBe('8');
   });
 
-  it('opens on the whole city for `zagreb` and for a screen that named no area at all', async () => {
+  it('opens on the whole city for a screen set up with an empty field, and for one that names no place at all', async () => {
     const window = cityWindowView(FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide);
+    const trg = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
+    // An empty field is Trg bana J. Jelačića for the header, the list and the departures, and the whole city on the map [O-65].
+    const empty = spyMap();
+    const e = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...CITY_SCREEN, place: trg, placeSet: false, frame: 6 } }), mapFactory: empty.factory as never });
+    await flush();
+    expect(empty.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
+    expect(text(q(e.root, '[data-testid=kiosk-context]'))).toBe('Trg bana J. Jelačića');
+    expect(q(e.root, '[data-testid=kiosk]')!.dataset.placeKind).toBe('city');
+    e.handle.destroy();
+    // 'zagreb' is the whole city, not a quarter; and a record from before place-v2 with no stop names the city until the DO answers.
     const city = spyMap();
     const k = mount({ stored: STORED_CITY, mapFactory: city.factory as never });
     await flush();
-    // 'zagreb' is the whole city, not a quarter: no outline, and the city window's own frame.
     expect(city.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     k.handle.destroy();
     const none = spyMap();
-    const n = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null } }), mapFactory: none.factory as never });
+    const n = mount({ stored: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'trnje' } }), mapFactory: none.factory as never });
     await flush();
     expect(none.factory.mock.calls[0]![0]).toMatchObject({ center: window.center, zoom: window.zoom, outline: null });
-    expect(text(q(n.root, '[data-testid=kiosk-context]'))).toBe('');
+    expect(text(q(n.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
   });
 
-  it('re-frames the one live map when the DO answers a Postavke save with another area', async () => {
+  it('re-frames the one live map when the DO answers with a place the operator chose', async () => {
     const map = spyMap();
     const k = mount({ stored: STORED_CITY, mapFactory: map.factory as never });
     await flush();
     expect(map.factory).toHaveBeenCalledTimes(1);
-    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: null, area: 'maksimir' });
+    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOPS[2]!, area: 'novi-zagreb-istok', place: { kind: 'tram', name: 'Zapruđe', lon: 15.99, lat: 45.77, stopId: '200_1' }, placeSet: true, frame: 6 });
     await flush();
-    const seat = districtBySlug('maksimir')!.seat;
     // The same map, moved -- never a second one built for the new frame.
     expect(map.factory).toHaveBeenCalledTimes(1);
-    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [seat.lon, seat.lat] }));
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Maksimir');
+    expect(map.handle.setView).toHaveBeenLastCalledWith(expect.objectContaining({ center: [15.99, 45.77], zoom: fieldZoom(FIELD_DESIGN_WIDTH.wide, 45.77, frameSpanM(FRAME_RADIUS_M[6])) }));
+    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zapruđe');
   });
-  // The camera above is pushed on the beat Postavke closes, and while the
-  // panel was open the stage -- and with it the map's box -- was hidden. A
+  // While Postavke is open the stage -- and with it the map's box -- is
+  // hidden, and the toggles keep the panel open when the DO answers. A
   // MapLibre transform measured behind the panel is 0 x 0, and a move against
   // it lands the subject about a third of the field off centre (seen on the
-  // real map: correct after a reload, wrong after a save). The order is the
-  // whole fix, so the order is what this case holds.
+  // real map: correct after a reload, wrong after a save). So the camera
+  // waits: nothing moves while the panel is open, and the close re-measures
+  // before it moves. The order is the whole fix, so the order is what this
+  // case holds.
   it('re-measures the map before it moves it when Postavke closes: a box behind the panel is no box at all', async () => {
     const order: string[] = [];
     const handle = {
@@ -2061,26 +2206,27 @@ describe('the field, the column and the one map', () => {
       resize: () => { order.push('resize'); },
       setView: vi.fn(() => { order.push('setView'); }),
     };
-    const k = mount({ stored: STORED_CITY, mapFactory: vi.fn(() => handle) as never });
+    const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never });
     await flush();
-    q(k.root, '[data-testid=kiosk-settings]')!.click();
+    q(k.root, '[data-testid=kiosk-brand]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    k.tick(LONG_PRESS_MS);
     await flush();
     // The panel is over the stage and the map is held.
     expect(order).toContain('pause');
     expect(q(k.root, '.k-stage')!.hidden).toBe(true);
     const box = q(k.root, '[data-testid=kiosk-settings-panel]')!;
-    const chosen = q(box, 'input[name=settings-stop][value=106_1]') as HTMLInputElement;
-    chosen.checked = true;
-    chosen.dispatchEvent(new Event('change', { bubbles: true }));
-    q(box, '[data-testid=settings-save]')!.click();
-    expect(k.beacon.setScreen).toHaveBeenCalledWith('106_1', 'zagreb');
+    q(box, '[data-testid=toggle-frame]')!.click();
+    k.tick(SETTINGS_SEND_DELAY_MS);
+    expect(k.beacon.setScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '106_1' }, frame: 8 });
     order.length = 0;
-    k.handlers.onContext?.({ kind: 'temporary', expiresAt: NOW + 20 * 3_600_000, stop: STOP, area: 'zagreb' });
+    k.handlers.onContext?.({ ...SCREEN, place: { kind: 'tram', name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id }, placeSet: true, frame: 8 });
     await flush();
-    expect(box.hidden).toBe(true);
-    expect(handle.setView).toHaveBeenCalled();
-    expect(order).toContain('resize');
-    expect(order).toContain('setView');
+    // The answer lands with the panel still open: the camera waits for the box.
+    expect(box.hidden).toBe(false);
+    expect(handle.setView).not.toHaveBeenCalled();
+    q(box, '[data-testid=kiosk-settings-close]')!.click();
+    expect(handle.setView).toHaveBeenCalledTimes(1);
+    expect(order.indexOf('resize')).toBeGreaterThanOrEqual(0);
     expect(order.indexOf('resize')).toBeLessThan(order.indexOf('setView'));
     // And the stage is back, so the box the resize read is the real one.
     expect(q(k.root, '.k-stage')!.hidden).toBe(false);
@@ -2168,47 +2314,47 @@ describe('handheld: the kiosk on a phone', () => {
   });
 });
 
-// T5.3: a 44 px header button left of the clock, labelled "Tema: <word>" from
-// the theme controller's own preference, cycling auto -> light -> dark ->
-// solar through setPreference (which persists vidikovac-theme itself --
-// ui/theme.ts is untouched and does the writing). The controller is always
+// T5.3, moved by WP3: the theme toggle lives in Postavke (the header carries
+// no glyph, principle 8), labelled "Tema: <word>" from the theme controller's
+// own preference with its glyph beside the words, cycling auto -> light ->
+// dark -> solar through setPreference (which persists vidikovac-theme itself
+// -- ui/theme.ts is untouched and does the writing). The controller is always
 // supplied: entries/kiosk.ts hands mountKiosk the same instance bootPage()
 // created and resolved (default solar, or ?tema=) before this component ever
 // sees it, so the label is correct on the very first paint.
-describe('T5.3: the theme button', () => {
-  it('sits left of the clock as a glyph named by the current preference, and four clicks cycle auto -> light -> dark -> solar in order', () => {
-    const k = mount(); // themeInitial defaults to 'solar', the kiosk's own default
-    const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
-    expect(btn).not.toBeNull();
+describe('T5.3: the theme toggle', () => {
+  async function openPanel(k: ReturnType<typeof mount>): Promise<HTMLButtonElement> {
+    await flush();
+    q(k.root, '[data-testid=kiosk-brand]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    k.tick(LONG_PRESS_MS);
+    return q(k.root, '[data-testid=toggle-theme]') as HTMLButtonElement;
+  }
+  it('names the current preference beside its glyph, and four clicks cycle auto -> light -> dark -> solar in order', async () => {
+    const k = mount({ stored: STORED }); // themeInitial defaults to 'solar', the kiosk's own default
+    expect(q(k.root, '[data-testid=kiosk-theme]')).toBeNull();
+    const btn = await openPanel(k);
     expect(btn.type).toBe('button');
-    expect(btn.getAttribute('aria-label')).toBe('Tema: po suncu');
-    expect(btn.title).toBe('Tema: po suncu');
-    expect(text(btn)).toBe('');
-    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sunset');
-    // Left of the clock: its very next sibling is the clock itself.
-    expect(btn.nextElementSibling?.getAttribute('data-testid')).toBe('kiosk-clock');
+    const seen = (): [string, string | null | undefined, string | undefined] => [text(btn), q(btn, 'use')?.getAttribute('href'), btn.dataset.value];
+    expect(seen()).toEqual(['Tema: po suncu', '#icon-sunset', 'solar']);
     btn.click();
-    expect(btn.getAttribute('aria-label')).toBe('Tema: automatski');
-    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sun-moon');
+    expect(seen()).toEqual(['Tema: automatski', '#icon-sun-moon', 'auto']);
     btn.click();
-    expect(btn.getAttribute('aria-label')).toBe('Tema: svijetla');
-    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sun');
+    expect(seen()).toEqual(['Tema: svijetla', '#icon-sun', 'light']);
     btn.click();
-    expect(btn.getAttribute('aria-label')).toBe('Tema: tamna');
-    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-moon');
+    expect(seen()).toEqual(['Tema: tamna', '#icon-moon', 'dark']);
     btn.click();
-    expect(btn.getAttribute('aria-label')).toBe('Tema: po suncu');
-    expect(btn.title).toBe('Tema: po suncu');
-    expect(text(btn)).toBe('');
-    expect(q(btn, 'use')!.getAttribute('href')).toBe('#icon-sunset');
+    expect(seen()).toEqual(['Tema: po suncu', '#icon-sunset', 'solar']);
     expect(k.themeCalls).toEqual(['auto', 'light', 'dark', 'solar']);
   });
-  it('reads every word straight from the theme controller, never the locale it started in', () => {
-    const k = mount({ locale: 'en', themeInitial: 'light' });
-    const btn = q(k.root, '[data-testid=kiosk-theme]') as HTMLButtonElement;
-    expect(btn.getAttribute('aria-label')).toBe('Theme: light');
+  it('reads every word straight from the theme controller, never the locale it started in, and follows a change made elsewhere', async () => {
+    const k = mount({ stored: STORED, locale: 'en', themeInitial: 'light' });
+    const btn = await openPanel(k);
+    expect(text(btn)).toBe('Theme: light');
     btn.click();
-    expect(btn.getAttribute('aria-label')).toBe('Theme: dark');
+    expect(text(btn)).toBe('Theme: dark');
+    // ?tema= landing after the mount, another tab, the OS answer for auto: the open toggle repaints.
+    k.theme.setPreference('auto');
+    expect(text(btn)).toBe('Theme: automatic');
   });
   it('lets go of the theme controller on destroy, like every other subscription', () => {
     const k = mount();
