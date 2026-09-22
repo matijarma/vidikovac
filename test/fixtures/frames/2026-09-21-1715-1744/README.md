@@ -37,3 +37,12 @@ node scripts/frames-sample.mjs <recordings>/2026/09/21 --from 151500 --to 154459
 ```
 
 `<recordings>` is a local copy of R2's `zet-rt/` prefix. The script refuses an `--out` under any `recordings/` directory, because `.gitignore` ignores `recordings/` at any depth.
+
+## How it is graded
+
+```
+npx vitest run --project accept test/accept/wrong-turn.test.ts
+npm run replay:grade -- test/fixtures/frames/2026-09-21-1715-1744 --out <scratch>/wrong-turn --targets stage1
+```
+
+The first is WP0's acceptance test: `scripts/grade-branches-core.ts` replays the frames through the real engine and the committed artefacts and judges the rows against the stage-1 targets; `test/accept/wrong-turn.expect.json` records the rows this sample gave before WP0 and after it. The second writes the grader's full report, `<scratch>/wrong-turn.json` and `.md`, and exits 1 while a row misses its target.
