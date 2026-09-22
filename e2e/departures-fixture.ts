@@ -14,11 +14,13 @@
 // clock arithmetic.
 //
 // A live countdown needs a board row whose tripId a tracked vehicle carries
-// (shared/city/arrivals.ts joins by trip id). `departuresBoard` therefore takes
-// the tripIds of its first `tracked` rows from the zet-rt fixture's `vehicle:`
-// items (pass `vehicles`); a live badge is possible for those rows only, and
-// only while they are due within the live horizon (the board's rows at now + 2
-// and now + 8 minutes with the default headway).
+// (shared/city/arrivals.ts joins by trip id). `departuresBoard` therefore gives
+// up to `tracked` of its rows the trip ids of the zet-rt fixture's `vehicle:`
+// items (pass `vehicles`). Only vehicles on the stop's own lines are eligible,
+// each is placed while it is being scheduled, in a slot within the live horizon
+// where its own line runs, so a tracked row never breaks its line's service
+// window; a live badge is possible for those rows only (the rows at now + 2 and
+// now + 8 minutes with the default headway, when both lines run).
 import type { DepartureBoard, ScheduledDeparture } from '../shared/city/types';
 import type { FeedItem } from '../worker/feed/schema';
 import { scheduleInstant, zagrebDay } from '../worker/city/schedules';
@@ -68,7 +70,7 @@ export interface DeparturesBoardOptions {
   headwayMin?: number;
   routes?: readonly string[];
   headsigns?: Readonly<Record<string, string>>;
-  /** How many of the first rows take a tracked vehicle's trip id (default 2). */
+  /** How many rows within the live horizon take a tracked vehicle's trip id (default 2). */
   tracked?: number;
   /** The zet-rt snapshot's items: `vehicle:` items with `data.tripId` give the tracked rows their trip ids. */
   vehicles?: readonly Pick<FeedItem, 'id' | 'data'>[];
@@ -83,14 +85,19 @@ export interface DeparturesBoardOptions {
 
 interface TrackedTrip { tripId: string; routeId: string; routeName: string }
 
-/** The trip ids a board's live rows take: vehicles on the stop's own lines first, in feed order, then the rest. */
-export function trackedTrips(vehicles: readonly Pick<FeedItem, 'id' | 'data'>[], routes: readonly string[], count: number): TrackedTrip[] {
-  const candidates = vehicles
-    .filter((v) => v.id.startsWith('vehicle:') && typeof v.data?.tripId === 'string' && v.data.tripId !== '')
-    .map((v) => ({ tripId: String(v.data!.tripId), routeId: String(v.data!.routeId ?? ''), routeName: String(v.data!.routeShortName ?? v.data!.routeId ?? '') }));
-  const own = candidates.filter((c) => routes.includes(c.routeId));
-  const rest = candidates.filter((c) => !routes.includes(c.routeId));
-  return [...own, ...rest].slice(0, Math.max(0, count));
+/** The trips eligible for a board's live rows: `vehicle:` items with a trip id on one of the stop's own lines, in feed order, each trip once. */
+export function trackedTrips(vehicles: readonly Pick<FeedItem, 'id' | 'data'>[], routes: readonly string[], count = Infinity): TrackedTrip[] {
+  const seen = new Set<string>();
+  const out: TrackedTrip[] = [];
+  for (const v of vehicles) {
+    if (out.length >= count) break;
+    if (!v.id.startsWith('vehicle:') || typeof v.data?.tripId !== 'string' || v.data.tripId === '') continue;
+    const routeId = String(v.data.routeId ?? '');
+    if (!routes.includes(routeId) || seen.has(v.data.tripId)) continue;
+    seen.add(v.data.tripId);
+    out.push({ tripId: v.data.tripId, routeId, routeName: String(v.data.routeShortName ?? routeId) });
+  }
+  return out;
 }
 
 /**
@@ -111,27 +118,29 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
   const running = (routeId: string, at: number): boolean =>
     days.some((day) => at >= scheduleInstant(day, firstOf()) && at <= scheduleInstant(day, lastOf(routeId)));
 
+  // Tracked trips are chosen before scheduling and placed slot by slot: a slot within the live horizon takes
+  // the first eligible trip whose own line runs at that moment; every other slot takes the next line in turn.
+  // Either way the row's line is checked against its service window before it is pushed.
+  const pending = trackedTrips(options.vehicles ?? [], routes);
+  let trackedLeft = Math.max(0, options.tracked ?? 2);
   const departures: ScheduledDeparture[] = [];
   const anchor = now + FIRST_ROW_AFTER_MS;
   const limit = now + 2 * DAY_MS;
   for (let m = 0; departures.length < wanted && anchor + m * headwayMs <= limit; m++) {
     const at = anchor + m * headwayMs;
+    const stamp = new Date(at).toISOString();
+    if (trackedLeft > 0 && at - now <= LIVE_HORIZON_MS) {
+      const i = pending.findIndex((trip) => running(trip.routeId, at));
+      if (i >= 0) {
+        const [trip] = pending.splice(i, 1);
+        trackedLeft--;
+        departures.push({ operator: 'zet', tripId: trip.tripId, routeId: trip.routeId, routeName: trip.routeName || trip.routeId, headsign: headsigns[trip.routeId] ?? '', at: stamp });
+        continue;
+      }
+    }
     const routeId = routes[m % routes.length];
     if (!running(routeId, at)) continue;
-    departures.push({ operator: 'zet', tripId: `fixture-${stopId}-${routeId}-${new Date(at).toISOString().slice(0, 16)}`, routeId, routeName: routeId, headsign: headsigns[routeId] ?? '', at: new Date(at).toISOString() });
-  }
-
-  const tracked = trackedTrips(options.vehicles ?? [], routes, options.tracked ?? 2);
-  let t = 0;
-  for (const row of departures) {
-    if (t >= tracked.length || Date.parse(row.at) - now > LIVE_HORIZON_MS) break;
-    const trip = tracked[t++];
-    row.tripId = trip.tripId;
-    if (trip.routeId) {
-      row.routeId = trip.routeId;
-      row.routeName = trip.routeName || trip.routeId;
-      row.headsign = headsigns[trip.routeId] ?? row.headsign;
-    }
+    departures.push({ operator: 'zet', tripId: `fixture-${stopId}-${routeId}-${stamp.slice(0, 16)}`, routeId, routeName: routeId, headsign: headsigns[routeId] ?? '', at: stamp });
   }
 
   return {

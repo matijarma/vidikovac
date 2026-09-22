@@ -142,7 +142,10 @@ export interface WallSample {
   sentenceOverflow: boolean;
   sentenceEllipsis: boolean;
   head: string;
+  /** The rows a passer-by can see: shown, wholly inside the viewport and inside the list's clipping box. */
   rows: WallRow[];
+  /** `.nearby-row` elements in the DOM that are not on the wall (hidden, offscreen or clipped). */
+  hiddenRows: number;
   departures: number;
   solarRows: number;
   liveRows: number;
@@ -162,6 +165,7 @@ export interface WallSample {
   qr: { w: number; h: number } | null;
   lead: string;
   strip: string;
+  /** Any HH:MM anywhere in the footer (§16.3: footer without HH:MM), not only in its sources. */
   stripHasClock: boolean;
   pharmacy: string;
   pharmacySymbols: number;
@@ -196,6 +200,14 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
   const ellipsis = new RegExp(spec.ellipsis.source, spec.ellipsis.flags);
   const q = (s: string, root: Element | Document = document): HTMLElement | null => root.querySelector<HTMLElement>(s);
   const words = (el: Element | null): string => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+  /** The element's text with a space at every text-node boundary, so adjacent spans never run together ("17:30" + "24/7"). */
+  const phrases = (el: Element | null): string => {
+    if (!el) return '';
+    const parts: string[] = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) parts.push(n.textContent ?? '');
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  };
   const num = (v: string | undefined): number | null => (v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
   const shown = (el: Element): boolean => {
     if ((el as HTMLElement).hidden || el.closest('[hidden]')) return false;
@@ -210,7 +222,25 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
   const sentence = words(textEl);
   const overflows = (el: HTMLElement | null): boolean => Boolean(el && el.scrollWidth > el.clientWidth + 1);
 
-  const rows = Array.from(document.querySelectorAll<HTMLElement>(p.row)).map((li) => {
+  // A row counts only when a passer-by can see all of it: shown, wholly inside the viewport and inside every
+  // ancestor that clips its overflow (the list's own box: whole rows only, §11). Rows in the DOM but not on
+  // the wall are counted apart, so a hidden departure can never satisfy "a departure in every reading".
+  const within = (r: DOMRect, c: DOMRect): boolean => r.top >= c.top - 1 && r.bottom <= c.bottom + 1 && r.left >= c.left - 1 && r.right <= c.right + 1;
+  const clips = (value: string): boolean => value !== '' && value !== 'visible';
+  const onWall = (el: Element): boolean => {
+    if (!shown(el)) return false;
+    const r = el.getBoundingClientRect();
+    if (!(r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1)) return false;
+    for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
+      if ((clips(cs.overflowX) || clips(cs.overflowY) || clips(cs.overflow)) && !within(r, a.getBoundingClientRect())) return false;
+    }
+    return true;
+  };
+  const allRows = Array.from(document.querySelectorAll<HTMLElement>(p.row));
+  const visibleRows = allRows.filter(onWall);
+  const rows = visibleRows.map((li) => {
     const title = words(q(p.rowTitle, li));
     const whenText = words(q(p.rowWhen, li) ?? q(p.rowTime, li));
     const sub = words(q(p.rowSub, li));
@@ -252,6 +282,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     sentenceEllipsis: ellipsis.test(sentence),
     head: words(q(p.nearbyHead)),
     rows,
+    hiddenRows: allRows.length - visibleRows.length,
     departures: rows.filter((r) => r.kind === 'departure').length,
     solarRows: rows.filter((r) => r.kind === 'solar').length,
     liveRows: rows.filter((r) => r.live).length,
@@ -269,8 +300,10 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     codeState: codeEl?.dataset.state ?? null,
     qr: qb ? { w: Math.round(qb.width), h: Math.round(qb.height) } : null,
     lead: words(q(p.lead)),
-    strip: words(q(p.strip)),
-    stripHasClock: clockRe.test(words(q(p.stripSources))),
+    strip: phrases(q(p.strip)),
+    // Every element of the footer on its own text, so a clock split across elements (<b>17</b>:30) is read whole
+    // and a clock beside another item ("17:30" then "24/7") is not run into it.
+    stripHasClock: ((strip) => Boolean(strip) && [strip!, ...Array.from(strip!.querySelectorAll('*'))].some((el) => clockRe.test(phrases(el)) || clockRe.test(words(el))))(q(p.strip)),
     pharmacy: words(q(p.stripPharmacy)),
     pharmacySymbols: document.querySelectorAll(p.pharmacySymbol).length,
     controls: controls.length,
@@ -344,6 +377,8 @@ export interface RotationSummary {
   sentenceOverflows: number;
   sentenceEllipses: number;
   sentenceCharsMax: number;
+  /** Readings whose sentence is longer than SENTENCE_MAX_CHARS. */
+  longSentences: number;
   /** Readings with an empty sentence. */
   emptySentences: number;
   /** Closure rows whose id leaves the list and comes back. */
@@ -424,6 +459,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     sentenceOverflows: valid.filter((s) => s.sentenceOverflow).length,
     sentenceEllipses: valid.filter((s) => s.sentenceEllipsis).length,
     sentenceCharsMax: max(valid.map((s) => s.sentenceChars)),
+    longSentences: valid.filter((s) => s.sentenceChars > SENTENCE_MAX_CHARS).length,
     emptySentences: valid.filter((s) => !s.sentence).length,
     closureReentries: reentriesByKind.closure ?? 0,
     reentriesByKind,
@@ -456,7 +492,7 @@ export function sampleFailures(s: WallSample): string[] {
   if (s.retiredChrome > 0) out.push(`${s.retiredChrome} retired operator control(s) still in the DOM (${WALL_PROBES.retiredChrome})`);
   if (s.unlabelled !== 0) out.push(s.unlabelled === null ? `the map has no data-unlabelled probe (${WALL_PROBES.map})` : `${s.unlabelled} map marker(s) without a label or count (target 0)`);
   if (!s.qr || s.qr.w < QR_MIN_PX || s.qr.h < QR_MIN_PX) out.push(`the QR SVG is ${s.qr ? `${s.qr.w} × ${s.qr.h}` : 'missing'} (target ≥ ${QR_MIN_PX} × ${QR_MIN_PX} px)`);
-  if (s.stripHasClock) out.push(`the footer's sources print a clock time: "${s.strip}"`);
+  if (s.stripHasClock) out.push(`the footer prints a clock time: "${s.strip}"`);
   if (s.solarRows > SOLAR_ROWS_MAX) out.push(`${s.solarRows} solar rows (only the next solar event, at most ${SOLAR_ROWS_MAX})`);
   return out;
 }
@@ -477,6 +513,9 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (r.caveatRows > 0) out.push(`${r.caveatRows} row(s) read as a caveat (target 0)`);
   if (r.closureReentries > 0) out.push(`${r.closureReentries} closure row(s) left the list and came back (target 0)`);
   if (r.plusPills > 0) out.push(`${r.plusPills} reading(s) with a "+N" vehicle pill (target 0)`);
+  if (r.emptySentences > 0) out.push(`${r.emptySentences} reading(s) with an empty sentence (target 1–${SENTENCE_MAX_CHARS} characters in every reading)`);
+  if (r.longSentences > 0) out.push(`${r.longSentences} reading(s) with a sentence over ${SENTENCE_MAX_CHARS} characters (longest ${r.sentenceCharsMax})`);
+  if (r.rowsWithoutTime > 0) out.push(`${r.rowsWithoutTime} row reading(s) with neither data-when nor data-always="1" (target 0: every row has a time or "uvijek")`);
   if (r.sentenceOverflows > 0) out.push(`${r.sentenceOverflows} reading(s) with an overflowing sentence (target 0)`);
   if (r.sentenceEllipses > 0) out.push(`${r.sentenceEllipses} reading(s) with a sentence cut by an ellipsis (target 0)`);
   if (r.controlsMax > 0) out.push(`up to ${r.controlsMax} control(s) a passer-by can press (target 0)`);
