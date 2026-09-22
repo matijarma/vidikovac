@@ -939,6 +939,41 @@
       "tonight": "Tonight",
       "city": "City"
     },
+    "sentence": {
+      "kicker": {
+        "promet": "Transit",
+        "kultura": "Culture",
+        "vrijeme": "Weather",
+        "bicikli": "Bikes",
+        "nocas": "Tonight",
+        "radovi": "Works"
+      },
+      "departureIn": "Tram {route} towards {to} leaves in {n} min.",
+      "departureAt": "Tram {route} towards {to} leaves at {time}.",
+      "busIn": "Bus {route} towards {to} leaves in {n} min.",
+      "busAt": "Bus {route} towards {to} leaves at {time}.",
+      "closureUntil": "{street} is closed to traffic until {until}.",
+      "weather": "{temp}, {condition}; up to {max} °C today.",
+      "weatherNoRange": "{temp}, {condition}.",
+      "bikes": "BAJS {station}: {bikes}.",
+      "sunset": "The sun sets at {time}.",
+      "sunrise": "The sun rises at {time}.",
+      "lastTram": "The last tram {route} leaves {time}.",
+      "firstTram": "The first tram {route} leaves {time}.",
+      "event": "{title} starts {time}, {venue}.",
+      "pharmacy": "24/7 duty pharmacy: {address}.",
+      "always": "{name}: {text}",
+      "outage": "ZET is not sending vehicle positions; departures follow the timetable.",
+      "weatherTemperature": "The temperature in Zagreb is {temp}.",
+      "sunsetAt": "Sunset is at {time}.",
+      "sunsetTime": "At {time} the sun sets.",
+      "sunriseAt": "Sunrise is at {time}.",
+      "sunriseTime": "At {time} the sun rises.",
+      "opening": "{name} opens {time}."
+    },
+    "handheld": {
+      "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
+    },
     "safety": {
       "warningsUnknown": "DHMZ warnings: data unavailable right now",
       "warningsStale": "DHMZ warnings: stale, unconfirmed",

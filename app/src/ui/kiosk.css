@@ -31,10 +31,11 @@
    the credit tier.
 
    Frame (plan "Frame", R-KP1): the header carries the brand, the ink stop
-   chip, the city's news line (.k-ticker, kiosk/ticker.ts), the date, the
-   theme button and the clock. The strip is one fixed row: the shield label,
-   the safetyState verdict pill, the trail, the pharmacy and the /hitno link;
-   nothing counts down any more. Between them the stage holds the front page,
+   chip, the header sentence (.k-ticker), the date, the theme button and the
+   clock. The strip is one fixed row: the shield label, the safetyState
+   verdict pill, the trail (the sources without a time), the green cross with
+   24/7 and the pharmacy's address, and the /hitno link; nothing counts down
+   any more. Between them the stage holds the front page,
    whose layout is ui/kiosk-city.css: the map (kiosk/field.ts) edge to edge
    in the left column with nothing on the picture but MapLibre's own
    attribution, and the aside of weather, the network's exceptions and
@@ -219,7 +220,7 @@
 .k-stage { grid-row: 3; position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
 
-/* The header's middle: the city's news, one item at a time (kiosk/ticker.ts).
+/* The header's middle: one sentence at a time, after its kicker.
    One line, the kicker in the action colour, the sentence ellipsised rather
    than wrapped -- a header that grows a second row moves the whole page. The
    session pill and the return button own this space when they are here; the
@@ -567,6 +568,11 @@ button.k-strip-verdict { cursor: pointer; }
 .k-strip-items { display: flex; flex: 1; flex-wrap: wrap; align-items: center; align-content: center; align-self: stretch; min-width: 0; overflow: hidden; }
 .k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-strip-item strong { color: var(--k-ink); }
+/* The on-duty pharmacy (the wall of 22 September): the Greek cross filled in the calm green, "24/7" in the
+   same green, then the short address in ink. The cross is the cell's symbol (data-symbol=pharmacy) and
+   carries the pharmacy's name for a screen reader; no word "ljekarna" is printed beside it. */
+.k-strip-pharmacy .k-cross { margin-right: 0.3em; vertical-align: middle; color: var(--k-green); fill: currentColor; }
+.k-247 { margin-right: 0.35em; font-weight: 800; letter-spacing: 0.02em; color: var(--k-green); }
 .k-strip-item[data-state='active'] { color: var(--k-rose); font-weight: 700; }
 .k-strip-item[data-state='active'][data-severity='minor'], .k-strip-item[data-state='active'][data-severity='moderate'] { color: var(--k-amber); }
 .k-strip-item[data-state='unknown'], .k-strip-item[data-state='down'] { color: var(--k-ink-3); }

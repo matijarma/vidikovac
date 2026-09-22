@@ -973,6 +973,41 @@
       "tonight": "Večeras",
       "city": "Grad"
     },
+    "sentence": {
+      "kicker": {
+        "promet": "Promet",
+        "kultura": "Kultura",
+        "vrijeme": "Vrijeme",
+        "bicikli": "Bicikli",
+        "nocas": "Noćas",
+        "radovi": "Radovi"
+      },
+      "departureIn": "Tramvaj {route}, smjer {to}, polazi za {n} min.",
+      "departureAt": "Tramvaj {route}, smjer {to}, polazi u {time}.",
+      "busIn": "Autobus {route}, smjer {to}, polazi za {n} min.",
+      "busAt": "Autobus {route}, smjer {to}, polazi u {time}.",
+      "closureUntil": "{street}: zatvoreno za promet do {until}.",
+      "weather": "{temp}, {condition}; danas do {max} °C.",
+      "weatherNoRange": "{temp}, {condition}.",
+      "bikes": "BAJS {station}: {bikes}.",
+      "sunset": "Sunce zalazi u {time}.",
+      "sunrise": "Sunce izlazi u {time}.",
+      "lastTram": "Zadnji tramvaj {route} polazi {time}.",
+      "firstTram": "Prvi tramvaj {route} polazi {time}.",
+      "event": "{time} počinje događanje „{title}“ ({venue}).",
+      "pharmacy": "Dežurna ljekarna 24/7: {address}.",
+      "always": "{name}: {text}",
+      "outage": "ZET ne šalje položaje vozila; polasci su po voznom redu.",
+      "weatherTemperature": "Temperatura u Zagrebu je {temp}.",
+      "sunsetAt": "Zalazak sunca je u {time}.",
+      "sunsetTime": "U {time} zalazi sunce.",
+      "sunriseAt": "Izlazak sunca je u {time}.",
+      "sunriseTime": "U {time} izlazi sunce.",
+      "opening": "{name}: rad počinje {time}."
+    },
+    "handheld": {
+      "info": "Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz."
+    },
     "safety": {
       "warningsUnknown": "Upozorenja DHMZ-a: podaci trenutačno nedostupni",
       "warningsStale": "Upozorenja DHMZ-a: zastarjelo, nepotvrđeno",

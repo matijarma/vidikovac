@@ -7,7 +7,7 @@ import { escapeAttribute } from './dom/escape';
 export const ICON_NAMES = [
   'activity', 'alert-circle', 'arrow-left', 'arrow-up', 'arrow-up-right', 'bell', 'bike', 'bus-front', 'calendar', 'calendar-days', 'car-front', 'cast',
   'check-circle', 'chevron-down', 'chevron-left', 'chevron-right', 'clock', 'cloud', 'cloud-drizzle',
-  'cloud-fog', 'cloud-lightning', 'cloud-rain', 'cloud-snow', 'cloud-sun', 'copy', 'download', 'droplets',
+  'cloud-fog', 'cloud-lightning', 'cloud-rain', 'cloud-snow', 'cloud-sun', 'copy', 'cross', 'download', 'droplets',
   'ellipsis', 'external-link', 'eye', 'eye-off', 'file-text', 'filter', 'footprints', 'gauge', 'hard-hat', 'home', 'info',
   'landmark', 'languages', 'list', 'map', 'map-pin', 'moon', 'newspaper', 'pause', 'phone', 'pill', 'play',
   'printer', 'qr-code', 'radio', 'refresh-cw', 'route', 'search', 'share-2', 'shield', 'siren', 'star', 'sun', 'sun-moon', 'sunrise',
@@ -41,6 +41,8 @@ const SYMBOLS: Record<IconName, string> = {
   'cloud-snow': '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M8 15h.01"/><path d="M8 19h.01"/><path d="M12 17h.01"/><path d="M12 21h.01"/><path d="M16 15h.01"/><path d="M16 19h.01"/>',
   'cloud-sun': '<path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  // The pharmacy's Greek cross (the wall's footer paints it filled, in the calm green).
+  cross: '<path d="M4 9a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h4a1 1 0 0 1 1 1v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a1 1 0 0 1 1-1h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-4a1 1 0 0 1-1-1V4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4a1 1 0 0 1-1 1z"/>',
   download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
   droplets: '<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/>',
   ellipsis: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',

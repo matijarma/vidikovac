@@ -20,6 +20,7 @@
 // site, as before. Every catalogue key named here is checked against the
 // Croatian JSON at compile time; hr/en parity is the i18n test's.
 import type { LayerId } from '../../../worker/protocol';
+import type { SentenceKicker } from '../../../shared/kiosk/sentence';
 import { createDefaultI18n, type SupportedLocale } from '../i18n/create-default-i18n';
 import en from '../i18n/en.json';
 import hr from '../i18n/hr.json';
@@ -153,8 +154,10 @@ export interface KioskStrings {
     /** "+2 linije kasne": the exceptions the card had no room for. */
     moreLate: PluralForms;
   };
-  /** The header ticker's five kicker words (kiosk/ticker.ts), printed uppercase
-   *  by the sheet: the weather, the network, the works, tonight, the city. */
+  /** The retired header ticker's five kicker words, printed uppercase by the
+   *  sheet: the weather, the network, the works, tonight, the city. The header
+   *  sentence's kickers (`sentence.kicker`) replace them; ready to delete with
+   *  the ticker module, its last reader. */
   ticker: {
     weather: string;
     transit: string;
@@ -162,6 +165,28 @@ export interface KioskStrings {
     tonight: string;
     city: string;
   };
+  /** The wall's "U blizini" list (WP1, kiosk.nearby.*): its head, the pill
+   *  template "{km} km · ~{min} min" (the measured radius and its walking
+   *  minutes), the untimed row's word "uvijek", "do" before a closure's end
+   *  date, the timed rows' own titles and the one quiet note on the map while
+   *  ZET sends no vehicle positions. */
+  nearby: {
+    title: string;
+    pill: string;
+    always: string;
+    until: string;
+    sunrise: string;
+    sunset: string;
+    lastTrams: string;
+    firstTram: string;
+    outageNote: string;
+  };
+  /** The header sentence (WP1, kiosk.sentence.*): the six kicker words
+   *  (Promet · Kultura · Vrijeme · Bicikli · Noćas · Radovi) and the templates
+   *  the deterministic fallback fills, one fact each. */
+  sentence: Record<SentenceTemplate, string> & { kicker: Record<SentenceKicker, string> };
+  /** The handheld invitation's one line: how a public display is started, and that scanning changes nothing on it. */
+  handheld: { info: string };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
    *  transit's three value states, its "N vozila u blizini" plural and its
    *  zero, the other seven statements' kickers and the works plural, and
@@ -196,12 +221,13 @@ export interface KioskStrings {
     closuresUnknown: string;
     closuresStale: string;
     closuresNearest: string;
+    /** No reader since the footer shows the green cross (WP1): ready to delete. */
     pharmacy: string;
     hitno: string;
     basics: string;
-    /** "DHMZ · EMSC": the sources, the calm trail before any of them has confirmed the moment. */
+    /** "DHMZ · EMSC": the sources, the calm trail, never with a time. */
     sources: string;
-    /** "DHMZ · EMSC · {time}": the calm trail, the moment the three sources last confirmed calm together. */
+    /** "DHMZ · EMSC · {time}": no reader since the footer prints no confirmation time (WP1): ready to delete. */
     confirmed: string;
     /** "Sigurnost: {verdict}. Otvori Osnovno": the verdict button's name while the invitation shows. */
     openBasics: string;
@@ -366,6 +392,12 @@ export interface KioskStrings {
   };
 }
 
+/** The header sentence's templates (kiosk.sentence.*), each filled from one fact. */
+export type SentenceTemplate =
+  | 'departureIn' | 'departureAt' | 'busIn' | 'busAt' | 'closureUntil' | 'weather' | 'weatherNoRange' | 'weatherTemperature'
+  | 'bikes' | 'sunset' | 'sunsetAt' | 'sunsetTime' | 'sunrise' | 'sunriseAt' | 'sunriseTime' | 'lastTram' | 'firstTram'
+  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage';
+
 type Kiosk = typeof hr.kiosk;
 type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
 type Leaf<G extends Group> = keyof Kiosk[G] & string;
@@ -429,6 +461,16 @@ function build(code: SupportedLocale): KioskStrings {
       moreLate: forms('front', 'moreLate'),
     },
     ticker: group('ticker', ['weather', 'transit', 'works', 'tonight', 'city']),
+    nearby: group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote']),
+    sentence: {
+      ...group('sentence', [
+        'departureIn', 'departureAt', 'busIn', 'busAt', 'closureUntil', 'weather', 'weatherNoRange', 'weatherTemperature',
+        'bikes', 'sunset', 'sunsetAt', 'sunsetTime', 'sunrise', 'sunriseAt', 'sunriseTime', 'lastTram', 'firstTram',
+        'event', 'opening', 'pharmacy', 'always', 'outage',
+      ]),
+      kicker: record(['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const, (kind) => `kiosk.sentence.kicker.${kind}`),
+    },
+    handheld: group('handheld', ['info']),
     say: {
       ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'worksCity', 'today', 'tomorrow', 'tonight', 'allDay']),
       nearby: forms('say', 'nearby'),

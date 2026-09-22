@@ -12,7 +12,8 @@ import hr from '../../app/src/i18n/hr.json';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { stopDetailMarkup } from '../../app/src/transport/view';
-import { kioskStrings } from '../../app/src/kiosk/strings';
+import * as sentenceModule from '../../app/src/city/sentence';
+import { fill, kioskStrings } from '../../app/src/kiosk/strings';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
@@ -270,5 +271,139 @@ describe('leaves', () => {
         expect(value, `${key} (${name})`).not.toMatch(/^[a-z]+(\.[\w-]+)+$/);
       }
     }
+  });
+});
+
+// The wall of 22 September (WP1) owns three key groups. The rule is scoped to
+// them: older kiosk copy still carries loading ellipses ("Kod stiže…") that
+// belong to other surfaces and other packages.
+describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP1)', () => {
+  const GROUPS = ['nearby', 'sentence', 'handheld'] as const;
+  const values = (catalogue: Catalogue): (readonly [string, string])[] =>
+    GROUPS.flatMap((group) => leafKeys((catalogue.kiosk as Catalogue)[group], `kiosk.${group}`).map((key) => [key, leaf(catalogue, key)!] as const));
+  const slots = (text: string): string[] => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!).sort();
+
+  it('carries the owner\'s strings byte-exact', () => {
+    expect(hr.kiosk.nearby.title).toBe('U blizini');
+    expect(hr.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
+    expect(en.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
+    expect(hr.kiosk.nearby.always).toBe('uvijek');
+    expect(hr.kiosk.nearby.outageNote).toBe('ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu.');
+    expect(hr.kiosk.sentence.kicker).toEqual({ promet: 'Promet', kultura: 'Kultura', vrijeme: 'Vrijeme', bicikli: 'Bicikli', nocas: 'Noćas', radovi: 'Radovi' });
+    expect(hr.kiosk.sentence.pharmacy).toContain('24/7');
+    expect(hr.kiosk.handheld.info).toBe('Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz.');
+  });
+
+  it.each([['hr', HR], ['en', EN]] as const)('%s: no ellipsis, never "unavailable" as a headline, never "zid"', (name, catalogue) => {
+    const all = values(catalogue);
+    expect(all.length, name).toBeGreaterThanOrEqual(30);
+    for (const [key, value] of all) {
+      expect(value, `${key} (${name})`).not.toMatch(/…|\.\.\./);
+      expect(value, `${key} (${name})`).not.toMatch(/nedostupn|unavailable/i);
+      expect(value, `${key} (${name})`).not.toMatch(/(?<![\p{L}\p{N}_])zid/iu);
+    }
+  });
+
+  it('every template names the same slots in both languages', () => {
+    for (const [key, value] of values(HR)) expect(slots(leaf(EN, key)!), key).toEqual(slots(value));
+  });
+});
+
+// The header sentence's templates are Section C's reviewed copy (orchestrator
+// decision 9): every source name (a destination, a street, a place, a title, a
+// venue, a station, an address) sits in an envelope that needs no case or
+// gender agreement, so a masculine or plural name reads as correctly as a
+// feminine one. Pinned here; once app/src/city/sentence.ts exports its own
+// defaults (SENTENCE_COPY_HR / SENTENCE_COPY_EN), the catalogue must equal them.
+describe('the header sentence templates are name-safe and match the sentence client (WP1)', () => {
+  const HR_TEMPLATES = {
+    departureIn: 'Tramvaj {route}, smjer {to}, polazi za {n} min.',
+    departureAt: 'Tramvaj {route}, smjer {to}, polazi u {time}.',
+    busIn: 'Autobus {route}, smjer {to}, polazi za {n} min.',
+    busAt: 'Autobus {route}, smjer {to}, polazi u {time}.',
+    closureUntil: '{street}: zatvoreno za promet do {until}.',
+    weather: '{temp}, {condition}; danas do {max} °C.',
+    weatherNoRange: '{temp}, {condition}.',
+    weatherTemperature: 'Temperatura u Zagrebu je {temp}.',
+    bikes: 'BAJS {station}: {bikes}.',
+    sunset: 'Sunce zalazi u {time}.',
+    sunsetAt: 'Zalazak sunca je u {time}.',
+    sunsetTime: 'U {time} zalazi sunce.',
+    sunrise: 'Sunce izlazi u {time}.',
+    sunriseAt: 'Izlazak sunca je u {time}.',
+    sunriseTime: 'U {time} izlazi sunce.',
+    lastTram: 'Zadnji tramvaj {route} polazi {time}.',
+    firstTram: 'Prvi tramvaj {route} polazi {time}.',
+    event: '{time} počinje događanje „{title}“ ({venue}).',
+    opening: '{name}: rad počinje {time}.',
+    pharmacy: 'Dežurna ljekarna 24/7: {address}.',
+    always: '{name}: {text}',
+    outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+  };
+  const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
+    departureIn: 'Tram {route} towards {to} leaves in {n} min.',
+    departureAt: 'Tram {route} towards {to} leaves at {time}.',
+    busIn: 'Bus {route} towards {to} leaves in {n} min.',
+    busAt: 'Bus {route} towards {to} leaves at {time}.',
+    closureUntil: '{street} is closed to traffic until {until}.',
+    weather: '{temp}, {condition}; up to {max} °C today.',
+    weatherNoRange: '{temp}, {condition}.',
+    weatherTemperature: 'The temperature in Zagreb is {temp}.',
+    bikes: 'BAJS {station}: {bikes}.',
+    sunset: 'The sun sets at {time}.',
+    sunsetAt: 'Sunset is at {time}.',
+    sunsetTime: 'At {time} the sun sets.',
+    sunrise: 'The sun rises at {time}.',
+    sunriseAt: 'Sunrise is at {time}.',
+    sunriseTime: 'At {time} the sun rises.',
+    lastTram: 'The last tram {route} leaves {time}.',
+    firstTram: 'The first tram {route} leaves {time}.',
+    event: '{title} starts {time}, {venue}.',
+    opening: '{name} opens {time}.',
+    pharmacy: '24/7 duty pharmacy: {address}.',
+    always: '{name}: {text}',
+    outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+  };
+  const templates = (sentence: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker'));
+
+  it('the catalogues carry the reviewed templates byte-exact, in both languages', () => {
+    expect(templates(hr.kiosk.sentence)).toEqual(HR_TEMPLATES);
+    expect(templates(en.kiosk.sentence)).toEqual(EN_TEMPLATES);
+  });
+
+  it('equal the sentence client\'s own defaults wherever that module exports them', () => {
+    const exported = sentenceModule as Record<string, unknown>;
+    if (exported.SENTENCE_COPY_HR !== undefined) expect(templates(hr.kiosk.sentence)).toEqual(exported.SENTENCE_COPY_HR);
+    if (exported.SENTENCE_COPY_EN !== undefined) expect(templates(en.kiosk.sentence)).toEqual(exported.SENTENCE_COPY_EN);
+  });
+
+  it('puts every Croatian name slot in an envelope that needs no case or gender agreement', () => {
+    const envelopes: Record<string, RegExp> = {
+      to: /, smjer \{to\}, /,
+      street: /^\{street\}: /,
+      name: /^\{name\}: /,
+      title: /„\{title\}“/,
+      venue: /\(\{venue\}\)/,
+      station: /^BAJS \{station\}: /,
+      address: /: \{address\}\.$/,
+    };
+    for (const [key, template] of Object.entries(HR_TEMPLATES)) {
+      for (const [slot, envelope] of Object.entries(envelopes)) {
+        if (template.includes(`{${slot}}`)) expect(template, `${key} {${slot}}`).toMatch(envelope);
+      }
+    }
+  });
+
+  it('reads correctly with masculine and plural names, not only feminine ones', () => {
+    const s = hr.kiosk.sentence;
+    expect(fill(s.departureIn, { route: 6, to: 'Črnomerec', n: 3 })).toBe('Tramvaj 6, smjer Črnomerec, polazi za 3 min.');
+    expect(fill(s.busAt, { route: 109, to: 'Dugave', time: '12:33' })).toBe('Autobus 109, smjer Dugave, polazi u 12:33.');
+    expect(fill(s.closureUntil, { street: 'Trg bana Josipa Jelačića', until: '18:00' })).toBe('Trg bana Josipa Jelačića: zatvoreno za promet do 18:00.');
+    expect(fill(s.closureUntil, { street: 'Vukovarska avenija', until: '18:00' })).toBe('Vukovarska avenija: zatvoreno za promet do 18:00.');
+    expect(fill(s.opening, { name: 'Klovićevi dvori', time: 'sutra u 10:00' })).toBe('Klovićevi dvori: rad počinje sutra u 10:00.');
+    expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus“ (Kino Europa).');
+    expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
+    expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
   });
 });
