@@ -21,7 +21,7 @@ import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { bodiesToGeoJson } from '../motion/bodies';
-import { clusterPills, createLineColours, type Cluster, type PillPoint } from '../motion/pills';
+import { clusterPills, createLineColours, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
@@ -274,11 +274,13 @@ function bearingGap(a: number, b: number): number {
 
 /** The number on the front of the vehicle: the network's own short name,
  *  else the static GTFS table's, else the route id itself; '' for a vehicle
- *  whose route nobody knows. */
+ *  whose route nobody knows. Held to the widest capsule (pills.ts's
+ *  pillLabel), so a standalone or selected pill obeys the same cap as a
+ *  cluster's name. */
 export function vehicleLabel(v: { short?: string; routeId?: string }): string {
-  if (v.short) return v.short;
+  if (v.short) return pillLabel(v.short);
   if (v.routeId === undefined) return '';
-  return ZET_ROUTES[v.routeId]?.shortName || v.routeId;
+  return pillLabel(ZET_ROUTES[v.routeId]?.shortName || v.routeId);
 }
 
 /** Draw order among the vehicle marks (overlays.ts reads `sort` straight as
