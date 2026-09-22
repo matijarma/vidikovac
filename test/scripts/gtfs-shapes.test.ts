@@ -432,7 +432,8 @@ describe('the committed artefact', () => {
   // 0.8 %, and still 11 % inside both pins, which again stand. F8c nodes
   // three crossings (six edges become twelve) and shortens nine plans:
   // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
-  // Both pins stand again.
+  // Both pins stand again. WP0 adds three connectors and seventeen terminus
+  // loops: 582,473 B raw, 136,758 B gzip, 0.3 % more of each; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -678,7 +679,7 @@ describe('the committed artefact', () => {
         off.push(`${path.id} (route ${pattern.route}) ${stopId} "${stop.name}" ${Math.round(d)} m`);
       });
     });
-    expect(tramPatterns).toBeGreaterThan(500);
+    expect(tramPatterns).toBe(152); // 100 by shape, 49 exact synthetic, 3 trimmed (times.test.ts)
     expect(off).toEqual([]);
     // Pinned by name, measured on feed 000395, so a new such case fails here
     // rather than passing unnoticed.
@@ -720,11 +721,16 @@ describe('the committed artefact', () => {
       const between = path.len - net.edges[path.edges[0]].len - net.edges[path.edges.at(-1)!].len;
       expect(between, path.id).toBeLessThanOrEqual(LOOP_MAX_METRES);
       for (let k = 1; k < path.edges.length; k++) expect(net.edges[path.edges[k]].from).toBe(net.edges[path.edges[k - 1]].to);
-      // It serves its two ends and nothing else, in arc order.
-      const served = net.stopsOnPath(idx).map((entry) => entry.stop.id);
+      // It serves its two ends and nothing else, L no later than F (a join of
+      // length 0 has both at one arc).
+      const served = net.stopsOnPath(idx);
       expect(served.length, path.id).toBeGreaterThan(0);
-      expect(served.every((id) => id === L || id === F), path.id).toBe(true);
-      if (served.length === 2) expect(served).toEqual([L, F]);
+      expect(served.every(({ stop }) => stop.id === L || stop.id === F), path.id).toBe(true);
+      if (served.length === 2) {
+        expect(new Set(served.map(({ stop }) => stop.id))).toEqual(new Set([L, F]));
+        const arcOf = (id: string) => served.find(({ stop }) => stop.id === id)!.s;
+        expect(arcOf(L), path.id).toBeLessThanOrEqual(arcOf(F));
+      }
     }
     // One loop at least at every terminus whose rails the feed draws.
     const termini = new Set(loops.map(({ path }) => net.stops.find((stop) => stop.id === path.stops![0])!.name));

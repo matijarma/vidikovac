@@ -98,34 +98,36 @@ describe('the ZET artwork build', () => {
 // WP0: a vehicle on a terminus loop is drawn on the diagram at the circle of
 // the loop's first stop -- the platform its last trip ended at -- on its own
 // line, wherever along the loop it is: the artwork draws a terminus as one
-// point, and a loop has no legs to lay along it.
+// point, and a loop has no legs to lay along it. Where the artwork prints no
+// such stop (Mandlova, the depot, is explicitly absent from it) the loop's
+// other end stands in, so no tram on a loop drops off the diagram.
 describe('a vehicle on a terminus loop on the diagram', () => {
-  it('sits on its own line at the circle of the loop\'s first stop, whatever its arc, with no track to point along', () => {
+  it('sits on its own line at the circle of the loop\'s first stop, or its last where the first is not printed, whatever its arc, with no track to point along', () => {
     const net = decodeNetwork(read('app/public/data/zet-network.json'));
     const schema = decodeSchema(read('app/public/data/zet-schema.json'));
     const placer = createSchemaPlacer(schema, net);
     const loops = net.paths.map((path, idx) => ({ path, idx })).filter(({ path }) => path.direction === LOOP_PATH_DIRECTION);
-    expect(loops.length).toBeGreaterThan(10);
-    let placed = 0;
+    expect(loops).toHaveLength(17);
+    const names: string[] = [];
     for (const { path, idx } of loops) {
       const line = schema.lines.find((l) => l.route === path.route)!;
-      const name = net.stops.find((stop) => stop.id === path.stops![0])!.name;
-      const entry = line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
-      const here = [0, path.len / 2, path.len].map((s) => placer.place(idx, s));
-      if (!entry) {
-        expect(here, `${path.id}: ${name} is not on line ${path.route}'s artwork`).toEqual([null, null, null]);
-        continue;
-      }
-      placed++;
-      const circle = pointAt(line, entry.u);
-      for (const at of here) {
+      const entryFor = (stopId: string) => {
+        const name = net.stops.find((stop) => stop.id === stopId)!.name;
+        return line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
+      };
+      const entry = entryFor(path.stops![0]) ?? entryFor(path.stops![1]);
+      expect(entry, `${path.id}: neither end is on line ${path.route}'s artwork`).toBeTruthy();
+      names.push(entry!.name);
+      const circle = pointAt(line, entry!.u);
+      for (const s of [0, path.len / 2, path.len]) {
+        const at = placer.place(idx, s);
         expect(at, path.id).toMatchObject({ x: circle.x, y: circle.y, line: path.route, colour: line.colour });
         expect(at!.track, path.id).toBeUndefined();
       }
     }
-    // Every loop's terminus is printed on its line, bar the night lines' and
-    // the depot's platforms the artwork does not name.
-    expect(placed).toBeGreaterThanOrEqual(loops.length - 4);
+    // Four loops leave Mandlova for Dubrava and are drawn at Dubrava.
+    expect(names.filter((name) => name === 'Dubrava')).toHaveLength(6);
+    expect(names).not.toContain('Mandlova');
   });
 });
 

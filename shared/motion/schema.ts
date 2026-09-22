@@ -449,20 +449,24 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
 }
 
 /** Where a vehicle on a terminus loop path is drawn: at the circle of the
- *  loop's first stop, the platform its last trip ended at, on its own line.
- *  The whole loop is one point of the artwork, so the arc does not move it,
- *  and it has no track to point along. Null when the line's artwork names
- *  no stop of that name. */
+ *  loop's first stop, the platform its last trip ended at, on its own line;
+ *  where the artwork prints no stop of that name (Mandlova, the depot), at
+ *  the circle of the loop's other end, the platform the next trip leaves
+ *  from. The whole loop is one point of the artwork, so the arc does not
+ *  move it, and it has no track to point along. Null when the line's
+ *  artwork names neither. */
 export function loopPlacement(schema: Schema, net: GraphNetwork, pathIdx: number): SchemaPlacement | null {
   const path = net.paths[pathIdx];
   if (!path || path.direction !== LOOP_PATH_DIRECTION) return null;
   const line = schema.lines.find((l) => l.route === path.route);
-  const name = net.stops.find((stop) => stop.id === path.stops?.[0])?.name;
-  if (!line || name === undefined) return null;
-  // Its own printed circle first, then a projection onto the line.
-  const entry = line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
-  if (!entry) return null;
-  return { ...pointAt(line, entry.u), sign: 1, colour: line.colour, line: line.route, chord: false };
+  if (!line) return null;
+  for (const stopId of path.stops ?? []) {
+    const name = net.stops.find((stop) => stop.id === stopId)?.name;
+    // Its own printed circle first, then a projection onto the line.
+    const entry = line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
+    if (entry) return { ...pointAt(line, entry.u), sign: 1, colour: line.colour, line: line.route, chord: false };
+  }
+  return null;
 }
 
 /** Cached stop brackets, including cached rejection of unplaceable paths. */
