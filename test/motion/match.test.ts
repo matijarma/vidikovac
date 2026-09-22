@@ -466,10 +466,11 @@ describe('terminal placement continuity', () => {
     const m = createMatcher(n);
     const t = newTrack('diverted', '1', 'trip', 'tram');
     const p = m.priorFor('prior', '1', 0);
-    m.matchFix(t, fix(950, 0, 1000), p, null);
-    m.matchFix(t, fix(1000, 100, 1010), p, null);
+    m.matchFix(t, fix(950, 0, 980), p, null);
+    m.matchFix(t, fix(1000, 58, 1000), p, null);
+    m.matchFix(t, fix(1000, 90, 1010), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('prior'); // one stray is still tolerated
-    m.matchFix(t, fix(1006, 100, 1020), p, null);
+    m.matchFix(t, fix(1006, 90, 1020), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
   });
 

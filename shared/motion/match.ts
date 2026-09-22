@@ -425,7 +425,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       for (let i = track.fixes.length - 2; i >= 0; i--) {
         const before = track.fixes[i];
         if (fix.atSec - before.atSec > DIRECTION_MEMORY_S) break;
-        if (dist(before, p) >= FOLD_MOVE_M) {
+        if (dist(before, p) >= DEAD_ZONE_M) {
           candidateDir = normalise({ x: p.x - before.x, y: p.y - before.y });
           break;
         }
