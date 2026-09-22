@@ -148,29 +148,81 @@ the line is never silenced for the screen's life. An item's sentence is
 `item.brief ?? item.title`: the Worker's condensed reading when it made one,
 the item's own title otherwise, never a truncation.
 
-The header's right end carries the gear that opens **Postavke** (area, stop,
-theme, screen expiry and "Zaboravi zaslon"). It is the only setup surface on
-the screen; there is no wizard and no provisioning aside, on a wall or on a
-phone.
+The brand at the header's left end ("Kaj ima?") is a button,
+`[data-testid=kiosk-brand]` named "Kaj ima? · Postavke zaslona", and the one
+way into **Postavke**: a press held on it for `LONG_PRESS_MS` (800 ms,
+`kiosk/constants.ts`) opens the panel, a shorter press or a finger that moves
+more than 12 px opens nothing, and Enter or Space on the focused brand opens it
+at once (`bindLongPress` in `kiosk/settings.ts`, timed through the kiosk's own
+timer seam so a test's `tick()` drives it; the press is never stopped, so the
+first-tap fullscreen and wake-lock listener still hears it). The header
+carries no gear and no theme glyph. Postavke is the only setup surface after
+the start screen; there is no wizard and no provisioning aside, on a wall or
+on a phone. Its rows are click-toggles that name their current state: Mjesto
+(`toggle-place` opens the shared `kiosk/place-field.ts` field,
+`settings-place-city` sets the whole city), Kadar
+(`toggle-frame[data-value=4|6|8]`), Prikaz
+(`toggle-view[data-value=map|schema]`), Tema (`toggle-theme`), Ritam
+(`toggle-rhythm[data-value=20|30|60]`) and Zaslon (expiry and "Zaboravi
+zaslon"). Prikaz and Ritam belong to this browser (`kiosk/prefs.ts`,
+`vidikovac-kiosk-view`, `vidikovac-kiosk-rhythm`) and Tema to the theme
+controller; none of the three reaches the server. The shell paints the screen
+the DO last applied as `.kiosk[data-frame]` and `[data-place-kind]`
+(`tram`, `bus` or `address`; `city` without a chosen place) and this
+browser's choices as `[data-rhythm]` and `[data-view]`.
 
 ## Backend (already in place)
 
-`POST /api/screens` (`core/screens.ts`) with an empty body -- `area` defaults to
-`zagreb` and `stopId` to null, so the one-button start needs no input at all;
-`/data/stops.json`, `onContext` on the beacon socket, `ScreenMetadata` on
-`joined`, 10-minute screens and 5-minute one-hop grants. `ScreenMetadata.area`
-carries what the screen is set to (`'zagreb'` for the whole city, else a
-gradska cetvrt's slug) and is what the camera reads as its district.
+`POST /api/screens` (`core/screens.ts`) takes one of three bodies. An empty
+body is the field left empty and stays byte-identical to the one-button
+start: `area` `zagreb`, no stop, no place stored. `{ place, frame? }` is a
+picked place (place-v2): `{ kind: 'stop', stopId, address? }` or
+`{ kind: 'address', name, lon, lat, address? }` inside Zagreb; the Worker
+takes a stop's name and point from its own table and answers 400 with
+`field: 'place'` or `field: 'frame'` otherwise. The legacy `{ area?, stopId? }`
+body is still accepted. `/data/stops.json` and `/data/streets-geo.json` feed
+the field (loaded on its first focus or keystroke); `onContext` on the beacon
+socket, `ScreenMetadata` on `joined`, 10-minute screens and 5-minute one-hop
+grants are unchanged.
 
-The settings panel saves over the same socket: `{ t: 'screen-set', version: 1,
-stopId, area }` (`worker/protocol.ts`). The DO validates both, writes its meta
-and answers through the existing `codes` frame carrying `screen`, so
-`applyScreen()` re-frames the wall exactly as a DO-side stop change does. A
-refused frame comes back as `{ t: 'error', error: ... }` (`'screen-set-rate'`
-for more than one save in the DO's window) and reaches the panel through the
-beacon client's `onError`; the panel stays open and says so. The panel waits
-for the DO's answer before closing, and gives the button back after eight
-seconds; an answer that arrives later still re-frames the screen.
+`ScreenMetadata` carries `place` (`ScreenPlace`, `shared/city/place.ts`),
+`placeSet` and `frame` (`FrameStops`, 4 | 6 | 8, `shared/city/frame.ts`),
+always present on the create response, the scan grant and the room `joined`
+frame. Records made before place-v2 are enriched on read (`screenMetadata()`
+and `worker/pairing/place.ts`), never migrated: a stored stop is the chosen
+place (`placeSet: true`); no place and no stop reads as Trg bana J. Jelačića
+with `placeSet: false`, so the list and the departures always have a place
+while the map keeps the whole-city window; a missing frame reads as 6. The
+kiosk reads the same answer through `wallPlaceOf()` (`kiosk/settings.ts`),
+which also covers a credential copy stored before the deploy, and frames the
+invitation with `wallSpanM()`: the whole measured circle
+(`frameSpanM(frameRadiusM(place, stops, frame))`) around a chosen place,
+`FIELD_SPAN_M` otherwise, `HANDHELD_SPAN_M` on a phone. `ScreenMetadata.area`
+is now derived from the place (`districtOf`, else `zagreb`) and kept for
+stats, `ScanOk.area` and the index; the camera no longer reads it.
+
+The panel changes Mjesto and Kadar over the same socket:
+`{ t: 'screen-set', version: 2, place, frame }` (`worker/protocol.ts`;
+`place: null` for the whole city), sent by `beacon.setScreen(input)` from the
+panel's `SendQueue`: 800 ms after the last click (`SETTINGS_SEND_DELAY_MS`),
+one frame in flight, the next only `SCREEN_SET_MIN_MS` (5 s, defined in
+`worker/protocol.ts` and re-exported from `worker/do/beacon-do.ts`) after the
+DO's last answer, and never a state equal to the DO's current screen. The
+kiosk announces the capability `place-v2` beside `city-v1`. The DO validates
+both fields, writes its meta and answers through the existing `codes` frame
+carrying `screen`, sent to every authenticated socket of the beacon, so
+`applyScreen()` re-frames the wall exactly as a DO-side change does; the panel
+stays open. A refusal is one `{ t: 'error', error: ... }` frame and nothing
+else: `'bad-place'` or `'bad-frame'` (version 2 only), or `'screen-set-rate'`
+inside the beacon-wide window. It reaches the panel through the beacon
+client's `onError`; the panel states it and repaints the toggles from the
+DO's truth, no answer within eight seconds does the same, and nothing is
+re-sent by the clock. `'bad-frame'` is also the DO's word for any unreadable
+socket message, so the panel counts it as a refusal only while one of its own
+frames is in flight. Version 1, `{ t: 'screen-set', version: 1, stopId, area }`
+(refused with `'bad-area'` or `'bad-stop'`), stays accepted indefinitely for
+kiosk bundles opened before the deploy; it keeps the stored frame and derives
+the place from the stop.
 
 The kiosk never recreates a screen on its own: an expired or revoked screen
 shows a notice with one button that forgets the credentials and returns to the

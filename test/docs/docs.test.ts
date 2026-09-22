@@ -57,6 +57,26 @@ describe('docs/kiosk.md', () => {
     expect(kiosk).toContain('git push');
     expect(kiosk).toContain('fizička matrica');
   });
+  // WP3 (22 Sep): one optional field and Pokreni, then click-toggle Postavke behind a long
+  // press on the brand. The numbers are the rulings' (0,8 s, 300 m), never the planner's
+  // 1,5 s / 250 m, and nothing of the one-button start, the gear or Spremi survives. Prose
+  // pins tolerate a line break; the owner's strings are quoted on one line.
+  it('documents the one-field setup and the click-toggle settings', () => {
+    for (const text of [
+      'Postavke su prekidači: svaki klik odmah mijenja stanje; jedan okvir prema poslužitelju najviše svakih pet sekundi',
+      '**Adresa ili stajalište**',
+      '**Pokreni**',
+      '„Na zaslonu: Kvaternikov trg i 6 stajališta uokolo”',
+      '„Na zaslonu: cijeli grad.”',
+      '„Poslužitelj nije prihvatio mjesto. Odaberi ponovno.”',
+    ]) expect(kiosk, text).toContain(text);
+    for (const re of [/Dugi\s+pritisak\s+\(0,8\s+s\)/, /unutar\s+400\s+m/, /unutar\s+300\s+m/, /`screen-set`\s+verzije\s+2/, /`bad-place`/, /`bad-frame`/]) {
+      expect(kiosk).toMatch(re);
+    }
+    for (const re of [/Pokreni\s+zaslon/, /1,5\s+s\b/, /\b250\s+m\b/, /\*\*Spremi\*\*/, /nespremljeni\s+unos/, /jednim\s+gumbom/, /zupčanik\s+u\s+zaglavlju\s+otvara/i]) {
+      expect(kiosk).not.toMatch(re);
+    }
+  });
 });
 
 describe('docs/arhitektura.md and README.md', () => {

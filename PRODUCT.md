@@ -56,8 +56,9 @@ Search, filters, saved choices and general discovery belong on personal
 devices. A handheld opening `/kiosk/` sees the code/setup information before a
 compact map preview. Scanning grants access only; deliberate presentation,
 confirmed takeover and acknowledged delivery retain their existing protocol.
-The QR is at least 240 CSS pixels at documented display sizes. Settings retain
-unsaved input and have a bounded scroll area with visible actions.
+The QR is at least 240 CSS pixels at documented display sizes. Settings are
+click-toggles that apply at once, with no draft and no save action; at most
+one change reaches the server every five seconds (22 September 2026).
 
 On personal devices, search opens usable results immediately, ranks names
 and transport matches ahead of incidental addresses, and groups only
@@ -69,10 +70,16 @@ route planning are added. Release remains gated on visual review; physical
 display, distance scan and Safari/VoiceOver checks are required before a pilot.
 
 On 19 September 2026 (evening) the owner approved the city-window round for
-the public screen. Opening `/kiosk/` gives one button, **Pokreni zaslon**, and
-nothing else to decide: the screen it creates covers the whole city and carries
-no stop. Area, stop, theme and expiry move to an on-screen settings panel
-behind a gear in the header. The map takes the whole left column and opens on
+the public screen. Since 22 September 2026, replacing that round's one button
+and header gear, opening `/kiosk/` gives one optional field,
+**Adresa ili stajalište**, a line under it saying what the screen will show,
+and **Pokreni**. A picked stop is the screen's place; a picked street becomes the
+nearest tram stop within 400 m, else the nearest bus stop within 300 m, else
+the address itself; an empty field keeps the whole-city window, with Trg bana
+Jelačića as the place for the list and the departures. Place, frame (Kadar: 4,
+6 or 8 stops), view, theme, rhythm and expiry sit in an on-screen settings
+panel opened by a long press on the brand; the header names the place and
+carries no operator control. The map takes the whole left column and opens on
 the city a passer-by means by Zagreb, Črnomerec to Maksimir and the Sava to
 Mirogoj, with trams, the tram network in neutral grey, BAJS stations as teal
 discs carrying their bike count, closures, the on-duty pharmacy and active
