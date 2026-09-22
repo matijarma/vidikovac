@@ -273,9 +273,10 @@ export interface KioskStrings {
     setupAgain: string;
     endsAfterSession: string;
   };
-  /** The start screen (kiosk/start.ts) and the sentences the settings panel's
-   *  stop search reuses: one vocabulary for the one thing that creates and
-   *  changes a screen. */
+  /** The start screen (kiosk/start.ts), its one field (kiosk/place-field.ts,
+   *  shared with the settings' Mjesto row) and the sentences the settings
+   *  panel reuses: one vocabulary for the one thing that creates and changes a
+   *  screen. */
   setup: {
     title: string;
     intro: string;
@@ -295,6 +296,18 @@ export interface KioskStrings {
     retry: string;
     retryIn: string;
     loadingStops: string;
+    /** The one field's label, "Adresa ili stajalište" (kiosk/place-field.ts). */
+    place: string;
+    /** "Na zaslonu: {place} i {count} stajališta uokolo": what a screen with a place shows, {count} its Kadar. */
+    preview: PluralForms;
+    /** "Na zaslonu: cijeli grad.": the line under an empty field. */
+    previewCity: string;
+    /** Typed text that is neither a stop nor a street, said instead of creating anything. */
+    noMatch: string;
+    /** A stretch of a long street, named by the stop on it: "{street} · stajalište {stop}". */
+    streetNear: string;
+    loadingPlaces: string;
+    errorPlaces: string;
   };
   /** The on-screen settings overlay (kiosk/settings.ts): the four sections and
    *  the forget-screen confirmation. */
@@ -425,8 +438,10 @@ function build(code: SupportedLocale): KioskStrings {
         'title', 'intro', 'search', 'noResults', 'routesAt', 'create', 'creating', 'validity',
         'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed', 'errorStops',
         'retry', 'retryIn', 'loadingStops',
+        'place', 'previewCity', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces',
       ]),
       results: forms('setup', 'results'),
+      preview: forms('setup', 'preview'),
     },
     settings: group('settings', [
       'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',

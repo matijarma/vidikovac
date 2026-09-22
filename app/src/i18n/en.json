@@ -1056,7 +1056,7 @@
       "results_other": "{count} stops",
       "noResults": "No stop with that name.",
       "routesAt": "lines {routes}",
-      "create": "Start the screen",
+      "create": "Start",
       "creating": "Starting the screen…",
       "validity": "Valid 24 hours · at most five screens per hour from one network",
       "errorAccess": "The server refused setup from this connection. Try again from another network.",
@@ -1067,7 +1067,15 @@
       "errorStops": "The stop list is unavailable.",
       "retry": "Try again",
       "retryIn": "Try again in {time}",
-      "loadingStops": "Loading stops…"
+      "loadingStops": "Loading stops…",
+      "place": "Address or stop",
+      "preview_one": "On screen: {place} and {count} stop around it",
+      "preview_other": "On screen: {place} and {count} stops around it",
+      "previewCity": "On screen: the whole city.",
+      "noMatch": "No such stop or street. Pick a suggestion or leave the field empty for the whole city.",
+      "streetNear": "{street} · stop {stop}",
+      "loadingPlaces": "Loading addresses and stops…",
+      "errorPlaces": "The list of addresses and stops is unavailable."
     },
     "settings": {
       "open": "Screen settings",

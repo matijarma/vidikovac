@@ -1093,7 +1093,7 @@
       "results_other": "{count} stanica",
       "noResults": "Nema stanice s tim imenom.",
       "routesAt": "linije {routes}",
-      "create": "Pokreni zaslon",
+      "create": "Pokreni",
       "creating": "Pokretanje zaslona…",
       "validity": "Vrijedi 24 sata · najviše pet zaslona na sat s iste mreže",
       "errorAccess": "Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.",
@@ -1104,7 +1104,16 @@
       "errorStops": "Popis stanica nije dostupan.",
       "retry": "Pokušaj ponovno",
       "retryIn": "Pokušaj ponovno za {time}",
-      "loadingStops": "Učitavanje stanica…"
+      "loadingStops": "Učitavanje stanica…",
+      "place": "Adresa ili stajalište",
+      "preview_one": "Na zaslonu: {place} i {count} stajalište uokolo",
+      "preview_few": "Na zaslonu: {place} i {count} stajališta uokolo",
+      "preview_other": "Na zaslonu: {place} i {count} stajališta uokolo",
+      "previewCity": "Na zaslonu: cijeli grad.",
+      "noMatch": "Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.",
+      "streetNear": "{street} · stajalište {stop}",
+      "loadingPlaces": "Učitavanje adresa i stajališta…",
+      "errorPlaces": "Popis adresa i stajališta nije dostupan."
     },
     "settings": {
       "open": "Postavke zaslona",
