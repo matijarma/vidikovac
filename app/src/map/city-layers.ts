@@ -7,58 +7,50 @@ export const CITY_LAYERS = ['city-place-dots','city-place-badges','city-place-la
  *  marks what a person just tapped and a pill passing through must not hide
  *  it. Every other city layer goes under the vehicle marks (city-map.ts). */
 export const CITY_SELECTION = 'city-place-selection';
-/** The zoom from which a BAJS station is a thing to walk to rather than one
- *  dot in a picture of the whole city: below it the station marks are a size
- *  that lets the tram plates lead (kiosk/mapview.ts CITY_DETAIL_ZOOM is the
- *  same line, one zoom down, where the buses join the trams). */
-export const BIKE_NEAR_ZOOM = 14;
-export const BIKE_FAR_ZOOM = 13;
-/** A station with nothing to give -- no bike ("0"), not renting ("—") or a
- *  source that has gone quiet ("?") -- is still on the map, because a person
- *  walking to it needs to know it is there, but it recedes behind the ones
- *  that can be used (shared/city/bikes.ts bikeAvailability writes the three). */
-export const BIKE_SPENT_BADGES: readonly string[] = Object.freeze(['0', '—', '?']);
-export const BIKE_SPENT_OPACITY = 0.55;
-/** A station's dot, in drawn px before the surface's symbol scale: a minor
- *  mark on the whole city, a small one to walk to in a neighbourhood. */
+/** A BAJS station is a disc with its count in it at every zoom: 10 px before
+ *  the surface's symbol scale, 20 px on the wall's scale 2, room for two
+ *  digits of BIKE_COUNT_PX (24 px there). A count is the one thing about a
+ *  station a passer-by can act on from across a room. */
+export const BIKE_DISC_RADIUS_PX = 10;
+/** The count inside the disc: the size of a pill's line number. */
+export const BIKE_COUNT_PX = 12;
+/** The unframed window onto the whole city (points carrying `far`, from
+ *  city/curated.ts) keeps each station a small dot without its number: a
+ *  hundred counted discs over the whole town would bury the trams. */
 export const BIKE_FAR_RADIUS_PX = 3;
-export const BIKE_NEAR_RADIUS_PX = 5;
-/** A merged group of places (city/discovery.ts clusterPlaces) is a counted
- *  dot of this radius, never the 18 px bubble that hid the map beneath it. */
-export const CLUSTER_RADIUS_PX = 11;
-/** `labels` false leaves the city places' own names off the picture: the
- *  public screen's window onto the whole city is badges and dots only (a BAJS
- *  count, a venue's programme count), because a hundred station names over
- *  the tram network is a list, not a map. The names come back the moment a
- *  person explores (kiosk.ts setCityLabels) or taps one. */
-export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels=true):StyleLayerLike[] {
-  const color=['match',['get','category'],'culture',p.event,'heritage',p.other,'cluster',p.other,'bikes',p.bike,'air',p.other,p.place];
+/** What shared/city/bikes.ts bikeAvailability writes for a station with
+ *  nothing to give (no bike, not renting, a source gone quiet). A point from
+ *  city/curated.ts says so with `spent` instead; both read grey. */
+const SPENT_BADGES: readonly string[] = ['0', '—', '?'];
+/** Which of the city places' own names the map draws: 'all'; 'venues', the
+ *  framed wall's, where a venue with a programme tonight is named and a BAJS
+ *  station or an air station is its disc alone; 'none', the unframed window
+ *  onto the whole city, badges and dots only, because a hundred names over
+ *  the tram network is a list, not a map. A boolean is the older switch:
+ *  true is 'all', false is 'none'. */
+export type CityLabels = 'all' | 'venues' | 'none';
+export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels:CityLabels|boolean='all'):StyleLayerLike[] {
+  const mode:CityLabels=labels===true?'all':labels===false?'none':labels;
   const isBike=['==',['get','category'],'bikes'];
-  // A zoom ramp whose stops are themselves per-category expressions: MapLibre
-  // allows ['zoom'] only at the top of a property, so the category case sits
-  // INSIDE each stop rather than the interpolation inside a case.
-  const byZoom=(far:unknown,near:unknown)=>['interpolate',['linear'],['zoom'],BIKE_FAR_ZOOM,far,BIKE_NEAR_ZOOM,near];
-  // A BAJS station is a secondary dot at every zoom -- there are dozens of
-  // them, and a hundred large discs bury the trams -- and a merged cluster is
-  // a small counted dot, never a bubble. The station's count only appears
-  // once the camera is close enough for the number to fit inside the dot.
-  const dotRadius=(bike:number)=>['*',scale,['case',isBike,bike,['==',['get','category'],'cluster'],CLUSTER_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
-  const badgeSize=(bike:number)=>['*',scale,['case',isBike,bike,['==',['get','category'],'cluster'],10,12]];
-  const spent=['case',['all',isBike,['in',['get','badge'],['literal',BIKE_SPENT_BADGES]]],BIKE_SPENT_OPACITY,1];
-  /** The count fades in with the camera: nothing on the whole city, the spent rule once near. */
-  const countOpacity=byZoom(['case',isBike,0,1],spent);
+  const far=['all',isBike,['==',['get','far'],true]];
+  const spent=['all',isBike,['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
+  // Every city place is drawn at full strength at every zoom: a station with
+  // nothing to give is grey, never faded, and no mark is a merged cluster.
+  const color=['case',spent,p.other,['match',['get','category'],'bikes',p.bike,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
+  const radius=['*',scale,['case',far,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
-      'circle-radius':byZoom(dotRadius(BIKE_FAR_RADIUS_PX),dotRadius(BIKE_NEAR_RADIUS_PX)),
-      'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',isBike,1,2],
-      'circle-opacity':spent,'circle-stroke-opacity':spent}},
+      'circle-radius':radius,'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',isBike,1,2]}},
+    // A count is never dropped by a collision (text-allow-overlap takes no
+    // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
-      'text-field':['get','badge'],'text-font':[MAP_FONTS.medium],'text-size':byZoom(badgeSize(7),badgeSize(8)),'text-allow-overlap':false,
-      'symbol-sort-key':['get','priority']},paint:{'text-color':['match',['get','category'],'bikes',p.bikeText,p.halo],'text-halo-width':0,'text-opacity':countOpacity}},
-    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,layout:{
-      visibility:labels?'visible':'none',
-      'text-field':['case',['==',['get','category'],'cluster'],'',['get','title']],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-anchor':'top','text-offset':[0,1.5],
+      'text-field':['case',far,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
+      'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.otherText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
+    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,
+      ...(mode==='venues'?{filter:['!',['in',['get','category'],['literal',['bikes','air']]]]}:{}),layout:{
+      visibility:mode==='none'?'none':'visible',
+      'text-field':['get','title'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-anchor':'top','text-offset':[0,1.5],
       'text-max-width':12,'text-optional':true,'symbol-sort-key':['get','priority']},
       paint:{'text-color':p.label,'text-halo-color':p.halo,'text-halo-width':2}},
     {id:'city-place-selection',type:'circle',source:CITY_POINTS,filter:['==',['get','id'],selected??''],
