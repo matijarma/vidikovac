@@ -1113,7 +1113,8 @@
       "noMatch": "Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.",
       "streetNear": "{street} · stajalište {stop}",
       "loadingPlaces": "Učitavanje adresa i stajališta…",
-      "errorPlaces": "Popis adresa i stajališta nije dostupan."
+      "errorPlaces": "Popis adresa i stajališta nije dostupan.",
+      "ambiguous": "Više ulica ima to ime. Odaberi prijedlog s popisa."
     },
     "settings": {
       "open": "Postavke zaslona",

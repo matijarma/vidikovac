@@ -308,6 +308,8 @@ export interface KioskStrings {
     streetNear: string;
     loadingPlaces: string;
     errorPlaces: string;
+    /** A typed name more than one street carries: the person picks the row, told apart by its settlement. */
+    ambiguous: string;
   };
   /** The on-screen settings overlay (kiosk/settings.ts): the four sections and
    *  the forget-screen confirmation. */
@@ -438,7 +440,7 @@ function build(code: SupportedLocale): KioskStrings {
         'title', 'intro', 'search', 'noResults', 'routesAt', 'create', 'creating', 'validity',
         'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed', 'errorStops',
         'retry', 'retryIn', 'loadingStops',
-        'place', 'previewCity', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces',
+        'place', 'previewCity', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces', 'ambiguous',
       ]),
       results: forms('setup', 'results'),
       preview: forms('setup', 'preview'),

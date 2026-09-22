@@ -1075,7 +1075,8 @@
       "noMatch": "No such stop or street. Pick a suggestion or leave the field empty for the whole city.",
       "streetNear": "{street} · stop {stop}",
       "loadingPlaces": "Loading addresses and stops…",
-      "errorPlaces": "The list of addresses and stops is unavailable."
+      "errorPlaces": "The list of addresses and stops is unavailable.",
+      "ambiguous": "More than one street has that name. Pick one from the suggestions."
     },
     "settings": {
       "open": "Screen settings",

@@ -512,6 +512,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
       return { mountStart: start.mountStart, strings: strings.kioskStrings('hr'), isTram: (routeId) => stops.routeType(routeId) === 0 };
     } finally { vi.doUnmock(PLACES_MODULE); }
   }
+  const suggestBox = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>('.k-suggest-box')!;
   function harness(mod: StartEnv, opts: { loadStops?: () => Promise<typeof STOPS>; loadStreets?: () => Promise<Street[]> } = {}) {
     const host = document.createElement('div');
     document.body.replaceChildren(host);
@@ -530,6 +531,9 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     return {
       host, handle, input, list, timers, createScreen, loadStops, loadStreets, onCreated,
       focus: () => { input.dispatchEvent(new FocusEvent('focus')); },
+      /** The focus leaves the field for somewhere outside it. */
+      blur: () => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })); },
+      box: () => suggestBox(host),
       type: (value: string) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); },
       key: (key: string) => { input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); },
       /** Fires the armed timers registered at a delay, as the kiosk's oneShot would. */
@@ -642,6 +646,84 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     expect(h.input.value).toBe('Zapruđe');
     expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
     expect(h.createScreen).not.toHaveBeenCalled();
+  });
+  it('editing the text retires the rows on show at once: Enter inside the pause picks nothing stale, and a stale row does not answer a click', async () => {
+    const kvaternikov: Suggestion = { kind: 'stop', stop: { id: '236_2', name: 'Kvaternikov trg', lon: 15.9975, lat: 45.815, routes: ['4', '7'], distanceM: null } };
+    const h = harness(await startWith((query) => (query === 'Kvatern' ? [kvaternikov] : query === 'Zapruđe' ? [ZAPRUDJE_ROW] : [])));
+    h.type('Kvatern');
+    await flush();
+    h.tick(PAUSE_MS);
+    h.key('ArrowDown');
+    const stale = h.rows()[0]!;
+    expect(stale.getAttribute('aria-selected')).toBe('true');
+    h.type('Zapruđe');
+    expect(stale.getAttribute('aria-selected')).toBe('false');
+    expect(h.input.hasAttribute('aria-activedescendant')).toBe(false);
+    stale.click();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('');
+    h.key('Enter');
+    await flush();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+  });
+  it('streets that share a name show their settlements, and a shared name typed in full waits for a pick instead of choosing one', async () => {
+    const inSettlement = (name: string, lon: number, lat: number, settlement: string): Street => ({ ...street(name, lon, lat), settlement } as Street);
+    const gajevaZagreb = inSettlement('Gajeva ulica', 15.9745, 45.811, 'Zagreb');
+    const gajevaSesvete = inSettlement('Gajeva ulica', 16.11, 45.83, 'Sesvete');
+    const ilica = inSettlement('Ilica', 15.955, 45.8125, 'Zagreb');
+    const offer = (query: string): Suggestion[] => (query.startsWith('Gajeva') ? [{ kind: 'street', street: gajevaZagreb }, { kind: 'street', street: gajevaSesvete }] : query === 'Ilica' ? [{ kind: 'street', street: ilica }] : []);
+    const h = harness(await startWith(offer), { loadStreets: async () => [gajevaZagreb, gajevaSesvete, ilica] });
+    h.type('Ilica');
+    await flush();
+    h.tick(PAUSE_MS);
+    // A name only one street carries needs no settlement.
+    expect(h.list.querySelector('.k-suggest-meta')).toBeNull();
+    h.type('Gajeva ulica');
+    h.submit();
+    await flush();
+    expect(h.createScreen).not.toHaveBeenCalled();
+    expect(h.error()).toBe('Više ulica ima to ime. Odaberi prijedlog s popisa.');
+    expect(h.preview()).toBe('');
+    expect(h.names()).toEqual(['Gajeva ulica', 'Gajeva ulica']);
+    expect([...h.list.querySelectorAll('.k-suggest-meta')].map(text)).toEqual(['Zagreb', 'Sesvete']);
+    expect(h.status()).toBe('Više ulica ima to ime. Odaberi prijedlog s popisa.');
+    h.rows()[1]!.click();
+    expect(h.preview()).toBe('Na zaslonu: Gajeva ulica i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'address', name: 'Gajeva ulica', lon: 16.11, lat: 45.83 }, frame: 6 });
+  });
+  it('Escape or a focus that leaves the field keeps the list shut through a pending pause or load; coming back shows the rows again at once', async () => {
+    let release!: (stops: typeof STOPS) => void;
+    const pending = new Promise<typeof STOPS>((resolve) => { release = resolve; });
+    const h = harness(await startWith((query) => (query.startsWith('Zapr') ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending });
+    h.type('Zapr');
+    h.tick(PAUSE_MS);
+    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    h.blur();
+    expect(h.box().hidden).toBe(true);
+    release(STOPS);
+    await flush();
+    expect(h.box().hidden).toBe(true);
+    // Back in the field: the loaded rows at once, nothing fetched again.
+    h.focus();
+    expect(h.names()).toEqual(['Zapruđe']);
+    expect(h.box().hidden).toBe(false);
+    expect(h.loadStops).toHaveBeenCalledTimes(1);
+    // Escape inside the pause: the pending refresh is dropped.
+    h.type('Zapru');
+    h.key('Escape');
+    h.tick(PAUSE_MS);
+    expect(h.box().hidden).toBe(true);
+    h.focus();
+    expect(h.names()).toEqual(['Zapruđe']);
+    h.key('Escape');
+    expect(h.box().hidden).toBe(true);
+    expect(h.input.value).toBe('Zapru');
   });
   it('the lists load on the first touch and say so; a failed load is said in the field and on Pokreni, and only a person tries again', async () => {
     let release!: (stops: typeof STOPS) => void;

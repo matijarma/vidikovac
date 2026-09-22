@@ -182,11 +182,11 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
     startBtn.disabled = true;
     startBtn.textContent = s.setup.creating;
     try {
-      const listed = field.unresolved() ? await field.settle() : true;
+      const settled = field.unresolved() ? await field.settle() : 'ready';
       if (destroyed) return;
       const place = field.value();
       if (!place && field.unresolved()) {
-        showError(listed ? s.setup.noMatch : s.setup.errorPlaces, false);
+        showError(settled === 'failed' ? s.setup.errorPlaces : settled === 'ambiguous' ? s.setup.ambiguous : s.setup.noMatch, false);
         fieldError = true;
         return;
       }

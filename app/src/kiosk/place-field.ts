@@ -53,15 +53,24 @@ export interface PlaceFieldHandle {
   unresolved(): string;
   /**
    * Waits for the lists and gives typed text one last chance: a full name that is exactly a
-   * stop's or a street's (letter case and diacritics aside) becomes that place. False when the
-   * lists could not be loaded, so nothing could be matched.
+   * stop's or one street's (letter case and diacritics aside) becomes that place. 'ambiguous'
+   * when the name belongs to more than one street, so a person has to pick the row; 'failed'
+   * when the lists could not be loaded, so nothing could be matched; 'ready' otherwise.
    */
-  settle(): Promise<boolean>;
+  settle(): Promise<SettleResult>;
   focus(): void;
   destroy(): void;
 }
 
+export type SettleResult = 'ready' | 'ambiguous' | 'failed';
+
 let fieldCount = 0;
+
+/** A trailing house number ("Gajeva ulica 5"), set aside to compare street names. */
+const HOUSE_NUMBER = /^(.*?)\s+\d{1,4}[a-z]?$/i;
+const streetPart = (typed: string): string => HOUSE_NUMBER.exec(typed)?.[1]?.trim() || typed;
+/** The settlement the street index names a street's place by (Section B's rows carry it). */
+const settlementOf = (street: StreetGeo): string => (street as StreetGeo & { settlement?: string }).settlement ?? '';
 
 /** What a row reads as, and what the field says once the row is picked. */
 function rowLabel(s: KioskStrings, row: PlaceSuggestion): string {
@@ -106,6 +115,10 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
   let active = -1;
   let timer: unknown = null;
   let destroyed = false;
+  /** Escape or a focus that left the field: nothing reopens the list until the field is touched again. */
+  let dismissed = false;
+  /** How many streets of the index carry each folded name; more than one needs its settlement shown. */
+  let streetNames = new Map<string, number>();
 
   if (place) {
     input.value = place.address ?? place.name;
@@ -131,18 +144,37 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
     showStatus('');
   }
 
+  const sharedName = (street: StreetGeo): boolean => (streetNames.get(normalName(street.name)) ?? 0) > 1;
+  /** A street whose name another street also carries is told apart by its settlement. */
+  const settlementText = (street: StreetGeo): string => (sharedName(street) ? settlementOf(street) : '');
+
   function rowMarkup(row: PlaceSuggestion, index: number): string {
-    const meta = row.kind === 'stop'
-      ? [routesText(s, row.stop.routes), deps.near && row.stop.distanceM !== null ? fmtDistance(deps.locale, row.stop.distanceM) : ''].filter(Boolean).join(' · ')
-      : row.kind === 'segment' ? routesText(s, row.stop.routes) : '';
+    const meta = (row.kind === 'stop'
+      ? [routesText(s, row.stop.routes), deps.near && row.stop.distanceM !== null ? fmtDistance(deps.locale, row.stop.distanceM) : '']
+      : row.kind === 'segment' ? [settlementText(row.street), routesText(s, row.stop.routes)] : [settlementText(row.street)]).filter(Boolean).join(' · ');
     return `<li class="k-suggest-row" id="${escapeAttribute(`${listId}-${index}`)}" role="option" aria-selected="false" data-testid="setup-suggestion" data-kind="${row.kind}" data-index="${index}">`
       + `<span class="k-suggest-name">${escapeHtml(rowLabel(s, row))}</span>`
       + (meta ? `<span class="k-suggest-meta">${escapeHtml(meta)}</span>` : '')
       + '</li>';
   }
+  /** What was typed changed: the rows on show belong to the old text and can no longer be picked. */
+  function invalidate(): void {
+    rows = [];
+    active = -1;
+    input.removeAttribute('aria-activedescendant');
+    for (const option of list.querySelectorAll('[role=option]')) option.setAttribute('aria-selected', 'false');
+    list.dataset.stale = '1';
+  }
+  /** Escape, or the focus left the field: the list closes and no pending refresh or load reopens it. */
+  function dismiss(): void {
+    dismissed = true;
+    if (timer !== null) { deps.clearTimeout(timer); timer = null; }
+    close();
+  }
   function render(next: PlaceSuggestion[]): void {
     rows = next;
     active = -1;
+    delete list.dataset.stale;
     list.innerHTML = next.map(rowMarkup).join('');
     list.hidden = next.length === 0;
     input.setAttribute('aria-expanded', next.length > 0 ? 'true' : 'false');
@@ -162,6 +194,11 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
         ]);
         stops = loadedStops;
         streets = loadedStreets;
+        streetNames = new Map();
+        for (const street of loadedStreets) {
+          const key = normalName(street.name);
+          streetNames.set(key, (streetNames.get(key) ?? 0) + 1);
+        }
         failed = false;
         return true;
       } catch {
@@ -172,7 +209,7 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
       }
     })();
     loading = attempt;
-    void attempt.then(() => { if (!destroyed && wantsList()) refresh(); });
+    void attempt.then(() => { if (!destroyed && !dismissed && wantsList()) refresh(); });
     return attempt;
   }
 
@@ -187,7 +224,7 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
   }
   function schedule(): void {
     if (timer !== null) deps.clearTimeout(timer);
-    timer = deps.setTimeout(() => { timer = null; if (!destroyed) refresh(); }, PLACE_DEBOUNCE_MS);
+    timer = deps.setTimeout(() => { timer = null; if (!destroyed && !dismissed) refresh(); }, PLACE_DEBOUNCE_MS);
   }
 
   function setActive(index: number): void {
@@ -215,40 +252,57 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
     if (row) choose(placeOf(row), rowLabel(s, row));
   }
 
-  /** Typed text that is exactly one name: first among the suggestions, then the whole stop table and street index. */
-  function exactMatch(): boolean {
-    if (!stops) return false;
+  /**
+   * Typed text that is exactly one name: first among the suggestions, then the whole stop table
+   * and street index. A name more than one street carries is never chosen for the person.
+   */
+  function exactMatch(): 'picked' | 'ambiguous' | 'none' {
+    if (!stops) return 'none';
     const typed = text();
     const key = normalName(typed);
-    if (!key) return false;
+    if (!key) return 'none';
+    if ((streetNames.get(normalName(streetPart(typed))) ?? 0) > 1) return 'ambiguous';
     const offered = suggestPlaces(typed, stops, streets, deps.near, PLACE_SUGGESTION_LIMIT);
     const row = offered.find((r) => normalName(rowLabel(s, r)) === key);
-    if (row) { choose(placeOf(row), rowLabel(s, row)); return true; }
+    if (row) { choose(placeOf(row), rowLabel(s, row)); return 'picked'; }
     const named = stops.filter((stop) => normalName(stop.name) === key);
     const stop = named.find((candidate) => candidate.routes.some(deps.isTram)) ?? named[0];
-    if (stop) { choose(placeFromStop(stop, deps.isTram), stop.name); return true; }
+    if (stop) { choose(placeFromStop(stop, deps.isTram), stop.name); return 'picked'; }
     const street = streets.filter((candidate) => normalName(candidate.name) === key);
     if (street.length === 1) {
-      const only: PlaceSuggestion = { kind: 'street', street: street[0] };
+      const only: PlaceSuggestion = { kind: 'street', street: street[0]! };
       choose(placeOf(only), rowLabel(s, only));
-      return true;
+      return 'picked';
     }
-    return false;
+    return 'none';
   }
 
-  async function settle(): Promise<boolean> {
-    if (place || !text()) return true;
+  async function settle(): Promise<SettleResult> {
+    if (place || !text()) return 'ready';
     const ok = await ensureLoaded();
-    if (destroyed || !ok) return ok;
-    if (place || !text()) return true;
+    if (destroyed) return ok ? 'ready' : 'failed';
+    if (!ok) return 'failed';
+    if (place || !text()) return 'ready';
     if (timer !== null) { deps.clearTimeout(timer); timer = null; }
-    exactMatch();
-    return true;
+    const match = exactMatch();
+    // No pick: the list shows what the text really offers, unless the person has moved on.
+    if (match !== 'picked' && !dismissed) {
+      refresh();
+      if (match === 'ambiguous') showStatus(s.setup.ambiguous);
+    }
+    return match === 'ambiguous' ? 'ambiguous' : 'ready';
   }
 
-  input.addEventListener('focus', () => { void ensureLoaded(); });
+  input.addEventListener('focus', () => {
+    dismissed = false;
+    void ensureLoaded();
+    // Back in the field: what the text offers shows again at once, from the lists already loaded.
+    if (stops && wantsList()) refresh();
+  });
   input.addEventListener('input', () => {
+    dismissed = false;
     if (place && text() !== pickedText) place = null;
+    invalidate();
     emit();
     if (!text()) { if (timer !== null) { deps.clearTimeout(timer); timer = null; } close(); return; }
     void ensureLoaded();
@@ -265,7 +319,10 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
       // owner settles the field (an exact name still becomes its place).
       if (open && active >= 0) { event.preventDefault(); pick(active); } else if (!place && text()) { void settle(); }
     } else if (event.key === 'Escape') {
-      if (!box.hidden) { event.preventDefault(); event.stopPropagation(); close(); }
+      // An open list takes the Escape; with nothing open it goes on (the settings panel closes).
+      const wasOpen = !box.hidden;
+      dismiss();
+      if (wasOpen) { event.preventDefault(); event.stopPropagation(); }
     }
   });
   // A press on a row must not take the focus out of the field before the click lands.
@@ -277,7 +334,7 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
   });
   element.addEventListener('focusout', (event) => {
     const next = (event as FocusEvent).relatedTarget as Node | null;
-    if (!next || !element.contains(next)) close();
+    if (!next || !element.contains(next)) dismiss();
   });
 
   return {
