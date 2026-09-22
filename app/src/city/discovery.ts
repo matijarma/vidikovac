@@ -80,19 +80,13 @@ export function discover(state: CityState, items: readonly FeedItem[], o: Discov
     o.category==='streets'?[...state.streets].sort((a,b)=>a.name.localeCompare(b.name,'hr')):[];
   return {places,events,count:places.length,points,streets};
 }
-/** Group nearby markers at the current zoom. Cluster count always means
- * places, never events; a single-venue pin keeps its program count. */
-export function clusterPlaces(points:readonly MapPoint[],zoom:number):MapPoint[]{
-  const cells=new Map<string,MapPoint[]>(),scale=256*2**Math.min(zoom,20),cell=48;
-  for(const p of points){
-    const sin=Math.sin(p.lat*Math.PI/180),x=(p.lon+180)/360*scale,y=(.5-Math.log((1+sin)/(1-sin))/(4*Math.PI))*scale;
-    const key=`${Math.floor(x/cell)}:${Math.floor(y/cell)}`;
-    cells.set(key,[...(cells.get(key)??[]),p]);
-  }
-  return [...cells.entries()].map(([key,rows])=>rows.length===1?rows[0]:({
-    id:`cluster-${key.replace(':','-')}`,title:`${rows.length}`,lon:rows.reduce((n,p)=>n+p.lon,0)/rows.length,lat:rows.reduce((n,p)=>n+p.lat,0)/rows.length,
-    place:'city' as const,props:{category:'cluster',badge:`+${rows.length}`,eventCount:0,priority:0,cluster:true,count:rows.length},
-  }));
+/** No surface merges places into geographic "+N" bubbles any more
+ *  (MAP_PRESENTATIONS.placeClusters is false everywhere; the map curates,
+ *  city/curated.ts). Kept as the identity only while
+ *  app/src/transport/workspace.ts still calls it; delete it with those calls.
+ *  @deprecated */
+export function clusterPlaces(points:readonly MapPoint[],_zoom:number):MapPoint[]{
+  return [...points];
 }
 export const CATEGORY_SOURCE:Record<string,readonly string[]>={
   culture:['culture'],water:['water','drinking-water'],toilet:['toilets'],sport:['sport'],dogs:['dogs'],
