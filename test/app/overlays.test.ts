@@ -157,25 +157,29 @@ describe('the overlay layer list', () => {
   it('generates one SDF pill and one plate for every label length a cluster can take, at pills.ts\u2019s own widths, a nose and a ring, and the pill layer picks a plate for a tram and a pill for a bus, by the label\u2019s length', () => {
     const images = overlayImages();
     const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
-    // The longest label clusterLabel can write, and the reason the cap is
-    // what it is: four *bus* routes of three digits, their three separators,
-    // the space, the "+" and a two-digit tail -- "109\u00b7113\u00b7119\u00b7120 +12",
-    // nineteen characters. A tram cluster is shorter; a bus hub is not.
-    expect(PILL_MAX_CHARS_CLUSTER).toBe(19);
+    // The cap, and the reason it is what it is: a merged pill lists every
+    // line [O-35], and all fifteen tram lines together are 35 characters, so
+    // every tram cluster is written whole. Forty is the widest capsule.
+    expect(PILL_MAX_CHARS_CLUSTER).toBe(40);
     const bus = (n: number): string[] => Array.from({ length: n }, (_, i) => String(109 + i));
-    expect(clusterLabel(bus(16))).toBe('109\u00b7110\u00b7111\u00b7112 +12');
-    expect(clusterLabel(bus(16))).toHaveLength(PILL_MAX_CHARS_CLUSTER);
+    // A bus hub of sixteen three-digit routes would be 63 characters: it keeps
+    // the ten whole lines that fit in the widest capsule, and never a "+n".
+    const hub = clusterLabel(bus(16));
+    expect(hub).toBe(bus(10).join('\u00b7'));
+    expect(hub).not.toContain('+');
+    expect(hub.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+    expect(pillChars(hub)).toBe(hub.length);
     // Five three-digit routes -- the everyday bus cluster -- get a pill wide
-    // enough to write them in, not a clamped one that drops characters.
+    // enough to write every one of them in, not a clamped one that drops characters.
     const five = clusterLabel(bus(5));
-    expect(five).toBe('109\u00b7110\u00b7111\u00b7112 +1');
+    expect(five).toBe('109\u00b7110\u00b7111\u00b7112\u00b7113');
     expect(pillChars(five)).toBe(five.length);
     expect(images.map((i) => i.id)).toEqual([
       ...lengths.map((n) => `vehicle-pill-${n}`),
       ...lengths.map((n) => `vehicle-plate-${n}`),
       'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
     ]);
-    // Nineteen pills, nineteen plates, the nose, the selection ring and the three place marks.
+    // Forty pills, forty plates, the nose, the selection ring and the three place marks.
     expect(images).toHaveLength(2 * PILL_MAX_CHARS_CLUSTER + 5);
     // Every one is pillWidthPx's box plus the distance field's own spread around it.
     for (const n of lengths) {

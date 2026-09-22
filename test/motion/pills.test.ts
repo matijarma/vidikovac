@@ -14,29 +14,61 @@ import {
   type PillPoint,
   type Single,
 } from '../../app/src/motion/pills';
+import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
 
 describe('pillWidthPx / pillChars: the pill grows past four characters instead of clipping', () => {
   it('gives the four hand-tuned widths verbatim, then +7px per character up to the cluster cap, mapping onto the SDF image ids', () => {
     expect(PILL_BASE_WIDTHS_PX.map((_, i) => pillWidthPx(i + 1))).toEqual(PILL_BASE_WIDTHS_PX);
     expect(pillWidthPx(5)).toBe(45);
-    // The widest capsule: nineteen characters, the longest cluster label of
-    // four three-digit bus routes with a two-digit tail.
-    expect(pillWidthPx(PILL_MAX_CHARS_CLUSTER)).toBe(143);
+    // The widest capsule: forty characters, the hard cap. All fifteen tram
+    // lines together are thirty-five, so every tram cluster fits whole.
+    expect(PILL_MAX_CHARS_CLUSTER).toBe(40);
+    expect(pillWidthPx(PILL_MAX_CHARS_CLUSTER)).toBe(290);
     // '' counts as one character (route unknown takes the smallest pill); anything past the
     // cluster cap (a label no clusterLabel writes) clamps to it rather than growing forever.
     expect(pillChars('')).toBe(1);
-    expect(pillChars('109·113·119·120 +3')).toBe(18); // an everyday bus cluster, written whole
-    expect(pillChars('12345678901234567890123')).toBe(PILL_MAX_CHARS_CLUSTER);
-    expect(pillWidthPx(pillChars('12345678901234567890123'))).toBe(143);
+    expect(pillChars('109·113·119·120·121')).toBe(19); // an everyday bus cluster, written whole
+    expect(pillChars('23-characters-is-no-cap')).toBe(23); // once the old cap, now an ordinary pill
+    const past = '1234567890'.repeat(4) + '12345'; // 45 characters, past the cap
+    expect(pillChars(past)).toBe(PILL_MAX_CHARS_CLUSTER);
+    expect(pillWidthPx(pillChars(past))).toBe(290);
     expect(pillImageId(3)).toBe('vehicle-pill-3');
     expect(pillImageId(3, true)).toBe('vehicle-plate-3');
   });
 });
 
-describe('clusterLabel: distinct labels, numeric order, capped at four', () => {
-  it('sorts numbers before text, numerically, and caps the display at four with a +n tail', () => {
+describe('clusterLabel: distinct labels, numeric order, never folded', () => {
+  it('lists every line, numbers ascending then letters, joined by "·", with no "+n" tail [O-35]', () => {
     expect(clusterLabel(['12', '6', '6', '11'])).toBe('6·11·12');
-    expect(clusterLabel(['14', '6', '12', 'K', '11', '221'])).toBe('6·11·12·14 +2');
+    expect(clusterLabel(['14', '6', '12', 'K', '11', '221'])).toBe('6·11·12·14·221·K');
+    // Moved from test/city/readable.test.ts: one line is its own name, and
+    // the everyday bus cluster is written whole, not bounded to a summary.
+    expect(clusterLabel(['6'])).toBe('6');
+    expect(clusterLabel(['109', '113', '119', '120', '121'])).toBe('109·113·119·120·121');
+  });
+
+  it('writes all fifteen tram lines whole: 35 characters, inside the cap', () => {
+    const trams = ['17', '15', '14', '13', '12', '11', '9', '8', '7', '6', '5', '4', '3', '2', '1'];
+    const label = clusterLabel(trams);
+    expect(label).toBe('1·2·3·4·5·6·7·8·9·11·12·13·14·15·17');
+    expect(label).toHaveLength(35);
+    expect(pillChars(label)).toBe(label.length);
+  });
+
+  it('past the 40-character cap keeps the whole lines that fit and drops the rest, never a count', () => {
+    const hub = Array.from({ length: 16 }, (_, i) => String(109 + i));
+    const label = clusterLabel(hub);
+    expect(label).toBe('109·110·111·112·113·114·115·116·117·118');
+    expect(label.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+    expect(label).not.toMatch(/\+/);
+    // Every name in it is a whole line of the cluster, never a number cut short.
+    for (const line of label.split('·')) expect(hub).toContain(line);
+  });
+
+  it('is the same on every surface: no presentation profile carries a cluster budget of its own', () => {
+    for (const [name, profile] of Object.entries(MAP_PRESENTATIONS)) {
+      expect(profile, name).not.toHaveProperty('clusterMaxNumbers');
+    }
   });
 });
 

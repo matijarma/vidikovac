@@ -320,7 +320,6 @@ export interface VehicleGeoJsonOptions {
    *  and with the collision pass no longer thinning anything, a busy hub would
    *  pile up worse than before. */
   symbolScale?: number;
-  clusterMaxNumbers?: number;
   /** The line the map is about (F5). A cluster of several routes has no one
    *  route id and carries '' -- which, under a selection, is every route but
    *  the lit one, so a merged mark standing partly *on* the lit line took the
@@ -445,7 +444,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   }
   const merged: VehicleFeature[] = [...alone];
   for (const points of byKind.values()) {
-    for (const group of clusterPills(points, { selectedId, maxNumbers: options.clusterMaxNumbers })) {
+    for (const group of clusterPills(points, { selectedId })) {
       merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
   }
@@ -1239,7 +1238,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
       const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, clusterMaxNumbers: profile.clusterMaxNumbers });
+      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
       lastPushedSignature = signature;
