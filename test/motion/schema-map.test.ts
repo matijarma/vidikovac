@@ -250,7 +250,7 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   expect(h.pendingFrames()).toBe(0);
   expect(h.container.querySelector('canvas')).toBeNull();
 
-  const kiosk = harness({ interactive: false, stop: { id: 'T600', name: 'T600', lon: 0, lat: 0 } });
+  const kiosk = harness({ interactive: false, stop: { id: 'T600', name: 'T600', lon: 0, lat: 0, routes: [] } });
   await flush();
   kiosk.resize(1920, 1080);
   kiosk.frame();

@@ -451,7 +451,7 @@ describe('search and selection', () => {
     expect(text(q('#t-clear-selection'))).toBe('Natrag');
     // Clearing tells the map and the paired screen once, and the overview returns.
     q<HTMLButtonElement>('#t-clear-selection').click();
-    expect(last().select!.mock.lastCall?.[0]).toBeNull();
+    expect(spy(last().select).mock.lastCall?.[0]).toBeNull();
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', null);
     expect(q<HTMLInputElement>('[data-testid=transport-search]').value).toBe('crnomerec');
     expect(q('[role=listbox]')).not.toBeNull();

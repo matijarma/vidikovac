@@ -16,9 +16,9 @@ function shapeOf(id: string, route: string, pts: XY[]): Shape {
 function net(): Network {
   const shape = shapeOf('S6', '6', [{ x: 0, y: 0 }, { x: 3000, y: 0 }]);
   const stops: Stop[] = [
-    { id: 'A', name: 'Črnomerec', p: { x: 0, y: 0 }, on: [{ shape: 0, s: 0 }] },
-    { id: 'B', name: 'Trg bana Jelačića', p: { x: 1500, y: 0 }, on: [{ shape: 0, s: 1500 }] },
-    { id: 'C', name: 'Sopot', p: { x: 3000, y: 0 }, on: [{ shape: 0, s: 3000 }] },
+    { id: 'A', name: 'Črnomerec', p: { x: 0, y: 0 }, on: [{ shape: 0, s: 0 }], terminal: true },
+    { id: 'B', name: 'Trg bana Jelačića', p: { x: 1500, y: 0 }, on: [{ shape: 0, s: 1500 }], terminal: false },
+    { id: 'C', name: 'Sopot', p: { x: 3000, y: 0 }, on: [{ shape: 0, s: 3000 }], terminal: true },
   ];
   return {
     version: 1, feedVersion: 'test',

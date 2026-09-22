@@ -53,7 +53,7 @@ describe('transitProducer', () => {
   ]);
   const savedList = (ids: string[]): LayerContext => ({
     ...ctx({ snapshots: { 'zet-rt': ZET }, screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: STOP } }),
-    ...({ saved: { list: () => ids.map((id) => ({ kind: 'route' as const, id })) } } as Partial<LayerContext>),
+    ...({ saved: { list: () => ids.map((id) => ({ kind: 'route' as const, id })) } } as unknown as Partial<LayerContext>), // no has(): the producer only lists
   });
 
   it('boards the stop’s lines with saved lines prepended, each badge, delay word, tone and vehicle-count glyph', () => {
@@ -375,7 +375,7 @@ describe('gazetteProducer', () => {
       { id: 'a1', module: 'glasnik', kind: 'act', tier: 'open', title: 'Odluka', at: '2026-09-10T00:00:00Z', data: { broj: '21', godina: '2026' } },
       { id: 'a2', module: 'glasnik', kind: 'act', tier: 'open', title: 'Odluka 2', data: {} },
     ]);
-    const tile = gazetteProducer.produce(ctx({ snapshots: { glasnik } }))[0]!;
+    const tile = gazetteProducer.produce(ctx({ snapshots: { glasnik } }), options())[0]!;
     expect(tile).toMatchObject({ key: 'glasnik:issue', domain: 'civic', variant: 'value', label: 'Glasnik', value: '21/2026', valueSize: 'xl', bucket: 'sada', testid: 'tile-gazette' });
     // The day and month and the count alone (kajimafix 01.6): the verb and the weekday ellipsised a three-digit count; the aria keeps the sentence.
     expect(tile.context).toBe('10. 9. · 2 akta');
@@ -383,7 +383,7 @@ describe('gazetteProducer', () => {
   });
 
   it('shows nothing without any acts', () => {
-    expect(gazetteProducer.produce(ctx({ snapshots: { glasnik: base('glasnik', []) } }))).toEqual([]);
+    expect(gazetteProducer.produce(ctx({ snapshots: { glasnik: base('glasnik', []) } }), options())).toEqual([]);
   });
 });
 

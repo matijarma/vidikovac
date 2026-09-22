@@ -30,8 +30,8 @@ function testNetwork(): Network {
     [15.977, 45.813],
     [15.977, 45.821],
   ]);
-  const stopTram: Stop = { id: 'ST1', name: 'Jelačić plac', p: toPlane(15.977, 45.813), on: [{ shape: 0, s: tram.cum[1] }] };
-  const stopBus: Stop = { id: 'ST2', name: 'Jelačić plac (bus)', p: toPlane(15.977, 45.813), on: [{ shape: 1, s: bus.cum[1] }] };
+  const stopTram: Stop = { id: 'ST1', name: 'Jelačić plac', p: toPlane(15.977, 45.813), on: [{ shape: 0, s: tram.cum[1] }], terminal: false };
+  const stopBus: Stop = { id: 'ST2', name: 'Jelačić plac (bus)', p: toPlane(15.977, 45.813), on: [{ shape: 1, s: bus.cum[1] }], terminal: false };
   return {
     version: 1,
     feedVersion: 'test',
@@ -110,7 +110,7 @@ function mount(opts: {
   // and invoked once the test has stubbed the now-existing elements, to
   // force a second, properly-measured layout pass (exactly the resize path
   // a real theme change or window resize would drive).
-  let repaint: (() => void) | null = null;
+  let repaint = null as (() => void) | null; // assigned by onRepaint below, so no narrowing to null
   // One-shot timers the view arms for the card's idle close, fired by hand.
   const timers: { fn: () => void; ms: number; cleared: boolean }[] = [];
   const handle = mountSchematicView(root, {

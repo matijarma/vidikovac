@@ -114,7 +114,10 @@ describe('the page-side function in a DOM', () => {
       Object.defineProperty(el, 'offsetParent', { configurable: true, get: () => document.body });
     }
     const out = RULES_IN_PAGE({
+      geometry: null,
+      typeFloor: null,
       targets: [CONTROL_TARGETS],
+      openDetails: false,
       edge: EDGE_TOLERANCE_PX,
       rounding: 0.5,
     });

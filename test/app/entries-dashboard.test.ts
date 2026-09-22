@@ -74,7 +74,7 @@ describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
 
   it('schedules exactly one prefetch through requestIdleCallback, with a timeout, when not lightweight', async () => {
     const idle = vi.fn();
-    (globalThis as { requestIdleCallback?: typeof idle }).requestIdleCallback = idle;
+    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
     await importDashboardEntry('?lagano=0');
     expect(idle).toHaveBeenCalledTimes(1);
     const [callback, options] = idle.mock.calls[0]!;
@@ -85,14 +85,14 @@ describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
 
   it('schedules no prefetch at all on the lightweight path (?lagano=1)', async () => {
     const idle = vi.fn();
-    (globalThis as { requestIdleCallback?: typeof idle }).requestIdleCallback = idle;
+    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
     await importDashboardEntry('?lagano=1');
     expect(idle).not.toHaveBeenCalled();
   });
 
   it('does not idle-prefetch MapLibre when the device prefers the schema, and shares the store with the mounted dashboard', async () => {
     const idle = vi.fn();
-    (globalThis as { requestIdleCallback?: typeof idle }).requestIdleCallback = idle;
+    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
     localStorage.setItem('kajima:map-mode:v1', 'schema');
     await importDashboardEntry('?lagano=0');
     expect(idle).not.toHaveBeenCalled();

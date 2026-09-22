@@ -820,7 +820,7 @@ describe('invitation: the screen a passer-by sees', () => {
     const highlight=q(k.root,'.k-highlight-content')!;
     const key=highlight.dataset.highlight;
     // A phone pairs: the notice speaks, and it speaks as a status region, so the ticker stands aside.
-    k.handlers.onPaired!();
+    k.handlers.onPaired!(NOW + 600_000);
     expect(text(headMid)).toBe('Pogled je otvoren na tvom uređaju.');
     expect(headMid.getAttribute('role')).toBe('status');
     k.tick(CODE_TICK_MS);
@@ -1483,10 +1483,10 @@ describe('the invitation composition: the cards, the header ticker, the strip', 
 // rebuilt; the composition's tables reach the ranker; last departures are
 // fetched on stop change and again once their table expires.
 describe('the field, the column and the one map', () => {
-  function spyMap(extra: Record<string, unknown> = {}) {
+  function spyMap<E extends object = Record<never, never>>(extra: E = {} as E) {
     const calls: string[] = [];
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn(), ...extra };
-    return { factory: vi.fn(() => handle), handle, calls };
+    return { factory: vi.fn((_options: unknown) => handle), handle, calls };
   }
   /** happy-dom lays nothing out: a host width is stubbed so the camera can be seen to follow it. */
   const layOut = (host: HTMLElement, width: number) => Object.defineProperty(host, 'clientWidth', { value: width, configurable: true });
@@ -1659,7 +1659,7 @@ describe('the field, the column and the one map', () => {
     let now = NOW;
     const down: LastRunSnapshot = { status: 'down', fetchedAt: new Date(NOW).toISOString() };
     const live: LastRunSnapshot = { status: 'live', fetchedAt: new Date(NOW + LASTRUN_DOWN_RETRY_MS).toISOString(), sourceUpdatedAt: '2026-09-15T00:00:00Z', validUntil: new Date(NOW + 30 * 24 * 3_600_000).toISOString(), routes: { '6': { '2026-09-11': '23:58' } } };
-    const loadLastRun = vi.fn(async () => down);
+    const loadLastRun = vi.fn(async (): Promise<LastRunSnapshot> => down);
     const k = mount({ stored: STORED, now: () => now, loadLastRun });
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
@@ -2011,7 +2011,7 @@ describe('arrivals on the public screen', () => {
    *  callback with the stop's id. */
   function tappableMap() {
     const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn(), setFeedState: vi.fn(), setView: vi.fn() };
-    return { factory: vi.fn(() => handle), handle };
+    return { factory: vi.fn((_options: unknown) => handle), handle };
   }
 
   it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {

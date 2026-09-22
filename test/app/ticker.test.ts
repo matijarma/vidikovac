@@ -56,7 +56,7 @@ describe('tickerItems: the city in one line at a time', () => {
 
   it('names a ZET notice, and a closure as a closure with the hour it ends, both under PROMET', () => {
     const modules = [
-      snap('dogadanja', [item('dogadanja', 'n1', 'notice', 'Tramvaji preko Savske voze obilazno', { at: new Date(NOW - 3_600_000).toISOString(), data: { source: 'zet-promet' } })]),
+      snap('dogadanja', [item('dogadanja', 'n1', 'event', 'Tramvaji preko Savske voze obilazno', { at: new Date(NOW - 3_600_000).toISOString(), data: { source: 'zet-promet' } })]),
       snap('prometnice', [item('prometnice', 'c1', 'closure', 'Ilica zatvorena', { at: new Date(NOW - 7_200_000).toISOString(), until: '2026-09-11T14:00:00Z' })]),
     ];
     const items = tickerItems(modules, null, NOW, s, i18n);
@@ -72,7 +72,7 @@ describe('tickerItems: the city in one line at a time', () => {
   });
 
   it('gives works under way their own kicker', () => {
-    const modules = [snap('dogadanja', [item('dogadanja', 'w1', 'notice', 'Obnova kolnika u Vlaškoj', { data: { source: 'komunalne', phase: 'U tijeku' } })])];
+    const modules = [snap('dogadanja', [item('dogadanja', 'w1', 'event', 'Obnova kolnika u Vlaškoj', { data: { source: 'komunalne', phase: 'U tijeku' } })])];
     const items = tickerItems(modules, null, NOW, s, i18n);
     expect(items).toEqual([{ key: 'works:w1', kicker: kickers.works, text: 'Obnova kolnika u Vlaškoj' }]);
   });
@@ -106,7 +106,7 @@ describe('tickerItems: the city in one line at a time', () => {
       ]),
       snap('dogadanja', [
         item('dogadanja', 's1', 'event', '13. sjednica Gradske skupštine', { at: '2026-09-17T08:00:00Z', dateBasis: 'event', data: { source: 'skupstina', precision: 'time' } }),
-        item('dogadanja', 'k1', 'notice', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
+        item('dogadanja', 'k1', 'event', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
       ]),
     ];
     const items = tickerItems(modules, null, NOW, s, i18n);
@@ -119,14 +119,14 @@ describe('tickerItems: the city in one line at a time', () => {
   });
 
   it('prefers the worker\'s one-line brief to a long title', () => {
-    const modules = [snap('dogadanja', [item('dogadanja', 'n1', 'notice', 'OBAVIJEST O PRIVREMENOJ IZMJENI REŽIMA PROMETA NA PODRUČJU GRADSKE ČETVRTI TREŠNJEVKA', { at: new Date(NOW - 60_000).toISOString(), data: { source: 'zet-promet' }, brief: 'Tramvaji 3 i 9 voze obilazno do subote.' })])];
+    const modules = [snap('dogadanja', [item('dogadanja', 'n1', 'event', 'OBAVIJEST O PRIVREMENOJ IZMJENI REŽIMA PROMETA NA PODRUČJU GRADSKE ČETVRTI TREŠNJEVKA', { at: new Date(NOW - 60_000).toISOString(), data: { source: 'zet-promet' }, brief: 'Tramvaji 3 i 9 voze obilazno do subote.' })])];
     expect(tickerItems(modules, null, NOW, s, i18n)[0]!.text).toBe('Tramvaji 3 i 9 voze obilazno do subote.');
   });
 
   it('says one thing once: two sources with the same sentence make one item', () => {
     const modules = [snap('dogadanja', [
-      item('dogadanja', 'k1', 'notice', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
-      item('dogadanja', 'k2', 'notice', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
+      item('dogadanja', 'k1', 'event', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
+      item('dogadanja', 'k2', 'event', 'Nova šetnica na Savici', { data: { source: 'kvartovske' } }),
     ])];
     expect(tickerItems(modules, null, NOW, s, i18n)).toHaveLength(1);
   });
@@ -136,9 +136,9 @@ describe('tickerItems: the city in one line at a time', () => {
       snap('zet-rt', [route('6', 240)]),
       snap('prometnice', [item('prometnice', 'c1', 'closure', 'Ilica zatvorena', { until: '2026-09-11T14:00:00Z' })]),
       snap('dogadanja', [
-        item('dogadanja', 'w1', 'notice', 'Obnova kolnika', { data: { source: 'komunalne', phase: 'U tijeku' } }),
+        item('dogadanja', 'w1', 'event', 'Obnova kolnika', { data: { source: 'komunalne', phase: 'U tijeku' } }),
         item('dogadanja', 'e1', 'event', 'Sa zida na zid', { at: '2026-09-11T17:00:00Z', dateBasis: 'event', data: { source: 'etnografski', precision: 'time', venue: 'Etnografski muzej' } }),
-        item('dogadanja', 'k1', 'notice', 'Nova šetnica', { data: { source: 'kvartovske' } }),
+        item('dogadanja', 'k1', 'event', 'Nova šetnica', { data: { source: 'kvartovske' } }),
       ]),
       snap('dhmz-forecast', [item('dhmz-forecast', 'f1', 'forecast', 'Prognoza', { at: '2026-09-11T00:00:00Z', summary: 'Pretežno oblačno.' })]),
     ];

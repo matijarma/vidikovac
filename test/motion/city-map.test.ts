@@ -475,7 +475,7 @@ describe('the basemap and the overlays on it', () => {
   });
 
   it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint, zoom ranges and the street names’ padding), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
-    const prozor: overlays.ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, labelPadding: 30 };
+    const prozor: overlays.ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6'], stopLabelMinRank: 4, overlapZoom: 14.6, stopRadius: false, labelPadding: 30 };
     const { map, handle } = await harness({ load: false, extra: { basemapProfile: 'prozor', prozor, interactive: false, symbolScale: 2 } });
     expect(handle.placedNames!('roads_labels_major')).toEqual([]);
     map.fire('load');
@@ -507,7 +507,7 @@ describe('the basemap and the overlays on it', () => {
     // A pill is never dropped, at any zoom and under any option set: the layer
     // went on with overlap and ignore-placement already true, and nothing the
     // kiosk changes can turn them off again.
-    expect((map.layers.find((l) => l.id === 'vehicles') as { layout: Record<string, unknown> }).layout['icon-allow-overlap']).toBe(true);
+    expect(layer('vehicles')!.layout!['icon-allow-overlap']).toBe(true);
     expect(map.layout['vehicles']?.['icon-allow-overlap']).toBeUndefined();
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
     // Back to no option set: today's drawing, thresholds and the profile's own padding included.

@@ -582,7 +582,7 @@ describe('the one map, through the additive adapter', () => {
   it('hands the factory the stop as centre at the field zoom with the prozor options, no selection and no padding (R-KP11), keeps the handle, pushes a changed view only, and pushes the prozor set on every request so a stop change moves the drawn stops (R-KP19)', () => {
     const setView = vi.fn();
     const setProzor = vi.fn();
-    const factory = vi.fn(() => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView, setProzor }));
+    const factory = vi.fn((_options: unknown) => ({ update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setView, setProzor }));
     const adapter = createKioskMapAdapter(factory);
     const maps = createMapSlots(adapter.factory);
     const input = { stop: STOP, snapshots: { 'zet-rt': MODULES.find((m) => m.module === 'zet-rt')!, prometnice: MODULES.find((m) => m.module === 'prometnice')! }, now: NOW, selection: null, phase: 'invitation' as const, widthPx: 1400, heightPx: 888, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
@@ -649,7 +649,7 @@ describe('the one map, through the additive adapter', () => {
   it('forwards the feed state on every paint, starts a map created in an outage held, marks the stop, and lights only the kiosk quake rule (R-KP9)', () => {
     const setFeedState = vi.fn();
     const update = vi.fn();
-    const factory = vi.fn(() => ({ update, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
+    const factory = vi.fn((_options: unknown) => ({ update, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState }));
     const adapter = createKioskMapAdapter(factory);
     adapter.setFeedState('stale');
     expect(adapter.feedState()).toBe('stale');
@@ -707,7 +707,7 @@ describe('the kiosk\u2019s whole-city window', () => {
   const EVENTS = [item('dogadanja', 'kvartovske:e1', 'event', 'Koncert', { at: new Date(NOW + 3_600_000).toISOString(), dateBasis: 'event', data: { source: 'kvartovske', venue: 'Kino Europa', precision: 'time' } })];
   const stub = () => {
     const calls = { setModes: vi.fn(), setCityLabels: vi.fn(), setProzor: vi.fn(), setOutline: vi.fn(), update: vi.fn() };
-    const factory = vi.fn(() => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
+    const factory = vi.fn((_options: unknown) => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
     const adapter = createKioskMapAdapter(factory);
     return { calls, factory, adapter, maps: createMapSlots(adapter.factory) };
   };
