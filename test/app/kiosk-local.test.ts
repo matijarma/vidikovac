@@ -17,8 +17,10 @@ import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { busesVisible, CITY_DETAIL_ZOOM, cityWindowPoints, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
+import { busesVisible, CITY_DETAIL_ZOOM, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
 import { emptyCity, type CityState } from '../../shared/city/types';
+import { CURATED_WALL, curatedCityPoints } from '../../app/src/city/curated';
+import { cityLabelsOf } from '../../app/src/map/city-map';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/start';
@@ -704,7 +706,10 @@ describe('the kiosk\u2019s whole-city window', () => {
       consultations: [],
     },
   };
-  const EVENTS = [item('dogadanja', 'kvartovske:e1', 'event', 'Koncert', { at: new Date(NOW + 3_600_000).toISOString(), dateBasis: 'event', data: { source: 'kvartovske', venue: 'Kino Europa', precision: 'time' } })];
+  // 20:02 in Zagreb: a programme of this evening, so the venue is on the wall's curated map ('tonight') as on the week's.
+  const EVENTS = [item('dogadanja', 'kvartovske:e1', 'event', 'Koncert', { at: new Date(NOW + 5.5 * 3_600_000).toISOString(), dateBasis: 'event', data: { source: 'kvartovske', venue: 'Kino Europa', precision: 'time' } })];
+  /** The names the map was last asked to draw, as one of CityLabels' three answers (true/false are the older switch). */
+  const lastLabels = (spy: { mock: { calls: unknown[][] } }) => cityLabelsOf(spy.mock.calls.at(-1)![0] as never);
   const stub = () => {
     const calls = { setModes: vi.fn(), setCityLabels: vi.fn(), setProzor: vi.fn(), setOutline: vi.fn(), update: vi.fn() };
     const factory = vi.fn(() => ({ ...calls, pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() }));
@@ -799,19 +804,19 @@ describe('the kiosk\u2019s whole-city window', () => {
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
     const city = (options.points as { id: string; title: string; place?: string; props?: Record<string, unknown> }[]).filter((p) => p.place === 'city');
     expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
-    expect(city.every((p) => p.title === '')).toBe(true);
-    expect(city.find((p) => p.id === 'bajs-b1')!.props).toEqual({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
+    expect(city.find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
     expect(city.find((p) => p.id === 'bajs-b2')!.props!.badge).toBe('0');
     expect(city.find((p) => p.id === 'culture-1')!.props).toEqual({ category: 'culture', badge: '1', eventCount: 1, priority: 0 });
-    expect(options.cityLabels).toBe(false);
-    expect(calls.setCityLabels).toHaveBeenLastCalledWith(false);
+    // The names are the layer's to leave off (CityLabels 'none'), not the points'.
+    expect(cityLabelsOf(options.cityLabels as never)).toBe('none');
+    expect(lastLabels(calls.setCityLabels)).toBe('none');
     // The one on-duty pharmacy keeps its ring and loses its address: a street number is not a fact anyone reads a city window for.
     expect((options.points as { place?: string; title: string; props?: Record<string, unknown> }[]).find((p) => p.place === 'pharmacy')).toMatchObject({ title: '' });
     // The same call, exploring: discover() answers the question with the few places it is about, named.
     requestKioskMap(maps, { ...base, exploring: true }, adapter);
     const drawn = calls.update.mock.calls.at(-1)![0] as { id: string; title: string; place?: string }[];
     expect(drawn.filter((p) => p.place === 'city').some((p) => p.title !== '')).toBe(true);
-    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+    expect(lastLabels(calls.setCityLabels)).toBe('all');
   });
 
   it('puts the buses on the picture only once the camera is in a neighbourhood, and follows the camera without a new map', () => {
@@ -837,8 +842,8 @@ describe('the kiosk\u2019s whole-city window', () => {
     const paired = { ...base, phase: 'paired' as const, selection: { kind: 'place' as const, id: 'culture-1' } };
     requestKioskMap(maps, paired, adapter);
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
-    expect(options.cityLabels).toBe(true);
-    expect(calls.setCityLabels).toHaveBeenLastCalledWith(true);
+    expect(cityLabelsOf(options.cityLabels as never)).toBe('all');
+    expect(lastLabels(calls.setCityLabels)).toBe('all');
     // discover()'s own points, named -- not the window's nameless badges.
     const city = (options.points as { id: string; title: string; place?: string }[]).filter((p) => p.place === 'city');
     expect(city.find((p) => p.id === 'culture-1')!.title).toBe('Kino Europa');
@@ -851,17 +856,21 @@ describe('the kiosk\u2019s whole-city window', () => {
     const invitation = stub();
     requestKioskMap(invitation.maps, base, invitation.adapter);
     const first = invitation.factory.mock.calls[0]![0] as Record<string, unknown>;
-    expect(first.cityLabels).toBe(false);
-    expect((first.points as { id: string; title: string }[]).find((p) => p.id === 'culture-1')!.title).toBe('');
+    expect(cityLabelsOf(first.cityLabels as never)).toBe('none');
+    expect((first.points as { id: string; title: string }[]).some((p) => p.id === 'culture-1')).toBe(true);
   });
 
-  it('cityWindowPoints reads the live BAJS rows and the week\u2019s venues, and nothing a source did not place', () => {
-    expect(cityWindowPoints(CITY, EVENTS, NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
-    // A station whose own source is not live cannot claim a count: bikeAvailability says so.
+  it('curatedCityPoints reads the live BAJS rows and tonight\u2019s venues, and nothing a source did not place', () => {
+    expect(curatedCityPoints(CITY, EVENTS, NOW, CURATED_WALL).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
+    expect(curatedCityPoints(CITY, EVENTS, NOW).find((p) => p.id === 'culture-1')!.title).toBe('Kino Europa');
+    // A station whose own source is not live cannot claim a count: a grey disc without a number, never "?".
     const stale: CityState = { ...CITY, live: { ...CITY.live!, sources: [{ ...CITY.live!.sources[0]!, status: 'stale' }] } };
-    expect(cityWindowPoints(stale, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props!.badge).toBe('?');
-    // No events, no venue marks: a venue is on the window because something is on there.
-    expect(cityWindowPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
+    expect(curatedCityPoints(stale, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ badge: '', spent: true });
+    // No events, no venue marks: a venue is on the map because something is on there tonight.
+    expect(curatedCityPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
+    // A 15:32 matinee is this week's, not this evening's.
+    const matinee = [{ ...EVENTS[0]!, at: new Date(NOW + 3_600_000).toISOString() }];
+    expect(curatedCityPoints(CITY, matinee, NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
   });
 });
 
