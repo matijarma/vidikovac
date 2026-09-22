@@ -310,6 +310,38 @@
   .ki[data-stage='map'][data-view='map'] .t-sheet-toggle .icon { transform: rotate(90deg); }
 }
 
+/* --- The desk pair: .ki[data-stage='desk'] ----------------------------------
+   From 60rem dashboard.ts renders Sada and Karta side by side in .ki-desk
+   (dashboard.css) and writes data-stage='desk'. The page scrolls with the Sada
+   column; the Karta column sticks under the status line at the height left
+   below it, one bounded panel with the map filling it and the sheet as the
+   board column beside the map, as on the desk stage above: no detents, no
+   handle. The stage mode of workspace.ts already reads 'desk' at this width. */
+.ki[data-stage='desk'] .ki-desk > .layer[data-layer='u-pokretu'] {
+  position: sticky; inset-block-start: calc(var(--ki-top) + var(--sp-3));
+  block-size: calc(100vh - var(--ki-top) - 2 * var(--sp-3)); block-size: calc(100dvh - var(--ki-top) - 2 * var(--sp-3));
+  min-block-size: 0; gap: 0;
+}
+.ki[data-stage='desk'] .layer[data-layer='u-pokretu'] > .layer-title {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.ki[data-stage='desk'] .layer[data-layer='u-pokretu'] .layer-panels { display: block; block-size: 100%; min-block-size: 0; }
+.ki[data-stage='desk'] .transport { display: flex; flex-direction: column; gap: 0; block-size: 100%; min-block-size: 0; }
+.ki[data-stage='desk'] .transport-body {
+  position: relative; flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem); gap: 0; min-block-size: 0;
+  overflow: hidden; border: 1px solid var(--tone-stroke); border-radius: var(--r-lg);
+}
+.ki[data-stage='desk'] .transport-map { position: relative; block-size: 100%; min-block-size: 0; }
+.ki[data-stage='desk'] .t-map-canvas { position: absolute; inset: 0; block-size: 100%; border-radius: 0; border: 0; }
+.ki[data-stage='desk'] .t-map-status { inset-block-start: auto; inset-inline-end: auto; max-inline-size: calc(100% - 2 * var(--sp-2)); inset-block-end: var(--sp-2); }
+.ki[data-stage='desk'] .transport-sheet {
+  position: static; transform: none; transition: none; block-size: 100%; min-block-size: 0; overflow: hidden;
+  border: 0; border-radius: 0; border-inline-start: 1px solid var(--tone-stroke); box-shadow: none;
+}
+.ki[data-stage='desk'] .t-sheet-handle, .ki[data-stage='desk'] .t-sheet-toggle { display: none; }
+.ki[data-stage='desk'] .t-sheet-head { min-block-size: var(--target); padding-block-start: var(--sp-3); touch-action: auto; cursor: default; }
+
 /* --- The full-map view mode: .ki[data-view='map'] ------------------------
    dashboard.css hides the banners in this mode; the expiry line must stay in view, and above MapLibre's controls (z-index 2). */
 .ki[data-view='map'] .ki-banners { display: grid; z-index: 3; }

@@ -84,3 +84,5 @@
   .day-agenda .tl > * { grid-column: 1; grid-row: auto; }
   .day-section-head { flex-wrap: wrap; }
 }
+/* The desk pair (dashboard.css .ki-desk): the feed keeps the phone's reading measure beside the map. */
+.ki[data-stage='desk'] .ws-sada { max-inline-size: 32rem; }
