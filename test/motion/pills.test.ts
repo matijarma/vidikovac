@@ -7,6 +7,7 @@ import {
   NOSE_WIDTH_PX,
   pillChars,
   pillImageId,
+  pillLabel,
   pillWidthPx,
   PILL_BASE_WIDTHS_PX,
   PILL_MAX_CHARS_CLUSTER,
@@ -63,6 +64,22 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
     expect(label).not.toMatch(/\+/);
     // Every name in it is a whole line of the cluster, never a number cut short.
     for (const line of label.split('·')) expect(hub).toContain(line);
+  });
+
+  it('holds every candidate to the cap, the first one too: an oversized single line is cut to forty characters, never emptied', () => {
+    const long = 'K'.repeat(41);
+    expect(clusterLabel([long, 'Z'])).toBe('K'.repeat(PILL_MAX_CHARS_CLUSTER));
+    expect(clusterLabel([long])).toHaveLength(PILL_MAX_CHARS_CLUSTER);
+    expect(pillLabel(long)).toBe('K'.repeat(PILL_MAX_CHARS_CLUSTER));
+    // A real line, and a vehicle whose route nobody knows, pass through untouched.
+    expect(pillLabel('6')).toBe('6');
+    expect(pillLabel('')).toBe('');
+    // The union-find's own cluster obeys the same cap.
+    const groups = clusterPills([point('a', 0, 0, long), point('b', 5, 0, 'Z')], {});
+    expect(groups).toHaveLength(1);
+    const cluster = groups[0]!;
+    if (!isCluster(cluster)) throw new Error('expected a cluster');
+    expect(cluster.label.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
   });
 
   it('is the same on every surface: no presentation profile carries a cluster budget of its own', () => {

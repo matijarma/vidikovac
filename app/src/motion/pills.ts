@@ -113,15 +113,26 @@ function compareClusterLabel(a: string, b: string): number {
   return a.localeCompare(b, 'hr');
 }
 
+/** One line's name as its pill writes it: whole, as it always is for a
+ *  ZET line (four characters at most). Only an identifier longer than the
+ *  widest capsule (PILL_MAX_CHARS_CLUSTER) is cut to it, so no label ever
+ *  runs past its pill; it is never emptied. The standalone and selected
+ *  pills (city-map.ts's vehicleLabel) and a cluster's first line both pass
+ *  through here, so the cap holds on every mark. */
+export function pillLabel(label: string): string {
+  return label.length > PILL_MAX_CHARS_CLUSTER ? label.slice(0, PILL_MAX_CHARS_CLUSTER) : label;
+}
+
 /** A cluster's name: every distinct line, numbers ascending then letters,
  *  joined by CLUSTER_SEPARATOR -- every line number, the pill grows
  *  [O-35]. Nothing is folded into a count. Only past the capsule's hard cap
  *  (PILL_MAX_CHARS_CLUSTER, a bus hub; every tram line together fits) does
  *  the name stop at the last whole line that fits: a shorter list, never a
- *  number cut in half and never a count in place of the lines. */
+ *  count in place of the lines. Every candidate is checked against the cap,
+ *  the first one too (pillLabel), so the name never outgrows its pill. */
 export function clusterLabel(labels: readonly string[]): string {
   const distinct = [...new Set(labels)].sort(compareClusterLabel);
-  let label = distinct[0] ?? '';
+  let label = pillLabel(distinct[0] ?? '');
   for (const line of distinct.slice(1)) {
     const next = label + CLUSTER_SEPARATOR + line;
     if (next.length > PILL_MAX_CHARS_CLUSTER) break;
