@@ -40,8 +40,16 @@ const at = (iso: string): number => Date.parse(iso);
 const row = (over: Partial<TimelineRow> & Pick<TimelineRow, 'id' | 'kind'>): TimelineRow => ({
   atMs: NOW + 5 * MIN, always: false, title: 'Črnomerec', sub: '', live: false, source: 'zet', ...over,
 });
-const dep = (n: number, over: Partial<TimelineRow> = {}): TimelineRow =>
-  row({ id: `dep:${n}`, kind: 'departure', atMs: NOW + n * 4 * MIN, live: true, ...over });
+const dep = (n: number, over: Omit<Partial<TimelineRow>, 'arrival'> & {
+  arrival?: Pick<NonNullable<NearbyRow['arrival']>, 'routeId' | 'routeName'>;
+} = {}): TimelineRow => {
+  const { arrival, ...rest } = over;
+  const atMs = rest.atMs ?? NOW + n * 4 * MIN;
+  return row({ id: `dep:${n}`, kind: 'departure', atMs, live: true, ...rest,
+    ...(arrival ? { arrival: { ...arrival, tripId: `trip:${n}`, headsign: rest.title ?? 'Črnomerec',
+      atMs, live: rest.live ?? true, minutes: Math.round((atMs - NOW) / MIN) } } : {}),
+  });
+};
 const always = (over: Partial<TimelineRow> = {}): TimelineRow =>
   row({ id: 'always:story:trg', kind: 'always', atMs: null, always: true, title: 'Trg bana Josipa Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859', source: 'city', ...over });
 
@@ -415,7 +423,8 @@ describe('whole rows from the row budget', () => {
     const closure = row({ id: 'closure:x', kind: 'closure', atMs: NOW + 30 * MIN });
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
     expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
-    expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('always:story:trg');
+    expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), always()])).toBeNull();
     expect(dropCandidate([dep(1), dep(2)])?.id).toBe('dep:2');
     expect(dropCandidate([dep(1)])).toBeNull();
     expect(typeScale(64)).toBe(1);
@@ -555,13 +564,13 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
 /** Evaluates a computed font-size such as "calc(max(40px,calc(28px * 1)) * 1)" to px (happy-dom resolves var() but not calc/max). */
 function px(value: string): number {
   const js = value.replace(/px/g, '').replace(/calc\(/g, '(').replace(/max\(/g, 'Math.max(').replace(/min\(/g, 'Math.min(');
-  if (!/^[\d.\s+\-*/(),]*(Math\.(max|min)\([\d.\s+\-*/(),Mathaxin]*\)[\d.\s+\-*/(),]*)*$/.test(js.replace(/Math\.(max|min)/g, 'Math.$1'))) throw new Error(`not a length: ${value}`);
+  if (!/^[\d.\s+\-*/(),]+$/.test(js.replace(/Math\.(max|min)/g, ''))) throw new Error(`not a length: ${value}`);
   return Number(new Function(`return (${js});`)());
 }
 
 describe('the 3-metre floors in every wall composition (computed from the real sheets)', () => {
   const sheets = ['app/src/ui/kiosk.css', 'app/src/ui/kiosk-city.css'].map((f) => readFileSync(join(import.meta.dirname, '..', '..', f), 'utf8')).join('\n');
-  function sizes(size: string, portrait: boolean, zoom = 1): Record<string, number> {
+  function sizes(size: string, portrait: boolean, zoom = 1, theme = 'light'): Record<string, number> {
     document.head.innerHTML = '';
     const style = document.createElement('style');
     style.textContent = sheets;
@@ -569,6 +578,8 @@ describe('the 3-metre floors in every wall composition (computed from the real s
     const root = document.createElement('div');
     root.className = 'kiosk';
     root.dataset.size = size;
+    root.dataset.phase = 'invitation';
+    document.documentElement.dataset.themeResolved = theme;
     if (portrait) root.dataset.portrait = '1';
     root.style.setProperty('--kiosk-zoom', String(zoom));
     document.body.replaceChildren(root);
@@ -578,6 +589,7 @@ describe('the 3-metre floors in every wall composition (computed from the real s
     const out: Record<string, number> = {};
     for (const sel of ['.nearby-title', '.nearby-when', '.nearby-sub', '.k-nearby-day', '.k-nearby-heading']) out[sel] = px(getComputedStyle(root.querySelector(sel)!).fontSize);
     t.destroy();
+    delete document.documentElement.dataset.themeResolved;
     return out;
   }
   for (const [name, size, portrait] of [['wide 1920 x 1080', 'wide', false], ['compact 1366 x 768', 'compact', false], ['portrait 1080 x 1920', 'compact', true]] as const) {
@@ -597,6 +609,14 @@ describe('the 3-metre floors in every wall composition (computed from the real s
     const big = sizes('wide', false, 2);
     expect(big['.nearby-title']).toBe(80);
     expect(big['.nearby-sub']).toBe(56);
+  });
+  it.each(['wide', 'compact'])('scales the dark read tier by 1.1 for %s while keeping the walk-up floor', size => {
+    const light = sizes(size, false);
+    const dark = sizes(size, false, 1, 'dark');
+    expect(dark['.nearby-title']).toBeCloseTo(light['.nearby-title']! * 1.1);
+    expect(dark['.nearby-when']).toBeCloseTo(light['.nearby-when']! * 1.1);
+    expect(dark['.nearby-title']).toBeGreaterThanOrEqual(43);
+    expect(dark['.k-nearby-heading']).toBeGreaterThanOrEqual(28);
   });
   it('lets a phone (handheld) read the list at its own tiers', () => {
     const s = sizes('handheld', false);

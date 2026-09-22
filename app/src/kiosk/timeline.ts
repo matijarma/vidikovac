@@ -23,8 +23,8 @@
 // more than two, is replaced by the row's shorter complete label when the
 // selection layer supplies one (titleShort, subShort); when the list still
 // overflows its box, every label that takes more than one line gives way to
-// its short one, then whole rows are dropped, the latest timed rows first, then the
-// "uvijek" row, then departures beyond the first. The fit is measured once
+// its short one, then whole rows are dropped, the latest timed rows first, then
+// departures beyond the first. One "uvijek" row is reserved. The fit is measured once
 // per change of content or box and remembered, so a steady wall does not
 // re-measure or re-insert anything.
 //
@@ -130,18 +130,18 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
 
 /**
  * The row to drop when the rows do not fit, or null: the latest timed row
- * that is not a departure, then the "uvijek" row, then the latest departure
- * while more than one is left (a departure row always exists, principle 3).
+ * that is not a departure, then the latest departure while more than one
+ * is left. Keep one timeless row as well (owner decision 10).
  */
 export function dropCandidate<T extends NearbyRow>(rows: readonly T[]): T | null {
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i]!;
     if (!isTimeless(row) && row.kind !== 'departure') return row;
   }
-  const timeless = rows.filter(isTimeless);
-  if (timeless.length > 0) return timeless[timeless.length - 1]!;
   const departures = rows.filter((row) => row.kind === 'departure');
-  return departures.length > 1 ? departures[departures.length - 1]! : null;
+  if (departures.length > 1) return departures[departures.length - 1]!;
+  const timeless = rows.filter(isTimeless);
+  return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
 }
 
 const WEEKDAY_HR = new Intl.DateTimeFormat('hr-HR', { timeZone: 'Europe/Zagreb', weekday: 'short' });

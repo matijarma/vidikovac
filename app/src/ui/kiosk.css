@@ -31,15 +31,14 @@
    the credit tier.
 
    Frame (plan "Frame", R-KP1): the header carries the brand, the ink stop
-   chip, the header sentence (.k-ticker), the date, the theme button and the
+   chip, the header sentence, the date and the
    clock. The strip is one fixed row: the shield label, the safetyState
    verdict pill, the trail (the sources without a time), the green cross with
    24/7 and the pharmacy's address, and the /hitno link; nothing counts down
    any more. Between them the stage holds the front page,
    whose layout is ui/kiosk-city.css: the map (kiosk/field.ts) edge to edge
-   in the left column with nothing on the picture but MapLibre's own
-   attribution, and the aside of weather, the network's exceptions and
-   tonight over the accent-filled, QR-bound card. The paired compositions
+   in the left column with MapLibre's own attribution and one outage note,
+   and the nearby timeline over the accent-filled, QR-bound card. The paired compositions
    (kiosk/paired.ts) keep their own block/row/story grammar.
 
    Icons: the Lucide sprite base.css draws as .icon; --k-icon-size (28/22)
@@ -68,6 +67,7 @@
 
 .kiosk {
   --k-zoom: var(--kiosk-zoom, 1);
+  --k-read-scale: 1;
   /* The invitation card is a thing a person walks up to and scans, not a
      picture to be read across a room: above Full HD it stops growing with the
      screen, so the extra pixels go to the city rather than to a bigger QR.
@@ -122,16 +122,16 @@
   /* The front page's aside: the QR's 240 px plus the column of words beside it (ui/kiosk-city.css). */
   --k-side-w: calc(600px * var(--k-sign-zoom));
   --k-paired-side-w: calc(720px * var(--k-zoom));
-  --k-qr: calc(240px * var(--k-sign-zoom));
+  --k-qr: calc(264px * var(--k-sign-zoom));
   --k-code-size: calc(36px * var(--k-sign-zoom));
-  --k-ticker-size: calc(26px * var(--k-zoom));
+  --k-sentence-size: calc(40px * var(--k-zoom));
   /* The card's own measures on the sign scale: its gap, its lead (the supporting tier) and its hint (the hint tier).
      1 at the design sizes, so these equal --k-gap, --k-sup-size and --k-hint-size there; above Full HD the wall's type
      doubles (--k-zoom 2 at 4K) while the card stops at 1.35, and words that followed the type would not fit the side
      column beside the QR. */
   --k-card-gap: calc(20px * var(--k-sign-zoom));
   --k-card-lead: calc(28px * var(--k-sign-zoom));
-  --k-card-hint: calc(26px * var(--k-sign-zoom));
+  --k-card-hint: calc(28px * var(--k-sign-zoom));
   --k-display-size: calc(84px * var(--k-zoom));
   --k-clock-size: calc(48px * var(--k-zoom));
   --k-main-size: calc(40px * var(--k-zoom));
@@ -153,12 +153,12 @@
   --k-gap: calc(14px * var(--k-zoom));
   --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(540px * var(--k-zoom));
-  --k-qr: calc(240px * var(--k-sign-zoom));
+  --k-qr: calc(264px * var(--k-sign-zoom));
   --k-code-size: calc(32px * var(--k-sign-zoom));
-  --k-ticker-size: calc(20px * var(--k-zoom));
+  --k-sentence-size: calc(40px * var(--k-zoom));
   --k-card-gap: calc(14px * var(--k-sign-zoom));
-  --k-card-lead: calc(22px * var(--k-sign-zoom));
-  --k-card-hint: calc(20px * var(--k-sign-zoom));
+  --k-card-lead: calc(28px * var(--k-sign-zoom));
+  --k-card-hint: calc(28px * var(--k-sign-zoom));
   --k-display-size: calc(64px * var(--k-zoom));
   --k-clock-size: calc(36px * var(--k-zoom));
   --k-main-size: calc(28px * var(--k-zoom));
@@ -173,6 +173,29 @@
   --k-radius-s: calc(10px * var(--k-zoom));
   --k-control: calc(52px * var(--k-zoom));
 }
+
+/* The public overview has the same read/walk-up floors in every wall
+   composition. Paired layouts and handheld retain their own density. */
+:root[data-theme-resolved='dark'] .kiosk { --k-read-scale: 1.1; }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) {
+  --k-main-size: calc(max(40px, 40px * var(--k-zoom)) * var(--k-read-scale));
+  --k-sub-size: max(28px, calc(28px * var(--k-zoom)));
+  --k-sup-size: var(--k-sub-size);
+  --k-hint-size: var(--k-sub-size);
+  --k-sentence-size: var(--k-main-size);
+  --k-code-size: calc(max(40px, 40px * var(--k-sign-zoom)) * var(--k-read-scale));
+  --k-card-lead: max(28px, calc(28px * var(--k-sign-zoom)));
+  --k-card-hint: max(28px, calc(28px * var(--k-sign-zoom)));
+  --k-clock-size: var(--k-sub-size);
+  --k-strip-h: auto;
+}
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-context { font-size: var(--k-main-size); }
+.kiosk[data-size='compact'][data-phase='invitation'] { --k-head-h: calc(120px * var(--k-zoom)); }
+.kiosk[data-size='compact'][data-phase='invitation'] .k-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 1fr 1fr; }
+.kiosk[data-size='compact'][data-phase='invitation'] .k-head-mid { grid-column: 1 / -1; grid-row: 2; padding: 0; justify-content: flex-start; }
+.kiosk[data-size='compact'][data-phase='invitation'] .k-head-when { grid-column: 2; grid-row: 1; }
+.kiosk[data-size='compact'][data-phase='invitation'] .k-sentence-probe { left: 0; right: 0; }
+.kiosk[data-portrait='1'][data-phase='invitation'] .k-date { display: block; }
 
 /* --- Shell: header, stage, strip ------------------------------------------ */
 .kiosk { position: relative; }
@@ -195,7 +218,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* The stop chip: ink on paper, paper on night (kajimafix 03.1); the accent is kept for badges and the invitation card. */
 .k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding-left: var(--k-gap); border-left: 1px solid var(--k-line); color: var(--k-ink-2); font-size: var(--k-hint-size); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-context:empty { display: none; }
-.k-head-mid { display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
+.k-head-mid { position: relative; display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
 .k-head-when { display: flex; align-items: center; justify-content: flex-end; gap: var(--k-gap); margin-left: auto; white-space: nowrap; }
 .k-date { font-size: var(--k-hint-size); color: var(--k-ink-2); }
@@ -222,16 +245,20 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-stage { grid-row: 3; position: relative; min-height: 0; padding: var(--k-pad); }
 .k-stage > section { height: 100%; min-height: 0; }
 
-/* The header's middle: one sentence at a time, after its kicker.
-   One line, the kicker in the action colour, the sentence ellipsised rather
-   than wrapped -- a header that grows a second row moves the whole page. The
-   session pill and the return button own this space when they are here; the
-   controller removes the ticker rather than stacking it under them. */
-.k-ticker { display: flex; align-items: baseline; gap: calc(var(--k-gap) * 0.5); min-width: 0; max-width: 100%; font-size: var(--k-ticker-size); }
-.k-ticker-kicker { flex: none; font-size: 0.75em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-action); }
-.k-ticker-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; color: var(--k-ink); }
-.k-ticker[data-swap='1'] { animation: k-ticker-in 220ms var(--ease-enter) both; }
-@keyframes k-ticker-in { from { opacity: 0; } }
+/* One whole sentence. A permanently laid-out, invisible twin measures the
+   complete line before selection, even while a session or notice owns the middle. */
+.k-sentence { display: flex; align-items: baseline; gap: calc(var(--k-gap) * 0.5); min-width: 0; max-width: 100%; font-size: var(--k-sentence-size); }
+.k-sentence[hidden], .k-pairing-notice[hidden] { display: none; }
+.k-sentence-kicker { flex: none; font-size: var(--k-sub-size); font-weight: 800; color: var(--k-action); }
+.k-sentence-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: clip; font-weight: 600; color: var(--k-ink); }
+.k-sentence-probe { position: absolute; top: 0; left: var(--k-gap); right: var(--k-gap); visibility: hidden; pointer-events: none; }
+.k-sentence[data-kicker='kultura'] .k-sentence-kicker { color: var(--k-violet); }
+.k-sentence[data-kicker='vrijeme'] .k-sentence-kicker,
+.k-sentence[data-kicker='radovi'] .k-sentence-kicker { color: var(--k-amber); }
+.k-sentence[data-kicker='bicikli'] .k-sentence-kicker { color: var(--k-green); }
+.k-sentence[data-kicker='nocas'] .k-sentence-kicker { color: var(--k-ink-2); }
+.k-sentence[data-swap='1'] { animation: k-sentence-in 220ms var(--ease-enter) both; }
+@keyframes k-sentence-in { from { opacity: 0; } }
 
 /* --- Compositions: the paired main and side -----------------------------
    The front page's own layout is ui/kiosk-city.css (the window: the map
@@ -422,7 +449,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-invite-side { grid-area: side; display: flex; flex-direction: column; gap: calc(var(--k-card-gap) * 0.45); min-width: 0; width: 100%; }
 .k-lead { font-size: var(--k-card-lead); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
-.k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-card-gap) * 0.6); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
+.k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: 12px; border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-card-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
 .k-hint { min-width: 0; font-size: var(--k-card-hint); line-height: 1.3; }
@@ -433,12 +460,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* The code and its bar close the column; the words above it take the slack. */
 .k-invite-code { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: auto; }
 .k-code-box { position: relative; min-width: 0; }
-.k-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; align-items: center; }
-.k-code-copy { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid currentColor; border-radius: var(--r-sm); background: transparent; color: inherit; cursor: pointer; }
-.k-code-copy:hover:not(:disabled) { background: color-mix(in oklab, currentColor 12%, transparent); }
-.k-code-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-.k-code-copy:disabled { opacity: 0.5; cursor: default; }
-.k-code-copy .icon { width: 20px; height: 20px; }
+.k-code-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 .k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 @keyframes k-code-in { from { opacity: 0; } }
@@ -580,6 +602,11 @@ button.k-strip-verdict { cursor: pointer; }
 .k-strip-item[data-state='unknown'], .k-strip-item[data-state='down'] { color: var(--k-ink-3); }
 .k-strip-item[data-state='stale'] { color: var(--k-amber); }
 .k-strip-hitno { display: inline-flex; flex: none; align-items: center; box-sizing: border-box; min-height: 44px; margin-left: auto; padding: 0.25em 0.9em; border-radius: 999px; background: var(--k-ink); color: var(--k-canvas); font-weight: 700; text-decoration: none; }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip { min-height: calc(72px * var(--k-zoom)); padding-block: calc(4px * var(--k-zoom)); }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-verdict { font-size: var(--k-main-size); }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-items { overflow: visible; gap: calc(var(--k-gap) * .25) 0; }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy { display: inline-flex; align-items: center; font-size: var(--k-main-size); white-space: normal; overflow: visible; }
+.kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy strong { overflow-wrap: break-word; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
 .k-basics { position: absolute; top: var(--k-head-h); right: 0; bottom: var(--k-strip-h); left: 0; z-index: 4; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--k-pad); background: var(--k-canvas); }
@@ -724,12 +751,12 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
-  .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'], .kiosk .k-ticker[data-swap='1'] { animation: none; }
+  .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'], .kiosk .k-sentence[data-swap='1'] { animation: none; }
   .kiosk .k-code-ghost { display: none; }
   .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
-:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'], :root[data-lagano='1'] .k-ticker[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'], :root[data-lagano='1'] .k-sentence[data-swap='1'] { animation: none; }
 :root[data-lagano='1'] .k-code-ghost { display: none; }
 :root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 
@@ -754,7 +781,8 @@ button.k-strip-verdict { cursor: pointer; }
   --k-paired-side-w: 100%;
   --k-qr: 240px;
   --k-code-size: 32px;
-  --k-ticker-size: 16px;
+  --k-sentence-size: 18px;
+  --k-sub-size: 14px;
   --k-display-size: 40px;
   --k-clock-size: 24px;
   --k-main-size: 24px;

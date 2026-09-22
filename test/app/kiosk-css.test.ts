@@ -62,7 +62,7 @@ describe('public-screen design invariants', () => {
     expect(timeline).not.toMatch(/setAttribute\('hidden'/);
     expect(timeline).toContain('reconcile(list, next)');
     // The highlight is gone from both sheets.
-    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(/\.k-highlight(?![\w-])/);
+    for (const sheet of [css, cityCss]) expect(sheet).not.toMatch(new RegExp(`\\.${['k', 'highlight'].join('-')}(?![\\w-])`));
   });
   it('never cuts a word: no ellipsis, no clipped title, sub or head, no one-line squeeze', () => {
     expect(timelineRules.length).toBeGreaterThan(0);
@@ -132,23 +132,40 @@ describe('public-screen design invariants', () => {
     // The area/stop panel's list is gone with it.
     expect(css).not.toContain('.k-settings .k-stop-list');
   });
-  it('carries the header ticker on one line, crossfaded and stopped where motion is unwanted', () => {
-    expect(rule('.k-ticker')).toContain('font-size: var(--k-ticker-size)');
-    expect(rule('.k-ticker-text')).toContain('text-overflow: ellipsis');
-    expect(rule(".k-ticker[data-swap='1']")).toContain('animation: k-ticker-in 220ms');
-    expect(rule(".kiosk[data-size='wide']")).toContain('--k-ticker-size: calc(26px * var(--k-zoom))');
-    expect(rule(".kiosk[data-size='compact']")).toContain('--k-ticker-size: calc(20px * var(--k-zoom))');
-    expect(css).toContain(".kiosk .k-ticker[data-swap='1'] { animation: none; }");
+  it('carries a whole header sentence with a permanent measuring twin and reduced-motion support', () => {
+    expect(rule('.k-sentence')).toContain('font-size: var(--k-sentence-size)');
+    expect(rule('.k-sentence-text')).toContain('text-overflow: clip');
+    expect(rule('.k-sentence-text')).not.toContain('ellipsis');
+    expect(rule('.k-sentence-probe')).toContain('visibility: hidden');
+    expect(rule('.k-sentence-probe')).not.toContain('display: none');
+    expect(rule(".k-sentence[data-swap='1']")).toContain('animation: k-sentence-in 220ms');
+    expect(rule(".kiosk[data-size='wide']")).toContain('--k-sentence-size: calc(40px * var(--k-zoom))');
+    expect(rule(".kiosk[data-size='compact']")).toContain('--k-sentence-size: calc(40px * var(--k-zoom))');
+    expect(css).toContain(".kiosk .k-sentence[data-swap='1'] { animation: none; }");
     // The header's weather group is gone for good: the card owns the weather (T3).
     expect(css).not.toMatch(/\.k-weather(?![\w-])/);
     expect(css).not.toMatch(/\.k-sun(?![\w-])/);
   });
-  it('keeps the QR at a 240px design floor with a separate sign scale', () => {
-    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(240px * var(--k-sign-zoom))');
-    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(240px * var(--k-sign-zoom))');
+  it('keeps the QR SVG at 240px inside a 264px plate with 12px padding', () => {
+    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
+    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
+    expect(windowRule('.kiosk:not([data-size=handheld])')).toContain('--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))');
     expect(rule('.k-qr')).toContain('width: var(--k-qr)');
     expect(windowRule('.kiosk .k-city-window .k-invite')).toContain('var(--k-qr)');
     expect(rule('.k-qr .qr')).toContain('var(--k-qr-plate)');
+    expect(rule('.k-qr .qr')).toContain('padding: 12px');
+    expect(rule(".kiosk[data-size='handheld']")).toContain('--k-qr: 240px');
+  });
+  it('uses the walk-up floor for the head, map note and card, with a 1.1 dark read multiplier', () => {
+    const overview = rule(".kiosk[data-phase='invitation']:not([data-size='handheld'])");
+    expect(overview).toContain('--k-sub-size: max(28px');
+    expect(overview).toContain('--k-card-lead: max(28px');
+    expect(overview).toContain('--k-card-hint: max(28px');
+    expect(overview).toContain('var(--k-read-scale)');
+    expect(rule(":root[data-theme-resolved='dark'] .kiosk")).toContain('--k-read-scale: 1.1');
+    expect(windowRule('.k-map-note')).toContain('font-size:var(--k-sub-size)');
+    expect(windowRule('.k-map-legend')).toContain('font-size:var(--k-sub-size)');
+    expect(rule(".k-sentence[data-kicker='bicikli'] .k-sentence-kicker")).toContain('var(--k-green)');
   });
   it('sets the pairing code at a fixed monospace size, left-aligned, its groups a third of a space apart', () => {
     expect(rule('.k-code')).toContain('var(--font-mono)');
@@ -171,8 +188,8 @@ describe('public-screen design invariants', () => {
     expect(rule('.k-progress-bar')).not.toContain('transition: width');
   });
   it('never hides useful overview rows as a fitting strategy', () => {
-    expect(invitation).not.toMatch(/\.hidden\s*=\s*true/);
-    expect(invitation).toContain('dataset.overflow');
+    expect(timeline).not.toMatch(/\.hidden\s*=\s*true/);
+    expect(invitation).toContain('mountTimeline');
   });
   it('keeps the transit board outside the map in presented mode', () => {
     const shell = pairedShell('u-pokretu', kioskStrings('hr'), false);

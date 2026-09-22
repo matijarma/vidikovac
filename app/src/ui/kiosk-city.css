@@ -1,10 +1,12 @@
 /* The passive wall. The QR and safety frame never compete with discovery. */
 .k-handheld-info{display:none}
 .kiosk .k-city-window{display:grid;grid-template-columns:minmax(0,1fr) var(--k-side-w);gap:var(--k-gap);height:100%;min-height:0}
-.kiosk .k-city-window .k-geography{display:grid;grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--k-line);border-radius:var(--k-radius)}
+.kiosk .k-city-window .k-geography{position:relative;display:grid;grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--k-line);border-radius:var(--k-radius)}
 .kiosk .k-city-window .k-overview{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:var(--k-gap);min-height:0;min-width:0}
 .kiosk .k-city-window .k-invite{grid-template-columns:var(--k-qr) minmax(0,1fr);grid-template-areas:'qr side';justify-items:stretch}
-.k-map-legend{display:flex;flex-wrap:wrap;gap:calc(var(--k-gap) * .5) var(--k-gap);padding:calc(var(--k-gap) * .65);background:var(--k-surface);font-size:var(--k-credit-size)}
+.k-map-legend{display:flex;flex-wrap:wrap;gap:calc(var(--k-gap) * .5) var(--k-gap);padding:calc(var(--k-gap) * .65);background:var(--k-surface);font-size:var(--k-sub-size)}
+.k-map-note{position:absolute;left:var(--k-gap);right:var(--k-gap);top:var(--k-gap);padding:calc(var(--k-gap) * .6);border-radius:var(--k-radius-s);background:var(--k-surface);color:var(--k-ink-2);font-size:var(--k-sub-size);line-height:1.25;pointer-events:none}
+.k-map-note[hidden]{display:none}
 .k-map-legend span{display:inline-flex;align-items:center;gap:.4em}
 .k-legend-tram{padding:.05em .3em;border-radius:3px;color:var(--k-action-ink);background:var(--k-action)}
 .k-legend-bike{color:var(--tone-bike)}.k-legend-culture{color:var(--k-violet)}
@@ -53,8 +55,8 @@
 .kiosk .k-present-board .city-actions,.kiosk .k-present-board .city-detail>button{display:none}
 .kiosk .k-present-board .city-meta{font-size:var(--k-credit-size)}
 .kiosk[data-size=wide]{--k-side-w:calc(680px * var(--k-zoom))}
-.kiosk[data-size=compact]{--k-side-w:calc(560px * var(--k-zoom))}
-.kiosk:not([data-size=handheld]){--k-qr:max(240px,calc(240px * var(--k-sign-zoom)))}
+.kiosk[data-size=compact]{--k-side-w:calc(600px * var(--k-zoom))}
+.kiosk:not([data-size=handheld]){--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))}
 .kiosk[data-portrait='1'] .k-city-window{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
 .kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}
 .kiosk[data-portrait='1'] .k-invite-code{margin-top:0}
@@ -77,4 +79,3 @@
 .k-settings .k-basics-head,.k-settings>.k-setup-actions,.k-settings>.k-setup-error{flex:none}
 .k-settings .k-settings-rows{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
 .k-eta-kind{display:block;font-size:var(--k-credit-size);font-weight:400}
-.k-invite-benefit{font-size:calc(15px * var(--k-sign-zoom));line-height:1.35}
