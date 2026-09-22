@@ -37,28 +37,30 @@ describe('public-screen design invariants', () => {
     for (const dead of ['k-local', 'k-local-facts', 'k-neighborhood', 'k-context-stack', 'k-column', 'k-bottom', 'k-provision', 'k-front'])
       for (const sheet of [css, cityCss]) expect(sheet, dead).not.toMatch(new RegExp(`\\.${dead}(?![\\w-])`));
   });
-  // Postavke's stop list on a wall: it may scroll, but it may not show half a
-  // row. The rows are a fixed height and the box is an exact number of them
-  // plus the gaps, so the cut always lands between two rows.
-  it('bounds the settings stop list to whole rows', () => {
-    const list = rule('.k-settings .k-stop-list');
-    expect(list).toContain('--k-stop-row');
-    expect(list).toContain('grid-auto-rows: var(--k-stop-row)');
+  // Postavke's suggestion list on a wall: it may scroll, but it may not show
+  // half a row. The rows are one control high with no gap, and the box is an
+  // exact number of them, so the cut always lands between two rows.
+  it('bounds the settings suggestion list to whole rows', () => {
+    const list = rule('.k-settings .k-suggest');
+    expect(list).toContain('--k-suggest-row: var(--k-control)');
+    expect(list).toContain('grid-auto-rows: var(--k-suggest-row)');
+    expect(list).toContain('gap: 0');
     // The list must not be flex-shrunk to whatever the panel's grid leaves it:
-    // that lands the edge mid-row whatever the max-height says (measured: a
-    // 321 px box against an 84 px row pitch, two rows cut).
+    // that lands the edge mid-row whatever the max-height says.
     expect(list).toContain('flex: none');
-    // The height is rows and gaps only -- no bare rem cap that could land mid-row.
-    expect(list).toMatch(/max-height: calc\(var\(--k-stop-row\) \* 3 \+ var\(--k-gap\) \* 0\.6 \* 2\)/);
+    // The height is rows only -- no bare rem cap that could land mid-row.
+    expect(list).toMatch(/max-height: calc\(var\(--k-suggest-row\) \* 4\)/);
     expect(list).not.toMatch(/max-height:\s*\d/);
-    // The row holds a name over a two-line route list; measured on the panel,
-    // that is 132 px, and a shorter row slices the routes through the middle.
-    expect(list).toContain('--k-stop-row: 8.25rem');
+    // Inside the panel the box is part of its row, never a layer over the rows below it.
+    expect(rule('.k-settings .k-suggest-box')).toContain('position: static');
     // A row that fills its fixed box clips inside it rather than growing past it.
-    expect(rule('.k-settings .k-stop-list .k-choice-text')).toContain('height: 100%');
-    expect(rule('.k-settings .k-stop-list .k-stop-meta')).toContain('-webkit-line-clamp: 2');
-    // The list is still a scroller, so nothing below the fifth row is unreachable.
-    expect(rule('.k-stop-list')).toContain('overflow-y: auto');
+    expect(rule('.k-settings .k-suggest > li')).toContain('height: 100%');
+    // The list is still a scroller, so nothing below the last whole row is unreachable,
+    // and a hidden list stays hidden under its own display rule.
+    expect(list).toContain('overflow-y: auto');
+    expect(rule('.k-settings .k-suggest[hidden]')).toContain('display: none');
+    // The area/stop panel's list is gone with it.
+    expect(css).not.toContain('.k-settings .k-stop-list');
   });
   it('carries the header ticker on one line, crossfaded and stopped where motion is unwanted', () => {
     expect(rule('.k-ticker')).toContain('font-size: var(--k-ticker-size)');
@@ -122,6 +124,8 @@ describe('public-screen design invariants', () => {
   it('retains accessible controls instead of shrinking their hit areas', () => {
     expect(tokens).toContain('--target: 2.75rem');
     expect(tokens).toContain('--target-primary: 3rem');
-    expect(rule('.k-theme')).toContain('min-width: 44px');
+    // The settings toggles: never smaller than a finger, whatever the display zoom does to --k-control.
+    expect(rule('.k-toggle')).toContain('min-width: 44px');
+    expect(rule('.k-toggle')).toContain('min-height: max(44px, var(--k-control))');
   });
 });

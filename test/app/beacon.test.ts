@@ -87,21 +87,35 @@ describe('createBeaconClient', () => {
     client.requestMore();
     expect(sockets[0]!.json(0)).toEqual({ t: 'more' });
   });
-  it('sends the screen the settings panel chose, and surfaces the DO\u2019s refusal of it', () => {
+  it('sends the screen the settings panel chose as screen-set version 2, and surfaces the DO\u2019s refusal of it', () => {
     const { client, sockets, onError } = boot();
     client.connect();
     sockets[0]!.emit('open');
-    client.setScreen('106_1', 'trnje');
-    expect(sockets[0]!.json(0)).toEqual({ t: 'screen-set', version: 1, stopId: '106_1', area: 'trnje' });
-    client.setScreen(null, 'zagreb');
-    expect(sockets[0]!.json(1)).toEqual({ t: 'screen-set', version: 1, stopId: null, area: 'zagreb' });
+    // A stop place travels as its id alone: the DO fills the name and the point from its own table.
+    client.setScreen({ place: { kind: 'stop', stopId: '106_1' }, frame: 6 });
+    expect(sockets[0]!.json(0)).toEqual({ t: 'screen-set', version: 2, place: { kind: 'stop', stopId: '106_1' }, frame: 6 });
+    // The whole city is an explicit null, never an omitted place.
+    client.setScreen({ place: null, frame: 8 });
+    expect(sockets[0]!.json(1)).toEqual({ t: 'screen-set', version: 2, place: null, frame: 8 });
+    client.setScreen({ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 });
+    expect(sockets[0]!.json(2)).toEqual({ t: 'screen-set', version: 2, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, address: 'Ilica 25' }, frame: 4 });
+    // Nothing of version 1 leaves this client any more.
+    expect(sockets[0]!.sent.map((raw) => JSON.parse(raw) as { version?: number }).every((m) => m.version === 2)).toBe(true);
     // The DO's error frame is a word for the caller, never a status change or a reconnect.
-    sockets[0]!.server({ t: 'error', error: 'bad-stop' });
-    expect(onError).toHaveBeenCalledWith('bad-stop');
+    sockets[0]!.server({ t: 'error', error: 'bad-place' });
+    expect(onError).toHaveBeenCalledWith('bad-place');
+    sockets[0]!.server({ t: 'error', error: 'bad-frame' });
+    expect(onError).toHaveBeenCalledWith('bad-frame');
     sockets[0]!.server({ t: 'error', error: 'screen-set-rate' });
     expect(onError).toHaveBeenCalledWith('screen-set-rate');
     expect(client.status()).toBe('connecting');
     expect(sockets).toHaveLength(1);
+  });
+  it('sends nothing while the socket is not open', () => {
+    const { client, sockets } = boot();
+    client.connect();
+    client.setScreen({ place: null, frame: 6 });
+    expect(sockets[0]!.sent).toHaveLength(0);
   });
   it('reports unlocked and revoked, and status changes', () => {
     const { client, sockets, onUnlocked, onRevoked, onStatus } = boot();

@@ -311,8 +311,11 @@ export interface KioskStrings {
     /** A typed name more than one street carries: the person picks the row, told apart by its settlement. */
     ambiguous: string;
   };
-  /** The on-screen settings overlay (kiosk/settings.ts): the four sections and
-   *  the forget-screen confirmation. */
+  /** The on-screen settings overlay (kiosk/settings.ts): the click-toggle rows
+   *  (Mjesto, Kadar, Prikaz, Tema, Ritam, Zaslon) and the forget-screen
+   *  confirmation. `area`, `areaHint`, `stop`, `stopNone`, `stopHint`, `save`,
+   *  `saving` and `saved` belonged to the area/stop/Spremi panel and are read
+   *  by nothing any more (ready to delete, WP5). */
   settings: {
     open: string;
     title: string;
@@ -339,6 +342,19 @@ export interface KioskStrings {
     forgetAsk: string;
     forgetYes: string;
     forgetNo: string;
+    /** Mjesto: the row's label, and the button that opens the "Adresa ili stajalište" field. */
+    place: string;
+    placeChange: string;
+    /** Kadar: the row's label, and the toggle's text "Kadar: {count} stajališta odavde" (4, 6 or 8). */
+    frame: string;
+    frameValue: string;
+    /** Prikaz: the row's label and the toggle's two texts, the map or the schematic network. */
+    view: string;
+    viewMap: string;
+    viewSchema: string;
+    /** Ritam: the row's label, and the toggle's text "Ritam: {seconds} s" (20, 30 or 60). */
+    rhythm: string;
+    rhythmValue: string;
   };
 }
 
@@ -449,6 +465,7 @@ function build(code: SupportedLocale): KioskStrings {
       'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',
       'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
       'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
+      'place', 'placeChange', 'frame', 'frameValue', 'view', 'viewMap', 'viewSchema', 'rhythm', 'rhythmValue',
     ]),
   };
 }
