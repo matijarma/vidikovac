@@ -57,6 +57,12 @@
    which owns the page scroll -- each with a safe fallback (the body simply
    does not scroll). */
 
+:root {
+  /* 3-metre legibility floors (WP1 rows, WP6 e2e/legibility.ts): read tier 40 px; walk-up tier 28 px (sub lines, date, legend, kicker, lead, card hint, typed address). */
+  --k-main-size: 40px;
+  --k-sub-size: 28px;
+}
+
 .kiosk-body { margin: 0; overflow: hidden; background: var(--tone-surface-canvas); }
 
 .kiosk {

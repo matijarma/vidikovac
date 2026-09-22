@@ -1,6 +1,10 @@
 // Published landing imagery comes from the running application, not fixtures.
 // Local Worker + ordinary self-service screen + ordinary code redemption.
 // No credentials or raw feed payloads are written to the provenance manifest.
+// The screen: AUDIT_KIOSK_URL names one that already exists on the same local
+// origin (its provisioning URL); creating one instead needs the explicit
+// AUDIT_ALLOW_SCREEN_CREATE=1, and without either the run refuses and exits 2
+// before any browser starts (the same guard as scripts/audit-production.mjs).
 import { chromium } from 'playwright';
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -10,6 +14,14 @@ import { fulfillPublicMap } from './review-maps.mjs';
 const base = process.env.LANDING_CAPTURE_URL ?? 'http://127.0.0.1:5174';
 if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) {
   throw new Error('Capture is local-only. It must not provision public deployment screens.');
+}
+const KIOSK_URL = process.env.AUDIT_KIOSK_URL ? new URL(process.env.AUDIT_KIOSK_URL, base).toString() : null;
+if (KIOSK_URL && new URL(KIOSK_URL).origin !== new URL(base).origin) {
+  throw new Error('Capture is local-only. AUDIT_KIOSK_URL must name a screen on ' + new URL(base).origin + '.');
+}
+if (!KIOSK_URL && process.env.AUDIT_ALLOW_SCREEN_CREATE !== '1') {
+  console.error('creating screens on production is refused; set AUDIT_KIOSK_URL to an existing screen (or AUDIT_ALLOW_SCREEN_CREATE=1 to spend one of the five per hour)');
+  process.exit(2);
 }
 const root = resolve(import.meta.dirname, '..');
 const raw = resolve(root, 'review.local/landing-captures');
@@ -142,10 +154,16 @@ async function scan(page, code) {
 }
 
 try {
-  await kiosk.goto(`${base}/kiosk/`);
-  await preferences(kiosk, variants[0]);
-  await kiosk.getByTestId('setup-create').waitFor();
-  await kiosk.getByTestId('setup-create').click();
+  if (KIOSK_URL) {
+    await kiosk.goto(KIOSK_URL);
+    await preferences(kiosk, variants[0]);
+  } else {
+    // Reached only with AUDIT_ALLOW_SCREEN_CREATE=1 (the guard at the top refuses otherwise).
+    await kiosk.goto(`${base}/kiosk/`);
+    await preferences(kiosk, variants[0]);
+    await kiosk.getByTestId('setup-create').waitFor();
+    await kiosk.getByTestId('setup-create').click();
+  }
   await kiosk.getByTestId('pair-code').waitFor({ timeout: 30_000 });
   await kiosk.waitForFunction(() => document.querySelector('[data-testid=pair-code]')?.getAttribute('data-state') === 'live');
   // Warm the actual public and session feeds before recording the invitation.

@@ -1,10 +1,15 @@
 import { defineConfig } from 'vitest/config';
 import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
 
-// Two projects, selected with `npx vitest run --project unit|workers`.
+// Three projects, selected with `npx vitest run --project unit|workers|accept`.
 //   unit:    pure modules, node environment, files test/**/*.test.ts
 //   workers: anything touching bindings or Durable Objects, runs inside workerd
 //            with the real wrangler.jsonc, files test/**/*.workers.test.ts
+//   accept:  the companion acceptance tier (test/accept/**), red by design until
+//            the packages it measures land; `npm test` runs unit + workers only.
+//            Fold-back rule: when every accept row is green, drop the --project
+//            filters from "test" in package.json and the test/accept exclusion
+//            below, so the tier becomes plain regression.
 // With vitest 4 the workers pool is a Vite plugin (cloudflareTest), scoped to
 // the workers project so it never touches the node project.
 export default defineConfig({
@@ -15,7 +20,16 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['test/**/*.test.ts'],
-          exclude: ['test/**/*.workers.test.ts', '**/node_modules/**', 'video/**', 'e2e/**'],
+          exclude: ['test/**/*.workers.test.ts', 'test/accept/**', '**/node_modules/**', 'video/**', 'e2e/**'],
+        },
+      },
+      {
+        test: {
+          name: 'accept',
+          environment: 'node',
+          include: ['test/accept/**/*.test.ts'],
+          testTimeout: 180_000,
+          hookTimeout: 180_000,
         },
       },
       {

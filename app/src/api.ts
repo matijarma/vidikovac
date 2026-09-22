@@ -1,7 +1,8 @@
-// HTTP client for the three routes the browser calls. Typed against the shared
+// HTTP client for the routes the browser calls. Typed against the shared
 // contracts; `fetchImpl` is injectable so tests never touch the network.
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { DataToken, ScanFail, ScanOk, ScanRequest } from '../../worker/protocol';
+import type { SentenceRequest, SentenceResponse, WrittenSentence } from '../../shared/kiosk/sentence';
 import { normalizeCode } from './code';
 
 export interface TeaserResponse { modules: ModuleSnapshot[] }
@@ -70,4 +71,23 @@ export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: stri
   const { response, body } = await requestJson<TeaserResponse>(path, { cache: 'no-store' }, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
   return body;
+}
+
+/**
+ * Model-written header sentences for a set of facts (POST /api/kiosk/sentences, WP1's route).
+ * Anything but a 200 with JSON, or no network at all, answers [] -- the template sentences
+ * cover every such case, so a caller never waits on this or shows an error for it.
+ */
+export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch): Promise<WrittenSentence[]> {
+  try {
+    const { body } = await requestJson<SentenceResponse>('/api/kiosk/sentences', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+      cache: 'no-store',
+    }, fetchImpl);
+    return Array.isArray(body?.sentences) ? body.sentences : [];
+  } catch {
+    return [];
+  }
 }
