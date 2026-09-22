@@ -12,13 +12,17 @@ export interface StreetGeo {
   id?: string;
   name: string;
   settlementId?: string;
+  /** The settlement's name, to tell apart streets of the same name. */
+  settlement?: string;
+  /** A point on the street, the one nearest its length-weighted centre. */
   lon: number;
   lat: number;
+  /** West, south, east, north, rounded outward to 1e-4 of a degree. */
   bbox: [number, number, number, number];
   lengthM: number;
   /** Ids of the stops within 60 m of the line, one platform per name, ordered along it. */
   stops: string[];
-  /** Simplified centreline, only for streets longer than 700 m. */
+  /** Simplified centreline (its longest continuous run), only for streets longer than 700 m. */
   line?: [number, number][];
 }
 
