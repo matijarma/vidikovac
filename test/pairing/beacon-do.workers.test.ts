@@ -8,7 +8,7 @@ import { metricsStub } from '../../worker/metrics';
 import { defaultScreenPlace, enrichPlace } from '../../worker/pairing/place';
 import { screenStop } from '../../worker/pairing/stops';
 import { randomId } from '../../worker/pairing/tokens';
-import { CODES_PER_BATCH, CODE_GRACE_MS, type CodeSlot, type ScreenMetadata } from '../../worker/protocol';
+import { CODES_PER_BATCH, CODE_GRACE_MS, type CodeSlot, type ScreenMetadata, type ScreenPlace } from '../../worker/protocol';
 import { DEFAULT_PLACE_STOP_ID } from '../../shared/city/place';
 import { KIOSK_NET_KEY, authKiosk, connectBeaconDirect, kioskAnswer, onlineKiosk, provision } from './helpers';
 
@@ -22,6 +22,12 @@ const v2 = (place: unknown, frame: unknown) => JSON.stringify({ t: 'screen-set',
 const metaOf = (beaconId: string, key: string): Promise<string | null> => runInDurableObject(beaconStub(testEnv, beaconId), (_instance: BeaconDO, state: DurableObjectState) =>
   (state.storage.sql.exec('SELECT value FROM meta WHERE key = ?', key).toArray()[0] as { value: string } | undefined)?.value ?? null);
 const screenOf = (beaconId: string) => runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => instance.screenMetadata());
+const setMetaOf = (beaconId: string, key: string, value: string) => runInDurableObject(beaconStub(testEnv, beaconId), (_instance: BeaconDO, state: DurableObjectState) => {
+  state.storage.sql.exec('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', key, value);
+});
+const clockOf = (beaconId: string, ms: number) => runInDurableObject(beaconStub(testEnv, beaconId), (instance: BeaconDO) => {
+  vi.spyOn(instance, 'now').mockReturnValue(ms);
+});
 
 // Any 22-char net-key-shaped string is a valid scanner net key for the DO;
 // the Worker computes real ones from CF-Connecting-IP and ASN (worker/pairing/netkey.ts).
@@ -383,6 +389,7 @@ describe('BeaconDO screen-set version: 2', () => {
       [v2({ kind: 'address', name: 'X', lon: 0, lat: 0 }, 6), 'bad-place'],
       [v2({ kind: 'address', name: 'Ilica\u0000', lon: 15.97, lat: 45.8135 }, 6), 'bad-place'],
       [v2({ kind: 'tram', name: 'Trg', lon: 15.97, lat: 45.81, stopId: '106_1' }, 6), 'bad-place'],
+      [v2({ ...ILICA, stopId: '106_1' }, 6), 'bad-place'],
       [v2('Ilica 25', 6), 'bad-place'],
       [JSON.stringify({ t: 'screen-set', version: 2, frame: 6 }), 'bad-place'],
       [v2({ kind: 'stop', stopId: '106_1' }, 5), 'bad-frame'],
@@ -423,6 +430,39 @@ describe('BeaconDO screen-set version: 2', () => {
     kiosk.ws.send(v2(ILICA, 4));
     expect((await kiosk.inbox.nextOfType('codes')).screen).toMatchObject({ place: ILICA, frame: 4, stop: null });
     kiosk.ws.close(1000, 'done');
+  });
+
+  it('the window belongs to the beacon: a second socket and a reconnect share it, and every open socket gets each accepted change', async () => {
+    const { beaconId, secret, kiosk: a } = await onlineKiosk('donja-dubrava');
+    const b = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
+    await authKiosk(b, secret);
+    const at = Date.now();
+    await clockOf(beaconId, at);
+    a.ws.send(v2({ kind: 'stop', stopId: '106_1' }, 8));
+    const applied = (await a.inbox.nextOfType('codes')).screen;
+    expect(applied).toMatchObject({ place: TRG_PLACE, frame: 8 });
+    // The other socket hears the change too, so its copy is the DO's state.
+    expect((await b.inbox.nextOfType('codes')).screen).toEqual(applied);
+    await clockOf(beaconId, at + 1_000);
+    b.ws.send(v2(ILICA, 4));
+    expect((await b.inbox.nextOfType('error')).error).toBe('screen-set-rate');
+    await b.inbox.expectSilence(150);
+    expect(await screenOf(beaconId)).toEqual(applied);
+    // Reconnecting does not open a new window either.
+    a.ws.close(1000, 'reconnect');
+    const c = await connectBeaconDirect(beaconId, KIOSK_NET_KEY);
+    expect((await authKiosk(c, secret)).screen).toEqual(applied);
+    c.ws.send(v2(ILICA, 4));
+    expect((await c.inbox.nextOfType('error')).error).toBe('screen-set-rate');
+    expect(await screenOf(beaconId)).toEqual(applied);
+    await clockOf(beaconId, at + SCREEN_SET_MIN_MS);
+    c.ws.send(v2(ILICA, 4));
+    const next = (await c.inbox.nextOfType('codes')).screen;
+    expect(next).toMatchObject({ place: ILICA, frame: 4 });
+    expect((await b.inbox.nextOfType('codes')).screen).toEqual(next);
+    expect(await screenOf(beaconId)).toEqual(next);
+    b.ws.close(1000, 'done');
+    c.ws.close(1000, 'done');
   });
 
   it('version 1 from an old bundle keeps the frame a version 2 panel chose', async () => {
@@ -488,14 +528,69 @@ describe('BeaconDO legacy records', () => {
     expect(enrichPlace(null, null)).toEqual({ place: TRG_PLACE, placeSet: false });
   });
 
-  it('create() refuses a place that is not a stored place or names another stop than stopId', async () => {
+  it('tells an absent place from a stored null: absent derives from the stop, null reads as Trg with placeSet false, null beside a stop is refused', async () => {
+    const kvaternikov = screenStop('236_2')!;
+    const legacy = await legacyCreate('236_2');
+    expect(await screenOf(legacy.beaconId)).toMatchObject({
+      stop: { id: '236_2' }, placeSet: true, place: { kind: 'tram', name: kvaternikov.name, stopId: '236_2' },
+    });
+    const cityId = randomId(5);
+    expect(await beaconStub(testEnv, cityId).create({
+      beaconId: cityId, venueType: 'kafic', area: 'zagreb', operatorLabel: 'x', stopId: null, secret: randomId(20), place: null, frame: 6,
+    })).toEqual({ created: true });
+    expect(await metaOf(cityId, 'place')).toBe('');
+    expect(await screenOf(cityId)).toMatchObject({ stop: null, place: TRG_PLACE, placeSet: false });
+    await runInDurableObject(beaconStub(testEnv, randomId(5)), async (instance: BeaconDO) => {
+      await expect(instance.create({
+        beaconId: randomId(5), venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', secret: randomId(20),
+        stopId: '236_2', stop: kvaternikov, place: null,
+      })).rejects.toThrow('beacon-create-invalid');
+    });
+    // Should a record ever hold both, the stored null still wins on read.
+    await setMetaOf(legacy.beaconId, 'place', '');
+    expect(await screenOf(legacy.beaconId)).toMatchObject({ stop: { id: '236_2' }, place: TRG_PLACE, placeSet: false });
+  });
+
+  it('create() refuses a place that is not a stored place, disagrees with the stop table or names another stop than stopId', async () => {
     const stub = beaconStub(testEnv, randomId(5));
     await runInDurableObject(stub, async (instance: BeaconDO) => {
       const base = { beaconId: randomId(5), venueType: 'kafic' as const, area: 'donji-grad', operatorLabel: 'x', secret: randomId(20) };
-      await expect(instance.create({ ...base, stopId: null, place: { ...TRG_PLACE, kind: 'tram' } })).rejects.toThrow('beacon-create-invalid');
-      await expect(instance.create({ ...base, stopId: '106_1', place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135 } })).rejects.toThrow('beacon-create-invalid');
-      await expect(instance.create({ ...base, stopId: null, place: { kind: 'address', name: 'Beč', lon: 16.37, lat: 48.21 } })).rejects.toThrow('beacon-create-invalid');
-      await expect(instance.create({ ...base, stopId: null, place: null, frame: 5 as 6 })).rejects.toThrow('beacon-create-invalid');
+      const refused: Array<Partial<Parameters<BeaconDO['create']>[0]>> = [
+        { stopId: null, place: { ...TRG_PLACE, kind: 'tram' } },
+        { stopId: '106_1', place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135 } },
+        { stopId: null, place: { kind: 'address', name: 'Beč', lon: 16.37, lat: 48.21 } },
+        { stopId: null, place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, stopId: '106_1' } },
+        // An invented stop id, a real one under an invented name, point or kind.
+        { stopId: 'X9_9', place: { kind: 'tram', name: 'Izmišljeno', lon: 15.97, lat: 45.81, stopId: 'X9_9' } },
+        { stopId: '106_1', place: { ...TRG_PLACE, kind: 'tram', name: 'Kavana Velebit' } },
+        { stopId: '106_1', place: { ...TRG_PLACE, kind: 'tram', lon: 15.99 } },
+        { stopId: '106_1', place: { ...TRG_PLACE, kind: 'bus' } },
+        { stopId: null, place: null, frame: 5 as 6 },
+      ];
+      for (const shape of refused) {
+        await expect(instance.create({ ...base, stopId: null, ...shape })).rejects.toThrow('beacon-create-invalid');
+      }
     });
+  });
+
+  it('stores only the known fields of a place, and reads back only those', async () => {
+    const stopId = randomId(5);
+    const extras = { note: '<b>x</b>', secret: 'leak' };
+    expect(await beaconStub(testEnv, stopId).create({
+      beaconId: stopId, venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', stopId: '106_1', stop: TRG_STOP, secret: randomId(20),
+      place: { ...TRG_PLACE, kind: 'tram', address: 'Trg bana Josipa Jelačića 3', ...extras } as ScreenPlace, frame: 6,
+    })).toEqual({ created: true });
+    expect(JSON.parse((await metaOf(stopId, 'place'))!)).toEqual({ ...TRG_PLACE, address: 'Trg bana Josipa Jelačića 3' });
+    const addressId = randomId(5);
+    expect(await beaconStub(testEnv, addressId).create({
+      beaconId: addressId, venueType: 'kafic', area: 'donji-grad', operatorLabel: 'x', stopId: null, secret: randomId(20),
+      place: { ...ILICA, ...extras } as ScreenPlace,
+    })).toEqual({ created: true });
+    expect(JSON.parse((await metaOf(addressId, 'place'))!)).toEqual(ILICA);
+    // The read path whitelists too, and a stored stop the table no longer knows falls back to the stored stop.
+    await setMetaOf(addressId, 'place', JSON.stringify({ ...ILICA, ...extras }));
+    expect((await screenOf(addressId)).place).toEqual(ILICA);
+    await setMetaOf(stopId, 'place', JSON.stringify({ kind: 'tram', name: 'Nestalo', lon: 15.97, lat: 45.81, stopId: 'X9_9' }));
+    expect(await screenOf(stopId)).toMatchObject({ place: TRG_PLACE, placeSet: true });
   });
 });

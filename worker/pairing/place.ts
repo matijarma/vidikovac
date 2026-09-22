@@ -36,11 +36,13 @@ export function parseFrame(raw: unknown): FrameStops | null {
  * A place from a request body or a v2 'screen-set': shape checked, strings trimmed and
  * bounded (name 1..80, address ..120, no control characters), an address point inside
  * Zagreb. Null when anything is off; the caller answers 'bad-place' / 400 field 'place'.
- * Only the known keys survive: a stop carries its id (and the typed address), never a
- * name or a point, because the server fills those from its own table.
+ * An address that also names a stop id is refused, not guessed at: the two kinds are
+ * exclusive. Only the known keys survive: a stop carries its id (and the typed address),
+ * never a name or a point, because the server fills those from its own table.
  */
 export function parsePlaceInput(raw: unknown): ScreenPlaceInput | null {
   if (!isValidPlaceInput(raw)) return null;
+  if (raw.kind === 'address' && (raw as Record<string, unknown>).stopId !== undefined) return null;
   const address = typeof raw.address === 'string' ? raw.address.trim() : '';
   const typed = address ? { address } : {};
   if (raw.kind === 'stop') return { kind: 'stop', stopId: raw.stopId, ...typed };
@@ -65,9 +67,10 @@ const boundedText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length >= 1 && value.length <= max && !CONTROL.test(value);
 
 /**
- * A place as the Durable Object stores it (the output of resolvePlace, or of placeFromStop
- * for a legacy stop): what BeaconDO.create() accepts and what screenMetadata() trusts when it
- * reads the 'place' meta back. A stop place keeps its stop id; an address has none.
+ * A place in the shape the Durable Object stores (the output of resolvePlace, or of
+ * placeFromStop for a legacy stop). A stop place names a stop the server's table knows;
+ * an address has no stop id. Properties beyond these are ignored here and never stored
+ * (storedPlaceOf copies the known ones).
  */
 export function isStoredPlace(x: unknown): x is ScreenPlace {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
@@ -77,7 +80,31 @@ export function isStoredPlace(x: unknown): x is ScreenPlace {
   if (typeof o.lon !== 'number' || typeof o.lat !== 'number' || !inZagreb(o.lon, o.lat)) return false;
   if (o.address !== undefined && !boundedText(o.address, PLACE_ADDRESS_MAX)) return false;
   if (o.kind === 'address') return o.stopId === undefined;
-  return typeof o.stopId === 'string' && STOP_ID_SHAPE.test(o.stopId);
+  return typeof o.stopId === 'string' && STOP_ID_SHAPE.test(o.stopId) && screenStop(o.stopId) !== null;
+}
+
+/** The known fields of a stored-shape place, or null when it is not one. What the DO reads back. */
+export function storedPlaceOf(x: unknown): ScreenPlace | null {
+  if (!isStoredPlace(x)) return null;
+  return {
+    kind: x.kind, name: x.name, lon: x.lon, lat: x.lat,
+    ...(x.stopId !== undefined ? { stopId: x.stopId } : {}),
+    ...(x.address !== undefined ? { address: x.address } : {}),
+  };
+}
+
+/**
+ * What BeaconDO.create() persists for a place a caller hands it: the known fields only, and
+ * a stop place exactly as the server's table makes it (kind, name and point from the stop),
+ * so no caller can store an invented name or point under a real stop id. Null when the place
+ * is not a stored-shape place or disagrees with the table.
+ */
+export function canonicalPlace(x: unknown): ScreenPlace | null {
+  const place = storedPlaceOf(x);
+  if (!place || place.kind === 'address') return place;
+  const table = placeFromStop(screenStop(place.stopId!)!, isTramRoute, place.address);
+  const same = table.kind === place.kind && table.name === place.name && table.lon === place.lon && table.lat === place.lat;
+  return same ? table : null;
 }
 
 /** What screenMetadata() and the scan grant carry for a stored record. */
@@ -101,13 +128,15 @@ export function defaultScreenPlace(): ScreenPlace {
 }
 
 /**
- * Read-path enrichment: the stored place, else one derived from a stored stop (records from
- * before place-v2), else Trg bana Jelačića with placeSet false (an empty field or "Cijeli
- * grad"), so the list and the departures always have a place and the map keeps the
- * whole-city window.
+ * Read-path enrichment, so the list and the departures always have a place:
+ * - a stored place is the operator's choice (placeSet true);
+ * - a stored null (the field left empty, "Cijeli grad") is Trg bana Jelačića with placeSet
+ *   false, and the map keeps the whole-city window, whatever else the record holds;
+ * - no place at all (undefined: a record from before place-v2) is derived from the stored
+ *   stop as the operator chose it then, else Trg with placeSet false.
  */
-export function enrichPlace(stored: ScreenPlace | null, stop: ScreenStop | null): EnrichedPlace {
+export function enrichPlace(stored: ScreenPlace | null | undefined, stop: ScreenStop | null): EnrichedPlace {
   if (stored) return { place: stored, placeSet: true };
-  if (stop) return { place: placeFromStop(stop, isTramRoute), placeSet: true };
+  if (stored === undefined && stop) return { place: placeFromStop(stop, isTramRoute), placeSet: true };
   return { place: { ...defaultScreenPlace() }, placeSet: false };
 }

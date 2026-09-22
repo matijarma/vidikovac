@@ -236,6 +236,27 @@ describe('screens with a place (place-v2)', () => {
     expect(listed.operatorLabel.endsWith('…')).toBe(true);
   });
 
+  it('tells an explicit null place from an absent one: null is the whole city, absent keeps the legacy stop', async () => {
+    const kvaternikov = screenStop('236_2')!;
+    const nullPlace = await createScreen({ place: null });
+    expect(nullPlace.status).toBe(201);
+    const city = await nullPlace.json<CreateBeaconResponse>();
+    expect(city.screen).toMatchObject({ stop: null, area: 'zagreb', place: TRG_PLACE, placeSet: false, frame: 6 });
+    expect(await storedPlaceMeta(city.beaconId)).toBe('');
+    const absent = await createScreen({ stopId: '236_2' });
+    expect(absent.status).toBe(201);
+    const legacy = await absent.json<CreateBeaconResponse>();
+    expect(legacy.screen).toMatchObject({
+      stop: { id: '236_2' }, placeSet: true,
+      place: { kind: 'tram', name: kvaternikov.name, lon: kvaternikov.lon, lat: kvaternikov.lat, stopId: '236_2' },
+    });
+    expect(JSON.parse((await storedPlaceMeta(legacy.beaconId))!)).toEqual(legacy.screen!.place);
+    // Both at once says two things; it is refused, not resolved one way or the other.
+    const both = await createScreen({ place: null, stopId: '236_2' });
+    expect(both.status).toBe(400);
+    expect(await both.json()).toEqual({ error: 'bad-request', field: 'place' });
+  });
+
   it('answers 400 with the field for a place it cannot take, a frame outside 4/6/8, or a place beside a stopId', async () => {
     const cases: Array<[unknown, string]> = [
       [{ place: { kind: 'address', name: 'X', lon: 0, lat: 0 } }, 'place'],
@@ -248,7 +269,9 @@ describe('screens with a place (place-v2)', () => {
       [{ place: { kind: 'stop', stopId: '106_1; drop' } }, 'place'],
       [{ place: { kind: 'tram', name: 'Trg', lon: 15.97, lat: 45.81, stopId: '106_1' } }, 'place'],
       [{ place: 'Ilica 25' }, 'place'],
-      [{ place: { kind: 'stop', stopId: '106_1' }, stopId: '106_1' }, 'stopId'],
+      [{ place: { kind: 'stop', stopId: '106_1' }, stopId: '106_1' }, 'place'],
+      [{ place: null, stopId: '106_1' }, 'place'],
+      [{ place: { kind: 'address', name: 'Ilica', lon: 15.97, lat: 45.8135, stopId: '106_1' } }, 'place'],
       [{ frame: 5 }, 'frame'],
       [{ frame: '6' }, 'frame'],
       [{ place: { kind: 'stop', stopId: '106_1' }, frame: null }, 'frame'],

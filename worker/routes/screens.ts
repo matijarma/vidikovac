@@ -72,12 +72,13 @@ export const handleScreens: RouteHandler = async (request, env, _ctx, url) => {
     // follows from the place. The legacy `{ area?, stopId? }` body stays
     // accepted. The screen's own settings panel changes all of it later over
     // the beacon socket ('screen-set').
+    // One way to say where the screen is: a place (null for the whole city), or the
+    // legacy stop, never both -- `{ place: null, stopId }` included.
+    if (body.place !== undefined && body.stopId !== undefined) return json({ error: 'bad-request', field: 'place' }, 400);
     const hasPlace = body.place !== undefined && body.place !== null;
     const placeInput = hasPlace ? parsePlaceInput(body.place) : null;
     const place = placeInput ? resolvePlace(placeInput) : null;
     if (hasPlace && !place) return json({ error: 'bad-request', field: 'place' }, 400);
-    // One way to say where the screen is: a place, or the legacy stop, never both.
-    if (hasPlace && body.stopId !== undefined) return json({ error: 'bad-request', field: 'stopId' }, 400);
     const frame = body.frame === undefined ? DEFAULT_FRAME_STOPS : parseFrame(body.frame);
     if (frame === null) return json({ error: 'bad-request', field: 'frame' }, 400);
     const placeArea = place ? (districtOf(place.lon, place.lat) ?? CITY_AREA.slug) : CITY_AREA.slug;
