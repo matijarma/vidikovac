@@ -73,8 +73,11 @@ function compile(program) {
     maxBuffer: 256 * 1024 * 1024,
   });
   const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-  const errors = output.split('\n').filter((line) => /\berror TS\d+:/.test(line)).length;
-  return { output, errors, status: run.status ?? 1, seconds: (Date.now() - started) / 1000 };
+  const lines = output.split('\n').filter((line) => /\berror TS\d+:/.test(line));
+  // app/, worker/ and shared/ are green under their own tsconfigs (npm run
+  // typecheck); an error there means a test pulled them into the wrong program.
+  const inSources = lines.filter((line) => /^(app|worker|shared)\//.test(line)).length;
+  return { output, errors: lines.length, inSources, status: run.status ?? 1, seconds: (Date.now() - started) / 1000 };
 }
 
 function main(argv) {
@@ -100,6 +103,10 @@ function main(argv) {
   for (const row of rows) {
     const verdict = row.status === 0 && row.errors === 0 ? 'ok' : 'FAILED';
     console.log(`${row.name.padEnd(12)} ${row.config.padEnd(width)} ${String(row.errors).padStart(4)} errors  ${row.seconds.toFixed(1).padStart(5)} s  ${verdict}`);
+  }
+  for (const row of rows.filter((r) => r.inSources > 0)) {
+    console.log(`${row.name}: ${row.inSources} of the errors are in app/, worker/ or shared/, which npm run typecheck keeps green: ` +
+      'a test in this program imports code written for the other library (lib.dom or workers-types); move that test to the program its imports need.');
   }
   if (problems.length) console.log(`membership: ${problems.length} test file(s) not in exactly one program`);
   const red = problems.length > 0 || rows.some((row) => row.status !== 0 || row.errors > 0);
