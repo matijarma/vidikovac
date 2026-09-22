@@ -76,6 +76,9 @@ export const FOLD_MOVE_M = 50;
 /** Smaller longitudinal intervals are noise, not accumulated return progress
  *  or reversals. Also covers the sub-metre rounding of a legacy stored fix. */
 const PRIOR_RETURN_NOISE_M = 1;
+/** Keep a recent approach bearing across a stopped fix at a junction.
+ *  This is candidate selection evidence only, never D4/return movement. */
+const DIRECTION_MEMORY_S = 30;
 /** Consecutive fixes moving against the rail the vehicle is read on before
  *  the path is re-derived to the other direction (D4). One is a stray or a
  *  platform shuffle; two in a row, both further than FOLD_MOVE_M, is a tram
@@ -414,6 +417,20 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const p = { x: fix.x, y: fix.y };
     const motion = motionOf(track, fix, prev);
     const dir = motion.dir;
+    let candidateDir = dir;
+    if (candidateDir === null) {
+      // The second off-path fix often arrives after the tram has stopped
+      // at the diverted platform. At Frankopanska the nearest rail then
+      // used to win by centimetres, despite the preceding southbound run.
+      for (let i = track.fixes.length - 2; i >= 0; i--) {
+        const before = track.fixes[i];
+        if (fix.atSec - before.atSec > DIRECTION_MEMORY_S) break;
+        if (dist(before, p) >= FOLD_MOVE_M) {
+          candidateDir = normalise({ x: p.x - before.x, y: p.y - before.y });
+          break;
+        }
+      }
+    }
     const dtSec = motion.dtSec;
     const previousReturn = track.priorReturn;
     // Every early exit or off-path fix breaks the run unless the eligible
@@ -505,7 +522,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // animate along. Re-derive on every such fix, including while standing.
     const rederive = (): Match => {
       delete track.priorReturn;
-      const best = candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx)[0];
+      const best = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)[0];
       if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
       track.offPathCount = 0;
       track.againstCount = 0;
@@ -563,7 +580,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const atOwnEnd = working === prior.pathIdx
         && (onPath.s <= 0.5 || onPath.s >= net.paths[working].len - 0.5);
       if (track.match.pathIdx === working && atOwnEnd && onPath.residual <= OFF_GRAPH_M) {
-        const loop = candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx)
+        const loop = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)
           .some(candidate => net.paths[candidate.pathIdx].direction === -1);
         if (!loop) {
           track.match = onPath;
@@ -578,7 +595,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // A new trip has no established placement to protect from a stray.
       // Prefer an eligible nearby rail immediately to publishing a remote
       // prior for one tick (Mandlova departures were placed 631 m away).
-      if (track.match.pathIdx === null && candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx).length > 0) return rederive();
+      if (track.match.pathIdx === null && candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.

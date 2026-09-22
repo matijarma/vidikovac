@@ -448,6 +448,31 @@ describe('own-path return and service eligibility', () => {
 });
 
 describe('terminal placement continuity', () => {
+  it('uses the recent approach direction when a diverted tram stops between opposite rails', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 400 }] },
+        { from: 3, to: 4, pts: [{ x: 1006, y: 400 }, { x: 1006, y: 0 }] },
+        { from: 1, to: 5, pts: straight(1000, 2000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'prior', direction: 0, edges: [0, 3] },
+        { id: 'diversion', direction: 0, edges: [0, 1] },
+        { id: 'opposite', direction: 1, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('diverted', '1', 'trip', 'tram');
+    const p = m.priorFor('prior', '1', 0);
+    m.matchFix(t, fix(950, 0, 1000), p, null);
+    m.matchFix(t, fix(1000, 100, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('prior'); // one stray is still tolerated
+    m.matchFix(t, fix(1006, 100, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+  });
+
   it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {
     const n = syntheticNetwork({
       edges: [
