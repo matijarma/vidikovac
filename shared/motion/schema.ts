@@ -453,10 +453,12 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
  *  ZET's schematic (stops[0], else stops[1]), on its own line. stops[0] is
  *  the platform its last trip ended at, stops[1] the one its next trip leaves
  *  from; the second is reached only where the artwork prints no stop of the
- *  first's name (Mandlova, the depot, for four loops on feed 000395). The
+ *  first's name (Mandlova, the depot, which the artwork leaves out). The
  *  whole loop is one point of the artwork, so the arc does not move the
  *  vehicle, and it has no track to point along. Null when the line's artwork
- *  names neither stop. */
+ *  names neither stop: on feed 000395 the depot run from Mandlova to Ravnice
+ *  of the lines that do not serve Ravnice (6, 8, 13, 14, 15, 31, 33), which
+ *  is then not drawn rather than drawn on another line's circle. */
 export function loopPlacement(schema: Schema, net: GraphNetwork, pathIdx: number): SchemaPlacement | null {
   const path = net.paths[pathIdx];
   if (!path || path.direction !== LOOP_PATH_DIRECTION) return null;
