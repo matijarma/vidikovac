@@ -338,6 +338,13 @@ describe('session states', () => {
     expect(text(desk.root.querySelector('[data-testid=status-line] [data-testid=share-city]'))).toBe('Podijeli grad');
     desk.handle.destroy();
   });
+  it('without the screen label (a reload of an older tab) the pill names the screen’s stop, never the bare word "zaslon" (T5)', () => {
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6'] };
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop });
+    expect(text(root.querySelector('[data-testid=session-label]'))).toContain('Otključano · Trg bana J. Jelačića · do 14:42');
+    expect(text(root.querySelector('[data-testid=session-label]'))).not.toContain('zaslon');
+  });
   it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, the theme words read from the catalogue in preference order, and the four pages', () => {
     const stop = { id: 's1', name: 'Trg bana J. Jelačića', lon: 15.98, lat: 45.81, routes: ['6', '11'] };
     const theme = { getPreference: () => 'auto' as const, getResolvedTheme: () => 'light' as const, setPreference: vi.fn(), onChange: () => () => {}, destroy: vi.fn() };
