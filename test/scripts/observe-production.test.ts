@@ -314,7 +314,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
   const sentence = `Tramvaj ${n} kreće za dvije minute.`;
   return {
     at, place: 'Trg bana J. Jelačića', sentence, kicker: 'promet', kickerText: 'Promet', validUntil: new Date(at + 1_000).toISOString(),
-    sentenceChars: [...sentence].length, sentenceOverflow: false, sentenceEllipsis: false, head: wall.NEARBY_HEAD_2KM, rows,
+    sentenceChars: [...sentence].length, sentenceOverflow: false, sentenceEllipsis: false, head: wall.NEARBY_HEAD_2KM, rows, hiddenRows: 0,
     departures: 1, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
@@ -483,6 +483,13 @@ describe('a run over a fake browser', () => {
     const d1 = await observe(['--stage', 'd1'], { inventories });
     expect(d1.code).toBe(0);
     expect(read(d1.out, 'report.md')).toMatch(/\| phone-instruction \| d3 \| phone \| .* \| ≤ 0 \| 1 \| info \|/);
+  });
+
+  it('a departure only in hidden rows is no departure: the reading fails and the finding names the hidden rows', async () => {
+    const r = await observe([], { reading: (n, at, code) => ({ ...wallReading(n, at, code), ...(n === 1 ? { rows: [], departures: 0, solarRows: 0, hiddenRows: 2 } : {}) }) });
+    expect(r.code).toBe(1);
+    expect(r.lines.join('\n')).toContain('FAIL departures');
+    expect(read(r.out, 'report.md')).toContain('0 visible departure rows (2 row(s) in the DOM but not on the wall, not counted)');
   });
 
   it('a "+N" pill in one reading fails d1', async () => {

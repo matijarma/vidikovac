@@ -727,7 +727,8 @@ export const METRICS = Object.freeze({
     return { value: over + close, detail: [`redemptions ${Object.entries(per).map(([s, n]) => `${s} ${n}`).join(' · ') || 'none'}${gaps.length ? `; gaps ${gaps.map((g) => `${(g / 1000).toFixed(1)} s`).join(', ')}` : ''}`] };
   },
   'kiosk.emptyPlaceReadings': (obs) => countReadings(obs, (s) => !s.place, () => 'kiosk-context empty'),
-  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => s.departures < k.wall.DEPARTURES_MIN || s.departures > k.wall.DEPARTURES_MAX, (s) => `${s.departures} departure rows`),
+  // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
+  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => s.departures < k.wall.DEPARTURES_MIN || s.departures > k.wall.DEPARTURES_MAX, (s) => `${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}`),
   'kiosk.unlabelledReadings': (obs) => countReadings(obs, (s) => s.unlabelled !== 0, (s) => (s.unlabelled === null ? 'no data-unlabelled probe' : `${s.unlabelled} unlabelled marker(s)`)),
   'kiosk.pillsEmptyReadings': (obs) => countReadings(obs, (s) => !s.pills, (s) => `data-pills empty (feed ${s.feed ?? '?'}, map ${s.mapStatus ?? '?'})`),
   'kiosk.sentenceOutOfRange': (obs, k) => countReadings(obs, (s) => s.sentenceChars < 1 || s.sentenceChars > k.wall.SENTENCE_MAX_CHARS, (s) => `${s.sentenceChars} characters ${quote(s.sentence, 90)}`),
@@ -926,7 +927,7 @@ export function renderReport(observation, verdict, instruments) {
     lines.push(`## Wall rotation (${rot.length} readings, ${instruments.wall.ROTATION_STEP_MS / 1000} s apart, rotation.jsonl)`, '');
     lines.push('| Readings | Failed | Turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
-    if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} departures, feed ${k.first.feed ?? '?'}, theme ${k.first.theme ?? '?'}.`, '');
+    if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, theme ${k.first.theme ?? '?'}.`, '');
   }
 
   const views = [...(k?.viewports ?? []), ...(observation.phone?.viewports ?? []), ...(observation.desktop?.viewports ?? [])];
