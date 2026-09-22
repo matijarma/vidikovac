@@ -1,6 +1,8 @@
-// Seam S2: shared/city/frame.ts. The measured radius (air distance to the N-th
-// distinct-name tram stop, bus stops as the fallback, clamped 0.5–3 km), the
-// camera span and the "U blizini" pill.
+// Seam S2: shared/city/frame.ts. The measured radius (N stops down the tram
+// lines that serve the place, orchestrator decision 6; bus stops by air as the
+// fallback, clamped 0.5–3 km), the camera span and the "U blizini" pill.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import stopsJson from '../../app/public/data/stops.json';
 import {
@@ -8,27 +10,41 @@ import {
   FRAME_RADIUS_M,
   FRAME_RADIUS_MAX_M,
   FRAME_RADIUS_MIN_M,
+  FRAME_SAME_STOP_M,
   FRAME_STOPS,
   FRAME_TRAM_REACH_M,
   WALK_MIN_PER_KM,
+  frameLinesOf,
   frameRadiusM,
   frameSpanM,
   frameStopsFrom,
   isFrameStops,
   pillText,
+  type FrameLine,
   type FrameStop,
   type FrameStops,
 } from '../../shared/city/frame';
+import { decodeNetwork } from '../../shared/motion/network';
 import { isTramRoute } from '../../worker/pairing/place';
 import type { ScreenStop } from '../../worker/protocol';
 
 const PLACE = { lon: 16.0, lat: 45.8 };
 /** Metres per degree of latitude on the sphere shared/city/geo.ts distanceM uses (R = 6,371 km). */
 const M_PER_DEG = (6_371_000 * Math.PI) / 180;
+/** Metres per degree of longitude at PLACE's latitude, on the same sphere. */
+const M_PER_DEG_LON = M_PER_DEG * Math.cos((PLACE.lat * Math.PI) / 180);
+type Row = { id: string; name: string; lon: number; lat: number; routes: string[] };
+/** A platform `north` metres north (negative: south) and `east` metres east of PLACE. */
+const at = (id: string, name: string, north: number, east = 0, routes = ['6']): Row => ({ id, name, lon: PLACE.lon + east / M_PER_DEG_LON, lat: PLACE.lat + north / M_PER_DEG, routes });
+const isTram = (route: string) => route !== '109';
+/** A tram line due north from PLACE: its stop P at PLACE, then `count` stops every `step` metres, named S1, S2, … */
+const northLine = (step: number, count: number, prefix = 'n'): { rows: Row[]; line: FrameLine } => {
+  const rows = [at(`${prefix}0`, 'P', 0), ...Array.from({ length: count }, (_, i) => at(`${prefix}${i + 1}`, `S${i + 1}`, step * (i + 1)))];
+  return { rows, line: rows.map((r) => r.id) };
+};
+const table = (rows: Row[], lines: FrameLine[] = []): FrameStop[] => frameStopsFrom(rows, isTram, lines);
 /** A stop `d` metres due north of PLACE, so its air distance is exactly `d`. */
 const north = (name: string, d: number, tram = true): FrameStop => ({ name, lon: PLACE.lon, lat: PLACE.lat + d / M_PER_DEG, tram });
-/** Tram stops every `step` metres, named S1, S2, … */
-const line = (step: number, count: number, tram = true): FrameStop[] => Array.from({ length: count }, (_, i) => north(`S${i + 1}`, step * (i + 1), tram));
 
 describe('frame constants', () => {
   it('offers Kadar 4, 6 and 8, six by default', () => {
@@ -41,60 +57,157 @@ describe('frame constants', () => {
   it('keeps the fallback table and the bounds', () => {
     expect(FRAME_RADIUS_M).toEqual({ 4: 1300, 6: 2000, 8: 2700 });
     expect(Object.isFrozen(FRAME_RADIUS_M)).toBe(true);
-    expect([FRAME_RADIUS_MIN_M, FRAME_RADIUS_MAX_M, FRAME_TRAM_REACH_M, WALK_MIN_PER_KM]).toEqual([500, 3000, 3000, 7.5]);
+    expect([FRAME_RADIUS_MIN_M, FRAME_RADIUS_MAX_M, FRAME_TRAM_REACH_M, WALK_MIN_PER_KM, FRAME_SAME_STOP_M]).toEqual([500, 3000, 3000, 7.5, 300]);
   });
 });
 
 describe('frameRadiusM', () => {
-  it('is the air distance to the N-th tram stop', () => {
-    const stops = line(300, 10);
+  it('walks N stops down the line that serves the place', () => {
+    const { rows, line } = northLine(300, 10);
+    const stops = table(rows, [line]);
     expect(frameRadiusM(PLACE, stops, 4)).toBeCloseTo(1200, 3);
     expect(frameRadiusM(PLACE, stops, 6)).toBeCloseTo(1800, 3);
     expect(frameRadiusM(PLACE, stops, 8)).toBeCloseTo(2400, 3);
   });
 
+  it('counts the stops down the place\u2019s own lines, not the nearest stops of other lines by air', () => {
+    // The place's line runs north every 500 m; another line crosses 100–400 m to the east and never calls at P.
+    const own = northLine(500, 10);
+    const cross = [at('x1', 'X1', 100, 150), at('x2', 'X2', 0, 250), at('x3', 'X3', -100, 350), at('x4', 'X4', -200, 400), at('x5', 'X5', -300, 450)];
+    const stops = table([...own.rows, ...cross], [own.line, cross.map((r) => r.id)]);
+    expect(frameRadiusM(PLACE, stops, 4)).toBeCloseTo(2000, 3);
+    // By air the fourth-nearest stop name would be a crossing stop, under half a kilometre out.
+    expect(frameRadiusM(PLACE, stops, 4)).toBeGreaterThan(FRAME_RADIUS_MIN_M * 3);
+  });
+
+  it('walks both directions from the stop\u2019s platforms and counts each way out once, however many lines run it', () => {
+    // North every 300 m on three lines that share every stop; south every 500 m from the opposite platform 20 m away.
+    const up = northLine(300, 8);
+    const down = [at('p2', 'P', -20), ...Array.from({ length: 8 }, (_, i) => at(`s${i + 1}`, `South ${i + 1}`, -500 * (i + 1)))];
+    const stops = table([...up.rows, ...down], [up.line, up.line, up.line, down.map((r) => r.id)]);
+    // The median of the two ways out, 1200 m north and 2000 m south: the three lines north are one of them.
+    expect(frameRadiusM(PLACE, stops, 4)).toBeCloseTo(1600, 3);
+  });
+
+  it('counts platforms that share a name once, never the place\u2019s own name, and keeps a stop\u2019s far-off namesake out of its platforms', () => {
+    const rows = [at('p', 'P', 0), at('p-b', 'P', 40), at('a', 'A', 300), at('a-b', 'A', 330), at('b', 'B', 600), at('c', 'C', 900), at('d', 'D', 1200), at('e', 'E', 1500)];
+    // A stop also named P five kilometres south, on a line of its own: it is not the place's platform.
+    const far = [at('pz', 'P', -5000), at('z1', 'Z1', -5100), at('z2', 'Z2', -5200), at('z3', 'Z3', -5300), at('z4', 'Z4', -5400)];
+    const stops = table([...rows, ...far], [rows.map((r) => r.id), far.map((r) => r.id)]);
+    expect(frameRadiusM({ ...PLACE, name: 'P', kind: 'tram' }, stops, 4)).toBeCloseTo(1200, 3);
+  });
+
+  it('measures an address from the address, down the lines of the nearest tram stop', () => {
+    const { rows, line } = northLine(400, 8);
+    const stops = table(rows, [line]);
+    const address = { lon: PLACE.lon - 300 / M_PER_DEG_LON, lat: PLACE.lat, name: 'Ilica 1', kind: 'address' };
+    // The fourth stop is 1600 m north of P, the address 300 m west of P.
+    expect(frameRadiusM(address, stops, 4)).toBeCloseTo(Math.hypot(1600, 300), -1);
+  });
+
+  it('reaches the end of a line that ends before N stops', () => {
+    const { rows, line } = northLine(400, 3);
+    expect(frameRadiusM(PLACE, table(rows, [line]), 6)).toBeCloseTo(1200, 3);
+  });
+
   it('grows with N', () => {
-    for (const stops of [line(250, 12), line(420, 12)]) {
+    for (const step of [250, 420]) {
+      const { rows, line } = northLine(step, 12);
+      const stops = table(rows, [line]);
       const [r4, r6, r8] = FRAME_STOPS.map((n: FrameStops) => frameRadiusM(PLACE, stops, n));
-      expect(r4).toBeLessThanOrEqual(r6!);
-      expect(r6).toBeLessThanOrEqual(r8!);
+      expect(r4).toBeLessThan(r6!);
+      expect(r6).toBeLessThan(r8!);
     }
   });
 
-  it('counts platforms that share a name once and skips the place’s own stop', () => {
-    const stops = [north('Trg', 0), north('Trg', 40), north('A', 300), north('A', 330), north('B', 600), north('C', 900), north('D', 1200)];
-    expect(frameRadiusM({ ...PLACE, name: 'Trg', kind: 'tram' }, stops, 4)).toBeCloseTo(1200, 3);
-    // An address named like a stop still counts that stop: only a stop place skips its own name.
-    expect(frameRadiusM({ ...PLACE, name: 'Trg', kind: 'address' }, stops, 4)).toBeCloseTo(900, 3);
-  });
-
-  it('counts bus stops only when no tram stop lies within 3 km', () => {
-    const buses = line(400, 10, false);
+  it('counts bus stops by air only when no tram stop lies within 3 km, the place\u2019s own stop included', () => {
+    const buses = Array.from({ length: 10 }, (_, i) => north(`B${i + 1}`, 400 * (i + 1), false));
     expect(frameRadiusM(PLACE, [...buses, north('Far tram', 3200)], 4)).toBeCloseTo(1600, 3);
-    expect(frameRadiusM(PLACE, [...buses, ...line(700, 10)], 4)).toBeCloseTo(2800, 3);
+    // A bus-stop place does not count its own name.
+    expect(frameRadiusM({ ...PLACE, name: 'B1', kind: 'bus' }, [...buses, north('Far tram', 3200)], 4)).toBeCloseTo(2000, 3);
+    // The place is a tram stop whose next stops lie beyond 3 km, with buses all around it: its own
+    // stop is a tram within reach, so the frame walks the tram line (clamped) and ignores the buses.
+    const rows = [at('t0', 'Tram P', 0), at('t1', 'T1', 3200), at('t2', 'T2', 3400), at('t3', 'T3', 3600), at('t4', 'T4', 3800)];
+    const lonely = [...table(rows, [rows.map((r) => r.id)]), ...buses];
+    expect(frameRadiusM({ ...PLACE, name: 'Tram P', kind: 'tram' }, lonely, 4)).toBe(FRAME_RADIUS_MAX_M);
   });
 
   it('clamps to half a kilometre and three', () => {
-    expect(frameRadiusM(PLACE, line(50, 10), 4)).toBe(FRAME_RADIUS_MIN_M);
-    expect(frameRadiusM(PLACE, line(1000, 10), 8)).toBe(FRAME_RADIUS_MAX_M);
-    expect(frameRadiusM(PLACE, line(300, 3), 6)).toBe(FRAME_RADIUS_MAX_M);
+    const close = northLine(50, 10);
+    expect(frameRadiusM(PLACE, table(close.rows, [close.line]), 4)).toBe(FRAME_RADIUS_MIN_M);
+    const wide = northLine(1000, 10);
+    expect(frameRadiusM(PLACE, table(wide.rows, [wide.line]), 8)).toBe(FRAME_RADIUS_MAX_M);
+    // Fewer than N bus stops in the whole table reads as the maximum.
+    expect(frameRadiusM(PLACE, [north('B1', 300, false), north('B2', 600, false)], 6)).toBe(FRAME_RADIUS_MAX_M);
   });
 
-  it('falls back to the table when no stops are loaded', () => {
+  it('falls back to the table when no stops are loaded, or no tram line order is known', () => {
     expect(FRAME_STOPS.map((n) => frameRadiusM(PLACE, [], n))).toEqual([1300, 2000, 2700]);
+    const { rows } = northLine(300, 10);
+    expect(FRAME_STOPS.map((n) => frameRadiusM(PLACE, table(rows), n))).toEqual([1300, 2000, 2700]);
+  });
+});
+
+describe('frameStopsFrom and frameLinesOf', () => {
+  it('joins the lines on the stop ids and flags a stop a tram line calls at as tram', () => {
+    const rows = [at('a', 'A', 0, 0, ['109']), at('b', 'B', 300), at('c', 'C', 600, 0, ['109'])];
+    const stops = frameStopsFrom(rows, isTram, [['a', 'b'], ['b']]);
+    expect(stops.map((s) => s.tram)).toEqual([true, true, false]);
+    expect(stops.map((s) => s.lines)).toEqual([[[0, 0]], [[0, 1], [1, 0]], undefined]);
+    expect(frameStopsFrom(rows, isTram).every((s) => s.lines === undefined)).toBe(true);
   });
 
-  it('measures the real stop table around Trg bana J. Jelačića within the bounds, monotone', () => {
-    const table = stopsJson as ScreenStop[];
-    const stops = frameStopsFrom(table, isTramRoute);
-    expect(stops.filter((s) => s.tram).length).toBeGreaterThan(300);
-    const trg = table.find((s) => s.id === '106_1')!;
-    const radii = FRAME_STOPS.map((n) => frameRadiusM(trg, stops, n));
-    expect(radii[0]).toBeLessThanOrEqual(radii[1]!);
-    expect(radii[1]).toBeLessThanOrEqual(radii[2]!);
-    for (const r of radii) {
-      expect(r).toBeGreaterThanOrEqual(FRAME_RADIUS_MIN_M);
-      expect(r).toBeLessThanOrEqual(FRAME_RADIUS_MAX_M);
+  it('reads the tram paths that carry a served list, as platform ids in call order', () => {
+    const network = {
+      routes: new Map([['6', { type: 0 }], ['109', { type: 3 }]]),
+      stops: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      paths: [
+        { route: '6', served: [{ stop: 2 }, { stop: 0 }] },
+        { route: '109', served: [{ stop: 0 }, { stop: 1 }] },
+        { route: '6' },
+      ],
+    };
+    expect(frameLinesOf(network)).toEqual([['c', 'a']]);
+    expect(frameLinesOf({ ...network, paths: undefined })).toEqual([]);
+  });
+});
+
+// The artefact the app ships (feed 000395): the measure the camera, the circle and the pill read.
+describe('the frame over the real network', () => {
+  const rows = stopsJson as ScreenStop[];
+  const net = decodeNetwork(JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/public/data/zet-network.json'), 'utf8')));
+  const stops = frameStopsFrom(rows, isTramRoute, frameLinesOf(net));
+  const median = (values: number[]): number => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  };
+
+  it('knows the order of every tram platform a line calls at', () => {
+    expect(frameLinesOf(net).length).toBeGreaterThan(100);
+    expect(stops.filter((s) => s.lines).length).toBeGreaterThan(250);
+    expect(stops.filter((s) => s.lines).every((s) => s.tram)).toBe(true);
+  });
+
+  it('frames Trg bana J. Jelačića about 1.5 / 2.2 / 2.8 km, monotone, and prints its Kadar 6 as the owner\u2019s pill', () => {
+    const trg = rows.find((s) => s.id === '106_1')!;
+    const [r4, r6, r8] = FRAME_STOPS.map((n) => frameRadiusM(trg, stops, n));
+    expect(r4).toBeLessThan(r6!);
+    expect(r6).toBeLessThan(r8!);
+    expect(r4! / 1500).toBeGreaterThan(0.9);
+    expect(r4! / 1500).toBeLessThan(1.1);
+    expect(r8! / 2800).toBeGreaterThan(0.9);
+    expect(r8! / 2800).toBeLessThan(1.1);
+    expect(pillText(r6!)).toBe('2,2 km · ~16 min');
+  });
+
+  // The calibration (orchestrator decision 6): the constant table the first paint and the
+  // fallback use stays within 20 % of the measure's median over the artefact's tram platforms.
+  it('holds the fallback table within 20 % of the median over every tram platform', () => {
+    const tram = rows.filter((_, i) => stops[i]!.lines);
+    for (const n of FRAME_STOPS) {
+      const p50 = median(tram.map((stop) => frameRadiusM(stop, stops, n)));
+      expect(Math.abs(p50 - FRAME_RADIUS_M[n]) / FRAME_RADIUS_M[n], `Kadar ${n}: median ${Math.round(p50)} m`).toBeLessThanOrEqual(0.2);
     }
   });
 });

@@ -3,9 +3,16 @@
 // pill), WP3 (the camera span), WP4 (Karta) and the Worker. Pure: no DOM, no
 // fetch, no clock, no data files; callers hand in the stop table they hold.
 //
-// The radius is measured per place [O-68]: the camera, the "U blizini" circle
-// and the pill all read the same number, so the map never frames one distance
-// while the list promises another.
+// The radius is measured per place [O-68], and measured ALONG THE TRAM LINES
+// (orchestrator decision 6, run/RUN.md): N stops down the lines that serve the
+// place, which is what "6 stajališta odavde" means to a rider and what the
+// owner-approved numbers come from (typical 1.5 / 2.2 / 2.8 km, the pill
+// "2,2 km · ~16 min" at Trg bana Jelačića). The air distance to the N-th
+// nearest stop name, the first reading of the brief's words, measured
+// 0.68 / 0.94 / 1.10 km: nearest by air counts the stops of every other line
+// around a junction, not the stops down the place's own. The camera, the
+// "U blizini" circle and the pill all read the same number, so the map never
+// frames one distance while the list promises another.
 import { distanceM, normalName } from './geo';
 
 /** Kadar 4 / 6 / 8: how many tram stops around the place the frame reaches. */
@@ -20,18 +27,29 @@ export function isFrameStops(x: unknown): x is FrameStops {
 /** The measured radius never frames less than half a kilometre or more than three. */
 export const FRAME_RADIUS_MIN_M = 500;
 export const FRAME_RADIUS_MAX_M = 3000;
-/** With no tram stop this close, the frame counts bus stops instead. */
+/** With no tram stop this close (the place's own stop included), the frame counts bus stops instead. */
 export const FRAME_TRAM_REACH_M = 3000;
+/**
+ * Platforms sharing a name this close together are one stop, whose lines all serve the
+ * place: a junction's platforms lie up to 240 m apart in feed 000395 (Tržnica Kvatrić,
+ * Dubrava), and two stops of one name across the city are kilometres apart.
+ */
+export const FRAME_SAME_STOP_M = 300;
 
 /**
- * The radius per Kadar when no stops are loaded yet (the first paint, a failed stop table),
- * and the calibration target the measured radius is compared against. From the along-the-line
- * calibration in WP2's notes (the N-th stop along the same tram path, p50 1.5 / 2.2 / 2.8 km).
+ * The radius per Kadar when no stops are loaded yet (the first paint, a failed stop table)
+ * or no tram line order is known, and the calibration target the measured radius is held
+ * to (test/city/frame.test.ts, review.local/companion/plan/WP2/frame-calibration.mjs:
+ * within 20 %). The measure over feed 000395's tram platforms gives a median of
+ * 1524 / 2139 / 2753 m (WP2's notes: p50 1519 / 2191 / 2847 m over every stop and line).
  */
 export const FRAME_RADIUS_M: Readonly<Record<FrameStops, number>> = Object.freeze({ 4: 1300, 6: 2000, 8: 2700 });
 
 /** Walking pace the pill prints: 7.5 minutes per kilometre (8 km/h, the owner's figure). */
 export const WALK_MIN_PER_KM = 7.5;
+
+/** GTFS route_type of a tram, the only lines the frame walks. */
+const ROUTE_TYPE_TRAM = 0;
 
 /** A stop as the frame counts it: its name (platforms sharing a name are one stop) and whether a tram serves it. */
 export interface FrameStop {
@@ -39,25 +57,154 @@ export interface FrameStop {
   lon: number;
   lat: number;
   tram: boolean;
+  /**
+   * Where the tram lines call at this platform, as [line, order]: `line` indexes the line
+   * list the table was built from (frameStopsFrom), `order` is the platform's 0-based call
+   * along that line. Absent: no tram line calls here, or the caller holds no line order.
+   */
+  lines?: readonly (readonly [line: number, order: number])[];
 }
 
-/** The frame's view of a stop table: every platform, flagged tram when any of its routes is a tram route. */
+/** One tram line as the frame walks it: one direction of one pattern, the ids of the stops its trips call at, in order. */
+export type FrameLine = readonly string[];
+
+/**
+ * The frame's view of a stop table: every platform, flagged tram when any of its routes is a
+ * tram route or a tram line calls there, with where each line of `lines` calls at it (joined
+ * on the row's `id`). Without `lines` the table knows no line order and frameRadiusM answers
+ * FRAME_RADIUS_M for a place among trams.
+ */
 export function frameStopsFrom(
-  stops: readonly { name: string; lon: number; lat: number; routes: readonly string[] }[],
+  stops: readonly { id?: string; name: string; lon: number; lat: number; routes: readonly string[] }[],
   isTram: (routeId: string) => boolean,
+  lines: readonly FrameLine[] = [],
 ): FrameStop[] {
-  return stops.map((s) => ({ name: s.name, lon: s.lon, lat: s.lat, tram: s.routes.some(isTram) }));
+  const calls = new Map<string, [number, number][]>();
+  lines.forEach((line, index) => {
+    line.forEach((id, order) => {
+      const at = calls.get(id);
+      if (at) at.push([index, order]);
+      else calls.set(id, [[index, order]]);
+    });
+  });
+  return stops.map((s) => {
+    const on = s.id === undefined ? undefined : calls.get(s.id);
+    return { name: s.name, lon: s.lon, lat: s.lat, tram: on !== undefined || s.routes.some(isTram), ...(on ? { lines: on } : {}) };
+  });
+}
+
+/** The part of a decoded network the frame reads (shared/motion/network.ts GraphNetwork satisfies it). */
+export interface FrameNetwork {
+  routes: ReadonlyMap<string, { type: number }>;
+  stops: readonly { id: string }[];
+  /** Every path over the rail graph with the platforms its own trips call at, in order (F8). */
+  paths?: readonly { route: string; served?: readonly { stop: number }[] }[];
 }
 
 /**
- * The frame's radius around a place, in metres: the air distance to its N-th nearest
- * distinct-name tram stop (bus stops when no tram stop lies within FRAME_TRAM_REACH_M),
- * clamped to [FRAME_RADIUS_MIN_M, FRAME_RADIUS_MAX_M].
+ * The tram lines of a decoded network artefact, for frameStopsFrom: every tram path with a
+ * served list (152 in feed 000395), as the ids of the platforms it calls at, in order. Bus
+ * shapes carry no served list, so the bus fallback stays an air distance.
+ */
+export function frameLinesOf(network: FrameNetwork): FrameLine[] {
+  const out: FrameLine[] = [];
+  for (const path of network.paths ?? []) {
+    if (network.routes.get(path.route)?.type !== ROUTE_TYPE_TRAM || !path.served?.length) continue;
+    out.push(path.served.map((call) => network.stops[call.stop]?.id).filter((id): id is string => id !== undefined));
+  }
+  return out;
+}
+
+/** The lines rebuilt from a table's calls, platform by order (a platform missing from the table is a hole), the platforms any line calls at, and every platform's name as compared (normalName, once per table). */
+interface LineIndex {
+  lines: (FrameStop | undefined)[][];
+  served: FrameStop[];
+  names: Map<FrameStop, string>;
+}
+const lineIndexes = new WeakMap<readonly FrameStop[], LineIndex>();
+function lineIndex(stops: readonly FrameStop[]): LineIndex {
+  const known = lineIndexes.get(stops);
+  if (known) return known;
+  const index: LineIndex = { lines: [], served: [], names: new Map() };
+  for (const stop of stops) {
+    index.names.set(stop, normalName(stop.name));
+    if (!stop.tram || !stop.lines?.length) continue;
+    index.served.push(stop);
+    for (const [line, order] of stop.lines) (index.lines[line] ??= [])[order] = stop;
+  }
+  lineIndexes.set(stops, index);
+  return index;
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/**
+ * N stops down the tram lines that serve the place, or null when the table holds no line
+ * order. The place's stop is the platform a tram line calls at nearest the place, with every
+ * platform of its name within FRAME_SAME_STOP_M (a stop's platforms carry its lines in each
+ * direction). From each call there, the walk counts the distinct stop names down the line,
+ * the place's own name not among them, to the N-th. Each distinct N-th stop counts once,
+ * however many lines reach it (five lines down one street are one way out, not five), at its
+ * air distance from the place; the radius is the median over those stops. Where no line
+ * reaches N stops (a short line) the frame reaches the farthest stop any line does.
+ */
+function alongTheLines(place: { lon: number; lat: number }, stops: readonly FrameStop[], frame: FrameStops): number | null {
+  const { lines, served, names } = lineIndex(stops);
+  let anchor: FrameStop | undefined;
+  let nearest = Infinity;
+  for (const stop of served) {
+    const d = distanceM(place, stop);
+    if (d < nearest) {
+      nearest = d;
+      anchor = stop;
+    }
+  }
+  if (!anchor) return null;
+  const own = names.get(anchor)!;
+  const ends = new Map<string, number>();
+  let farthest = -1;
+  for (const platform of served) {
+    if (names.get(platform) !== own || distanceM(platform, anchor) > FRAME_SAME_STOP_M) continue;
+    for (const [index, order] of platform.lines!) {
+      const line = lines[index] ?? [];
+      const seen = new Set([own]);
+      let count = 0;
+      let last: FrameStop | undefined;
+      for (let at = order + 1; at < line.length && count < frame; at++) {
+        const next = line[at];
+        if (!next) continue;
+        const name = names.get(next)!;
+        if (seen.has(name)) continue;
+        seen.add(name);
+        count++;
+        last = next;
+      }
+      if (!last) continue;
+      const d = distanceM(place, last);
+      if (count === frame) {
+        const name = names.get(last)!;
+        ends.set(name, Math.min(ends.get(name) ?? Infinity, d));
+      } else farthest = Math.max(farthest, d);
+    }
+  }
+  if (ends.size > 0) return median([...ends.values()]);
+  return farthest >= 0 ? farthest : FRAME_RADIUS_MAX_M;
+}
+
+/**
+ * The frame's radius around a place, in metres, clamped to [FRAME_RADIUS_MIN_M,
+ * FRAME_RADIUS_MAX_M]: N stops down the tram lines that serve the place (alongTheLines).
  *
- * A place that is itself a stop (a ScreenStop, or a ScreenPlace of kind tram or bus) does not
- * count its own name: "Kvaternikov trg i 6 stajališta uokolo" is the place and six stops around
- * it. Fewer than N stops of the kind counted reads as the maximum; an empty table (nothing
- * loaded yet) falls back to FRAME_RADIUS_M.
+ * Only when no tram stop lies within FRAME_TRAM_REACH_M of the place, its own stop included,
+ * does the frame count bus stops, as the air distance to the N-th nearest distinct-name bus
+ * stop (the artefact carries no bus call order); a place that is itself a bus stop does not
+ * count its own name, and fewer than N bus stops reads as the maximum. An empty table
+ * (nothing loaded yet), or a table with no tram line order around a place among trams,
+ * falls back to FRAME_RADIUS_M.
  */
 export function frameRadiusM(
   place: { lon: number; lat: number; name?: string; kind?: string },
@@ -65,23 +212,24 @@ export function frameRadiusM(
   frame: FrameStops,
 ): number {
   if (stops.length === 0) return FRAME_RADIUS_M[frame];
+  const clamp = (m: number): number => Math.min(FRAME_RADIUS_MAX_M, Math.max(FRAME_RADIUS_MIN_M, m));
+  if (stops.some((stop) => stop.tram && distanceM(place, stop) <= FRAME_TRAM_REACH_M)) {
+    const along = alongTheLines(place, stops, frame);
+    return along === null ? FRAME_RADIUS_M[frame] : clamp(along);
+  }
   const own = place.name !== undefined && place.kind !== 'address' ? normalName(place.name) : null;
-  const ranked = (tram: boolean): number[] => {
-    const nearest = new Map<string, number>();
-    for (const stop of stops) {
-      if (stop.tram !== tram) continue;
-      const name = normalName(stop.name);
-      if (name === own) continue;
-      const d = distanceM(place, stop);
-      const seen = nearest.get(name);
-      if (seen === undefined || d < seen) nearest.set(name, d);
-    }
-    return [...nearest.values()].sort((a, b) => a - b);
-  };
-  let distances = ranked(true);
-  if (!(distances[0] !== undefined && distances[0] <= FRAME_TRAM_REACH_M)) distances = ranked(false);
-  const nth = distances[frame - 1] ?? FRAME_RADIUS_MAX_M;
-  return Math.min(FRAME_RADIUS_MAX_M, Math.max(FRAME_RADIUS_MIN_M, nth));
+  const { names } = lineIndex(stops);
+  const nearest = new Map<string, number>();
+  for (const stop of stops) {
+    if (stop.tram) continue;
+    const name = names.get(stop)!;
+    if (name === own) continue;
+    const d = distanceM(place, stop);
+    const seen = nearest.get(name);
+    if (seen === undefined || d < seen) nearest.set(name, d);
+  }
+  const nth = [...nearest.values()].sort((a, b) => a - b)[frame - 1] ?? FRAME_RADIUS_MAX_M;
+  return clamp(nth);
 }
 
 /** The camera's span for a radius: the whole circle, edge to edge. */
