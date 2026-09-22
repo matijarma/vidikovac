@@ -2085,7 +2085,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
         const lastEdge = e[e.length - 1];
         const [lIdx, lDm] = served[served.length - 1];
         const onLast = lDm / 10 - (lengthOf(e) - edgeLen[lastEdge]);
-        note(ends, route, lIdx, lastEdge, onLast >= -ARC_EPS ? Math.max(0, onLast) : null);
+        // Clamped to the edge: the served arc is rounded to the decimetre, and a
+        // platform at the very end must not land a quantum into the next edge.
+        note(ends, route, lIdx, lastEdge, onLast >= -ARC_EPS ? Math.min(edgeLen[lastEdge], Math.max(0, onLast)) : null);
         const firstEdge = e[0];
         const [fIdx, fDm] = served[0];
         const onFirst = fDm / 10;
