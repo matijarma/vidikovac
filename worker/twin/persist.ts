@@ -33,6 +33,9 @@ const TRIP_ROWS_PER_INSERT = 20;
 const PATTERN_ROWS_PER_INSERT = 10;
 const BLOCK_ROWS_PER_INSERT = 40;
 const LOOKUP_CHUNK = 50;
+/** Version of the persisted index contents, independent of the GTFS feed.
+ *  Version 1 includes trip services; an older/missing marker needs backfill. */
+const INDEX_SCHEMA_VERSION = '1';
 
 /** Coordinates in the state row keep the feed's own precision (~1.1 m);
  *  arcs a decimetre. The plane coordinates are recomputed on load. */
@@ -116,9 +119,13 @@ export function ensureSchema(sql: SqlStorage): void {
   // column is harmless; a storage failure must still fail schema setup.
   try {
     sql.exec("ALTER TABLE trips ADD COLUMN service TEXT NOT NULL DEFAULT ''");
+    metaSet(sql, 'index_schema_version', '0');
   } catch (error) {
     if (!(error instanceof Error) || !/duplicate column name:\s*service\b/i.test(error.message)) throw error;
   }
+  // Also repair databases migrated by the earlier build, whose service
+  // column exists but whose same-version index rows were never refreshed.
+  sql.exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('index_schema_version', '0')");
   sql.exec('CREATE TABLE IF NOT EXISTS blocks (block TEXT PRIMARY KEY, trips TEXT NOT NULL)');
   // C1: one histogram per (edge, hour band, day type) and per (stop, hour band, day type).
   sql.exec(
@@ -264,6 +271,10 @@ export function indexFeedVersion(sql: SqlStorage): string | null {
   return metaGet(sql, 'feed_version');
 }
 
+export function indexNeedsBackfill(sql: SqlStorage): boolean {
+  return metaGet(sql, 'index_schema_version') !== INDEX_SCHEMA_VERSION;
+}
+
 export function indexCheckedAt(sql: SqlStorage): number | null {
   const value = metaGet(sql, 'index_checked_at');
   const parsed = value === null ? Number.NaN : Number(value);
@@ -282,7 +293,8 @@ function insertBatched(sql: SqlStorage, table: string, columns: string[], rows: 
   }
 }
 
-/** Replaces the whole index in one transaction and records its feed version. */
+/** Replaces the index and records its feed/schema versions atomically.
+ *  A failed replacement must leave the backfill marker pending. */
 export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): void {
   const sql = storage.sql;
   storage.transactionSync(() => {
@@ -299,6 +311,7 @@ export function replaceIndex(storage: DurableObjectStorage, rows: IndexRows): vo
     insertBatched(sql, 'trips', ['trip_id', 'pattern', 'block', 'start', 'service'], rows.trips.map((t) => [t.id, t.pattern, t.block, t.start, t.service]), TRIP_ROWS_PER_INSERT);
     insertBatched(sql, 'blocks', ['block', 'trips'], rows.blocks.map((b) => [b.id, JSON.stringify(b.trips)]), BLOCK_ROWS_PER_INSERT);
     metaSet(sql, 'feed_version', rows.feedVersion);
+    metaSet(sql, 'index_schema_version', INDEX_SCHEMA_VERSION);
   });
 }
 

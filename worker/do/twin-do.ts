@@ -50,6 +50,7 @@ import {
   flushLearned,
   indexCheckedAt,
   indexFeedVersion,
+  indexNeedsBackfill,
   learnFlushedAt,
   loadDwellRecent,
   loadLatestState,
@@ -549,8 +550,9 @@ export class TwinDO extends DurableObject<Env> {
         this.index = index;
         const stored = indexFeedVersion(sql);
         const checked = indexCheckedAt(sql);
-        if (index.feedVersion !== stored || checked === null || now - checked >= INDEX_RECHECK_MS) {
-          if (index.feedVersion !== stored) replaceIndex(this.ctx.storage, indexRowsFromIndex(index));
+        const replace = index.feedVersion !== stored || indexNeedsBackfill(sql);
+        if (replace || checked === null || now - checked >= INDEX_RECHECK_MS) {
+          if (replace) replaceIndex(this.ctx.storage, indexRowsFromIndex(index));
           markIndexChecked(sql, now);
         }
       }
