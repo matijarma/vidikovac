@@ -8,6 +8,8 @@ import { ZET_ROUTES } from '../data/routes';
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 
 export const DEFAULT_STOP_ID = '106_1';
+/** Trg bana J. Jelačića, the point suggestions and stop lists rank around when nothing nearer is known. */
+export const CITY_CENTRE: { readonly lon: number; readonly lat: number } = Object.freeze({ lon: 15.97726, lat: 45.81286 });
 
 export interface RankedStop extends ScreenStop {
   /** Metres from the reference point, or null when there was none. */
@@ -18,7 +20,8 @@ export function stopDistanceM(stop: { lon: number; lat: number }, to: { lon: num
   return dist(toPlane(stop.lon, stop.lat), toPlane(to.lon, to.lat));
 }
 
-function fold(text: string): string {
+/** Lower case without diacritics (đ → d) and with single spaces: how typed text meets names. */
+export function fold(text: string): string {
   return text
     .toLowerCase()
     .replace(/đ/g, 'd')
@@ -37,6 +40,11 @@ export function sortRouteIds(ids: readonly string[]): string[] {
 export function routeType(routeId: string): number | null {
   const route = ZET_ROUTES[routeId];
   return route ? route.type : null;
+}
+
+/** A stop any tram line serves (GTFS route_type 0). */
+export function isTramStop(stop: { readonly routes: readonly string[] }): boolean {
+  return stop.routes.some((routeId) => routeType(routeId) === 0);
 }
 
 export function routeLongName(routeId: string): string {
