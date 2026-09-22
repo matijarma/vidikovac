@@ -1,6 +1,7 @@
 // Static GTFS route names, downloaded by scripts/gtfs-routes.mjs (Area E, R-10).
-// This is the only module that imports the JSON, so a missing file breaks in one
-// obvious place instead of seven.
+// This is the only app module that imports the JSON, so a missing file breaks in one
+// obvious place instead of seven (the Worker reads it too: worker/feed/modules/zet-routes.ts
+// and worker/pairing/place.ts).
 //
 // RULING (C5): the brief's illustrative snippet assumed a flat
 // `Record<string, string>`; the file Area E actually landed keys each route id
