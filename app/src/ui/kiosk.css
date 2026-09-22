@@ -831,11 +831,39 @@ button.k-strip-verdict { cursor: pointer; }
   .k-setup .k-stop-list { grid-template-columns: 1fr; max-height: none; }
 }
 
-/* The start screen: a brand, a sentence and one button, centred on the stage. */
-.k-start { justify-content: center; max-width: 46rem; }
+/* The start screen: a brand, one field, the line under it and Pokreni, centred on the stage. */
+.k-start { justify-content: center; max-width: 46rem; overflow: visible; }
 .k-start-form { display: flex; flex-direction: column; align-items: flex-start; }
 .k-start .k-setup-actions { margin-top: calc(var(--k-gap) * 1.2); }
 .k-start-btn { min-width: 16rem; min-height: 56px; font-size: 1.125rem; font-weight: 700; }
+.k-start .k-setup-summary { font-size: 1rem; }
+
+/* The one field "Adresa ili stajalište" (kiosk/place-field.ts), on the start
+   screen and in Postavke: the label over the input, the suggestions in a box
+   laid over what follows. Whole rows only: every row is one fixed height and
+   the box is an exact number of them, so a scroll can only ever stop between
+   two rows. On a phone the box is part of the page instead of floating. */
+.k-place { position: relative; align-self: stretch; min-width: 0; }
+.k-place .k-search { flex-direction: column; align-items: stretch; }
+.k-place .k-search-label { margin: 0 0 calc(var(--k-gap) * 0.4); }
+.k-suggest-box { position: absolute; top: 100%; right: 0; left: 0; z-index: 3; margin-top: calc(var(--k-gap) * 0.25); overflow: hidden; border: 2px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-canvas); box-shadow: var(--k-shadow); }
+.k-suggest-box[hidden] { display: none; }
+.k-suggest { --k-suggest-row: var(--k-control); display: grid; grid-auto-rows: var(--k-suggest-row); max-height: calc(var(--k-suggest-row) * 6); margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.k-suggest[hidden] { display: none; }
+.k-suggest[data-stale='1'] { opacity: 0.55; }
+.k-suggest-row { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; min-width: 0; padding: 0 var(--k-gap); overflow: hidden; cursor: pointer; }
+.k-suggest-row + .k-suggest-row { border-top: 1px solid var(--k-line); }
+.k-suggest-row[aria-selected='true'] { background: var(--k-action-soft); color: var(--k-action-on-soft); }
+.k-suggest-name { font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-suggest-meta { font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-suggest-row[aria-selected='true'] .k-suggest-meta { color: inherit; }
+.k-suggest-status { padding: calc(var(--k-gap) * 0.5) var(--k-gap); font-size: var(--k-hint-size); color: var(--k-ink-2); }
+.k-suggest-status[hidden] { display: none; }
+.k-setup .k-suggest { --k-suggest-row: 56px; }
+.k-setup .k-suggest-name { font-size: 1rem; }
+.k-setup .k-suggest-meta, .k-setup .k-suggest-status { font-size: 0.8125rem; }
+.kiosk[data-size='handheld'] .k-suggest-box { position: static; }
+.kiosk[data-size='handheld'] .k-place .k-search-label, .kiosk[data-size='handheld'] .k-place .k-search-input { flex-basis: auto; }
 
 /* Postavke: the same overlay geometry as Osnovno, with its own rows. */
 .k-settings { gap: var(--k-gap); }

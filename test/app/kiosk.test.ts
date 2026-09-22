@@ -410,41 +410,45 @@ describe('versioned explicit public presentation', () => {
   });
 });
 
-describe('start: one button, one creation per press', () => {
-  it('offers one button and nothing to choose when nothing is provisioned; the strip is already there', () => {
+describe('start: one field, one line, Pokreni', () => {
+  it('offers the one field, the whole-city line and Pokreni; nothing loads before the field is touched; the strip is already there', () => {
     const k = mount();
     expect(k.handle.phase()).toBe('setup');
     expect(q(k.root, '[data-testid=kiosk-setup]')).not.toBeNull();
     expect(text(q(k.root, 'h1'))).toBe('Pokreni gradski zaslon');
-    expect(text(q(k.root, '[data-testid=setup-create]'))).toBe('Pokreni zaslon');
-    // No district, no stop, no list to load: the choice moved onto the screen itself.
-    expect(q(k.root, 'select[name=district]')).toBeNull();
-    expect(k.root.querySelectorAll('input[name=stop]')).toHaveLength(0);
+    const field = k.root.querySelector<HTMLInputElement>('[data-testid=kiosk-setup] input[data-testid=setup-place]')!;
+    expect(field.getAttribute('role')).toBe('combobox');
+    expect(text(field.closest('label'))).toBe('Adresa ili stajalište');
+    expect(field.value).toBe('');
+    expect(k.root.querySelector<HTMLElement>('[data-testid=setup-suggestions]')!.hidden).toBe(true);
+    expect(text(q(k.root, '[data-testid=setup-preview]'))).toBe('Na zaslonu: cijeli grad.');
+    expect(text(q(k.root, '[data-testid=setup-create]'))).toBe('Pokreni');
+    // One optional field and nothing else to decide: no district, no stop list, no paragraphs around it.
+    expect(q(k.root, '[data-testid=kiosk-setup] select')).toBeNull();
+    expect(k.root.querySelectorAll('[data-testid=kiosk-setup] input')).toHaveLength(1);
+    expect(q(k.root, '.k-setup-intro')).toBeNull();
+    expect(q(k.root, '.k-setup-meta')).toBeNull();
     expect(k.loadStops).not.toHaveBeenCalled();
     expect(k.beacon.connect).not.toHaveBeenCalled();
-    // The gear belongs to a screen that exists.
-    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(true);
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull(); // the verdict is a plain word while the start screen or a session owns the screen
     expect(q(k.root, 'span.k-strip-verdict[data-testid=strip-verdict]')).not.toBeNull();
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Sigurnost');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
-  it('creates the whole-city screen with no area and no stop on one press, and boots the beacon', async () => {
+  it('an empty field posts exactly {} on one press, the whole city as before, and boots the beacon', async () => {
     const createScreen = vi.fn(async () => ({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.S3CR3TXYZ', screen: CITY_SCREEN }));
     const k = mount({ createScreen });
     await flush();
     submit(k.root);
     await flush();
     expect(createScreen).toHaveBeenCalledTimes(1);
-    expect(createScreen).toHaveBeenCalledWith();
+    expect(createScreen).toHaveBeenCalledWith({});
+    expect(k.loadStops).not.toHaveBeenCalled();
     expect(k.handle.phase()).toBe('invitation');
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'NEW00001', secret: 'S3CR3TXYZ', screen: CITY_SCREEN });
     expect(k.beacon.connect).toHaveBeenCalledTimes(1);
     expect(k.root.innerHTML).not.toContain('S3CR3TXYZ');
     expect(q(k.root, '[data-testid=kiosk-setup]')).toBeNull();
-    // A whole-city screen names no place in the header; the gear is there instead.
-    expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('');
-    expect(q(k.root, '[data-testid=kiosk-settings]')!.hidden).toBe(false);
   });
   it('a 403 ends in the refused-connection sentence with no retry, a 429 counts its retry down, a network failure offers one; nothing loops', async () => {
     const attempts: unknown[] = [new ScreenError('evaluation-access-required', 403), new ScreenError('screen-limit', 429, 90), new TypeError('Failed to fetch')];
@@ -468,6 +472,289 @@ describe('start: one button, one creation per press', () => {
     expect(createScreen).toHaveBeenCalledTimes(3);
     expect(k.handle.phase()).toBe('setup');
     expect(k.beacon.connect).not.toHaveBeenCalled();
+  });
+});
+
+// The field itself (kiosk/place-field.ts) through the start screen alone. The
+// ranking of suggestions is places.ts's and has its own tests
+// (kiosk-places.test.ts); here the test decides what is suggested, and
+// everything after it is real: the pause, the rows, the pick, the derivation
+// of the place, the line under the field and what Pokreni posts.
+describe('start: the field turns what is typed into the screen’s place', () => {
+  type StartModule = typeof import('../../app/src/kiosk/start');
+  type KioskStrings = import('../../app/src/kiosk/strings').KioskStrings;
+  /** Typing rests this long before the rows are worked out (place-field.ts PLACE_DEBOUNCE_MS). */
+  const PAUSE_MS = 120;
+  type Suggestion = import('../../app/src/kiosk/places').PlaceSuggestion;
+  type Street = import('../../app/src/kiosk/places').StreetGeo;
+  const PLACES_MODULE = '../../app/src/kiosk/places';
+  const street = (name: string, lon: number, lat: number): Street => ({ name, lon, lat, bbox: [lon - 0.002, lat - 0.001, lon + 0.002, lat + 0.001], lengthM: 400, stops: [] });
+  /** 170 m from the Zapruđe tram platform: a pick here is that stop. */
+  const NEAR_ZAPRUDJE = street('Meštrovićev trg', 15.9905, 45.7715);
+  /** About 1.7 km from every stop of the fixture: a pick here stays the street. */
+  const ILICA = street('Ilica', 15.955, 45.8125);
+  const ZAPRUDJE_ROW: Suggestion = { kind: 'stop', stop: { ...STOPS[2], distanceM: null } };
+  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.';
+
+  interface StartEnv { mountStart: StartModule['mountStart']; strings: KioskStrings; isTram: (routeId: string) => boolean }
+  /** start.ts over a places.ts whose suggestPlaces answers `suggest`; the rest of that module stays real. */
+  async function startWith(suggest: (query: string) => Suggestion[]): Promise<StartEnv> {
+    vi.resetModules();
+    vi.doMock(PLACES_MODULE, async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../app/src/kiosk/places')>()),
+      suggestPlaces: (query: string) => suggest(query),
+    }));
+    try {
+      const [start, field, strings, stops] = await Promise.all([import('../../app/src/kiosk/start'), import('../../app/src/kiosk/place-field'), import('../../app/src/kiosk/strings'), import('../../app/src/kiosk/stops')]);
+      expect(field.PLACE_DEBOUNCE_MS).toBe(PAUSE_MS);
+      return { mountStart: start.mountStart, strings: strings.kioskStrings('hr'), isTram: (routeId) => stops.routeType(routeId) === 0 };
+    } finally { vi.doUnmock(PLACES_MODULE); }
+  }
+  const suggestBox = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>('.k-suggest-box')!;
+  function harness(mod: StartEnv, opts: { loadStops?: () => Promise<typeof STOPS>; loadStreets?: () => Promise<Street[]> } = {}) {
+    const host = document.createElement('div');
+    document.body.replaceChildren(host);
+    const timers: Timer[] = [];
+    const createScreen = vi.fn(async (_input: object) => ({ beaconId: 'NEW00001', secret: 'nova', provisionUrl: 'https://zagreb.aningfilm.hr/kiosk/#NEW00001.nova', screen: CITY_SCREEN }));
+    const loadStops = vi.fn(opts.loadStops ?? (async () => STOPS));
+    const loadStreets = vi.fn(opts.loadStreets ?? (async () => [NEAR_ZAPRUDJE, ILICA]));
+    const onCreated = vi.fn();
+    const handle = mod.mountStart(host, {
+      strings: mod.strings, locale: 'hr', createScreen, loadStops, loadStreets, isTram: mod.isTram, onCreated, now: () => NOW,
+      setTimeout: (fn, ms) => { const t: Timer = { fn, ms, cleared: false }; timers.push(t); return t; },
+      clearTimeout: (h) => { (h as Timer).cleared = true; },
+    });
+    const input = host.querySelector<HTMLInputElement>('[data-testid=setup-place]')!;
+    const list = host.querySelector<HTMLElement>('[data-testid=setup-suggestions]')!;
+    return {
+      host, handle, input, list, timers, createScreen, loadStops, loadStreets, onCreated,
+      focus: () => { input.dispatchEvent(new FocusEvent('focus')); },
+      /** The focus leaves the field for somewhere outside it. */
+      blur: () => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null })); },
+      box: () => suggestBox(host),
+      type: (value: string) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); },
+      key: (key: string) => { input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); },
+      /** Fires the armed timers registered at a delay, as the kiosk's oneShot would. */
+      tick: (ms: number) => { for (const t of [...timers]) if (t.ms === ms && !t.cleared) { t.cleared = true; t.fn(); } },
+      rows: () => [...list.querySelectorAll<HTMLElement>(':scope > [data-testid=setup-suggestion]')],
+      names: () => [...list.querySelectorAll('.k-suggest-name')].map(text),
+      status: () => text(host.querySelector<HTMLElement>('.k-suggest-status')),
+      preview: () => text(host.querySelector<HTMLElement>('[data-testid=setup-preview]')),
+      error: () => text(host.querySelector<HTMLElement>('[data-testid=setup-error]')),
+      submit: () => { host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); },
+    };
+  }
+
+  it('typing a stop name suggests it after the pause; picking it writes the line, and Pokreni posts the stop with Kadar 6', async () => {
+    const h = harness(await startWith((query) => (query === 'Zapr' ? [ZAPRUDJE_ROW] : [])));
+    h.focus();
+    await flush();
+    expect(h.loadStops).toHaveBeenCalledTimes(1);
+    expect(h.loadStreets).toHaveBeenCalledTimes(1);
+    h.type('Zapr');
+    // Nothing before the pause, and typed text is not a place yet: the line says nothing rather than "cijeli grad".
+    expect(h.rows()).toHaveLength(0);
+    expect(h.preview()).toBe('');
+    h.tick(PAUSE_MS);
+    expect(h.names()).toEqual(['Zapruđe']);
+    expect(text(h.list.querySelector('.k-suggest-meta'))).toBe('linije 7');
+    expect(h.rows()[0]!.dataset.kind).toBe('stop');
+    expect(h.rows()[0]!.getAttribute('role')).toBe('option');
+    expect(h.input.getAttribute('aria-expanded')).toBe('true');
+    h.rows()[0]!.click();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.list.hidden).toBe(true);
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledTimes(1);
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+    expect(h.onCreated).toHaveBeenCalledTimes(1);
+    expect(h.loadStops).toHaveBeenCalledTimes(1);
+  });
+  it('a street becomes the tram stop within 400 m of it; farther from every stop it stays the street and keeps the typed number', async () => {
+    const h = harness(await startWith((query) => (query === 'Meštr' ? [{ kind: 'street', street: NEAR_ZAPRUDJE }] : query === 'Ilica 25' ? [{ kind: 'street', street: ILICA, number: '25' }] : [])));
+    h.type('Meštr');
+    await flush();
+    h.tick(PAUSE_MS);
+    expect(h.names()).toEqual(['Meštrovićev trg']);
+    h.rows()[0]!.click();
+    expect(h.input.value).toBe('Meštrovićev trg');
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    // Editing the picked text undoes the pick until another row is picked.
+    h.type('Ilica 25');
+    expect(h.preview()).toBe('');
+    h.tick(PAUSE_MS);
+    expect(h.names()).toEqual(['Ilica 25']);
+    expect(h.rows()[0]!.dataset.kind).toBe('street');
+    h.rows()[0]!.click();
+    expect(h.preview()).toBe('Na zaslonu: Ilica i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'address', name: 'Ilica', lon: 15.955, lat: 45.8125, address: 'Ilica 25' }, frame: 6 });
+  });
+  it('text that matches nothing creates nothing: the field and Pokreni both say so, and an emptied field is the whole city again', async () => {
+    const h = harness(await startWith(() => []));
+    h.type('Xyzzy');
+    await flush();
+    h.tick(PAUSE_MS);
+    expect(h.rows()).toHaveLength(0);
+    expect(h.status()).toBe(NO_MATCH);
+    h.submit();
+    await flush();
+    expect(h.createScreen).not.toHaveBeenCalled();
+    expect(h.error()).toBe(NO_MATCH);
+    expect(h.host.querySelector<HTMLElement>('[data-testid=setup-retry]')!.hidden).toBe(true);
+    expect(text(h.host.querySelector<HTMLElement>('[data-testid=setup-create]'))).toBe('Pokreni');
+    h.type('');
+    expect(h.host.querySelector<HTMLElement>('[data-testid=setup-error]')!.hidden).toBe(true);
+    expect(h.preview()).toBe('Na zaslonu: cijeli grad.');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledTimes(1);
+    expect(h.createScreen).toHaveBeenCalledWith({});
+  });
+  it('a full stop name typed and never picked still becomes that stop on Pokreni', async () => {
+    const h = harness(await startWith(() => []));
+    h.type('zapruđe');
+    h.submit();
+    await flush();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+  });
+  it('the keyboard walks the rows: arrows highlight, Enter picks, Escape closes the list and keeps the text', async () => {
+    const h = harness(await startWith((query) => (query.startsWith('Zapr') ? [ZAPRUDJE_ROW, { kind: 'street', street: NEAR_ZAPRUDJE }] : [])));
+    h.type('Zapr');
+    await flush();
+    h.tick(PAUSE_MS);
+    expect(h.rows()).toHaveLength(2);
+    h.key('Escape');
+    expect(h.host.querySelector<HTMLElement>('.k-suggest-box')!.hidden).toBe(true);
+    expect(h.input.value).toBe('Zapr');
+    h.type('Zapru');
+    h.tick(PAUSE_MS);
+    h.key('ArrowDown');
+    h.key('ArrowDown');
+    expect(h.rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+    expect(h.input.getAttribute('aria-activedescendant')).toBe(h.rows()[1]!.id);
+    h.key('ArrowUp');
+    expect(h.rows().map((row) => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+    h.key('Enter');
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    expect(h.createScreen).not.toHaveBeenCalled();
+  });
+  it('editing the text retires the rows on show at once: Enter inside the pause picks nothing stale, and a stale row does not answer a click', async () => {
+    const kvaternikov: Suggestion = { kind: 'stop', stop: { id: '236_2', name: 'Kvaternikov trg', lon: 15.9975, lat: 45.815, routes: ['4', '7'], distanceM: null } };
+    const h = harness(await startWith((query) => (query === 'Kvatern' ? [kvaternikov] : query === 'Zapruđe' ? [ZAPRUDJE_ROW] : [])));
+    h.type('Kvatern');
+    await flush();
+    h.tick(PAUSE_MS);
+    h.key('ArrowDown');
+    const stale = h.rows()[0]!;
+    expect(stale.getAttribute('aria-selected')).toBe('true');
+    h.type('Zapruđe');
+    expect(stale.getAttribute('aria-selected')).toBe('false');
+    expect(h.input.hasAttribute('aria-activedescendant')).toBe(false);
+    stale.click();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('');
+    h.key('Enter');
+    await flush();
+    expect(h.input.value).toBe('Zapruđe');
+    expect(h.preview()).toBe('Na zaslonu: Zapruđe i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'stop', stopId: '200_1' }, frame: 6 });
+  });
+  it('streets that share a name show their settlements, and a shared name typed in full waits for a pick instead of choosing one', async () => {
+    const inSettlement = (name: string, lon: number, lat: number, settlement: string): Street => ({ ...street(name, lon, lat), settlement } as Street);
+    const gajevaZagreb = inSettlement('Gajeva ulica', 15.9745, 45.811, 'Zagreb');
+    const gajevaSesvete = inSettlement('Gajeva ulica', 16.11, 45.83, 'Sesvete');
+    const ilica = inSettlement('Ilica', 15.955, 45.8125, 'Zagreb');
+    const offer = (query: string): Suggestion[] => (query.startsWith('Gajeva') ? [{ kind: 'street', street: gajevaZagreb }, { kind: 'street', street: gajevaSesvete }] : query === 'Ilica' ? [{ kind: 'street', street: ilica }] : []);
+    const h = harness(await startWith(offer), { loadStreets: async () => [gajevaZagreb, gajevaSesvete, ilica] });
+    h.type('Ilica');
+    await flush();
+    h.tick(PAUSE_MS);
+    // A name only one street carries needs no settlement.
+    expect(h.list.querySelector('.k-suggest-meta')).toBeNull();
+    h.type('Gajeva ulica');
+    h.submit();
+    await flush();
+    expect(h.createScreen).not.toHaveBeenCalled();
+    expect(h.error()).toBe('Više ulica ima to ime. Odaberi prijedlog s popisa.');
+    expect(h.preview()).toBe('');
+    expect(h.names()).toEqual(['Gajeva ulica', 'Gajeva ulica']);
+    expect([...h.list.querySelectorAll('.k-suggest-meta')].map(text)).toEqual(['Zagreb', 'Sesvete']);
+    expect(h.status()).toBe('Više ulica ima to ime. Odaberi prijedlog s popisa.');
+    h.rows()[1]!.click();
+    expect(h.preview()).toBe('Na zaslonu: Gajeva ulica i 6 stajališta uokolo');
+    h.submit();
+    await flush();
+    expect(h.createScreen).toHaveBeenCalledWith({ place: { kind: 'address', name: 'Gajeva ulica', lon: 16.11, lat: 45.83 }, frame: 6 });
+  });
+  it('Escape or a focus that leaves the field keeps the list shut through a pending pause or load; coming back shows the rows again at once', async () => {
+    let release!: (stops: typeof STOPS) => void;
+    const pending = new Promise<typeof STOPS>((resolve) => { release = resolve; });
+    const h = harness(await startWith((query) => (query.startsWith('Zapr') ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending });
+    h.type('Zapr');
+    h.tick(PAUSE_MS);
+    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    h.blur();
+    expect(h.box().hidden).toBe(true);
+    release(STOPS);
+    await flush();
+    expect(h.box().hidden).toBe(true);
+    // Back in the field: the loaded rows at once, nothing fetched again.
+    h.focus();
+    expect(h.names()).toEqual(['Zapruđe']);
+    expect(h.box().hidden).toBe(false);
+    expect(h.loadStops).toHaveBeenCalledTimes(1);
+    // Escape inside the pause: the pending refresh is dropped.
+    h.type('Zapru');
+    h.key('Escape');
+    h.tick(PAUSE_MS);
+    expect(h.box().hidden).toBe(true);
+    h.focus();
+    expect(h.names()).toEqual(['Zapruđe']);
+    h.key('Escape');
+    expect(h.box().hidden).toBe(true);
+    expect(h.input.value).toBe('Zapru');
+  });
+  it('the lists load on the first touch and say so; a failed load is said in the field and on Pokreni, and only a person tries again', async () => {
+    let release!: (stops: typeof STOPS) => void;
+    const pending = new Promise<typeof STOPS>((resolve) => { release = resolve; });
+    const h = harness(await startWith((query) => (query === 'Zapr' ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending, loadStreets: async () => { throw new Error('streets-unavailable'); } });
+    h.type('Zapr');
+    h.tick(PAUSE_MS);
+    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    release(STOPS);
+    await flush();
+    // The street index failing leaves the stops to suggest from.
+    expect(h.names()).toEqual(['Zapruđe']);
+    expect(h.loadStops).toHaveBeenCalledTimes(1);
+
+    const down = harness(await startWith(() => []), { loadStops: async () => { throw new Error('stops-unavailable'); } });
+    down.focus();
+    await flush();
+    down.type('Zapr');
+    await flush();
+    down.tick(PAUSE_MS);
+    expect(down.status()).toBe('Popis adresa i stajališta nije dostupan.');
+    const attempts = down.loadStops.mock.calls.length;
+    for (const t of [...down.timers]) if (!t.cleared) t.fn();
+    await flush();
+    expect(down.loadStops).toHaveBeenCalledTimes(attempts);
+    down.submit();
+    await flush();
+    expect(down.error()).toBe('Popis adresa i stajališta nije dostupan.');
+    expect(down.createScreen).not.toHaveBeenCalled();
+    down.type('');
+    down.submit();
+    await flush();
+    expect(down.createScreen).toHaveBeenCalledWith({});
   });
 });
 

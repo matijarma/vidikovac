@@ -1,21 +1,39 @@
-// The start screen: a brand, one sentence and one button. Pressing it makes
-// one real POST /api/screens (core/screens.ts) with an empty body -- no
-// district, no stop, no URL parameter -- and the Worker answers with ordinary
-// credentials for a whole-city screen. Whatever the screen should frame
-// instead is chosen afterwards, on the screen itself (kiosk/settings.ts).
+// The start screen: one field "Adresa ili stajalište", one line under it that
+// says what the screen will show, and Pokreni (brief §11, Setup). The field is
+// optional. Left empty, Pokreni makes one real POST /api/screens with an
+// empty body, byte for byte what the one-button start sent, and the Worker
+// answers with a whole-city screen whose place is Trg bana J. Jelačića. A
+// picked stop or street posts `{ place, frame }` instead; the Worker resolves
+// a stop's name and point from its own table (core/screens.ts, seam S1).
 //
-// The start screen never previews anything, never grants anything and never
-// retries on its own: every error ends in a sentence and a button a person
-// presses.
-import type { CreateBeaconResponse } from '../../../worker/protocol';
-import { ScreenError } from '../core/screens';
+// The start screen never grants anything and never retries on its own: every
+// error ends in a sentence and a button a person presses, and typed text that
+// matches nothing is said to be so rather than quietly becoming the whole city.
+import type { CreateBeaconResponse, ScreenStop } from '../../../worker/protocol';
+import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../../shared/city/frame';
+import { PLACE_ADDRESS_MAX, PLACE_NAME_MAX, type ScreenPlace, type ScreenPlaceInput } from '../../../shared/city/place';
+import { loadStops as loadStopsImpl, ScreenError, type CreateScreenInput } from '../core/screens';
 import { escapeHtml } from '../ui/dom/escape';
 import { mmss } from './format';
-import { fill, type KioskStrings } from './strings';
+import { mountPlaceField } from './place-field';
+import { placeInputOf, type StreetGeo } from './places';
+import { routeType } from './stops';
+import { fill, plural, type KioskStrings } from './strings';
+
+/** What Pokreni posts: `{}` for an empty field, `{ place, frame }` for a picked place. */
+export type StartScreenInput = CreateScreenInput & { place?: ScreenPlaceInput; frame?: FrameStops };
 
 export interface StartDeps {
   strings: KioskStrings;
-  createScreen: () => Promise<CreateBeaconResponse>;
+  /** The plural of the preview line; Croatian when absent. */
+  locale?: string;
+  createScreen: (input: StartScreenInput) => Promise<CreateBeaconResponse>;
+  /** The stop table, fetched on the first touch of the field and never at mount; the lazy core loader by default. */
+  loadStops?: () => Promise<readonly ScreenStop[]>;
+  /** The offline street index; without it only stops are suggested. */
+  loadStreets?: () => Promise<readonly StreetGeo[]>;
+  /** Whether a route is a tram route (GTFS route_type 0 in the static table by default). */
+  isTram?: (routeId: string) => boolean;
   onCreated: (response: CreateBeaconResponse) => void;
   now: () => number;
   setTimeout: (fn: () => void, ms: number) => unknown;
@@ -53,22 +71,37 @@ function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: strin
         : c.kind === 'failed' ? s.setup.errorFailed : s.setup.errorNetwork;
 }
 
+/** The line under the field: what the screen will show once Pokreni is pressed. */
+export function previewText(s: KioskStrings, locale: string, place: ScreenPlace | null, unresolved: string): string {
+  if (place) return fill(plural(locale, s.setup.preview, DEFAULT_FRAME_STOPS), { place: place.name });
+  return unresolved ? '' : s.setup.previewCity;
+}
+
+/** The place as the Worker accepts it: a typed address past the protocol's cap is dropped, a name past its cap cut. */
+function postable(place: ScreenPlace): ScreenPlaceInput {
+  const input = placeInputOf(place);
+  if (input.address !== undefined && input.address.trim().length > PLACE_ADDRESS_MAX) delete input.address;
+  if (input.kind === 'address' && input.name.trim().length > PLACE_NAME_MAX) input.name = input.name.trim().slice(0, PLACE_NAME_MAX).trimEnd();
+  return input;
+}
+
 function startMarkup(s: KioskStrings): string {
   return `<form class="k-start-form" novalidate>
       <p class="k-kicker">${escapeHtml(s.appName)}</p>
       <h1 class="k-setup-title" id="k-setup-title">${escapeHtml(s.setup.title)}</h1>
-      <p class="k-setup-intro">${escapeHtml(s.setup.intro)}</p>
+      <div class="k-start-place"></div>
+      <p class="k-setup-summary" data-testid="setup-preview" aria-live="polite"></p>
       <p class="k-setup-error" role="alert" data-testid="setup-error" hidden></p>
       <div class="k-setup-actions">
         <button type="submit" class="k-btn k-btn--primary k-start-btn" data-testid="setup-create">${escapeHtml(s.setup.create)}</button>
         <button type="button" class="k-btn k-btn--ghost" data-testid="setup-retry" hidden>${escapeHtml(s.setup.retry)}</button>
       </div>
-      <p class="k-setup-meta">${escapeHtml(s.setup.validity)}</p>
     </form>`;
 }
 
 export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
   const { strings: s } = deps;
+  const locale = deps.locale ?? 'hr';
   const element = document.createElement('section');
   element.className = 'k-setup k-start';
   element.dataset.testid = 'kiosk-setup';
@@ -77,6 +110,7 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
   host.appendChild(element);
   const q = <T extends HTMLElement>(selector: string): T => element.querySelector<T>(selector)!;
   const form = q<HTMLFormElement>('form');
+  const previewEl = q('[data-testid=setup-preview]');
   const errorEl = q('[data-testid=setup-error]');
   const startBtn = q<HTMLButtonElement>('[data-testid=setup-create]');
   const retryBtn = q<HTMLButtonElement>('[data-testid=setup-retry]');
@@ -85,6 +119,23 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
   let destroyed = false;
   let countdown: unknown = null;
   let retryAt = 0;
+  /** The error on show is the field's own (no match, no lists): the next keystroke takes it away. */
+  let fieldError = false;
+
+  const field = mountPlaceField(q('.k-start-place'), {
+    strings: s,
+    locale,
+    loadStops: deps.loadStops ?? (() => loadStopsImpl()),
+    loadStreets: deps.loadStreets ?? (async () => []),
+    isTram: deps.isTram ?? ((routeId) => routeType(routeId) === 0),
+    onChange: (place, unresolved) => {
+      previewEl.textContent = previewText(s, locale, place, unresolved);
+      if (fieldError) clearError();
+    },
+    setTimeout: deps.setTimeout,
+    clearTimeout: deps.clearTimeout,
+  });
+  previewEl.textContent = previewText(s, locale, null, '');
 
   function showError(text: string, retryable: boolean): void {
     errorEl.textContent = text;
@@ -94,6 +145,7 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
     retryBtn.textContent = s.setup.retry;
   }
   function clearError(): void {
+    fieldError = false;
     errorEl.hidden = true;
     errorEl.textContent = '';
     retryBtn.hidden = true;
@@ -119,9 +171,10 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
     countdown = deps.setTimeout(tick, 1000);
   }
 
-  /** One real creation per press. A failure is a sentence and a button;
-   *  nothing here retries by itself, so a quota or an Access refusal can
-   *  never turn into a loop of requests. */
+  /** One real creation per press. Typed text that is not a place stops here
+   *  with a sentence; a failure of the Worker is a sentence and a button.
+   *  Nothing retries by itself, so a quota or an Access refusal can never turn
+   *  into a loop of requests. */
   async function create(): Promise<void> {
     if (busy) return;
     busy = true;
@@ -129,7 +182,15 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
     startBtn.disabled = true;
     startBtn.textContent = s.setup.creating;
     try {
-      const response = await deps.createScreen();
+      const settled = field.unresolved() ? await field.settle() : 'ready';
+      if (destroyed) return;
+      const place = field.value();
+      if (!place && field.unresolved()) {
+        showError(settled === 'failed' ? s.setup.errorPlaces : settled === 'ambiguous' ? s.setup.ambiguous : s.setup.noMatch, false);
+        fieldError = true;
+        return;
+      }
+      const response = await deps.createScreen(place ? { place: postable(place), frame: DEFAULT_FRAME_STOPS } : {});
       if (destroyed) return;
       deps.onCreated(response);
     } catch (error) {
@@ -152,6 +213,7 @@ export function mountStart(host: HTMLElement, deps: StartDeps): StartHandle {
     destroy() {
       destroyed = true;
       if (countdown !== null) deps.clearTimeout(countdown);
+      field.destroy();
       element.remove();
     },
   };
