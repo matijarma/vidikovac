@@ -392,6 +392,7 @@ describe('session states', () => {
     expect(text(status)).toBe('');
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('ABCD-EFGH');
     expect(dialog.querySelector('.qr')?.getAttribute('role')).toBe('img');
+    expect(dialog.querySelector('.qr')?.getAttribute('aria-label'), 'the QR is announced in Croatian with the spelled code, never as a raw key').toBe('QR kod za otključavanje. Kod: A B C D, E F G H');
     expect(text(dialog)).toContain('Dobiva vlastitih pet minuta; tvoje se vrijeme ne mijenja.');
     expect(text(dialog)).toContain(`upiše slova na ${location.host}/s.`);
     expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: A B C D, E F G H');
@@ -406,6 +407,7 @@ describe('session states', () => {
     tick();
     expect(text(dialog.querySelector('[data-testid=share-code]'))).toBe('JKMN-PQRS');
     expect(text(dialog.querySelector('.share-read'))).toBe('Pročitaj naglas: J K M N, P Q R S');
+    expect(dialog.querySelector('.qr')?.getAttribute('aria-label')).toBe('QR kod za otključavanje. Kod: J K M N, P Q R S');
     expect(fill.style.transform).toBe('scaleX(0)');
     expect(fill.style.transition, 'the reset switches the transition off only for the committed zero').toBe('');
     at = NOW + 31_000;
