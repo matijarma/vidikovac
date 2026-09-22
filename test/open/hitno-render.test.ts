@@ -349,10 +349,12 @@ describe('renderHitnoPage', () => {
     expect(main).not.toContain('{');
     expect(main).not.toContain('}');
     // fetchedAt '2026-09-11T07:58:00Z' is 09:58 in Zagreb; none of these three
-    // modules carries a sourceUpdatedAt in this fixture, so {vrijeme}/{datum}
-    // both fall back to the fetch time, labelled as such (R-25).
+    // modules carries a sourceUpdatedAt in this fixture, so {vrijeme} falls
+    // back to the fetch time, labelled as such (R-25), and {datum} (the
+    // publisher's "posljednja izmjena") is left out, never the fetch time (T3).
     expect(out).toContain('Izvor: DHMZ, Otvorena dozvola, dohvaćeno 11. 9. 2026. 09:58');
-    expect(out).toContain('posljednja izmjena dohvaćeno 11. 9. 2026. 09:58');
+    expect(out).not.toContain('posljednja izmjena');
+    expect(out).toContain('Zatvaranje prometnica na području Grada Zagreba');
     expect(out).toContain('Zborno mjesto civilne zaštite');
   });
 });

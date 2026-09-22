@@ -27,12 +27,19 @@ function dataString(item: FeedItem | undefined, key: string): string | undefined
   return undefined;
 }
 
-/** {vrijeme} and {datum}: the source's own update time, or the fetch time
- *  labelled as such when the source publishes none (R-25). */
+/** {vrijeme}: the source's own update time, or the fetch time labelled as
+ *  such when the source publishes none (R-25). */
 function timeValue(snapshot: Pick<ModuleSnapshot, 'sourceUpdatedAt' | 'fetchedAt'>): string | undefined {
   if (snapshot.sourceUpdatedAt) return formatZagrebDateTimeWithYear(new Date(snapshot.sourceUpdatedAt));
   if (snapshot.fetchedAt) return `dohvaćeno ${formatZagrebDateTimeWithYear(new Date(snapshot.fetchedAt))}`;
   return undefined;
+}
+
+/** {datum}: the publisher's own change date (sourceUpdatedAt) or nothing.
+ *  It follows "posljednja izmjena", so our fetch time never stands in for it
+ *  (PRODUCT.md principle 4; T3 of the companion brief). */
+function dateValue(snapshot: Pick<ModuleSnapshot, 'sourceUpdatedAt' | 'fetchedAt'>): string | undefined {
+  return snapshot.sourceUpdatedAt ? formatZagrebDateTimeWithYear(new Date(snapshot.sourceUpdatedAt)) : undefined;
 }
 
 /** {naziv}'s last resort when neither the item nor its category names a
@@ -53,7 +60,7 @@ type PlaceholderResolver = (
 
 const PLACEHOLDERS: Record<string, PlaceholderResolver> = {
   vrijeme: (snapshot) => timeValue(snapshot),
-  datum: (snapshot) => timeValue(snapshot),
+  datum: (snapshot) => dateValue(snapshot),
   naslov: (_snapshot, item) => item?.title,
   naziv: (_snapshot, item) => datasetName(item),
   broj: (_snapshot, item) => dataString(item, 'broj'),
@@ -63,13 +70,15 @@ const PLACEHOLDERS: Record<string, PlaceholderResolver> = {
 
 /**
  * Fills every R-08 placeholder in `attribution.text` from the snapshot (and,
- * where the template needs one, a representative item): {vrijeme}/{datum}
- * from sourceUpdatedAt or fetchedAt, {naslov} from item.title, {naziv} from
- * item.data.dataset, else its category, else the module's own dataset name,
- * {broj}/{godina}/{id} from the act fields. Whatever it cannot fill is
- * removed together with its preceding separator (", " or " "), and the
- * result is trimmed — the function never returns a string containing "{" or
- * "}".
+ * where the template needs one, a representative item): {vrijeme} from
+ * sourceUpdatedAt or fetchedAt, {datum} from sourceUpdatedAt only, {naslov}
+ * from item.title, {naziv} from item.data.dataset, else its category, else
+ * the module's own dataset name, {broj}/{godina}/{id} from the act fields.
+ * Whatever it cannot fill is removed together with its label (the plain
+ * words between the preceding ", " and the placeholder, so ", posljednja
+ * izmjena {datum}" goes whole when there is no source date) or else its
+ * preceding separator (" "), and the result is trimmed — the function never
+ * returns a string containing "{" or "}" or a label left without its value.
  */
 export function fillAttribution(
   attribution: Attribution,
@@ -77,7 +86,7 @@ export function fillAttribution(
   item?: FeedItem,
 ): string {
   return attribution.text
-    .replace(/(,\s|\s)?\{(\w+)\}/g, (_whole: string, sep: string | undefined, key: string) => {
+    .replace(/(,\s[\p{L} ]*|\s)?\{(\w+)\}/gu, (_whole: string, sep: string | undefined, key: string) => {
       const value = PLACEHOLDERS[key]?.(snapshot, item);
       return value === undefined ? '' : `${sep ?? ''}${value}`;
     })
