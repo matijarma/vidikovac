@@ -5,13 +5,15 @@
 // their markup (and WP0 retires the wall's stop-presentation button).
 //
 // The scan is a presence proxy, not a DOM check: a required probe is green when
-// every test id, class and data attribute its selector names appears somewhere
-// in app/src/**/*.ts; a retired probe is green when its name appears nowhere
-// (comments included, so a stale reference keeps the row red). The e2e specs
-// under e2e/accept/ check the real DOM.
+// every test id, class and data attribute its selector names appears in the code
+// of app/src/**/*.ts (comments do not count: a doc comment naming a probe emits
+// nothing); a retired probe is green when its name appears nowhere (comments
+// included, so a stale reference keeps the row red). The e2e specs under
+// e2e/accept/ check the real DOM.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { afterAll, describe, expect, it } from 'vitest';
 
 export type ProbeOwner = 'WP0' | 'WP1' | 'WP2' | 'WP3' | 'WP4';
@@ -169,8 +171,14 @@ function walk(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
+/** The source as code: every comment dropped, string and template literals kept as written. */
+export function withoutComments(file: string, source: string): string {
+  return ts.createPrinter({ removeComments: true }).printFile(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS));
+}
+
 const FILES = walk('app/src').sort();
 const SOURCES = new Map(FILES.map((file) => [file, readFileSync(join(ROOT, file), 'utf8')] as const));
+const CODE = [...SOURCES].map(([file, source]) => withoutComments(file, source));
 
 describe('the probe contract itself', () => {
   it('lists 46 required probes and the 16 retired names of §15.6', () => {
@@ -202,6 +210,12 @@ describe('the probe contract itself', () => {
     expect(missingTokens('li.row-x[data-valid-until]', ['<li class="row-xy">'])).toEqual(['.row-x', 'data-valid-until']);
     expect(retiredName('[data-action=pause-highlights]')).toBe('pause-highlights');
   });
+  it('reads code, not comments, for a required probe', () => {
+    const code = withoutComments('x.ts', "// <li class=\"row-x\">\n/** data-testid=\"a-b\" */\nconst s = `<p data-testid=\"c-d\">`;");
+    expect(missingTokens('.row-x', [code])).toEqual(['.row-x']);
+    expect(missingTokens('[data-testid=a-b]', [code])).toEqual(['data-testid=a-b']);
+    expect(missingTokens('[data-testid=c-d]', [code])).toEqual([]);
+  });
 });
 
 const red: string[] = [];
@@ -210,7 +224,7 @@ describe('probe presence in app/src (red until the owning package lands)', () =>
   for (const probe of PROBES) {
     if (probe.kind === 'required') {
       it(`${probe.owner} emits ${probe.selector}`, () => {
-        const missing = missingTokens(probe.selector, [...SOURCES.values()]);
+        const missing = missingTokens(probe.selector, CODE);
         if (missing.length) red.push(`${probe.owner}  ${probe.surface.padEnd(12)}  emits    ${probe.selector}  (missing: ${missing.join(', ')})`);
         expect(missing, `${probe.owner} (${probe.surface}) must emit ${probe.selector}; nothing in app/src mentions ${missing.join(', ')}`).toEqual([]);
       });
