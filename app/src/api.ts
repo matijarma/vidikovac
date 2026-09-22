@@ -3,6 +3,7 @@
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { DataToken, ScanFail, ScanOk, ScanRequest } from '../../worker/protocol';
 import type { SentenceRequest, SentenceResponse, WrittenSentence } from '../../shared/kiosk/sentence';
+import { readWrittenSentences, stableSentenceFacts } from '../../shared/kiosk/sentence';
 import { normalizeCode } from './code';
 
 export interface TeaserResponse { modules: ModuleSnapshot[] }
@@ -80,13 +81,15 @@ export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: stri
  */
 export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch): Promise<WrittenSentence[]> {
   try {
+    const stableRequest = { ...request, facts: stableSentenceFacts(request.facts, Date.now()) };
+    if (!stableRequest.facts.length) return [];
     const { body } = await requestJson<SentenceResponse>('/api/kiosk/sentences', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(stableRequest),
       cache: 'no-store',
     }, fetchImpl);
-    return Array.isArray(body?.sentences) ? body.sentences : [];
+    return readWrittenSentences(body?.sentences, { facts: stableRequest.facts, budget: request.budget, now: Date.now() }).slice(0, 8);
   } catch {
     return [];
   }

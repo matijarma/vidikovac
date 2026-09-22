@@ -1,12 +1,75 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { MODULES } from '../../worker/feed/registry';
 import { TEASER_CACHE_CONTROL, handleFeed, readDataToken } from '../../worker/routes/feed';
+import { handleKiosk, SENTENCE_BODY_MAX_BYTES } from '../../worker/routes/kiosk';
+import worker from '../../worker/index';
 
 const testEnv = env as unknown as Env;
 const NOW = new Date('2026-09-11T10:00:00.000Z');
+
+describe('POST /api/kiosk/sentences', () => {
+  const payload = () => ({ locale: 'hr', budget: 80, facts: [
+    { id: 'closure:ilica', kind: 'radovi', text: 'Ilica je zatvorena do 18:00.', validUntil: Date.now() + 600_000 },
+  ] });
+  async function sentenceCall(body: unknown = payload(), init: RequestInit = {}, overrides: Partial<Env> = {}) {
+    const url = new URL('https://vidikovac.test/api/kiosk/sentences');
+    const ctx = createExecutionContext();
+    const response = await handleKiosk(new Request(url, {
+      method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' }, ...init,
+    }), { ...testEnv, ...overrides }, ctx, url);
+    await waitOnExecutionContext(ctx);
+    if (!response) throw new Error('sentence route declined');
+    return response;
+  }
+  it('answers 405 for GET and is wired into the Worker dispatcher', async () => {
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(new Request('https://vidikovac.test/api/kiosk/sentences'), testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('POST');
+  });
+  it('returns private, no-store 200 with zero AI calls under APP_ENV=test', async () => {
+    const run = vi.fn(async () => { throw new Error('must never bill AI'); });
+    const response = await sentenceCall(payload(), {}, { AI: { run } as unknown as Ai });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({ generatedAt: expect.any(String), sentences: [] });
+    expect(run).not.toHaveBeenCalled();
+  });
+  it('enforces same-origin, but accepts requests with no Origin', async () => {
+    expect((await sentenceCall(payload(), { headers: { origin: 'https://other.test' } })).status).toBe(403);
+    expect((await sentenceCall()).status).toBe(200);
+    expect((await sentenceCall(payload(), { headers: { origin: 'https://vidikovac.test' } })).status).toBe(200);
+  });
+  it('validates count, locale, budget, fact shape, unique IDs, text and finite expiry', async () => {
+    const good = payload();
+    for (const body of [
+      null, [], {}, { ...good, locale: 'fr' }, { ...good, budget: 39 }, { ...good, budget: 81 }, { ...good, budget: 64.5 },
+      { ...good, facts: Array.from({ length: 17 }, (_, n) => ({ ...good.facts[0], id: String(n) })) },
+      { ...good, facts: [...good.facts, ...good.facts] }, { ...good, facts: [null] },
+      { ...good, facts: [{ ...good.facts[0], kind: 'other' }] },
+      { ...good, facts: [{ ...good.facts[0], text: 'x'.repeat(161) }] },
+      { ...good, facts: [{ ...good.facts[0], validUntil: 'tomorrow' }] },
+      { ...good, facts: [{ ...good.facts[0], id: 'bad|id' }] },
+      { ...good, facts: [{ ...good.facts[0], text: 'Ilica\nu 18:00.' }] },
+    ]) expect((await sentenceCall(body)).status, JSON.stringify(body)).toBe(400);
+  });
+  it('caps both declared and streamed UTF-8 bodies and rejects malformed JSON', async () => {
+    expect((await sentenceCall(payload(), { body: '{' })).status).toBe(400);
+    expect((await sentenceCall(payload(), { headers: { 'content-length': String(SENTENCE_BODY_MAX_BYTES + 1) } })).status).toBe(400);
+    expect((await sentenceCall(payload(), { body: 'š'.repeat(SENTENCE_BODY_MAX_BYTES / 2 + 1) })).status).toBe(400);
+  });
+  it('limits paid inference by client IP and fails closed when the limiter fails', async () => {
+    const limit = vi.fn(async () => ({ success: false }));
+    const response = await sentenceCall(payload(), { headers: { 'cf-connecting-ip': '192.0.2.1' } }, { RL_OPEN: { limit } });
+    expect(response.status).toBe(429);
+    expect(limit).toHaveBeenCalledWith({ key: 'kiosk-sentences:192.0.2.1' });
+    expect((await sentenceCall(payload(), {}, { RL_OPEN: { limit: async () => { throw new Error('limiter down'); } } })).status).toBe(429);
+  });
+});
 
 function snapshot(module: ModuleId): ModuleSnapshot {
   const spec = MODULES[module];
