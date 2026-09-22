@@ -1,7 +1,12 @@
 import type { FeedItem } from '../../worker/feed/schema';
 import type { Place } from './types';
 import { located, normalName, distanceM } from './geo';
+/** The programme windows a person picks on the phone (today, tomorrow, this week). */
 export type ActivityWindow = 'week' | 'today' | 'tomorrow';
+/** Every window eventInWindow answers: the phone's three and 'tonight', the
+ *  wall's own (app/src/city/curated.ts), a timed programme of this evening or
+ *  one that is on right now. */
+export type EventWindow = ActivityWindow | 'tonight';
 export interface LocatedEvent {
   key: string;
   item: FeedItem;
@@ -58,10 +63,22 @@ export function resolveVenues(item: FeedItem, places: readonly Place[]): string[
 export function dayKey(value: number | string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zagreb', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 }
-export function eventInWindow(item: FeedItem, now: number, window: ActivityWindow): boolean {
+/** The Zagreb hour from which a timed programme belongs to this evening. */
+export const TONIGHT_FROM_HOUR = 17;
+const ZAGREB_HOUR = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Zagreb', hour: '2-digit', hourCycle: 'h23' });
+const zagrebHour = (value: number): number => Number(ZAGREB_HOUR.format(new Date(value))) % 24;
+export function eventInWindow(item: FeedItem, now: number, window: EventWindow): boolean {
   if (!item.at || item.dateBasis !== 'event' || !Number.isFinite(Date.parse(item.at))) return false;
   const start = Date.parse(item.at), end = item.until ? Date.parse(item.until) : start;
   const allDay = item.data?.precision === 'day' || item.data?.precision === 'range';
+  // Tonight is something to go to now or this evening: a timed item that
+  // starts today from TONIGHT_FROM_HOUR, or one already running and not over.
+  // An all-day listing (an exhibition, a festival's date range) is not an
+  // occasion of this evening, and a matinee that has ended is gone.
+  if (window === 'tonight') {
+    if (allDay || !Number.isFinite(end) || end < now || dayKey(start) !== dayKey(now)) return false;
+    return zagrebHour(start) >= TONIGHT_FROM_HOUR || (start <= now && now <= end);
+  }
   if (Number.isFinite(end) && end < now && !(allDay && dayKey(end) === dayKey(now))) return false;
   const currentDay = dayKey(now);
   const offsetDay = (days: number) => new Date(Date.parse(currentDay + 'T12:00:00Z') + days * 86400000).toISOString().slice(0, 10);
@@ -69,7 +86,7 @@ export function eventInWindow(item: FeedItem, now: number, window: ActivityWindo
   const last = window === 'week' ? offsetDay(6) : first;
   return dayKey(start) <= last && dayKey(Number.isFinite(end) ? end : start) >= first;
 }
-export function locatedEvents(items: readonly FeedItem[], places: readonly Place[], now: number, window: ActivityWindow = 'week'): LocatedEvent[] {
+export function locatedEvents(items: readonly FeedItem[], places: readonly Place[], now: number, window: EventWindow = 'week'): LocatedEvent[] {
   const result: LocatedEvent[] = [];
   const byIdentity = new Map<string, LocatedEvent>();
   for (const item of items) {
