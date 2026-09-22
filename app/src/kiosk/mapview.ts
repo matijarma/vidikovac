@@ -897,7 +897,8 @@ export interface KioskMapInput {
    *  the stops and the city's places stay. Never a setModes(new Set()), which drops the stops too. */
   vehiclesVisible?: boolean;
   /** The wall's Prikaz setting (WP3's toggle): 'schema' puts the invitation on the schematic network,
-   *  the whole network without zoom [O-72]. 'map' or absent leaves the boot renderer (?prikaz=). */
+   *  the whole network without zoom [O-72] (a wall's diagram is handed no stop to crop round; a
+   *  phone's band keeps its crop). 'map' or absent leaves the boot renderer (?prikaz=) as it was. */
   view?: 'map' | 'schema';
 }
 
@@ -905,7 +906,11 @@ export interface KioskMapInput {
  *  Null when the page has no map factory (lightweight, or a browser with
  *  no WebGL), in which case the composition shows its list instead. */
 export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: KioskMapAdapter): HTMLElement | null {
-  // The wall's Prikaz: the schematic network instead of the geographic frame [O-72].
+  // The wall's Prikaz: the schematic network instead of the geographic frame
+  // [O-72], the whole network and no zoom. The diagram crops round the stop it
+  // is handed (motion/schema-map.ts kioskFit), so the wall's own schema is
+  // handed none; a phone's band keeps its stop and its crop.
+  const wholeNetwork = input.view === 'schema' && input.phase === 'invitation' && input.handheld !== true;
   if (input.view === 'schema' && input.phase === 'invitation') input = { ...input, renderer: 'schema' };
   // A city place cannot be located on the transit diagram. Preserve an
   // explicitly configured diagram for transport, use geography for city subjects.
@@ -996,7 +1001,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const buses = framed || busesVisible(input.cameraZoom ?? view.zoom);
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
-    stop: input.stop,
+    stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop,
     interactive: Boolean(input.onSelect),
     symbolScale: MAP_PRESENTATIONS[input.handheld?'handheld':'public-display'].symbolScale*(input.handheld?1:input.displayScale??1),
     presentationProfile: input.handheld?'handheld':'public-display',
