@@ -216,11 +216,11 @@ describe('the kiosk overlay set (prozor)', () => {
     const json = JSON.stringify(far.filter);
     expect(json).toContain('["get","tramInterchange"]');
     expect(json).not.toContain('"rank"');
-    // Nearer in, the ranked reading, untouched.
+    // Nearer in (a quarter, the wall's frame), the ranked reading with every interchange beside it:
+    // an interchange is always worth its name, whatever its route count.
     const near = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR }).find((l) => l.id === LAYERS.stopLabels)!;
     const nearJson = JSON.stringify(near.filter);
-    expect(nearJson).toContain('[">=",["get","rank"],4]');
-    expect(nearJson).not.toContain('tramInterchange');
+    expect(nearJson).toContain('["any",["get","tramInterchange"],[">=",["get","rank"],4]]');
     // Either way the one label per name and the screen's own stop rule hold.
     for (const f of [json, nearJson]) expect(f).toContain('["get","label"]');
   });
