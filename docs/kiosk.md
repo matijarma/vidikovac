@@ -320,6 +320,23 @@ Playwright ima zaseban lokalni poslužitelj za 12-sekundni test isteka.
 Za provjeru javne adrese dovoljan je postojeći testni zaslon (`E2E_KIOSK_URL`),
 bez slanja vjerodajnica u izvještaje.
 
+Nakon svake isporuke stanje u produkciji provjerava se samo čitanjem, na zaslonu
+postavljenom toga dana:
+`E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10`.
+Skripta nikad ne stvara zaslon, ne prikazuje pogled na zaslonu, ne otvara
+postavke i na zaslonu ništa ne pritišće; bez `E2E_KIOSK_URL` završava s izlaznim
+kodom 2 prije ijednog zahtjeva. Deset minuta čita zaslon na 1920 × 1080, zatim
+uspravno na 1080 × 1920, i snima umanjenu sliku za provjeru s tri metra
+(DPR 0,25). U međuvremenu telefon (Pixel 7) i stolno računalo (1440 × 900)
+iskoriste po jedan kod sa zaslona, s najmanje 12 sekundi razmaka. Nalazi se
+zapisuju u `review.local/observe-<vrijeme>/` (`inventory.json`, `rotation.jsonl`,
+`legibility.json`, `report.md`), a tajna iz adrese i kodovi u tim su datotekama
+prikriveni. Izlazni kod je 1 čim ne prođe bilo koji prag iz odjeljaka 16.3 i 16.4
+dokumenta `docs/companion-2026-09-22.md`. Pragovi su jedna tablica u skripti i
+svaki redak nosi oznaku isporuke: `--stage d1` provjerava samo oznake vozila, na
+kojima ne smije biti „+N”, i greške u pregledniku i na mreži, a bez te zastavice
+primjenjuju se svi pragovi.
+
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja
 bilježe se zasebno, s uređajem, preglednikom, datumom i opaženim rezultatom.
