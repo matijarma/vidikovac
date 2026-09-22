@@ -2183,30 +2183,39 @@ export async function buildNetwork(zipBuf, opts = {}) {
             const viaOf = (edge) => [...(arrivingIds.get(`${L}|${edge}`) ?? [])].sort()[0] ?? '';
             for (const lastEdge of [...arrivals.keys()].sort((a, b) => viaOf(a).localeCompare(viaOf(b)) || a - b)) {
               const named = { route, from: stops[L].id, fromName: stops[L].name, to: stops[F].id, toName: stops[F].name, apart: round1(apart) };
-              const leg = routeBetween(graph.edges, outgoing, edgeLen, [{ edge: lastEdge, s: edgeLen[lastEdge] }], targets);
-              if (!leg) {
-                loopSkipped.push({ ...named, reason: 'no directed route' });
-                continue;
-              }
-              const e = leg.path;
-              const onL = arrivals.get(lastEdge);
-              const onF = departures.get(leg.end.edge);
               // Only the terminal end of the two boundary edges belongs to the
               // loop: from LOOP_LEAD_METRES before the arriving platform (or the
               // edge's last LOOP_LEAD_METRES when the platform is not on it) and
               // to LOOP_LEAD_METRES past the departing one. Longer boundary edges
-              // are cut there (splitLoopEdges), so the length the cap is held to
-              // is the length the exported path has.
-              const departEdge = e[e.length - 1];
+              // are cut there (below, after the last derivation), so the length
+              // the cap is held to is the length the exported path has. Each
+              // departing edge from F is tried, and the loop is the one whose
+              // exported path is shortest: the cheapest way between the two
+              // edges need not be, once the two boundary ends are counted.
+              const onL = arrivals.get(lastEdge);
               const projL = nearestOnPolyline(stopPlane[L], edgePlane[lastEdge], edgeCum[lastEdge]).arc;
-              const projF = nearestOnPolyline(stopPlane[F], edgePlane[departEdge], edgeCum[departEdge]).arc;
               const cutFirst = cutBefore(lastEdge, (onL !== null ? Math.min(onL, projL) : edgeLen[lastEdge]) - LOOP_LEAD_METRES);
-              const cutLast = cutAfter(departEdge, (onF !== null ? Math.max(onF, projF) : 0) + LOOP_LEAD_METRES);
-              const metres = lengthOf(e) - cutFirst - (edgeLen[departEdge] - cutLast);
+              let pick = null;
+              for (const target of targets) {
+                const leg = routeBetween(graph.edges, outgoing, edgeLen, [{ edge: lastEdge, s: edgeLen[lastEdge] }], [target]);
+                if (!leg) continue;
+                const departEdge = leg.path[leg.path.length - 1];
+                const onF = departures.get(departEdge);
+                const projF = nearestOnPolyline(stopPlane[F], edgePlane[departEdge], edgeCum[departEdge]).arc;
+                const cutLast = cutAfter(departEdge, (onF !== null ? Math.max(onF, projF) : 0) + LOOP_LEAD_METRES);
+                const metres = lengthOf(leg.path) - cutFirst - (edgeLen[departEdge] - cutLast);
+                if (!pick || metres < pick.metres) pick = { leg, departEdge, onF, cutLast, metres };
+              }
+              if (!pick) {
+                loopSkipped.push({ ...named, reason: 'no directed route' });
+                continue;
+              }
+              const { leg, departEdge, onF, cutLast, metres } = pick;
               if (metres > LOOP_MAX_METRES) {
                 loopSkipped.push({ ...named, reason: 'too long', metres: round1(metres) });
                 continue;
               }
+              const e = leg.path;
               const key = e.join(',');
               if (seen.has(key)) {
                 loopDuplicates.push(named);
@@ -2716,7 +2725,8 @@ function renderNetworkMeta({ feedVersion, builtAt, routeCount, edgeCount, byteSi
  * Last-Modified, never the wall clock and never a file's own time: a download
  * reads the header; a build from `zipPath` must be told it (`builtAt`, the
  * CLI's `--built-at`), since a copied or re-downloaded file need not keep the
- * server's time. Two builds from the same archive bytes and the same stamp are
+ * server's time; a download without the header needs it too. Neither is ever
+ * guessed from the clock. Two builds from the same archive bytes and the same stamp are
  * then the same bytes on any machine, and the static-feed watch
  * (worker/feed/static-watch.ts), which calls a feed newer when the live
  * Last-Modified is later than BUILT_AT, stays exact. `now` overrides it
@@ -2762,11 +2772,17 @@ export async function main({
     if (!res.ok) throw new Error(`GTFS download failed: HTTP ${res.status}`);
     fallbackMtime = res.headers.get('last-modified');
     if (stamp === null && fallbackMtime !== null) stamp = stampOf(fallbackMtime, 'Last-Modified');
+    if (stamp === null && now === null) {
+      throw new Error(
+        `The download from ${url} carries no Last-Modified header, and builtAt is never the wall clock: pass --built-at ` +
+          '<the archive\'s publication time, e.g. 2026-09-01T08:50:29Z> so the same archive builds the same bytes and the static-feed watch has a time to compare.',
+      );
+    }
     buf = new Uint8Array(await res.arrayBuffer());
     log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
   }
   if (fallbackMtime === null && stamp !== null) fallbackMtime = stamp.toISOString();
-  const builtAt = now ?? (() => stamp ?? new Date());
+  const builtAt = now ?? (() => stamp);
 
   // The overrides live beside the script, not beside its output: they belong
   // to the build, so `cwd` (which tests point at a temp directory) must not
