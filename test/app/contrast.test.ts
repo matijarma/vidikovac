@@ -341,3 +341,31 @@ describe.each(['dark', 'light'] as const)('%s kiosk aliases meet WCAG AA 4.5:1 a
     expect(kioskAlias('action-on-soft')).toBe('text-brand-on-tint');
   });
 });
+
+// The wall of 22 September (WP1), as the kiosk paints it: the header
+// sentence's kicker in its colour (Promet the action blue, Kultura violet,
+// Vrijeme and Radovi amber, Bicikli the calm green, Noćas the second ink) on
+// the header's surface; the "U blizini" rows' times (a live countdown blue, a
+// timetable time grey, "uvijek" the muted ink) on the list's surface; the
+// footer's green cross and "24/7" on the strip's surface. Every one of them is
+// text or a symbol that carries meaning, so each clears the text minimum on the
+// surface it sits on and on the canvas a handheld page shows through.
+describe.each(['dark', 'light'] as const)('%s wall sentence, timeline and footer colours meet WCAG AA 4.5:1 (WP1)', (theme) => {
+  const pairs: [use: string, colour: string][] = [
+    ['kicker promet', 'action'], ['kicker kultura', 'violet'], ['kicker vrijeme', 'amber'],
+    ['kicker bicikli', 'green'], ['kicker radovi', 'amber'], ['kicker nocas', 'ink-2'],
+    ['live time', 'action'], ['timetable time', 'ink-2'], ['uvijek', 'ink-3'],
+    ['green cross and 24/7', 'green'],
+  ];
+  it.each(pairs)('%s: --k-%s on the surface and the canvas', (use, colour) => {
+    for (const surface of ['surface', 'canvas']) {
+      const ratio = contrastRatio(kioskColour(theme, colour), kioskColour(theme, surface));
+      expect(Number(ratio.toFixed(2)), `${theme} ${use} --k-${colour} on --k-${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_TEXT);
+    }
+  });
+  it('the bike teal is a graphic colour and would fail as the Bicikli kicker, so the kicker takes the calm green', () => {
+    // 3:1 for the map's discs (above), not the 4.5:1 a word needs.
+    expect(contrastRatio(palette(theme, 'bike'), palette(theme, 'surface-1'))).toBeLessThan(AA_TEXT);
+    expect(kioskAlias('green')).toBe('live');
+  });
+});
