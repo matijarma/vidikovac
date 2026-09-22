@@ -118,11 +118,20 @@ export async function installExperienceFixture(
 
 export const FIXTURE_DASHBOARD = `/d/#room=${FIXTURE_ROOM}&ticket=fixture-ticket`;
 
-/** Deterministic feed content with a real clock. No pairing/socket mocks:
- * use with a real local screen for presentation and display-state tests. */
-export async function installKioskFeedFixture(page: Page, state: FixtureState = 'ready'): Promise<void> {
+/** Options of installKioskFeedFixture. */
+export interface KioskFeedFixtureOptions {
+  /** The instant the feed is stamped for: the page's fake clock (`page.clock.install({ time: now })`) in the wall scenes; the real clock when omitted. Drives both the shift of every recorded time and the teaser's `generatedAt`. */
+  now?: number;
+}
+
+/** Deterministic feed content with a real clock (or the scene's `now`). No pairing/socket mocks:
+ * use with a real local screen for presentation and display-state tests.
+ * Resolves to the shifted snapshots, so a spec can read the zet-rt vehicles it serves
+ * (e2e/departures-fixture.ts departuresBoard takes its tracked trip ids from them). */
+export async function installKioskFeedFixture(page: Page, state: FixtureState = 'ready', options: KioskFeedFixtureOptions = {}): Promise<Record<ModuleId, ModuleSnapshot>> {
   const snapshots = await experienceSnapshots(state);
-  const delta = Date.now() - FIXTURE_NOW.getTime();
+  const now = options.now ?? Date.now();
+  const delta = now - FIXTURE_NOW.getTime();
   const shift = (value: string | undefined) => value ? new Date(Date.parse(value) + delta).toISOString() : undefined;
   for (const snapshot of Object.values(snapshots)) {
     snapshot.fetchedAt = shift(snapshot.fetchedAt)!;
@@ -132,10 +141,11 @@ export async function installKioskFeedFixture(page: Page, state: FixtureState = 
   }
   await page.route('**/api/teaser*', route => route.fulfill({
     status: 200, contentType: 'application/json',
-    body: JSON.stringify({ generatedAt: new Date().toISOString(), modules: Object.values(snapshots).map(snapshot => teaserSubset(snapshot, FIXTURE_STOP)) }),
+    body: JSON.stringify({ generatedAt: new Date(options.now ?? Date.now()).toISOString(), modules: Object.values(snapshots).map(snapshot => teaserSubset(snapshot, FIXTURE_STOP)) }),
   }));
   await page.route('**/api/data/**', route => {
     const id = new URL(route.request().url()).pathname.split('/').at(-1) as ModuleId;
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snapshots[id]) });
   });
+  return snapshots;
 }
