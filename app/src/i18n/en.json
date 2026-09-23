@@ -529,7 +529,7 @@
     "joinedNotice": "Unlocked until {time} · {label}",
     "joinedPeer": "Five minutes from the person beside you · until {time}",
     "labelScreen": "screen",
-    "expiring60": "One minute left. What you are looking at stays on screen after the session ends.",
+    "expiring60": "One minute left.",
     "expiring20": "Twenty seconds left.",
     "expired": "Ten minutes have passed. A nearby screen unlocks another 10 minutes.",
     "expiredTitle": "The session has ended",

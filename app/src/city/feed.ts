@@ -97,10 +97,21 @@ export function feedRadiusM(ctx: LayerContext, place: ScreenPlace): number {
   return frameRadiusM(place, table, ctx.frame ?? DEFAULT_FRAME_STOPS);
 }
 
-/** The boards the page already holds for the departures stop's platforms (the departures block asks for them). */
+/** The boards the page already holds for the departures stop's platforms. */
 function heldBoards(ctx: LayerContext, stop: ScreenStop | null): DepartureBoard[] {
   if (!stop || !ctx.boards) return [];
   return platformIds(stop, ctx.stops).map((id) => ctx.boards!.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
+}
+
+/**
+ * Asks the page's board cache for the departures stop's platforms, so the list leads with the departures wherever it
+ * is first drawn: Sada's block asks for them itself, Karta's default sheet did not, and a phone opening on Karta (a
+ * reload, a saved link) listed the place without them until Sada was visited. Nothing is asked once the session ended.
+ */
+export function askBoards(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): void {
+  const stop = placeContext.departuresStop;
+  if (!stop || !ctx.boards || ctx.frozenAt !== undefined || ctx.session?.frozen) return;
+  ctx.boards.ensure('zet', platformIds(stop, ctx.stops), ctx.onLocalData);
 }
 
 /**

@@ -547,7 +547,7 @@
     "joinedNotice": "Otključano do {time} · {label}",
     "joinedPeer": "Pet minuta od osobe pokraj tebe · do {time}",
     "labelScreen": "zaslon",
-    "expiring60": "Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.",
+    "expiring60": "Još minuta.",
     "expiring20": "Još dvadeset sekundi.",
     "expired": "Deset minuta je prošlo. Zaslon u blizini otključava novih 10 minuta.",
     "expiredTitle": "Sesija je završila",

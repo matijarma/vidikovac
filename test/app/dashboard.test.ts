@@ -350,7 +350,7 @@ describe('session states', () => {
     const { root, session } = mount();
     session.join();
     session.expiring(60);
-    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta.');
     session.expiring(20);
     const alert = root.querySelector('[data-testid=announce-assertive]')!;
     expect(alert.getAttribute('role')).toBe('alert');
@@ -1542,6 +1542,28 @@ describe('the desk pair (WP4 chunk E)', () => {
     await flush();
     const asked = new Set(fetchData.mock.calls.map((c) => c[0]));
     for (const module of ['zet-rt', 'prometnice', 'dogadanja', 'dhmz-now', 'glasnik']) expect(asked.has(module as ModuleId), module).toBe(true);
+    handle.destroy();
+  });
+
+  it('Karta opened first (a reload, a saved link) asks for the place\'s boards itself, so U blizini leads with the departures without a visit to Sada (WP4 review)', async () => {
+    const board = { operator: 'zet', stopId: STOP.id, stopName: STOP.name, status: 'live', generatedAt: new Date(NOW).toISOString(),
+      departures: [4, 12, 25].map((m, i) => ({ operator: 'zet', tripId: `t${i}`, routeId: '6', routeName: '6', headsign: 'Črnomerec', at: new Date(NOW + m * 60_000).toISOString() })) };
+    let landed = false;
+    const cache = { get: vi.fn((_op: string, id: string) => (landed && id === STOP.id ? board : undefined)), ensure: vi.fn(), destroy: vi.fn() };
+    const { root, session, handle } = mount({ deps: { createBoards: () => cache as never, location: { pathname: '/d/', search: '', hash: '#layer=u-pokretu' } } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    // Karta alone is on the page: Sada never drew, so nothing but Karta could have asked.
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(root.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(cache.ensure).toHaveBeenCalledWith('zet', [STOP.id], expect.any(Function));
+    const rows = () => root.querySelectorAll('[data-testid=transport-workspace] [data-testid=nearby] li.nearby-row[data-kind=departure]').length;
+    expect(rows()).toBe(0);
+    // The board lands: the repaint Karta asked for draws the departures at the head of the list.
+    landed = true;
+    (cache.ensure.mock.calls[0]![2] as () => void)();
+    await flush();
+    expect(rows()).toBeGreaterThanOrEqual(1);
     handle.destroy();
   });
 

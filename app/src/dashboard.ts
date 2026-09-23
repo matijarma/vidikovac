@@ -21,7 +21,7 @@ import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { fetchSentences as fetchSentencesImpl } from './api';
-import { loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
+import { askBoards, loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
 import { bannersMarkup, fabMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
@@ -462,6 +462,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     ctx.nearby = (cap) => {
       const feed = sadaFeed(repaintLocalData);
       if (typeof feed !== 'object') return null;
+      // The list leads with the departures: the boards are asked for here too, so Karta opened first has them.
+      askBoards(ctx);
       const input = nearbyInput(ctx);
       const rows = feed.selectNearby(input);
       return {
