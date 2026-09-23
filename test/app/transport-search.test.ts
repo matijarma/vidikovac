@@ -100,6 +100,6 @@ describe('workspace strings', () => {
     expect(trPlural(hr, 'vehiclesNow', 5)).toBe('5 vozila u pokretu');
     expect(trPlural(en, 'vehiclesNow', 1)).toBe('1 vehicle moving');
     expect(trPlural(en, 'vehiclesNow', 2)).toBe('2 vehicles moving');
-    expect(tr(hr, 'noResults', { query: 'xy' })).toBe('Nema linije ni stanice za „xy”.');
+    expect(tr(hr, 'noResults', { query: 'xy' })).toBe('Nema linije ni stajališta za „xy”.');
   });
 });

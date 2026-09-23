@@ -452,7 +452,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
     const body = text(sheet.querySelector('.dialog-body'));
-    expect(body).toContain('Sa zaslona Kavana Velebit, stanica Trg bana J. Jelačića.');
+    expect(body).toContain('Sa zaslona Kavana Velebit, stajalište Trg bana J. Jelačića.');
     expect(body).toContain('Na ovom pogledu su 2 uređaja.');
     expect(body).not.toMatch(/stanje sesije/i);
     expect(body).not.toContain('skenirano sa zaslona');

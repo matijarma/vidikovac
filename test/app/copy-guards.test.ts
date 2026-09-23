@@ -95,6 +95,18 @@ describe('one name per concept: the transport surface (slop #11, [O-51])', () =>
   });
 });
 
+describe('one word per concept: a tram or bus stop is "stajalište" (WP5 step 6)', () => {
+  // "Stanica" is BAJS's word for a bike station and "postaja" DHMZ's for a measuring station.
+  // A leaf may say "stanica" only when its key is on this list, and the list takes BAJS keys
+  // under city.* only. None needs the word today: city.* says "BAJS" and the counts.
+  const BAJS_STANICA_KEYS: readonly string[] = [];
+  it('no hr.json leaf outside the BAJS allowlist says "stanica"', () => {
+    for (const key of BAJS_STANICA_KEYS) expect(key, 'BAJS keys live under city.*').toMatch(/^city\./);
+    const stanica = leafKeys(HR).filter((key) => /(?<![\p{L}\p{N}_])[Ss]tanic/u.test(leaf(HR, key)!));
+    expect(stanica.filter((key) => !BAJS_STANICA_KEYS.includes(key))).toEqual([]);
+  });
+});
+
 describe('canonical sentences', () => {
   const SHARED_HR = {
     closuresNone: 'Nema zatvorenih prometnica.',

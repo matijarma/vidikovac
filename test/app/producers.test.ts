@@ -110,7 +110,7 @@ describe('transitProducer', () => {
 
   it('words its "+ N" foot, naming the stop only when one exists', () => {
     const withStop = transitProducer.moreLabel!(hr, 4, ctx({ screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: STOP } }));
-    expect(withStop).toEqual({ text: '+ 4 linije', aria: '+ 4 linije, Sa stanice Trg bana J. Jelačića' });
+    expect(withStop).toEqual({ text: '+ 4 linije', aria: '+ 4 linije, Sa stajališta Trg bana J. Jelačića' });
     const withoutStop = transitProducer.moreLabel!(hr, 2, ctx());
     expect(withoutStop).toEqual({ text: '+ 2 linije', aria: undefined });
   });

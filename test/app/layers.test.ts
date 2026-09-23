@@ -191,7 +191,7 @@ describe('u-pokretu', () => {
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
-    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stanice rade i bez nje.');
+    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stajališta rade i bez karte.');
     expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
   });
   // T10: the full map.

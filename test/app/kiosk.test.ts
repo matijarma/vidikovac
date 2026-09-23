@@ -1464,7 +1464,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     // Without a stop the field is labelled by the lines title, never left nameless. The default Trg
     // is the list's place, not the map's: the field follows the whole-city map [O-52], [O-65].
-    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ove stanice');
+    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ovog stajališta');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe(STOP.name);

@@ -230,7 +230,7 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await page.goto(FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=0'));
   await openLayer(page, 'u-pokretu');
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
-  await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
+  await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stajališta rade i bez karte.');
   await page.getByTestId('transport-search').fill('Jela');
   const options = page.getByTestId('transport-results').getByRole('option');
   await expect(options.first()).toBeVisible();

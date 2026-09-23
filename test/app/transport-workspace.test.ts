@@ -394,7 +394,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-vehicles] button').id).toBe('t-row-vehicle-vehicle_1');
     expect(vehicleRows.every((row) => row.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
     expect(vehicleRows.map((row) => text(row.querySelector('.row-title')))).toEqual(['Smjer istok', 'Smjer nepoznat']);
-    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stanici');
+    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stajalištu');
     const stops = all<HTMLElement>('[data-testid=route-stops] li');
     expect(stops.length).toBeGreaterThan(15);
     expect(visible('[data-testid=route-stops] li')).toHaveLength(12);
@@ -403,7 +403,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-stops] button').id).toMatch(/^t-row-stop-/);
     const allStops = q<HTMLButtonElement>('[data-testid=toggle-stops]');
     expect(allStops).toMatchObject({ dataset: { action: 'toggle-fold', fold: 'stops' } }); // the workspace's one fold contract
-    expect(text(allStops)).toBe(`sve stanice (${stops.length})`);
+    expect(text(allStops)).toBe(`sva stajališta (${stops.length})`);
     expect(allStops.getAttribute('aria-expanded')).toBe('false');
     allStops.click();
     expect(visible('[data-testid=route-stops] li')).toHaveLength(stops.length);
@@ -417,7 +417,7 @@ describe('search and selection', () => {
     expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: false }); // a stop opens the sheet, so no fit (§16.4);
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
-    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
+    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stajalište"
     expect(text(q('[data-testid=stop-routes]'))).toContain('6');
     const stopRoute = q<HTMLElement>('[data-testid=stop-routes] .row');
     expect(stopRoute.querySelector('button.t-row .line[data-size="m"]')).not.toBeNull();
