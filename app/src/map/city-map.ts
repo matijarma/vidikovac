@@ -1185,21 +1185,19 @@ export function nameCandidates(
 export const NAME_HOLD_MS = 2000;
 /** The shortest a hidden stop name stays out of sight. */
 export const NAME_MIN_HIDDEN_MS = 1000;
-/** The fade in after that second, on top of MapLibre's own. */
+/** Our own fade of a stop name, out and in, on top of MapLibre's collision fade. */
 export const NAME_FADE_MS = 300;
 /** How often the public screen looks at its names. */
 export const NAME_TICK_MS = 100;
-/** A name moving between stop-labels and stop-labels-held is re-laid out
- *  with its source; for this long after a move, missing from both is the
- *  reload, not a hide. */
-export const NAME_SWAP_GRACE_MS = 600;
 
-interface NameState { placed: boolean; hiddenAt: number | null; quietUntil: number | null; fadeFrom: number | null; swapAt: number }
+/** A stop name's own ink: full, out of sight, or fading between the two. */
+type NameInk = 'full' | 'out' | 'in' | 'fading-out';
+interface NameState { placed: boolean; hiddenAt: number | null; ink: NameInk; fadeFrom: number; o: number }
 
 export interface NameTick {
   /** The held stop ids, sorted, when they changed on this tick; null otherwise. */
   held: readonly string[] | null;
-  /** The `o` feature state to write per stop id: a number, or null to remove it. */
+  /** The `o` feature state to write per stop id: a number, or null to remove it (full ink). */
   opacity: ReadonlyMap<string, number | null>;
 }
 
@@ -1210,11 +1208,19 @@ export interface NameHysteresis {
   held(): readonly string[];
 }
 
+/**
+ * The hysteresis. A name the collision pass hides, or a held name a pill
+ * covers, fades out (its own `o`, beside MapLibre's) and stays out of sight
+ * for NAME_MIN_HIDDEN_MS from then, whatever the pass does meanwhile; once
+ * that second is up and MapLibre places it, it fades in and is held for
+ * NAME_HOLD_MS, a pill covering it ending the hold early. A name first seen
+ * as the picture opens (within its first second) is simply drawn; one first
+ * seen later was out of sight all along and comes back like any other.
+ */
 export function createNameHysteresis(): NameHysteresis {
   const states = new Map<string, NameState>();
   const held = new Map<string, number>();
   const heldList = (): string[] => [...held.keys()].sort();
-  /** The first look: a name first seen a second after it was out of sight all along, and comes back like any other. */
   let startedAt: number | null = null;
   return {
     held: heldList,
@@ -1222,80 +1228,72 @@ export function createNameHysteresis(): NameHysteresis {
       const opacity = new Map<string, number | null>();
       let changed = false;
       startedAt ??= t;
-      // A hold ends when its time is up, or at once when a pill covers the
-      // name -- which then goes out of sight at once, for its full second,
-      // whatever the collision pass makes of the move back.
+      /** The ink a name has at `t`: a fade in counts on from where it started. */
+      const inkAt = (st: NameState): number => st.ink === 'in' ? Math.min(1, (t - st.fadeFrom) / NAME_FADE_MS) : st.ink === 'full' ? 1 : st.o;
+      // A fade out starts from the ink the name has, so a name caught fading in never flashes back to full first.
+      const goOut = (st: NameState): void => {
+        if (st.ink === 'out' || st.ink === 'fading-out') return;
+        st.hiddenAt = t;
+        const from = inkAt(st);
+        st.ink = 'fading-out';
+        st.fadeFrom = t - (1 - from) * NAME_FADE_MS;
+      };
+      // A hold ends when its time is up, or at once when a pill covers the name, which then goes out of sight.
       for (const [id, until] of held) {
         const cover = covered.has(id);
         if (t < until && !cover) continue;
         held.delete(id);
-        const st = states.get(id);
-        if (st) {
-          st.swapAt = t;
-          if (cover) {
-            st.hiddenAt = t;
-            st.quietUntil = t + NAME_MIN_HIDDEN_MS;
-            st.fadeFrom = null;
-            opacity.set(id, 0);
-          }
-        }
         changed = true;
+        const st = states.get(id);
+        if (st && cover) goOut(st);
       }
+      // Hidden by the collision pass.
       for (const [id, st] of states) {
-        if (!st.placed || placed.has(id) || t - st.swapAt < NAME_SWAP_GRACE_MS) continue;
+        if (!st.placed || placed.has(id)) continue;
         st.placed = false;
-        st.hiddenAt = t;
         if (held.delete(id)) changed = true;
-        if (st.quietUntil !== null || st.fadeFrom !== null) opacity.set(id, null);
-        st.quietUntil = null;
-        st.fadeFrom = null;
+        goOut(st);
       }
       for (const id of placed) {
-        const st = states.get(id);
-        if (!st) {
-          // First seen as the picture opens: nothing to hold. Later, it was
-          // out of sight since then and comes back.
-          const late = t - startedAt >= NAME_MIN_HIDDEN_MS;
-          states.set(id, { placed: true, hiddenAt: null, quietUntil: null, fadeFrom: null, swapAt: late ? t : -Infinity });
-          if (late) {
-            held.set(id, t + NAME_HOLD_MS);
-            changed = true;
-          }
-          continue;
+        let st = states.get(id);
+        // Placed again while it fades out: straight out of sight, never a second fade in over the first one's tail.
+        if (st && !st.placed && st.ink === 'fading-out') {
+          st.ink = 'out';
+          st.o = 0;
+          opacity.set(id, 0);
         }
-        if (st.placed) {
-          // Placed all along but sent out of sight by a covering pill: when
-          // its second is up it shows again, and is held from then.
-          if (st.quietUntil !== null && t >= st.quietUntil && !held.has(id)) {
-            held.set(id, t + NAME_HOLD_MS);
-            st.swapAt = t;
-            changed = true;
-          }
+        if (!st) {
+          const late = t - startedAt >= NAME_MIN_HIDDEN_MS;
+          st = { placed: true, hiddenAt: late ? startedAt : null, ink: late ? 'out' : 'full', fadeFrom: t, o: late ? 0 : 1 };
+          states.set(id, st);
+          if (late) opacity.set(id, 0);
           continue;
         }
         st.placed = true;
-        if (st.hiddenAt === null) continue;
-        // Back: unseen until its second out of sight is up, then held.
-        const quietUntil = st.hiddenAt + NAME_MIN_HIDDEN_MS;
-        if (t < quietUntil) {
-          st.quietUntil = quietUntil;
-          opacity.set(id, 0);
-        }
-        held.set(id, Math.max(t, quietUntil) + NAME_HOLD_MS);
-        st.swapAt = t;
-        changed = true;
       }
       for (const [id, st] of states) {
-        if (st.quietUntil !== null && t >= st.quietUntil) {
-          st.quietUntil = null;
-          st.fadeFrom = t;
+        // The fades step on.
+        if (st.ink === 'in' || st.ink === 'fading-out') {
+          const k = Math.min(1, (t - st.fadeFrom) / NAME_FADE_MS);
+          if (st.ink === 'in') {
+            if (k >= 1) st.ink = 'full';
+            st.o = k;
+            opacity.set(id, k >= 1 ? null : k);
+          } else {
+            if (k >= 1) st.ink = 'out';
+            st.o = 1 - k;
+            opacity.set(id, 1 - k);
+          }
         }
-        if (st.fadeFrom === null) continue;
-        const k = (t - st.fadeFrom) / NAME_FADE_MS;
-        if (k >= 1) {
-          st.fadeFrom = null;
-          opacity.set(id, null);
-        } else opacity.set(id, Math.max(0, k));
+        // Back: placed, out of sight, its second up -- fade in and hold.
+        if (st.placed && st.ink === 'out' && st.hiddenAt !== null && t - st.hiddenAt >= NAME_MIN_HIDDEN_MS) {
+          st.ink = 'in';
+          st.fadeFrom = t;
+          st.o = 0;
+          opacity.set(id, 0);
+          held.set(id, t + NAME_HOLD_MS);
+          changed = true;
+        }
       }
       return { held: changed ? heldList() : null, opacity };
     },

@@ -9,7 +9,7 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, createNameHysteresis, evaluateExpression, markerCensus, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_SWAP_GRACE_MS, NAME_TICK_MS, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, createNameHysteresis, evaluateExpression, markerCensus, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_TICK_MS, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
@@ -1426,80 +1426,77 @@ describe('the names a layer would draw, from its own filter and text', () => {
 describe('the stop names\u2019 hysteresis (decision 19)', () => {
   const S = (...ids: string[]) => new Set(ids);
   const NONE = S();
+  /** Runs `h` over [t, placed, covered] looks and answers each look's result. */
+  const run = (h: ReturnType<typeof createNameHysteresis>, looks: [number, Set<string>, Set<string>?][]) => looks.map(([t, placed, covered]) => h.tick(t, placed, covered ?? NONE));
 
-  it('holds nothing on the picture as it opens', () => {
+  it('draws the picture as it opens as it is: nothing held, no ink of its own', () => {
     const h = createNameHysteresis();
     expect(h.tick(0, S('a', 'b'), NONE)).toEqual({ held: null, opacity: new Map() });
+    expect(h.tick(500, S('a', 'b', 'c'), NONE)).toEqual({ held: null, opacity: new Map() });
     expect(h.held()).toEqual([]);
   });
 
-  it('holds a name that comes back after a second or more out of sight for NAME_HOLD_MS, and lets it go then', () => {
+  it('fades a hidden name out, keeps it out of sight for its full second even when MapLibre places it again at once, then fades it in and holds it', () => {
     const h = createNameHysteresis();
     h.tick(0, S('a'), NONE);
-    expect(h.tick(1000, NONE, NONE).held).toBeNull(); // hidden: nothing held yet
-    const back = h.tick(2500, S('a'), NONE);
-    expect(back.held).toEqual(['a']);
-    expect(back.opacity.size).toBe(0); // out of sight long enough: MapLibre's own fade brings it in
-    expect(h.tick(2500 + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
-    expect(h.tick(2500 + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
+    const [out, half, gone, back, waiting, up, inHalf, full] = run(h, [
+      [1000, NONE], [1000 + NAME_FADE_MS / 2, NONE], [1000 + NAME_FADE_MS, NONE],
+      [1100 + NAME_FADE_MS, S('a')], // MapLibre places it again a moment later
+      [1900, S('a')], [2000, S('a')], [2000 + NAME_FADE_MS / 2, S('a')], [2000 + NAME_FADE_MS, S('a')],
+    ]);
+    expect(out!.opacity.get('a')).toBe(1);
+    expect(half!.opacity.get('a')).toBeCloseTo(0.5, 5);
+    expect(gone!.opacity.get('a')).toBe(0);
+    expect(back!.opacity.has('a')).toBe(false); // still out of sight: no blink
+    expect(waiting!.held).toBeNull();
+    expect(up!.held).toEqual(['a']); // its second is up: back, held from now
+    expect(up!.opacity.get('a')).toBe(0);
+    expect(inHalf!.opacity.get('a')).toBeCloseTo(0.5, 5);
+    expect(full!.opacity.get('a')).toBeNull();
+    expect(h.tick(2000 + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
+    expect(h.tick(2000 + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
   });
 
   it('lets a pill that covers a held name end the hold at once and send the name out of sight for its full second', () => {
     const h = createNameHysteresis();
-    h.tick(0, S('a'), NONE);
-    h.tick(100, NONE, NONE);
-    h.tick(1500, S('a'), NONE);
+    run(h, [[0, S('a')], [100, NONE], [400, NONE], [1100, S('a')]]);
     expect(h.held()).toEqual(['a']);
-    const covered = h.tick(1700, S('a'), S('a'));
+    const covered = h.tick(1300, S('a'), S('a'));
     expect(covered.held).toEqual([]);
-    expect(covered.opacity.get('a')).toBe(0);
-    // Still placed by MapLibre: out of sight to its second, then in, and held from then.
-    expect(h.tick(2000, S('a'), NONE).opacity.get('a')).toBeUndefined();
-    const again = h.tick(1700 + NAME_MIN_HIDDEN_MS, S('a'), NONE);
-    expect(again.opacity.get('a')).toBe(0);
-    expect(again.held).toEqual(['a']);
+    expect(covered.opacity.get('a')).toBeCloseTo(2 / 3, 5); // caught two thirds into its fade in: fades out from there
+    // MapLibre still places it: out of sight all the same, back only at 2300.
+    const [, , early, back] = run(h, [[1300 + NAME_FADE_MS, S('a')], [2000, S('a')], [2299, S('a')], [2300, S('a')]]);
+    expect(early!.held).toBeNull();
+    expect(back!.held).toEqual(['a']);
   });
 
-  it('holds a name first seen a second after the picture opened: it was out of sight all along', () => {
+  it('brings a name first seen a second after the picture opened in like one coming back: it was out of sight all along', () => {
     const h = createNameHysteresis();
     h.tick(0, S('a'), NONE);
-    expect(h.tick(500, S('a', 'b'), NONE).held).toBeNull(); // still opening
-    expect(h.tick(NAME_MIN_HIDDEN_MS, S('a', 'b', 'c'), NONE).held).toEqual(['c']);
+    const late = h.tick(NAME_MIN_HIDDEN_MS, S('a', 'c'), NONE);
+    expect(late.held).toEqual(['c']);
+    expect(late.opacity.get('c')).toBe(0);
+    expect(h.tick(NAME_MIN_HIDDEN_MS + NAME_FADE_MS, S('a', 'c'), NONE).opacity.get('c')).toBeNull();
+    expect([NAME_TICK_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_FADE_MS]).toEqual([100, 2000, 1000, 300]);
   });
 
-  it('keeps a name hidden for a moment out of sight until its second is up, then fades it in over NAME_FADE_MS, and holds it from then', () => {
+  it('never blinks for less than a second over a jittering pass: a pill hovering at a name\u2019s edge for six seconds', () => {
     const h = createNameHysteresis();
-    h.tick(0, S('a'), NONE);
-    h.tick(1000, NONE, NONE); // hidden at 1000
-    const back = h.tick(1300, S('a'), NONE);
-    expect(back.opacity.get('a')).toBe(0); // placed again after 300 ms: not shown
-    expect(back.held).toEqual(['a']);
-    expect(h.tick(1900, S('a'), NONE).opacity.get('a')).toBeUndefined(); // still waiting, nothing new to write
-    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS, S('a'), NONE).opacity.get('a')).toBe(0);
-    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_FADE_MS / 2, S('a'), NONE).opacity.get('a')).toBeCloseTo(0.5, 5);
-    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_FADE_MS, S('a'), NONE).opacity.get('a')).toBeNull(); // the state removed: full ink
-    // Held from the moment it shows, not from the moment MapLibre placed it unseen.
-    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
-    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
-  });
-
-  it('reads a name missing just after it moved between the two layers as the reload, and a name hidden while waiting starts over', () => {
-    const h = createNameHysteresis();
-    h.tick(0, S('a'), NONE);
-    h.tick(100, NONE, NONE);
-    h.tick(1500, S('a'), NONE); // held: moves to the twin
-    expect(h.tick(1500 + NAME_SWAP_GRACE_MS - 1, NONE, NONE).held).toBeNull(); // the reload, not a hide
-    expect(h.held()).toEqual(['a']);
-    // Missing past the grace: hidden, the hold gone.
-    expect(h.tick(1500 + NAME_SWAP_GRACE_MS, NONE, NONE).held).toEqual([]);
-    const g = createNameHysteresis();
-    g.tick(0, S('b'), NONE);
-    g.tick(100, NONE, NONE);
-    g.tick(300, S('b'), NONE); // back unseen, waiting to 1100
-    const lost = g.tick(300 + NAME_SWAP_GRACE_MS, NONE, NONE); // hidden again while it waited
-    expect(lost.opacity.get('b')).toBeNull();
-    expect(lost.held).toEqual([]);
-    expect([NAME_TICK_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS]).toEqual([100, 2000, 1000]);
+    // The plain layer's collision pass flips the name every 200 ms; while it
+    // is held, the cooperative layer keeps it placed, as MapLibre does.
+    let o = 1;
+    const seen: boolean[] = [];
+    for (let t = 0; t <= 6000; t += 100) {
+      const placed = h.held().includes('a') || Math.floor(t / 200) % 2 === 0 ? S('a') : NONE;
+      const r = h.tick(t, placed, NONE);
+      if (r.opacity.has('a')) o = r.opacity.get('a') ?? 1;
+      seen.push(placed.has('a') && o > 0);
+    }
+    const runs: { v: boolean; n: number }[] = [];
+    for (const v of seen) { if (runs.at(-1)?.v === v) runs.at(-1)!.n++; else runs.push({ v, n: 1 }); }
+    // Every run between the first and the last lasts a second or more.
+    expect(runs.length).toBeGreaterThan(2);
+    for (const r of runs.slice(1, -1)) expect(r.n * 100, JSON.stringify(runs)).toBeGreaterThanOrEqual(1000);
   });
 });
 
@@ -1523,9 +1520,11 @@ describe('the public screen runs the stop names\u2019 hysteresis and times the o
     expect(JSON.stringify(map.filters['stop-labels-held'])).toContain('"1_1"');
     expect(JSON.stringify(map.filters['stop-labels'])).toContain('"1_1"'); // and left out of the plain layer
     // Hidden again and back within the second: out of sight until its second is up, by feature state.
-    look([own], NAME_HOLD_MS + 100);
-    look([own], NAME_SWAP_GRACE_MS);
-    look([name, own], 200);
+    look([own], NAME_HOLD_MS + 100); // hidden: it fades out by feature state
+    expect(states.at(-1)).toEqual(['1_1', { o: 1 }]);
+    look([own], NAME_FADE_MS);
+    expect(states.at(-1)).toEqual(['1_1', { o: 0 }]);
+    look([name, own], 200); // placed again within its second: stays out of sight
     expect(states.at(-1)).toEqual(['1_1', { o: 0 }]);
     // A pill over the own name: the seconds add up while it stays.
     const before = Number(container.dataset.ownNameCrossed ?? '0');
