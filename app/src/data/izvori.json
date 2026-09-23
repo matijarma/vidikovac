@@ -131,7 +131,7 @@
   ],
   "obrada": {
     "naslov": "Strojni odabir rečenice na zaslonu",
-    "tekst": "Rečenica u zaglavlju javnog zaslona i na kartici Sada sastavlja se iz gotovih predložaka popunjenih činjenicama koje zaslon već prikazuje (polasci, zatvaranja, vrijeme, bicikli, sunce, događanja, dežurna ljekarna). Model Workers AI samo bira među tim predlošcima i prepisuje odabrane doslovno; ne piše slobodan tekst, a odabir koji se ne slaže s činjenicama odbacuje se. Bez modela prikazuje se predložak. Izvorni podaci i njihovi navodi ostaju na ovoj stranici. Rečenice se ne objavljuju na /open."
+    "tekst": "Rečenica u zaglavlju javnog zaslona i na kartici Sada sastavlja se iz odobrenih predložaka popunjenih činjenicama koje zaslon već prikazuje, o polascima, zatvaranjima, vremenu, biciklima, suncu, događanjima i dežurnoj ljekarni. Model Workers AI dobiva samo provjerene ponude, svaku s oznakom činjenice, predloška i vrijednosti (factId, family, slots), i smije samo odabrati neke od ponuda i vratiti ih nepromijenjene; priču o ulici ili zaštićenoj građevini bira samo po oznaci. Model ne piše slobodan tekst: rečenicu uvijek ispisuje aplikacija iz odabranog predloška, a odabir koji se ne slaže s činjenicama odbacuje se. Bez modela prikazuje se predložak. Ova stranica navodi izvore i poveznice na njih, a ne same podatke. Rečenice se ne objavljuju na /open."
   },
   "staticSources": [
     {
