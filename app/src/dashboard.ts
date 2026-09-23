@@ -39,7 +39,6 @@ import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
 import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
-import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { createDialog, type DialogHandle } from './ui/dialog';
@@ -113,6 +112,7 @@ export interface DashboardDeps {
   reducedMotion?: boolean;
   /** Decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
+  /** Read by nothing since the phone's schematic host went with the lightweight face (WP5 A3); entries/dashboard.ts still passes it. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
@@ -224,9 +224,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const maps = createMapSlots(
     lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce, undefined, () => loadNetworkOnce(true)), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
   );
-  const schematic = createSchematicHost({
-    i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,
-  });
   const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
   const surface = (): Surface => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
   /** The desk is the phone, wider [O-56] (WP4 step 8): Sada and Karta stand side by side in one .ki-desk pair whenever
@@ -435,7 +432,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
-      maps, schematic, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
+      maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
@@ -985,7 +982,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     notifySheet.close();
     presentationOpen = false;
     presentationConfirmRevision = null;
-    schematic.pause();
     store.pause(true);
     stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
@@ -1045,7 +1041,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       error = 'no-ticket';
       reconnecting = false;
       store.pause(true);
-      schematic.pause();
       maps.pause();
       closeShare();
       stopPolls();
@@ -1286,7 +1281,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       notifySheet.destroy();
       maps.destroy();
       boards.destroy();
-      schematic.destroy();
       store.destroy();
       element.remove();
     },
