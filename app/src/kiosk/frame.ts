@@ -70,7 +70,9 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
 
 /** Green cross · 24/7 · the short address: `[data-symbol=pharmacy]` is the cross itself (the probe contract, §15.6). */
 function pharmacyMarkup(strip: FrameStrip, strings: KioskStrings): string {
-  const caption = fill(strings.sentence.pharmacy, { address: vetExternal('address', strip.parts.pharmacy.label, 'row') ?? '' });
+  // A refused address leaves the cross named by its 24/7 alone, never "… 24/7: ." (review D2b finding 4).
+  const address = vetExternal('address', strip.parts.pharmacy.label, 'row');
+  const caption = address === null ? PHARMACY_HOURS : fill(strings.sentence.pharmacy, { address });
   const cross = iconMarkup('cross', caption, 'icon k-icon k-cross').replace('<svg ', '<svg data-symbol="pharmacy" ');
   return `<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">${cross}<span class="k-247">${PHARMACY_HOURS}</span> <strong>${externalHtml('address', strip.parts.pharmacy.label)}</strong></span>`;
 }
