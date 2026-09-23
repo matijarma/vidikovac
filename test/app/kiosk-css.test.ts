@@ -191,6 +191,18 @@ describe('public-screen design invariants', () => {
     expect(rule('.k-strip-item')).not.toContain('nowrap');
     expect(rule('.k-strip')).toContain('min-height: var(--k-strip-h)');
   });
+  // The presented rail (review W, P2): 448 px beside the main region at 1920 and 1366 (the main
+  // region is then 1404 and 868 px wide), and on the totem a row across the foot, the blocks beside
+  // the card at its own width (392 px measured). The width is the owner's call at D2: this pin
+  // makes a later change deliberate, it does not endorse the number.
+  it('pins the presented rail: 448 px at 1920 and 1366, a row across the foot of the totem', () => {
+    expect(rule(".kiosk[data-size='wide']")).toContain('--k-paired-side-w: calc(448px * var(--k-sign-zoom))');
+    expect(rule(".kiosk[data-size='compact']")).toContain('--k-paired-side-w: calc(448px * var(--k-sign-zoom))');
+    expect(rule('.k-paired')).toContain('grid-template-columns: minmax(0, 1fr) var(--k-paired-side-w)');
+    expect(rule(".kiosk[data-portrait='1'] .k-paired")).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(rule(".kiosk[data-portrait='1'] .k-paired .k-side")).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(rule(".kiosk[data-size='handheld']")).toContain('--k-paired-side-w: 100%');
+  });
   it('keeps the QR SVG at 240px inside a 264px plate with 12px padding', () => {
     expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
     expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
