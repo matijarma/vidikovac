@@ -2,12 +2,14 @@
 // No mock routes, authentication bypass or fixture session is shipped.
 import { createServer, preview } from 'vite';
 import { resolve } from 'node:path';
+import { e2ePorts, localOrigin } from './e2e-ports.mjs';
 
 const portIndex = process.argv.indexOf('--port');
 const port = Number(portIndex === -1 ? 5174 : process.argv[portIndex + 1]);
 const built = process.argv.includes('--built');
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid review port.');
-const target = 'http://127.0.0.1:8787';
+// The app server of the local harness (E2E_PORT, scripts/e2e-ports.mjs).
+const target = localOrigin(e2ePorts().app, '127.0.0.1');
 const mapTarget = process.env.REVIEW_MAP_ORIGIN ?? target;
 if (![target, 'https://zagreb.aningfilm.hr'].includes(mapTarget)) throw new Error('Unexpected review map origin.');
 const settings = {

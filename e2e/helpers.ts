@@ -7,8 +7,11 @@ import { randomUUID } from 'node:crypto';
 import type { CreateBeaconRequest, CreateBeaconResponse } from '../worker/protocol';
 import { CODE_RE, CODE_SHOWN_RE, kioskUrl, parseDevVars, rebaseUrl } from './lib';
 import { localNetworkHeaders } from '../scripts/local-network.mjs';
+import { e2ePorts, localOrigin } from '../scripts/e2e-ports.mjs';
 
-export const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
+/** The local servers' ports, from E2E_PORT exactly as playwright.config.ts starts them. */
+const PORTS = e2ePorts();
+export const APP_URL = process.env.E2E_APP_URL ?? localOrigin(PORTS.app);
 const RUN_ID = randomUUID();
 
 /** A local test is one visitor network, not the combined traffic of every
@@ -30,7 +33,7 @@ export const E2E_STOP_ID = '106_1';
 /** Server running with SESSION_MINUTES=0.2; undefined when pointed at a hosted target without one. */
 export const SHORT_URL: string | undefined = process.env.E2E_NO_WEBSERVER
   ? process.env.E2E_SHORT_URL
-  : (process.env.E2E_SHORT_URL ?? 'http://localhost:8788');
+  : (process.env.E2E_SHORT_URL ?? localOrigin(PORTS.short));
 
 export interface Health {
   ok: boolean;

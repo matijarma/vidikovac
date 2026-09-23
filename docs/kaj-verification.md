@@ -1979,7 +1979,11 @@ crven dok vrijednost ne dosegne prag, a izmjerena vrijednost služi kao radno po
 
 Razina prihvaćanja (`npm run accept` u Vitestu, `npm run accept:e2e` u Playwrightu) namjerno ostaje
 crvena do isporuke odgovarajućeg paketa i nikad se ne preskače. `npm test` i `npm run e2e` ne
-pokreću tu razinu; na isporuci D4 razina postaje dio obiju naredbi. Uzorak okvira za redak U1
+pokreću tu razinu; na isporuci D4 razina postaje dio obiju naredbi. Drugo pokretanje Playwrighta na
+istom računalu, iz zasebnog radnog stabla, dobiva vlastite lokalne poslužitelje uz varijablu
+`E2E_PORT`, na primjer `E2E_PORT=8797 npm run accept:e2e -- e2e/accept/wall.spec.ts`: aplikacija
+tada sluša na 8797, poslužitelj s kratkom sesijom na 8798, a bez varijable ostaju 8787 i 8788.
+Uzorak okvira za redak U1
 opisan je u
 [`test/fixtures/frames/2026-09-21-1715-1744/README.md`](../test/fixtures/frames/2026-09-21-1715-1744/README.md):
 162 okvira ZET-ova GTFS-RT-a samo s tramvajima, od 21. rujna 2026., od 17:15 do 17:44, isključivo

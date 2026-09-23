@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Lighthouse accessibility category over the five public surfaces. Requires a
-// running server (default the wrangler dev instance on :8787) and a local
+// running server (default the wrangler dev app server on E2E_PORT) and a local
 // Chrome or Chromium that chrome-launcher can find (CHROME_PATH overrides).
 //   node scripts/lighthouse-a11y.mjs
 //   E2E_APP_URL=https://zagreb.aningfilm.hr node scripts/lighthouse-a11y.mjs
@@ -8,8 +8,9 @@
 import lighthouse from 'lighthouse';
 import { launch } from 'chrome-launcher';
 import { renderTable, summarise } from './lib/lighthouse-report.mjs';
+import { e2ePorts, localOrigin } from './e2e-ports.mjs';
 
-const BASE = process.env.E2E_APP_URL ?? 'http://localhost:8787';
+const BASE = process.env.E2E_APP_URL ?? localOrigin(e2ePorts().app);
 const PAGES = ['/', '/hitno', '/kiosk/', '/s/', '/d/', '/prijava/'];
 const MIN = Number(process.env.LH_MIN_A11Y ?? '95');
 
