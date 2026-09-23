@@ -529,7 +529,11 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // A wrong-direction arrival rail is different: return as soon as the
       // prior fits, including at its endpoint (Mandlova -> Ravnice). Waiting
       // until past the endpoint only prolongs a known backward match.
-      const againstCurrent = pathForwardM(track.match.pathIdx, track.match.s, delta) <= -PRIOR_RETURN_NOISE_M;
+      // At a bend the previous arc's tangent can point along the motion
+      // while the current projection already runs backwards. Use the same
+      // current placement as D4, so the first return interval is not lost.
+      const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
+      const againstCurrent = pathForwardM(track.match.pathIdx, current.s, delta) <= -PRIOR_RETURN_NOISE_M;
       if (prev !== null && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {

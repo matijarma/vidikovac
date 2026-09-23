@@ -746,6 +746,36 @@ describe('terminal placement continuity', () => {
     m.matchFix(t, fix(60, 0, 1040), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('departure');
   });
+
+  it('accumulates a return around a bend using the current projected tangent', () => {
+    // 102301, 20 Sep 17:51:07 and 17:51:17: the adopted rail's
+    // previous arc points along the new movement, but its CURRENT
+    // projection runs backwards. Losing the first interval deferred the
+    // return until the next fix, 118 s and 753 m later.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: [{ x: 0, y: 0 }, { x: -100, y: -100 }] },
+        { from: 1, to: 2, pts: straight(-100, 0, -100) },
+        { from: 3, to: 4, pts: [{ x: -50, y: -30 }, { x: -50, y: 970 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'adopted', direction: 1, edges: [0, 1] },
+        { id: 'departure', direction: 0, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('return-at-bend', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(-100, -100, 1000), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('adopted');
+    m.matchFix(t, fix(-70, -65, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('adopted'); // only 35 forward metres
+    m.matchFix(t, fix(-55, -40, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure'); // 35 + 25, at the real near endpoint
+    expect(t.match.s).toBe(0);
+    expect(t.match.residual).toBeLessThan(12);
+  });
 });
 
 describe('parallel-street stability', () => {
