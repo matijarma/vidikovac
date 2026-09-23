@@ -243,10 +243,12 @@ prije nego što se izvor gurne u kartu, oznake čije se kutije na zaslonu prekla
 unija-nalaz uz `CLUSTER_PADDING_PX` = 2 px oko svake kutije) spajaju se u jedno obilježje s natpisom
 koji ispisuje svaku liniju, tipa „6·11·12·14”, i s popisom članova. Skupina se
 otvara dodirom i nudi svoje članove; tramvaji i autobusi se ne miješaju u istu skupinu, pa skup jedne
-vrste ne može nestati pod filtrom druge. Natpis skupine ide do `PILL_MAX_CHARS_CLUSTER` = 40 znakova
+vrste ne može nestati pod filtrom druge. Jedan redak natpisa skupine ide do `PILL_MAX_CHARS_CLUSTER` = 40 znakova
 (svih petnaest tramvajskih linija, „1·2·3·4·5·6·7·8·9·11·12·13·14·15·17”, stane u 35 znakova) i kapsula raste s njim;
-broj skrivenih linija („+n”) ne piše nikad. Dulji natpis, samo na velikim autobusnim čvorištima, zadržava
-cijele linije koje stanu, redom, a ostale izostavlja. Tramvaj nosi pločicu s jedva zaobljenim uglovima, a autobus kapsulu (pravilo značke iz signage.css:
+broj skrivenih linija („+n”) ne piše nikad. Dulji natpis, kakav imaju velika autobusna čvorišta, prelama se u drugi
+redak na razdjelniku „·”, tako da su oba retka podjednako široka, a kapsula je za jedan redak viša, s istim zaobljenim
+uglovima (odluka 23: `PILL_MAX_LINES` = 2, ukupno do 80 znakova). Tek natpis koji ne stane ni u dva retka zadržava
+cijele linije koje stanu, redom, a ostale izostavlja; u tablici stajališta to je samo Črnomerec, s 23 autobusne linije. Tramvaj nosi pločicu s jedva zaobljenim uglovima, a autobus kapsulu (pravilo značke iz signage.css:
 najprije na javnom zaslonu, D4, od rujna 2026. na svakoj karti i u čipovima legende nad kartom, `map.css`), a na
 javnom zaslonu kutije skupina računaju se na zaslonovoj skali oznaka, pa se ne spajaju na pola stvarne udaljenosti.
 Shema crta iste oznake u istoj tinti (`schema-map.ts` čita `PILL_INKS` iz istog modula i predaje tintu slikaru u `schema-paint.ts`), s istim

@@ -8,8 +8,8 @@ import { vehicleLabel } from '../map/city-map';
 import { contrastRatio } from '../ui/contrast';
 import type { Drawn } from './integrator';
 import {
-  clusterPills, NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PLATE_RADIUS_PX, pillChars, pillWidthPx,
-  type PillPoint,
+  clusterPills, NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PLATE_RADIUS_PX,
+  pillChars, pillHeightPx, pillRows, pillWidthPx, type PillPoint,
 } from './pills';
 import {
   MIN_VEHICLE_ALPHA, ROUTE_TYPE_TRAM,
@@ -298,7 +298,8 @@ export function clusterSchemaMarks(
       out.push({
         id: group.id, kind,
         x: group.x * size, y: group.y * size,
-        w: pillWidthPx(pillChars(group.label)) * size, h: PILL_HEIGHT_PX * size,
+        // A wrapped hub label (pills.ts clusterLabel, decision 23) is a row taller.
+        w: pillWidthPx(pillChars(group.label)) * size, h: pillHeightPx(pillRows(group.label).length) * size,
         angle: 0,
         // The group is as solid as its most confident member: a cluster that
         // faded with its weakest would read as less certain than what it hides.
@@ -328,10 +329,14 @@ function capsulePath(ctx: SchemaContext, x: number, y: number, w: number, h: num
 }
 
 /** The mark's outline, the badge rule (signage.css, the city map's
- *  MARK_IMAGE): a tram the plate, its corner PLATE_RADIUS_PX scaled with the
- *  mark; anything else the capsule. Centred on (x, y) like capsulePath. */
-function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: number, w: number, h: number, radius: number): void {
+ *  MARK_IMAGE): a tram the plate, its corner `radius`; anything else the
+ *  capsule, and for a label of two rows the capsule's own round corner
+ *  (`endRadius`, half a one-row pill) on straight sides a row taller, as the
+ *  city map's stretchable pill grows (overlays.ts). Centred on (x, y) like
+ *  capsulePath. */
+function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: number, w: number, h: number, radius: number, rows: number, endRadius: number): void {
   if (kind === 'tram') roundRectPath(ctx, x - w / 2, y - h / 2, w, h, radius);
+  else if (rows > 1) roundRectPath(ctx, x - w / 2, y - h / 2, w, h, endRadius);
   else capsulePath(ctx, x, y, w, h);
 }
 
@@ -382,11 +387,14 @@ export function paintPills(
   ctx.textBaseline = 'middle';
   for (const m of marks) {
     if (!m.pill) continue;
-    if (vetExternal('name', m.label, 'row') === null) continue;
-    const size = m.h / PILL_HEIGHT_PX;
+    // A wrapped hub label is vetted row by row: the break between its rows
+    // is the painter's own, never text anyone sent.
+    const rows = pillRows(m.label ?? '');
+    if (rows.some((row) => vetExternal('name', row, 'row') === null)) continue;
+    const size = m.h / pillHeightPx(rows.length);
     ctx.save();
     ctx.globalAlpha = m.alpha;
-    markPath(ctx, m.kind, m.x, m.y, m.w, m.h, PLATE_RADIUS_PX * size);
+    markPath(ctx, m.kind, m.x, m.y, m.w, m.h, PLATE_RADIUS_PX * size, rows.length, (PILL_HEIGHT_PX / 2) * size);
     ctx.fillStyle = inks.fill;
     ctx.fill();
     ctx.strokeStyle = m.pill === 'cluster' ? inks.ink : inks.halo;
@@ -394,12 +402,13 @@ export function paintPills(
     ctx.stroke();
     ctx.fillStyle = inks.text;
     ctx.font = `600 ${PILL_TEXT_PX * size}px Manrope, system-ui, sans-serif`;
-    ctx.fillText(m.label ?? '', m.x, m.y);
+    // One line height apart about the mark's centre, as MapLibre sets them.
+    rows.forEach((row, i) => ctx.fillText(row, m.x, m.y + (i - (rows.length - 1) / 2) * PILL_LINE_HEIGHT_PX * size));
     if (m.id === selectedId) {
       const gap = 2 * PILL_SELECT_GAP_PX * size;
       ctx.globalAlpha = 1;
       // The ring's corner is the plate's plus the gap, so the two stay concentric.
-      markPath(ctx, m.kind, m.x, m.y, m.w + gap, m.h + gap, (PLATE_RADIUS_PX + PILL_SELECT_GAP_PX) * size);
+      markPath(ctx, m.kind, m.x, m.y, m.w + gap, m.h + gap, (PLATE_RADIUS_PX + PILL_SELECT_GAP_PX) * size, rows.length, (PILL_HEIGHT_PX / 2 + PILL_SELECT_GAP_PX) * size);
       ctx.strokeStyle = inks.ink;
       ctx.lineWidth = PILL_SELECT_RING_PX * size;
       ctx.stroke();
