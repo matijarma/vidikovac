@@ -71,6 +71,9 @@ const DEAD_KEYS = [
   'scan.unlock', 'scan.confirmTitle', 'scan.confirmStop', 'scan.confirmStopOnly', 'scan.confirmHint', 'scan.cancel',
   'cast.toScreen', 'cast.fab', 'cast.fabLabel', 'cast.sent', 'panels.closures', 'session.openSheet', 'export.print',
   'timeband.segLabel', 'timeband.laneEmpty',
+  // WP5 A4 final: the "Zatim" segment word; A3 retired its renderer and presentation.ts's
+  // timeband.${…} reads only sada/today/tonight/tomorrow/week (trust row e-zatim).
+  'timeband.next',
   // WP5 A5: a multi-day event says events.untilDate ("do 25. 9."); the paired copy of it is gone.
   'kiosk.paired.ongoingUntil',
   // WP5 A1: every leaf the S8 scanner found unread once A2, A3, A5 and lane P

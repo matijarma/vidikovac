@@ -130,8 +130,7 @@
     },
     "headUntil": "until {time}",
     "headFrom": "from {time}",
-    "headUntilDate": "until {date}",
-    "next": "Next"
+    "headUntilDate": "until {date}"
   },
   "weather": {
     "now": "Now",

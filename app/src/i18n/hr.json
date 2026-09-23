@@ -134,8 +134,7 @@
     },
     "headUntil": "do {time}",
     "headFrom": "od {time}",
-    "headUntilDate": "do {date}",
-    "next": "Zatim"
+    "headUntilDate": "do {date}"
   },
   "weather": {
     "now": "Sada",
