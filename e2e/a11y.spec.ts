@@ -236,7 +236,9 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
-    await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
+    // The public wall's safety verdict is text, not a basics button ([O-43], principle 8, trust row d-controls-invitation).
+    await expect(page.getByTestId('kiosk-essentials-open')).toHaveCount(0);
+    await expect(page.getByTestId('strip-verdict')).toBeVisible();
     // A public screen's list is glanceable, not a hidden interactive phone
     // list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
