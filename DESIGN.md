@@ -89,15 +89,20 @@ The list is one time axis around the place: at most three departures, blue
 "za N min" for a tracked vehicle and a grey clock time for the timetable; then
 the timed rows (a closure's end, an event with its venue and the tram to it,
 the next sunset or sunrise, never both, the evening's last departures as one
-row from four hours ahead, the first morning tram from 22:00 until it leaves,
+row from four hours ahead, the next morning line to start from 22:00 until
+every daytime line has started or 06:00,
 tomorrow's openings when the evening empties); then one "uvijek" row, the
 place's naming story or a protected building nearby, alternating, and the
 24/7 pharmacy at night. No row carries a source, freshness or caveat caption.
 Rows are whole and at least 64–92px tall from the item count, so fewer items
 make larger rows; a row whose words need two lines is taller. Nothing is cut
 with an ellipsis: a long row prints the source's own shorter label or wraps
-whole; when the rows do not fit, whole rows leave the list, the latest first,
-and the first row after the departures only after the later departures.
+whole; when the rows do not fit, whole discretionary rows leave the list,
+the latest first, and the first discretionary row after the departures only
+after the later departures. First/last trams and one "uvijek" row are reserved.
+Candidate rows are measured in a hidden same-width sibling; only the final
+selection is reconciled into the live list. Departure badges share the
+title's read tier, at least 40px in light and 44px in dark.
 Each row keeps its node: a new row enters at the bottom, fades in once and
 takes its place in time on the next update, a past one leaves at the top, and
 nothing moves without a change. The map highlights what the header
