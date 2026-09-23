@@ -142,9 +142,9 @@ export interface WallSample {
   sentenceOverflow: boolean;
   sentenceEllipsis: boolean;
   head: string;
-  /** The rows a passer-by can see: shown, wholly inside the viewport and inside the list's clipping box. */
+  /** The rows a passer-by can see: shown, not transparent, wholly inside the viewport and inside the list's clipping box. */
   rows: WallRow[];
-  /** `.nearby-row` elements in the DOM that are not on the wall (hidden, offscreen or clipped). */
+  /** `.nearby-row` elements in the DOM that are not on the wall (hidden, transparent, zero-size, offscreen or clipped). */
   hiddenRows: number;
   departures: number;
   solarRows: number;
@@ -222,19 +222,23 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
   const sentence = words(textEl);
   const overflows = (el: HTMLElement | null): boolean => Boolean(el && el.scrollWidth > el.clientWidth + 1);
 
-  // A row counts only when a passer-by can see all of it: shown, wholly inside the viewport and inside every
-  // ancestor that clips its overflow (the list's own box: whole rows only, §11). Rows in the DOM but not on
-  // the wall are counted apart, so a hidden departure can never satisfy "a departure in every reading".
+  // A row counts only when a passer-by can see all of it: shown with a box, not transparent, wholly inside the
+  // viewport and inside every ancestor that clips its overflow (the list's own box: whole rows only, §11).
+  // Rows in the DOM but not on the wall are counted apart, so a hidden departure can never satisfy "a departure
+  // in every reading". Transparency and invisibility are read on the row itself and on every ancestor up to the
+  // root (an empty computed opacity, as happy-dom reports it, is opaque).
   const within = (r: DOMRect, c: DOMRect): boolean => r.top >= c.top - 1 && r.bottom <= c.bottom + 1 && r.left >= c.left - 1 && r.right <= c.right + 1;
   const clips = (value: string): boolean => value !== '' && value !== 'visible';
+  const transparent = (cs: CSSStyleDeclaration): boolean => cs.opacity !== '' && Number(cs.opacity) === 0;
   const onWall = (el: Element): boolean => {
     if (!shown(el)) return false;
     const r = el.getBoundingClientRect();
     if (!(r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1)) return false;
-    for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+    for (let a: Element | null = el; a; a = a.parentElement) {
       const cs = getComputedStyle(a);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
-      if ((clips(cs.overflowX) || clips(cs.overflowY) || clips(cs.overflow)) && !within(r, a.getBoundingClientRect())) return false;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || transparent(cs)) return false;
+      const root = a === el || a === document.body || a === document.documentElement;
+      if (!root && (clips(cs.overflowX) || clips(cs.overflowY) || clips(cs.overflow)) && !within(r, a.getBoundingClientRect())) return false;
     }
     return true;
   };

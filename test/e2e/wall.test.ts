@@ -165,6 +165,23 @@ describe('one reading of the wall', () => {
     expect(one).toMatchObject({ departures: 1, hiddenRows: 3 });
   });
 
+  it('a transparent, an invisible, a collapsed, a zero-size and a sideways-offscreen departure are hidden rows, never departures', () => {
+    const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+    const box = (left: number, top: number, width = 300, height = 60): DOMRect => ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) }) as DOMRect;
+    const li = (id: string, extra = ''): string => `<li class="nearby-row" data-id="${id}" data-kind="departure" data-when="2026-09-21T15:47:00.000Z"${extra}><span class="nearby-title">6 Sopot</span><time>2 min</time></li>`;
+    document.body.innerHTML = `<section data-testid="nearby"><ol data-testid="nearby-rows">${li('transparent', ' style="opacity: 0"')}${li('invisible', ' style="visibility: hidden"')}${li('collapsed', ' style="display: none"')}${li('zero')}${li('sideways')}${li('shown')}</ol></section>`;
+    const boxes: Record<string, DOMRect> = { transparent: box(0, 0), invisible: box(0, 60), collapsed: box(0, 120), zero: box(0, 180, 0, 0), sideways: box(innerWidth + 20, 240), shown: box(0, 300) };
+    for (const id of Object.keys(boxes)) document.querySelector<HTMLElement>(`[data-id=${id}]`)!.getBoundingClientRect = () => boxes[id];
+    const one = shippedFn(WALL_SAMPLE_SPEC);
+    expect(one.rows.map((r) => r.id)).toEqual(['shown']);
+    expect(one).toMatchObject({ departures: 1, hiddenRows: 5 });
+    // The row alone, made transparent: no departure is left, and the reading fails.
+    document.querySelector<HTMLElement>('[data-id=shown]')!.style.opacity = '0';
+    const none = shippedFn(WALL_SAMPLE_SPEC);
+    expect(none).toMatchObject({ departures: 0, hiddenRows: 6, rows: [] });
+    expect(sampleFailures(none)).toContain('0 departure rows (target 1–3)');
+  });
+
   it('a clock anywhere in the footer is caught, not only in its sources', () => {
     const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
     document.body.innerHTML = '<footer data-testid="safety-strip"><span data-testid="strip-verdict">Mirno od 17:30</span><span data-testid="strip-pharmacy">24/7 Ilica 1</span><span data-testid="strip-sources">DHMZ · EMSC</span></footer>';
