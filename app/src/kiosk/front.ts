@@ -39,6 +39,8 @@ import { weatherMarkup } from './markup';
 import { weatherNow } from './local';
 import { weatherIcon } from '../experience/weather-icon';
 import { iconMarkup } from '../ui/icons';
+import { externalHtml, optionalExternal } from './external';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 
 export type PanelId = 'tonight' | 'weather' | 'city' | 'promet' | 'around';
 export const PANEL_IDS: readonly PanelId[] = ['tonight', 'weather', 'city', 'promet', 'around'];
@@ -230,7 +232,7 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   const reading = observed.temperature ?? (observed.state === 'loading' ? s.weather.loading : observed.state === 'down' ? s.weather.unavailable : s.weather.noReading);
   // The glyph and the reading, the condition word under them: inline it widens
   // the observation until the ranges beside it are clipped mid-degree.
-  const figure = `<div class="k-weather-current"><div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(reading)}</span></div>${observed.condition ? `<p class="k-condition">${escapeHtml(observed.condition)}</p>` : ''}</div>`;
+  const figure = `<div class="k-weather-current"><div class="k-weather-main">${glyph ? iconMarkup(glyph, undefined, 'icon k-weather-icon') : ''}<span class="${observed.temperature === null ? 'k-weather-note' : 'k-temp'}">${escapeHtml(reading)}</span></div>${observed.condition ? `<p class="k-condition">${externalHtml('summary', observed.condition)}</p>` : ''}</div>`;
   const rows: FrontRow[] = [];
   for (const [key, day, item] of [['today', s.say.today, today], ['tomorrow', s.say.tomorrow, tomorrow]] as const) {
     if (item) rows.push({ key: `forecast:${key}`, lead: day, title: rangeOf(item, s, locale), sub: conditionWord(item) || undefined });
@@ -512,6 +514,7 @@ export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
 }
 
 function rowMarkup(row: FrontRow): string {
+  if (vetExternal('title', row.title, 'row') === null || !optionalExternal('summary', row.sub)) return '';
   const lead = row.leadMarkup
     ? `<span class="k-fr-lead k-fr-lead--badge">${row.leadMarkup}</span>`
     : `<span class="k-fr-lead">${row.day ? `<span class="k-fr-day">${escapeHtml(row.day)}</span>` : ''}${escapeHtml(row.lead ?? '')}</span>`;
@@ -522,7 +525,7 @@ function rowMarkup(row: FrontRow): string {
 
 /** One panel's inner markup: the head (kicker and meta), the figure, the rows or the note, the foot, the credit. */
 export function panelMarkup(panel: FrontPanel): string {
-  const head = `<header class="k-panel-head"><h2 class="k-panel-kicker">${escapeHtml(panel.kicker)}</h2>${panel.meta ? `<p class="k-panel-meta">${escapeHtml(panel.meta)}</p>` : ''}</header>`;
+  const head = `<header class="k-panel-head"><h2 class="k-panel-kicker">${escapeHtml(panel.kicker)}</h2>${panel.meta ? `<p class="k-panel-meta">${externalHtml('summary', panel.meta)}</p>` : ''}</header>`;
   const rowsId = panel.id === 'promet' ? ' data-testid="kiosk-lines"' : '';
   const body = panel.rows.length > 0 ? `<ul class="k-panel-rows"${rowsId}>${panel.rows.map(rowMarkup).join('')}</ul>` : '';
   const note = panel.note ? `<p class="k-panel-note"${panel.state === 'down' ? ' data-state="down"' : ''}>${escapeHtml(panel.note)}</p>` : '';

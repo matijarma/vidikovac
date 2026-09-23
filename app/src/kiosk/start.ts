@@ -14,6 +14,7 @@ import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../../shared/city/frame
 import { PLACE_ADDRESS_MAX, PLACE_NAME_MAX, type ScreenPlace, type ScreenPlaceInput } from '../../../shared/city/place';
 import { loadStops as loadStopsImpl, ScreenError, type CreateScreenInput } from '../core/screens';
 import { escapeHtml } from '../ui/dom/escape';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 import { mmss } from './format';
 import { mountPlaceField } from './place-field';
 import { placeInputOf, type StreetGeo } from './places';
@@ -63,7 +64,7 @@ export function classifySetupError(error: unknown): { kind: SetupErrorKind; retr
  *  Worker actually named one ('bad-request' is a reason, not a field). */
 function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: string }): string {
   const invalid = c.field && c.field !== 'bad-request'
-    ? fill(s.setup.errorInvalid, { field: c.field })
+    ? fill(s.setup.errorInvalid, { field: vetExternal('name', c.field, 'row') ?? '' })
     : s.setup.errorInvalid.replace(/\s*\(\{field\}\)/, '');
   return c.kind === 'access' ? s.setup.errorAccess
     : c.kind === 'quota' ? s.setup.errorQuota
@@ -73,7 +74,7 @@ function setupErrorText(s: KioskStrings, c: { kind: SetupErrorKind; field: strin
 
 /** The line under the field: what the screen will show once Pokreni is pressed. */
 export function previewText(s: KioskStrings, locale: string, place: ScreenPlace | null, unresolved: string): string {
-  if (place) return fill(plural(locale, s.setup.preview, DEFAULT_FRAME_STOPS), { place: place.name });
+  if (place) return fill(plural(locale, s.setup.preview, DEFAULT_FRAME_STOPS), { place: vetExternal('name', place.name, 'row') ?? '' });
   return unresolved ? '' : s.setup.previewCity;
 }
 

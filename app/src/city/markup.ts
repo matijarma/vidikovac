@@ -4,11 +4,13 @@ import { locationLabel, type LocationContext } from './location';
 import { airIndexLabel } from './air';
 import type { LocatedEvent } from '../../../shared/city/events';
 import type { I18n } from '../i18n/i18n';
-import { escapeHtml as e, escapeAttribute as a } from '../ui/dom/escape';
+import { escapeHtml as e, escapeHtml as escapePhone, escapeAttribute as a } from '../ui/dom/escape';
 import { zagrebTime, zagrebWeekdayDate } from '../format';
 import { ct, type CityWord } from './strings';
 import { publicItemKey } from '../core/contracts';
 import {bikeAvailability} from '../../../shared/city/bikes';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+import { externalHtml } from '../kiosk/external';
 const button=(action:string,id:string,label:string)=>`<button type="button" class="city-row" data-action="${action}" data-id="${a(id)}"><span>${e(label)}</span><span aria-hidden="true">↗</span></button>`;
 const SAFE_FACTS: Record<string,[string,string]> = {
   payment:['Naplata','Payment'],maintenance:['Stanje prema registru','Recorded condition'],type:['Vrsta','Type'],sport:['Sport','Sport'],
@@ -36,11 +38,16 @@ export function placesMarkup(i18n:I18n,places:readonly Place[],events:readonly L
   }).join('')}${places.length>limit?button('city-more','',`${ct(i18n,'more')} (${places.length-limit})`):''}</div>`;
 }
 export function eventLinks(i18n:I18n,events:readonly LocatedEvent[],interactive=true):string {
+  if (!interactive) events = events.filter(x => vetExternal('title', x.item.title, 'row') !== null);
   const tag=interactive?'button':'div';
   const publishers:Record<string,string>={kulturpunkt:'Kulturpunkt · CC BY-SA 3.0 HR',etnografski:'Etnografski muzej',kvartovske:'Grad Zagreb · Otvorena dozvola'};
   return events.map(x=>`<${tag} class="city-event"${interactive?` type="button" data-action="nav" data-layer="kultura" data-selection="${a(JSON.stringify({kind:'item',module:'dogadanja',id:publicItemKey('dogadanja',x.item.id)}))}"`:''}><time>${e(x.ongoing?ct(i18n,'ongoing'):x.item.data?.precision==='time'?`${zagrebWeekdayDate(x.item.at!)} · ${zagrebTime(x.item.at!)}`:zagrebWeekdayDate(x.item.at!))}</time><strong>${e(x.item.title)}</strong><span class="city-meta">${e(publishers[String(x.item.data?.source)]??ct(i18n,'source'))}${interactive?' ↗':''}${x.location==='multiple'?` · ${ct(i18n,'multiVenue')}`:''}</span></${tag}>`).join('');
 }
 export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly LocatedEvent[],saved=false,publicDisplay=false,reference?:LocationContext):string {
+  if (publicDisplay && vetExternal('name', p.name, 'row') === null) return '';
+  // The public component's default text escape checks every optional field,
+  // including facts/provenance. Phone rendering retains its existing policy.
+  const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const en=i18n.getLocale().startsWith('en');
@@ -67,7 +74,9 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${p.sourceId!=='bajs'&&p.sourceId!=='air'?`<p class="city-meta">${ct(i18n,'reference')}${p.updatedAt&&referenceDate(p.updatedAt)?` · ${e(referenceDate(p.updatedAt))}`:''}</p>`:''}
   </article>`;
 }
-export function streetDetail(i18n:I18n,s:StreetStory):string {
+export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string {
+  if (publicDisplay && (vetExternal('name', s.name, 'row') === null || vetExternal('register-text', s.description, 'row') === null)) return '';
+  const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
   return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${e(s.name)}</h3><p class="city-meta">${e(s.settlement)}</p><p lang="hr">${e(s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
 }
 /** A minute of grace: a train due at 10:00 is still the one you are running
@@ -80,7 +89,7 @@ const DEPARTED_GRACE_MS=60_000;
  *  arrives would open on trains that have already gone, so they are dropped
  *  here rather than at the source. */
 export function departuresMarkup(i18n:I18n,board:DepartureBoard,nowMs:number=Date.now()):string {
-  const due=board.departures.filter(d=>{const at=Date.parse(d.at);return !Number.isFinite(at)||at>=nowMs-DEPARTED_GRACE_MS;});
+  const due=board.departures.filter(d=>{const at=Date.parse(d.at);return vetExternal('headsign',d.headsign||d.routeName,'row')!==null&&(!Number.isFinite(at)||at>=nowMs-DEPARTED_GRACE_MS);});
   return `<section class="city-departures"><h4>${ct(i18n,'departures')}</h4><p class="city-meta">${ct(i18n,'schedule')} · ${board.operator==='hz'?'HŽPP':'ZET'}${board.status==='stale'?` · ${ct(i18n,'stale')}`:''}</p>
     ${board.status==='down'?`<p>${ct(i18n,'noDepartures')}</p>`:due.length?due.slice(0,6).map(d=>`<div class="city-departure"><strong>${e(zagrebTime(d.at))}</strong><span>${e(d.headsign||d.routeName)}</span></div>`).join(''):`<p>${ct(i18n,'noDepartures')}</p>`}
     <p class="city-meta">${ct(i18n,'scheduleNote')}</p></section>`;

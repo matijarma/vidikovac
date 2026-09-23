@@ -229,22 +229,23 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(fc.features[2]!.properties).toMatchObject({ short: '', bearing: 180, hasHeading: false, held: true });
   });
 
-  it('holds a standalone or selected pill to the 40-character cap a cluster obeys, and never empties it', () => {
+  it('omits oversized external route text instead of cutting it, including selected pills', () => {
     const long = '9'.repeat(45);
-    const capped = '9'.repeat(PILL_MAX_CHARS_CLUSTER);
+    const omitted = '';
     const bus = (id: string, extra: Partial<Drawn>, lon: number): Drawn =>
       ({ id, type: 3, p: toPlane(lon, 45.81), heading: null, speed: 0, confidence: 1, onShape: null, ...extra });
     // One vehicle carries an oversized short name, the other only an oversized route id.
     const drawn = [bus('a', { routeId: 'r', short: long }, 15.97), bus('b', { routeId: long }, 15.99)];
     // No camera: nothing merges, both are standalone pills.
-    expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.short)).toEqual([capped, capped]);
+    expect(vehiclesToGeoJson(drawn).features.map((f) => f.properties.short)).toEqual([omitted, omitted]);
     // With a camera their widest capsules overlap, but the selected one keeps its own mark, and the rest stays alone.
     const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
     const selected = vehiclesToGeoJson(drawn, { project, selectedId: 'a' }).features;
-    expect(selected.map((f) => [f.properties.id, f.properties.short, f.properties.cluster])).toEqual([['b', capped, false], ['a', capped, false]]);
+    expect(selected.map((f) => [f.properties.id, f.properties.short, f.properties.cluster])).toEqual([['b', omitted, false], ['a', omitted, false]]);
     // The shared formatter the schema's marks use too.
-    expect(vehicleLabel({ short: long })).toBe(capped);
-    expect(vehicleLabel({ routeId: long })).toBe(capped);
+    expect(vehicleLabel({ short: long })).toBe(omitted);
+    expect(vehicleLabel({ routeId: long })).toBe(omitted);
+    expect(vehicleLabel({ short: 'X'.repeat(PILL_MAX_CHARS_CLUSTER) })).toBe('X'.repeat(PILL_MAX_CHARS_CLUSTER));
     expect(vehicleLabel({ short: '6' })).toBe('6');
     expect(vehicleLabel({})).toBe('');
   });

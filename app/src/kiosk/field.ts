@@ -20,6 +20,7 @@ import type { I18n } from '../i18n/i18n';
 import { linesMarkup } from './markup';
 import { linesAtStop } from './local';
 import type { KioskStrings } from './strings';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 
 /** The lagano board's rows: ten fit the board's height with the overflow line at 1080p (R-V1, measured in e2e/lagano.spec.ts). */
 export const BOARD_ROWS = 10;
@@ -85,7 +86,7 @@ export function mountField(host: HTMLElement, deps: FieldDeps = {}): FieldHandle
     },
     update(model) {
       // The field is named by what it shows: the stop, or the lines title while the screen has no stop yet.
-      const label = model.stop?.name ?? model.strings.lines.title;
+      const label = model.stop ? vetExternal('name', model.stop.name, 'row') ?? '' : model.strings.lines.title;
       if (label !== lastLabel) {
         element.setAttribute('aria-label', label);
         lastLabel = label;

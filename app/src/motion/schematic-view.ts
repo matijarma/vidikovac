@@ -41,6 +41,8 @@ import { summariseRoutes, type RouteVehicle } from '../layers/route-summary';
 import { statusText } from '../panels/panel';
 import { DENSITY, prepareCanvas, tone } from '../ui/canvas';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+import { externalHtml } from '../kiosk/external';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 
 /** A network with nothing in it, standing in for `net === null` (not yet
@@ -358,11 +360,11 @@ export function mountSceneAccessibility(deps: SceneAccessibilityDeps): SceneAcce
     const text = `${card.line}\n${card.direction}\n${card.delay}\n${card.nextStop ?? ''}`;
     if (text === lastCardText) return;
     lastCardText = text;
-    cardLine!.textContent = card.line;
-    cardDirection!.textContent = card.direction;
+    cardLine!.textContent = vetExternal('headsign', card.line, 'row') ?? '';
+    cardDirection!.textContent = vetExternal('name', card.direction, 'row') ?? '';
     cardDelay!.textContent = card.delay;
     if (cardNextStop) {
-      cardNextStop.textContent = card.nextStop ?? '';
+      cardNextStop.textContent = vetExternal('name', card.nextStop, 'row') ?? '';
       cardNextStop.hidden = card.nextStop === undefined;
     }
   }
@@ -737,7 +739,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
       shown
         .map(
           (r) => `<li class="schematic-route" data-testid="schematic-route">
-          <span class="schematic-route-label">${escapeHtml(r.label)}</span> <span class="schematic-route-value">${escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))} · ${escapeHtml(r.word)}</span>
+          <span class="schematic-route-label">${externalHtml('headsign', r.label)}</span> <span class="schematic-route-value">${escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))} · ${escapeHtml(r.word)}</span>
         </li>`,
         )
         .join('') +

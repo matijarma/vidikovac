@@ -16,6 +16,7 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { byModule, safetyStrip, type SafetyStrip } from './local';
 import { fill, type KioskStrings } from './strings';
+import { externalHtml } from './external';
 
 // --- The safety strip: the verdict, the trail, the pharmacy -----------------
 
@@ -54,7 +55,7 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
     : `<button type="button" class="k-strip-verdict" data-testid="kiosk-essentials-open" data-level="${strip.level}" aria-label="${escapeAttribute(fill(strings.safety.openBasics, { verdict: strip.verdict }))}"><span data-testid="strip-verdict">${word}</span></button>`;
   const trail = w.state === 'none'
     ? `<span class="k-strip-item" data-testid="strip-sources">${escapeHtml(strings.safety.sources)}</span>`
-    : `<span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeAttribute(w.severity)}"` : ''}>${escapeHtml(w.text)}</span>`;
+    : `<span class="k-strip-item" data-testid="strip-warning" data-state="${w.state}"${w.severity ? ` data-severity="${escapeAttribute(w.severity)}"` : ''}>${externalHtml('summary', w.text)}</span>`;
   return `<span class="k-strip-label">${iconMarkup('shield', undefined, 'icon k-icon')}<span>${escapeHtml(strings.safety.label)}</span></span>
     ${verdict}
     <div class="k-strip-items" data-testid="strip-items">
@@ -67,5 +68,5 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
 /** Green cross · 24/7 · the short address: `[data-symbol=pharmacy]` is the cross itself (the probe contract, §15.6). */
 function pharmacyMarkup(strip: FrameStrip, strings: KioskStrings): string {
   const cross = iconMarkup('cross', strings.basics.pharmacy, 'icon k-icon k-cross').replace('<svg ', '<svg data-symbol="pharmacy" ');
-  return `<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">${cross}<span class="k-247">${PHARMACY_HOURS}</span> <strong>${escapeHtml(strip.parts.pharmacy.label)}</strong></span>`;
+  return `<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">${cross}<span class="k-247">${PHARMACY_HOURS}</span> <strong>${externalHtml('address', strip.parts.pharmacy.label)}</strong></span>`;
 }

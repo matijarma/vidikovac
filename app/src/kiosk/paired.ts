@@ -18,7 +18,7 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayTime, fmtAmount, fmtNumber, weekdayDayMonth, zagrebDayAfter } from './format';
 import { kBadge, kicker, linesMarkup, weatherMarkup } from './markup';
 import { activeWarnings, cityDateLine, cityKicker, cleanCondition, closuresByDistance, closuresNear, isLive, linesAtStop, pharmaciesByDistance, plausibleDelay, recentQuakes, sunToday, upcomingWarnings, weatherNow, type SunToday } from './local';
-import { arrivalCells, arrivalsEmptyText, ARRIVAL_ROWS, platformIds, type StopArrivals } from './arrivals';
+import { arrivalCells, arrivalsEmptyText, ARRIVAL_ROWS, platformIds, vettedArrival, type StopArrivals } from './arrivals';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
@@ -29,6 +29,8 @@ import type { CityState } from '../../../shared/city/types';
 import { dynamicPlaces } from '../city/discovery';
 import { placeDetail,streetDetail } from '../city/markup';
 import { locatedEvents } from '../../../shared/city/events';
+import { externalHtml, optionalExternal } from './external';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */
@@ -122,10 +124,10 @@ const EVENT_PUBLISHER: Record<string, string> = {
  *  the screen by name and its own catalogued licence, never the six-source
  *  paragraph. A per-item template (an act's UUID) never prints. */
 export function creditText(snapshot: ModuleSnapshot, items: readonly FeedItem[], s: KioskStrings): string {
-  const licence = snapshot.attribution.licence;
+  const licence = vetExternal('summary', snapshot.attribution.licence, 'row') ?? '';
   const licenceWords = licence === '' ? '' : `${s.paired.licence}: ${licence}`;
   if (snapshot.module === 'zet-rt') {
-    const text = fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]);
+    const text = vetExternal('summary', fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]), 'row') ?? '';
     const named = licence !== '' && text.toLowerCase().includes(licence.toLowerCase().split(' (')[0]!);
     return [text, named ? '' : licenceWords, s.paired.fullSources].filter(Boolean).join(' · ');
   }
@@ -134,7 +136,7 @@ export function creditText(snapshot: ModuleSnapshot, items: readonly FeedItem[],
     const credits = [...new Set(DOGADANJA_SOURCES.filter((src) => shown.has(src.source)).map((src) => `${EVENT_PUBLISHER[src.source] ?? src.naziv} (${src.licence})`))];
     if (credits.length > 0) return `${credits.length > 1 ? s.paired.sourcesLabel : s.paired.sourceLabel}: ${credits.join(' · ')} · ${s.paired.fullSources}`;
   }
-  const publisher = PUBLISHER[snapshot.module] ?? IZVORI.find((src) => src.module === snapshot.module)?.naziv ?? fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]);
+  const publisher = PUBLISHER[snapshot.module] ?? IZVORI.find((src) => src.module === snapshot.module)?.naziv ?? vetExternal('name', fillAttribution(snapshot.attribution, snapshot, items[0] ?? snapshot.items[0]), 'row') ?? '';
   return [`${s.paired.sourceLabel}: ${publisher}`, licenceWords, s.paired.fullSources].filter(Boolean).join(' · ');
 }
 
@@ -206,6 +208,7 @@ export function sentencesOf(text: string): string[] {
  *  the end, one sentence at a time, and then as a whole: a paragraph that does
  *  not fit its box loses whole sentences, never words (never an ellipsis). */
 export function fitSentences(text: string, tag = 'span', className = 'k-fit'): string {
+  if (vetExternal('summary', text, 'row') === null) return '';
   const parts = sentencesOf(text).map((part) => `<span class="k-fit-part">${escapeHtml(part)}</span>`).join(' ');
   return `<${tag} class="${className}" data-fit="sentences">${parts}</${tag}>`;
 }
@@ -215,7 +218,7 @@ export function fitSentences(text: string, tag = 'span', className = 'k-fit'): s
  *  with it, so a dropped paragraph never leaves "·" behind. Plain segments are
  *  escaped here. */
 export function joinWithFit(segments: readonly { text: string; fit?: boolean }[]): string {
-  const shown = segments.filter((segment) => segment.text !== '');
+  const shown = segments.filter((segment) => segment.text !== '' && (!segment.fit || vetExternal('summary', segment.text, 'row') !== null));
   return shown.map((segment, i) => {
     const before = i > 0 && !(i === 1 && shown[0]!.fit) ? ' · ' : '';
     if (!segment.fit) return `${before}${escapeHtml(segment.text)}`;
@@ -340,7 +343,7 @@ export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolea
 function warningRows(ctx: PairedContext): string[] {
   const cap = ctx.snapshots['dhmz-cap'];
   const rowOf = (w: FeedItem, upcoming: boolean): string => row(
-    `<span class="badge k-badge" data-tone="${escapeAttribute(w.severity ?? 'info')}">${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</span> ${escapeHtml(w.title)}`,
+    `<span class="badge k-badge" data-tone="${escapeAttribute(w.severity ?? 'info')}">${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</span> ${externalHtml('title', w.title)}`,
     joinWithFit([
       { text: upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '' },
       { text: w.summary ?? '', fit: true },
@@ -371,7 +374,7 @@ function closureRows(ctx: PairedContext, limit: number): string[] {
   return closuresByDistance(ctx.snapshots.prometnice, ctx.stop, ctx.now).slice(0, limit).map(({ item, distanceM }) => {
     const type = i18n.t(`panels.closureType.${dataText(item, 'subtype') || 'ROAD_CLOSED'}`);
     const until = item.until ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : '';
-    return row(escapeHtml(item.title), [type, until].filter(Boolean).map(escapeHtml).join(' · '), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
+    return row(externalHtml('title', item.title), [type, until].filter(Boolean).map(escapeHtml).join(' · '), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
   });
 }
 
@@ -421,7 +424,8 @@ function renderPromet(ctx: PairedContext): PairedMarkup {
 function findItem(ctx: PairedContext, module: ModuleId, key: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
   const snapshot = ctx.snapshots[module];
   const item = snapshot?.items.find((candidate) => publicItemKey(module, candidate.id) === key);
-  return snapshot && item ? { item, snapshot } : null;
+  return snapshot && item && vetExternal('title', item.title, 'row') !== null
+    && optionalExternal('summary', item.summary) ? { item, snapshot } : null;
 }
 
 /** Shared by the actual composition and its delivery receipt. A source may
@@ -432,12 +436,21 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
   if (!pick) return 'displayed';
   if (pick.kind === 'route') return routeType(pick.id) === null ? 'unavailable' : 'displayed';
   if (pick.kind === 'stop') {
-    if (pick.id === ctx.stop?.id || ctx.stops?.some(stop => stop.id === pick.id)) return 'displayed';
+    const named = pick.id === ctx.stop?.id ? ctx.stop : ctx.stops?.find(stop => stop.id === pick.id);
+    if (named) return vetExternal('name', named.name, 'row') === null ? 'unavailable' : 'displayed';
     return ctx.stops ? 'unavailable' : 'loading';
   }
-  if(pick.kind==='place')return !ctx.city||ctx.city.loading?'loading':
-    [...ctx.city.places,...dynamicPlaces(ctx.city,ctx.now)].some(p=>p.id===pick.id)?'displayed':'unavailable';
-  if(pick.kind==='street')return !ctx.city||ctx.city.loading?'loading':ctx.city.streets.some(s=>s.id===pick.id)?'displayed':'unavailable';
+  if (pick.kind === 'place') {
+    if (!ctx.city || ctx.city.loading) return 'loading';
+    const place = [...ctx.city.places, ...dynamicPlaces(ctx.city, ctx.now)].find(p => p.id === pick.id);
+    return place && vetExternal('name', place.name, 'row') !== null ? 'displayed' : 'unavailable';
+  }
+  if (pick.kind === 'street') {
+    if (!ctx.city || ctx.city.loading) return 'loading';
+    const street = ctx.city.streets.find(s => s.id === pick.id);
+    return street && vetExternal('name', street.name, 'row') !== null
+      && vetExternal('register-text', street.description, 'row') !== null ? 'displayed' : 'unavailable';
+  }
   if (!ctx.snapshots[pick.module]) return 'loading';
   return findItem(ctx, pick.module, pick.id) ? 'displayed' : 'unavailable';
 }
@@ -454,7 +467,7 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
 function arrivalsBody(ctx: PairedContext, stop: { id: string; name?: string }): string {
   if (!ctx.arrivals) return '';
   const answer = ctx.arrivals(platformIds(stop, ctx.stops));
-  const rows = answer.rows.slice(0, ARRIVAL_ROWS[ctx.size]);
+  const rows = answer.rows.filter(vettedArrival).slice(0, ARRIVAL_ROWS[ctx.size]);
   if (rows.length === 0) {
     return `<p class="k-board-note"${answer.status === 'down' ? ' data-state="down"' : ''}>${escapeHtml(arrivalsEmptyText(answer.status, ctx.strings))}</p>`;
   }
@@ -485,16 +498,16 @@ export function selectionCard(ctx: PairedContext): string {
     const delay = plausibleDelay(median) ? median : null;
     const count = dataNumber(summary, 'vehicles');
     const sub = [delay === null ? '' : delayWord(i18n, delay), count === null ? '' : plural(ctx.locale, s.paired.routeVehicles, count)].filter(Boolean).join(' · ');
-    const body = `<p class="k-select-main">${kBadge(selection.id, kindOfRoute(selection.id))} ${escapeHtml(routeLongName(selection.id) || fill(s.session.selectedRoute, { route: selection.id }))}</p>${sub ? `<p class="k-select-sub">${escapeHtml(sub)}</p>` : ''}`;
+    const body = `<p class="k-select-main">${kBadge(selection.id, kindOfRoute(selection.id))} ${externalHtml('name', routeLongName(selection.id) || fill(s.session.selectedRoute, { route: selection.id }))}</p>${sub ? `<p class="k-select-sub">${escapeHtml(sub)}</p>` : ''}`;
     return block(s.session.selected, body, { ...o, snapshot: zet, item: summary });
   }
   if (selection.kind === 'stop') {
     const named = selection.id === ctx.stop?.id ? ctx.stop : ctx.stops?.find((stop) => stop.id === selection.id) ?? null;
-    const routes = named ? sortRouteIds(named.routes).join(', ') : '';
+    const routes = named ? sortRouteIds(named.routes).filter(route => vetExternal('headsign', route, 'row') !== null).join(', ') : '';
     // The rider's own question first: which tram comes next, and in how long.
     // The lines this stop serves are the answer to a different question and
     // keep their place under it.
-    const body = `<p class="k-select-main">${escapeHtml(named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>`
+    const body = `<p class="k-select-main">${externalHtml('name', named ? named.name : fill(s.session.selectedStop, { stop: selection.id }))}</p>`
       + arrivalsBody(ctx, named ?? { id: selection.id })
       + (routes ? `<p class="k-select-sub">${escapeHtml(`${s.paired.lineWord} ${routes}`)}</p>` : '');
     return block(s.session.selected, body, o);
@@ -505,13 +518,13 @@ export function selectionCard(ctx: PairedContext): string {
   }
   if(selection.kind==='street'){
     const p=ctx.city?.streets.find(s=>s.id===selection.id);
-    return p?streetDetail(i18n,p):'';
+    return p?streetDetail(i18n,p,true):'';
   }
   const found = findItem(ctx, selection.module, selection.id);
   if (!found) return '';
   const { item, snapshot } = found;
   const when = cityDateLine(item, s, ctx.locale);
-  const body = `<p class="k-select-main k-select-main--item">${escapeHtml(item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${escapeHtml(item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
+  const body = `<p class="k-select-main k-select-main--item">${externalHtml('title', item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${externalHtml('summary', item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
   return block(s.session.selected, body, { ...o, snapshot, item });
 }
 
@@ -536,8 +549,8 @@ function forecastBlock(ctx: PairedContext): string {
     const range = tmin !== null && tmax !== null ? fill(s.weather.range, { min: fmtNumber(locale, tmin, 0), max: fmtNumber(locale, tmax, 0) }) : s.paired.rangeUnknown;
     // DHMZ's forecast 'vrijeme' is sometimes a symbol code, never a word to print.
     const raw = dataText(today, 'weather');
-    const word = /^\d+$/.test(raw) ? '' : cleanCondition(raw);
-    body = `<p class="k-figure">${escapeHtml(range)}</p>${word ? `<p class="k-figure-sub">${escapeHtml(word)}</p>` : ''}${today.summary ? fitSentences(today.summary, 'p', 'k-text') : ''}`;
+    const word = /^\d+$/.test(raw) ? '' : cleanCondition(vetExternal('summary', raw, 'row') ?? '');
+    body = `<p class="k-figure">${escapeHtml(range)}</p>${word ? `<p class="k-figure-sub">${externalHtml('summary', word)}</p>` : ''}${today.summary ? fitSentences(today.summary, 'p', 'k-text') : ''}`;
   }
   return block(s.paired.forecast, body, { s, snapshot: snap, item: today, testid: 'k-forecast' });
 }
@@ -569,7 +582,7 @@ function quakeRows(ctx: PairedContext, limit: number): string[] {
     const mag = dataNumber(q, 'mag');
     const depth = dataNumber(q, 'depth');
     return row(
-      `<strong>${escapeHtml(mag === null ? s.paired.magUnknown : `M ${fmtNumber(locale, mag, 1)}`)}</strong> · ${escapeHtml(dataText(q, 'region') || q.title)}`,
+      `<strong>${escapeHtml(mag === null ? s.paired.magUnknown : `M ${fmtNumber(locale, mag, 1)}`)}</strong> · ${externalHtml('name', dataText(q, 'region') || q.title)}`,
       escapeHtml(depth === null ? s.paired.depthUnknown : fill(s.paired.depth, { depth: fmtNumber(locale, depth, 0) })),
       escapeHtml(dayTime(q.at)),
     );
@@ -605,8 +618,8 @@ function renderVrijeme(ctx: PairedContext): PairedMarkup {
 
 function pharmacyRows(ctx: PairedContext, limit: number): string[] {
   return pharmaciesByDistance(ctx.stop).slice(0, limit).map((p) => row(
-    escapeHtml(p.label),
-    escapeHtml([p.address, p.hours].filter(Boolean).join(' · ')),
+    externalHtml('name', p.label),
+    [externalHtml('address', p.address), externalHtml('summary', p.hours)].filter(Boolean).join(' · '),
     p.phoneDisplay ? escapeHtml(p.phoneDisplay) : '',
   ));
 }
@@ -630,7 +643,7 @@ function assemblyRows(ctx: PairedContext, limit: number): string[] {
     })
     .sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity))
     .slice(0, limit);
-  return points.map(({ item, distanceM }) => row(escapeHtml(item.title), escapeHtml(item.summary ?? ''), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM))));
+  return points.map(({ item, distanceM }) => row(externalHtml('title', item.title), externalHtml('summary', item.summary ?? ''), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM))));
 }
 
 function assemblyBlock(ctx: PairedContext, limit: number): string {
@@ -656,9 +669,9 @@ function renderSigurnost(ctx: PairedContext): PairedMarkup {
 function actRows(ctx: PairedContext, limit: number): string[] {
   const glasnik = ctx.snapshots.glasnik;
   return (isLive(glasnik) ? glasnik.items : []).slice(0, limit).map((act) => {
-    const issue = dataText(act, 'broj') ? `${ctx.strings.paired.acts} ${dataText(act, 'broj')}/${dataText(act, 'godina')}` : '';
-    const sub = [issue, dataText(act, 'category')].filter(Boolean).join(' · ');
-    return row(escapeHtml(act.title), escapeHtml(sub), act.at ? escapeHtml(weekdayDayMonth(ctx.locale, act.at)) : '');
+    const issue = dataText(act, 'broj') ? `${ctx.strings.paired.acts} ${vetExternal('name', dataText(act, 'broj'), 'row') ?? ''}/${vetExternal('name', dataText(act, 'godina'), 'row') ?? ''}` : '';
+    const sub = [issue, vetExternal('name', dataText(act, 'category'), 'row')].filter(Boolean).join(' · ');
+    return row(externalHtml('title', act.title), escapeHtml(sub), act.at ? escapeHtml(weekdayDayMonth(ctx.locale, act.at)) : '');
   });
 }
 
@@ -677,8 +690,8 @@ function sessionRows(ctx: PairedContext, limit: number): string[] {
     .filter((item) => citySource(item) === 'skupstina' && item.at !== undefined && Date.parse(item.at) >= ctx.now - 86_400_000)
     .slice(0, limit);
   return upcoming.map((item) => row(
-    escapeHtml(item.title),
-    escapeHtml([dataText(item, 'organiser'), dataText(item, 'venue')].filter(Boolean).join(' · ')),
+    externalHtml('title', item.title),
+    [externalHtml('name', dataText(item, 'organiser')), externalHtml('name', dataText(item, 'venue'))].filter(Boolean).join(' · '),
     escapeHtml(dataText(item, 'precision') === 'day' ? weekdayDayMonth(ctx.locale, item.at!) : `${weekdayDayMonth(ctx.locale, item.at!)} ${clock(item.at)}`),
   ));
 }
@@ -695,10 +708,10 @@ function worksRows(ctx: PairedContext, limit: number): string[] {
   const { strings: s, locale } = ctx;
   return (isLive(dog) ? dog.items : []).filter((item) => citySource(item) === 'komunalne').slice(0, limit).map((item) => {
     const amount = dataNumber(item, 'amount');
-    const phase = dataText(item, 'phase');
+    const phase = vetExternal('name', dataText(item, 'phase'), 'row') ?? '';
     const sub = [phase ? fill(s.paired.phase, { phase }) : '', amount === null ? '' : fill(s.paired.amount, { amount: fmtAmount(locale, amount) })].filter(Boolean).join(' · ');
     const changed = item.at ? fill(s.story.changed, { date: weekdayDayMonth(locale, item.at) }) : '';
-    return row(escapeHtml(item.title), escapeHtml([sub, changed].filter(Boolean).join(' · ')));
+    return row(externalHtml('title', item.title), escapeHtml([sub, changed].filter(Boolean).join(' · ')));
   });
 }
 
@@ -778,8 +791,8 @@ function eventRow(item: FeedItem, ctx: PairedContext, withDay: boolean): string 
     : (allDay ? s.paired.allDay : clock(item.at));
   // A category slug is printed only as a word the catalogue knows; a raw slug never reaches the screen.
   const category = s.events[dataText(item, 'category')] ?? '';
-  const sub = [category, dataText(item, 'venue') || dataText(item, 'organiser')].filter(Boolean).join(' · ');
-  return row(escapeHtml(item.title), escapeHtml(sub), escapeHtml(when));
+  const sub = [category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
+  return row(externalHtml('title', item.title), escapeHtml(sub), escapeHtml(when));
 }
 
 function eventsBlock(ctx: PairedContext, title: string, items: readonly FeedItem[], limit: number, testid: string, withDay: boolean): string {
@@ -791,7 +804,7 @@ function eventsBlock(ctx: PairedContext, title: string, items: readonly FeedItem
 function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: number): string[] {
   const priority = (item: FeedItem) => dataText(item, 'source') === 'zet-promet' ? 0 : 1;
   return [...items].sort((a, b) => priority(a) - priority(b)).slice(0, limit).map((item) => row(
-    escapeHtml(item.title),
+    externalHtml('title', item.title),
     escapeHtml([cityKicker(dataText(item, 'source'), ctx.strings), cityDateLine(item, ctx.strings, ctx.locale)].filter(Boolean).join(' · ')),
   ));
 }
@@ -799,9 +812,9 @@ function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: numbe
 function ongoingRow(item: FeedItem, ctx: PairedContext): string {
   const { strings: s, locale } = ctx;
   const category = s.events[dataText(item, 'category')] ?? '';
-  const sub = [s.paired.ongoingWord, category, dataText(item, 'venue') || dataText(item, 'organiser')].filter(Boolean).join(' · ');
+  const sub = [s.paired.ongoingWord, category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
   const until = item.until ? fill(s.paired.ongoingUntil, { date: weekdayDayMonth(locale, item.until) }) : '';
-  return row(escapeHtml(item.title), escapeHtml(sub), escapeHtml(until));
+  return row(externalHtml('title', item.title), escapeHtml(sub), escapeHtml(until));
 }
 
 function ongoingBlock(ctx: PairedContext, items: readonly FeedItem[], limit: number): string {

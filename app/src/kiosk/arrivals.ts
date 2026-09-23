@@ -18,6 +18,12 @@ import { clock } from './format';
 import type { FrontRow } from './front';
 import { kBadge } from './markup';
 import { fill, type KioskStrings } from './strings';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+
+export function vettedArrival(row: ArrivalRow): boolean {
+  return vetExternal('headsign', row.routeName, 'row') !== null
+    && vetExternal('headsign', row.headsign || row.routeName, 'row') !== null;
+}
 
 /** What one surface asked the board cache for, as the shared module answered it. */
 export interface StopArrivals {
@@ -101,6 +107,7 @@ function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string
  *  timetable time carries nothing -- and the note under the list says in one
  *  sentence what that means. */
 export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; aside: string } {
+  if (!vettedArrival(row)) return { main: '', aside: '' };
   return {
     main: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))} ${escapeHtml(row.headsign || row.routeName)}`,
     aside: etaMarkup(row, s, 'k-eta'),
@@ -113,7 +120,7 @@ export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; 
  *  when it has no board -- so a stop's arrivals cost the aside the room three
  *  or four exception lines cost it, and the events and QR cards keep theirs. */
 export function arrivalFrontRows(arrivals: StopArrivals, s: KioskStrings, limit: number): FrontRow[] {
-  return arrivals.rows.slice(0, Math.max(0, limit)).map((row) => ({
+  return arrivals.rows.filter(vettedArrival).slice(0, Math.max(0, limit)).map((row) => ({
     key: `arrival:${row.tripId}|${row.atMs}`,
     leadMarkup: kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s)),
     title: row.headsign || row.routeName,

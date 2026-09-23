@@ -20,8 +20,8 @@ import { dynamicPlaces } from './city/discovery';
 import { selectNearby, skippedTextCensus, type NearbyRow } from './city/nearby';
 import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
-import { readWrittenSentences, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
-import type { ExternalTextRejection } from '../../shared/kiosk/external-text';
+import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
+import { vetExternal, type ExternalTextRejection } from '../../shared/kiosk/external-text';
 import { matchStreet } from '../../shared/city/geo';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
@@ -40,7 +40,7 @@ import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
-import { essentialsRows, fitEssentials } from './kiosk/essentials';
+import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
@@ -380,12 +380,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   /** The probe is laid out even while the live sentence yields to a notice.
    * Its kicker, gap, font and available width are the live sentence's exact twins. */
   function sentenceOverflows(sentence: WrittenSentence): boolean {
+    if (!typedSentenceFact({ id: 'render', kind: sentence.kicker, text: sentence.text, validUntil: sentence.validUntil }, locale.startsWith('en') ? 'en' : 'hr').ok) return true;
     setText(probeKicker, s.sentence.kicker[sentence.kicker]);
     setText(probeText, sentence.text);
     return sentenceProbe.clientWidth > 0
       && (probeText.scrollWidth > probeText.clientWidth + 1 || sentenceProbe.scrollWidth > sentenceProbe.clientWidth + 1);
   }
   function paintSentence(): void {
+    if (currentSentence && !typedSentenceFact({ id: 'render', kind: currentSentence.kicker, text: currentSentence.text, validUntil: currentSentence.validUntil }, locale.startsWith('en') ? 'en' : 'hr').ok) currentSentence = null;
     const hidden = sentenceSuspended() || currentSentence === null;
     const previous = sentenceText.textContent;
     if (sentenceEl.hidden !== hidden) sentenceEl.hidden = hidden;
@@ -502,7 +504,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  shell carries the frame, the place's kind, Ritam and Prikaz for the
    *  compositions and the specs. */
   function paintContext(): void {
-    contextEl.textContent = !credentials ? '' : wall.place?.name ?? CITY_AREA.name;
+    contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? '';
     element.dataset.frame = String(wall.frame);
     element.dataset.placeKind = wall.placeSet && wall.place ? wall.place.kind : 'city';
     element.dataset.rhythm = String(rhythm);
@@ -527,7 +529,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const until = document.createElement('span');
     until.className = 'k-session-until';
     until.textContent = presentation?.target
-      ? i18n.t('presentation.showing', { name: presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()) })
+      ? i18n.t('presentation.showing', { name: vetExternal('title', presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' })
       : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
     const layer = document.createElement('span');
     layer.className = 'k-session-layer';
@@ -551,7 +553,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
   function paintEssentials(): void {
-    basicsRows.innerHTML = essentialsRows(teaser, i18n, s, locale, stop, now()).map((row) => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${escapeHtml(row.value)}</p>${row.detail ? `<p class="k-ess-detail">${escapeHtml(row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${escapeHtml(row.attribution)}</p>` : ''}</div>`).join('');
+    basicsRows.innerHTML = essentialsMarkup(essentialsRows(teaser, i18n, s, locale, stop, now()));
   }
   function disarmEssentialsIdle(): void {
     if (essentialsIdle === null) return;
@@ -675,7 +677,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       place: wall.place, placeSet: wall.placeSet, frame: wall.frame, radiusM: wallRadiusM(),
       view: mapMode === 'schema' ? 'schema' : view,
       vehiclesVisible: feedStateOf(snapshots['zet-rt']) !== 'down',
-      ariaLabel: stop ? `${s.paired.overviewTransport} · ${stop.name}` : s.paired.overviewTransport,
+      ariaLabel: stop ? `${s.paired.overviewTransport} · ${vetExternal('name', stop.name, 'row') ?? ''}` : s.paired.overviewTransport,
     }, mapAdapter);
     if (!container) return;
     // The network the map already fetches (withNetwork) carries the tram lines'

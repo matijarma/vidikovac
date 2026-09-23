@@ -26,6 +26,7 @@ import { placeFromStop, type ScreenPlace } from '../../../shared/city/place';
 import type { ScreenSetInput } from '../beacon';
 import type { ScreenStop } from '../core/contracts';
 import { escapeHtml } from '../ui/dom/escape';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 import { iconMarkup, type IconName } from '../ui/icons';
 import type { ThemePreference } from '../ui/theme';
 import { LONG_PRESS_MS } from './constants';
@@ -424,7 +425,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   /** Every toggle names its current state, so the one button is both the value and the way to change it. */
   function paintRows(): void {
     const shown = queue.shown();
-    placeValue.textContent = placeText(s, shown.place);
+    placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? '';
     // "Cijeli grad" is offered only while the screen names a place: pressing it on the whole city says nothing new.
     placeCity.hidden = shown.place === null;
     frameBtn.dataset.value = String(shown.frame);
@@ -555,4 +556,3 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     },
   };
 }
-

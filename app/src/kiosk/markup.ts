@@ -16,6 +16,8 @@ import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
 import { plural, type KioskStrings } from './strings';
+import { externalHtml, optionalExternal } from './external';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 
 export function kicker(text: string, meta = '', tone = ''): string {
   return `<p class="k-kicker${tone ? ` k-kicker--${escapeAttribute(tone)}` : ''}"><span>${escapeHtml(text)}</span>${meta ? `<span class="k-kicker-meta">${escapeHtml(meta)}</span>` : ''}</p>`;
@@ -23,6 +25,7 @@ export function kicker(text: string, meta = '', tone = ''): string {
 
 /** The one line badge (signage.css `.line`) at the kiosk's k size; `.k-line-badge` keeps the kiosk's geometry, `.line` paints the mode. */
 export function kBadge(label: string, kind: 'tram' | 'bus' | 'other', ariaLabel = ''): string {
+  if (vetExternal('headsign', label, 'row') === null || (ariaLabel && vetExternal('name', ariaLabel, 'row') === null)) return '';
   return `<span class="k-line-badge line" data-kind="${kind}" data-size="k"${ariaLabel ? ` aria-label="${escapeAttribute(ariaLabel)}"` : ''}>${escapeHtml(label)}</span>`;
 }
 
@@ -68,13 +71,14 @@ export function weatherMarkup(weather: WeatherNow, strings: KioskStrings, facts 
   const temp = weather.temperature !== null
     ? `<span class="k-temp" data-testid="kiosk-temp">${escapeHtml(weather.temperature)}</span>`
     : `<span class="k-temp k-temp--none" data-testid="kiosk-temp" data-state="none">${escapeHtml(strings.weather.noReading)}</span>`;
-  const condition = weather.condition ? `<span class="k-condition">${escapeHtml(weather.condition)}</span>` : '';
+  const condition = weather.condition ? `<span class="k-condition">${externalHtml('summary', weather.condition)}</span>` : '';
   const shown = weather.details.slice(0, facts);
   const details = shown.length > 0 ? `<p class="k-weather-details">${escapeHtml(shown.join(' · '))}</p>` : '';
-  return `<div class="k-weather-main">${icon ? iconMarkup(icon, undefined, 'icon k-weather-icon') : ''}${temp}${condition}${stale}</div>${details}<p class="k-meta">${escapeHtml([weather.observedAt, weather.station, 'DHMZ'].filter(Boolean).join(' · '))}</p>`;
+  return `<div class="k-weather-main">${icon ? iconMarkup(icon, undefined, 'icon k-weather-icon') : ''}${temp}${condition}${stale}</div>${details}<p class="k-meta">${escapeHtml([weather.observedAt, vetExternal('name', weather.station, 'row'), 'DHMZ'].filter(Boolean).join(' · '))}</p>`;
 }
 
 function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale: string): string {
+  if (vetExternal('headsign', row.label, 'row') === null || !optionalExternal('name', row.longName)) return '';
   const near = row.nearby > 0 ? plural(locale, strings.lines.nearby, row.nearby) : strings.lines.noneNearby;
   const kindWord = row.kind === 'tram' ? strings.lines.tram : row.kind === 'bus' ? strings.lines.bus : '';
   return `<li class="k-line" data-kind="${row.kind}" data-route="${escapeAttribute(row.routeId)}">

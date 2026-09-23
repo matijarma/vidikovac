@@ -15,6 +15,7 @@ import type { ScreenStop } from '../../../worker/protocol';
 import { normalName } from '../../../shared/city/geo';
 import { derivePlace, placeFromStop, type ScreenPlace } from '../../../shared/city/place';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
+import { externalHtml } from './external';
 import { fmtDistance } from './format';
 import { anchorOf, suggestPlaces, type PlaceSuggestion, type StreetGeo } from './places';
 import { sortRouteIds } from './stops';
@@ -153,8 +154,8 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
       ? [routesText(s, row.stop.routes), deps.near && row.stop.distanceM !== null ? fmtDistance(deps.locale, row.stop.distanceM) : '']
       : row.kind === 'segment' ? [settlementText(row.street), routesText(s, row.stop.routes)] : [settlementText(row.street)]).filter(Boolean).join(' · ');
     return `<li class="k-suggest-row" id="${escapeAttribute(`${listId}-${index}`)}" role="option" aria-selected="false" data-testid="setup-suggestion" data-kind="${row.kind}" data-index="${index}">`
-      + `<span class="k-suggest-name">${escapeHtml(rowLabel(s, row))}</span>`
-      + (meta ? `<span class="k-suggest-meta">${escapeHtml(meta)}</span>` : '')
+      + `<span class="k-suggest-name">${externalHtml('name', rowLabel(s, row))}</span>`
+      + (meta ? `<span class="k-suggest-meta">${externalHtml('summary', meta)}</span>` : '')
       + '</li>';
   }
   /** What was typed changed: the rows on show belong to the old text and can no longer be picked. */

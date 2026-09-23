@@ -37,6 +37,7 @@
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
 import { matchStreet } from '../../../shared/city/geo';
@@ -977,9 +978,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     id: KIOSK_MAP_SLOT_ID,
     className: 'k-map-canvas',
     testid: 'kiosk-map',
-    ariaLabel: input.ariaLabel,
-    points,
-    lines: closureLines(input.snapshots.prometnice),
+    ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? '',
+    points: points.filter(point => point.at !== undefined || point.title === '' || vetExternal('name', point.title, 'row') !== null),
+    lines: closureLines(input.snapshots.prometnice).filter(line => line.title === '' || vetExternal('name', line.title, 'row') !== null),
     reducedMotion: input.reducedMotion,
     onSelect:input.onSelect,
     onCamera:input.onCamera,

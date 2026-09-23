@@ -33,6 +33,8 @@ import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, Sty
 import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 import type { NameHysteresis, SourcePoint } from './name-census';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+import { wallLabelLayers, vettedTileLabels, type LabelSource, type TileLabelFeature } from './external-labels';
 
 // --- Kept for callers: the first basemap was the OpenStreetMap community
 // raster, whose usage policy forbids app traffic. The vector basemap
@@ -226,13 +228,15 @@ export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollec
   return {
     type: 'FeatureCollection',
     features: points
-      .filter((p) => !isVehicleReport(p) && Number.isFinite(p.lon) && Number.isFinite(p.lat))
+      .filter((p) => !isVehicleReport(p) && Number.isFinite(p.lon) && Number.isFinite(p.lat)
+        && (p.title === '' || vetExternal('name', p.title, 'row') !== null))
       .map((p) => {
         const properties: PointProperties = p.routeId === undefined ? { id: p.id, title: p.title } : { id: p.id, title: p.title, routeId: p.routeId };
         if (p.place !== undefined) properties.place = p.place;
         for (const [key, value] of Object.entries(p.props ?? {})) {
           if (RESERVED_POINT_PROPS.has(key) || value === undefined) continue;
-          properties[key] = value;
+          properties[key] = typeof value === 'string' && ['name', 'address', 'badge', 'label'].includes(key)
+            ? vetExternal(key === 'address' ? 'address' : 'name', value, 'row') ?? '' : value;
         }
         return {
           type: 'Feature' as const,
@@ -247,7 +251,8 @@ export function linesToGeoJson(lines: readonly MapLine[]): LineFeatureCollection
   return {
     type: 'FeatureCollection',
     features: lines
-      .filter((l) => l.coordinates.length >= 2 && l.coordinates.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat)))
+      .filter((l) => l.coordinates.length >= 2 && l.coordinates.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat))
+        && (l.title === '' || vetExternal('name', l.title, 'row') !== null))
       .map((l) => ({
         type: 'Feature' as const,
         geometry: { type: 'LineString' as const, coordinates: l.coordinates },
@@ -286,9 +291,10 @@ function bearingGap(a: number, b: number): number {
  *  pillLabel), so a standalone or selected pill obeys the same cap as a
  *  cluster's name. */
 export function vehicleLabel(v: { short?: string; routeId?: string }): string {
-  if (v.short) return pillLabel(v.short);
+  if (v.short) return vetExternal('headsign', v.short, 'row') === null ? '' : pillLabel(v.short);
   if (v.routeId === undefined) return '';
-  return pillLabel(ZET_ROUTES[v.routeId]?.shortName || v.routeId);
+  const text = ZET_ROUTES[v.routeId]?.shortName || v.routeId;
+  return vetExternal('headsign', text, 'row') === null ? '' : pillLabel(text);
 }
 
 /** Draw order among the vehicle marks (overlays.ts reads `sort` straight as
@@ -486,7 +492,7 @@ export function networkToGeoJson(net: Network): NetworkFeatureCollection {
         return {
           type: 'Feature' as const,
           geometry: { type: 'LineString' as const, coordinates: shape.pts.map(toLonLat) },
-          properties: { shape: i, route: shape.route, short: route?.short ?? shape.route, kind: vehicleKind(route?.type ?? -1) },
+          properties: { shape: i, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1) },
         };
       }),
   };
@@ -557,7 +563,7 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
         properties: {
-          id: stop.id, name: stop.name, routes, rank: routes.length, tram, bus,
+          id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '', routes, rank: routes.length, tram, bus,
           label: labelled.get(stop.name)?.id === stop.id,
           tramInterchange: hub.tram && hub.terminal,
         },
@@ -1060,6 +1066,7 @@ interface MapApi {
   getLayer?(id: string): unknown;
   setSprite?(url: string): void;
   queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): RenderedFeature[];
+  querySourceFeatures?(source: string, options: { sourceLayer: string }): TileLabelFeature[];
   /** Decision 19's name hysteresis only; a stand-in without them runs none. */
   setFeatureState?(feature: { source: string; id: string }, state: Record<string, unknown>): void;
   easeTo(options: Record<string, unknown>): void;
@@ -1741,7 +1748,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
 
   function screenStopGeoJson(): { type: 'FeatureCollection'; features: unknown[] } {
     if (!stop || !Number.isFinite(stop.lon) || !Number.isFinite(stop.lat)) return { type: 'FeatureCollection', features: [] };
-    return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] }, properties: { id: stop.id, name: stop.name } }] };
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] }, properties: { id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '' } }] };
   }
 
   void (async () => {
@@ -1810,13 +1817,30 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return { center: ZAGREB_CENTER, zoom: options.zoom ?? l.CITY_ZOOM };
   }
 
+  let labelSources: LabelSource[] = [];
+  const labelSignatures = new Map<string, string>();
+  const wallLabels = options.presentationProfile === 'public-display' || options.basemapProfile === 'prozor';
+  function refreshTileLabels(): void {
+    if (!styled || !map?.querySourceFeatures) return;
+    for (const { id, source, sourceLayer } of labelSources) {
+      const data = vettedTileLabels(map.querySourceFeatures(source, { sourceLayer }), locale ?? 'hr');
+      const signature = JSON.stringify(data);
+      if (labelSignatures.get(id) === signature) continue;
+      labelSignatures.set(id, signature);
+      map.getSource(id)?.setData(data);
+    }
+  }
   function buildMap(l: MaplibreModule): void {
     const style = l.basemapStyle(theme, basemapOptions());
-    basemap = style.layers;
+    const vetted = wallLabels ? wallLabelLayers(style.layers) : { layers: style.layers, sources: [] };
+    labelSources = vetted.sources;
+    basemap = vetted.layers;
+    const safeStyle = { ...style, layers: basemap, sources: { ...style.sources,
+      ...Object.fromEntries(labelSources.map(({ id }) => [id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }])) } };
     const start = initialCamera(l);
     const created = new l.Map({
       container,
-      style: style as never,
+      style: safeStyle as never,
       center: start.center,
       zoom: start.zoom,
       minZoom: l.MAP_MIN_ZOOM,
@@ -1867,6 +1891,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    created.on('moveend', refreshTileLabels);
     if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
     // honest place to ask it what it drew (see the probe comment above), and,
@@ -1920,6 +1945,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
     created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
     styled = true;
+    refreshTileLabels();
     // A resize or a deliberate presentation can arrive before the library or
     // style finishes loading. Apply the latest request before reporting ready,
     // never certify the constructor's now-obsolete frame.
@@ -1977,6 +2003,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** A basemap tile arriving after a failure: the basemap is back. */
   function onSourceData(event: MapEventLike): void {
     if (lib === null || event.sourceId !== lib.BASEMAP_SOURCE || event.tile === undefined) return;
+    refreshTileLabels();
     basemapFailing = false;
     if (styled && status === 'tiles-failed') setStatus('ready');
   }
@@ -2285,9 +2312,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function applyBasemap(): void {
     const l = lib;
     if (!map || !styled || !l) return;
-    const nextBasemap = l.basemapLayers(theme, basemapOptions());
+    const raw = l.basemapLayers(theme, basemapOptions());
+    const nextBasemap = wallLabels ? wallLabelLayers(raw).layers : raw;
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
+    refreshTileLabels();
   }
 
   function setTheme(next: MapTheme): void {

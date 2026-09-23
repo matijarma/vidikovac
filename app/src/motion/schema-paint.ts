@@ -2,6 +2,7 @@
 // an integrator arc to this plane; reported GPS coordinates never enter a
 // painter. Canvas mounting, gestures and the clock live in schema-map.ts.
 import type { XY } from '../../../shared/motion/geo';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 import { pointAt, type Schema, type SchemaPlacement, type SchemaStop, type createSchemaPlacer } from '../../../shared/motion/schema';
 import { vehicleLabel } from '../map/city-map';
 import { contrastRatio } from '../ui/contrast';
@@ -381,6 +382,7 @@ export function paintPills(
   ctx.textBaseline = 'middle';
   for (const m of marks) {
     if (!m.pill) continue;
+    if (vetExternal('name', m.label, 'row') === null) continue;
     const size = m.h / PILL_HEIGHT_PX;
     ctx.save();
     ctx.globalAlpha = m.alpha;
@@ -528,7 +530,10 @@ function planNames(ctx: SchemaContext, layout: SchemaLayout, point: (p: XY) => X
     const px = labelPx(terminal ? TERMINAL_LABEL_UNITS : STOP_LABEL_UNITS, scale, density,
       terminal ? LABEL_MAX_PX + TERMINAL_LABEL_EXTRA_PX : LABEL_MAX_PX, kioskMinPx);
     // A terminal shouts in the source too; Croatian diacritics survive it.
-    const rows = stop.label.text.split(/\r?\n/).map(row => terminal ? row.toLocaleUpperCase('hr') : row);
+    const rawRows = stop.label.text.split(/\r?\n/);
+    if (rawRows.some(row => vetExternal('name', row, 'row') === null)
+      || vetExternal('name', rawRows.join(' '), 'row') === null) continue;
+    const rows = rawRows.map(row => terminal ? row.toLocaleUpperCase('hr') : row);
     ctx.font = nameFont(terminal, px);
     let width = 0;
     for (const row of rows) width = Math.max(width, ctx.measureText(row).width);
@@ -581,6 +586,7 @@ function paintNames(ctx: SchemaContext, plans: readonly NamePlan[], tones: Schem
   ctx.lineWidth = LABEL_HALO_PX * density;
   ctx.fillStyle = tones.ink;
   for (const plan of plans) {
+    if (vetExternal('name', plan.rows.join(' '), 'row') === null) continue;
     ctx.font = nameFont(plan.terminal, plan.px);
     plan.rows.forEach((row, i) => {
       const y = plan.y + i * plan.advance;
@@ -641,6 +647,7 @@ function paintChips(ctx: SchemaContext, plans: readonly NamePlan[], tones: Schem
     ctx.font = chipFont(plan.chipPx);
     let x = plan.x - plan.chipsWidth / 2;
     for (const chip of plan.chips) {
+      if (vetExternal('headsign', chip.text, 'row') === null) continue;
       roundRectPath(ctx, x, plan.chipY - plan.chipHeight / 2, chip.w, plan.chipHeight, CHIP_RADIUS_PX * density);
       ctx.fillStyle = chip.colour;
       ctx.fill();

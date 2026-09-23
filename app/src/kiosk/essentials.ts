@@ -13,6 +13,9 @@ import { dataNumber, dataText } from '../panels/panel';
 import { fmtTemp } from './format';
 import { activeWarnings, cleanCondition, closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
 import type { KioskStrings } from './strings';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+import { externalHtml, optionalExternal } from './external';
+import { escapeHtml } from '../ui/dom/escape';
 
 /** Never more than this many routes on the board: the wall-of-text bug of
  *  12 September had every route in the city on one row. */
@@ -24,6 +27,12 @@ export interface EssentialsRow {
   value: string;
   detail?: string;
   attribution?: string;
+}
+
+/** The card boundary also accepts direct callers, never unchecked field text. */
+export function essentialsMarkup(rows: readonly EssentialsRow[]): string {
+  return rows.filter(row => vetExternal('title', row.value, 'row') !== null && optionalExternal('summary', row.detail))
+    .map(row => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${externalHtml('title', row.value)}</p>${row.detail ? `<p class="k-ess-detail">${externalHtml('summary', row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${externalHtml('summary', row.attribution)}</p>` : ''}</div>`).join('');
 }
 
 export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, strings: KioskStrings, locale: string, stop: ScreenStop | null, now: number): EssentialsRow[] {
@@ -80,7 +89,7 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
       id: 'weather',
       label: strings.basics.weather,
       value: `${temp === null ? i18n.t('common.unavailable') : fmtTemp(locale, temp)}${staleMark(weatherSnap)}`,
-      detail: cleanCondition(dataText(observation, 'weather')) || undefined,
+      detail: cleanCondition(vetExternal('summary', dataText(observation, 'weather'), 'row') ?? '') || undefined,
       attribution: fillAttribution(weatherSnap.attribution, weatherSnap, observation),
     });
   }
