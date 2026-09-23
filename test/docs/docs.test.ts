@@ -45,6 +45,22 @@ describe('docs/izvori.md', () => {
   });
 });
 
+describe('the rail graph sentences (T-rail, D3 read-through)', () => {
+  const izvori = read('docs/izvori.md');
+  const arh = read('docs/arhitektura.md');
+  it('count the network in the right grammatical number', () => {
+    expect(izvori).toContain('(tri čvora, 345 bridova)');
+    expect(izvori).toContain('154 linije, 345 bridova, 591 323 bajta.');
+    expect(izvori).not.toMatch(/345 brida|591 323 bajtova/);
+  });
+  it('name line 1 and the last platform instead of a pronoun standing for them', () => {
+    expect(izvori).toContain('bez kojeg se staze linije 1 nisu mogle provesti do Zapadnog kolodvora');
+    expect(arh).toContain('bez kojeg se sintetičke staze linije 1 nisu mogle provesti do Zapadnog kolodvora');
+    expect(arh).toContain('reže se, kao i petlja, 70 m iza završnog perona.');
+    for (const doc of [izvori, arh]) expect(doc).not.toMatch(/njezine (sintetičke )?staze|70 m iza njega/);
+  });
+});
+
 describe('docs/kiosk.md', () => {
   const kiosk = read('docs/kiosk.md');
   it('documents the actual self-service journey and supported network rule', () => {

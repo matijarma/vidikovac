@@ -288,6 +288,17 @@ describe('an arrival time is never bare (WP5)', () => {
   });
 });
 
+describe('the end of a session clears the content (WP4 step 11, D3 read-through)', () => {
+  it('the landing story and the expired capture never promise a snapshot that stays', () => {
+    for (const [name, catalogue, promise] of [['hr', HR, /snimk|zamrz|izvoz/i], ['en', EN, /snapshot|frozen|export/i]] as const) {
+      for (const key of ['landing.story.leaveBody', 'landing.alt.frozen']) expect(leaf(catalogue, key), `${key} (${name})`).not.toMatch(promise);
+    }
+    const html = read('app/index.html');
+    expect(html).not.toContain('označena snimka');
+    expect(html).toContain(`alt="${leaf(HR, 'landing.alt.frozen')}" data-capture-alt="frozen"`);
+  });
+});
+
 describe('leaves', () => {
   it('no leaf is empty in either catalogue and no leaf keeps a raw dotted key as its text', () => {
     for (const [name, catalogue] of [['hr', HR], ['en', EN]] as const) {

@@ -664,7 +664,7 @@
       "transport": "Transport: ZET vehicle map, route and stop search, and route status.",
       "events": "Events on a phone: dated listings with venue, category and source.",
       "peer": "Another person’s phone in its own five-minute session.",
-      "frozen": "An expired session: a clearly labelled snapshot stays on the phone."
+      "frozen": "An expired session: no content is left on the phone, only a button to scan again and Safety."
     },
     "story": {
       "label": "From a screen to an encounter",
@@ -680,7 +680,7 @@
       "shareBody": "The person next to you scans your code and gets five minutes of their own. Your time stays the same. A small reason to meet.",
       "shareNote": "Five minutes for another person, once.",
       "leaveTitle": "Move on.",
-      "leaveBody": "Ten minutes later, refreshing stops. What you’re reading remains as a labelled snapshot, with sources and export options. Nothing calls you back.",
+      "leaveBody": "Ten minutes later, the content clears from your phone. What remains is a button to scan again and Safety at /hitno. Nothing calls you back.",
       "leaveNote": "The city is waiting.",
       "safety": "Safety is always open, without a code or a time limit."
     },

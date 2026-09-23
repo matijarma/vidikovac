@@ -9,7 +9,7 @@ import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
 import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
-import { closureDetailMarkup, stopDetailMarkup } from '../../app/src/transport/view';
+import { closureDetailMarkup, departureRow, stopDetailMarkup } from '../../app/src/transport/view';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
@@ -164,6 +164,17 @@ describe('the stop sheet says what comes next, first', () => {
     expect(plan).toContain('data-live="false"');
     expect(plan).not.toContain('po redu vožnje');
     expect(plan).not.toContain('class="t-live"');
+  });
+
+  it('every departure row names its kind for the probe itself (§15.6 `[data-kind=departure]`), on Sada, in the sheet and under "Vozni red"', () => {
+    const one = departureRow(i18n, row(), () => 'tram');
+    expect(one.startsWith('<li class="sada-departure" data-kind="departure" ')).toBe(true);
+    expect(one.split('data-kind="departure"')).toHaveLength(2);
+    const trips = Array.from({ length: 5 }, (_, i) => row({ tripId: `k${i}`, atMs: NOW + (i + 1) * 5 * 60_000 }));
+    const html = stop(trips);
+    const rows = html.match(/<li class="sada-departure"[^>]*>/g) ?? [];
+    expect(rows).toHaveLength(5);
+    for (const li of rows) expect(li).toContain(' data-kind="departure" ');
   });
 
   it('leads with the three departures Sada shows, then "Vozni red" with the rest to the twelfth, then the note once', () => {

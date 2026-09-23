@@ -1537,6 +1537,80 @@ describe('selection and status', () => {
   });
 });
 
+// The D3 browser gate (companion-phone.spec:282): at Karta's cold frame on the phone (390 x 844, zoom 12.70) the
+// tram cluster "12·14·17" stands on the ring of the place's own stop, 106_1, where Karta frames the place, and a
+// tap on the ring zoomed into the cluster (12.70 to 16.42) instead of opening the stop's board. The scene's
+// geometry, in CSS px on the map, with a stand-in that answers queryRenderedFeatures by box intersection.
+describe('a tap on the place’s own stop ring under a pill (D3 gate, companion-phone:282)', () => {
+  interface Box { x0: number; y0: number; x1: number; y1: number }
+  /** The screen-stop circle: 7 px and its 2 px halo (overlays.ts LAYERS.screenStop), at the uncovered map's middle. */
+  const RING = { x: 195, y: 250, r: 9 };
+  const RING_BOX: Box = { x0: RING.x - RING.r, y0: RING.y - RING.r, x1: RING.x + RING.r, y1: RING.y + RING.r };
+  /** The three-member cluster pill, a little off the ring's centre and much wider than it. */
+  const PILL: Box = { x0: 165, y0: 238, x1: 229, y1: 262 };
+  const JELACIC = 'Trg bana J. Jelačića';
+  const CLUSTER = { id: 'cluster:v12,v14,v17', cluster: true, n: 3, ids: ['v12', 'v14', 'v17'], short: '12·14·17' };
+  const member = (id: string): Drawn => ({ id, type: 0, p: toPlane(15.9772, 45.8131), heading: null, speed: 0, confidence: 1 }) as unknown as Drawn;
+
+  function scene(features: { layer: string; box: Box; properties: Record<string, unknown> }[]) {
+    const listeners = new Map<string, (event: { point?: { x: number; y: number } }) => void>();
+    const chosen: (MapSelection | null)[] = [];
+    const fits: unknown[] = [];
+    const m: mapPointer.PointerMap = {
+      on: (type, listener) => { listeners.set(type, listener); },
+      getCanvas: () => document.createElement('canvas'),
+      getZoom: () => 12.7,
+      queryRenderedFeatures: (geometry, options) => {
+        const [[x0, y0], [x1, y1]] = geometry as [[number, number], [number, number]];
+        return features
+          .filter((f) => (!options?.layers || options.layers.includes(f.layer)) && f.box.x0 <= x1 && f.box.x1 >= x0 && f.box.y0 <= y1 && f.box.y1 >= y0)
+          .map((f) => ({ properties: f.properties }));
+      },
+    };
+    mapPointer.bindCityMapPointer(m, overlays, {
+      container: document.createElement('div'),
+      styled: () => true,
+      hitTolerance: () => 22, // the phone's (workspace.ts hitTolerancePx, handheld)
+      closuresVisible: () => false,
+      basemap: () => [],
+      siblingPlatforms: (name) => (name === JELACIC ? ['106_1', '106_2', '106_3'] : undefined),
+      drawn: () => CLUSTER.ids.map(member),
+      fitCoordinates: (coords, maxZoom) => { fits.push([coords.length, maxZoom]); },
+      selection: () => null,
+      choose: (next) => { chosen.push(next); },
+    });
+    return { tap: (x: number, y: number) => listeners.get('click')!({ point: { x, y } }), chosen, fits };
+  }
+  const ring = { layer: overlays.LAYERS.screenStop, box: RING_BOX, properties: { id: '106_1', name: JELACIC } };
+  const platform = { layer: overlays.LAYERS.stops, box: RING_BOX, properties: { id: '106_1', name: JELACIC } };
+  const pill = { layer: overlays.LAYERS.vehicles, box: PILL, properties: CLUSTER };
+
+  it('opens the place’s own stop when the tap lands within the ring’s tolerance, though the cluster pill covers it', () => {
+    const s = scene([ring, platform, pill]);
+    s.tap(RING.x, RING.y);
+    expect(s.chosen).toEqual([{ kind: 'stop', id: '106_1', ids: ['106_1', '106_2', '106_3'] }]);
+    expect(s.fits).toEqual([]);
+    // A single pill standing on the ring yields to it the same way.
+    const one = scene([ring, platform, { layer: overlays.LAYERS.vehicles, box: PILL, properties: { id: 'v12', short: '12' } }]);
+    one.tap(RING.x + 20, RING.y);
+    expect(one.chosen).toEqual([{ kind: 'stop', id: '106_1', ids: ['106_1', '106_2', '106_3'] }]);
+  });
+
+  it('keeps today’s order everywhere else: the pill’s far end, beyond the ring’s tolerance, still opens the cluster', () => {
+    const s = scene([ring, platform, pill]);
+    s.tap(PILL.x1 - 1, RING.y); // 33 px from the ring's centre: the 22 px box misses the 9 px ring
+    expect(s.chosen).toEqual([]);
+    expect(s.fits).toEqual([[3, CLUSTER_ZOOM_IN_UNTIL]]);
+  });
+
+  it('gives any other stop under a pill to the pill, as before', () => {
+    const s = scene([{ ...platform, properties: { id: '1_21', name: 'Kvaternikov trg' } }, pill]);
+    s.tap(RING.x, RING.y);
+    expect(s.chosen).toEqual([]);
+    expect(s.fits).toEqual([[3, CLUSTER_ZOOM_IN_UNTIL]]);
+  });
+});
+
 // Ruling 30. The whole-city window names interchanges, not the busiest
 // corners: route count put Elka (3 trams among 11 routes) and Savski
 // gaj-rotor (3 among 19) on the picture and left Trg bana Jelačića, Glavni
