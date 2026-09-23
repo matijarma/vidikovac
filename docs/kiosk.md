@@ -43,7 +43,7 @@ rute `/api/admin/*` i `/stats`.
 2. U polje **Adresa ili stajalište** upisati ulicu ili ime stajališta, ili
    polje ostaviti prazno. Već nakon dva slova polje predlaže tramvajska i
    autobusna stajališta te ulice; duga ulica nudi se po dijelovima, uz
-   stajališta na njoj. Upisani kućni broj ostaje zapisan kao tekst, jer
+   stajališta te ulice. Upisani kućni broj ostaje zapisan kao tekst, jer
    izvanmrežni popis ulica (`/data/streets-geo.json`, podaci OpenStreetMap,
    licenca ODbL 1.0) nema kućnih brojeva. Odabrano stajalište postaje mjesto
    zaslona. Kad je odabrana ulica, mjesto postaje najbliže tramvajsko
