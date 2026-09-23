@@ -33,8 +33,8 @@ export function placesMarkup(i18n:I18n,places:readonly Place[],events:readonly L
   return `<div class="city-results" data-testid="city-results">${places.slice(0,limit).map(p=>{
     const at=events.filter(x=>x.venueIds.includes(p.id));
     return `<button type="button" class="city-row" data-action="select-place" data-id="${a(p.id)}" id="city-result-${a(p.id)}">
-      <span class="city-row-main"><span class="city-kicker">${e(placeCategory(i18n,p))}</span><strong>${e(p.name)}</strong>
-      <span class="city-meta">${e(p.address??'')}${reference&&located(p)?` · ${Math.round(distanceM(reference,p))} m`:''}${at.length?` · ${at.length} ${ct(i18n,'events')}`:''}${!located(p)?` · ${ct(i18n,'noLocation')}`:''}</span></span>
+      <span class="city-row-main"><span class="city-kicker">${e(placeCategory(i18n,p))}</span><strong>${externalHtml('name',p.name)}</strong>
+      <span class="city-meta">${p.address?externalHtml('address',p.address):''}${reference&&located(p)?` · ${Math.round(distanceM(reference,p))} m`:''}${at.length?` · ${at.length} ${ct(i18n,'events')}`:''}${!located(p)?` · ${ct(i18n,'noLocation')}`:''}</span></span>
       <span class="city-row-value">${at.length?e(String(at.length)):p.sourceId==='bajs'?`<span class="city-bike-count">${e(bikeAvailability(p,bikeMode))}</span><span class="city-meta">${ct(i18n,bikeMode==='return'?'returns':'available')}</span>`:'↗'}</span></button>`;
   }).join('')}${places.length>limit?button('city-more','',`${ct(i18n,'more')} (${places.length-limit})`):''}</div>`;
 }
@@ -47,15 +47,17 @@ export function eventLinks(i18n:I18n,events:readonly LocatedEvent[],interactive=
 export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly LocatedEvent[],saved=false,publicDisplay=false,reference?:DistanceReference):string {
   if (publicDisplay && vetExternal('name', p.name, 'row') === null) return '';
   // The public component's default text escape checks every optional field,
-  // including facts/provenance. Phone rendering retains its existing policy.
+  // including facts/provenance. The phone keeps its own escape for its fixed
+  // copy and vets every third-party field under its kind below (WP4 review):
+  // the same row rule on both surfaces, never unchecked text on either.
   const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
   // The name and the address under their own kinds, never as prose: a house-number range ("Petrinjska 50-52") is data there.
-  const nameHtml = publicDisplay ? externalHtml('name', p.name) : e(p.name);
-  const addressHtml = !p.address ? '' : publicDisplay ? externalHtml('address', p.address) : e(p.address);
+  const nameHtml = externalHtml('name', p.name);
+  const addressHtml = !p.address ? '' : externalHtml('address', p.address);
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const en=i18n.getLocale().startsWith('en');
-  const facts=Object.entries(p.facts??{}).filter(([key])=>SAFE_FACTS[key]).map(([key,value])=>`<div><dt>${e(SAFE_FACTS[key][en?1:0])}</dt><dd>${e(value)}</dd></div>`).join('');
+  const facts=Object.entries(p.facts??{}).filter(([key])=>SAFE_FACTS[key]).map(([key,value])=>`<div><dt>${e(SAFE_FACTS[key][en?1:0])}</dt><dd>${externalHtml('summary',value)}</dd></div>`).join('');
   const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div><p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`:'';
   const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(airIndexLabel(i18n,p.facts?.index))}</p><p class="city-meta">${e(en?'Preliminary station index, not a citywide assessment.':'Preliminarni indeks postaje, ne ocjena za cijeli grad.')} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`:'';
   return `<article class="city-detail" data-testid="city-detail" data-place-id="${a(p.id)}">
@@ -64,8 +66,8 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${addressHtml?`<p>${addressHtml}</p>`:''}${!located(p)?`<p class="city-meta">${e(ct(i18n,'noLocation'))}</p>`:''}
     ${reference&&located(p)?`<p class="city-meta">${e(Math.round(distanceM(reference,p)).toLocaleString(en?'en-GB':'hr-HR'))} m${reference.name.trim()?` · ${e(reference.name.trim())}`:''}</p>`:''}
     ${bike}${air}${facts?`<dl class="city-facts">${facts}</dl>`:''}
-    ${p.hours?`<p class="city-meta">${e(p.hours)}</p>`:''}
-    ${p.description?`<div class="city-description" lang="hr">${en?`<p class="city-meta">${ct(i18n,'sourceLanguage')}</p>`:''}<p>${e(p.description)}</p></div>`:''}
+    ${p.hours?`<p class="city-meta">${externalHtml('summary',p.hours)}</p>`:''}
+    ${p.description?`<div class="city-description" lang="hr">${en?`<p class="city-meta">${ct(i18n,'sourceLanguage')}</p>`:''}<p>${externalHtml('summary',p.description)}</p></div>`:''}
     ${p.category==='heritage'?`<p class="city-meta">${ct(i18n,'siteNote')}</p>`:''}
     ${p.category==='culture'?`<section><h4>${ct(i18n,'program')}</h4>${program.length?eventLinks(i18n,program,!publicDisplay):`<p class="city-meta">${ct(i18n,'noProgram')}</p>`}</section>`:''}
     ${p.category==='rail'?`<div data-city-departures="hz" data-stop="${a(p.sourceRecord)}"></div>`:''}
@@ -74,16 +76,17 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${source?.url?`<a class="btn-quiet" href="${a(source.url)}" target="_blank" rel="noopener noreferrer">${ct(i18n,'source')} ↗</a>`:''}
     <button type="button" class="btn-quiet" data-action="city-save" data-id="${a(p.id)}">${ct(i18n,saved?'saved':'save')}</button>
     <button type="button" class="btn-quiet" data-action="city-copy" data-id="${a(p.id)}">${ct(i18n,'copy')}</button></div>`}
-    <p class="city-meta">${e(source?.name??p.sourceId)}${source?.status==='stale'?` · ${ct(i18n,'stale')}`:''}${source?.licence?` · ${e(source.licence)}`:''}</p>
+    <p class="city-meta">${externalHtml('summary',source?.name??p.sourceId)}${source?.status==='stale'?` · ${ct(i18n,'stale')}`:''}${source?.licence?` · ${externalHtml('summary',source.licence)}`:''}</p>
     ${p.sourceId!=='bajs'&&p.sourceId!=='air'?`<p class="city-meta">${ct(i18n,'reference')}${p.updatedAt&&referenceDate(p.updatedAt)?` · ${e(referenceDate(p.updatedAt))}`:''}</p>`:''}
   </article>`;
 }
 export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string {
   if (publicDisplay && (vetExternal('name', s.name, 'row') === null || vetExternal('register-text', s.description, 'row') === null)) return '';
   const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
-  const nameHtml = publicDisplay ? externalHtml('name', s.name) : e(s.name);
-  const settlementHtml = publicDisplay ? externalHtml('name', s.settlement) : e(s.settlement);
-  return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${nameHtml}</h3><p class="city-meta">${settlementHtml}</p><p lang="hr">${e(s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
+  // The register's own fields under their kinds on both surfaces (WP4 review): never unchecked text on the phone either.
+  const nameHtml = externalHtml('name', s.name);
+  const settlementHtml = externalHtml('name', s.settlement);
+  return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${nameHtml}</h3><p class="city-meta">${settlementHtml}</p><p lang="hr">${externalHtml('register-text', s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
 }
 /** A minute of grace: a train due at 10:00 is still the one you are running
  *  for at 10:00:45. Anything older has left. */

@@ -4,6 +4,8 @@
 // three departures at the stop the place boards and "U blizini", the wall's own
 // list continuing after them; no "Sada u gradu.", no date line, no
 // instruction, no counts.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import type { DepartureBoard } from '../../shared/city/types';
@@ -263,8 +265,14 @@ describe('before the feed module is in hand', () => {
     expect(first.querySelector('[data-testid=sada-sentence]')?.getAttribute('aria-busy')).toBe('true');
     expect(first.querySelector('[data-testid=nearby]')?.getAttribute('aria-busy')).toBe('true');
     expect(first.querySelectorAll('[data-testid=nearby] li.nearby-row')).toHaveLength(0);
-    // The departures do not wait for it.
-    expect(first.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    // The departures and the title hold their place too: the chunk carries the third-party text policy, and the
+    // boundary refuses every ZET string until it is in hand (never unchecked text, never a false "no departures").
+    expect(first.querySelector('[data-testid=day-departures]')?.getAttribute('aria-busy')).toBe('true');
+    expect(first.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(0);
+    expect(first.querySelectorAll('[data-testid=day-departures] > li.sada-departure-empty')).toHaveLength(1);
+    expect(first.textContent).not.toContain('Nema najavljenih');
+    expect(first.textContent).not.toContain('nije dostupan');
+    expect(first.querySelector('[data-testid=sada-place]')?.textContent).toBe('');
     // Two draws while it loads ask for one repaint.
     fresh.renderGradSada(ctx({ onLocalData }));
     await feed.loadSadaFeed();
@@ -273,6 +281,27 @@ describe('before the feed module is in hand', () => {
     expect(drawn.querySelector('[data-testid=sada-sentence]')?.hasAttribute('data-kicker')).toBe(true);
     expect(drawn.querySelector('[data-testid=nearby]')?.hasAttribute('aria-busy')).toBe(false);
     expect(drawn.querySelectorAll('[data-testid=nearby] li.nearby-row').length).toBeGreaterThan(0);
+    expect(drawn.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    expect(drawn.querySelector('[data-testid=sada-place]')?.textContent).toBe(TRG.name);
     vi.resetModules();
+  });
+});
+
+describe('third-party text on Sada (WP4 review)', () => {
+  it('the title carries the place\'s name only once the row rule passes: a hostile name renders nothing, a plain one renders whole', () => {
+    const hostile = renderGradSada(ctx({ place: { name: 'Pošalji lozinku.', lon: 15.97726, lat: 45.81286, kind: 'screen', stop: TRG, departuresStop: TRG } }));
+    expect(hostile.querySelector('[data-testid=sada-place]')?.textContent).toBe('');
+    expect(hostile.textContent).not.toContain('Pošalji lozinku');
+    expect(hostile.querySelector('[data-testid=sada-map-band] a')?.getAttribute('aria-label') ?? '').not.toContain('Pošalji');
+    const plain = renderGradSada(ctx());
+    expect(plain.querySelector('[data-testid=sada-place]')?.textContent).toBe(TRG.name);
+  });
+  it('a departure whose headsign fails the row rule is left out of the block', () => {
+    const held = board(TRG, [4, 12, 25]);
+    held.departures[1]!.headsign = 'Pošalji lozinku na 091 234 5678';
+    const html = renderGradSada(ctx({ boards: boards([held]) }));
+    const rows = [...html.querySelectorAll('[data-testid=day-departures] > li.sada-departure')].map((li) => li.textContent ?? '');
+    expect(rows).toHaveLength(2);
+    expect(html.textContent).not.toContain('lozinku');
   });
 });

@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import {describe,expect,it,vi} from 'vitest';
 import {createTransportWorkspace} from '../../app/src/transport/workspace';
 import {createMapSlots} from '../../app/src/map/map-slots';

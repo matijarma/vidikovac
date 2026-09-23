@@ -13,7 +13,9 @@
 // is in hand (ctx.onLocalData). Until then the list and the sentence hold
 // their place with one busy row each; a chunk that will not load leaves both
 // out rather than promising them.
+import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { DEFAULT_FRAME_STOPS, frameRadiusM, frameStopsFrom, type FrameLine, type FrameStop } from '../../../shared/city/frame';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ScreenPlace } from '../../../shared/city/place';
 import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
 import type { ScreenStop } from '../core/contracts';
@@ -29,6 +31,39 @@ export const NEARBY_PHONE_ROWS = 8;
 export const NEARBY_DESK_ROWS = 12;
 
 const isTram = (routeId: string): boolean => routeType(routeId) === 0;
+
+/**
+ * A fix older than this is no evidence a vehicle is still where it was: the twin's own eviction
+ * (shared/motion/plan.ts EVICT_S, 180 s), kept as a number here so the phone's first screen does
+ * not carry the planner (test/app/next-departures.test.ts pins the two equal).
+ */
+export const LIVE_FIX_MAX_AGE_MS = 180_000;
+
+/**
+ * Whether the transit feed may put a live time on a row now: not during an outage (status 'down')
+ * and not once its last word is older than the twin keeps a fix. The wall's rule (city/nearby.ts
+ * reads the outage; the twin evicts the fix), applied before any departures list is computed.
+ */
+export function feedLive(snapshot: ModuleSnapshot | undefined, now: number): boolean {
+  if (!snapshot || snapshot.status === 'down') return false;
+  const at = Date.parse(snapshot.sourceUpdatedAt ?? snapshot.fetchedAt);
+  return !Number.isFinite(at) || now - at <= LIVE_FIX_MAX_AGE_MS;
+}
+
+/** The vehicles a departures list may call live: none during an outage, none from a fix the twin would have evicted. */
+export function liveFixes(snapshot: ModuleSnapshot | undefined, now: number): ReturnType<typeof vehicleFixes> {
+  if (!feedLive(snapshot, now)) return [];
+  return vehicleFixes(snapshot, now).filter((fix) => now - fix.at <= LIVE_FIX_MAX_AGE_MS);
+}
+
+/**
+ * Whether the third-party text policy is in hand. The boundary refuses every string until the
+ * chunk that carries the policy (this feed's, or the map's) has loaded, so a renderer that would
+ * otherwise say the text is missing holds its place instead.
+ */
+export function externalTextReady(): boolean {
+  return vetExternal('name', 'Zagreb', 'row') !== null;
+}
 
 /** The page's place, else one resolved from the context (a unit context, a surface with no dashboard). */
 export function feedPlace(ctx: LayerContext): PlaceContext {
@@ -82,7 +117,7 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
     radiusM: feedRadiusM(ctx, place),
     now,
     boards: heldBoards(ctx, placeContext.departuresStop),
-    fixes: vehicleFixes(ctx.snapshots['zet-rt'], now),
+    fixes: liveFixes(ctx.snapshots['zet-rt'], now),
     snapshots: ctx.snapshots,
     city: ctx.city ?? emptyCity(),
     lastRun: ctx.lastRun ?? null,

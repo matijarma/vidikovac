@@ -12,12 +12,13 @@
 // below the fold and the stop's sheet carries arrivals.note once.
 import { arrivalsAt } from '../../../shared/city/arrivals';
 import type { DepartureBoard } from '../../../shared/city/types';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { LayerContext } from '../layers/types';
-import { vehicleFixes } from '../motion/fixes';
-import { platformIds } from '../kiosk/arrivals';
+import { platformIds, vettedArrival } from '../kiosk/arrivals';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { departureRow } from '../transport/view';
 import { escapeHtml as e, escapeAttribute as a } from '../ui/dom/escape';
+import { externalTextReady, liveFixes } from './feed';
 import { resolvePlace, type PlaceContext } from './place';
 
 export { departureRow };
@@ -54,9 +55,16 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
     const ids = platformIds(stop, ctx.stops);
     if (!frozen) ctx.boards?.ensure('zet', ids, ctx.onLocalData);
     const held = ids.map((id) => ctx.boards?.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
-    const answer = arrivalsAt(held, vehicleFixes(ctx.snapshots['zet-rt'], ctx.now), ctx.now, { stopIds: ids, rows: opts.rows ?? DEPARTURE_ROWS });
-    if (answer.rows.length) {
-      body = answer.rows.map((row) => departureRow(i18n, row, kindOfRoute, frozenAt)).join('');
+    // Live only while the feed is (city/feed.ts liveFixes): no live time during an outage or off a stale fix.
+    const answer = arrivalsAt(held, liveFixes(ctx.snapshots['zet-rt'], ctx.now), ctx.now, { stopIds: ids, rows: opts.rows ?? DEPARTURE_ROWS });
+    // Every row's line and headsign are ZET's text (kiosk/arrivals.ts vettedArrival): a row that fails the check is
+    // left out; until the policy is in hand the rows hold their place rather than say the timetable is missing.
+    const rows = answer.rows.filter(vettedArrival);
+    if (rows.length) {
+      body = rows.map((row) => departureRow(i18n, row, kindOfRoute, frozenAt)).join('');
+    } else if (answer.rows.length) {
+      busy = !frozen && !externalTextReady();
+      body = emptyRow(busy ? null : i18n.t(frozen ? 'arrivals.frozen' : 'arrivals.down'));
     } else if (answer.status === 'none') {
       // No board in hand: on its way while live, never coming once frozen.
       busy = !frozen;
@@ -65,9 +73,11 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
       body = emptyRow(i18n.t(answer.status === 'down' ? 'arrivals.down' : 'arrivals.none'));
     }
   }
-  const label = stop ? i18n.t('sada.departuresAt', { stop: stop.name }) : i18n.t('arrivals.title');
-  const heading = opts.heading && stop && stop.name.trim() !== place.name.trim()
-    ? `<h3 class="sada-departures-title">${e(stop.name)}</h3>` : '';
+  // The stop's name is ZET's text too: vetted before it names the block or heads it.
+  const stopName = stop ? vetExternal('name', stop.name, 'row') : null;
+  const label = stopName !== null ? i18n.t('sada.departuresAt', { stop: stopName }) : i18n.t('arrivals.title');
+  const heading = opts.heading && stopName !== null && stopName.trim() !== place.name.trim()
+    ? `<h3 class="sada-departures-title">${e(stopName)}</h3>` : '';
   return `<section class="sada-departures" aria-label="${a(label)}">${heading}<ul class="sada-departure-list" data-testid="day-departures"${busy ? ' aria-busy="true"' : ''}>${body}</ul></section>`;
 }
 

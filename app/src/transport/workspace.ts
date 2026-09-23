@@ -58,6 +58,8 @@ import { routeType } from '../kiosk/stops';
 import { frameView } from '../map/frame';
 import { reconcile } from '../ui/dom/reconcile';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
+import { feedLive } from '../city/feed';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
 import type { StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
@@ -724,7 +726,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function nearbySheet(): [string, string] {
     const c = ctx();
     const list = nearbyList();
-    const peekHtml = `<strong>${esc(placeNow().name)}</strong>${list ? `<span class="t-peek-pill">${esc(list.pill)}</span>` : ''}`;
+    // The place's name is the catalogue's or the operator's text: vetted before the peek says it.
+    const peekHtml = `<strong>${esc(vetExternal('name', placeNow().name, 'row') ?? '')}</strong>${list ? `<span class="t-peek-pill">${esc(list.pill)}</span>` : ''}`;
     if (list) return [list.html, peekHtml];
     // The page has a list but not its rows yet (the selection code loads with its own chunk): one quiet line.
     return [c.nearby ? `<p class="t-empty" role="status" aria-busy="true" data-testid="nearby-pending">${esc(c.i18n.t('status.loading'))}</p>` : '', peekHtml];
@@ -767,8 +770,16 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // the 6 leaves from one side and the 11 from the other, and the rider
         // waiting here wants both. The merge itself is arrivalsAt's.
         ensureBoards('zet', group.ids);
-        const next = arrivalsAt(boardsFor('zet', group.ids), vehicles, c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS });
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, arrivalsStatus: next.status, frozenAt: c.frozenAt });
+        const held = boardsFor('zet', group.ids);
+        // Live only while the feed is (city/feed.ts feedLive, the wall's rule): no live time during an outage or once
+        // the feed's last word is older than the twin keeps a fix.
+        const live = feedLive(c.snapshots['zet-rt'], c.now) ? vehicles : [];
+        const next = arrivalsAt(held, live, c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS });
+        // "Vozni red" is the timetable: the same boards read without the fleet.
+        const timetable = arrivalsAt(held, [], c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS }).rows;
+        // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
+        const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt });
         return [html, `${tr(i18n, 'stop')} ${group.name}`];
       }
       case 'vehicle': {

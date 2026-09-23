@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -855,6 +857,44 @@ describe('what comes next at a stop', () => {
     const first = q('[data-testid=arrival-rows]');
     expect(q('[data-testid=stop-title]').compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(first.compareDocumentPosition(q('[data-testid=timetable-rows]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('puts no live time on a row while the feed is down or its last word is older than the twin keeps a fix, and none once the session flag says frozen (WP4 review)', () => {
+    const tracked = vehicle('vehicle:9', '6', 0, { tripId: 'trip-live', delaySeconds: 60 });
+    const stop = { id: '106_1', name: 'Črnomerec', lon: 15.87, lat: 45.82, routes: ['6', '11'] };
+    // The stop's board is already in the page's hands: the sheet draws its rows on the first render.
+    const held = { operator: 'zet', stopId: '106_1', stopName: stop.name, status: 'live', generatedAt: at(0), departures: [departure('trip-live', '6', 'Sopot', 4), departure('trip-plan', '11', 'Dubec', 26)] };
+    const cache = { ensure: vi.fn(), get: () => held, destroy: vi.fn() };
+    const open = (snapshots: LayerContext['snapshots'], session?: LayerContext['session']): HTMLElement => {
+      const { maps } = fakeMaps({ vehicles: [...VEHICLES, tracked], net: NET });
+      const { context } = ctx({ maps, snapshots, selection: { kind: 'stop', id: '106_1' }, stop });
+      context.boards = cache as never;
+      if (session) context.session = session;
+      render(context);
+      return q<HTMLElement>('[data-testid=stop-arrivals]');
+    };
+    const feed = { 'zet-rt': ZET, prometnice: PROMETNICE, dogadanja: DOGADANJA };
+    // Live feed, the vehicle carries the first trip: the live dot and its countdown.
+    const live = open(feed);
+    const first = live.querySelector<HTMLElement>('[data-testid=arrival-rows] li')!;
+    expect(first.dataset.live).toBe('true');
+    expect(text(first)).toContain('za 5 min');
+    // The feed is down: the same retained vehicle puts no live time on any row; the trip shows its timetable clock.
+    const down = open({ ...feed, 'zet-rt': { ...ZET, status: 'down' } });
+    expect(down.querySelectorAll('[data-live="true"], .t-live')).toHaveLength(0);
+    expect(down.textContent).not.toContain('uživo');
+    expect(down.textContent).not.toContain('za 5 min');
+    expect(down.querySelector('[data-testid=arrival-rows] li time')).not.toBeNull();
+    // The feed answers, but its last word is five minutes old: every fix has outlived the twin's eviction.
+    const stale = open({ ...feed, 'zet-rt': { ...ZET, fetchedAt: new Date(NOW - 5 * 60_000).toISOString(), sourceUpdatedAt: new Date(NOW - 5 * 60_000).toISOString() } });
+    expect(stale.querySelectorAll('[data-live="true"]')).toHaveLength(0);
+    // The session flag alone, with the rows still in hand: no row says live and nothing is asked for.
+    cache.ensure.mockClear();
+    const frozen = open(feed, { expiresAt: null, frozen: true });
+    expect(frozen.querySelectorAll('[data-testid=arrival-rows] li').length).toBeGreaterThan(0);
+    expect(frozen.querySelectorAll('[data-live="true"]')).toHaveLength(0);
+    expect(frozen.textContent).not.toContain('uživo');
+    expect(cache.ensure).not.toHaveBeenCalled();
   });
 
   it('says the timetable is unavailable when every platform is down, and never invents a row', async () => {

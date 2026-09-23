@@ -15,6 +15,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sentence';
 import { emptyCity } from '../../../shared/city/types';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { CURATED_WALL, curatedCityPoints } from '../city/curated';
 import { feedPlace, feedRadiusM, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
 import { departuresBlock } from '../city/next-departures';
@@ -77,7 +78,7 @@ function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLE
     renderer: 'map',
     className: 'map-canvas sada-map-canvas',
     testid: 'sada-map-canvas',
-    ariaLabel: ctx.i18n.t('sada.mapBand', { place: place.name }),
+    ariaLabel: ctx.i18n.t('sada.mapBand', { place: vetExternal('name', place.name, 'row') ?? '' }),
     points: [
       ...vehiclePoints(ctx.snapshots['zet-rt'], now),
       ...curatedCityPoints(ctx.city ?? emptyCity(), ctx.snapshots.dogadanja?.items ?? [], now, CURATED_WALL),
@@ -124,10 +125,13 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
       { cap: desk ? NEARBY_DESK_ROWS : NEARBY_PHONE_ROWS, id: 'sada' })
     : feed === 'loading' ? nearbyBusy(ctx) : '';
   const band = mapBand(ctx, place, input?.radiusM ?? feedRadiusM(ctx, nearbyPlace(place)));
+  // The place's name is the catalogue's or the operator's text: the title carries it only once the row check passes
+  // (the boundary refuses everything until the policy chunk, this feed's own, is in hand).
+  const name = vetExternal('name', place.name, 'row') ?? '';
   const section = createElementFromHTML(`<section class="layer ws ws-sada" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">`
-    + `<h2 class="layer-title sada-place" id="layer-title-grad-sada" tabindex="-1" data-testid="sada-place">${e(place.name)}</h2>`
+    + `<h2 class="layer-title sada-place" id="layer-title-grad-sada" tabindex="-1" data-testid="sada-place">${e(name)}</h2>`
     + sentenceMarkup(ctx, sentence)
-    + (band ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: place.name }))}"></a></div>` : '')
+    + (band ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
     + departuresBlock(ctx, place, { heading: true })
     + nearby
     + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])

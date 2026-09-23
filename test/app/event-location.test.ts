@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadSadaFeed } from '../../app/src/city/feed';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';

@@ -5,6 +5,8 @@
 // vocabularies while every test stayed green and the dashboard showed
 // "Nedostupno" over healthy data (final review, C1). Nothing here builds a
 // FeedItem by hand.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it } from 'vitest';
 import { MODULES, MODULE_IDS, OPEN_LICENCE, OPEN_MODULES, TEASER_MODULES, teaserSubset } from '../../worker/feed/registry';
 import { isOpenLicenceEvent } from '../../worker/feed/modules/dogadanja/licence';

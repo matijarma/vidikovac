@@ -3,6 +3,8 @@
 // the worker's string literals, and the delay words that stand beside a
 // `.line` badge. Canonical sentences live under `shared.*`; the dashboard
 // keys that say the same thing are pinned equal to them so they cannot drift.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

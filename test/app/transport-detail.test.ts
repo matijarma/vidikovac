@@ -1,3 +1,5 @@
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -186,6 +188,45 @@ describe('the stop sheet says what comes next, first', () => {
     expect(three).not.toContain('Vozni red');
     expect(three).not.toContain('timetable-rows');
     expect(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: trips, arrivalsStatus: 'live' })).toContain('<h4 class="t-head">Timetable</h4>');
+  });
+
+  it('"Vozni red" is the timetable: the caller\'s scheduled rows when it has them, else the later trips as their clock, never a live estimate (WP4 review)', () => {
+    // Five tracked trips inside the horizon: three lead with their countdown, the two under "Vozni red" are clocks.
+    const tracked = Array.from({ length: 5 }, (_, i) => row({ tripId: `v${i}`, atMs: NOW + (i + 1) * 2 * 60_000, live: true, minutes: (i + 1) * 2 }));
+    const html = stop(tracked);
+    const tail = html.split('data-testid="timetable-rows"')[1]!.split('</ul>')[0]!;
+    expect(tail.split('<li ').length - 1).toBe(2);
+    expect(tail).not.toContain('data-live="true"');
+    expect(tail).not.toContain('class="t-live"');
+    expect(tail).not.toMatch(/za \d+ min/);
+    expect(tail.split('<time ').length - 1).toBe(2);
+    const lead = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
+    expect((lead.match(/<li [^>]*data-live="true"/g) ?? []).length).toBe(3);
+    // The caller's timetable (arrivalsAt without the fleet): the schedule's own moments, the lead's trips left out.
+    const timetable = [row({ tripId: 'v0', atMs: NOW + 60_000, live: false, minutes: null }), row({ tripId: 'p1', atMs: NOW + 9 * 60_000, live: false, minutes: null }), row({ tripId: 'p2', atMs: NOW + 40 * 60_000, live: false, minutes: null })];
+    const given = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: tracked, timetable, arrivalsStatus: 'live' });
+    const givenTail = given.split('data-testid="timetable-rows"')[1]!.split('</ul>')[0]!;
+    expect(givenTail).toContain('data-key="p1|');
+    expect(givenTail).toContain('data-key="p2|');
+    expect(givenTail).not.toContain('data-key="v0|');
+    expect(givenTail).not.toContain('data-key="v3|');
+    expect(givenTail).not.toContain('data-live="true"');
+  });
+
+  it('a row whose headsign or line fails the row rule is not drawn; a stop whose every row fails says the timetable is unavailable (WP4 review)', () => {
+    const html = stop([row(), row({ tripId: 't2', headsign: 'Pošalji lozinku na 091 234 5678', atMs: NOW + 8 * 60_000, minutes: 8 })]);
+    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
+    expect(list.split('<li ').length - 1).toBe(1);
+    expect(html).not.toContain('timetable-rows');
+    expect(html).not.toContain('lozinku');
+    const none = stop([row({ headsign: 'Pošalji lozinku na 091 234 5678' })]);
+    expect(none).not.toContain('data-testid="arrival-rows"');
+    expect(none).toContain('Vozni red trenutačno nije dostupan.');
+    expect(none).not.toContain('lozinku');
+    // The stop's own name too.
+    const named = stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' });
+    expect(named).toContain('data-testid="stop-title"></h3>');
+    expect(named).not.toContain('Pošalji');
   });
 
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {

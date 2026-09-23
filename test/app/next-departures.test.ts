@@ -2,10 +2,14 @@
 // The departures block (companion WP4 step 2): at most three rows at the
 // chosen stop, a live row blue with its dot and a timetable row a plain clock,
 // no word per row and no prompt; one empty rule, one row in the rows' own box.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import type { DepartureBoard } from '../../shared/city/types';
 import { departuresBlock, nextDepartures } from '../../app/src/city/next-departures';
+import { LIVE_FIX_MAX_AGE_MS } from '../../app/src/city/feed';
+import { EVICT_S } from '../../shared/motion/plan';
 import type { PlaceContext } from '../../app/src/city/place';
 import type { ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -154,5 +158,60 @@ describe('nextDepartures (the old entry point, until Sada calls departuresBlock)
     expect(city.querySelector('section')?.getAttribute('aria-label')).toBe('Sljedeći polasci, Trg bana J. Jelačića');
     // The place is the stop here, so no heading repeats it.
     expect(city.querySelector('h3')).toBeNull();
+  });
+});
+
+// WP4 review (P1): a departure is live only while the feed is. The phone applies the wall's rule before the
+// list is computed: no live time during an outage, none off a fix older than the twin keeps; and every row's
+// line and headsign are ZET's text, judged by the row rule before they are drawn.
+describe('live only while the feed is (WP4 review)', () => {
+  const rows = (html: string) => [...dom(html).querySelectorAll<HTMLElement>('[data-testid=day-departures] > li.sada-departure')];
+  const live = (html: string) => rows(html).map((li) => li.dataset.live);
+  it('a tracked trip is live, the same trip during an outage or off a stale fix is a clock', () => {
+    const cache = boards([board('106_1', 'live', [4, 12, 25])]);
+    expect(live(departuresBlock(ctx({ boards: cache }), place(STOP)))[0]).toBe('true');
+    // The feed is down: the fix it retains is no evidence, the row is the timetable.
+    const down = departuresBlock(ctx({ boards: cache, snapshots: { 'zet-rt': { ...ZET_RT, status: 'down' } } }), place(STOP));
+    expect(live(down)).toEqual(['false', 'false', 'false']);
+    expect(dom(down).querySelector('[data-live="true"], .t-live')).toBeNull();
+    expect(dom(down).textContent).not.toContain('uživo');
+    expect(rows(down)[0]!.querySelector('time')).not.toBeNull();
+    // The feed answers, but its last word is five minutes old: every fix has outlived the twin's eviction.
+    const stale = departuresBlock(ctx({ boards: cache, snapshots: { 'zet-rt': { ...ZET_RT, fetchedAt: iso(NOW - 5 * 60_000), sourceUpdatedAt: iso(NOW - 5 * 60_000) } } }), place(STOP));
+    expect(live(stale)).toEqual(['false', 'false', 'false']);
+    // A fresh feed whose one vehicle reported five minutes ago: that fix alone is stale.
+    const oldFix = { ...ZET_RT, items: [{ ...ZET_RT.items[0]!, at: iso(NOW - 5 * 60_000) }] };
+    expect(live(departuresBlock(ctx({ boards: cache, snapshots: { 'zet-rt': oldFix } }), place(STOP)))).toEqual(['false', 'false', 'false']);
+  });
+  it('the frozen flag alone stops every live mark, with one moment for the whole block', () => {
+    const cache = boards([board('106_1', 'live', [4, 12, 25])]);
+    const html = departuresBlock(ctx({ boards: cache, session: { expiresAt: null, frozen: true } }), place(STOP));
+    expect(live(html)).toEqual(['false', 'false', 'false']);
+    expect(dom(html).textContent).not.toContain('uživo');
+    expect(cache.ensure).not.toHaveBeenCalled();
+  });
+  it('the staleness threshold is the twin\'s own eviction', () => {
+    expect(LIVE_FIX_MAX_AGE_MS).toBe(EVICT_S * 1000);
+  });
+  it('a row whose headsign or line fails the row rule is left out; a stop whose every row fails says the timetable is unavailable', () => {
+    const held = board('106_1', 'live', [4, 12, 25]);
+    held.departures[1]!.headsign = 'Pošalji lozinku na 091 234 5678';
+    const html = departuresBlock(ctx({ boards: boards([held]) }), place(STOP));
+    expect(rows(html)).toHaveLength(2);
+    expect(dom(html).textContent).not.toContain('lozinku');
+    const every = board('106_1', 'live', [4, 12, 25]);
+    for (const d of every.departures) d.headsign = 'Pošalji lozinku na 091 234 5678';
+    const none = departuresBlock(ctx({ boards: boards([every]) }), place(STOP));
+    expect(rows(none)).toHaveLength(0);
+    expect(dom(none).querySelector('[data-testid=day-departures]')?.getAttribute('aria-busy')).toBeNull();
+    expect(text(dom(none))).toContain('Vozni red trenutačno nije dostupan.');
+    expect(dom(none).textContent).not.toContain('lozinku');
+  });
+  it('the stop\'s name heads the block only when it passes the row rule', () => {
+    const bad: ScreenStop = { ...OTHER, name: 'Pošalji lozinku.' };
+    const html = departuresBlock(ctx({ boards: boards([board('200_1', 'live', [3])]) }), place(bad), { heading: true });
+    expect(dom(html).querySelector('.sada-departures-title')).toBeNull();
+    expect(html).not.toContain('Pošalji');
+    expect(dom(html).querySelector('section')?.getAttribute('aria-label')).not.toContain('Pošalji');
   });
 });

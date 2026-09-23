@@ -17,6 +17,8 @@
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import type { FeedItem } from '../../../worker/feed/schema';
 import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import { externalTextReady } from '../city/feed';
 import type { CastState } from '../core/contracts';
 import type { SavedRef } from '../core/saved-store';
 import { lineBadge, signRow } from '../experience/blocks';
@@ -25,6 +27,7 @@ import { delayTone, type DelayTone } from '../experience/delay';
 import { castReasonText } from '../experience/presentation';
 import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
+import { vettedArrival } from '../kiosk/arrivals';
 import { delayWord } from '../layers/shared';
 import { vehicleKind, type MapStatus, type VehicleInfo } from '../map/city-map';
 import { dataText } from '../panels/panel';
@@ -182,9 +185,9 @@ export function vehicleCountGlyph(i18n: I18n, type: number, count: number): stri
   return `<span class="tl-context" role="img" aria-label="${attr(sentence)}">${iconMarkup(icon)}<span class="tl-ctx-text" aria-hidden="true">${count}</span></span>`;
 }
 
-/** One named stop as a row: its routes as badges, its name, its platform count. */
+/** One named stop as a row: its routes as badges, its name (ZET's text, vetted), its platform count. */
 export function stopRowInner(i18n: I18n, stop: StopGroup, routes: readonly RouteEntry[]): string {
-  return cells(badgeList(routes), esc(stop.name), esc(trPlural(i18n, 'platforms', stop.ids.length)));
+  return cells(badgeList(routes), esc(vetExternal('name', stop.name, 'row') ?? ''), esc(trPlural(i18n, 'platforms', stop.ids.length)));
 }
 
 export interface ResultIds {
@@ -392,7 +395,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       : `<p class="t-empty" data-testid="route-no-vehicles">${esc(tr(i18n, 'noVehiclesNow'))}</p>`;
   // The sequence keeps its counter (map.css, a CSS counter on the row) in a dense 44 px row.
   const stopRows = d.stops
-    .map((s, i) => rowButton({ kind: 'stop', id: s.id, action: 'select-stop', dense: true, hidden: i >= STOP_ROWS && !d.stopsOpen, inner: cells('', esc(s.name), '') }))
+    .map((s, i) => rowButton({ kind: 'stop', id: s.id, action: 'select-stop', dense: true, hidden: i >= STOP_ROWS && !d.stopsOpen, inner: cells('', esc(vetExternal('name', s.name, 'row') ?? ''), '') }))
     .join('');
   const stopsFold = d.stops.length > STOP_ROWS ? foldButton(i18n, 'stops', d.stopsOpen, tr(i18n, 'allStops', { count: d.stops.length })) : '';
   const stops =
@@ -430,6 +433,11 @@ export interface StopDetailData {
    *  sheet never says "uživo" -- the live marker reads the shell's own snapshot
    *  sentence instead -- and never waits for a board that will not come. */
   frozenAt?: number;
+  /** "Vozni red": the timetable alone, the same boards read without the fleet
+   *  (arrivalsAt with no vehicles), so the tail under the three departures is
+   *  the schedule and never a live estimate. Absent, the later trips are shown
+   *  as their clock. */
+  timetable?: readonly ArrivalRow[];
 }
 
 /** The GTFS type behind an arrival row, read off the stop's own lines: the
@@ -469,9 +477,12 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
  * One departure, the same row on Sada and in the stop's sheet: the line badge,
  * the destination, the time (arrivalTime). `data-live` says whether a tracked
  * vehicle carries the trip right now; it reads "false" once the view is frozen,
- * like the time's own marker. `kindOf` gives the badge its mode's shape.
+ * like the time's own marker. `kindOf` gives the badge its mode's shape. The
+ * line and the headsign are ZET's text: a row that fails the row-surface check
+ * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
  */
 export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number): string {
+  if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
   return `<li class="sada-departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
 }
@@ -483,19 +494,32 @@ export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: stri
  *  the sheet under the stop's name with no heading of their own. */
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
-  const rows = (from: number, to: number): string => d.arrivals.slice(from, to).map((row) => departureRow(i18n, row, kindOf, d.frozenAt)).join('');
+  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt);
+  const key = (r: ArrivalRow): string => r.tripId || `${r.routeId}|${r.atMs}`;
+  // Every row's line and headsign are ZET's text: a row that fails the check is left out (departureRow draws none).
+  const vetted = d.arrivals.filter(vettedArrival);
+  const lead = vetted.slice(0, STOP_DEPARTURES_FIRST);
+  const leadKeys = new Set(lead.map(key));
+  // "Vozni red" is the timetable: the caller's scheduled rows when it has them, else the later trips shown as
+  // their clock; either way a plain grey <time>, never a live estimate.
+  const scheduled = (r: ArrivalRow): ArrivalRow => ({ ...r, live: false, minutes: null });
+  const tail = (d.timetable ? d.timetable.filter(vettedArrival).filter((r) => !leadKeys.has(key(r))) : vetted.slice(STOP_DEPARTURES_FIRST))
+    .slice(0, STOP_ARRIVAL_ROWS - STOP_DEPARTURES_FIRST).map(scheduled);
   // 'none' is "no board in hand", which live means "still on its way" and
   // frozen means "the session ended first, and none is coming": a frozen sheet
-  // that said "učitavanje" would say it for good.
-  const empty = d.arrivalsStatus === 'none'
-    ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
-    : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
-  const later = rows(STOP_DEPARTURES_FIRST, STOP_ARRIVAL_ROWS);
-  const timetable = later
-    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${later}</ul>`
+  // that said "učitavanje" would say it for good. Rows in hand that all failed
+  // the text check say the timetable is unavailable, once the policy is here
+  // to judge them; before that the list is still loading.
+  const empty = d.arrivals.length > 0
+    ? i18n.t(externalTextReady() ? 'arrivals.down' : 'status.loading')
+    : d.arrivalsStatus === 'none'
+      ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
+      : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
+  const timetable = tail.length
+    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(row).join('')}</ul>`
     : '';
-  const body = d.arrivals.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${rows(0, STOP_DEPARTURES_FIRST)}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+  const body = lead.length > 0
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
     : `<p class="t-empty">${esc(empty)}</p>`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
@@ -507,7 +531,7 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const moving = d.routes.reduce((sum, r) => sum + (d.counts.get(r.id) ?? 0), 0);
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(d.stop.name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(vetExternal('name', d.stop.name, 'row') ?? '')}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
     arrivalsSection(i18n, d) +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
@@ -555,7 +579,7 @@ export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, 
   const window = closureWindow(i18n, item);
   const description = closureDescription(item);
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(item.title)}</span></h3>`, kiosk, { cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(vetExternal('name', item.title, 'row') ?? '')}</span></h3>`, kiosk, { cast }) +
     `<p class="t-lead">${esc(closureWords(i18n, item))}</p>` +
     (window ? `<p class="t-meta" data-testid="closure-window">${esc(window)}</p>` : '') +
     (description ? `<p class="t-prose">${esc(description)}</p>` : '') +

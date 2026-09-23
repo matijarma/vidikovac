@@ -14,6 +14,8 @@ const FILES = [
   ...readdirSync(resolve(ROOT, 'app/src/kiosk')).filter(f => f.endsWith('.ts')).map(f => `app/src/kiosk/${f}`),
   'app/src/city/markup.ts', 'app/src/map/city-map.ts', 'app/src/map/external-labels.ts', 'app/src/map/external-features.ts',
   'app/src/map/overlays.ts', 'app/src/map/city-layers.ts',
+  // The phone's departures block, its Sada title and the stop sheet (WP4): the same row rule as the wall's rows.
+  'app/src/city/next-departures.ts', 'app/src/layers/grad-sada.ts', 'app/src/transport/view.ts',
   'app/src/motion/schema-paint.ts', 'app/src/motion/schema-map.ts', 'app/src/motion/schematic-view.ts',
   'shared/kiosk/sentence.ts',
 ].sort();
@@ -28,6 +30,7 @@ const EXTERNAL_FIELD = /\b(?:item|row|act|p|s|strip|weather|observed|panel|stop|
 const INDIRECT_GUARDS: Record<string, string> = {
   'app/src/kiosk/arrival-cells.ts#arrivalCells': 'if (!vettedArrival(row)) return',
   'app/src/kiosk/timeline.ts#rowMarkup': 'if (!vettedTimelineRow(row)) return',
+  'app/src/transport/view.ts#departureRow': 'if (!vettedArrival(row)) return',
 };
 // This renderer is used by phone discovery only. The wall calls placeDetail
 // with publicDisplay=true, never placesMarkup. Keep the exception exact.
