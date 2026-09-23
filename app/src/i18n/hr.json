@@ -389,7 +389,8 @@
     "note": "Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.",
     "none": "Nema najavljenih polazaka.",
     "frozen": "Sesija je završila prije nego što je red vožnje stigao.",
-    "down": "Vozni red trenutačno nije dostupan."
+    "down": "Vozni red trenutačno nije dostupan.",
+    "timetable": "Vozni red"
   },
   "transport": {
     "search": "Traži liniju ili stanicu",
@@ -528,7 +529,16 @@
     "eventsSummary_one": "{count} događanje danas",
     "eventsSummary_few": "{count} događanja danas",
     "eventsSummary_other": "{count} događanja danas",
-    "noSummary": "Otvori za detalje"
+    "noSummary": "Otvori za detalje",
+    "eventsWeek": "Događanja ovaj tjedan",
+    "saved": "Spremljeno",
+    "savedEmpty": "Spremi liniju, stajalište ili mjesto na karti. Ovdje ih možeš ponovno otvoriti na ovom uređaju.",
+    "savedRecord": "Spremljeni zapis {id}",
+    "route": "Linija",
+    "stop": "Stajalište",
+    "remove": "Ukloni",
+    "destinations": "Odredišta",
+    "preferences": "Osobne postavke"
   },
   "session": {
     "unlocked": "Otključano · {label} · do {time}",
@@ -537,13 +547,13 @@
     "joinedNotice": "Otključano do {time} · {label}",
     "joinedPeer": "Pet minuta od osobe pokraj tebe · do {time}",
     "labelScreen": "zaslon",
-    "expiring60": "Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.",
+    "expiring60": "Još minuta.",
     "expiring20": "Još dvadeset sekundi.",
-    "expired": "Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.",
+    "expired": "Deset minuta je prošlo. Zaslon u blizini otključava novih 10 minuta.",
     "expiredTitle": "Sesija je završila",
-    "expiredHint": "Prikaz stoji na posljednjim podacima; kopiranje i preuzimanje i dalje rade. Sigurnost ostaje otvorena na /hitno.",
-    "expiredCta": "Skeniraj za novih deset minuta",
-    "revoked": "Zaslon je isključen i sesija je prekinuta. Prikaz je zamrznut.",
+    "expiredHint": "Sigurnost ostaje otvorena na /hitno.",
+    "expiredCta": "Skeniraj za novih 10 minuta",
+    "revoked": "Zaslon je isključen i sesija je prekinuta.",
     "revokedCta": "Skeniraj drugi zaslon",
     "connecting": "Povezivanje…",
     "disconnected": "Veza je prekinuta. Ponovno povezivanje…",
@@ -578,7 +588,7 @@
     "sheetPeer": "Pet minuta od osobe pokraj tebe.",
     "sheetTemporary": "Zaslon vrijedi do {when}.",
     "openSheet": "Sesija: još {time}. Otvori postavke",
-    "frozenBadge": "zamrznuto",
+    "frozenBadge": "isteklo",
     "snapshotAt": "podaci od {time}"
   },
   "export": {
@@ -1280,5 +1290,11 @@
     "airNote": "Preliminarni indeks postaje, ne ocjena za cijeli grad.",
     "airMethod": "Opažanja postaja su preliminarna, ne ocjena za cijeli grad. Indeksi čestica koriste pomične prosjeke.",
     "consultationsNote": "Nacionalni izvori, ne savjetovanja Grada Zagreba."
+  },
+  "sada": {
+    "departuresAt": "Sljedeći polasci, {stop}",
+    "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
+    "viewSchema": "Shema",
+    "viewMap": "Karta"
   }
 }

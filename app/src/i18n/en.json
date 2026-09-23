@@ -373,7 +373,8 @@
     "note": "Estimated from ZET’s own vehicle data; the rest follow the timetable.",
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
-    "down": "The timetable is unavailable right now."
+    "down": "The timetable is unavailable right now.",
+    "timetable": "Timetable"
   },
   "transport": {
     "search": "Search a route or a stop",
@@ -510,7 +511,16 @@
     "civicSummary": "Gazette {broj}/{godina}",
     "eventsSummary_one": "{count} event today",
     "eventsSummary_other": "{count} events today",
-    "noSummary": "Open for details"
+    "noSummary": "Open for details",
+    "eventsWeek": "Events this week",
+    "saved": "Saved",
+    "savedEmpty": "Save a route, stop or place on the map. Find it here next time, on this device.",
+    "savedRecord": "Saved record {id}",
+    "route": "Route",
+    "stop": "Stop",
+    "remove": "Remove",
+    "destinations": "Destinations",
+    "preferences": "Preferences"
   },
   "session": {
     "unlocked": "Unlocked · {label} · until {time}",
@@ -519,13 +529,13 @@
     "joinedNotice": "Unlocked until {time} · {label}",
     "joinedPeer": "Five minutes from the person beside you · until {time}",
     "labelScreen": "screen",
-    "expiring60": "One minute left. What you are looking at stays on screen after the session ends.",
+    "expiring60": "One minute left.",
     "expiring20": "Twenty seconds left.",
-    "expired": "The session has ended. The view is frozen. A nearby screen unlocks another ten minutes.",
+    "expired": "Ten minutes have passed. A nearby screen unlocks another 10 minutes.",
     "expiredTitle": "The session has ended",
-    "expiredHint": "The view holds the last data; copying and downloads still work. Safety stays open at /hitno.",
-    "expiredCta": "Scan for another ten minutes",
-    "revoked": "The screen was switched off and the session ended. The view is frozen.",
+    "expiredHint": "Safety stays open at /hitno.",
+    "expiredCta": "Scan for another 10 minutes",
+    "revoked": "The screen was switched off and the session ended.",
     "revokedCta": "Scan another screen",
     "connecting": "Connecting…",
     "disconnected": "Connection lost. Reconnecting…",
@@ -559,7 +569,7 @@
     "sheetPeer": "Five minutes from the person beside you.",
     "sheetTemporary": "The screen is valid until {when}.",
     "openSheet": "Session: {time} left. Open settings",
-    "frozenBadge": "frozen",
+    "frozenBadge": "expired",
     "snapshotAt": "data from {time}"
   },
   "export": {
@@ -1241,5 +1251,11 @@
     "airNote": "Preliminary station index, not a citywide assessment.",
     "airMethod": "Station observations are preliminary, not a citywide assessment. Particulate indices use rolling averages.",
     "consultationsNote": "National sources, not City of Zagreb consultations."
+  },
+  "sada": {
+    "departuresAt": "Next departures, {stop}",
+    "mapBand": "Map around {place}. Open the map.",
+    "viewSchema": "Diagram",
+    "viewMap": "Map"
   }
 }

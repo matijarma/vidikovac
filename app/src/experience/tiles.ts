@@ -14,12 +14,12 @@
 // markup other builders produced. Hover and press live in layers.css with the
 // other controls; the tile inherits base.css's global focus ring.
 import type { LayerId } from '../../../worker/protocol';
-import { selectionParams, type PublicSelection } from '../core/contracts';
+import type { PublicSelection } from '../core/contracts';
 import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
-import { attrs } from './blocks';
+import { attrs, selectionHref } from './blocks';
 
 export type TileDomain = 'transit' | 'mobility' | 'komunalno' | 'safety' | 'events' | 'civic';
 export type TileVariant = 'value' | 'time' | 'band' | 'row' | 'ink';
@@ -66,11 +66,8 @@ export interface Tile {
   stale?: string;
 }
 
-/** '#layer=…' plus the public selection as view-store writes it, so the hash restores the same place. */
-export function tileHref(layer: LayerId, selection?: PublicSelection): string {
-  const params = selectionParams(selection ?? null);
-  return params ? `#layer=${layer}&${new URLSearchParams(params).toString()}` : `#layer=${layer}`;
-}
+/** '#layer=…' plus the public selection: experience/blocks.ts selectionHref, under its old name until WP5 retires the tiles. */
+export const tileHref: (layer: LayerId, selection?: PublicSelection) => string = selectionHref;
 
 /** The words of a badge another builder wrote, for the aria label: tags off, escapeHtml's five entities back to text. */
 function markupText(html: string): string {

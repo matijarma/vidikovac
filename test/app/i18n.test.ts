@@ -80,8 +80,13 @@ describe('catalogs', () => {
   it('carries the approved copy verbatim', () => {
     expect(hr.kiosk.invitation).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
     expect(hr.session.unlocked).toBe('Otključano · {label} · do {time}');
-    expect(hr.session.expiring60).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
-    expect(hr.session.expired).toBe('Sesija je završila. Prikaz je zamrznut. Zaslon u blizini otključava novih deset minuta.');
+    // The end clears the content (WP4 step 11), so the minute's warning promises nothing about what stays.
+    expect(hr.session.expiring60).toBe('Još minuta.');
+    expect(en.session.expiring60).toBe('One minute left.');
+    // The end of the ten minutes [O-59], [O-62] (WP4 step 11): the owner's three sentences, verbatim.
+    expect(hr.session.expired).toBe('Deset minuta je prošlo. Zaslon u blizini otključava novih 10 minuta.');
+    expect(hr.session.expiredHint).toBe('Sigurnost ostaje otvorena na /hitno.');
+    expect(hr.session.expiredCta).toBe('Skeniraj za novih 10 minuta');
     expect(hr.scan.errors['same-network']).toBe('Ovaj kod trenutačno nije moguće iskoristiti s ove veze. Skeniraj ponovno.');
   });
 });

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountDashboard } from '../../app/src/dashboard';
 import type { CityMapHandle, CityMapOptions, MapFactory } from '../../app/src/map/city-map';
 import { LOCALE_STORAGE_KEY } from '../../app/src/i18n/create-default-i18n';
+import { rememberScreenLabel, SCREEN_LABEL_KEY } from '../../app/src/core/screen-label';
 import { stubLocalStorage } from './helpers';
 
 const read = (...parts: string[]): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', ...parts), 'utf8');
@@ -106,6 +107,43 @@ describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
     const scheduled = timeoutSpy.mock.calls.find(([, ms]) => ms === 2500);
     expect(scheduled).toBeDefined();
     expect(typeof scheduled?.[0]).toBe('function');
+  });
+});
+
+// T5: /s/ hands /d/ the screen's label once, in the fragment; the entry drops it
+// from the address, so a reload used to name the screen "zaslon". The label now
+// stays with the tab, per room.
+describe('a reload keeps the screen label (T5)', () => {
+  beforeEach(() => sessionStorage.removeItem(SCREEN_LABEL_KEY));
+  afterEach(() => { sessionStorage.removeItem(SCREEN_LABEL_KEY); vi.restoreAllMocks(); });
+  const mountedLabel = (): string | null | undefined => vi.mocked(mountDashboard).mock.lastCall?.[1].label;
+
+  it('mounts with the fragment’s label, drops it from the address, and mounts the same label again after a reload of that room', async () => {
+    await importDashboardEntry('?lagano=1', '#room=r1&ticket=t1&label=Kavana%20Velebit');
+    expect(mountedLabel()).toBe('Kavana Velebit');
+    expect(location.hash).not.toContain('label=');
+    expect(location.hash).not.toContain('ticket=');
+    await importDashboardEntry('?lagano=1', location.hash);
+    expect(mountedLabel()).toBe('Kavana Velebit');
+  });
+  it('never lends one room’s label to another room', async () => {
+    await importDashboardEntry('?lagano=1', '#room=r1&ticket=t1&label=Kavana%20Velebit');
+    await importDashboardEntry('?lagano=1', '#room=r2');
+    expect(mountedLabel()).toBeNull();
+  });
+  it('rememberScreenLabel prefers the fragment, reads only its own room back, and survives storage that throws or holds junk', () => {
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+    expect(rememberScreenLabel(storage, 'r1', null)).toBeNull();
+    expect(rememberScreenLabel(storage, 'r1', 'Kaj ima? · Kvaternikov trg')).toBe('Kaj ima? · Kvaternikov trg');
+    expect(rememberScreenLabel(storage, 'r1', null)).toBe('Kaj ima? · Kvaternikov trg');
+    expect(rememberScreenLabel(storage, 'r2', null)).toBeNull();
+    store.set(SCREEN_LABEL_KEY, '{not json');
+    expect(rememberScreenLabel(storage, 'r1', null)).toBeNull();
+    const denied = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); } };
+    expect(rememberScreenLabel(denied, 'r1', 'Kavana Velebit')).toBe('Kavana Velebit');
+    expect(rememberScreenLabel(denied, 'r1', null)).toBeNull();
+    expect(rememberScreenLabel(null, 'r1', null)).toBeNull();
   });
 });
 

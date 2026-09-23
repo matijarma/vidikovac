@@ -3,6 +3,8 @@
 // the worker's string literals, and the delay words that stand beside a
 // `.line` badge. Canonical sentences live under `shared.*`; the dashboard
 // keys that say the same thing are pinned equal to them so they cannot drift.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -243,30 +245,38 @@ describe('an arrival time is never bare (WP5)', () => {
     stop: STOP, routes: [{ id: '11', short: '11', long: 'Črnomerec - Dubec', type: 0 }], counts: new Map(), delays: new Map(),
     isScreenStop: false, kiosk: false, arrivals: ROWS, arrivalsStatus: 'live', frozenAt,
   });
+  /** Every row of the stop's list: its first three (arrival-rows), then the rest under "Vozni red" (timetable-rows). */
   const arrivalRows = (html: string): string[] => {
-    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
-    return list.split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
+    const list = (testid: string): string => html.split(`data-testid="${testid}"`)[1]?.split('</ul>')[0] ?? '';
+    expect(html).toContain('data-testid="arrival-rows"');
+    return (list('arrival-rows') + list('timetable-rows')).split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
   };
 
-  it.each(['hr', 'en'] as const)('%s: every row carries the live marker or the schedule mark, and the note names the source', (locale) => {
+  it.each(['hr', 'en'] as const)('%s: a live row carries the dot and data-live, a timetable row a plain clock and neither; the note names the source once', (locale) => {
+    const catalogue = locale === 'hr' ? HR : EN;
     const html = sheet(locale);
     const rows = arrivalRows(html);
     expect(rows).toHaveLength(ROWS.length);
-    for (const row of rows) {
-      const live = row.includes('class="t-live"');
-      const scheduled = row.includes(leaf(locale === 'hr' ? HR : EN, 'arrivals.scheduled')!);
-      expect(live || scheduled, row).toBe(true);
-      // Never both: a row is one thing or the other.
-      expect(live && scheduled, row).toBe(false);
-    }
-    expect(html).toContain(leaf(locale === 'hr' ? HR : EN, 'arrivals.note'));
+    rows.forEach((row, i) => {
+      const live = ROWS[i]!.live;
+      expect(row.includes('class="t-live"'), row).toBe(live);
+      expect(row.includes('data-live="true"'), row).toBe(live);
+      if (!live) expect(row, row).toContain('<time');
+      // No word per row [O-27]: the form carries it and the note says it once.
+      expect(row, row).not.toContain(leaf(catalogue, 'arrivals.scheduled')!);
+      expect(row, row).not.toMatch(/Procjena|Estimate/);
+    });
+    expect(html.split(leaf(catalogue, 'arrivals.note')!).length - 1).toBe(1);
+    // The live word names the dot for a screen reader; it is never text on the sheet.
+    expect(html.replace(/<[^>]*>/g, ' ')).not.toContain(leaf(catalogue, 'arrivals.live')!);
   });
 
   it('a frozen sheet keeps the marker but never says the live word', () => {
     const html = sheet('hr', Date.parse('2026-09-19T10:02:00Z'));
-    for (const row of arrivalRows(html)) {
-      expect(row.includes('class="t-live"') || row.includes(leaf(HR, 'arrivals.scheduled')!), row).toBe(true);
-    }
+    arrivalRows(html).forEach((row, i) => {
+      expect(row.includes('class="t-live"'), row).toBe(ROWS[i]!.live);
+      expect(row, row).not.toContain('data-live="true"');
+    });
     expect(html).not.toContain(leaf(HR, 'arrivals.live'));
     expect(html).toContain(leaf(HR, 'session.snapshotAt')!.replace('{time}', '12:02'));
   });

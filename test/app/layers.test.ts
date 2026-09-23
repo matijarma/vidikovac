@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
@@ -72,8 +74,6 @@ const atStop = (over: Partial<LayerContext> = {}): LayerContext => ctx({
   screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: STOP },
   ...over,
 });
-/** The real ZET feed dates itself from the GTFS-RT header, so its foot reads "podaci od", not "dohvaćeno". */
-const DATED_ZET: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, sourceUpdatedAt: new Date(NOW - 120_000).toISOString() };
 
 // Fixtures with more rows than a single default page, for T1.4's paging tests.
 // Real shapes (module, kind, data) match the single-item SNAPSHOTS above.
@@ -113,173 +113,22 @@ describe('layer registry', () => {
     expect(ALL_LAYER_MODULES).toContain('glasnik');
     expect(new Set(ALL_LAYER_MODULES).size).toBe(ALL_LAYER_MODULES.length);
   });
-  it('every layer renders a focusable heading with the Croatian layer name', () => {
+  it('every layer renders a focusable heading: the Croatian layer name, and on Sada the place (test/app/sada.test.ts)', () => {
     for (const layer of LAYERS) {
       const section = renderLayer(layer, ctx());
       expect(section.getAttribute('data-layer')).toBe(layer);
-      expect(text(section.querySelector('.layer-title'))).toBe(createDefaultI18n('hr').t(layer === 'grad-sada' ? 'cityOverview.title' : `layers.${layer}`));
+      if (layer === 'grad-sada') {
+        expect(section.querySelector('.layer-title')).toBe(section.querySelector('[data-testid=sada-place]'));
+        expect(text(section.querySelector('[data-testid=sada-place]'))).toBe('Trg bana J. Jelačića');
+      } else {
+        expect(text(section.querySelector('.layer-title'))).toBe(createDefaultI18n('hr').t(`layers.${layer}`));
+      }
       expect(section.querySelector('.layer-title')?.getAttribute('tabindex')).toBe('-1');
     }
   });
 });
 
-describe('grad-sada (Sada, the time band)', () => {
-  const DESK = { surface: 'desktop' as const, locale: 'hr' as const, theme: 'light' as const, themePreference: 'light' as const, lightweight: false, reducedMotion: false, stop: STOP };
-  const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
-
-  it('composes nearby facts and a dated agenda, with temporal filtering and one provenance disclosure', () => {
-    const section = renderLayer('grad-sada', atStop());
-    expect(section.querySelector('.day-overview')).not.toBeNull();
-    expect(section.querySelector('.day-now')!.compareDocumentPosition(section.querySelector('.day-ahead')!) & FOLLOWING).toBe(FOLLOWING);
-    expect(section.querySelectorAll('.tb-lanes, .ov-col')).toHaveLength(0);
-    const seg = section.querySelector('.day-times[role="group"]')!;
-    const buttons = [...seg.querySelectorAll('[aria-pressed]')];
-    expect(buttons).toHaveLength(5);
-    expect(buttons.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-filter-value'))).toEqual(['sada']);
-    expect(section.querySelector('details.provenance')).not.toBeNull();
-    expect(text(section.querySelector('.day-clock'))).toBe('14:32');
-    expect(section.querySelectorAll('.day-clock')).toHaveLength(1);
-  });
-
-  it('weather is legible on both surfaces and links its observation to Vrijeme', () => {
-    const phone = renderLayer('grad-sada', atStop());
-    const weather = phone.querySelector('.day-weather[data-layer=zrak-i-nebo]')!;
-    expect(weather).not.toBeNull();
-    expect(weather.getAttribute('href')).toBe('#layer=zrak-i-nebo');
-    expect(text(weather.querySelector('strong'))).toBe('21 °C');
-    expect(weather.querySelector('.icon use')?.getAttribute('href')).toBe('#icon-sun');
-    expect(weather.getAttribute('aria-label')).toContain('vedro');
-    expect(weather.getAttribute('aria-label')).toMatch(/zalazak \d{2}:\d{2}/);
-    const desk = renderLayer('grad-sada', ctx());
-    expect(text(desk.querySelector('.day-weather strong'))).toBe('21 °C');
-    for (const section of [phone, desk]) {
-      expect(section.querySelector('[data-testid=temp]')).toBeNull();
-      const tiles = [...section.querySelectorAll('.tl')];
-      expect(tiles.length).toBeGreaterThan(0);
-      expect(tiles.some((tile) => text(tile).includes('°C') || (tile.getAttribute('aria-label') ?? '').includes('°C'))).toBe(false);
-    }
-  });
-
-  it('states safety as one band whose level, word and time come from safetyState', () => {
-    const section = renderLayer('grad-sada', atStop());
-    const bands = section.querySelectorAll('.tl[data-domain=safety]');
-    expect(bands).toHaveLength(1);
-    const band = bands[0]!;
-    expect(band.getAttribute('data-variant')).toBe('band');
-    expect(band.getAttribute('data-level')).toBe('urgent');
-    expect(band.getAttribute('data-tone')).toBe('urgent');
-    expect(band.getAttribute('data-layer')).toBe('sigurnost');
-    expect(band.getAttribute('href')).toBe('#layer=sigurnost');
-    expect(text(band.querySelector('.tl-title'))).toBe('žuto upozorenje: Grmljavinsko nevrijeme');
-    expect(band.querySelector('.tl-glyph use')?.getAttribute('href')).toBe('#icon-triangle-alert');
-    // The untimed page is Sigurnost's to offer; the band only points at the domain.
-    expect(section.querySelector('[data-testid=hitno-link]')).toBeNull();
-
-    const calm = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': base('dhmz-cap', []) } }));
-    const calmBand = calm.querySelector('.tl[data-domain=safety]')!;
-    expect(calmBand.getAttribute('data-level')).toBe('calm');
-    expect(calmBand.getAttribute('data-tone')).toBe('calm');
-    expect(text(calmBand.querySelector('.tl-title'))).toBe('Nema hitnih upozorenja');
-    expect(text(calmBand.querySelector('.tl-trail'))).toMatch(/^potvrđeno \d{2}:\d{2}$/);
-  });
-
-  it('reads unknown, never all-clear, while a safety source is missing or down', () => {
-    const loading = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(loading.querySelector('.tl[data-domain=safety]')?.getAttribute('data-level')).toBe('unknown');
-    const down = renderLayer('grad-sada', ctx({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': { ...SNAPSHOTS['dhmz-cap']!, status: 'down', items: [] } } }));
-    const band = down.querySelector('.tl[data-domain=safety]')!;
-    expect(band.getAttribute('data-level')).toBe('unknown');
-    expect(text(band.querySelector('.tl-title'))).toBe('Stanje nije potvrđeno');
-    expect(text(band)).not.toContain('Nema hitnih upozorenja');
-    expect(band.querySelector('.tl-trail')).toBeNull();
-  });
-
-  it('names a level only when that level is the reason: a quake with minor warnings reads the urgent word', () => {
-    // safetyState raises urgent from a moderate/severe/extreme warning OR a quake
-    // of M3 and up. When the quake is the reason, a minor or info warning is not
-    // the verdict: "zeleno" is never a level word on any surface (R-K1).
-    const minorWarnings = base('dhmz-cap', [
-      { id: 'w2', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Vjetar u gorju', severity: 'minor', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
-      { id: 'w3', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Promjena vremena', severity: 'info', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
-    ]);
-    const felt = base('emsc', [{ id: 'q2', module: 'emsc', kind: 'quake', tier: 'open', title: 'ZAGREB', at: '2026-09-11T09:00:00Z', geo: { type: 'Point', coordinates: [15.98, 45.81] }, data: { mag: 3.5, depth: 8 } }]);
-    const section = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': minorWarnings, emsc: felt } }));
-    const band = section.querySelector('.tl[data-domain=safety]')!;
-    expect(band.getAttribute('data-level')).toBe('urgent');
-    expect(text(band.querySelector('.tl-title'))).toBe('Hitno sada');
-    expect(text(band)).not.toContain('zeleno');
-    expect(text(band)).not.toContain('obavijest');
-    expect(text(band)).not.toContain('Vjetar u gorju');
-
-    // A warning that is itself a reason for the urgency still names itself.
-    const yellow = base('dhmz-cap', [...minorWarnings.items, ...SNAPSHOTS['dhmz-cap']!.items]);
-    const named = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': yellow, emsc: felt } }));
-    expect(text(named.querySelector('.tl[data-domain=safety] .tl-title'))).toBe('žuto upozorenje: Grmljavinsko nevrijeme');
-  });
-
-  it('tiles the lines of this screen’s stop: two on the phone, four on a desk, the rest counted into Promet', () => {
-
-    const ensure=vi.fn();
-    const boards={ensure,get:()=>undefined,destroy:vi.fn()};
-    for(const screen of [atStop().screen,DESK]){
-      const section=renderLayer('grad-sada',ctx({screen,boards}));
-      expect(section.querySelectorAll('.tl[data-domain=transit]')).toHaveLength(0);
-      const departures=section.querySelector('[data-testid=day-departures]')!;
-      expect(text(departures)).toContain(STOP.name);
-      expect(departures.querySelector('[data-layer=u-pokretu]')?.getAttribute('href')).toContain('kind=stop&id='+STOP.id);
-      expect(text(departures)).toContain('učitavanje');
-      expect(text(section)).not.toContain('vozila ZET-a u pokretu');
-    }
-    expect(ensure).toHaveBeenCalledWith('zet',[STOP.id],undefined);
-
-  });
-
-  it('buckets the next starts by time and keeps the sada lane for live values', () => {
-    const section = renderLayer('grad-sada', atStop());
-    // Saturday 20:00 is sutra; a dated notice today reads "cijeli dan" in the first time lane.
-    const concert = section.querySelector('.day-event[data-col=sutra] .tl[data-domain=events]')!;
-    expect(text(concert.querySelector('.tl-time'))).toBe('20:00');
-    expect(text(concert.querySelector('.tl-title'))).toBe('Koncert u parku');
-    expect(concert.getAttribute('data-layer')).toBe('kultura');
-    const notice = section.querySelector('.day-event[data-col=danas] .tl[data-key="dogadanja:kvartovske:3"]')!;
-    expect(text(notice.querySelector('.tl-time'))).toBe('cijeli dan');
-    // An exhibition already running is not a start: agenda parity.
-    expect(text(section)).not.toContain('Izložba tradicijskog nakita');
-    // The one ink tile on the page is the Assembly, in its own week.
-    const inks = section.querySelectorAll('.tl[data-variant=ink]');
-    expect(inks).toHaveLength(1);
-    expect(inks[0]!.closest('.day-event')?.getAttribute('data-col')).toBe('tjedan');
-    expect(text(inks[0]!.querySelector('.tl-title'))).toContain('13. sjednicu');
-    // The live values stay in sada: the gazette, works and the closed road.
-    const sada = section.querySelector('[data-testid=tb-lane-sada]')!;
-    const gazette = section.querySelector('.day-city [data-testid=tile-gazette]')!;
-    expect(text(gazette.querySelector('.tl-value'))).toBe('21/2026');
-    expect(text(gazette.querySelector('.tl-label'))).toBe('Glasnik');
-    expect(text(sada.querySelector('[data-testid=tile-works] .tl-trail'))).toBe('1');
-    expect(text(sada.querySelector('[data-testid=tile-closures] .tl-title'))).toBe('Grada Vukovara');
-    // Sada reads in domain order: what moves first, what the city decided last; on the phone the two compact Zatim rows (the next starts) follow the lane's own tiles.
-    expect([...sada.querySelectorAll('.tl')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['mobility', 'komunalno', 'safety']);
-    expect(section.querySelector('.day-agenda')).not.toBeNull();
-  });
-
-  it('paints a loading source as skeleton tiles in its lane and only announces the word; a failed source offers the retry', () => {
-    const section = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(section.querySelectorAll('.tl[data-skeleton]').length).toBeGreaterThan(0);
-    expect(section.querySelector('[data-testid=tb-lane-sada]')?.getAttribute('aria-busy')).toBe('true');
-    expect(section.querySelector('.day-agenda')?.getAttribute('aria-busy')).toBe('true');
-    // Safety never skeletons: its band already says the state is unconfirmed.
-    const safety = section.querySelector('[data-testid=tile-safety]')!;
-    expect(safety.getAttribute('data-level')).toBe('unknown');
-    expect(safety.hasAttribute('data-skeleton')).toBe(false);
-    expect(text(section)).toContain('učitavanje podataka');
-    expect(section.querySelectorAll('.tl[data-skeleton] a, .tl[data-skeleton] button')).toHaveLength(0);
-    // A source that failed says so and offers the retry at the lane's foot, never a skeleton that never ends.
-    const down = renderLayer('grad-sada', ctx({ snapshots: {}, errors: { glasnik: 'fetch failed' } }));
-    expect(down.querySelector('.day-more [data-action=retry][data-module=glasnik]')).not.toBeNull();
-    expect(down.querySelector('[data-testid=tile-gazette]')).toBeNull();
-    expect(down.querySelectorAll('[data-testid=tb-lane-sada] .tl[data-skeleton][data-variant=row]')).toHaveLength(0);
-  });
-});
+// Sada (grad-sada) is tested in test/app/sada.test.ts: the place, the sentence, the band, the departures and U blizini.
 
 describe('u-pokretu', () => {
   it('reads the module’s own delay summary per route, worst first', () => {
@@ -297,7 +146,7 @@ describe('u-pokretu', () => {
       { id: 'route:17', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '17', data: { routeId: '17' } },
     ] }).map((row) => row.routeId)).toEqual(['6', '11']);
   });
-  it('builds the map from vehicle points and closure lines and prints the delay table', () => {
+  it('builds the map from vehicle points and closure lines, with no per-route delay table (it left the phone with the overview)', () => {
     const update = vi.fn();
     const factory = vi.fn((_options: CityMapOptions) => ({ update, destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
@@ -308,9 +157,7 @@ describe('u-pokretu', () => {
     expect(options.points![0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
     expect(options.lines![0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
     expect(options.ariaLabel).toContain('Karta');
-    const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
-    expect(rows[0]).toContain('kasni 2 min');
-    expect(rows[1]).toContain('rani 1 min');
+    expect(section.querySelector('[data-testid=delay-row], #u-pokretu-delays')).toBeNull();
 
     // R-54: a second render reuses the same live map, moving the one container
     // into the new section instead of allocating another WebGL context.
@@ -444,19 +291,15 @@ describe('u-pokretu', () => {
     expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
     expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
   });
-  it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
+  it('has no full-map button: the sheet’s own chevron and detents say how much map shows', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
     const toggle = vi.fn();
-    const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full: false, toggle } }));
-    const button = section.querySelector<HTMLButtonElement>('#u-pokretu-map [data-testid=map-full-toggle]')!;
-    expect(text(button)).toBe('Proširi kartu');
-    button.click();
-    expect(toggle).toHaveBeenCalledTimes(1);
-    const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
-    expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
-    // No view-mode owner: the stable control is hidden and not actionable.
-    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.hidden).toBe(true);
+    for (const full of [false, true]) {
+      const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full, toggle } }));
+      expect(section.querySelector('[data-testid=map-full-toggle], #u-pokretu-map-full')).toBeNull();
+    }
+    expect(toggle).not.toHaveBeenCalled();
   });
 });
 
@@ -681,6 +524,42 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura', () => {
     expect(open.querySelector('[data-testid=event-detail] a[href="https://kulturpunkt.hr/clanak/1"]')).not.toBeNull();
     expect(section.querySelector('[data-filter-key=q]')).not.toBeNull();
     expect(section.querySelectorAll('[data-testid=event-category] option').length).toBeGreaterThan(1);
+  });
+  it('kultura says "do d. m." in the time column of a multi-day all-day item, never "cijeli dan", and names the end once', () => {
+    const extra: ModuleSnapshot['items'] = [
+      // "od 11. do 25. rujna": the parser's range, Zagreb midnight to 23:59 of the last day.
+      { id: 'kulturpunkt:8', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Festival u Tvornici', at: '2026-09-10T22:00:00Z', until: '2026-09-25T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'festival', precision: 'range' } },
+      // A range that begins next week keeps its own day head; an October end reads "do 4. 10.".
+      { id: 'kulturpunkt:9', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Sajam knjiga', at: '2026-09-13T22:00:00Z', until: '2026-10-04T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'sajam', precision: 'range' } },
+      // A timed start that runs on keeps its time; the end stays on the second line.
+      { id: 'kulturpunkt:10', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Radionica keramike', at: '2026-09-12T16:00:00Z', until: '2026-09-13T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'radionica', precision: 'time' } },
+    ];
+    const dogadanja = { ...SNAPSHOTS.dogadanja!, items: [...SNAPSHOTS.dogadanja!.items, ...extra] };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const row = (title: string): Element => [...section.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes(title))!;
+    const lead = (title: string): string => text(row(title).querySelector('.ev-lead'));
+    const sub = (title: string): string => text(row(title).querySelector('.row-sub'));
+
+    expect(lead('Festival u Tvornici')).toBe('do 25. 9.');
+    expect(row('Festival u Tvornici').querySelector('.ev-lead .ev-allday')).not.toBeNull();
+    expect(text(row('Festival u Tvornici'))).not.toContain('cijeli dan');
+    expect(text(row('Festival u Tvornici')).match(/do 25\. 9\./g)).toHaveLength(1); // not repeated on the second line
+    expect(sub('Festival u Tvornici')).toBe('Kulturpunkt');
+    // Day and month stay together, so the 3.5rem column breaks after "do", never inside the date.
+    expect(row('Festival u Tvornici').querySelector('.ev-allday')!.textContent).toBe('do 25.\u00a09.');
+
+    expect(lead('Sajam knjiga')).toBe('do 4. 10.');
+    expect(sub('Sajam knjiga')).not.toContain('do 4. 10.');
+
+    expect(lead('Radionica keramike')).toBe('18:00');
+    expect(sub('Radionica keramike')).toBe('Kulturpunkt · do 13. 9.');
+
+    // A single-day day-precision entry still reads "cijeli dan".
+    expect(lead('Novo dječje igralište')).toBe('cijeli dan');
+
+    const en = renderLayer('kultura', ctx({ i18n: createDefaultI18n('en'), snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const enRow = [...en.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes('Festival u Tvornici'))!;
+    expect(text(enRow.querySelector('.ev-lead'))).toBe('until 25. 9.');
   });
   it('filter chips are a labelled group holding a native list, and no <li> in a workspace is orphaned from a list (axe: listitem)', () => {
 

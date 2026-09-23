@@ -9,7 +9,10 @@ import type { NotifyFlags } from './notify-store';
 import type { SavedStore } from './saved-store';
 import type { CityState } from '../../../shared/city/types';
 import type { LocationContext } from '../city/location';
+import type { PlaceContext } from '../city/place';
 import type { BoardCache } from '../city/boards';
+import type { FrameLine, FrameStops } from '../../../shared/city/frame';
+import type { WrittenSentence } from '../../../shared/kiosk/sentence';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -48,9 +51,27 @@ export interface CastState {
   stopName: string | null;
 }
 
+/** The place's "U blizini" list as a personal surface prints it (§12, probe §15.6): WP1's rows for
+ *  `place` (city/nearby.ts selectNearby over city/feed.ts nearbyInput) in the shared nearby markup. */
+export interface NearbyList {
+  /** section[data-testid=nearby] > [data-testid=nearby-head] + ol[data-testid=nearby-rows]. */
+  html: string;
+  /** The measured circle as the head prints it, "2 km · ~15 min" (kiosk.nearby.pill). */
+  pill: string;
+  /** The measured circle, metres (shared/city/frame.ts frameRadiusM): what the map frames around the place. */
+  radiusM: number;
+}
+
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
   location?: LocationContext;
+  /** The phone's place (city/place.ts resolvePlace): the screen's place or stop, a saved stop, the stop
+   *  nearest the reference, or Trg bana J. Jelačića; titles Sada and names the stop its departures come from. */
+  place?: PlaceContext;
+  /** The place's "U blizini" list, at most `cap` rows, the same rows Sada lists; the Karta sheet shows
+   *  it while nothing is typed or selected. Supplied by the page; null while the rows are not in hand
+   *  yet. Absent where no list exists (the kiosk's paired board, a unit context). */
+  nearby?: (cap: number) => NearbyList | null;
   setLocation?: (location: LocationContext) => void;
   boards?: BoardCache;
   onLocalData?: () => void;
@@ -72,8 +93,10 @@ export interface ExperienceActions {
   /** Read-only: a layer only checks and lists what is saved, it never mutates the store directly. */
   saved?: Pick<SavedStore, 'list' | 'has'>;
   cast?: CastState;
-  /** The stop catalogue (`loadStops`), fetched once a saved stop exists; used for the saved stop's walking row (D16). */
+  /** The stop catalogue (`loadStops`), fetched once per session: the place and its departures stop are resolved from it (D16). */
   stops?: readonly ScreenStop[];
+  /** The stop catalogue's last load failed (the page asks again a bounded number of times); absent or false while it loads or once it is in hand. */
+  stopsDown?: boolean;
   /** The nearest bike-share and parking stations (plan T3.2, D7): undefined until
    *  FEED_BIKES / FEED_PARKING turn on with their worker module. */
   bikes?: MobilitySnapshot;
@@ -83,6 +106,14 @@ export interface ExperienceActions {
   /** The screen stop's last scheduled departures per line (T3.1, behind FEED_LASTRUN): loaded once per
    *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */
   lastRun?: LastRunSnapshot | null;
+  /** Sada's sentence card (seam S6, the page's rotation of fetchSentences / templateSentences): null says there is none
+   *  to show; absent, Sada writes the first template sentence of its own facts (city/feed.ts). */
+  sentence?: WrittenSentence | null;
+  /** How many stops around the place the circle counts (the screen's Kadar, ScreenMetadata.frame); absent: DEFAULT_FRAME_STOPS. */
+  frame?: FrameStops;
+  /** The tram lines in call order (shared/city/frame.ts frameLinesOf, from the network the map loads), so the phone's
+   *  circle is measured along the lines as the wall's is; absent, frameRadiusM answers its fallback among trams. */
+  frameLines?: readonly FrameLine[];
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */

@@ -150,7 +150,8 @@ describe('confirmStopLine', () => {
 describe('dashboardUrl', () => {
   it('puts room, ticket and a label in the fragment, never in the query', () => {
     expect(dashboardUrl(KIOSK)).toBe('/d/#room=r1&ticket=t1&label=Kavana%20Velebit');
-    expect(dashboardUrl(PHONE)).toBe('/d/#room=r2&ticket=t2&label=phone');
+    // A kind is never a label: a peer's fragment carries no label at all, and the pill says whose minutes these are (session.joinedPeer).
+    expect(dashboardUrl(PHONE)).toBe('/d/#room=r2&ticket=t2');
   });
 });
 

@@ -107,9 +107,12 @@ export function confirmStopLine(ok: ScanOk, i18n: I18n): string | null {
     : i18n.t('scan.confirmStopOnly', { stop: stop.name });
 }
 
+/** The fragment /d/ opens with. Only an operator's own label travels: a kind ('phone', a venue type) is a slug,
+ *  not a name, and the dashboard's pill would read it out as one; without a label the pill names the screen's
+ *  stop, a peer's sentence names the person beside them (chrome.ts sessionMarkup). */
 export function dashboardUrl(ok: ScanOk): string {
-  const label = ok.screenLabel ?? (ok.beaconType === 'phone' ? 'phone' : ok.venueType ?? 'screen');
-  return `/d/#room=${encodeURIComponent(ok.roomId)}&ticket=${encodeURIComponent(ok.ticket)}&label=${encodeURIComponent(label)}`;
+  const label = ok.screenLabel ? `&label=${encodeURIComponent(ok.screenLabel)}` : '';
+  return `/d/#room=${encodeURIComponent(ok.roomId)}&ticket=${encodeURIComponent(ok.ticket)}${label}`;
 }
 
 /** mm:ss for the wait countdown, rounded up so it never reads 00:00 while the check is still closed. */

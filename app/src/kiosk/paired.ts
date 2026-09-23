@@ -25,7 +25,7 @@ import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
 import { frontPanels, panelMarkup } from './front';
 import { kindOfRoute } from './exceptions';
-import { columnsFor } from '../experience/timeband';
+import { columnsFor } from './columns';
 import type { CityState } from '../../../shared/city/types';
 import { dynamicPlaces } from '../city/discovery';
 import { placeDetail,streetDetail } from '../city/markup';

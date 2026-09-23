@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
-import { APP_URL, pickCityGroup, provisionKiosk } from './helpers';
+import { APP_URL, provisionKiosk } from './helpers';
 import { schemaSnapshot, TWO_TRAM_PATH_ROUTE, twoTramSnapshot } from './schema-fixtures';
 
 test('the transport switch draws moving trams on the SVG diagram and restores the city map', async ({ page }) => {
@@ -12,20 +12,18 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
-  await page.getByTestId('transport-search').focus();
-  await pickCityGroup(page, 'transport');
+  // Every vehicle is drawn at once (WP4): no group to pick. The switch sits in the sheet's head [O-72], in reach at
+  // every detent, so the phone lowers its sheet to the peek to leave the diagram the stage.
   if(test.info().project.name==='mobile'){
     for(let i=0;i<3&&await page.getByTestId('transport-workspace').getAttribute('data-sheet')!=='peek';i++)
       await page.locator('[data-action=toggle-sheet]').click();
   }
-  await page.locator('.t-map-menu > summary').click();
   const toggle = page.getByTestId('map-mode-toggle');
   await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText('Shema');
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-  // The disclosure can stay open while several filters are adjusted.
-  // Close it before gesturing on the map underneath.
-  await page.locator('.t-map-menu > summary').click();
+  await expect(toggle).toHaveAttribute('data-mode', 'schema');
+  await expect(toggle).toHaveText('Karta');
   const canvas = page.getByTestId('schema-vehicles');
   await expect(canvas).toBeVisible();
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'ready');
@@ -46,7 +44,7 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   const rect = (await canvas.boundingBox())!;
   if (test.info().project.name === 'mobile') {
     // Two fingers through Chromium's actual touch pipeline, not synthetic
-    // canvas handlers. Stay below the tools and above the phone sheet.
+    // canvas handlers. Stay above the phone sheet.
     const cdp = await page.context().newCDPSession(page);
     const cx = rect.x + rect.width / 2, y = rect.y + 240;
     const pair = (radius: number) => [{ id: 0, x: cx - radius, y }, { id: 1, x: cx + radius, y }];
@@ -68,9 +66,8 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('transport-detail')).toContainText('6');
   await expect(page.locator('.schema-map [role=dialog]')).toHaveCount(0);
-  await page.locator('.t-map-menu > summary').click();
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(toggle).toHaveAttribute('data-mode', 'map');
   await expect(canvas).toHaveCount(0);
   await expect(page.locator('.transport-map .maplibregl-canvas')).toHaveCount(1);
   expect(errors).toEqual([]);
@@ -134,11 +131,6 @@ test('the diagram paints numbered pills, names that give way and come back, and 
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => localStorage.setItem('kajima:map-mode:v1', 'schema'));
   await page.goto(FIXTURE_DASHBOARD.replace('#', '#layer=u-pokretu&'));
-  // The workspace opens on the city's own group since the city sources
-  // landed; the diagram is the transport group's renderer, so pick that group
-  // first -- the same step the two tests above take.
-  await page.getByTestId('transport-search').focus();
-  await pickCityGroup(page, 'transport');
   const canvas = page.getByTestId('schema-vehicles');
   const diagram = page.getByTestId('schema-map');
   await expect(canvas).toBeVisible();

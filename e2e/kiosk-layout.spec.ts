@@ -5,6 +5,16 @@ import { installKioskFeedFixture, installWallFixture } from './experience-fixtur
 const sizes = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }];
 const layers = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'] as const;
 
+/** The remote is a phone: Sada and Karta are tabs, every other domain is a row under Još. */
+async function openLayer(phone: Page, layer: (typeof layers)[number]): Promise<void> {
+  if (layer === 'grad-sada' || layer === 'u-pokretu') {
+    await phone.locator(`.ki-tabs [data-action=nav][data-layer="${layer}"]`).click();
+    return;
+  }
+  await phone.getByTestId('tab-more').click();
+  await phone.getByTestId(`dir-${layer}`).click();
+}
+
 async function geometry(page: Page) {
   return page.evaluate(() => {
     const visible = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(el => el.getBoundingClientRect().width > 0 && !el.hidden);
@@ -33,7 +43,7 @@ async function geometry(page: Page) {
 for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
   test(`presented domains at ${size.width}×${size.height}, ${theme}: readable subjects, safety and invitation`, async ({ browser, request }) => {
     const kctx = await localContext(browser, { viewport: size, colorScheme: theme, locale: 'hr-HR' });
-    const pctx = await localContext(browser, { viewport: { width: 1440, height: 900 }, locale: 'hr-HR' });
+    const pctx = await localContext(browser, { viewport: { width: 390, height: 844 }, locale: 'hr-HR' });
     try {
       const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
       const kiosk = await kctx.newPage(), phone = await pctx.newPage();
@@ -44,7 +54,7 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
       await unlockOnPhone(phone, scanUrl, '10 minuta');
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
       for (const layer of layers) {
-        await phone.locator(`.ki-domains [data-layer="${layer}"]`).click();
+        await openLayer(phone, layer);
         if (await phone.getByTestId('presentation-panel').count() === 0) await phone.getByTestId('screen-control').click();
         await phone.getByTestId('present-view').click();
         await expect(phone.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 20_000 });

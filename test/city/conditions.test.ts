@@ -4,6 +4,8 @@
 // city.consultationsNote, weather.reference and civic.consultations, never an
 // inline Croatian/English pair. Also the bike-count plural keys lane C's
 // bikeCount() adapter will read (city.bikeCount_*, city.bikeCountUnknown).
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';

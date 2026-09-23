@@ -41,7 +41,9 @@ const PLAN_SPAN_S = 5;
 // artefact (which the browser really does fetch, R-L4), so every scenario
 // exercises the model's free-plane branch, not a live geometry match whose
 // exact stop spacing this test cannot see and does not need to.
-const ROUTE_ID = 'E2E6';
+// A real tram line, so the search Karta offers finds it and the fixture's vehicle rides its shape: the one UI path
+// into a line's detail now that Karta opens on the place's list (WP4).
+const ROUTE_ID = '6';
 
 /**
  * One vehicle as the twin publishes it: its estimate at the source time and
@@ -57,7 +59,7 @@ function vehicleItem(vehicleId: string, routeType?: number) {
     module: 'zet-rt',
     kind: 'vehicle',
     tier: 'open',
-    title: 'Tramvaj E2E6',
+    title: `Tramvaj ${ROUTE_ID}`,
     at: new Date().toISOString(),
     geo: { type: 'Point', coordinates: [CENTRE_LON, CENTRE_LAT] },
     data: {
@@ -247,7 +249,7 @@ test.describe('the motion model, mounted end to end (T11)', () => {
     expect(f2 - f1, 'reduced motion must not advance anywhere near full frame rate').toBeLessThanOrEqual(5);
   });
 
-  test('a session on /d: the vector map advances, keyboard-accessible detail names the line, and full-map mode keeps session controls', async ({
+  test('a session on /d: the vector map advances, keyboard-accessible detail names the line, and the shell keeps its session controls', async ({
     browser,
     request,
   }) => {
@@ -282,24 +284,23 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       await creditToggle.click();
       await expect(credit).toHaveJSProperty('open', false);
 
-      // The tap card: select the one drawn vehicle with the keyboard (T9's
-      // own arrow-key contract, schematic-view.ts's onCanvasKey) rather than
-      // clicking a computed pixel, so the assertion does not depend on the
-      // whole-network crop's own scale.
-      const route = phone.locator('[data-testid=running-routes] button').first();
-      await phone.locator('[data-action=toggle-sheet]').click();
-      await route.focus();
-      await phone.keyboard.press('Enter');
+      // The tap card: select the one drawn vehicle with the keyboard rather
+      // than clicking a computed pixel, so the assertion does not depend on
+      // the crop's own scale. Karta opens on the place's list, not on a list
+      // of running lines (WP4): the line's detail is reached the way a person
+      // reaches it, through the one search field, and its vehicle row is
+      // taken by keyboard.
+      const search = phone.getByTestId('transport-search');
+      await search.focus();
+      await search.fill(ROUTE_ID);
+      await phone.locator(`[data-action=select-route][data-id="${ROUTE_ID}"]`).first().click();
       const vehicle = phone.locator('[data-testid=route-vehicles] button').first();
       await vehicle.focus();
       await phone.keyboard.press('Enter');
       await expect(phone.getByTestId('vehicle-title')).toContainText(ROUTE_ID);
 
-      // The new full-map mode keeps the working shell, not the retired
+      // The working shell stays around the map, not the retired
       // panorama/meander graphic.
-      await phone.locator('.t-map-menu > summary').click();
-      await phone.click('#u-pokretu-map-full');
-      await expect(phone.locator('.ki[data-view="map"]')).toBeVisible();
       await expect(phone.getByTestId('session-label')).toBeVisible();
       await expect(phone.locator('[data-testid=map-canvas] canvas')).toBeVisible();
       await expect(phone.locator('[data-testid=panorama], [data-testid=meander-legend]')).toHaveCount(0);
