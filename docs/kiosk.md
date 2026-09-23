@@ -432,13 +432,17 @@ npm test
 npm run e2e
 npm run accept
 npm run accept:e2e
+E2E_PORT=8797 npm run accept:e2e -- e2e/accept/wall.spec.ts
 npm run replay:grade -- <direktorij-okvira> --out <prefiks> --targets stage1
 npm run review:visual
 node scripts/review-redesign.mjs
 ```
 
 `npm run accept` i `npm run accept:e2e` pokreću razinu prihvaćanja, namjerno crvenu do isporuke
-odgovarajućeg paketa; `npm test` i `npm run e2e` ne pokreću tu razinu.
+odgovarajućeg paketa; `npm test` i `npm run e2e` ne pokreću tu razinu. Drugo pokretanje
+Playwrighta iz zasebnog radnog stabla na istom računalu dobiva vlastite lokalne poslužitelje uz
+varijablu `E2E_PORT`: uz `E2E_PORT=8797` aplikacija sluša na 8797, a poslužitelj s kratkom sesijom
+na 8798, dok bez varijable ostaju 8787 i 8788.
 `npm run replay:grade` ocjenjuje staze tramvaja nad snimljenim okvirima i uz `--targets stage1`
 završava izlaznim kodom 1 čim ijedan redak ne dosegne prag. Pragovi, izmjerene vrijednosti i
 ručne provjere nalaze se u `docs/kaj-verification.md`, u odjeljku „Prihvaćanje, companion 2026-09”.
