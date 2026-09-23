@@ -101,8 +101,13 @@ disc carrying its count (grey at zero, grey and blank when the count is
 unknown, never "?"), venues only with a programme tonight and named, ranked
 stop names with every tram interchange, and the major street names. There is
 no "+N" mark on the wall map: no geographic clusters, and a merged vehicle
-pill lists every line number. The map highlights what the header sentence
-names without fitting or moving the camera.
+pill lists every line number and wraps to a second and a third row as it
+grows. Vehicle pills keep their place: a stop name first moves to another
+side of its point and otherwise yields while a vehicle passes,
+fading out over 300 ms, staying away at least one second and, once back,
+staying at least two; the screen's own place name is always drawn, under the
+pills. The map highlights what the header sentence names without fitting or
+moving the camera.
 
 The list is one time axis around the place, its head naming the measured
 circle and its walking time ("U blizini · 2,2 km · ~16 min";
@@ -110,8 +115,9 @@ circle and its walking time ("U blizini · 2,2 km · ~16 min";
 blue "za N min" for a tracked vehicle within ten minutes and a grey clock time
 for the timetable; then the timed rows (a closure's end, an event with its
 venue and the tram to it, the next sunset or sunrise, never both, the
-evening's last departures as one row from four hours ahead, the first morning
-tram from 22:00 until it leaves, tomorrow's openings when the evening
+evening's last departures as one row from four hours ahead, from 22:00 the
+first morning departure of the next line to start, until every line serving
+the place has started or 06:00, tomorrow's openings when the evening
 empties); then one "uvijek" row, the place's naming story or a protected
 building nearby, alternating every 20 minutes, and from 22:00 to 06:00 the
 24/7 pharmacy. The list never renders empty: a departure row always exists,
@@ -119,12 +125,16 @@ timetable when no vehicle is tracked, and when the evening empties the rows
 grow and the horizon reaches into the next morning instead of padding. No row
 carries a source, freshness or caveat caption. Rows are whole and at least
 64–92px tall from the item count, so fewer items make larger rows; a row whose
-words need two lines is taller. Nothing is cut with an ellipsis: a long row
-prints the source's own shorter label or wraps whole; when the rows do not
-fit, whole rows leave the list, the latest first, and the first row after the
-departures only after the later departures. Each row keeps its node: a new row
-enters at the bottom, fades in once and takes its place in time on the next
-update, a past one leaves at the top, and nothing moves without a change.
+words need two lines is taller. A departure's line badge shares the title's
+read tier, at least 40px in light and 44px in dark. Nothing is cut with an
+ellipsis: a long row prints the source's own shorter label or wraps whole;
+when the rows do not fit, whole rows leave the list, the latest first, and the
+first row after the departures only after the later departures, but the
+last-departures row, the first-departure row and the one "uvijek" row are
+never dropped for space. Candidate rows are measured in a hidden list of the
+same width; only the final selection reaches the visible list. Each row keeps
+its node: a new row is inserted once, at its time position, and fades in
+there, a past one leaves at the top, and nothing moves without a change.
 Weather, transit exceptions and events are not cards on the wall: weather
 speaks through the header sentence, closures and events are timed rows, and
 the paired compositions keep their own panels. Presentation suspends the
@@ -142,17 +152,28 @@ Workers AI may only choose among these templates and never writes words of its
 own, and a sentence is shown only while its fact holds (a last-tram line
 leaves when the tram has left). The templates are always in the pool, so the
 header never waits for the model and still speaks when it is unavailable. A
-fact is on screen at most once in ten minutes, whatever its wording, while at
-least three facts are at hand; with fewer, no sentence repeats word for word
-within ten minutes.
+sentence stays at least one rhythm unless its fact expires. When the fact on
+screen is restated (the next minute of a countdown, a moved estimate, a
+closure's end said again) the same wording is refreshed in place, without a
+fade, and a sentence never switches between "za N min" and a clock time. A
+model answer waits for the end of the sentence on screen, and a new rhythm
+re-times the rotation without starting it again. A fact is on screen at most
+once in ten minutes, in one wording, while at least three facts are at hand;
+with fewer, no sentence repeats word for word within ten minutes.
 
 Keep the place, date and time in the header and safety in the footer, where
 the on-duty pharmacy is a green cross, "24/7" and its short address and the
-sources are named without a time. The QR card holds the lead, the code and the
-address to type it at, with no benefit line and no copy button, beside a QR
-code of at least 240 CSS pixels on a 264px plate at the design sizes, with the
-code under the text at a fixed size, never stretched across a column. No fetch
-time, freshness mark or count without a name stands on the city overview.
+sources are named without a time. On the wall the footer is text, not
+controls: the verdict, the `/hitno` word and the map's credit are neither
+links nor buttons (a handheld `/kiosk/` keeps the link and Osnovno). The cross
+is announced with the pharmacy's caption, or as "24/7" alone when the address
+cannot be shown. The QR card holds the lead, the code and the address to type
+it at, with no benefit line and no copy button, beside a QR code of at least
+240 CSS pixels on a 264px plate at the design sizes, with the code under the
+text at a fixed size, never stretched across a column. No fetch or
+observation time, caveat, freshness mark or count without a name stands on
+the wall, in the overview or in a presentation; a source that is behind says
+only its state word.
 
 At night the solar theme turns the wall to its separately tuned dark palette.
 In a ZET outage the map stays a map: the network, stops, BAJS, closures and
@@ -160,12 +181,17 @@ places without vehicles, with one quiet note on the map; every departure is a
 grey timetable time and the header sentence says what is known. No headline
 says "unavailable".
 
-Touch, where the screen has it, is read-only: a stop ring opens that stop's
-next departures for 60 seconds, a row shows its detail (venue, address, the
-tram to it), the pharmacy its address and phone, and the wall returns by
-itself. Otherwise touch opens only Osnovno, from the verdict word on the
-footer; the camera never moves, and scanning is the only way to take content
-along.
+Touch, where the screen has it, is read-only and needs no interactive map:
+the wall finds the touched ring itself, within the finger tolerance. A stop
+ring opens that stop's board for 60 seconds: its next three departures in the
+phone's row, then one "Vozni red" line with later trips. A row shows its
+detail (venue, address, the tram to it) and the pharmacy its caption, name
+and phone. The panel covers the list in its box and the wall returns by
+itself: after 60 seconds, when a ZET outage starts under a board, on a
+presentation or when the phase changes; a second touch replaces the first.
+Nothing else reacts, the camera never moves, touch is off in the schema view,
+in a presentation and in Postavke, and scanning is the only way to take
+content along.
 
 Starting a screen is one optional field, "Adresa ili stajalište", a line under
 it saying what the screen will show, and "Pokreni"; place, frame, view, theme,
@@ -234,8 +260,10 @@ the map inert.
 A deliberate presentation gives the public subject a distance-readable
 layout, not a cropped phone screen. Route/stop selections have geography
 and a separate subject board. Events and civic selections lead with their
-title and source-supported details. A legacy phone that still sends the
-retired `kvart` layer renders as the plain Sada overview, never a district.
+title and source-supported details. Beside the subject stands a 448px rail
+(scaled with the sign): the QR card, stood up, under one local fact, its
+words at the 28px walk-up tier. A legacy phone that still sends the retired
+`kvart` layer renders as the plain Sada overview, never a district.
 
 Safety and the invitation remain available; the return-to-overview action
 is the presenter's, on the phone. The screen shows no control that ends a
@@ -259,7 +287,8 @@ the session pill and the safety shortcut; the desk adds Još. "Podijeli grad"
 is a labelled button beside the session pill on every screen of a direct
 session, absent for a one-hop peer and once the session has ended; one tap
 opens the rotating code and its QR. Under a narrow header it keeps its icon
-and its accessible name. A reload keeps the screen's name in the session pill.
+and its accessible name, and at 200% text the header still fits the phone's
+width. A reload keeps the screen's name in the session pill.
 
 Sada reads, in this order: the place as the title; one sentence with its
 coloured kicker (Promet, Kultura, Vrijeme, Bicikli, Noćas or Radovi); on the
@@ -267,8 +296,10 @@ phone a 112px still map band around the place that opens Karta; three
 departures at the automatically chosen stop; then the "U blizini" list, the
 wall's own time-ordered rows continuing after those departures under the
 circle measured for the place ("U blizini · 2 km · ~15 min"); below the fold
-the sources, crediting ZET. There is no generic heading sentence, no date
-line, no instruction, no count and no time filter. The place follows one
+the sources, crediting ZET. The sentence is the wall's: approved templates
+over the same facts under the header's strict rule, with the model asked at
+most once a minute. There is no generic heading sentence, no date line, no
+instruction, no count and no time filter. The place follows one
 order: the wall's place or the screen's stop, then a saved stop, then the
 nearest tram stop within 400 m, then the nearest bus stop within 300 m, then
 the address alone; with none of these the place is Trg bana J. Jelačića. The
@@ -277,8 +308,9 @@ departures come from the place's stop, else from the nearest platform within
 near, Sada shows no departures block at all.
 
 Whenever Sada has a stop to board, a departure row exists. A blue countdown
-with its dot is a vehicle ZET tracks, a grey clock time is the timetable, and
-no row carries a word for its kind. While a board is on its way one row-sized
+with its dot is a vehicle ZET tracks (a screen reader announces the dot as
+"uživo"), a grey clock time is the timetable, and no row carries a visible
+word for its kind. While a board is on its way one row-sized
 placeholder holds the place; only a source that cannot answer says so, in one
 line. Sada reads the same departure cache and arrival logic as the stop
 detail.
@@ -290,7 +322,10 @@ closures); there is no group taxonomy, no chip row and no map menu, and there
 are no geographic clusters on any surface. One small control in the sheet
 head switches between the map and the schematic network ("Shema" / "Karta")
 and is remembered on the device. A selected place stays drawn whatever the
-search.
+search. A stop chosen on the phone opens the sheet with its departures in
+view, without fitting the map to it. A browser without WebGL2 gets no map,
+stated as unavailable, while the sheet, its lists and the search keep
+working.
 
 Karta has one map, one search field over routes, stops, places and streets,
 a peek/detail/open sheet on a phone and a board column on the desk. The peek
@@ -332,7 +367,8 @@ state, stopping and takeover. No floating cast button covers content,
 and no duplicate detail/aside buttons compete with it.
 
 When the ten minutes end, the content clears: what remains is the invitation
-to scan again and the `/hitno` link.
+to scan again and the `/hitno` link, with no snapshot and no export, and
+nothing more is fetched.
 
 ## Data, access and acceptance
 
@@ -351,8 +387,9 @@ on its own line's rails; off them it is drawn at its reported positions. On the
 schematic, a tram on a terminus loop is drawn at the circle of the loop's first
 stop, or of its other end where ZET's artwork does not print the first
 (Mandlova); where its line's artwork prints neither end (the Mandlova to
-Ravnice loop of a line that does not serve Ravnice), the schematic does not
-draw the tram, which stays on the geographic map.
+Ravnice loop of a line that does not serve Ravnice, a depot loop from
+Ljubljanica to Selska, a turn at another line's terminus), the schematic does
+not draw the tram, which stays on the geographic map.
 BAJS counts require a recent observation; air is a
 preliminary station observation. A ZET countdown exists only where a tracked
 vehicle carries that trip, built from the scheduled departure and ZET's own
