@@ -135,40 +135,7 @@
     "headUntil": "do {time}",
     "headFrom": "od {time}",
     "headUntilDate": "do {date}",
-    "next": "Zatim",
-    "moreItems_one": "+ {count} stavka",
-    "moreItems_few": "+ {count} stavke",
-    "moreItems_other": "+ {count} stavki",
-    "moreLines_one": "+ {count} linija",
-    "moreLines_few": "+ {count} linije",
-    "moreLines_other": "+ {count} linija",
-    "moreClosures_one": "+ {count} zatvaranje",
-    "moreClosures_few": "+ {count} zatvaranja",
-    "moreClosures_other": "+ {count} zatvaranja",
-    "moreEvents_one": "+ {count} događanje",
-    "moreEvents_few": "+ {count} događanja",
-    "moreEvents_other": "+ {count} događanja"
-  },
-  "tiles": {
-    "line": "Linija {line}",
-    "closures": "Zatvaranja",
-    "works": "Radovi",
-    "worksCity": "Radovi u gradu",
-    "worksNow_one": "{count} rad u tijeku",
-    "worksNow_few": "{count} rada u tijeku",
-    "worksNow_other": "{count} radova u tijeku",
-    "gazette": "Glasnik",
-    "event": "Događanje",
-    "lastRun": "Zadnji polazak",
-    "scheduled": "vozni red",
-    "bikesFree": "Bicikli",
-    "parkingFree": "Garaža",
-    "waste": {
-      "label": "Odvoz"
-    }
-  },
-  "overview": {
-    "allClearConfirmed": "potvrđeno {time}"
+    "next": "Zatim"
   },
   "weather": {
     "now": "Sada",
@@ -352,7 +319,6 @@
     "consultations": "Nacionalna savjetovanja"
   },
   "transit": {
-    "fromStop": "Sa stajališta {stop}",
     "noDelayData": "nema podataka"
   },
   "arrivals": {
@@ -428,11 +394,9 @@
     "windowFromUntil": "od {from} do {until}"
   },
   "kvart": {
-    "wholeCity": "Cijeli grad",
     "saveRoute": "Spremi liniju {id}",
     "saveStop": "Spremi stajalište {name}",
     "unsave": "Ukloni iz spremljenog",
-    "walkMinutes": "{minutes} min",
     "notifyOn_one": "{count} uključena",
     "notifyOn_few": "{count} uključene",
     "notifyOn_other": "{count} uključenih",

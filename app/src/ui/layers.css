@@ -187,13 +187,6 @@
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
 .route-delay[data-state='early'] { color: var(--tone-weather); }
 .route-delay[data-state='ontime'] { color: var(--tone-live); }
-/* The tile family (.tl) is signage.css's; its hover and press live here with
-   the other controls. Sada's time band, its segments and its "Zatim" foot
-   went with the band's renderers (WP5 A3). */
-@media (hover: hover) {
-  .tl:not([data-tone]):not([data-variant='ink']):hover { background-color: var(--tone-surface-2); }
-  .tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
-}
 /* Provenance: one line to open; the required credits sit inside. */
 .provenance { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); font-size: var(--text-meta); color: var(--tone-text-muted); }
 .provenance summary { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--target); cursor: pointer; font-weight: var(--weight-medium); color: var(--tone-text-primary); list-style: none; }
@@ -464,11 +457,8 @@
 @media (hover: none) {
   .row-button:active, .route-link:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
   .sf-number-primary:active { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
-  /* Rows inside the events well and the tiles already sit on a raised surface; their press goes one level
-     further. A tinted or ink tile has no deeper surface to go to and shows the hover's inset stroke instead. */
+  /* Rows inside the events well already sit on a raised surface; their press goes one level further. */
   .ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }
-  .tl:not([data-tone]):not([data-variant='ink']):active { background-color: var(--tone-surface-3); transition: none; }
-  .tl[data-tone]:active, .tl[data-variant='ink']:active { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
 }
 
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
@@ -487,10 +477,6 @@
 }
 /* Very narrow room (a phone at 200% text is about 11rem). */
 @container ws (max-width: 16rem) {
-  /* A band's trail (the works count, the calm verdict's time) is signage and never breaks; in this
-     much room it drops under the title instead of squeezing the words beside it letter by letter. */
-  .tl[data-variant='band'] { grid-template-columns: auto minmax(0, 1fr); }
-  .tl[data-variant='band'] .tl-trail { grid-column: 2; justify-self: start; }
   /* A row's lead (time, all-day, amount) takes its own line above the title. */
   .row-button { flex-wrap: wrap; }
   .row-lead { flex: 1 0 100%; justify-items: start; text-align: start; }

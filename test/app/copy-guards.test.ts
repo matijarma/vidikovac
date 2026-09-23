@@ -134,8 +134,8 @@ describe('one catalogue: no inline Croatian/English pair outside app/src/i18n (W
 describe('one word per concept: "Sada" is now and "vozni red" the timetable (WP5 step 6)', () => {
   it('the timetable word is "vozni red" wherever a time is not tracked', () => {
     expect(hr.arrivals.scheduled).toBe('vozni red');
-    expect(hr.tiles.scheduled).toBe(hr.arrivals.scheduled);
-    expect(en.tiles.scheduled).toBe(en.arrivals.scheduled);
+    // tiles.scheduled, its twin, went with the phone's tiles (WP5 B1): one key says it.
+    expect(JSON.stringify(hr).split('"vozni red"').length - 1).toBe(1);
     expect(JSON.stringify(hr)).not.toMatch(/po redu vožnje|po rasporedu|ZET GTFS/);
   });
   it('the weather now is "Sada"', () => {

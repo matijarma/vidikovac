@@ -10,8 +10,7 @@
 //   - a literal first argument of any `.t(…)` call (`i18n.t('k')`, `ctx.i18n.t('k')`);
 //   - a local wrapper such as `const t = (key) => escapeHtml(i18n.t(\`presentation.${key}\`))`
 //     (app/src/experience/presentation.ts; the prefix is read from the wrapper) or the
-//     pass-through `const t = (key) => i18n.t(key)` of app/src/kiosk/strings.ts and
-//     app/src/experience/timeband.ts;
+//     pass-through `const t = (key) => i18n.t(key)` of app/src/kiosk/strings.ts;
 //   - app/src/kiosk/strings.ts `group('name', ['a', …])` (kiosk.name.a), `forms('name', 'base')`
 //     (a plural base) and `record([...], (k) => \`prefix${k}\`)`;
 //   - `tr(i18n, 'k')` (transport.k), `trPlural(i18n, 'base', n)` (a plural base under

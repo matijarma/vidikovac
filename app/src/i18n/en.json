@@ -131,35 +131,7 @@
     "headUntil": "until {time}",
     "headFrom": "from {time}",
     "headUntilDate": "until {date}",
-    "next": "Next",
-    "moreItems_one": "+ {count} item",
-    "moreItems_other": "+ {count} items",
-    "moreLines_one": "+ {count} line",
-    "moreLines_other": "+ {count} lines",
-    "moreClosures_one": "+ {count} closure",
-    "moreClosures_other": "+ {count} closures",
-    "moreEvents_one": "+ {count} event",
-    "moreEvents_other": "+ {count} events"
-  },
-  "tiles": {
-    "line": "Line {line}",
-    "closures": "Closures",
-    "works": "Works",
-    "worksCity": "Works across the city",
-    "worksNow_one": "{count} work under way",
-    "worksNow_other": "{count} works under way",
-    "gazette": "Gazette",
-    "event": "Event",
-    "lastRun": "Last departure",
-    "scheduled": "timetable",
-    "bikesFree": "Bikes",
-    "parkingFree": "Garage",
-    "waste": {
-      "label": "Waste pickup"
-    }
-  },
-  "overview": {
-    "allClearConfirmed": "confirmed {time}"
+    "next": "Next"
   },
   "weather": {
     "now": "Now",
@@ -338,7 +310,6 @@
     "consultations": "National consultations"
   },
   "transit": {
-    "fromStop": "From {stop}",
     "noDelayData": "no data"
   },
   "arrivals": {
@@ -414,11 +385,9 @@
     "windowFromUntil": "from {from} to {until}"
   },
   "kvart": {
-    "wholeCity": "Whole city",
     "saveRoute": "Save line {id}",
     "saveStop": "Save stop {name}",
     "unsave": "Remove from saved",
-    "walkMinutes": "{minutes} min",
     "notifyOn_one": "{count} on",
     "notifyOn_other": "{count} on",
     "notifyOff": "off"

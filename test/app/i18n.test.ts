@@ -21,6 +21,13 @@ const base = (k: string): string => { const s = PLURAL.find((p) => k.endsWith(p)
 const DEAD_KEYS = [
   // WP5 B1 (step 8): the wall prints no fetch time, caveat or note (companion brief §12).
   'kiosk.lines.modelNote', 'kiosk.paired.dataFrom', 'kiosk.paired.fetchedAt', 'panels.sunComputed',
+  // WP5 B1 (step 9): the phone's tiles, their producers and the time band are gone; so are the words only they read.
+  'tiles.line', 'tiles.closures', 'tiles.works', 'tiles.worksCity', 'tiles.worksNow_one', 'tiles.worksNow_few', 'tiles.worksNow_other',
+  'tiles.gazette', 'tiles.event', 'tiles.lastRun', 'tiles.scheduled', 'tiles.bikesFree', 'tiles.parkingFree', 'tiles.waste.label',
+  'overview.allClearConfirmed', 'transit.fromStop', 'kvart.wholeCity', 'kvart.walkMinutes',
+  'timeband.moreItems_one', 'timeband.moreItems_few', 'timeband.moreItems_other', 'timeband.moreLines_one', 'timeband.moreLines_few',
+  'timeband.moreLines_other', 'timeband.moreClosures_one', 'timeband.moreClosures_few', 'timeband.moreClosures_other',
+  'timeband.moreEvents_one', 'timeband.moreEvents_few', 'timeband.moreEvents_other',
   'kiosk.scenes.tonight', 'kiosk.scenes.position', 'kiosk.scenes.moreEvents_one', 'kiosk.tiles.vehicles', 'kiosk.tiles.closures', 'kiosk.safety.nextScene',
   'kiosk.legendPanorama', 'kiosk.legendPanoramaLoading', 'kiosk.legendQr', 'kiosk.legendMeander', 'kiosk.safetyLabel',
   'kiosk.catalogueWeather', 'kiosk.catalogueVehicles', 'kiosk.catalogueClosures', 'kiosk.typeCode', 'kiosk.invitationEn',

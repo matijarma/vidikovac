@@ -65,7 +65,10 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   // The wall (publicDisplay) prints no observation time, note or caveat (companion brief §12, §13 #12,
   // #13): a count that is not fresh says the stale word, the air index stands alone. The phone keeps them.
   const bikeMeta=publicDisplay?(p.facts?.fresh?'':`<p class="city-meta">${e(ct(i18n,'stale'))}</p>`):`<p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`;
-  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div>${bikeMeta}`:'';
+  // An unknown count is a dash on the wall (our own mark, as city.bikeCountUnknown says it), never "?"
+  // (§13 #14) and never an empty cell; the phone keeps its "?".
+  const count=(mode:'rent'|'return'):string=>{const value=bikeAvailability(p,mode);return publicDisplay&&value==='?'?'–':e(value);};
+  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${count('rent')}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${count('return')}</strong><span>${e(ct(i18n,'returns'))}</span></div></div>${bikeMeta}`:'';
   const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(airIndexLabel(i18n,p.facts?.index))}</p>${publicDisplay?'':`<p class="city-meta">${e(ct(i18n,'airNote'))} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`}`:'';
   return `<article class="city-detail" data-testid="city-detail" data-place-id="${a(p.id)}">
     ${publicDisplay?'':`<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n,'back'))}</button>`}

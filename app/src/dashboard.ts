@@ -28,7 +28,6 @@ import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
-import { tickTimebandClock } from './experience/timeband';
 import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -1250,7 +1249,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
-    tickTimebandClock(main, now());
     paintShell();
     if (presentationOpen) paintPresentation();
   }, TICK_MS);

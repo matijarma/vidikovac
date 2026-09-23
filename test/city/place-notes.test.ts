@@ -46,7 +46,7 @@ describe('the wall place detail carries no note, time or control', () => {
     id: 'bajs-1', category: 'cycle-parking', name: 'Trg bana Jelačića', sourceId: 'bajs', sourceRecord: 'b1', lon: 15.977, lat: 45.813,
     updatedAt: '2026-09-20T11:58:00.000Z', facts: { fresh, bikes: 4, docks: 6 },
   });
-  const air: Place = { id: 'air-1', category: 'air', name: 'Zagreb-1', sourceId: 'air', sourceRecord: 'a1', lon: 15.97, lat: 45.8, updatedAt: '2026-09-20T11:00:00.000Z', facts: { index: 2 } };
+  const air: Place = { id: 'air-1', category: 'water', name: 'Zagreb-1', sourceId: 'air', sourceRecord: 'a1', lon: 15.97, lat: 45.8, updatedAt: '2026-09-20T11:00:00.000Z', facts: { index: 2 } };
   const street: StreetStory = { id: 's1', name: 'Tkalčićeva ulica', settlement: 'Zagreb', settlementId: 'z', description: 'Ulica je dobila ime po Ivanu Tkalčiću, povjesničaru.', updatedAt: '2026-09-01' };
   const CAVEAT = /Obuhvat zaštite|Podatak iz registra|Preliminarni indeks|Podatak od|nije potvrđeno|\d\d:\d\d|2026-09-\d\d|data-action/;
   it('heritage: no site note and no register sentence; the phone keeps both', () => {
@@ -61,6 +61,9 @@ describe('the wall place detail carries no note, time or control', () => {
     expect(fresh).not.toMatch(CAVEAT);
     const old = placeDetail(i18n, bike(false), emptyCity(), [], false, true);
     expect(old).not.toMatch(CAVEAT);
+    expect(old).not.toContain('?');
+    expect(old).toContain('<strong class="city-bike-count">–</strong>');
+    expect(placeDetail(i18n, bike(false), emptyCity(), [])).toContain('<strong class="city-bike-count">?</strong>');
     expect(old).toContain(`<p class="city-meta">${hr.city.stale}</p>`);
     expect(placeDetail(i18n, bike(true), emptyCity(), [])).toMatch(/Podatak od · \d\d:\d\d/);
   });

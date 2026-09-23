@@ -320,8 +320,10 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(layers).toContain('.row-button:active');
     expect(layers).toContain('.route-link:active');
-    // A tile already stands on surface-1, so its press goes one level further, like the rows in the events well.
-    expect(layers).toContain(".tl:not([data-tone]):not([data-variant='ink']):active { background-color: var(--tone-surface-3); transition: none; }");
+    // The rows in the events well already stand on a raised surface, so their press goes one level further;
+    // the time band's tiles and their press went with their producers (WP5 B1).
+    expect(layers).toContain('.ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }');
+    expect(layers).not.toMatch(/\.tl\b/);
     expect(layers).toContain('.dir-item:active');
     expect(layers).toContain('.sf-number:active');
     expect(layers).toContain('.link-arrow:active');
@@ -399,14 +401,8 @@ describe('the tiles read in one order on every width', () => {
   it('never reorders a tile in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
     // `order` (and a row-reversed flow) would move a tile past its neighbours
     // for the eye while leaving it where it was for a Tab key and a screen reader.
-    const rules = /\.tl(?:-[a-z-]+)?\b[^{}]*\{[^}]*\}/g;
-    let seen = 0;
-    for (const [declaration] of LAYERS_CSS.matchAll(rules)) {
-      seen += 1;
-      expect(declaration, declaration).not.toMatch(/\border\s*:/);
-    }
-    expect(seen).toBeGreaterThan(0);
-    expect(LAYERS_CSS).not.toMatch(/\.tl\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+    // The time band's .tl tiles went with their producers (WP5 B1); no rule may bring them back.
+    expect(LAYERS_CSS).not.toMatch(/\.tl\b/);
     expect(LAYERS_CSS).not.toMatch(/\.ov\b/);
   });
 });
