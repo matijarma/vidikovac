@@ -342,16 +342,22 @@ export function pairedShell(layer: LayerId, s: KioskStrings, lightweight: boolea
 
 function warningRows(ctx: PairedContext): string[] {
   const cap = ctx.snapshots['dhmz-cap'];
-  const rowOf = (w: FeedItem, upcoming: boolean): string => row(
-    `<span class="badge k-badge" data-tone="${escapeAttribute(w.severity ?? 'info')}">${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</span> ${externalHtml('title', w.title)}`,
-    joinWithFit([
-      { text: upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '' },
-      { text: w.summary ?? '', fit: true },
-      { text: w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : '' },
-    ]),
-    '',
-    ` data-severity="${escapeAttribute(w.severity ?? 'info')}" data-window="${upcoming ? 'upcoming' : 'active'}"`,
-  );
+  const rowOf = (w: FeedItem, upcoming: boolean): string => {
+    const severity = ['info', 'minor', 'moderate', 'severe', 'extreme'].includes(w.severity ?? '') ? w.severity! : 'info';
+    const key = `panels.severity.${severity}`;
+    const translated = ctx.i18n.t(key);
+    const severityLabel = translated === key ? ctx.strings.paired.warnings : translated;
+    return row(
+      `<span class="badge k-badge" data-tone="${escapeAttribute(severity)}">${escapeHtml(severityLabel)}</span> ${externalHtml('title', w.title)}`,
+      joinWithFit([
+        { text: upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '' },
+        { text: w.summary ?? '', fit: true },
+        { text: w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : '' },
+      ]),
+      '',
+      ` data-severity="${escapeAttribute(severity)}" data-window="${upcoming ? 'upcoming' : 'active'}"`,
+    );
+  };
   // Active warnings first, most severe on top; announced ones after, each saying from when. Ended ones are gone.
   return [...activeWarnings(cap, ctx.now).map((w) => rowOf(w, false)), ...upcomingWarnings(cap, ctx.now).map((w) => rowOf(w, true))];
 }
@@ -372,9 +378,13 @@ function warningsRelevant(ctx: PairedContext): boolean {
 function closureRows(ctx: PairedContext, limit: number): string[] {
   const { strings: s, i18n } = ctx;
   return closuresByDistance(ctx.snapshots.prometnice, ctx.stop, ctx.now).slice(0, limit).map(({ item, distanceM }) => {
-    const type = i18n.t(`panels.closureType.${dataText(item, 'subtype') || 'ROAD_CLOSED'}`);
+    const subtype = dataText(item, 'subtype');
+    const key = `panels.closureType.${subtype || 'ROAD_CLOSED'}`;
+    const translated = i18n.t(key);
+    const type = translated === key ? s.paired.closures : translated;
     const until = item.until ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : '';
-    return row(externalHtml('title', item.title), [type, until].filter(Boolean).map(escapeHtml).join(' · '), distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
+    const detail = `${escapeHtml(type)}${until ? ` · ${escapeHtml(until)}` : ''}`;
+    return row(externalHtml('title', item.title), detail, distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
   });
 }
 

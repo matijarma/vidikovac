@@ -16,6 +16,7 @@ import { normalName } from '../../../shared/city/geo';
 import { derivePlace, placeFromStop, type ScreenPlace } from '../../../shared/city/place';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { externalHtml } from './external';
+import { vetExternal } from '../../../shared/kiosk/external-text';
 import { fmtDistance } from './format';
 import { anchorOf, suggestPlaces, type PlaceSuggestion, type StreetGeo } from './places';
 import { sortRouteIds } from './stops';
@@ -122,7 +123,9 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
   let streetNames = new Map<string, number>();
 
   if (place) {
-    input.value = place.address ?? place.name;
+    const initialText = vetExternal(place.address ? 'address' : 'name', place.address ?? place.name, 'row');
+    input.value = initialText ?? '';
+    if (initialText === null) place = null;
     pickedText = input.value.trim();
   }
 
@@ -154,7 +157,7 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
       ? [routesText(s, row.stop.routes), deps.near && row.stop.distanceM !== null ? fmtDistance(deps.locale, row.stop.distanceM) : '']
       : row.kind === 'segment' ? [settlementText(row.street), routesText(s, row.stop.routes)] : [settlementText(row.street)]).filter(Boolean).join(' · ');
     return `<li class="k-suggest-row" id="${escapeAttribute(`${listId}-${index}`)}" role="option" aria-selected="false" data-testid="setup-suggestion" data-kind="${row.kind}" data-index="${index}">`
-      + `<span class="k-suggest-name">${externalHtml('name', rowLabel(s, row))}</span>`
+      + `<span class="k-suggest-name">${externalHtml(row.kind === 'stop' ? 'name' : 'address', rowLabel(s, row))}</span>`
       + (meta ? `<span class="k-suggest-meta">${externalHtml('summary', meta)}</span>` : '')
       + '</li>';
   }
@@ -173,14 +176,14 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
     close();
   }
   function render(next: PlaceSuggestion[]): void {
-    rows = next;
+    rows = next.filter(row => vetExternal(row.kind === 'stop' ? 'name' : 'address', rowLabel(s, row), 'row') !== null);
     active = -1;
     delete list.dataset.stale;
-    list.innerHTML = next.map(rowMarkup).join('');
-    list.hidden = next.length === 0;
-    input.setAttribute('aria-expanded', next.length > 0 ? 'true' : 'false');
+    list.innerHTML = rows.map(rowMarkup).join('');
+    list.hidden = rows.length === 0;
+    input.setAttribute('aria-expanded', rows.length > 0 ? 'true' : 'false');
     input.removeAttribute('aria-activedescendant');
-    showStatus(next.length > 0 ? '' : s.setup.noMatch);
+    showStatus(rows.length > 0 ? '' : s.setup.noMatch);
   }
 
   /** The lists, once; a failed attempt is tried again on the next focus or keystroke, never by itself. */
@@ -242,9 +245,11 @@ export function mountPlaceField(host: HTMLElement, deps: PlaceFieldDeps): PlaceF
     return row.kind === 'stop' ? placeFromStop(row.stop, deps.isTram) : derivePlace(anchorOf(row), stops ?? [], deps.isTram);
   }
   function choose(next: ScreenPlace, label: string): void {
+    const chosenText = vetExternal(next.kind === 'address' || next.address ? 'address' : 'name', label, 'row');
+    if (chosenText === null) return;
     place = next;
-    input.value = label;
-    pickedText = label.trim();
+    input.value = chosenText;
+    pickedText = chosenText.trim();
     close();
     emit();
   }

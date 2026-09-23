@@ -1,7 +1,7 @@
 // ISO 4217 alphabetic codes, including fund/metal/test codes and withdrawn
 // currencies: a historical payment is still a payment vector.
 // Baseline: Debian iso-codes' ISO 4217 data (active and historic entries);
-// successor codes XCG and ZWG are included explicitly. This is a data pin,
+// additional codes XAD, XCG and ZWG are included explicitly. This is a data pin,
 // not a runtime dependency on Intl's implementation-specific currency list.
 export const ISO_4217_CODES = `
 ADF ADP AED AFA AFN ALK ALL AMD ANG AOA AOK AON AOR ARA ARL ARM ARP ARS
@@ -18,6 +18,6 @@ NZD OMR PAB PEH PEI PEN PES PGK PHP PKR PLN PLZ PTE PYG QAR RHD ROK ROL
 RON RSD RUB RUR RWF SAR SBD SCR SDD SDG SDP SEK SGD SHP SIT SKK SLE SLL
 SOS SRD SRG SSP STD STN SUR SVC SYP SZL THB TJR TJS TLE TMM TMT TND TOP TRL TRY
 TTD TWD TZS UAH UAK UGS UGW UGX USD USN USS UYI UYN UYP UYU UYW UZS VEB VED VEF
-VES VNC VND VUV WST XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XEU XFO XFU XOF XPD
+VES VNC VND VUV WST XAD XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XEU XFO XFU XOF XPD
 XPF XPT XRE XSU XTS XUA XXX YDD YER YUD YUM YUN ZAL ZAR ZMK ZMW ZRN ZRZ ZWD ZWG ZWL ZWN ZWR
 `.trim().split(/\s+/u);

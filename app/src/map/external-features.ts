@@ -2,7 +2,7 @@
 // re-exported by city-map for pure callers, but startup imports no renderer.
 import { toLonLat } from '../../../shared/motion/geo';
 import type { Network } from '../../../shared/motion/network';
-import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import { vetExternal, vetExternalMap } from '../../../shared/kiosk/external-text-boundary';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { vehicleKind } from './vehicle-mark';
 import type { MapPoint, MapLine, MapOutline, PointProperties, PointFeatureCollection, LineFeatureCollection, LineStringFeatureCollection, NetworkFeatureCollection, StopFeatureCollection } from './city-map';
@@ -24,32 +24,35 @@ export function screenStopGeoJson(stop: ScreenStop | null): { type: 'FeatureColl
   return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] }, properties: { id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '' } }] };
 }
 
-export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollection {
+export function pointsToGeoJson(points: readonly MapPoint[], publicDisplay = true): PointFeatureCollection {
   return {
     type: 'FeatureCollection',
     features: points
-      .filter(p => p.at === undefined && Number.isFinite(p.lon) && Number.isFinite(p.lat)
-        && (p.title === '' || vetExternal('name', p.title, 'row') !== null))
-      .map(p => {
-        const properties: PointProperties = p.routeId === undefined ? { id: p.id, title: p.title } : { id: p.id, title: p.title, routeId: p.routeId };
+      .filter(p => p.at === undefined && Number.isFinite(p.lon) && Number.isFinite(p.lat))
+      .flatMap(p => {
+        const title = p.title === '' ? '' : vetExternalMap('name', p.title, publicDisplay);
+        if (title === null) return [];
+        const properties: PointProperties = p.routeId === undefined ? { id: p.id, title } : { id: p.id, title, routeId: p.routeId };
         if (p.place !== undefined) properties.place = p.place;
         for (const [key, value] of Object.entries(p.props ?? {})) {
           if (RESERVED_POINT_PROPS.has(key) || value === undefined) continue;
           properties[key] = typeof value === 'string' && ['name', 'address', 'badge', 'label'].includes(key)
-            ? vetExternal(key === 'address' ? 'address' : 'name', value, 'row') ?? '' : value;
+            ? vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay) ?? '' : value;
         }
-        return { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] }, properties };
+        return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] }, properties }];
       }),
   };
 }
 
-export function linesToGeoJson(lines: readonly MapLine[]): LineFeatureCollection {
+export function linesToGeoJson(lines: readonly MapLine[], publicDisplay = true): LineFeatureCollection {
   return {
     type: 'FeatureCollection',
     features: lines
-      .filter(l => l.coordinates.length >= 2 && l.coordinates.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat))
-        && (l.title === '' || vetExternal('name', l.title, 'row') !== null))
-      .map(l => ({ type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: l.coordinates }, properties: { id: l.id, title: l.title } })),
+      .filter(l => l.coordinates.length >= 2 && l.coordinates.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat)))
+      .flatMap(l => {
+        const title = l.title === '' ? '' : vetExternalMap('name', l.title, publicDisplay);
+        return title === null ? [] : [{ type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: l.coordinates }, properties: { id: l.id, title } }];
+      }),
   };
 }
 

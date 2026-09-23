@@ -31,7 +31,7 @@ describe('decision 24 finite structural close-out', () => {
     expect(ISO_4217_CODES.every(code => /^[A-Z]{3}$/u.test(code))).toBe(true);
     // Independent sentinels: Swiss francs, Asian/African codes, fund/metal
     // units, historic kuna, and successor currencies, not a regex-derived list.
-    expect(ISO_4217_CODES).toEqual(expect.arrayContaining(['CHF', 'CNY', 'JPY', 'INR', 'ZAR', 'XAU', 'XDR', 'CLF', 'HRK', 'XCG', 'ZWG']));
+    expect(ISO_4217_CODES).toEqual(expect.arrayContaining(['CHF', 'CNY', 'JPY', 'INR', 'ZAR', 'XAD', 'XAU', 'XDR', 'CLF', 'HRK', 'XCG', 'ZWG']));
     for (const code of ISO_4217_CODES) for (const currency of [code, code.toLowerCase()]) {
       for (const value of [`45 ${currency}`, `${currency}45`, `45${currency}`, `${currency} 45`]) {
         for (const surface of ['header', 'row'] as const) {

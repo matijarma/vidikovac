@@ -33,11 +33,137 @@ const INDIRECT_GUARDS: Record<string, string> = {
 // with publicDisplay=true, never placesMarkup. Keep the exception exact.
 const PHONE_ONLY = new Set(['app/src/city/markup.ts#placesMarkup', 'app/src/city/markup.ts#departuresMarkup']);
 
+const program = ts.createProgram(FILES.map(file => resolve(ROOT, file)), { noResolve: true, noLib: true });
+const checker = program.getTypeChecker();
+function initializer(node: ts.Identifier): ts.Expression | undefined {
+  const declaration = checker.getSymbolAtLocation(node)?.valueDeclaration;
+  // Only immutable aliases prove value flow. An unrelated vet call, or an
+  // unused vetted variable, cannot authorize a later write of the raw value.
+  return declaration && ts.isVariableDeclaration(declaration)
+    && ts.isVariableDeclarationList(declaration.parent)
+    && (declaration.parent.flags & ts.NodeFlags.Const) !== 0 ? declaration.initializer : undefined;
+}
+const same = (a: ts.Node, b: ts.Node): boolean => a.getText() === b.getText();
+const fixedCopy = (node: ts.Node): boolean =>
+  /^(?:s|ctx\.strings)\.paired\.(?:closures|warnings)$/u.test(node.getText());
+
+/** Prove the complete rendered expression is a vetted return (or fixed
+ * fallback), following const aliases rather than searching a function body. */
+function guardedValue(node: ts.Expression, seen = new Set<ts.Node>()): boolean {
+  if (seen.has(node)) return false;
+  const next = new Set(seen).add(node);
+  if (ts.isStringLiteralLike(node) || node.kind === ts.SyntaxKind.NullKeyword || fixedCopy(node)) return true;
+  if (ts.isIdentifier(node)) {
+    const init = initializer(node);
+    return Boolean(init && guardedValue(init, next));
+  }
+  if (ts.isParenthesizedExpression(node)) return guardedValue(node.expression, next);
+  if (ts.isCallExpression(node)) {
+    const name = node.expression.getText();
+    if (name === 'vetExternal') return node.arguments.length === 3 && /^(?:'row'|'header')$/u.test(node.arguments[2]!.getText());
+    if (name === 'externalHtml') return node.arguments.length === 2;
+    if (/^(?:e|escapeHtml)$/u.test(name)) return Boolean(node.arguments[0] && guardedValue(node.arguments[0], next));
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+    return guardedValue(node.left, next) && guardedValue(node.right, next);
+  }
+  if (ts.isConditionalExpression(node)) {
+    if (guardedValue(node.whenTrue, next) && guardedValue(node.whenFalse, next)) return true;
+    // i18n's missing-key return must flow only into the equality check; the
+    // rendered branch substitutes existing fixed copy, never that key.
+    const condition = node.condition;
+    if (ts.isBinaryExpression(condition) && condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+      && same(condition.left, node.whenFalse) && ts.isIdentifier(node.whenFalse) && fixedCopy(node.whenTrue)) {
+      const translated = initializer(node.whenFalse);
+      return Boolean(translated && ts.isCallExpression(translated) && /\.t$/u.test(translated.expression.getText())
+        && translated.arguments[0] && same(translated.arguments[0], condition.right));
+    }
+  }
+  return false;
+}
+
+function rawExternalFields(node: ts.Node): ts.Expression[] {
+  if (ts.isCallExpression(node) && /^(?:vetExternal|externalHtml)$/u.test(node.expression.getText())) return [];
+  if (ts.isPropertyAccessExpression(node) && EXTERNAL_FIELD.exec(node.getText())?.[0] === node.getText()) return [node];
+  const fields: ts.Expression[] = [];
+  ts.forEachChild(node, child => { fields.push(...rawExternalFields(child)); });
+  return fields;
+}
+
+function rejectsField(condition: ts.Expression, field: ts.Expression | string): boolean {
+  const matches = (node: ts.Node) => typeof field === 'string' ? node.getText() === field : same(node, field);
+  if (ts.isParenthesizedExpression(condition)) return rejectsField(condition.expression, field);
+  if (ts.isBinaryExpression(condition)) {
+    if (condition.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+      return rejectsField(condition.left, field) || rejectsField(condition.right, field);
+    }
+    if (condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken && condition.right.kind === ts.SyntaxKind.NullKeyword
+      && ts.isCallExpression(condition.left) && condition.left.expression.getText() === 'vetExternal') {
+      return Boolean(condition.left.arguments[1] && matches(condition.left.arguments[1]));
+    }
+  }
+  return ts.isPrefixUnaryExpression(condition) && condition.operator === ts.SyntaxKind.ExclamationToken
+    && ts.isCallExpression(condition.operand) && condition.operand.expression.getText() === 'optionalExternal'
+    && Boolean(condition.operand.arguments[1] && matches(condition.operand.arguments[1]));
+}
+
+function dominatingRefusal(node: ts.Node, value: ts.Expression | string): boolean {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (!ts.isBlock(parent)) continue;
+    if (parent.statements.some(statement => statement.end < node.getStart() && ts.isIfStatement(statement)
+      && (ts.isReturnStatement(statement.thenStatement) || ts.isContinueStatement(statement.thenStatement))
+      && rejectsField(statement.expression, value))) return true;
+  }
+  return false;
+}
+
+function guardedCanvas(node: ts.CallExpression): boolean {
+  const arg = node.arguments[0]!;
+  if (guardedValue(arg)) return true;
+  const value = ts.isBinaryExpression(arg) && arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+    && guardedValue(arg.right) ? arg.left : arg;
+  if (dominatingRefusal(node, value)) return true;
+  // A multiline name is vetted as a whole before forEach paints its rows.
+  // Resolve the actual callback parameter/collection, not a same-named local.
+  const parameter = ts.isIdentifier(value) ? checker.getSymbolAtLocation(value)?.valueDeclaration : undefined;
+  if (!parameter || !ts.isParameter(parameter) || !ts.isArrowFunction(parameter.parent)) return false;
+  const callback = parameter.parent;
+  const call = callback.parent;
+  return ts.isCallExpression(call) && ts.isPropertyAccessExpression(call.expression)
+    && call.expression.name.text === 'forEach' && callback.parameters[0] === parameter
+    && dominatingRefusal(node, `${call.expression.expression.getText()}.join(' ')`);
+}
+
+function guardedEscape(node: ts.CallExpression, key: string): boolean {
+  if (guardedValue(node)) return true;
+  const fn = owner(node);
+  if (!fn?.body) return false;
+  // Shared phone/wall detail renderers bind their escape itself to a vetted
+  // return on the public branch. Pin the parameter -> externalHtml -> escape
+  // flow; a guard on a different field is not evidence for this escape.
+  if (node.expression.getText() === 'e' && ['app/src/city/markup.ts#placeDetail', 'app/src/city/markup.ts#streetDetail'].includes(key)) {
+    const init = initializer(node.expression as ts.Identifier);
+    if (init?.getText() === "publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone") return true;
+  }
+  const indirect = INDIRECT_GUARDS[key];
+  if (indirect && fn.body.getText().includes(indirect)) return true;
+  if (key === 'app/src/city/markup.ts#eventLinks') {
+    return fn.body.getText().includes("if (!interactive) events = events.filter(x => vetExternal('title', x.item.title, 'row') !== null);")
+      && fn.body.getText().includes('return events.map(x=>') && node.arguments[0]?.getText() === 'x.item.title';
+  }
+  return node.arguments.every(arg => rawExternalFields(arg).every(field =>
+    fn.body!.statements.some(statement => statement.end < node.getStart()
+      && ts.isIfStatement(statement) && ts.isReturnStatement(statement.thenStatement)
+      && rejectsField(statement.expression, field))));
+}
+
 interface Site { file: string; line: number; boundary: string; expression: string }
 const sites: Site[] = [];
-const externalEscapes: { key: string; expression: string; body: string }[] = [];
+const externalEscapes: { key: string; node: ts.CallExpression }[] = [];
+const renderedValues: { key: string; sink: string; value: ts.Expression }[] = [];
+const canvasWrites: ts.CallExpression[] = [];
 for (const file of FILES) {
-  const source = ts.createSourceFile(file, readFileSync(resolve(ROOT, file), 'utf8'), ts.ScriptTarget.Latest, true);
+  const source = program.getSourceFile(resolve(ROOT, file))!;
   const add = (node: ts.Node, expression: string): void => {
     sites.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
       boundary: owner(node)?.name?.text ?? '<module>', expression: expression.replace(/\s+/gu, ' ') });
@@ -46,16 +172,36 @@ for (const file of FILES) {
     if (ts.isCallExpression(node)) {
       const callee = node.expression.getText(source);
       const args = node.arguments.map(arg => arg.getText(source)).join(', ');
-      if (/^(?:e|escapeHtml|externalHtml|vetExternal|externalText|setText)$|(?:fillText|strokeText)$/.test(callee)) {
+      if (/^(?:e|escapeHtml|externalHtml|vetExternal|vetExternalMap|externalText|setText)$|(?:fillText|strokeText)$/.test(callee)) {
         add(node, node.getText(source));
+      }
+      if (/\.(?:fillText|strokeText)$/u.test(callee)) canvasWrites.push(node);
+      if (/\.setAttribute$/u.test(callee) && /^(?:'aria-label'|'title')$/u.test(node.arguments[0]?.getText() ?? '')) {
+        add(node, node.getText(source));
+        if (file === 'app/src/map/city-map.ts' || file === 'app/src/kiosk/mapview.ts') {
+          renderedValues.push({ key: `${file}#${owner(node)?.name?.text}`, sink: callee, value: node.arguments[1]! });
+        }
       }
       if (/^(?:e|escapeHtml)$/.test(callee) && EXTERNAL_FIELD.test(args)) {
         const fn = owner(node);
-        externalEscapes.push({ key: `${file}#${fn?.name?.text}`, expression: node.getText(source), body: fn?.getText(source) ?? '' });
+        externalEscapes.push({ key: `${file}#${fn?.name?.text}`, node });
+      }
+      if (callee === 'escapeHtml' && ['leadText', 'dayText', 'severityLabel', 'type'].includes(args)) {
+        renderedValues.push({ key: `${file}#${owner(node)?.name?.text}`, sink: node.getText(), value: node.arguments[0]! });
       }
     }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
-      && ts.isPropertyAccessExpression(node.left) && node.left.name.text === 'textContent') add(node, node.getText(source));
+      && ts.isPropertyAccessExpression(node.left) && ['textContent', 'value', 'title'].includes(node.left.name.text)) {
+      if (!node.left.expression.getText().endsWith('.dataset')) add(node, node.getText(source));
+      if ((file === 'app/src/kiosk/place-field.ts' && node.left.name.text === 'value')
+        || (file === 'app/src/map/city-map.ts' && node.left.name.text === 'title')) {
+        renderedValues.push({ key: `${file}#${owner(node)?.name?.text}`, sink: node.left.getText(), value: node.right });
+      }
+    }
+    if (ts.isPropertyAssignment(node) && node.name.getText() === 'ariaLabel' && file === 'app/src/kiosk/mapview.ts') {
+      add(node, node.getText(source));
+      renderedValues.push({ key: `${file}#${owner(node)?.name?.text}`, sink: 'ariaLabel', value: node.initializer });
+    }
     if (ts.isPropertyAssignment(node) && node.name.getText(source).replace(/['"]/gu, '') === 'text-field') add(node, node.getText(source));
     ts.forEachChild(node, visit);
   };
@@ -69,12 +215,36 @@ describe('every wall text render boundary', () => {
     await expect(inventory).toMatchFileSnapshot('../fixtures/wall-render-sites.txt');
   });
 
-  it('requires raw external-field escapes to be guarded at the component, not just a producer', () => {
+  it('requires each raw rendered field to be the field actually guarded', () => {
     for (const site of externalEscapes) {
       if (PHONE_ONLY.has(site.key)) continue;
-      const guard = INDIRECT_GUARDS[site.key];
-      expect(guard ? site.body.includes(guard) : /\b(?:vetExternal|externalHtml)\(/u.test(site.body),
-        `${site.key}: ${site.expression}`).toBe(true);
+      expect(guardedEscape(site.node, site.key), `${site.key}: ${site.node.getText()}`).toBe(true);
+    }
+  });
+
+  it('follows vetted values into every closing-round lead, fallback, field and map ARIA sink', () => {
+    expect(renderedValues).toHaveLength(10);
+    for (const site of renderedValues) {
+      expect(guardedValue(site.value), `${site.key}: ${site.sink} ← ${site.value.getText()}`).toBe(true);
+    }
+  });
+
+  it('checks the actual canvas argument, including the guarded whole-name row projection', () => {
+    expect(canvasWrites).toHaveLength(4);
+    for (const node of canvasWrites) expect(guardedCanvas(node), node.getText()).toBe(true);
+  });
+
+  it('does not mistake unused or wrong-field guards for guarded rendered values', () => {
+    for (const body of [
+      "const safe = vetExternal('title', row.title, 'row'); escapeHtml(row.title);",
+      "if (vetExternal('title', row.sub, 'row') === null) return ''; escapeHtml(row.title);",
+      "vetExternal('title', row.title, 'row'); escapeHtml(row.title);",
+    ]) {
+      const source = ts.createSourceFile('negative.ts', `function render(row) { ${body} }`, ts.ScriptTarget.Latest, true);
+      const fn = source.statements[0] as ts.FunctionDeclaration;
+      const call = (fn.body!.statements.at(-1) as ts.ExpressionStatement).expression as ts.CallExpression;
+      expect(guardedEscape(call, 'negative.ts#render'), body).toBe(false);
+      expect(guardedCanvas(call), body).toBe(false);
     }
   });
 

@@ -515,9 +515,11 @@ export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
 
 function rowMarkup(row: FrontRow): string {
   if (vetExternal('title', row.title, 'row') === null || !optionalExternal('summary', row.sub)) return '';
+  const leadText = vetExternal('name', row.lead ?? '', 'row') ?? '';
+  const dayText = vetExternal('name', row.day ?? '', 'row') ?? '';
   const lead = row.leadMarkup
     ? `<span class="k-fr-lead k-fr-lead--badge">${row.leadMarkup}</span>`
-    : `<span class="k-fr-lead">${row.day ? `<span class="k-fr-day">${escapeHtml(row.day)}</span>` : ''}${escapeHtml(row.lead ?? '')}</span>`;
+    : `<span class="k-fr-lead">${dayText ? `<span class="k-fr-day">${escapeHtml(dayText)}</span>` : ''}${escapeHtml(leadText)}</span>`;
   const tone = row.tone ? ` data-tone="${escapeAttribute(row.tone)}"` : '';
   const trail = row.trail ? `<span class="k-fr-trail">${row.trail}</span>` : '';
   return `<li class="k-fr" data-key="${escapeAttribute(row.key)}"${row.trail ? ' data-trail="1"' : ''}${tone}>${lead}<span class="k-fr-main"><span class="k-fr-title">${escapeHtml(row.title)}</span>${row.sub ? `<span class="k-fr-sub">${escapeHtml(row.sub)}</span>` : ''}</span>${trail}</li>`;

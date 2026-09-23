@@ -196,6 +196,29 @@ async function harness(opts: HarnessOptions = {}) {
 afterEach(() => { FakeMap.instances.length = 0; FakeMap.failConstruction = false; document.body.replaceChildren(); document.documentElement.removeAttribute('data-theme-resolved'); });
 
 describe('the full map draws the model, never the report (R-P2)', () => {
+  it('guards the map region ARIA value even without a kiosk producer', async () => {
+    const { container, handle } = await harness({ extra: { ariaLabel: 'Submit passcode', presentationProfile: 'public-display' } });
+    expect(container.getAttribute('aria-label')).toBe('');
+    handle.destroy();
+  });
+
+  it('passes the personal/public profile to static map text on initial load and updates', async () => {
+    for (const presentationProfile of ['handheld', 'public-display']) {
+      const point = { ...QUAKE, title: 'Submit passcode' };
+      const { map, handle } = await harness({ points: [point], extra: { presentationProfile } });
+      const ids = () => {
+        const source = map.getSource('places')!;
+        return ((source.calls.at(-1) ?? source.data) as FC).features.map(f => f.properties.id);
+      };
+      expect(ids()).toEqual(presentationProfile === 'handheld' ? [QUAKE.id] : []);
+      handle.update([{ ...point, title: 'Kuće Eisner, Petrinjska 50-52' }], []);
+      expect(ids()).toEqual([QUAKE.id]);
+      handle.update([{ ...point, title: 'Isplata uz 45 CHF' }], []);
+      expect(ids()).toEqual([]);
+      handle.destroy();
+    }
+  });
+
   it('converges onto a new fix over frames instead of jumping: the drawn vehicle is at neither the old nor the new report', async () => {
     const { handle, frame, vehicles } = await harness();
     frame(); frame(); frame();

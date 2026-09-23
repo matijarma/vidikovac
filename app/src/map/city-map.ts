@@ -1147,7 +1147,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // canvas alone (set once the library has built it). An id the page
   // already gave the element is kept: the canvas points its label at it.
   container.setAttribute('role', 'region');
-  container.setAttribute('aria-label', options.ariaLabel);
+  function labelRegion(): void {
+    container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '');
+  }
+  labelRegion();
   if (!container.id) container.id = `city-map-${++mapUid}`;
   container.dataset.mapStatus = status;
 
@@ -1501,8 +1504,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function sourcePoints(l: MaplibreModule, id: string): readonly SourcePoint[] {
     if (id === l.SOURCES.stops) return stopsData.features;
     if (id === l.SOURCES.screenStop) return l.screenStopGeoJson(stop).features as SourcePoint[];
-    if (id === l.SOURCES.places) return l.pointsToGeoJson(points.filter((p) => p.place !== 'city')).features;
-    if (l.CITY_POINTS && id === l.CITY_POINTS) return l.pointsToGeoJson(points.filter((p) => p.place === 'city')).features;
+    if (id === l.SOURCES.places) return l.pointsToGeoJson(points.filter((p) => p.place !== 'city'), wallLabels).features;
+    if (l.CITY_POINTS && id === l.CITY_POINTS) return l.pointsToGeoJson(points.filter((p) => p.place === 'city'), wallLabels).features;
     return [];
   }
 
@@ -1637,9 +1640,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** Places and closures do not move: re-set at once on every update. */
   function applyStatic(): void {
     if (!styled || !lib) return;
-    setData(lib.SOURCES.places, lib.pointsToGeoJson(points.filter(p=>p.place!=='city')));
-    if (lib.CITY_POINTS) setData(lib.CITY_POINTS, lib.pointsToGeoJson(points.filter(p=>p.place==='city')));
-    setData(lib.SOURCES.closures, lib.linesToGeoJson(lines));
+    setData(lib.SOURCES.places, lib.pointsToGeoJson(points.filter(p=>p.place!=='city'), wallLabels));
+    if (lib.CITY_POINTS) setData(lib.CITY_POINTS, lib.pointsToGeoJson(points.filter(p=>p.place==='city'), wallLabels));
+    setData(lib.SOURCES.closures, lib.linesToGeoJson(lines, wallLabels));
   }
 
   void (async () => {
@@ -1714,6 +1717,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (styled && map) updateTileLabels?.(map, locale ?? 'hr');
   }
   function buildMap(l: MaplibreModule): void {
+    // Personal pages load the boundary with the renderer, after the initial
+    // fail-closed region write. Restore its safe name once that import settles.
+    labelRegion();
     const style = l.basemapStyle(theme, basemapOptions());
     const vetted = wallLabels ? l.prepareWallStyle(style) : null;
     updateTileLabels = vetted?.refresh;
@@ -1798,11 +1804,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // Keyed by the platform id, so the name hysteresis addresses one stop's
     // name by feature state (decision 19).
     created.addSource(l.SOURCES.stops, { ...geojson(stops), promoteId: 'id' });
-    created.addSource(l.SOURCES.closures, geojson(l.linesToGeoJson(lines)));
-    created.addSource(l.SOURCES.places, geojson(l.pointsToGeoJson(points.filter(p=>p.place!=='city'))));
+    created.addSource(l.SOURCES.closures, geojson(l.linesToGeoJson(lines, wallLabels)));
+    created.addSource(l.SOURCES.places, geojson(l.pointsToGeoJson(points.filter(p=>p.place!=='city'), wallLabels)));
     if (l.CITY_POINTS) {
-      created.addSource(l.CITY_POINTS, geojson(l.pointsToGeoJson(points.filter(p=>p.place==='city'))));
-      created.addSource(l.CITY_PATHS, geojson(l.linesToGeoJson(cityPaths)));
+      created.addSource(l.CITY_POINTS, geojson(l.pointsToGeoJson(points.filter(p=>p.place==='city'), wallLabels)));
+      created.addSource(l.CITY_PATHS, geojson(l.linesToGeoJson(cityPaths, wallLabels)));
     }
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.bodies, geojson(empty));
@@ -2244,8 +2250,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     for (const [selector, label] of pairs) {
       const el = container.querySelector<HTMLElement>(selector);
       if (!el) continue;
-      el.setAttribute('aria-label', label);
-      el.title = label;
+      const controlLabel = vetExternal('summary', label, 'row') ?? '';
+      el.setAttribute('aria-label', controlLabel);
+      el.title = controlLabel;
     }
   }
 
@@ -2378,7 +2385,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       lineFocus = on;
       applyOverlays();
     },
-    setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,lib.linesToGeoJson(next)); },
+    setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,lib.linesToGeoJson(next,wallLabels)); },
     setHighlight(next) {
       if(JSON.stringify(next)===JSON.stringify(highlight))return;
       highlight=next;
