@@ -4,11 +4,10 @@
 // 18:00 the afternoon leaves and the axis shifts left one bucket (four
 // columns), because no data reaches beyond day+6. Every domain writes into
 // that axis: a producer describes tiles, `bucketOf` tells which lane a start
-// belongs to, `buildTimeband` sorts, caps and marks stale, and the two
-// renderers write the segments and the band. This module holds the model and
-// the band's markup; the columns and their clock arithmetic live in
-// kiosk/columns.ts (re-exported here), a tile's markup in tiles.ts, and the
-// phone's segment-to-lane sync in timeband-sync.ts.
+// belongs to, `buildTimeband` sorts, caps and marks stale. This module holds
+// the model; the columns and their clock arithmetic live in kiosk/columns.ts
+// (re-exported here). The band's renderers and the phone's segment-to-lane
+// sync went with Sada's time band (WP4 replaced it; WP5 A3 deleted them).
 import type { ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import { FLAGS, type Flag } from '../core/flags';
@@ -16,13 +15,10 @@ import { zagrebDayKey, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { columnsFor, frameFor, NOON_HOUR, zagrebInstant, type ColumnSpec } from '../kiosk/columns';
 import type { LayerContext } from '../layers/types';
-import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { iconMarkup } from '../ui/icons';
-import { attrs } from './blocks';
 import { DEFAULT_PRODUCERS } from './producers';
 import { stateBlock, statusBadge } from './status';
-import { DOMAIN_ORDER, skeletonTileMarkup, tileMarkup, type Bucket, type Tile, type TileDomain, type TileVariant } from './tiles';
-import { weatherStatus, weatherStatusMarkup, type WeatherStatus } from './weather-status';
+import { DOMAIN_ORDER, type Bucket, type Tile, type TileDomain, type TileVariant } from './tiles';
+import { weatherStatus, type WeatherStatus } from './weather-status';
 
 export { columnsFor, DAY_START_HOUR, EVENING_HOUR, HORIZON_DAYS, NOON_HOUR, zagrebInstant, type ColumnSpec } from '../kiosk/columns';
 
@@ -30,8 +26,6 @@ export { columnsFor, DAY_START_HOUR, EVENING_HOUR, HORIZON_DAYS, NOON_HOUR, zagr
 export const LANE_CAP = { phone: 4, desktop: 6 } as const;
 /** Tiles per domain in the sada lane; every domain not named here shows one. */
 export const SADA_DOMAIN_CAP = { transit: { phone: 2, desktop: 4 } } as const;
-/** The phone's sada lane ends with this many tiles from the following lanes under a "Zatim" kicker (concept 02). */
-export const NEXT_CAP = 2;
 /** The view-store filter key that carries the selected column (view-store rejects dotted keys). */
 export const FILTER_KEY = 'tb-col';
 
@@ -104,8 +98,6 @@ export interface Lane {
   /** A source this lane waits for has not answered: `aria-busy` and the loading word. */
   busy: boolean;
   skeletons: LaneSkeleton[];
-  /** The phone's sada lane only: the first NEXT_CAP tiles of the lanes that follow, shown compact under "Zatim" so the first screen answers now and next without a swipe. */
-  next?: Tile[];
 }
 
 export interface TimebandModel {
@@ -283,11 +275,6 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
     lane.foot = [...more, ...(stateFeet.get(lane.col) ?? [])];
   }
 
-  if (surface === 'phone') {
-    const sada = lanes.get('sada')!;
-    sada.next = columns.slice(1).flatMap((c) => lanes.get(c.id)!.tiles).slice(0, NEXT_CAP);
-  }
-
   const wanted = ctx.view?.filters[FILTER_KEY];
   const selected: Bucket = wanted && lanes.has(wanted as Bucket) ? (wanted as Bucket) : 'sada';
   return {
@@ -302,122 +289,17 @@ export function buildTimeband(ctx: LayerContext, producers: readonly TileProduce
   };
 }
 
-// ---------------------------------------------------------------------------
-// Markup
-
-/**
- * The phone's segmented control: one group, `aria-pressed` per button, the
- * time word and its head (the clock for sada) as the label. Rendered on every
- * surface and shown only in the ≤ 36rem room by CSS. Not a tablist: every
- * lane stays in the accessibility tree, so there is no hidden panel to
- * promise. The dashboard routes `data-action="filter"` into `view.setFilter`.
- */
-export function renderTimebandSeg(i18n: I18n, model: TimebandModel): string {
-  const buttons = model.columns.map((c) => {
-    const pressed = c.id === model.selected;
-    const label = `${c.label}, ${c.head || model.clock}`;
-    return `<button type="button" class="tb-seg-btn" data-action="filter" data-filter-key="${FILTER_KEY}" data-filter-value="${c.id}" aria-pressed="${pressed}" aria-label="${escapeAttribute(label)}"><span>${escapeHtml(c.seg)}</span></button>`;
-  });
-  // The buttons sit in a surface-2 track (kajimafix 02.3); the sticky wrapper keeps the canvas behind it while the lanes scroll under.
-  return `<div class="tb-seg" role="group" aria-label="${escapeAttribute(i18n.t('timeband.segLabel'))}" data-key="tb-seg" data-testid="tb-seg" data-col="${model.selected}"><div class="tb-seg-track">${buttons.join('')}</div></div>`;
-}
-
-/** The phone's weather group beside the clock, one link into Vrijeme. */
-function weatherMarkup(weather: WeatherStatus): string {
-  const a = attrs({
-    class: 'tb-weather', href: '#layer=zrak-i-nebo', 'data-action': 'nav', 'data-layer': 'zrak-i-nebo', 'data-testid': 'tb-weather',
-    'data-status': weather.stale ? 'stale' : 'live', 'aria-label': weather.aria,
-  });
-  return `<a ${a}>${weatherStatusMarkup(weather)}</a>`;
-}
-
-/** A column head: the time word and its head text as one h3, so a reader hears the time words as headings; sada carries the clock. */
-function headMarkup(model: TimebandModel, c: ColumnSpec): string {
-  const current = c.id === model.selected;
-  const root = attrs({ class: 'tb-head', 'data-col': c.id, 'data-key': `head-${c.id}`, 'data-testid': `tb-head-${c.id}`, 'data-current': current ? 'true' : undefined });
-  const h = c.id === 'sada'
-    ? `<time class="tb-h tb-clock" data-testid="tb-clock" datetime="${new Date(model.now).toISOString()}">${escapeHtml(model.clock)}</time>`
-    : `<span class="tb-h">${escapeHtml(c.head)}</span>`;
-  const weather = c.id === 'sada' && model.weather ? weatherMarkup(model.weather) : '';
-  return `<div ${root}><h3 class="tb-head-title" id="tb-head-${c.id}"><span class="tb-word kicker">${escapeHtml(c.label)}</span> ${h}</h3>${weather}</div>`;
-}
-
-/**
- * The "+ N" foot: a link into the domain in navLink's shape (the words, the
- * arrow), with the reconciler key, the testid and the producer's aria that
- * navLink has no options for.
- */
-function moreMarkup(foot: Extract<LaneFoot, { kind: 'more' }>): string {
-  const a = attrs({
-    class: 'tb-more', 'data-key': `more-${foot.domain}`, 'data-testid': `tb-more-${foot.domain}`, href: `#layer=${foot.layer}`,
-    'data-action': 'nav', 'data-layer': foot.layer, 'aria-label': foot.aria,
-  });
-  return `<a ${a}><span>${escapeHtml(foot.text)}</span>${iconMarkup('arrow-up-right', undefined, 'icon icon-sm')}</a>`;
-}
-
-/**
- * A lane's body: skeletons and tiles interleaved so a skeleton stands where
- * its domain's tile will (sada reads in domain order; a time lane reads its
- * tiles by start and waits at the end), then the feet.
- */
-function laneBody(i18n: I18n, lane: Lane): string {
-  const skeleton = (s: LaneSkeleton): string => skeletonTileMarkup(s.variant, s.key);
-  const tile = (t: Tile): string => tileMarkup(i18n, t);
-  let body: string;
-  if (lane.col === 'sada') {
-    const domains = [...new Set([...DOMAIN_ORDER, ...lane.skeletons.map((s) => s.domain), ...lane.tiles.map((t) => t.domain)])];
-    body = domains.map((d) => lane.skeletons.filter((s) => s.domain === d).map(skeleton).join('') + lane.tiles.filter((t) => t.domain === d).map(tile).join('')).join('');
-  } else {
-    body = lane.tiles.map(tile).join('') + lane.skeletons.map(skeleton).join('');
-  }
-  // The phone's "Zatim" foot: the next tiles keep their href and words but take a compact row form (data-compact), a new key and no testid, so the lane they belong to keeps the one addressable copy.
-  if (lane.next?.length) {
-    body += `<p class="tb-next kicker" data-key="next-head">${escapeHtml(i18n.t('timeband.next'))}</p>`
-      + lane.next.map((t) => tileMarkup(i18n, { ...t, key: `next:${t.key}`, testid: undefined, data: { ...t.data, compact: '1' } })).join('');
-  }
-  const feet = lane.foot.map((f) => (f.kind === 'more' ? moreMarkup(f) : f.markup)).join('');
-  if (!body && !feet && !lane.busy) return `<p class="tb-empty" data-key="empty">${escapeHtml(i18n.t('timeband.laneEmpty'))}</p>`;
-  const loading = lane.busy ? `<span class="visually-hidden" data-key="loading">${escapeHtml(i18n.t('status.loading'))}</span>` : '';
-  return `${loading}${body}${feet}`;
-}
-
-function laneMarkup(i18n: I18n, model: TimebandModel, lane: Lane): string {
-  const root = attrs({
-    class: 'tb-lane', 'data-col': lane.col, 'data-key': `lane-${lane.col}`, 'data-testid': `tb-lane-${lane.col}`, role: 'group',
-    'aria-labelledby': `tb-head-${lane.col}`, 'data-current': lane.col === model.selected ? 'true' : undefined, 'aria-busy': lane.busy ? 'true' : undefined,
-  });
-  return `<div ${root}>${laneBody(i18n, lane)}</div>`;
-}
-
-/**
- * The band: heads, the decorative axis, then the lanes, in time order, so the
- * DOM order is the reading order on every surface (WCAG 2.4.3). Each lane is
- * a group labelled by its head, so on the phone (where the other heads are
- * clipped) every lane still announces its time word.
- */
-export function renderTimeband(i18n: I18n, model: TimebandModel): string {
-  const heads = model.columns.map((c) => headMarkup(model, c)).join('');
-  const dots = model.columns.map((c) => `<span class="tb-dot" data-col="${c.id}"${c.id === 'sada' ? ' data-on="true"' : ''}></span>`).join('');
-  const lanes = model.lanes.map((lane) => laneMarkup(i18n, model, lane)).join('');
-  return `<section class="tb" data-cols="${model.columns.length}" data-mode="${model.mode}" data-key="tb" data-testid="tb">`
-    + `<header class="tb-heads" data-key="heads">${heads}</header>`
-    + `<div class="tb-axis" aria-hidden="true" data-key="axis">${dots}</div>`
-    + `<div class="tb-lanes" data-key="lanes" data-testid="tb-lanes" data-col="${model.selected}">${lanes}</div>`
-    + '</section>';
-}
-
 /**
  * The shell's one-second tick lands here: when the minute changed, the clock
- * text and its datetime follow, and so does the sada segment's label, which
- * reads the same clock. Within a minute nothing is touched.
+ * text and its datetime follow. Within a minute nothing is touched. No
+ * renderer has emitted a `.day-clock` since WP4 rewrote Sada, so today the
+ * tick finds nothing; it goes with this module (WP5 step 9).
  */
 export function tickTimebandClock(root: ParentNode, now: number): void {
-  const clock = root.querySelector('.tb-clock, .day-clock');
+  const clock = root.querySelector('.day-clock');
   if (!clock) return;
   const time = zagrebTime(now);
   if (clock.textContent === time) return;
   clock.textContent = time;
   clock.setAttribute('datetime', new Date(now).toISOString());
-  const sada = root.querySelector(`.tb-seg-btn[data-filter-value="sada"]`);
-  if (sada) sada.setAttribute('aria-label', `${sada.querySelector('span')?.textContent ?? ''}, ${time}`);
 }

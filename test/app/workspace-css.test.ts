@@ -21,8 +21,6 @@ describe('layers.css reflows the workspace by its own room', () => {
   it('collapses every inner grid and the open detail in a narrow container, in rem so text zoom counts', () => {
     const block = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS)?.[1] ?? '';
     expect(block).toMatch(/\.wx-grid, \.cv-grid, \.sf-grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
-    // The time band's phone form: the lane row becomes a snapping horizontal scroller.
-    expect(block).toMatch(/\.tb-lanes \{ display: flex; overflow-x: auto; scroll-snap-type: x mandatory;/);
     expect(block).toMatch(/\.ws-split\[data-detail-open='true'\] \.ws-primary \{ display: none; \}/);
     expect(block).toMatch(/\.ws-back \{ display: inline-flex; \}/);
     // The container rules come after the viewport rules they override, at equal specificity.

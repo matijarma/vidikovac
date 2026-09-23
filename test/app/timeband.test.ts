@@ -8,21 +8,19 @@ import { DEFAULT_PRODUCERS } from '../../app/src/experience/producers';
 import { statusBadge } from '../../app/src/experience/status';
 import type { Tile } from '../../app/src/experience/tiles';
 import {
-  buildTimeband, bucketOf, columnsFor, renderTimeband, renderTimebandSeg, tickTimebandClock, zagrebInstant, type TileProducer,
+  buildTimeband, bucketOf, columnsFor, tickTimebandClock, zagrebInstant, type TileProducer,
 } from '../../app/src/experience/timeband';
-import { weatherStatusMarkup, weatherStatus } from '../../app/src/experience/weather-status';
+import { weatherStatus } from '../../app/src/experience/weather-status';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { LayerContext } from '../../app/src/layers/types';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
-import { createElementFromHTML } from '../../app/src/ui/dom/escape';
-import { text } from './helpers';
 
 // The time band (plan A.3): one axis, sada · poslijepodne · večeras · sutra ·
 // tjedan, cut at the service day's 04:00 and the evening's 18:00 in Zagreb
 // wall-clock time. Every worked example of A.3 is a row here, so the cuts, the
 // labels and the buckets are pinned where the design argued them. The model
-// and the markup (A.4) are tested with hand-made producers: the real ones
-// arrive with T2.3 and are tested over the layers fixtures there.
+// is tested with hand-made producers: the real ones arrive with T2.3 and are
+// tested over the layers fixtures there.
 
 const hr = createDefaultI18n('hr');
 const en = createDefaultI18n('en');
@@ -473,225 +471,29 @@ describe('buildTimeband: notification highlights (T3.3, ctx.notify)', () => {
     expect(tileByTestid(buildTimeband(ctx({ notify }), [wasteTile]), 'tile-waste')?.data?.highlight).toBe('1');
     expect(tileByTestid(buildTimeband(ctx({ notify: NOTIFY_OFF }), [wasteTile]), 'tile-waste')?.data?.highlight).toBeUndefined();
   });
-
-  it('renders the mark as a plain data attribute, so signage.css can stroke it', () => {
-    const notify = { ...NOTIFY_OFF, dhmz: true };
-    const model = buildTimeband(ctx({ notify }), [safetyBand('urgent')]);
-    const tb = createElementFromHTML(renderTimeband(hr, model));
-    expect(tb.querySelector('.tl[data-testid="tile-safety"][data-highlight="1"]')).not.toBeNull();
-  });
 });
 
-const SEG_BUTTON = (value: string, pressed: boolean, aria: string, word: string): string =>
-  `<button type="button" class="tb-seg-btn" data-action="filter" data-filter-key="tb-col" data-filter-value="${value}" aria-pressed="${pressed}" aria-label="${aria}"><span>${word}</span></button>`;
-
-describe('the phone’s "Zatim" foot (concept 02): now and next on one screen', () => {
-  it('the phone’s sada lane carries the first two tiles of the following lanes, in time order; the desk carries none', () => {
-    expect(lane(buildTimeband(phone(), PRODUCERS), 'sada').next?.map((t) => t.key)).toEqual(['dogadanja:friAllDay', 'dogadanja:fri17']);
-    expect(lane(buildTimeband(ctx(), PRODUCERS), 'sada').next).toBeUndefined();
-    // Fewer than two ahead: whatever there is, never a placeholder.
-    expect(lane(buildTimeband(phone(), [safety, events([{ id: 'mon11', at: '2026-09-14T09:00:00Z' }])]), 'sada').next?.map((t) => t.key)).toEqual(['dogadanja:mon11']);
-    expect(lane(buildTimeband(phone(), [safety]), 'sada').next).toEqual([]);
-  });
-  it('renders them under a "Zatim" kicker as compact rows with a next: key and no testid, so the lane they belong to keeps the one addressable copy', () => {
-    const tb = render(phone(), PRODUCERS);
-    const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect(text(sada.querySelector('.tb-next.kicker[data-key="next-head"]'))).toBe('Zatim');
-    const compact = [...sada.querySelectorAll('.tl[data-compact="1"]')];
-    expect(compact.map((el) => el.getAttribute('data-key'))).toEqual(['next:dogadanja:friAllDay', 'next:dogadanja:fri17']);
-    for (const el of compact) {
-      expect(el.hasAttribute('data-testid')).toBe(false);
-      expect(el.getAttribute('data-variant')).toBe('time');
-      expect(el.getAttribute('href')).toMatch(/^#layer=kultura/);
-    }
-    // The kicker follows the lane's own tiles and precedes its feet.
-    const keys = [...sada.children].map((el) => el.getAttribute('data-key'));
-    expect(keys.indexOf('next-head')).toBeGreaterThan(keys.indexOf('glasnik:issue'));
-    expect(tb.querySelector('[data-testid="tb-lane-danas"] .tl[data-compact]')).toBeNull();
-    expect(render(ctx(), PRODUCERS).querySelector('.tb-next')).toBeNull();
-  });
-});
-
-describe('renderTimebandSeg: the phone’s segmented control (A.4)', () => {
-  it('writes a group of five pressed-state buttons whose labels read the time word and its head, the clock for sada', () => {
-    expect(renderTimebandSeg(hr, buildTimeband(ctx(), PRODUCERS))).toBe(
-      '<div class="tb-seg" role="group" aria-label="Doba dana" data-key="tb-seg" data-testid="tb-seg" data-col="sada"><div class="tb-seg-track">'
-      + SEG_BUTTON('sada', true, 'sada, 14:32', 'sada')
-      + SEG_BUTTON('danas', false, 'poslijepodne, do 18:00', 'popodne')
-      + SEG_BUTTON('veceras', false, 'večeras, od 18:00', 'večeras')
-      + SEG_BUTTON('sutra', false, 'sutra, sub 12. 9.', 'sutra')
-      + SEG_BUTTON('tjedan', false, 'tjedan, do čet 17. 9.', 'tjedan')
-      + '</div></div>',
-    );
-  });
-  it('presses the selected column and names it on the group', () => {
-    const html = renderTimebandSeg(hr, buildTimeband(ctx({ view: view('sutra') }), PRODUCERS));
-    expect(html).toContain('data-testid="tb-seg" data-col="sutra"');
-    expect(html).toContain('data-filter-value="sutra" aria-pressed="true"');
-    expect(html).toContain('data-filter-value="sada" aria-pressed="false"');
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
-  });
-  it('has four buttons at night', () => {
-    expect(renderTimebandSeg(hr, buildTimeband(ctx({ now: FRI_EVENING }), PRODUCERS)).match(/<button/g)).toHaveLength(4);
-  });
-});
-
-const render = (c: LayerContext, producers: readonly TileProducer[] = PRODUCERS): HTMLElement => createElementFromHTML(renderTimeband(c.i18n, buildTimeband(c, producers)));
-const SADA_HEAD = '<div class="tb-head" data-col="sada" data-key="head-sada" data-testid="tb-head-sada" data-current="true"><h3 class="tb-head-title" id="tb-head-sada"><span class="tb-word kicker">sada</span> <time class="tb-h tb-clock" data-testid="tb-clock" datetime="2026-09-11T12:32:00.000Z">14:32</time></h3></div>';
-
-describe('renderTimeband: the band (A.4)', () => {
-  it('writes the root, five heads, the axis, then five lanes in time order; heads precede lanes in the DOM', () => {
-    const tb = render(ctx());
-    expect(tb.matches('section.tb[data-cols="5"][data-mode="day"][data-key="tb"][data-testid="tb"]')).toBe(true);
-    expect([...tb.children].map((c) => c.className)).toEqual(['tb-heads', 'tb-axis', 'tb-lanes']);
-    expect([...tb.querySelectorAll('.tb-head')].map((h) => h.getAttribute('data-col'))).toEqual(['sada', 'danas', 'veceras', 'sutra', 'tjedan']);
-    expect([...tb.querySelectorAll('.tb-lane')].map((l) => l.getAttribute('data-col'))).toEqual(['sada', 'danas', 'veceras', 'sutra', 'tjedan']);
-    expect([...tb.querySelectorAll('.tb-head, .tb-lane')].map((el) => el.className)).toEqual([...Array(5).fill('tb-head'), ...Array(5).fill('tb-lane')]);
-    expect([...tb.querySelectorAll('.tb-head h3')].map((h) => text(h))).toEqual(['sada 14:32', 'poslijepodne do 18:00', 'večeras od 18:00', 'sutra sub 12. 9.', 'tjedan do čet 17. 9.']);
-    expect(tb.querySelector('.tb-heads')?.getAttribute('data-key')).toBe('heads');
-    expect(tb.querySelector('.tb-lanes')?.matches('[data-key="lanes"][data-testid="tb-lanes"][data-col="sada"]')).toBe(true);
-  });
-  it('writes the sada head exactly: the time word and the 40 px clock as one h3, no weather on the desktop', () => {
-    const tb = render(ctx());
-    expect(tb.querySelector('[data-testid="tb-head-sada"]')?.outerHTML).toBe(SADA_HEAD);
-    expect(tb.querySelector('[data-testid="tb-head-danas"]')?.outerHTML).toBe(
-      '<div class="tb-head" data-col="danas" data-key="head-danas" data-testid="tb-head-danas"><h3 class="tb-head-title" id="tb-head-danas"><span class="tb-word kicker">poslijepodne</span> <span class="tb-h">do 18:00</span></h3></div>',
-    );
-    expect(tb.querySelector('.tb-weather')).toBeNull();
-  });
-  it('names every lane by its head: role group, aria-labelledby the h3 id', () => {
-    const tb = render(ctx());
-    for (const col of ['sada', 'danas', 'veceras', 'sutra', 'tjedan']) {
-      const lane = tb.querySelector(`[data-testid="tb-lane-${col}"]`)!;
-      expect(lane.matches(`.tb-lane[data-col="${col}"][data-key="lane-${col}"][role="group"][aria-labelledby="tb-head-${col}"]`), col).toBe(true);
-      expect(tb.querySelector(`h3#tb-head-${col}`), col).not.toBeNull();
-    }
-  });
-  it('marks the selected column current on its head, its lane and the lanes row; the axis is decorative and its filled dot is sada, the origin', () => {
-    const tb = render(ctx({ view: view('tjedan') }));
-    expect([...tb.querySelectorAll('[data-current="true"]')].map((el) => `${el.className}:${el.getAttribute('data-col')}`)).toEqual(['tb-head:tjedan', 'tb-lane:tjedan']);
-    expect(tb.querySelector('.tb-lanes')?.getAttribute('data-col')).toBe('tjedan');
-    const axis = tb.querySelector('.tb-axis')!;
-    expect(axis.matches('[aria-hidden="true"][data-key="axis"]')).toBe(true);
-    expect([...axis.querySelectorAll('.tb-dot')].map((d) => d.getAttribute('data-col'))).toEqual(['sada', 'danas', 'veceras', 'sutra', 'tjedan']);
-    expect([...axis.querySelectorAll('.tb-dot[data-on="true"]')].map((d) => d.getAttribute('data-col'))).toEqual(['sada']);
-  });
-  it('night mode: four columns, data-cols 4, data-mode night', () => {
-    const tb = render(ctx({ now: FRI_EVENING }));
-    expect(tb.matches('[data-cols="4"][data-mode="night"]')).toBe(true);
-    expect([...tb.querySelectorAll('.tb-head h3')].map((h) => text(h))).toEqual(['sada 19:40', 'noćas do 04:00', 'sutra sub 12. 9.', 'tjedan do čet 17. 9.']);
-    expect(tb.querySelectorAll('.tb-dot')).toHaveLength(4);
-  });
-  it('renders each tile through the tile grammar in lane order, then the feet', () => {
-    const tb = render(phone());
-    const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['zet-rt:route:6', 'zet-rt:route:11', 'prometnice:c1', 'safety', 'glasnik:issue', 'next-head', 'next:dogadanja:friAllDay', 'next:dogadanja:fri17', 'more-transit']);
-    expect(sada.querySelector('.tl[data-variant="value"][data-domain="transit"][data-testid="tile-transit"]')).not.toBeNull();
-    expect(sada.querySelector('.tl[data-variant="band"][data-domain="safety"][data-level="calm"]')).not.toBeNull();
-    expect(text(tb.querySelector('[data-testid="tb-lane-danas"] .tl-time'))).toBe('cijeli dan');
-    expect([...tb.querySelectorAll('[data-testid="tb-lane-veceras"] .tl')].map((t) => t.getAttribute('data-tone'))).toEqual(['events', null]);
-    expect(tb.getAttribute('aria-busy')).toBeNull();
-  });
-  it('writes the more foot exactly: a link into the domain with the words and the arrow, its aria only when the producer worded one', () => {
-    const tb = render(phone());
-    expect(tb.querySelector('[data-testid="tb-more-transit"]')?.outerHTML).toBe(
-      '<a class="tb-more" data-key="more-transit" data-testid="tb-more-transit" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="+ 4 linije, Sa stanice Trg bana J. Jelačića"><span>+ 4 linije</span><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-arrow-up-right"></use></svg></a>',
-    );
-    const eight = Array.from({ length: 8 }, (_, i) => ({ id: `sat${i}`, at: `2026-09-12T${String(8 + i).padStart(2, '0')}:00:00Z` }));
-    const more = render(phone(), [events(eight)]).querySelector('[data-testid="tb-more-events"]')!;
-    expect(more.hasAttribute('aria-label')).toBe(false);
-    expect(text(more)).toBe('+ 4 stavke');
-    expect(more.getAttribute('href')).toBe('#layer=kultura');
-  });
-  it('a busy lane carries aria-busy and one visually hidden loading word, then the skeletons where their domain will stand', () => {
-    const tb = render(phone({ snapshots: { prometnice: live('prometnice'), glasnik: live('glasnik') } }));
-    const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect(sada.getAttribute('aria-busy')).toBe('true');
-    expect(sada.firstElementChild?.outerHTML).toBe('<span class="visually-hidden" data-key="loading">učitavanje podataka</span>');
-    expect([...sada.children].map((el) => el.getAttribute('data-key'))).toEqual(['loading', 'sk-transit-0', 'sk-transit-1', 'prometnice:c1', 'safety', 'glasnik:issue']);
-    expect(sada.querySelectorAll('.tl[data-skeleton][data-variant="value"][aria-hidden="true"]')).toHaveLength(2);
-    expect(sada.querySelectorAll('.visually-hidden')).toHaveLength(1);
-    const danas = tb.querySelector('[data-testid="tb-lane-danas"]')!;
-    expect(danas.getAttribute('aria-busy')).toBe('true');
-    expect([...danas.children].map((el) => el.getAttribute('data-key'))).toEqual(['loading', 'sk-events-0', 'sk-events-1', 'sk-events-2']);
-    expect(danas.querySelectorAll('.tl[data-skeleton][data-variant="time"]')).toHaveLength(3);
-    expect(danas.querySelector('.tb-empty')).toBeNull();
-    expect(tb.querySelector('[data-testid="tb-lane-veceras"]')?.getAttribute('aria-busy')).toBeNull();
-    expect(tb.querySelectorAll('.tl[data-skeleton][href], .tl[data-skeleton][data-action]')).toHaveLength(0);
-  });
-  it('a stale transit tile keeps its shape, shows the badge in place of its context and is marked data-stale', () => {
-    const tb = render(ctx({ snapshots: { ...ALL_LIVE, 'zet-rt': stale('zet-rt') } }));
-    const tiles = tb.querySelectorAll('.tl[data-domain="transit"]');
-    expect(tiles).toHaveLength(4);
-    for (const tile of tiles) {
-      expect(tile.hasAttribute('data-stale')).toBe(true);
-      expect(tile.querySelector('.tl-context .status-badge[data-status="stale"]')).not.toBeNull();
-      expect(tile.getAttribute('aria-label')).toContain('zastarjelo od 14:00');
-    }
-    expect(tb.querySelectorAll('.tl[data-stale]')).toHaveLength(4);
-  });
-  it('a down source renders the state block with its retry at the foot of the lane, after the tiles, and no tile of its own', () => {
-    const tb = render(ctx({ snapshots: { ...ALL_LIVE, prometnice: down('prometnice') } }));
-    const sada = tb.querySelector('[data-testid="tb-lane-sada"]')!;
-    expect(sada.querySelector('[data-testid="tile-closures"]')).toBeNull();
-    const state = sada.querySelector('.state[data-kind="down"][data-testid="tb-state-mobility"]')!;
-    expect(state.querySelector('[data-action="retry"][data-module="prometnice"]')).not.toBeNull();
-    expect(text(state)).toContain('Stanje nije potvrđeno: izvor ne odgovara.');
-    expect(sada.lastElementChild).toBe(state);
-    expect([...sada.children].filter((el) => el.classList.contains('tl'))).toHaveLength(6);
-  });
-  it('says "ništa najavljeno" only in an empty lane with no foot and no skeleton', () => {
-    const tb = render(ctx(), [safety, events([{ id: 'fri17', at: '2026-09-11T15:00:00Z' }])]);
-    expect(tb.querySelector('[data-testid="tb-lane-tjedan"]')?.innerHTML).toBe('<p class="tb-empty" data-key="empty">ništa najavljeno</p>');
-    expect(tb.querySelector('[data-testid="tb-lane-danas"] .tb-empty')).toBeNull();
-    expect(tb.querySelector('[data-testid="tb-lane-sada"] .tb-empty')).toBeNull();
-    const downEvents = render(ctx({ snapshots: { ...ALL_LIVE, dogadanja: down('dogadanja') } }), [events([])]);
-    expect(downEvents.querySelector('[data-testid="tb-lane-danas"] .tb-empty')).toBeNull();
-    expect(downEvents.querySelector('[data-testid="tb-lane-danas"] .state')).not.toBeNull();
-    expect(render(ctx({ snapshots: {} }), [events([])]).querySelector('[data-testid="tb-lane-danas"] .tb-empty')).toBeNull();
-    expect(text(render(ctx({ i18n: en }), [safety]).querySelector('[data-testid="tb-lane-sutra"] .tb-empty'))).toBe('nothing announced');
-  });
-  it('on the phone the sada head links glyph, temperature and sunset into Vrijeme; on the desktop it does not; without a usable observation the clock stands alone, never a dash', () => {
-    const status = weatherStatus(hr, { 'dhmz-now': OBSERVATION }, NOW)!;
-    const onPhone = render(phone({ snapshots: { ...ALL_LIVE, 'dhmz-now': OBSERVATION } }));
-    const head = onPhone.querySelector('[data-testid="tb-head-sada"]')!;
-    expect(head.outerHTML).toBe(SADA_HEAD.replace('</h3></div>', `</h3><a class="tb-weather" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="tb-weather" data-status="live" aria-label="vedro, 21 °C, zalazak 19:16">${weatherStatusMarkup(status)}</a></div>`));
-    expect(text(head.querySelector('.tb-temp'))).toBe('21 °C');
-    expect(head.querySelector('.tb-weather .icon use')?.getAttribute('href')).toBe('#icon-sun');
-    const staleObservation = { ...OBSERVATION, status: 'stale' as const, staleSince: '2026-09-11T12:00:00Z' };
-    expect(render(phone({ snapshots: { ...ALL_LIVE, 'dhmz-now': staleObservation } })).querySelector('.tb-weather')?.getAttribute('data-status')).toBe('stale');
-    expect(render(ctx({ snapshots: { ...ALL_LIVE, 'dhmz-now': OBSERVATION } })).querySelector('.tb-weather')).toBeNull();
-    for (const snapshots of [ALL_LIVE, { ...ALL_LIVE, 'dhmz-now': NO_TEMP }, { ...ALL_LIVE, 'dhmz-now': down('dhmz-now') }]) {
-      const bare = render(phone({ snapshots })).querySelector('[data-testid="tb-head-sada"]')!;
-      expect(bare.querySelector('.tb-weather')).toBeNull();
-      expect(bare.outerHTML).toBe(SADA_HEAD);
-      expect(text(bare)).not.toMatch(/[–—-]/);
-    }
-  });
-});
-
+// The band's renderers, its segments and its "Zatim" foot went with Sada's time band (WP4 rewrote Sada, WP5 A3
+// deleted them); the model stays until the producers go (WP5 step 9). The tick is tested on a hand-written clock.
 describe('tickTimebandClock: the one clock ticks through the shell seam', () => {
-  const mount = (c: LayerContext): HTMLElement => {
-    const model = buildTimeband(c, PRODUCERS);
-    document.body.innerHTML = renderTimebandSeg(hr, model) + renderTimeband(hr, model);
+  const mount = (): HTMLElement => {
+    document.body.innerHTML = '<p class="day-date"><time class="day-clock" datetime="2026-09-11T12:32:00.000Z">14:32</time></p>';
     return document.body;
   };
-  it('updates the clock text and datetime, and the sada segment’s label, when the minute changed, and leaves the DOM alone within the minute', () => {
-    const root = mount(ctx());
-    const clock = root.querySelector('.tb-clock')!;
+  it('updates the clock text and datetime when the minute changed, and leaves the DOM alone within the minute', () => {
+    const root = mount();
+    const clock = root.querySelector('.day-clock')!;
     tickTimebandClock(root, NOW + 30_000);
     expect(clock.textContent).toBe('14:32');
     expect(clock.getAttribute('datetime')).toBe('2026-09-11T12:32:00.000Z');
     tickTimebandClock(root, NOW + 60_000);
     expect(clock.textContent).toBe('14:33');
     expect(clock.getAttribute('datetime')).toBe('2026-09-11T12:33:00.000Z');
-    expect(root.querySelector('.tb-seg-btn[data-filter-value="sada"]')?.getAttribute('aria-label')).toBe('sada, 14:33');
-    expect(text(root.querySelector('#tb-head-sada'))).toBe('sada 14:33');
   });
   it('does nothing without a clock in the root', () => {
-    document.body.innerHTML = '<div class="tb"></div>';
+    document.body.innerHTML = '<div class="day"></div>';
     expect(() => tickTimebandClock(document.body, NOW)).not.toThrow();
-    expect(document.body.innerHTML).toBe('<div class="tb"></div>');
+    expect(document.body.innerHTML).toBe('<div class="day"></div>');
   });
 });
 

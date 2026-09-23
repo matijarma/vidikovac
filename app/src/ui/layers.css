@@ -187,61 +187,12 @@
 .route-delay[data-state='late'] { color: var(--tone-urgency); }
 .route-delay[data-state='early'] { color: var(--tone-weather); }
 .route-delay[data-state='ontime'] { color: var(--tone-live); }
-/* Sada: the time band (newdesignsystem.md §4.2, plan A.5). Five tracks, the
-   sada track wider (its lane holds the live values two abreast); the heads,
-   the axis and the lanes share one grid, so a head stands over its lane at
-   every width; four tracks at night. A lane is a grid 10 px apart; the sada
-   lane auto-fits half-width value tiles and spans its bands, rows and feet.
-   Nothing here moves a head, a lane or a tile past its neighbour: the DOM
-   order is the reading order on every surface (WCAG 2.2 SC 2.4.3). The tile
-   family (.tl) is signage.css's; its hover and press live here with the
-   other controls. The 60rem and 36rem container blocks below reshape the
-   band by the room it really has. */
-.tb { display: grid; row-gap: var(--sp-3); }
-.tb-heads, .tb-lanes, .tb-axis { display: grid; grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr; column-gap: 1.25rem; }
-.tb[data-cols='4'] .tb-heads, .tb[data-cols='4'] .tb-lanes, .tb[data-cols='4'] .tb-axis { grid-template-columns: 2.2fr 1fr 1fr 1fr; }
-/* A head: the time word (a kicker) over its line; the sada head's line is the 40 px clock, the axis origin. */
-.tb-head { display: grid; gap: var(--sp-1); align-content: end; min-inline-size: 0; }
-.tb-head-title { display: grid; gap: var(--sp-1); }
-.tb-word { display: block; }
-.tb-h { display: block; font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.02em; line-height: var(--lh-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tb-clock { font-size: var(--type-numeral); letter-spacing: -0.03em; line-height: var(--lh-tight); }
-/* The phone's weather status beside the clock (D4, D11): one link into Vrijeme, glyph · temperature · sunset. */
-.tb-weather { display: inline-flex; align-items: center; gap: var(--sp-1) var(--sp-2); min-block-size: var(--target); inline-size: fit-content; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--tone-text-primary); text-decoration: none; }
-.tb-weather .icon { color: var(--tone-weather); }
-/* The axis: a 2 px rule with one dot per column; the filled dot is sada, the origin. Decorative (aria-hidden). */
-.tb-axis { position: relative; block-size: 1.5rem; align-items: center; }
-.tb-axis::before { content: ''; position: absolute; inset-inline: 0; inset-block-start: calc(50% - 1px); block-size: 2px; background: var(--tone-text-primary); }
-.tb-dot { position: relative; inline-size: 0.625rem; block-size: 0.625rem; border-radius: 50%; border: 2px solid var(--tone-text-primary); background: var(--tone-surface-canvas); }
-.tb-dot[data-on='true'] { background: var(--tone-text-primary); }
-.tb-lane { display: grid; gap: 0.625rem; align-content: start; min-inline-size: 0; }
-.tb-lane[data-col='sada'] { grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr)); }
-.tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }
-/* The "+ N" foot: a 44 px link into the domain in the brand tone; the empty word in the muted tone. */
-.tb-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding-inline: var(--sp-2); border-radius: var(--r-sm); font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-brand); text-decoration: none; }
-/* An empty lane says so in a tile's footprint (kajimafix 01.4): a dashed stroke, one target tall, the muted word centred, never bare text that reads as a fault. */
-.tb-empty { display: grid; place-items: center; margin: 0; min-block-size: var(--target); padding: 0 var(--sp-3); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-md); font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); text-align: center; }
-/* The phone's "Zatim" foot (concept 02): a kicker and the next two tiles of the following lanes as compact rows, time left, label and title right, the context left out. Rendered only on the phone surface, so the rules need no room query. */
-.tb-next { margin: var(--sp-2) 0 0; }
-.tb-lane[data-col='sada'] > .tb-next, .tb-lane[data-col='sada'] > .tl[data-compact='1'] { grid-column: 1 / -1; }
-.tl[data-compact='1'][data-variant='time'], .tl[data-compact='1'][data-variant='ink'] { grid-template-columns: 3.25rem minmax(0, 1fr); grid-template-rows: auto auto; column-gap: var(--sp-3); align-items: center; padding-block: var(--sp-2); }
-.tl[data-compact='1'] .tl-time { grid-row: 1 / span 2; align-self: center; font-size: var(--type-tile-m); }
-.tl[data-compact='1'] .tl-title { font-size: var(--type-body); -webkit-line-clamp: 1; line-clamp: 1; }
-.tl[data-compact='1'] .tl-context { display: none; }
-/* At the desk a title that still ellipsises at two lines may take a third (kajimafix, cross-cutting): the evening's events. */
-@media (min-width: 60rem) {
-  .tb-lane[data-col='veceras'] .tl[data-domain='events'] .tl-title { -webkit-line-clamp: 3; line-clamp: 3; }
-}
-/* The phone's segmented control, hidden until the 36rem room shows it: five equal 44 px buttons in a surface-2 track, the accent "on" pill the inner 34 px span (kajimafix 02.3). A button never shrinks under its word (its minimum is its content), so at 200 % text the track wraps to a second row instead of clipping. */
-.tb-seg { display: none; }
-.tb-seg-track { display: flex; flex-wrap: wrap; gap: 0.125rem; min-inline-size: 0; padding: 2px; border-radius: var(--r-md); background: var(--tone-surface-2); }
-.tb-seg-btn { flex: 1 1 0; min-block-size: var(--target); padding: 0.3125rem 0; border: 0; background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.02em; cursor: pointer; touch-action: manipulation; }
-.tb-seg-btn > span { display: flex; align-items: center; justify-content: center; block-size: 2.125rem; padding-inline: 0.25rem; border-radius: var(--r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-seg-btn[aria-pressed='true'] > span { background: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
+/* The tile family (.tl) is signage.css's; its hover and press live here with
+   the other controls. Sada's time band, its segments and its "Zatim" foot
+   went with the band's renderers (WP5 A3). */
 @media (hover: hover) {
   .tl:not([data-tone]):not([data-variant='ink']):hover { background-color: var(--tone-surface-2); }
   .tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
-  .tb-more:hover, .tb-weather:hover { background-color: var(--tone-surface-2); }
 }
 /* Provenance: one line to open; the required credits sit inside. */
 .provenance { border-block-start: 1px solid var(--tone-stroke); padding-block-start: var(--sp-2); font-size: var(--text-meta); color: var(--tone-text-muted); }
@@ -511,7 +462,7 @@
 
 /* Press feedback: a touch has no hover, so :active stands in for it. */
 @media (hover: none) {
-  .row-button:active, .route-link:active, .tb-more:active, .tb-seg-btn:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
+  .row-button:active, .route-link:active, .dir-item:active, .sf-number:active, .link-arrow:active, .link-ext:active { background-color: var(--tone-surface-2); transition: none; }
   .sf-number-primary:active { background: var(--tone-text-primary); color: var(--tone-surface-canvas); }
   /* Rows inside the events well and the tiles already sit on a raised surface; their press goes one level
      further. A tinted or ink tile has no deeper surface to go to and shows the hover's inset stroke instead. */
@@ -520,41 +471,13 @@
   .tl[data-tone]:active, .tl[data-variant='ink']:active { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }
 }
 
-/* Middling room (a narrower window, or a desk at 125 % text): three lanes; sutra and tjedan wait in Događanja. */
-@container ws (max-width: 60rem) {
-  .tb-heads, .tb-lanes, .tb-axis { grid-template-columns: 2fr 1fr 1fr; }
-  .tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],
-  .tb[data-cols='5'] .tb-head[data-col='sutra'], .tb[data-cols='5'] .tb-lane[data-col='sutra'], .tb[data-cols='5'] .tb-dot[data-col='sutra'] { display: none; }
-}
 /* Narrow room: a phone, or a desktop at 200% text zoom, where the workspace is
    about 20rem wide and the viewport queries above no longer describe the
    space. The compositions fall back to their single-column forms and an open
    detail replaces the list, as on a phone. Measured against the .ws
    container in rem, so the threshold moves with the text. Engines without
-   container queries keep the viewport forms above.
-   The time band takes its phone form here: the segments show and stick under
-   the header; one head (the current column's) is shown and the others are
-   clipped with clip-path, so every lane keeps the heading that labels it in
-   the tree; the axis leaves; the lanes become a snapping horizontal scroller,
-   one lane per screen, that pans both ways under a finger (.ki-main is pan-y)
-   and reserves 5rem under the tiles for the FAB. The restore rules share the
-   60rem hides' specificity and come later, so on a phone every lane is back;
-   the 2 px margin and padding keep a tile's focus ring inside the scroller.
-   Whether the row glides or jumps is decided in JS from the reader's motion
-   preference (experience/timeband-sync.ts), never declared here. */
+   container queries keep the viewport forms above. */
 @container ws (max-width: 36rem) {
-  /* The five time words never clip: when the room (200 % text on a 390 px phone) cannot hold them on one row the track wraps to a second, and the control never widens the page. */
-  .tb-seg { display: block; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }
-  /* The sada head on a phone (kajimafix 02.2): the kicker over the 40 px clock at the left, the weather group at the right, one block instead of three rows. */
-  .tb-head[data-col='sada'] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
-  .tb-head[data-col='sada'] > .tb-weather { justify-self: end; }
-  .tb-heads { display: block; position: relative; }
-  .tb[data-cols] .tb-head[data-col] { display: grid; }
-  .tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }
-  .tb-axis { display: none; }
-  .tb-lanes { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x pan-y; margin-inline: -2px; padding: 2px 2px 5rem; }
-  .tb-lanes::-webkit-scrollbar { display: none; }
-  .tb[data-cols] .tb-lane[data-col] { display: grid; flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
   .wx-grid, .cv-grid, .sf-grid { grid-template-columns: minmax(0, 1fr); }
   .wx-wide, .cv-wide, .sf-wide { grid-column: auto; }
   .ws-split[data-detail-open='true'] { grid-template-columns: minmax(0, 1fr); }
