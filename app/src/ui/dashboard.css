@@ -73,6 +73,11 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .ki[data-stage='map'] .ki-main { display: flex; flex-direction: column; }
 .ki[data-stage='map'] .ki-main > .layer { flex: 1 1 auto; min-block-size: 0; }
 .ki[data-stage='map'] .ki-snapshot { flex: none; padding-inline: var(--sp-4); }
+/* The desk pair (data-stage='desk', from 60rem): Sada and Karta side by side in
+   .ki-desk, the feed in a reading column and the map beside it. The page scrolls
+   with the feed; map.css keeps the Karta column in view under the status line. */
+.ki[data-stage='desk'] .ki-desk { display: grid; grid-template-columns: minmax(22rem, 32rem) minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
+.ki[data-stage='desk'] .ki-main { padding-block-end: var(--sp-6); }
 /* .ki-alert is the assertive live region: .visually-hidden hides it while readers
    still hear it. It is never display: none, which would silence it. */
 

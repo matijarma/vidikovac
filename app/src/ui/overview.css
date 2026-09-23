@@ -79,3 +79,5 @@
 @container ws (max-width: 18rem) {
   .nearby-row, .nearby-link { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
 }
+/* The desk pair (dashboard.css .ki-desk): the feed keeps the phone's reading measure beside the map. */
+.ki[data-stage='desk'] .ws-sada { max-inline-size: 32rem; }
