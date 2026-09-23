@@ -76,6 +76,8 @@ export const WALL_PROBES = Object.freeze({
   controlScopes: '[data-testid=kiosk-invitation], .k-head',
   /** Not counted: the QR itself, and the brand, whose only behaviour is the long press to the settings (principle 8's named path). */
   controlExempt: '[data-testid=kiosk-qr], [data-testid=kiosk-brand]',
+  /** What a person reads as a headline: during an outage none says "unavailable" (principle 9). */
+  headings: 'h1, h2',
   /** Operator chrome that must be gone from the wall (brief §15.6 retired names). */
   retiredChrome: '[data-testid=kiosk-settings], [data-testid=kiosk-theme], [data-action=pause-highlights], [data-testid=pair-copy], [data-testid=kiosk-stop-presentation]',
 });
@@ -182,6 +184,8 @@ export interface WallSample {
   retiredChrome: number;
   settingsOpen: boolean;
   stopBoardOpen: boolean;
+  /** Visible h1 and h2 texts (the accept spec's HEADINGS_IN_PAGE filter): an outage never headlines "unavailable". */
+  headings: string[];
 }
 
 export type WallProbes = typeof WALL_PROBES;
@@ -322,6 +326,10 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     retiredChrome: document.querySelectorAll(p.retiredChrome).length,
     settingsOpen: Boolean(settings && shown(settings)),
     stopBoardOpen: Boolean(board && shown(board)),
+    headings: Array.from(document.querySelectorAll<HTMLElement>(p.headings))
+      .filter((el) => !el.hidden && !el.closest('[hidden]') && el.getBoundingClientRect().height > 1)
+      .map((el) => words(el))
+      .filter(Boolean),
   };
 };
 
@@ -505,6 +513,113 @@ export function sampleFailures(s: WallSample): string[] {
   if (!s.qr || s.qr.w < QR_MIN_PX || s.qr.h < QR_MIN_PX) out.push(`the QR SVG is ${s.qr ? `${s.qr.w} × ${s.qr.h}` : 'missing'} (target ≥ ${QR_MIN_PX} × ${QR_MIN_PX} px)`);
   if (s.stripHasClock) out.push(`the footer prints a clock time: "${s.strip}"`);
   if (s.solarRows > SOLAR_ROWS_MAX) out.push(`${s.solarRows} solar rows (only the next solar event, at most ${SOLAR_ROWS_MAX})`);
+  return out;
+}
+
+// --- calm motion (principle 7), shared by the accept spec and the production observer ----------------
+/** One idle minute of calm motion, stepped like the rotation. */
+export const IDLE_MINUTE_MS = 60_000;
+/** Structural mutations allowed in that minute: a departure leaving at the top and one row entering (principle 7). */
+export const IDLE_MUTATIONS_MAX = 2;
+
+export interface CalmMotionSpec {
+  /** The subtree watched for structural mutations. */
+  root: string;
+  /** The rows that must keep their node. */
+  row: string;
+  /** The window and element property the watcher uses. */
+  key: string;
+}
+export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion' });
+
+export interface CalmMotionReading {
+  /** The watched subtree existed when the minute started. */
+  rootFound: boolean;
+  before: number;
+  after: number;
+  /** childList records that add or remove an element. */
+  mutations: number;
+  /** childList records that only swap text nodes (a countdown's digits): content, not structure. */
+  textSwaps: number;
+  /** Rows whose `kind|id` was on the list before and after, on the same node. */
+  kept: number;
+  /** Rows whose `kind|id` was on the list before and after, on a new node. */
+  rebuilt: string[];
+  left: string[];
+  entered: string[];
+  /** Rows without a data-id: their node cannot be followed. */
+  untracked: number;
+}
+
+/** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
+export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
+  const w = window as unknown as Record<string, unknown>;
+  const root = document.querySelector(spec.root);
+  const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
+  const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
+  rows.forEach((el, i) => { (el as unknown as Record<string, unknown>)[spec.key] = i; });
+  const state = {
+    rootFound: Boolean(root),
+    before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
+    mutations: 0,
+    textSwaps: 0,
+    observer: null as MutationObserver | null,
+    count(records: MutationRecord[]): void {
+      for (const m of records) {
+        if (m.type !== 'childList') continue;
+        const nodes = [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)];
+        if (nodes.some((n) => n.nodeType === 1)) state.mutations++;
+        else if (nodes.length) state.textSwaps++;
+      }
+    },
+  };
+  if (root) {
+    state.observer = new MutationObserver((records) => state.count(records));
+    state.observer.observe(root, { childList: true, subtree: true });
+  }
+  w[spec.key] = state;
+  return rows.length;
+};
+
+/** Stop counting and compare the rows with the tagged ones. */
+export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReading => {
+  const w = window as unknown as Record<string, unknown>;
+  const state = w[spec.key] as {
+    rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
+    observer: MutationObserver | null; count: (r: MutationRecord[]) => void;
+  } | undefined;
+  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
+  if (state.observer) {
+    state.count(state.observer.takeRecords());
+    state.observer.disconnect();
+  }
+  const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
+  const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
+  const beforeByKey = new Map(state.before.filter((b) => b.key !== null).map((b) => [b.key as string, b.tag]));
+  const afterKeys = new Set<string>();
+  let kept = 0;
+  let untracked = 0;
+  const rebuilt: string[] = [];
+  const entered: string[] = [];
+  for (const el of rows) {
+    const key = keyOf(el);
+    if (key === null) { untracked++; continue; }
+    afterKeys.add(key);
+    if (!beforeByKey.has(key)) { entered.push(key); continue; }
+    if ((el as unknown as Record<string, unknown>)[spec.key] === beforeByKey.get(key)) kept++;
+    else rebuilt.push(key);
+  }
+  const left = [...beforeByKey.keys()].filter((k) => !afterKeys.has(k));
+  delete w[spec.key];
+  return { rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations, textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked };
+};
+
+export function calmMotionFailures(r: CalmMotionReading): string[] {
+  if (!r.rootFound) return [`the timeline (${CALM_MOTION_SPEC.root}) is missing, so calm motion cannot be measured`];
+  if (r.before === 0) return [`the timeline had no rows (${CALM_MOTION_SPEC.row}) to follow through the idle minute`];
+  const out: string[] = [];
+  if (r.mutations > IDLE_MUTATIONS_MAX) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  if (r.rebuilt.length) out.push(`${r.rebuilt.length} row(s) stayed on the list but were re-created: ${r.rebuilt.join(', ')} (target 0, a row keeps its node)`);
   return out;
 }
 

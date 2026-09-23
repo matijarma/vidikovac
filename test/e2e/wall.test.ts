@@ -44,7 +44,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
     hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: LEAD_TEXT, strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
-    pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
+    pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],
     ...over,
     rows,
   };

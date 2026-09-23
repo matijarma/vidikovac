@@ -29,16 +29,16 @@ import {
 // The phone's shared verdicts live beside its probes (e2e/inventory.ts), where the production observer reads them too.
 export { PHONE_DEPARTURE_ROWS, phoneDepartureFailures, phoneDepartures, type PhoneDepartures } from '../inventory';
 export { PHARMACY_HOURS } from '../wall';
+export {
+  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, IDLE_MINUTE_MS, IDLE_MUTATIONS_MAX,
+  type CalmMotionReading, type CalmMotionSpec,
+} from '../wall';
 
 // --- numbers the specs hold that the instruments do not name ------------------------------------
 /** The place in the wall's header: a stop or street name, "Zagreb" for the whole city (acceptance A5). */
 export const PLACE_MIN_CHARS = 3;
 /** The time word of a timeless row (owner string, §11). */
 export const ALWAYS_WORD = 'uvijek';
-/** One idle minute of calm motion, stepped like the rotation. */
-export const IDLE_MINUTE_MS = 60_000;
-/** Structural mutations allowed in that minute: a departure leaving at the top and one row entering (principle 7). */
-export const IDLE_MUTATIONS_MAX = 2;
 /** Read-only touch: the stop's board stays this long, then the wall returns by itself ([O-58]). */
 export const TOUCH_BOARD_MS = 60_000;
 /** The phone's first viewport (the Pixel 7 emulation keeps its touch and scale, the viewport is the plan's 390×844). */
@@ -200,7 +200,7 @@ export const HEADINGS_IN_PAGE = (selector: string): string[] =>
     .filter((el) => !(el as HTMLElement).hidden && !el.closest('[hidden]') && el.getBoundingClientRect().height > 1)
     .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
     .filter(Boolean);
-export const HEADINGS = 'h1, h2';
+export const HEADINGS = WALL_PROBES.headings;
 
 const kindsOf = (s: WallSample): string => [...new Set(s.rows.map((r) => r.kind ?? 'none'))].join(', ') || 'none';
 const isPast = (when: string | null, at: number): boolean => when !== null && Number.isFinite(Date.parse(when)) && Date.parse(when) < at;
@@ -293,107 +293,7 @@ export function rotationSceneFailures(scene: Scene, samples: readonly WallSample
   return out;
 }
 
-// --- calm motion (principle 7) -----------------------------------------------------------------
-export interface CalmMotionSpec {
-  /** The subtree watched for structural mutations. */
-  root: string;
-  /** The rows that must keep their node. */
-  row: string;
-  /** The window and element property the watcher uses. */
-  key: string;
-}
-export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion' });
-
-export interface CalmMotionReading {
-  /** The watched subtree existed when the minute started. */
-  rootFound: boolean;
-  before: number;
-  after: number;
-  /** childList records that add or remove an element. */
-  mutations: number;
-  /** childList records that only swap text nodes (a countdown's digits): content, not structure. */
-  textSwaps: number;
-  /** Rows whose `kind|id` was on the list before and after, on the same node. */
-  kept: number;
-  /** Rows whose `kind|id` was on the list before and after, on a new node. */
-  rebuilt: string[];
-  left: string[];
-  entered: string[];
-  /** Rows without a data-id: their node cannot be followed. */
-  untracked: number;
-}
-
-/** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
-export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
-  const w = window as unknown as Record<string, unknown>;
-  const root = document.querySelector(spec.root);
-  const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
-  const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
-  rows.forEach((el, i) => { (el as unknown as Record<string, unknown>)[spec.key] = i; });
-  const state = {
-    rootFound: Boolean(root),
-    before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
-    mutations: 0,
-    textSwaps: 0,
-    observer: null as MutationObserver | null,
-    count(records: MutationRecord[]): void {
-      for (const m of records) {
-        if (m.type !== 'childList') continue;
-        const nodes = [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)];
-        if (nodes.some((n) => n.nodeType === 1)) state.mutations++;
-        else if (nodes.length) state.textSwaps++;
-      }
-    },
-  };
-  if (root) {
-    state.observer = new MutationObserver((records) => state.count(records));
-    state.observer.observe(root, { childList: true, subtree: true });
-  }
-  w[spec.key] = state;
-  return rows.length;
-};
-
-/** Stop counting and compare the rows with the tagged ones. */
-export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReading => {
-  const w = window as unknown as Record<string, unknown>;
-  const state = w[spec.key] as {
-    rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
-    observer: MutationObserver | null; count: (r: MutationRecord[]) => void;
-  } | undefined;
-  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
-  if (state.observer) {
-    state.count(state.observer.takeRecords());
-    state.observer.disconnect();
-  }
-  const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
-  const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
-  const beforeByKey = new Map(state.before.filter((b) => b.key !== null).map((b) => [b.key as string, b.tag]));
-  const afterKeys = new Set<string>();
-  let kept = 0;
-  let untracked = 0;
-  const rebuilt: string[] = [];
-  const entered: string[] = [];
-  for (const el of rows) {
-    const key = keyOf(el);
-    if (key === null) { untracked++; continue; }
-    afterKeys.add(key);
-    if (!beforeByKey.has(key)) { entered.push(key); continue; }
-    if ((el as unknown as Record<string, unknown>)[spec.key] === beforeByKey.get(key)) kept++;
-    else rebuilt.push(key);
-  }
-  const left = [...beforeByKey.keys()].filter((k) => !afterKeys.has(k));
-  delete w[spec.key];
-  return { rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations, textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked };
-};
-
-export function calmMotionFailures(r: CalmMotionReading): string[] {
-  if (!r.rootFound) return [`the timeline (${CALM_MOTION_SPEC.root}) is missing, so calm motion cannot be measured`];
-  if (r.before === 0) return [`the timeline had no rows (${CALM_MOTION_SPEC.row}) to follow through the idle minute`];
-  const out: string[] = [];
-  if (r.mutations > IDLE_MUTATIONS_MAX) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
-  if (r.rebuilt.length) out.push(`${r.rebuilt.length} row(s) stayed on the list but were re-created: ${r.rebuilt.join(', ')} (target 0, a row keeps its node)`);
-  return out;
-}
+// --- calm motion (principle 7): e2e/wall.ts, where the production observer reads it too (re-exported above) ---
 
 // --- the phone ---------------------------------------------------------------------------------
 // PHONE_DEPARTURE_ROWS, phoneDepartures and phoneDepartureFailures: e2e/inventory.ts (re-exported above).
