@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { Buffer } from 'node:buffer';
 import { closeSync, existsSync, openSync, readFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -268,7 +269,7 @@ describe('frames-sample README regeneration', () => {
     expect(readme).toContain(`graphHash \`${network.graphHash}\``);
     for (const row of original.split('\n').filter((line) => line.startsWith('|'))) expect(readme).toContain(row);
     for (const file of before) {
-      expect(await readFile(join(out, file.name))).toEqual(file.bytes);
+      expect(Buffer.compare(await readFile(join(out, file.name)), file.bytes)).toBe(0);
       expect((await stat(join(out, file.name))).mtimeMs).toBe(file.mtime);
     }
     await main({ argv: ['--readme-only', out], log: () => {} });
