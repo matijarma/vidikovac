@@ -90,10 +90,10 @@ export interface FrontRow {
   leadMarkup?: string;
   title: string;
   sub?: string;
-  /** Trusted markup at the row's end, hard right: a departure's time. A row
-   *  that carries one is ONE line at every size -- the title ellipsises rather
-   *  than wrapping under the trail -- because a board read from across a room
-   *  is a column of times, not a column of paragraphs. */
+  /** Trusted markup at the row's end, hard right: a departure's time. The
+   *  time keeps its own column at every size -- a title too long for its cell
+   *  wraps inside it, never under the trail and never cut -- because a board
+   *  read from across a room is a column of times, not a column of paragraphs. */
   trail?: string;
   tone?: 'late' | 'early' | 'ontime' | 'unknown';
 }
