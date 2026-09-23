@@ -110,20 +110,10 @@ async function openLayer(page, layer) {
   await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor();
 }
 
-/** Promet, then its transport group. Since the city sources landed the
- *  workspace opens on the city's own group ("Zivi grad"), where the transport
- *  modes are off and neither a pill nor the diagram is drawn (workspace.ts
- *  modesArg and the renderer choice); "Kretanje" is what a reader looking for
- *  a tram picks, and what e2e/round-f.spec.ts picks. A host that has no city
- *  groups at all (a legacy transport-only view) is already there. */
+/** Karta. It draws every vehicle at once (WP4): there is no group to pick
+ *  first, as e2e/round-f.spec.ts's openScene says too. */
 async function openTransport(page) {
   await openLayer(page, 'u-pokretu');
-  const group = page.locator('[data-action=city-group][data-group=transport]');
-  if (!(await group.count())) return;
-  // Focusing the search first is what raises the sheet on a phone, so the
-  // group buttons under it are on screen to be clicked (e2e/schema.spec.ts).
-  await page.getByTestId('transport-search').focus();
-  await group.first().click();
 }
 
 try {

@@ -92,8 +92,8 @@ describe('dashboard.css phone shell', () => {
     expect(head).toContain('min-block-size: var(--ki-top)');
     expect(head).toContain('padding-block-start: env(safe-area-inset-top, 0px)');
     expect(head).toContain('background: var(--tone-surface-1)');
-    // Three keyed controls on the phone: wordmark, session, safety, with a flexible gap pushing them right.
-    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto');
+    // Up to five keyed controls on the phone: wordmark, then Zaslon, Podijeli grad, session and safety, with a flexible gap pushing them right.
+    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     expect(rule(".ki[data-loading='true'] .ki-head::after")).toContain('opacity: 1');
   });
@@ -126,9 +126,6 @@ describe('dashboard.css phone shell', () => {
     for (const [, property, twin] of fallbacks) expect(twin).toBe(property);
     expect(CSS).not.toContain('!important');
   });
-  it('the phone FAB reserves its room: with data-fab main pads by the tab bar plus 5rem', () => {
-    expect(rule(".ki[data-fab='1'] .ki-main")).toContain('padding-block-end: calc(var(--ki-tabs) + 5rem)');
-  });
 });
 
 describe('dashboard.css header controls', () => {
@@ -151,20 +148,30 @@ describe('dashboard.css header controls', () => {
     expect(rule('.ki-safety .ki-nav-label')).toBe('');
     expect(CSS).not.toContain('@media (max-width: 22.4375rem)');
   });
+  it('"Podijeli grad" is a labelled 44 px button in the brand tone beside the pill; the phone places it between Zaslon and the session', () => {
+    const share = rule('.ki-share');
+    expect(share).toContain('min-inline-size: var(--target)');
+    expect(share).toContain('min-block-size: var(--target)');
+    expect(share).toContain('color: var(--tone-action-brand)');
+    expect(share).toContain('font-weight: var(--weight-bold)');
+    expect(share).toContain('white-space: nowrap');
+    expect(share).toContain('touch-action: manipulation');
+    expect(rule('.ki-share > span')).toContain('position: static');
+    const phone = /@media \(max-width: 59\.99rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(phone).toContain(".ki-head > [data-key='screen'] { grid-column: 3; }");
+    expect(phone).toContain(".ki-head > [data-key='share'] { grid-column: 4; }");
+    expect(phone).toContain(".ki-head > [data-key='session'] { grid-column: 5; }");
+    expect(phone).toContain(".ki-head > [data-key='safety'] { grid-column: 6; }");
+    // Too narrow for the word (a 320 px phone, text zoom): the glyph and the aria-label stay.
+    const narrow = /@container header \(max-width: 21rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(rule('.ki-share > span', narrow)).toContain('clip: rect(0 0 0 0)');
+  });
   it('the wordmark keeps its size and paints only the question mark in the brand tone', () => {
     expect(rule('.ki-wordmark-text')).toContain('font-size: var(--type-body)');
     expect(rule('.ki-wordmark-mark')).toContain('color: var(--tone-action-brand)');
   });
-  it('the FAB is a fixed 48 px accent pill above the tab bar, flat under lagano', () => {
-    const fab = rule('.ki-fab');
-    expect(fab).toContain('position: fixed');
-    expect(fab).toContain('inset-block-end: calc(var(--ki-tabs) + var(--sp-4))');
-    expect(fab).toContain('min-block-size: var(--target-primary)');
-    expect(fab).toContain('border-radius: var(--r-pill)');
-    expect(fab).toContain('background: var(--tone-action-brand)');
-    expect(fab).toContain('color: var(--tone-action-brand-fg)');
-    expect(fab).toContain('z-index: var(--z-sticky)');
-    expect(rule(":root[data-lagano='1'] .ki-fab")).toContain('box-shadow: none');
+  it('carries no FAB: "Na zaslon" left the phone with the legacy cast (WP5 A3), Zaslon is a header control', () => {
+    expect(CSS).not.toMatch(/ki-fab|data-fab/);
   });
   it('notice banners take the tint of their kind and keep the dismiss control beside the text at every width', () => {
     expect(rule('.banner-notice')).toContain('flex-wrap: nowrap');
@@ -176,13 +183,13 @@ describe('dashboard.css header controls', () => {
 });
 
 describe('dashboard.css desktop (60rem and up)', () => {
-  it('gives desktop one full workspace and direct domain navigation', () => {
+  it('gives desktop one full workspace under a one-row status line, with no domain bar (the desk is the phone, wider)', () => {
     const ki = rule('.ki', DESKTOP);
-    expect(ki).toContain('--ki-top: 6.5rem');
+    expect(ki).toContain('--ki-top: 3.5rem');
     expect(ki).toContain('grid-template-columns: minmax(0, 1fr)');
     expect(ki).toContain('grid-template-rows: auto auto auto 1fr');
     expect(ki).toContain("grid-template-areas: 'status' 'presentation' 'banners' 'main'");
-    expect(rule('.ki-domains', DESKTOP)).toContain('grid-column: 1 / -1');
+    expect(CSS).not.toContain('.ki-domains');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
     expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
   });
@@ -191,32 +198,27 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
     expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('keeps the status line a real box with six columns, the search taking the room; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+  it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar leaves; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto');
-    expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
+    // Seven: the desk pair stands Karta beside Sada on the page, so the header carries no way into it (WP4 chunk E).
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;');
+    expect(rule('.ki-head', DESKTOP)).not.toContain('grid-template-rows');
+    for (const [key, column] of [['screen', 3], ['share', 4], ['session', 5], ['more', 6], ['safety', 7]] as const) {
+      expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-column: ${column}; }`);
+    }
+    expect(DESKTOP).not.toContain("[data-key='karta']");
+    expect(CSS).not.toContain('.ki-desk-karta');
+    expect(rule('.ki-tabbar', DESKTOP)).toContain('display: none');
     expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--type-title)');
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
     expect(DESKTOP).not.toContain('display: contents');
   });
-  it('the desktop-only controls are 44 px: Još, the search launcher (a 420 px pill), the clock link and the bell with its dot', () => {
+  it('the desktop-only controls are 44 px: Još and the clock link; the search launcher and the bell left with their markup (WP5 A3)', () => {
     const more = rule('.ki-more', DESKTOP);
     expect(more).toContain('min-block-size: var(--target)');
     expect(more).toContain('font-size: var(--type-control)');
     expect(rule(".ki-more[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
-    const search = rule('.ki-search', DESKTOP);
-    // At 200 % text the desk header is about 45rem: the search keeps its glyph and its aria-label, the words wait for room; the pill never wraps over the clock.
-    expect(rule('.ki-search > span', DESKTOP)).toContain('text-overflow: ellipsis');
-    const narrowHeader = CSS.slice(CSS.indexOf('@container header (max-width: 56rem)'));
-    expect(narrowHeader).toContain('.ki-search > span { display: none; }');
-    expect(narrowHeader).toContain('.ki-search { inline-size: var(--target); max-inline-size: var(--target); padding: 0; justify-content: center; }');
-    // On a very narrow viewport the FAB keeps its glyph and aria-label and drops the word.
-    const narrowFab = CSS.slice(CSS.indexOf('@media (max-width: 24rem)'));
-    expect(narrowFab).toContain('.ki-fab > span { display: none; }');
-    expect(search).toContain('max-inline-size: 26.25rem');
-    expect(search).toContain('min-block-size: var(--target)');
-    expect(search).toContain('border-radius: var(--r-pill)');
-    expect(search).toContain('cursor: text');
+    expect(CSS).not.toMatch(/\.ki-(?:search|bell)\b/);
     const clock = rule('.ki-clock', DESKTOP);
     expect(clock).toContain('min-block-size: var(--target)');
     expect(clock).toContain('font-size: var(--type-control)');
@@ -226,7 +228,6 @@ describe('dashboard.css desktop (60rem and up)', () => {
     // Hairlines, not dots, separate the clock from the weather group and the temperature from the sunset (kajimafix 01.9).
     expect(rule('.ki-weather', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
     expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
-    expect(rule(".ki-bell[data-active]:not([data-active='0'])::after", DESKTOP)).toContain('background: var(--tone-action-brand)');
   });
   it('never reintroduces a side rail: no aside width variable stands', () => {
     expect(CSS).not.toContain('--ki-side');
@@ -237,6 +238,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
 // T1.2: the tab bar, zoom-compact containers, hover gating, press states and
 // touch behaviour. map.css is T1.3's except the one deleted 40 px override.
 describe('tab bar: 56 px targets, the current tab a bold peacock bar, labels that never ellipsise', () => {
+  it('holds three equal tabs, Sada · Karta · Još', () => {
+    expect(rule('.ki-tabs')).toContain('grid-template-columns: repeat(3, 1fr)');
+  });
   it('the tab is 56 px tall with 14 px labels and a manipulation touch-action (no double-tap zoom delay)', () => {
     const tab = rule('.ki-tab');
     expect(tab).toContain('font-size: var(--text-sm)');
@@ -271,6 +275,9 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     expect(CSS).toContain('@container tabs (max-width: 18rem)');
     const header = /@container header \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-session .g-ring', header)).toContain('display: none');
+    // Five controls at 200 % text: the header's targets keep the 44 px minimum in device pixels rather than growing to
+    // 2.75rem (88 px), or the row (44 + 4 × 88 + gaps + padding = 460 px) widens the 390 px document (WP4, mobile.spec 200 %).
+    expect(rule('.ki-head', header)).toContain('--target: 44px');
     expect(rule('.ki-wordmark-text', header)).toContain('font-size: 0');
     expect(rule('.ki-wordmark-mark', header)).toContain('font-size: var(--type-title)');
     const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
@@ -306,17 +313,17 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     expect(dash).toContain('.ki-session:active');
     expect(dash).toContain('.ki-safety:active');
     expect(dash).toContain('.ki-more:active');
-    expect(dash).toContain('.ki-fab:active');
+    expect(dash).toContain('.ki-share:active');
     const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
     expect(base).toContain('.btn:active');
     expect(base).toContain('.chip:active');
     const layers = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
     expect(layers).toContain('.row-button:active');
     expect(layers).toContain('.route-link:active');
-    // Sada's own controls: the "+ N" feet and the segments press to surface-2; a tile already
-    // stands on surface-1, so its press goes one level further, like the rows in the events well.
-    expect(layers).toContain('.tb-more:active, .tb-seg-btn:active');
-    expect(layers).toContain(".tl:not([data-tone]):not([data-variant='ink']):active { background-color: var(--tone-surface-3); transition: none; }");
+    // The rows in the events well already stand on a raised surface, so their press goes one level further;
+    // the time band's tiles and their press went with their producers (WP5 B1).
+    expect(layers).toContain('.ev-well .row-button:active { background-color: var(--tone-surface-3); transition: none; }');
+    expect(layers).not.toMatch(/\.tl\b/);
     expect(layers).toContain('.dir-item:active');
     expect(layers).toContain('.sf-number:active');
     expect(layers).toContain('.link-arrow:active');
@@ -329,8 +336,8 @@ describe('touch: the main scrolls vertically only; controls get the browser out 
     expect(rule('.ki-main')).toContain('touch-action: pan-y');
   });
   it('every S-owned control is touch-action: manipulation (no 300 ms tap delay)', () => {
-    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab', '.ki-fab']) expect(rule(selector)).toContain('touch-action: manipulation');
-    for (const selector of ['.ki-more', '.ki-search']) expect(rule(selector, DESKTOP)).toContain('touch-action: manipulation');
+    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab']) expect(rule(selector)).toContain('touch-action: manipulation');
+    expect(rule('.ki-more', DESKTOP)).toContain('touch-action: manipulation');
     for (const selector of ['.btn, .btn-ghost, .btn-quiet', '.chip']) expect(rule(selector, BASE_CSS)).toContain('touch-action: manipulation');
     for (const selector of ['.row-button', '.route-link', '.dir-item', '.link-arrow, .link-ext', '.source-link']) {
       expect(rule(selector, LAYERS_CSS)).toContain('touch-action: manipulation');
@@ -370,7 +377,7 @@ describe('scroll padding keeps focused rows clear of the fixed chrome', () => {
   it('pads the document scrollport by the status line and the tab bar on the phone, and by the 3.5rem status line alone at the desk', () => {
     expect(CSS).toContain('html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }');
     const desk = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 6.5rem 0; }');
+    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 3.5rem 0; }');
   });
 });
 
@@ -390,84 +397,21 @@ describe('the tab bar is exactly the space the shell reserves for it', () => {
 });
 
 
-describe('Sada reads in one order on every width', () => {
-  it('never reorders a head, a lane or a tile in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
-    // `order` (and a row-reversed flow) would move a lane past its neighbours
-    // for the eye while leaving it where it was for a Tab key and a screen
-    // reader. Heads, lanes and tiles are written in time order instead; the
-    // desk and the phone are grid and flex changes that move nothing past
-    // anything.
-    const rules = /\.t[bl](?:-[a-z-]+)?\b[^{}]*\{[^}]*\}/g;
-    let seen = 0;
-    for (const [declaration] of LAYERS_CSS.matchAll(rules)) {
-      seen += 1;
-      expect(declaration, declaration).not.toMatch(/\border\s*:/);
-    }
-    expect(seen).toBeGreaterThan(10);
-    expect(LAYERS_CSS).not.toMatch(/\.t[bl]\b[^{}]*\{[^}]*flex-direction: (?:column|row)-reverse/);
+describe('the tiles read in one order on every width', () => {
+  it('never reorders a tile in CSS, so the visual order is the DOM order (SC 2.4.3)', () => {
+    // `order` (and a row-reversed flow) would move a tile past its neighbours
+    // for the eye while leaving it where it was for a Tab key and a screen reader.
+    // The time band's .tl tiles went with their producers (WP5 B1); no rule may bring them back.
+    expect(LAYERS_CSS).not.toMatch(/\.tl\b/);
     expect(LAYERS_CSS).not.toMatch(/\.ov\b/);
   });
 });
 
-describe('layers.css time band', () => {
-  it('lays the heads, the axis and the lanes on one five-track grid with the sada track wider, 20 px apart; four tracks at night', () => {
-    const grid = rule('.tb-heads, .tb-lanes, .tb-axis', LAYERS_CSS);
-    expect(grid).toContain('display: grid');
-    expect(grid).toContain('grid-template-columns: 2.2fr 1fr 1fr 1fr 1fr');
-    expect(grid).toContain('column-gap: 1.25rem');
-    expect(rule(".tb[data-cols='4'] .tb-heads, .tb[data-cols='4'] .tb-lanes, .tb[data-cols='4'] .tb-axis", LAYERS_CSS)).toContain('grid-template-columns: 2.2fr 1fr 1fr 1fr');
-  });
-  it('stacks a lane’s tiles 10 px apart; the sada lane auto-fits half-width value tiles and spans its bands, rows, feet and states', () => {
-    const lane = rule('.tb-lane', LAYERS_CSS);
-    expect(lane).toContain('display: grid');
-    expect(lane).toContain('gap: 0.625rem');
-    expect(lane).toContain('min-inline-size: 0');
-    expect(rule(".tb-lane[data-col='sada']", LAYERS_CSS)).toContain('grid-template-columns: repeat(auto-fit, minmax(min(10.5rem, 100%), 1fr))');
-    expect(LAYERS_CSS).toContain(".tb-lane[data-col='sada'] > .tl[data-variant='band'], .tb-lane[data-col='sada'] > .tl[data-variant='row'], .tb-lane[data-col='sada'] > .tb-more, .tb-lane[data-col='sada'] > .state, .tb-lane[data-col='sada'] > .tb-empty { grid-column: 1 / -1; }");
-  });
-  it('sets the segments, the feet and the weather group as 44 px controls on tokens, hover under (hover: hover) only', () => {
-    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('min-block-size: var(--target)');
-    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('touch-action: manipulation');
-    expect(rule(".tb-seg-btn[aria-pressed='true'] > span", LAYERS_CSS)).toContain('background: var(--tone-action-brand)');
-    expect(rule('.tb-more', LAYERS_CSS)).toContain('min-block-size: var(--target)');
-    expect(rule('.tb-weather', LAYERS_CSS)).toContain('min-block-size: var(--target)');
-    const hover = mediaBlocks(LAYERS_CSS, '@media (hover: hover)').find((body) => body.includes('.tl:not([data-tone])')) ?? '';
-    expect(hover).toContain(".tl:not([data-tone]):not([data-variant='ink']):hover { background-color: var(--tone-surface-2); }");
-    expect(hover).toContain(".tl[data-tone]:hover, .tl[data-variant='ink']:hover { box-shadow: inset 0 0 0 1.5px var(--tone-stroke-strong); }");
-    expect(hover).toContain('.tb-more:hover, .tb-weather:hover');
-  });
-  it('in a workspace of 60rem or less (a narrower window, or a desk at 125 % text) keeps three lanes: sutra and tjedan wait in Događanja', () => {
-    const middling = /@container ws \(max-width: 60rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
-    expect(rule('.tb-heads, .tb-lanes, .tb-axis', middling)).toContain('grid-template-columns: 2fr 1fr 1fr');
-    expect(middling).toContain(".tb-head[data-col='tjedan'], .tb-lane[data-col='tjedan'], .tb-dot[data-col='tjedan'],");
-    expect(middling).toContain(".tb[data-cols='5'] .tb-head[data-col='sutra'], .tb[data-cols='5'] .tb-lane[data-col='sutra'], .tb[data-cols='5'] .tb-dot[data-col='sutra'] { display: none; }");
-    // Cascade: after the last viewport rule it overrides, before the phone form that overrides it.
-    const at = LAYERS_CSS.indexOf('@container ws (max-width: 60rem)');
-    expect(at).toBeGreaterThan(LAYERS_CSS.lastIndexOf('@media (min-width: 80rem)'));
-    expect(at).toBeLessThan(LAYERS_CSS.indexOf('@container ws (max-width: 36rem)'));
-    expect(LAYERS_CSS).not.toContain('@container ws (max-width: 50rem)');
-  });
-  it('the phone form (36rem): sticky segments, one head shown and the rest clipped, a snapping lane row that pans both ways with the FAB reserve', () => {
-    const phone = /@container ws \(max-width: 36rem\) \{([\s\S]*?)\n\}/.exec(LAYERS_CSS)?.[1] ?? '';
-    // The five time words wrap to a second row at 200 % text on a 390 px phone instead of clipping or widening the page.
-    expect(phone).toContain('.tb-seg { display: block; min-inline-size: 0; position: sticky; inset-block-start: var(--ki-top); z-index: 2; padding-block: var(--sp-2); background: var(--tone-surface-canvas); }');
-    // The track (kajimafix 02.3): surface-2, 2 px of padding, wrapping at 200 % text; five equal buttons that never shrink under their word.
-    const track = rule('.tb-seg-track', LAYERS_CSS);
-    expect(track).toContain('background: var(--tone-surface-2)');
-    expect(track).toContain('padding: 2px');
-    expect(track).toContain('flex-wrap: wrap');
-    expect(rule('.tb-seg-btn', LAYERS_CSS)).toContain('flex: 1 1 0;');
-    expect(rule('.tb-seg-btn', LAYERS_CSS)).not.toContain('min-inline-size: 0');
-    // The sada head on a phone: the kicker over the clock at the left, the weather group at the right (kajimafix 02.2).
-    expect(phone).toContain(".tb-head[data-col='sada'] { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }");
-    expect(phone).toContain('.tb-heads { display: block; position: relative; }');
-    expect(phone).toContain(".tb-head:not([data-current='true']) { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; clip-path: inset(50%); white-space: nowrap; border: 0; }");
-    expect(phone).toContain('.tb-axis { display: none; }');
-    expect(phone).toContain('.tb-lanes { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x pan-y; margin-inline: -2px; padding: 2px 2px 5rem; }');
-    expect(phone).toContain(".tb[data-cols] .tb-lane[data-col] { display: grid; flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }");
-    // The restore rules share the hiding rules' specificity and come later, so on a phone every lane and head is back.
-    expect(phone).toContain('.tb[data-cols] .tb-head[data-col] { display: grid; }');
-    expect(phone.indexOf('.tb[data-cols] .tb-head[data-col]')).toBeGreaterThan(-1);
+describe('layers.css carries no time band', () => {
+  it('has no .tb rule left: the band, its segments, its axis and its "Zatim" foot went with their renderers (WP5 A3)', () => {
+    expect(LAYERS_CSS).not.toMatch(/\.tb(?:-[a-z-]+)?\b/);
+    expect(LAYERS_CSS).not.toMatch(/data-compact/);
+    expect(LAYERS_CSS).not.toContain('@container ws (max-width: 60rem)');
     // Motion is a decision made in JS from the reader's preference, never here.
     expect(LAYERS_CSS).not.toContain('scroll-behavior');
     // Every trace of the old overview is gone from the sheet.

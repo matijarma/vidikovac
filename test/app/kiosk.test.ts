@@ -178,6 +178,32 @@ const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=ki
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
 describe('passive public city',()=>{
+  it('keeps presentation payload and safety links consistent when crossing the handheld boundary', async () => {
+    const viewport = { width: 1920, height: 1080 };
+    const k = await pairedKiosk({ viewport });
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    viewport.width = 390; viewport.height = 844; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('A');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('A');
+    viewport.width = 1920; viewport.height = 1080; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    k.handle.destroy();
+  });
+  it('offers plain safety and payload text on the wall, keeping the handheld links and basics button', async () => {
+    for (const viewport of [{ width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
+      const k = mount({ stored: STORED, viewport });
+      await flush();
+      k.handlers.onCodes(batch(NOW), NOW);
+      const wall = viewport.width === 1920;
+      expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe(wall ? 'SPAN' : 'A');
+      expect(q(k.root, '[data-testid=pair-url]')?.hasAttribute('href')).toBe(!wall);
+      expect(q(k.root, '.k-strip-hitno')?.tagName).toBe(wall ? 'SPAN' : 'A');
+      expect(q(k.root, '[data-testid=kiosk-essentials-open]') !== null).toBe(!wall);
+      expect(text(q(k.root, '[data-testid=strip-verdict]'))).not.toBe('');
+      k.handle.destroy();
+    }
+  });
   it('keeps nearby nodes through sentence changes and yields to explicit presentation',async()=>{
     const cityStore=fakeCityStore({...emptyCity(),places:[{id:'culture-a',name:'Gavella',category:'culture',sourceId:'culture',sourceRecord:'a',lon:15.97,lat:45.81}]});
     let now=NOW;
@@ -714,7 +740,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
   /** About 1.7 km from every stop of the fixture: a pick here stays the street. */
   const ILICA = street('Ilica', 15.955, 45.8125);
   const ZAPRUDJE_ROW: Suggestion = { kind: 'stop', stop: { ...STOPS[2], distanceM: null } };
-  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.';
+  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi polje prazno za cijeli grad.';
 
   interface StartEnv { mountStart: StartModule['mountStart']; strings: KioskStrings; isTram: (routeId: string) => boolean }
   /** start.ts over a places.ts whose suggestPlaces answers `suggest`; the rest of that module stays real. */
@@ -1387,7 +1413,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(k.root.innerHTML).not.toContain('tajna');
     expect(text(q(k.root, '[data-testid=kiosk-clock]'))).toBe('14:32');
   });
-  it('shows the current code as two groups with a QR of the scan URL and its payload link, and asks for more when low', () => {
+  it('shows the current code as two groups with a QR of the scan URL and passive payload text, and asks for more when low', () => {
     const k = mount({ stored: STORED });
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=code-a]'))).toBe('ABCD');
@@ -1397,8 +1423,10 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(qr.getAttribute('role')).toBe('img');
     expect(qr.getAttribute('aria-label')).toContain('A B C D, E F G 0');
     expect(k.root.querySelector('svg')).not.toBeNull();
-    const link = q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
+    const link = q(k.root, '[data-testid=pair-url]')!;
+    expect(link.tagName).toBe('SPAN');
+    expect(link.hasAttribute('href')).toBe(false);
+    expect(link.textContent).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
     expect(link.hidden).toBe(false);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
     k.handlers.onCodes(batch(NOW - 17 * 30_000), NOW);
@@ -1407,7 +1435,7 @@ describe('invitation: the screen a passer-by sees', () => {
   it('keeps the link out of the page and the QR waiting until a code exists; the bar is quantised under reduced motion', () => {
     const k = mount({ stored: STORED, reducedMotion: true });
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže…');
+    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže');
     k.handlers.onCodes(batch(NOW - 7_000), NOW);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('0.80');
   });
@@ -1464,7 +1492,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     // Without a stop the field is labelled by the lines title, never left nameless. The default Trg
     // is the list's place, not the map's: the field follows the whole-city map [O-52], [O-65].
-    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ove stanice');
+    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ovog stajališta');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe(STOP.name);
@@ -1560,7 +1588,8 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     // The reading the header used to carry, now inside the card.
     expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
     expect(text(q(weather, '.k-condition'))).toBe('vedro');
-    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
+    // The source, never the observation time (companion brief §12, [O-27]).
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ');
     // Sized for the paired column: two ranges, never the whole forecast run.
     const rows = [...weather.querySelectorAll('.k-panel-rows .k-fr')];
     expect(rows.map((row) => text(row.querySelector('.k-fr-lead')))).toEqual(['danas', 'sutra']);
@@ -1585,7 +1614,9 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
     expect(text(q(k.root, '.k-rail-summary'))).toContain('Ilica');
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(q(k.root, '.k-strip-hitno')?.getAttribute('href')).toBe('/hitno');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    expect(q(k.root, '.k-strip-hitno')?.hasAttribute('href')).toBe(false);
+    expect(text(q(k.root, '.k-strip-hitno'))).toBe('Sigurnost');
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
     expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });
@@ -1691,7 +1722,8 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
     expect(k.handle.phase()).toBe('revoked');
     expect(text(q(k.root, '[data-testid=kiosk-notice]'))).toContain('Ovaj je zaslon isključen.');
     expect(q(k.root, '[data-testid=kiosk-qr]')).toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(false);
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull();
+    expect(text(q(k.root, '[data-testid=strip-verdict]'))).not.toBe('');
   });
   it('a fresh screen after starting over rotates only its own codes', async () => {
     const k = mount({ stored: JSON.stringify({ beaconId: 'OLD00001', secret: 'stara', screen: { ...SCREEN, expiresAt: NOW - 1 } }) });
@@ -1706,9 +1738,9 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
   });
 });
 
-describe('basics: sessionless, one touch, 90 s idle only outside a grant', () => {
+describe('handheld basics: sessionless, one touch, 90 s idle only outside a grant', () => {
   it('opens with the five rows, re-arms on a touch, closes on Escape with focus back, and closes on its own after 90 s', async () => {
-    const k = mount({ stored: STORED });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 } });
     await flush();
     const open = q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement;
     expect(open.hidden).toBe(false);
@@ -1718,7 +1750,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
     expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(true);
     expect(document.activeElement?.id).toBe('ess-title');
     const labels = [...k.root.querySelectorAll('[data-testid=ess-row] .k-ess-label')].map((el) => text(el));
-    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna']);
+    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.']);
     expect(text(q(k.root, '[data-row=pharmacy]'))).toContain('Ljekarna Centar, Ilica 1');
     expect([...k.root.querySelectorAll('.ess-attr')].every((el) => !(el.textContent ?? '').includes('{'))).toBe(true);
     expect(ESSENTIALS_IDLE_MS).toBe(90_000);
@@ -1735,7 +1767,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
     expect(panel.hidden).toBe(true);
   });
   it('never opens over a grant (the verdict is a plain word then, not a button), and the close button closes it', async () => {
-    const k = await pairedKiosk();
+    const k = await pairedKiosk({ viewport: { width: 390, height: 844 } });
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-essentials]')!.hidden).toBe(true);
     k.expire();
@@ -1746,7 +1778,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
   });
   it('with every source down the panel says so once and points at /hitno', async () => {
     const down = (module: ModuleId): ModuleSnapshot => snap(module, [], 'down');
-    const k = mount({ stored: STORED, fetchTeaser: async () => ({ modules: (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down) }) });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, fetchTeaser: async () => ({ modules: (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down) }) });
     await flush();
     (q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement).click();
     expect(k.root.querySelectorAll('[data-testid=ess-row]')).toHaveLength(1);
@@ -1980,7 +2012,7 @@ describe('alerts, polling, the first tap and disposal', () => {
   it('the map hears the ZET feed state on every paint: a stale teaser holds it, a reparent resizes and re-asserts the hold right after resume, basics pause and resume the same way', async () => {
     const stale = MODULES.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' as const } : m));
     const map = fakeMap();
-    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
     // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
     expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
     await flush();
@@ -2044,7 +2076,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
     k.handlers.onStatus('live');
     k.handlers.onStatus('connecting');
-    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje…');
+    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje');
     k.handlers.onStatus('live');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
@@ -2127,15 +2159,16 @@ describe('the invitation composition: the timeline, sentence and strip', () => {
     expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
     expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
   });
-  it('the strip label carries the shield and the pill reads Sigurnost, linking the same page', async () => {
+  it('the strip label carries the shield and the passive pill reads Sigurnost', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const label = q(k.root, '.k-strip-label')!;
     expect(q(label, 'svg use')!.getAttribute('href')).toBe('#icon-shield');
     expect(text(label)).toBe('Sigurnost');
-    const pill = q(k.root, '.k-strip-hitno') as HTMLAnchorElement;
+    const pill = q(k.root, '.k-strip-hitno')!;
     expect(text(pill)).toBe('Sigurnost');
-    expect(pill.getAttribute('href')).toBe('/hitno');
+    expect(pill.tagName).toBe('SPAN');
+    expect(pill.hasAttribute('href')).toBe(false);
     expect(k.root.innerHTML).not.toContain('>/hitno<');
   });
   it('paired: the header centre names the mirrored domain and follows every layer change', async () => {
@@ -2773,7 +2806,7 @@ describe('arrivals on the public screen', () => {
     return { factory: vi.fn((_options: unknown) => handle), handle };
   }
 
-  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, no note, the lines under them', async () => {
     const map = tappableMap();
     const b = fakeBoards(JELACIC_BOARDS);
     const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
@@ -2785,18 +2818,18 @@ describe('arrivals on the public screen', () => {
     const card = q(k.root, '[data-testid=k-selection]')!;
     const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
     // One line per row: the time, the plate, where it is going -- and no
-    // per-row "po redu vožnje", which doubled the height of every untracked row.
-    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+    // second line saying "vozni red", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // The tracked row, and only it, carries the live dot and is marked live;
-    // the note under the list says what the unmarked times are.
+    // every other row says "vozni red" in its own words.
     expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
     expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
-    expect(text(card)).toContain('po redu vožnje');
-    // One note for the list, not one per row, and the stop's lines keep their place under it.
-    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    expect(text(card)).toContain('vozni red');
+    // No note under the list on the wall (companion brief §12 "Never"), and the stop's lines keep their place under it.
+    expect(text(card)).not.toMatch(/Procjena|ostalo po voznom redu/);
     expect(text(card)).toContain('linija 6, 11, 12');
     const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
-    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-select-sub']);
     // The card is the column while it is open (kiosk-city.css hides the screen's
     // own board behind this flag); going back gives the board the rail again.
     expect(q(k.root,'[data-testid=kiosk-invitation]')).toBeNull();
@@ -2815,7 +2848,7 @@ describe('arrivals on the public screen', () => {
     expect(rows.map(row => text(q(row, '.nearby-title')))).toEqual(['6 Črnomerec', '11 Velika Gorica', '13 Žitnjak']);
     expect(rows.map(row => text(q(row, '.nearby-when')))).toEqual(['za 3 min', '14:38', '14:45']);
     expect(rows.map(row => row.dataset.live)).toEqual(['1', undefined, undefined]);
-    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|po redu vožnje|ZET|Dohvaćeno/);
+    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|vozni red|ZET|Dohvaćeno/);
     // Ten seconds later the poll comes round again; the minute's memo answers it.
     k.poll();
     await flush();
@@ -2917,7 +2950,7 @@ describe('arrivals on the public screen', () => {
     // And the wall shows the rows, not an empty card under the stop's name.
     const card = q(k.root, '[data-testid=k-selection]')!;
     expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
-      .toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+      .toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // A presented route is not a stop: the screen keeps quiet behind it, and
     // the screen's own stop is not polled behind the phone's subject either.
     const other = fakeBoards(JELACIC_BOARDS);
@@ -2965,6 +2998,64 @@ describe('W-C4: third-party text on the wall is checked and counted (decision 18
     expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;phone:1');
     expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
+    k.handle.destroy();
+  });
+});
+
+// WP5 step 8 (companion brief §12 "Never", §13 #12-#15, [O-27]): no fetch or
+// update time, no disclaimer and no caveat anywhere on the wall. The phone
+// keeps its own notes; this reads only what the wall paints.
+describe('the wall carries no disclaimer, caveat or fetch time', () => {
+  /** WP5.md step 8's pattern, plus the forms the wall printed before it: the paired
+   *  credit "ZET 14:31", the weather meta "DHMZ · 14:00" and the Vrijeme card's
+   *  observation clock "opaženo 14:00 · Maksimir · DHMZ" (review of lane/c-B1, P1). */
+  const SLOP = /Podatak iz registra|Obuhvat zaštite|Procjena|Vozni red od|Zapis od|[Dd]ohvaćeno|podaci od \d|potvrđeno \d|[Oo]paženo \d|Izračunato na uređaju|ne procjena dolaska|ostalo po voznom redu|Položaj (je|vozila)|\b\d\d:\d\d(?: · [^·]{1,40})? · (DHMZ|ZET)\b|\b(DHMZ|ZET)( ·)? \d\d:\d\d|nepotvrđeno\)|\?/;
+  /** Every text node on its own, space-separated: adjacent elements never fuse into one word ("blizini" + "ZET 14:31"). */
+  const words = (el: Element | null): string => {
+    const out: string[] = [];
+    const walker = document.createTreeWalker(el ?? document.createElement('div'), NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) out.push(node.textContent ?? '');
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  };
+  it('no disclaimer: the invitation, the safety strip and every paired composition, live and stale', async () => {
+    for (const status of ['live', 'stale'] as const) {
+      const modules = ARRIVAL_MODULES.map((m) => ({ ...m, status }));
+      const b = fakeBoards(JELACIC_BOARDS);
+      const k = mount({ stored: STORED, modules, createBoards: b.create });
+      await flush();
+      k.handlers.onCodes(batch(NOW), NOW);
+      const overview = words(q(k.root, '[data-testid=kiosk-invitation] .k-overview'));
+      expect(departures(k.root).length, 'the list is painted').toBeGreaterThan(0);
+      const seen: [string, string][] = [['invitation aside', overview], ['invitation strip', words(q(k.root, '[data-testid=safety-strip]'))]];
+      k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+      await flush();
+      const views: [string, Record<string, string>?][] = [
+        ['grad-sada'], ['u-pokretu'], ['u-pokretu', { kind: 'stop', id: '106_1' }], ['u-pokretu', { kind: 'route', id: '6' }],
+        ['zrak-i-nebo'], ['sigurnost'], ['uprava-i-pravo'], ['kultura'],
+      ];
+      for (const [layer, params] of views) {
+        k.view(layer, params);
+        await flush();
+        const where = `${layer}${params ? ` ${params.kind} ${params.id}` : ''}`;
+        expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer, where).toBe(layer);
+        seen.push([where, words(q(k.root, '[data-testid=kiosk-layer]'))], [`${where} strip`, words(q(k.root, '[data-testid=safety-strip]'))]);
+      }
+      for (const [where, words] of seen) {
+        expect(words, `${status} ${where}`).not.toBe('');
+        expect(words, `${status} ${where}`).not.toMatch(SLOP);
+      }
+      k.handle.destroy();
+    }
+  });
+  it('no disclaimer under the departures of a stop the phone presents', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelectorAll('[data-testid=k-arrivals] .k-row').length).toBeGreaterThan(0);
+    expect(words(card)).not.toMatch(SLOP);
     k.handle.destroy();
   });
 });

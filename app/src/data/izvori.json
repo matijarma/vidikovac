@@ -130,8 +130,8 @@
     }
   ],
   "obrada": {
-    "naslov": "Strojno sažimanje za traku na javnom zaslonu",
-    "tekst": "Istaknuti sadržaj na javnom zaslonu može koristiti strojno sažetu rečenicu uz navod izvora. Duge izvorne tekstove (nazive akata iz Službenog glasnika, pripovjedni tekst prognoze DHMZ-a, obavijesti ZET-a, opise komunalnih radova i kvartovske novosti) poslužitelj jednom sažme modelom Workers AI u jednu rečenicu na hrvatskom i sprema je u predmemoriju. To je prilagodba, a ne izvorni tekst: izvorni naslov, sažetak i poveznica na izvor ostaju uz svaku stavku. Bez sažetka ostaje izvorni naslov ili jasno imenovana vrsta promjene. Sažimaju se samo izvori s otvorenom licencom; Kulturpunkt (CC BY-SA 3.0 HR) i Etnografski muzej nikada. Sažeci se ne objavljuju na /open."
+    "naslov": "Strojni odabir rečenice na zaslonu",
+    "tekst": "Rečenica u zaglavlju javnog zaslona i na kartici Sada sastavlja se iz gotovih predložaka popunjenih činjenicama koje zaslon već prikazuje (polasci, zatvaranja, vrijeme, bicikli, sunce, događanja, dežurna ljekarna). Model Workers AI samo bira među tim predlošcima i prepisuje odabrane doslovno; ne piše slobodan tekst, a odabir koji se ne slaže s činjenicama odbacuje se. Bez modela prikazuje se predložak. Izvorni podaci i njihovi navodi ostaju na ovoj stranici. Rečenice se ne objavljuju na /open."
   },
   "staticSources": [
     {

@@ -316,6 +316,7 @@ describe('public-screen design invariants', () => {
   it('keeps the transit board outside the map in presented mode', () => {
     const shell = pairedShell('u-pokretu', kioskStrings('hr'), false);
     expect(shell).not.toContain('k-lines--overlay');
+    expect(css).not.toContain('k-lines--overlay');
     expect(shell).toContain('k-present-board');
     expect(shell).toContain('kiosk-map-host');
     expect(shell).toContain('kiosk-qr');

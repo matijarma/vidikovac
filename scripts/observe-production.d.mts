@@ -99,6 +99,32 @@ export interface ShareCodeRead { present: boolean; visible: boolean; text: strin
 export const SHARE_CODE_IN_PAGE: InPage<{ code: string }, ShareCodeRead>;
 export interface StopBoardRead { open: boolean; total: number; inViewport: number; texts: string[] }
 export const STOP_BOARD_READ_IN_PAGE: InPage<{ board: string; rows: string }, StopBoardRead>;
+/** One element's `data-skipped-text`, by its data-testid (`kiosk` the root, `nearby` the timeline). */
+export interface SkippedTextEntry { surface: string; value: string }
+export interface SkippedTextSurface { surface: string; count: number | null; reasons: Record<string, number>; raw?: string }
+/** A reading's census: `total` null when no surface wrote a count; `error` when the page could not answer. */
+export interface SkippedTextReading { total: number | null; surfaces: SkippedTextSurface[]; error?: string }
+export const SKIPPED_TEXT_SPEC: Readonly<{ selector: string }>;
+export const SKIPPED_TEXT_IN_PAGE: InPage<{ selector: string }, SkippedTextEntry[]>;
+export function parseSkippedText(value: string | null | undefined): Omit<SkippedTextSurface, 'surface'>;
+export function skippedTextOf(entries: readonly SkippedTextEntry[]): SkippedTextReading;
+export function readSkippedText(page: Pick<ObserverPage, 'evaluate'>): Promise<SkippedTextReading>;
+export interface SkippedTextSummary {
+  readings: number;
+  withCensus: number;
+  withSkip: number;
+  /** The counts summed over the readings (a row left out in consecutive readings counts in each). */
+  total: number;
+  max: number | null;
+  maxReading: number | null;
+  maxSurfaces: { surface: string; count: number | null }[];
+  bySurface: Record<string, number>;
+  reasons: Record<string, number>;
+  /** The readings (`n`) with a count above 0. */
+  flagged: number[];
+  errors: number;
+}
+export function summariseSkippedText(rotation: readonly ObservedRotationRow[]): SkippedTextSummary;
 export const EXPIRY_KEY: string;
 export const EXPIRY_WATCH_IN_PAGE: InPage<{ ended: string; key: string }, boolean>;
 export const EXPIRY_STAMP_IN_PAGE: InPage<{ ended: string; key: string }, number | null>;
@@ -143,11 +169,13 @@ export interface PhoneObservation {
   failed?: string;
 }
 export interface DesktopObservation { landingMs: number | null; read: DesktopRead | null; viewports: ViewportEntry[]; failed?: string }
+/** A rotation reading as the observer records it: the wall's reading and the validator's census beside it. */
+export type ObservedRotationRow = Wall.RotationRow & { skippedText?: SkippedTextReading };
 export interface CalmWindow { from: number; to: number; reading?: Wall.CalmMotionReading; error?: string }
 export interface KioskObservation {
   first: Wall.WallSample | null;
   portrait: Wall.WallSample | null;
-  rotation: Wall.RotationRow[];
+  rotation: ObservedRotationRow[];
   /** Calm motion over each minute of the rotation. */
   calm: CalmWindow[];
   viewports: ViewportEntry[];

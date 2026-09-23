@@ -8,6 +8,7 @@ import type { Role, RoomServerMessage, ScreenStop } from '../worker/protocol';
 import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import type { PresentationState } from '../worker/presentation';
 import type { DepartureBoard } from '../shared/city/types';
+import type { WrittenSentence } from '../shared/kiosk/sentence';
 
 export type FixtureState = 'ready' | 'empty' | 'down' | 'stale';
 const FIXTURE_ROOM = '0000000000000000';
@@ -104,19 +105,44 @@ export async function installWallFixture(page: Page, options: WallFixtureOptions
   }));
 }
 
+/** One request the phone made for model-written sentences (POST /api/kiosk/sentences, WP4 step 12). */
+export interface SentenceCall {
+  /** Node's clock when the request arrived; the page's own clock is the fake one. */
+  at: number;
+  /** The JSON body as sent (SentenceRequest: locale, budget, facts), or null when it was not JSON. */
+  body: unknown;
+}
+
 export interface FixtureSession {
   expire(): void;
   acknowledgePresentation(): void;
   requests: string[];
   events: Record<string, unknown>[];
+  /** Every sentence request the page made, in order. */
+  sentenceRequests: SentenceCall[];
+  /** The page's clock as the Node side knows it: FIXTURE_NOW plus the real time since the clock was installed (a spec that jumps the page's clock adds the jump itself). */
+  now(): number;
 }
 
-/** How the room answers the join: the driver with a screen by default; the two cases in which casting is disabled (D5) opt out. */
+/** A departures board for a stop at the page's time (the shape of worker/city/schedules.ts departuresFrom). */
+export type FixtureDepartures = (stopId: string, operator: DepartureBoard['operator'], now: number) => DepartureBoard;
+
+/** How the room answers the join (the driver with a screen by default; the two cases in which casting is disabled (D5) opt out) and what the page's departures and sentence requests answer. */
 export interface FixtureOptions {
   /** 'scanner' (the room's driver) by default; 'phone' is the one-hop peer whose screen follows the scanning phone. */
   role?: Role;
   /** True by default; false joins a session that has no screen at all. */
   screen?: boolean;
+  /**
+   * What /api/city/departures answers, at the page's clock (FixtureSession.now): wallDepartures by
+   * default, so Sada's departures block and a stop's sheet always have their rows at FIXTURE_NOW (a
+   * timetable row always exists, WP4 step 2) instead of a board the local server computes for the
+   * real clock. False leaves the request to the server. A route a spec registers later
+   * (installCityFixture, installWallFixture) answers first, as Playwright's last route does.
+   */
+  departures?: false | FixtureDepartures;
+  /** The model sentences /api/kiosk/sentences answers; none by default, so Sada shows its template sentence and no run reaches Workers AI. */
+  sentences?: readonly WrittenSentence[];
 }
 
 export async function installExperienceFixture(
@@ -126,8 +152,11 @@ export async function installExperienceFixture(
 ): Promise<FixtureSession> {
   const now = FIXTURE_NOW.getTime();
   await page.clock.install({ time: now });
+  const installedAt = Date.now();
+  const pageNow = (): number => now + (Date.now() - installedAt);
   const requests: string[] = [];
   const events: Record<string, unknown>[] = [];
+  const sentenceRequests: SentenceCall[] = [];
   const sockets: { send(message: string): void }[] = [];
   let presentation: PresentationState = { version: 1, revision: 0, target: null, owner: null, expiresAt: null, status: 'idle', online: true, supported: true,capabilities:['city-v1'] };
   const joined: RoomServerMessage = {
@@ -143,6 +172,21 @@ export async function installExperienceFixture(
     await route.fulfill({
       status: snapshot ? 200 : 404, contentType: 'application/json',
       body: JSON.stringify(snapshot ?? { error: 'not-found' }),
+    });
+  });
+  const departures = options.departures ?? ((stopId: string, operator: DepartureBoard['operator'], at: number) => wallDepartures(at, stopId, operator));
+  if (departures) await page.route((url) => url.pathname === '/api/city/departures', (route) => {
+    const url = new URL(route.request().url());
+    const operator = url.searchParams.get('operator') === 'hz' ? 'hz' : 'zet';
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(departures(url.searchParams.get('stop') ?? '', operator, pageNow())) });
+  });
+  await page.route((url) => url.pathname === '/api/kiosk/sentences', (route) => {
+    let body: unknown = null;
+    try { body = route.request().postDataJSON(); } catch { body = null; }
+    sentenceRequests.push({ at: Date.now(), body });
+    return route.fulfill({
+      status: 200, contentType: 'application/json', headers: { 'cache-control': 'private, no-store' },
+      body: JSON.stringify({ generatedAt: new Date(pageNow()).toISOString(), sentences: options.sentences ?? [] }),
     });
   });
   await page.routeWebSocket('**/ws/room/**', (socket) => {
@@ -166,7 +210,8 @@ export async function installExperienceFixture(
     });
   });
   return {
-    requests, events,
+    requests, events, sentenceRequests,
+    now: pageNow,
     acknowledgePresentation() {
       presentation = { ...presentation, status: 'displayed' };
       for (const socket of sockets) socket.send(JSON.stringify({ t: 'presentation', state: presentation }));

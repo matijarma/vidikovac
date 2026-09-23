@@ -17,9 +17,10 @@ export interface Env {
   MAPS?: R2Bucket;
   /** Raw ZET realtime frames for replay (worker/twin/record.ts); absent in a worktree without the bucket. */
   RECORDINGS?: R2Bucket;
-  /** Workers AI, used only for the kiosk ticker's one-line briefs
-   *  (worker/feed/brief.ts). Optional: unit tests and a `wrangler dev`
-   *  without the binding must keep working, and briefs are then skipped. */
+  /** Workers AI, used only by the live sentence service that picks the header
+   *  sentence's templates (worker/feed/sentences.ts); the per-item brief pass is
+   *  retired (WP5 B1). Optional: unit tests and a `wrangler dev` without the
+   *  binding must keep working, and the service then answers from its template fallback. */
   AI?: Ai;
   /** Unset means production. Test bypasses require exactly "test". */
   APP_ENV?: string;

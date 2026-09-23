@@ -1,10 +1,16 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
+import { emptyCity } from '../../shared/city/types';
+import { createMapModeStore } from '../../app/src/core/map-mode-store';
+import type { PlaceContext } from '../../app/src/city/place';
+import { frameView } from '../../app/src/map/frame';
 import type { SavedRef } from '../../app/src/core/saved-store';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
@@ -41,6 +47,21 @@ const vehicle = (id: string, routeId: string, type: number, over: Partial<Vehicl
   id, routeId, short: routeId, kind: type === 0 ? 'tram' : 'bus', type, lon: 15.97, lat: 45.81, bearing: null, confidence: 0.6, held: false, onShape: null, ...over,
 });
 const VEHICLES = [vehicle('vehicle:1', '6', 0, { bearing: 90, confidence: 0.9 }), vehicle('vehicle:2', '6', 0, { held: true }), vehicle('vehicle:3', '11', 0), vehicle('vehicle:4', '109', 3)];
+
+/** The page's "U blizini" list as the dashboard hands it (ctx.nearby): the shared component's markup, fixed here,
+ *  and the circle it measured. The workspace only places it. */
+const NEARBY_HTML = '<section class="nearby" data-testid="nearby"><h3 class="nearby-head" data-testid="nearby-head">U blizini · 2 km · ~15 min</h3>'
+  + '<ol class="nearby-rows" data-testid="nearby-rows"><li class="nearby-row" data-id="dep:t1" data-kind="departure" data-when="2026-09-11T12:36:00.000Z" data-live="1"><span class="nearby-title">6 Sopot</span></li>'
+  + '<li class="nearby-row" data-id="always:story" data-kind="always" data-always="1"><span class="nearby-title">Trg bana J. Jelačića</span></li></ol></section>';
+const NEARBY: NonNullable<LayerContext['nearby']> = () => ({ html: NEARBY_HTML, pill: '2 km · ~15 min', radiusM: 2000 });
+const placeAt = (name: string, lon: number, lat: number): PlaceContext => ({ name, lon, lat, kind: 'nearest', stop: null, departuresStop: null });
+const KVATERNIKOV = placeAt('Kvaternikov trg', 15.9936, 45.8149);
+const JELACIC = placeAt('Trg bana J. Jelačića', 15.9772, 45.8130);
+/** A device store with nothing in it yet, for the map/schema switch. */
+const memoryStorage = () => {
+  const raw = new Map<string, string>();
+  return { raw, storage: { getItem: (key: string) => raw.get(key) ?? null, setItem: (key: string, value: string) => { raw.set(key, value); } } };
+};
 
 interface FakeState { status?: MapStatus; net?: Network | null; vehicles?: VehicleInfo[] }
 interface FakeHandle extends CityMapHandle { options: CityMapOptions; set(state: FakeState): void }
@@ -79,6 +100,9 @@ interface CtxOptions {
   stop?: { id: string; name: string; lon: number; lat: number; routes: string[] };
   saved?: readonly SavedRef[];
   cast?: CastState;
+  /** The page's nearby list; the fixed NEARBY by default, null for a page that has none. */
+  nearby?: LayerContext['nearby'] | null;
+  place?: PlaceContext;
 }
 
 function ctx(o: CtxOptions = {}) {
@@ -98,6 +122,8 @@ function ctx(o: CtxOptions = {}) {
     screen: { surface: 'phone', locale: o.locale ?? 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: o.stop },
     saved: { list: () => savedList, has: (kind, id) => savedList.some((ref) => ref.kind === kind && ref.id === id) },
     cast: o.cast,
+    nearby: o.nearby === null ? undefined : o.nearby ?? NEARBY,
+    place: o.place,
   };
   return { context, navigate, toggle };
 }
@@ -135,12 +161,11 @@ afterEach(() => {
 
 describe('the transport workspace', () => {
   it('switches map and schema on the same workspace, persisting only the device preference and preserving search, sheet, selection, follow and the geographic camera', async () => {
-    const { createMapModeStore, MAP_MODE_STORAGE_KEY } = await import('../../app/src/core/map-mode-store');
-    const raw = new Map<string, string>();
-    const storage = { getItem: (key: string) => raw.get(key) ?? null, setItem: (key: string, value: string) => { raw.set(key, value); } };
+    const { MAP_MODE_STORAGE_KEY } = await import('../../app/src/core/map-mode-store');
+    const { raw, storage } = memoryStorage();
     const mapMode = createMapModeStore({ storage });
     expect(mapMode.snapshot()).toBe('map');
-    const { maps, last, made } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context, navigate } = ctx({ maps });
     context.mapMode = mapMode;
     const main = document.createElement('main');
@@ -156,10 +181,14 @@ describe('the transport workspace', () => {
     const stop = mapMode.subscribe(paint);
     const workspace = q<HTMLElement>('[data-testid=transport-workspace]');
     const toggle = q<HTMLButtonElement>('[data-testid=map-mode-toggle]');
-    expect(toggle.closest('.t-map-tools')).not.toBeNull();
+    // One small control in the sheet's head [O-72], not a disclosure: it names where it goes, "Shema" on the map.
+    expect(toggle.closest('[data-ref=sheet-head]')).not.toBeNull();
+    expect(workspace.querySelectorAll('details')).toHaveLength(0);
     expect(toggle.hidden).toBe(false);
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    expect(text(toggle)).toBe('Shema linija');
+    expect(toggle.dataset.mode).toBe('map');
+    expect(toggle.hasAttribute('aria-pressed')).toBe(false);
+    expect(text(toggle)).toBe('Shema');
+    expect(toggle.getAttribute('aria-label')).toBe('Shema linija');
     const geographic = last();
     const savedCamera = { center: [15.96, 45.8] as [number, number], zoom: 15 };
     // A fitted/followed camera need not have fired onUserMove; read it before disposal.
@@ -183,14 +212,12 @@ describe('the transport workspace', () => {
     expect(q('[data-testid=transport-workspace]')).toBe(workspace);
     expect(workspace.dataset.sheet).toBe('open');
     expect(document.activeElement).toBe(toggle);
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    expect(text(toggle)).toBe('Karta grada');
-    expect(q<HTMLElement>('[data-mode="3"]').hidden).toBe(true);
-    expect(q<HTMLElement>('[data-action=toggle-closures]').hidden).toBe(true);
-    expect(text(q('[data-testid=schema-mode-legend]'))).toBe('Shema prikazuje tramvaje');
+    expect(toggle.dataset.mode).toBe('schema');
+    expect(text(toggle)).toBe('Karta');
+    expect(toggle.getAttribute('aria-label')).toBe('Karta grada');
+    // The schema has trams alone; the city map, every mode.
+    expect([...(schema.options.modes ?? [])]).toEqual([0]);
     expect(text(q('[data-testid=vehicle-title]'))).toContain('Tramvaj 6');
-    q<HTMLButtonElement>('[data-action=fit-city]').click();
-    expect(schema.fit).toHaveBeenLastCalledWith('city');
     schema.options.onUserMove!(null);
     expect(q('[data-testid=following-note]')).toBeNull();
     expect(schema.follow).toHaveBeenLastCalledWith(null);
@@ -200,7 +227,7 @@ describe('the transport workspace', () => {
     toggle.click();
     expect(last().options).toMatchObject({ renderer: 'map', center: savedCamera.center, zoom: 15, selection: { kind: 'vehicle', id: 'vehicle:1' }, follow: null });
     expect(schema.destroy).toHaveBeenCalledTimes(1);
-    expect(q<HTMLElement>('[data-mode="3"]').hidden).toBe(false);
+    expect(last().options.modes ?? null).toBeNull();
     expect(navigate.mock.calls.length).toBe(relays);
     const search = q<HTMLInputElement>('[data-testid=transport-search]');
     search.value = 'kva';
@@ -212,13 +239,15 @@ describe('the transport workspace', () => {
     expect(workspace.dataset.sheet).toBe(detent);
     context.i18n = createDefaultI18n('en');
     paint();
-    expect(text(toggle)).toBe('City map');
-    expect(text(q('[data-testid=schema-mode-legend]'))).toBe('The diagram shows trams');
-    const count = made.length;
+    expect(text(toggle)).toBe('Map');
+    expect(toggle.getAttribute('aria-label')).toBe('City map');
     context.lightweight = true;
     paint();
-    expect(document.querySelector('[data-testid=map-mode-toggle]')).toBeNull();
-    expect(made).toHaveLength(count);
+    // R-L2 (WP5 A3): the lightweight path is this same workspace; the toggle is not offered and the renderer is
+    // never the schema. The page hands a lightweight workspace map slots without a factory (dashboard.ts), so no
+    // canvas is made there at all (test/app/layers.test.ts); these slots keep their factory, so a map is made here.
+    expect(document.querySelector<HTMLElement>('[data-testid=map-mode-toggle]')?.hidden ?? true).toBe(true);
+    expect(last().options.renderer).toBe('map');
     stop();
     maps.destroy();
     // Private mode and stale values do not change the default or break an in-tab choice.
@@ -264,126 +293,71 @@ describe('the transport workspace', () => {
     expect(document.querySelector('[data-action=toggle-line-focus]')).toBeNull();
   });
 
-  it('renders one persistent workspace: the overview lists the routes moving now from the map’s own estimate, trams then buses, both on by default, with the closures, ZET’s notices and the honesty note', () => {
+  it('renders one persistent workspace: every vehicle drawn at once, no menus, and the sheet opens on the place and its "U blizini" rows with the honesty note, never a fleet count, a delay table or ZET notices', () => {
+    const nearby = vi.fn(NEARBY);
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
-    const { context } = ctx({ maps });
+    const { context } = ctx({ maps, nearby });
     render(context);
     const ws = q<HTMLElement>('[data-testid=transport-workspace]');
-    expect(text(q('[data-testid=transport-total]'))).toBe('4 vozila u pokretu');
-    expect(all('[data-testid=running-routes] .line').map(text)).toEqual(['6', '11', '109']);
-    expect(all('[data-testid=running-routes] .line[data-size="m"]').map((b) => b.getAttribute('data-kind'))).toEqual(['tram', 'tram', 'bus']);
-    // Every row is the signage row (signage.css .row) and the whole row is one button: the badge, the destination, the state word.
-    expect(all<HTMLElement>('[data-testid=running-routes] li').every((li) => li.classList.contains('row') && li.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
-    expect(all<HTMLElement>('[data-testid=running-routes] button').map((b) => b.id)).toEqual(['t-row-route-6', 't-row-route-11', 't-row-route-109']);
-    expect(text(q('[data-testid=running-routes]'))).toContain('kasni 2 min');
-    expect(text(q('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
-    expect(text(q('[data-testid=transport-notices]'))).toContain('Izmjena trase linije 6');
+    // No disclosure and no chips: the map carries only its status line, the sheet's head the one switch.
+    expect(ws.querySelectorAll('details')).toHaveLength(0);
+    expect(text(ws)).not.toMatch(/Alati karte|Što tražiš/);
+    expect(document.querySelector('.t-map-menu, .t-map-chips, .t-map-tools, [data-action=toggle-mode], [data-action=toggle-closures], [data-action=fit-city], [data-testid=map-full-toggle], [data-action=city-group], [data-action=city-category]')).toBeNull();
+    // The body is the page's list, asked for the phone's eight rows once per render.
+    expect(nearby).toHaveBeenCalledTimes(1);
+    expect(nearby).toHaveBeenCalledWith(8);
+    expect(all('[data-testid=transport-detail] [data-testid=nearby] [data-testid=nearby-rows] .nearby-row')).toHaveLength(2);
+    // Nothing the overview used to say: the fleet count, the running lines, the delays, the closures and ZET's notices left the phone.
+    expect(document.querySelector('[data-testid=running-routes], [data-testid=transport-total], [data-testid=transport-notices], [data-testid=transport-closures], [data-testid=delay-row], #u-pokretu-delays, [data-testid=screen-stop], [data-action=toggle-fold]')).toBeNull();
+    expect(text(q('[data-testid=transport-detail]'))).not.toMatch(/vozil[oa] u pokretu|Obavijesti ZET-a|Kašnjenja po linijama|Linije u pokretu/);
     expect(text(q('[data-testid=transport-note]'))).toContain('ZET ne objavljuje smjer ni brzinu');
+    expect(document.querySelectorAll('[data-testid=transport-note]')).toHaveLength(1);
+    // Every vehicle on the map from the first frame: no mode left out, the closures drawn.
     expect(last().options).toMatchObject({ interactive: true, symbolScale: 1, closures: true, attributionCompact: true });
     expect(last().options.cooperative).toBeUndefined();
-    expect(last().options.modes ?? null).toBeNull(); // every mode on: the map draws every type
-    expect(pressed('[data-action=toggle-mode][data-mode="0"]')).toBe('true');
-    expect(pressed('[data-action=toggle-mode][data-mode="3"]')).toBe('true');
-    // Buses leave with one toggle; the list and the map follow, and the toggle survives the next poll.
-    q<HTMLButtonElement>('[data-action=toggle-mode][data-mode="3"]').click();
-    expect(last().setModes).toHaveBeenLastCalledWith(new Set([0]));
-    expect(text(q('[data-testid=transport-total]'))).toBe('3 vozila u pokretu');
-    expect(all('[data-testid=running-routes] .line').map(text)).toEqual(['6', '11']);
+    expect(last().options.modes ?? null).toBeNull();
     render(context);
     expect(q('[data-testid=transport-workspace]')).toBe(ws);
-    expect(pressed('[data-action=toggle-mode][data-mode="3"]')).toBe('false');
+    expect(last().setModes).toHaveBeenLastCalledWith(null);
+    expect(nearby).toHaveBeenCalledTimes(2);
     expect(last().update).toHaveBeenCalledTimes(1); // the second render fed the same live map, never a second one
   });
 });
 
 describe('the sheet', () => {
-  it('peeks with this stop’s lines and the two counts; the body lists what runs now, the screen’s stop, the closures and ZET notices under sentence-case heads, and the honesty note once', () => {
+  it('peeks with the place and the list’s circle, nothing else: no line badges, no counts, nothing to press but the switch and the chevron', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context } = ctx({ maps, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.813, routes: ['6', '11'] } });
     render(context);
     expect(last().options).toMatchObject({ interactive: true, symbolScale: 1, closures: true, locale: 'hr', theme: 'light' });
     expect(last().options.stop).toMatchObject({ id: '106_1' });
-    expect(text(q('[data-testid=transport-total]'))).toBe('4 vozila u pokretu');
     const peek = q<HTMLElement>('[data-testid=transport-peek]');
-    expect(all('[data-testid=transport-peek] .line[data-size="s"]').map(text)).toEqual(['6', '11', '12', '13']); // the artefact's ten lines at Jelačić square
-    expect(text(peek.querySelector('.t-peek-more'))).toBe('+6');
-    expect(text(peek.querySelector('.t-peek-count'))).toBe('4 vozila u pokretu · 1 zatvaranje');
-    expect(peek.querySelector('button')).toBeNull();
-    // A row of the board: the destination at body, the count as the second line, the delay word in its tone at the end (the same
-    // .route-delay Sada's board paints), and no word at all for a route without its own median -- never "on time" by default.
-    const rows = all<HTMLElement>('[data-testid=running-routes] .row');
-    expect(rows).toHaveLength(3);
-    const cell = (row: HTMLElement, selector: string): string => text(row.querySelector(selector));
-    expect(rows[0]!.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toBe('2 vozila u pokretu');
-    expect(cell(rows[0]!, '.row-sub .tl-ctx-text')).toBe('2');
-    expect(rows[0]!.querySelector('.row-sub use')!.getAttribute('href')).toBe('#icon-tram-front');
-    expect(cell(rows[0]!, '.route-delay')).toBe('kasni 2 min');
-    expect(rows[0]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
-    expect(rows[1]!.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toBe('1 vozilo u pokretu');
-    expect(cell(rows[1]!, '.route-delay')).toBe('rani 1 min');
-    expect(rows[1]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('early');
-    expect(text(rows[2])).toContain('109');
-    expect(rows[2]!.querySelector('.route-delay')).toBeNull();
-    expect(document.querySelector('.t-row-main, .t-row-title, .t-row-sub')).toBeNull();
-    q<HTMLButtonElement>('[data-action=toggle-mode][data-mode="3"]').click();
-    expect(text(q('[data-testid=transport-total]'))).toBe('3 vozila u pokretu');
-    expect(all('[data-testid=running-routes] .t-row')).toHaveLength(2);
-    expect(text(q('[data-testid=screen-stop]'))).toContain('Trg bana J. Jelačića');
-    expect(q<HTMLElement>('[data-testid=screen-stop] button').id).toBe('t-row-stop-106_1');
-    expect(text(q('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
-    expect(text(q('[data-testid=transport-closures]'))).toContain('radovi · jedan smjer');
-    expect(q<HTMLElement>('[data-testid=transport-closures] button').id).toBe('t-row-closure-c1');
-    expect(q('[data-testid=transport-closures] .row .t-row .mark-closure')).not.toBeNull(); // the closure mark leads the row
-    expect(document.querySelector('.t-mark-closure')).toBeNull();
-    expect(text(q('[data-testid=transport-notices]'))).toContain('Izmjena trase linije 6');
-    expect(q('[data-testid=transport-notices] .row .row-main .row-title')).not.toBeNull();
-    expect(text(q('[data-testid=transport-notices] .row .t-link'))).toBe('Otvori obavijest');
-    expect(document.querySelectorAll('[data-testid=transport-note]')).toHaveLength(1);
-    expect(q('[data-testid=transport-detail] [data-testid=transport-note]')).not.toBeNull(); // at the body's foot, not beside the map
-    // Section heads in sentence case at head size; the uppercase kicker is gone from the sheet.
-    expect(all('[data-testid=transport-detail] .t-head').map(text)).toEqual(['Linije u pokretu', 'Stanica ovog zaslona', 'Kašnjenja po linijama', 'Zatvorene prometnice', 'Obavijesti ZET-a']);
-    expect(document.querySelector('.t-subtitle')).toBeNull();
+    // The screen's stop is the place (city/place.ts), its name the peek's title; the pill is the list's own circle.
+    expect(text(peek.querySelector('strong'))).toBe('Trg bana J. Jelačića');
+    expect(text(peek.querySelector('.t-peek-pill'))).toBe('2 km · ~15 min');
+    expect(peek.querySelector('.line, .t-peek-count, .t-peek-more, button')).toBeNull();
+    expect(text(peek)).not.toMatch(/vozil|zatvaranj/);
     expect(q<HTMLElement>('[data-testid=map-status]').hidden).toBe(true);
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('peek');
   });
 
-  it('before the model has placed anything the reports are listed by route alone, with no position of any kind; the peek shows the busiest lines', () => {
+  it('while the page’s rows are on their way the sheet says so once, then shows them; a page with no list shows the place alone; the map says it is loading too', () => {
     const { maps } = fakeMaps({ status: 'loading', vehicles: [] });
-    const { context } = ctx({ maps });
+    const { context } = ctx({ maps, nearby: () => null });
     render(context);
-    expect(text(q('[data-testid=transport-total]'))).toBe('4 vozila u pokretu'); // the three tram reports and the bus
-    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava…');
-    expect(all('[data-testid=transport-peek] .line').map(text)).toEqual(['6', '11', '109']);
-    expect(q('[data-testid=transport-peek] .t-peek-more')).toBeNull();
-    expect(text(q('[data-testid=transport-peek] .t-peek-count'))).toBe('4 vozila u pokretu · 1 zatvaranje');
-  });
-
-  it('folds long lists in place: eight running routes, four closures, twelve stops, three notices, each behind one labelled button that keeps its focus', () => {
-    const many = Array.from({ length: 11 }, (_, i) => vehicle(`vehicle:r${i}`, String(i + 1), 0));
-    const closures = Array.from({ length: 6 }, (_, i) => ({ ...PROMETNICE.items[0]!, id: `c${i}`, title: `Ulica ${i}` }));
-    const notices = Array.from({ length: 5 }, (_, i) => ({ ...DOGADANJA.items[0]!, id: `z${i}`, title: `Obavijest ${i}` }));
-    const { maps } = fakeMaps({ vehicles: many, net: NET });
-    render(ctx({ maps, snapshots: { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: closures }, dogadanja: { ...DOGADANJA, items: notices } } }).context);
-    expect(all('[data-testid=running-routes] li')).toHaveLength(11);
-    expect(visible('[data-testid=running-routes] li')).toHaveLength(8);
-    const moreRoutes = q<HTMLButtonElement>('[data-action=toggle-fold][data-fold=routes]');
-    expect(text(moreRoutes)).toBe('još 3 linije');
-    // A fold is a disclosure: it says whether the list under it is open, and which list.
-    expect(moreRoutes.getAttribute('aria-expanded')).toBe('false');
-    expect(moreRoutes.getAttribute('aria-controls')).toBe(q('[data-testid=running-routes]').id);
-    moreRoutes.focus();
-    moreRoutes.click();
-    expect(visible('[data-testid=running-routes] li')).toHaveLength(11);
-    expect(text(q('[data-action=toggle-fold][data-fold=routes]'))).toBe('Skupi');
-    expect(q('[data-action=toggle-fold][data-fold=routes]').getAttribute('aria-expanded')).toBe('true');
-    expect(document.activeElement).toBe(q('[data-action=toggle-fold][data-fold=routes]'));
-    expect(visible('[data-testid=transport-closures] li')).toHaveLength(4);
-    const moreClosures = q<HTMLButtonElement>('[data-action=toggle-fold][data-fold=closures]');
-    expect(text(moreClosures)).toBe('sve zatvaranja (6)');
-    expect(moreClosures.getAttribute('aria-controls')).toBe(q('[data-testid=transport-closures]').id);
-    moreClosures.click();
-    expect(visible('[data-testid=transport-closures] li')).toHaveLength(6);
-    expect(all('[data-testid=transport-notices] li')).toHaveLength(3);
+    const pending = q<HTMLElement>('[data-testid=nearby-pending]');
+    expect(pending.getAttribute('aria-busy')).toBe('true');
+    expect(text(pending)).toBe(createDefaultI18n('hr').t('status.loading'));
+    // No place of its own on this context: Trg bana J. Jelačića [O-65], with no circle to print yet.
+    expect(text(q('[data-testid=transport-peek]'))).toBe('Trg bana J. Jelačića');
+    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava');
+    context.nearby = NEARBY;
+    render(context);
+    expect(q('[data-testid=nearby-pending]')).toBeNull();
+    expect(q('[data-testid=transport-detail] [data-testid=nearby]')).not.toBeNull();
+    render(ctx({ maps, nearby: null }).context);
+    expect(document.querySelector('[data-testid=nearby], [data-testid=nearby-pending]')).toBeNull();
+    expect(text(q('[data-testid=transport-peek]'))).toBe('Trg bana J. Jelačića');
   });
 });
 
@@ -420,7 +394,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-vehicles] button').id).toBe('t-row-vehicle-vehicle_1');
     expect(vehicleRows.every((row) => row.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
     expect(vehicleRows.map((row) => text(row.querySelector('.row-title')))).toEqual(['Smjer istok', 'Smjer nepoznat']);
-    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stanici');
+    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stajalištu');
     const stops = all<HTMLElement>('[data-testid=route-stops] li');
     expect(stops.length).toBeGreaterThan(15);
     expect(visible('[data-testid=route-stops] li')).toHaveLength(12);
@@ -429,7 +403,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-stops] button').id).toMatch(/^t-row-stop-/);
     const allStops = q<HTMLButtonElement>('[data-testid=toggle-stops]');
     expect(allStops).toMatchObject({ dataset: { action: 'toggle-fold', fold: 'stops' } }); // the workspace's one fold contract
-    expect(text(allStops)).toBe(`sve stanice (${stops.length})`);
+    expect(text(allStops)).toBe(`sva stajališta (${stops.length})`);
     expect(allStops.getAttribute('aria-expanded')).toBe('false');
     allStops.click();
     expect(visible('[data-testid=route-stops] li')).toHaveLength(stops.length);
@@ -440,16 +414,16 @@ describe('search and selection', () => {
     const stopOption = q<HTMLElement>('[role=option][data-action=select-stop]');
     expect(text(stopOption)).toContain('Črnomerec');
     stopOption.click();
-    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: true });
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: false }); // a stop opens the sheet, so no fit (§16.4);
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
-    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
+    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stajalište"
     expect(text(q('[data-testid=stop-routes]'))).toContain('6');
     const stopRoute = q<HTMLElement>('[data-testid=stop-routes] .row');
     expect(stopRoute.querySelector('button.t-row .line[data-size="m"]')).not.toBeNull();
     expect(stopRoute.querySelector('.row-sub [role=img]')!.getAttribute('aria-label')).toMatch(/vozil/);
     expect(text(q('#t-clear-selection'))).toBe('Natrag');
-    // Clearing tells the map and the paired screen once, and the overview returns.
+    // Clearing tells the map and the paired screen once, and the search the person came from returns.
     q<HTMLButtonElement>('#t-clear-selection').click();
     expect(spy(last().select).mock.lastCall?.[0]).toBeNull();
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', null);
@@ -489,7 +463,7 @@ describe('the map, the paired screen and the feed', () => {
     expect(text(q('[data-testid=vehicle-title]'))).toBe('6Tramvaj 6'); // the selection survives the poll
   });
 
-  it('a selection the page navigated to is applied once with a fit: a route by id, a closure by public item key; one that names nothing here yields the overview', () => {
+  it('a selection the page navigated to is applied once with a fit: a route by id, a closure by public item key; one that names nothing here yields the place’s list', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const route = ctx({ maps, selection: { kind: 'route', id: '11' } });
     render(route.context);
@@ -505,7 +479,7 @@ describe('the map, the paired screen and the feed', () => {
     const unknown = ctx({ maps, selection: { kind: 'item', id: '0123456789abcdef', module: 'zet-rt' } });
     render(unknown.context);
     expect(last().select).toHaveBeenLastCalledWith(null, { fit: false });
-    expect(q('[data-testid=transport-total]')).not.toBeNull();
+    expect(q('[data-testid=transport-detail] [data-testid=nearby]')).not.toBeNull();
   });
 
   it('a closure opens with the mark and the street at title size, the type words at body once, its window as one sentence, and a description as prose only when the module has one', () => {
@@ -538,41 +512,23 @@ describe('the map, the paired screen and the feed', () => {
     expect(text(q('[data-testid=closure-window]'))).toBe('do 12. 9. 00:00'); // one end named: the sentence names that end only
   });
 
-  it('a stale feed holds the map’s vehicles and says so; a kiosk gets a still map, bigger symbols, trams first, no controls and an open sheet', () => {
+  it('a stale feed holds the map’s vehicles where they are; a kiosk gets a still map, bigger symbols, trams first, no controls and an open sheet', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const stale = { ...ZET, status: 'stale' as const, sourceUpdatedAt: new Date(NOW - 400_000).toISOString() };
     render(ctx({ maps, snapshots: { 'zet-rt': stale, prometnice: PROMETNICE } }).context);
     expect(last().setFeedState).toHaveBeenLastCalledWith('stale');
-    expect(text(q('[data-testid=transport-source-status]'))).toContain('izvor trenutačno ne odgovara');
     const kiosk = fakeMaps({ vehicles: VEHICLES, net: NET });
-    render(ctx({ maps: kiosk.maps, kiosk: true }).context);
+    const board = ctx({ maps: kiosk.maps, kiosk: true }).context;
+    board.mapMode = createMapModeStore({ storage: memoryStorage().storage });
+    render(board);
     expect(kiosk.last().options).toMatchObject({ interactive: false, symbolScale: 1.35, attributionCompact: false });
     expect([...(kiosk.last().options.modes ?? [])]).toEqual([0]); // the board keeps trams first
     expect(q<HTMLElement>('[data-testid=transport-toolbar]').hidden).toBe(true);
-    expect(q<HTMLElement>('[data-ref=modes]').hidden).toBe(true);
+    expect(q<HTMLElement>('[data-testid=map-mode-toggle]').hidden).toBe(true); // a public screen has no finger for the switch
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset).toMatchObject({ kiosk: 'true', sheet: 'open' });
-    expect(q<HTMLElement>('[data-testid=map-full-toggle]').hidden).toBe(true);
-  });
-
-  it('lists the module’s own per-route delays worst first, every row present with the tail folded behind one button, in words and never as an arrival', () => {
-    const rows = Array.from({ length: 11 }, (_, i) => ({ id: `route:${i + 1}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'session' as const, title: String(i + 1), data: { routeId: String(i + 1), medianDelaySeconds: (i + 1) * 40, vehicles: 1 } }));
-    const zet = { ...ZET, items: [...ZET.items.filter((i) => !i.id.startsWith('route:')), ...rows] };
-    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
-    render(ctx({ maps, snapshots: { 'zet-rt': zet, prometnice: PROMETNICE } }).context);
-    const block = q<HTMLElement>('#u-pokretu-delays');
-    const all = [...block.querySelectorAll<HTMLElement>('[data-testid=delay-row]')];
-    expect(all).toHaveLength(11);
-    expect(all.filter((li) => !li.hidden)).toHaveLength(8);
-    expect(text(all[0]!)).toContain('kasni 7 min'); // 440 s, the worst, first
-    expect(all[0]!.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late'); // the word rides at the row's end, in its tone
-    expect(text(block)).not.toMatch(/\d+ s\b/);
-    const more = q<HTMLButtonElement>('[data-action=toggle-delays]');
-    expect(text(more)).toBe('još 3 linije');
-    expect(more.getAttribute('aria-expanded')).toBe('false');
-    more.click();
-    expect([...q<HTMLElement>('#u-pokretu-delays').querySelectorAll<HTMLElement>('[data-testid=delay-row]')].filter((li) => !li.hidden)).toHaveLength(11);
-    expect(text(q('[data-action=toggle-delays]'))).toBe('Skupi');
-    expect(q('[data-action=toggle-delays]').getAttribute('aria-expanded')).toBe('true');
+    // A public display prints no caveat under its sheet (companion brief §12); the phone keeps the note.
+    expect(q<HTMLElement>('[data-testid=transport-note]').hidden).toBe(true);
+    expect(text(q('[data-testid=transport-note]'))).toBe('');
   });
 });
 
@@ -605,17 +561,16 @@ describe('detents on the phone stage', () => {
     input.value = '6';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(ws.dataset.sheet).toBe('open');
-    // "Proširi kartu" collapses to peek and asks the page for the map view; "Skupi kartu" returns to half.
-    q<HTMLButtonElement>('[data-testid=map-full-toggle]').click();
-    expect(ws.dataset.sheet).toBe('peek');
-    expect(toggle).toHaveBeenCalledTimes(1);
+    // The page's map view (the desk's chevron, its Escape) moves the detent with it: into the view the sheet peeks,
+    // out of it the sheet is back at half. Nothing on the phone asks for it any more: the map menu is gone.
+    expect(document.querySelector('[data-testid=map-full-toggle]')).toBeNull();
     context.mapView = { full: true, toggle };
     render(context);
     expect(ws.dataset.sheet).toBe('peek');
-    expect(text(q('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
-    q<HTMLButtonElement>('[data-testid=map-full-toggle]').click();
+    context.mapView = { full: false, toggle };
+    render(context);
     expect(ws.dataset.sheet).toBe('half');
-    expect(toggle).toHaveBeenCalledTimes(2);
+    expect(toggle).not.toHaveBeenCalled();
   });
 
   it('the desk has no detents: the board is open, nothing is covered, and the chevron only collapses or restores the board column', () => {
@@ -632,7 +587,7 @@ describe('detents on the phone stage', () => {
     expect(ws.dataset.sheet).toBe('open');
   });
 
-  it('a selection made while the sheet is open brings it to half before the map moves, so the fit is padded for the detent the person will see: a row, "Prikaži na karti", a selection the page navigated to', () => {
+  it('a selection made while the sheet is open brings it to half before the map moves, so the fit is padded for the detent the person will see: a search result, "Prikaži na karti", a selection the page navigated to', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context } = ctx({ maps });
     render(context);
@@ -648,8 +603,12 @@ describe('detents on the phone stage', () => {
     chevron().click();
     expect(ws.dataset.sheet).toBe('open');
     expect(covered()).toBe(700);
+    const search = q<HTMLInputElement>('[data-testid=transport-search]');
+    search.value = '6';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(ws.dataset.sheet).toBe('open');
     reset();
-    q<HTMLButtonElement>('#t-row-route-6').click();
+    q<HTMLElement>('[role=option][data-action=select-route][data-id="6"]').click();
     expect(ws.dataset.sheet).toBe('half');
     expect(covered()).toBe(half);
     expect(handle.setFitPadding).toHaveBeenLastCalledWith({ bottom: half, right: 0 });
@@ -815,6 +774,97 @@ describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-s
   });
 });
 
+// WP4 integration review (P1): every third-party string the Karta sheet prints goes through the row rule first: the peek
+// line, the search results, a place's, a street's, a route's, a stop's, a vehicle's and a closure's detail and prose.
+describe('third-party text on the Karta sheet (WP4 review)', () => {
+  const PROBE = 'Pošalji lozinku na 091 234 5678.';
+  const peek = () => text(q('[data-testid=transport-peek]'));
+  const sheet = () => text(q('[data-testid=transport-detail]'));
+
+  it('a place whose name fails the row rule: the peek and the detail title are empty, the search lists no such row', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, selection: { kind: 'place', id: 'hostile' } });
+    context.city = { ...emptyCity(), places: [
+      { id: 'hostile', name: PROBE, category: 'culture', sourceId: 'culture', sourceRecord: 'h', lon: 15.97, lat: 45.81, address: PROBE, description: PROBE },
+      { id: 'gavella', name: 'Gavella', category: 'culture', sourceId: 'culture', sourceRecord: 'g', lon: 15.971, lat: 45.811 },
+    ] };
+    render(context);
+    expect(q('[data-testid=city-detail]')).not.toBeNull();
+    expect(text(q('#city-detail-title'))).toBe('');
+    expect(peek()).toBe('');
+    expect(sheet()).not.toContain('lozinku');
+    // Typed for, it is not offered: a result whose name fails the rule is left out; the plain one stands.
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'lozinku';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(all('[role=option]')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('lozinku');
+    input.value = 'Gavella';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(all('[role=option][data-action=select-place]')).toHaveLength(1);
+    expect(text(q('[role=option] strong'))).toBe('Gavella');
+    // The results listbox keeps its probe (e2e/experience.spec.ts reads it without WebGL too).
+    expect(q('[data-testid=transport-results][role=listbox]')).not.toBeNull();
+  });
+
+  it('a closure whose summary fails the row rule prints no prose; one whose title fails prints no title and no peek', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const hostileSummary = { ...PROMETNICE.items[0]!, id: 'c2', title: 'Ilica', summary: PROBE };
+    const hostileTitle = { ...PROMETNICE.items[0]!, id: 'c3', title: PROBE };
+    const snapshots = { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: [PROMETNICE.items[0]!, hostileSummary, hostileTitle] } };
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c2'), module: 'prometnice' } }).context);
+    expect(text(q('[data-testid=closure-title]'))).toBe('Ilica');
+    expect(q('[data-testid=transport-detail] .t-prose')).toBeNull();
+    expect(sheet()).not.toContain('lozinku');
+    expect(peek()).toBe('Ilica');
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c3'), module: 'prometnice' } }).context);
+    expect(text(q('[data-testid=closure-title]'))).toBe('');
+    expect(peek()).toBe('');
+    expect(document.body.textContent).not.toContain('lozinku');
+  });
+
+  it('a vehicle whose headsign fails the row rule: the direction falls back and the peek says none of it; the route\'s rows read the same direction', () => {
+    const hostile = vehicle('vehicle:9', '6', 0, { headsign: PROBE, bearing: 90 });
+    const { maps, last } = fakeMaps({ vehicles: [...VEHICLES, hostile], net: NET });
+    render(ctx({ maps }).context);
+    // A vehicle is the map's own selection (a tap on the drawn tram), never a public one.
+    last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:9' });
+    expect(text(q('[data-testid=vehicle-title]'))).toContain('6');
+    expect(text(q('[data-testid=vehicle-direction]'))).not.toContain('lozinku');
+    expect(text(q('[data-testid=vehicle-direction]')).length).toBeGreaterThan(0);
+    expect(peek()).toContain('Tramvaj 6');
+    expect(peek()).not.toContain('lozinku');
+    expect(document.body.textContent).not.toContain('lozinku');
+    // The route's rows read the same direction; the route's peek is its number and long name.
+    render(ctx({ maps, selection: { kind: 'route', id: '6' } }).context);
+    expect(text(q('[data-testid=route-vehicles]'))).not.toContain('lozinku');
+    expect(peek()).toContain('6');
+    expect(document.body.textContent).not.toContain('lozinku');
+  });
+});
+
+describe('a stop opens the sheet (WP4 §11, §16.4)', () => {
+  it('a stop chosen from the search opens the sheet with no map fit, so its three departures and "Vozni red" are in view; a route lifts it to half with a fit', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const ws = q<HTMLElement>('[data-testid=transport-workspace]');
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    expect(ws.dataset.sheet).toBe('open');
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop' }), { fit: false });
+    expect(q('[data-testid=stop-board]')).not.toBeNull();
+    // A route is read beside the map: half, fitted.
+    input.value = '6';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-route][data-id="6"]').click();
+    expect(ws.dataset.sheet).toBe('half');
+    expect(last().select).toHaveBeenLastCalledWith({ kind: 'route', id: '6' }, { fit: true });
+  });
+});
+
 describe('what comes next at a stop', () => {
   const at = (minutes: number): string => new Date(NOW + minutes * 60_000).toISOString();
   const departure = (tripId: string, routeId: string, headsign: string, minutes: number) =>
@@ -865,7 +915,8 @@ describe('what comes next at a stop', () => {
     expect(rows[0]!.querySelector('.line[data-kind=tram]')).not.toBeNull();
     // Beyond the countdown horizon, and with no vehicle behind it: the clock and the timetable mark.
     expect(text(rows[1])).toContain('Dubec');
-    expect(text(rows[1])).toContain('po redu vožnje');
+    expect(rows[1]!.dataset.live).toBe('false');
+    expect(text(rows[1])).not.toContain('vozni red'); // the form says it, never a word per row [O-27]
     expect(rows[1]!.querySelector('time')).not.toBeNull();
     expect(rows[1]!.querySelector('.t-live')).toBeNull();
     // One note, first in the sheet, and the retired sentence and slot are gone.
@@ -876,6 +927,71 @@ describe('what comes next at a stop', () => {
     const arrivals = q<HTMLElement>('[data-testid=stop-arrivals]');
     expect(arrivals.compareDocumentPosition(q('[data-testid=stop-meta]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(arrivals.compareDocumentPosition(q('[data-testid=stop-routes]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('leads with three departures, then lists the rest of the day’s board to the twelfth under "Vozni red"', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const stop = new URL(url, 'http://test.local').searchParams.get('stop')!;
+      return {
+        ok: true,
+        json: async () => ({
+          operator: 'zet', stopId: stop, stopName: 'Črnomerec', status: 'live', generatedAt: at(0),
+          departures: Array.from({ length: 15 }, (_, i) => departure(`run-${i}`, '6', 'Sopot', 3 + i * 4)),
+        }),
+      };
+    }));
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps }).context);
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    await vi.waitFor(() => expect(q('[data-testid=timetable-rows]')).not.toBeNull());
+    expect(all('[data-testid=arrival-rows] > li.sada-departure')).toHaveLength(3);
+    expect(all('[data-testid=timetable-rows] > li.sada-departure')).toHaveLength(9);
+    expect(all('[data-testid=stop-arrivals] .t-head').map(text)).toEqual(['Vozni red']);
+    // The three lead under the stop's own name, before the timetable and the note.
+    const first = q('[data-testid=arrival-rows]');
+    expect(q('[data-testid=stop-title]').compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(first.compareDocumentPosition(q('[data-testid=timetable-rows]')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('puts no live time on a row while the feed is down or its last word is older than the twin keeps a fix, and none once the session flag says frozen (WP4 review)', () => {
+    const tracked = vehicle('vehicle:9', '6', 0, { tripId: 'trip-live', delaySeconds: 60 });
+    const stop = { id: '106_1', name: 'Črnomerec', lon: 15.87, lat: 45.82, routes: ['6', '11'] };
+    // The stop's board is already in the page's hands: the sheet draws its rows on the first render.
+    const held = { operator: 'zet', stopId: '106_1', stopName: stop.name, status: 'live', generatedAt: at(0), departures: [departure('trip-live', '6', 'Sopot', 4), departure('trip-plan', '11', 'Dubec', 26)] };
+    const cache = { ensure: vi.fn(), get: () => held, destroy: vi.fn() };
+    const open = (snapshots: LayerContext['snapshots'], session?: LayerContext['session']): HTMLElement => {
+      const { maps } = fakeMaps({ vehicles: [...VEHICLES, tracked], net: NET });
+      const { context } = ctx({ maps, snapshots, selection: { kind: 'stop', id: '106_1' }, stop });
+      context.boards = cache as never;
+      if (session) context.session = session;
+      render(context);
+      return q<HTMLElement>('[data-testid=stop-arrivals]');
+    };
+    const feed = { 'zet-rt': ZET, prometnice: PROMETNICE, dogadanja: DOGADANJA };
+    // Live feed, the vehicle carries the first trip: the live dot and its countdown.
+    const live = open(feed);
+    const first = live.querySelector<HTMLElement>('[data-testid=arrival-rows] li')!;
+    expect(first.dataset.live).toBe('true');
+    expect(text(first)).toContain('za 5 min');
+    // The feed is down: the same retained vehicle puts no live time on any row; the trip shows its timetable clock.
+    const down = open({ ...feed, 'zet-rt': { ...ZET, status: 'down' } });
+    expect(down.querySelectorAll('[data-live="true"], .t-live')).toHaveLength(0);
+    expect(down.textContent).not.toContain('uživo');
+    expect(down.textContent).not.toContain('za 5 min');
+    expect(down.querySelector('[data-testid=arrival-rows] li time')).not.toBeNull();
+    // The feed answers, but its last word is five minutes old: every fix has outlived the twin's eviction.
+    const stale = open({ ...feed, 'zet-rt': { ...ZET, fetchedAt: new Date(NOW - 5 * 60_000).toISOString(), sourceUpdatedAt: new Date(NOW - 5 * 60_000).toISOString() } });
+    expect(stale.querySelectorAll('[data-live="true"]')).toHaveLength(0);
+    // The session flag alone, with the rows still in hand: no row says live and nothing is asked for.
+    cache.ensure.mockClear();
+    const frozen = open(feed, { expiresAt: null, frozen: true });
+    expect(frozen.querySelectorAll('[data-testid=arrival-rows] li').length).toBeGreaterThan(0);
+    expect(frozen.querySelectorAll('[data-live="true"]')).toHaveLength(0);
+    expect(frozen.textContent).not.toContain('uživo');
+    expect(cache.ensure).not.toHaveBeenCalled();
   });
 
   it('says the timetable is unavailable when every platform is down, and never invents a row', async () => {
@@ -889,5 +1005,50 @@ describe('what comes next at a stop', () => {
     q<HTMLElement>('[role=option][data-action=select-stop]').click();
     await vi.waitFor(() => expect(text(q('[data-testid=stop-arrivals]'))).toContain('Vozni red trenutačno nije dostupan.'));
     expect(q('[data-testid=arrival-rows]')).toBeNull();
+  });
+});
+
+describe('the frame: Karta opens on the place', () => {
+  it('opens framed on the place with its measured circle (map/frame.ts, the wall’s arithmetic), follows a new place once, and never takes back a map the person moved', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, place: KVATERNIKOV });
+    render(context);
+    // Not laid out yet (a unit context has no layout): a 390 x 600 phone stage stands in.
+    const framed = frameView(KVATERNIKOV, 2000, 390, 600);
+    expect(framed.center).toEqual([KVATERNIKOV.lon, KVATERNIKOV.lat]);
+    expect(last().options).toMatchObject({ center: framed.center, zoom: framed.zoom });
+    expect(text(q('[data-testid=transport-peek] strong'))).toBe('Kvaternikov trg');
+    // The list's own circle is the one the camera fits: a tighter one frames closer (2 km across a phone is already
+    // at the frame's 12.7 floor, as on the compact wall).
+    const tight = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps: tight.maps, place: KVATERNIKOV, nearby: () => ({ html: NEARBY_HTML, pill: '0,9 km · ~7 min', radiusM: 900 }) }).context);
+    expect(tight.last().options.zoom).toBeCloseTo(frameView(KVATERNIKOV, 900, 390, 600).zoom, 6);
+    expect(tight.last().options.zoom!).toBeGreaterThan(framed.zoom);
+    // Another place (a stop saved elsewhere on the page): the camera follows it once.
+    render(context);
+    context.place = JELACIC;
+    render(context);
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [JELACIC.lon, JELACIC.lat], zoom: frameView(JELACIC, 2000, 390, 600).zoom });
+    expect(text(q('[data-testid=transport-peek] strong'))).toBe('Trg bana J. Jelačića');
+    // The person moves the map: a later place change leaves the camera where they put it.
+    last().options.onUserMove!({ center: [15.99, 45.8], zoom: 15 });
+    spy(last().setView).mockClear();
+    context.place = KVATERNIKOV;
+    render(context);
+    expect(last().setView).not.toHaveBeenCalled();
+  });
+
+  it('draws every mode on the phone, trams alone on the schema, and trams first only on the kiosk board', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const phone = ctx({ maps }).context;
+    phone.mapMode = createMapModeStore({ storage: memoryStorage().storage });
+    render(phone);
+    expect(last().options.modes ?? null).toBeNull();
+    phone.mapMode.set('schema');
+    render(phone);
+    expect([...(last().options.modes ?? [])]).toEqual([0]);
+    const board = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps: board.maps, kiosk: true }).context);
+    expect([...(board.last().options.modes ?? [])]).toEqual([0]);
   });
 });

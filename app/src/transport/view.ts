@@ -1,6 +1,5 @@
 // The transport sheet's markup, as strings a workspace sets into its stable
-// containers: route and stop rows, the search listbox, the overview, the
-// four detail views and the closures-and-notices list. Pure and escaped --
+// containers: route and stop rows and the four detail views. Pure and escaped --
 // every interpolated value goes through escapeHtml/escapeAttribute (dom/
 // escape.ts), and every interactive element carries a `data-action` the
 // workspace's one delegated click handler reads, never a closure handler on
@@ -17,15 +16,16 @@
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import type { FeedItem } from '../../../worker/feed/schema';
 import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import { externalTextReady } from '../city/feed';
 import type { CastState } from '../core/contracts';
 import type { SavedRef } from '../core/saved-store';
-import { lineBadge, signRow } from '../experience/blocks';
+import { lineBadge } from '../experience/blocks';
 import { snapshotLine } from '../experience/chrome';
 import { delayTone, type DelayTone } from '../experience/delay';
-import { castReasonText } from '../experience/presentation';
 import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
-import type { RouteSummaryRow } from '../layers/route-summary';
+import { vettedArrival } from '../kiosk/arrivals';
 import { delayWord } from '../layers/shared';
 import { vehicleKind, type MapStatus, type VehicleInfo } from '../map/city-map';
 import { dataText } from '../panels/panel';
@@ -35,33 +35,30 @@ import type { RouteStop } from './catalogue';
 import type { RouteEntry, SearchResults, StopGroup } from './search';
 import { tr, trPlural, type TransportKey } from './strings';
 
-/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle,
- *  every detail gets the ghost cast button ("Na zaslon", disabled with its reason when it cannot fire). */
+/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle.
+ *  `name` is what a stop's save label says: its vetted name, never its id [B-7]. */
 export interface DetailHeadExtras {
-  save?: SavedRef & { on: boolean };
-  cast?: CastState;
+  save?: SavedRef & { on: boolean; name?: string };
 }
 
 /** Route badges the rows show before "+n". */
 const ROW_BADGES = 6;
-/** Line badges the peek shows before "+n". */
-export const PEEK_BADGES = 4;
-/** Rows a list shows before its fold. */
-export const RUNNING_ROWS = 8;
-export const CLOSURE_ROWS = 4;
+/** Rows a route's stop list shows before its fold. */
 export const STOP_ROWS = 12;
-/** ZET notices the overview lists. */
-export const NOTICE_ROWS = 3;
-
-/** The folds a person opens in place. The delays block keeps its own `toggle-delays` action. */
+/** A stop's sheet leads with this many departures, the same three rows Sada shows, then "Vozni red". */
+export const STOP_DEPARTURES_FIRST = 3;
+/** What a stop's sheet lists in all: the three, then the timetable to the twelfth (shared/city/arrivals.ts rows). */
+export const STOP_ARRIVAL_ROWS = 12;
+/** The folds a person opens in place: a route's stops. */
 export type Fold = 'routes' | 'closures' | 'stops';
 
 /** s in dense rows and the peek, m on boards, l on a detail head. */
 export type BadgeSize = 's' | 'm' | 'l';
 
 /** The number on the front of the vehicle, in its mode's colour and shape: the shared badge component (blocks.ts lineBadge, signage.css .line). */
+/** The line badge: the number is GTFS text, vetted as a headsign is (kiosk/arrivals.ts vettedArrival); one that fails draws an empty plate. */
 export function badge(short: string, type: number, size: BadgeSize = 'm'): string {
-  return lineBadge(short, vehicleKind(type), size);
+  return lineBadge(vetExternal('headsign', short, 'row') ?? '', vehicleKind(type), size);
 }
 
 /** The closure mark (signage.css): a bar in the urgency role, beside the street's name. */
@@ -103,7 +100,7 @@ export function button(spec: ButtonSpec): string {
 }
 
 /** The ids of the lists a fold opens, so the fold button can say which one. */
-const listId = (fold: Fold | 'delays'): string => `t-list-${fold}`;
+const listId = (fold: Fold): string => `t-list-${fold}`;
 
 /** The one button under a bounded list: "još 3 linije" / "sve zatvaranja (6)" closed, "Skupi" open. A disclosure, so it says whether the list is open. */
 function foldButton(i18n: I18n, fold: Fold, open: boolean, moreLabel: string): string {
@@ -112,7 +109,7 @@ function foldButton(i18n: I18n, fold: Fold, open: boolean, moreLabel: string): s
   return button({ action: 'toggle-fold', id: `t-fold-${fold}`, label: open ? tr(i18n, 'collapse') : moreLabel, className: 'btn-ghost t-action t-fold', data, expanded: open, controls: listId(fold) });
 }
 
-/** A section head in sentence case at head size; h3 in the overview, h4 under a detail title. */
+/** A section head in sentence case at head size; h3 on its own, h4 under a detail title. */
 function sectionHead(label: string, level: 3 | 4 = 3): string {
   return `<h${level} class="t-head">${esc(label)}</h${level}>`;
 }
@@ -139,17 +136,6 @@ export function delayTrail(i18n: I18n, seconds: number | undefined): string {
   return seconds === undefined ? '' : stateWord(delayWord(i18n, seconds), delayTone(i18n, seconds));
 }
 
-/** A summary row (route-summary.ts) carries its word, not its seconds: the tone is the word read back against the catalogue's own templates, so it can never disagree with delayTone. */
-function toneOfWord(i18n: I18n, word: string): DelayTone {
-  if (!word) return 'none';
-  if (word === i18n.t('panels.delayOnTime')) return 'ontime';
-  const minutes = /\d+/.exec(word)?.[0];
-  if (minutes === undefined) return 'none';
-  if (word === i18n.t('panels.delayLate', { minutes })) return 'late';
-  if (word === i18n.t('panels.delayEarly', { minutes })) return 'early';
-  return 'none';
-}
-
 interface RowButtonSpec {
   /** The id's kind and value: rowId(kind, id). */
   kind: string;
@@ -173,10 +159,10 @@ function rowButton(o: RowButtonSpec): string {
   return `<li class="${cls}"${o.hidden ? ' hidden' : ''}${testid}><button type="button" class="t-row" id="${rowId(o.kind, o.id)}" data-action="${attr(o.action)}" data-id="${attr(o.id)}"${current}>${o.inner}</button></li>`;
 }
 
-/** One route as a row: badge, long name, vehicles moving now as the second line, the delay word at the end when known. */
+/** One route as a row: badge, long name (GTFS text, vetted; the mode's word when it fails or is missing), vehicles moving now as the second line, the delay word at the end when known. */
 export function routeRowInner(i18n: I18n, route: RouteEntry, count: number | null, delay: number | undefined): string {
   const sub = count === null ? '' : vehicleCountGlyph(i18n, route.type, count);
-  return cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), sub, delayTrail(i18n, delay));
+  return cells(badge(route.short, route.type), esc(vetExternal('name', route.long, 'row') || kindWord(i18n, route.type)), sub, delayTrail(i18n, delay));
 }
 
 /**
@@ -192,104 +178,9 @@ export function vehicleCountGlyph(i18n: I18n, type: number, count: number): stri
   return `<span class="tl-context" role="img" aria-label="${attr(sentence)}">${iconMarkup(icon)}<span class="tl-ctx-text" aria-hidden="true">${count}</span></span>`;
 }
 
-/** One named stop as a row: its routes as badges, its name, its platform count. */
+/** One named stop as a row: its routes as badges, its name (ZET's text, vetted), its platform count. */
 export function stopRowInner(i18n: I18n, stop: StopGroup, routes: readonly RouteEntry[]): string {
-  return cells(badgeList(routes), esc(stop.name), esc(trPlural(i18n, 'platforms', stop.ids.length)));
-}
-
-export interface ResultIds {
-  list: string;
-  option: (kind: 'route' | 'stop', id: string) => string;
-}
-
-export interface ResultsData {
-  query: string;
-  results: SearchResults;
-  counts: ReadonlyMap<string, number>;
-  delays: ReadonlyMap<string, number>;
-  routeOf: (id: string) => RouteEntry;
-  /** The option id aria-activedescendant points at. */
-  active: string | null;
-  ids: ResultIds;
-}
-
-/** The combobox's listbox: routes first, then stops, one flat list with two headings. */
-export function resultsMarkup(i18n: I18n, d: ResultsData): string {
-  const total = d.results.routes.length + d.results.stops.length;
-  if (total === 0) return `<p class="t-empty" data-testid="transport-no-results">${esc(tr(i18n, 'noResults', { query: d.query }))}</p>`;
-  const option = (kind: 'route' | 'stop', id: string, inner: string): string => {
-    const oid = d.ids.option(kind, id);
-    return `<li role="option" id="${attr(oid)}" class="row t-option" data-action="select-${kind}" data-id="${attr(id)}" aria-selected="${d.active === oid ? 'true' : 'false'}">${inner}</li>`;
-  };
-  const heading = (label: string): string => `<li role="presentation" class="t-group-label">${esc(label)}</li>`;
-  const routes = d.results.routes.map((r) => option('route', r.id, routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id))));
-  const stops = d.results.stops.map((s) => option('stop', s.id, stopRowInner(i18n, s, s.routes.map(d.routeOf))));
-  return (
-    `<p class="visually-hidden" role="status">${esc(trPlural(i18n, 'resultsCount', total))}</p>` +
-    `<ul role="listbox" id="${attr(d.ids.list)}" class="t-list t-results" aria-label="${attr(tr(i18n, 'searchResults'))}" data-testid="transport-results">` +
-    `${routes.length > 0 ? heading(tr(i18n, 'routes')) + routes.join('') : ''}${stops.length > 0 ? heading(tr(i18n, 'stops')) + stops.join('') : ''}</ul>`
-  );
-}
-
-export interface PeekData {
-  /** The lines the board leads with: this stop's, else the busiest. */
-  routes: readonly { short: string; type: number }[];
-  /** Lines beyond the badges shown. */
-  more: number;
-  vehicles: number;
-  closures: number;
-}
-
-/** The collapsed sheet's one line: up to four small badges, "+n", then "193 vozila u pokretu · 37 zatvaranja". Nothing here is interactive. */
-export function peekMarkup(i18n: I18n, d: PeekData): string {
-  const badges = d.routes.map((r) => badge(r.short, r.type, 's')).join('');
-  const more = d.more > 0 ? `<span class="t-peek-more">+${d.more}</span>` : '';
-  const lines = badges ? `<span class="t-peek-lines">${badges}${more}</span> ` : '';
-  return `${lines}<span class="t-peek-count">${esc(`${trPlural(i18n, 'vehiclesNow', d.vehicles)} · ${trPlural(i18n, 'closuresNow', d.closures)}`)}</span>`;
-}
-
-export interface OverviewData {
-  /** Routes with a vehicle moving now, trams first. */
-  routes: RouteSummaryRow[];
-  /** Vehicles moving now among the admitted modes. */
-  total: number;
-  /** No zet-rt snapshot has arrived yet. */
-  loading: boolean;
-  /** The source's own stale/down sentence, or null while it answers. */
-  sourceStatus: string | null;
-  screenStop: { id: string; name: string; routes: readonly string[] } | null;
-  routeOf: (id: string) => RouteEntry;
-  kiosk: boolean;
-  /** The running-routes fold is open: every row shown. */
-  routesOpen: boolean;
-}
-
-/** A running route on the board: m badge, the destination, the count under it, the delay word in its tone at the end. */
-function routeButton(i18n: I18n, row: RouteSummaryRow, route: RouteEntry, hidden: boolean): string {
-  const inner = cells(badge(row.label, row.type), esc(route.long || kindWord(i18n, row.type)), vehicleCountGlyph(i18n, row.type, row.count), stateWord(row.word, toneOfWord(i18n, row.word)));
-  return rowButton({ kind: 'route', id: row.routeId, action: 'select-route', hidden, inner });
-}
-
-/** Nothing selected, nothing typed: what runs now (eight rows, then the fold) and the screen's stop. */
-export function overviewMarkup(i18n: I18n, d: OverviewData): string {
-  const status = d.sourceStatus ? `<p class="t-status" data-testid="transport-source-status">${esc(d.sourceStatus)}</p>` : '';
-  let running: string;
-  if (d.loading) running = `<p class="t-empty">${esc(i18n.t('status.loading'))}</p>`;
-  else if (d.routes.length === 0) running = `<p class="t-empty" data-testid="transport-none-running">${esc(tr(i18n, 'noRunning'))}</p>`;
-  else {
-    const rows = d.routes.map((row, i) => routeButton(i18n, row, d.routeOf(row.routeId), i >= RUNNING_ROWS && !d.routesOpen)).join('');
-    const folded = d.routes.length - RUNNING_ROWS;
-    running =
-      `<p class="t-lead" data-testid="transport-total">${esc(trPlural(i18n, 'vehiclesNow', d.total))}</p>` +
-      `<ul class="t-list" id="${listId('routes')}" data-testid="running-routes">${rows}</ul>` +
-      (folded > 0 ? foldButton(i18n, 'routes', d.routesOpen, i18n.t('panels.moreRoutes', { count: folded })) : '');
-  }
-  const stop = d.screenStop
-    ? `<section class="t-block" data-testid="screen-stop">${sectionHead(tr(i18n, 'screenStop'))}<ul class="t-list">` +
-      rowButton({ kind: 'stop', id: d.screenStop.id, action: 'select-stop', inner: cells(badgeList(d.screenStop.routes.map(d.routeOf)), esc(d.screenStop.name), '') }) +
-      '</ul></section>'
-    : '';
-  return `<section class="t-block">${sectionHead(tr(i18n, 'runningRoutes'))}${status}${running}</section>${stop}`;
+  return cells(badgeList(routes), esc(vetExternal('name', stop.name, 'row') ?? ''), esc(trPlural(i18n, 'platforms', stop.ids.length)));
 }
 
 /** The map's own state line, or null while it draws. */
@@ -302,10 +193,11 @@ function capital(text: string, locale: string): string {
   return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
 }
 
-/** "Tramvaj 6", "Autobus 109", "Vozilo" for a route nobody knows. */
+/** "Tramvaj 6", "Autobus 109", "Vozilo" for a route nobody knows or whose number fails the row rule. */
 export function vehicleTitle(i18n: I18n, v: VehicleInfo): string {
   const kind = capital(kindWord(i18n, v.type), i18n.getLocale());
-  return v.short ? tr(i18n, 'vehicleTitle', { kind, short: v.short }) : kind;
+  const short = v.short ? vetExternal('headsign', v.short, 'row') : null;
+  return short ? tr(i18n, 'vehicleTitle', { kind, short }) : kind;
 }
 
 function actions(buttons: string[]): string {
@@ -334,24 +226,17 @@ function lineFocusSwitch(i18n: I18n, on: boolean): string {
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });
 
 /** The save toggle (route and stop details only): a filled star once saved, "Ukloni iz spremljenog" generic
- *  once it is (the id already named it on the way in). */
-function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
+ *  once it is (the label already named it on the way in). A route is named by its number, a stop by its
+ *  vetted name; a stop whose name was refused is saved as "Spremi stajalište", never by its id. */
+function saveButton(i18n: I18n, save: SavedRef & { on: boolean; name?: string }): string {
   const label = save.on
     ? i18n.t('kvart.unsave')
-    : i18n.t(save.kind === 'route' ? 'kvart.saveRoute' : 'kvart.saveStop', save.kind === 'route' ? { id: save.id } : { name: save.id });
+    : save.kind === 'route' ? i18n.t('kvart.saveRoute', { id: save.id }) : i18n.t('kvart.saveStop', { name: save.name ?? '' }).trim();
   return `<button type="button" class="btn-quiet icon-btn t-save" data-action="${save.on ? 'unsave' : 'save'}" data-kind="${attr(save.kind)}" data-id="${attr(save.id)}" aria-pressed="${save.on ? 'true' : 'false'}" aria-label="${attr(label)}">${iconMarkup('star')}</button>`;
 }
 
-/** The ghost cast button every detail carries (D5): disabled with its reason (presentation.ts's own
- *  castReasonText, the same sentence the FAB reads) when "Na zaslon" cannot fire. */
-function castButton(i18n: I18n, cast: CastState | undefined): string {
-  const can = cast?.can ?? false;
-  const disabled = can ? '' : ` aria-disabled="true" title="${attr(castReasonText(i18n, cast))}"`;
-  return `<button type="button" class="btn-ghost t-cast" data-action="cast" data-testid="detail-cast"${disabled}>${iconMarkup('cast')}<span>${esc(i18n.t('cast.fab'))}</span></button>`;
-}
-
-/** Every detail opens the same way: the way back, the save toggle (route and stop), the ghost cast button,
- *  then the title. A public screen has no finger to press any of them. */
+/** Every detail opens the same way: the way back, the save toggle (route and stop), then the title.
+ *  A public screen has no finger to press any of them. */
 function detailHead(i18n: I18n, title: string, kiosk: boolean, extras?: DetailHeadExtras): string {
   if (kiosk) return title;
   const buttons = [back(i18n)];
@@ -384,6 +269,7 @@ export interface VehicleDetailData {
    *  null where there is no device store to write the choice to, and the
    *  switch is then not offered at all. */
   lineFocus: boolean | null;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
 }
 
@@ -391,7 +277,11 @@ export interface VehicleDetailData {
 export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
   const { vehicle: v } = d;
   const locale = i18n.getLocale();
-  const line = [d.route?.long ?? '', delayLine(i18n, d.delay)].filter(Boolean).join(' · ');
+  // The route's long name is GTFS text; the direction and the next stop carry a headsign or a stop's name
+  // (transport/detail.ts vets those parts, and each line is checked whole here before it is printed).
+  const line = [vetExternal('name', d.route?.long ?? '', 'row') ?? '', delayLine(i18n, d.delay)].filter(Boolean).join(' · ');
+  const direction = vetExternal('title', d.direction, 'row') ?? i18n.t('motion.directionUnknown');
+  const nextStop = d.nextStop ? vetExternal('title', d.nextStop, 'row') : null;
   const state = vehicleState(i18n, v);
   const follow = d.kiosk
     ? ''
@@ -405,9 +295,9 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
       });
   const route = d.route ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk, { cast: d.cast }) +
-    `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(d.direction, locale))}</p>` +
-    (d.nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(d.nextStop, locale))}</p>` : '') +
+    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk) +
+    `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(direction, locale))}</p>` +
+    (nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(nextStop, locale))}</p>` : '') +
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
     (d.kiosk ? '' : actions([follow, route])) +
@@ -434,6 +324,7 @@ export interface RouteDetailData {
   lineFocus: boolean | null;
   /** Whether this route is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
 }
 
@@ -452,7 +343,8 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
         kind: 'vehicle',
         id: v.id,
         action: 'select-vehicle',
-        inner: cells(badge(v.short, v.type), esc(capital(d.directions.get(v.id) ?? i18n.t('motion.directionUnknown'), locale)), esc(vehicleState(i18n, v))),
+        // A vehicle's direction carries its headsign or a terminus (transport/detail.ts vets those parts; the line is checked whole here too).
+        inner: cells(badge(v.short, v.type), esc(capital(vetExternal('title', d.directions.get(v.id) ?? '', 'row') ?? i18n.t('motion.directionUnknown'), locale)), esc(vehicleState(i18n, v))),
       }),
     )
     .join('');
@@ -463,7 +355,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       : `<p class="t-empty" data-testid="route-no-vehicles">${esc(tr(i18n, 'noVehiclesNow'))}</p>`;
   // The sequence keeps its counter (map.css, a CSS counter on the row) in a dense 44 px row.
   const stopRows = d.stops
-    .map((s, i) => rowButton({ kind: 'stop', id: s.id, action: 'select-stop', dense: true, hidden: i >= STOP_ROWS && !d.stopsOpen, inner: cells('', esc(s.name), '') }))
+    .map((s, i) => rowButton({ kind: 'stop', id: s.id, action: 'select-stop', dense: true, hidden: i >= STOP_ROWS && !d.stopsOpen, inner: cells('', esc(vetExternal('name', s.name, 'row') ?? ''), '') }))
     .join('');
   const stopsFold = d.stops.length > STOP_ROWS ? foldButton(i18n, 'stops', d.stopsOpen, tr(i18n, 'allStops', { count: d.stops.length })) : '';
   const stops =
@@ -471,7 +363,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       ? `<ol class="t-list t-stops" id="${listId('stops')}" data-testid="route-stops">${stopRows}</ol>${stopsFold}`
       : `<p class="t-empty">${esc(i18n.t(d.hasNetwork ? 'status.empty' : 'status.loading'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(route.long || tr(i18n, 'routeTitle', { short: route.short }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(vetExternal('name', route.long, 'row') || tr(i18n, 'routeTitle', { short: vetExternal('headsign', route.short, 'row') ?? '' }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false } }) +
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
@@ -489,6 +381,7 @@ export interface StopDetailData {
   kiosk: boolean;
   /** Whether this stop is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
   /** What comes next here, already merged across the stop's platforms and
    *  sorted (shared/city/arrivals.ts). Never computed in this file: the view
@@ -501,6 +394,11 @@ export interface StopDetailData {
    *  sheet never says "uživo" -- the live marker reads the shell's own snapshot
    *  sentence instead -- and never waits for a board that will not come. */
   frozenAt?: number;
+  /** "Vozni red": the timetable alone, the same boards read without the fleet
+   *  (arrivalsAt with no vehicles), so the tail under the three departures is
+   *  the schedule and never a live estimate. Absent, the later trips are shown
+   *  as their clock. */
+  timetable?: readonly ArrivalRow[];
 }
 
 /** The GTFS type behind an arrival row, read off the stop's own lines: the
@@ -510,22 +408,23 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
   return routes.find((r) => r.id === routeId)?.type ?? -1;
 }
 
-/** A row's time at the row's end. Inside the countdown horizon every row says
- *  how long the wait is, because that is the question, and `sada` at zero: a
- *  tram due in under half a minute is the one pulling in, not "za 0 min".
- *  Beyond the horizon a countdown would be a guess dressed as a fact, so the
- *  row shows a clock.
+/** A row's time at the row's end. A tracked row inside the countdown horizon
+ *  says how long the wait is, because that is the question, and `sada` at
+ *  zero: a tram due in under half a minute is the one pulling in, not "za 0
+ *  min". Beyond the horizon a countdown would be a guess dressed as a fact, so
+ *  the row shows a clock; a row off the timetable alone always shows its clock.
  *
- *  What the number is worth is said beside it, not in it, and in BOTH forms: a
- *  tracked row's clock is the schedule plus ZET's delay, not the timetable
- *  moment, so it keeps the live marker exactly as its countdown would; and a
- *  row off the timetable alone carries "po redu vožnje" on its second line
- *  whether it counts down or shows a time. An unlabelled clock would read as
- *  the timetable and make the note under the list say the wrong thing about it.
+ *  What the number is worth is said by its form, never by a word per row
+ *  [O-27]: a tracked row carries the live dot (named "uživo" for a screen
+ *  reader) and the blue tone, and a tracked row's clock is the schedule plus
+ *  ZET's delay, so it keeps the dot exactly as its countdown would; a
+ *  timetable row is a plain grey `<time>`. The note under the stop's list
+ *  says once where the estimate comes from.
  *
  *  Frozen, the marker stays -- the figure did come off a tracked vehicle -- but
  *  it says the shell's own snapshot sentence (chrome.ts snapshotLine, "podaci
- *  od 13:57") and loses the live tone with it. */
+ *  od 13:57") and loses the live tone with it: "uživo" is never said once the
+ *  view has stopped. */
 export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
   const time = !row.live || row.minutes === null
     ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
@@ -535,42 +434,71 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
   return `<span class="t-eta"${frozenAt === undefined ? ' data-live="true"' : ''}><span class="t-live" role="img" aria-label="${attr(label)}"></span>${time}</span>`;
 }
 
-/** The arrivals list: the board's own row (blocks.ts signRow) with the line
- *  badge as its lead, the headsign as its destination and the time at its end.
- *  A row off the timetable alone says so on its second line; a row an estimate
- *  stands behind says nothing there, because the note under the list already
- *  says where the estimate comes from. */
-function arrivalsSection(i18n: I18n, d: StopDetailData): string {
-  const rows = d.arrivals
-    .map((row) => signRow({
-      lead: badge(row.routeName, routeTypeAt(d.routes, row.routeId), 'm'),
-      title: row.headsign || row.routeName,
-      sub: row.live && d.frozenAt !== undefined ? snapshotLine(i18n,d.frozenAt) : row.live ? (i18n.getLocale().startsWith('en')?'Estimate':'Procjena') : i18n.t('arrivals.scheduled'),
-      trail: arrivalTime(i18n, row, d.frozenAt),
-      key: `${row.tripId}|${row.atMs}`,
-    }))
-    .join('');
-  // 'none' is "no board in hand", which live means "still on its way" and
-  // frozen means "the session ended first, and none is coming": a frozen sheet
-  // that said "učitavanje" would say it for good.
-  const empty = d.arrivalsStatus === 'none'
-    ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
-    : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
-  const body = d.arrivals.length > 0
-    ? `<ul class="t-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
-    : `<p class="t-empty">${esc(empty)}</p>`;
-  return `<section class="t-block" data-testid="stop-arrivals">${sectionHead(i18n.t('arrivals.title'), 4)}${body}</section>`;
+/**
+ * One departure, the same row on Sada and in the stop's sheet: the line badge,
+ * the destination, the time (arrivalTime). `data-live` says whether a tracked
+ * vehicle carries the trip right now; it reads "false" once the view is frozen,
+ * like the time's own marker. `kindOf` gives the badge its mode's shape. The
+ * line and the headsign are ZET's text: a row that fails the row-surface check
+ * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
+ */
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number): string {
+  if (!vettedArrival(row)) return '';
+  const live = row.live && frozenAt === undefined;
+  return `<li class="sada-departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
 }
 
-/** One stop: its name at title, then what comes next, then "3 perona" and its lines as rows with their count and delay word. */
+/** What comes next here, departures first [O-50]: the first three trips as
+ *  Sada's own rows, then "Vozni red" with the rest of the list to the twelfth,
+ *  then the note that says once where the estimate comes from. Every row is
+ *  one departureRow, so no row carries a word for its kind, and the three lead
+ *  the sheet under the stop's name with no heading of their own. */
+function arrivalsSection(i18n: I18n, d: StopDetailData): string {
+  const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
+  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt);
+  const key = (r: ArrivalRow): string => r.tripId || `${r.routeId}|${r.atMs}`;
+  // Every row's line and headsign are ZET's text: a row that fails the check is left out (departureRow draws none).
+  const vetted = d.arrivals.filter(vettedArrival);
+  const lead = vetted.slice(0, STOP_DEPARTURES_FIRST);
+  const leadKeys = new Set(lead.map(key));
+  // "Vozni red" is the timetable: the caller's scheduled rows when it has them, else the later trips shown as
+  // their clock; either way a plain grey <time>, never a live estimate.
+  const scheduled = (r: ArrivalRow): ArrivalRow => ({ ...r, live: false, minutes: null });
+  const tail = (d.timetable ? d.timetable.filter(vettedArrival).filter((r) => !leadKeys.has(key(r))) : vetted.slice(STOP_DEPARTURES_FIRST))
+    .slice(0, STOP_ARRIVAL_ROWS - STOP_DEPARTURES_FIRST).map(scheduled);
+  // 'none' is "no board in hand", which live means "still on its way" and
+  // frozen means "the session ended first, and none is coming": a frozen sheet
+  // that said "učitavanje" would say it for good. Rows in hand that all failed
+  // the text check say the timetable is unavailable, once the policy is here
+  // to judge them; before that the list is still loading.
+  const empty = d.arrivals.length > 0
+    ? i18n.t(externalTextReady() ? 'arrivals.down' : 'status.loading')
+    : d.arrivalsStatus === 'none'
+      ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
+      : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
+  const timetable = tail.length
+    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(row).join('')}</ul>`
+    : '';
+  const body = lead.length > 0
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    : `<p class="t-empty">${esc(empty)}</p>`;
+  return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
+}
+
+/** One stop: its name at title, then its next three departures and the timetable, then "3 perona" and its lines as rows with their count and delay word. */
 export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const meta = [trPlural(i18n, 'platforms', d.stop.ids.length), d.isScreenStop ? tr(i18n, 'screenStop') : ''].filter(Boolean).join(' · ');
   const rows = d.routes.map((r) => rowButton({ kind: 'route', id: r.id, action: 'select-route', inner: routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id)) })).join('');
   const moving = d.routes.reduce((sum, r) => sum + (d.counts.get(r.id) ?? 0), 0);
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
+  // The stop's board (probe §15.6 / §16.4 `stop-board`): its name and what comes next, one element a canvas tap
+  // lands on; display: contents (map.css), so the sheet's own layout is untouched.
+  const name = vetExternal('name', d.stop.name, 'row') ?? '';
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(d.stop.name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
+    `<div class="t-stop-board" data-testid="stop-board">` +
+    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, name, on: d.saved ?? false } }) +
     arrivalsSection(i18n, d) +
+    '</div>' +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     `<section class="t-block">${sectionHead(tr(i18n, 'stopRoutes'), 4)}${lead}<ul class="t-list" data-testid="stop-routes">${rows}</ul></section>`
@@ -582,12 +510,6 @@ function closureWords(i18n: I18n, item: FeedItem): string {
   const type = i18n.t(`panels.closureType.${dataText(item, 'subtype') || 'ROAD_CLOSED'}`);
   const direction = i18n.t(`panels.direction.${dataText(item, 'direction') || 'BOTH_DIRECTIONS'}`);
   return `${type} · ${direction}`;
-}
-
-/** A closure row's second line: the words, then "do 13. 9. 06:00" when the item names an end. */
-function closureLine(i18n: I18n, item: FeedItem): string {
-  const until = item.until ? i18n.t('panels.until', { time: zagrebDateTime(item.until) }) : '';
-  return [closureWords(i18n, item), until].filter(Boolean).join(' · ');
 }
 
 /** The closure's window as one sentence: "od 8. 9. 08:00 do 13. 9. 06:00", or the one end the item names, or nothing. */
@@ -605,93 +527,25 @@ function closureWindow(i18n: I18n, item: FeedItem): string {
  *  its closureWords), which is a paraphrase and not a description, so it is never repeated: one concept, one line.
  *  Anything else the module writes there is the description and is printed as it came. The comparison uses the
  *  worker's function itself, so a change of wording there can never turn into a repeated line here. */
+/** The module's description of a closure, when it wrote one beyond its own paraphrase of the type words: third-party
+ *  prose, vetted under the summary kind on the row surface; '' when there is none or it fails. */
 function closureDescription(item: FeedItem): string {
   const summary = (item.summary ?? '').trim();
   if (!summary || summary === workerClosureWords(dataText(item, 'subtype') || '', dataText(item, 'direction') || '')) return '';
-  return summary;
+  return vetExternal('summary', summary, 'row') ?? '';
 }
 
 /** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the
- *  description as prose when the module has one (closureDescription). */
-export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, cast?: CastState): string {
+ *  description as prose when the module has one (closureDescription). `_cast` is unread since the ghost cast
+ *  button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
+export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, _cast?: CastState): string {
   const window = closureWindow(i18n, item);
   const description = closureDescription(item);
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(item.title)}</span></h3>`, kiosk, { cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(vetExternal('name', item.title, 'row') ?? '')}</span></h3>`, kiosk) +
     `<p class="t-lead">${esc(closureWords(i18n, item))}</p>` +
     (window ? `<p class="t-meta" data-testid="closure-window">${esc(window)}</p>` : '') +
     (description ? `<p class="t-prose">${esc(description)}</p>` : '') +
     (kiosk ? '' : actions([showOnMap(i18n)]))
   );
-}
-
-/** The closures beside the map (four, then "sve zatvaranja (n)") and ZET's own notices, as two blocks of the overview.
- *  `interactive` rows are buttons that open a closure (the workspace hears select-closure); otherwise the rows are
- *  static signage and the list shows every row (a public screen), unless `staticFold` names a control of the host's own
- *  that opens the rest (the lightweight face's page filter), in which case four show and the control follows. */
-export function closuresMarkup(
-  i18n: I18n,
-  closures: readonly FeedItem[],
-  notices: readonly FeedItem[],
-  sourceStatus: string | null,
-  selectedId: string | null,
-  interactive = true,
-  open = false,
-  staticFold?: string,
-): string {
-  const status = sourceStatus ? `<p class="t-status">${esc(sourceStatus)}</p>` : '';
-  const foldable = interactive || staticFold !== undefined;
-  const rows = closures
-    .map((c, i) => {
-      const hidden = foldable && i >= CLOSURE_ROWS && !open;
-      return interactive
-        ? rowButton({ kind: 'closure', id: c.id, action: 'select-closure', hidden, current: c.id === selectedId, inner: cells(closureMark(), esc(c.title), esc(closureLine(i18n, c))) })
-        : signRow({ lead: closureMark(), title: c.title, sub: closureLine(i18n, c), key: c.id, attrs: hidden ? { hidden: '' } : {} });
-    })
-    .join('');
-  const fold = closures.length > CLOSURE_ROWS ? (interactive ? foldButton(i18n, 'closures', open, tr(i18n, 'allClosures', { count: closures.length })) : (staticFold ?? '')) : '';
-  const list = closures.length > 0 ? `<ul class="t-list" id="${listId('closures')}" data-testid="transport-closures">${rows}</ul>${fold}` : `<p class="t-empty" data-testid="transport-no-closures">${esc(tr(i18n, 'noClosures'))}</p>`;
-  const noticeRows = notices
-    .map((n) => {
-      const link = n.link ? `<a class="t-link" href="${attr(n.link)}" rel="noopener noreferrer" target="_blank">${esc(tr(i18n, 'openNotice'))}</a>` : '';
-      return signRow({ lead: '', title: n.title, sub: n.at ? zagrebDateTime(n.at) : '', trail: link, key: n.id });
-    })
-    .join('');
-  const noticeList = notices.length > 0 ? `<section class="t-block">${sectionHead(tr(i18n, 'notices'))}<ul class="t-list" data-testid="transport-notices">${noticeRows}</ul></section>` : '';
-  return `<section class="t-block">${sectionHead(i18n.t('panels.closures'))}${status}${list}</section>${noticeList}`;
-}
-
-export interface DelayRow {
-  routeId: string;
-  /** The module's median for the route, seconds; negative is early. */
-  delay: number;
-}
-
-/** Routes shown before the fold of the delays block. */
-export const DELAY_ROWS = 8;
-
-/** The module's own per-route medians, worst first: every row is present (a
- *  reader or a test can count them), the tail folded behind one button. In
- *  words, never raw seconds (R-F8), and never an arrival time. */
-export function delaysMarkup(i18n: I18n, rows: readonly DelayRow[], routeOf: (id: string) => RouteEntry, open: boolean): string {
-  if (rows.length === 0) return '';
-  const items = rows
-    .map((row, i) => {
-      const route = routeOf(row.routeId);
-      return rowButton({
-        kind: 'delay',
-        id: row.routeId,
-        action: 'select-route',
-        hidden: i >= DELAY_ROWS && !open,
-        testid: 'delay-row',
-        inner: cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), '', delayTrail(i18n, row.delay)),
-      });
-    })
-    .join('');
-  const folded = rows.length - DELAY_ROWS;
-  const more =
-    folded > 0
-      ? button({ action: 'toggle-delays', id: 't-fold-delays', label: open ? tr(i18n, 'collapse') : i18n.t('panels.moreRoutes', { count: folded }), className: 'btn-ghost t-action t-fold', expanded: open, controls: listId('delays') })
-      : '';
-  return `<section class="t-block" id="u-pokretu-delays" data-testid="transport-delays">${sectionHead(i18n.t('panels.delays'))}<ul class="t-list" id="${listId('delays')}">${items}</ul>${more}</section>`;
 }

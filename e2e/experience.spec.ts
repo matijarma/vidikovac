@@ -6,13 +6,13 @@ import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { DESKTOP_MIN_PX } from './lib';
 
 const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'];
-/** Sada's promise at 390×844: the city's now is on the first screen without a scroll. */
+/** The desk's pair (WP4 step 8): Sada's feed and Karta's map side by side, in this order. */
+const DESK_PAIR: readonly LayerId[] = ['grad-sada', 'u-pokretu'];
+/** Sada's promise at 390×844: the three departures at the chosen stop are on the first screen without a scroll, above the tab bar (WP4). */
 const SADA_FOLD_PX = 700;
-const SADA_TILES_IN_FOLD = 2;
-/** The band at FIXTURE_NOW (Friday 11 September 2026, 14:00 in Zagreb): its five columns and the h3 each head reads, time word then head text. */
-const COLUMNS_AT_FIXTURE_NOW = ['sada', 'danas', 'veceras', 'sutra', 'tjedan'];
-const HEADS_AT_FIXTURE_NOW = ['sada 14:00', 'poslijepodne do 18:00', 'večeras od 18:00', 'sutra sub 12. 9.', 'tjedan do čet 17. 9.'];
-if (FIXTURE_NOW.toISOString() !== '2026-09-11T12:00:00.000Z') throw new Error('HEADS_AT_FIXTURE_NOW pins the band at 2026-09-11T12:00Z; the fixture clock moved');
+const SADA_DEPARTURES_IN_FOLD = 3;
+/** Sada's rows at the chosen stop (the probe of brief §15.6); the fixture's board gives them at FIXTURE_NOW. */
+const SADA_DEPARTURES = '[data-testid=day-departures] > li.sada-departure';
 
 /**
  * The phone's tab when the domain has one; otherwise the directory (Još in the
@@ -21,14 +21,16 @@ if (FIXTURE_NOW.toISOString() !== '2026-09-11T12:00:00.000Z') throw new Error('H
  * selection, so the tab and the directory come first.
  */
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
+  // The desk pair (WP4 chunk E) shows Sada and Karta side by side inside .ki-desk: either is already on the page.
+  const shown = page.locator(`[data-testid="dash-view"] .layer[data-layer="${layer}"]`);
   const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
   if (await tab.count()) {
     await tab.click();
-  } else {
+  } else if (!(await shown.count())) {
     await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
     await page.locator(`[data-testid="dir-${layer}"], [data-action="nav"][data-layer="${layer}"]:visible`).first().click();
   }
-  await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
+  await expect(shown).toBeVisible();
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
@@ -40,32 +42,48 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await installExperienceFixture(page, snapshots);
       await page.goto(FIXTURE_DASHBOARD);
       await expect(page.getByTestId('session-label')).toBeVisible();
-      await expect(page.getByTestId('tb')).toBeVisible();
+      await expect(page.getByTestId('sada-place')).toBeVisible();
       for (const layer of LAYERS) {
         await openLayer(page, layer);
-        await expect(page.locator('[data-testid="dash-view"] > .layer')).toHaveCount(1);
+        // The desk is the phone, wider (WP4 step 8): Sada or Karta opens the .ki-desk pair, Sada then Karta and
+        // nothing else; every other domain, and every layer on the phone, is one workspace alone.
+        if (viewport.width >= DESKTOP_MIN_PX && DESK_PAIR.includes(layer)) {
+          const pair = page.locator('[data-testid="dash-view"] > .ki-desk > .layer');
+          await expect.poll(() => pair.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), { message: `the desk pair holds Sada and Karta when ${layer} is open` })
+            .toEqual([...DESK_PAIR]);
+          await expect(page.locator('[data-testid="dash-view"] > .layer'), 'no workspace stands outside the pair').toHaveCount(0);
+        } else {
+          await expect(page.locator('[data-testid="dash-view"] > .layer'), `${layer} is the one workspace`).toHaveCount(1);
+          await expect(page.locator('[data-testid="dash-view"] .ki-desk'), `no desk pair around ${layer}`).toHaveCount(0);
+        }
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width + 1);
         await expect(page.getByTestId('dash-view')).not.toContainText('[object Object]');
       }
       await expect(page.locator('canvas[data-testid="panorama"], [data-testid="meander-legend"]')).toHaveCount(0);
     });
 
-    test('overview has named local and upcoming regions, with explicit time filters and a readable clock', async ({ page }) => {
+    test('Sada reads the place, one sentence, the departures and U blizini in that order, with no time filters and no date line', async ({ page }) => {
       await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
-      await expect(page.getByTestId('tb')).toBeVisible();
-      const overview = await page.getByTestId('tb').evaluate((tb) => {
-        const regions = [...tb.querySelectorAll(':scope > section')];
+      await expect(page.getByTestId('sada-place')).toHaveText(/\S/);
+      await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
+      // Sada's own list: the desk pair shows Karta's beside it (chunk E), so the probe is scoped to the feed.
+      await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
+      const order = await page.locator('#layer-grad-sada').evaluate((sada) => {
+        const parts = ['sada-place', 'sada-sentence', 'day-departures', 'nearby'];
+        const nodes = parts.map((id) => sada.querySelector(`[data-testid="${id}"]`));
         return {
-          labels: regions.map(region => document.getElementById(region.getAttribute('aria-labelledby') ?? '')?.textContent),
-          filters: [...tb.querySelectorAll('[data-filter-key="tb-col"]')].map(button => button.getAttribute('data-filter-value')),
-          localBeforeAgenda: Boolean(regions[0]!.compareDocumentPosition(regions[1]!) & Node.DOCUMENT_POSITION_FOLLOWING),
+          missing: parts.filter((_, i) => !nodes[i]),
+          inOrder: nodes.every((node, i) => i === 0 || !node || !nodes[i - 1] || Boolean(nodes[i - 1]!.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)),
+          filters: sada.querySelectorAll('[data-filter-key="tb-col"]').length,
+          clock: sada.querySelectorAll('.day-clock, .day-date').length,
         };
       });
-      expect(overview.labels).toEqual(['Ovdje i sada', 'Što slijedi']);
-      expect(overview.filters).toEqual(COLUMNS_AT_FIXTURE_NOW);
-      expect(overview.localBeforeAgenda).toBe(true);
-      await expect(page.locator('.day-clock')).toHaveText('14:00');
+      expect(order.missing, 'the place, the sentence, the departures and U blizini are all on Sada').toEqual([]);
+      expect(order.inOrder, 'Sada reads place, sentence, departures, then U blizini (WP4 step 3)').toBe(true);
+      expect(order.filters, 'Sada has no time filters any more').toBe(0);
+      expect(order.clock, 'Sada has no date line or clock of its own [O-12]').toBe(0);
+      await expect(page.getByTestId('dash-view')).not.toContainText(/Ovdje i sada|Što slijedi|Sada u gradu/);
     });
 
     test('source outages never claim no warnings and retain usable navigation', async ({ page }) => {
@@ -81,16 +99,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.getByTestId('dash-view')).toContainText(/nedostup|nepozn|ne odgovar|potvrđen/);
     });
 
-    test('expiry freezes data but leaves safety and the renewal path available', async ({ page }) => {
+    test('expiry clears the content to the scan invitation and leaves safety and the renewal path available', async ({ page }) => {
       const fixture = await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
-      await expect(page.getByTestId('tb')).toBeVisible();
+      await expect(page.getByTestId('sada-place')).toBeVisible();
       fixture.expire();
-      await expect(page.getByTestId('frozen-line')).toBeVisible();
+      // The end of the ten minutes (WP4 step 11): the content is gone, the card holds the way to a new session and /hitno.
+      const ended = page.getByTestId('session-ended');
+      await expect(ended).toBeVisible();
+      await expect(page.getByTestId('sada-place')).toHaveCount(0);
+      await expect(page.locator('[data-testid=dash-view] .layer')).toHaveCount(0);
+      await expect(page.locator('[data-action=copy-item], [data-action=share-item], [data-action=export]')).toHaveCount(0);
       const requestsAfterExpiry = fixture.requests.length;
       await page.clock.runFor(31_000);
       expect(fixture.requests.length).toBe(requestsAfterExpiry);
-      await expect(page.getByTestId('frozen-line').locator('a')).toBeVisible();
+      await expect(ended.locator('a[href^="/s/"]')).toBeVisible();
+      await expect(ended.locator('a[href="/hitno"]')).toBeVisible();
       await page.locator('[data-layer=sigurnost][href="/hitno"]:visible').first().click();
       await expect(page).toHaveURL(/\/hitno\/?$/);
       await expect(page.locator('a[href="tel:112"]')).toBeVisible();
@@ -120,7 +144,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await page.goto(FIXTURE_DASHBOARD);
       await openLayer(page, 'u-pokretu');
       const map = page.getByTestId('map-canvas');
-      await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
+      // Drawing: ready, or tiles-failed where the local server has no basemap tiles (the overlays still draw).
+      await expect(map).toHaveAttribute('data-map-status', /^(ready|tiles-failed)$/, { timeout: 30_000 });
       const canvas = await map.locator('canvas').elementHandle();
       if (phone) {
         await page.locator('.t-sheet-toggle').click();
@@ -134,26 +159,28 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
         return { width: box.width, height: Math.min(box.y + box.height, sheet.y) - box.y, stage: box.height };
       };
       const before = await uncovered();
-      await page.locator('.t-map-menu > summary').click();
-      await page.getByTestId('map-full-toggle').click();
-      await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
+      // The phone lowers its sheet to the peek (the full-map button went with the map menu, WP4); the desk's chevron
+      // collapses the board into the page's map view.
+      await page.locator('.t-sheet-toggle').click();
+      if (phone) {
+        await page.locator('.t-sheet-toggle').click();
+        await expect(page.getByTestId('transport-workspace')).toHaveAttribute('data-sheet', 'peek');
+      } else {
+        await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
+      }
       if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 100);
       else await expect.poll(async () => (await uncovered()).width).toBeGreaterThanOrEqual(before.width + 300);
       expect(await canvas!.evaluate((el) => el === document.querySelector('[data-testid=map-canvas] canvas'))).toBe(true);
       await expect(page.getByTestId('session-label')).toBeVisible();
       if (phone) await expect(page.getByTestId('safety-shortcut')).toBeVisible();
       fixture.expire();
-      await expect(page.getByTestId('frozen-line')).toBeVisible();
-      await expect(page.getByTestId('frozen-line').locator('a')).toBeInViewport();
-      await page.keyboard.press('Escape');
+      // The end of the ten minutes (WP4 step 11): the map and its board leave with the content; the closing card's
+      // way to a new session is in view, the page's map view is over and the session chrome stays.
+      await expect(page.getByTestId('session-ended')).toBeVisible();
+      await expect(page.getByTestId('session-ended').locator('a[href^="/s/"]')).toBeInViewport();
+      await expect(page.getByTestId('transport-workspace')).toHaveCount(0);
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'layers');
-      // The frozen banner now sits in flow above the stage, so the stage is shorter than before; the sheet is
-      // back at half of it (half a stage is what "half" means), and the board column is back at its width.
-      await expect.poll(async () => {
-        const after = await uncovered();
-        if (!phone) return Math.abs(after.width - before.width);
-        return Math.abs(after.height - after.stage * 0.62);
-      }).toBeLessThanOrEqual(4);
+      await expect(page.getByTestId('session-label')).toBeVisible();
     });
   });
 }
@@ -162,28 +189,28 @@ test('phone overview gives the city the first viewport and passes accessibility 
   await page.setViewportSize({ width: 390, height: 844 });
   await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(FIXTURE_DASHBOARD);
-  await expect(page.getByTestId('tb')).toBeVisible();
-  await expect(page.getByTestId('tb-lane-sada'), 'the sada lane must have its data before the fold is measured').not.toHaveAttribute('aria-busy', 'true');
-  const tiles = page.locator('[data-testid="tb-lane-sada"] .tl:not([data-skeleton])');
+  await expect(page.getByTestId('sada-place')).toBeVisible();
+  await expect(page.getByTestId('day-departures'), 'the departures must have their board before the fold is measured').not.toHaveAttribute('aria-busy', 'true');
+  const rows = page.locator(SADA_DEPARTURES);
   await expect.poll(async () => {
-    const boxes = await tiles.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { top: number; bottom: number }));
+    const boxes = await rows.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { top: number; bottom: number }));
     return boxes.filter((box) => box.top < SADA_FOLD_PX && box.bottom > 0).length;
-  }, { message: `at least ${SADA_TILES_IN_FOLD} sada tiles must reach into the first ${SADA_FOLD_PX} px` }).toBeGreaterThanOrEqual(SADA_TILES_IN_FOLD);
+  }, { message: `at least ${SADA_DEPARTURES_IN_FOLD} departures (${SADA_DEPARTURES}) must reach into the first ${SADA_FOLD_PX} px` }).toBeGreaterThanOrEqual(SADA_DEPARTURES_IN_FOLD);
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([]);
 });
 
-test('text zoom retains both overview regions and every time filter without horizontal overflow', async ({ page }) => {
+test('text zoom keeps the place, the departures and U blizini without horizontal overflow', async ({ page }) => {
   const width = 1440;
   await page.setViewportSize({ width, height: 1000 });
   await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(FIXTURE_DASHBOARD);
-  await expect(page.getByTestId('tb')).toBeVisible();
+  await expect(page.getByTestId('sada-place')).toBeVisible();
   for (const zoom of [100, 125, 200]) {
     await page.addStyleTag({ content: `html { font-size: ${zoom}% !important; }` });
-    await expect(page.locator('.day-now')).toBeVisible();
-    await expect(page.locator('.day-ahead')).toBeVisible();
-    await expect(page.locator('.day-time')).toHaveCount(5);
+    await expect(page.getByTestId('sada-place')).toBeVisible();
+    await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
+    await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });
@@ -203,10 +230,15 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await page.goto(FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=0'));
   await openLayer(page, 'u-pokretu');
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
-  await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
+  await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stajališta rade i bez karte.');
   await page.getByTestId('transport-search').fill('Jela');
-  await expect(page.getByTestId('transport-results').getByRole('option').first()).toBeVisible();
-  await page.getByTestId('transport-search').press('ArrowDown');
+  const options = page.getByTestId('transport-results').getByRole('option');
+  await expect(options.first()).toBeVisible();
+  // One field over routes, stops, places and streets (WP4): the street stories of the Jelačić streets rank before the
+  // stops here, so the keyboard walks down to the first stop and takes it, the way a person would.
+  const stopIndex = await options.evaluateAll((els) => els.findIndex((el) => el.getAttribute('data-action') === 'select-stop'));
+  expect(stopIndex, 'a stop is among the results').toBeGreaterThanOrEqual(0);
+  for (let i = 0; i <= stopIndex; i++) await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');
   await expect(page.getByTestId('stop-title')).toContainText('Jela');
   await expect(page.getByTestId('stop-routes').locator('button').first()).toBeVisible();

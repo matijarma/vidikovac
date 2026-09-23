@@ -237,8 +237,10 @@ describe('names and addresses keep their house-number range at every wall render
     expect(renderedText(detail)).not.toContain('lozinku');
     expect(detail).not.toContain('<p></p>');
     expect(placeDetail(i18n, heritage(hostile, 'Petrinjska 50-52'), emptyCity(), [], false, true)).toBe('');
-    // The phone's detail keeps its own escape-only reading.
-    expect(renderedText(placeDetail(i18n, heritage('Kuće Eisner', hostile), emptyCity(), [], false, false))).toContain(hostile);
+    // The phone's detail vets its fields under their kinds too (WP4 review, lane P): the hostile address is blanked there as well.
+    const phone = renderedText(placeDetail(i18n, heritage('Kuće Eisner', hostile), emptyCity(), [], false, false));
+    expect(phone).toContain('Kuće Eisner');
+    expect(phone).not.toContain('lozinku');
   });
   it('vets the public street story name and settlement as names', () => {
     const street: StreetStory = { id: '1', name: 'Petrinjska ulica', settlement: 'Zagreb', settlementId: '1', description: 'Ulica prema Petrinji.', lon: 15.98, lat: 45.81 } as StreetStory;
@@ -249,7 +251,7 @@ describe('names and addresses keep their house-number range at every wall render
     expect(renderedText(streetDetail(i18n, { ...street, settlement: hostile }, true))).not.toContain('lozinku');
   });
   it('keeps the range in the essentials pharmacy and closure, the paired closures, venues and the presentation label', () => {
-    const label = strings.basics.pharmacy;
+    const label = strings.sentence.pharmacy.replace('{address}', 'Petrinjska 50-52');
     expect(renderedText(essentialsMarkup([{ id: 'pharmacy', label, value: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
     expect(renderedText(essentialsMarkup([{ id: 'closures', label, value: '1 zatvaranje', detail: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
     expect(essentialsMarkup([{ id: 'pharmacy', label, value: hostile }])).toBe('');

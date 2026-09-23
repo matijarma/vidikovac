@@ -141,7 +141,7 @@ for (const viewport of SIZES) {
       await page.emulateMedia({ colorScheme: scheme });
       await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
-      await expect(page.getByTestId('tb'), 'Sada must paint from the fixture').toBeVisible();
+      await expect(page.getByTestId('sada-place'), 'Sada must paint from the fixture').toBeVisible();
       await expect(page.getByTestId('session-label')).toBeVisible();
 
       for (const layer of LAYERS) {

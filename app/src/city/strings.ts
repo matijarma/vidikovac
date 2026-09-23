@@ -1,60 +1,41 @@
+// The city words live in the one catalogue (i18n/hr.json, en.json) under
+// `city.*`; this is the thin typed adapter over it, shaped like
+// transport/strings.ts. Callers address a word by its short name (`ct(i18n,
+// 'back')` reads city.back), picked by the page's locale, so a locale switch
+// re-renders the city surfaces in the other language like everything else.
+//
+// Callers hand in anything with `getLocale` (city/air.ts and the map pass a
+// plain `{ getLocale }`), so the word is read through an I18n of that locale
+// rather than the caller's `t`. Anything that is not English reads Croatian.
+import { catalogueLocale, createDefaultI18n, type SupportedLocale } from '../i18n/create-default-i18n';
+import hr from '../i18n/hr.json';
 import type { I18n } from '../i18n/i18n';
-const hr = {
-  map: 'Karta', city: 'Grad oko tebe', culture: 'Kultura', movement: 'Kretanje', useful: 'Korisna mjesta', heritage: 'Baština',
-  all: 'Živi grad', search: 'Mjesto, ulica, linija ili stajalište', layers: 'Što tražiš?', list: 'Mjesta u ovom području',
-  here: 'Pretraži do 5 km oko središta karte', locate: 'Moja lokacija', week: 'Idućih 7 dana', today: 'Danas', tomorrow: 'Sutra',
-  water: 'Voda', toilet: 'Javni WC', sport: 'Igrališta', dogs: 'Za pse', recycling: 'Recikliranje', market: 'Tržnice',
-  wifi: 'Wi-Fi', 'cycle-parking': 'Stalci za bicikle', garage: 'Garaže', charging: 'Punionice', rail: 'Vlak',
-  bikes: 'BAJS', air: 'Zrak', streets: 'Priče ulica', 'cycle-paths': 'Biciklističke staze',
-  program: 'Program ovog mjesta', ongoing: 'U tijeku', noProgram: 'U našim izvorima nema aktualnog programa.',
-  noResults: 'Nema rezultata u ovom području. Promijeni kategoriju ili pretraži naziv.', unavailable: 'Izvor nije dostupan. Sačuvani podaci imaju oznaku starosti.',
-  loading: 'Učitavamo mjesta…', source: 'Izvor', original: 'Izvornik', reference: 'Podatak iz registra, nije provjera uživo.',
-  saved: 'Spremljeno', save: 'Spremi mjesto', back: 'Natrag na mjesta', more: 'Prikaži više', onMap: 'Na karti',
-  noLocation: 'Lokacija nije potvrđena', matching: 'Poznata lokacija iz gradskog registra', multiVenue: 'Program na više lokacija',
-  events: 'događanja', venues: 'mjesta', available: 'bicikala', returns: 'mjesta za povrat', rent: 'Uzmi bicikl', return: 'Vrati bicikl',
-  inactive: 'Stanica nije raspoloživa', unknown: 'Nema podatka', observed: 'Podatak od', stale: 'Zastarjelo',
-  schedule: 'Po rasporedu', departures: 'Sljedeći polasci', noDepartures: 'Nema potvrđenog rasporeda za ovo razdoblje.',
-  scheduleNote: 'Vozni red, ne procjena dolaska. Kašnjenje linije ne mijenja ove satnice.',
-  whyStreet: 'Zašto se tako zove?', sourceLanguage: 'Izvorni tekst na hrvatskom', siteNote: 'Obuhvat zaštite, ne ulaz. Pristup javnosti nije potvrđen.',
-  start: 'Ovdje i sada', next: 'Što slijedi', conditions: 'Uvjeti u gradu', river: 'Sava', consultation: 'Nacionalna savjetovanja',
-  preview: 'Istraži grad', leave: 'Vrati pregled', legend: 'Broj na ljubičastoj oznaci: poznata događanja u odabranom razdoblju.',
-  network: 'Prijevoz i raspored', noMap: 'Ista mjesta u pristupačnom popisu', locationDenied: 'Lokacija nije dostupna. Odaberi kvart ili pomakni kartu.',
-  partial: 'Prikazan je dio podataka iz dostupnih izvora.', copy: 'Kopiraj s izvorom', copied: 'Kopirano', closed: 'Nije u funkciji prema registru',
-  freshUnknown: 'Trenutačno stanje nije potvrđeno', selected: 'Odabrano mjesto', cityLife: 'Život u kvartu', hour: 'Vrijeme opažanja',
-  allVenues:'Sva kulturna mjesta',activeVenues:'Mjesta s programom',rentMode:'Uzmi',returnMode:'Vrati',cluster:'Skup mjesta',
-  publicProgram:'Poznati program iz naših izvora',copyFailed:'Kopiranje nije uspjelo. Označi i kopiraj tekst.',
-  notFound:'Ovaj zapis nije dostupan u učitanom katalogu.',streetBrowse:'Nazivi i opisi iz gradskog registra. Pretraži naziv ili osobu; naselje razlikuje istoimene ulice.',
-  fetched:'Dohvaćeno',noConsultations:'U dostupnom izvoru nema otvorenih savjetovanja.',
-};
-const en: Record<keyof typeof hr,string> = {
-  map:'Map',city:'The city around you',culture:'Culture',movement:'Getting around',useful:'Useful places',heritage:'Heritage',
-  all:'Living city',search:'Place, street, route or stop',layers:'What do you need?',list:'Places in this area',here:'Search within 5 km of map centre',locate:'My location',
-  week:'Next 7 days',today:'Today',tomorrow:'Tomorrow',water:'Water',toilet:'Public toilets',sport:'Sports courts',dogs:'Dog areas',recycling:'Recycling',market:'Markets',
-  wifi:'Wi-Fi','cycle-parking':'Bicycle parking',garage:'Garages',charging:'Charging',rail:'Rail',bikes:'BAJS',air:'Air',streets:'Street stories','cycle-paths':'Cycle paths',
-  program:'At this venue',ongoing:'Ongoing',noProgram:'No current program is available from our sources.',noResults:'No results in this area. Change category or search by name.',
-  unavailable:'Source unavailable. Saved information is marked with its age.',loading:'Loading places…',source:'Source',original:'Original source',reference:'Published inventory, not a live check.',
-  saved:'Saved',save:'Save place',back:'Back to places',more:'Show more',onMap:'On the map',noLocation:'Location not confirmed',matching:'Location from the city register',multiVenue:'Program at multiple venues',
-  events:'events',venues:'places',available:'bikes',returns:'return spaces',rent:'Rent a bike',return:'Return a bike',inactive:'Station unavailable',unknown:'No data',observed:'Observed',stale:'Out of date',
-  schedule:'Scheduled',departures:'Next departures',noDepartures:'No confirmed timetable for this period.',scheduleNote:'Timetable, not an arrival prediction. Route delays do not alter these times.',
-  whyStreet:'Why this name?',sourceLanguage:'Original text in Croatian',siteNote:'Protected area, not an entrance. Public access is not confirmed.',start:'Here and now',next:'What comes next',
-  conditions:'City conditions',river:'Sava',consultation:'National consultations',preview:'Explore the city',leave:'Return to overview',
-  legend:'Number on a purple marker: known events in the selected period.',network:'Transport and timetable',noMap:'The same places in an accessible list',
-  locationDenied:'Location unavailable. Choose a district or move the map.',partial:'Showing part of the information from available sources.',copy:'Copy with source',copied:'Copied',
-  closed:'Not working according to the register',freshUnknown:'Current status not confirmed',selected:'Selected place',cityLife:'Neighborhood life',hour:'Observation time',
-  allVenues:'All cultural places',activeVenues:'Venues with programs',rentMode:'Rent',returnMode:'Return',cluster:'Place cluster',
-  publicProgram:'Known programs from our sources',copyFailed:'Copy failed. Select and copy the text.',
-  notFound:'This record is not available in the loaded catalogue.',streetBrowse:'Names and descriptions from the city register. Search a street or person; the settlement distinguishes streets with the same name.',
-  fetched:'Fetched',noConsultations:'No open consultations in the available source.',
-};
-export type CityWord = keyof typeof hr;
-export const ct = (i18n: Pick<I18n,'getLocale'>, key: CityWord): string => i18n.getLocale().startsWith('en') ? en[key] : hr[key];
 
-/** A numeric availability and its noun, on the wall and the phone alike. */
-export function bikeCount(i18n: Pick<I18n,'getLocale'>, value: unknown): string {
-  const n=typeof value==='number'?value:Number.NaN;
-  const english=i18n.getLocale().startsWith('en');
-  const label=english?(n===1?'bike':'bikes'):
-    n%10===1&&n%100!==11?'bicikl':
-    n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'bicikla':'bicikala';
-  return `${Number.isFinite(n)?n:'?'} ${label}`;
+type CityKey = keyof typeof hr.city;
+/** A word of `city.*`; the plural forms are read by their base (bikeCount), never one by one. */
+export type CityWord = Exclude<CityKey, `${string}_${'one' | 'few' | 'other'}`>;
+
+const BY_LOCALE = new Map<SupportedLocale, I18n>();
+
+function catalogue(locale: string): I18n {
+  const code = catalogueLocale(locale);
+  let i18n = BY_LOCALE.get(code);
+  if (!i18n) {
+    i18n = createDefaultI18n(code);
+    BY_LOCALE.set(code, i18n);
+  }
+  return i18n;
+}
+
+/** A city word in the page's locale, with `{var}` interpolation. */
+export function ct(i18n: Pick<I18n, 'getLocale'>, key: CityWord, vars?: Record<string, string | number>): string {
+  return catalogue(i18n.getLocale()).t(`city.${key}`, vars);
+}
+
+/** A numeric availability and its noun, on the wall and the phone alike: "5 bicikala", "1 bike".
+ *  A count the source did not state is a dash and the noun (city.bikeCountUnknown), never "?". */
+export function bikeCount(i18n: Pick<I18n, 'getLocale'>, value: unknown): string {
+  const count = typeof value === 'number' ? value : Number.NaN;
+  if (!Number.isFinite(count)) return ct(i18n, 'bikeCountUnknown');
+  return catalogue(i18n.getLocale()).t('city.bikeCount', { count });
 }

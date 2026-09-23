@@ -461,6 +461,7 @@ export interface CensusMap {
   getLayer?(id: string): unknown;
   getZoom(): number;
   isMoving?(): boolean;
+  isSourceLoaded?(id: string): boolean;
   project?(lonLat: [number, number]): { x: number; y: number };
   queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): RenderedFeature[];
   setFeatureState?(feature: { source: string; id: string }, state: Record<string, unknown>): void;
@@ -474,6 +475,8 @@ export interface RenderCensusHost {
   /** The map's container: its box, and the probe attributes the census writes on it. */
   readonly container: HTMLElement;
   now(): number;
+  setTimer?(fn: () => void, ms: number): unknown;
+  clearTimer?(timer: unknown): void;
   /** Whether the overlays sit on the style of this map: nothing is read before, or after destroy. */
   styled(): boolean;
   /** The key a census is taken once for: zoom, selection, "has any marks", evidence version. */
@@ -500,6 +503,7 @@ export interface RenderCensus {
   settled(): void;
   /** A `render`: one look at the public screen's names, at most every NAME_TICK_MS. */
   nameTick(): void;
+  destroy(): void;
 }
 
 /** The render census of one drawn map `m` (city-map.ts's probe comment): the
@@ -511,18 +515,37 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
   /** The key a still frame first saw untaken, and when: settled()'s clock. */
   let settlingKey = '';
   let settlingSince = 0;
+  let settleTimer: unknown = null;
+  const schedule = host.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const cancel = host.clearTimer ?? ((timer: unknown) => clearTimeout(timer as ReturnType<typeof setTimeout>));
+  const cancelSettle = (): void => {
+    if (settleTimer !== null) cancel(settleTimer);
+    settleTimer = null;
+  };
+  // Source data handed to the worker is not rendered data. In particular,
+  // an empty cold-start city layer must not certify data-markers="0".
+  const cityReady = (): boolean => !m.isSourceLoaded || host.cityOverlays().every(layer =>
+    typeof layer.source !== 'string' || m.isSourceLoaded!(layer.source));
 
   /** The fallback for a map that never idles (city-map.ts's probe comment):
    *  on a `render` with the camera still, a key not yet taken is timed, and
    *  taken once it has stood for PROBE_SETTLE_MS. A key already taken costs
    *  one string per frame and nothing else. */
   function settled(): void {
-    if (!host.styled() || m.isMoving?.()) return;
+    if (!host.styled() || m.isMoving?.() || !cityReady()) {
+      settlingKey = '';
+      cancelSettle();
+      return;
+    }
     const key = host.key();
     if (key === renderProbeKey) return;
     if (key !== settlingKey) {
       settlingKey = key;
       settlingSince = host.now();
+      cancelSettle();
+      // A held outage map may draw no further frame once its sources land.
+      // Read that still frame after the same settling window, not a later poll.
+      settleTimer = schedule(() => { cancelSettle(); settled(); }, PROBE_SETTLE_MS);
       return;
     }
     if (host.now() - settlingSince >= PROBE_SETTLE_MS) idle();
@@ -530,10 +553,12 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
 
   /** The census on MapLibre's `idle`: the vehicle attributes, then the marker census. */
   function idle(): void {
-    if (!host.styled()) return;
+    if (!host.styled() || m.isMoving?.() || !cityReady()) return;
     const key = host.key();
     if (key === renderProbeKey) return;
+    cancelSettle();
     renderProbeKey = key;
+    host.container.dataset.zoom = m.getZoom().toFixed(2);
     // Asking MapLibre about a layer the style does not carry fires an error
     // event, which city-map.ts onMapError logs as a bug; its placedNames()
     // guards the same way.
@@ -686,5 +711,5 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
     if (result.held) host.hold(result.held);
   }
 
-  return { idle, settled, nameTick };
+  return { idle, settled, nameTick, destroy: cancelSettle };
 }

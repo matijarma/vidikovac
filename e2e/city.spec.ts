@@ -24,12 +24,11 @@ for(const light of [false,true])test(`city discovery: accessible venue, event, h
   await expect(page.getByTestId('street-story')).toContainText('Opis imena iz izvornog registra.');
   await search.fill('Povijesna');await page.locator('[data-action=select-place]').first().click();
   await expect(page.getByTestId('city-detail')).toContainText('Obuhvat zaštite, ne ulaz');
-  await page.locator('.city-filter-disclosure > summary').click();
-  await page.locator('[data-action=city-group][data-group=transport]').click();
-  await page.locator('[data-action=city-category][data-category=bikes]').click();
-  await page.locator('[data-action=bike-mode][data-mode=return]').click();
-  await expect(page.locator('[data-id=bajs-test-bike] .city-row-value')).toContainText('0');
-  await expect(page.locator('[data-id=bajs-test-bike] .city-row-value')).toContainText('mjesta za povrat');
+  // Bikes are a search, not a group or a category (WP4): the station's detail says what it lends and what it takes back.
+  await search.fill('BAJS');await page.locator('[data-action=select-place][data-id=bajs-test-bike]').click();
+  await expect(page.getByTestId('city-detail')).toContainText('BAJS Trg');
+  await expect(page.getByTestId('city-detail').locator('.city-bike-count')).toHaveText(['4','0']);
+  await expect(page.getByTestId('city-detail')).toContainText('mjesta za povrat');
   const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations;
   expect(violations.filter(v=>v.impact==='serious'||v.impact==='critical').map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
@@ -42,7 +41,7 @@ test('a saved city selection survives refresh and is presented only explicitly',
   const session=await installExperienceFixture(page,snapshots);await installCityFixture(page);
   await page.route('**/maps/**',route=>fulfillPublicMap(route));
   await page.goto(FIXTURE_DASHBOARD);
-  await page.locator('.ki-domains [data-layer=u-pokretu]').click();
+  // No domain bar at the desk (WP4): Karta stands beside Sada on the page, its search field in the first view.
   await page.getByTestId('transport-search').fill('Gavella');await page.locator('[data-action=select-place]').first().click();
   await page.locator('[data-action=city-save]').click();
   await expect(page.locator('[data-action=city-save]')).toHaveText('Spremljeno');

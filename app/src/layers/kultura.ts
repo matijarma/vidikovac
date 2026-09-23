@@ -194,11 +194,24 @@ function sentence(text: string): string {
   return text.charAt(0).toLocaleUpperCase('hr') + text.slice(1);
 }
 
-/** The 3.5rem time column: the start time, or the all-day word for a day-precision entry. */
-function timeCell(i18n: I18n, item: FeedItem): string {
-  const inner = isAllDay(item)
-    ? `<span class="ev-allday">${escapeHtml(i18n.t('time.allDay'))}</span>`
-    : `<span class="ev-time">${escapeHtml(zagrebTime(item.at))}</span>`;
+/** A start whose end falls on another Zagreb day than its start: an exhibition, a fair, a range of days. */
+function runsOn(item: FeedItem): boolean {
+  const untilKey = item.until ? zagrebDayKey(item.until) : '';
+  return untilKey !== '' && untilKey !== zagrebDayKey(item.at);
+}
+
+/**
+ * The 3.5rem time column: the start time; for an all-day entry the all-day
+ * word, or "do 25. 9." when it runs on for days, never "cijeli dan" for a
+ * multi-day item [O-53]. The day and the month stay on one line, so the
+ * narrow column breaks after "do".
+ */
+function timeCell(i18n: I18n, item: FeedItem, now: number): string {
+  const inner = !isAllDay(item)
+    ? `<span class="ev-time">${escapeHtml(zagrebTime(item.at))}</span>`
+    : runsOn(item)
+      ? `<span class="ev-allday">${escapeHtml(i18n.t('events.untilDate', { date: dayMonth(item.until, now).replace(' ', '\u00a0') }))}</span>`
+      : `<span class="ev-allday">${escapeHtml(i18n.t('time.allDay'))}</span>`;
   return `<span class="row-lead ev-lead">${inner}</span>`;
 }
 
@@ -217,11 +230,10 @@ function untilText(i18n: I18n, item: FeedItem, now: number): string {
   return i18n.t('events.untilDate', { date: dayMonth(item.until, now) });
 }
 
-/** An agenda row: the time column, the title, the venue or the source; a start that runs on for days says until when. */
+/** An agenda row: the time column, the title, the venue or the source; a start that runs on for days says until when, once (an all-day one in its time column). */
 function eventRow(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
-  const untilKey = item.until ? zagrebDayKey(item.until) : '';
-  const multiDay = untilKey !== '' && untilKey !== zagrebDayKey(item.at);
-  const body = `${timeCell(i18n, item)}<span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span>${subLine(i18n, item, multiDay ? untilText(i18n, item, ctx.now) : '')}</span>`;
+  const until = runsOn(item) && !isAllDay(item) ? untilText(i18n, item, ctx.now) : '';
+  const body = `${timeCell(i18n, item, ctx.now)}<span class="row-main"><span class="row-title">${escapeHtml(item.title)}</span>${subLine(i18n, item, until)}</span>`;
   return itemRow(item, body, { selected: isSelected(item, ctx.view?.selection), testid: 'event-row' });
 }
 
@@ -363,4 +375,19 @@ ${toolbar}
 ${listDetail(i18n, { list, detail, detailTitle: i18n.t('events.detailTitle') })}
 ${notes}${attributionFoot(i18n, dogadanja)}
 </section>`);
+}
+
+/**
+ * The page's own count line as numbers, for Još's "Događanja ovaj tjedan" row
+ * [O-53, O-60]: the same deduplicated Zagreb subset renderKultura lists, the
+ * starts of the default seven-day window (today and the six days after) and
+ * what is running now. No filter applies: the row counts the page as it opens.
+ */
+export function eventsCount(snapshot: ModuleSnapshot | undefined, city: { places: Parameters<typeof deduplicateEvents>[1] } | null | undefined, now: number): { count: number; ongoing: number } {
+  const inZagreb = deduplicateEvents(cultureEvents(snapshot), city?.places ?? []).filter((item) => !venueOutsideZagreb(item));
+  const count = upcomingEvents(inZagreb, now).filter((item) => {
+    const offset = dayOffset(zagrebDayKey(item.at), zagrebDayKey(now));
+    return offset !== null && offset >= 0 && offset < 7;
+  }).length;
+  return { count, ongoing: ongoingEvents(inZagreb, now).length };
 }

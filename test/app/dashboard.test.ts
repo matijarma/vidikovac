@@ -2,10 +2,11 @@
 // The /d/ shell on the real core stores: navigation, session states, polling
 // aligned to the feed, reconciliation that keeps focus and typed text, the
 // session sheet, sharing, expiry and exports. Every browser global is injected.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
 import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
@@ -14,6 +15,7 @@ import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
 import { createCityMap, type CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
+import { loadSadaFeed } from '../../app/src/city/feed';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 import { fakeCityStore } from '../city/fake-store';
@@ -135,13 +137,16 @@ function click(root: Root, selector: string): HTMLElement {
 }
 /** Opens a domain the tab bar does not carry, the way a reader does: Još, then its directory row. */
 function openViaMore(root: Root, layer: LayerId): void {
-  const primary = root.querySelector<HTMLElement>(`.ki-tabs [data-layer="${layer}"], .ki-domains [data-layer="${layer}"]`);
+  const primary = root.querySelector<HTMLElement>(`.ki-tabs [data-layer="${layer}"]`);
   if (primary) { primary.click(); return; }
   click(root, '[data-testid=tab-more]');
   click(root, `[data-testid=dir-${layer}]`);
 }
 
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
+// Sada's list and sentence load as one chunk after the first paint (city/feed.ts); in hand before any mount,
+// so every draw here is the finished one and no late repaint lands inside another test.
+beforeAll(async () => { expect(await loadSadaFeed()).not.toBeNull(); });
 
 it('reconciles an open phone Karta and refreshes the shared network loader after a graph change', async () => {
   const oldNet = decodeNetwork(graphBefore);
@@ -199,14 +204,50 @@ describe('parseSessionHash', () => {
     expect(parseSessionHash('#nothing')).toBeNull();
   });
 });
+describe('the stop catalogue failing (WP4)', () => {
+  const TRG = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11'] };
+  it('says once that the timetable is unavailable, in one row that is not busy, and asks again at most three times', async () => {
+    const load = vi.mocked((await import('../../app/src/core/screens')).loadStops);
+    load.mockClear();
+    load.mockImplementation(async () => { throw new Error('stops-unavailable'); });
+    try {
+      const { root, session, tick } = mount();
+      session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+      await flush();
+      const list = root.querySelector('[data-testid=day-departures]')!;
+      expect(list.hasAttribute('aria-busy')).toBe(false);
+      expect(text(list)).toBe('Vozni red trenutačno nije dostupan.');
+      for (let i = 0; i < 5; i += 1) { tick(); await flush(); }
+      expect(load).toHaveBeenCalledTimes(3);
+      expect(root.querySelector('[data-testid=day-departures]')?.hasAttribute('aria-busy')).toBe(false);
+    } finally {
+      load.mockImplementation(async () => []);
+    }
+  });
+  it('a retry that answers boards Trg bana J. Jelačića again', async () => {
+    const load = vi.mocked((await import('../../app/src/core/screens')).loadStops);
+    load.mockClear();
+    load.mockImplementationOnce(async () => { throw new Error('stops-unavailable'); }).mockImplementationOnce(async () => [TRG]);
+    const { root, session, tick } = mount();
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+    // The draw after the failure asks again; the second answer lands.
+    for (let i = 0; i < 3; i += 1) { tick(); await flush(); }
+    expect(load).toHaveBeenCalledTimes(2);
+    const section = root.querySelector('section.sada-departures')!;
+    expect(section.getAttribute('aria-label')).toBe('Sljedeći polasci, Trg bana J. Jelačića');
+    expect(text(section)).not.toContain('nije dostupan');
+  });
+});
 describe('shell and navigation', () => {
-  it('renders the wordmark, one session element, the safety shortcut and four phone tabs; no kvart select, no sidebar, no canvas', () => {
+  it('renders the wordmark, one session element, the safety shortcut and three phone tabs Sada · Karta · Još; no kvart select, no sidebar, no canvas', () => {
     const { root } = mount();
     expect(text(root.querySelector('.ki-wordmark'))).toBe('Kaj ima?');
     expect(root.querySelectorAll('[data-testid=session-label]')).toHaveLength(1);
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('data-layer')).toBe('sigurnost');
-    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Karta', 'Događanja', 'Još']);
-    expect(root.querySelector('.ki-tabs [data-layer=kultura]')).not.toBeNull();
+    expect([...root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Sada', 'Karta', 'Još']);
+    // Događanja is a Još row now [O-51], never a tab.
+    expect(root.querySelector('.ki-tabs [data-layer=kultura]')).toBeNull();
+    expect(root.querySelector('[data-testid=tab-more]')).not.toBeNull();
     expect(root.querySelectorAll('.ki-side-link')).toHaveLength(0);
     expect(root.querySelector('[data-testid=kvart-select]')).toBeNull();
     expect(root.querySelector('main#ki-main')).not.toBeNull();
@@ -222,6 +263,9 @@ describe('shell and navigation', () => {
     openViaMore(root, 'kultura');
     expect(text(title)).toBe('Kaj ima? · Događanja');
     expect(document.title).toBe('Kaj ima? · Događanja');
+    // One word for the map everywhere: the tab, the title and the kiosk pill say Karta (layers.u-pokretu).
+    click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
+    expect(document.title).toBe('Kaj ima? · Karta');
   });
   it('opens a domain from the tab bar: the workspace swaps, the tab is current, and the room is told nothing (D5: casting is explicit)', () => {
     const { root, session } = mount();
@@ -233,13 +277,20 @@ describe('shell and navigation', () => {
     expect(root.querySelector('.ki-tabs [data-layer=u-pokretu]')?.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('.ki-tabs [data-layer=grad-sada]')?.getAttribute('aria-current')).toBe('false');
   });
-  it('Još opens the labelled directory of the four extra domains, Događanja third, and names the open one on its tab', () => {
+  it('Još opens the labelled directory: Spremljeno, then the week’s agenda with its count line, Vrijeme, Grad and Sigurnost, then the settings; it names the open domain on its tab', async () => {
     const { root, session } = mount();
     session.join();
     click(root, '[data-testid=tab-more]');
+    await flush();
     expect(root.querySelector('#layer-directory')).not.toBeNull();
     expect(text(root.querySelector('#layer-directory'))).not.toContain('Ostale domene');
-    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['zrak-i-nebo', 'sigurnost', 'uprava-i-pravo']);
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
+    expect([...root.querySelectorAll('#layer-directory h3')].map((h) => text(h))).toEqual(['Spremljeno', 'Odredišta', 'Osobne postavke']);
+    expect(text(root.querySelector('[data-testid=saved-section] .city-meta'))).toBe('Spremi liniju, stajalište ili mjesto na karti. Ovdje ih možeš ponovno otvoriti na ovom uređaju.');
+    // The fixture's two dated events fall inside the page's seven-day window; nothing is running.
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-title'))).toBe('Događanja ovaj tjedan');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('2 događanja');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toMatch(/događanj/);
     expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('true');
     expect(text(root.querySelector('[data-testid=dir-session] .row-title'))).toBe('Otključano do 14:42');
     click(root, '[data-testid=dir-session]');
@@ -299,7 +350,7 @@ describe('session states', () => {
     const { root, session } = mount();
     session.join();
     session.expiring(60);
-    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta. Ono što gledaš ostaje na zaslonu i nakon isteka.');
+    expect(text(root.querySelector('[data-testid=announce-polite]'))).toBe('Još minuta.');
     session.expiring(20);
     const alert = root.querySelector('[data-testid=announce-assertive]')!;
     expect(alert.getAttribute('role')).toBe('alert');
@@ -312,7 +363,7 @@ describe('session states', () => {
     const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
     expect(sheet).not.toBeNull();
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
-    click(sheet, '[data-testid=share-city]');
+    click(sheet, '[data-testid=share-city-sheet]');
     expect(scanner.session.client.share).toHaveBeenCalledTimes(1);
     click(scanner.root, '[data-testid=session-label]');
     click(sheet, '[data-testid=toggle-refresh]');
@@ -330,13 +381,65 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Unlocked until 14:42');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Show the countdown');
     expect(text(scanner.root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Now');
-    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Map', 'Events', 'More']);
+    expect([...scanner.root.querySelectorAll('.ki-tabs .ki-tab')].map((t) => text(t))).toEqual(['Now', 'Map', 'More']);
+    expect(text(scanner.root.querySelector('[data-testid=share-city]'))).toBe('Share the city');
     scanner.handle.destroy();
 
     const peer = mount();
     peer.session.join('phone');
     click(peer.root, '[data-testid=session-label]');
-    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
+    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toBeNull();
+  });
+  it('the header share button "Podijeli grad" stands beside the session pill for the scanner, labelled, and asks the room for the code in one tap [O-61]', () => {
+    const { root, session } = mount();
+    expect(root.querySelector('[data-testid=share-city]'), 'nothing to share before the join').toBeNull();
+    session.join();
+    const share = root.querySelector<HTMLButtonElement>('[data-testid=status-line] [data-testid=share-city]')!;
+    expect(share).not.toBeNull();
+    expect(share.tagName).toBe('BUTTON');
+    expect(share.dataset.action).toBe('share-city');
+    expect(share.dataset.key).toBe('share');
+    expect(text(share)).toBe('Podijeli grad');
+    expect(share.getAttribute('aria-label')).toBe('Podijeli grad');
+    expect(share.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(share.querySelector('svg use')?.getAttribute('href')).toBe('#icon-share-2');
+    // Beside the pill: the share button is the session element's previous sibling.
+    expect(share.nextElementSibling?.getAttribute('data-testid')).toBe('session-label');
+    share.click();
+    expect(session.client.share).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-testid=session-sheet]'), 'the header button opens no sheet on the way').toBeNull();
+    // The sheet's own row has its own probe, so one test id never names two controls.
+    click(root, '[data-testid=session-label]');
+    expect(document.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toHaveLength(1);
+  });
+  it('the header share button is absent for a peer, after a share refusal and after the freeze, and present at the desk', () => {
+    const peer = mount();
+    peer.session.join('phone');
+    expect(peer.root.querySelector('[data-testid=share-city]')).toBeNull();
+    peer.handle.destroy();
+    const refused = mount();
+    refused.session.join();
+    expect(refused.root.querySelector('[data-testid=share-city]')).not.toBeNull();
+    refused.session.error('share-not-allowed');
+    expect(refused.root.querySelector('[data-testid=share-city]')).toBeNull();
+    refused.handle.destroy();
+    const frozen = mount();
+    frozen.session.join();
+    frozen.session.expire();
+    expect(frozen.root.querySelector('[data-testid=share-city]')).toBeNull();
+    frozen.handle.destroy();
+    const desk = mount({ wide: true });
+    desk.session.join();
+    expect(text(desk.root.querySelector('[data-testid=status-line] [data-testid=share-city]'))).toBe('Podijeli grad');
+    desk.handle.destroy();
+  });
+  it('without the screen label (a reload of an older tab) the pill names the screen’s stop, never the bare word "zaslon" (T5)', () => {
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6'] };
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop });
+    expect(text(root.querySelector('[data-testid=session-label]'))).toContain('Otključano · Trg bana J. Jelačića · do 14:42');
+    expect(text(root.querySelector('[data-testid=session-label]'))).not.toContain('zaslon');
   });
   it('the sheet is a bottom sheet in plain words: unlocked until, the remaining time, the screen and its stop, the devices, 48 px action rows, the theme words read from the catalogue in preference order, and the four pages', () => {
     const stop = { id: 's1', name: 'Trg bana J. Jelačića', lon: 15.98, lat: 45.81, routes: ['6', '11'] };
@@ -349,16 +452,16 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
     const body = text(sheet.querySelector('.dialog-body'));
-    expect(body).toContain('Sa zaslona Kavana Velebit, stanica Trg bana J. Jelačića.');
+    expect(body).toContain('Sa zaslona Kavana Velebit, stajalište Trg bana J. Jelačića.');
     expect(body).toContain('Na ovom pogledu su 2 uređaja.');
     expect(body).not.toMatch(/stanje sesije/i);
     expect(body).not.toContain('skenirano sa zaslona');
     expect(body).not.toContain('Sesija i postavke');
     expect(body).not.toContain('Vrijedi do');
-    for (const testid of ['share-city', 'toggle-refresh', 'toggle-countdown', 'refresh-now']) {
+    for (const testid of ['share-city-sheet', 'toggle-refresh', 'toggle-countdown', 'refresh-now']) {
       expect(sheet.querySelector(`[data-testid=${testid}]`)?.classList.contains('sheet-btn'), testid).toBe(true);
     }
-    expect(text(sheet.querySelector('[data-testid=share-city]'))).toBe('Podijeli grad Pet minuta za osobu pokraj tebe, jednom.');
+    expect(text(sheet.querySelector('[data-testid=share-city-sheet]'))).toBe('Podijeli grad Pet minuta za osobu pokraj tebe, jednom.');
     expect(text(sheet.querySelector('[data-testid=toggle-refresh]'))).toBe('Zaustavi osvježavanje');
     expect(text(sheet.querySelector('[data-testid=toggle-countdown]'))).toBe('Sakrij odbrojavanje');
     expect(text(sheet.querySelector('[data-testid=refresh-now]'))).toBe('Osvježi sada');
@@ -483,7 +586,7 @@ describe('session states', () => {
     session.error('share-not-allowed');
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('Ova je sesija dobivena od druge osobe i ne može se dalje dijeliti.');
     click(root, '[data-testid=session-label]');
-    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city]')).toBeNull();
+    expect(document.querySelector('[data-testid=session-sheet] [data-testid=share-city-sheet]')).toBeNull();
   });
 });
 describe('polling on the feed store', () => {
@@ -493,8 +596,11 @@ describe('polling on the feed store', () => {
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'prometnice', 'zet-rt']);
     expect(fetchData.mock.calls[0]![1]).toBe('dt1');
+    // Kultura is a Još row now: the directory's own refresh is cleared away, the row's switch is what is measured.
+    click(root, '[data-testid=tab-more]');
+    await flush();
     fetchData.mockClear();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    click(root, '[data-testid=dir-kultura]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja']);
     fetchData.mockClear();
@@ -601,22 +707,30 @@ describe('reconciliation across polls', () => {
 describe('failure and recovery', () => {
   it('keeps the last good data marked stale when a module fails, and a failed module offers a retry that fetches again', async () => {
     let failNow = false;
-    const { root, session, fetchData, tick } = mount({ snapshot: (module) => {
+    const { root, session, fetchData, tick, handle } = mount({ snapshot: (module) => {
       if (module === 'glasnik') throw new Error('down');
       if (failNow && module === 'dhmz-now') throw new Error('boom');
       return snapshotOf(module);
     } });
     session.join();
     await flush();
-    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
-    expect(root.querySelector('.day-more [data-action=retry][data-module=glasnik]')).not.toBeNull();
+    // Sada says one sentence and names no source's trouble: the retry lives with the module's own page.
+    const sentence = text(root.querySelector('[data-testid=sada-sentence][data-kicker]'));
+    expect(sentence).not.toBe('');
+    expect(root.querySelector('#layer-grad-sada [data-action=retry]')).toBeNull();
     failNow = true;
     tick();
     await flush();
-    expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
-    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
+    // The weather failed after a good answer: Sada keeps its sentence, Vrijeme keeps 21 °C marked stale.
+    expect(text(root.querySelector('[data-testid=sada-sentence][data-kicker]'))).toBe(sentence);
+    handle.selectLayer('zrak-i-nebo');
+    await flush();
+    expect(root.querySelector('#layer-zrak-i-nebo [data-testid=panel-status][data-status=stale]')).not.toBeNull();
+    expect(text(root.querySelector('#layer-zrak-i-nebo'))).toContain('21 °C');
+    handle.selectLayer('uprava-i-pravo');
+    await flush();
     fetchData.mockClear();
-    click(root, '.day-more [data-action=retry][data-module=glasnik]');
+    click(root, '#layer-uprava-i-pravo [data-action=retry][data-module=glasnik]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['glasnik']);
   });
@@ -648,7 +762,9 @@ describe('failure and recovery', () => {
     expect(root.querySelector('.ki-banners a[href="/s/"]')).not.toBeNull();
     handle.destroy();
   });
-  it('the end of the session freezes the view: the closing line and the way to a new session, no fetches, navigation off, exports on', async () => {
+  // WP4 step 11, [O-59], [O-62]: the end of the ten minutes clears the content. What remains is the invitation to
+  // scan again and the way to /hitno; no snapshot line, no export, no fetch, navigation off.
+  it('the end of the session clears the content to the scan invitation: the way to a new session and to /hitno, no fetches, navigation off, no exports', async () => {
     const onItemCopy = vi.fn();
     const { root, session, fetchData, tick, ticks } = mount({ deps: { onItemCopy } });
     session.join();
@@ -656,22 +772,31 @@ describe('failure and recovery', () => {
     openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
+    expect(root.querySelector('[data-action=copy-item]')).not.toBeNull();
     fetchData.mockClear();
     session.expire();
-    const frozen = root.querySelector<HTMLElement>('[data-testid=frozen-line]')!;
-    expect(text(frozen)).toContain('Sesija je završila. Prikaz je zamrznut.');
-    expect(frozen.querySelector('a[href="/s/"]')).not.toBeNull();
-    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+    const ended = root.querySelector<HTMLElement>('[data-testid=session-ended]')!;
+    expect(ended).not.toBeNull();
+    expect(text(ended)).toContain(hr.session.expired);
+    expect(ended.querySelector('a[href^="/s/"]')).not.toBeNull();
+    expect(ended.querySelector('a[href="/hitno"]')).not.toBeNull();
+    // The content is gone with its exports and its date line; the retired probes are absent.
+    expect(root.querySelector('#layer-kultura')).toBeNull();
+    expect(root.querySelector('[data-testid=dash-view] .layer')).toBeNull();
+    expect(root.querySelector('[data-action=copy-item], [data-action=share-item], [data-action=export], [data-action=ics-item], [data-action=print-item]')).toBeNull();
+    expect(root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe(hr.session.frozenBadge);
     tick();
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
     expect(ticks.every((t) => t.cleared)).toBe(true);
     click(root, '.ki-tabs [data-action=nav][data-layer=u-pokretu]');
-    expect(root.querySelector('#layer-kultura')).not.toBeNull();
-    click(root, '[data-action=copy-item]');
-    expect(onItemCopy).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('#layer-u-pokretu')).toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).toBe(ended);
+    expect(onItemCopy).not.toHaveBeenCalled();
   });
-  it('freezes on the clock alone when the socket died and no expired frame arrives', async () => {
+  it('ends on the clock alone when the socket died and no expired frame arrives', async () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
@@ -679,7 +804,7 @@ describe('failure and recovery', () => {
     session.runOut();
     tick();
     await flush();
-    expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
     expect(fetchData).not.toHaveBeenCalled();
   });
   it('a refused Access check shows the way back to the protected entrance, and a rejected data token ends the session', async () => {
@@ -692,9 +817,9 @@ describe('failure and recovery', () => {
     const rejected = mount({ snapshot: () => { throw new Error('data request failed with 401'); } });
     rejected.session.join();
     await flush();
-    expect(rejected.root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(rejected.root.querySelector('[data-testid=session-ended]')).not.toBeNull();
   });
-  it('keeps the frozen view when the clock runs out after a socket drop', async () => {
+  it('keeps the ended view when the clock runs out after a socket drop', async () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
@@ -702,7 +827,7 @@ describe('failure and recovery', () => {
     session.runOut();
     tick();
     await flush();
-    expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
     expect(fetchData).not.toHaveBeenCalled();
   });
 });
@@ -769,25 +894,30 @@ describe('the full map view (transport)', () => {
   });
   it('is a view mode on the shell with the session chrome kept; Escape and another domain leave it', async () => {
     const mapFactory = vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
-    const { root, session, handle } = mount({ mapFactory });
+    const { root, session, handle } = mount({ wide: true, mapFactory });
     session.join();
     await flush();
     handle.selectLayer('u-pokretu');
     await flush();
     const dash = root.querySelector<HTMLElement>('.ki')!;
-    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
-    button.focus();
-    button.click();
+    // The full-map button went with Karta's map menu (WP4); the desk's chevron is what collapses the board into
+    // the page's map view.
+    expect(root.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    const chevron = root.querySelector<HTMLButtonElement>('.t-sheet-toggle')!;
+    chevron.focus();
+    chevron.click();
     expect(dash.dataset.view).toBe('map');
-    expect(mapFactory).toHaveBeenCalledTimes(1);
+    // Karta's own maps; Sada's band (sada-map-canvas) is a map of its own, released when Karta opens.
+    const karta = () => mapFactory.mock.calls.map(([o], i) => ({ o, i })).filter(({ o }) => o.container.dataset.testid === 'map-canvas');
+    expect(karta()).toHaveLength(1);
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
-    click(root,'[data-action=city-group][data-group=transport]');
+    // The map/schema switch stays in the sheet's head, with no group to pick first [O-72].
     const mode = root.querySelector<HTMLButtonElement>('[data-testid=map-mode-toggle]')!;
     mode.focus();
     mode.click();
-    expect(mapFactory).toHaveBeenCalledTimes(2);
-    expect(mapFactory.mock.calls[1]?.[0].renderer).toBe('schema');
-    expect(mapFactory.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(karta()).toHaveLength(2);
+    expect(karta()[1]?.o.renderer).toBe('schema');
+    expect(mapFactory.mock.results[karta()[0]!.i]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('kajima:map-mode:v1')).toBe('schema');
     expect(dash.dataset.view).toBe('map');
     expect(document.activeElement).toBe(mode);
@@ -805,7 +935,6 @@ describe('the full map view (transport)', () => {
     desk.handle.selectLayer('u-pokretu');
     await flush();
     expect(mapFactory.mock.calls.find(([o])=>o.container.dataset.testid==='map-canvas')?.[0].renderer).toBe('schema');
-    click(desk.root,'[data-action=city-group][data-group=transport]');
     await flush();
     expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas').at(-1)?.[0].renderer).toBe('schema');
     desk.handle.destroy();
@@ -879,7 +1008,7 @@ describe('the sticky header and notices in flow', () => {
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe(hr.session.expiring20);
     time.set(EXPIRES);
     tick();
-    expect(root.querySelector('[data-testid=frozen-line]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
     expect(notice(root)).toBeNull();
     expect(text(root.querySelector('[data-testid=announce-assertive]'))).toBe('');
   });
@@ -912,9 +1041,18 @@ describe('the sticky header and notices in flow', () => {
     session.join();
     session.expire();
     const tabs = [...root.querySelectorAll<HTMLElement>('.ki-tab[aria-disabled="true"]')];
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(3);
     for (const tab of tabs) expect(tab.getAttribute('tabindex')).toBe('-1');
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('tabindex')).toBeNull();
+  });
+  it('a peer\'s pill says whose minutes these are, never a device\'s slug', () => {
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('phone');
+    const sentence = text(root.querySelector('[data-testid=session-label] .ki-session-sentence'));
+    expect(sentence).toBe('Pet minuta od osobe pokraj tebe · do 14:42');
+    expect(sentence).not.toContain('phone');
+    expect(sentence).not.toContain('zaslon');
+    expect(root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
   });
   it('the session pill names the expiry and the action for readers, and turns warn at 60 s and alert at 20 s', () => {
     const time = clock();
@@ -975,7 +1113,7 @@ describe('the sticky header and notices in flow', () => {
       scrollTo.mockClear();
       const desk = mount({ wide: true });
       click(desk.root, '[data-testid=status-more]');
-      click(desk.root, '.ki-domains [data-layer=kultura]');
+      click(desk.root, '[data-testid=dir-kultura]');
       expect(desk.root.querySelector('#layer-kultura')).not.toBeNull();
       expect(scrollTo).not.toHaveBeenCalled();
       desk.handle.destroy();
@@ -984,9 +1122,9 @@ describe('the sticky header and notices in flow', () => {
     }
   });
 
-  // T4.1: the session's moments. The freeze is a designed closing card, the only banner left;
-  // a room closed under a live session gets its own card; every frozen workspace is dated.
-  it('the freeze leaves one closing card as the only banner: the approved sentence as its title, the hint, and a primary way to a new session', () => {
+  // T4.1 / WP4 step 11: the session's moments. The end is a designed closing card standing in the workspace alone,
+  // with no banner left; a room closed under a live session gets its own title; nothing of the content is dated or kept.
+  it('the end leaves one closing card in the workspace and no banner: the approved sentence as its title, the hint, a primary way to a new session and the way to /hitno', () => {
     const time = clock();
     const { root, session, tick } = mount({ now: time.now });
     session.join();
@@ -996,78 +1134,87 @@ describe('the sticky header and notices in flow', () => {
     time.set(EXPIRES);
     tick();
     const banners = root.querySelector<HTMLElement>('[data-testid=banners]')!;
-    expect(banners.children).toHaveLength(1);
-    const card = banners.firstElementChild as HTMLElement;
-    expect(card.dataset.testid).toBe('frozen-line');
-    expect(card.dataset.key).toBe('frozen');
+    expect(banners.children).toHaveLength(0);
+    const main = root.querySelector<HTMLElement>('[data-testid=dash-view]')!;
+    expect(main.children).toHaveLength(1);
+    const card = main.firstElementChild as HTMLElement;
+    expect(card.dataset.testid).toBe('session-ended');
     expect(card.getAttribute('role')).toBe('alert');
     expect(card.classList.contains('closing')).toBe(true);
     expect(text(card.querySelector('.closing-title'))).toBe(hr.session.expired);
-    expect(text(card.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    expect(text(card.querySelector('.session-ended-hint'))).toBe(hr.session.expiredHint);
     const cta = card.querySelector<HTMLAnchorElement>('a.btn-primary[href="/s/"]')!;
     expect(text(cta)).toBe(hr.session.expiredCta);
     expect(cta.querySelector('svg use')?.getAttribute('href')).toBe('#icon-qr-code');
+    const safety = card.querySelector<HTMLAnchorElement>('a[href="/hitno"]')!;
+    expect(text(safety)).toBe(hr.nav.safety);
+    // Byte-exact owner strings [O-59].
+    expect(hr.session.expired).toBe('Deset minuta je prošlo. Zaslon u blizini otključava novih 10 minuta.');
+    expect(hr.session.expiredHint).toBe('Sigurnost ostaje otvorena na /hitno.');
+    expect(hr.session.expiredCta).toBe('Skeniraj za novih 10 minuta');
   });
-  it('after the freeze the workspace opens with the snapshot line "podaci od {time}", before the layer, once, and re-said in the other language', () => {
+  it('after the end the workspace is the closing card alone, with no date line, re-said in the other language', () => {
     const time = clock();
     const { root, session, tick } = mount({ now: time.now });
     session.join();
-    expect(root.querySelector('.ki-snapshot')).toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).toBeNull();
     time.set(EXPIRES);
     tick();
     const main = root.querySelector<HTMLElement>('[data-testid=dash-view]')!;
-    const line = main.firstElementChild as HTMLElement;
-    expect(line.classList.contains('ki-snapshot')).toBe(true);
-    expect(text(line)).toBe('podaci od 14:42');
-    expect(line.nextElementSibling?.id).toBe('layer-grad-sada');
-    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+    expect(main.firstElementChild?.getAttribute('data-testid')).toBe('session-ended');
+    expect(main.querySelector('.ki-snapshot')).toBeNull();
+    expect(main.querySelector('#layer-grad-sada')).toBeNull();
     click(root, '[data-testid=session-label]');
     click(document, '[data-testid=session-sheet] [data-sheet-action=lang][data-value=en]');
-    expect(text(main.querySelector('.ki-snapshot'))).toBe('data from 14:42');
-    expect(main.querySelectorAll('.ki-snapshot')).toHaveLength(1);
+    expect(main.children).toHaveLength(1);
+    expect(text(main.querySelector('[data-testid=session-ended] .closing-title'))).toBe(en.session.expired);
+    expect(text(main.querySelector('[data-testid=session-ended] a.btn-primary'))).toBe(en.session.expiredCta);
+    expect(document.title).toBe('Kaj ima? · Now');
   });
-  it('a room closed under a live session is told apart from a spent ticket: the view freezes behind the revoked card with its own way out', async () => {
+  it('a room closed under a live session is told apart from a spent ticket: the content clears behind the revoked card with its own way out', async () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
     fetchData.mockClear();
     session.error('no-ticket', 'revoked');
-    const card = root.querySelector<HTMLElement>('[data-testid=frozen-line]');
+    const card = root.querySelector<HTMLElement>('[data-testid=session-ended]');
     expect(card).not.toBeNull();
     expect(text(card!.querySelector('.closing-title'))).toBe(hr.session.revoked);
-    expect(text(card!.querySelector('.banner-sub'))).toBe(hr.session.expiredHint);
+    expect(text(card!.querySelector('.session-ended-hint'))).toBe(hr.session.expiredHint);
     expect(text(card!.querySelector('a.btn-primary[href="/s/"]'))).toBe(hr.session.revokedCta);
+    expect(card!.querySelector('a[href="/hitno"]')).not.toBeNull();
     expect(root.querySelector('[data-key=no-ticket]')).toBeNull();
-    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
-    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:32');
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe(hr.session.frozenBadge);
     tick();
     await flush();
     expect(fetchData).not.toHaveBeenCalled();
-    // A spent ticket is not a closed room: its warning banner stays and nothing freezes.
+    // A spent ticket is not a closed room: its warning banner stays and the content stays.
     const spent = mount();
     spent.session.join();
     spent.session.error('no-ticket', 'no-ticket');
-    expect(spent.root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(spent.root.querySelector('[data-testid=session-ended]')).toBeNull();
     expect(spent.root.querySelector('[data-key=no-ticket]')).not.toBeNull();
-    expect(spent.root.querySelector('.ki-snapshot')).toBeNull();
+    expect(spent.root.querySelector('#layer-grad-sada')).not.toBeNull();
   });
-  it('a closed room reported before any join is a spent credential: the no-ticket banner, nothing frozen, nothing dated', () => {
+  it('a closed room reported before any join is a spent credential: the no-ticket banner, nothing ended', () => {
     const { root, session } = mount();
     session.error('no-ticket', 'revoked');
-    expect(root.querySelector('[data-testid=frozen-line]')).toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).toBeNull();
     expect(root.querySelector('[data-key=no-ticket]')).not.toBeNull();
-    expect(root.querySelector('.ki-snapshot')).toBeNull();
-    expect(text(root.querySelector('[data-testid=countdown]'))).not.toBe('zamrznuto');
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).not.toBe(hr.session.frozenBadge);
   });
-  it('the snapshot line dates the data by the end of the session, not by the late moment the end was learnt', () => {
+  it('a phone that hears of the end late still ends: the card stands and the pill says the session is over', () => {
     const time = clock();
     const { root, session } = mount({ now: time.now });
     session.join();
     // A phone whose socket dropped in the background hears of the end five minutes after it.
     time.set(EXPIRES + 5 * 60_000);
     session.expire();
-    expect(text(root.querySelector('.ki-snapshot'))).toBe('podaci od 14:42');
-    expect(text(root.querySelector('[data-testid=countdown]'))).toBe('zamrznuto');
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
+    expect(text(root.querySelector('[data-testid=countdown]'))).toBe(hr.session.frozenBadge);
+    expect(root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe(hr.session.expiredTitle);
   });
   it('the visible reconnecting banner says the countdown goes on, while the pill sentence for readers keeps the disconnected line', () => {
     const { root, session } = mount();
@@ -1076,7 +1223,7 @@ describe('the sticky header and notices in flow', () => {
     expect(text(root.querySelector('[data-testid=reconnecting] .banner-text'))).toBe('Veza se obnavlja. Odbrojavanje ide dalje.');
     expect(text(root.querySelector('[data-testid=session-label] .ki-session-sentence'))).toBe(hr.session.disconnected);
   });
-  it('the directory session row tells the truth: connecting before the join, the expiry while unlocked, the end once frozen, dated like every workspace', () => {
+  it('the directory session row tells the truth: connecting before the join, the expiry while unlocked; the end clears the directory too', () => {
     const { root, session } = mount();
     click(root, '[data-testid=tab-more]');
     const title = (): string => text(root.querySelector('[data-testid=dir-session] .row-title'));
@@ -1084,9 +1231,9 @@ describe('the sticky header and notices in flow', () => {
     session.join();
     expect(title()).toBe('Otključano do 14:42');
     session.expire();
-    expect(title()).toBe('Sesija je završila');
-    expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect(text(root.querySelector('[data-testid=dash-view] > .ki-snapshot'))).toBe('podaci od 14:32');
+    expect(root.querySelector('#layer-directory')).toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=tab-more]')?.getAttribute('aria-expanded')).toBe('false');
   });
 });
 
@@ -1094,20 +1241,20 @@ describe('the sticky header and notices in flow', () => {
 // in reading order on both surfaces; the CSS orders and sizes them but never
 // hides a control that exists.
 describe('the shell regions', () => {
-  it('is five children in order: the status line, banners, main, the FAB slot and the tab bar, with no rail, no sidebar and no kvart aside', () => {
+  it('is five children in order: the status line, the presentation panel, banners, main and the tab bar, with no rail, no sidebar, no kvart aside and no FAB slot', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;
     const order = [...shell.children].filter((el) => !el.matches('h1, p')).map((el) => el.className);
-    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-fab-slot', 'ki-tabbar']);
+    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-tabbar']);
     expect(shell.querySelector('.ki-rail')).toBeNull();
     expect(shell.querySelector('nav.ki-side')).toBeNull();
     expect(shell.querySelector('.ki-kvart')).toBeNull();
     const head = shell.querySelector<HTMLElement>('header.ki-head')!;
     expect(head.parentElement).toBe(shell);
     expect(head.dataset.region).toBe('status');
-    expect(shell.querySelector<HTMLElement>('.ki-fab-slot')!.dataset.region).toBe('fab');
+    expect(shell.querySelector('[data-region=fab]')).toBeNull();
     expect(shell.querySelector('nav.ki-tabbar')?.getAttribute('aria-label')).toBe('Domene');
-    expect(shell.dataset.fab).toBe('0');
+    expect(shell.dataset.fab).toBeUndefined();
   });
 });
 
@@ -1160,15 +1307,27 @@ describe('motion: the workspace fades in on a switch, never on a redraw', () => 
 describe('the status line', () => {
   const keys = (root: Root): string[] => [...root.querySelector('[data-testid=status-line]')!.children].map((el) => (el as HTMLElement).dataset.key ?? '');
 
-  it('paints three keyed controls on the phone and six at the desk, in the documented order, from the one builder', () => {
+  it('paints the keyed controls in the documented order from the one builder: Zaslon and Podijeli grad beside the pill on both surfaces, one row at the desk without the clock or a domain bar', () => {
+    const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
     const phone = mount();
     expect(keys(phone.root)).toEqual(['wordmark', 'session', 'safety']);
     expect(phone.root.querySelector('[data-testid=tab-more]')).not.toBeNull();
+    phone.session.join();
+    expect(keys(phone.root)).toEqual(['wordmark', 'share', 'session', 'safety']);
     phone.handle.destroy();
+    const scanner = mount();
+    scanner.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    expect(keys(scanner.root)).toEqual(['wordmark', 'screen', 'share', 'session', 'safety']);
+    scanner.handle.destroy();
     const desk = mount({ wide: true });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'clock', 'session', 'more', 'domains']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'more', 'safety']);
+    desk.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'more', 'safety']);
+    expect(desk.root.querySelector('[data-testid=desk-karta]'), 'no header link into Karta: it stands beside Sada (chunk E)').toBeNull();
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
-    expect([...desk.root.querySelectorAll('.ki-domains [data-layer]')].map(el => el.getAttribute('data-layer'))).toEqual(['grad-sada', 'u-pokretu', 'kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
+    expect(desk.root.querySelectorAll('.ki-domains [data-layer]')).toHaveLength(0);
+    expect(desk.root.querySelector('.ki-domains')).toBeNull();
+    expect(desk.root.querySelector('[data-testid=status-clock]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=status-search]')).toBeNull();
     expect(desk.root.querySelector('[data-testid=tab-more]'), 'the desk has no tab bar').toBeNull();
     expect(desk.root.querySelector('[data-testid=cast-fab]')).toBeNull();
@@ -1192,36 +1351,292 @@ describe('the status line', () => {
     expect(safety.querySelector('.ki-nav-label')).toBeNull();
     expect(text(safety)).toBe('');
   });
-  it('the desktop clock links the time, the temperature and the sun glyph from the shared weather group into Vrijeme, and stands alone when dhmz-now is down', async () => {
+  it('the desk header carries no clock and no weather: the time and the weather are the feed’s, never a second header row [O-56]', async () => {
     const live = mount({ wide: true });
     live.session.join();
     await flush();
-    const clock = live.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
-    expect(clock.getAttribute('href')).toBe('#layer=zrak-i-nebo');
-    expect(clock.dataset.layer).toBe('zrak-i-nebo');
-    expect(text(clock.querySelector('time'))).toBe('14:32');
-    expect(clock.querySelector('.tb-temp')).toBeNull();
-    expect(text(live.root.querySelector('.day-weather-now strong'))).toBe('21 °C');
-    expect(clock.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
+    const status = live.root.querySelector<HTMLElement>('[data-testid=status-line]')!;
+    expect(status.querySelector('[data-testid=status-clock]')).toBeNull();
+    expect(status.querySelector('time')).toBeNull();
+    expect(status.querySelector('.ki-weather')).toBeNull();
+    expect(text(status)).not.toContain('°C');
     live.handle.destroy();
-    const down = mount({ wide: true, snapshot: (module) => { if (module === 'dhmz-now') throw new Error('down'); return snapshotOf(module); } });
-    down.session.join();
-    await flush();
-    const lone = down.root.querySelector<HTMLAnchorElement>('[data-testid=status-clock]')!;
-    expect(lone.children).toHaveLength(1);
-    expect(lone.firstElementChild?.tagName).toBe('TIME');
-    expect(text(lone)).toBe('14:32');
-    expect(lone.getAttribute('aria-label')).toBe('14:32. Otvori Vrijeme.');
-    expect(text(lone)).not.toContain('–');
-    down.handle.destroy();
   });
-  it('desktop transport navigation exposes the single search field in lightweight mode', () => {
+  it('desktop transport navigation exposes the single search field in lightweight mode: Karta is on the page from the first draw', () => {
     const { root, session } = mount({ wide: true, lightweight: true });
     session.join();
-    click(root, '.ki-domains [data-layer=u-pokretu]');
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
-    expect(root.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    expect(root.querySelector('#ki-main [data-testid=transport-search]')).not.toBeNull();
     expect(session.sent).toEqual([]);
+  });
+});
+
+// WP4 step 12 (seam S6): the phone's sentence is the page's rotation over the model's answers and the templates,
+// asked from the route at most once a minute, read through the wall's own sequence with its strict acceptance.
+describe('Sada\'s sentence (WP4 step 12)', () => {
+  const clock = () => { let at = NOW; return { now: () => at, set(ms: number) { at = ms; } }; };
+  type Request = { locale: 'hr' | 'en'; budget: number; facts: { id: string; kind: string; text: string; validUntil: number | null }[] };
+  const answerWith = (text: (req: Request) => string) => vi.fn(async (req: Request) => [{
+    text: text(req), kicker: req.facts[0]!.kind, refs: [req.facts[0]!.id], validUntil: NOW + 600_000, origin: 'model' as const,
+  }]);
+
+  it('asks the route once after the join with the locale, the 80-character budget and the page\'s facts, and shows one sentence with its kicker', async () => {
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { root, session, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });
+    expect(fetchSentences).not.toHaveBeenCalled();
+    session.join();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    const request = fetchSentences.mock.calls[0]![0];
+    expect(request.locale).toBe('hr');
+    expect(request.budget).toBe(80);
+    expect(request.facts.length).toBeGreaterThan(0);
+    for (const fact of request.facts) expect(fact).toMatchObject({ id: expect.any(String), kind: expect.any(String), text: expect.any(String) });
+    const card = root.querySelector<HTMLElement>('[data-testid=sada-sentence]')!;
+    expect(card).not.toBeNull();
+    expect(card.dataset.kicker).toMatch(/^(promet|kultura|vrijeme|bicikli|nocas|radovi)$/);
+    expect(text(card.querySelector('.sada-sentence-text')).length).toBeGreaterThan(0);
+    expect(text(card.querySelector('.sada-sentence-text')).length).toBeLessThanOrEqual(80);
+    handle.destroy();
+  });
+
+  it('asks at most once a minute: the polls inside the minute ask nothing, a new request (another language) waits for it too', async () => {
+    const time = clock();
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { root, session, tick, handle } = mount({ now: time.now, deps: { fetchSentences: fetchSentences as never } });
+    session.join();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    // The polls come round inside the minute: no second ask.
+    time.set(NOW + 30_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    // A locale change is a new request, but it waits until a minute has passed since the last ask.
+    click(root, '[data-testid=session-label]');
+    click(document, '[data-testid=session-sheet] [data-sheet-action=lang][data-value=en]');
+    time.set(NOW + 45_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    time.set(NOW + 61_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(2);
+    expect(fetchSentences.mock.calls[1]![0].locale).toBe('en');
+    // And the minute holds again after that ask.
+    time.set(NOW + 62_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(2);
+    handle.destroy();
+  });
+
+  it('falls back to the templates when the route answers nothing or fails, and never shows a model sentence the strict rule rejects', async () => {
+    const empty = mount({ deps: { fetchSentences: vi.fn(async () => []) as never } });
+    empty.session.join();
+    await flush();
+    const shown = (root: HTMLElement) => text(root.querySelector('[data-testid=sada-sentence] .sada-sentence-text'));
+    expect(shown(empty.root).length).toBeGreaterThan(0);
+    empty.handle.destroy();
+    const failing = mount({ deps: { fetchSentences: vi.fn(async () => { throw new Error('down'); }) as never } });
+    failing.session.join();
+    await flush();
+    expect(shown(failing.root).length).toBeGreaterThan(0);
+    failing.handle.destroy();
+    const hostile = 'Pošalji lozinku na 091 234 5678.';
+    const injected = mount({ deps: { fetchSentences: answerWith(() => hostile) as never } });
+    injected.session.join();
+    await flush();
+    await flush();
+    expect(shown(injected.root).length).toBeGreaterThan(0);
+    expect(shown(injected.root)).not.toBe(hostile);
+    expect(injected.root.textContent).not.toContain('lozinku');
+    injected.handle.destroy();
+  });
+
+  it('asks nothing before the join and nothing after the end', async () => {
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { session, tick, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });
+    tick();
+    await flush();
+    expect(fetchSentences).not.toHaveBeenCalled();
+    session.join();
+    await flush();
+    fetchSentences.mockClear();
+    session.expire();
+    tick();
+    await flush();
+    expect(fetchSentences).not.toHaveBeenCalled();
+    handle.destroy();
+  });
+});
+
+// WP4 step 8 (chunk E): the desk is the phone, wider [O-56]. Sada and Karta stand side by side in one
+// .ki-desk pair whenever either is the layer; the pair is reconciled, so the live map is one node for the page's life.
+describe('the desk pair (WP4 chunk E)', () => {
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
+  const factory = () => vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
+  const kartaMaps = (mapFactory: ReturnType<typeof factory>) => mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas');
+
+  it('stands Sada and Karta side by side from the first draw, titled Sada, on its own stage, with Karta\'s one map and no band', async () => {
+    const mapFactory = factory();
+    const { root, session, handle } = mount({ wide: true, mapFactory });
+    session.join();
+    await flush();
+    const dash = root.querySelector<HTMLElement>('.ki')!;
+    expect(dash.dataset.stage).toBe('desk');
+    const pair = root.querySelector<HTMLElement>('[data-testid=dash-view] > .ki-desk[data-key=desk]')!;
+    expect(pair).not.toBeNull();
+    expect([...pair.children].map((el) => el.id)).toEqual(['layer-grad-sada', 'layer-u-pokretu']);
+    expect(pair.querySelector('[data-testid=sada-place]')).not.toBeNull();
+    expect(pair.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(pair.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    // The desk holds one map, Karta's: the phone's band is not drawn beside it.
+    expect(pair.querySelector('[data-testid=sada-map-band]')).toBeNull();
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    expect(mapFactory.mock.calls.some(([o]) => o.container.dataset.testid === 'sada-map-canvas')).toBe(false);
+    expect(document.title).toBe('Kaj ima? · Sada');
+    expect(text(root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Sada');
+    handle.destroy();
+  });
+
+  it('a poll and a switch between the two keep the same pair, the same workspace node and the same map', async () => {
+    const mapFactory = factory();
+    const { root, session, handle, tick } = mount({ wide: true, mapFactory });
+    session.join();
+    await flush();
+    const pair = root.querySelector('.ki-desk')!;
+    const sada = root.querySelector('#layer-grad-sada')!;
+    const workspace = root.querySelector('[data-testid=transport-workspace]')!;
+    const canvas = root.querySelector('[data-testid=map-canvas]')!;
+    tick();
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBe(pair);
+    expect(root.querySelector('#layer-grad-sada')).toBe(sada);
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('[data-testid=map-canvas]')).toBe(canvas);
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBe(pair);
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('[data-testid=map-canvas]')).toBe(canvas);
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    expect(document.title).toBe('Kaj ima? · Sada');
+    handle.selectLayer('grad-sada');
+    await flush();
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    // Leaving the pair for a Još domain releases Karta's map; coming back draws a new one.
+    handle.selectLayer('kultura');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('[data-testid=map-canvas]')).toBeNull();
+    expect(mapFactory.mock.results[0]!.value.destroy).toHaveBeenCalledTimes(1);
+    handle.destroy();
+  });
+
+  it('polls the modules of both halves while the pair is shown', async () => {
+    const { session, fetchData, handle } = mount({ wide: true });
+    session.join();
+    await flush();
+    const asked = new Set(fetchData.mock.calls.map((c) => c[0]));
+    for (const module of ['zet-rt', 'prometnice', 'dogadanja', 'dhmz-now', 'glasnik']) expect(asked.has(module as ModuleId), module).toBe(true);
+    handle.destroy();
+  });
+
+  it('Karta opened first (a reload, a saved link) asks for the place\'s boards itself, so U blizini leads with the departures without a visit to Sada (WP4 review)', async () => {
+    const board = { operator: 'zet', stopId: STOP.id, stopName: STOP.name, status: 'live', generatedAt: new Date(NOW).toISOString(),
+      departures: [4, 12, 25].map((m, i) => ({ operator: 'zet', tripId: `t${i}`, routeId: '6', routeName: '6', headsign: 'Črnomerec', at: new Date(NOW + m * 60_000).toISOString() })) };
+    let landed = false;
+    const cache = { get: vi.fn((_op: string, id: string) => (landed && id === STOP.id ? board : undefined)), ensure: vi.fn(), destroy: vi.fn() };
+    const { root, session, handle } = mount({ deps: { createBoards: () => cache as never, location: { pathname: '/d/', search: '', hash: '#layer=u-pokretu' } } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    // Karta alone is on the page: Sada never drew, so nothing but Karta could have asked.
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(root.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(cache.ensure).toHaveBeenCalledWith('zet', [STOP.id], expect.any(Function));
+    const rows = () => root.querySelectorAll('[data-testid=transport-workspace] [data-testid=nearby] li.nearby-row[data-kind=departure]').length;
+    expect(rows()).toBe(0);
+    // The board lands: the repaint Karta asked for draws the departures at the head of the list.
+    landed = true;
+    (cache.ensure.mock.calls[0]![2] as () => void)();
+    await flush();
+    expect(rows()).toBeGreaterThanOrEqual(1);
+    handle.destroy();
+  });
+
+  it('the phone keeps one layer at a time and the map stage for Karta', async () => {
+    const { root, session, handle } = mount();
+    session.join();
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('#layer-u-pokretu')).toBeNull();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('map');
+    expect(document.title).toBe('Kaj ima? · Karta');
+    handle.destroy();
+  });
+
+  it('Karta\'s default sheet lists the place\'s U blizini rows through the page (ctx.nearby), with the circle in its peek', async () => {
+    const { root, session, handle } = mount({ wide: true });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    const workspace = root.querySelector<HTMLElement>('[data-testid=transport-workspace]')!;
+    const list = workspace.querySelector<HTMLElement>('[data-testid=nearby]')!;
+    expect(list, 'the sheet body is the shared nearby section').not.toBeNull();
+    expect(text(list.querySelector('[data-testid=nearby-head]'))).toMatch(/^U blizini · \d+(,\d)? km · ~\d+ min$/);
+    expect(list.querySelector('[data-testid=nearby-rows]')).not.toBeNull();
+    expect(workspace.querySelector('[data-testid=nearby-pending]')).toBeNull();
+    const peek = workspace.querySelector<HTMLElement>('[data-testid=transport-peek]')!;
+    expect(text(peek.querySelector('strong'))).toBe(STOP.name);
+    expect(text(peek.querySelector('.t-peek-pill'))).toMatch(/^\d+(,\d)? km · ~\d+ min$/);
+    // Sada and Karta print one circle.
+    expect(text(peek.querySelector('.t-peek-pill'))).toBe(text(root.querySelector('#layer-grad-sada [data-testid=nearby-head] .nearby-pill')));
+    handle.destroy();
+  });
+
+  it('the screen\'s Kadar reaches the phone\'s circle: a frame of 8 widens the pill on both halves', async () => {
+    const eight = mount({ wide: true });
+    eight.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP, frame: 8 });
+    await flush();
+    const pill = (root: HTMLElement) => text(root.querySelector('[data-testid=transport-workspace] .t-peek-pill'));
+    // No stop table is loaded here, so the circle is the frame's fallback radius (shared/city/frame.ts FRAME_RADIUS_M).
+    expect(pill(eight.root)).toBe('2,7 km · ~20 min');
+    expect(text(eight.root.querySelector('#layer-grad-sada .nearby-pill'))).toBe('2,7 km · ~20 min');
+    eight.handle.destroy();
+    const six = mount({ wide: true });
+    six.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    expect(pill(six.root)).toBe('2 km · ~15 min');
+    six.handle.destroy();
+  });
+
+  it('widening a phone into a desk moves the live workspace into the pair without re-creating it', async () => {
+    const mapFactory = factory();
+    const listeners: (() => void)[] = [];
+    const media = { matches: false, addEventListener: (_: 'change', fn: () => void) => { listeners.push(fn); }, removeEventListener: () => {} };
+    const { root, session, handle } = mount({ mapFactory, deps: { matchMedia: () => media } });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const workspace = root.querySelector('[data-testid=transport-workspace]')!;
+    const canvas = root.querySelector('[data-testid=map-canvas]')!;
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('map');
+    media.matches = true;
+    for (const fn of listeners) fn();
+    await flush();
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('desk');
+    expect(root.querySelector('.ki-desk [data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('.ki-desk [data-testid=map-canvas]')).toBe(canvas);
+    expect(root.querySelector('.ki-desk #layer-grad-sada')).not.toBeNull();
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    handle.destroy();
   });
 });
 
@@ -1235,8 +1650,9 @@ describe('explicit casting (D5)', () => {
     session.join('scanner', screen);
     expect(root.querySelector('[data-testid=cast-fab]')).toBeNull();
     for (const layer of ['u-pokretu', 'kultura', 'grad-sada'] as const) {
-      click(root, `.ki-tabs [data-layer="${layer}"]`);
+      openViaMore(root, layer);
       expect(root.querySelectorAll('[data-testid=screen-control]')).toHaveLength(1);
+      expect(root.querySelectorAll('[data-testid=share-city]')).toHaveLength(1);
     }
     expect(session.sent).toEqual([]);
     expect(session.presentations).toEqual([]);
@@ -1282,7 +1698,8 @@ describe('explicit casting (D5)', () => {
     const { root, session } = mount({ wide: true });
     session.join('scanner', screen);
     await flush();
-    click(root, '.ki-domains [data-layer=kultura]');
+    click(root, '[data-testid=status-more]');
+    click(root, '[data-testid=dir-kultura]');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
     expect(session.sent).toEqual([]);
@@ -1302,12 +1719,17 @@ describe('explicit casting (D5)', () => {
     expect(peer.session.presentations).toEqual([]);
     peer.handle.destroy();
   });
-  it('freezing the client disables presentation without disturbing the readable snapshot', () => {
+  it('the end closes the presentation panel and disables presenting; the content is gone with it', () => {
     const { root, session } = mount();
     session.join('scanner', screen);
     click(root, '[data-testid=screen-control]');
+    expect(root.querySelector('[data-testid=presentation-panel]')).not.toBeNull();
     session.expire();
-    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=presentation-panel]')).toBeNull();
+    // Opened again after the end, the panel says why nothing can be presented.
+    click(root, '[data-testid=screen-control]');
     expect(root.querySelector<HTMLButtonElement>('[data-testid=present-view]')!.disabled).toBe(true);
     expect(text(root.querySelector('[data-testid=presentation-feedback]'))).toContain('Sesija je završila');
     click(root, '[data-testid=present-view]');
@@ -1354,9 +1776,10 @@ describe('explicit casting (D5)', () => {
 
 
 describe('the desktop directory (D10)', () => {
-  it('the desk lists five domains under Još, Promet first, each with its line of data, and has no tab bar', async () => {
+  it('the desk lists the same four domains under Još as the phone, the week’s agenda first with its count line, and has no tab bar and no domain bar', async () => {
     const today = { id: 'kp:3', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Večer poezije', at: '2026-09-11T17:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'knjizevnost', precision: 'time' } };
-    const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today]) : snapshotOf(module) });
+    const running = { id: 'kp:4', module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: 'Izložba plakata', at: '2026-09-09T08:00:00Z', until: '2026-09-20T18:00:00Z', dateBasis: 'event' as const, data: { source: 'kulturpunkt', category: 'izlozba', precision: 'range' } };
+    const { root, session } = mount({ wide: true, snapshot: (module) => module === 'dogadanja' ? base('dogadanja', [...FIXTURE.dogadanja!.items, today, running]) : snapshotOf(module) });
     session.join();
     await flush();
     expect(root.querySelector('[data-testid=tab-more]')).toBeNull();
@@ -1364,23 +1787,31 @@ describe('the desktop directory (D10)', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(more.getAttribute('aria-current')).toBe('page');
     expect(root.querySelector('#layer-directory')).not.toBeNull();
-    expect(root.querySelectorAll('.dir-item[data-layer]')).toHaveLength(0);
+    await flush();
+    expect([...root.querySelectorAll('.dir-item[data-layer]')].map((a) => a.getAttribute('data-layer'))).toEqual(['kultura', 'zrak-i-nebo', 'uprava-i-pravo', 'sigurnost']);
     expect(root.querySelector('[data-testid=saved-section]')).not.toBeNull();
-    expect(root.querySelector('.ki-domains [data-layer=kultura]')).not.toBeNull();
-    click(root, '.ki-domains [data-layer=u-pokretu]');
-    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
+    expect(root.querySelector('.ki-domains')).toBeNull();
+    // Three dated starts this week (today's evening one included) and one exhibition running: the page's own count line.
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-title'))).toBe('Događanja ovaj tjedan');
+    expect(text(root.querySelector('[data-testid=dir-kultura] .row-sub'))).toBe('3 događanja · 1 u tijeku');
+    click(root, '[data-testid=dir-kultura]');
+    expect(root.querySelector('#layer-kultura')).not.toBeNull();
+    // The row and the page count the same things.
+    expect(text(root.querySelector('[data-testid=ev-count]'))).toContain('3 događanja · 1 u tijeku');
     expect(root.querySelector('[data-testid=status-more]')?.getAttribute('aria-expanded')).toBe('false');
   });
 });
 
-describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
+describe('the place’s last departures (T3.1, FEED_LASTRUN)', () => {
   const SCREEN = { kind: 'venue' as const, expiresAt: null, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] } };
   const snapshot: LastRunSnapshot = {
     status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
-    routes: { '6': { '2026-09-11': '24:27' }, '11': { '2026-09-11': '24:09' }, '12': { '2026-09-11': '23:45' } },
+    // Lines that stop early at this stop today: at 14:32 their last trams are within four hours, so U blizini lists them as one row.
+    routes: { '6': { '2026-09-11': '18:20' }, '11': { '2026-09-11': '18:05' }, '12': { '2026-09-11': '17:45' } },
   };
+  const lastRows = (root: Root): HTMLElement[] => [...(root as ParentNode).querySelectorAll<HTMLElement>('[data-testid=nearby] li.nearby-row[data-kind=last]')];
 
-  it('loads the stop’s file once per session once a screen stop exists and threads it into the band: two Zadnji polazak tiles in večeras, no second load on a poll', async () => {
+  it('loads the file of the stop the place boards once and threads it into one U blizini row, no second load on a poll', async () => {
     const loadLastRun = vi.fn(async () => snapshot);
     const { root, session, tick } = mount({ deps: { loadLastRun } });
     expect(loadLastRun).not.toHaveBeenCalled();
@@ -1388,21 +1819,19 @@ describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
     expect(loadLastRun).toHaveBeenCalledWith('106_1');
-    const tiles = [...root.querySelectorAll<HTMLElement>('[data-testid=tile-lastrun]')];
-    expect(tiles).toHaveLength(2);
-    expect(tiles.every((t) => t.closest('.day-event[data-col=veceras]') !== null)).toBe(true);
-    expect(tiles[0]!.getAttribute('aria-label')).toBe('00:09, Zadnji polazak, Črnomerec - Dubec, po rasporedu · ZET GTFS'); // the xs badge replaces the kicker visually; the name says it
-    expect(text(tiles[0])).toContain('00:09');
-    expect(text(tiles[0])).toContain('po rasporedu · ZET GTFS');
-    expect(text(tiles[1])).toContain('00:27');
-    expect(tiles[0]!.querySelector('.line')?.getAttribute('data-size')).toBe('xs');
+    const rows = lastRows(root);
+    expect(rows).toHaveLength(1);
+    expect(text(rows[0]!.querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
+    expect(text(rows[0]!.querySelector('.nearby-sub'))).toBe('12 17:45 · 11 18:05 · 6 18:20');
+    expect(rows[0]!.querySelector('time.nearby-when')?.getAttribute('datetime')).toBe('2026-09-11T15:45:00.000Z');
     tick();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
-    expect(root.querySelectorAll('[data-testid=tile-lastrun]')).toHaveLength(2);
+    expect(lastRows(root)).toHaveLength(1);
   });
 
-  it('asks nothing while the session has no screen stop', async () => {
+  it('asks nothing while no stop is within reach of the place: no screen stop, and a catalogue without one near Trg bana J. Jelačića', async () => {
+    // This file's loadStops answers an empty catalogue, so the default place has no platform within 800 m.
     const loadLastRun = vi.fn(async () => snapshot);
     const { session } = mount({ deps: { loadLastRun } });
     session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
@@ -1410,13 +1839,13 @@ describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
     expect(loadLastRun).not.toHaveBeenCalled();
   });
 
-  it('a stop without a file, or a down answer, leaves the tile absent and the band whole', async () => {
+  it('a stop without a file, or a down answer, leaves the row absent and the list whole', async () => {
     for (const answer of [null, { status: 'down' as const, fetchedAt: '2026-09-11T12:00:00Z' }]) {
       const { root, session } = mount({ deps: { loadLastRun: vi.fn(async () => answer) } });
       session.join('scanner', SCREEN);
       await flush();
-      expect(root.querySelector('[data-testid=tile-lastrun]')).toBeNull();
-      expect(root.querySelector('[data-testid=tb]')).not.toBeNull();
+      expect(lastRows(root)).toHaveLength(0);
+      expect(root.querySelectorAll('[data-testid=nearby] li.nearby-row').length).toBeGreaterThan(0);
     }
   });
 });

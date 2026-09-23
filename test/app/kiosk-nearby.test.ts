@@ -140,7 +140,7 @@ const SUN_23 = sunTimes(new Date('2026-09-23T10:00:00Z'), PLACE.lat, PLACE.lon);
 /** The "uvijek" row a scene expects on its 20-minute turn: the square's story on even turns, the building on odd. */
 const alwaysFor = (now: number): string => (Math.floor(now / ALWAYS_ALTERNATE_MS) % 2 === 0 ? 'always:story:721503305' : 'always:heritage:heritage-stedionica');
 
-const FORBIDDEN = /registra|nije provjera|Obuhvat|Dohvaćeno|zastarjelo|nepotvrđeno|uživo|po redu vožnje|Procjena|nedostupn|…/i;
+const FORBIDDEN = /registra|nije provjera|Obuhvat|Dohvaćeno|zastarjelo|nepotvrđeno|uživo|vozni red|Procjena|nedostupn|…/i;
 
 /** Bounds that hold in every scene (§12). */
 function checkBounds(rows: readonly NearbyRow[]): void {
@@ -237,10 +237,11 @@ describe('eight scenes on fake clocks', () => {
     expect(one(rows, 'solar').id).toBe('solar:sunrise:2026-09-23');
   });
 
-  it('night0430: the first tram has left, so its row is gone; sunrise, the morning’s openings and the pharmacy remain', () => {
+  it('night0430: the next line to start remains beside sunrise, the morning’s openings and the pharmacy', () => {
     const now = at('2026-09-23T02:30:00Z'); // Wed 04:30
     const rows = scene(now, { boards: [board(now, [['1', 3], ['31', 15], ['11', 21], ['6', 27]])], fixes: [] });
-    expect(kinds(rows)).toEqual(['departure', 'departure', 'departure', 'solar', 'opening', 'opening', 'event', 'closure', 'closure', 'pharmacy']);
+    expect(kinds(rows)).toEqual(['departure', 'departure', 'departure', 'first', 'solar', 'opening', 'opening', 'event', 'closure', 'closure', 'pharmacy']);
+    expect(one(rows, 'first').services![0]).toMatchObject({ routeId: '1', atMs: at('2026-09-23T02:33:00Z') });
     expect(rows.slice(0, 3).map((r) => r.title)).toEqual(['Zapadni kolodvor', 'Savski most', 'Dubec']);
     expect(rows.filter((r) => r.kind === 'opening').map((r) => zagrebTime(r.atMs))).toEqual(['08:00', '11:00']);
   });
@@ -398,11 +399,29 @@ describe('the last trams', () => {
 
 describe('the first tram', () => {
   const firstRow = (now: number) => selectNearby(input(now)).filter((r) => r.kind === 'first');
-  it('from 22:00 until it leaves', () => {
+  it('names the next unstarted line until every morning line has started, with a hard stop at 06:00 (decision 27)', () => {
+    for (const [time, route, next] of [
+      ['04:13', '17', '04:24'], ['04:30', '1', '04:33'], ['04:33', '11', '04:51'],
+      ['04:57', '14', '05:11'], ['05:11', '13', '05:27'],
+    ]) {
+      const now = at(`2026-09-23T${time}:00+02:00`);
+      const first = firstRow(now);
+      expect(first).toHaveLength(1);
+      expect(first[0]!.id).toBe('first:2026-09-23');
+      expect(first[0]!.services![0]).toMatchObject({ routeId: route, atMs: at(`2026-09-23T${next}:00+02:00`) });
+      expect(first[0]!.services!.every(s => s.atMs > now)).toBe(true);
+      expect(first[0]!.sub.startsWith(`${route} ${next}`)).toBe(true);
+    }
+    expect(firstRow(at('2026-09-23T05:27:00+02:00'))).toEqual([]);
+    const lastRun = { ...LASTRUN, first: { ...FIRST, '13': perDay('06:15') } };
+    expect(selectNearby(input(at('2026-09-23T05:59:00+02:00'), { lastRun })).filter(r => r.kind === 'first')).toHaveLength(1);
+    expect(selectNearby(input(at('2026-09-23T06:00:00+02:00'), { lastRun })).filter(r => r.kind === 'first')).toEqual([]);
+  });
+  it('from 22:00 until all lines have started', () => {
     expect(firstRow(at('2026-09-22T19:59:00Z'))).toEqual([]); // 21:59
     expect(firstRow(at('2026-09-22T20:00:00Z'))).toMatchObject([{ id: 'first:2026-09-23', atMs: at('2026-09-23T02:13:00Z') }]); // 22:00, tomorrow 04:13
     expect(firstRow(at('2026-09-23T02:12:00Z'))).toMatchObject([{ id: 'first:2026-09-23' }]); // 04:12
-    expect(firstRow(at('2026-09-23T02:13:00Z'))).toEqual([]); // 04:13: it has left
+    expect(firstRow(at('2026-09-23T02:13:00Z'))).toMatchObject([{ id: 'first:2026-09-23', atMs: at('2026-09-23T02:24:00Z') }]); // 04:13: line 17 is next
     expect(firstRow(at('2026-09-23T10:00:00Z'))).toEqual([]); // midday
   });
   it('reads GTFS time against the service date: 24:00 or later is the next day’s small hours, and night service never counts', () => {

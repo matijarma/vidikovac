@@ -25,13 +25,15 @@ import type { WallRow, WallSample } from '../../e2e/wall';
 import type { PageInventory, RawInventory } from '../../e2e/inventory';
 import type { ExpiryReading } from '../../e2e/inventory';
 import type { CalmMotionReading } from '../../e2e/wall';
+import { skippedTextCensus } from '../../app/src/city/nearby';
 import {
   ANY_PRESENT_IN_PAGE, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
   EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
+  SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
   USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
   plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
-  type Instruments, type KartaRead, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
+  type Instruments, type KartaRead, type ObservedRotationRow, type SkippedTextEntry, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
 } from '../../scripts/observe-production.mjs';
 
 const root = resolve(import.meta.dirname, '..', '..');
@@ -397,6 +399,37 @@ describe('the page-side readings reference only their argument and the DOM', () 
     const d = shipped(DESKTOP_READ_IN_PAGE)({ sada: '#layer-grad-sada', karta: '[data-testid=transport-workspace]', domains: '.ki-domains', shareCity: '[data-testid=share-city]' }) as DesktopRead;
     expect(d).toEqual({ sadaInViewport: true, kartaInViewport: false, domains: 0, shareCityVisible: false });
   });
+
+  it('the validator census: every data-skipped-text by its surface, in the formats the kiosk root and the timeline write', () => {
+    // The kiosk root's value comes from the wall's own writer, so a format change there turns this red.
+    const root = skippedTextCensus(['instruction', 'link', 'instruction']);
+    document.body.innerHTML = `<div data-testid="kiosk" data-skipped-text="${root}"><section data-testid="nearby" data-skipped-text="1"></section></div><p>no census</p>`;
+    const entries = shipped(SKIPPED_TEXT_IN_PAGE)(SKIPPED_TEXT_SPEC) as SkippedTextEntry[];
+    expect(entries).toEqual([{ surface: 'kiosk', value: 'count:3;link:1;instruction:2' }, { surface: 'nearby', value: '1' }]);
+    expect(skippedTextOf(entries)).toEqual({ total: 4, surfaces: [{ surface: 'kiosk', count: 3, reasons: { link: 1, instruction: 2 } }, { surface: 'nearby', count: 1, reasons: {} }] });
+    expect(parseSkippedText(skippedTextCensus([]))).toEqual({ count: 0, reasons: {} });
+    expect(parseSkippedText('0')).toEqual({ count: 0, reasons: {} });
+    expect(parseSkippedText('link:1')).toEqual({ count: null, reasons: {}, raw: 'link:1' });
+    expect(parseSkippedText('')).toEqual({ count: null, reasons: {}, raw: '' });
+    // A wall that writes no census (a build before D2) has no total, not a total of 0.
+    document.body.innerHTML = '<div data-testid="kiosk"></div>';
+    expect(skippedTextOf(shipped(SKIPPED_TEXT_IN_PAGE)(SKIPPED_TEXT_SPEC) as SkippedTextEntry[])).toEqual({ total: null, surfaces: [] });
+  });
+
+  it('the census summary: total over the readings, the largest reading with its surfaces, the reasons and the flagged readings', () => {
+    const at = (n: number, entries: SkippedTextEntry[] | null): ObservedRotationRow => ({ at: T0 + n, error: 'x', n, skippedText: entries === null ? { total: null, surfaces: [], error: 'gone' } : skippedTextOf(entries) });
+    const s = summariseSkippedText([
+      at(0, [{ surface: 'kiosk', value: 'count:0' }, { surface: 'nearby', value: '0' }]),
+      at(1, [{ surface: 'kiosk', value: 'count:2;link:1;instruction:1' }, { surface: 'nearby', value: '1' }]),
+      at(2, [{ surface: 'kiosk', value: 'count:1;instruction:1' }, { surface: 'nearby', value: '0' }]),
+      at(3, null),
+    ]);
+    expect(s).toEqual({
+      readings: 4, withCensus: 3, withSkip: 2, total: 4, max: 3, maxReading: 1,
+      maxSurfaces: [{ surface: 'kiosk', count: 2 }, { surface: 'nearby', count: 1 }],
+      bySurface: { kiosk: 3, nearby: 1 }, reasons: { link: 1, instruction: 2 }, flagged: [1, 2], errors: 1,
+    });
+  });
 });
 
 // --- whole runs over a fake browser ------------------------------------------------------------------
@@ -432,6 +465,8 @@ const GOOD_DESKTOP: DesktopRead = { sadaInViewport: true, kartaInViewport: true,
 const GOOD_SHARE = { present: true, visible: true, text: 'W4TN-8KQZ' };
 const GOOD_BOARD: StopBoardRead = { open: true, total: 3, inViewport: 3, texts: ['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'] };
 const GOOD_EXPIRY: ExpiryReading = { ended: true, scanLinks: 1, hitnoLinks: 1, rows: 0, rowTexts: [], exportControls: 0 };
+/** The wall's validator census when nothing was left out: the kiosk root and the timeline both write 0. */
+const QUIET_CENSUS: SkippedTextEntry[] = [{ surface: 'kiosk', value: 'count:0' }, { surface: 'nearby', value: '0' }];
 const GOOD_CALM: CalmMotionReading = { rootFound: true, before: 3, after: 3, mutations: 2, textSwaps: 5, kept: 2, rebuilt: [], left: ['departure|trip-0'], entered: ['departure|trip-9'], untracked: 0 };
 
 type Kind = 'kiosk' | 'portrait' | 'proxy' | 'phone' | 'desktop';
@@ -466,6 +501,9 @@ interface FakeOptions {
   phoneRequests?: { path: string; afterScanMs: number }[];
   /** The calm-motion reading of each rotation minute, by its index. */
   calm?: (i: number) => CalmMotionReading;
+  /** The wall's data-skipped-text census at rotation reading `i`, or a page that cannot answer it. */
+  skippedText?: (i: number) => SkippedTextEntry[];
+  skippedTextThrows?: boolean;
   /** How the phone's cancellation (its page left for about:blank) goes: the held answer lands during it, or it rejects. */
   cancel?: 'answers' | 'rejects';
   /** The page-side end stamp: its watch cannot be installed, or it never stamps. */
@@ -513,6 +551,7 @@ function fakeRuntime(options: FakeOptions = {}) {
     let expiryReads = 0;
     let answered = false;
     let calmReads = 0;
+    let censusReads = 0;
     let endedAt: number | null = null;
     const inv = (key: keyof NonNullable<FakeOptions['inventories']>, vw: number, vh: number): PageInventory => options.inventories?.[key] ?? EMPTY_INVENTORY(vw, vh);
     return {
@@ -599,6 +638,10 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === EXPIRY_STAMP_IN_PAGE) return endedAt !== null ? (endedAt <= t ? endedAt : null) : t;
         if (fn === wall.CALM_MOTION_START_IN_PAGE) return 3;
         if (fn === wall.CALM_MOTION_READ_IN_PAGE) return (options.calm ?? (() => GOOD_CALM))(calmReads++);
+        if (fn === SKIPPED_TEXT_IN_PAGE) {
+          if (options.skippedTextThrows) throw new Error('page.evaluate: Execution context was destroyed');
+          return (options.skippedText ?? (() => QUIET_CENSUS))(censusReads++);
+        }
         throw new Error(`unexpected page function on the ${kind} page`);
       },
     };
@@ -978,5 +1021,40 @@ describe('a run over a fake browser', () => {
     expect(r.code).toBe(2);
     expect(r.log.gotos.filter((g) => g.url.includes('/s/#'))).toEqual([]);
     expect(read(r.out, 'report.md')).toContain('error, kiosk: the screen named by E2E_KIOSK_URL showed no invitation with a code');
+  });
+  it('records the validator census on every rotation reading and counts it in report.md, never in the verdict', async () => {
+    const census = (i: number): SkippedTextEntry[] => {
+      if (i === 1) return [{ surface: 'kiosk', value: 'count:2;link:1;instruction:1' }, { surface: 'nearby', value: '1' }];
+      if (i === 2) return [{ surface: 'kiosk', value: 'count:1;instruction:1' }, { surface: 'nearby', value: '0' }];
+      return QUIET_CENSUS;
+    };
+    const quiet = await observe([]);
+    const skipping = await observe([], { skippedText: census });
+    // Monitored, never a gate (decision 24): the same verdict and exit code as a wall that skipped nothing.
+    expect(skipping.code, skipping.lines.join('\n')).toBe(0);
+    expect(skipping.code).toBe(quiet.code);
+    const statuses = (out: string): string[] => read(out, 'report.md').split('\n').filter((l) => /^\| [a-z0-9-]+ \| d[123] \|/.test(l));
+    expect(statuses(skipping.out)).toEqual(statuses(quiet.out));
+    expect(THRESHOLDS.filter((t) => /skipped/i.test(`${t.id} ${t.metric} ${t.target}`))).toEqual([]);
+    const rows = read(skipping.out, 'rotation.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ObservedRotationRow);
+    expect(rows.map((r) => r.skippedText?.total)).toEqual([0, 3, 1]);
+    expect(rows[1].skippedText!.surfaces).toEqual([{ surface: 'kiosk', count: 2, reasons: { link: 1, instruction: 1 } }, { surface: 'nearby', count: 1, reasons: {} }]);
+    const report = read(skipping.out, 'report.md');
+    expect(report).toContain('Verdict: **PASS**.');
+    expect(report).toContain('### Skipped third-party text (data-skipped-text, monitored, never a gate)');
+    expect(report).toContain('| 3 | 0 | 2 | 4 | 3 (reading 1: kiosk 2, nearby 1) | kiosk 3, nearby 1 | link 1, instruction 2 |');
+    expect(report).toContain('Readings with a skip, for the owner: 1, 2 (rotation.jsonl, `skippedText`).');
+    expect(read(quiet.out, 'report.md')).toContain('| 3 | 0 | 0 | 0 | 0 | kiosk 0, nearby 0 | — |');
+  });
+
+  it('a wall without the census, or a page that cannot answer it, is reported as such and still leaves the exit code alone', async () => {
+    const none = await observe([], { skippedText: () => [] });
+    expect(none.code, none.lines.join('\n')).toBe(0);
+    expect(read(none.out, 'report.md')).toContain('No reading carried a `data-skipped-text` count (3 readings): a build before D2, or the census was not readable.');
+    const gone = await observe([], { skippedTextThrows: true });
+    expect(gone.code, gone.lines.join('\n')).toBe(0);
+    expect(read(gone.out, 'report.md')).toContain('No reading carried a `data-skipped-text` count (3 readings, 3 could not be read)');
+    const rows = read(gone.out, 'rotation.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ObservedRotationRow);
+    expect(rows.every((r) => r.skippedText?.total === null && /context was destroyed/.test(r.skippedText.error ?? ''))).toBe(true);
   });
 });

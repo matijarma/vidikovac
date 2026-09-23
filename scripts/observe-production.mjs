@@ -31,6 +31,9 @@
 // read the same selectors and numbers. Every planned reading is judged: a reading that failed or never
 // happened fails its row, it never drops out of the verdict.
 //
+// Every rotation reading also carries the wall validator's `data-skipped-text` census (`skippedText` in
+// rotation.jsonl, totals in report.md): a monitored figure (RUN decision 24), read by no threshold.
+//
 // Output: review.local/observe-<stamp>/ with inventory.json, rotation.jsonl, legibility.json, report.md,
 // plus recorders.json and captures/*.png (all gitignored through *.local; --out must stay in such a folder
 // or outside the repository). Exit codes: 0 every applied threshold holds; 1 a threshold fails; 2 the run
@@ -476,6 +479,20 @@ export const DESKTOP_READ_IN_PAGE = (spec) => {
   };
   return { sadaInViewport: inView(spec.sada), kartaInViewport: inView(spec.karta), domains: document.querySelectorAll(spec.domains).length, shareCityVisible: inView(spec.shareCity) };
 };
+/**
+ * The wall validator's census (RUN decision 24: a MONITORED figure, never a gate): every element that
+ * carries `data-skipped-text`, by its data-testid. The kiosk root (`kiosk`) writes the rows the last
+ * selection left out for their third-party text and why, "count:2;link:1;instruction:1"
+ * (app/src/city/nearby.ts skippedTextCensus, reasons in shared/kiosk/external-text.ts order); the
+ * "U blizini" timeline (`nearby`) writes how many rows its render check dropped, a bare "1"
+ * (app/src/kiosk/timeline.ts). Read on every rotation reading, recorded in rotation.jsonl and counted in
+ * report.md; no threshold reads it, so it never moves the exit code.
+ */
+export const SKIPPED_TEXT_SPEC = Object.freeze({ selector: '[data-skipped-text]' });
+export const SKIPPED_TEXT_IN_PAGE = (spec) => Array.from(document.querySelectorAll(spec.selector)).map((el) => ({
+  surface: el.getAttribute('data-testid') || el.tagName.toLowerCase(),
+  value: el.getAttribute('data-skipped-text') || '',
+}));
 
 const shipped = (re) => ({ source: re.source, flags: re.flags });
 const phoneSpec = (inventory) => {
@@ -485,6 +502,66 @@ const phoneSpec = (inventory) => {
 };
 const errText = (e) => String(e && e.message ? e.message : e).split(/\r?\n/)[0].slice(0, 300);
 const zagreb = (ms) => new Date(ms).toLocaleString('hr-HR', { timeZone: 'Europe/Zagreb', hour12: false });
+
+/** One census value: "count:N;reason:n…" (the kiosk root) or a bare "N" (the timeline); anything else keeps its raw text and no count. */
+export function parseSkippedText(value) {
+  const text = String(value ?? '').trim();
+  if (/^\d+$/.test(text)) return { count: Number(text), reasons: {} };
+  let count = null;
+  const reasons = {};
+  for (const part of text.split(';')) {
+    const m = /^([a-z-]+):(\d+)$/.exec(part.trim());
+    if (!m) return { count: null, reasons: {}, raw: text.slice(0, 80) };
+    if (m[1] === 'count') count = Number(m[2]);
+    else reasons[m[1]] = Number(m[2]);
+  }
+  return count === null ? { count: null, reasons: {}, raw: text.slice(0, 80) } : { count, reasons };
+}
+/** A reading's census per surface, and its total: null when no surface wrote a count (a build before D2). */
+export function skippedTextOf(entries) {
+  const surfaces = entries.map(({ surface, value }) => ({ surface, ...parseSkippedText(value) }));
+  const counted = surfaces.filter((x) => x.count !== null);
+  return { total: counted.length ? counted.reduce((n, x) => n + x.count, 0) : null, surfaces };
+}
+/** The census now; a page that cannot answer gives no count and the error, never a failed run. */
+export async function readSkippedText(page) {
+  try {
+    return skippedTextOf(await page.evaluate(SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC));
+  } catch (e) {
+    return { total: null, surfaces: [], error: errText(e) };
+  }
+}
+/**
+ * The rotation's census for report.md: total = the counts summed over the readings (a row left out in
+ * consecutive readings counts in each), max = the largest count in one reading, with its reading and surfaces.
+ */
+export function summariseSkippedText(rotation) {
+  const withCensus = rotation.filter((r) => r.skippedText && r.skippedText.total !== null);
+  const bySurface = {};
+  const reasons = {};
+  let max = null;
+  for (const r of withCensus) {
+    if (max === null || r.skippedText.total > max.skippedText.total) max = r;
+    for (const x of r.skippedText.surfaces) {
+      if (x.count !== null) bySurface[x.surface] = (bySurface[x.surface] ?? 0) + x.count;
+      for (const [reason, n] of Object.entries(x.reasons)) reasons[reason] = (reasons[reason] ?? 0) + n;
+    }
+  }
+  const flagged = withCensus.filter((r) => r.skippedText.total > 0).map((r) => r.n);
+  return {
+    readings: rotation.length,
+    withCensus: withCensus.length,
+    withSkip: flagged.length,
+    total: withCensus.reduce((n, r) => n + r.skippedText.total, 0),
+    max: max ? max.skippedText.total : null,
+    maxReading: max ? max.n : null,
+    maxSurfaces: max ? max.skippedText.surfaces.map((x) => ({ surface: x.surface, count: x.count })) : [],
+    bySurface,
+    reasons,
+    flagged,
+    errors: rotation.filter((r) => r.skippedText && r.skippedText.error).length,
+  };
+}
 
 // --- observing ----------------------------------------------------------------------------------------
 /** A browser context with the observer's user agent and a recorder on its one page. */
@@ -597,6 +674,8 @@ export async function rotate(page, ctx, calm = []) {
     steps, stepMs: wall.ROTATION_STEP_MS, clock: 'real',
     onSample: async (row) => {
       if (!('error' in row)) ctx.scrub.noteCode(row.code);
+      // The validator's census rides on the reading it belongs to (monitored, never judged).
+      row.skippedText = await readSkippedText(page);
       ctx.appendRotation(row);
       last = row.n;
       if (row.n % per === 0) { await close(row.n); await start(row.n); }
@@ -1407,6 +1486,16 @@ export function renderReport(observation, verdict, instruments) {
     lines.push('| Readings | Failed | Turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
     if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, theme ${k.first.theme ?? '?'}.`, '');
+    const skip = summariseSkippedText(rot);
+    lines.push('### Skipped third-party text (data-skipped-text, monitored, never a gate)', '');
+    if (skip.withCensus === 0) {
+      lines.push(`No reading carried a \`data-skipped-text\` count (${skip.readings} readings${skip.errors ? `, ${skip.errors} could not be read` : ''}): a build before D2, or the census was not readable.`, '');
+    } else {
+      const pairs = (o) => Object.entries(o).map(([key, n]) => `${key} ${n}`).join(', ') || '—';
+      lines.push('| Readings with a census | Without | With a skip | Total skipped | Max per reading | Per surface | Reasons |', '|---:|---:|---:|---:|---|---|---|');
+      lines.push(`| ${skip.withCensus} | ${skip.readings - skip.withCensus} | ${skip.withSkip} | ${skip.total} | ${skip.max}${skip.max ? ` (reading ${skip.maxReading}: ${cell(skip.maxSurfaces.map((x) => `${x.surface} ${x.count ?? '?'}`).join(', '))})` : ''} | ${cell(pairs(skip.bySurface))} | ${cell(pairs(skip.reasons))} |`, '');
+      lines.push(`Total skipped sums the counts over the readings, so a row left out in consecutive readings counts in each. ${skip.withSkip ? `Readings with a skip, for the owner: ${skip.flagged.slice(0, 30).join(', ')}${skip.flagged.length > 30 ? ` and ${skip.flagged.length - 30} more` : ''} (rotation.jsonl, \`skippedText\`).` : 'No reading left a row out.'} No threshold reads this census, so it never changes the exit code.`, '');
+    }
   }
 
   const views = [...(k?.viewports ?? []), ...(observation.phone?.viewports ?? []), ...(observation.desktop?.viewports ?? [])];

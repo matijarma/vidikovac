@@ -1,7 +1,7 @@
 /* /s/: one column, the field first, the code the largest thing on the page.
    Linked from <head> after tokens.css, base.css and signage.css, so the page is
-   styled from the first paint; .btn, .btn-ghost, .btn-primary, .card and the
-   input reset come from base.css. The entry imports base.css and signage.css
+   styled from the first paint; .btn, .btn-ghost, .btn-primary and the input
+   reset come from base.css. The entry imports base.css and signage.css
    again (the signage contract, test/app/signage-css.test.ts): the build keeps
    one copy, but Vite's dev server paints that copy after this sheet, so no rule
    here may rely on following base.css at equal specificity; where a base rule
@@ -122,26 +122,6 @@ input[type='text'].scan-input {
 
 .scan-camera { display: grid; }
 .scan-camera[hidden] { display: none; }
-
-/* The confirm card is a ticket, one of the few objects on a surface, so the
-   plate (base.css .card) is allowed. The code is the largest thing on it. */
-.scan-confirm { display: grid; gap: var(--sp-3); }
-.scan-confirm[hidden] { display: none; }
-.scan-confirm:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: 3px; }
-.scan-confirm-title { font-size: var(--type-title); line-height: var(--lh-title); }
-.scan-confirm-code {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-weight: var(--weight-bold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.18em;
-  line-height: var(--lh-tight);
-  color: var(--tone-text-primary);
-}
-.scan-confirm-label { font-size: var(--type-body); font-weight: var(--weight-medium); line-height: var(--lh-body); }
-.scan-confirm-stop { color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
-.scan-confirm-hint { color: var(--tone-text-muted); font-size: var(--type-secondary); line-height: var(--lh-body); }
-.scan-confirm-actions { display: grid; gap: var(--sp-2); margin-top: var(--sp-1); }
 
 .scan-foot {
   display: flex;
