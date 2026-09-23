@@ -412,6 +412,9 @@ export class TwinDO extends DurableObject<Env> {
     // In place: the engine's dwell table closes over THIS object (F11).
     trimDwellRecent(this.dwellRecent, Math.floor(nowMs / 1000));
     const learnedFlushed = this.flushLearnedIfDue(result.state, nowMs);
+    // Keep identity in the SAME row as its arcs. The learned-table marker
+    // can commit before an isolate dies, while the old state row remains.
+    Object.assign(result.state, { motionNetwork: this.engine?.net.graphHash ?? null });
     this.state = result.state;
     this.payload = result.payload;
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
@@ -521,6 +524,10 @@ export class TwinDO extends DurableObject<Env> {
     const now = this.now();
     // A restore IS the cold start, whatever the tick that reached it thought.
     await this.ensureAssets(now, true);
+    const stateNetwork = (saved as TwinState & { motionNetwork?: string | null }).motionNetwork;
+    // Legacy rows have no identity. Re-derive them once rather than assume
+    // that the independently committed learned-table marker dates the arcs.
+    if (!this.net || stateNetwork !== this.net.graphHash) this.graphChanged = true;
     // The minute the last life had not flushed yet is knowledge too -- but
     // its EDGE and NODE keys name edges and junctions of the graph that life
     // ran, so if this one loaded a different graph (F8c) only the stop dwells

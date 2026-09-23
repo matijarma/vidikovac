@@ -85,8 +85,19 @@ describe('TwinDO persisted graph migration', () => {
 
   it('preserves same-graph matches without replaying evidence', async () => {
     saved = deserializeState(serializeState(seed()));
+    Object.assign(saved, { motionNetwork: before.graphHash });
     const match = { ...saved.tracks.v6.match };
     const twin = await restore(before, false);
     expect(twin.state.tracks.v6.match).toEqual(match);
+  });
+
+  it.each([true, false])('uses the state row graph after an interrupted adoption (identity present=%s)', async identified => {
+    saved = deserializeState(serializeState(seed()));
+    if (identified) Object.assign(saved, { motionNetwork: before.graphHash });
+    // adoptGraph already committed its table marker before the previous
+    // isolate died. It now says "unchanged", but the state row is still old.
+    const twin = await restore(after, false);
+    expect(twin.state.tracks.v6.match.s).toBeCloseTo(8427.7, 0);
+    expect(twin.state).toHaveProperty('motionNetwork', after.graphHash);
   });
 });
