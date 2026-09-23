@@ -80,7 +80,7 @@
   "shell": {
     "session": "Session",
     "remaining": "{time} left",
-    "connecting": "Connecting…",
+    "connecting": "Connecting",
     "paused": "Refreshing is paused; the view holds the data as of {time}.",
     "sourcesDown_one": "{count} source is not responding.",
     "sourcesDown_other": "{count} sources are not responding.",
@@ -406,7 +406,7 @@
     "vehiclesNow_other": "{count} vehicles moving",
     "noVehiclesNow": "No vehicle of this route is moving right now.",
     "screenStop": "This screen’s stop",
-    "mapLoading": "Map loading…",
+    "mapLoading": "Loading the map",
     "tilesFailed": "The base map is unavailable right now; routes, stops and vehicles are still shown.",
     "mapUnavailable": "The map is not available in this browser. Search, routes and stops work without it.",
     "showOnMap": "Show on the map",
@@ -442,7 +442,7 @@
     "routeTitle": "Route {short}",
     "showRoute": "Show the route",
     "lineFocusOn": "Only this line on the map",
-    "peekLoading": "Loading vehicles…",
+    "peekLoading": "Loading vehicles",
     "peekFollowing": "Following: {title}",
     "windowFromUntil": "from {from} to {until}"
   },
@@ -462,7 +462,7 @@
     "noScreen": "This session has no screen.",
     "peer": "The screen follows the phone that scanned the code.",
     "frozen": "The session has ended; the screen no longer receives the view.",
-    "connecting": "Connecting to the screen…"
+    "connecting": "Connecting to the screen"
   },
   "notify": {
     "title": "In-app highlights",
@@ -511,8 +511,8 @@
     "expiredCta": "Scan for another 10 minutes",
     "revoked": "The screen was switched off and the session ended.",
     "revokedCta": "Scan another screen",
-    "connecting": "Connecting…",
-    "disconnected": "Connection lost. Reconnecting…",
+    "connecting": "Connecting",
+    "disconnected": "The connection was lost and is being restored.",
     "reconnectingVisible": "Reconnecting. The countdown continues.",
     "noTicket": "The session cannot resume in this browser. Scan the code again.",
     "accessDenied": "Access to the data was refused. Close the page and open it again.",
@@ -674,7 +674,7 @@
     "liveSources": "These are source data, not screenshots. A timestamp beside a reading belongs to its source; availability checks are shown separately.",
     "live": {
       "idle": "Data loads with JavaScript enabled.",
-      "loading": "Fetching data…",
+      "loading": "Loading data",
       "unavailable": "Currently unavailable",
       "unconfirmed": "Status is unconfirmed",
       "stale": "Last known data",
@@ -747,8 +747,8 @@
     "codeLabel": "Code from the screen",
     "codeHint": "Eight characters, e.g. ABCD-EFGH. The letters I, L and O do not exist: type 1 or 0.",
     "check": "Check the code",
-    "checking": "Checking the code…",
-    "checkingButton": "Checking…",
+    "checking": "Checking the code",
+    "checkingButton": "Checking",
     "confirmPeer": "Another person's phone",
     "venue": {
       "kafic": "café",
@@ -785,7 +785,7 @@
       "videoLabel": "Camera viewfinder",
       "struggling": "Hold steady, or move a little closer.",
       "torch": "Light",
-      "opening": "The camera is starting…",
+      "opening": "The camera is starting",
       "live": "The camera is on."
     }
   },
@@ -805,7 +805,7 @@
     },
     "status": {
       "offline": "Screen offline; no code can be issued",
-      "reconnecting": "Reconnecting…",
+      "reconnecting": "Reconnecting",
       "dataDown": "The screen overview could not refresh."
     },
     "invite": {
@@ -813,7 +813,7 @@
       "support": "Your departures, places, events and saved choices. No account or installation.",
       "typeCode": "or type the code at {host}",
       "qrLabel": "QR code to unlock. Code: {code}",
-      "qrWaiting": "Code on its way…",
+      "qrWaiting": "Code on its way",
       "codeWaiting": "waiting for a code",
       "progressLabel": "Time left on this code"
     },
@@ -835,7 +835,7 @@
       "daylight": "daylight {hours} h {minutes} min",
       "range": "{min} to {max} °C",
       "unavailable": "DHMZ data is unavailable right now.",
-      "loading": "Loading DHMZ data…",
+      "loading": "Loading DHMZ data",
       "station": "station {name}",
       "noReading": "no temperature reading"
     },
@@ -850,7 +850,7 @@
       "more_one": "{count} more line",
       "more_other": "{count} more lines",
       "unavailable": "ZET is not answering right now.",
-      "loading": "Loading ZET data…",
+      "loading": "Loading ZET data",
       "modelNote": "Vehicle positions are estimates from ZET reports; a line’s delay is not an arrival time.",
       "vehiclesMoving_one": "{count} vehicle moving",
       "vehiclesMoving_other": "{count} vehicles moving"
@@ -1085,7 +1085,7 @@
       "noResults": "No stop with that name.",
       "routesAt": "lines {routes}",
       "create": "Start",
-      "creating": "Starting the screen…",
+      "creating": "Starting the screen",
       "validity": "Valid 24 hours · at most five screens per hour from one network",
       "errorAccess": "The server refused setup from this connection. Try again from another network.",
       "errorQuota": "The hourly limit of temporary screens has been reached.",
@@ -1112,7 +1112,7 @@
       "hint": "Closes by itself after a minute and a half.",
       "close": "Close",
       "save": "Save",
-      "saving": "Saving…",
+      "saving": "Saving",
       "saveOffline": "The change was not sent: the screen has no connection to the server right now. Try again.",
       "saveRefused": "The server did not accept the place. Choose again.",
       "saveBusy": "Wait a moment, then choose again.",
@@ -1154,7 +1154,7 @@
     "self": "You control the screen",
     "other": "Another visitor controls the screen",
     "ready": "The screen is ready",
-    "pending": "Waiting for the screen to confirm…",
+    "pending": "Waiting for the screen to confirm",
     "displayed": "Displayed on the screen.",
     "notConfirmed": "Display not confirmed. Check the screen or try again.",
     "offline": "The screen is offline. Your own view still works.",

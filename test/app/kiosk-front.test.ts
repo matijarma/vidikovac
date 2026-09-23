@@ -124,7 +124,7 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     const empty = (status: 'down' | 'none' | 'stale' | 'live') =>
       prometPanel(input([snap('zet-rt', [route('6', 240)])], { prometMode: 'exceptions', prometRows: [], prometBoard: { status, total: 0, platforms: 1 } })).note;
     expect(empty('down')).toBe('Vozni red trenutačno nije dostupan.');
-    expect(empty('none')).toBe('Učitavanje podataka ZET-a…');
+    expect(empty('none')).toBe('Učitavanje podataka ZET-a');
     expect(empty('stale')).toBe('Zastarjelo: izvor ne odgovara, stanje nije potvrđeno');
     expect(empty('live')).toBe('Nema najavljenih polazaka.');
   });

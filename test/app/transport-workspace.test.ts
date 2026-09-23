@@ -350,7 +350,7 @@ describe('the sheet', () => {
     expect(text(pending)).toBe(createDefaultI18n('hr').t('status.loading'));
     // No place of its own on this context: Trg bana J. Jelačića [O-65], with no circle to print yet.
     expect(text(q('[data-testid=transport-peek]'))).toBe('Trg bana J. Jelačića');
-    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava…');
+    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava');
     context.nearby = NEARBY;
     render(context);
     expect(q('[data-testid=nearby-pending]')).toBeNull();

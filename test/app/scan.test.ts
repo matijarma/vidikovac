@@ -430,7 +430,7 @@ describe('createScanPage', () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it('keeps the keyboard during the check: the field is read-only and busy, never disabled; the check reads Provjera…', async () => {
+  it('keeps the keyboard during the check: the field is read-only and busy, never disabled; the check reads Provjera', async () => {
     let release!: (value: ScanOk) => void;
     const pending = new Promise<ScanOk>((resolve) => {
       release = resolve;
@@ -441,12 +441,12 @@ describe('createScanPage', () => {
     send();
     await flush();
     expect(scan).toHaveBeenCalledTimes(1);
-    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda…');
+    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda');
     expect(input.disabled).toBe(false);
     expect(input.readOnly).toBe(true);
     expect(input.getAttribute('aria-busy')).toBe('true');
     expect(submitButton.disabled).toBe(true);
-    expect(text(submitButton)).toBe('Provjera…');
+    expect(text(submitButton)).toBe('Provjera');
     release(KIOSK);
     await flush();
     expect(text(root.querySelector('[data-testid=scan-status]'))).toContain('Kavana Velebit');
@@ -569,7 +569,7 @@ describe('camera region', () => {
     button.click();
     expect(scroll).toHaveBeenCalledWith({ block: 'center' });
     expect(before(region, root.querySelector('form')!)).toBe(true);
-    expect(text(status)).toBe('Kamera se uključuje…');
+    expect(text(status)).toBe('Kamera se uključuje');
     expect(document.activeElement).toBe(scanner().element.querySelector('[data-qr-scan-cancel]'));
     await flush();
     expect(text(status)).toBe('Kamera je uključena.');

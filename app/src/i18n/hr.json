@@ -81,7 +81,7 @@
   "shell": {
     "session": "Sesija",
     "remaining": "Preostalo {time}",
-    "connecting": "Povezivanje…",
+    "connecting": "Povezivanje",
     "paused": "Osvježavanje je zaustavljeno; prikaz stoji na podacima od {time}.",
     "sourcesDown_one": "{count} izvor ne odgovara.",
     "sourcesDown_few": "{count} izvora ne odgovaraju.",
@@ -422,7 +422,7 @@
     "vehiclesNow_other": "{count} vozila u pokretu",
     "noVehiclesNow": "Trenutačno nijedno vozilo ove linije nije u pokretu.",
     "screenStop": "Stajalište ovog zaslona",
-    "mapLoading": "Karta se učitava…",
+    "mapLoading": "Karta se učitava",
     "tilesFailed": "Podloga karte trenutačno nije dostupna; linije, stajališta i vozila i dalje su prikazani.",
     "mapUnavailable": "Karta nije dostupna u ovom pregledniku. Pretraga, linije i stajališta rade i bez karte.",
     "showOnMap": "Prikaži na karti",
@@ -458,7 +458,7 @@
     "routeTitle": "Linija {short}",
     "showRoute": "Prikaži liniju",
     "lineFocusOn": "Samo ova linija na karti",
-    "peekLoading": "Vozila se učitavaju…",
+    "peekLoading": "Vozila se učitavaju",
     "peekFollowing": "Praćenje: {title}",
     "windowFromUntil": "od {from} do {until}"
   },
@@ -479,7 +479,7 @@
     "noScreen": "Ova sesija nema zaslon.",
     "peer": "Zaslon prati telefon koji je skenirao kod.",
     "frozen": "Sesija je završila; zaslon više ne prima prikaz.",
-    "connecting": "Povezivanje sa zaslonom…"
+    "connecting": "Povezivanje sa zaslonom"
   },
   "notify": {
     "title": "Isticanje u aplikaciji",
@@ -529,8 +529,8 @@
     "expiredCta": "Skeniraj za novih 10 minuta",
     "revoked": "Zaslon je isključen i sesija je prekinuta.",
     "revokedCta": "Skeniraj drugi zaslon",
-    "connecting": "Povezivanje…",
-    "disconnected": "Veza je prekinuta. Ponovno povezivanje…",
+    "connecting": "Povezivanje",
+    "disconnected": "Veza je prekinuta i ponovno se uspostavlja.",
     "reconnectingVisible": "Veza se obnavlja. Odbrojavanje ide dalje.",
     "noTicket": "Sesija se ne može nastaviti u ovom pregledniku. Skeniraj kod ponovno.",
     "accessDenied": "Pristup podacima je odbijen. Zatvori stranicu i otvori je ponovno.",
@@ -696,7 +696,7 @@
     "liveSources": "Ovdje su podaci iz izvora, ne snimke. Vrijeme uz podatak pripada izvoru; provjera dostupnosti prikazana je zasebno.",
     "live": {
       "idle": "Podaci se učitavaju uz JavaScript.",
-      "loading": "Dohvat podataka…",
+      "loading": "Učitavanje podataka",
       "unavailable": "Trenutačno nedostupno",
       "unconfirmed": "Stanje nije potvrđeno",
       "stale": "Posljednji poznati podatak",
@@ -769,8 +769,8 @@
     "codeLabel": "Kod sa zaslona",
     "codeHint": "Osam znakova, npr. ABCD-EFGH. Slova I, L i O ne postoje: upiši 1 ili 0.",
     "check": "Provjeri kod",
-    "checking": "Provjera koda…",
-    "checkingButton": "Provjera…",
+    "checking": "Provjera koda",
+    "checkingButton": "Provjera",
     "confirmPeer": "Telefon druge osobe",
     "venue": {
       "kafic": "kafić",
@@ -807,7 +807,7 @@
       "videoLabel": "Slika s kamere",
       "struggling": "Drži mirno ili se malo približi.",
       "torch": "Svjetlo",
-      "opening": "Kamera se uključuje…",
+      "opening": "Kamera se uključuje",
       "live": "Kamera je uključena."
     }
   },
@@ -827,7 +827,7 @@
     },
     "status": {
       "offline": "Bez veze sa zaslonom; kod se ne može izdati",
-      "reconnecting": "Ponovno povezivanje…",
+      "reconnecting": "Ponovno povezivanje",
       "dataDown": "Osvježavanje pregleda zaslona nije uspjelo."
     },
     "invite": {
@@ -835,7 +835,7 @@
       "support": "Tvoji polasci, mjesta, događanja i spremljeni izbori. Bez računa i instalacije.",
       "typeCode": "ili upiši kod na {host}",
       "qrLabel": "QR kod za otključavanje. Kod: {code}",
-      "qrWaiting": "Kod stiže…",
+      "qrWaiting": "Kod stiže",
       "codeWaiting": "čekanje koda",
       "progressLabel": "Preostalo vrijeme ovog koda"
     },
@@ -857,7 +857,7 @@
       "daylight": "dan traje {hours} h {minutes} min",
       "range": "{min} do {max} °C",
       "unavailable": "Podaci DHMZ-a trenutačno nisu dostupni.",
-      "loading": "Učitavanje podataka DHMZ-a…",
+      "loading": "Učitavanje podataka DHMZ-a",
       "station": "postaja {name}",
       "noReading": "bez očitanja temperature"
     },
@@ -874,7 +874,7 @@
       "more_few": "još {count} linije",
       "more_other": "još {count} linija",
       "unavailable": "ZET trenutačno ne odgovara.",
-      "loading": "Učitavanje podataka ZET-a…",
+      "loading": "Učitavanje podataka ZET-a",
       "modelNote": "Položaj vozila je procjena iz očitanja ZET-a; kašnjenje linije nije vrijeme dolaska.",
       "vehiclesMoving_one": "{count} vozilo u pokretu",
       "vehiclesMoving_few": "{count} vozila u pokretu",
@@ -1122,7 +1122,7 @@
       "noResults": "Nema stajališta s tim imenom.",
       "routesAt": "linije {routes}",
       "create": "Pokreni",
-      "creating": "Pokretanje zaslona…",
+      "creating": "Pokretanje zaslona",
       "validity": "Vrijedi 24 sata · najviše pet zaslona na sat s iste mreže",
       "errorAccess": "Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.",
       "errorQuota": "Dosegnut je broj privremenih zaslona za ovaj sat.",
@@ -1150,7 +1150,7 @@
       "hint": "Zatvara se samo od sebe nakon minute i pol.",
       "close": "Zatvori",
       "save": "Spremi",
-      "saving": "Spremanje…",
+      "saving": "Spremanje",
       "saveOffline": "Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.",
       "saveRefused": "Poslužitelj nije prihvatio mjesto. Odaberi ponovno.",
       "saveBusy": "Pričekaj koji trenutak pa odaberi ponovno.",
@@ -1192,7 +1192,7 @@
     "self": "Ti vodiš zaslon",
     "other": "Druga osoba vodi zaslon",
     "ready": "Zaslon je spreman",
-    "pending": "Čekamo potvrdu zaslona…",
+    "pending": "Čekamo potvrdu zaslona",
     "displayed": "Prikazano na zaslonu.",
     "notConfirmed": "Prikaz nije potvrđen. Provjeri zaslon ili pokušaj ponovno.",
     "offline": "Zaslon trenutačno nema vezu. Tvoj pogled i dalje radi.",

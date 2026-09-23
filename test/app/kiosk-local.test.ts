@@ -1184,7 +1184,7 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(quiet).not.toContain('k-weather-icon');
     expect(quiet).toContain('<span class="k-condition">lahor</span>');
     const loading = weatherMarkup(weatherNow([], hr, 'hr'), hr);
-    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a…</p>');
+    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a</p>');
   });
   it('transport gives the board its own region, and a selected route becomes its subject', () => {
     const { lines, side } = paired('u-pokretu');

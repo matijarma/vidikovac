@@ -1407,7 +1407,7 @@ describe('invitation: the screen a passer-by sees', () => {
   it('keeps the link out of the page and the QR waiting until a code exists; the bar is quantised under reduced motion', () => {
     const k = mount({ stored: STORED, reducedMotion: true });
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže…');
+    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže');
     k.handlers.onCodes(batch(NOW - 7_000), NOW);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('0.80');
   });
@@ -2044,7 +2044,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
     k.handlers.onStatus('live');
     k.handlers.onStatus('connecting');
-    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje…');
+    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje');
     k.handlers.onStatus('live');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });

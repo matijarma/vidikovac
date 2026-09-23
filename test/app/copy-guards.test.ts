@@ -333,11 +333,15 @@ describe('leaves', () => {
       }
     }
   });
+  it('no leaf in either catalogue ends or breaks off in an ellipsis: a status is a whole phrase (WP5)', () => {
+    for (const [name, catalogue] of [['hr', HR], ['en', EN]] as const) {
+      expect(leafKeys(catalogue).filter((key) => /…|\.\.\./u.test(leaf(catalogue, key)!)), name).toEqual([]);
+    }
+  });
 });
 
-// The wall of 22 September (WP1) owns three key groups. The rule is scoped to
-// them: older kiosk copy still carries loading ellipses ("Kod stiže…") that
-// belong to other surfaces and other packages.
+// The wall of 22 September (WP1) owns three key groups; these rules are theirs.
+// The ellipsis ban holds for every leaf ("leaves" above).
 describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP1)', () => {
   const GROUPS = ['nearby', 'sentence', 'handheld'] as const;
   const values = (catalogue: Catalogue): (readonly [string, string])[] =>
