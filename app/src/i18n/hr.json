@@ -761,6 +761,7 @@
     }
   },
   "kiosk": {
+    "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
     "surface": "javni zaslon",
     "header": {
       "theme": "Tema: {pref}",

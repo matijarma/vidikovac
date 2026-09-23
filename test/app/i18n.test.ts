@@ -68,8 +68,9 @@ const DEAD_KEYS = [
   // had landed, each checked by hand for a reader through a variable (the
   // orphan test's READ_THROUGH list): the retired phone overview and its
   // panels, the old map chrome, the event list's unused labels, the city
-  // words no screen says any more, the invitation's second sentence and
-  // support line, the confirmed-time strip cell and the paired delays title.
+  // words no screen says any more, the invitation's support line, the
+  // confirmed-time strip cell and the paired delays title. (kiosk.invitation,
+  // the owner's approved line, stays: orchestrator decision 42.)
   'common.print', 'shared.safetyOpen', 'attribution.source', 'shell.connecting', 'shell.footerNote', 'shell.sunset',
   'overview.allClear', 'safety.closuresUnknown',
   'events.thisWeek', 'events.later', 'events.fromDate', 'events.licence', 'events.when', 'events.selectHint',
@@ -81,7 +82,7 @@ const DEAD_KEYS = [
   'directory.eventsSummary_one', 'directory.eventsSummary_few', 'directory.eventsSummary_other', 'session.joinedNotice',
   'panels.vehicles', 'panels.map', 'panels.mapExpand', 'panels.mapCollapse', 'panels.schematic', 'panels.delays', 'panels.sun',
   'panels.events', 'panels.cityWork', 'panels.cityWorkChanged', 'panels.humidity', 'landing.pages.scan',
-  'kiosk.invitation', 'kiosk.invite.support', 'kiosk.safety.confirmed', 'kiosk.paired.delays',
+  'kiosk.invite.support', 'kiosk.safety.confirmed', 'kiosk.paired.delays',
   'cityOverview.title', 'cityOverview.nearby', 'cityOverview.next', 'cityOverview.city',
   // WP5 A1: city/strings.ts is the adapter over city.*; its unread words never entered the catalogue.
   'city.map', 'city.movement', 'city.network', 'city.all', 'city.city', 'city.useful', 'city.layers', 'city.list', 'city.here',
@@ -125,6 +126,7 @@ describe('catalogs', () => {
     expect('Vi možete nastaviti.').toMatch(formal);
   });
   it('carries the approved copy verbatim', () => {
+    expect(hr.kiosk.invitation).toBe('Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.');
     expect(hr.session.unlocked).toBe('Otključano · {label} · do {time}');
     // The end clears the content (WP4 step 11), so the minute's warning promises nothing about what stays.
     expect(hr.session.expiring60).toBe('Još minuta.');

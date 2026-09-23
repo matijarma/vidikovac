@@ -742,6 +742,7 @@
     }
   },
   "kiosk": {
+    "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
     "surface": "public screen",
     "header": {
       "theme": "Theme: {pref}",

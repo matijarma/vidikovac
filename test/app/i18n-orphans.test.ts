@@ -10,7 +10,8 @@
 // 'panels.eventsEmpty'), or when it is on READ_THROUGH below: the few keys a
 // variable carries, each named with the line of code that reads it, reviewed
 // by hand (WP5 A1). A line that goes takes its keys with it: the test fails
-// until they are deleted too.
+// until they are deleted too. OWNER_COPY is the one other way: owner-approved
+// copy is kept even while nothing reads it (orchestrator decision 42).
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,13 @@ function leafKeys(node: unknown, prefix = ''): string[] {
 }
 const PLURAL = /_(zero|one|two|few|many|other)$/;
 const base = (key: string): string => key.replace(PLURAL, '');
+
+/**
+ * Owner-approved copy no screen reads today. Orchestrator decision 42 (23 Sep 2026): a hygiene
+ * pass never deletes owner copy; it stays byte-exact (test/app/i18n.test.ts "carries the approved
+ * copy verbatim") until the owner retires it or a screen reads it again.
+ */
+const OWNER_COPY: readonly string[] = ['kiosk.invitation'];
 
 /** Keys a variable carries to i18n.t / tr / ct, with the code that reads them. */
 const READ_THROUGH: ReadonlyArray<{ keys: readonly string[]; file: string; code: readonly string[] }> = [
@@ -76,7 +84,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
   const scan = scanI18n();
   const leaves = leafKeys(hr);
   const handedOn = literalKeys(new Set([...leaves, ...leaves.map(base)]));
-  const readThrough = new Set(READ_THROUGH.flatMap((entry) => entry.keys));
+  const readThrough = new Set([...READ_THROUGH.flatMap((entry) => entry.keys), ...OWNER_COPY]);
 
   it('the scan meets only allowed dynamic prefixes (notify., timeband., city.fact- …)', () => {
     expect(unknownDynamicPrefixes(scan)).toEqual([]);
@@ -90,6 +98,14 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     }
   });
 
+  it('OWNER_COPY lists only owner copy the scan finds unread (decision 42), each in both catalogues', () => {
+    for (const key of OWNER_COPY) {
+      expect(isReferenced(scan, key), `${key} has a reader again: take it off OWNER_COPY`).toBe(false);
+      expect(leaves, `${key} (hr)`).toContain(key);
+      expect(leafKeys(en), `${key} (en)`).toContain(key);
+    }
+  });
+
   it('no leaf of hr.json is left unread', () => {
     const unread = leaves.filter((key) => !isReferenced(scan, key) && !readThrough.has(key) && !handedOn.has(key) && !handedOn.has(base(key)));
     expect(unread, 'unread catalogue leaves: delete them (and their en.json twins), or give them a reader').toEqual([]);
@@ -100,14 +116,15 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1074 Croatian leaves and 1041 English ones', () => {
+  it('the catalogue holds 1075 Croatian leaves and 1042 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
     // -61 unread leaves (test/app/i18n.test.ts DEAD_KEYS, "WP5 A1", 58 in en, which writes no _few
-    // form): 1,074 hr, 1,041 en. A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1074);
-    expect(leafKeys(en).length).toBe(1041);
+    // form): 1,074 hr, 1,041 en; +1 kiosk.invitation restored as owner copy (decision 42): 1,075 hr,
+    // 1,042 en. A new leaf changes this number on purpose, with its reader.
+    expect(leaves.length).toBe(1075);
+    expect(leafKeys(en).length).toBe(1042);
     expect(leafKeys(hr.city).length).toBe(90);
   });
 });
