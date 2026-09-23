@@ -251,7 +251,9 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-sentence[hidden], .k-pairing-notice[hidden] { display: none; }
 .k-sentence-kicker { flex: none; font-size: var(--k-sub-size); font-weight: 800; color: var(--k-action); }
 .k-sentence-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: clip; font-weight: 600; color: var(--k-ink); }
-.k-sentence-probe { position: absolute; top: 0; left: var(--k-gap); right: var(--k-gap); visibility: hidden; pointer-events: none; }
+/* Centred, not hung from the top: under a session pill the middle is shorter than the twin's
+   line, and a twin hung from the top would stick out below the header's box. */
+.k-sentence-probe { position: absolute; top: 50%; translate: 0 -50%; left: var(--k-gap); right: var(--k-gap); visibility: hidden; pointer-events: none; }
 .k-sentence[data-kicker='kultura'] .k-sentence-kicker { color: var(--k-violet); }
 .k-sentence[data-kicker='vrijeme'] .k-sentence-kicker,
 .k-sentence[data-kicker='radovi'] .k-sentence-kicker { color: var(--k-amber); }
