@@ -13,6 +13,7 @@
 // The field also measures itself for the camera: fieldZoom (kiosk/mapview.ts)
 // derives the zoom from the map host's laid-out width, so the composition,
 // not a constant, decides how much ground the picture spans (R-KP2).
+import type { FrameStops } from '../../../shared/city/frame';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
@@ -48,6 +49,8 @@ export interface FieldHandle {
   measureHeight(): number;
   /** Contract 3: how many distinct major street names the map has placed, written on the map host as data-major-labels for the e2e's proof (roads_labels_major, at most 8). */
   setMajorLabels(count: number): void;
+  /** The probe contract (§15.6): the Kadar the map frames, 4, 6 or 8 stops, written on the map host as data-frame beside data-major-labels. Under lagano too: the hidden host keeps the selectors of both fields alike. */
+  setFrame(frame: FrameStops): void;
   /** The field's label and, under lagano, the board. */
   update(model: FieldModel): void;
   destroy(): void;
@@ -75,6 +78,10 @@ export function mountField(host: HTMLElement, deps: FieldDeps = {}): FieldHandle
     setMajorLabels(count) {
       const value = String(count);
       if (mapHostEl.dataset.majorLabels !== value) mapHostEl.dataset.majorLabels = value;
+    },
+    setFrame(frame) {
+      const value = String(frame);
+      if (mapHostEl.dataset.frame !== value) mapHostEl.dataset.frame = value;
     },
     update(model) {
       // The field is named by what it shows: the stop, or the lines title while the screen has no stop yet.
