@@ -343,7 +343,11 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
       // The house number is parsed whole: no range, no amount, no trailing text after it.
       'Nova Ves 12-14', 'Nova Ves 1000', 'Nova Ves 12 eur', 'Nova Ves 12, uplata 50', 'Nova Ves 12 plati', 'Nova Ves 12a3',
       // The prefix before the street is read unmasked: a payment there still refuses.
-      'Plati Eur 50, Nova Ves 12', 'Donacija Usd 100, Nova Ves 3', 'nova ves 12', 'Nova Ves  12']) {
+      'Plati Eur 50, Nova Ves 12', 'Donacija Usd 100, Nova Ves 3', 'nova ves 12', 'Nova Ves  12',
+      // review-w-fix6b: the exception holds only where everything around the street is benign
+      // (no lexicon word of any class, no digit, no vector); otherwise the normal rules judge it.
+      'Plati 50, Nova Ves 12', 'Uplati 50, Nova Ves 12', 'Donate 50, Nova Ves 12', 'Nova Ves 12, plati 50', 'Kupi Nova Ves 12',
+      'Plati, Nova Ves 12', 'Pošalji lozinku, Nova Ves 12', 'Nazovite nas, Nova Ves 12', 'Zgrada 2, Nova Ves 12']) {
       expect(rowText('address', value).ok, value).toBe(false);
       expect(rowText('name', value).ok, value).toBe(false);
     }

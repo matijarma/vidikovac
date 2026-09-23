@@ -328,16 +328,28 @@ export function sentenceInstruction(text: string): boolean {
 // VES) is that street, not a currency, but only in exactly that context: in a row's name or
 // address whose address part is the register's street name, written as the register writes it,
 // followed by a fully parsed house number (12, 5a, 4/1, and at most one more after " i ") and
-// nothing else. No verb, amount, range or trailing text can ride on it; every other reading,
-// every other kind and the header surface keep the code a currency (review-w-fix6 P1).
+// nothing else, and only where the name before the street is benign: no lexicon word of any
+// class, no digit, no vector, no reader request (review-w-fix6b). Otherwise the field is judged
+// by the normal rules with no exception; every other kind and the header surface keep the code
+// a currency (review-w-fix6 P1).
 const CURRENCY_CODES = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 const HOUSE = '\\d{1,3}[a-z]?(?:/\\d{1,3}[a-z]?)?';
 const REGISTER_STREET_ADDRESS = new RegExp(`^(?:(.+), )?(${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
   .map(escapeRegExp).join('|')}) (${HOUSE}(?: i ${HOUSE})?)$`, 'u');
+/** Nothing a reader could be asked to do, pay or contact: the context a register street may stand in. */
+function benignContext(text: string): boolean {
+  if (/\p{N}/u.test(text) || externalTextVector(text, 'name') !== null) return false;
+  for (const reading of readings(geographicReading(text, true))) {
+    if (sensitivePatterns.some(({ pattern, separated, nameSeparated }) => pattern.test(reading) || separated.test(reading) || nameSeparated.test(reading))) return false;
+    if (headerPatterns.some(({ pattern, separated }) => pattern.test(reading) || separated.test(reading))) return false;
+  }
+  if (partialVectors(text).length > 0 || contactPatterns.some(({ pattern }) => pattern.test(foldText(text)))) return false;
+  return readerRequestRule(text) === null && headerInstructionRule(text, 'name') === null;
+}
 function maskRegisterStreet(value: string): string {
   const match = REGISTER_STREET_ADDRESS.exec(value);
-  if (!match) return value;
+  if (!match || (match[1] !== undefined && !benignContext(match[1]))) return value;
   const street = match[2]!.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word);
   return `${match[1] !== undefined ? `${match[1]}, ` : ''}${street} ${match[3]}`;
 }
