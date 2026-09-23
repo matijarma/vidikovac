@@ -103,6 +103,8 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   // Without a stop the board is the lines seen nearby, so an empty one says so in the same words.
   if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(strings.lines.noneNearby)}</p>`;
   const more = board.more > 0 ? `<p class="k-line-more">${escapeHtml(plural(locale, strings.lines.more, board.more))}</p>` : '';
+  // The source and, for a last-good copy, the stale word: no caveat under the
+  // board on the wall (§12 "Never"); the phone's vehicle detail keeps its note.
   const stale = board.state === 'stale' ? ` · ${strings.paired.stale}` : '';
-  return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
+  return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`ZET${stale}`)}</p>`;
 }

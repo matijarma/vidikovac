@@ -526,6 +526,9 @@ describe('the map, the paired screen and the feed', () => {
     expect(q<HTMLElement>('[data-testid=transport-toolbar]').hidden).toBe(true);
     expect(q<HTMLElement>('[data-testid=map-mode-toggle]').hidden).toBe(true); // a public screen has no finger for the switch
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset).toMatchObject({ kiosk: 'true', sheet: 'open' });
+    // A public display prints no caveat under its sheet (companion brief §12); the phone keeps the note.
+    expect(q<HTMLElement>('[data-testid=transport-note]').hidden).toBe(true);
+    expect(text(q('[data-testid=transport-note]'))).toBe('');
   });
 });
 

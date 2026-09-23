@@ -79,8 +79,8 @@ export interface KioskStrings {
   };
   /** What comes next at a stop (WP5b). The words are the app's own
    *  `arrivals.*`, not a kiosk copy of them: the tapped stop's card and the
-   *  phone sheet say the same thing about the same row, and the note under a
-   *  list is the one sentence that explains where an estimate comes from. */
+   *  phone sheet say the same thing about the same row. The phone's note
+   *  under a list (arrivals.note) never reaches the wall (§12). */
   arrivals: {
     /** A tram due inside half a minute is the one pulling in, not "za 0 min". */
     now: string;
@@ -89,7 +89,6 @@ export interface KioskStrings {
     /** The live dot's own name, for a reader who cannot see it. */
     live: string;
     scheduled: string;
-    note: string;
     none: string;
     down: string;
     /** Still waiting for a board: on a screen that never stops running, "no
@@ -109,7 +108,6 @@ export interface KioskStrings {
     more: PluralForms;
     unavailable: string;
     loading: string;
-    modelNote: string;
     vehiclesMoving: PluralForms;
   };
   story: {
@@ -237,8 +235,6 @@ export interface KioskStrings {
     noData: string;
     sourceDown: string;
     unconfirmed: string;
-    dataFrom: string;
-    fetchedAt: string;
     stale: string;
     phase: string;
     amount: string;
@@ -391,10 +387,10 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
-    arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
+    arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
     platforms: { one: t('transport.platforms_one'), few: t('transport.platforms_few'), other: t('transport.platforms_other') },
     lines: {
-      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'modelNote']),
+      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading']),
       nearby: forms('lines', 'nearby'),
       more: forms('lines', 'more'),
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
@@ -439,7 +435,7 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('paired', [
         'warnings', 'closures', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
         'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'overviewTransport', 'allDay',
-        'noData', 'sourceDown', 'unconfirmed', 'dataFrom', 'fetchedAt', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
+        'noData', 'sourceDown', 'unconfirmed', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
         'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
         'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',
       ]),

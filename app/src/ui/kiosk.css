@@ -406,16 +406,6 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* A sentence in place of rows: loading, a source that does not answer (rose), a true empty. */
 .k-panel-note { font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); }
 .k-panel-note[data-state='down'] { color: var(--k-rose); }
-/* The foot line: the last departures as badge-and-time pairs, the label before them, the schedule note after. */
-.k-panel-foot { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--k-gap) * 0.5) var(--k-gap); margin-top: calc(var(--k-gap) * 0.5); padding-top: calc(var(--k-gap) * 0.45); border-top: 1px solid var(--k-line); font-size: var(--k-sup-size); font-weight: 700; color: var(--k-ink); font-variant-numeric: tabular-nums; }
-.k-panel-foot-label { flex-basis: 100%; font-size: var(--k-label-size); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-action); }
-.k-panel-foot-note { font-size: var(--k-hint-size); font-weight: 500; color: var(--k-ink-2); }
-/* The board's attribution (WP5b): the same sentence the phone sheet and the
-   tapped card carry, at the card's credit size. A note's size wrapped it to
-   five lines of a 320 px column -- a hundred pixels that came out of the
-   events card and pushed the QR card out of the aside. */
-.k-panel-attrib { margin-top: calc(var(--k-gap) * 0.35); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-2); }
-.k-pair { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.35); white-space: nowrap; }
 /* The credit at the foot of every panel, pushed down by the rows above it. */
 .k-panel-credit { margin-top: auto; padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); overflow-wrap: break-word; }
 /* The card's own panel: the card at the column's foot, on the surface, padded like the others. */

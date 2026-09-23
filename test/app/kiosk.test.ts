@@ -1588,7 +1588,8 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     // The reading the header used to carry, now inside the card.
     expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
     expect(text(q(weather, '.k-condition'))).toBe('vedro');
-    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
+    // The source, never the observation time (companion brief §12, [O-27]).
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ');
     // Sized for the paired column: two ranges, never the whole forecast run.
     const rows = [...weather.querySelectorAll('.k-panel-rows .k-fr')];
     expect(rows.map((row) => text(row.querySelector('.k-fr-lead')))).toEqual(['danas', 'sutra']);
@@ -2805,7 +2806,7 @@ describe('arrivals on the public screen', () => {
     return { factory: vi.fn((_options: unknown) => handle), handle };
   }
 
-  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, no note, the lines under them', async () => {
     const map = tappableMap();
     const b = fakeBoards(JELACIC_BOARDS);
     const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
@@ -2820,15 +2821,15 @@ describe('arrivals on the public screen', () => {
     // second line saying "vozni red", which doubled the height of every untracked row.
     expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // The tracked row, and only it, carries the live dot and is marked live;
-    // the note under the list says what the unmarked times are.
+    // every other row says "vozni red" in its own words.
     expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
     expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
     expect(text(card)).toContain('vozni red');
-    // One note for the list, not one per row, and the stop's lines keep their place under it.
-    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    // No note under the list on the wall (companion brief §12 "Never"), and the stop's lines keep their place under it.
+    expect(text(card)).not.toMatch(/Procjena|ostalo po voznom redu/);
     expect(text(card)).toContain('linija 6, 11, 12');
     const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
-    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-select-sub']);
     // The card is the column while it is open (kiosk-city.css hides the screen's
     // own board behind this flag); going back gives the board the rail again.
     expect(q(k.root,'[data-testid=kiosk-invitation]')).toBeNull();
@@ -2997,6 +2998,63 @@ describe('W-C4: third-party text on the wall is checked and counted (decision 18
     expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;phone:1');
     expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
+    k.handle.destroy();
+  });
+});
+
+// WP5 step 8 (companion brief §12 "Never", §13 #12-#15, [O-27]): no fetch or
+// update time, no disclaimer and no caveat anywhere on the wall. The phone
+// keeps its own notes; this reads only what the wall paints.
+describe('the wall carries no disclaimer, caveat or fetch time', () => {
+  /** WP5.md step 8's pattern, plus the two source-then-clock forms the wall printed
+   *  before it (the paired credit "ZET 14:31", the weather meta "DHMZ · 14:00"). */
+  const SLOP = /Podatak iz registra|Obuhvat zaštite|Procjena|Vozni red od|Zapis od|[Dd]ohvaćeno|podaci od \d|potvrđeno \d|Izračunato na uređaju|ne procjena dolaska|ostalo po voznom redu|Položaj (je|vozila)|\b\d\d:\d\d · (DHMZ|ZET)\b|\b(DHMZ|ZET)( ·)? \d\d:\d\d|nepotvrđeno\)|\?/;
+  /** Every text node on its own, space-separated: adjacent elements never fuse into one word ("blizini" + "ZET 14:31"). */
+  const words = (el: Element | null): string => {
+    const out: string[] = [];
+    const walker = document.createTreeWalker(el ?? document.createElement('div'), NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) out.push(node.textContent ?? '');
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  };
+  it('no disclaimer: the invitation, the safety strip and every paired composition, live and stale', async () => {
+    for (const status of ['live', 'stale'] as const) {
+      const modules = ARRIVAL_MODULES.map((m) => ({ ...m, status }));
+      const b = fakeBoards(JELACIC_BOARDS);
+      const k = mount({ stored: STORED, modules, createBoards: b.create });
+      await flush();
+      k.handlers.onCodes(batch(NOW), NOW);
+      const overview = words(q(k.root, '[data-testid=kiosk-invitation] .k-overview'));
+      expect(departures(k.root).length, 'the list is painted').toBeGreaterThan(0);
+      const seen: [string, string][] = [['invitation aside', overview], ['invitation strip', words(q(k.root, '[data-testid=safety-strip]'))]];
+      k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+      await flush();
+      const views: [string, Record<string, string>?][] = [
+        ['grad-sada'], ['u-pokretu'], ['u-pokretu', { kind: 'stop', id: '106_1' }], ['u-pokretu', { kind: 'route', id: '6' }],
+        ['zrak-i-nebo'], ['sigurnost'], ['uprava-i-pravo'], ['kultura'],
+      ];
+      for (const [layer, params] of views) {
+        k.view(layer, params);
+        await flush();
+        const where = `${layer}${params ? ` ${params.kind} ${params.id}` : ''}`;
+        expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer, where).toBe(layer);
+        seen.push([where, words(q(k.root, '[data-testid=kiosk-layer]'))], [`${where} strip`, words(q(k.root, '[data-testid=safety-strip]'))]);
+      }
+      for (const [where, words] of seen) {
+        expect(words, `${status} ${where}`).not.toBe('');
+        expect(words, `${status} ${where}`).not.toMatch(SLOP);
+      }
+      k.handle.destroy();
+    }
+  });
+  it('no disclaimer under the departures of a stop the phone presents', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelectorAll('[data-testid=k-arrivals] .k-row').length).toBeGreaterThan(0);
+    expect(words(card)).not.toMatch(SLOP);
     k.handle.destroy();
   });
 });

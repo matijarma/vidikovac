@@ -193,14 +193,18 @@ describe('districts, stops and the wizard\u2019s error sentences', () => {
 });
 
 describe('formatting for a screen read from steps away', () => {
-  it('does not present a retrieval or date-only publication as an observation clock', () => {
+  it('a block states its source\'s condition in a word and never a fetch or update time (companion brief §12)', () => {
     const observation = snap('dhmz-now', []);
-    expect(statusLine(observation, hr)).toBe('podaci od 14:31');
+    expect(statusLine(observation, hr)).toBe('');
     const retrieved = { ...snap('dogadanja', []), sourceUpdatedAt: undefined };
-    expect(statusLine(retrieved, hr)).toBe('dohvaćeno 14:31');
-    expect(statusLine(retrieved, kioskStrings('en'))).toBe('retrieved 14:31');
+    expect(statusLine(retrieved, hr)).toBe('');
+    expect(statusLine(retrieved, kioskStrings('en'))).toBe('');
+    expect(statusLine(snap('dhmz-now', [], 'stale'), hr)).toBe('zastarjelo');
+    expect(statusLine(snap('dogadanja', [], 'stale'), kioskStrings('en'))).toBe(kioskStrings('en').paired.stale);
     expect(statusLine(snap('glasnik', []), hr)).toBe('');
     expect(statusLine(snap('glasnik', [], 'stale'), hr)).toBe('zastarjelo');
+    expect(statusLine(snap('dhmz-now', [], 'down'), hr)).toBe(hr.paired.sourceDown);
+    expect(statusLine(undefined, hr)).toBe('');
   });
   it('uses Croatian decimals, spaced units and the Zagreb wall clock', () => {
     expect(fmtNumber('hr', 12.8)).toBe('12,8');

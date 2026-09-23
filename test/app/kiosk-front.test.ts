@@ -30,7 +30,7 @@ function route(id: string, medianDelaySeconds: number): Item {
   return item('zet-rt', `route:${id}`, 'vehicle', id, { data: { routeId: id, routeShortName: id, medianDelaySeconds, vehicles: 4 } });
 }
 function input(modules: ModuleSnapshot[], extra: Partial<FrontInput> = {}): FrontInput {
-  return { modules, stop: null, now: NOW, lastRun: null, strings: s, i18n, locale: 'hr', lightweight: false, composition: 'wide', ...extra };
+  return { modules, stop: null, now: NOW, strings: s, i18n, locale: 'hr', lightweight: false, composition: 'wide', ...extra };
 }
 
 // --- the events card ----------------------------------------------------------
@@ -97,19 +97,22 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po redu');
   });
 
-  it("becomes a stop's board when a caller supplies its arrivals, and says under it where the figures come from", () => {
+  it("becomes a stop's board when a caller supplies its arrivals, with no note under it on the wall", () => {
     const modules = [snap('zet-rt', [route('6', 240)])];
     const supplied = [{ key: 'arrival:t1', leadMarkup: '<span>6</span>', title: 'Črnomerec' }];
     const panel = prometPanel(input(modules, { prometMode: 'exceptions', prometRows: supplied }));
     // The rows are the caller's, not the city's exceptions, and the kicker and
     // credit the card always had are untouched.
     expect(panel.rows).toEqual(supplied);
-    // The attribution goes under the rows at the card's credit size, not as a
-    // note at row size: a note wrapped to five lines of the aside's column.
+    // No note stands under the rows (companion brief §12 "Never"): each row's
+    // colour and accessible word say tracked or timetable. The credit is the
+    // source alone, never a fetch time.
     expect(panel.note).toBeUndefined();
-    expect(panel.footMarkup).toBe('<p class="k-panel-attrib">Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.</p>');
+    expect(panel.footMarkup).toBeUndefined();
     expect(panel.kicker).toBe(s.say.transit);
-    expect(panel.credit).toContain('ZET');
+    expect(panel.credit).toBe('ZET');
+    const stale = prometPanel(input([snap('zet-rt', [route('6', 240)], 'stale')], { prometMode: 'exceptions', prometRows: supplied }));
+    expect(stale.credit).toBe('ZET · zastarjelo');
     // With no rows supplied the card is the city's exceptions, exactly as before.
     expect(prometPanel(input(modules, { prometMode: 'exceptions' })).rows.map((row) => row.title)).toEqual(['kasni 4 min']);
   });
@@ -145,7 +148,7 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
       prometMode: 'exceptions', prometRows: supplied, stop, prometBoard: { status: 'live', total: 1, platforms: 1 },
     }));
     expect(one.meta).toBe('Trg bana J. Jelačića');
-    expect(one.footMarkup).not.toContain('k-row-more');
+    expect(one.footMarkup).toBeUndefined();
   });
 
   it('orders late before early, trams before buses, then the largest first', () => {

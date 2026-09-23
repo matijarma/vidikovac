@@ -553,3 +553,16 @@ it('wraps a hub past two rows onto a third on the canvas too: twenty-three bus l
   const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
   expect(radii).toEqual([...Array<number>(4).fill((PILL_HEIGHT_PX / 2) * size), ...Array<number>(4).fill((PILL_HEIGHT_PX / 2 + 3) * size)]);
 });
+
+it('the position note is the phone’s: a wall’s or handheld stage’s schema prints no caveat (companion brief §12)', async () => {
+  const phone = harness();
+  await flush();
+  expect(phone.container.querySelector('[data-testid=schema-note]')!.textContent).toBe('Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.');
+  for (const extra of [{ interactive: false }, { interactive: false, presentationProfile: 'handheld' as const }, { basemapProfile: 'prozor' as const }]) {
+    const wall = harness(extra);
+    await flush();
+    wall.frame();
+    expect(wall.container.querySelector('[data-testid=schema-note], .schema-note'), JSON.stringify(extra)).toBeNull();
+    expect(wall.container.textContent, JSON.stringify(extra)).not.toMatch(/Položaj je izračunat|ZET ne objavljuje/);
+  }
+});

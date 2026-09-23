@@ -634,10 +634,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     sheetToggle.hidden = k;
     renderSheetToggle();
     if (!sheet) element.dataset.sheet = mode === 'landscape' ? 'half' : 'open';
-    note.textContent = i18n.t('motion.note');
-    // The schema owns this note beside its canvas. Keep the sheet's copy only
-    // for geography or a failed renderer, where that canvas note is absent.
-    note.hidden = schema && status !== 'unavailable';
+    // A public display prints no caveat (companion brief §12 "Never"). On the
+    // phone the schema owns this note beside its canvas; the sheet keeps its
+    // copy only for geography or a failed renderer, where that note is absent.
+    note.textContent = k ? '' : i18n.t('motion.note');
+    note.hidden = k || (schema && status !== 'unavailable');
   }
 
   function renderStatus(): void {

@@ -24,7 +24,8 @@ import { DEFAULT_CROP, ROUTE_TYPE_TRAM, wholeNetworkCrop, type Crop } from './sc
 import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } from './schematic-view';
 
 /** R-P2's user-facing sentence in Croatian: the catalogue's motion.note,
- *  the one source the page renders (the host prints i18n.t('motion.note')),
+ *  the one source the page renders (the host prints i18n.t('motion.note')
+ *  everywhere but on a public display),
  *  exported so the test that guards the verbatim wording reads it. */
 export const HONESTY_NOTE_HR: string = hr.motion.note;
 
@@ -43,6 +44,9 @@ export interface SchematicHostDeps {
   scope: SchematicScope;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight: boolean;
+  /** A public display (a wall or its handheld stage): no position note under
+   *  the schematic, because the wall prints no caveat (companion brief §12). */
+  publicDisplay?: boolean;
   reducedMotion?: boolean;
   now?: () => number;
   /** ui/canvas.ts's `repaintOn` contract; forwarded to the view. */
@@ -82,8 +86,8 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
   const element = document.createElement('div');
   element.className = 'schematic-host';
   element.dataset.testid = 'schematic-host';
-  element.innerHTML = `<div class="schematic-slot" data-testid="schematic-slot"></div>
-    <p class="schematic-note" data-testid="schematic-note">${escapeHtml(i18n.t('motion.note'))}</p>`;
+  element.innerHTML = `<div class="schematic-slot" data-testid="schematic-slot"></div>${deps.publicDisplay ? '' : `
+    <p class="schematic-note" data-testid="schematic-note">${escapeHtml(i18n.t('motion.note'))}</p>`}`;
   const slot = element.querySelector<HTMLElement>('[data-testid=schematic-slot]')!;
 
   let started = false;

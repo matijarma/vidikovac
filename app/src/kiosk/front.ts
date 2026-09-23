@@ -1,21 +1,22 @@
-// The public screen's front page: five panels of the city read from the
-// teaser's nine modules, each a list a person in front of the screen can use
-// (plan "/kiosk/: a screen a person can use"). Every source the app fetches
-// is here with its credit; nothing is ranked away into one sentence. Pure:
-// readers in, HTML strings out; kiosk/invitation.ts mounts the panels, hosts
-// the map between them and hides the rows a panel's box does not hold whole.
+// The panels of the paired compositions (kiosk/paired.ts: the paired Sada's
+// main column and the compact rails' one summary). The invitation's front is
+// the "U blizini" list (kiosk/timeline.ts), not these. Each panel is a list a
+// person in front of the screen can use, with its credit and never a fetch,
+// update or observation time (companion brief §12). Pure: readers in, HTML
+// strings out; kiosk/paired.ts mounts the panels and its row fitter hides the
+// rows a panel's box does not hold whole.
 //
 //   tonight  today's events by start (running ones after the upcoming), then
 //            tomorrow's, each marked; time · title · category, venue, source
-//   weather  tomorrow's forecast as the figure, today's range under it (DHMZ)
+//   weather  the observation as the figure, today's and tomorrow's ranges
+//            under it (DHMZ)
 //   city     the next Assembly session, the gazette's issue and its acts, the
 //            kvart news (Skupština, Grad Zagreb)
-//   promet   the stop's lines with their state words and vehicles near, the
-//            last departures from 20:00, ZET's newest notice
+//   promet   the stop's lines with their state words and vehicles near,
+//            ZET's newest notice
 //   around   closures within 1.5 km by distance, works under way in the city
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
-import type { LastRunSnapshot } from '../core/lastrun';
 import { delayTone } from '../experience/delay';
 import type { I18n } from '../i18n/i18n';
 import { dataNumber, dataText } from '../panels/panel';
@@ -23,12 +24,12 @@ import { routeEnds } from '../transport/catalogue';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { clock, dayKey, dayMonth, fmtDistance, fmtNumber, sameZagrebDay, weekdayDayMonth, zagrebDayAfter } from './format';
 import {
-  byModule, cleanCondition, closuresByDistance, isLive, lastDeparturesAhead, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
+  byModule, cleanCondition, closuresByDistance, isLive, linesAtStop, NEARBY_CLOSURE_M, nearbyVehicleCount, nextSession,
   routeDelays, sourceState, worksInKvart, type LinesBoard, type SourceState,
 } from './local';
 import { delayWord } from '../layers/shared';
 import { arrivalsEmptyText, type BoardSubject } from './arrivals';
-import { GAZETTE_CONTENTS_TITLE, kindOfRoute, rankedExceptions, zetNotices } from './exceptions';
+import { GAZETTE_CONTENTS_TITLE, rankedExceptions, zetNotices } from './exceptions';
 import { kBadge } from './markup';
 import { fill, plural, type KioskStrings } from './strings';
 import { districtLabel } from './districts';
@@ -50,7 +51,6 @@ export interface FrontInput {
   modules: readonly ModuleSnapshot[];
   stop: ScreenStop | null;
   now: number;
-  lastRun: LastRunSnapshot | null;
   strings: KioskStrings;
   i18n: I18n;
   locale: string;
@@ -259,10 +259,10 @@ export function weatherPanel(input: FrontInput): FrontPanel {
   return {
     id: 'weather',
     kicker: input.i18n.t('layers.zrak-i-nebo'),
-    // The source and the clock it read at, where every other panel puts its
-    // meta; under a kicker that says VRIJEME the word "opaženo" is a wasted
-    // line on a 254 px card, so the meta is the hour alone. No second credit.
-    meta: [`DHMZ${observed.observedMs === null ? '' : ` · ${clock(observed.observedMs)}`}`, observed.state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
+    // The source where every other panel puts its meta, and the stale word
+    // when the reading is a last-good copy: no observation time on the wall
+    // (§12, [O-27]). No second credit.
+    meta: ['DHMZ', observed.state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
     rows,
     note,
     figureMarkup: figure,
@@ -391,25 +391,16 @@ export function prometPanel(input: FrontInput): FrontPanel {
     const notice = notices[0];
     rows.push({ key: `notice:${notice.id}`, lead: 'ZET', title: notice.title, sub: `${s.say.zet} · ${clock(notice.at)}` });
   }
-  // From 20:00: the last departures, soonest first, as one line of badge-and-time pairs (R-KP6, R-KP14).
-  const departures = exceptions ? [] : lastDeparturesAhead(input.lastRun, stop, now);
   // A trimmed board says so in the row fitter's own words (paired.ts fitRows,
   // "prikazano N od M"): a card that quietly dropped the next three trams
   // would read as a stop with nothing else coming.
   const trimmed = supplied && boardOf && boardOf.total > supplied.length
     ? `<p class="k-line-more k-row-more">${escapeHtml(fill(s.paired.coverage, { shown: supplied.length, total: boardOf.total }))}</p>`
     : '';
-  // No estimate on a public screen stands unattributed: the sentence the phone
-  // sheet and the tapped card carry goes under the rows here too, at the
-  // card's credit size -- a note's size wrapped it to five lines of a 320 px
-  // column and pushed the QR card out of the aside.
-  const foot = supplied && supplied.length > 0
-    ? `${trimmed}<p class="k-panel-attrib">${escapeHtml(s.arrivals.note)}</p>`
-    : departures.length > 0
-      ? `<p class="k-panel-foot" data-testid="kiosk-lastrun"><span class="k-panel-foot-label">${escapeHtml(i18n.t('tiles.lastRun'))}</span> ${departures.map((d) => `<span class="k-pair">${kBadge(d.routeId, kindAtStop(board, d.routeId), '')} <time datetime="${escapeAttribute(new Date(d.at).toISOString())}">${escapeHtml(clock(d.at))}</time></span>`).join(' ')} <span class="k-panel-foot-note">${escapeHtml(i18n.t('tiles.scheduled'))}</span></p>`
-      : undefined;
+  // No note stands under the rows on the wall: each row's colour and
+  // accessible word already say tracked or timetable (§11, §12 "Never").
+  const foot = supplied && supplied.length > 0 && trimmed ? trimmed : undefined;
   const nearby = nearbyVehicleCount(zet, stop);
-  const time = clock(zet?.sourceUpdatedAt ?? zet?.fetchedAt);
   const closed = closuresByDistance(byModule(input.modules).prometnice, null, now).length;
   // A board's caption is the board's own subject -- which stop this is, and
   // how many platforms were merged into it. The city's closure and notice
@@ -426,7 +417,7 @@ export function prometPanel(input: FrontInput): FrontPanel {
   // A board answers for itself. The vehicle feed being down is not a reason to
   // print "ZET trenutačno ne odgovara" under four good scheduled departures --
   // that is the hour a timetable board is worth most, and those rows are
-  // simply schedule-only, which the estimate note under them already allows for.
+  // simply schedule-only, which each row's own timetable word already says.
   const note = supplied
     ? (rows.length > 0 ? undefined : arrivalsEmptyText(boardOf?.status ?? 'none', s))
     : state === 'loading' ? s.lines.loading : state === 'down' ? s.lines.unavailable : rows.length === 0 ? empty : undefined;
@@ -437,14 +428,9 @@ export function prometPanel(input: FrontInput): FrontPanel {
     rows,
     note: input.lightweight && rows.length === 0 ? undefined : note,
     footMarkup: foot,
-    credit: [time ? `ZET ${time}` : 'ZET', state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
+    credit: ['ZET', state === 'stale' ? s.paired.stale : ''].filter(Boolean).join(' · '),
     state,
   };
-}
-
-/** The mode a departure's route is drawn in, as the board beside it read it. */
-function kindAtStop(board: LinesBoard, routeId: string): 'tram' | 'bus' | 'other' {
-  return board.rows.find((row) => row.routeId === routeId)?.kind ?? kindOfRoute(routeId);
 }
 
 // --- around ---------------------------------------------------------------------------

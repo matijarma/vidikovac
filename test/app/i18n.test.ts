@@ -19,6 +19,8 @@ const base = (k: string): string => { const s = PLURAL.find((p) => k.endsWith(p)
 // old flat kiosk keys the typed adapter replaced, plus the old kiosk's chapter,
 // tile and countdown copy Prozor retired (R-KP23). None may come back.
 const DEAD_KEYS = [
+  // WP5 B1 (step 8): the wall prints no fetch time, caveat or note (companion brief §12).
+  'kiosk.lines.modelNote', 'kiosk.paired.dataFrom', 'kiosk.paired.fetchedAt', 'panels.sunComputed',
   'kiosk.scenes.tonight', 'kiosk.scenes.position', 'kiosk.scenes.moreEvents_one', 'kiosk.tiles.vehicles', 'kiosk.tiles.closures', 'kiosk.safety.nextScene',
   'kiosk.legendPanorama', 'kiosk.legendPanoramaLoading', 'kiosk.legendQr', 'kiosk.legendMeander', 'kiosk.safetyLabel',
   'kiosk.catalogueWeather', 'kiosk.catalogueVehicles', 'kiosk.catalogueClosures', 'kiosk.typeCode', 'kiosk.invitationEn',
