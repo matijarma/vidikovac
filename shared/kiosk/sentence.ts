@@ -1,7 +1,11 @@
 // Wire text is untrusted, including local text: decode an approved family into
 // typed slots, then bind those slots to one complete fact. No free-prose escape;
-// the one prose family, `always`, passes only by byte identity with the list
-// committed from the repository's own city catalogue (decision 18).
+// the one prose family, `always`, carries register text only as the typed datum
+// `register-text`, checked by the same externalText() as the wall's rows
+// (./external-text.ts, decision 18 revised).
+import { externalText, type ExternalTextKind } from './external-text';
+export { SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS, sentenceInstruction } from './external-text';
+
 export const SENTENCE_KICKERS = ['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const;
 export type SentenceKicker = (typeof SENTENCE_KICKERS)[number];
 export const SENTENCE_MAX_CHARS = 80;
@@ -33,7 +37,7 @@ export type SentenceRejection =
   | 'empty' | 'too-long' | 'ellipsis' | 'newline' | 'markup'
   | 'invented-number' | 'unrelated' | 'expired' | 'multiple-sentences'
   | 'forbidden-copy' | 'unnamed-count' | 'wrong-kicker'
-  | 'unknown-family' | 'not-curated' | 'invalid-slot' | 'instruction'
+  | 'unknown-family' | 'invalid-slot' | 'instruction'
   | 'invalid-contract';
 export type SentenceVerdict = { ok: true } | { ok: false; reason: SentenceRejection };
 export interface SentenceContext {
@@ -88,48 +92,15 @@ export function sentenceDeadline(text: string, validUntil: number, now: number):
   return DATE_RELATIVE.test(text) ? Math.min(validUntil, sentenceMidnight(now)) : validUntil;
 }
 
-// Grammar data, not a special case in acceptSentence. Croatian imperative:
-// -j/-jmo/-jte and -i/-imo/-ite (including -ji); second-person present: -š/-te.
-// Productive -aj/-uj forms are conservative; ambiguous -i/-te use explicit
-// stems so Šalata, Unešić, Šaljić and Nazović remain names. English imperatives
-// use bare verbs; requests also use modals + "you". Accent folding is ONLY
-// for rejection, never grounding or display.
-export const SENTENCE_INSTRUCTION_PATTERNS = [
-  { id: 'hr-productive-imperative', source: '[a-z]{2,}(?:aj|uj)(?:mo|te)?', examples: ['skeniraj kod', 'provjeravajte ulaz', 'kupuj kartu'] },
-  { id: 'hr-i-imperative', source: '(?:posalj|salj|proslijed|klikn|nazov|jav|unes|upis|otvor|zatvor|zanemar|napis|odgovor|izvrs|otkr|slijed|obris|izbris|preuzm|sprem|dod|prikaz|plat|potvrd|pritisn|pristup|posjet|ostav|dostav|posud|kup|pokus|ukljuc|iskljuc|prijav|odjav|podijel|dopust|korist|odaber|izaber|bud|id|dod|vid)(?:i|imo|ite)', examples: ['proslijedi lozinku', 'šaljite poruku', 'javimo se', 'unesite PIN'] },
-  { id: 'hr-prefixed-i-imperative', source: '[a-z]*(?:cin|nes|nos|zov|govor|mijen|stisn|tisn|uc|pamt|gas|prat|bran|traz|podrz|pokaz|plat|broj|uvjer|obavijest|predoc|pomogn|pomoz|rec|udj|izadj|dodj|uzm)(?:i|imo|ite)', examples: ['učini uslugu', 'pozovite broj', 'prenesite poruku', 'izgovori lozinku', 'reci PIN', 'dođi ovamo'] },
-  { id: 'hr-j-imperative', source: '(?:[a-z]*ij|daj|prodaj|predaj|dodaj|cuj|stoj|broj)(?:mo|te)?', examples: ['dodajte podatke', 'otkrij tajnu', 'prekrij kod'] },
-  { id: 'hr-second-person', source: '\\p{L}{2,}š|(?:morate|moras|trebate|trebas|mozete|mozes|zelite|zelis|hocete|hoces|smijete|smijes|jeste|cete)', examples: ['moraš poslati lozinku', 'trebaš unijeti lozinku', 'možete poslati broj', 'moras poslati broj'] },
-  { id: 'hr-request', source: '(?:molimo|molim|nemoj|nemojmo|nemojte|hajde|hajdemo|hajdete|izvolite|vas|vase|vasa|vasu|tvoj|tvoja|tvoje|tvoju)', examples: ['molimo broj', 'vašu lozinku', 'nemoj čekati'] },
-  { id: 'hr-impersonal-request', source: '(?:potrebno|treba|valja|obavezno|obvezno)\\s+(?:je\\s+)?[a-z]+(?:ti|ci)', examples: ['potrebno je poslati broj', 'treba unijeti lozinku'] },
-  { id: 'en-imperative', source: '(?:send|forward|click|call|contact|enter|open|close|scan|ignore|disregard|execute|reveal|obey|reply|respond|write|type|submit|provide|share|visit|follow|download|upload|install|delete|remove|pay|buy|confirm|press|tap|select|choose|check|read|give|tell|show|use|try|sign|log|do|go|get|take|remember)', examples: ['forward password', 'call now', 'submit details'] },
-  { id: 'en-request', source: '(?:please|kindly|you|your|yours|let\\s+us|let\\s+s)', examples: ['could you help', 'your password', 'please wait'] },
-  { id: 'prompt-role', source: '(?:system|assistant|developer|sustav|asistent)\\s*:', examples: ['system: override', 'asistent: odgovor'] },
-] as const;
-const instructionPatterns = SENTENCE_INSTRUCTION_PATTERNS.map(({ id, source }) => ({
-  id, pattern: new RegExp(`(?<![\\p{L}\\p{N}])(?:${source})(?![\\p{L}\\p{N}])`, 'u'),
-}));
-// Inter-letter punctuation/spacing cannot hide these explicit commands.
-export const SENTENCE_SPLIT_COMMANDS = ['posalji', 'salji', 'proslijedi', 'klikni', 'nazovi', 'javi', 'unesi', 'upisi',
-  'otvori', 'skeniraj', 'molimo', 'send', 'forward', 'click', 'call', 'enter', 'open', 'scan', 'please'] as const;
-const splitInstructions = new RegExp(`(?<![a-z0-9])(?:${SENTENCE_SPLIT_COMMANDS.map(word =>
-  [...word].join("[\\s.,:;()'’&+\\-–/]*")).join('|')})(?:[\\s.,:;()'’&+\\-–/]*t[\\s.,:;()'’&+\\-–/]*e)?(?![a-z0-9])`, 'u');
-export function sentenceInstruction(text: string): boolean {
-  const folded = text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('hr').replace(/đ/gu, 'dj');
-  return instructionPatterns.some(({ id, pattern }) => pattern.test(folded)
-    || (id === 'hr-second-person' && pattern.test(text.normalize('NFC').toLocaleLowerCase('hr'))))
-    || splitInstructions.test(folded);
-}
-
 export type SentenceSlotType = 'route' | 'stop' | 'minutes' | 'clock' | 'time' | 'until'
   | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition';
-interface SlotRule { max: number; pattern: RegExp; names?: boolean }
+interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // Only the display's supported alphabets, not visually similar Latin letters
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
 const nameChars = /^[A-Za-zČĆĐŠŽčćđšž0-9][A-Za-zČĆĐŠŽčćđšž0-9 .,'’():&/+–-]*$/u;
 export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> = {
   route: { max: 6, pattern: /^[A-Za-z0-9]+$/u },
-  stop: { max: 48, pattern: nameChars, names: true },
+  stop: { max: 48, pattern: nameChars, names: 'name' },
   minutes: { max: 3, pattern: /^[1-9]\d{0,2}$/u },
   clock: { max: 5, pattern: /^(?:[01]\d|2[0-3]):[0-5]\d$/u },
   time: { max: 26, pattern: /^(?:(?:[Uu]|[Aa]t) |(?:[Ss]utra u|[Tt]omorrow at) |(?:[1-9]|[12]\d|3[01])\. (?:[1-9]|1[0-2])\. (?:u|at) )(?:[01]\d|2[0-3]):[0-5]\d$/u },
@@ -137,16 +108,20 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   temperature: { max: 10, pattern: /^[-−]?\d{1,2}(?:[.,]\d)? °C$/u },
   degrees: { max: 5, pattern: /^[-−]?\d{1,2}(?:[.,]\d)?$/u },
   count: { max: 13, pattern: /^(?:0|[1-9]\d{0,2}) (?:bicikl|bicikla|bicikala|bike|bikes)$/u },
-  title: { max: 64, pattern: nameChars, names: true },
-  venue: { max: 48, pattern: nameChars, names: true },
-  street: { max: 64, pattern: nameChars, names: true },
+  title: { max: 64, pattern: nameChars, names: 'title' },
+  venue: { max: 48, pattern: nameChars, names: 'name' },
+  street: { max: 64, pattern: nameChars, names: 'name' },
   condition: { max: 32, pattern: /^(?:vedro|pretežno vedro|sunčano|pretežno sunčano|malo oblačno|umjereno oblačno|pretežno oblačno|oblačno|naoblaka|kiša|slaba kiša|jaka kiša|rosulja|pljusak|pljuskovi|grmljavina|snijeg|slab snijeg|susnježica|magla|sumaglica|clear|sunny|partly cloudy|mostly cloudy|cloudy|overcast|rain|light rain|heavy rain|drizzle|showers|thunderstorm|snow|sleet|fog|mist)$/u },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
   const rule = SENTENCE_SLOT_RULES[type];
   if ([...value].length > rule.max || value !== value.trim() || value.includes('  ')
     || value.normalize('NFKC') !== value || !rule.pattern.test(value) || /…|\.\.\./u.test(value)) return 'invalid-slot';
-  if (rule.names && sentenceInstruction(value)) return 'instruction';
+  // Names are third-party text: the same check as the wall's rows (./external-text.ts).
+  if (rule.names) {
+    const verdict = externalText(rule.names, value);
+    if (!verdict.ok) return verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot';
+  }
   if (type === 'minutes' && Number(value) > 180) return 'invalid-slot';
   if ((type === 'temperature' || type === 'degrees')
     && Math.abs(Number(value.replace(' °C', '').replace('−', '-').replace(',', '.'))) > 65) return 'invalid-slot';
@@ -161,7 +136,7 @@ interface TemplateFamily {
   group?: string;
 }
 // Mirrors owner-reviewed copy byte-for-byte, pinned against both catalogues.
-// `always` is not among them: {text} is prose, never a typed datum or a pattern.
+// `always` is not among them: its {text} is register prose, typed as `register-text` below.
 export const SENTENCE_FAMILIES = {
   departureIn: { hr: 'Tramvaj {route}, smjer {to}, polazi za {n} min.', en: 'Tram {route} towards {to} leaves in {n} min.', slots: { route: 'route', to: 'stop', n: 'minutes' }, kinds: ['promet'] },
   departureAt: { hr: 'Tramvaj {route}, smjer {to}, polazi u {time}.', en: 'Tram {route} towards {to} leaves at {time}.', slots: { route: 'route', to: 'stop', time: 'clock' }, kinds: ['promet'] },
@@ -186,16 +161,30 @@ export const SENTENCE_FAMILIES = {
   outage: { hr: 'ZET ne šalje položaje vozila; polasci su po voznom redu.', en: 'ZET is not sending vehicle positions; departures follow the timetable.', slots: {}, kinds: ['promet'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
-// Decision 18: the `always` template runs only when the whole sentence is one
-// of the committed pairs in ./sentence-always/ (the "uvijek" rows of the city
-// catalogue in app/public/data/city). Identity, never a pattern; the model
-// selects such a fact by id and is never offered its text to copy or write.
-export const SENTENCE_CURATED_FAMILIES = { always: '{name}: {text}' } as const;
-export type SentenceCuratedFamily = keyof typeof SENTENCE_CURATED_FAMILIES;
-export type SentenceChoiceFamily = SentenceFamily | SentenceCuratedFamily;
-const CURATED_KINDS: readonly SentenceKicker[] = ['kultura'];
+// Decision 18 (revised): "{name}: {text}" shows a place's register story or a
+// protected building nearby. Both values are third-party text: `register-name`
+// and `register-text`, each checked by externalText() exactly as the rows are,
+// never by identity with a snapshot. The model selects such a fact by id only
+// and is never offered its text to copy or write.
+export const SENTENCE_REGISTER_FAMILIES = { always: '{name}: {text}' } as const;
+export type SentenceRegisterFamily = keyof typeof SENTENCE_REGISTER_FAMILIES;
+export type SentenceChoiceFamily = SentenceFamily | SentenceRegisterFamily;
+const REGISTER_KINDS: readonly SentenceKicker[] = ['kultura'];
+const REGISTER_SLOTS = { name: 'name', text: 'register-text' } as const satisfies Record<string, ExternalTextKind>;
+// The header is the wall's own voice, so register prose in it also keeps the
+// slop register (docs/companion-2026-09-22.md §12 "Never", §13): no fetch or sync
+// times, no hedges or register caveats, no "zid", no unit glued to a number, no
+// count without a name. The row keeps showing the text as the register writes it.
+const REGISTER_SLOP = /(?:\bzid(?:a|u|om|ovi|ove)?\b|dohva[ćt]|ažuriran|osvježen|preuzeto|sinkroniz|sinhroniz|podat(?:ak|ci) od|zastarjel|nepotvrđen|neprovjeren|nedostupn|nije provjera|obuhvat zaštite|iz registra|nema podat|možda|vjerojatno|navodno|moguće je|fetched|updated at|synced|synchroni[sz]|unavailable|unconfirmed|not verified|out of date|perhaps|maybe|probably|possibly)/iu;
+function registerCopyIssue(text: string): SentenceRejection | null {
+  if (REGISTER_SLOP.test(text.normalize('NFC').toLocaleLowerCase('hr')) || /\d(?:°|\s+°\s+[CF]\b|(?:min|km|m|h|s)\b)/u.test(text)) return 'forbidden-copy';
+  if (/(?:^|[;,]\s*|^(?:danas|sutra|večeras|ujutro|today|tomorrow|tonight)\s+)(?:\d+\s+(?:zatvaranja|radova|događanja|bicikl|closure|event|bike)|(?:radovi|događanja|zatvaranja)\s+(?:u gradu\s+)?\d)/iu.test(text)) {
+    return 'unnamed-count';
+  }
+  return null;
+}
 
-interface TypedSlot { type: SentenceSlotType | 'curated'; value: string }
+interface TypedSlot { type: SentenceSlotType | 'register-name' | 'register-text'; value: string }
 export interface TypedSentenceFact {
   family: SentenceChoiceFamily;
   locale: 'hr' | 'en';
@@ -234,85 +223,44 @@ function decodeTyped(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'):
   }
   return { ok: false, reason: issue };
 }
+/**
+ * The `always` family: the name before the first ": ", the register text after it
+ * up to the sentence's own full stop (a text ending in "!" or "?" keeps it). Both
+ * cross externalText(); nothing is trimmed, unquoted or repaired.
+ */
+function decodeRegister(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'): Decoded {
+  const colon = text.indexOf(': ');
+  if (colon <= 0 || !/[.!?]$/u.test(text)) return { ok: false, reason: 'unknown-family' };
+  const values = { name: text.slice(0, colon), text: text.endsWith('.') ? text.slice(colon + 2, -1) : text.slice(colon + 2) };
+  for (const [slot, type] of Object.entries(REGISTER_SLOTS) as [keyof typeof values, ExternalTextKind][]) {
+    const value = values[slot];
+    // Whole values only: the header's unquoting (normalizeSentence) must not have cut a quote off either end.
+    if (!value || value !== value.trim() || !quotesPaired(value)) return { ok: false, reason: 'invalid-slot' };
+    const verdict = externalText(type, value);
+    if (!verdict.ok) return { ok: false, reason: verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot' };
+  }
+  const copy = registerCopyIssue(values.text);
+  if (copy) return { ok: false, reason: copy };
+  if (kind && !REGISTER_KINDS.includes(kind)) return { ok: false, reason: 'wrong-kicker' };
+  return { ok: true, fact: { family: 'always', locale: locale ?? 'hr', slots: {
+    name: { type: 'register-name', value: values.name }, text: { type: 'register-text', value: values.text },
+  } } };
+}
 function decodeTemplate(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'): Decoded {
   const typed = decodeTyped(text, kind, locale);
   if (typed.ok || !text.includes(': ')) return typed;
-  const entry = curatedEntry(text);
-  // A typed envelope that matched whole keeps its finding; any other "{name}: {text}" is simply not committed.
-  if (!entry) return typed.reason === 'instruction' || typed.reason === 'wrong-kicker' ? typed : { ok: false, reason: 'not-curated' };
-  if (kind && !CURATED_KINDS.includes(kind)) return { ok: false, reason: 'wrong-kicker' };
-  return { ok: true, fact: { family: 'always', locale: locale ?? 'hr', slots: {
-    name: { type: 'curated', value: entry.name }, text: { type: 'curated', value: entry.text },
-  } } };
+  // A typed family that matched whole keeps its finding: register text never stands in for a closure or an opening.
+  if (typed.reason === 'instruction' || typed.reason === 'wrong-kicker') return typed;
+  return decodeRegister(text, kind, locale);
 }
-
-// --- the committed `always` pairs (decision 18) ---------------------------------
-type CuratedPair = readonly [name: string, text: string];
-type CuratedShard = () => Promise<{ default: readonly CuratedPair[] }>;
-// Sixteen chunks, by sentence hash: a wall fetches only the shard of the
-// sentence it meets, so the list stays out of the lightweight screen graph
-// (test/app/budget.test.ts). The Worker's bundler inlines all of them.
-const CURATED_SHARDS: readonly CuratedShard[] = [
-  () => import('./sentence-always/00'), () => import('./sentence-always/01'),
-  () => import('./sentence-always/02'), () => import('./sentence-always/03'),
-  () => import('./sentence-always/04'), () => import('./sentence-always/05'),
-  () => import('./sentence-always/06'), () => import('./sentence-always/07'),
-  () => import('./sentence-always/08'), () => import('./sentence-always/09'),
-  () => import('./sentence-always/10'), () => import('./sentence-always/11'),
-  () => import('./sentence-always/12'), () => import('./sentence-always/13'),
-  () => import('./sentence-always/14'), () => import('./sentence-always/15'),
-];
-export const SENTENCE_CURATED_SHARDS = CURATED_SHARDS.length;
-interface CuratedEntry { name: string; text: string }
-const curatedLoaded: (ReadonlyMap<string, CuratedEntry> | undefined)[] = [];
-const curatedPending: (Promise<void> | undefined)[] = [];
-
-/** FNV-1a over UTF-16 code units: which shard holds a sentence. Placement only; the check is identity. */
-export function curatedShard(sentence: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < sentence.length; i++) hash = Math.imul(hash ^ sentence.charCodeAt(i), 0x01000193);
-  return (hash >>> 0) % CURATED_SHARDS.length;
+/** Straight and curly double quotes come in pairs, as do « and ». */
+function quotesPaired(value: string): boolean {
+  const count = (pattern: RegExp) => (value.match(pattern) ?? []).length;
+  return count(/"/gu) % 2 === 0 && count(/[„“”]/gu) % 2 === 0 && count(/«/gu) === count(/»/gu);
 }
-/**
- * The header sentence of a committed pair: exactly "{name}: {text}" plus the
- * template's full stop. Null when the pair cannot be shown whole and unaltered:
- * a value that trimming, NFC or quote stripping would change, a control,
- * markup or ellipsis, over 80 characters, or a sentence a typed family decodes.
- */
-export function curatedSentence(name: string, text: string): string | null {
-  if (sentenceValue(name) !== name || sentenceValue(text) !== text) return null;
-  const whole = `${name}: ${text}`;
-  const sentence = sentenceWithPeriod(whole);
-  if ((sentence !== whole && sentence !== `${whole}.`) || textIssue(sentence, SENTENCE_MAX_CHARS)) return null;
-  return decodeTyped(sentence).ok ? null : sentence;
-}
-function loadCuratedShard(index: number): Promise<void> {
-  if (curatedLoaded[index]) return Promise.resolve();
-  return curatedPending[index] ??= CURATED_SHARDS[index]!().then(module => {
-    const entries = new Map<string, CuratedEntry>();
-    for (const [name, text] of module.default) {
-      const sentence = curatedSentence(name, text);
-      if (sentence !== null && curatedShard(sentence) === index) entries.set(sentence, { name, text });
-    }
-    curatedLoaded[index] = entries;
-  }, () => { curatedPending[index] = undefined; });
-}
-/**
- * Loads the committed shards these texts would be found in (every shard without
- * texts) and never rejects. Until a shard is in, its sentences are refused as
- * not-curated; meeting one starts its load, so the next check can pass.
- */
-export function loadCuratedSentences(texts?: readonly string[]): Promise<void> {
-  const shards = texts
-    ? new Set(texts.flatMap(text => [text, normalizeSentence(text), sentenceWithPeriod(text)].map(curatedShard)))
-    : CURATED_SHARDS.keys();
-  return Promise.all([...shards].map(loadCuratedShard)).then(() => undefined);
-}
-function curatedEntry(text: string): CuratedEntry | undefined {
-  const index = curatedShard(text);
-  const shard = curatedLoaded[index];
-  if (!shard) void loadCuratedShard(index);
-  return shard?.get(text);
+/** The header sentence of a register row: "{name}: {text}" and the template's full stop, as fact construction writes it. */
+function registerSentence(name: string, text: string): string {
+  return sentenceWithPeriod(`${name}: ${text}`);
 }
 function textIssue(text: string, max: number): SentenceRejection | null {
   if (!text.length) return 'empty';
@@ -428,8 +376,8 @@ function templateOptions(ctx: SentenceContext): TemplateOption[] {
     const accepted = (text: string) => acceptSentence(text, { ...ctx, facts: [fact], refs: [fact.id] }).ok;
     if (decoded.fact.family === 'always') {
       // Selected by id only: no slot is offered, so the model can neither copy nor write the text.
-      const text = curatedSentence(decoded.fact.slots.name!.value, decoded.fact.slots.text!.value);
-      if (text !== null && accepted(text)) options.push({ choice: { factId: fact.id, family: 'always', slots: {} }, text });
+      const text = registerSentence(decoded.fact.slots.name!.value, decoded.fact.slots.text!.value);
+      if (accepted(text)) options.push({ choice: { factId: fact.id, family: 'always', slots: {} }, text });
       continue;
     }
     for (const [family, spec] of familyEntries) {

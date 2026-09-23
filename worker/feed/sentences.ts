@@ -1,6 +1,6 @@
 import {
-  fillSentenceChoice, loadCuratedSentences, readWrittenSentences, sentenceTemplateChoices, stableSentenceFacts,
-  typedSentenceFact, writeSentence, type SentenceRejection, type SentenceRequest, type WrittenSentence,
+  fillSentenceChoice, readWrittenSentences, sentenceTemplateChoices, stableSentenceFacts, typedSentenceFact, writeSentence,
+  type SentenceRejection, type SentenceRequest, type WrittenSentence,
 } from '../../shared/kiosk/sentence';
 import { isTestEnvironment } from '../config';
 import type { Env } from '../env';
@@ -59,7 +59,7 @@ function fallback(request: SentenceRequest, now: number): WrittenSentence[] {
 
 // The model sees only validated choices. An `always` fact (decision 18) is offered
 // as { factId, family: 'always', slots: {} }: it can be selected by id only, and
-// fillSentenceChoice writes its committed text; the model never copies or writes it.
+// fillSentenceChoice writes its register text; the model never copies or writes it.
 function generate(ai: AiRunner, request: SentenceRequest, signal: AbortSignal): Promise<unknown> {
   signal.throwIfAborted();
   return ai.run(SENTENCE_MODEL, {
@@ -91,8 +91,6 @@ function parseAnswer(answer: unknown, request: SentenceRequest, now: number): Wr
 /** AI is optional. No paid calls or KV work at all in APP_ENV=test. */
 export async function writeSentences(env: Env, input: SentenceRequest, waitUntil?: BriefWaitUntil): Promise<WrittenSentence[]> {
   if (isTestEnvironment(env)) return [];
-  // The committed always list is part of this bundle; its shards resolve before any check.
-  await loadCuratedSentences(input.facts.map(fact => fact.text));
   const now = Date.now();
   for (const fact of input.facts) {
     const typed = typedSentenceFact(fact, input.locale);
