@@ -293,7 +293,7 @@ export const DOM_MEASURE: TimelineMeasure = {
 
 /** Everything a fit depends on except the ticking time words: when it is unchanged, so is the fit. */
 function fitSignature(rows: readonly TimelineRow[], now: number, i18n: I18n, rowPx: number, box: { height: number; width: number }): string {
-  const parts = rows.map((r) => [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n)].join('\u0001'));
+  const parts = rows.map((r) => [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n), timeLabel(r, now, i18n)].join('\u0001'));
   return `${parts.join('\u0002')}|${rowPx}|${box.height}|${box.width}`;
 }
 
@@ -361,9 +361,38 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   }
 
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
-  function fit(candidates: readonly TimelineRow[], before: ReadonlySet<string>, now: number): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+  function fit(candidates: readonly TimelineRow[], before: ReadonlySet<string>, now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+    // A detached tree has no layout. This hidden sibling inherits the same
+    // kiosk/aside styles and variables but is outside the live timeline. Give
+    // its list exactly the live content box, then dispose of it before paint.
+    const measuring = element.cloneNode(false) as HTMLElement;
+    measuring.removeAttribute('data-testid');
+    measuring.removeAttribute('aria-labelledby');
+    measuring.setAttribute('aria-hidden', 'true');
+    measuring.inert = true;
+    Object.assign(measuring.style, { position: 'fixed', visibility: 'hidden', pointerEvents: 'none', left: '0', top: '0' });
+    const measuringList = list.cloneNode(false) as HTMLOListElement;
+    measuringList.removeAttribute('data-testid');
+    measuringList.style.boxSizing = 'border-box';
+    if (box.width > 0) measuringList.style.width = `${box.width}px`;
+    if (box.height > 0) measuringList.style.height = `${box.height}px`;
+    measuring.appendChild(measuringList);
+    element.parentElement!.appendChild(measuring);
+    try {
+      return fitIn(measuringList);
+    } finally {
+      measuring.remove();
+    }
+
+    function fitIn(list: HTMLOListElement): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
     let shown = [...candidates];
     const short = new Map<string, ShortLabels>();
+    const draw = (): void => {
+      const ordered = painted
+        ? [...shown.filter(row => before.has(row.id)), ...shown.filter(row => !before.has(row.id))]
+        : shown;
+      list.innerHTML = rowsMarkup(ordered, now, i18n, short);
+    };
     const byId = new Map(shown.map((row) => [row.id, row] as const));
     const set = (row: TimelineRow, which: keyof ShortLabels): boolean => {
       const offered = which === 'title' ? row.titleShort : row.subShort;
@@ -371,7 +400,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       short.set(row.id, { ...short.get(row.id), [which]: true });
       return true;
     };
-    paint(shown, short, before, now);
+    draw();
     let changed = false;
     for (const li of list.children) {
       const row = byId.get(li.getAttribute('data-key') ?? '');
@@ -381,7 +410,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
       if (sub && measure.lines(sub) > SUB_MAX_LINES) changed = set(row, 'sub') || changed;
     }
-    if (changed) paint(shown, short, before, now);
+    if (changed) draw();
     if (measure.box(list).overflow) {
       // Still too tall: every label that takes more than one line gives way to its short twin, where that saves a line.
       let more = false;
@@ -393,15 +422,16 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         if (title && measure.lines(title) > 1) more = set(row, 'title') || more;
         if (sub && measure.lines(sub) > 1) more = set(row, 'sub') || more;
       }
-      if (more) paint(shown, short, before, now);
+      if (more) draw();
     }
     while (shown.length > 0 && measure.box(list).overflow) {
       // Reservation is a preference, never permission to clip the last row.
       const drop = dropCandidate(shown) ?? shown[shown.length - 1]!;
       shown = shown.filter((row) => row !== drop);
-      paint(shown, short, before, now);
+      draw();
     }
     return { shown, short };
+    }
   }
 
   const handle: TimelineHandle = {
@@ -433,17 +463,13 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         paint(shown, new Map(), before, now);
       } else {
         const sig = fitSignature(candidates, now, i18n, budget.rowPx, box);
-        if (memo && memo.sig === sig) {
-          const kept = memo.ids;
-          shown = candidates.filter((row) => kept.has(row.id));
-          paint(shown, memo.short, before, now);
+        if (!memo || memo.sig !== sig) {
+          const fitted = fit(candidates, before, now, box);
+          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short };
         }
-        // A new content or box is fitted afresh, and so is a remembered fit the words no longer keep inside the box.
-        if (!memo || memo.sig !== sig || measure.box(list).overflow) {
-          const fitted = fit(candidates, before, now);
-          shown = fitted.shown;
-          memo = { sig, ids: new Set(shown.map((row) => row.id)), short: fitted.short };
-        }
+        shown = candidates.filter((row) => memo!.ids.has(row.id));
+        // The only live-list commit. No rejected row ever enters this tree.
+        paint(shown, memo.short, before, now);
       }
 
       if (painted && !deps.reduced) {

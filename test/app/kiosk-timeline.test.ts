@@ -14,6 +14,7 @@ import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createI18n, type I18n, type MessageCatalog } from '../../app/src/i18n/i18n';
 import type { NearbyRow } from '../../app/src/city/nearby';
+import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures } from '../../e2e/wall';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
@@ -241,6 +242,41 @@ describe('the time words', () => {
 });
 
 describe('calm motion (principle 7)', () => {
+  it('keeps ten idle minutes within the recorder budget when rejected rows change on every poll', () => {
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure });
+    t.update(longRows(), 2000, NOW);
+    const kept = items();
+    const minutes: number[] = [];
+    for (let minute = 0; minute < 10; minute++) {
+      CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC);
+      for (let poll = 1; poll <= 6; poll++) {
+        const rows = longRows().map(r => r.kind === 'event' ? { ...r, sub: `${r.sub} ${minute * 6 + poll}` } : r);
+        t.update(rows, 2000, NOW + minute * MIN + poll * 10_000);
+      }
+      const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+      minutes.push(reading.mutations);
+      expect(calmMotionFailures(reading), JSON.stringify(minutes)).toEqual([]);
+      expect(reading.rebuilt).toEqual([]);
+      expect(items()).toEqual(kept);
+    }
+    expect(minutes).toEqual(Array(10).fill(0));
+  });
+
+  it('measures candidate words in a hidden same-width sibling, never in the live list', () => {
+    const measure = simulated(WALL_1920);
+    const lines = vi.fn((el: HTMLElement) => {
+      expect(el.closest('ol')).not.toBe(host.querySelector('[data-testid=nearby-rows]'));
+      expect(el.isConnected).toBe(true);
+      expect(getComputedStyle(el).visibility).toBe('hidden');
+      expect(el.closest('ol')!.style.width).toBe(`${WALL_1920.titleChars}px`);
+      return measure.lines(el);
+    });
+    const t = mount({ measure: { ...measure, lines } });
+    t.update(longRows(), 2000, NOW);
+    expect(lines).toHaveBeenCalled();
+    expect(host.children).toHaveLength(1);
+  });
   it('keeps every node across updates with the same rows and fades nothing in', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
