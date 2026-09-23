@@ -1018,7 +1018,6 @@
       "closuresUnknown": "Zatvaranja: podaci trenutačno nedostupni",
       "closuresStale": "Zatvaranja: zastarjelo, nepotvrđeno",
       "closuresNearest": "najbliže {street}",
-      "pharmacy": "Dežurna ljekarna",
       "basics": "Osnovno",
       "sources": "DHMZ · EMSC",
       "confirmed": "DHMZ · EMSC · {time}",
@@ -1036,7 +1035,6 @@
       "empty": "Izvor trenutačno ne odgovara. Sigurnosni sloj radi na /hitno.",
       "routes": "Linije u blizini",
       "weather": "Vrijeme sada",
-      "pharmacy": "Dežurna ljekarna",
       "warnings": "Upozorenja",
       "closures": "Zatvorene prometnice"
     },

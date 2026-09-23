@@ -46,3 +46,5 @@ npm run replay:grade -- test/fixtures/frames/2026-09-21-1715-1744 --out <scratch
 ```
 
 The first is WP0's acceptance test: `scripts/grade-branches-core.ts` replays the frames through the real engine and the committed artefacts and judges the rows against the stage-1 targets; `test/accept/wrong-turn.expect.json` records the rows this sample gave before WP0 and after it. The second writes the grader's full report, `<scratch>/wrong-turn.json` and `.md`, and exits 1 while a row misses its target.
+
+The rows, their thresholds and the values measured on this sample at each deploy are in [`docs/kaj-verification.md`](../../../../docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09" (row U1); the whole-day rows are in its "Kapija paketa WP0" table.

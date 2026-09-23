@@ -126,6 +126,43 @@ describe('the page-side pass', () => {
     }
   });
 
+  it('skips text a clipping ancestor cuts away (the visually-hidden typed-address link), and measures a run that is partly inside', () => {
+    const shippedFn = new Function(`return (${String(LEGIBILITY_IN_PAGE)});`)() as typeof LEGIBILITY_IN_PAGE;
+    document.documentElement.dataset.themeResolved = 'light';
+    document.body.innerHTML = `
+      <p class="k-hint" style="font-size: 30px">ili upiši kod na <a class="k-visually-hidden" data-testid="pair-url" href="https://example.test/s/#ABCD-EFGH"
+        style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); font-size: 16px">https://example.test/s/#ABCD-EFGH</a></p>
+      <div class="k-scroll" style="overflow: hidden; height: 40px"><p class="k-note" style="font-size: 22px">Napomena</p></div>`;
+    const rect = (x: number, y: number, w: number, h: number) => ({ x, y, left: x, top: y, right: x + w, bottom: y + h, width: w, height: h, toJSON: () => ({}) }) as DOMRect;
+    const realRange = Range.prototype.getBoundingClientRect;
+    // Every text run measures 300 × 30 at (100, 100): a range's box ignores the clip, as in a browser.
+    Range.prototype.getBoundingClientRect = () => rect(100, 100, 300, 30);
+    const link = document.querySelector<HTMLElement>('[data-testid=pair-url]')!;
+    const scroll = document.querySelector<HTMLElement>('.k-scroll')!;
+    try {
+      link.getBoundingClientRect = () => rect(100, 100, 1, 1);
+      scroll.getBoundingClientRect = () => rect(0, 90, 1920, 40);
+      const report = shippedFn(pageSpec(WALL_1920));
+      const texts = [...report.violations, ...report.otherSmall, ...report.warnings].map((f) => f.text);
+      expect(texts, 'the 1 px clipped link is not on the wall').not.toContain('https://example.test/s/#ABCD-EFGH');
+      // The note's run shares 20 px of height with its clipping box: on the wall, so measured (22 px < 28 px).
+      expect(report.otherSmall.map((f) => f.text)).toEqual(['Napomena']);
+
+      // The same note scrolled wholly out of its box is not on the wall either.
+      scroll.getBoundingClientRect = () => rect(0, 400, 1920, 40);
+      expect(shippedFn(pageSpec(WALL_1920)).otherSmall).toEqual([]);
+
+      // Without the clip the 16 px link text is measured and fails the walk-up floor of its hint, as before.
+      link.removeAttribute('style');
+      link.style.fontSize = '16px';
+      link.getBoundingClientRect = () => rect(100, 100, 300, 30);
+      expect(shippedFn(pageSpec(WALL_1920)).violations.map((f) => [f.tier, f.text])).toContainEqual(['walk-up', 'https://example.test/s/#ABCD-EFGH']);
+    } finally {
+      Range.prototype.getBoundingClientRect = realRange;
+      delete document.documentElement.dataset.themeResolved;
+    }
+  });
+
   // The kiosk map draws BAJS discs and vehicle pills on one canvas (WP2-E): no [data-symbol] child exists,
   // so the pass reads the container's census, and says so loudly when there is none to read.
   describe('the canvas map', () => {

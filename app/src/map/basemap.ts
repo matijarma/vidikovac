@@ -496,6 +496,21 @@ export function overlayPalette(theme: MapTheme): Readonly<OverlayPalette> {
 export const MAP_ATTRIBUTION_HTML =
   '<a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">© OpenStreetMap contributors</a> · <a href="https://protomaps.com" rel="noopener noreferrer" target="_blank">Protomaps</a>';
 
+/** The wall keeps the same credit, without a disclosure, link or tab stop. */
+export class StaticAttributionControl {
+  private element?: HTMLElement;
+  onAdd(): HTMLElement {
+    const credit = document.createElement('div');
+    credit.className = 'maplibregl-ctrl maplibregl-ctrl-attrib';
+    const source = document.createElement('template');
+    source.innerHTML = MAP_ATTRIBUTION_HTML;
+    credit.textContent = source.content.textContent;
+    this.element = credit;
+    return credit;
+  }
+  onRemove(): void { this.element?.remove(); }
+}
+
 /** A loose structural view of a style layer: enough for the diff below and
  *  the tests without binding this module to the style-spec types. The
  *  wrapper casts at the MapLibre boundary. */

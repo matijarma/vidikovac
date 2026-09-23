@@ -46,6 +46,8 @@
 .kiosk .k-nearby .nearby-title{min-width:0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
 .kiosk .k-nearby .nearby-sub{min-width:0;font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));line-height:1.15;overflow-wrap:break-word;color:var(--k-ink-2)}
 .kiosk .k-nearby .nearby-title .k-line-badge{margin-right:.3em;vertical-align:.1em}
+/* Decision 26: the line is read with its destination, including the dark read multiplier. */
+.kiosk:not([data-size=handheld]) .k-nearby .nearby-title .k-line-badge{font-size:inherit;height:auto;min-height:1.1em;line-height:1.1}
 /* Below the specificity of kiosk.css's reduced-motion and lagano rules, which load first and still win. */
 .k-nearby .nearby-row[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
 @keyframes k-nearby-in{from{opacity:0}}
