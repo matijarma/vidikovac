@@ -174,6 +174,8 @@ const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s
 const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelector<HTMLElement>(sel);
 const departures = (root: ParentNode): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('[data-testid=nearby-rows] [data-kind=departure]')];
 const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=kiosk-sentence-text]'));
+/** The header sentence as a passer-by sees it: '' while the sentence element is hidden. */
+const painted = (root: ParentNode): string => (q(root, '[data-testid=kiosk-sentence]')?.hidden ? '' : sentenceText(root));
 
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
@@ -360,6 +362,81 @@ describe('the integrated companion sentence', () => {
     now += 1_000;
     k.tick(CODE_TICK_MS);
     expect(sentenceText(k.root)).not.toContain('Ilica');
+    k.handle.destroy();
+  });
+
+  // Review D2b finding 1: a model answer landing mid-dwell replaced the whole model set, so a model
+  // sentence on screen that the new answer did not repeat left before its rhythm (decision 29).
+  it('keeps a model sentence on screen through an answer that lands mid-dwell, until the rhythm ends or its fact changes', async () => {
+    let now = NOW;
+    let modules = MODULES;
+    const requests: ((answer: WrittenSentence[]) => void)[] = [];
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules }),
+      fetchSentences: () => new Promise(resolve => { requests.push(resolve); }) });
+    await flush();
+    const model = 'Temperatura u Zagrebu je 21 °C.';
+    requests.at(-1)!([{ text: model, kicker: 'vrijeme', refs: ['weather:now'], validUntil: null, origin: 'model' }]);
+    await flush();
+    let shownAt = -1;
+    for (let s = 1; s <= 200 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (painted(k.root) === model) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    // A stable fact changes (the closure's end is restated), so a new answer is asked for and lands
+    // 5 s into the dwell without the sentence on screen.
+    now = shownAt + 3_000;
+    modules = MODULES.map(module => module.module === 'prometnice'
+      ? { ...module, items: module.items.map(item => ({ ...item, until: '2026-09-11T18:30:00Z' })) } : module);
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    const before = requests.length;
+    now = shownAt + 5_000;
+    requests.at(-1)!([]);
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(requests.length).toBe(before);
+    for (let t = 5_000; t < 20_000; t += 1_000) {
+      now = shownAt + t;
+      k.tick(CODE_TICK_MS);
+      expect(painted(k.root), `${t / 1000} s into the dwell`).toBe(model);
+    }
+    now = shownAt + 20_000;
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).not.toBe(model);
+    k.handle.destroy();
+  });
+
+  it('lets a model sentence go at once when its fact changes, answer or no answer', async () => {
+    let now = NOW;
+    let modules = MODULES;
+    const requests: ((answer: WrittenSentence[]) => void)[] = [];
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules }),
+      fetchSentences: () => new Promise(resolve => { requests.push(resolve); }) });
+    await flush();
+    const model = 'Temperatura u Zagrebu je 21 °C.';
+    requests.at(-1)!([{ text: model, kicker: 'vrijeme', refs: ['weather:now'], validUntil: null, origin: 'model' }]);
+    await flush();
+    let shownAt = -1;
+    for (let s = 1; s <= 200 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (painted(k.root) === model) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    // DHMZ now reports 22 °C: the claim on screen no longer holds, so the dwell ends.
+    now = shownAt + 4_000;
+    modules = MODULES.map(module => module.module === 'dhmz-now'
+      ? { ...module, items: module.items.map(item => ({ ...item, data: { ...item.data, temp: 22 } })) } : module);
+    const beforePoll = requests.length;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(requests.length).toBeGreaterThan(beforePoll);
+    // Every fact at hand was shown in the last ten minutes: the header waits rather than repeat one.
+    expect(painted(k.root)).not.toBe(model);
     k.handle.destroy();
   });
 
