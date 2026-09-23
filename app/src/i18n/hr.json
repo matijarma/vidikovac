@@ -760,6 +760,7 @@
     }
   },
   "kiosk": {
+    "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
     "surface": "javni zaslon",
     "header": {
       "theme": "Tema: {pref}",
@@ -1174,6 +1175,7 @@
     "loading": "Učitavanje mjesta",
     "source": "Izvor",
     "original": "Izvornik",
+    "reference": "Podatak iz registra, nije provjera uživo.",
     "saved": "Spremljeno",
     "save": "Spremi mjesto",
     "back": "Natrag na mjesta",
@@ -1191,8 +1193,10 @@
     "stale": "Zastarjelo",
     "departures": "Sljedeći polasci",
     "noDepartures": "Nema potvrđenog rasporeda za ovo razdoblje.",
+    "scheduleNote": "Vozni red, ne procjena dolaska. Kašnjenje linije ne mijenja ove satnice.",
     "whyStreet": "Zašto se tako zove?",
     "sourceLanguage": "Izvorni tekst na hrvatskom",
+    "siteNote": "Obuhvat zaštite, ne ulaz. Pristup javnosti nije potvrđen.",
     "river": "Sava",
     "partial": "Prikazan je dio podataka iz dostupnih izvora.",
     "copy": "Kopiraj s izvorom",

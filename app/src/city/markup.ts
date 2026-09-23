@@ -72,6 +72,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${bike}${air}${facts?`<dl class="city-facts">${facts}</dl>`:''}
     ${p.hours?`<p class="city-meta">${externalHtml('summary',p.hours)}</p>`:''}
     ${p.description?`<div class="city-description" lang="hr">${sourceLanguageNote(i18n)}<p>${externalHtml('summary',p.description)}</p></div>`:''}
+    ${p.category==='heritage'?`<p class="city-meta">${ct(i18n,'siteNote')}</p>`:''}
     ${p.category==='culture'?`<section><h4>${ct(i18n,'program')}</h4>${program.length?eventLinks(i18n,program,!publicDisplay):`<p class="city-meta">${ct(i18n,'noProgram')}</p>`}</section>`:''}
     ${p.category==='rail'?`<div data-city-departures="hz" data-stop="${a(p.sourceRecord)}"></div>`:''}
     ${publicDisplay?'':`<div class="city-actions">${p.website?`<a class="btn-ghost" href="${a(p.website)}" target="_blank" rel="noopener noreferrer">${e(p.sourceId==='bajs'?ct(i18n,'rent'):ct(i18n,'original'))} ↗</a>`:''}
@@ -80,6 +81,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     <button type="button" class="btn-quiet" data-action="city-save" data-id="${a(p.id)}">${ct(i18n,saved?'saved':'save')}</button>
     <button type="button" class="btn-quiet" data-action="city-copy" data-id="${a(p.id)}">${ct(i18n,'copy')}</button></div>`}
     <p class="city-meta">${externalHtml('summary',source?.name??p.sourceId)}${source?.status==='stale'?` · ${ct(i18n,'stale')}`:''}${source?.licence?` · ${externalHtml('summary',source.licence)}`:''}</p>
+    ${p.sourceId!=='bajs'&&p.sourceId!=='air'?`<p class="city-meta">${ct(i18n,'reference')}${p.updatedAt&&referenceDate(p.updatedAt)?` · ${e(referenceDate(p.updatedAt))}`:''}</p>`:''}
   </article>`;
 }
 export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string {
@@ -102,5 +104,6 @@ const DEPARTED_GRACE_MS=60_000;
 export function departuresMarkup(i18n:I18n,board:DepartureBoard,nowMs:number=Date.now()):string {
   const due=board.departures.filter(d=>{const at=Date.parse(d.at);return !Number.isFinite(at)||at>=nowMs-DEPARTED_GRACE_MS;});
   return `<section class="city-departures"><h4>${ct(i18n,'departures')}</h4><p class="city-meta">${e(i18n.t('arrivals.timetable'))} · ${board.operator==='hz'?'HŽPP':'ZET'}${board.status==='stale'?` · ${ct(i18n,'stale')}`:''}</p>
-    ${board.status==='down'?`<p>${ct(i18n,'noDepartures')}</p>`:due.length?due.slice(0,6).map(d=>`<div class="city-departure"><strong>${e(zagrebTime(d.at))}</strong><span>${e(d.headsign||d.routeName)}</span></div>`).join(''):`<p>${ct(i18n,'noDepartures')}</p>`}</section>`;
+    ${board.status==='down'?`<p>${ct(i18n,'noDepartures')}</p>`:due.length?due.slice(0,6).map(d=>`<div class="city-departure"><strong>${e(zagrebTime(d.at))}</strong><span>${e(d.headsign||d.routeName)}</span></div>`).join(''):`<p>${ct(i18n,'noDepartures')}</p>`}
+    <p class="city-meta">${ct(i18n,'scheduleNote')}</p></section>`;
 }

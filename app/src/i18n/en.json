@@ -741,6 +741,7 @@
     }
   },
   "kiosk": {
+    "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
     "surface": "public screen",
     "header": {
       "theme": "Theme: {pref}",
@@ -1141,6 +1142,7 @@
     "loading": "Loading places",
     "source": "Source",
     "original": "Original source",
+    "reference": "Published inventory, not a live check.",
     "saved": "Saved",
     "save": "Save place",
     "back": "Back to places",
@@ -1158,8 +1160,10 @@
     "stale": "Out of date",
     "departures": "Next departures",
     "noDepartures": "No confirmed timetable for this period.",
+    "scheduleNote": "Timetable, not an arrival prediction. Route delays do not alter these times.",
     "whyStreet": "Why this name?",
     "sourceLanguage": "Original text in Croatian",
+    "siteNote": "Protected area, not an entrance. Public access is not confirmed.",
     "river": "Sava",
     "partial": "Showing part of the information from available sources.",
     "copy": "Copy with source",
