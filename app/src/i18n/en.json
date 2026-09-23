@@ -1245,6 +1245,7 @@
     "consultationsNote": "National sources, not City of Zagreb consultations."
   },
   "sada": {
-    "departuresAt": "Next departures, {stop}"
+    "departuresAt": "Next departures, {stop}",
+    "mapBand": "Map around {place}. Open the map."
   }
 }

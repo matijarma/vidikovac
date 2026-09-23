@@ -1,70 +1,38 @@
-/* Sada: readable nearby facts beside a dated agenda. Temporal filtering
-   changes the agenda, not the person's local context or private selection. */
-.day-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding-block: var(--sp-2); }
-.day-heading > div { min-width: 0; }
-.day-date { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-bottom: var(--sp-2); }
-.day-title { font-size: 2rem; line-height: 1.15; letter-spacing: -0.045em; }
-.day-weather { display: grid; justify-items: end; gap: var(--sp-1); flex: none; max-width: 45%; color: var(--tone-text-primary); text-decoration: none; font-size: var(--type-control); text-align: right; }
-.day-weather-now { display: flex; align-items: center; gap: var(--sp-2); }
-.day-weather-now > .icon { width: 2rem; height: 2rem; color: var(--tone-weather); }
-.day-weather-now strong { font-size: 2rem; line-height: 1.2; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-.day-weather-source { font-size: var(--type-secondary); color: var(--tone-text-muted); }
-.day-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
-.day-now, .day-ahead { min-width: 0; }
-.day-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-.day-section-head h3 { font-size: var(--type-head); letter-spacing: -0.02em; }
-.day-link { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--target); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; }
-.day-facts { display: grid; gap: var(--sp-2); }
-.day-facts .tl { min-width: 0; padding: var(--sp-3) var(--sp-4); box-shadow: none; }
-.day-facts .tl[data-domain='transit'] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-3); align-items: center; border: 0; border-bottom: 1px solid var(--tone-stroke); border-radius: 0; background: transparent; padding-inline: var(--sp-1); }
-.day-facts .tl[data-domain='transit'] .tl-label { grid-column: 1; display: flex; align-items: flex-start; min-width: 0; gap: var(--sp-2); }
-.day-facts .tl-label-title { white-space: normal; font-size: var(--type-body); line-height: 1.3; font-weight: var(--weight-bold); overflow: visible; }
-.day-facts .tl[data-domain='transit'] .tl-value { grid-column: 2; grid-row: 1 / 3; font-size: var(--type-head); white-space: nowrap; }
-.day-facts .tl[data-domain='transit'] .tl-context { grid-column: 1; padding-left: 2.5rem; margin-top: var(--sp-1); }
-.day-facts .tl-context, .day-facts .tl-trail { font-size: var(--type-secondary); }
-.day-facts .tl[data-domain='safety'] { background: transparent; border: 0; padding-inline: var(--sp-1); }
-.day-facts .tl[data-variant='band'] .tl-title { font-size: var(--type-body); line-height: 1.35; }
-.day-more { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-1); }
-.day-opportunities{display:grid;gap:var(--sp-2);padding-top:var(--sp-3)}
-.day-opportunity{display:grid;gap:var(--sp-1);padding:var(--sp-3);border:1px solid var(--tone-stroke);border-radius:var(--r-md);text-decoration:none;color:var(--tone-text-primary)}
-.day-opportunity span{font-size:var(--type-secondary);color:var(--tone-text-muted)}
-.day-next-peek{display:none}
-.day-period{display:grid;gap:var(--sp-3);align-content:start;min-width:0;padding-top:var(--sp-3);border-top:1px solid var(--tone-stroke)}
-.day-period>h4{font-size:var(--type-head);color:var(--tone-text-primary)}
-@media(min-width:75rem){.day-overview{grid-template-columns:minmax(18rem,.75fr) minmax(0,1.7fr)}.day-agenda{grid-template-columns:minmax(0,1fr)}.day-period{padding-top:var(--sp-3)}.day-heading .day-title{font-size:2rem}}
-@media(max-width:47.99rem){.day-heading{padding-bottom:var(--sp-2)}.day-title{font-size:1.5rem}.day-date{font-size:var(--type-meta)}.day-weather-now strong{font-size:1.75rem}.day-next-peek{display:grid;gap:var(--sp-1);margin:var(--sp-2) 0 var(--sp-5);padding:var(--sp-3) 0;border-block:1px solid var(--tone-stroke)}.day-next-peek .tl{padding:0;border:0;background:transparent;box-shadow:none}.day-next-peek .tl-title{font-size:var(--type-body);line-clamp:2;-webkit-line-clamp:2}.day-next-peek .tl-label,.day-next-peek .tl-context{font-size:var(--type-secondary)}.day-next-peek .tl-time{font-size:var(--type-head)}.day-facts .tl[data-domain=transit]{padding-block:var(--sp-2)}.day-facts .tl[data-domain=transit] .tl-value{font-size:var(--type-control)}}
-.day-times { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-3); }
-.day-time { min-height: var(--target); padding: 0 var(--sp-3); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); cursor: pointer; }
-.day-time[aria-pressed='true'] { background: var(--tone-text-primary); color: var(--tone-surface-1); font-weight: var(--weight-bold); }
-.day-agenda { display: grid; gap: var(--sp-3); }
-.day-event { min-width: 0; }
-.day-event-date { font-size: var(--type-secondary); color: var(--tone-text-muted); margin-bottom: var(--sp-1); }
-.day-agenda .tl { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); column-gap: var(--sp-3); row-gap: var(--sp-1); padding: var(--sp-4); min-width: 0; background: var(--tone-surface-1); border: 1px solid var(--tone-stroke); color: var(--tone-text-primary); }
-.day-agenda .tl-time { grid-column: 1; grid-row: 1 / 4; align-self: start; font-size: var(--type-head); line-height: 1.3; color: var(--tone-events); white-space: normal; }
-.day-agenda .tl-label { grid-column: 2; color: var(--tone-text-muted); }
-.day-agenda .tl-title { grid-column: 2; font-size: var(--type-body); line-height: 1.35; -webkit-line-clamp: 3; line-clamp: 3; }
-.day-agenda .tl-context { grid-column: 2; display: block; font-size: var(--type-secondary); white-space: normal; color: var(--tone-text-muted); line-height: 1.35; }
-.day-agenda .tl-ctx-text { white-space: normal; }
-.day-agenda .tl[data-variant='ink'] .tl-label,
-.day-agenda .tl[data-variant='ink'] .tl-context { color: var(--tone-text-muted); }
-.day-empty { padding: var(--sp-4) 0; color: var(--tone-text-muted); font-size: var(--type-control); }
-.day-city { margin-top: var(--sp-6); padding-top: var(--sp-4); border-top: 1px solid var(--tone-stroke); }
-.day-city .tl { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); padding: 0; border: 0; background: transparent; min-height: var(--target); }
-.day-city .tl-value { font-size: var(--type-head); }
-@media (hover: hover) {
-  .day-time:hover { border-color: var(--tone-stroke); }
-  .day-weather:hover { color: var(--tone-action-brand); }
-}
-@media (min-width: 48rem) {
-  .day-overview { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--sp-8); }
-  .day-title { font-size: 2.5rem; }
-  .day-heading { padding-block: var(--sp-5) var(--sp-6); }
-}
-@media (min-width: 75rem) {
-  .ws-overview { max-width: 86rem; margin-inline: auto; }
-  .day-overview { gap: var(--sp-6); }
-  .day-facts .tl { padding: var(--sp-4) var(--sp-5); }
-}
+/* Sada (layers/grad-sada.ts, companion WP4 step 3): the place as the title,
+   one sentence with its kicker, the phone's map band, three departures and
+   "U blizini", the wall's own list continuing after them; the sources last.
+   The Događanja page's time chips (.day-time) live in layers.css. */
+.ws-sada { gap: var(--sp-4); }
+.sada-place { font-size: var(--type-display); line-height: var(--lh-title); letter-spacing: -0.03em; }
+
+/* One written sentence (seam S6), its kicker coloured by data-kicker. BAJS teal
+   fails 4.5:1 as text (city.css .city-bike-count), so the word keeps its ink
+   and a dot before it carries the mode's colour. */
+.sada-sentence { display: grid; gap: var(--sp-1); padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); min-inline-size: 0; }
+.sada-kicker { font-size: var(--type-secondary); font-weight: var(--weight-bold); line-height: var(--lh-body); color: var(--tone-transit); }
+.sada-sentence[data-kicker='kultura'] .sada-kicker { color: var(--tone-events); }
+.sada-sentence[data-kicker='vrijeme'] .sada-kicker, .sada-sentence[data-kicker='radovi'] .sada-kicker { color: var(--tone-weather); }
+.sada-sentence[data-kicker='bicikli'] .sada-kicker { color: var(--tone-text-primary); }
+.sada-sentence[data-kicker='bicikli'] .sada-kicker::before { content: ''; display: inline-block; inline-size: 0.5rem; block-size: 0.5rem; margin-inline-end: 0.4rem; border-radius: 50%; background: var(--tone-bike); vertical-align: 0.1em; }
+.sada-sentence[data-kicker='nocas'] .sada-kicker { color: var(--tone-text-secondary); }
+.sada-sentence-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-medium); }
+.sada-sentence[aria-busy='true'] .skeleton { min-block-size: 2.75rem; }
+
+/* The phone's 112 px map band around the place (mock v2, [O-31]): a still
+   map, and over it one link that opens Karta. The map's credit stays above
+   the link so it can be opened. */
+.sada-map { position: relative; display: block; block-size: 112px; overflow: hidden; border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-2); }
+.sada-map-canvas { position: absolute; inset: 0; }
+.sada-map-open { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.sada-map-open:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: -3px; }
+.sada-map-canvas .maplibregl-ctrl-bottom-left, .sada-map-canvas .maplibregl-ctrl-bottom-right { z-index: 2; }
+.sada-map-canvas .maplibregl-ctrl-attrib { font-size: var(--text-meta); background: var(--tone-surface-1); color: var(--tone-text-muted); }
+.sada-map-canvas .maplibregl-ctrl-attrib a { color: var(--tone-text-muted); }
+.sada-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact { min-block-size: var(--target); border-radius: var(--r-pill); background: var(--tone-surface-1); }
+.sada-map-canvas .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) { min-inline-size: var(--target); padding-inline-end: 0; }
+.sada-map-canvas .maplibregl-ctrl-attrib-button { inline-size: var(--target); block-size: var(--target); background-repeat: no-repeat; background-position: center; }
+@media (min-width: 60rem) { .sada-map { display: none; } }
+
 /* The departures block (city/next-departures.ts) and the stop sheet's rows
    (transport/view.ts departureRow): badge, destination, time. A tracked time
    is blue with its dot, a timetable time a grey tabular clock [O-27]; an
@@ -79,18 +47,35 @@
 .sada-departure .t-eta:not([data-live]) time { color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
 .sada-departure-empty { display: flex; align-items: center; color: var(--tone-text-muted); font-size: var(--type-control); }
 .sada-departure-empty .skeleton { min-block-size: 2rem; }
-@media (max-width: 23rem) {
-  .day-title, .day-weather-now strong { font-size: var(--type-title); }
-  .day-weather-now > .icon { width: 1.5rem; height: 1.5rem; }
-  .day-facts .tl[data-domain='transit'] { grid-template-columns: 1fr; }
-  .day-facts .tl[data-domain='transit'] .tl-value { grid-column: 1; grid-row: auto; padding-left: 2.5rem; }
+/* "U blizini · 2 km · ~15 min" (city/nearby-markup.ts): the wall's rows
+   (kiosk/timeline.ts rowMarkup) in the phone's type, time in the first
+   column; the pill a chip whose words stay the head's. A blue time is a
+   tracked departure, as everywhere; a row with a subject is one link. */
+.nearby { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.nearby-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin: 0; font-size: var(--type-head); line-height: var(--lh-title); }
+.nearby-pill { padding: var(--sp-1) var(--sp-3); border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-secondary); font-size: var(--type-secondary); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nearby-rows { list-style: none; margin: 0; padding: 0; }
+.nearby-row { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); column-gap: var(--sp-3); align-items: start; min-block-size: 4rem; padding-block: var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
+.nearby-row:has(> .nearby-link) { padding-block: 0; }
+.nearby-link { grid-column: 1 / -1; display: grid; grid-template-columns: inherit; column-gap: inherit; align-items: start; min-block-size: 4rem; padding-block: var(--sp-3); color: inherit; text-decoration: none; }
+.nearby-link:active { background: var(--tone-surface-2); }
+.nearby-link:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; border-radius: var(--r-sm); }
+.nearby-row .k-nearby-mark { display: none; }
+.nearby-row .k-nearby-at { display: grid; gap: 2px; min-inline-size: 0; }
+.nearby-when { font-size: var(--type-control); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
+.nearby-row[data-live='1'] .nearby-when { color: var(--tone-action-brand); }
+.nearby-row[data-kind='event'] .nearby-when { color: var(--tone-events); }
+.nearby-row[data-always='1'] .nearby-when { color: var(--tone-text-muted); font-weight: var(--weight-medium); font-variant-caps: all-small-caps; letter-spacing: 0.02em; }
+.nearby-row .k-nearby-day { font-size: var(--type-meta); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.nearby-row .k-nearby-text { display: grid; gap: var(--sp-1); min-inline-size: 0; }
+.nearby-title { font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-medium); }
+.nearby-sub { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.nearby-sub:empty { display: none; }
+.nearby-row-empty { padding-block: var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
+.nearby-row-empty .skeleton { min-block-size: 2.5rem; }
+@media (hover: hover) {
+  .nearby-link:hover .nearby-title { color: var(--tone-action-brand); }
 }
 @container ws (max-width: 18rem) {
-  .day-heading { flex-wrap: wrap; }
-  .day-weather { max-width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; text-align: start; gap: var(--sp-2); }
-  .day-facts .tl[data-domain='transit'] { grid-template-columns: 1fr; }
-  .day-facts .tl[data-domain='transit'] .tl-value { grid-column: 1; grid-row: auto; padding-left: 2.5rem; }
-  .day-agenda .tl { grid-template-columns: 1fr; }
-  .day-agenda .tl > * { grid-column: 1; grid-row: auto; }
-  .day-section-head { flex-wrap: wrap; }
+  .nearby-row, .nearby-link { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
 }

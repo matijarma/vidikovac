@@ -1,69 +1,137 @@
-// Sada: the whole city on one time axis (newdesignsystem.md §4.2, plan A.4).
-// The workspace is the band and nothing else. First the phone's segmented
-// control (sticky under the header; a desk hides it by CSS and reads the five
-// heads instead), then the band itself: the heads, the axis and the lanes in
-// time order, sada · poslijepodne · večeras · sutra · tjedan, then one line of
-// provenance. Every fact on the page is a tile a producer described
-// (experience/producers) and buildTimeband placed, capped and marked, so a
-// finger, a Tab key and a screen reader travel one order on every surface and
-// this file composes without a block builder of its own. Weather is status in
-// the sada head on the phone (D4, D11), never a tile; the desktop's status
-// line carries it instead. The root is reconciled in place, so a poll swaps
-// only the values that changed.
+// Sada, the ten-minute visit (companion WP4 step 3, §11 "Phone, ten-minute
+// visit"): the answer before any explanation. In reading order: the place as
+// the title [O-31]; one sentence with its coloured kicker; on the phone a
+// 112 px map band around the place that opens Karta; three departures at the
+// stop the place boards (city/next-departures.ts); then "U blizini · 2 km ·
+// ~15 min", the wall's own list continuing after those departures
+// (city/feed.ts, city/nearby-markup.ts); last, below the fold, the sources,
+// crediting ZET for every blue time. No generic heading sentence, no date
+// line, no instruction, no counts [O-12]; a desk shows the same feed without
+// the band (Karta stands beside it there).
+//
+// The root is reconciled in place, so a poll swaps only the values that
+// changed, and the band's live map is kept where it stands (u-pokretu.ts
+// persistSlot), never detached by a redraw.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
+import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sentence';
+import { emptyCity } from '../../../shared/city/types';
+import { CURATED_WALL, curatedCityPoints } from '../city/curated';
+import { feedPlace, feedRadiusM, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
+import { departuresBlock } from '../city/next-departures';
+import type { PlaceContext } from '../city/place';
 import { provenanceBlock } from '../experience/status';
-import { buildTimeband, FILTER_KEY } from '../experience/timeband';
-import { tileMarkup, skeletonTileMarkup, type Tile } from '../experience/tiles';
-import { weatherStatus } from '../experience/weather-status';
-import { zagrebDayKey, zagrebWeekdayDate, zagrebTime } from '../format';
-import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { iconMarkup } from '../ui/icons';
+import type { CityMapHandle } from '../map/city-map';
+import { frameView } from '../map/frame';
+import { createElementFromHTML, escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import type { LayerContext } from './types';
-import { dayOpportunities } from '../city/day';
-import { nextDepartures } from '../city/next-departures';
+import { closureLines, persistSlot, vehiclePoints } from './u-pokretu';
+
+/** The band's map slot, kept by the page across polls (map/map-slots.ts). */
+export const SADA_MAP_SLOT_ID = 'grad-sada-map';
+/** The band as the phone lays it out (mock v2, [O-31]): the frame is fitted to this box. */
+export const SADA_MAP_BAND = Object.freeze({ width: 390, height: 112 });
+
+/** The camera each band map was last given, so a redraw moves it only when the place moves. */
+const cameras = new WeakMap<CityMapHandle, string>();
+
+/** The kicker's word, one literal key each, as the wall reads them (kiosk.sentence.kicker.*, seam S9). */
+function kickerWord(ctx: LayerContext, kicker: SentenceKicker): string {
+  switch (kicker) {
+    case 'promet': return ctx.i18n.t('kiosk.sentence.kicker.promet');
+    case 'kultura': return ctx.i18n.t('kiosk.sentence.kicker.kultura');
+    case 'vrijeme': return ctx.i18n.t('kiosk.sentence.kicker.vrijeme');
+    case 'bicikli': return ctx.i18n.t('kiosk.sentence.kicker.bicikli');
+    case 'nocas': return ctx.i18n.t('kiosk.sentence.kicker.nocas');
+    case 'radovi': return ctx.i18n.t('kiosk.sentence.kicker.radovi');
+  }
+}
+
+/** One sentence and its kicker ("Vrijeme"), coloured by data-kicker; a busy card holds its height while the sentence is on its way. */
+function sentenceMarkup(ctx: LayerContext, sentence: WrittenSentence | 'busy' | null): string {
+  if (sentence === null) return '';
+  if (sentence === 'busy') {
+    return '<article class="sada-sentence" data-testid="sada-sentence" data-key="sada-sentence" aria-busy="true"><span class="skeleton" aria-hidden="true"></span></article>';
+  }
+  return `<article class="sada-sentence" data-testid="sada-sentence" data-key="sada-sentence" data-kicker="${a(sentence.kicker)}">`
+    + `<span class="sada-kicker">${e(kickerWord(ctx, sentence.kicker))}</span><p class="sada-sentence-text">${e(sentence.text)}</p></article>`;
+}
+
+/** The list's place while its rows are on their way: the head's title and one busy row. */
+function nearbyBusy(ctx: LayerContext): string {
+  return `<section class="nearby" data-testid="nearby" data-key="nearby" aria-busy="true"><h3 class="nearby-head" data-testid="nearby-head"><span class="nearby-head-title">${e(ctx.i18n.t('kiosk.nearby.title'))}</span></h3>`
+    + '<ol class="nearby-rows" data-testid="nearby-rows"><li class="nearby-row-empty" aria-hidden="true"><span class="skeleton"></span></li></ol></section>';
+}
+
+/**
+ * The phone's map band: vehicles, the curated city points the wall shows
+ * (city/curated.ts, WP2) and the closures, framed on the place
+ * (map/frame.ts frameView over the measured circle), still, and a link over
+ * it that opens Karta. Null on a desk, in lagano and without a map.
+ */
+function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLElement | null {
+  if (ctx.screen?.surface !== 'phone' || ctx.lightweight || !ctx.maps) return null;
+  const now = ctx.frozenAt ?? ctx.now;
+  const camera = frameView(place, radiusM, SADA_MAP_BAND.width, SADA_MAP_BAND.height);
+  const container = ctx.maps.slot({
+    id: SADA_MAP_SLOT_ID,
+    renderer: 'map',
+    className: 'map-canvas sada-map-canvas',
+    testid: 'sada-map-canvas',
+    ariaLabel: ctx.i18n.t('sada.mapBand', { place: place.name }),
+    points: [
+      ...vehiclePoints(ctx.snapshots['zet-rt'], now),
+      ...curatedCityPoints(ctx.city ?? emptyCity(), ctx.snapshots.dogadanja?.items ?? [], now, CURATED_WALL),
+    ],
+    lines: closureLines(ctx.snapshots.prometnice),
+    center: camera.center,
+    zoom: camera.zoom,
+    stop: place.stop ?? place.departuresStop,
+    interactive: false,
+    attributionCompact: true,
+    presentationProfile: 'handheld',
+    cityLabels: 'venues',
+    reducedMotion: ctx.reducedMotion,
+    theme: ctx.screen.theme,
+    locale: ctx.i18n.getLocale(),
+  });
+  if (!container) return null;
+  // The slot takes its camera when it is made; a place that moves later (the catalogue arrived) moves it here.
+  const handle = ctx.maps.handle(SADA_MAP_SLOT_ID);
+  const view = `${camera.center.join(',')}@${camera.zoom}`;
+  if (handle && cameras.get(handle) !== view) {
+    if (cameras.has(handle)) handle.setView?.({ center: camera.center, zoom: camera.zoom });
+    cameras.set(handle, view);
+  }
+  container.id ||= `${SADA_MAP_SLOT_ID}-canvas`;
+  return persistSlot(container);
+}
 
 export function renderGradSada(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
-  const model = buildTimeband(ctx);
-  const sada = model.lanes.find(lane => lane.col === 'sada')!;
-  const selected = model.selected;
-  const weather = weatherStatus(i18n, ctx.snapshots, ctx.now);
-  const observation = ctx.snapshots['dhmz-now']?.items[0];
-  const next = model.lanes.filter(lane => lane.col !== 'sada' && (selected === 'sada' || lane.col === selected));
-  const local = sada.tiles.filter(tile => tile.domain !== 'civic' && tile.domain !== 'transit');
-  const civic = sada.tiles.filter(tile => tile.domain === 'civic');
-  const link = (layer: string, label: string, aria?: string, testid?: string) => `<a class="day-link" data-action="nav" data-layer="${layer}" href="#layer=${layer}"${aria ? ` aria-label="${escapeAttribute(aria)}"` : ''}${testid ? ` data-testid="${testid}"` : ''}>${escapeHtml(label)}${iconMarkup('arrow-up-right', undefined, 'icon icon-sm')}</a>`;
-  const event = (tile: Tile, col: string) => {
-    const date = tile.at && zagrebDayKey(tile.at) !== zagrebDayKey(ctx.now) ? zagrebWeekdayDate(tile.at) : '';
-    return `<div class="day-event" data-col="${escapeAttribute(col)}" data-key="ahead:${escapeAttribute(tile.key)}">${date ? `<p class="day-event-date">${escapeHtml(date)}</p>` : ''}${tileMarkup(i18n, tile)}</div>`;
-  };
-  const choices = model.columns.map(col => `<button class="day-time" type="button" data-action="filter" data-filter-key="${FILTER_KEY}" data-filter-value="${col.id}" aria-pressed="${selected === col.id}"${col.id === 'sada' ? ' data-testid="day-next-all"' : ''}>${escapeHtml(col.id === 'sada' ? i18n.t('timeband.next') : col.seg)}</button>`).join('');
-  const feet = sada.foot.filter(foot=>foot.kind==='state'||foot.domain!=='transit').map(foot => foot.kind === 'state' ? foot.markup : link(foot.layer, foot.text, foot.aria, `tb-more-${foot.domain}`)).join('');
-  const laneMarkup = next.map(lane => {
-    if (!lane.tiles.length && !lane.foot.length && !lane.busy) return '';
-    const column=model.columns.find(c=>c.id===lane.col)!;
-    const body=lane.tiles.map(tile=>event(tile,lane.col)).join('');
-    const more=lane.foot.map(f=>f.kind==='state'?f.markup:link(f.layer,f.text,f.aria,`tb-more-${f.domain}`)).join('');
-    return `<section class="day-period" data-col="${lane.col}"><h4>${escapeHtml(column.label)}</h4>${body||more||lane.busy?'':`<p class="day-empty">${escapeHtml(i18n.t('timeband.laneEmpty'))}</p>`}${body}${lane.skeletons.map(s=>skeletonTileMarkup(s.variant,s.key)).join('')}<div class="day-more">${more}</div></section>`;
-  }).join('');
-  const weatherMarkup = weather
-    ? `<a class="day-weather" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="tb-weather" data-status="${weather.stale ? 'stale' : 'live'}" aria-label="${escapeAttribute(weather.aria)}"><span class="day-weather-now">${weather.icon ? iconMarkup(weather.icon) : ''}<strong>${escapeHtml(weather.temp)}</strong></span><span>${escapeHtml(weather.condition)}</span><span class="day-weather-source">${escapeHtml(`${weather.stale ? i18n.t('status.staleNote') + ' ' : ''}DHMZ${observation?.at ? ` · ${zagrebTime(observation.at)}` : ''}`)}</span></a>`
-    : `<a class="day-weather day-weather-empty" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo">${iconMarkup('cloud-sun')}<span>${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</span><span class="day-weather-source">${escapeHtml(i18n.t(ctx.errors?.['dhmz-now'] || ctx.snapshots['dhmz-now']?.status === 'down' ? 'status.down' : 'status.loading'))}</span></a>`;
-  return createElementFromHTML(`<section class="layer ws ws-overview" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">
-<header class="day-heading"><div><p class="day-date">${escapeHtml(zagrebWeekdayDate(ctx.now))} · <time class="day-clock" datetime="${new Date(ctx.now).toISOString()}">${escapeHtml(model.clock)}</time></p><h2 class="day-title layer-title" id="layer-title-grad-sada" tabindex="-1">${escapeHtml(i18n.t('cityOverview.title'))}</h2></div>${weatherMarkup}</header>
-<div class="day-overview" data-testid="tb">
-  <section class="day-now" aria-labelledby="day-now-title"><header class="day-section-head"><h3 id="day-now-title">${escapeHtml(i18n.t('cityOverview.nearby'))}</h3>${link('u-pokretu', i18n.t('layers.u-pokretu'))}</header>
-    ${nextDepartures(ctx)}
-    ${dayOpportunities(ctx)}
-    <div class="day-facts" data-testid="tb-lane-sada" data-col="sada" aria-busy="${sada.busy}">${local.map(tile => tileMarkup(i18n, tile)).join('')}</div>
-    <div class="day-more">${feet}</div>
-  </section>
-  <section class="day-ahead" aria-labelledby="day-ahead-title"><header class="day-section-head"><h3 id="day-ahead-title">${escapeHtml(i18n.t('cityOverview.next'))}</h3>${link('kultura', i18n.t('layers.kultura'))}</header>
-    <div class="day-times" role="group" aria-label="${escapeAttribute(i18n.t('timeband.segLabel'))}" data-testid="tb-seg">${choices}</div>
-    <div class="day-agenda" aria-busy="${next.some(l => l.busy)}">${laneMarkup}</div>
-    ${civic.length ? `<section class="day-city"><header class="day-section-head"><h3>${escapeHtml(i18n.t('layers.uprava-i-pravo'))}</h3>${link('uprava-i-pravo', i18n.t('cityOverview.city'))}</header>${civic.map(tile => tileMarkup(i18n, tile)).join('')}</section>` : ''}
-  </section>
-</div>
-${provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])}
-</section>`);
+  const place = feedPlace(ctx);
+  const now = ctx.frozenAt ?? ctx.now;
+  const desk = ctx.screen?.surface === 'desktop';
+  const feed = sadaFeed(ctx.onLocalData);
+  const input = typeof feed === 'object' ? nearbyInput(ctx, place) : null;
+  const rows = typeof feed === 'object' ? feed.selectNearby(input!) : null;
+  // The page's own sentence when it gives one (null: none), else the writer's first from these facts.
+  const sentence: WrittenSentence | 'busy' | null = ctx.sentence !== undefined ? ctx.sentence
+    : typeof feed === 'object' ? feed.sadaSentences(input!, rows!)[0] ?? null
+    : feed === 'loading' ? 'busy' : null;
+  // The departures block shows the departures; the list continues with what comes after them.
+  const nearby = typeof feed === 'object'
+    ? feed.nearbySectionMarkup(i18n, rows!.filter((row) => row.kind !== 'departure'), input!.radiusM, now,
+      { cap: desk ? NEARBY_DESK_ROWS : NEARBY_PHONE_ROWS, id: 'sada' })
+    : feed === 'loading' ? nearbyBusy(ctx) : '';
+  const band = mapBand(ctx, place, input?.radiusM ?? feedRadiusM(ctx, nearbyPlace(place)));
+  const section = createElementFromHTML(`<section class="layer ws ws-sada" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">`
+    + `<h2 class="layer-title sada-place" id="layer-title-grad-sada" tabindex="-1" data-testid="sada-place">${e(place.name)}</h2>`
+    + sentenceMarkup(ctx, sentence)
+    + (band ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: place.name }))}"></a></div>` : '')
+    + departuresBlock(ctx, place, { heading: true })
+    + nearby
+    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])
+    + '</section>');
+  if (band) section.querySelector('.sada-map')!.prepend(band);
+  return section;
 }

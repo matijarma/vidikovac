@@ -124,7 +124,7 @@ function definePersistSlot(): boolean {
 }
 
 /** The live element itself while it is not in the document (first mount, a return to the layer, a detached render); the slot only while a poll must leave it where it is. */
-function persistSlot(live: HTMLElement): HTMLElement {
+export function persistSlot(live: HTMLElement): HTMLElement {
   if (!live.isConnected || !definePersistSlot()) return live;
   const slot = document.createElement(PERSIST_TAG) as PersistSlotElement;
   slot.live = live;

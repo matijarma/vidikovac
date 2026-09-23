@@ -2,7 +2,7 @@
 // The /d/ shell on the real core stores: navigation, session states, polling
 // aligned to the feed, reconciliation that keeps focus and typed text, the
 // session sheet, sharing, expiry and exports. Every browser global is injected.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -14,6 +14,7 @@ import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
 import { createCityMap, type CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
+import { loadSadaFeed } from '../../app/src/city/feed';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 import { fakeCityStore } from '../city/fake-store';
@@ -142,6 +143,9 @@ function openViaMore(root: Root, layer: LayerId): void {
 }
 
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
+// Sada's list and sentence load as one chunk after the first paint (city/feed.ts); in hand before any mount,
+// so every draw here is the finished one and no late repaint lands inside another test.
+beforeAll(async () => { expect(await loadSadaFeed()).not.toBeNull(); });
 
 it('reconciles an open phone Karta and refreshes the shared network loader after a graph change', async () => {
   const oldNet = decodeNetwork(graphBefore);
@@ -635,22 +639,30 @@ describe('reconciliation across polls', () => {
 describe('failure and recovery', () => {
   it('keeps the last good data marked stale when a module fails, and a failed module offers a retry that fetches again', async () => {
     let failNow = false;
-    const { root, session, fetchData, tick } = mount({ snapshot: (module) => {
+    const { root, session, fetchData, tick, handle } = mount({ snapshot: (module) => {
       if (module === 'glasnik') throw new Error('down');
       if (failNow && module === 'dhmz-now') throw new Error('boom');
       return snapshotOf(module);
     } });
     session.join();
     await flush();
-    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
-    expect(root.querySelector('.day-more [data-action=retry][data-module=glasnik]')).not.toBeNull();
+    // Sada says one sentence and names no source's trouble: the retry lives with the module's own page.
+    const sentence = text(root.querySelector('[data-testid=sada-sentence][data-kicker]'));
+    expect(sentence).not.toBe('');
+    expect(root.querySelector('#layer-grad-sada [data-action=retry]')).toBeNull();
     failNow = true;
     tick();
     await flush();
-    expect(root.querySelector('[data-testid=tb-weather][data-status=stale]')).not.toBeNull();
-    expect(text(root.querySelector('.day-weather-now strong'))).toBe('21 °C');
+    // The weather failed after a good answer: Sada keeps its sentence, Vrijeme keeps 21 °C marked stale.
+    expect(text(root.querySelector('[data-testid=sada-sentence][data-kicker]'))).toBe(sentence);
+    handle.selectLayer('zrak-i-nebo');
+    await flush();
+    expect(root.querySelector('#layer-zrak-i-nebo [data-testid=panel-status][data-status=stale]')).not.toBeNull();
+    expect(text(root.querySelector('#layer-zrak-i-nebo'))).toContain('21 °C');
+    handle.selectLayer('uprava-i-pravo');
+    await flush();
     fetchData.mockClear();
-    click(root, '.day-more [data-action=retry][data-module=glasnik]');
+    click(root, '#layer-uprava-i-pravo [data-action=retry][data-module=glasnik]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['glasnik']);
   });
@@ -813,15 +825,17 @@ describe('the full map view (transport)', () => {
     button.focus();
     button.click();
     expect(dash.dataset.view).toBe('map');
-    expect(mapFactory).toHaveBeenCalledTimes(1);
+    // Karta's own maps; Sada's band (sada-map-canvas) is a map of its own, released when Karta opens.
+    const karta = () => mapFactory.mock.calls.map(([o], i) => ({ o, i })).filter(({ o }) => o.container.dataset.testid === 'map-canvas');
+    expect(karta()).toHaveLength(1);
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
     click(root,'[data-action=city-group][data-group=transport]');
     const mode = root.querySelector<HTMLButtonElement>('[data-testid=map-mode-toggle]')!;
     mode.focus();
     mode.click();
-    expect(mapFactory).toHaveBeenCalledTimes(2);
-    expect(mapFactory.mock.calls[1]?.[0].renderer).toBe('schema');
-    expect(mapFactory.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(karta()).toHaveLength(2);
+    expect(karta()[1]?.o.renderer).toBe('schema');
+    expect(mapFactory.mock.results[karta()[0]!.i]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('kajima:map-mode:v1')).toBe('schema');
     expect(dash.dataset.view).toBe('map');
     expect(document.activeElement).toBe(mode);
@@ -1407,14 +1421,16 @@ describe('the desktop directory (D10)', () => {
   });
 });
 
-describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
+describe('the place’s last departures (T3.1, FEED_LASTRUN)', () => {
   const SCREEN = { kind: 'venue' as const, expiresAt: null, stop: { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] } };
   const snapshot: LastRunSnapshot = {
     status: 'live', fetchedAt: '2026-09-11T12:00:00Z', sourceUpdatedAt: '2026-09-10T03:00:00Z', validUntil: '2026-10-02T04:00:00Z',
-    routes: { '6': { '2026-09-11': '24:27' }, '11': { '2026-09-11': '24:09' }, '12': { '2026-09-11': '23:45' } },
+    // Lines that stop early at this stop today: at 14:32 their last trams are within four hours, so U blizini lists them as one row.
+    routes: { '6': { '2026-09-11': '18:20' }, '11': { '2026-09-11': '18:05' }, '12': { '2026-09-11': '17:45' } },
   };
+  const lastRows = (root: Root): HTMLElement[] => [...(root as ParentNode).querySelectorAll<HTMLElement>('[data-testid=nearby] li.nearby-row[data-kind=last]')];
 
-  it('loads the stop’s file once per session once a screen stop exists and threads it into the band: two Zadnji polazak tiles in večeras, no second load on a poll', async () => {
+  it('loads the file of the stop the place boards once and threads it into one U blizini row, no second load on a poll', async () => {
     const loadLastRun = vi.fn(async () => snapshot);
     const { root, session, tick } = mount({ deps: { loadLastRun } });
     expect(loadLastRun).not.toHaveBeenCalled();
@@ -1422,21 +1438,19 @@ describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
     expect(loadLastRun).toHaveBeenCalledWith('106_1');
-    const tiles = [...root.querySelectorAll<HTMLElement>('[data-testid=tile-lastrun]')];
-    expect(tiles).toHaveLength(2);
-    expect(tiles.every((t) => t.closest('.day-event[data-col=veceras]') !== null)).toBe(true);
-    expect(tiles[0]!.getAttribute('aria-label')).toBe('00:09, Zadnji polazak, Črnomerec - Dubec, po rasporedu · ZET GTFS'); // the xs badge replaces the kicker visually; the name says it
-    expect(text(tiles[0])).toContain('00:09');
-    expect(text(tiles[0])).toContain('po rasporedu · ZET GTFS');
-    expect(text(tiles[1])).toContain('00:27');
-    expect(tiles[0]!.querySelector('.line')?.getAttribute('data-size')).toBe('xs');
+    const rows = lastRows(root);
+    expect(rows).toHaveLength(1);
+    expect(text(rows[0]!.querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
+    expect(text(rows[0]!.querySelector('.nearby-sub'))).toBe('12 17:45 · 11 18:05 · 6 18:20');
+    expect(rows[0]!.querySelector('time.nearby-when')?.getAttribute('datetime')).toBe('2026-09-11T15:45:00.000Z');
     tick();
     await flush();
     expect(loadLastRun).toHaveBeenCalledTimes(1);
-    expect(root.querySelectorAll('[data-testid=tile-lastrun]')).toHaveLength(2);
+    expect(lastRows(root)).toHaveLength(1);
   });
 
-  it('asks nothing while the session has no screen stop', async () => {
+  it('asks nothing while no stop is within reach of the place: no screen stop, and a catalogue without one near Trg bana J. Jelačića', async () => {
+    // This file's loadStops answers an empty catalogue, so the default place has no platform within 800 m.
     const loadLastRun = vi.fn(async () => snapshot);
     const { session } = mount({ deps: { loadLastRun } });
     session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
@@ -1444,13 +1458,13 @@ describe('the last departure from the screen stop (T3.1, FEED_LASTRUN)', () => {
     expect(loadLastRun).not.toHaveBeenCalled();
   });
 
-  it('a stop without a file, or a down answer, leaves the tile absent and the band whole', async () => {
+  it('a stop without a file, or a down answer, leaves the row absent and the list whole', async () => {
     for (const answer of [null, { status: 'down' as const, fetchedAt: '2026-09-11T12:00:00Z' }]) {
       const { root, session } = mount({ deps: { loadLastRun: vi.fn(async () => answer) } });
       session.join('scanner', SCREEN);
       await flush();
-      expect(root.querySelector('[data-testid=tile-lastrun]')).toBeNull();
-      expect(root.querySelector('[data-testid=tb]')).not.toBeNull();
+      expect(lastRows(root)).toHaveLength(0);
+      expect(root.querySelectorAll('[data-testid=nearby] li.nearby-row').length).toBeGreaterThan(0);
     }
   });
 });

@@ -18,6 +18,9 @@ import { renderLayer } from '../../app/src/layers';
 import { dataText } from '../../app/src/panels/panel';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk';
+import { loadSadaFeed } from '../../app/src/city/feed';
+import type { DepartureBoard } from '../../shared/city/types';
+import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = FIXTURE_NOW.getTime();
 const i18n = createDefaultI18n('hr');
@@ -33,6 +36,17 @@ await Promise.all(
 );
 
 const ctx = () => ({ i18n, snapshots, now: NOW });
+// Sada boards the place's stop: the catalogue's Trg bana J. Jelačića and a live board for it, as the page holds them.
+const TRG = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '13'] };
+const TRG_BOARD: DepartureBoard = {
+  operator: 'zet', stopId: TRG.id, stopName: TRG.name, status: 'live', generatedAt: new Date(NOW - 60_000).toISOString(),
+  departures: [3, 9, 15, 21].map((m, i) => ({ operator: 'zet', tripId: `t${i}`, routeId: '6', routeName: '6', headsign: 'Črnomerec', at: new Date(NOW + m * 60_000).toISOString() })),
+};
+const sadaCtx = (): LayerContext => ({
+  ...ctx(), stops: [TRG],
+  boards: { ensure: () => {}, get: (_op, id) => (id === TRG.id ? TRG_BOARD : undefined), destroy: () => {} },
+});
+await loadSadaFeed();
 const clean = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const panel = (section: HTMLElement, id: string): HTMLElement => {
   const found = section.querySelector<HTMLElement>(`#${id}`);
@@ -48,22 +62,18 @@ describe('every layer renders the real feed output', () => {
     expect(clean(weather)).not.toContain(DASH);
   });
 
-  it('grad-sada never renders the unavailable word or a dash: every source is live, so every lane is tiles or an honest empty word', () => {
-    const section = renderLayer('grad-sada', ctx());
-    expect(section.querySelector('[data-testid=tb]')).not.toBeNull();
-    expect(section.querySelectorAll('.tl:not([data-skeleton])').length).toBeGreaterThan(0);
-    expect(section.querySelectorAll('.tl[data-skeleton], [aria-busy="true"], [data-action=retry]')).toHaveLength(0);
+  it('grad-sada never renders the unavailable word or a dash: every source is live, so Sada is the place, its departures and U blizini, nothing on its way', () => {
+    const section = renderLayer('grad-sada', sadaCtx());
+    expect(section.querySelectorAll('[data-testid=day-departures] > li.sada-departure').length).toBeGreaterThanOrEqual(1);
+    expect(section.querySelector('[data-testid=nearby]')).not.toBeNull();
+    expect(section.querySelectorAll('[data-testid=nearby] li.nearby-row').length).toBeGreaterThan(0);
+    expect(section.querySelectorAll('[aria-busy="true"], [data-action=retry], .skeleton')).toHaveLength(0);
     expect(clean(section)).not.toContain(UNAVAILABLE);
-    // A dash where a figure should stand is the placeholder this guards against; a title is the
-    // source's own words (Kulturpunkt writes "zrcala – psihoanaliza"), so titles are not read here,
-    // and neither is a line's course beside its badge (GTFS writes "Črnomerec – Sopot").
-    const figures = section.querySelectorAll('.tb-h, .tb-more, .tb-empty, .tl-label, .tl-value, .tl-time, .tl-context, .tl-trail');
+    // A dash where a time should stand is the placeholder this guards against; titles and subs are the
+    // sources' own words (GTFS writes "Črnomerec – Sopot"), so only the times are read here.
+    const figures = section.querySelectorAll('.sada-departure .t-eta, .nearby-when, .nearby-pill');
     expect(figures.length).toBeGreaterThan(0);
-    for (const figure of figures) {
-      const probe = figure.cloneNode(true) as Element;
-      for (const course of probe.querySelectorAll('.tl-label-title')) course.remove();
-      expect(clean(probe), figure.outerHTML).not.toContain(DASH);
-    }
+    for (const figure of figures) expect(clean(figure), figure.outerHTML).not.toContain(DASH);
   });
 
   it('shows today’s forecast as a real range', () => {
@@ -83,19 +93,21 @@ describe('every layer renders the real feed output', () => {
     }
   });
 
-  it('tiles the deviating lines on Sada and lists a delay per route in Promet', () => {
+  it('shows at most three departures on Sada, never a delay tile or the fleet count', () => {
+    const gradSada = renderLayer('grad-sada', sadaCtx());
+    const rows = gradSada.querySelectorAll('[data-testid=day-departures] > li.sada-departure');
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows.length).toBeLessThanOrEqual(3);
+    expect(gradSada.querySelectorAll('.tl[data-domain=transit], .day-stop-prompt')).toHaveLength(0);
+    expect(clean(gradSada)).not.toMatch(/\d+ vozil/);
+  });
+
+  it('lists a delay per route in Promet', () => {
     const delays = routeDelays(snapshots['zet-rt']);
     expect(delays.length).toBeGreaterThan(0);
-    // Without a screen stop the sada lane boards the lines deviating most, at most four on a desk,
-    // and every value is a delay word: never an arrival, never the fleet count.
+    // Every value is a delay word: never an arrival, never the fleet count.
     const deviating = delays.filter((d) => delayTone(i18n, d.meanDelay) !== 'none');
     expect(deviating.length).toBeGreaterThan(0);
-    const gradSada = renderLayer('grad-sada', ctx());
-    const tiles = [...gradSada.querySelectorAll('.tl[data-domain=transit]:not([data-skeleton])')];
-    expect(tiles).toHaveLength(0);
-    expect(gradSada.querySelector('.day-stop-prompt')).not.toBeNull();
-    for (const tile of tiles) expect(clean(tile.querySelector('.tl-value'))).toMatch(/^(na vrijeme|kasni \d+ min|rani \d+ min)$/);
-    expect(clean(gradSada)).not.toMatch(/\d+ vozil/);
     // The per-route summary rows are the only source of a delay; the pins carry none.
     expect(delays.length).toBe(snapshots['zet-rt']!.items.filter((i) => i.id.startsWith('route:')).length);
 

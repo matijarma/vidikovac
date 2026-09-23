@@ -1284,6 +1284,7 @@
     "consultationsNote": "Nacionalni izvori, ne savjetovanja Grada Zagreba."
   },
   "sada": {
-    "departuresAt": "Sljedeći polasci, {stop}"
+    "departuresAt": "Sljedeći polasci, {stop}",
+    "mapBand": "Karta oko mjesta {place}. Otvori Kartu."
   }
 }

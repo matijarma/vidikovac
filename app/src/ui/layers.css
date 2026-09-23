@@ -358,6 +358,13 @@
 /* U tijeku: the end date at the row's end, before the chevron. */
 .ev-until { flex: none; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ev-more { justify-self: start; }
+/* The page's Danas · Sutra · Idućih 7 dana chips (kultura.ts .ev-days), moved here from overview.css with Sada's time band. */
+.day-times { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+.day-time { min-height: var(--target); padding: 0 var(--sp-3); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); cursor: pointer; }
+.day-time[aria-pressed='true'] { background: var(--tone-text-primary); color: var(--tone-surface-1); font-weight: var(--weight-bold); }
+@media (hover: hover) {
+  .day-time:hover { border-color: var(--tone-stroke); }
+}
 /* Bez datuma: a sunken well, not a raised card; its rows press to the next surface level. */
 .ev-well { display: grid; gap: var(--sp-3); padding: var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); }
 @media (hover: hover) {

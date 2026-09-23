@@ -11,6 +11,8 @@ import type { CityState } from '../../../shared/city/types';
 import type { LocationContext } from '../city/location';
 import type { PlaceContext } from '../city/place';
 import type { BoardCache } from '../city/boards';
+import type { FrameLine, FrameStops } from '../../../shared/city/frame';
+import type { WrittenSentence } from '../../../shared/kiosk/sentence';
 
 export { publicItemKey, parseSelection, selectionParams } from '../../../worker/public-selection';
 export type { PublicSelection } from '../../../worker/public-selection';
@@ -89,6 +91,14 @@ export interface ExperienceActions {
   /** The screen stop's last scheduled departures per line (T3.1, behind FEED_LASTRUN): loaded once per
    *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */
   lastRun?: LastRunSnapshot | null;
+  /** Sada's sentence card (seam S6, the page's rotation of fetchSentences / templateSentences): null says there is none
+   *  to show; absent, Sada writes the first template sentence of its own facts (city/feed.ts). */
+  sentence?: WrittenSentence | null;
+  /** How many stops around the place the circle counts (the screen's Kadar, ScreenMetadata.frame); absent: DEFAULT_FRAME_STOPS. */
+  frame?: FrameStops;
+  /** The tram lines in call order (shared/city/frame.ts frameLinesOf, from the network the map loads), so the phone's
+   *  circle is measured along the lines as the wall's is; absent, frameRadiusM answers its fallback among trams. */
+  frameLines?: readonly FrameLine[];
 }
 
 /** Versioned regional basemap; hosting and source credits are not supplied by feeds. */
