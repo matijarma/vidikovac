@@ -32,6 +32,7 @@
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
 import { arcOnPath } from './order';
+import { SILENCE_HOLD_S } from './plan';
 import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
@@ -127,6 +128,9 @@ interface Candidate {
 /** Matcher-owned, optional on older tracks. Kept on the track (not in a
  *  matcher cache) so the existing state serialization preserves progress. */
 interface TramTrack extends Track {
+  /** The short grace for a cropped terminal starts once, not on every
+   *  standing report. Optional so older persisted tracks remain readable. */
+  endpointHold?: { pathIdx: number; since: number };
   /** A confirmed wrong-way adopted rail has no directed placement. Keep
    *  its observed bearing while unplaced, including through standing fixes. */
   unplacedDirection?: XY;
@@ -450,6 +454,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       prior = { ...prior, pathIdx: null, shapeIdx: null };
     }
     if (invalidMatch) {
+      delete track.endpointHold;
       delete track.unplacedDirection;
       track.match = noMatch();
       track.offPathCount = 0;
@@ -463,6 +468,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // relation the new path leaves behind is dropped by the register's own
     // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
+      delete track.endpointHold;
       delete track.unplacedDirection;
       track.priorPath = prior.pathIdx;
       track.match = noMatch();
@@ -475,6 +481,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (anyNear.length === 0) {
       track.offGraphCount++;
       if (track.offGraphCount >= OFF_GRAPH_FIXES) {
+        delete track.endpointHold;
         delete track.unplacedDirection;
         track.offGraph = true;
         track.match = noMatch();
@@ -531,6 +538,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // Unplaced fixes carry their nearest edge as evidence, not as a path to
     // animate along. Re-derive on every such fix, including while standing.
     const rederive = (): Match => {
+      delete track.endpointHold;
       delete track.priorReturn;
       const best = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)[0];
       if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
@@ -563,6 +571,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         return rederive();
       }
       if (onPath.residual <= NEAR_M) {
+        delete track.endpointHold;
         track.offPathCount = 0;
         // (D4) Two consecutive fixes moving AGAINST the rail the vehicle is
         // read on, each further than scatter, with a rail within reach that
@@ -593,17 +602,24 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         track.match = onPath;
         return track.match;
       }
-      // The indexed trip's endpoint can stop short of the terminal rails.
-      // A near-end excursion is not evidence for running an entire sibling
-      // service in reverse. Hold the endpoint within the existing off-graph
-      // band, unless an explicit terminus loop fits. Beyond that band the
-      // usual off-graph/free-plane rules still apply.
+      // A cropped terminal permits a short longitudinal grace, not an
+      // indefinite placement off the rails. Lateral departures use the
+      // normal two-fix rule; a forward branch/loop also ends the grace.
+      // Standing reports cannot restart the shared 30-second hold window.
       const atOwnEnd = working === prior.pathIdx
         && (onPath.s <= 0.5 || onPath.s >= net.paths[working].len - 0.5);
       if (track.match.pathIdx === working && atOwnEnd && onPath.residual <= OFF_GRAPH_M) {
-        const loop = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)
-          .some(candidate => net.paths[candidate.pathIdx].direction === -1);
-        if (!loop) {
+        const geo = net.pathGeometry(working);
+        const end = onPath.s <= 0.5 ? geo.pts[0] : geo.pts[geo.pts.length - 1];
+        const tan = tangent(geo.pts, geo.cum, onPath.s);
+        const lateralM = Math.abs((p.x - end.x) * tan.y - (p.y - end.y) * tan.x);
+        const continuation = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)
+          .some(candidate => net.paths[candidate.pathIdx].direction === -1
+            || (candidateDir !== null && pathTangentAgrees(candidate.pathIdx, candidate.s, candidateDir)));
+        if (!track.endpointHold || track.endpointHold.pathIdx !== working) {
+          track.endpointHold = { pathIdx: working, since: fix.atSec };
+        }
+        if (lateralM <= NEAR_M && !continuation && fix.atSec - track.endpointHold.since <= SILENCE_HOLD_S) {
           track.match = onPath;
           track.offPathCount = 0;
           track.againstCount = 0;

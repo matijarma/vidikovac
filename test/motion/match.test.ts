@@ -448,6 +448,66 @@ describe('own-path return and service eligibility', () => {
 });
 
 describe('terminal placement continuity', () => {
+  it.each(['own', 'foreign'] as const)('releases an endpoint after two off-path fixes onto an %s branch', (owner) => {
+    const branch = { id: 'branch', direction: 0, edges: [1] };
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 1000 }] },
+      ],
+      routes: [
+        { id: '1', type: 0, paths: [{ id: 'out', direction: 0, edges: [0] }, ...(owner === 'own' ? [branch] : [])] },
+        ...(owner === 'foreign' ? [{ id: '2', type: 0, paths: [branch] }] : []),
+      ],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('endpoint', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    m.matchFix(t, fix(950, 0, 1000), p, null);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    m.matchFix(t, fix(1000, 55, 1020), p, null);
+    m.matchFix(t, fix(1000, 80, 1030), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('out'); // one off-path fix
+    expect(t.offPathCount).toBe(1);
+    for (let at = 1040; at <= 1640; at += 10) {
+      m.matchFix(t, fix(1000, 130, at), p, null);
+      expect(t.offGraph).toBe(false);
+      expect(t.match.residual).toBeCloseTo(0);
+      if (owner === 'own') {
+        expect(n.paths[t.match.pathIdx!].id).toBe('branch');
+        expect(t.match.s).toBeCloseTo(130);
+      } else {
+        expect(t.match.pathIdx).toBeNull();
+        expect(t.match.shapeIdx).toBeNull();
+        expect(t.fixes.at(-1)).not.toHaveProperty('arc');
+      }
+    }
+  });
+
+  it('bounds even a longitudinal truncated-end hold instead of renewing it on standing reports', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1150, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'out', direction: 0, edges: [0] },
+        { id: 'back', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('truncated', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    m.matchFix(t, fix(990, 0, 1000), p, null);
+    for (let at = 1010; at <= 1610; at += 10) {
+      m.matchFix(t, fix(1100, 0, at), p, null);
+      if (at <= 1040) expect(n.paths[t.match.pathIdx!].id).toBe('out');
+      if (at >= 1060) expect(t.match.pathIdx === null || t.match.residual <= 60).toBe(true);
+    }
+  });
+
   it('stays unplaced through a missing directed departure instead of running an adopted arrival backwards', () => {
     const n = syntheticNetwork({
       edges: [
