@@ -129,6 +129,18 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       for (const entry of LIGHTWEIGHT_ENTRIES) expect(staticGraph(entry), entry).not.toContain(module);
     }
   });
+  it('loads the phone’s U blizini selection and sentence templates after the first paint (city/feed.ts)', () => {
+    // city/nearby.ts carries the external-text policy and the kiosk's helpers; the phone reaches it
+    // only through the city/nearby-markup.ts chunk, never on its first screen.
+    expect(manifest['src/city/nearby-markup.ts']?.isDynamicEntry).toBe(true);
+    const graph = staticGraph('d/index.html');
+    expect(graph).not.toContain('src/city/nearby-markup.ts');
+    for (const key of graph) {
+      const js = readFileSync(join(outDir, manifest[key]!.file), 'utf8');
+      // Row ids only city/nearby.ts writes.
+      expect(js, `${key} carries the U blizini selection`).not.toContain('always:heritage:');
+    }
+  });
   for (const entry of LIGHTWEIGHT_ENTRIES) {
     it(`/${entry.replace('index.html', '')} transfers under ${BUDGET_BYTES} bytes gzipped`, () => {
       expect(existsSync(join(outDir, entry)), `${entry} must be built`).toBe(true);
