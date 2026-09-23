@@ -106,11 +106,20 @@ describe('the ZET artwork build', () => {
 // named, not silent: a loop whose line's artwork prints neither end is
 // matchSchemaPath's 'loop-undrawn', and the schematic does not draw its tram
 // (the geographic map still does), because another line's terminus circle
-// would misplace it. On feed 000395 that is exactly the depot run from
-// Mandlova to Ravnice of the seven lines that do not serve Ravnice; the list
-// is pinned, so a new undrawn loop fails here, and every other loop keeps the
-// mandatory placement below.
-const UNDRAWN_LOOPS = ['6', '8', '13', '14', '15', '31', '33'].map((route) => `${route}: Mandlova -> Ravnice`);
+// would misplace it. On feed 000395 that is exactly the depot runs: from
+// Mandlova to Ravnice of the seven lines that do not serve Ravnice, and, with
+// the terminus connectors of decision 25, from the Ljubljanica depot platform
+// to Selska of the eight lines whose depot runs end at Ljubljanica, plus line
+// 5's Žitnjak, line 12's Savski most and line 14's Črnomerec turns, all of
+// them at another line's terminus. The list is pinned, so a new undrawn loop
+// fails here, and every other loop keeps the mandatory placement below.
+const UNDRAWN_LOOPS = [
+  ...['6', '8', '13', '14', '15', '31', '33'].map((route) => `${route}: Mandlova -> Ravnice`),
+  ...['1', '2', '5', '6', '11', '14', '17', '32'].map((route) => `${route}: Ljubljanica -> Selska`),
+  '5: Žitnjak -> Žitnjak',
+  '12: Savski most -> Savski most',
+  '14: Črnomerec -> Črnomerec',
+];
 describe('a vehicle on a terminus loop on the diagram', () => {
   it('sits on its own line at the terminus circle of the loop\'s first stop that exists on the schematic, whatever its arc, with no track to point along; only the named loop-undrawn loops are not drawn', () => {
     const net = decodeNetwork(read('app/public/data/zet-network.json'));
@@ -150,9 +159,11 @@ describe('a vehicle on a terminus loop on the diagram', () => {
       }
     }
     // The second stop is reached only where the first is not printed: the
-    // drawn loops out of Mandlova on feed 000395.
+    // drawn loops out of Mandlova on feed 000395, whose other end the line does
+    // print. Every loop out of Mandlova is one or the other.
     expect(second).toBeGreaterThan(0);
-    expect(loops.filter(({ path }) => nameOf(path.stops![0]) === 'Mandlova')).toHaveLength(second + undrawn.length);
+    const fromMandlova = loops.filter(({ path }) => nameOf(path.stops![0]) === 'Mandlova');
+    expect(fromMandlova).toHaveLength(second + undrawn.filter(({ path }) => nameOf(path.stops![0]) === 'Mandlova').length);
   });
 });
 

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   BUS_ON_FRAC_SCALE,
+  CONNECTOR_MAX_METRES,
   CONNECTOR_SNAP_METRES,
   EDGE_KEYS,
   HOP_DETOUR_EXCESS_METRES,
@@ -414,8 +415,12 @@ describe('buildNetwork', () => {
 // 130 m past the end of line 8's rails, and Zapadni kolodvor on two of line
 // 1's paths. Trimmed off a synthetic path's end: line 1 out of Zapadni
 // kolodvor and past Talovčeva, where no shape draws the rails.
-const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:8:0:dce55b90 1780_18'];
-const TRIMMED_CASES = ['path:1:0:102900d1 317_1', 'path:1:1:7e51cfc2 293_4', 'path:1:1:7e51cfc2 317_2'];
+// The Trg dr. F. Tuđmana connector (decision 25) lets every line 1 pattern be
+// routed to Zapadni kolodvor, whose two platforms lie 93 to 172 m west of the
+// Republike Austrije tracks: a set-back terminus on all four, and nothing is
+// trimmed any more.
+const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:102900d1 317_1', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:1:1:7e51cfc2 317_2', 'path:8:0:dce55b90 1780_18'];
+const TRIMMED_CASES: string[] = [];
 
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');
@@ -435,6 +440,9 @@ describe('the committed artefact', () => {
   // 136,897 B gzip, 0.3 % and 0.4 % more; the pins stand. Its second round
   // tries every pair within the loop cap and adds the Dubrava loop's fourteen
   // (thirty loops, ten cuts): 584,224 B raw, 137,084 B gzip; the pins stand.
+  // Decision 25 adds fourteen terminus connectors (seventy-one loops, the
+  // set-back synthetic paths cut a lead's length past their platforms): 591,323 B raw,
+  // 138,400 B gzip, 1.2 % and 1.0 % more; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -463,8 +471,10 @@ describe('the committed artefact', () => {
     // F8c: 287 plus two halves for each of the three junctions noded; WP0: plus
     // the three connectors of gtfs-shapes-overrides.json (Glavni kolodvor, the
     // top of the Mihaljevac loop, a joint in line 12's Dubrava loop) and the
-    // ten pieces the terminus loops cut off their long boundary edges.
-    expect(net.edges).toHaveLength(306);
+    // ten pieces the terminus loops cut off their long boundary edges; decision
+    // 25: plus fourteen terminus connectors and the pieces the seventy-one loops
+    // and the set-back synthetic paths cut off their boundary edges.
+    expect(net.edges).toHaveLength(345);
     // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
     // none. The terminus loops are counted in their own test below.
     expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
@@ -574,12 +584,16 @@ describe('the committed artefact', () => {
   // WP0: the connectors of gtfs-shapes-overrides.json are in the graph, each
   // one directed edge between the two nodes its points name, run only by the
   // lines it names -- and by at least one path of them.
-  it('carries each connector the overrides file names as one short edge, run only by its own lines', () => {
+  it('carries each connector the overrides file names as one edge of at most CONNECTOR_MAX_METRES, straight or through its via point, run only by its own lines', () => {
     const parsed = JSON.parse(readFileSync(artefactPath).toString('utf8'));
     const net = decodeNetwork(parsed);
     const overrides = JSON.parse(readFileSync(resolve(process.cwd(), 'scripts/gtfs-shapes-overrides.json'), 'utf8'));
-    const connectors = overrides.connectors as { from: [number, number]; to: [number, number]; routes: string[]; reason: string }[];
-    expect(connectors.length).toBe(3);
+    const connectors = overrides.connectors as { from: [number, number]; to: [number, number]; via?: [number, number]; routes: string[]; reason: string }[];
+    // Three joints (Glavni kolodvor, the Mihaljevac loop's top, a Dubrava
+    // joint) and, per decision 25, the Tuđmana turn for line 1 and thirteen
+    // terminus turns the shapes stop short of.
+    expect(connectors.length).toBe(17);
+    expect(connectors.filter((c) => c.via).length).toBe(9);
     const near = (p: { x: number; y: number }, point: [number, number]) => {
       const [lon, lat] = toLonLat(p);
       const a = toMetres(lon, lat);
@@ -593,8 +607,9 @@ describe('the committed artefact', () => {
         .filter(({ edge }) => near(edge.pts[0], connector.from) && near(edge.pts[edge.pts.length - 1], connector.to));
       expect(found, `connector ${connector.from} -> ${connector.to}`).toHaveLength(1);
       const [{ edge, idx }] = found;
-      expect(edge.pts).toHaveLength(2);
-      expect(edge.len).toBeLessThan(20);
+      expect(edge.pts).toHaveLength(connector.via ? 3 : 2);
+      if (connector.via) expect(near(edge.pts[1], connector.via), `via of ${connector.from}`).toBe(true);
+      expect(edge.len).toBeLessThanOrEqual(CONNECTOR_MAX_METRES);
       const users = net.paths.filter((p) => p.edges.includes(idx));
       expect(users.length).toBeGreaterThan(0);
       for (const user of users) expect(connector.routes, `${user.id} runs the connector at ${connector.from}`).toContain(user.route);
@@ -618,11 +633,11 @@ describe('the committed artefact', () => {
 
     const exactByStops = new Map(net.paths.filter((p) => p.shape === null).map((p) => [`${p.route}|${p.direction}|${(p.stops ?? []).join(',')}`, p] as const));
     const withoutExact = patterns.filter((p: any) => !exactByStops.has(`${p.route}|${p.direction}|${p.stops.join(',')}`));
-    // The only three left are line 1's, where the rails past Zapadni kolodvor
-    // are drawn by no shape in the feed at all: the builder trims that stretch
-    // (TERMINUS_TRIM_STOPS) and each still reaches a path that is a contiguous
-    // run of its own stops, which is what the timetable mapping asks for.
-    expect(withoutExact.map((p: any) => `${p.route}/${p.direction}(${p.stops.length})`)).toEqual(['1/0(14)', '1/1(15)', '1/1(9)']);
+    // Line 1's three patterns past Trg dr. F. Tuđmana were the only ones the
+    // builder trimmed (TERMINUS_TRIM_STOPS), because the turn onto Republike
+    // Austrije was drawn by no shape; the connector of decision 25 routes them
+    // to Zapadni kolodvor, so every pattern now has its exact path.
+    expect(withoutExact.map((p: any) => `${p.route}/${p.direction}(${p.stops.length})`)).toEqual([]);
     const SEP = '>'; // no stop id contains it, so a run of the joined text is a run of whole ids
     for (const pattern of withoutExact) {
       const runs = net.paths.filter((p) => p.shape === null && p.route === pattern.route && p.direction === pattern.direction)
@@ -739,14 +754,35 @@ describe('the committed artefact', () => {
     // starts on that arriving edge and ends on one of F's departing edges.
     const outgoing = new Map<number, number[]>();
     net.edges.forEach((edge, idx) => outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), idx]));
-    /** Cheapest interior cost from the end of edge `from` to every node within the cap. */
-    const reach = (from: number) => {
+    // A connector (an edge of gtfs-shapes-overrides.json, found by its two
+    // endpoints) is a turn at one terminus: a loop may run it only within
+    // CONNECTOR_MAX_METRES of one of its own two platforms (decision 25), never
+    // as a way round through a junction joint 450 m away.
+    const overrides = JSON.parse(readFileSync(resolve(process.cwd(), 'scripts/gtfs-shapes-overrides.json'), 'utf8'));
+    const nearPoint = (p: { x: number; y: number }, point: [number, number]) => {
+      const [lon, lat] = toLonLat(p);
+      const a = toMetres(lon, lat);
+      const b = toMetres(point[0], point[1]);
+      return Math.hypot(a.x - b.x, a.y - b.y) <= CONNECTOR_SNAP_METRES;
+    };
+    const connectorEdges = new Set<number>();
+    for (const c of overrides.connectors as { from: [number, number]; to: [number, number] }[]) {
+      net.edges.forEach((edge, idx) => {
+        if (nearPoint(edge.pts[0], c.from) && nearPoint(edge.pts[edge.pts.length - 1], c.to)) connectorEdges.add(idx);
+      });
+    }
+    expect(connectorEdges.size).toBe(overrides.connectors.length);
+    const usable = (e: number, L: string, F: string) =>
+      !connectorEdges.has(e) || net.edges[e].pts.some((q) => Math.hypot(q.x - at(L).x, q.y - at(L).y) <= CONNECTOR_MAX_METRES || Math.hypot(q.x - at(F).x, q.y - at(F).y) <= CONNECTOR_MAX_METRES);
+    /** Cheapest interior cost from the end of edge `from` to every node within the cap, over the edges a loop from L to F may run. */
+    const reach = (from: number, L: string, F: string) => {
       const cost = new Map<number, number>([[net.edges[from].to, 0]]);
       const open = [net.edges[from].to];
       while (open.length > 0) {
         open.sort((a, b) => cost.get(a)! - cost.get(b)!);
         const node = open.shift()!;
         for (const e of outgoing.get(node) ?? []) {
+          if (!usable(e, L, F)) continue;
           const next = net.edges[e].to;
           const c = cost.get(node)! + net.edges[e].len;
           if (c > LOOP_MAX_METRES) continue;
@@ -761,6 +797,11 @@ describe('the committed artefact', () => {
     const missing: string[] = [];
     let pairs = 0;
     let qualifying = 0;
+    // Two pairs of one line with the same arriving edge and the same
+    // departing platform run the same rails (Žitnjak 187_1 and 1781_11 both
+    // end on the line 13 track and both leave for 187_2), and the builder
+    // keeps one loop for them, named for the first.
+    const sameRails = new Set<string>();
     for (const route of new Set(own.map(({ path }) => path.route))) {
       const mine = own.filter(({ path }) => path.route === route);
       const ends = new Map<string, Set<number>>();
@@ -778,15 +819,18 @@ describe('the committed artefact', () => {
           if (L === F || Math.hypot(at(L).x - at(F).x, at(L).y - at(F).y) > LOOP_PAIR_MAX_METRES) continue;
           pairs++;
           for (const E of lastEdges) {
-            const cost = reach(E);
+            const cost = reach(E, L, F);
             let shortest = Infinity;
             for (const D of firstEdges) {
               const interior = cost.get(net.edges[D].from);
               if (interior !== undefined) shortest = Math.min(shortest, net.edges[E].len + interior + net.edges[D].len);
             }
             if (shortest > LOOP_MAX_METRES) continue;
+            const rails = `${route}|${E}|${F}`;
+            if (sameRails.has(rails)) continue;
+            sameRails.add(rails);
             qualifying++;
-            const found = loops.some(({ path }) => path.route === route && path.stops![0] === L && path.stops![1] === F && path.edges[0] === E && firstEdges.has(path.edges.at(-1)!));
+            const found = loops.some(({ path }) => path.route === route && path.stops![1] === F && path.edges[0] === E && firstEdges.has(path.edges.at(-1)!));
             if (!found) missing.push(`${route} ${L} -> ${F} from edge ${E} (${Math.round(shortest)} m)`);
           }
         }
@@ -1184,6 +1228,19 @@ describe('a connector the overrides file names', () => {
     const a = toMetres(CN_STOPS[0].lon, CN_STOPS[0].lat);
     const b = toMetres(CN_STOPS[1].lon, CN_STOPS[1].lat);
     expect((toDm - fromDm) / 10).toBeLessThan(1.5 * Math.hypot(a.x - b.x, a.y - b.y)); // the turn, as the ground runs
+
+    // Decision 25: a `via` point bends the connector into two segments, the
+    // whole of which counts against CONNECTOR_MAX_METRES; a connector longer
+    // than that is a stretch of line, not a turn, and is refused by name.
+    const viaNet = await buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [{ ...CN_CONNECTOR, via: cnPoint([306, -4]) }] } });
+    const [viaConnector] = viaNet.report.connectors;
+    expect(viaConnector.metres).toBeGreaterThan(connector.metres + 4); // out to the via point and back
+    expect(viaConnector.metres).toBeLessThan(20);
+    expect(edgePoints(viaNet, 4)).toHaveLength(3);
+    expect(pathsOf(viaNet)[0].e).toEqual([...east, 4, ...north]);
+    await expect(
+      buildNetwork(makeConnectorZip(), { diagramBusCount: 0, overrides: { connectors: [{ ...CN_CONNECTOR, via: cnPoint([550, 250]) }] } }),
+    ).rejects.toThrow(new RegExp(`m of track, past CONNECTOR_MAX_METRES \\(${CONNECTOR_MAX_METRES} m\\).*gtfs-shapes-overrides\\.json`));
 
     // A point more than CONNECTOR_SNAP_METRES from every node is refused by name.
     await expect(

@@ -31,12 +31,13 @@ describe('the timetable over the committed artefacts', () => {
     // Every shapeless pattern now reaches a path of its own: nothing is left
     // guessing (firstOfRouteAndDirection) or unmapped. Before F8b the seven
     // patterns of routes 2, 5 and 13 whose stops the 40 m router could not
-    // chain counted 6 unmapped and 1 guessed. The three trimmed are line 1's,
-    // whose rails past Zapadni kolodvor no shape in the feed draws.
+    // chain counted 6 unmapped and 1 guessed. Line 1's three were trimmed
+    // until the Trg dr. F. Tuđmana connector (decision 25) let them be routed
+    // to Zapadni kolodvor; now every pattern has its exact path.
     expect(mapping.report).toEqual({
       byShape: 100,
-      exact: 49,
-      trimmed: 3,
+      exact: 52,
+      trimmed: 0,
       firstOfRouteAndDirection: 0,
       unmapped: 0,
       nonTram: 450,
@@ -61,12 +62,14 @@ describe('the timetable over the committed artefacts', () => {
     expect(without, 'tram paths the timetable says nothing about').toEqual([]);
     expect(withSegments).toHaveLength(152);
     expect(times.report.unusable).toBe(0);
-    // Three patterns name a stop their path cannot place -- line 1's trimmed
-    // off-graph terminus stretches. The segment spanning such a stop carries
-    // its time, so those paths keep their timetable rather than losing it.
-    // (Olipska accounted for another nine until the served radius grew to
-    // SERVED_STOP_MAX_METRES; the fourth was the route-13 pattern that used to
-    // be handed a sibling path and now has its own, F8b.)
-    expect(times.report.clipped).toBe(3);
+    // No pattern names a stop its path cannot place any more. Line 1's three
+    // did until the Trg dr. F. Tuđmana connector (decision 25) routed them to
+    // Zapadni kolodvor, whose platforms are set-back termini on the path; the
+    // segment spanning such a stop carried its time meanwhile, so those paths
+    // kept their timetable. (Olipska accounted for another nine until the
+    // served radius grew to SERVED_STOP_MAX_METRES; the fourth was the
+    // route-13 pattern that used to be handed a sibling path and now has its
+    // own, F8b.)
+    expect(times.report.clipped).toBe(0);
   });
 });
