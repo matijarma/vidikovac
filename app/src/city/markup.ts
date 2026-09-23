@@ -20,6 +20,10 @@ const SAFE_FACTS = [
   'paper','plastic','glass','metal','batteries','biowaste','tyres','electronics','period','classification','registry',
 ] as const;
 type SafeFact = typeof SAFE_FACTS[number];
+/** The facts whose label is a caveat on the phone ("Kapacitet, ne slobodna mjesta", "Stanje prema registru",
+ *  "Punjači prema registru"): without it the figure would read as live availability, and the wall prints no
+ *  caveat (companion brief §12, §13 #12), so a public display leaves these facts out. */
+const WALL_OMITTED_FACTS: ReadonlySet<SafeFact> = new Set(['capacity', 'maintenance', 'charging-points']);
 const isSafeFact=(key:string):key is SafeFact=>(SAFE_FACTS as readonly string[]).includes(key);
 /** "Original text in Croatian": said only in English, above a register's Croatian description. */
 function sourceLanguageNote(i18n:I18n):string {
@@ -61,7 +65,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   const addressHtml = !p.address ? '' : externalHtml('address', p.address);
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
-  const facts=Object.entries(p.facts??{}).filter(([key])=>isSafeFact(key)).map(([key,value])=>`<div><dt>${e(ct(i18n,`fact-${key as SafeFact}`))}</dt><dd>${externalHtml('summary',value)}</dd></div>`).join('');
+  const facts=Object.entries(p.facts??{}).filter(([key])=>isSafeFact(key)&&!(publicDisplay&&WALL_OMITTED_FACTS.has(key))).map(([key,value])=>`<div><dt>${e(ct(i18n,`fact-${key as SafeFact}`))}</dt><dd>${externalHtml('summary',value)}</dd></div>`).join('');
   // The wall (publicDisplay) prints no observation time, note or caveat (companion brief §12, §13 #12,
   // #13): a count that is not fresh says the stale word, the air index stands alone. The phone keeps them.
   const bikeMeta=publicDisplay?(p.facts?.fresh?'':`<p class="city-meta">${e(ct(i18n,'stale'))}</p>`):`<p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`;

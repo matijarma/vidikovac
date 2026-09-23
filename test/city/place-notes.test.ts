@@ -74,6 +74,25 @@ describe('the wall place detail carries no note, time or control', () => {
     expect(wall).not.toContain('data-city-air');
     expect(placeDetail(i18n, air, emptyCity(), [])).toContain(hr.city.airNote);
   });
+  it('register facts: no caveat label on the wall (the capacity, the recorded condition, the recorded chargers); the phone keeps them', () => {
+    // Review of lane/c-B1 (P2): "Kapacitet, ne slobodna mjesta" and "Stanje prema registru" are caveats; without
+    // them the figures would read as live availability, so the wall leaves those facts out and keeps the plain ones.
+    const garage: Place = {
+      id: 'garage-1', category: 'garage', name: 'Garaža Tuškanac', address: 'Tuškanac 1', sourceId: 'garages', sourceRecord: 'g1', lon: 15.97, lat: 45.815,
+      facts: { capacity: 320, maintenance: 'dobro', 'charging-points': 4, payment: 'kartica', 'designated-accessible-spaces': 6 },
+    };
+    const wall = placeDetail(i18n, garage, emptyCity(), [], false, true);
+    for (const caveat of [hr.city['fact-capacity'], hr.city['fact-maintenance'], hr.city['fact-charging-points'], 'ne slobodna mjesta', 'prema registru']) {
+      expect(wall, caveat).not.toContain(caveat);
+    }
+    expect(wall).not.toMatch(/>(320|dobro|4)</);
+    expect(wall).toContain(hr.city['fact-payment']);
+    expect(wall).toContain(hr.city['fact-designated-accessible-spaces']);
+    const phone = placeDetail(i18n, garage, emptyCity(), []);
+    expect(phone).toContain('Kapacitet, ne slobodna mjesta');
+    expect(phone).toContain('Stanje prema registru');
+    expect(phone).toContain('Punjači prema registru');
+  });
   it('street story: the credit without the register date and no back button; the phone keeps both', () => {
     const wall = streetDetail(i18n, street, true);
     expect(wall).toContain('Grad Zagreb · Registar naziva ulica · Otvorena dozvola');
