@@ -625,7 +625,7 @@
       "title": "Over to you.",
       "intro": "No public screen nearby? Set one up in your browser to try it.",
       "screenTitle": "First, open a screen.",
-      "screenBody": "Press one button and the screen shows the whole city. A district and a stop are chosen later, in the screen’s own settings. If you’ve already set up a screen, your existing setup will open.",
+      "screenBody": "Type an address or a stop, or leave the field empty for the whole city, then press Start. Place, frame and the rest change later, with a long press on “Kaj ima?” on the screen. If a screen is already set up, its existing setup will open.",
       "phoneTitle": "Then take the city with you.",
       "phoneBody": "Keep the screen open and scan its code with your phone. On a single device, open code entry in a second tab.",
       "sameDevice": "Enter a code in another tab",
