@@ -17,10 +17,11 @@ import { arrivalsAt } from '../../shared/city/arrivals';
 import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { dynamicPlaces } from './city/discovery';
-import { selectNearby, type NearbyRow } from './city/nearby';
+import { selectNearby, skippedTextCensus, type NearbyRow } from './city/nearby';
 import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { readWrittenSentences, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
+import type { ExternalTextRejection } from '../../shared/kiosk/external-text';
 import { matchStreet } from '../../shared/city/geo';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
@@ -419,6 +420,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     return null;
   }
+  /** data-skipped-text on the root: the rows the last selection left out for their third-party text, and why. */
+  function paintSkippedText(reasons: readonly ExternalTextRejection[]): void {
+    const census = skippedTextCensus(reasons);
+    if (element.dataset.skippedText !== census) element.dataset.skippedText = census;
+  }
   /** Select once for both readers. The selector rebuilds timetable departures
    * without live fixes during an outage; grey never means a relabelled ETA. */
   function paintWall(): void {
@@ -432,15 +438,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       const radiusM = wallRadiusM();
       const held = (subject ? platformIds(subject, stops) : [])
         .map(id => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
+      // Third-party text that fails the shared check leaves its row out; the census says how many and why.
+      const skipped: ExternalTextRejection[] = [];
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
-        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined,
+        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason),
       });
+      paintSkippedText(skipped);
       facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n });
       invitation?.update(invitationModel());
     } else {
       wallItems = [];
       facts = [];
+      paintSkippedText([]);
     }
     // Old answers are never trusted against the facts they were requested with.
     modelSentences = readWrittenSentences(modelSentences, { facts, budget, now: at });

@@ -2838,3 +2838,22 @@ describe('arrivals on the public screen', () => {
     k.handle.destroy();
   });
 });
+
+describe('W-C4: third-party text on the wall is checked and counted (decision 18, revised)', () => {
+  it('leaves a closure whose title asks something out of the list and counts it on the root as data-skipped-text', async () => {
+    const clean = mount({ stored: STORED });
+    await flush();
+    expect(q(clean.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:0');
+    expect(text(q(clean.root, '.nearby-row[data-kind=closure]'))).toContain('Ilica');
+    clean.handle.destroy();
+    const hostile = MODULES.map((m) => (m.module === 'prometnice' ? snap('prometnice', [
+      item('prometnice', 'c1', 'closure', 'Ilica: pošaljite SMS na 0800', { until: '2026-09-11T18:00:00Z', geo: { type: 'LineString', coordinates: [[15.9705, 45.813], [15.972, 45.8131]] } }),
+    ]) : m));
+    const k = mount({ stored: STORED, modules: hostile });
+    await flush();
+    expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;instruction:1');
+    expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
+    k.handle.destroy();
+  });
+});
