@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createI18n, type I18n, type MessageCatalog } from '../../app/src/i18n/i18n';
-import type { NearbyRow } from '../../app/src/city/nearby';
+import { mainTitle, type NearbyRow } from '../../app/src/city/nearby';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
@@ -543,6 +543,82 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(TOTEM_1080.boxPx);
+  });
+
+  // The lane W wall check of 22 September at 1920 x 1080 (review.local/companion/run/logs/w-e2e/wall-visual.json):
+  // the line counts Chromium measured, a 40 px title line box of 44 px (48.4 px in dark, 44 px type) and a 28 px sub
+  // line of 32.2 px. With no short label the long event left the list in dark at both places and in light at Trg,
+  // under a story row that needs its three sub lines; its own name without the subtitle keeps it on the wall.
+  describe('the long event title of the 22 September wall check', () => {
+    const LONG = 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini';
+    const LINES: Record<'light' | 'dark', Record<string, number>> = {
+      light: {
+        [LONG]: 3, 'Dom kulture Kvaternik': 1, 'Gradsko dramsko kazalište Gavella': 1, 'Kvaternikov trg': 1, 'Trg bana Josipa Jelačića': 1,
+        'Trg je nazvan po Eugenu Kvaterniku, hrvatskom političaru iz 19. stoljeća.': 2,
+        'Središnji zagrebački trg nosi ime bana Josipa Jelačića od 1848. godine.': 3,
+      },
+      dark: {
+        [LONG]: 3, 'Dom kulture Kvaternik': 1, 'Gradsko dramsko kazalište Gavella': 2, 'Kvaternikov trg': 1, 'Trg bana Josipa Jelačića': 2,
+        'Trg je nazvan po Eugenu Kvaterniku, hrvatskom političaru iz 19. stoljeća.': 3,
+        'Središnji zagrebački trg nosi ime bana Josipa Jelačića od 1848. godine.': 3,
+      },
+    };
+    const LINE_PX = { light: { title: 44, sub: 32.2 }, dark: { title: 48.4, sub: 32.2 } };
+    const BOX_PX = 486;
+    function measured(theme: 'light' | 'dark'): TimelineMeasure & { sum(list: Element): number } {
+      const lines = (el: Element): number => {
+        const words = (el.textContent ?? '').replace(/^\d+ /, '');
+        return words ? LINES[theme][words] ?? 1 : 0;
+      };
+      const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
+      const rowHeight = (li: Element): number => Math.max(rowPx(),
+        LINE_PX[theme].title * lines(li.querySelector('.nearby-title')!) + LINE_PX[theme].sub * lines(li.querySelector('.nearby-sub')!) + 8);
+      const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
+      return { box: (list) => ({ height: BOX_PX, width: 472, overflow: sum(list) > BOX_PX }), lines, sum };
+    }
+    const T = at('2026-09-22T17:30:00Z'); // Tue 19:30
+    function wall(variant: 'kvaternik' | 'trg', short: boolean): TimelineRow[] {
+      const kv = variant === 'kvaternik';
+      const heads = kv ? ['Mihaljevac', 'Prečko', 'Črnomerec'] : ['Dubec', 'Dubrava', 'Žitnjak'];
+      const story = kv
+        ? { title: 'Kvaternikov trg', sub: 'Trg je nazvan po Eugenu Kvaterniku, hrvatskom političaru iz 19. stoljeća.' }
+        : { title: 'Trg bana Josipa Jelačića', titleShort: 'Trg bana J. Jelačića', sub: 'Središnji zagrebački trg nosi ime bana Josipa Jelačića od 1848. godine.' };
+      const rows: TimelineRow[] = [
+        ...heads.map((title, i) => dep(i + 1, { title, atMs: T + (6 + 5 * i) * MIN, live: false, arrival: { routeId: String(5 + i), routeName: String(5 + i) } })),
+        row({ id: 'event:vis', kind: 'event', atMs: at('2026-09-22T18:00:00Z'), title: LONG, titleShort: mainTitle(LONG), sub: kv ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella', source: 'dogadanja' }),
+        row({ id: 'closure:vlaska', kind: 'closure', atMs: at('2026-09-22T20:00:00Z'), title: 'Vlaška', source: 'prometnice' }),
+        row({ id: 'last:2026-09-22', kind: 'last', atMs: at('2026-09-22T21:31:00Z'), title: 'Zadnji tramvaji', sub: '1 23:31 · 12 23:45', source: 'zet-gtfs' }),
+        row({ id: 'solar:sunrise:2026-09-23', kind: 'solar', atMs: at('2026-09-23T04:43:00Z'), title: 'Izlazak sunca', source: 'solar' }),
+        always({ id: `always:story:${variant}`, ...story }),
+      ];
+      return short ? rows : rows.map(({ titleShort: _t, subShort: _s, ...rest }) => rest);
+    }
+    for (const [variant, theme, droppedBefore] of [
+      ['kvaternik', 'light', false], ['kvaternik', 'dark', true], ['trg', 'light', true], ['trg', 'dark', true],
+    ] as const) {
+      it(`${variant}, ${theme}: ${droppedBefore ? 'the event dropped without its short name and stays with it' : 'the event stays, printed by its short name'}`, () => {
+        expect(mainTitle(LONG)).toBe('Večer u Kvaterniku');
+        const before = measured(theme);
+        const t = mount({ designHeightPx: BOX_PX, measure: before });
+        t.update(wall(variant, false), 2000, T);
+        expect(ids().includes('event:vis')).toBe(!droppedBefore);
+        expect(before.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
+        t.destroy();
+        handle = null;
+
+        const after = measured(theme);
+        const fitted = mount({ designHeightPx: BOX_PX, measure: after });
+        fitted.update(wall(variant, true), 2000, T);
+        expect(ids().slice(0, 4)).toEqual(['dep:1', 'dep:2', 'dep:3', 'event:vis']);
+        expect(ids().at(-1)).toBe(`always:story:${variant}`);
+        expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe('Večer u Kvaterniku');
+        expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');
+        // The story keeps its sentence whole; at Trg in dark its name gives way to the stop's shorter one.
+        expect(text(byId(`always:story:${variant}`).querySelector('.nearby-title'))).toBe(variant === 'trg' && theme === 'dark' ? 'Trg bana J. Jelačića' : variant === 'trg' ? 'Trg bana Josipa Jelačića' : 'Kvaternikov trg');
+        expect(after.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
+        for (const li of items()) expect(text(li)).not.toMatch(/…|\.\.\./);
+      });
+    }
   });
 
   it('fits again when the box shrinks, and brings rows back when it grows', () => {

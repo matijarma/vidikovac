@@ -60,6 +60,14 @@ export interface NearbyRow {
   always: boolean;
   title: string;
   sub: string;
+  /**
+   * A shorter title, complete in itself, that the wall prints where the full
+   * one runs long (app/src/kiosk/timeline.ts): the source's own shorter words,
+   * never a cut and never "…". Absent when no complete shorter label exists.
+   */
+  titleShort?: string;
+  /** The same for the sub. */
+  subShort?: string;
   /** A departure timed by a tracked vehicle (data-live="1"). */
   live: boolean;
   /** Where the row comes from (data-source): a feed module id or a static data set. */
@@ -250,13 +258,17 @@ function closureRows(input: NearbyInput): NearbyRow[] {
     .slice(0, MAX_CLOSURES)
     .map(({ item, until }) => {
       const map = itemMap(item);
+      const sub = oneLine(item.brief ?? '');
+      // The machine brief can run long; the feed's own summary ("zatvoreno zbog radova, oba smjera") is its complete short twin.
+      const subShort = shorterLabel(sub, [item.summary]);
       return {
         id: `closure:${item.id}`,
         kind: 'closure' as const,
         atMs: until,
         always: false,
         title: item.title,
-        sub: oneLine(item.brief ?? ''),
+        sub,
+        ...(subShort ? { subShort } : {}),
         live: false,
         source: 'prometnice',
         selection: { kind: 'item' as const, id: publicItemKey('prometnice', item.id), module: 'prometnice' as const },
@@ -284,13 +296,19 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     const venueName = (venue?.name ?? dataText(item, 'venue')).trim();
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
+    const title = oneLine(item.brief ?? item.title);
+    // The source's own title where a machine brief stands in for it, else the event's name without its subtitle.
+    const titleShort = shorterLabel(title, [item.brief ? item.title : undefined, mainTitle(title)]);
     out.push({
       id: `event:${item.id}`,
       kind: 'event',
       atMs: start,
       always: false,
-      title: oneLine(item.brief ?? item.title),
+      title,
+      ...(titleShort ? { titleShort } : {}),
       sub: tram ? `${venueName} · ${input.i18n.t('kiosk.lines.tram')} ${tram}` : venueName,
+      // The venue alone: the tram to it is the part a crowded list can do without.
+      ...(tram ? { subShort: venueName } : {}),
       live: false,
       source: 'dogadanja',
       selection: { kind: 'item', id: publicItemKey('dogadanja', item.id), module: 'dogadanja' },
@@ -568,12 +586,17 @@ function storyRow(input: NearbyInput): NearbyRow | null {
   const story = placeStory(input.place, input.city);
   const text = story ? firstSentence(story.description) : '';
   if (!story || !text) return null;
+  // The register's full name ("Trg bana Josipa Jelačića") and, where the stop's own name abbreviates it, that
+  // name ("Trg bana J. Jelačića", the one in the header): the same place, whole, only shorter.
+  const own = oneLine(input.place.name);
+  const titleShort = abbreviates(normalName(own).split(' '), normalName(story.name).split(' ')) ? shorterLabel(story.name, [own]) : undefined;
   return {
     id: `always:story:${story.id}`,
     kind: 'always',
     atMs: null,
     always: true,
     title: story.name,
+    ...(titleShort ? { titleShort } : {}),
     sub: text,
     live: false,
     source: 'streets',
@@ -665,6 +688,51 @@ function heritageName(name: string): string {
 function firstStreet(address: string): string {
   const [first] = oneLine(address).split(/,\s+(?=\p{L})|\s+[-–]\s+(?=\p{L})/u);
   return (first ?? '').replace(/\b0+(\d)/g, '$1');
+}
+
+// --- shorter complete labels ------------------------------------------------------
+
+const ELLIPSIS = /…|\.\.\./;
+
+/**
+ * The first candidate that is shorter than `full` and whole: the source's own
+ * words, trimmed to one line, never with an ellipsis. Undefined when none
+ * is, so the row offers no short label and the wall keeps the full one or drops
+ * the row; a label is never cut to fit.
+ */
+export function shorterLabel(full: string, candidates: readonly (string | undefined)[]): string | undefined {
+  const whole = oneLine(full);
+  for (const candidate of candidates) {
+    const text = oneLine(candidate ?? '');
+    if (text && text.length < whole.length && !ELLIPSIS.test(text)) return text;
+  }
+  return undefined;
+}
+
+/** "Name: subtitle" (never a clock's colon), "Name – subtitle" (a spaced dash, never "Erdödy-Keglević"), "Name (subtitle)". */
+const SUBTITLE: readonly RegExp[] = [/^(.*?\D):\s+\S/u, /^(.*?\S)\s+[-–—]\s+\S/u, /^(.*?\S)\s*\([^()]*\)$/u];
+
+/**
+ * An event's own name without its subtitle, as the source writes it: "Večer u
+ * Kvaterniku: razgovor o gradu i kulturnoj baštini" is "Večer u Kvaterniku",
+ * "S druge strane zrcala – psihoanaliza i film" is "S druge strane zrcala".
+ * Only a name of two words or more with its quotes closed: "Predavanje:
+ * Povijest Zagreba" says what the event is only in its second half, so it has
+ * no shorter name. Undefined when the title has no such part.
+ */
+export function mainTitle(title: string): string | undefined {
+  const text = oneLine(title);
+  for (const pattern of SUBTITLE) {
+    const head = pattern.exec(text)?.[1]?.replace(/[\s,;:–—-]+$/u, '').trim();
+    if (head && head.split(' ').length >= 2 && quotesClosed(head)) return head;
+  }
+  return undefined;
+}
+
+/** Every quote the head opens it also closes („…“, “…”, "…"). */
+function quotesClosed(text: string): boolean {
+  const count = (re: RegExp): number => (text.match(re) ?? []).length;
+  return count(/"/g) % 2 === 0 && count(/[„“”]/g) % 2 === 0;
 }
 
 // --- helpers ----------------------------------------------------------------------

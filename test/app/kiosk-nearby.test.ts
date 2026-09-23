@@ -14,12 +14,14 @@ import {
   ALWAYS_ALTERNATE_MS,
   MAX_DEPARTURES,
   firstSentence,
+  mainTitle,
   nearbyHead,
   nearbyPill,
   openingTimes,
   placeStory,
   rowBudget,
   selectNearby,
+  shorterLabel,
   type NearbyInput,
   type NearbyKind,
   type NearbyRow,
@@ -157,6 +159,13 @@ function checkBounds(rows: readonly NearbyRow[]): void {
     expect(`${r.title} ${r.sub}`, r.id).not.toMatch(FORBIDDEN);
     expect(r.title.trim(), r.id).not.toBe('');
     if (r.kind !== 'departure') expect(r.live, r.id).toBe(false);
+    // A short label is a whole label, shorter than the one it stands in for (the wall prints it only when that runs long).
+    for (const [full, short] of [[r.title, r.titleShort], [r.sub, r.subShort]] as const) {
+      if (short === undefined) continue;
+      expect(short.trim(), r.id).not.toBe('');
+      expect(short.length, r.id).toBeLessThan(full.length);
+      expect(short, r.id).not.toMatch(FORBIDDEN);
+    }
   }
   expect(new Set(ids(rows)).size).toBe(rows.length);
 }
@@ -506,6 +515,69 @@ describe('tomorrow’s openings', () => {
     const late = item('dogadanja', 'ev-late', 'event', 'Kasni koncert', { at: '2026-09-22T20:30:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venue: 'Kino Europa', precision: 'time' } });
     expect(openings(at('2026-09-22T18:00:00Z'), { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [...EVENTS, late]) } })).toEqual([]);
     expect(openings(at('2026-09-22T18:00:00Z'), { radiusM: 700 }).map((r) => r.title)).toEqual(['Moderna galerija']);
+  });
+});
+
+describe('shorter complete labels (titleShort, subShort)', () => {
+  const now = at('2026-09-22T15:45:00Z');
+  const event = (id: string, title: string, extra: Partial<FeedItem> = {}) =>
+    item('dogadanja', id, 'event', title, { at: '2026-09-22T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venue: 'Kino Europa', precision: 'time' }, ...extra });
+  const eventRow = (ev: FeedItem, extra: Partial<NearbyInput> = {}): NearbyRow =>
+    selectNearby(input(now, { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [ev]) }, ...extra })).find((r) => r.id === `event:${ev.id}`)!;
+
+  it('names an event without its subtitle, as the source writes it', () => {
+    const row = eventRow(event('ev-long', 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini'));
+    expect(row).toMatchObject({ title: 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini', titleShort: 'Večer u Kvaterniku' });
+    expect(eventRow(event('ev-dash', 'S druge strane zrcala – psihoanaliza i film')).titleShort).toBe('S druge strane zrcala');
+    expect(eventRow(event('ev-paren', 'Noć kazališta (program za djecu)')).titleShort).toBe('Noć kazališta');
+  });
+  it('offers no short title where none is whole: a category before the colon, a clock, an open quote, no subtitle at all', () => {
+    for (const title of ['Predavanje: Povijest Zagreba', 'Koncert u 19:30 sati', 'Koncert „Kiša: pjesme“', 'Intersonus', 'Erdödy-Keglević danas']) {
+      expect(eventRow(event(`ev-${title.length}`, title)).titleShort, title).toBeUndefined();
+    }
+    expect(mainTitle('„Kiša: pjesme“ – koncert u dvorištu')).toBe('„Kiša: pjesme“');
+  });
+  it('prefers the source’s own title where a machine brief stands in for it', () => {
+    const row = eventRow(event('ev-brief', 'Jazz u Europi', { brief: 'Večer jazza u Kinu Europa s gostima iz Ljubljane i Beča' }));
+    expect(row).toMatchObject({ title: 'Večer jazza u Kinu Europa s gostima iz Ljubljane i Beča', titleShort: 'Jazz u Europi' });
+  });
+  it('gives the venue alone as the short sub when the tram to it follows, and nothing when the venue is the whole sub', () => {
+    const row = eventRow(event('ev-tram', 'Intersonus'));
+    expect(row).toMatchObject({ sub: 'Kino Europa · tramvaj 1', subShort: 'Kino Europa' });
+    expect(eventRow(event('ev-notram', 'Intersonus'), { stops: undefined })).not.toHaveProperty('subShort');
+  });
+  it('names the square’s story by the stop’s own shorter name, and a street matched exactly has no shorter one', () => {
+    const story = (place: ScreenPlace) => selectNearby(input(at('2026-09-22T10:30:00Z'), { place, city: { ...CITY, places: [] } })).at(-1)!;
+    expect(story(PLACE)).toMatchObject({ kind: 'always', title: 'Trg bana Josipa Jelačića', titleShort: 'Trg bana J. Jelačića' });
+    expect(story({ kind: 'tram', name: 'Ilica', lon: 15.97, lat: 45.813, stopId: '118_1' })).not.toHaveProperty('titleShort');
+  });
+  it('gives a closure the feed’s own summary where a long brief is its sub, and nothing more', () => {
+    const closure = (extra: Partial<FeedItem>) => selectNearby(input(at('2026-09-22T10:30:00Z'), {
+      snapshots: { prometnice: snap('prometnice', [item('prometnice', 'c-x', 'closure', 'Ilica', { geo: { type: 'Point', coordinates: [15.9705, 45.813] }, until: '2026-09-22T16:00:00Z', summary: 'zatvoreno zbog radova, oba smjera', ...extra })]) },
+    })).find((r) => r.kind === 'closure')!;
+    expect(closure({ brief: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu' }))
+      .toMatchObject({ sub: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu', subShort: 'zatvoreno zbog radova, oba smjera' });
+    expect(closure({})).not.toHaveProperty('subShort');
+    expect(closure({})).not.toHaveProperty('titleShort');
+  });
+  it('shorterLabel: the first whole candidate shorter than the label, never an ellipsis, else nothing', () => {
+    expect(shorterLabel('Gradsko dramsko kazalište Gavella', [undefined, '', 'Gavella…', 'Gavella'])).toBe('Gavella');
+    expect(shorterLabel('Gavella', ['Gradsko dramsko kazalište Gavella', 'Gavella'])).toBeUndefined();
+    expect(shorterLabel('Trg bana Josipa Jelačića', ['  Trg bana   J. Jelačića ', 'Trg'])).toBe('Trg bana J. Jelačića');
+  });
+  it('offers none for the rows with no shorter whole label: departures, heritage, the last and first trams, openings, the pharmacy', () => {
+    const rows = [
+      ...selectNearby(input(at('2026-09-22T19:30:00Z'))),
+      ...selectNearby(input(at('2026-09-22T20:40:00Z'))),
+      ...selectNearby(input(at('2026-09-23T01:00:00Z'))),
+      ...selectNearby(input(at('2026-09-22T10:40:00Z'), { city: { ...CITY, streets: [] } })),
+    ];
+    for (const r of rows.filter((x) => ['departure', 'always', 'last', 'first', 'opening', 'pharmacy', 'solar'].includes(x.kind) && !x.id.startsWith('always:story:'))) {
+      expect(r.titleShort, r.id).toBeUndefined();
+      expect(r.subShort, r.id).toBeUndefined();
+    }
+    expect(rows.some((r) => r.kind === 'last')).toBe(true);
+    expect(rows.some((r) => r.id.startsWith('always:heritage:'))).toBe(true);
   });
 });
 

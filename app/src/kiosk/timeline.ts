@@ -47,15 +47,14 @@ import { kBadge } from './markup';
 
 /**
  * A row as the timeline reads it: the S5 NearbyRow, whose departure rows
- * carry their `arrival` (the line badge leads the title), plus two optional
- * shorter labels the selection layer may offer. A short label is complete in
- * itself ("Gradska štedionica" for "Zgrada nekadašnje Gradske štedionice"),
- * never a cut; the wall prints it only when the full one does not fit.
+ * carry their `arrival` (the line badge leads the title), and whose
+ * `titleShort` / `subShort` are the shorter complete labels the selection
+ * layer offers ("Večer u Kvaterniku" for "Večer u Kvaterniku: razgovor o
+ * gradu i kulturnoj baštini", the venue without the tram to it), never a cut;
+ * the wall prints one only when the full label does not fit.
  */
 export type TimelineRow = NearbyRow & {
   arrival?: Pick<ArrivalRow, 'routeId' | 'routeName'>;
-  titleShort?: string;
-  subShort?: string;
 };
 
 /** What the fit reads from the layout; the DOM by default, a fake in tests (happy-dom lays nothing out). */
