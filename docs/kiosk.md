@@ -38,7 +38,7 @@ upute o pretraživanju dodirom. Ukratko:
   tihom napomenom, a svaki je polazak siv sat po voznom redu.
 - Dodir, gdje ga zaslon ima, služi samo za čitanje: dodir na prsten
   stajališta 60 sekundi pokazuje polaske s tog stajališta, a zatim se zaslon
-  sam vraća. Sadržaj se ponese samo skeniranjem.
+  sam vraća. Sadržaj se može ponijeti samo skeniranjem.
 - Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija zaustavlja
   rečenicu i popis; potvrda preuzimanja i potvrda iscrtavanja ostaju.
 - Za postavljanje postoje samo polje „Adresa ili stajalište” i **Pokreni**.
@@ -213,7 +213,7 @@ od 28 CSS piksela, jer prst na zaslonu nije miš na stolu. Dodir na prsten
 pokazuje pojedinosti retka (mjesto održavanja, adresu i tramvaj do
 odredišta), a dodir na dežurnu ljekarnu adresu i telefon ljekarne. Zatim se
 zaslon sam vraća. Karta se pritom ne pomiče, pretrage i izbornika nema, a
-sadržaj se ponese samo skeniranjem.
+sadržaj se može ponijeti samo skeniranjem.
 
 Desni stupac nosi popis „U blizini”, a ispod popisa pozivnicu. Naslov popisa
 ispisuje polumjer kruga i vrijeme hoda, na primjer
@@ -282,7 +282,7 @@ i inače.
 
 Izričit prikaz na zaslon šalje samo javni izbor: područje, liniju,
 stajalište ili stavku te vremenski raspon tog pogleda.
-Šest područja imaju raspored za gledanje s udaljenosti.
+Svako od šest područja ima raspored za gledanje s udaljenosti.
 Tekst pretrage, spremljeni popisi i koordinate uređaja ne prenose se.
 
 Tekst se ne reže trotočjem ni u šest rasporeda za gledanje s udaljenosti:
@@ -337,8 +337,8 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   voznom redu i ispisuje se kao siv sat. Razliku nose boja i oblik vremena, a
   ne natpis: na popisu „U blizini” nema riječi „procjena” ni rečenice ispod
   redaka. Na telefonu čitač zaslona praćeni redak najavljuje riječju
-  „uživo”, a jednu rečenicu o tome odakle procjena dolazi nosi samo
-  pojedinost stajališta. Ništa se ne izmišlja: bez praćenog vozila nema
+  „uživo”, a jedna rečenica o tome odakle procjena dolazi prikazuje se samo
+  u pojedinostima stajališta. Ništa se ne izmišlja: bez praćenog vozila nema
   odbrojavanja.
 - Nedostajući ili neupotrebljivo velik medijan ne prikazuje se kao „na vrijeme”
   niti se skraćuje na izmišljenu vrijednost. Sirovi izvor ostaje neizmijenjen.
@@ -353,7 +353,7 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 - Prognoza prikazuje stvarne dnevne vrijednosti, ne izmišljeni satni niz.
 - Nedatirane obavijesti nisu današnja događanja; trajanje izložbe nije novo
   otvorenje svakog dana.
-- Podaci o ljekarni ne znače jamstvo da je ona trenutačno najbliža korisniku.
+- Podaci o ljekarni ne jamče da je riječ o najbližoj ljekarni.
   Aplikacija ne traži korisnikovu geolokaciju.
 - Kvaliteta zraka i arhivska građa nisu implementirane integracije ovog
   prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
@@ -390,7 +390,7 @@ lagani prikaz prema dostupnoj memoriji, štednji podataka ili nedostupnom WebGL-
 Lagani prikaz ne učitava MapLibre, mrežni geometrijski artefakt ni web-fontove,
 i ne stvara canvas. Umjesto karte ostaje uporabiv popis linija i tekstualni
 sadržaj. Redovno uparivanje, QR, kod, sigurnost i „Osnovno” nastavljaju raditi.
-Na telefonu lagani prikaz Karte zadržava cijeli list, s pretragom,
+Na telefonu lagani prikaz Karte zadržava cijelu ploču, s pretragom,
 pojedinostima stajališta i popisom „U blizini”, samo bez karte i bez
 prekidača između karte i sheme.
 

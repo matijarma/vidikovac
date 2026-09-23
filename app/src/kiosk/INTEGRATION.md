@@ -136,10 +136,17 @@ dynamically imports `createSchemaMap` only for a schema request. Pending
 updates are buffered; destroying the handle before import prevents a late
 mount. Lightweight mode creates neither renderer and loads no schema code.
 
-The schema ignores geographic cameras, emphasis and outlines. It keeps the
-legible crop around the screen's stop; without a stop it fits the network
-without labels. Prozor's statements do not overlay the field, so no rail
-padding is needed and `setView` is a no-op. No district outline is fetched
+The schema ignores geographic cameras, emphasis and outlines, and it names by
+surface. On the wall's city overview (Prikaz: shema) it shows the whole
+network without zoom and always names it: `requestKioskMap` hands it no stop
+to crop round and passes the screen's own stop as `priorityStopId`, so the
+collision pass places the screen's place first and then as many names as fit
+at `WALL_LABEL_MIN_PX` (28 px), terminals first. A wall presentation that
+carries a stop keeps the legible crop around that stop, still named at 28 px.
+A handheld (`presentationProfile: 'handheld'`) keeps its own contract: a crop
+around its stop named at `KIOSK_LABEL_MIN_PX` (24 px), and without a stop the
+whole network without names. Prozor's statements do not overlay the field, so
+no rail padding is needed and `setView` is a no-op. No district outline is fetched
 for a schema field. The schema renderer itself does not load MapLibre.
 
 ## UI workstream (tokens, i18n)
