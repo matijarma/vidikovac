@@ -29,9 +29,8 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 - `cityLabels` -- false on the city window, so the city's own places draw as
   dots and badges with no names; `'venues'` on the framed wall, where tonight's
   venues are named and the BAJS discs carry their counts without names; true
-  the moment somebody explores and on every paired presentation, whose one
-  subject has to be named on the wall. Changed live through the handle's
-  `setCityLabels`.
+  on every paired presentation, whose one subject has to be named on the wall.
+  Changed live through the handle's `setCityLabels`.
 - `hitTolerancePx` -- 28 on the kiosk (`KIOSK_HIT_TOLERANCE_PX`), against the
   map's 8 px default: a finger on a wall is not a mouse on a desk, and on the
   city window the stop rings it aims at are three pixels across.
@@ -94,18 +93,23 @@ twice for one screen and never reaches into MapLibre itself.
 Contract testids across this hand-off (global constraints, contract 8; the
 whole probe list is `docs/companion-2026-09-22.md` §15.6): `kiosk-live` names
 the field's section; `kiosk-map-host` and `kiosk-map` name the map container
-inside it, and `kiosk-map-host` carries `data-major-labels="<count>"` once the
-style idles; `map-note` is the outage note over the map. The front page carries
-no panel: beside the field it has the "U blizini" list (`nearby` >
-`nearby-head` + `nearby-rows` > `li.nearby-row`, drawn by `kiosk/timeline.ts`
-from `city/nearby.ts` `selectNearby`) over the pairing card (`kiosk-invite`,
-`kiosk-qr`). `kiosk-panel-<id>` names each panel of the paired compositions,
-which keep weather, promet, tonight, `city` and `around` with their producers.
-`kiosk-sentence` (with `kiosk-sentence-kicker` and `kiosk-sentence-text`) names
-the header's one sentence; `kiosk-lines` the lines panel's list (also the
-lagano board's, unchanged); `kiosk-lastrun` the paired promet panel's
-last-departures line from 20:00, while that panel is a configured stop's board.
-On the front page the evening's last departures are one row of the list.
+inside it, and `kiosk-map-host` carries `data-frame="4|6|8"` and, once the
+style idles, `data-major-labels="<count>"`; `map-note` is the outage
+note over the map, and `.k-map-legend` holds the three legend items of
+`kiosk.legend.*`. The front page carries no panel: beside the field it has the
+"U blizini" list (`nearby` > `nearby-head` + `nearby-rows` > `li.nearby-row`
+with `data-id`, `data-kind`, `data-when` or `data-always`, `data-live` and
+`data-source`, drawn by `kiosk/timeline.ts` from `city/nearby.ts`
+`selectNearby`) over the pairing card (`kiosk-invite`, `kiosk-qr`,
+`kiosk-code`). The footer is `safety-strip` with `strip-verdict`,
+`strip-sources` (no clock time) and `strip-pharmacy`. `kiosk-sentence` (with
+`kiosk-sentence-kicker` and `kiosk-sentence-text`) names the header's one
+sentence and `kiosk-brand` the brand button. `kiosk-panel-<id>` names each
+panel of the paired compositions, which keep weather, promet, tonight, `city`
+and `around` with their producers; `kiosk-lines` names the lines panel's list
+(also the lagano board's, unchanged). The evening's last departures are one
+row of the list; only the paired Promet panel keeps its own last-departures
+line from 20:00.
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn
@@ -144,13 +148,20 @@ for a schema field. The schema renderer itself does not load MapLibre.
   light / deep-neutral dark, peacock action). When the shared `--tone-*` set
   lands, alias `--k-canvas`, `--k-surface`, `--k-ink`, `--k-action` to it in
   one place at the top of `kiosk.css`; nothing else has to change.
-- Kiosk copy lives in `kiosk/strings-hr.ts` / `strings-en.ts` typed by
-  `KioskStrings`. Shared vocabulary (severity words, delay words, closure
-  types and plurals, `panels.temperature`, `status.loading`) is read through
-  `i18n.t` so the two surfaces agree. `common.appName` becoming "Kaj ima?"
-  needs no kiosk change (`strings.appName` already says it).
-- The old `kiosk.*` keys in `i18n/hr.json` / `en.json` (panorama, meander,
-  catalogue legends) are no longer read by any kiosk file and can be retired.
+- Kiosk copy lives in the one catalogue, `i18n/hr.json` / `en.json`, under
+  `kiosk.*`, and is read through `kiosk/strings.ts`: a thin typed adapter
+  that builds the `KioskStrings` tree once per locale and checks every key it
+  names against the Croatian catalogue at compile time (hr/en parity is
+  `test/app/i18n.test.ts`'s). Shared vocabulary is read where it lives, so
+  the two surfaces agree: the app name (`common.appName`), the domain names
+  (`layers.*`), the compass words and the canonical sentences; severity
+  words, delay words, closure types and plurals, `panels.temperature` and
+  `status.loading` go through `i18n.t` at the call site.
+- The header of `kiosk/strings.ts` names who owns which key group (the
+  wall's `kiosk.nearby.*`, `kiosk.sentence.*`, `kiosk.handheld.*`,
+  `kiosk.legend.*`, `kiosk.setup.*` and `kiosk.settings.*`); a package adds
+  keys only inside its own group, and a key nothing reads any more is
+  deleted with its last reader.
 
 ## Header
 
@@ -163,14 +174,21 @@ crossfade, instant under reduced motion and in lagano. The pure
 `city/sentence.ts` turns the list's own rows plus weather, closures and bikes
 into facts (`sentenceFacts`), writes the template sentences from them
 (`templateSentences`, the fallback that always exists) and sequences the pool
-(`createSentenceSequence`: a sentence past its `validUntil` is skipped, none
+(`createSentenceSequence`: a sentence past its `validUntil` is skipped; while
+at least `SENTENCE_MIN_FACTS` (3) facts are at hand one fact is on screen at
+most once in ten minutes whatever its wording, and below that no sentence
 repeats verbatim within ten minutes). `fetchSentences` (`api.ts`) asks
 `POST /api/kiosk/sentences` for model sentences when the facts change and at
-the latest every `SENTENCE_REFRESH_MS`, never in lagano; the Worker writes them
-with Workers AI, checks each against the facts with `shared/kiosk/sentence.ts`
-`acceptSentence`, keeps them in KV for 20 minutes and answers an empty list
-under `APP_ENV=test`, and the client checks them again against the current
-facts before they join the templates. A sentence that would overflow the cell
+the latest every `SENTENCE_REFRESH_MS`, never in lagano. The Worker offers
+Workers AI only validated template choices (`{ factId, family, slots }`,
+`shared/kiosk/sentence.ts` `sentenceTemplateChoices`); the model may only
+select among them, the chosen ones are filled from the approved templates and
+checked with `acceptSentence`, kept in KV for 20 minutes, and under
+`APP_ENV=test` the answer is an empty list. The client checks them again
+against the current facts before they join the templates. Third-party text in
+a fact or a row passes `shared/kiosk/external-text.ts` first (the header on the
+strict rule, the list's rows on the row rule); a value that fails is skipped,
+never repaired. A sentence that would overflow the cell
 is measured on a permanently laid-out, visually hidden probe and skipped,
 never cut. The session pill and the pairing notice still take that cell when
 they are present, and the notice's `role="status"` is cleared when it
