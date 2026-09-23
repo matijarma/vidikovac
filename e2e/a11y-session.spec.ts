@@ -43,14 +43,17 @@ const describeViolation = (v: Violation) =>
  * selection, so the tab and the directory come first.
  */
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
+  // The desk pair (WP4 chunk E) shows Sada and Karta side by side inside .ki-desk, so a layer is no longer always a
+  // direct child of dash-view, and on the desk either of the two is already on the page (as mobile.spec.ts reads it).
+  const shown = page.locator(`[data-testid="dash-view"] .layer[data-layer="${layer}"]`);
   const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
   if (await tab.count()) {
     await tab.click();
-  } else {
+  } else if (!(await shown.count())) {
     await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
     await page.locator(`[data-testid="dir-${layer}"], [data-action="nav"][data-layer="${layer}"]:visible`).first().click();
   }
-  await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
+  await expect(shown).toBeVisible();
   if (layer === 'u-pokretu') {
     await expect(page.getByTestId('map-canvas'), 'the Promet map must reach a settled status').toHaveAttribute('data-map-status', /^(ready|tiles-failed|unavailable)$/, { timeout: 30_000 });
   }
@@ -74,6 +77,9 @@ interface FocusStop {
 async function tabWalkClearOfChrome(page: Page, limit = TAB_LIMIT): Promise<FocusStop[]> {
   const stops: FocusStop[] = [];
   let leftDocument = 0;
+  // Each walk comes round once from where it starts. On the desk pair (WP4 chunk E) Sada and Karta share one page,
+  // so the marks an earlier layer's walk left on the same nodes would end this walk at its first press.
+  await page.evaluate(() => document.querySelectorAll('[data-e2e-visited]').forEach((el) => el.removeAttribute('data-e2e-visited')));
   for (let i = 0; i < limit; i++) {
     await page.keyboard.press('Tab');
     const stop = await page.evaluate(({ header, tabbar }): (FocusStop & { revisit: boolean }) | null => {
