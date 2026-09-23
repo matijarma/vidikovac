@@ -33,7 +33,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
-import { pickCityGroup } from './helpers';
 import type { ModuleSnapshot } from '../worker/feed/schema';
 import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
 import { pillRows } from '../app/src/motion/pills';
@@ -94,14 +93,7 @@ async function openScene(page: Page, scene: (time: number) => ModuleSnapshot, nu
   await page.clock.resume();
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
-  // The workspace now opens on the city's own group ("Zivi grad"), where the
-  // transport modes are switched off entirely (workspace.ts modesArg) and no
-  // vehicle is drawn. "Kretanje" is the transport group; picking it is what a
-  // reader looking for a tram does, and it is what the schema spec's own
-  // tests do since the city sources landed. The groups sit in the collapsed
-  // filter disclosure since b300af3; pickCityGroup opens and closes it.
-  await page.getByTestId('transport-search').focus();
-  await pickCityGroup(page, 'transport');
+  // Karta draws every vehicle at once (WP4): there is no group to pick first.
   // Both marks on the screen before anything is measured. This is also the
   // map's own readiness: `data-pills` is a census of rendered features, so it
   // says nothing until the style is up, the model has stepped and MapLibre
@@ -225,12 +217,11 @@ test('two trams of one number passing each other read as one pill with an arrow 
   // throws it. The two directions of one line share one artwork line with
   // opposite signs, so the merged mark's members head against each other
   // there too (schema-paint.ts clusterSchemaMarks).
-  await page.locator('.t-map-menu > summary').click();
+  // The switch sits in the sheet's head [O-72]; it says the renderer it shows in data-mode.
   const toggle = page.getByTestId('map-mode-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('.t-map-menu > summary').click();
+  await expect(toggle).toHaveAttribute('data-mode', 'schema');
   await expect(page.getByTestId('schema-vehicles')).toBeVisible();
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'ready');
   await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(2);

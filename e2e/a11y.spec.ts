@@ -273,9 +273,8 @@ test.describe('the moving map has a text path (R-F5)', () => {
     const kioskCtx = await localContext(browser, { ...devices['Desktop Chrome'], viewport: KIOSK });
     const phoneCtx = await localContext(browser, { ...devices['Pixel 7'] });
     try {
-      // A stopless screen, as this proof was written for: with the screen's stop known the phone's U pokretu sheet opens
-      // on a route of that stop rather than on the running-routes list, which is the phone's own behaviour to settle
-      // (task-WB-report.md, concerns), not what this text-path proof is about.
+      // A stopless screen, as this proof was written for: the text path below walks a line's detail, which the
+      // address opens whatever place the screen has.
       const { kioskUrl } = await provisionKiosk(request, APP_URL);
       const kiosk = await kioskCtx.newPage();
       await kiosk.goto(kioskUrl);
@@ -287,12 +286,15 @@ test.describe('the moving map has a text path (R-F5)', () => {
       await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click();
       await waitForFrames(phone, '[data-testid=map-canvas]');
       await phone.getByTestId('transport-search').focus();
-      await phone.locator('.city-filter-disclosure > summary').click();
-      await phone.locator('[data-action=city-group][data-group=transport]').click();
-      await phone.locator('.city-filter-disclosure > summary').click();
-      const route = phone.locator('[data-testid=running-routes] button').first();
-      await expect(route).toBeVisible();
-      await route.click();
+      // Karta opens on the place's list, not on a list of running lines (WP4), and this fixture's line is not in the
+      // catalogue a search reads: its detail opens the way history or a paired screen opens one, by the address.
+      await phone.evaluate(() => {
+        const params = new URLSearchParams(location.hash.slice(1));
+        params.set('layer', 'u-pokretu');
+        params.set('kind', 'route');
+        params.set('id', 'E2E6');
+        location.hash = params.toString();
+      });
       await expect(phone.locator('[data-testid=route-vehicles] button').first()).toBeVisible();
 
       // The full map (T10) is a named region whose controls and licence

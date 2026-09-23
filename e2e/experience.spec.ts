@@ -134,9 +134,15 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
         return { width: box.width, height: Math.min(box.y + box.height, sheet.y) - box.y, stage: box.height };
       };
       const before = await uncovered();
-      await page.locator('.t-map-menu > summary').click();
-      await page.getByTestId('map-full-toggle').click();
-      await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
+      // The phone lowers its sheet to the peek (the full-map button went with the map menu, WP4); the desk's chevron
+      // collapses the board into the page's map view.
+      await page.locator('.t-sheet-toggle').click();
+      if (phone) {
+        await page.locator('.t-sheet-toggle').click();
+        await expect(page.getByTestId('transport-workspace')).toHaveAttribute('data-sheet', 'peek');
+      } else {
+        await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
+      }
       if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 100);
       else await expect.poll(async () => (await uncovered()).width).toBeGreaterThanOrEqual(before.width + 300);
       expect(await canvas!.evaluate((el) => el === document.querySelector('[data-testid=map-canvas] canvas'))).toBe(true);
@@ -147,13 +153,10 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.getByTestId('frozen-line').locator('a')).toBeInViewport();
       await page.keyboard.press('Escape');
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'layers');
-      // The frozen banner now sits in flow above the stage, so the stage is shorter than before; the sheet is
-      // back at half of it (half a stage is what "half" means), and the board column is back at its width.
-      await expect.poll(async () => {
-        const after = await uncovered();
-        if (!phone) return Math.abs(after.width - before.width);
-        return Math.abs(after.height - after.stage * 0.62);
-      }).toBeLessThanOrEqual(4);
+      // The frozen banner now sits in flow above the stage, so the stage is shorter than before; the board column is
+      // back at its width, and the phone's sheet stays at the peek it was lowered to.
+      if (phone) await expect(page.getByTestId('transport-workspace')).toHaveAttribute('data-sheet', 'peek');
+      else await expect.poll(async () => Math.abs((await uncovered()).width - before.width)).toBeLessThanOrEqual(4);
     });
   });
 }
