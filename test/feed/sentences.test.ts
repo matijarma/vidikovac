@@ -484,7 +484,7 @@ describe('W-C2 constrained inference contract', () => {
     }] })).toEqual([]);
     expect(run).not.toHaveBeenCalled();
     expect(get).not.toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalledWith('sentence-rejected', 'unsupported-family');
+    expect(console.warn).toHaveBeenCalledWith('sentence-rejected', 'not-curated');
     expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain('lozinku');
   });
 

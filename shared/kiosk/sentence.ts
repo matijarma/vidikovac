@@ -1,5 +1,7 @@
 // Wire text is untrusted, including local text: decode an approved family into
-// typed slots, then bind those slots to one complete fact. No free-prose escape.
+// typed slots, then bind those slots to one complete fact. No free-prose escape;
+// the one prose family, `always`, passes only by byte identity with the list
+// committed from the repository's own city catalogue (decision 18).
 export const SENTENCE_KICKERS = ['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const;
 export type SentenceKicker = (typeof SENTENCE_KICKERS)[number];
 export const SENTENCE_MAX_CHARS = 80;
@@ -31,7 +33,7 @@ export type SentenceRejection =
   | 'empty' | 'too-long' | 'ellipsis' | 'newline' | 'markup'
   | 'invented-number' | 'unrelated' | 'expired' | 'multiple-sentences'
   | 'forbidden-copy' | 'unnamed-count' | 'wrong-kicker'
-  | 'unknown-family' | 'unsupported-family' | 'invalid-slot' | 'instruction'
+  | 'unknown-family' | 'not-curated' | 'invalid-slot' | 'instruction'
   | 'invalid-contract';
 export type SentenceVerdict = { ok: true } | { ok: false; reason: SentenceRejection };
 export interface SentenceContext {
@@ -159,7 +161,7 @@ interface TemplateFamily {
   group?: string;
 }
 // Mirrors owner-reviewed copy byte-for-byte, pinned against both catalogues.
-// `always` is not executable: {text} is not a typed city datum.
+// `always` is not among them: {text} is prose, never a typed datum or a pattern.
 export const SENTENCE_FAMILIES = {
   departureIn: { hr: 'Tramvaj {route}, smjer {to}, polazi za {n} min.', en: 'Tram {route} towards {to} leaves in {n} min.', slots: { route: 'route', to: 'stop', n: 'minutes' }, kinds: ['promet'] },
   departureAt: { hr: 'Tramvaj {route}, smjer {to}, polazi u {time}.', en: 'Tram {route} towards {to} leaves at {time}.', slots: { route: 'route', to: 'stop', time: 'clock' }, kinds: ['promet'] },
@@ -184,11 +186,18 @@ export const SENTENCE_FAMILIES = {
   outage: { hr: 'ZET ne šalje položaje vozila; polasci su po voznom redu.', en: 'ZET is not sending vehicle positions; departures follow the timetable.', slots: {}, kinds: ['promet'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
-export const SENTENCE_UNSUPPORTED_FAMILIES = { always: '{name}: {text}' } as const;
+// Decision 18: the `always` template runs only when the whole sentence is one
+// of the committed pairs in ./sentence-always/ (the "uvijek" rows of the city
+// catalogue in app/public/data/city). Identity, never a pattern; the model
+// selects such a fact by id and is never offered its text to copy or write.
+export const SENTENCE_CURATED_FAMILIES = { always: '{name}: {text}' } as const;
+export type SentenceCuratedFamily = keyof typeof SENTENCE_CURATED_FAMILIES;
+export type SentenceChoiceFamily = SentenceFamily | SentenceCuratedFamily;
+const CURATED_KINDS: readonly SentenceKicker[] = ['kultura'];
 
-interface TypedSlot { type: SentenceSlotType; value: string }
+interface TypedSlot { type: SentenceSlotType | 'curated'; value: string }
 export interface TypedSentenceFact {
-  family: SentenceFamily;
+  family: SentenceChoiceFamily;
   locale: 'hr' | 'en';
   slots: Record<string, TypedSlot>;
 }
@@ -204,7 +213,7 @@ const matchers = familyEntries.flatMap(([family, spec]) => (['hr', 'en'] as cons
   return { family, spec, locale, names, pattern: new RegExp(`^${source}$`, 'u') };
 }));
 type Decoded = { ok: true; fact: TypedSentenceFact } | { ok: false; reason: SentenceRejection };
-function decodeTemplate(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'): Decoded {
+function decodeTyped(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'): Decoded {
   let issue: SentenceRejection = 'unknown-family';
   for (const matcher of matchers) {
     if (locale && matcher.locale !== locale) continue;
@@ -223,8 +232,87 @@ function decodeTemplate(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en
     if (kind && !matcher.spec.kinds.includes(kind)) { issue = 'wrong-kicker'; continue; }
     return { ok: true, fact: { family: matcher.family, locale: matcher.locale, slots } };
   }
-  if (issue === 'unknown-family' && /^[^:]+: /u.test(text)) issue = 'unsupported-family';
   return { ok: false, reason: issue };
+}
+function decodeTemplate(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'): Decoded {
+  const typed = decodeTyped(text, kind, locale);
+  if (typed.ok || !text.includes(': ')) return typed;
+  const entry = curatedEntry(text);
+  // A typed envelope that matched whole keeps its finding; any other "{name}: {text}" is simply not committed.
+  if (!entry) return typed.reason === 'instruction' || typed.reason === 'wrong-kicker' ? typed : { ok: false, reason: 'not-curated' };
+  if (kind && !CURATED_KINDS.includes(kind)) return { ok: false, reason: 'wrong-kicker' };
+  return { ok: true, fact: { family: 'always', locale: locale ?? 'hr', slots: {
+    name: { type: 'curated', value: entry.name }, text: { type: 'curated', value: entry.text },
+  } } };
+}
+
+// --- the committed `always` pairs (decision 18) ---------------------------------
+type CuratedPair = readonly [name: string, text: string];
+type CuratedShard = () => Promise<{ default: readonly CuratedPair[] }>;
+// Sixteen chunks, by sentence hash: a wall fetches only the shard of the
+// sentence it meets, so the list stays out of the lightweight screen graph
+// (test/app/budget.test.ts). The Worker's bundler inlines all of them.
+const CURATED_SHARDS: readonly CuratedShard[] = [
+  () => import('./sentence-always/00'), () => import('./sentence-always/01'),
+  () => import('./sentence-always/02'), () => import('./sentence-always/03'),
+  () => import('./sentence-always/04'), () => import('./sentence-always/05'),
+  () => import('./sentence-always/06'), () => import('./sentence-always/07'),
+  () => import('./sentence-always/08'), () => import('./sentence-always/09'),
+  () => import('./sentence-always/10'), () => import('./sentence-always/11'),
+  () => import('./sentence-always/12'), () => import('./sentence-always/13'),
+  () => import('./sentence-always/14'), () => import('./sentence-always/15'),
+];
+export const SENTENCE_CURATED_SHARDS = CURATED_SHARDS.length;
+interface CuratedEntry { name: string; text: string }
+const curatedLoaded: (ReadonlyMap<string, CuratedEntry> | undefined)[] = [];
+const curatedPending: (Promise<void> | undefined)[] = [];
+
+/** FNV-1a over UTF-16 code units: which shard holds a sentence. Placement only; the check is identity. */
+export function curatedShard(sentence: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < sentence.length; i++) hash = Math.imul(hash ^ sentence.charCodeAt(i), 0x01000193);
+  return (hash >>> 0) % CURATED_SHARDS.length;
+}
+/**
+ * The header sentence of a committed pair: exactly "{name}: {text}" plus the
+ * template's full stop. Null when the pair cannot be shown whole and unaltered:
+ * a value that trimming, NFC or quote stripping would change, a control,
+ * markup or ellipsis, over 80 characters, or a sentence a typed family decodes.
+ */
+export function curatedSentence(name: string, text: string): string | null {
+  if (sentenceValue(name) !== name || sentenceValue(text) !== text) return null;
+  const whole = `${name}: ${text}`;
+  const sentence = sentenceWithPeriod(whole);
+  if ((sentence !== whole && sentence !== `${whole}.`) || textIssue(sentence, SENTENCE_MAX_CHARS)) return null;
+  return decodeTyped(sentence).ok ? null : sentence;
+}
+function loadCuratedShard(index: number): Promise<void> {
+  if (curatedLoaded[index]) return Promise.resolve();
+  return curatedPending[index] ??= CURATED_SHARDS[index]!().then(module => {
+    const entries = new Map<string, CuratedEntry>();
+    for (const [name, text] of module.default) {
+      const sentence = curatedSentence(name, text);
+      if (sentence !== null && curatedShard(sentence) === index) entries.set(sentence, { name, text });
+    }
+    curatedLoaded[index] = entries;
+  }, () => { curatedPending[index] = undefined; });
+}
+/**
+ * Loads the committed shards these texts would be found in (every shard without
+ * texts) and never rejects. Until a shard is in, its sentences are refused as
+ * not-curated; meeting one starts its load, so the next check can pass.
+ */
+export function loadCuratedSentences(texts?: readonly string[]): Promise<void> {
+  const shards = texts
+    ? new Set(texts.flatMap(text => [text, normalizeSentence(text), sentenceWithPeriod(text)].map(curatedShard)))
+    : CURATED_SHARDS.keys();
+  return Promise.all([...shards].map(loadCuratedShard)).then(() => undefined);
+}
+function curatedEntry(text: string): CuratedEntry | undefined {
+  const index = curatedShard(text);
+  const shard = curatedLoaded[index];
+  if (!shard) void loadCuratedShard(index);
+  return shard?.get(text);
 }
 function textIssue(text: string, max: number): SentenceRejection | null {
   if (!text.length) return 'empty';
@@ -240,14 +328,18 @@ export function typedSentenceFact(fact: SentenceFact, locale?: 'hr' | 'en'): Dec
   return issue ? { ok: false, reason: issue } : decodeTemplate(fact.text, fact.kind, locale);
 }
 function grounded(candidate: TypedSentenceFact, source: TypedSentenceFact): boolean {
+  const same = ([name, slot]: [string, TypedSlot]) => source.slots[name]?.type === slot.type && source.slots[name]?.value === slot.value;
+  if (candidate.family === 'always' || source.family === 'always') {
+    return candidate.family === source.family && Object.keys(candidate.slots).length === Object.keys(source.slots).length
+      && Object.entries(candidate.slots).every(same);
+  }
   const targetSpec: TemplateFamily = SENTENCE_FAMILIES[candidate.family];
   const sourceSpec: TemplateFamily = SENTENCE_FAMILIES[source.family];
   const compatible = candidate.family === source.family
     || (targetSpec.group !== undefined && targetSpec.group === sourceSpec.group)
     || (source.family === 'weather' && ['weatherNoRange', 'weatherTemperature'].includes(candidate.family))
     || (source.family === 'weatherNoRange' && candidate.family === 'weatherTemperature');
-  return compatible && Object.entries(candidate.slots).every(([name, slot]) =>
-    source.slots[name]?.type === slot.type && source.slots[name]?.value === slot.value);
+  return compatible && Object.entries(candidate.slots).every(same);
 }
 export function sentenceRefs(text: string, ctx: SentenceContext): SentenceFact[] {
   const candidate = decodeTemplate(normalizeSentence(text), ctx.kicker, ctx.locale);
@@ -324,26 +416,37 @@ export function stableSentenceFacts(facts: readonly SentenceFact[], now?: number
 /** The model chooses a family and copies only complete slot assignments. */
 export interface SentenceTemplateChoice {
   factId: string;
-  family: SentenceFamily;
+  family: SentenceChoiceFamily;
   slots: Record<string, string>;
 }
-export function sentenceTemplateChoices(ctx: SentenceContext): SentenceTemplateChoice[] {
-  const choices: SentenceTemplateChoice[] = [];
+interface TemplateOption { choice: SentenceTemplateChoice; text: string }
+function templateOptions(ctx: SentenceContext): TemplateOption[] {
+  const options: TemplateOption[] = [];
   for (const fact of ctx.facts) {
     const decoded = typedSentenceFact(fact, ctx.locale);
     if (!decoded.ok) { ctx.onReject?.(decoded.reason); continue; }
+    const accepted = (text: string) => acceptSentence(text, { ...ctx, facts: [fact], refs: [fact.id] }).ok;
+    if (decoded.fact.family === 'always') {
+      // Selected by id only: no slot is offered, so the model can neither copy nor write the text.
+      const text = curatedSentence(decoded.fact.slots.name!.value, decoded.fact.slots.text!.value);
+      if (text !== null && accepted(text)) options.push({ choice: { factId: fact.id, family: 'always', slots: {} }, text });
+      continue;
+    }
     for (const [family, spec] of familyEntries) {
       const slots: Record<string, string> = {};
       for (const name of Object.keys(spec.slots)) slots[name] = decoded.fact.slots[name]?.value ?? '';
       const text = spec[ctx.locale ?? decoded.fact.locale].replace(/\{(\w+)\}/gu, (_, name: string) => slots[name]!);
       if (!grounded({ ...decoded.fact, family, slots: Object.fromEntries(Object.entries(spec.slots)
         .map(([name, type]) => [name, { type, value: slots[name]! }])) }, decoded.fact)) continue;
-      if (acceptSentence(text, { ...ctx, facts: [fact], refs: [fact.id] }).ok) choices.push({ factId: fact.id, family, slots });
+      if (accepted(text)) options.push({ choice: { factId: fact.id, family, slots }, text });
     }
   }
-  return choices;
+  return options;
 }
-/** Compare the full contract before interpolating any model-controlled field. */
+export function sentenceTemplateChoices(ctx: SentenceContext): SentenceTemplateChoice[] {
+  return templateOptions(ctx).map(option => option.choice);
+}
+/** Compare the full contract, then write our own rendering; no model-controlled field is interpolated. */
 export function fillSentenceChoice(raw: unknown, ctx: SentenceContext): WrittenSentence | null {
   const reject = (reason: SentenceRejection): null => { ctx.onReject?.(reason); return null; };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return reject('invalid-contract');
@@ -351,12 +454,10 @@ export function fillSentenceChoice(raw: unknown, ctx: SentenceContext): WrittenS
   if (Object.keys(raw).sort().join(',') !== 'factId,family,slots'
     || typeof value.factId !== 'string' || typeof value.family !== 'string'
     || !value.slots || typeof value.slots !== 'object' || Array.isArray(value.slots)) return reject('invalid-contract');
-  const choice = sentenceTemplateChoices({ ...ctx, onReject: undefined }).find(option =>
-    option.factId === value.factId && option.family === value.family
-    && Object.keys(option.slots).sort().join(',') === Object.keys(value.slots!).sort().join(',')
-    && Object.entries(option.slots).every(([name, slot]) => value.slots![name] === slot));
-  if (!choice) return reject('invalid-contract');
-  const spec = SENTENCE_FAMILIES[choice.family];
-  const text = spec[ctx.locale ?? 'hr'].replace(/\{(\w+)\}/gu, (_, name: string) => choice.slots[name]!);
-  return writeSentence(text, { ...ctx, refs: [choice.factId] }, 'model');
+  const option = templateOptions({ ...ctx, onReject: undefined }).find(({ choice }) =>
+    choice.factId === value.factId && choice.family === value.family
+    && Object.keys(choice.slots).sort().join(',') === Object.keys(value.slots!).sort().join(',')
+    && Object.entries(choice.slots).every(([name, slot]) => value.slots![name] === slot));
+  if (!option) return reject('invalid-contract');
+  return writeSentence(option.text, { ...ctx, refs: [option.choice.factId] }, 'model');
 }

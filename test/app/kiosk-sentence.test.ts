@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import {
   acceptSentence, readWrittenSentences, sentenceDeadline, sentenceMidnight, sentenceValue, writeSentence, SENTENCE_VALUE_MAX_CHARS,
-  SENTENCE_FAMILIES, SENTENCE_UNSUPPORTED_FAMILIES, SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS,
+  SENTENCE_FAMILIES, SENTENCE_CURATED_FAMILIES, SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS,
   SENTENCE_SLOT_RULES, sentenceInstruction, typedSentenceFact, validateSentenceSlot, sentenceTemplateChoices, fillSentenceChoice,
   type SentenceFact, type WrittenSentence, type SentenceSlotType,
 } from '../../shared/kiosk/sentence';
@@ -169,7 +169,8 @@ describe('one grounded, time-aware sentence', () => {
     for (const value of [instruction, instruction.toLocaleUpperCase('hr'), instruction.normalize('NFD')]) {
       const text = `Muzej: ${value}.`;
       const fact: SentenceFact = { ...closure, id: 'always:museum', kind: 'kultura', text };
-      expect(acceptSentence(text, { facts: [fact], now: NOW })).toEqual({ ok: false, reason: 'unsupported-family' });
+      // Decision 18: the always envelope passes only by identity with the committed list.
+      expect(acceptSentence(text, { facts: [fact], now: NOW })).toEqual({ ok: false, reason: 'not-curated' });
       expect(acceptSentence('Muzej.', { facts: [fact], now: NOW })).toEqual({ ok: false, reason: 'unknown-family' });
       expect(writeSentence(text, { facts: [fact], now: NOW }, 'model')).toBeNull();
       expect(readWrittenSentences([sentence(text, { refs: [fact.id] })], { facts: [fact], now: NOW })).toEqual([]);
@@ -671,14 +672,14 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 22 owner-reviewed families in both languages, with always explicitly unsupported', () => {
+  it('pins all 22 owner-reviewed families in both languages, with always curated by identity only', () => {
     expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(21);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
       for (const key of Object.keys(SENTENCE_FAMILIES) as (keyof typeof SENTENCE_FAMILIES)[]) {
         expect(SENTENCE_FAMILIES[key][locale], `${locale}/${key}`).toBe(copy[key]);
       }
-      expect(copy.always).toBe(SENTENCE_UNSUPPORTED_FAMILIES.always);
+      expect(copy.always).toBe(SENTENCE_CURATED_FAMILIES.always);
     }
   });
 
