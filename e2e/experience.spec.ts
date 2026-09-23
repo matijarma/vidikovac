@@ -216,6 +216,14 @@ test('text zoom keeps the place, the departures and U blizini without horizontal
 });
 
 test('without WebGL the transport search still opens a real stop and its routes', async ({ page }) => {
+  // An exception in the page is the failure itself, not a silent no-op: the Sada band's half-built MapLibre v6 map
+  // (no WebGL2) once threw from its teardown inside every render after Karta opened, so Enter on a stop did nothing.
+  // Console errors ride along in the messages (a local server answers some city sources 503), never as the verdict.
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', (error) => { pageErrors.push(error.stack ?? String(error)); });
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  const uncaught = (step: string): string => `no uncaught error ${step}; console errors: ${consoleErrors.join(' | ') || 'none'}`;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
@@ -231,6 +239,7 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await openLayer(page, 'u-pokretu');
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
   await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
+  expect(pageErrors, uncaught('opening Karta without WebGL')).toEqual([]);
   await page.getByTestId('transport-search').fill('Jela');
   const options = page.getByTestId('transport-results').getByRole('option');
   await expect(options.first()).toBeVisible();
@@ -240,9 +249,11 @@ test('without WebGL the transport search still opens a real stop and its routes'
   expect(stopIndex, 'a stop is among the results').toBeGreaterThanOrEqual(0);
   for (let i = 0; i <= stopIndex; i++) await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');
+  expect(pageErrors, uncaught('from the search to the stop')).toEqual([]);
   await expect(page.getByTestId('stop-title')).toContainText('Jela');
   await expect(page.getByTestId('stop-routes').locator('button').first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  expect(pageErrors, uncaught('on the stop')).toEqual([]);
 });
 
 test('printing selected civic metadata retains provenance even when its disclosure was closed', async ({ page }) => {

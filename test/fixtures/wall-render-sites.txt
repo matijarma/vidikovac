@@ -303,9 +303,9 @@ app/src/map/city-map.ts:232 #vehicleLabel → vetExternal('headsign', v.short, '
 app/src/map/city-map.ts:235 #vehicleLabel → vetExternal('headsign', text, 'row')
 app/src/map/city-map.ts:812 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
 app/src/map/city-map.ts:812 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1698 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1699 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1700 #relabelControls → el.title = controlLabel
+app/src/map/city-map.ts:1701 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1702 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1703 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:24 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:33 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:40 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
