@@ -1,9 +1,9 @@
-// The /d/ surface: one stable shell (the status line, banners, the FAB
-// slot, the tab bar) around one active workspace. Real
+// The /d/ surface: one stable shell (the status line, the presentation
+// panel, banners, the tab bar) around one active workspace. Real
 // session, real feeds through the core stores, keyed reconciliation of the
 // workspace so a poll never disturbs focus, typed text, scroll or a live map.
-// Casting is explicit (D5): navigation tells the room nothing, the cast
-// controls send one view frame. Every browser global is injected, so the
+// Casting is explicit (D5): navigation tells the room nothing, the Zaslon
+// panel sends one view frame. Every browser global is injected, so the
 // behaviour is unit-tested under happy-dom.
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
@@ -1207,7 +1207,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     });
   });
   const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
-  // The reader's stores: a saved change repaints the layer and, at the desk, refreshes its modules; a switch repaints the bell.
+  // The reader's stores: a saved change repaints the layer and, at the desk, refreshes its modules; a switch repaints the shell.
   const stopSaved = onChange(saved.subscribe, () => {
     render();
     if (surface() === 'desktop') continuePoll(refresh(), rearmPoll, 'dashboard saved refresh');
