@@ -759,6 +759,39 @@ describe('terminal placement continuity', () => {
     expect(t.match.s).toBeCloseTo(60);
   });
 
+  it('keeps an arrival that still has its loop to run when the departure start is within the stop zone', () => {
+    // Kvaternikov trg: 13_11 passes the node the departure starts from 200 m
+    // before its own end at the terminus stand. ZET names the new trip there;
+    // a start 28 m away is not a platform the tram has reached until the
+    // arrival is done.
+    // The loop runs the arrival's last 1,200 m, a 20 m connector back west
+    // along the departure's own first edge: the same rails as at the square.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1200) },
+        { from: 2, to: 3, pts: [{ x: 1020, y: 20 }, { x: 2020, y: 20 }] },
+        { from: 1, to: 4, pts: [{ x: 1200, y: 0 }, { x: 1200, y: 20 }] },
+        { from: 4, to: 2, pts: [{ x: 1200, y: 20 }, { x: 1020, y: 20 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+        { id: 'loop', direction: -1, edges: [0, 2, 3, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('still-going', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1100, 0, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    expect(t.match.s).toBeCloseTo(1100);
+  });
+
   it('switches to a departure that starts where the arrival ends', () => {
     const n = syntheticNetwork({
       edges: [
@@ -833,6 +866,101 @@ describe('terminal placement continuity', () => {
     expect(n.paths[t.match.pathIdx!].id).toBe('departure'); // 35 + 25, at the real near endpoint
     expect(t.match.s).toBe(0);
     expect(t.match.residual).toBeLessThan(12);
+  });
+});
+
+describe('a terminus loop between the arrival and the departure', () => {
+  // Kvaternikov trg with the connector of decision 25: the arrival ends at
+  // the stand, the loop runs the arrival's last edge, the connector and the
+  // departure's first edge, and the departure starts on that shared edge.
+  // The tram comes round the loop; both transitions are loop transitions,
+  // never an arrival-to-departure change (39 and 41 a day before this).
+  const spec: SynthSpec = {
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1000) },
+      { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 60 }] },
+      { from: 2, to: 3, pts: [{ x: 1000, y: 60 }, { x: 1060, y: 60 }] },
+      { from: 3, to: 4, pts: [{ x: 1060, y: 60 }, { x: 2060, y: 60 }] },
+    ],
+    routes: [{ id: '1', type: 0, paths: [
+      { id: 'arrival', direction: 0, edges: [0] },
+      { id: 'loop', direction: -1, edges: [0, 1, 2] },
+      { id: 'departure', direction: 1, edges: [2, 3] },
+    ] }],
+    stops: [],
+  };
+
+  it('is where a tram standing at the arrival end goes when the next trip is named', () => {
+    const n = syntheticNetwork(spec);
+    const m = createMatcher(n);
+    const t = newTrack('at-the-stand', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    expect(t.match.s).toBeCloseTo(1000);
+    m.matchFix(t, fix(1000, 30, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    expect(t.match.s).toBeCloseTo(1030);
+    m.matchFix(t, fix(1030, 60, 1030), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop'); // still on the shared first edge of the departure
+    m.matchFix(t, fix(1120, 60, 1040), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(120);
+  });
+
+  it('is taken by a tram whose next fix already lies on the departure start', () => {
+    // Recorded: from the stand at the end of 13_11 to the start of the
+    // departure in one 11 s interval (102411 05:47:46, 102425 07:54:56).
+    const n = syntheticNetwork(spec);
+    const m = createMatcher(n);
+    const t = newTrack('round-in-one', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(700, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip'; // named 300 m before the stand
+    const p = m.priorFor('departure', '1', 1);
+    for (const [i, x] of [800, 900, 1000].entries()) {
+      m.matchFix(t, fix(x, 0, 1010 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    }
+    m.matchFix(t, fix(1010, 60, 1040), p, null); // came round: on the departure's first edge, 10 m in
+    m.matchFix(t, fix(1060, 60, 1050), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1120, 60, 1060), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(120);
+  });
+});
+
+describe('a terminus loop between the arrival and the departure, off the arrival first', () => {
+  it('is taken when the second fix off the arrival lands on the departure start before the return has accumulated', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 60 }] },
+        { from: 2, to: 3, pts: [{ x: 1000, y: 60 }, { x: 1060, y: 60 }] },
+        { from: 3, to: 4, pts: [{ x: 1060, y: 60 }, { x: 2060, y: 60 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'loop', direction: -1, edges: [0, 1, 2] },
+        { id: 'departure', direction: 1, edges: [2, 3] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('off-first', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(700, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    for (const [i, x] of [800, 900, 1000].entries()) m.matchFix(t, fix(x, 0, 1010 + i * 10), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1015, 60, 1040), p, null); // one stray fix: still the arrival
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1035, 60, 1050), p, null); // two: re-derived, onto the loop, not straight onto the departure
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1120, 60, 1060), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
   });
 });
 

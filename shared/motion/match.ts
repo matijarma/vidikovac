@@ -175,6 +175,20 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     else pathsByRoute.set(path.route, [pathIdx]);
   });
   const stopArcCache = new Map<number, Map<string, number>>();
+  // Terminus loops by the two edges they join (scripts/gtfs-shapes.mjs): a
+  // loop's first edge is an arriving path's last, its last edge a departing
+  // path's first, of the same line.
+  const loopJoin = new Map<string, number>();
+  net.paths.forEach((path, pathIdx) => {
+    if (path.direction === -1 && path.edges.length > 1) loopJoin.set(`${path.route}|${path.edges[0]}|${path.edges[path.edges.length - 1]}`, pathIdx);
+  });
+  /** The loop of the line that runs from `fromPath`'s last edge to `toPath`'s first, or null. */
+  function loopBetween(fromPath: number, toPath: number): number | null {
+    const from = net.paths[fromPath];
+    const to = net.paths[toPath];
+    if (from.route !== to.route || from.direction === -1 || to.direction === -1) return null;
+    return loopJoin.get(`${to.route}|${from.edges[from.edges.length - 1]}|${to.edges[0]}`) ?? null;
+  }
   const terminals = net.stops.filter((stop) => stop.terminal).map((stop) => stop.p);
   const nearTerminal = (p: XY): boolean => terminals.some((q) => dist(p, q) <= TERMINUS_NEAR_M);
 
@@ -508,14 +522,29 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       delete track.endpointHold;
       delete track.unplacedDirection;
       let keepArrival = false;
+      let viaLoop: Match | null = null;
       if (prior.pathIdx !== null && track.match.pathIdx !== null) {
         const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
         const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
-        keepArrival = own.s <= 0.5 && own.residual > STOP_ZONE_M && own.residual <= NEAR_M
-          && current.residual <= NEAR_M && current.residual < own.residual;
+        // The arrival is done once the tram is within a stop zone of its end.
+        const arrivalDone = current.residual <= NEAR_M && current.s >= net.paths[track.match.pathIdx].len - STOP_ZONE_M;
+        // A terminus loop from the arrival's last edge to the departure's
+        // first is the track between them (decision 25): a tram that has
+        // arrived goes onto it, and reaches the departure round it.
+        const loop = arrivalDone ? loopBetween(track.match.pathIdx, prior.pathIdx) : null;
+        if (loop !== null) {
+          const onLoop = onPathMatch(track, loop, p, motion, nextStopId);
+          if (onLoop.residual <= NEAR_M) viaLoop = onLoop;
+        }
+        keepArrival = own.s <= 0.5 && own.residual <= NEAR_M
+          && current.residual <= NEAR_M && current.residual < own.residual
+          && !(own.residual <= STOP_ZONE_M && arrivalDone);
       }
       track.priorPath = prior.pathIdx;
-      if (!keepArrival) track.match = noMatch();
+      if (viaLoop) {
+        resetOrder(track);
+        track.match = viaLoop;
+      } else if (!keepArrival) track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
     }
@@ -567,12 +596,31 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // current placement as D4, so the first return interval is not lost.
       const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
       const againstCurrent = pathForwardM(track.match.pathIdx, current.s, delta) <= -PRIOR_RETURN_NOISE_M;
-      if (prev !== null && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
+      // Where a terminus loop of the line runs from the current path's end to
+      // the prior's start, the prior is reached round that loop, so a tram
+      // still on its arrival does not return to a departure track that runs
+      // alongside (Kvaternikov trg: the departure's first edge lies 20 m from
+      // the arrival's last 80 m, and 13_11 was left 80 m before its stand).
+      // Once the arrival is done, within a stop zone of its end, it may.
+      // (A tram past the end projects onto the end with a growing residual:
+      // 68 m from the stand at node 73 it has come round, so the residual is
+      // bounded by the off-graph band, not the near band.)
+      const loopAhead = loopBetween(track.match.pathIdx, prior.pathIdx) !== null
+        && !(current.residual <= OFF_GRAPH_M && current.s >= net.paths[track.match.pathIdx].len - STOP_ZONE_M);
+      if (prev !== null && !loopAhead && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
           delete track.unplacedDirection;
           resetOrder(track);
-          track.match = own;
+          // Re-entered on the prior's first edge, which a terminus loop of the
+          // line runs from the current path's last edge: the tram came round
+          // the loop (Kvaternikov trg, 13_11's stand to the departure start in
+          // one interval), so it is placed on the loop while still on that
+          // shared edge and reaches the prior off the loop's end.
+          const loop = loopBetween(track.match.pathIdx, prior.pathIdx);
+          const firstEdgeLen = net.paths[prior.pathIdx].offsets[1] ?? net.paths[prior.pathIdx].len;
+          const onLoop = loop !== null && own.s <= firstEdgeLen + 0.5 ? onPathMatch(track, loop, p, motion, nextStopId) : null;
+          track.match = onLoop !== null && onLoop.residual <= NEAR_M ? onLoop : own;
           track.offPathCount = 0;
           track.againstCount = 0;
           return track.match;
@@ -592,9 +640,21 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
       track.offPathCount = 0;
       track.againstCount = 0;
-      track.match = best
+      let match: Match | null = best
         ? { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d }
-        : { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
+        : null;
+      // Off the arrival onto the prior's first edge, which a terminus loop of
+      // the line runs from the arrival's last: the loop is the track between
+      // (see the prior-return rule above), so the tram is placed on it.
+      if (match && track.match.pathIdx !== null && best.pathIdx === prior.pathIdx) {
+        const loop = loopBetween(track.match.pathIdx, prior.pathIdx);
+        const firstEdgeLen = net.paths[prior.pathIdx].offsets[1] ?? net.paths[prior.pathIdx].len;
+        if (loop !== null && best.s <= firstEdgeLen + 0.5) {
+          const onLoop = onPathMatch(track, loop, p, motion, nextStopId);
+          if (onLoop.residual <= NEAR_M) match = onLoop;
+        }
+      }
+      track.match = match ?? { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
       if (best) delete track.unplacedDirection;
       return track.match;
     };
