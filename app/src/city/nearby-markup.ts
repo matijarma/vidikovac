@@ -21,8 +21,13 @@ import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { nearbyHead, nearbyPill, selectNearby, type NearbyInput, type NearbyRow } from './nearby';
 import { sentenceFacts, templateSentences, type SentenceFact, type WrittenSentence } from './sentence';
 
-// The page reads the selection, the head's circle and the sentence tools through this chunk alone (city/feed.ts).
+// The page reads the selection, the head's circle and the sentence tools through this chunk alone (city/feed.ts):
+// the rotation (createSentenceSequence, the wall's own, which applies the header's strict acceptance to every
+// candidate), the wire shape of a request (modelSentenceFacts), the reading of an answer (readWrittenSentences)
+// and the templates, so dashboard.ts never imports city/sentence.ts on /d/.
 export { nearbyHead, nearbyPill, selectNearby };
+export { createSentenceSequence, modelSentenceFacts, templateSentences, SENTENCE_HOLD_MS, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS } from './sentence';
+export { readWrittenSentences } from '../../../shared/kiosk/sentence';
 
 /** The phone's sentence runs to the header's own length (companion §12, step 12). */
 export const PHONE_SENTENCE_BUDGET = 80;

@@ -20,7 +20,8 @@ import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
-import { loadSadaFeed, nearbyInput, sadaFeed } from './city/feed';
+import { fetchSentences as fetchSentencesImpl } from './api';
+import { loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
 import { bannersMarkup, fabMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
@@ -38,6 +39,7 @@ import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
 import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
+import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
@@ -119,6 +121,8 @@ export interface DashboardDeps {
   /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
   mapMode?: MapModeStore;
   loadNetwork?: () => Promise<Network | null>;
+  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. */
+  fetchSentences?: (request: SentenceRequest) => Promise<WrittenSentence[]>;
   /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
@@ -199,6 +203,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   /** The network's tram lines in call order (shared/city/frame.ts frameLinesOf), once the artefact has loaded: the
    *  phone's circle is then measured along the lines as the wall's is; until then frameRadiusM falls back among trams. */
   let frameLines: readonly FrameLine[] | undefined;
+  // --- Sada's sentence (WP4 step 12; seam S6) -------------------------------
+  // The page rotates one sentence over the facts Sada's rows are chosen from: the model's answers (fetchSentences,
+  // asked at most once a minute since the route is rate-limited per IP) and WP1's templates, read through the
+  // wall's own sequence (20 s hold, no verbatim repeat within ten minutes, the header's strict acceptance on every
+  // candidate: a rejected fact yields no sentence, decision 21). The tools live in the lazy feed chunk.
+  /** The phone asks the sentence route at most this often. */
+  const SENTENCE_FETCH_MS = 60_000;
+  const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
+  let sentenceSequence: ReturnType<SadaFeedModule['createSentenceSequence']> | null = null;
+  let modelSentences: WrittenSentence[] = [];
+  let sentenceFetchKey = '';
+  let sentenceAskedAt = -Infinity;
+  let sentenceFetchSeq = 0;
   const loadNetworkOnce = (refresh = false): Promise<Network | null> => {
     // Karta replaces this shared cache after a deploy, so later map mounts
     // cannot reinstall the graph the current map just rejected.
@@ -453,7 +470,58 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         radiusM: input.radiusM,
       };
     };
+    // Sada's sentence, the page's pick (step 12), only while Sada is drawn; absent, Sada holds its own place.
+    if (sadaShown()) {
+      const feed = sadaFeed(repaintLocalData);
+      if (typeof feed === 'object') {
+        const input = nearbyInput(ctx);
+        ctx.sentence = sadaSentence(feed, input, feed.selectNearby(input));
+      }
+    }
     return ctx;
+  }
+
+  /** Whether Sada is on the page: the layer itself, or either half of the desk pair. */
+  function sadaShown(): boolean {
+    return !directory && (view.snapshot().layer === 'grad-sada' || deskPair());
+  }
+
+  /** The rotation's pick for this draw: the model's answers still valid against these facts, then the templates. */
+  function sadaSentence(feed: SadaFeedModule, input: ReturnType<typeof nearbyInput>, rows: ReturnType<SadaFeedModule['selectNearby']>): WrittenSentence | null {
+    const at = input.now;
+    const facts = feed.sadaSentenceFacts(input, rows);
+    // Old answers are never trusted against the facts they were requested with (the wall's rule).
+    modelSentences = feed.readWrittenSentences(modelSentences, { facts, budget: feed.PHONE_SENTENCE_BUDGET, now: at });
+    sentenceSequence ??= feed.createSentenceSequence({ rhythmMs: feed.SENTENCE_HOLD_MS, noRepeatMs: feed.SENTENCE_NO_REPEAT_MS });
+    const pool = [...modelSentences, ...feed.templateSentences(facts, i18n, feed.PHONE_SENTENCE_BUDGET, at)];
+    return sentenceSequence.read(pool, at);
+  }
+
+  /**
+   * Asks the sentence route for these facts: at most once a minute, the same facts again only after the
+   * wall's refresh period, never before the join, never after the end. The facts are the page's own at this
+   * moment (the same selection Sada draws from), so the answer is read against them on the next draw.
+   */
+  function ensureSentences(): void {
+    if (disposed || frozen || paused || session.snapshot().phase !== 'live' || !sadaShown()) return;
+    const feed = sadaFeed(repaintLocalData);
+    if (typeof feed !== 'object') return;
+    const ctx = layerContext();
+    const input = nearbyInput(ctx);
+    const at = now();
+    const stable = feed.modelSentenceFacts(feed.sadaSentenceFacts(input, feed.selectNearby(input)), at);
+    if (!stable.length) return;
+    const locale: SentenceRequest['locale'] = i18n.getLocale().startsWith('en') ? 'en' : 'hr';
+    const key = JSON.stringify([locale, stable.map((fact) => [fact.id, fact.kind, fact.text])]);
+    if (at - sentenceAskedAt < (key === sentenceFetchKey ? feed.SENTENCE_REFRESH_MS : SENTENCE_FETCH_MS)) return;
+    sentenceFetchKey = key;
+    sentenceAskedAt = at;
+    const seq = ++sentenceFetchSeq;
+    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }).then((answer) => {
+      if (disposed || frozen || seq !== sentenceFetchSeq) return;
+      modelSentences = feed.readWrittenSentences(answer, { facts: stable, budget: feed.PHONE_SENTENCE_BUDGET, now: now() });
+      if (modelSentences.length) render();
+    }, () => { /* Optional inference never replaces the templates with an error. */ });
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
@@ -705,6 +773,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function setLocale(next: string): void {
     const applied = i18n.setLocale(next);
+    // The model's answers were written in the other language; the templates carry the card until the next ask.
+    modelSentences = [];
+    sentenceFetchKey = '';
     storeLocale(applied);
     doc.documentElement.lang = applied;
     i18n.translatePage(doc);
@@ -747,6 +818,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     await store.refresh(ids);
     if (frozen || disposed) return;
     lastRefresh = now();
+    ensureSentences();
     // A rejected data token means the session is over for this device; a refused
     // Access check needs the protected entrance again. Both get a visible way out.
     const messages = Object.values(store.snapshot().errors).filter((m): m is string => typeof m === 'string');
@@ -1188,8 +1260,13 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   updateTitle();
   paintShell();
   // Sada's selection and sentence chunk is asked for at once, so it is in flight before the first draw (a phone
-  // opening on Karta needs it for the sheet too); the page repaints when it lands (city/feed.ts).
-  void loadSadaFeed();
+  // opening on Karta needs it for the sheet too); the page repaints when it lands (city/feed.ts) and, once joined,
+  // asks for its first sentences.
+  void loadSadaFeed().then((module) => {
+    if (!module || disposed || frozen) return;
+    render();
+    ensureSentences();
+  });
   // The network's tram lines measure the circle along the lines; the map loads the same artefact once.
   void loadNetworkOnce().then((network) => {
     if (disposed || !network) return;

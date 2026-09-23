@@ -1363,6 +1363,107 @@ describe('the status line', () => {
   });
 });
 
+// WP4 step 12 (seam S6): the phone's sentence is the page's rotation over the model's answers and the templates,
+// asked from the route at most once a minute, read through the wall's own sequence with its strict acceptance.
+describe('Sada\'s sentence (WP4 step 12)', () => {
+  const clock = () => { let at = NOW; return { now: () => at, set(ms: number) { at = ms; } }; };
+  type Request = { locale: 'hr' | 'en'; budget: number; facts: { id: string; kind: string; text: string; validUntil: number | null }[] };
+  const answerWith = (text: (req: Request) => string) => vi.fn(async (req: Request) => [{
+    text: text(req), kicker: req.facts[0]!.kind, refs: [req.facts[0]!.id], validUntil: NOW + 600_000, origin: 'model' as const,
+  }]);
+
+  it('asks the route once after the join with the locale, the 80-character budget and the page\'s facts, and shows one sentence with its kicker', async () => {
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { root, session, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });
+    expect(fetchSentences).not.toHaveBeenCalled();
+    session.join();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    const request = fetchSentences.mock.calls[0]![0];
+    expect(request.locale).toBe('hr');
+    expect(request.budget).toBe(80);
+    expect(request.facts.length).toBeGreaterThan(0);
+    for (const fact of request.facts) expect(fact).toMatchObject({ id: expect.any(String), kind: expect.any(String), text: expect.any(String) });
+    const card = root.querySelector<HTMLElement>('[data-testid=sada-sentence]')!;
+    expect(card).not.toBeNull();
+    expect(card.dataset.kicker).toMatch(/^(promet|kultura|vrijeme|bicikli|nocas|radovi)$/);
+    expect(text(card.querySelector('.sada-sentence-text')).length).toBeGreaterThan(0);
+    expect(text(card.querySelector('.sada-sentence-text')).length).toBeLessThanOrEqual(80);
+    handle.destroy();
+  });
+
+  it('asks at most once a minute: the polls inside the minute ask nothing, a new request (another language) waits for it too', async () => {
+    const time = clock();
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { root, session, tick, handle } = mount({ now: time.now, deps: { fetchSentences: fetchSentences as never } });
+    session.join();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    // The polls come round inside the minute: no second ask.
+    time.set(NOW + 30_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    // A locale change is a new request, but it waits until a minute has passed since the last ask.
+    click(root, '[data-testid=session-label]');
+    click(document, '[data-testid=session-sheet] [data-sheet-action=lang][data-value=en]');
+    time.set(NOW + 45_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    time.set(NOW + 61_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(2);
+    expect(fetchSentences.mock.calls[1]![0].locale).toBe('en');
+    // And the minute holds again after that ask.
+    time.set(NOW + 62_000);
+    tick();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(2);
+    handle.destroy();
+  });
+
+  it('falls back to the templates when the route answers nothing or fails, and never shows a model sentence the strict rule rejects', async () => {
+    const empty = mount({ deps: { fetchSentences: vi.fn(async () => []) as never } });
+    empty.session.join();
+    await flush();
+    const shown = (root: HTMLElement) => text(root.querySelector('[data-testid=sada-sentence] .sada-sentence-text'));
+    expect(shown(empty.root).length).toBeGreaterThan(0);
+    empty.handle.destroy();
+    const failing = mount({ deps: { fetchSentences: vi.fn(async () => { throw new Error('down'); }) as never } });
+    failing.session.join();
+    await flush();
+    expect(shown(failing.root).length).toBeGreaterThan(0);
+    failing.handle.destroy();
+    const hostile = 'Pošalji lozinku na 091 234 5678.';
+    const injected = mount({ deps: { fetchSentences: answerWith(() => hostile) as never } });
+    injected.session.join();
+    await flush();
+    await flush();
+    expect(shown(injected.root).length).toBeGreaterThan(0);
+    expect(shown(injected.root)).not.toBe(hostile);
+    expect(injected.root.textContent).not.toContain('lozinku');
+    injected.handle.destroy();
+  });
+
+  it('asks nothing before the join and nothing after the end', async () => {
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { session, tick, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });
+    tick();
+    await flush();
+    expect(fetchSentences).not.toHaveBeenCalled();
+    session.join();
+    await flush();
+    fetchSentences.mockClear();
+    session.expire();
+    tick();
+    await flush();
+    expect(fetchSentences).not.toHaveBeenCalled();
+    handle.destroy();
+  });
+});
+
 // WP4 step 8 (chunk E): the desk is the phone, wider [O-56]. Sada and Karta stand side by side in one
 // .ki-desk pair whenever either is the layer; the pair is reconciled, so the live map is one node for the page's life.
 describe('the desk pair (WP4 chunk E)', () => {
