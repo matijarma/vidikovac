@@ -85,6 +85,19 @@ const PRIOR_RETURN_NOISE_M = 1;
  *  that has turned at its terminus while ZET still names the old trip. */
 export const FOLD_FIXES = 2;
 
+/** A tram unplaced within this of a terminal platform is turning at a
+ *  terminus the shapes stop short of; further away it is off its line
+ *  (the grader's own terminal band, TERMINAL_NEAR_M). */
+export const TERMINUS_NEAR_M = 150;
+
+/** Why a tram is unplaced (TramTrack.unplacedReason), decided when the
+ *  episode starts and kept until the tram is placed again: 'terminus' within
+ *  TERMINUS_NEAR_M of a terminal platform, 'diversion' anywhere else on a
+ *  trip that has its own path, 'no-path' for a trip without one. A reason
+ *  changes nothing about placement or publication; it is read by the grader
+ *  so terminus turns, diversions and pathless trips are counted apart. */
+export type UnplacedReason = 'terminus' | 'diversion' | 'no-path';
+
 export interface Prior {
   /** The rail path the trip runs, or null for a shapeless pattern without a synthetic path (and for buses). */
   pathIdx: number | null;
@@ -131,6 +144,8 @@ interface TramTrack extends Track {
   /** A confirmed wrong-way adopted rail has no directed placement. Keep
    *  its observed bearing while unplaced, including through standing fixes. */
   unplacedDirection?: XY;
+  /** Set while unplaced (see UnplacedReason), absent once placed. */
+  unplacedReason?: UnplacedReason;
   priorReturn?: {
     pathIdx: number;
     fromPathIdx: number;
@@ -160,6 +175,20 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     else pathsByRoute.set(path.route, [pathIdx]);
   });
   const stopArcCache = new Map<number, Map<string, number>>();
+  const terminals = net.stops.filter((stop) => stop.terminal).map((stop) => stop.p);
+  const nearTerminal = (p: XY): boolean => terminals.some((q) => dist(p, q) <= TERMINUS_NEAR_M);
+
+  /** The unplaced reason follows the match: named when an unplaced episode
+   *  starts, kept through it, gone when the tram is placed or off the graph. */
+  function noteUnplaced(track: TramTrack, p: XY, prior: Prior): void {
+    const unplaced = track.match.pathIdx === null && track.match.edge !== null && !track.offGraph;
+    if (!unplaced) {
+      delete track.unplacedReason;
+      return;
+    }
+    if (track.unplacedReason) return;
+    track.unplacedReason = prior.pathIdx === null ? 'no-path' : nearTerminal(p) ? 'terminus' : 'diversion';
+  }
 
   function stopArc(pathIdx: number, stopId: string): number | null {
     let byId = stopArcCache.get(pathIdx);
@@ -466,7 +495,11 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // A new prior normally starts the vehicle over on that path. A cropped
     // departure's start is not evidence that it has left a better-fitting
     // arrival yet: retain that genuine placement until the normal entry
-    // evidence admits the new prior (Kvaternikov's early trip handovers).
+    // evidence admits the new prior (Kvaternikov's early trip handovers,
+    // 55 to 60 m). A start within STOP_ZONE_M is different: that is the
+    // platform the tram stands at (Zapruđe, where 14_25 ends on the node
+    // 14_24 starts from), and keeping the arrival there only made the first
+    // metre onto the departure a same-trip path change.
     // Only path-derived state goes. The
     // ordering register stays (E3, D14) -- the tram is the same tram, and a
     // relation the new path leaves behind is dropped by the register's own
@@ -478,7 +511,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       if (prior.pathIdx !== null && track.match.pathIdx !== null) {
         const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
         const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
-        keepArrival = own.s <= 0.5 && own.residual <= NEAR_M
+        keepArrival = own.s <= 0.5 && own.residual > STOP_ZONE_M && own.residual <= NEAR_M
           && current.residual <= NEAR_M && current.residual < own.residual;
       }
       track.priorPath = prior.pathIdx;
@@ -749,10 +782,12 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         // A repeated GPS timestamp is not motion evidence, but changed
         // route/service evidence can invalidate the match or restore a prior.
         const match = matchTram(track, prev, prior, nextStopId, null, ctx);
+        noteUnplaced(track, prev, prior);
         annotate(prev, match);
         return match;
       }
       const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev, ctx);
+      if (track.kind === 'tram') noteUnplaced(track, fix, prior);
       annotate(fix, match);
       return match;
     },

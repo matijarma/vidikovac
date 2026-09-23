@@ -538,6 +538,8 @@ interface UnplacedOpen {
   route: string;
   trip: string | null;
   prior: string | null;
+  /** match.ts TramTrack.unplacedReason at the episode's first tick, or 'unknown'. */
+  reason: string;
   startP: XY;
   lastP: XY;
   sec: number;
@@ -554,6 +556,8 @@ interface UnplacedEpisode {
   route: string;
   trip: string | null;
   prior: string | null;
+  /** Why the matcher left the tram unplaced ('terminus', 'diversion', 'no-path', or 'unknown'). */
+  reason: string;
   durationS: number;
   ticks: number;
   freshFixes: number;
@@ -784,6 +788,11 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   // it; the raw share stays beside it.
   const unplaced = { sec: 0, withEdgeSec: 0, noEdgeSec: 0, fresh: 0, offGraphSec: 0, episodes: [] as UnplacedEpisode[] };
   const unplacedSecByRoute = new Map<string, number>();
+  // Why the matcher left the tram unplaced (match.ts TramTrack.unplacedReason:
+  // 'terminus' within TERMINUS_NEAR_M of a terminal platform, 'diversion'
+  // mid-line, 'no-path' for a trip with no rails of its own; 'unknown' from an
+  // engine that does not say), by seconds and by episode.
+  const unplacedSecByReason = new Map<string, number>();
   const unplacedOpen = new Map<string, UnplacedOpen>(); // vehicle id -> the running episode
   // Silence: fresh-fix gaps per vehicle (keyed by vehicle id, so a gap that
   // outlives the track's eviction is still one gap), and what the payload
@@ -864,6 +873,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       route: ep.route,
       trip: ep.trip,
       prior: ep.prior,
+      reason: ep.reason,
       durationS: ep.sec,
       ticks: ep.ticks,
       freshFixes: ep.fresh,
@@ -1177,13 +1187,15 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         else unplaced.noEdgeSec += dt;
         if (fresh) unplaced.fresh++;
         inc(unplacedSecByRoute, track.routeId, dt);
+        const unplacedReason = (track as { unplacedReason?: string }).unplacedReason ?? 'unknown';
+        inc(unplacedSecByReason, unplacedReason, dt);
         let ep = unplacedOpen.get(track.id);
         if (ep && ep.gen !== gen) {
           closeUnplaced(track.id);
           ep = undefined;
         }
         if (!ep) {
-          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0, maxDistFromStart: 0 };
+          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, reason: unplacedReason, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0, maxDistFromStart: 0 };
           unplacedOpen.set(track.id, ep);
         }
         ep.sec += dt;
@@ -1729,6 +1741,11 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     }
     const unplacedEpisodesByRoute = new Map<string, number>();
     for (const e of eps) inc(unplacedEpisodesByRoute, e.route);
+    const unplacedByReason = Object.fromEntries(
+      [...unplacedSecByReason.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([reason, sec]) => [reason, { vehicleHours: r2(sec / 3600), shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round((sec / tramTrackedSec) * 1e6) / 1e6 : null, episodes: eps.filter((e) => e.reason === reason).length }]),
+    );
     const parkedEps = eps.filter((e) => e.parked);
     const parkedSec = parkedEps.reduce((sum, e) => sum + e.durationS, 0);
     const unplacedReport = {
@@ -1745,6 +1762,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       noEdgeVehicleHours: r2(unplaced.noEdgeSec / 3600),
       offGraphVehicleHours: r2(unplaced.offGraphSec / 3600),
       freshFixes: unplaced.fresh,
+      // Why (match.ts TramTrack.unplacedReason), every unplaced second counted, parked or not.
+      byReason: unplacedByReason,
       episodes: eps.length,
       durationS: { p50: percentile(eps.map((e) => e.durationS), 0.5), p95: percentile(eps.map((e) => e.durationS), 0.95), max: maxOf(eps.map((e) => e.durationS)) },
       terminalM: { p50: percentile(epTerminal, 0.5), p95: percentile(epTerminal, 0.95) },
@@ -2222,7 +2241,7 @@ function acceptanceLines(r: BranchReport): string[] {
   L.push(`  G  same-trip re-seeds > 50 m: ${r.client.sameTripPathToPathOver50}, p95 ${fmt(r.client.sameTripPathToPathJumpP95)} m  [0; < 50 m]`);
   L.push(`  H  visible correction at a re-derive, p95: ${fmt(r.rederive.planGapM.p95)} m  [< 60 m]`);
   L.push(`  loops: ${r.loops.events} own-route loop transitions (onto ${r.loops.onto}, off ${r.loops.off}, loop to loop ${r.loops.loopToLoop}); foreign loop events ${r.loops.foreignEvents} (in B); ${r.loops.loopPaths} loop paths in the network`);
-  L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m  [share without parked <= 3 %]`);
+  L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m; by reason ${Object.entries(u.byReason ?? {}).map(([reason, x]: [string, { vehicleHours: number; episodes: number }]) => `${reason} ${fmt(x.vehicleHours, 2)} vh in ${x.episodes} ep`).join(', ') || 'n/a'}  [share without parked <= 3 %]`);
   L.push(`  silence (EVICT_S ${si.evictS} s, SILENCE_HOLD_S ${si.holdS} s): published older than EVICT_S ${si.publishedOlderThanEvict} (tram ${si.publishedOlderThanEvictTram}, frames ${si.publishedOlderThanEvictFrames})  [0]; silent trams planned past the next stop at +${si.lookaheadS} s ${si.extrapolatedPastNextStop} of ${si.silentTramItemsOnPath} silent on-path items (${si.extrapolatedPastNextStopVehicles} vehicles; at the horizon ${si.extrapolatedPastNextStopAtHorizon})  [0]`);
   const g = si.gaps.hist;
   L.push(`  fresh-fix gaps > ${si.gaps.minS} s: ${si.gaps.total} (over EVICT_S ${si.gaps.overEvictS}); same trip 60-120 s ${g['60-120'].sameTrip}, 120-180 s ${g['120-180'].sameTrip} (moved <= 50 m ${g['120-180'].sameTripMovedLe50m}, <= 150 m of a terminal ${g['120-180'].sameTripWithin150mOfTerminal}), 180-300 s ${g['180-300'].sameTrip}, > 300 s ${g.over300.sameTrip}`);
