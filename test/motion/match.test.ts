@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMatcher, type MatchContext, type PathRank } from '../../shared/motion/match';
+import { EVICT_S } from '../../shared/motion/plan';
 import { newTrack, type PlaneFix } from '../../shared/motion/track';
 import { corridorSpec, lonLatOf, straight, syntheticNetwork, type SynthSpec, type SynthStop } from './synthetic-network';
 
@@ -498,12 +499,14 @@ describe('terminal placement continuity', () => {
       stops: [],
     });
     const m = createMatcher(n);
-    const t = newTrack('truncated', '1', 'trip', 'tram');
+    let t = newTrack('truncated', '1', 'trip', 'tram');
     const p = m.priorFor('out', '1', 0);
     m.matchFix(t, fix(990, 0, 1000), p, null);
     for (let at = 1010; at <= 1610; at += 10) {
       m.matchFix(t, fix(1100, 0, at), p, null);
       if (at <= 1040) expect(n.paths[t.match.pathIdx!].id).toBe('out');
+      if (at === 1030) t = JSON.parse(JSON.stringify(t)); // cold restore cannot renew the hold
+      if (at === 1050) expect(t.offPathCount).toBe(1);
       if (at >= 1060) expect(t.match.pathIdx === null || t.match.residual <= 60).toBe(true);
     }
   });
@@ -586,6 +589,32 @@ describe('terminal placement continuity', () => {
     expect(n.paths[t.match.pathIdx!].id).toBe('prior'); // one stray is still tolerated
     m.matchFix(t, fix(1006, 90, 1020), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+  });
+
+  it.each([53, EVICT_S, EVICT_S + 1])('keeps approach evidence through a standing fix, bounded by report lifetime (%i s)', (age) => {
+    // 22134, 20 Sep 11:50:34 -> 11:50:56 -> 11:51:17:
+    // a southbound approach followed by a stopped report; the 30 s
+    // lookback lost the approach and adopted the nearer northbound rail.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 2000) },
+        { from: 2, to: 3, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 400 }] },
+        { from: 4, to: 5, pts: [{ x: 1006, y: 400 }, { x: 1006, y: 0 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'prior', direction: 0, edges: [0] },
+        { id: 'diversion', direction: 0, edges: [1] },
+        { id: 'opposite', direction: 1, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('stopped-diversion', '1', 'trip', 'tram');
+    const p = m.priorFor('prior', '1', 0);
+    m.matchFix(t, fix(1000, 58, 1000), p, null);
+    m.matchFix(t, fix(1000, 90, 1010), p, null);
+    m.matchFix(t, fix(1006, 90, 1000 + age), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe(age <= EVICT_S ? 'diversion' : 'opposite');
   });
 
   it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {

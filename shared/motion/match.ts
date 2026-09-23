@@ -32,7 +32,7 @@
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
 import { arcOnPath } from './order';
-import { SILENCE_HOLD_S } from './plan';
+import { EVICT_S, SILENCE_HOLD_S } from './plan';
 import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
@@ -79,9 +79,6 @@ export const FOLD_MOVE_M = 50;
 /** Smaller longitudinal intervals are noise, not accumulated return progress
  *  or reversals. Also covers the sub-metre rounding of a legacy stored fix. */
 const PRIOR_RETURN_NOISE_M = 1;
-/** Keep a recent approach bearing across a stopped fix at a junction.
- *  This is candidate selection evidence only, never D4/return movement. */
-const DIRECTION_MEMORY_S = 30;
 /** Consecutive fixes moving against the rail the vehicle is read on before
  *  the path is re-derived to the other direction (D4). One is a stray or a
  *  platform shuffle; two in a row, both further than FOLD_MOVE_M, is a tram
@@ -434,7 +431,11 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // used to win by centimetres, despite the preceding southbound run.
       for (let i = track.fixes.length - 2; i >= 0; i--) {
         const before = track.fixes[i];
-        if (fix.atSec - before.atSec > DIRECTION_MEMORY_S) break;
+        // A stopped report does not erase the approach: 22134's next fix
+        // arrived 43 s after its approach baseline. Retain the live track's
+        // evidence, bounded by the same age that would evict the vehicle.
+        // This is candidate selection only, never D4/return movement.
+        if (fix.atSec - before.atSec > EVICT_S) break;
         if (dist(before, p) >= DEAD_ZONE_M) {
           candidateDir = normalise({ x: p.x - before.x, y: p.y - before.y });
           break;
