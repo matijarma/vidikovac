@@ -818,6 +818,20 @@ describe('decision 29: one sentence per dwell through polls and re-estimates', (
       ['Tramvaj 11, smjer Črnomerec, polazi za 6 min.', 'Tramvaj 11, smjer Črnomerec, polazi za 5 min.']);
   });
 
+  it('re-times the same rotation on a Ritam change: the sentence on screen keeps its dwell start and the memory stays', () => {
+    const a = sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['weather:now'], kicker: 'vrijeme' });
+    const b = sentence('Ilica: zatvoreno za promet do 20:00.', { refs: ['closure:c'], kicker: 'radovi' });
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    expect(seq.read([a, b], NOW)).toBe(a);
+    seq.setRhythm(60_000);
+    expect(seq.read([a, b], NOW + 59_000)).toBe(a);
+    expect(seq.read([a, b], NOW + 60_000)).toBe(b);
+    // Shortened again: at the new boundary nothing unshown is left, so b holds; a stays shown for ten minutes.
+    seq.setRhythm(20_000);
+    expect(seq.read([a, b], NOW + 80_000)).toBe(b);
+    expect(seq.read([a, b], NOW + 81_000)).toBe(b);
+  });
+
   it('never flips a departure between "za N min" and "u HH:MM" mid-dwell, and never picks a line that cannot last a rhythm', () => {
     const at = (s: WrittenSentence, extra: Partial<RotatingSentence>): RotatingSentence => ({ ...s, ...extra });
     const dep = (text: string, validUntil: number, wording: 'departureIn' | 'departureAt', formUntil: number) => at(

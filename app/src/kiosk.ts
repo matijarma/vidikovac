@@ -273,7 +273,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let start: StartHandle | null = null;
   let settings: SettingsHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  let sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+  const sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
   let wallItems: NearbyRow[] = [];
   let facts: SentenceFact[] = [];
   let modelSentences: WrittenSentence[] = [];
@@ -1123,7 +1123,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       setRhythm: (next) => {
         rhythm = next;
         writeRhythm(storage, next);
-        sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+        // Re-time the same rotation (review-w-fix6 P2): a new sequence would drop the sentence on
+        // screen mid-dwell and forget which facts it has shown (decision 29).
+        sentenceSequence.setRhythm(rhythm * 1000);
         paintContext();
         paintWall();
       },

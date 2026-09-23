@@ -1145,6 +1145,35 @@ describe('settings: the panel on the screen itself', () => {
     expect(q(k.root, '[data-testid=kiosk-theme]')).toBeNull();
   });
 
+  // review-w-fix6 P2: a Ritam change rebuilt the sentence sequence, so the closure on screen since
+  // 20 s gave way at 21 s with nothing changed. The same sequence is re-timed (decision 29).
+  it('keeps the header sentence and its dwell through a Ritam change', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    now = NOW + 20_000;
+    k.tick(CODE_TICK_MS);
+    const closure = 'Ilica: zatvoreno za promet do 20:00.';
+    expect(painted(k.root)).toBe(closure);
+    now = NOW + 21_000;
+    open(k);
+    await flush();
+    toggle(k, 'rhythm').click();
+    expect(text(toggle(k, 'rhythm'))).toBe('Ritam: 30 s');
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toBe(closure);
+    // The dwell that began at 20 s now runs the new rhythm: to 50 s, and no longer.
+    for (let t = 22_000; t < 50_000; t += 1_000) {
+      now = NOW + t;
+      k.tick(CODE_TICK_MS);
+      expect(painted(k.root), `${t / 1000} s`).toBe(closure);
+    }
+    now = NOW + 50_000;
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).not.toBe(closure);
+    k.handle.destroy();
+  });
+
   it('opens on a press held on the brand, with the screen’s own place and frame; a tap opens nothing', async () => {
     const k = mount({ stored: STORED });
     await flush();
