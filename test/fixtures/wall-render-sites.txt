@@ -346,10 +346,10 @@ app/src/map/overlays.ts:1000 #overlayLayers → 'text-field': ['get', 'title']
 app/src/map/overlays.ts:1019 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:81 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:83 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
-app/src/motion/schema-map.ts:180 #refreshWords → legend.textContent = text
-app/src/motion/schema-map.ts:181 #refreshWords → vehicleCanvas.setAttribute('aria-label', `${title}. ${text}`)
-app/src/motion/schema-map.ts:182 #refreshWords → note.textContent = i18n.t('motion.note')
-app/src/motion/schema-map.ts:184 #refreshWords → hint.textContent = canvasHint()
+app/src/motion/schema-map.ts:182 #refreshWords → legend.textContent = text
+app/src/motion/schema-map.ts:183 #refreshWords → vehicleCanvas.setAttribute('aria-label', `${title}. ${text}`)
+app/src/motion/schema-map.ts:184 #refreshWords → note.textContent = i18n.t('motion.note')
+app/src/motion/schema-map.ts:186 #refreshWords → hint.textContent = canvasHint()
 app/src/motion/schema-paint.ts:394 #paintPills → vetExternal('name', row, 'row')
 app/src/motion/schema-paint.ts:407 #paintPills → ctx.fillText(row, m.x, m.y + (i - (rows.length - 1) / 2) * PILL_LINE_HEIGHT_PX * size)
 app/src/motion/schema-paint.ts:544 #planNames → vetExternal('name', row, 'row')

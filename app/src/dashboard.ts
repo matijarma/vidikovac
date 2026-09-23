@@ -229,6 +229,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   );
   const schematic = createSchematicHost({
     i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,
+    // One fetch past the cache for the map and the schematic alike when the motion names a rebuilt graph.
+    reloadNetwork: () => loadNetworkOnce(true),
   });
   const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
   const surface = (): Surface => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
