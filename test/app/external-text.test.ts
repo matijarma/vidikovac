@@ -12,7 +12,7 @@ import {
   type ExternalTextKind, type ExternalTextRejection,
 } from '../../shared/kiosk/external-text';
 import { EXTERNAL_HEADER_LEXICON, EXTERNAL_SENSITIVE_LEXICON } from '../../shared/kiosk/external-text-policy';
-import { CODE_WORD_STREETS } from '../../shared/kiosk/code-word-streets';
+import { CODE_WORD_FIELDS, CODE_WORD_STREETS } from '../../shared/kiosk/code-word-streets';
 import { ISO_4217_CODES } from '../../shared/kiosk/iso-4217';
 import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS, W_C2_ATTACKS } from '../fixtures/external-text-attacks';
 import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES } from '../fixtures/external-text-corpus';
@@ -328,6 +328,24 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
   ] as const)('%s "%s" is an address on a row', (kind, value) => {
     expect(rowText(kind, value)).toEqual({ ok: true });
   });
+  // Decision 41: the only names with a prefix that may carry the code are the committed register
+  // fields themselves, pinned byte-exact. When a register changes, refresh the fixture with
+  // `npx vitest run --project unit test/app/external-text.test.ts -t "register fields" -u`, review its
+  // diff, and copy the lines into CODE_WORD_FIELDS (shared/kiosk/code-word-streets.ts).
+  it('admits only the pinned register fields, derived from the committed heritage and street registers', async () => {
+    const streetPattern = new RegExp(`(?:^|[\\s,])(?:${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
+      .map(name => name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')}) \\d`, 'u');
+    const fields = [...heritage.flatMap(place => [place.name, place.address ?? '']), ...streets.map(street => street.name)]
+      .filter(value => streetPattern.test(value));
+    const derived = [...new Set(fields)];
+    await expect(derived.join('\n') + '\n').toMatchFileSnapshot('../fixtures/code-word-fields.txt');
+    expect([...CODE_WORD_FIELDS]).toEqual(derived);
+    expect(derived).toHaveLength(25);
+    for (const value of derived) {
+      expect(rowText('name', value), value).toEqual({ ok: true });
+      expect(headerText('name', value), value).toEqual({ ok: false, reason: 'payment' });
+    }
+  });
   it('takes its street names from the committed register, nothing added by hand', () => {
     const { streets } = JSON.parse(readFileSync(join(CITY_DIR, '..', 'streets-geo.json'), 'utf8')) as { streets: { name: string[] } };
     const codes = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
@@ -347,7 +365,10 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
       // review-w-fix6b: the exception holds only where everything around the street is benign
       // (no lexicon word of any class, no digit, no vector); otherwise the normal rules judge it.
       'Plati 50, Nova Ves 12', 'Uplati 50, Nova Ves 12', 'Donate 50, Nova Ves 12', 'Nova Ves 12, plati 50', 'Kupi Nova Ves 12',
-      'Plati, Nova Ves 12', 'Pošalji lozinku, Nova Ves 12', 'Nazovite nas, Nova Ves 12', 'Zgrada 2, Nova Ves 12']) {
+      'Plati, Nova Ves 12', 'Pošalji lozinku, Nova Ves 12', 'Nazovite nas, Nova Ves 12', 'Zgrada 2, Nova Ves 12',
+      // review-w-fix6c, decision 41: no free-text prefix is ever admitted, however it is spelled.
+      'P—l—a—t—i pedeset, Nova Ves 12', 'P—a—y fifty, Nova Ves 12', 'Donacija pedeset, Nova Ves 12', 'DONACIJA PEDESET, NOVA VES 12',
+      'donacija pedeset, Nova Ves 12', 'P·l·a·t·i, Nova Ves 12', '"Plati", Nova Ves 12', 'Zgrada, Nova Ves 3', 'Kuća, Lepa Ves 3']) {
       expect(rowText('address', value).ok, value).toBe(false);
       expect(rowText('name', value).ok, value).toBe(false);
     }

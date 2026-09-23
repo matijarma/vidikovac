@@ -21,7 +21,7 @@ import {
 } from './external-text-policy';
 import { installExternalTextBoundary } from './external-text-boundary';
 import { TOP_LEVEL_DOMAINS } from './tlds';
-import { CODE_WORD_STREETS } from './code-word-streets';
+import { CODE_WORD_FIELDS, CODE_WORD_STREETS } from './code-word-streets';
 import { ISO_4217_CODES } from './iso-4217';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
@@ -325,33 +325,21 @@ export function sentenceInstruction(text: string): boolean {
 }
 
 // A word of a committed street's own name that is spelled like an ISO 4217 code ("Nova Ves":
-// VES) is that street, not a currency, but only in exactly that context: in a row's name or
-// address whose address part is the register's street name, written as the register writes it,
-// followed by a fully parsed house number (12, 5a, 4/1, and at most one more after " i ") and
-// nothing else, and only where the name before the street is benign: no lexicon word of any
-// class, no digit, no vector, no reader request (review-w-fix6b). Otherwise the field is judged
-// by the normal rules with no exception; every other kind and the header surface keep the code
-// a currency (review-w-fix6 P1).
+// VES) is that street, not a currency, in exactly two cases (decision 41): the bare address
+// "<register street> <house number>" (1-3 digits and an optional letter, nothing else), and the
+// committed register fields pinned byte-exact in CODE_WORD_FIELDS. Any other text, a free-text
+// prefix above all, is judged by the normal rules with no exception. Only the currency-amount
+// vector is affected, only on a row's name or address; the header surface keeps the code a
+// currency (review-w-fix6, -6b, -6c).
 const CURRENCY_CODES = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const HOUSE = '\\d{1,3}[a-z]?(?:/\\d{1,3}[a-z]?)?';
-const REGISTER_STREET_ADDRESS = new RegExp(`^(?:(.+), )?(${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
-  .map(escapeRegExp).join('|')}) (${HOUSE}(?: i ${HOUSE})?)$`, 'u');
-/** Nothing a reader could be asked to do, pay or contact: the context a register street may stand in. */
-function benignContext(text: string): boolean {
-  if (/\p{N}/u.test(text) || externalTextVector(text, 'name') !== null) return false;
-  for (const reading of readings(geographicReading(text, true))) {
-    if (sensitivePatterns.some(({ pattern, separated, nameSeparated }) => pattern.test(reading) || separated.test(reading) || nameSeparated.test(reading))) return false;
-    if (headerPatterns.some(({ pattern, separated }) => pattern.test(reading) || separated.test(reading))) return false;
-  }
-  if (partialVectors(text).length > 0 || contactPatterns.some(({ pattern }) => pattern.test(foldText(text)))) return false;
-  return readerRequestRule(text) === null && headerInstructionRule(text, 'name') === null;
-}
+const REGISTER_STREETS = [...CODE_WORD_STREETS].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+const BARE_STREET_ADDRESS = new RegExp(`^(?:${REGISTER_STREETS}) \\d{1,3}[a-z]?$`, 'u');
+const STREET_IN_FIELD = new RegExp(`(?<![\\p{L}\\p{N}])(?:${REGISTER_STREETS})(?= \\d)`, 'gu');
+const REGISTER_FIELDS = new Set(CODE_WORD_FIELDS);
 function maskRegisterStreet(value: string): string {
-  const match = REGISTER_STREET_ADDRESS.exec(value);
-  if (!match || (match[1] !== undefined && !benignContext(match[1]))) return value;
-  const street = match[2]!.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word);
-  return `${match[1] !== undefined ? `${match[1]}, ` : ''}${street} ${match[3]}`;
+  if (!REGISTER_FIELDS.has(value) && !BARE_STREET_ADDRESS.test(value)) return value;
+  return value.replace(STREET_IN_FIELD, street => street.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word));
 }
 
 /** Structural evidence for corpus audits; production callers log codes only. */
