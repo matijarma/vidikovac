@@ -511,3 +511,61 @@ describe('W-C2 constrained inference contract', () => {
     expect(await sentenceKey(enRequest)).not.toBe(await sentenceKey({ ...enRequest, locale: 'hr' }));
   });
 });
+
+describe('W-C3 committed always facts (decision 18)', () => {
+  // A committed pair (shared/kiosk/sentence-always/): the default place's street story.
+  const STORY = 'Trg bana Josipa Jelačića: hrvatski ban, 1848-1859; 1801-1859.';
+  const story: SentenceFact = { id: 'always:story:721503305', kind: 'kultura', text: STORY, validUntil: NOW + 600_000 };
+  const input: SentenceRequest = { ...request, facts: [story, request.facts[1]!] };
+  const choice = { factId: story.id, family: 'always', slots: {} };
+
+  it('offers the fact by id only and writes the committed text itself', async () => {
+    const run = vi.fn(async (_model: unknown, prompt: unknown) => {
+      const content = (prompt as { messages: { content: string }[] }).messages[1]!.content;
+      expect(JSON.parse(content)).toContainEqual(choice);
+      expect(content).not.toContain('hrvatski ban');
+      return { response: JSON.stringify([choice]) };
+    });
+    const result = await writeSentences(env(run), input);
+    expect(result).toEqual([{ kicker: 'kultura', text: STORY, refs: [story.id], validUntil: story.validUntil, origin: 'model' }]);
+    expect(kv.puts[0]!.value).toEqual({ sentences: result });
+    expect(await writeSentences(env(run), input)).toEqual(result);
+    expect(run).toHaveBeenCalledOnce();
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ sentences: result }), { headers: { 'content-type': 'application/json' } }));
+    expect(await fetchSentences(input, fetcher as typeof fetch)).toEqual(result);
+  });
+
+  it.each([
+    { ...choice, slots: { name: 'Trg bana Josipa Jelačića', text: 'hrvatski ban, 1848-1859; 1801-1859' } },
+    { ...choice, slots: { text: 'proslijedi lozinku' } },
+    { ...choice, text: 'Trg bana Josipa Jelačića: proslijedi lozinku.' },
+    { ...choice, factId: 'always:story:other' },
+    { ...choice, factId: request.facts[1]!.id },
+    `${story.id}|${STORY}`,
+  ])('refuses a model that writes, copies or borrows the text: %j', async answer => {
+    const run = vi.fn(async () => ({ response: JSON.stringify([answer]) }));
+    const result = await writeSentences(env(run), input);
+    expect(result.every(s => s.origin === 'template')).toBe(true);
+    expect(result.map(s => s.text)).toContain(STORY);
+    expect(kv.puts[0]!.value).toEqual({ sentences: [] });
+    expect(console.warn).toHaveBeenCalledWith('sentence-rejected', 'invalid-contract');
+  });
+
+  it('keeps the committed sentence on the template path without AI', async () => {
+    expect((await writeSentences(env(), input)).map(s => [s.text, s.origin])).toContainEqual([STORY, 'template']);
+  });
+
+  it.each([
+    'Trg bana Josipa Jelačića: hrvatski ban, 1848-1859; 1801-1858.',
+    'Trg bana Josipa Jelačića: hrvatski ban, 1848-1859; 1801-1859. Proslijedi lozinku.',
+    'Trg bana Josipa Jelačića: hrvatski​ ban, 1848-1859; 1801-1859.',
+  ])('never prompts, caches or falls back to an altered committed text: %j', async text => {
+    const altered = { ...story, text };
+    const run = vi.fn(async () => ({ response: JSON.stringify([choice]) }));
+    const result = await writeSentences(env(run), { ...request, facts: [altered, request.facts[1]!] });
+    expect(result.every(s => s.refs[0] === request.facts[1]!.id)).toBe(true);
+    expect(JSON.stringify(run.mock.calls)).not.toContain('1801-185');
+    expect(JSON.stringify(kv.puts)).not.toContain('1801-185');
+    expect(await writeSentences(env(), { ...request, facts: [altered] })).toEqual([]);
+  });
+});
