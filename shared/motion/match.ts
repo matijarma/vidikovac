@@ -195,7 +195,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
   /** The unplaced reason follows the match: named when an unplaced episode
    *  starts, kept through it, gone when the tram is placed or off the graph. */
   function noteUnplaced(track: TramTrack, p: XY, prior: Prior): void {
-    const unplaced = track.match.pathIdx === null && track.match.edge !== null && !track.offGraph;
+    // The grader's own definition of unplaced tram time (WP0 step 7b).
+    const unplaced = track.match.pathIdx === null && !track.offGraph;
     if (!unplaced) {
       delete track.unplacedReason;
       return;
