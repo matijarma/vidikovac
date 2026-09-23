@@ -909,6 +909,26 @@ describe('the marker census of the city layers', () => {
     tickTimers();
     expect(map.queries).toHaveLength(queries);
   });
+  // D2-e2e defect 6a: data-zoom was never written on an outage cold start. With the feed held, no
+  // vehicle push, no basemap tile (every tile request fails) and nothing drawn at all, the first
+  // settled still frame still publishes the camera, whichever of the tile errors and 'load' comes first.
+  it.each([['after', false], ['before', true]] as const)('outage with no vehicles and no tiles: writes data-zoom on the settled frame (tile errors %s load)', async (_order, early) => {
+    const { map, container, handle, frame, tickTimers } = await harness({ lib: cityLib, points: [], load: false });
+    handle.setFeedState!('down');
+    const tileError = () => map.fire('error', { sourceId: basemap.BASEMAP_SOURCE, error: new Error('404'), tile: {} });
+    if (early) tileError();
+    map.fire('load');
+    if (!early) tileError();
+    map.rendered = [] as typeof map.rendered;
+    map.fire('render');
+    expect(container.dataset.zoom).toBeUndefined();
+    frame(PROBE_SETTLE_MS);
+    tickTimers();
+    expect(container.dataset.zoom).toBe(map.zoom.toFixed(2));
+    expect(container.dataset.markers).toBe('0');
+    expect(container.dataset.pills).toBe('');
+    handle.destroy();
+  });
   const at = (lon: number, lat: number) => ({ type: 'Point', coordinates: [lon, lat] });
   const dot = (id: string, props: Record<string, unknown>, lon = 15.97, lat = 45.81): RenderedFeature =>
     ({ layer: { id: CENSUS_LAYERS.dots }, properties: { id, ...props }, geometry: at(lon, lat) });
