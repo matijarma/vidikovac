@@ -564,4 +564,111 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(after.s).toBeCloseTo(200, 6);
     expect(after.p.y).toBeCloseTo(6, 6); // not the closer, later return leg
   });
+
+  it.each([
+    { heading: 'westbound', mirror: false },
+    { heading: 'eastbound', mirror: true },
+  ])('re-seeds a held $heading mark onto the matching earlier loop segment', ({ mirror }) => {
+    // Review P1: (200,0) is 4 m from eastbound s=200, but 6 m from
+    // westbound s=1810. Choosing s=200 invents another 1.61 km of travel.
+    // Reflect x for the mirror case; segmentation keeps the plan window
+    // genuinely empty instead of projecting onto a long segment's end.
+    const x = (value: number): number => mirror ? 1000 - value : value;
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(x(1000), x(0)) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: x(50 * i), y: -4 })),
+          ...Array.from({ length: 21 }, (_, i) => ({ x: x(1000 - 50 * i), y: 6 })),
+          ...Array.from({ length: 20 }, (_, i) => ({ x: x(0), y: 56 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 800), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 700), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(before.p).toEqual({ x: x(200), y: 0 });
+    expect(before.heading).toEqual({ x: mirror ? 1 : -1, y: 0 });
+    const candidates = net.projectionsOntoPath(1, before.p, 0, 2700, 150);
+    expect(candidates).toEqual([{ s: 200, d: 4 }, { s: 1810, d: 6 }]);
+    integrator.update([pathFix('v', 'loop', still(t1, 2700), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(1810);
+    expect(after.p).toEqual({ x: x(200), y: 6 });
+    expect(after.heading).toEqual(before.heading);
+    expect(after.lastSnapAt).toBe(t1);
+    expect(integrator.size()).toBe(1);
+  });
+
+  it('falls back to the plan when a held mark only has a wrong-direction nearby segment', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(1000, 0) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: -4 })),
+          ...Array.from({ length: 40 }, (_, i) => ({ x: 1000, y: 46 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 800), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 700), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(before.heading).toEqual({ x: -1, y: 0 });
+    expect(net.projectionsOntoPath(1, before.p, 0, 2700, 150)).toEqual([{ s: 200, d: 4 }]);
+    integrator.update([pathFix('v', 'departure', still(t1, 2700), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(2700);
+    expect(after.p).toEqual(net.toPathPoint(1, 2700));
+    expect(after.lastSnapAt).toBe(t1);
+  });
+
+  it('re-seeds a held mark nearest the plan progress among matching nearby segments', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: -4 })),
+          { x: 1000, y: 306 }, { x: 0, y: 306 }, { x: 0, y: 6 },
+          ...Array.from({ length: 20 }, (_, i) => ({ x: 50 + 50 * i, y: 6 })),
+          ...Array.from({ length: 20 }, (_, i) => ({ x: 1000, y: 56 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 200), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 100), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(net.projectionsOntoPath(1, before.p, 0, 4300, 150)).toEqual([{ s: 200, d: 4 }, { s: 2810, d: 6 }]);
+    integrator.update([pathFix('v', 'loop', still(t1, 4300), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(2810);
+    expect(after.p).toEqual({ x: 200, y: 6 });
+    expect(after.heading).toEqual(before.heading);
+  });
 });
