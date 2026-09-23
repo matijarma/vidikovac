@@ -108,9 +108,14 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 }
 /* Zoom-compact (390 px at 200 % is 12.2rem): the wordmark drops to icon-only, the session ring leaves and the
    controls keep their 44 px minimum in device pixels instead of growing with the text (2.75rem is 88 px at 200 %:
-   five of them would widen the document), so Zaslon, Podijeli grad, the pill and Sigurnost still fit one row. */
+   five of them would widen the document), so Zaslon, Podijeli grad, the pill and Sigurnost still fit one row.
+   A container query styles the container's descendants, never the container itself: the 44 px goes on the
+   header's children, and the two icon buttons give up half their side padding (the header's own padding is
+   out of this block's reach). */
 @container header (max-width: 18rem) {
-  .ki-head { --target: 44px; column-gap: var(--sp-1); padding-inline: var(--sp-2); }
+  .ki-head > * { --target: 44px; }
+  .ki-screen { padding-inline: var(--sp-1); }
+  .ki-share { padding-inline: var(--sp-1); }
   .ki-wordmark { min-inline-size: 44px; justify-content: center; }
   .ki-wordmark-text { font-size: 0; }
   .ki-wordmark-mark { font-size: var(--type-title); }

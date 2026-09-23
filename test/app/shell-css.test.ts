@@ -301,12 +301,40 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     expect(rule('.ki-session .g-ring', header)).toContain('display: none');
     // Five controls at 200 % text: the header's targets keep the 44 px minimum in device pixels rather than growing to
     // 2.75rem (88 px), or the row (44 + 4 × 88 + gaps + padding = 460 px) widens the 390 px document (WP4, mobile.spec 200 %).
-    expect(rule('.ki-head', header)).toContain('--target: 44px');
+    // The variable goes on the header's children: the query cannot style .ki-head itself (the next test).
+    expect(rule('.ki-head > *', header)).toContain('--target: 44px');
+    expect(rule('.ki-screen', header)).toContain('padding-inline: var(--sp-1)');
+    expect(rule('.ki-share', header)).toContain('padding-inline: var(--sp-1)');
     expect(rule('.ki-wordmark-text', header)).toContain('font-size: 0');
     expect(rule('.ki-wordmark-mark', header)).toContain('font-size: var(--type-title)');
     const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-tab .icon', tabs)).toContain('1.75rem');
     expect(rule(".ki-tab:not([aria-current='page']) .ki-nav-label", tabs)).toContain('clip: rect(0 0 0 0)');
+  });
+  it('no rule inside a container query styles the container itself: a query is evaluated against the element\'s ancestors, so such a rule never applies (review-p-delta 2a)', () => {
+    const selfStyled: string[] = [];
+    for (const [file, css] of [['dashboard.css', CSS], ['base.css', BASE_CSS], ['layers.css', LAYERS_CSS], ['toast.css', TOAST_CSS], ['map.css', MAP_CSS]] as const) {
+      const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
+      // Who each named container is: `container-name: n` or the `container: n / type` shorthand.
+      const owners = new Map<string, string[]>();
+      for (const [, selectors, body] of plain.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const name = /container-name:\s*([\w-]+)/.exec(body)?.[1] ?? /(?:^|;)\s*container:\s*([\w-]+)\s*\//.exec(body)?.[1];
+        if (name) owners.set(name, [...(owners.get(name) ?? []), ...selectors.split(',').map((s) => s.trim())]);
+      }
+      // Every `@container <name> (...) { ... }` block, walked by brace depth (a block may sit inside an @media).
+      for (const open of plain.matchAll(/@container\s+([\w-]+)[^{]*\{/g)) {
+        let depth = 1;
+        let end = open.index + open[0].length;
+        for (; end < plain.length && depth > 0; end += 1) depth += plain[end] === '{' ? 1 : plain[end] === '}' ? -1 : 0;
+        const body = plain.slice(open.index + open[0].length, end - 1);
+        for (const [, selectors] of body.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+          for (const selector of selectors.split(',').map((s) => s.trim())) {
+            if (owners.get(open[1]!)?.includes(selector)) selfStyled.push(`${file}: @container ${open[1]} styles ${selector}, its own container`);
+          }
+        }
+      }
+    }
+    expect(selfStyled).toEqual([]);
   });
 });
 
