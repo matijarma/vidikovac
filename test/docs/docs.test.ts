@@ -103,3 +103,62 @@ describe('docs/implementation-kaj-ima.md', () => {
     expect(doc).toContain('implement-vidikovac-newdesignsystem-md-agile-locket.md');
   });
 });
+
+// WP5 step 10 (22 Sep): the one §11 rewrite of the four product documents. Every
+// retired phrase is matched whitespace-tolerant, so a line break inside it cannot
+// hide it from the guard; the owner's strings are asserted as written.
+describe('the §11 rewrite of PRODUCT.md, DESIGN.md, docs/kiosk.md and INTEGRATION.md', () => {
+  const kiosk = read('docs/kiosk.md');
+  const product = read('PRODUCT.md');
+  const design = read('DESIGN.md');
+  const integration = read('app/src/kiosk/INTEGRATION.md');
+
+  it('docs/kiosk.md opens on the approved public screen and keeps the setup words', () => {
+    for (const text of ['## Javni zaslon, odobreno 22. rujna 2026.', 'U blizini', 'Adresa ili stajalište', '„Skeniraj za 10 minuta grada.”', '„uvijek”']) {
+      expect(kiosk, text).toContain(text);
+    }
+    expect(kiosk).toMatch(/Ništa\s+se\s+ne\s+izmišlja/);
+    for (const re of [
+      /svakih\s+8\s+sekundi/,
+      /gumbom\s+za\s+zaustavljanje/,
+      /Dodir\s+na\s+stajalište\s+otvara\s+istraživanje\s+grada/,
+      /Radovi\s+u\s+gradu/,
+      /Procjena\s+iz\s+ZET-ovih\s+podataka\s+o\s+vozilima;\s+ostalo\s+po\s+voznom\s+redu\./,
+      /zupčanik/i,
+      /tri\s+ploče/,
+      /bez\s+dodira\s+vraća\s+prozor/,
+      /zamrznuti\s+prikaz\s+i\s+dostupne\s+izvoze/,
+    ]) expect(kiosk).not.toMatch(re);
+  });
+
+  it('PRODUCT.md dates the approval, marks what it superseded and records the deferred vision', () => {
+    expect(product).toMatch(/On\s+22\s+September\s+2026\s+the\s+owner\s+approved\s+the\s+companion\s+round/);
+    expect(product).toContain('Superseded 22 September 2026:');
+    expect(product).toMatch(/"without\s+too\s+much\s+fuss"/);
+    expect(product).toMatch(/remain\s+pinned\s+so\s+that\s+a\s+person\s+can\s+easily\s+walk\s+with\s+it/);
+  });
+
+  it('DESIGN.md states the "U blizini" wall and none of the retired rules', () => {
+    expect(design).toContain('U blizini');
+    for (const re of [
+      /one\s+map-linked\s+highlight\s+held\s+for\s+20\s+seconds/,
+      /geographic\s+clusters\s+use\s+a\s+distinct\s+plus-count\s+mark/,
+      /frozen\s+attributed\s+exports/,
+      /Touch\s+exploration\s+has\s+search/,
+      /A\s+ZET\s+arrival\s+is\s+an\s+estimate\s+and\s+is\s+labelled\s+one/,
+    ]) expect(design).not.toMatch(re);
+  });
+
+  it('INTEGRATION.md names the catalogue adapter and none of the retired testids', () => {
+    expect(integration).toContain('kiosk/strings.ts');
+    for (const re of [/kiosk-ticker/, /kiosk-lastrun/, /strings-hr\.ts/, /strings-en\.ts/]) expect(integration).not.toMatch(re);
+  });
+
+  it.each([
+    ['PRODUCT.md', product], ['DESIGN.md', design], ['docs/kiosk.md', kiosk], ['app/src/kiosk/INTEGRATION.md', integration],
+  ])('%s: never "zid", no em dash, no ellipsis character', (name, text) => {
+    expect(text, name).not.toMatch(/(?<![\p{L}\p{N}_])zid/iu);
+    expect(text, name).not.toContain('—');
+    expect(text, name).not.toContain('…');
+  });
+});
