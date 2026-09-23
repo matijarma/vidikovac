@@ -13,3 +13,4 @@ export { AttributionControl, GeolocateControl, LngLatBounds, Map, NavigationCont
 export * from './basemap';
 export * from './overlays';
 export * from './city-layers';
+export * from './name-census';

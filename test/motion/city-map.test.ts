@@ -9,7 +9,9 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, createNameHysteresis, evaluateExpression, markerCensus, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_TICK_MS, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/city-map';
+import * as nameCensus from '../../app/src/map/name-census';
+import { createNameHysteresis, evaluateExpression, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_TICK_MS, UNKNOWN_EXPRESSION, type SourcePoint } from '../../app/src/map/name-census';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
@@ -102,7 +104,7 @@ class FakeMap {
   remove(): void { this.removed = true; }
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
-const lib = { ...basemap, ...overlays, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
+const lib = { ...basemap, ...overlays, ...nameCensus, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
 /** The real entry (maplibre-entry.ts) also re-exports the city-places layers;
  *  the transport tests leave them out so they see the transport style alone,
  *  and the test that is about those layers asks for this one. */

@@ -19,6 +19,7 @@ import {
 } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import * as overlays from '../../app/src/map/overlays';
+import * as nameCensus from '../../app/src/map/name-census';
 import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 // WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
 import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
@@ -186,7 +187,7 @@ class FakeMap {
   remove(): void {}
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
-const lib = { ...basemap, ...overlays, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
+const lib = { ...basemap, ...overlays, ...nameCensus, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
 const CLOSURE: MapLine = { id: 'c1', title: 'Grada Vukovara', coordinates: [[15.959, 45.799], [15.957, 45.799]] };
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.813, routes: ['6', '11'] };
 const flush = async (): Promise<void> => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
