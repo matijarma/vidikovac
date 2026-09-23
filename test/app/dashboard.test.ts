@@ -867,19 +867,22 @@ describe('the full map view (transport)', () => {
   });
   it('is a view mode on the shell with the session chrome kept; Escape and another domain leave it', async () => {
     const mapFactory = vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
-    const { root, session, handle } = mount({ mapFactory });
+    const { root, session, handle } = mount({ wide: true, mapFactory });
     session.join();
     await flush();
     handle.selectLayer('u-pokretu');
     await flush();
     const dash = root.querySelector<HTMLElement>('.ki')!;
-    const button = root.querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!;
-    button.focus();
-    button.click();
+    // The full-map button went with Karta's map menu (WP4); the desk's chevron is what collapses the board into
+    // the page's map view.
+    expect(root.querySelector('[data-testid=map-full-toggle]')).toBeNull();
+    const chevron = root.querySelector<HTMLButtonElement>('.t-sheet-toggle')!;
+    chevron.focus();
+    chevron.click();
     expect(dash.dataset.view).toBe('map');
     expect(mapFactory).toHaveBeenCalledTimes(1);
     expect(root.querySelector('[data-testid=session-label]')).not.toBeNull();
-    click(root,'[data-action=city-group][data-group=transport]');
+    // The map/schema switch stays in the sheet's head, with no group to pick first [O-72].
     const mode = root.querySelector<HTMLButtonElement>('[data-testid=map-mode-toggle]')!;
     mode.focus();
     mode.click();
@@ -903,7 +906,6 @@ describe('the full map view (transport)', () => {
     desk.handle.selectLayer('u-pokretu');
     await flush();
     expect(mapFactory.mock.calls.find(([o])=>o.container.dataset.testid==='map-canvas')?.[0].renderer).toBe('schema');
-    click(desk.root,'[data-action=city-group][data-group=transport]');
     await flush();
     expect(mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas').at(-1)?.[0].renderer).toBe('schema');
     desk.handle.destroy();

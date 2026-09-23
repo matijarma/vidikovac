@@ -95,12 +95,16 @@ describe('the stop sheet says what comes next, first', () => {
     expect(html.indexOf('data-testid="stop-arrivals"')).toBeGreaterThan(-1);
     expect(html.indexOf('data-testid="stop-arrivals"')).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
     expect(html.indexOf('data-testid="stop-meta"')).toBeLessThan(html.indexOf('data-testid="stop-routes"'));
-    expect(html).toContain('Sljedeći polasci');
+    // The rows lead under the stop's own name: no heading of their own, and the first is a departure row.
+    expect(html).not.toContain('Sljedeći polasci');
+    expect(html.indexOf('class="sada-departure"')).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
     expect(html).toContain('sada');
     expect(html).toContain('za 3 min');
-    // 10:24 UTC is 12:24 in Zagreb; a clock row carries the scheduled mark, a live row does not.
+    // 10:24 UTC is 12:24 in Zagreb; a clock row is a plain <time> that says nothing live, with no word for its kind [O-27].
+    expect(rowOf(html, 't2')).toContain('<time');
+    expect(rowOf(html, 't2')).toContain('data-live="false"');
     expect(html).toContain('12:24');
-    expect(html.split('po redu vožnje').length - 1).toBe(1);
+    expect(html.split('po redu vožnje').length - 1).toBe(0);
     expect(html.split('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.').length - 1).toBe(1);
     expect(html).toContain('aria-label="uživo"');
     expect(html).toContain('Dubec');
@@ -120,9 +124,10 @@ describe('the stop sheet says what comes next, first', () => {
     const near = rowOf(html, 'near');
     expect(near).toContain('12:04');
     expect(near).not.toContain('za 4 min');
-    expect(near).toContain('po redu vožnje');
+    expect(near).toContain('<time');
     expect(near).not.toContain('t-live');
-    expect(near).not.toContain('data-live');
+    expect(near).toContain('data-live="false"');
+    expect(near).not.toContain('data-live="true"');
     // The same wait with a vehicle behind it: the dot and the live tone.
     const tracked = rowOf(html, 'tracked');
     expect(tracked).toContain('za 4 min');
@@ -133,7 +138,8 @@ describe('the stop sheet says what comes next, first', () => {
     const far = rowOf(html, 'far');
     expect(far).toContain('12:14');
     expect(far).not.toContain('za 1');
-    expect(far).toContain('po redu vožnje');
+    expect(far).toContain('data-live="false"');
+    expect(far).not.toContain('po redu vožnje');
   });
 
   it('labels a row beyond the horizon too: a tracked clock keeps the live dot, a timetable clock keeps the mark', () => {
@@ -152,8 +158,34 @@ describe('the stop sheet says what comes next, first', () => {
     expect(live).not.toContain('po redu vožnje');
     const plan = rowOf(html, 'farPlan');
     expect(plan).toContain('12:18');
-    expect(plan).toContain('po redu vožnje');
+    expect(plan).toContain('<time');
+    expect(plan).toContain('data-live="false"');
+    expect(plan).not.toContain('po redu vožnje');
     expect(plan).not.toContain('class="t-live"');
+  });
+
+  it('leads with the three departures Sada shows, then "Vozni red" with the rest to the twelfth, then the note once', () => {
+    const trips = Array.from({ length: 13 }, (_, i) => row({ tripId: `r${i}`, atMs: NOW + (i + 1) * 5 * 60_000, live: i === 0, minutes: i === 0 ? 5 : null }));
+    const html = stop(trips);
+    const rowsIn = (testid: string): string[] => (html.split(`data-testid="${testid}"`)[1] ?? '').split('</ul>')[0]!.split('<li ').slice(1);
+    expect(rowsIn('arrival-rows')).toHaveLength(3);
+    expect(rowsIn('arrival-rows').every((li) => li.startsWith('class="sada-departure"'))).toBe(true);
+    // Rows four to twelve under the one timetable word; the thirteenth is not on the sheet.
+    expect(rowsIn('timetable-rows')).toHaveLength(9);
+    expect(html).not.toContain('data-key="r12|');
+    expect(html).toContain('<h4 class="t-head">Vozni red</h4>');
+    expect(html.indexOf('data-testid="arrival-rows"')).toBeLessThan(html.indexOf('Vozni red'));
+    expect(html.indexOf('Vozni red')).toBeLessThan(html.indexOf('data-testid="timetable-rows"'));
+    // One note, after every row and before the platform count.
+    const note = 'Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.';
+    expect(html.split(note).length - 1).toBe(1);
+    expect(html.indexOf('data-testid="timetable-rows"')).toBeLessThan(html.indexOf(note));
+    expect(html.indexOf(note)).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
+    // Three trips or fewer: no timetable head at all.
+    const three = stop(trips.slice(0, 3));
+    expect(three).not.toContain('Vozni red');
+    expect(three).not.toContain('timetable-rows');
+    expect(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: trips, arrivalsStatus: 'live' })).toContain('<h4 class="t-head">Timetable</h4>');
   });
 
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {

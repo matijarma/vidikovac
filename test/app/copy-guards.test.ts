@@ -243,9 +243,11 @@ describe('an arrival time is never bare (WP5)', () => {
     stop: STOP, routes: [{ id: '11', short: '11', long: 'Črnomerec - Dubec', type: 0 }], counts: new Map(), delays: new Map(),
     isScreenStop: false, kiosk: false, arrivals: ROWS, arrivalsStatus: 'live', frozenAt,
   });
+  /** Every row of the stop's list: its first three (arrival-rows), then the rest under "Vozni red" (timetable-rows). */
   const arrivalRows = (html: string): string[] => {
-    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
-    return list.split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
+    const list = (testid: string): string => html.split(`data-testid="${testid}"`)[1]?.split('</ul>')[0] ?? '';
+    expect(html).toContain('data-testid="arrival-rows"');
+    return (list('arrival-rows') + list('timetable-rows')).split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
   };
 
   it.each(['hr', 'en'] as const)('%s: a live row carries the dot and data-live, a timetable row a plain clock and neither; the note names the source once', (locale) => {

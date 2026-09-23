@@ -297,7 +297,7 @@ describe('u-pokretu', () => {
       { id: 'route:17', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '17', data: { routeId: '17' } },
     ] }).map((row) => row.routeId)).toEqual(['6', '11']);
   });
-  it('builds the map from vehicle points and closure lines and prints the delay table', () => {
+  it('builds the map from vehicle points and closure lines, with no per-route delay table (it left the phone with the overview)', () => {
     const update = vi.fn();
     const factory = vi.fn((_options: CityMapOptions) => ({ update, destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
@@ -308,9 +308,7 @@ describe('u-pokretu', () => {
     expect(options.points![0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
     expect(options.lines![0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
     expect(options.ariaLabel).toContain('Karta');
-    const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
-    expect(rows[0]).toContain('kasni 2 min');
-    expect(rows[1]).toContain('rani 1 min');
+    expect(section.querySelector('[data-testid=delay-row], #u-pokretu-delays')).toBeNull();
 
     // R-54: a second render reuses the same live map, moving the one container
     // into the new section instead of allocating another WebGL context.
@@ -444,19 +442,15 @@ describe('u-pokretu', () => {
     expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
     expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
   });
-  it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
+  it('has no full-map button: the sheet’s own chevron and detents say how much map shows', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
     const toggle = vi.fn();
-    const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full: false, toggle } }));
-    const button = section.querySelector<HTMLButtonElement>('#u-pokretu-map [data-testid=map-full-toggle]')!;
-    expect(text(button)).toBe('Proširi kartu');
-    button.click();
-    expect(toggle).toHaveBeenCalledTimes(1);
-    const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
-    expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
-    // No view-mode owner: the stable control is hidden and not actionable.
-    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.hidden).toBe(true);
+    for (const full of [false, true]) {
+      const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full, toggle } }));
+      expect(section.querySelector('[data-testid=map-full-toggle], #u-pokretu-map-full')).toBeNull();
+    }
+    expect(toggle).not.toHaveBeenCalled();
   });
 });
 

@@ -373,7 +373,8 @@
     "note": "Estimated from ZET’s own vehicle data; the rest follow the timetable.",
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
-    "down": "The timetable is unavailable right now."
+    "down": "The timetable is unavailable right now.",
+    "timetable": "Timetable"
   },
   "transport": {
     "search": "Search a route or a stop",
@@ -1254,6 +1255,8 @@
     "consultationsNote": "National sources, not City of Zagreb consultations."
   },
   "sada": {
-    "departuresAt": "Next departures, {stop}"
+    "departuresAt": "Next departures, {stop}",
+    "viewSchema": "Diagram",
+    "viewMap": "Map"
   }
 }

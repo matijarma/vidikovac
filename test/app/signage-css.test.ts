@@ -319,29 +319,12 @@ describe('the badge has one name: .route-no is retired', () => {
   });
 });
 
-// The mode chips over the transport map are its legend, and a legend has to
-// show the marks it explains: the badge rule (shape carries the mode, colour
-// repeats it) at the pill's own proportion, two thirds of the map's
-// two-character capsule (pills.ts: 24 x 18 px, the plate's corner 3 px).
-describe('the map chips are the map\u2019s marks in miniature: a tram plate, a bus capsule, a closure line', () => {
-  it('the swatch is the two-character pill at two thirds, its corners and height read from the mode, no circle left', () => {
-    const swatch = decls('.t-toggle::before', MAP_CSS);
-    expect(swatch['inline-size']).toBe('1rem');
-    expect(swatch['block-size']).toBe('var(--t-swatch-h, 0.75rem)');
-    expect(swatch['border-radius']).toBe('var(--t-swatch-radius, var(--r-pill))');
-    expect(swatch.background).toBe('var(--t-swatch, currentColor)');
-  });
-  it('a tram is the barely rounded plate (PLATE_RADIUS_PX at the same scale); a bus keeps the capsule and the full height', () => {
-    expect(decls(".t-toggle[data-mode='0']", MAP_CSS)['--t-swatch-radius']).toBe('0.125rem');
-    const bus = decls(".t-toggle[data-mode='3']", MAP_CSS);
-    expect(bus['--t-swatch']).toBe('var(--t-bus)');
-    expect(bus).not.toHaveProperty('--t-swatch-radius');
-    expect(bus).not.toHaveProperty('--t-swatch-h');
-  });
-  it('a closure is a line on the map, so its swatch is a thin bar in the urgency tone', () => {
-    const closure = decls(".t-toggle[data-action='toggle-closures']", MAP_CSS);
-    expect(closure['--t-swatch']).toBe('var(--t-closure)');
-    expect(closure['--t-swatch-h']).toBe('0.25rem');
-    expect(closure).not.toHaveProperty('--t-swatch-radius');
+// The mode chips and the tools menu over the transport map are gone with the
+// map menu (WP4): Karta draws every mode at once and keeps one switch, the
+// map/schema one, in the sheet's head. Their rules must not linger.
+describe('the retired map controls leave no rules behind', () => {
+  it('no chip, toggle, schema legend, tools column or menu rule is left in map.css', () => {
+    expect(MAP_CSS).not.toMatch(/\.t-map-chips|\.t-toggle|\.t-schema-legend|\.t-map-tools|\.t-map-menu/);
+    expect(decls('.t-mode', MAP_CSS)['min-block-size']).toBe('var(--target)');
   });
 });

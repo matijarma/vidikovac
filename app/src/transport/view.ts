@@ -1,6 +1,6 @@
 // The transport sheet's markup, as strings a workspace sets into its stable
-// containers: route and stop rows, the search listbox, the overview, the
-// four detail views and the closures-and-notices list. Pure and escaped --
+// containers: route and stop rows, the search listbox, the four detail views
+// and the closures-and-notices list the lightweight face keeps. Pure and escaped --
 // every interpolated value goes through escapeHtml/escapeAttribute (dom/
 // escape.ts), and every interactive element carries a `data-action` the
 // workspace's one delegated click handler reads, never a closure handler on
@@ -25,7 +25,6 @@ import { delayTone, type DelayTone } from '../experience/delay';
 import { castReasonText } from '../experience/presentation';
 import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
-import type { RouteSummaryRow } from '../layers/route-summary';
 import { delayWord } from '../layers/shared';
 import { vehicleKind, type MapStatus, type VehicleInfo } from '../map/city-map';
 import { dataText } from '../panels/panel';
@@ -44,16 +43,18 @@ export interface DetailHeadExtras {
 
 /** Route badges the rows show before "+n". */
 const ROW_BADGES = 6;
-/** Line badges the peek shows before "+n". */
-export const PEEK_BADGES = 4;
 /** Rows a list shows before its fold. */
 export const RUNNING_ROWS = 8;
 export const CLOSURE_ROWS = 4;
 export const STOP_ROWS = 12;
-/** ZET notices the overview lists. */
+/** A stop's sheet leads with this many departures, the same three rows Sada shows, then "Vozni red". */
+export const STOP_DEPARTURES_FIRST = 3;
+/** What a stop's sheet lists in all: the three, then the timetable to the twelfth (shared/city/arrivals.ts rows). */
+export const STOP_ARRIVAL_ROWS = 12;
+/** ZET notices the lightweight face lists (the Karta sheet no longer carries them, WP4). */
 export const NOTICE_ROWS = 3;
 
-/** The folds a person opens in place. The delays block keeps its own `toggle-delays` action. */
+/** The folds a person opens in place: a route's stops, and the lightweight face's closures. */
 export type Fold = 'routes' | 'closures' | 'stops';
 
 /** s in dense rows and the peek, m on boards, l on a detail head. */
@@ -103,7 +104,7 @@ export function button(spec: ButtonSpec): string {
 }
 
 /** The ids of the lists a fold opens, so the fold button can say which one. */
-const listId = (fold: Fold | 'delays'): string => `t-list-${fold}`;
+const listId = (fold: Fold): string => `t-list-${fold}`;
 
 /** The one button under a bounded list: "još 3 linije" / "sve zatvaranja (6)" closed, "Skupi" open. A disclosure, so it says whether the list is open. */
 function foldButton(i18n: I18n, fold: Fold, open: boolean, moreLabel: string): string {
@@ -112,7 +113,7 @@ function foldButton(i18n: I18n, fold: Fold, open: boolean, moreLabel: string): s
   return button({ action: 'toggle-fold', id: `t-fold-${fold}`, label: open ? tr(i18n, 'collapse') : moreLabel, className: 'btn-ghost t-action t-fold', data, expanded: open, controls: listId(fold) });
 }
 
-/** A section head in sentence case at head size; h3 in the overview, h4 under a detail title. */
+/** A section head in sentence case at head size; h3 on its own, h4 under a detail title. */
 function sectionHead(label: string, level: 3 | 4 = 3): string {
   return `<h${level} class="t-head">${esc(label)}</h${level}>`;
 }
@@ -137,17 +138,6 @@ function stateWord(word: string, tone: DelayTone): string {
 /** The delay word for a route whose median is known; nothing at all when it is not -- never "on time" by default. */
 export function delayTrail(i18n: I18n, seconds: number | undefined): string {
   return seconds === undefined ? '' : stateWord(delayWord(i18n, seconds), delayTone(i18n, seconds));
-}
-
-/** A summary row (route-summary.ts) carries its word, not its seconds: the tone is the word read back against the catalogue's own templates, so it can never disagree with delayTone. */
-function toneOfWord(i18n: I18n, word: string): DelayTone {
-  if (!word) return 'none';
-  if (word === i18n.t('panels.delayOnTime')) return 'ontime';
-  const minutes = /\d+/.exec(word)?.[0];
-  if (minutes === undefined) return 'none';
-  if (word === i18n.t('panels.delayLate', { minutes })) return 'late';
-  if (word === i18n.t('panels.delayEarly', { minutes })) return 'early';
-  return 'none';
 }
 
 interface RowButtonSpec {
@@ -229,67 +219,6 @@ export function resultsMarkup(i18n: I18n, d: ResultsData): string {
     `<ul role="listbox" id="${attr(d.ids.list)}" class="t-list t-results" aria-label="${attr(tr(i18n, 'searchResults'))}" data-testid="transport-results">` +
     `${routes.length > 0 ? heading(tr(i18n, 'routes')) + routes.join('') : ''}${stops.length > 0 ? heading(tr(i18n, 'stops')) + stops.join('') : ''}</ul>`
   );
-}
-
-export interface PeekData {
-  /** The lines the board leads with: this stop's, else the busiest. */
-  routes: readonly { short: string; type: number }[];
-  /** Lines beyond the badges shown. */
-  more: number;
-  vehicles: number;
-  closures: number;
-}
-
-/** The collapsed sheet's one line: up to four small badges, "+n", then "193 vozila u pokretu · 37 zatvaranja". Nothing here is interactive. */
-export function peekMarkup(i18n: I18n, d: PeekData): string {
-  const badges = d.routes.map((r) => badge(r.short, r.type, 's')).join('');
-  const more = d.more > 0 ? `<span class="t-peek-more">+${d.more}</span>` : '';
-  const lines = badges ? `<span class="t-peek-lines">${badges}${more}</span> ` : '';
-  return `${lines}<span class="t-peek-count">${esc(`${trPlural(i18n, 'vehiclesNow', d.vehicles)} · ${trPlural(i18n, 'closuresNow', d.closures)}`)}</span>`;
-}
-
-export interface OverviewData {
-  /** Routes with a vehicle moving now, trams first. */
-  routes: RouteSummaryRow[];
-  /** Vehicles moving now among the admitted modes. */
-  total: number;
-  /** No zet-rt snapshot has arrived yet. */
-  loading: boolean;
-  /** The source's own stale/down sentence, or null while it answers. */
-  sourceStatus: string | null;
-  screenStop: { id: string; name: string; routes: readonly string[] } | null;
-  routeOf: (id: string) => RouteEntry;
-  kiosk: boolean;
-  /** The running-routes fold is open: every row shown. */
-  routesOpen: boolean;
-}
-
-/** A running route on the board: m badge, the destination, the count under it, the delay word in its tone at the end. */
-function routeButton(i18n: I18n, row: RouteSummaryRow, route: RouteEntry, hidden: boolean): string {
-  const inner = cells(badge(row.label, row.type), esc(route.long || kindWord(i18n, row.type)), vehicleCountGlyph(i18n, row.type, row.count), stateWord(row.word, toneOfWord(i18n, row.word)));
-  return rowButton({ kind: 'route', id: row.routeId, action: 'select-route', hidden, inner });
-}
-
-/** Nothing selected, nothing typed: what runs now (eight rows, then the fold) and the screen's stop. */
-export function overviewMarkup(i18n: I18n, d: OverviewData): string {
-  const status = d.sourceStatus ? `<p class="t-status" data-testid="transport-source-status">${esc(d.sourceStatus)}</p>` : '';
-  let running: string;
-  if (d.loading) running = `<p class="t-empty">${esc(i18n.t('status.loading'))}</p>`;
-  else if (d.routes.length === 0) running = `<p class="t-empty" data-testid="transport-none-running">${esc(tr(i18n, 'noRunning'))}</p>`;
-  else {
-    const rows = d.routes.map((row, i) => routeButton(i18n, row, d.routeOf(row.routeId), i >= RUNNING_ROWS && !d.routesOpen)).join('');
-    const folded = d.routes.length - RUNNING_ROWS;
-    running =
-      `<p class="t-lead" data-testid="transport-total">${esc(trPlural(i18n, 'vehiclesNow', d.total))}</p>` +
-      `<ul class="t-list" id="${listId('routes')}" data-testid="running-routes">${rows}</ul>` +
-      (folded > 0 ? foldButton(i18n, 'routes', d.routesOpen, i18n.t('panels.moreRoutes', { count: folded })) : '');
-  }
-  const stop = d.screenStop
-    ? `<section class="t-block" data-testid="screen-stop">${sectionHead(tr(i18n, 'screenStop'))}<ul class="t-list">` +
-      rowButton({ kind: 'stop', id: d.screenStop.id, action: 'select-stop', inner: cells(badgeList(d.screenStop.routes.map(d.routeOf)), esc(d.screenStop.name), '') }) +
-      '</ul></section>'
-    : '';
-  return `<section class="t-block">${sectionHead(tr(i18n, 'runningRoutes'))}${status}${running}</section>${stop}`;
 }
 
 /** The map's own state line, or null while it draws. */
@@ -547,24 +476,31 @@ export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: stri
   return `<li class="sada-departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
 }
 
-/** The arrivals list: one departureRow per trip, then the note that says once
- *  where the estimate comes from. No row carries a word for its kind. */
+/** What comes next here, departures first [O-50]: the first three trips as
+ *  Sada's own rows, then "Vozni red" with the rest of the list to the twelfth,
+ *  then the note that says once where the estimate comes from. Every row is
+ *  one departureRow, so no row carries a word for its kind, and the three lead
+ *  the sheet under the stop's name with no heading of their own. */
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
-  const rows = d.arrivals.map((row) => departureRow(i18n, row, kindOf, d.frozenAt)).join('');
+  const rows = (from: number, to: number): string => d.arrivals.slice(from, to).map((row) => departureRow(i18n, row, kindOf, d.frozenAt)).join('');
   // 'none' is "no board in hand", which live means "still on its way" and
   // frozen means "the session ended first, and none is coming": a frozen sheet
   // that said "učitavanje" would say it for good.
   const empty = d.arrivalsStatus === 'none'
     ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
     : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
+  const later = rows(STOP_DEPARTURES_FIRST, STOP_ARRIVAL_ROWS);
+  const timetable = later
+    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${later}</ul>`
+    : '';
   const body = d.arrivals.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${rows(0, STOP_DEPARTURES_FIRST)}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
     : `<p class="t-empty">${esc(empty)}</p>`;
-  return `<section class="t-block" data-testid="stop-arrivals">${sectionHead(i18n.t('arrivals.title'), 4)}${body}</section>`;
+  return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
 
-/** One stop: its name at title, then what comes next, then "3 perona" and its lines as rows with their count and delay word. */
+/** One stop: its name at title, then its next three departures and the timetable, then "3 perona" and its lines as rows with their count and delay word. */
 export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const meta = [trPlural(i18n, 'platforms', d.stop.ids.length), d.isScreenStop ? tr(i18n, 'screenStop') : ''].filter(Boolean).join(' · ');
   const rows = d.routes.map((r) => rowButton({ kind: 'route', id: r.id, action: 'select-route', inner: routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id)) })).join('');
@@ -661,39 +597,4 @@ export function closuresMarkup(
     .join('');
   const noticeList = notices.length > 0 ? `<section class="t-block">${sectionHead(tr(i18n, 'notices'))}<ul class="t-list" data-testid="transport-notices">${noticeRows}</ul></section>` : '';
   return `<section class="t-block">${sectionHead(i18n.t('panels.closures'))}${status}${list}</section>${noticeList}`;
-}
-
-export interface DelayRow {
-  routeId: string;
-  /** The module's median for the route, seconds; negative is early. */
-  delay: number;
-}
-
-/** Routes shown before the fold of the delays block. */
-export const DELAY_ROWS = 8;
-
-/** The module's own per-route medians, worst first: every row is present (a
- *  reader or a test can count them), the tail folded behind one button. In
- *  words, never raw seconds (R-F8), and never an arrival time. */
-export function delaysMarkup(i18n: I18n, rows: readonly DelayRow[], routeOf: (id: string) => RouteEntry, open: boolean): string {
-  if (rows.length === 0) return '';
-  const items = rows
-    .map((row, i) => {
-      const route = routeOf(row.routeId);
-      return rowButton({
-        kind: 'delay',
-        id: row.routeId,
-        action: 'select-route',
-        hidden: i >= DELAY_ROWS && !open,
-        testid: 'delay-row',
-        inner: cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), '', delayTrail(i18n, row.delay)),
-      });
-    })
-    .join('');
-  const folded = rows.length - DELAY_ROWS;
-  const more =
-    folded > 0
-      ? button({ action: 'toggle-delays', id: 't-fold-delays', label: open ? tr(i18n, 'collapse') : i18n.t('panels.moreRoutes', { count: folded }), className: 'btn-ghost t-action t-fold', expanded: open, controls: listId('delays') })
-      : '';
-  return `<section class="t-block" id="u-pokretu-delays" data-testid="transport-delays">${sectionHead(i18n.t('panels.delays'))}<ul class="t-list" id="${listId('delays')}">${items}</ul>${more}</section>`;
 }
