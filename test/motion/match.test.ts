@@ -450,7 +450,7 @@ describe('own-path return and service eligibility', () => {
 
 describe('terminal placement continuity', () => {
   it.each(['own', 'foreign'] as const)('releases an endpoint after two off-path fixes onto an %s branch', (owner) => {
-    const branch = { id: 'branch', direction: 0, edges: [1] };
+    const branch = { id: 'branch', direction: 0 as const, edges: [1] };
     const n = syntheticNetwork({
       edges: [
         { from: 0, to: 1, pts: straight(0, 1000) },
@@ -458,7 +458,7 @@ describe('terminal placement continuity', () => {
       ],
       routes: [
         { id: '1', type: 0, paths: [{ id: 'out', direction: 0, edges: [0] }, ...(owner === 'own' ? [branch] : [])] },
-        ...(owner === 'foreign' ? [{ id: '2', type: 0, paths: [branch] }] : []),
+        ...(owner === 'foreign' ? [{ id: '2', type: 0 as const, paths: [branch] }] : []),
       ],
       stops: [],
     });
