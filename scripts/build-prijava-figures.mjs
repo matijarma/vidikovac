@@ -13,6 +13,9 @@
 //
 // Node >= 22, ESM, no dependency beyond uqr (already in package.json). Run from anywhere:
 //   node scripts/build-prijava-figures.mjs
+// Not part of `npm run build:prijava` since 23 September 2026: the two figures belong to
+// the proposal as submitted, and today's network (regenerated after submission) would
+// redraw the submitted scheme. Run it only to change a figure on purpose.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

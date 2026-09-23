@@ -1,8 +1,9 @@
 /* Kaj ima? · pisani prijedlog: the document's small behaviours. Everything the
    document says is in the HTML; this adds the Zagreb clock, the theme control
    (same preference key as the app), the rotating demo code, a compressed
-   session-expiry demo, the contents scrollspy and, on the app's own origin,
-   a refresh of the "Sada u Zagrebu" tiles from the open teaser endpoint.
+   session-expiry demo, the contents scrollspy, the switch for the hosted page's
+   development-notes layer and, on the app's own origin, a refresh of the
+   "Sada u Zagrebu" tiles from the open teaser endpoint.
    Plain script, no imports, no dependencies: it runs inline from a file on
    disk and as a module under the app's CSP (script-src 'self'). */
 (function () {
@@ -94,6 +95,31 @@
       if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
     }
     setInterval(function () { if (currentPref === 'solar') applyTheme('solar'); }, 60000);
+  }
+
+  // --- Development notes since submission: an optional layer, off by default ---
+  // Only the hosted page carries the layer; the file variant has no button, so this
+  // does nothing there. The choice is remembered beside the theme, in the same family.
+  var NOTES_KEY = 'vidikovac-prijava-notes';
+  function readNotes() {
+    var s = store();
+    try { return !!(s && s.getItem(NOTES_KEY) === 'on'); } catch (e) { return false; }
+  }
+  function bindNotes() {
+    var btn = $('[data-testid="prijava-notes"]');
+    var layer = $('[data-testid="prijava-notes-layer"]');
+    if (!btn || !layer) return;
+    var show = function (on) {
+      btn.setAttribute('aria-pressed', String(on));
+      layer.hidden = !on;
+    };
+    show(readNotes());
+    btn.addEventListener('click', function () {
+      var on = btn.getAttribute('aria-pressed') !== 'true';
+      show(on);
+      var s = store();
+      if (s) { try { if (on) s.setItem(NOTES_KEY, 'on'); else s.removeItem(NOTES_KEY); } catch (e) { /* private mode */ } }
+    });
   }
 
   // --- The rotating demo code: eight Crockford base32 characters per 30 s slot --
@@ -290,6 +316,7 @@
     $$('[data-action="print"]').forEach(function (b) { b.addEventListener('click', function () { window.print(); }); });
     $$('[data-action="demo-session"]').forEach(function (b) { b.addEventListener('click', function () { startDemo(b); }); });
     bindScrollspy();
+    bindNotes();
     refreshLive();
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();

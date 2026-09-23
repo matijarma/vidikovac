@@ -5,6 +5,7 @@ import { codeRotateSeconds, peerMinutes, sessionMinutes } from '../../worker/con
 import { CODE_EARLY_MS, CODE_GRACE_MS, CODE_LENGTH } from '../../worker/protocol';
 import { QUAKE_WINDOW_MS } from '../../worker/hitno/select';
 import { UPSTREAM_TIMEOUT_MS } from '../../worker/feed/http';
+import { parseNotes, render } from '../../scripts/build-prijava.mjs';
 
 const read = (p: string) => readFileSync(new URL(`../../docs/prijava/${p}`, import.meta.url), 'utf8');
 const headingIndex = (md: string, heading: string) => {
@@ -104,5 +105,80 @@ describe('prijedlog-projekta.md quotes the code', () => {
   it('quake window and upstream timeout come from the worker', () => {
     expect(md).toContain(`posljednja ${QUAKE_WINDOW_MS / 3_600_000} sata`);
     expect(md).toContain(`rok dohvata od ${UPSTREAM_TIMEOUT_MS / 1000} sekundi`);
+  });
+});
+
+// WP7 (23 September 2026, [O-75]): /prijava/ keeps the proposal exactly as submitted and adds
+// one optional layer, off by default, of dated development notes since submission. The layer
+// is rendered on the hosted page only, from docs/prijava/razvojne-biljeske.md, as one block at
+// the top of <main>; everything else in the page is the markup the masters render without it.
+describe('/prijava/: the submitted text and the development-notes layer', () => {
+  const root = (p: string) => new URL(`../../${p}`, import.meta.url);
+  const hosted = readFileSync(root('app/prijava/index.html'), 'utf8');
+  const submitted = read('prijedlog-projekta.html');
+  const LAYER = /<div class="notes" id="biljeske" data-prijava-notes-root>[\s\S]*?<\/aside>\s*<\/div>\s*/;
+  const SCRIPTS = /<script>[\s\S]*?<\/script>/g;
+  const article = (html: string) => {
+    const m = /<main class="doc" id="sadrzaj">([\s\S]*?)<\/main>/.exec(html);
+    if (!m) throw new Error('no <main id="sadrzaj">');
+    return m[1];
+  };
+  const text = (html: string) => html.replace(SCRIPTS, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  it('the committed page and script are exactly what the build renders, layer included', () => {
+    const built = render();
+    expect(built.warnings).toEqual([]);
+    // Compared as booleans: a failing diff of a 1.3 MB page helps nobody; rebuild with `npm run build:prijava`.
+    expect(built.hosted === hosted, 'app/prijava/index.html is stale or hand-edited').toBe(true);
+    expect(readFileSync(root('app/prijava/prijava.js'), 'utf8')).toBe(read('src/prijava.js'));
+  });
+
+  it('the article minus the layer is, byte for byte, the article rendered from prijedlog-projekta.md without it', () => {
+    const page = article(hosted);
+    expect(page).toMatch(LAYER);
+    const rest = page.replace(LAYER, '');
+    expect(rest).not.toMatch(/prijava-notes|biljeske|razvojne bilješke/i);
+    expect(rest === article(render({ notes: false }).hosted)).toBe(true);
+  });
+
+  it('the article minus the layer is the article of the submitted self-contained file', () => {
+    // The file inlines a figure's small script that the hosted page's CSP drops; nothing else differs.
+    const rest = article(hosted).replace(LAYER, '');
+    expect(rest === article(submitted).replace(SCRIPTS, '')).toBe(true);
+    expect(text(rest)).toBe(text(article(submitted)));
+    expect(submitted).not.toMatch(/prijava-notes|razvojne-biljeske|Razvojne bilješke/);
+  });
+
+  it('ships the layer hidden, the button unpressed and labelled, and the page unindexed', () => {
+    const button = /<button [^>]*data-testid="prijava-notes"[^>]*>([^<]*)<\/button>/.exec(hosted);
+    expect(button?.[0]).toContain('type="button"');
+    expect(button?.[0]).toContain('aria-pressed="false"');
+    expect(button?.[0]).toContain('aria-controls="biljeske-sloj"');
+    expect(button?.[1]).toBe('Razvojne bilješke od predaje');
+    const aside = /<aside [^>]*data-testid="prijava-notes-layer"[^>]*>/.exec(hosted)?.[0] ?? '';
+    expect(aside).toMatch(/\shidden(?=[\s>])/);
+    expect(aside).toContain('id="biljeske-sloj"');
+    expect(aside).toContain('aria-labelledby="biljeske-h"');
+    expect(hosted).toContain('<h2 class="notes-title" id="biljeske-h">Bilješke o razvoju nakon predaje, nisu dio predanog prijedloga</h2>');
+    expect(hosted.match(/data-testid="prijava-notes(?:-layer)?"/g)).toHaveLength(2);
+    expect(hosted).toContain('<meta name="robots" content="noindex">');
+  });
+
+  it('dates every entry of razvojne-biljeske.md and links it to the record in the repository', () => {
+    const md = read('razvojne-biljeske.md');
+    const { intro, entries } = parseNotes(md);
+    expect(intro.length).toBeGreaterThan(0);
+    expect(entries.length).toBeGreaterThanOrEqual(3);
+    for (const e of entries) {
+      expect(e.iso, `entry "${e.date}" has no date`).toMatch(/^2026-\d\d-\d\d$/);
+      expect(e.title.length, `entry ${e.date} has no title`).toBeGreaterThan(0);
+      const links = [...e.paragraphs.join(' ').matchAll(/\]\((https:\/\/github\.com\/matijarma\/vidikovac\/blob\/main\/([^)]+))\)/g)];
+      expect(links.length, `entry ${e.date} has no link to the record`).toBeGreaterThan(0);
+    }
+    const isos = entries.map((e) => e.iso as string);
+    expect([...isos].sort()).toEqual(isos);
+    // House style of a Croatian document the owner reads: no em dash, no ellipsis, no "zid".
+    expect(md).not.toMatch(/—|…| -- /);
+    expect(md).not.toMatch(/(?<![\p{L}])zid/iu);
   });
 });
