@@ -7,13 +7,19 @@ describe('decision 24 finite structural close-out', () => {
     'treats %s as a domain, never an abbreviation', token => {
       for (const surface of ['header', 'row'] as const) {
         expect(externalText('title', `Kino: Zugang bei ${token}.`, { surface })).toEqual({ ok: false, reason: 'link' });
+        // W-C10: in a name, only a top-level domain after the last dot makes a link.
+        expect(externalText('name', `Kino ${token}`, { surface })).toEqual(token === 'a.b' ? { ok: true } : { ok: false, reason: 'link' });
       }
     });
-  it.each(['sv.', 'dr.', 'kn.', 'br.', 'tzv.', 'npr.', 'sl.'])('keeps %s only as a separate abbreviation', value => {
+  it.each(['sv.', 'dr.', 'kn.', 'br.', 'tzv.', 'npr.', 'sl.'])('keeps %s joined to a word only in a name', value => {
     for (const surface of ['header', 'row'] as const) {
       expect(vetExternal('name', value, surface)).toBe(value);
       expect(vetExternal('name', `${value} Marko`, surface)).toBe(`${value} Marko`);
-      expect(vetExternal('name', `${value}Marko`, surface)).toBeNull();
+      // Register shorthand without a space ("Vatikanska-Sv.Mateja") is a name;
+      // prose and headsigns keep the letter-dot-letter refusal.
+      expect(vetExternal('name', `${value}Marko`, surface)).toBe(`${value}Marko`);
+      expect(vetExternal('title', `${value}Marko`, surface)).toBeNull();
+      expect(vetExternal('headsign', `${value}Marko`, surface)).toBeNull();
     }
   });
   it('keeps exact GTFS spellings in rendered kinds, never as domain-prefix exceptions', () => {

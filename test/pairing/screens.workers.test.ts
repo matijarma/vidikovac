@@ -6,7 +6,7 @@ import { indexStub, type IndexDO } from '../../worker/do/index-do';
 import type { CodeSlot, CreateBeaconResponse } from '../../worker/protocol';
 import { connectWs, authKiosk, connectRoom } from './helpers';
 import { cityRows } from '../../worker/stats/export';
-import { handleScreens, networkPrincipal } from '../../worker/routes/screens';
+import { defaultLabel, handleScreens, networkPrincipal } from '../../worker/routes/screens';
 import { districtOf } from '../../worker/feed/geo/districts';
 import { screenStop } from '../../worker/pairing/stops';
 
@@ -224,16 +224,36 @@ describe('screens with a place (place-v2)', () => {
     expect(frameOnly.screen).toMatchObject({ area: 'zagreb', stop: null, place: TRG_PLACE, placeSet: false, frame: 4 });
   });
 
-  it('shortens a default label that a long street name would push past 80 characters', async () => {
+  it('fits a default label that a long street name would push past 80 characters, dropping whole words', async () => {
     const name = 'Ulica ' + 'Velikog Imena '.repeat(5) + 'kraj';
-    expect(name.length).toBeLessThanOrEqual(80);
+    expect(name.length).toBe(80);
     const response = await createScreen({ place: { kind: 'address', name, lon: 15.97, lat: 45.8135 } });
     expect(response.status).toBe(201);
     const screen = await response.json<CreateBeaconResponse>();
     const listed = (await indexStub(testEnv).listBeacons()).find((b) => b.beaconId === screen.beaconId)!;
-    expect(listed.operatorLabel.length).toBeLessThanOrEqual(80);
-    expect(listed.operatorLabel.startsWith('Kaj ima? · Ulica Velikog Imena')).toBe(true);
-    expect(listed.operatorLabel.endsWith('…')).toBe(true);
+    expect(listed.operatorLabel).toBe('Kaj ima? · Ulica Velikog Imena Velikog Imena Velikog Imena Velikog Imena Velikog');
+    expect(listed.operatorLabel.length).toBe(80);
+    expect(listed.operatorLabel).not.toContain('…');
+  });
+
+  it('builds the default label to fit: the least significant parts go whole, never an ellipsis', () => {
+    expect(defaultLabel('Zagreb')).toBe('Kaj ima? · Zagreb');
+    expect(defaultLabel('Muzej suv.umjetnosti')).toBe('Kaj ima? · Muzej suv.umjetnosti');
+    // A long place name: the trailing comma components first ...
+    expect(defaultLabel('Trg kralja Petra Krešimira IV. 12, Gradska četvrt Donji grad, Zagreb, Hrvatska'))
+      .toBe('Kaj ima? · Trg kralja Petra Krešimira IV. 12, Gradska četvrt Donji grad, Zagreb');
+    expect(defaultLabel('Aleja Hermanna Bollea 7, Gradska četvrt Donji grad i Gornji grad – Medveščak'))
+      .toBe('Kaj ima? · Aleja Hermanna Bollea 7');
+    // ... then trailing words, with no separator left hanging.
+    expect(defaultLabel('Ulica kralja Petra Krešimira IV. i Trg žrtava fašizma - Kvatrić - Maksimirska 10'))
+      .toBe('Kaj ima? · Ulica kralja Petra Krešimira IV. i Trg žrtava fašizma - Kvatrić');
+    // A single word too long for the prefix stands alone (names are at most 80).
+    expect(defaultLabel('Š'.repeat(75))).toBe('Š'.repeat(75));
+    for (const name of ['Trg kralja Petra Krešimira IV. 12, Gradska četvrt Donji grad, Zagreb, Hrvatska', 'x'.repeat(80), 'a '.repeat(40).trim()]) {
+      const label = defaultLabel(name);
+      expect(label.length, label).toBeLessThanOrEqual(80);
+      expect(label).not.toMatch(/…|\.\.\.|[\s,·–-]$/u);
+    }
   });
 
   it('tells an explicit null place from an absent one: null is the whole city, absent keeps the legacy stop', async () => {
