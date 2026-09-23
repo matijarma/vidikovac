@@ -324,7 +324,6 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-map-canvas { width: 100%; height: 100%; }
 /* The paired transit view's map: a panel among the paired blocks, with their radius. */
 .k-map { position: relative; min-height: 0; overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface-2); }
-.k-lines--overlay { position: absolute; right: var(--k-gap); bottom: var(--k-gap); left: var(--k-gap); padding: var(--k-gap) calc(var(--k-gap) * 1.25); border-radius: var(--k-radius-s); background: var(--k-glass); box-shadow: var(--k-shadow); }
 .k-lines--board { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: var(--k-pad); }
 .k-lines--board .k-line-list { flex: 1; }
 
