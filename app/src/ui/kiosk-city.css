@@ -80,3 +80,29 @@
 .k-settings .k-basics-head,.k-settings>.k-setup-actions,.k-settings>.k-setup-error{flex:none}
 .k-settings .k-settings-rows{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
 .k-eta-kind{display:block;font-size:var(--k-credit-size);font-weight:400}
+/* The read-only touch (WP2 step 9, [O-58]; kiosk/timeline.ts mountTouchPanel): a stop's board, a row's detail or the
+   pharmacy stands in the aside's box for 60 s, over the "U blizini" list, which keeps its layout under it (visibility,
+   never display) so the wall returns to the list exactly as it was. The panel is in the DOM only while it shows
+   something. Read tier for the title, the three departures, their line badges and their times, times the dark read
+   multiplier (--k-main-size; decision 26); walk-up tier for the timetable line and the detail's lines. Whole rows,
+   whole words: the panel prints the richest variant its box holds, nothing is cut or ellipsised. */
+.kiosk .k-nearby-host>[data-testid=nearby],.kiosk .k-nearby-host>.k-touch{grid-area:1/1}
+.kiosk .k-nearby-host[data-touch]>[data-testid=nearby]{visibility:hidden}
+.kiosk .k-touch{--k-touch-read:max(40px,var(--k-main-size));--k-touch-walk:max(28px,var(--k-sup-size));display:grid;grid-template-rows:minmax(0,1fr);min-width:0;min-height:0;padding:var(--k-gap) var(--k-gap) calc(var(--k-gap) * .5);background:var(--k-surface);border-radius:var(--k-radius-s)}
+.kiosk .k-touch-body{display:grid;grid-auto-rows:min-content;align-content:start;gap:calc(var(--k-gap) * .5);min-width:0;min-height:0;overflow:hidden}
+.kiosk .k-touch-title{margin:0;font-size:calc(var(--k-touch-read));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
+.kiosk .k-touch-rows{display:grid;grid-auto-rows:min-content;margin:0;padding:0;list-style:none}
+.kiosk .k-touch .sada-departure{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:calc(var(--k-gap) * .6);min-height:calc(64px * var(--k-zoom,1));border-top:1px solid var(--k-line);font-size:calc(var(--k-touch-read));line-height:1.1}
+.kiosk .k-touch .sada-departure:first-child{border-top:0}
+.kiosk .k-touch .sada-departure .line{font-size:inherit;block-size:auto;min-block-size:1.1em;min-inline-size:1.6em;padding:0 .3em;line-height:1.1}
+.kiosk .k-touch .sada-dest{min-width:0;font-weight:700;overflow-wrap:break-word;color:var(--k-ink)}
+.kiosk .k-touch .t-eta{display:inline-flex;align-items:center;gap:.25em;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--k-ink-2)}
+.kiosk .k-touch .t-eta[data-live]{color:var(--k-action)}
+.kiosk .k-touch .t-live{flex:none;inline-size:.3em;block-size:.3em;border-radius:50%;background:currentColor}
+.kiosk .k-touch-timetable,.kiosk .k-touch-line,.kiosk .k-touch-when,.kiosk .k-touch-kicker{margin:0;font-size:calc(var(--k-touch-walk));line-height:1.2;overflow-wrap:break-word;color:var(--k-ink-2)}
+.kiosk .k-touch-timetable time{font-variant-numeric:tabular-nums}
+.kiosk .k-touch-timetable-head,.kiosk .k-touch-when{font-weight:700;color:var(--k-ink)}
+.kiosk .k-touch-trip{white-space:nowrap}
+.kiosk .k-touch-kicker{display:flex;align-items:center;gap:.4em;font-weight:700;color:var(--k-ink)}
+.kiosk .k-touch-cross{flex:none;inline-size:.8em;block-size:.8em;background:linear-gradient(var(--k-green),var(--k-green)) center/100% 34% no-repeat,linear-gradient(var(--k-green),var(--k-green)) center/34% 100% no-repeat}
+.kiosk .k-touch-phone{font-weight:700;color:var(--k-ink)}
