@@ -26,8 +26,8 @@ import { fill, type KioskStrings } from './strings';
  * horizon a countdown would be a guess dressed as a fact, so the row shows a
  * clock -- and a tracked row's clock is the schedule plus ZET's delay, not the
  * timetable moment, so it keeps the live dot exactly as its countdown would.
- * An unlabelled clock would read as the timetable and make the note under the
- * list say the wrong thing about it.
+ * An unlabelled clock would read as the timetable, which is why this board
+ * keeps its small kind word under every time.
  */
 function etaMarkup(row: ArrivalRow, s: KioskStrings, className: string): string {
   const time = !row.live || row.minutes === null
@@ -49,11 +49,11 @@ function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string
  *  plate and the destination, with the time floated at their right. One line,
  *  like every other board row on this screen.
  *
- *  What is NOT here is a per-row word for the timetable: a second line under
- *  every untracked row doubled the height of a card read from four metres away.
- *  The distinction survives whole -- a tracked estimate carries the live dot, a
- *  timetable time carries nothing -- and the wall prints no note about it
- *  (companion brief §12); the phone's stop detail says it once. */
+ *  The kind word is the small `.k-eta-kind` under the time ("uživo" or
+ *  "vozni red", etaMarkup above); an earlier full second line of words under
+ *  every untracked row doubled the height of a card read from four metres
+ *  away. The "U blizini" timeline (kiosk/timeline.ts) carries no kind word:
+ *  there colour and form alone say it (companion brief §12). */
 export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; aside: string } {
   if (!vettedArrival(row)) return { main: '', aside: '' };
   return {

@@ -31,7 +31,10 @@ upute o pretraživanju dodirom. Ukratko:
   kod i mali pregled.
 - Na zaslonu nema vremena dohvata ni opažanja, napomena o izvoru, svježini
   ili pouzdanosti ni brojeva bez imena, ni na pregledu grada ni u
-  prezentaciji. Nema ni gumba za posjetitelja: ni za pauzu, ni za kopiranje
+  prezentaciji. Jedini datum stoji u navodu izvora popisa dežurnih ljekarni
+  na zbijenoj traci Sigurnosti u prezentaciji: „Grad Zagreb · provjereno” uz
+  datum provjere samog popisa (odluka 47). To je navod izvora, a ne vrijeme
+  dohvata. Nema ni gumba za posjetitelja: ni za pauzu, ni za kopiranje
   koda, ni za temu ili postavke, a riječ stanja i `/hitno` u sigurnosnoj
   traci samo su tekst. Pozivnica nudi samo jednu radnju: skeniranje.
 - Sigurnosna traka uvijek je vidljiva i nosi stanje, izvore bez vremena i
@@ -39,7 +42,7 @@ upute o pretraživanju dodirom. Ukratko:
 - Zadana tema zaslona prati sunce, pa zaslon noću prelazi na tamnu paletu.
   Kad ZET ne šalje položaje vozila, karta ostaje karta bez vozila, s jednom
   tihom napomenom, a svaki je polazak siv sat po voznom redu.
-- Dodir, gdje ga zaslon ima, služi samo za čitanje: dodir na prsten
+- Na zaslonu s dodirom dodir služi samo za čitanje: dodir na prsten
   stajališta 60 sekundi pokazuje polaske s tog stajališta, dodir na redak
   popisa pokazuje pojedinosti retka, a dodir na dežurnu ljekarnu adresu i
   telefon ljekarne; zatim se zaslon sam vraća. Sadržaj se može ponijeti samo
@@ -217,14 +220,17 @@ dodira od 28 CSS piksela, jer prst na zaslonu nije miš na stolu. Zaslon sam
 pronalazi dodirnuti prsten, pa karta ne mora primati dodir i ne pomiče se.
 Dodir na prsten 60 sekundi pokazuje ploču tog stajališta: sljedeća tri
 polaska u istom retku kao na telefonu, zatim jedan redak „Vozni red” s
-kasnijim polascima. Dodir na redak popisa pokazuje pojedinosti retka (mjesto
-održavanja, adresu i tramvaj do odredišta), a dodir na dežurnu ljekarnu
-adresu, naziv i telefon ljekarne. Ploča prekriva popis „U blizini” unutar
-okvira popisa, a drugi dodir zamjenjuje prvi. Zaslon se sam vraća nakon 60
-sekundi, kad ZET prestane slati položaje vozila dok je ploča otvorena, kad
-počne prezentacija ili kad se promijeni stanje zaslona. U prikazu sheme,
-tijekom prezentacije i u Postavkama dodir ne otvara ništa. Pretrage i
-izbornika nema, a sadržaj se može ponijeti samo skeniranjem.
+kasnijim polascima; istu ploču za stajalište mjesta otvara i dodir na redak
+polaska. Dodir na drugi redak popisa pokazuje pojedinosti retka (mjesto
+održavanja, adresu i tramvaj do odredišta), a dodir na dežurnu ljekarnu, na
+karti, u popisu ili u sigurnosnoj traci, adresu, naziv i telefon ljekarne.
+Ploča prekriva popis „U blizini” unutar okvira popisa, a drugi dodir
+zamjenjuje prvi. Zaslon se sam vraća nakon 60 sekundi, kad ZET prestane
+slati položaje vozila dok je ploča otvorena, kad počne prezentacija ili kad
+se promijeni stanje zaslona. Tijekom prezentacije i u Postavkama dodir ne
+otvara ništa. U prikazu sheme ne reagira dodir na kartu, a redovi popisa i
+ljekarna u sigurnosnoj traci otvaraju se i dalje. Pretrage i izbornika nema,
+a sadržaj se može ponijeti samo skeniranjem.
 
 Desni stupac nosi popis „U blizini”, a ispod popisa pozivnicu. Naslov popisa
 ispisuje polumjer kruga i vrijeme hoda, na primjer
@@ -364,10 +370,11 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   minuta kaže „za N min” i plav je. Svaki drugi polazak zadržava vrijeme po
   voznom redu i ispisuje se kao siv sat. Razliku nose boja i oblik vremena, a
   ne natpis: na popisu „U blizini” nema riječi „procjena” ni rečenice ispod
-  redaka. Na telefonu čitač zaslona praćeni redak najavljuje riječju
-  „uživo”, a jedna rečenica o tome odakle procjena dolazi prikazuje se samo
-  u pojedinostima stajališta. Ništa se ne izmišlja: bez praćenog vozila nema
-  odbrojavanja.
+  redaka. Ploče polazaka u prezentaciji ispod svakog vremena nose malu riječ
+  „uživo” ili „vozni red”. Na telefonu čitač zaslona praćeni redak najavljuje
+  riječju „uživo”, a jedna rečenica o tome odakle procjena dolazi prikazuje
+  se samo u pojedinostima stajališta. Ništa se ne izmišlja: bez praćenog
+  vozila nema odbrojavanja.
 - Nedostajući ili neupotrebljivo velik medijan ne prikazuje se kao „na vrijeme”
   niti se skraćuje na izmišljenu vrijednost. Sirovi izvor ostaje neizmijenjen.
 - Prekid izvora zaustavlja procijenjeno kretanje. Na telefonu posljednji
@@ -383,7 +390,10 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   otvorenje svakog dana.
 - Podaci o ljekarni ne jamče da je riječ o najbližoj ljekarni.
   Aplikacija ne traži korisnikovu geolokaciju.
-- Kvaliteta zraka i arhivska građa nisu implementirane integracije ovog
+- Kvaliteta zraka je preliminarni indeks pojedinih postaja iz Informacijskog
+  sustava zaštite zraka (`iszz.azo.hr`), na telefonu u Vremenu i u
+  pojedinostima postaje na Karti: to je opažanje postaje, a ne ocjena za
+  cijeli grad. Arhivska građa nije implementirana integracija ovog
   prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
   nema praćenih vozila, pa nema ni procjene dolaska.
 - „Zadnji polazak” je posljednji polazak po voznom redu ZET-a, ne procjena

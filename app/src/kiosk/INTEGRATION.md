@@ -177,8 +177,10 @@ for a schema field. The schema renderer itself does not load MapLibre.
   wall's `kiosk.nearby.*`, `kiosk.sentence.*`, `kiosk.handheld.*`,
   `kiosk.legend.*`, `kiosk.setup.*` and `kiosk.settings.*`); a package adds
   keys only inside its own group, and a key nothing reads any more is
-  deleted with its last reader. `test/app/i18n-orphans.test.ts` (over the
-  shared scanner `test/app/i18n-scan.ts`) fails on any leaf nothing reads.
+  deleted with its last reader, except owner copy kept on purpose
+  (`OWNER_COPY`, decision 42: `kiosk.invitation` stays in both catalogues and
+  must stay unread). `test/app/i18n-orphans.test.ts` (over the shared scanner
+  `test/app/i18n-scan.ts`) fails on any other leaf nothing reads.
 
 ## Header
 
@@ -248,7 +250,10 @@ Touch on the wall never makes the map interactive. `kiosk/mapview.ts`
 `touchAt` projects the drawn stop rings (`drawnStops`, the same filter as the
 overlays) and the pharmacy's ring with `fieldPixel` from the camera the map
 reports, and returns the nearest within `KIOSK_HIT_TOLERANCE_PX`; a delegated
-`click` on the kiosk root reaches it, and nothing moves the camera. A stop
+`click` on the kiosk root reaches it (`touchOnMap`), and nothing moves the
+camera. The same click on a row of `nearby-rows` or on `strip-pharmacy` opens
+a panel without the map: a departure, last or first row opens the place's own
+board, the pharmacy row and the footer item the pharmacy's detail. A stop
 opens `kiosk/timeline.ts` `mountTouchPanel` with `stopBoardVariants`: the
 next `STOP_BOARD_ROWS` (3) departures in the phone's `departureRow` (loaded
 as its own chunk on the first touch, `loadStopBoardRows`), then one "Vozni
@@ -259,7 +264,9 @@ its box holds whole and closes after `TOUCH_MS` (60 s, by its timer and by
 the deadline checked on every tick and poll), when an outage starts under an
 open board, on a phase change, on a presentation and on destroy; a second
 touch replaces it. Touch does nothing on a handheld, in a paired composition
-or presentation, in Postavke, in Osnovno and on the schema.
+or presentation, in Postavke and while Osnovno is open. On the schema only the
+map's ring hit test is off (`touchOnMap` returns null), so the list's rows and
+the footer's pharmacy item still open their panels.
 
 ## Backend (already in place)
 

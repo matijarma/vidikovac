@@ -102,12 +102,11 @@ unknown, never "?"), venues only with a programme tonight and named, ranked
 stop names with every tram interchange, and the major street names. There is
 no "+N" mark on the wall map: no geographic clusters, and a merged vehicle
 pill lists every line number and wraps to a second and a third row as it
-grows. Vehicle pills keep their place: a stop name first moves to another
-side of its point and otherwise yields while a vehicle passes,
-fading out over 300 ms, staying away at least one second and, once back,
-staying at least two; the screen's own place name is always drawn, under the
-pills. The map highlights what the header sentence names without fitting or
-moving the camera.
+grows. Vehicle pills keep their place: a stop name first moves to another side
+of its point and otherwise yields while a vehicle passes, fading out over 300
+ms, staying away at least one second and, once back, staying at least two; the
+screen's own place name is always drawn, under the pills. The map highlights
+what the header sentence names without fitting or moving the camera.
 
 The list is one time axis around the place, its head naming the measured
 circle and its walking time ("U blizini · 2,2 km · ~16 min";
@@ -117,10 +116,10 @@ for the timetable; then the timed rows (a closure's end, an event with its
 venue and the tram to it, the next sunset or sunrise, never both, the
 evening's last departures as one row from four hours ahead, from 22:00 the
 first morning departure of the next line to start, until every line serving
-the place has started or 06:00, tomorrow's openings when the evening
-empties); then one "uvijek" row, the place's naming story or a protected
-building nearby, alternating every 20 minutes, and from 22:00 to 06:00 the
-24/7 pharmacy. The list never renders empty: a departure row always exists,
+the place has started or 06:00, tomorrow's openings when the evening empties);
+then one "uvijek" row, the place's naming story or a protected building
+nearby, alternating every 20 minutes, and from 22:00 to 06:00 the 24/7
+pharmacy. The list never renders empty: a departure row always exists,
 timetable when no vehicle is tracked, and when the evening empties the rows
 grow and the horizon reaches into the next morning instead of padding. No row
 carries a source, freshness or caveat caption. Rows are whole and at least
@@ -170,10 +169,13 @@ is announced with the pharmacy's caption, or as "24/7" alone when the address
 cannot be shown. The QR card holds the lead, the code and the address to type
 it at, with no benefit line and no copy button, beside a QR code of at least
 240 CSS pixels on a 264px plate at the design sizes, with the code under the
-text at a fixed size, never stretched across a column. No fetch or
-observation time, caveat, freshness mark or count without a name stands on
-the wall, in the overview or in a presentation; a source that is behind says
-only its state word.
+text at a fixed size, never stretched across a column. No fetch or observation
+time, caveat, freshness mark or count without a name stands on the wall, in
+the overview or in a presentation; a source that is behind says only its state
+word. The one dated line on the wall is an attribution: the compact Sigurnost
+rail of a presentation credits the on-duty pharmacy list as
+"Grad Zagreb · provjereno {date}", the date the list itself was checked, not a
+fetch time (decision 47).
 
 At night the solar theme turns the wall to its separately tuned dark palette.
 In a ZET outage the map stays a map: the network, stops, BAJS, closures and
@@ -181,17 +183,19 @@ places without vehicles, with one quiet note on the map; every departure is a
 grey timetable time and the header sentence says what is known. No headline
 says "unavailable".
 
-Touch, where the screen has it, is read-only and needs no interactive map:
-the wall finds the touched ring itself, within the finger tolerance. A stop
-ring opens that stop's board for 60 seconds: its next three departures in the
+Touch, where the screen has it, is read-only and needs no interactive map: the
+wall finds the touched ring itself, within the finger tolerance. A stop ring
+opens that stop's board for 60 seconds: its next three departures in the
 phone's row, then one "Vozni red" line with later trips. A row shows its
-detail (venue, address, the tram to it) and the pharmacy its caption, name
-and phone. The panel covers the list in its box and the wall returns by
-itself: after 60 seconds, when a ZET outage starts under a board, on a
-presentation or when the phase changes; a second touch replaces the first.
-Nothing else reacts, the camera never moves, touch is off in the schema view,
-in a presentation and in Postavke, and scanning is the only way to take
-content along.
+detail (venue, address, the tram to it) and the pharmacy its caption, name and
+phone; the pharmacy opens from its ring, its row or the footer's pharmacy
+item, and a departure row opens the place's own board. The panel covers the
+list in its box and the wall returns by itself: after 60 seconds, when a ZET
+outage starts under a board, on a presentation or when the phase changes; a
+second touch replaces the first. Nothing else reacts and the camera never
+moves. Touch is off in a presentation and in Postavke; in the schema view the
+map takes no touch, while the list and the footer still do. Scanning is the
+only way to take content along.
 
 Starting a screen is one optional field, "Adresa ili stajalište", a line under
 it saying what the screen will show, and "Pokreni"; place, frame, view, theme,
@@ -394,9 +398,11 @@ BAJS counts require a recent observation; air is a
 preliminary station observation. A ZET countdown exists only where a tracked
 vehicle carries that trip, built from the scheduled departure and ZET's own
 reported delay for that vehicle; every other departure keeps its scheduled
-clock time. Colour and form carry the difference, never a caption on the row:
-a blue countdown for a tracked vehicle, a grey clock time for the timetable,
-and no row says "procjena". On the phone a tracked row's marker is announced
+clock time. In the "U blizini" list colour and form carry the difference,
+never a caption on the row: a blue countdown for a tracked vehicle, a grey
+clock time for the timetable. The departure boards of a presentation keep a
+small word under each time ("uživo" or "vozni red"), and no row anywhere
+says "procjena". On the phone a tracked row's marker is announced
 as "uživo", and the one sentence on where the estimate comes from stands once,
 in a stop's detail. No tracked vehicle, no countdown; HŽ boards stay scheduled
 times only. The header sentence is a derived reading of the wall's own facts
