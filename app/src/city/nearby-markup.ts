@@ -18,10 +18,11 @@ import { selectionHref } from '../experience/blocks';
 import type { I18n } from '../i18n/i18n';
 import { fitRows, rowMarkup, vettedTimelineRow } from '../kiosk/timeline';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
-import { nearbyHead, selectNearby, type NearbyInput, type NearbyRow } from './nearby';
+import { nearbyHead, nearbyPill, selectNearby, type NearbyInput, type NearbyRow } from './nearby';
 import { sentenceFacts, templateSentences, type SentenceFact, type WrittenSentence } from './sentence';
 
-export { selectNearby };
+// The page reads the selection, the head's circle and the sentence tools through this chunk alone (city/feed.ts).
+export { nearbyHead, nearbyPill, selectNearby };
 
 /** The phone's sentence runs to the header's own length (companion §12, step 12). */
 export const PHONE_SENTENCE_BUDGET = 80;

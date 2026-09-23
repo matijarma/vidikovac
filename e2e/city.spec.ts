@@ -41,8 +41,7 @@ test('a saved city selection survives refresh and is presented only explicitly',
   const session=await installExperienceFixture(page,snapshots);await installCityFixture(page);
   await page.route('**/maps/**',route=>fulfillPublicMap(route));
   await page.goto(FIXTURE_DASHBOARD);
-  // No domain bar at the desk (WP4): the temporary header link opens Karta until the desk pair stands it beside Sada.
-  const karta=page.getByTestId('desk-karta');if(await karta.count())await karta.click();
+  // No domain bar at the desk (WP4): Karta stands beside Sada on the page, its search field in the first view.
   await page.getByTestId('transport-search').fill('Gavella');await page.locator('[data-action=select-place]').first().click();
   await page.locator('[data-action=city-save]').click();
   await expect(page.locator('[data-action=city-save]')).toHaveText('Spremljeno');

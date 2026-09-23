@@ -105,8 +105,9 @@ function frozenAttrs(s: ShellState): string {
  * honest for axe and the target rule (CSS orders and sizes, never hides a
  * control that exists). Phone: wordmark · Zaslon · Podijeli grad · session ·
  * safety. Desktop: wordmark · spacer · Zaslon · Podijeli grad · session ·
- * Karta · Još · safety, one row with no clock and no domain bar (the desk is
- * the phone, wider [O-56]). Zaslon stands while a scanner's session has a
+ * Još · safety, one row with no clock and no domain bar (the desk is the
+ * phone, wider [O-56]: Karta stands beside Sada on the page itself, so the
+ * header needs no way into it). Zaslon stands while a scanner's session has a
  * screen, the share button while the session can share [O-61].
  */
 export function statusLineMarkup(i18n: I18n, s: ShellState): string {
@@ -118,20 +119,7 @@ export function statusLineMarkup(i18n: I18n, s: ShellState): string {
   const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';
   const share = shareButtonMarkup(i18n, s);
   if (s.surface === 'phone') return `${wordmark}${display}${share}${session}${safety}`;
-  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${display}${share}${session}${deskKartaMarkup(i18n, s)}${moreButtonMarkup(i18n, s)}${safety}`;
-}
-
-/**
- * TEMPORARY (until WP4 chunk E): the desk's one way into Karta. The desk has no
- * tab bar, Još lists only the MORE domains and the six-domain bar is gone, so
- * until the desk pair shows Karta beside Sada this labelled link opens it.
- * Chunk E deletes this function, its call, its CSS (.ki-desk-karta and the
- * 'karta' column) and its tests. Frozen it keeps its handler like a tab, so its
- * hash never replaces the fragment.
- */
-export function deskKartaMarkup(i18n: I18n, s: ShellState): string {
-  const current = s.layer === 'u-pokretu' && !s.directory;
-  return `<a class="ki-desk-karta" data-key="karta" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" data-testid="desk-karta" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup(LAYER_ICONS['u-pokretu'])}<span>${escapeHtml(layerLabel(i18n, 'u-pokretu'))}</span></a>`;
+  return `${wordmark}<div class="ki-status-space" data-key="space"></div>${display}${share}${session}${moreButtonMarkup(i18n, s)}${safety}`;
 }
 
 /**

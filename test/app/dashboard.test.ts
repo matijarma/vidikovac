@@ -1290,9 +1290,10 @@ describe('the status line', () => {
     expect(keys(scanner.root)).toEqual(['wordmark', 'screen', 'share', 'session', 'safety']);
     scanner.handle.destroy();
     const desk = mount({ wide: true });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'karta', 'more', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'session', 'more', 'safety']);
     desk.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
-    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'karta', 'more', 'safety']);
+    expect(keys(desk.root)).toEqual(['wordmark', 'space', 'screen', 'share', 'session', 'more', 'safety']);
+    expect(desk.root.querySelector('[data-testid=desk-karta]'), 'no header link into Karta: it stands beside Sada (chunk E)').toBeNull();
     expect(text(desk.root.querySelector('[data-testid=status-more]'))).toBe('Još');
     expect(desk.root.querySelectorAll('.ki-domains [data-layer]')).toHaveLength(0);
     expect(desk.root.querySelector('.ki-domains')).toBeNull();
@@ -1331,32 +1332,158 @@ describe('the status line', () => {
     expect(text(status)).not.toContain('°C');
     live.handle.destroy();
   });
-  it('the desk reaches Karta through one labelled header link until the desk pair shows it beside Sada (temporary, WP4 chunk E removes it)', () => {
-    const { root, session } = mount({ wide: true });
-    session.join();
-    const karta = root.querySelector<HTMLAnchorElement>('[data-testid=status-line] [data-testid=desk-karta]')!;
-    expect(karta).not.toBeNull();
-    expect(text(karta)).toBe('Karta');
-    expect(karta.getAttribute('href')).toBe('#layer=u-pokretu');
-    expect(karta.getAttribute('aria-current')).toBe('false');
-    karta.click();
-    expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
-    expect(root.querySelector('[data-testid=desk-karta]')?.getAttribute('aria-current')).toBe('page');
-    expect(session.sent).toEqual([]);
-    session.expire();
-    expect(root.querySelector('[data-testid=desk-karta]')?.getAttribute('tabindex')).toBe('-1');
-    // The phone has its tab instead.
-    const phone = mount();
-    expect(phone.root.querySelector('[data-testid=desk-karta]')).toBeNull();
-    expect(phone.root.querySelector('.ki-tabs [data-layer=u-pokretu]')).not.toBeNull();
-  });
-  it('desktop transport navigation exposes the single search field in lightweight mode', () => {
+  it('desktop transport navigation exposes the single search field in lightweight mode: Karta is on the page from the first draw', () => {
     const { root, session } = mount({ wide: true, lightweight: true });
     session.join();
-    click(root, '[data-testid=desk-karta]');
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
     expect(root.querySelector('#layer-u-pokretu')).not.toBeNull();
-    expect(root.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    expect(root.querySelector('#ki-main [data-testid=transport-search]')).not.toBeNull();
     expect(session.sent).toEqual([]);
+  });
+});
+
+// WP4 step 8 (chunk E): the desk is the phone, wider [O-56]. Sada and Karta stand side by side in one
+// .ki-desk pair whenever either is the layer; the pair is reconciled, so the live map is one node for the page's life.
+describe('the desk pair (WP4 chunk E)', () => {
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
+  const factory = () => vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
+  const kartaMaps = (mapFactory: ReturnType<typeof factory>) => mapFactory.mock.calls.filter(([o]) => o.container.dataset.testid === 'map-canvas');
+
+  it('stands Sada and Karta side by side from the first draw, titled Sada, on its own stage, with Karta\'s one map and no band', async () => {
+    const mapFactory = factory();
+    const { root, session, handle } = mount({ wide: true, mapFactory });
+    session.join();
+    await flush();
+    const dash = root.querySelector<HTMLElement>('.ki')!;
+    expect(dash.dataset.stage).toBe('desk');
+    const pair = root.querySelector<HTMLElement>('[data-testid=dash-view] > .ki-desk[data-key=desk]')!;
+    expect(pair).not.toBeNull();
+    expect([...pair.children].map((el) => el.id)).toEqual(['layer-grad-sada', 'layer-u-pokretu']);
+    expect(pair.querySelector('[data-testid=sada-place]')).not.toBeNull();
+    expect(pair.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(pair.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    // The desk holds one map, Karta's: the phone's band is not drawn beside it.
+    expect(pair.querySelector('[data-testid=sada-map-band]')).toBeNull();
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    expect(mapFactory.mock.calls.some(([o]) => o.container.dataset.testid === 'sada-map-canvas')).toBe(false);
+    expect(document.title).toBe('Kaj ima? · Sada');
+    expect(text(root.querySelector('[data-testid=dash-title]'))).toBe('Kaj ima? · Sada');
+    handle.destroy();
+  });
+
+  it('a poll and a switch between the two keep the same pair, the same workspace node and the same map', async () => {
+    const mapFactory = factory();
+    const { root, session, handle, tick } = mount({ wide: true, mapFactory });
+    session.join();
+    await flush();
+    const pair = root.querySelector('.ki-desk')!;
+    const sada = root.querySelector('#layer-grad-sada')!;
+    const workspace = root.querySelector('[data-testid=transport-workspace]')!;
+    const canvas = root.querySelector('[data-testid=map-canvas]')!;
+    tick();
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBe(pair);
+    expect(root.querySelector('#layer-grad-sada')).toBe(sada);
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('[data-testid=map-canvas]')).toBe(canvas);
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBe(pair);
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('[data-testid=map-canvas]')).toBe(canvas);
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    expect(document.title).toBe('Kaj ima? · Sada');
+    handle.selectLayer('grad-sada');
+    await flush();
+    expect(root.querySelector('[data-testid=transport-workspace]')).toBe(workspace);
+    // Leaving the pair for a Još domain releases Karta's map; coming back draws a new one.
+    handle.selectLayer('kultura');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('[data-testid=map-canvas]')).toBeNull();
+    expect(mapFactory.mock.results[0]!.value.destroy).toHaveBeenCalledTimes(1);
+    handle.destroy();
+  });
+
+  it('polls the modules of both halves while the pair is shown', async () => {
+    const { session, fetchData, handle } = mount({ wide: true });
+    session.join();
+    await flush();
+    const asked = new Set(fetchData.mock.calls.map((c) => c[0]));
+    for (const module of ['zet-rt', 'prometnice', 'dogadanja', 'dhmz-now', 'glasnik']) expect(asked.has(module as ModuleId), module).toBe(true);
+    handle.destroy();
+  });
+
+  it('the phone keeps one layer at a time and the map stage for Karta', async () => {
+    const { root, session, handle } = mount();
+    session.join();
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('#layer-u-pokretu')).toBeNull();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    expect(root.querySelector('.ki-desk')).toBeNull();
+    expect(root.querySelector('#layer-grad-sada')).toBeNull();
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('map');
+    expect(document.title).toBe('Kaj ima? · Karta');
+    handle.destroy();
+  });
+
+  it('Karta\'s default sheet lists the place\'s U blizini rows through the page (ctx.nearby), with the circle in its peek', async () => {
+    const { root, session, handle } = mount({ wide: true });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    const workspace = root.querySelector<HTMLElement>('[data-testid=transport-workspace]')!;
+    const list = workspace.querySelector<HTMLElement>('[data-testid=nearby]')!;
+    expect(list, 'the sheet body is the shared nearby section').not.toBeNull();
+    expect(text(list.querySelector('[data-testid=nearby-head]'))).toMatch(/^U blizini · \d+(,\d)? km · ~\d+ min$/);
+    expect(list.querySelector('[data-testid=nearby-rows]')).not.toBeNull();
+    expect(workspace.querySelector('[data-testid=nearby-pending]')).toBeNull();
+    const peek = workspace.querySelector<HTMLElement>('[data-testid=transport-peek]')!;
+    expect(text(peek.querySelector('strong'))).toBe(STOP.name);
+    expect(text(peek.querySelector('.t-peek-pill'))).toMatch(/^\d+(,\d)? km · ~\d+ min$/);
+    // Sada and Karta print one circle.
+    expect(text(peek.querySelector('.t-peek-pill'))).toBe(text(root.querySelector('#layer-grad-sada [data-testid=nearby-head] .nearby-pill')));
+    handle.destroy();
+  });
+
+  it('the screen\'s Kadar reaches the phone\'s circle: a frame of 8 widens the pill on both halves', async () => {
+    const eight = mount({ wide: true });
+    eight.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP, frame: 8 });
+    await flush();
+    const pill = (root: HTMLElement) => text(root.querySelector('[data-testid=transport-workspace] .t-peek-pill'));
+    // No stop table is loaded here, so the circle is the frame's fallback radius (shared/city/frame.ts FRAME_RADIUS_M).
+    expect(pill(eight.root)).toBe('2,7 km · ~20 min');
+    expect(text(eight.root.querySelector('#layer-grad-sada .nearby-pill'))).toBe('2,7 km · ~20 min');
+    eight.handle.destroy();
+    const six = mount({ wide: true });
+    six.session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    expect(pill(six.root)).toBe('2 km · ~15 min');
+    six.handle.destroy();
+  });
+
+  it('widening a phone into a desk moves the live workspace into the pair without re-creating it', async () => {
+    const mapFactory = factory();
+    const listeners: (() => void)[] = [];
+    const media = { matches: false, addEventListener: (_: 'change', fn: () => void) => { listeners.push(fn); }, removeEventListener: () => {} };
+    const { root, session, handle } = mount({ mapFactory, deps: { matchMedia: () => media } });
+    session.join();
+    await flush();
+    handle.selectLayer('u-pokretu');
+    await flush();
+    const workspace = root.querySelector('[data-testid=transport-workspace]')!;
+    const canvas = root.querySelector('[data-testid=map-canvas]')!;
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('map');
+    media.matches = true;
+    for (const fn of listeners) fn();
+    await flush();
+    expect(root.querySelector<HTMLElement>('.ki')!.dataset.stage).toBe('desk');
+    expect(root.querySelector('.ki-desk [data-testid=transport-workspace]')).toBe(workspace);
+    expect(root.querySelector('.ki-desk [data-testid=map-canvas]')).toBe(canvas);
+    expect(root.querySelector('.ki-desk #layer-grad-sada')).not.toBeNull();
+    expect(kartaMaps(mapFactory)).toHaveLength(1);
+    handle.destroy();
   });
 });
 

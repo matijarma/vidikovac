@@ -101,14 +101,16 @@ async function openDashboard(page: Page, viewport: Viewport, url = FIXTURE_DASHB
  * selection, so the tab and the directory come first.
  */
 async function openLayer(page: Page, layer: LayerId): Promise<void> {
+  // The desk pair (WP4 chunk E) shows Sada and Karta side by side inside .ki-desk: either is already on the page.
+  const shown = page.locator(`[data-testid="dash-view"] .layer[data-layer="${layer}"]`);
   const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
   if (await tab.count()) {
     await tab.click();
-  } else {
+  } else if (!(await shown.count())) {
     await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
     await page.locator(`[data-testid="dir-${layer}"], [data-action="nav"][data-layer="${layer}"]:visible`).first().click();
   }
-  await expect(page.locator(`[data-testid="dash-view"] > [data-layer="${layer}"]`)).toBeVisible();
+  await expect(shown).toBeVisible();
 }
 
 /** The layer's own data has arrived and been painted: the fixture's request count stops moving, then a frame passes. */

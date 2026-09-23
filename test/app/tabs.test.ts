@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 // The map's one word (companion WP4, [O-51], slop #11): the tab, the document
-// title, the desk's temporary header link and the wall's paired pill all say
-// Karta, read from layers.u-pokretu; "Promet" stays the kicker and subject word.
+// title and the wall's paired pill all say Karta, read from layers.u-pokretu;
+// "Promet" stays the kicker and subject word. The desk has no link into Karta:
+// it stands beside Sada on the page (chunk E).
 import { describe, expect, it } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { deskKartaMarkup, MORE_LAYERS, PHONE_TABS, tabbarMarkup, type ShellState } from '../../app/src/experience/chrome';
+import { MORE_LAYERS, PHONE_TABS, statusLineMarkup, tabbarMarkup, type ShellState } from '../../app/src/experience/chrome';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 
 /** The destination word for u-pokretu (WP6's trust guard carries the same constant in the accept tier). */
@@ -28,14 +29,15 @@ describe('the map has one word: Karta', () => {
     expect(en.layers['u-pokretu']).toBe('Map');
     expect(hr.kiosk.ticker.transit).toBe('Promet');
   });
-  it('the phone tab, the desk link and the wall pill read the same word', () => {
+  it('the phone tab and the wall pill read the same word; the desk header carries no link into Karta', () => {
     const i18n = createDefaultI18n('hr');
     const tabs = document.createElement('div');
     tabs.innerHTML = tabbarMarkup(i18n, shell());
     expect([...tabs.querySelectorAll('.ki-tab')].map((t) => t.textContent?.trim())).toEqual(['Sada', TRANSPORT_TAB_WORD, 'Još']);
     const desk = document.createElement('div');
-    desk.innerHTML = deskKartaMarkup(i18n, shell({ surface: 'desktop' }));
-    expect(desk.textContent?.trim()).toBe(TRANSPORT_TAB_WORD);
+    desk.innerHTML = statusLineMarkup(i18n, shell({ surface: 'desktop' }));
+    expect(desk.querySelector('[data-testid=desk-karta], [data-key=karta]')).toBeNull();
+    expect(desk.textContent).not.toContain(TRANSPORT_TAB_WORD);
     expect(kioskStrings('hr').layers['u-pokretu']).toBe(TRANSPORT_TAB_WORD);
     expect(i18n.t('session.documentTitle', { app: i18n.t('common.appName'), layer: i18n.t('layers.u-pokretu') })).toBe(`Kaj ima? · ${TRANSPORT_TAB_WORD}`);
   });

@@ -20,6 +20,7 @@ import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
+import { loadSadaFeed, nearbyInput, sadaFeed } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
 import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
@@ -28,7 +29,6 @@ import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { tickTimebandClock } from './experience/timeband';
 import { attachTimebandSync } from './experience/timeband-sync';
-import { weatherStatus } from './experience/weather-status';
 import { storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -37,6 +37,7 @@ import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
+import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
 import { createSchematicHost } from './motion/schematic-host';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
@@ -46,7 +47,7 @@ import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
-import { PRESENTATION_ACK_MS, PRESENTATION_TIMES, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
+import { PRESENTATION_ACK_MS, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
 import { presentationPanel, presentationTargetLabel } from './experience/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
 import { dynamicPlaces } from './city/discovery';
@@ -195,6 +196,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let lastRun: LastRunSnapshot | null = null;
   let lastRunStop: string | null = null;
   let networkPromise: Promise<Network | null> | null = null;
+  /** The network's tram lines in call order (shared/city/frame.ts frameLinesOf), once the artefact has loaded: the
+   *  phone's circle is then measured along the lines as the wall's is; until then frameRadiusM falls back among trams. */
+  let frameLines: readonly FrameLine[] | undefined;
   const loadNetworkOnce = (refresh = false): Promise<Network | null> => {
     // Karta replaces this shared cache after a deploy, so later map mounts
     // cannot reinstall the graph the current map just rejected.
@@ -211,6 +215,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   });
   const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
   const surface = (): Surface => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
+  /** The desk is the phone, wider [O-56] (WP4 step 8): Sada and Karta stand side by side in one .ki-desk pair whenever
+   *  either is the layer, so navigating between them redraws the same pair and the map is never re-created. */
+  const deskPair = (): boolean => {
+    const layer = view.snapshot().layer;
+    return surface() === 'desktop' && !directory && (layer === 'grad-sada' || layer === 'u-pokretu');
+  };
 
   let frozen = false;
   /** The moment freeze() ran: every workspace and time line is dated with it. */
@@ -316,13 +326,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
   }
 
+  /** The layer and its selection; Sada has no time filter any more, so no `time` rides along (the wire still accepts one). */
   function currentPresentationTarget(): PresentationTarget {
     const state = view.snapshot();
-    const time = state.filters['tb-col'];
     return {
       layer: state.layer,
       ...(state.selection ? { selection: state.selection } : {}),
-      ...(state.layer === 'grad-sada' && (PRESENTATION_TIMES as readonly string[]).includes(time ?? '') ? { time: time as PresentationTarget['time'] } : {}),
     };
   }
 
@@ -385,7 +394,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   function updateTitle(): void {
-    const layerName = directory ? i18n.t('nav.moreTitle') : i18n.t(`layers.${view.snapshot().layer}`);
+    // The desk pair is one page, titled by its feed whichever half the layer names.
+    const layerName = directory ? i18n.t('nav.moreTitle') : deskPair() ? i18n.t('layers.grad-sada') : i18n.t(`layers.${view.snapshot().layer}`);
     const title = i18n.t('session.documentTitle', { app: i18n.t('common.appName'), layer: layerName });
     titleEl.textContent = title;
     doc.title = title;
@@ -408,7 +418,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const feed = store.snapshot();
     // The cast state plus the moment of the last cast, which the panel's button shows as data-sent.
     const cast: CastState & { sentAt: number | null } = { ...castState(), sentAt: castSentAt };
-    return {
+    const ctx: LayerContext = {
       city: cityStore.snapshot(),
       ensureCity: ids => { if (!frozen && !disposed) void cityStore.ensure(ids); },
       onDispose:fn=>workspaceDisposals.add(fn),
@@ -426,7 +436,24 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, stopsDown, lastRun,
+      // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
+      frame: session.snapshot().screen?.frame, frameLines,
     };
+    // The place's "U blizini" list for Karta's default sheet (city/feed.ts, the same rows Sada lists), at most `cap`
+    // rows, with the head's circle and the radius the frame is fitted to. Null while the lazily loaded selection chunk
+    // is not in hand (the page repaints when it lands); never a static import of city/nearby.ts on /d/ (the budget).
+    ctx.nearby = (cap) => {
+      const feed = sadaFeed(repaintLocalData);
+      if (typeof feed !== 'object') return null;
+      const input = nearbyInput(ctx);
+      const rows = feed.selectNearby(input);
+      return {
+        html: feed.nearbySectionMarkup(i18n, rows, input.radiusM, input.now, { cap, id: 'karta' }),
+        pill: feed.nearbyPill(i18n, input.radiusM),
+        radiusM: input.radiusM,
+      };
+    };
+    return ctx;
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
@@ -443,14 +470,25 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       : null;
     const ctx = layerContext();
     const layer = view.snapshot().layer;
-    // Promet is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is the
-    // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
-    element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
-    const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
+    const pair = deskPair();
+    // Karta on the phone is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is
+    // the stage. The desk pair is its own stage (data-stage='desk': the feed scrolls, the map column sticks). An
+    // empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
+    element.dataset.stage = pair ? 'desk' : !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
+    let next: HTMLElement;
+    if (directory) next = renderDirectory(ctx);
+    else if (pair) {
+      // Sada then Karta, keyed so the reconciler morphs the same pair on every poll; the workspace section inside
+      // carries its own data-reconcile and its kaj-persist slot (layers/u-pokretu.ts), so the live map stays put.
+      next = doc.createElement('div');
+      next.className = 'ki-desk';
+      next.dataset.key = 'desk';
+      next.append(renderLayer('grad-sada', ctx), renderLayer('u-pokretu', ctx));
+    } else next = renderLayer(layer, ctx);
     // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
     // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
     const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
-    if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
+    if (directory || pair || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
       if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
@@ -462,7 +500,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // redraws the same place) fades `next` in -- it is the live node exactly
     // when the key actually changed, since reconcile.ts only morphs onto (and
     // discards `next` in favour of) a pre-existing node of the same key.
-    const workspaceKey = directory ? 'directory' : layer;
+    const workspaceKey = directory ? 'directory' : pair ? 'desk' : layer;
     if (workspaceKey !== lastWorkspaceKey) {
       lastWorkspaceKey = workspaceKey;
       if (!deps.reducedMotion && !lightweight) {
@@ -551,6 +589,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function activeModules(): readonly ModuleId[] {
     if (directory) return directoryModules(surface());
+    if (deskPair()) return [...new Set([...LAYER_MODULES['grad-sada'], ...LAYER_MODULES['u-pokretu']])];
     return LAYER_MODULES[view.snapshot().layer];
   }
 
@@ -1135,6 +1174,15 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   if (deps.history && deps.location) win.addEventListener?.('popstate', onPopState);
   updateTitle();
   paintShell();
+  // Sada's selection and sentence chunk is asked for at once, so it is in flight before the first draw (a phone
+  // opening on Karta needs it for the sheet too); the page repaints when it lands (city/feed.ts).
+  void loadSadaFeed();
+  // The network's tram lines measure the circle along the lines; the map loads the same artefact once.
+  void loadNetworkOnce().then((network) => {
+    if (disposed || !network) return;
+    frameLines = frameLinesOf(network);
+    if (!frozen) render();
+  });
   armPoll();
   armSlowPoll();
   tickTimer = setTimer(() => {
