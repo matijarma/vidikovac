@@ -25,7 +25,6 @@ import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, fitSentences, joinWithFit, pairedMarkup, row, sentencesOf, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
-import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
 // WP2 step 4: the framed wall (mapview.ts kioskCityLabels, map/frame.ts frameView).
 import { kioskCityLabels } from '../../app/src/kiosk/mapview';
@@ -283,22 +282,18 @@ describe('local content from the stop-scoped teaser', () => {
     expect(byId.get('city:komunalne:1')?.meta).toBe('zadnja izmjena čet 2. 7.');
     expect(cityDateLine(item('dogadanja', 'x', 'event', 'x', { at: '2026-09-11T00:00:00Z', dateBasis: 'unknown' }), hr, 'hr')).toBe('');
   });
-  it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
+  it('lets every source the payload carries into the city rotation, the Assembly session included', () => {
     const unfiltered = MODULES.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [item('dogadanja', 'kp:9', 'event', 'Koncert u Močvari (Kulturpunkt)', { at: '2026-09-11T20:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt' } }), ...m.items]) : m));
     const list = stories(unfiltered, hr, 'hr', NOW);
     expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(true); // every source the app fetches reaches the screen
     expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
-    const cards = teaserCards(MODULES, i18n, NOW);
-    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'city', 'invitation']);
-    expect(cards.find(c => c.id === 'invitation')?.body).toBe('Skeniraj za 10 minuta grada.');
-    expect(cards[0]!.body).toBe('21,4 °C · vedro');
-    expect(cards[1]!.body).toBe('M 1,6 · CROATIA');
-    expect(cards[2]!.body).toBe('2 zatvaranja');
-    expect(cards[3]!.body).toContain('13. sjednica Gradske skupštine');
-    expect(cards.every((c) => !(c.attribution?.text ?? '').includes('{'))).toBe(true);
+  });
+  it('reads the safety strip without a stop: the warning, the closures and the pharmacy', () => {
+    const strip = (now: number) => safetyStrip(MODULES, null, i18n, hr, now);
     // The strip is judged at the fixture's clock: by the real one the Ilica closure (until 12 September) has ended.
-    expect(safetyStripText(MODULES, i18n, NOW)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
-    expect(safetyStripText(MODULES, i18n, Date.parse('2026-09-13T12:00:00Z')).closures).toBe('1 zatvaranje');
+    expect({ cap: strip(NOW).warning.text, closures: strip(NOW).closures.text, pharmacy: strip(NOW).pharmacy.label })
+      .toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
+    expect(strip(Date.parse('2026-09-13T12:00:00Z')).closures.text).toBe('1 zatvaranje');
   });
   it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
     const rows = essentialsRows(MODULES, i18n, hr, 'hr', STOP, NOW);
