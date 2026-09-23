@@ -4,7 +4,7 @@
 // counts, per vehicle per tick, every change of the matched rail path within
 // an unchanged trip, with the matcher state that led to it, the client
 // integrator's re-seed displacement when the new path reaches the page, and
-// the WP0 acceptance rows (A to H, S, I) judged against a stage's targets.
+// the WP0 acceptance rows (A to H, U, S, I) judged against a stage's targets.
 // The core is scripts/grade-branches-core.ts, a port of the review-only
 // grader review.local/companion/replay/grade-branches.mjs that takes the same
 // arguments, so the two stay comparable on the same frames.

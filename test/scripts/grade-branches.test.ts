@@ -12,6 +12,8 @@ import {
   gradeDirectory,
   judge,
   loadRealEngine,
+  PARKED_MIN_S,
+  PARKED_RADIUS_M,
   type AcceptanceRows,
   type AcceptanceSource,
   type BranchReport,
@@ -187,6 +189,48 @@ describe('the branch grader, fault injection on the corridor', () => {
     expect(movedOn.ghostAdvance.advanceWhileSilentM.max).toBe(0);
   });
 
+  // Decision 16: an unplaced episode of at least PARKED_MIN_S whose fixes never
+  // leave PARKED_RADIUS_M of its first one is a parked tram (depot or layover),
+  // left out of row U; the raw share keeps it. The victim alone, on no path (its
+  // nearest edge kept, not off the graph), observed once a minute for `minutes`
+  // minutes with a fresh fix `offsetM(k)` metres east of where it stood.
+  function observeUnplaced(minutes: number, offsetM: (k: number) => number): BranchReport {
+    const { state, headerSec, payload, victimId } = structuredClone(kept!);
+    const victim = state.tracks[victimId];
+    state.tracks = { [victimId]: victim };
+    victim.match = { ...victim.match, pathIdx: null };
+    victim.offGraph = false;
+    const fix0 = victim.fixes[victim.fixes.length - 1];
+    const grader = createBranchGrader(engine, { stops });
+    for (let k = 0; k <= minutes; k++) {
+      victim.fixes = [...victim.fixes.slice(0, -1), { ...fix0, x: fix0.x + offsetM(k), atSec: fix0.atSec + 60 * k }];
+      grader.observe(state, headerSec + 60 * k, payload);
+    }
+    return grader.report();
+  }
+
+  it('leaves a parked tram out of row U and keeps it in the raw share: ten minutes never beyond 100 m of where it stood', () => {
+    expect([PARKED_MIN_S, PARKED_RADIUS_M]).toEqual([600, 100]);
+    const jitter = [0, 40, 100, 60, 20, 80, 0, 90, 30, 70, 50];
+    const report = observeUnplaced(10, (k) => jitter[k]);
+    expect(report.unplaced.episodes).toBe(1);
+    expect(report.unplaced.longest[0]).toMatchObject({ id: kept!.victimId, durationS: 600, maxDistFromStartM: 100, parked: true });
+    expect(report.unplaced).toMatchObject({ vehicleHours: 0.17, parkedEpisodes: 1, parkedVehicleHours: 0.17, shareOfTramVehicleHoursRaw: 1, shareOfTramVehicleHours: 0 });
+    expect(acceptanceRows(report)).toMatchObject({ U: 0, U_raw: 100, U_parkedVh: 0.17 });
+  });
+
+  it('counts a slow-moving unplaced tram (ten minutes, 101 m from where it started) and a short standing one (nine minutes) in row U', () => {
+    const slow = observeUnplaced(10, (k) => 10.1 * k);
+    expect(slow.unplaced.longest[0]).toMatchObject({ durationS: 600, maxDistFromStartM: 101, parked: false });
+    const short = observeUnplaced(9, () => 0);
+    expect(short.unplaced.longest[0]).toMatchObject({ durationS: 540, maxDistFromStartM: 0, parked: false });
+    for (const report of [slow, short]) {
+      expect(report.unplaced.episodes).toBe(1);
+      expect(report.unplaced).toMatchObject({ parkedEpisodes: 0, parkedVehicleHours: 0, shareOfTramVehicleHoursRaw: 1, shareOfTramVehicleHours: 1 });
+      expect(acceptanceRows(report)).toMatchObject({ U: 100, U_raw: 100, U_parkedVh: 0 });
+    }
+  });
+
   it('refuses an observation after the report', () => {
     const grader = createBranchGrader(engine, { stops });
     grader.observe(kept!.state, kept!.headerSec, kept!.payload);
@@ -199,19 +243,26 @@ describe('the branch grader, fault injection on the corridor', () => {
 // (review.local/companion/replay/branches-0921.json on the engine before WP0,
 // with events, reseeds, priorChangeSamples and arcJumps.all left out). The
 // file predates the loops, unplaced and silence blocks and the rows S and I,
-// so A subtracts no loop events and S and I read "not measured".
+// so A subtracts no loop events and U, S and I read "not measured".
 describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
+  let aggregates: AcceptanceSource;
   let rows: AcceptanceRows;
 
   beforeAll(async () => {
-    const aggregates = JSON.parse(await readFile(root('test/fixtures/frames/branches-0921-aggregates.json'), 'utf8')) as AcceptanceSource;
+    aggregates = JSON.parse(await readFile(root('test/fixtures/frames/branches-0921-aggregates.json'), 'utf8')) as AcceptanceSource;
     rows = acceptanceRows(aggregates);
   });
 
   it('reproduces the baseline table of the brief', () => {
     expect(rows.A).toBeCloseTo(136.5, 1);
     expect(rows).toMatchObject({ Aprime: 130.9, B: 483, C_vh: 116.4, C_fixes: 19700, D: 620, E: 196, F: 191, G: 1922, G_p95: 629.4, H: 387 });
-    expect(rows).toMatchObject({ S_count: null, S_max: null, S_pastNextStop: null, I: null });
+    expect(rows).toMatchObject({ U: null, U_raw: null, U_parkedVh: null, S_count: null, S_max: null, S_pastNextStop: null, I: null });
+  });
+
+  it('reads an unplaced block from before decision 16 as its raw share, parked time not measured', () => {
+    const before16 = acceptanceRows({ ...aggregates, unplaced: { shareOfTramVehicleHours: 0.030177 } });
+    expect(before16).toMatchObject({ U: 3.0177, U_raw: 3.0177, U_parkedVh: null });
+    expect(judge(before16, ACCEPTANCE_TARGETS.stage1).failures).toContain('U 3.02 > 3');
   });
 
   it('fails stage 1 on every row, the unmeasured ones included, and passes an all-zero row set', () => {
@@ -219,7 +270,8 @@ describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
     expect(verdict.ok).toBe(false);
     expect(verdict.failures).toContain('B 483 > 0');
     expect(verdict.failures).toContain('S_max: not measured (target <= 50)');
-    expect(verdict.failures).toHaveLength(14);
+    expect(verdict.failures).toContain('U: not measured (target <= 3)');
+    expect(verdict.failures).toHaveLength(15);
 
     const zero = Object.fromEntries(ACCEPTANCE_ROW_KEYS.map((key) => [key, 0])) as unknown as AcceptanceRows;
     expect(judge(zero, ACCEPTANCE_TARGETS.stage1)).toEqual({ ok: true, failures: [] });

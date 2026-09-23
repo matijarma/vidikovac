@@ -1,11 +1,12 @@
 // The wrong-branch grader's core (WP6 step 2): a TypeScript port of the
 // review-only grader review.local/companion/replay/grade-branches-core.mjs
 // (Track E, extended by WP0 with the loops, unplaced and silence blocks),
-// plus what the companion plan judges WP0 by: the acceptance rows A to H read
-// from the report's own keys, row S (a silent tram's published anchor moving
-// on without evidence), row I (an adoption onto a path no service of the day
-// runs), the unknown-trip share that says whether the frames still join the
-// committed artefacts, the stage targets and the judge.
+// plus what the companion plan judges WP0 by: the acceptance rows A to H and U
+// (unplaced time without parked trams, decision 16) read from the report's own
+// keys, row S (a silent tram's published anchor moving on without evidence),
+// row I (an adoption onto a path no service of the day runs), the unknown-trip
+// share that says whether the frames still join the committed artefacts, the
+// stage targets and the judge.
 //
 // It replays recorded ZET frames through the twin's production `runTick`
 // (worker/twin/tick.ts) with the joins, learning feedback and clock of
@@ -101,6 +102,11 @@ const PAST_STOP_SLACK_M = 1;
  *  tick's own clock, is silent, and its published anchor should have stopped
  *  moving on without it. */
 const GHOST_SILENCE_S = 60;
+/** Decision 16: an unplaced episode at least this long ... */
+export const PARKED_MIN_S = 600;
+/** ... whose fixes never leave this radius of its first fix is a parked tram
+ *  (depot or layover): never drawn, so not counted in row U's share (A10). */
+export const PARKED_RADIUS_M = 100;
 
 // ---- the join builder -------------------------------------------------------
 
@@ -243,6 +249,11 @@ function inWindow(sec: number): boolean {
 
 function inc<K>(map: Map<K, number>, key: K, by = 1): void {
   map.set(key, (map.get(key) ?? 0) + by);
+}
+
+/** Decision 16: a tram standing off-graph without moving for ten minutes or more is parked. */
+export function isParkedEpisode(durationS: number, maxDistFromStartM: number): boolean {
+  return durationS >= PARKED_MIN_S && maxDistFromStartM <= PARKED_RADIUS_M;
 }
 
 function isLoopId(id: string | null | undefined): boolean {
@@ -529,6 +540,8 @@ interface UnplacedOpen {
   ticks: number;
   fresh: number;
   withEdgeTicks: number;
+  /** The farthest fix of the episode from its first one, in metres. */
+  maxDistFromStart: number;
 }
 
 interface UnplacedEpisode {
@@ -542,6 +555,9 @@ interface UnplacedEpisode {
   freshFixes: number;
   withEdgeTicks: number;
   groundM: number;
+  maxDistFromStartM: number;
+  /** Decision 16 (isParkedEpisode): standing at a depot or layover, left out of row U. */
+  parked: boolean;
   stop: string | null;
   stopM: number | null;
   terminal: string | null;
@@ -732,6 +748,10 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   // step 2). `withEdgeSec` is the matcher's own unplaced flag (a nearest edge
   // is carried), `noEdgeSec` the rest (a match just reset, for a new track or
   // a new prior, whose fix lies beyond OFF_GRAPH_M before off-graph is declared).
+  // Parked (decision 16): an episode of at least PARKED_MIN_S whose fixes never
+  // leave PARKED_RADIUS_M of its first one is a tram standing off the graph at a
+  // depot or layover. It is never drawn, so row U (A10) judges the share without
+  // it; the raw share stays beside it.
   const unplaced = { sec: 0, withEdgeSec: 0, noEdgeSec: 0, fresh: 0, offGraphSec: 0, episodes: [] as UnplacedEpisode[] };
   const unplacedSecByRoute = new Map<string, number>();
   const unplacedOpen = new Map<string, UnplacedOpen>(); // vehicle id -> the running episode
@@ -819,6 +839,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       freshFixes: ep.fresh,
       withEdgeTicks: ep.withEdgeTicks,
       groundM: Math.round(dist(ep.startP, ep.lastP)),
+      maxDistFromStartM: Math.round(ep.maxDistFromStart),
+      parked: isParkedEpisode(ep.sec, Math.round(ep.maxDistFromStart)),
       stop: near ? near.stop.name : null,
       stopM: near ? Math.round(near.d) : null,
       terminal: terminal ? terminal.stop.name : null,
@@ -1131,13 +1153,14 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
           ep = undefined;
         }
         if (!ep) {
-          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0 };
+          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0, maxDistFromStart: 0 };
           unplacedOpen.set(track.id, ep);
         }
         ep.sec += dt;
         ep.ticks++;
         if (fresh) ep.fresh++;
         if (track.match.edge !== null) ep.withEdgeTicks++;
+        ep.maxDistFromStart = Math.max(ep.maxDistFromStart, dist(ep.startP, rec.p));
         ep.lastP = rec.p;
       } else if (unplacedOpen.has(track.id)) closeUnplaced(track.id);
 
@@ -1672,10 +1695,18 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     }
     const unplacedEpisodesByRoute = new Map<string, number>();
     for (const e of eps) inc(unplacedEpisodesByRoute, e.route);
+    const parkedEps = eps.filter((e) => e.parked);
+    const parkedSec = parkedEps.reduce((sum, e) => sum + e.durationS, 0);
     const unplacedReport = {
       definition: 'tram track after the tick with match.pathIdx === null && !offGraph',
       vehicleHours: r2(unplaced.sec / 3600),
-      shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round((unplaced.sec / tramTrackedSec) * 1e6) / 1e6 : null,
+      // Row U (A10): the unplaced share without parked episodes (decision 16).
+      shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round(((unplaced.sec - parkedSec) / tramTrackedSec) * 1e6) / 1e6 : null,
+      // Every unplaced second, parked or not (the share before decision 16).
+      shareOfTramVehicleHoursRaw: tramTrackedSec > 0 ? Math.round((unplaced.sec / tramTrackedSec) * 1e6) / 1e6 : null,
+      parkedRule: `episode durationS >= ${PARKED_MIN_S} && maxDistFromStartM <= ${PARKED_RADIUS_M}`,
+      parkedEpisodes: parkedEps.length,
+      parkedVehicleHours: r2(parkedSec / 3600),
       withEdgeVehicleHours: r2(unplaced.withEdgeSec / 3600),
       noEdgeVehicleHours: r2(unplaced.noEdgeSec / 3600),
       offGraphVehicleHours: r2(unplaced.offGraphSec / 3600),
@@ -1938,6 +1969,8 @@ export interface AcceptanceSource {
   rederive: { priorInPoolButOtherAdopted: number; planGapM: { p95: number | null } };
   backward: { runsOver500m: number };
   client: { sameTripPathToPathOver50: number; sameTripPathToPathJumpP95: number | null };
+  /** `shareOfTramVehicleHoursRaw` and `parkedVehicleHours` arrived with decision 16; before it the share was the raw one. */
+  unplaced?: { shareOfTramVehicleHours: number | null; shareOfTramVehicleHoursRaw?: number | null; parkedVehicleHours?: number };
   ghostAdvance?: { episodes: number; advanceM: { max: number | null }; pastNextStop: number };
   serviceFilter?: { adoptionsWithoutService: number };
 }
@@ -1971,6 +2004,12 @@ export interface AcceptanceRows {
   G_p95: number | null;
   /** rederive.planGapM.p95. */
   H: number | null;
+  /** WP0 A10: unplaced.shareOfTramVehicleHours as a percent, parked trams left out (decision 16). */
+  U: number | null;
+  /** unplaced.shareOfTramVehicleHoursRaw as a percent, parked trams included (informational). */
+  U_raw: number | null;
+  /** unplaced.parkedVehicleHours: trams standing off the graph at a depot or layover (informational). */
+  U_parkedVh: number | null;
   /** ghostAdvance.episodes: silent episodes over 60 s (informational). */
   S_count: number | null;
   /** ghostAdvance.advanceM.max. */
@@ -1981,7 +2020,10 @@ export interface AcceptanceRows {
   I: number | null;
 }
 
-export const ACCEPTANCE_ROW_KEYS = ['A', 'Aprime', 'B', 'C_vh', 'C_fixes', 'D', 'E', 'F', 'G', 'G_p95', 'H', 'S_count', 'S_max', 'S_pastNextStop', 'I'] as const satisfies readonly (keyof AcceptanceRows)[];
+export const ACCEPTANCE_ROW_KEYS = ['A', 'Aprime', 'B', 'C_vh', 'C_fixes', 'D', 'E', 'F', 'G', 'G_p95', 'H', 'U', 'U_raw', 'U_parkedVh', 'S_count', 'S_max', 'S_pastNextStop', 'I'] as const satisfies readonly (keyof AcceptanceRows)[];
+
+/** Rows printed beside the judged ones, with no target of their own. */
+export const INFORMATIONAL_ROW_KEYS = ['U_raw', 'U_parkedVh', 'S_count'] as const satisfies readonly (typeof ACCEPTANCE_ROW_KEYS)[number][];
 
 /** Metric A as WP0 defines it: same-trip path changes less direction flips
  *  within 150 m of a terminal and own-route loop-path transitions, per 100
@@ -1992,8 +2034,14 @@ export function metricA(r: AcceptanceSource): { n: number; per100vh: number | nu
   return { n, per100vh: r.tramVehicleHours !== null && r.tramVehicleHours > 0 ? (n / r.tramVehicleHours) * 100 : null };
 }
 
+/** A share (fraction) as a percent, to the 1e-6 the report rounds it to. */
+function sharePercent(share: number | null | undefined): number | null {
+  return share === null || share === undefined ? null : Math.round(share * 1e6) / 1e4;
+}
+
 export function acceptanceRows(r: AcceptanceSource): AcceptanceRows {
   const ghost = r.ghostAdvance;
+  const u = r.unplaced;
   return {
     A: metricA(r).per100vh,
     Aprime: r.teaserBox.window.per100vh,
@@ -2006,6 +2054,9 @@ export function acceptanceRows(r: AcceptanceSource): AcceptanceRows {
     G: r.client.sameTripPathToPathOver50,
     G_p95: r.client.sameTripPathToPathJumpP95 ?? 0,
     H: r.rederive.planGapM.p95 ?? 0,
+    U: u ? sharePercent(u.shareOfTramVehicleHours) : null,
+    U_raw: u ? sharePercent(u.shareOfTramVehicleHoursRaw ?? u.shareOfTramVehicleHours) : null,
+    U_parkedVh: u?.parkedVehicleHours ?? null,
     S_count: ghost ? ghost.episodes : null,
     S_max: ghost ? ghost.advanceM.max ?? 0 : null,
     S_pastNextStop: ghost ? ghost.pastNextStop : null,
@@ -2013,13 +2064,14 @@ export function acceptanceRows(r: AcceptanceSource): AcceptanceRows {
   };
 }
 
-export type TargetRow = Exclude<(typeof ACCEPTANCE_ROW_KEYS)[number], 'S_count'>;
+export type InformationalRow = (typeof INFORMATIONAL_ROW_KEYS)[number];
+export type TargetRow = Exclude<(typeof ACCEPTANCE_ROW_KEYS)[number], InformationalRow>;
 export type Stage = 'stage1' | 'stage2';
 
 /** A target set: the stage it belongs to, and the ceiling of every judged row. */
 export type AcceptanceTargets = { stage: Stage } & Record<TargetRow, number>;
 
-const STAGE1: AcceptanceTargets = { stage: 'stage1', A: 5, Aprime: 5, B: 0, C_vh: 0, C_fixes: 0, D: 0, E: 0, F: 0, G: 0, G_p95: 50, H: 60, S_max: 50, S_pastNextStop: 0, I: 0 };
+const STAGE1: AcceptanceTargets = { stage: 'stage1', A: 5, Aprime: 5, B: 0, C_vh: 0, C_fixes: 0, D: 0, E: 0, F: 0, G: 0, G_p95: 50, H: 60, U: 3, S_max: 50, S_pastNextStop: 0, I: 0 };
 
 /** Brief §8 / WP6 step 2: stage 1 is the coding session's gate, stage 2 the stretch (A and A' at most 1). */
 export const ACCEPTANCE_TARGETS: Readonly<Record<Stage, AcceptanceTargets>> = {
@@ -2027,7 +2079,11 @@ export const ACCEPTANCE_TARGETS: Readonly<Record<Stage, AcceptanceTargets>> = {
   stage2: { ...STAGE1, stage: 'stage2', A: 1, Aprime: 1 },
 };
 
-export const TARGET_ROWS = ACCEPTANCE_ROW_KEYS.filter((key): key is TargetRow => key !== 'S_count');
+export function isTargetRow(key: (typeof ACCEPTANCE_ROW_KEYS)[number]): key is TargetRow {
+  return !(INFORMATIONAL_ROW_KEYS as readonly string[]).includes(key);
+}
+
+export const TARGET_ROWS = ACCEPTANCE_ROW_KEYS.filter(isTargetRow);
 
 function fmtRow(n: number | null): string {
   if (n === null) return 'n/a';
@@ -2051,7 +2107,7 @@ export function formatRows(rows: AcceptanceRows, targets: AcceptanceTargets | nu
   const L: string[] = [targets ? `acceptance rows against ${targets.stage}:` : 'acceptance rows:'];
   for (const key of ACCEPTANCE_ROW_KEYS) {
     const value = rows[key];
-    const target = targets && key !== 'S_count' ? targets[key] : null;
+    const target = targets && isTargetRow(key) ? targets[key] : null;
     const verdict = target === null ? '' : value === null ? 'not measured' : value <= target ? 'ok' : 'FAIL';
     L.push(`  ${key.padEnd(15)}${fmtRow(value).padStart(10)}${target === null ? '' : `   <= ${String(target).padEnd(4)} ${verdict}`}`);
   }
@@ -2069,6 +2125,11 @@ type Cell = string | number | boolean | null | undefined;
 function mdTable(header: readonly string[], rows: readonly (readonly Cell[])[]): string {
   const line = (cells: readonly Cell[]): string => `| ${cells.map((c) => String(c ?? '')).join(' | ')} |`;
   return [line(header), line(header.map(() => '---')), ...rows.map(line)].join('\n');
+}
+
+/** A fraction as a percent; a missing value stays missing (fmt prints n/a). */
+function asPercent(x: number | null | undefined): number | null {
+  return x === null || x === undefined ? null : x * 100;
 }
 
 function fmt(n: unknown, digits = 1): string {
@@ -2112,7 +2173,7 @@ function acceptanceLines(r: BranchReport): string[] {
   L.push(`  G  same-trip re-seeds > 50 m: ${r.client.sameTripPathToPathOver50}, p95 ${fmt(r.client.sameTripPathToPathJumpP95)} m  [0; < 50 m]`);
   L.push(`  H  visible correction at a re-derive, p95: ${fmt(r.rederive.planGapM.p95)} m  [< 60 m]`);
   L.push(`  loops: ${r.loops.events} own-route loop transitions (onto ${r.loops.onto}, off ${r.loops.off}, loop to loop ${r.loops.loopToLoop}); foreign loop events ${r.loops.foreignEvents} (in B); ${r.loops.loopPaths} loop paths in the network`);
-  L.push(`  unplaced: share ${fmt(u.shareOfTramVehicleHours === null ? null : u.shareOfTramVehicleHours * 100, 2)} % of tram vehicle-hours (${u.vehicleHours} vh; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m  [share <= 3 %]`);
+  L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m  [share without parked <= 3 %]`);
   L.push(`  silence (EVICT_S ${si.evictS} s, SILENCE_HOLD_S ${si.holdS} s): published older than EVICT_S ${si.publishedOlderThanEvict} (tram ${si.publishedOlderThanEvictTram}, frames ${si.publishedOlderThanEvictFrames})  [0]; silent trams planned past the next stop at +${si.lookaheadS} s ${si.extrapolatedPastNextStop} of ${si.silentTramItemsOnPath} silent on-path items (${si.extrapolatedPastNextStopVehicles} vehicles; at the horizon ${si.extrapolatedPastNextStopAtHorizon})  [0]`);
   const g = si.gaps.hist;
   L.push(`  fresh-fix gaps > ${si.gaps.minS} s: ${si.gaps.total} (over EVICT_S ${si.gaps.overEvictS}); same trip 60-120 s ${g['60-120'].sameTrip}, 120-180 s ${g['120-180'].sameTrip} (moved <= 50 m ${g['120-180'].sameTripMovedLe50m}, <= 150 m of a terminal ${g['120-180'].sameTripWithin150mOfTerminal}), 180-300 s ${g['180-300'].sameTrip}, > 300 s ${g.over300.sameTrip}`);
@@ -2247,13 +2308,13 @@ export function formatMarkdown(r: BranchReport): string {
   const u = r.unplaced;
   L.push('## Unplaced trams (on no path, not off the graph)');
   L.push('');
-  L.push(`Definition: ${u.definition}. Tram time unplaced: **${u.vehicleHours} vehicle-hours = ${fmt(u.shareOfTramVehicleHours === null ? null : u.shareOfTramVehicleHours * 100, 2)} %** of tram vehicle-hours (with a nearest edge, the matcher's own unplaced flag: ${u.withEdgeVehicleHours} vh; without: ${u.noEdgeVehicleHours} vh). Off the graph, for comparison: ${u.offGraphVehicleHours} vh. Fresh fixes while unplaced: ${u.freshFixes}. Episodes: **${u.episodes}**, duration p50 ${fmt(u.durationS.p50)} s, p95 ${fmt(u.durationS.p95)} s, max ${fmt(u.durationS.max)} s; distance of the first fix to the nearest terminal platform p50 ${fmt(u.terminalM.p50)} m, p95 ${fmt(u.terminalM.p95)} m (<=150 m ${u.terminalDistanceHist.le150}, 150-300 m ${u.terminalDistanceHist.le300}, 300-600 m ${u.terminalDistanceHist.le600}, >600 m ${u.terminalDistanceHist.gt600}); ground covered p50 ${fmt(u.groundM.p50)} m, p95 ${fmt(u.groundM.p95)} m.`);
+  L.push(`Definition: ${u.definition}. Tram time unplaced: ${u.vehicleHours} vehicle-hours = ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} % of tram vehicle-hours (raw). Parked (${u.parkedRule}: a tram standing off the graph at a depot or layover, never drawn): ${fmt(u.parkedVehicleHours, 2)} vehicle-hours in ${fmt(u.parkedEpisodes)} episodes. **Without parked trams (row A10): ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} %** of tram vehicle-hours (with a nearest edge, the matcher's own unplaced flag: ${u.withEdgeVehicleHours} vh; without: ${u.noEdgeVehicleHours} vh). Off the graph, for comparison: ${u.offGraphVehicleHours} vh. Fresh fixes while unplaced: ${u.freshFixes}. Episodes: **${u.episodes}**, duration p50 ${fmt(u.durationS.p50)} s, p95 ${fmt(u.durationS.p95)} s, max ${fmt(u.durationS.max)} s; distance of the first fix to the nearest terminal platform p50 ${fmt(u.terminalM.p50)} m, p95 ${fmt(u.terminalM.p95)} m (<=150 m ${u.terminalDistanceHist.le150}, 150-300 m ${u.terminalDistanceHist.le300}, 300-600 m ${u.terminalDistanceHist.le600}, >600 m ${u.terminalDistanceHist.gt600}); ground covered p50 ${fmt(u.groundM.p50)} m, p95 ${fmt(u.groundM.p95)} m.`);
   L.push('');
   L.push(mdTable(['nearest stop (episode start)', 'episodes', 'vehicle-hours', 'terminal m (median)'], u.byStop.map((x) => [x.stop, x.episodes, x.vehicleHours, fmt(x.terminalM)])));
   L.push('');
   L.push(mdTable(['route', 'episodes', 'vehicle-hours', 'share of the route'], u.byRoute.slice(0, 20).map((x) => [x.route, x.episodes, x.vehicleHours, x.shareOfRouteVehicleHours === null ? 'n/a' : `${(x.shareOfRouteVehicleHours * 100).toFixed(2)}%`])));
   L.push('');
-  L.push(mdTable(['longest episodes', 'route', 'prior', 'duration s', 'fresh fixes', 'ground m', 'stop (m)', 'terminal (m)'], u.longest.map((x) => [`${x.start} ${x.id}`, x.route, x.prior, x.durationS, x.freshFixes, x.groundM, `${x.stop} (${x.stopM})`, `${x.terminal} (${x.terminalM})`])));
+  L.push(mdTable(['longest episodes', 'route', 'prior', 'duration s', 'fresh fixes', 'ground m', 'max from start m', 'parked', 'stop (m)', 'terminal (m)'], u.longest.map((x) => [`${x.start} ${x.id}`, x.route, x.prior, x.durationS, x.freshFixes, x.groundM, x.maxDistFromStartM, x.parked ? 'yes' : 'no', `${x.stop} (${x.stopM})`, `${x.terminal} (${x.terminalM})`])));
   L.push('');
   const si = r.silence;
   L.push('## Silence (T8: hold at the next stop after SILENCE_HOLD_S, drop at EVICT_S)');
