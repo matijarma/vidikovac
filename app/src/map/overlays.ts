@@ -26,7 +26,7 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_EXTRA_CHAR_PX, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_EXTRA_CHAR_PX, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -125,14 +125,10 @@ const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
 export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX };
-/** The capsule's room around its number, in CSS px before the surface's
- *  symbol scale (icon-text-fit-padding, top/bottom and left/right). The
- *  pill's 12 px Noto Sans Medium sets every digit 6.5 px wide (its glyph
- *  advance, 13 at 24 px) on a 14.4 px line, so two digits land on the
- *  24 x 18 capsule pills.ts states, three and four within a pixel of its 31
- *  and 38, and one (or none) on the ends' own 18. */
-export const PILL_FIT_PAD_X = 5.5;
-export const PILL_FIT_PAD_Y = 1.8;
+/** The capsule's room around its number (icon-text-fit-padding): hoisted to
+ *  motion/pills.ts beside the glyph advances, so the render census and the
+ *  nose measure the capsule this layer draws; re-exported under its name. */
+export { PILL_FIT_PAD_X, PILL_FIT_PAD_Y };
 /** The direction nose (pills.ts NOSE_LENGTH_PX by NOSE_WIDTH_PX) sits ahead
  *  of the pill, drawn under it, its centre this far out for a label of one to
  *  four characters: hand-tuned, and kept verbatim. */

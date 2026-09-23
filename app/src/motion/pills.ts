@@ -40,6 +40,110 @@ export const PLATE_RADIUS_PX = 3;
 export const NOSE_LENGTH_PX = 8;
 export const NOSE_WIDTH_PX = 9;
 
+// --- The capsule as the city map draws it ----------------------------------
+//
+// MapLibre lays the stretchable pill on its number (icon-text-fit), so the
+// drawn capsule is the text's own advance plus PILL_FIT_PAD_X each side, and
+// never narrower than its two fixed round ends. These are the numbers the
+// render census and the direction nose need to agree with what is on the
+// screen; the cluster rule above keeps measuring with the hand-tuned table.
+
+/** The pill's number, in CSS px before the surface's symbol scale. */
+export const PILL_TEXT_PX = 12;
+/** The capsule's room around its number, in CSS px before the symbol scale
+ *  (overlays.ts icon-text-fit-padding, top/bottom and left/right). The
+ *  pill's 12 px Noto Sans Medium sets every digit 6.5 px wide (its glyph
+ *  advance, 13 at 24 px) on a 14.4 px line, so two digits land on the
+ *  24 x 18 capsule stated above, three and four within a pixel of its 31
+ *  and 38, and one (or none) on the ends' own 18. */
+export const PILL_FIT_PAD_X = 5.5;
+export const PILL_FIT_PAD_Y = 1.8;
+/** Glyph advances of Noto Sans Medium at the glyph set's 24 px (the PBF
+ *  ranges under app/public/maps/fonts, which MapLibre shapes the pill with):
+ *  the digits, the cluster's separator, the no-break space an unknown route
+ *  writes, and the capitals a route name may carry. Anything else is taken
+ *  as wide as a digit. */
+const PILL_GLYPH_ADVANCE_24: Readonly<Record<string, number>> = Object.freeze({
+  '0': 13, '1': 13, '2': 13, '3': 13, '4': 13, '5': 13, '6': 13, '7': 13, '8': 13, '9': 13,
+  '·': 6, ' ': 6, ' ': 6, '-': 7,
+  A: 15, B: 15, C: 15, D: 17, E: 13, F: 12, G: 17, H: 17, I: 8, J: 6, K: 15, L: 12, M: 22,
+  N: 18, O: 18, P: 14, Q: 18, R: 15, S: 13, T: 13, U: 17, V: 14, W: 22, X: 14, Y: 13, Z: 13,
+});
+const DIGIT_ADVANCE_24 = 13;
+
+/** The width MapLibre shapes `label` to at the pill's text size, in CSS px
+ *  before the symbol scale: the sum of its glyph advances. '' is the one
+ *  no-break space the pill layer writes for a route nobody knows. */
+export function pillTextWidthPx(label: string): number {
+  let advance = 0;
+  for (const ch of label === '' ? ' ' : label) advance += PILL_GLYPH_ADVANCE_24[ch] ?? DIGIT_ADVANCE_24;
+  return (advance * PILL_TEXT_PX) / 24;
+}
+
+/** The drawn capsule's half extents in CSS px before the symbol scale: the
+ *  text plus its padding, never narrower than the two fixed ends (a circle
+ *  of PILL_HEIGHT_PX), always PILL_HEIGHT_PX tall. */
+export function capsuleHalfPx(label: string): { halfWidth: number; halfHeight: number } {
+  const halfHeight = PILL_HEIGHT_PX / 2;
+  return { halfWidth: Math.max(halfHeight, pillTextWidthPx(label) / 2 + PILL_FIT_PAD_X), halfHeight };
+}
+
+/** The corner radius of the mark a vehicle of `kind` wears (overlays.ts
+ *  MARK_IMAGE): a tram's plate, anything else the round-ended capsule. */
+export function markRadiusPx(kind: string): number {
+  return kind === 'tram' ? PLATE_RADIUS_PX : PILL_HEIGHT_PX / 2;
+}
+
+/**
+ * How far a ray from the centre of a rounded rectangle (half extents
+ * `halfWidth` x `halfHeight`, corner radius `radius`) runs before it leaves
+ * the shape, heading `bearingDeg` degrees clockwise from screen up: the
+ * straight sides where it meets them, else the corner's own arc. The shape
+ * is symmetric about both axes, so only the heading's two magnitudes count.
+ */
+export function outlineDistancePx(halfWidth: number, halfHeight: number, radius: number, bearingDeg: number): number {
+  const rad = (bearingDeg * Math.PI) / 180;
+  const ux = Math.abs(Math.sin(rad));
+  const uy = Math.abs(Math.cos(rad));
+  const r = Math.max(0, Math.min(radius, halfWidth, halfHeight));
+  const EPS = 1e-9;
+  if (ux > EPS) {
+    const t = halfWidth / ux;
+    if (t * uy <= halfHeight - r + EPS) return t;
+  }
+  if (uy > EPS) {
+    const t = halfHeight / uy;
+    if (t * ux <= halfWidth - r + EPS) return t;
+  }
+  // Through the corner: |t u - c| = r, c the corner arc's centre.
+  const cx = halfWidth - r;
+  const cy = halfHeight - r;
+  const b = cx * ux + cy * uy;
+  return b + Math.sqrt(Math.max(0, b * b - (cx * cx + cy * cy - r * r)));
+}
+
+/** How far into the capsule the nose's base is tucked along its heading, in
+ *  CSS px before the symbol scale: half a pixel (one on the wall's scale 2),
+ *  so the triangle reads as attached and never shows a hairline of street
+ *  between the two, while all but that half pixel of its length is outside. */
+export const NOSE_TUCK_PX = 0.5;
+
+/**
+ * The centre of the direction nose (or of one arrow of an opposed merge),
+ * its distance from the mark's centre along `bearingDeg`, in CSS px before
+ * the symbol scale: the capsule MapLibre draws for `label` (capsuleHalfPx,
+ * markRadiusPx), left along the heading, plus half the triangle, less the
+ * tuck. The capsule stays upright in the viewport while the triangle turns
+ * with the heading, so a north-bound nose sits on the capsule's top edge and
+ * an east-bound one on its round end: the old per-length table measured the
+ * half-width alone, and floated the arrows of a vertical "6·7·8" 14 to 21 px
+ * off the wall's capsule (lane-w-e2e-2.md).
+ */
+export function noseCentrePx(label: string, kind: string, bearingDeg: number): number {
+  const { halfWidth, halfHeight } = capsuleHalfPx(label);
+  return outlineDistancePx(halfWidth, halfHeight, markRadiusPx(kind), bearingDeg) + NOSE_LENGTH_PX / 2 - NOSE_TUCK_PX;
+}
+
 /** Padding added to a pill's box (each side) before two boxes are tested for
  *  overlap: two pills that almost touch still read as one cluster, not a
  *  hairline gap that flickers between joined and apart frame to frame. */

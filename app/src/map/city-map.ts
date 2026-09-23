@@ -21,7 +21,7 @@ import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { bodiesToGeoJson } from '../motion/bodies';
-import { clusterPills, createLineColours, pillChars, pillLabel, pillWidthPx, PILL_HEIGHT_PX, type Cluster, type PillPoint } from '../motion/pills';
+import { capsuleHalfPx, clusterPills, createLineColours, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
@@ -895,8 +895,12 @@ export interface ScreenBox { left: number; top: number; right: number; bottom: n
 export interface MarkerCensus {
   /** data-markers: the curated city marks drawn with their centre on the screen, once each. */
   markers: number;
-  /** data-unlabelled: marks drawn with neither a whole-number count nor a
-   *  name, the two deliberate exceptions below aside. Must be 0. */
+  /** data-unlabelled: marks drawn with nothing that says what they are, the
+   *  deliberate exceptions below aside. Must be 0. A BAJS disc says it with
+   *  its count; a venue (any mark but a station's or an air station's) with
+   *  its NAME, never with its programme count alone -- the framed wall at
+   *  Kadar 8 lost Gavella's name below zoom 13 and still read 0 while its
+   *  disc said "1" (review-w, P2). */
   unlabelled: number;
   /** data-bajs, by what a station's disc says: `counted` a number above
    *  zero, `zero` the grey "0", `blank` the grey disc without a number (the
@@ -909,7 +913,23 @@ export interface MarkerCensus {
    *  Transient on a live map: a tram passing a station covers it for as long
    *  as it takes to pass. */
   covered: number;
+  /** data-disc-pills: the pills over those numbers, counted per mark (a
+   *  pill over two discs counts twice), so `covered` never exceeds it: a
+   *  covered disc is a pill passing, never a mark drawn under something else. */
+  discPills: number;
 }
+
+/** What the city places' name layer did, as markerCensus needs it: whether
+ *  the surface draws their names at all (city-layers.ts 'none', the
+ *  whole-city window, draws none, and there a venue's count is its label),
+ *  and the ids whose name the style would draw but the collision pass held
+ *  back -- a name yielding to a passing pill (decision 17) is a hidden name
+ *  (data-hidden-names), not a mark without one. */
+export interface CensusNames {
+  shown: boolean;
+  suppressed: ReadonlySet<string>;
+}
+const NAMES_SHOWN: CensusNames = Object.freeze({ shown: true, suppressed: new Set<string>() });
 
 function boxesMeet(a: ScreenBox, b: ScreenBox): boolean {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
@@ -929,6 +949,7 @@ export function markerCensus(
   view: { width: number; height: number },
   pills: readonly ScreenBox[],
   scale: number,
+  names: CensusNames = NAMES_SHOWN,
 ): MarkerCensus {
   // By feature id: a point on a tile seam comes back once from each tile.
   const dots = new Map<string, RenderedFeature>();
@@ -948,7 +969,7 @@ export function markerCensus(
       named.add(id);
     }
   }
-  const census: MarkerCensus = { markers: 0, unlabelled: 0, bajs: { counted: 0, zero: 0, blank: 0, far: 0 }, covered: 0 };
+  const census: MarkerCensus = { markers: 0, unlabelled: 0, bajs: { counted: 0, zero: 0, blank: 0, far: 0 }, covered: 0, discPills: 0 };
   const laidOut = view.width > 0 && view.height > 0;
   const half = CENSUS_COUNT_HALF_PX * scale;
   for (const [id, feature] of dots) {
@@ -965,21 +986,181 @@ export function markerCensus(
     if (far) census.bajs.far++;
     else if (bike && counted) census.bajs[count === '0' ? 'zero' : 'counted']++;
     else if (blank) census.bajs.blank++;
-    if (!counted && !named.has(id) && !far && !blank) census.unlabelled++;
-    if (at && pills.some((box) => boxesMeet(box, { left: at.x - half, top: at.y - half, right: at.x + half, bottom: at.y + half }))) census.covered++;
+    // A venue is named or it is a number on a disc: its count says how many
+    // happenings, not where. Only a surface that names no city place at all
+    // lets the count stand for it.
+    const venue = !bike && p.category !== 'air';
+    const saysIt = named.has(id) || names.suppressed.has(id) || (counted && (!venue || !names.shown));
+    if (!saysIt && !far && !blank) census.unlabelled++;
+    if (at) {
+      const number: ScreenBox = { left: at.x - half, top: at.y - half, right: at.x + half, bottom: at.y + half };
+      const over = pills.filter((box) => boxesMeet(box, number)).length;
+      if (over > 0) census.covered++;
+      census.discPills += over;
+    }
   }
   return census;
 }
 
-/** A rendered pill's box as motion/pills.ts reckons it for the clustering:
- *  pillWidthPx(pillChars(label)) x PILL_HEIGHT_PX, at the map's symbol scale,
- *  centred on the mark -- the box the merge decisions are made with. Where
- *  the capsule is drawn to fit its text, a merged label's narrow "·" makes the
- *  drawn capsule a little shorter than this, so the overlaps it finds are an
- *  upper bound by those few pixels, never a miss. */
+// --- Names the collision pass held back (data-hidden-names) ----------------
+//
+// queryRenderedFeatures answers the names MapLibre placed; which names the
+// style WOULD draw is the name layers' own filter, text and zoom range over
+// the features their sources were handed. The census asks the second through
+// a small evaluator of the expression operators those layers use (overlays.ts,
+// city-layers.ts) rather than a copy of their rules, so a filter changed there
+// is the filter counted here; an operator outside the set leaves that layer
+// out of the count instead of guessing.
+
+/** What evaluateExpression answers for an operator it does not know. */
+export const UNKNOWN_EXPRESSION: unique symbol = Symbol('unknown expression');
+class UnknownOperator extends Error {}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return a === b || (a === null && b === undefined) || (a === undefined && b === null);
+}
+
+/**
+ * A MapLibre expression over one feature's `properties` at `zoom`, for the
+ * operators the name layers' filters and text fields use: literal, get, has,
+ * zoom, !, all, any, ==, !=, <, <=, >, >=, in, case, match, step, coalesce
+ * and the four arithmetic ones. Anything else is UNKNOWN_EXPRESSION.
+ */
+export function evaluateExpression(expr: unknown, properties: Readonly<Record<string, unknown>>, zoom: number): unknown {
+  const ev = (e: unknown): unknown => {
+    if (!Array.isArray(e)) return e ?? null;
+    const [op, ...args] = e as [unknown, ...unknown[]];
+    const num = (x: unknown): number => Number(ev(x));
+    switch (op) {
+      case 'literal': return args[0];
+      case 'get': return typeof args[0] === 'string' && args.length === 1 ? (properties[args[0]] ?? null) : (() => { throw new UnknownOperator('get'); })();
+      case 'has': return typeof args[0] === 'string' && properties[args[0]] !== undefined && properties[args[0]] !== null;
+      case 'zoom': return zoom;
+      case '!': return ev(args[0]) !== true;
+      case 'all': return args.every((a) => ev(a) === true);
+      case 'any': return args.some((a) => ev(a) === true);
+      case '==': return sameValue(ev(args[0]), ev(args[1]));
+      case '!=': return !sameValue(ev(args[0]), ev(args[1]));
+      case '<': return num(args[0]) < num(args[1]);
+      case '<=': return num(args[0]) <= num(args[1]);
+      case '>': return num(args[0]) > num(args[1]);
+      case '>=': return num(args[0]) >= num(args[1]);
+      case '+': return args.reduce<number>((sum, a) => sum + num(a), 0);
+      case '*': return args.reduce<number>((product, a) => product * num(a), 1);
+      case '-': return args.length === 1 ? -num(args[0]) : num(args[0]) - num(args[1]);
+      case '/': return num(args[0]) / num(args[1]);
+      case 'in': {
+        const needle = ev(args[0]);
+        const haystack = ev(args[1]);
+        if (Array.isArray(haystack)) return haystack.some((x) => sameValue(x, needle));
+        return typeof haystack === 'string' && needle !== null && haystack.includes(String(needle));
+      }
+      case 'case':
+        for (let i = 0; i + 1 < args.length; i += 2) if (ev(args[i]) === true) return ev(args[i + 1]);
+        return ev(args[args.length - 1]);
+      case 'match': {
+        const value = ev(args[0]);
+        for (let i = 1; i + 1 < args.length; i += 2) {
+          const label = args[i];
+          if (Array.isArray(label) ? label.some((x) => sameValue(x, value)) : sameValue(label, value)) return ev(args[i + 1]);
+        }
+        return ev(args[args.length - 1]);
+      }
+      case 'step': {
+        const input = num(args[0]);
+        let out = args[1];
+        for (let i = 2; i + 1 < args.length; i += 2) {
+          if (input >= Number(args[i])) out = args[i + 1];
+          else break;
+        }
+        return ev(out);
+      }
+      case 'coalesce':
+        for (const a of args) {
+          const v = ev(a);
+          if (v !== null) return v;
+        }
+        return null;
+      default: throw new UnknownOperator(String(op));
+    }
+  };
+  try {
+    return ev(expr);
+  } catch (error) {
+    if (error instanceof UnknownOperator) return UNKNOWN_EXPRESSION;
+    throw error;
+  }
+}
+
+/** One point feature as a source was handed it. */
+export interface SourcePoint {
+  geometry: { type: string; coordinates: unknown };
+  properties: Record<string, unknown>;
+}
+
+/** The census key of one name: its layer and its feature, as data-overlaps counts them. */
+export function nameKey(layerId: string, properties: Readonly<Record<string, unknown>>): string {
+  return `${layerId}:${String(properties.id ?? properties.name ?? '')}`;
+}
+
+/**
+ * The names the style would draw on the screen with no collision in the
+ * way: for each of `layers` (a StyleLayerLike from overlays.ts or
+ * city-layers.ts) that is visible at `zoom` and whose filter and text the
+ * evaluator can read, every feature of its source that passes the filter,
+ * has a text and stands with its anchor inside `view`. By nameKey.
+ */
+export function nameCandidates(
+  layers: readonly StyleLayerLike[],
+  featuresOf: (sourceId: string) => readonly SourcePoint[],
+  zoom: number,
+  project: (lonLat: [number, number]) => { x: number; y: number } | null,
+  view: { width: number; height: number },
+): Map<string, { layer: string; id: string }> {
+  const out = new Map<string, { layer: string; id: string }>();
+  // A zoom step inside a filter is read at the tile's whole zoom
+  // (overlays.ts stopLabelFilter); the layer's own range at the camera's.
+  const tileZoom = Math.floor(zoom);
+  const laidOut = view.width > 0 && view.height > 0;
+  for (const layer of layers) {
+    const layout = (layer.layout ?? {}) as Record<string, unknown>;
+    const field = layout['text-field'];
+    if (field === undefined || layout.visibility === 'none' || !layer.source) continue;
+    if (zoom < (layer.minzoom ?? 0) || zoom >= (layer.maxzoom ?? Infinity)) continue;
+    const found = new Map<string, { layer: string; id: string }>();
+    let readable = true;
+    for (const feature of featuresOf(layer.source)) {
+      const props = feature.properties;
+      if (layer.filter !== undefined) {
+        const pass = evaluateExpression(layer.filter, props, tileZoom);
+        if (pass === UNKNOWN_EXPRESSION) { readable = false; break; }
+        if (pass !== true) continue;
+      }
+      const text = evaluateExpression(field, props, zoom);
+      if (text === UNKNOWN_EXPRESSION) { readable = false; break; }
+      if (typeof text !== 'string' || text.trim() === '') continue;
+      const [lon, lat] = (feature.geometry.type === 'Point' && Array.isArray(feature.geometry.coordinates) ? feature.geometry.coordinates : []) as number[];
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+      const at = project([lon!, lat!]);
+      if (at && laidOut && (at.x < 0 || at.y < 0 || at.x > view.width || at.y > view.height)) continue;
+      found.set(nameKey(layer.id, props), { layer: layer.id, id: String(props.id ?? '') });
+    }
+    if (readable) for (const [key, value] of found) out.set(key, value);
+  }
+  return out;
+}
+
+/** A rendered pill's box as MapLibre draws it: the capsule icon-text-fit
+ *  lays on its number (motion/pills.ts capsuleHalfPx, from the glyph
+ *  advances), at the map's symbol scale, centred on the mark. Inside the
+ *  pill's own collision box (that plus icon-padding), so a name MapLibre
+ *  placed clear of a pill is never counted as crossed by it -- where the
+ *  clustering's table width, a few pixels wider for a merged label's narrow
+ *  "·", would have counted names that sit beside the capsule. */
 export function pillBox(at: { x: number; y: number }, label: string, scale: number): ScreenBox {
-  const halfW = (pillWidthPx(pillChars(label)) * scale) / 2;
-  const halfH = (PILL_HEIGHT_PX * scale) / 2;
+  const { halfWidth, halfHeight } = capsuleHalfPx(label);
+  const halfW = halfWidth * scale;
+  const halfH = halfHeight * scale;
   return { left: at.x - halfW, top: at.y - halfH, right: at.x + halfW, bottom: at.y + halfH };
 }
 
@@ -1174,6 +1355,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let basemap: StyleLayerLike[] = [];
   let overlays: StyleLayerLike[] = [];
   let cityOverlays: StyleLayerLike[] = [];
+  /** The stops the map's `stops` source was built with (the census reads them for the names it would draw). */
+  let stopsData: { features: readonly SourcePoint[] } = { features: [] };
   let cityPaths: MapLine[] = [];
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
@@ -1321,9 +1504,15 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //   data-overlaps   `discs:N;names:N`: marks whose number a pill covers,
   //                   and the app's own names and place marks (stop names,
   //                   the screen's stop, city and place labels) a pill's box
-  //                   crosses -- the pills ignore placement, so neither ever
-  //                   pushes the other off the map, and this counts where
-  //                   they meet instead. One small query per rendered pill.
+  //                   (the capsule as drawn) crosses. One small query per
+  //                   rendered pill.
+  //   data-disc-pills the pills over those numbers, per mark: `discs` never
+  //                   exceeds it, because a covered number is a pill passing
+  //   data-hidden-names the names the style would draw on the screen (the
+  //                   name layers' own filter, text and zoom over what their
+  //                   sources were handed, nameCandidates) that the collision
+  //                   pass held back: where the wall's names yield to its
+  //                   pills (decision 17), this is how many are yielding
   /** zoom, selection, "has any marks" and the evidence version the census was last taken for. */
   let renderProbeKey = '';
   /** Whether the last pushed collection had any mark at all; see the key above. */
@@ -1411,18 +1600,32 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       const at = anchorOf(feature);
       if (at) pillBoxes.push(pillBox(at, String(feature.properties.short ?? ''), scale));
     }
+    const view = { width: container.clientWidth, height: container.clientHeight };
+    const nameIds: string[] = [l.LAYERS.stopLabels, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
+      l.LAYERS.placeSeat, l.LAYERS.placeAssembly, l.LAYERS.placePharmacy, CENSUS_LAYERS.labels].filter(has);
+    // The names placed, and the names the style would place with nothing in
+    // the way: what the second has and the first lacks, the collision pass
+    // held back (data-hidden-names).
+    const placed = new Set<string>();
+    for (const feature of nameIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: nameIds })) placed.add(nameKey(feature.layer.id, feature.properties));
+    const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : () => null;
+    const specs = [...overlays, ...cityOverlays].filter((layer) => nameIds.includes(layer.id));
+    const hidden = [...nameCandidates(specs, (id) => sourcePoints(l, id), m.getZoom(), project, view)].filter(([key]) => !placed.has(key));
+    const cityLabels = cityOverlays.find((layer) => layer.id === CENSUS_LAYERS.labels);
+    const names: CensusNames = {
+      shown: cityLabels !== undefined && (cityLabels.layout as Record<string, unknown> | undefined)?.visibility !== 'none',
+      suppressed: new Set(hidden.filter(([, name]) => name.layer === CENSUS_LAYERS.labels).map(([, name]) => name.id)),
+    };
     const cityIds = [CENSUS_LAYERS.dots, CENSUS_LAYERS.badges, CENSUS_LAYERS.labels].filter(has);
     const census = markerCensus(
       cityIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: cityIds }),
-      anchorOf, { width: container.clientWidth, height: container.clientHeight }, pillBoxes, scale,
+      anchorOf, view, pillBoxes, scale, names,
     );
-    const nameIds = [l.LAYERS.stopLabels, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
-      l.LAYERS.placeSeat, l.LAYERS.placeAssembly, l.LAYERS.placePharmacy, CENSUS_LAYERS.labels].filter(has);
     const crossed = new Set<string>();
     if (nameIds.length > 0) {
       for (const box of pillBoxes) {
         for (const feature of m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: nameIds })) {
-          crossed.add(`${feature.layer.id}:${String(feature.properties.id ?? feature.properties.name ?? '')}`);
+          crossed.add(nameKey(feature.layer.id, feature.properties));
         }
       }
     }
@@ -1430,6 +1633,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     container.dataset.unlabelled = String(census.unlabelled);
     container.dataset.bajs = `counted:${census.bajs.counted};zero:${census.bajs.zero};blank:${census.bajs.blank};far:${census.bajs.far}`;
     container.dataset.overlaps = `discs:${census.covered};names:${crossed.size}`;
+    container.dataset.discPills = String(census.discPills);
+    container.dataset.hiddenNames = String(hidden.length);
+  }
+
+  /** The point features a name layer's source was last handed, for
+   *  nameCandidates: the stops as the map was built with them, the screen's
+   *  stop, the places and the city's own places as update() last set them. */
+  function sourcePoints(l: MaplibreModule, id: string): readonly SourcePoint[] {
+    if (id === l.SOURCES.stops) return stopsData.features;
+    if (id === l.SOURCES.screenStop) return screenStopGeoJson().features as SourcePoint[];
+    if (id === l.SOURCES.places) return pointsToGeoJson(points.filter((p) => p.place !== 'city')).features;
+    if (l.CITY_POINTS && id === l.CITY_POINTS) return pointsToGeoJson(points.filter((p) => p.place === 'city')).features;
+    return [];
   }
 
   /** `data-focus`: what line focus did, read back off the live style once the
@@ -1691,7 +1907,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
     created.addSource(l.SOURCES.network, geojson(net ? networkToGeoJson(net) : empty));
-    created.addSource(l.SOURCES.stops, geojson(net ? stopsToGeoJson(net) : empty));
+    const stops = net ? stopsToGeoJson(net) : empty;
+    stopsData = stops;
+    created.addSource(l.SOURCES.stops, geojson(stops));
     created.addSource(l.SOURCES.closures, geojson(linesToGeoJson(lines)));
     created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points.filter(p=>p.place!=='city'))));
     if (l.CITY_POINTS) {

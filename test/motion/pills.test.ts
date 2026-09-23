@@ -15,6 +15,39 @@ import {
   type Single,
 } from '../../app/src/motion/pills';
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
+import { capsuleHalfPx, PILL_FIT_PAD_X, PILL_TEXT_PX, pillTextWidthPx } from '../../app/src/motion/pills';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/** The glyph advances of one PBF glyph range (the protobuf MapLibre reads:
+ *  glyphs.stacks[1].glyphs[3] { id 1, advance 7 }), by code point. */
+function glyphAdvances(path: string): Map<number, number> {
+  const buf = readFileSync(path);
+  const out = new Map<number, number>();
+  const walk = (start: number, end: number, visit: (field: number, wire: number, at: number, next: number) => void): void => {
+    let pos = start;
+    const varint = (): number => { let r = 0, shift = 0, byte = 0; do { byte = buf[pos++]!; r += (byte & 0x7f) * 2 ** shift; shift += 7; } while (byte & 0x80); return r; };
+    while (pos < end) {
+      const key = varint();
+      const field = key >> 3, wire = key & 7;
+      if (wire === 0) { const at = pos; varint(); visit(field, wire, at, pos); }
+      else if (wire === 2) { const n = varint(); visit(field, wire, pos, pos + n); pos += n; }
+      else if (wire === 5) pos += 4;
+      else pos += 8;
+    }
+  };
+  const readVarint = (at: number): number => { let r = 0, shift = 0, byte = 0, pos = at; do { byte = buf[pos++]!; r += (byte & 0x7f) * 2 ** shift; shift += 7; } while (byte & 0x80); return r; };
+  walk(0, buf.length, (f1, w1, s1, e1) => {
+    if (f1 !== 1 || w1 !== 2) return;
+    walk(s1, e1, (f2, w2, s2, e2) => {
+      if (f2 !== 3 || w2 !== 2) return;
+      let id = -1, advance = -1;
+      walk(s2, e2, (f3, w3, s3) => { if (w3 === 0 && f3 === 1) id = readVarint(s3); if (w3 === 0 && f3 === 7) advance = readVarint(s3); });
+      out.set(id, advance);
+    });
+  });
+  return out;
+}
 
 describe('pillWidthPx / pillChars: the pill grows past four characters instead of clipping', () => {
   it('gives the four hand-tuned widths verbatim, then +7px per character up to the cluster cap', () => {
@@ -32,6 +65,25 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
     const past = '1234567890'.repeat(4) + '12345'; // 45 characters, past the cap
     expect(pillChars(past)).toBe(PILL_MAX_CHARS_CLUSTER);
     expect(pillWidthPx(pillChars(past))).toBe(290);
+  });
+});
+
+describe('the capsule the city map draws: its number\u2019s glyphs plus the fit padding', () => {
+  it('measures a label with the glyph advances of the font MapLibre shapes it in', () => {
+    const advances = glyphAdvances(resolve(import.meta.dirname, '../../app/public/maps/fonts/Noto Sans Medium/0-255.pbf'));
+    for (const ch of '0123456789\u00b7\u00a0ABCDEFGHIJKLMNOPQRSTUVWXYZ-') {
+      expect(pillTextWidthPx(ch), ch).toBe((advances.get(ch.codePointAt(0)!)! * PILL_TEXT_PX) / 24);
+    }
+    expect(pillTextWidthPx('14')).toBe(13);
+    expect(pillTextWidthPx('6\u00b711\u00b712')).toBe(5 * 6.5 + 2 * 3);
+    // A route nobody knows writes one no-break space.
+    expect(pillTextWidthPx('')).toBe(pillTextWidthPx('\u00a0'));
+  });
+
+  it('lands one to four digits on the widths WP2-A measured through MapLibre\u2019s own text fit: 18, 24, 30.5 and 37, always 18 tall', () => {
+    expect(['6', '14', '268', '1234'].map((label) => 2 * capsuleHalfPx(label).halfWidth)).toEqual([18, 24, 30.5, 37]);
+    expect(capsuleHalfPx('').halfWidth).toBe(9);
+    expect(capsuleHalfPx('6\u00b711\u00b712')).toEqual({ halfWidth: (5 * 6.5 + 2 * 3) / 2 + PILL_FIT_PAD_X, halfHeight: 9 });
   });
 });
 

@@ -9,7 +9,7 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, evaluateExpression, markerCensus, nameCandidates, nameKey, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
@@ -715,7 +715,7 @@ describe('the marker census of the city layers', () => {
       dot('bajs-d', bike('', false, { far: true })),
       dot('culture-1', { category: 'culture', badge: '2', eventCount: 2 }), badge('culture-1', '2'), label('culture-1', 'Gavella'),
     ], anchor, OPEN, [], 1);
-    expect(census).toEqual({ markers: 5, unlabelled: 0, bajs: { counted: 1, zero: 1, blank: 1, far: 1 }, covered: 0 });
+    expect(census).toEqual({ markers: 5, unlabelled: 0, bajs: { counted: 1, zero: 1, blank: 1, far: 1 }, covered: 0, discPills: 0 });
   });
 
   it('counts a mark without a whole-number count or a name as unlabelled: a "?", a "+3", a lost number, a nameless air station', () => {
@@ -740,20 +740,42 @@ describe('the marker census of the city layers', () => {
       // 15.899 E is x = -10: the disc's edge is on the screen, its number is not.
       dot('edge', bike('', true), 15.899, 45.81),
     ], anchor, view, [], 2);
-    expect(census).toEqual({ markers: 1, unlabelled: 0, bajs: { counted: 1, zero: 0, blank: 0, far: 0 }, covered: 0 });
+    expect(census).toEqual({ markers: 1, unlabelled: 0, bajs: { counted: 1, zero: 0, blank: 0, far: 0 }, covered: 0, discPills: 0 });
   });
 
-  it('counts a mark whose number a pill covers, by the pill box the clustering reckons at the map scale', () => {
+  it('counts a mark whose number a pill covers, by the capsule MapLibre draws at the map scale, and the pills over each such number', () => {
     // bajs-a at (700, 900); a one-digit pill 18 x 18 px at scale 2 is 36 x 36.
     const over = pillBox({ x: 710, y: 905 }, '6', 2);
     const beside = pillBox({ x: 760, y: 900 }, '6', 2);
     expect(over).toEqual({ left: 692, top: 887, right: 728, bottom: 923 });
-    expect(pillBox({ x: 0, y: 0 }, '6·11·12', 1).right).toBe(pillWidthPx(7) / 2);
+    // A merged label is its glyphs' width: five digits at 6.5 px and two
+    // separators at 3, plus 5.5 px each side -- narrower than the
+    // clustering's table width for seven characters.
+    expect(pillBox({ x: 0, y: 0 }, '6·11·12', 1).right).toBe(24.75);
+    expect(pillBox({ x: 0, y: 0 }, '6·11·12', 1).right).toBeLessThan(pillWidthPx(7) / 2);
     const marks = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4')];
     expect(markerCensus(marks, anchor, OPEN, [over], 2).covered).toBe(1);
     expect(markerCensus(marks, anchor, OPEN, [beside], 2).covered).toBe(0);
     // Covered is not unlabelled: MapLibre drew the number, a passing tram hides it.
     expect(markerCensus(marks, anchor, OPEN, [over], 2).unlabelled).toBe(0);
+    // Two pills over one number count twice, so a covered disc is never more than the pills over it.
+    const both = markerCensus(marks, anchor, OPEN, [over, pillBox({ x: 700, y: 912 }, '14', 2)], 2);
+    expect([both.covered, both.discPills]).toEqual([1, 2]);
+    expect(markerCensus(marks, anchor, OPEN, [beside], 2).discPills).toBe(0);
+  });
+
+  it('asks a venue for its name: a programme count alone leaves it unlabelled, unless the surface names no city place or the collision pass held the name back', () => {
+    const venue = (id: string, lon = 15.97) => dot(id, { category: 'culture', badge: '2', eventCount: 2, priority: 0 }, lon);
+    // Named: a mark that says what it is.
+    expect(markerCensus([venue('v'), badge('v', '2'), label('v', 'Gavella')], anchor, OPEN, [], 1).unlabelled).toBe(0);
+    // A disc saying "2" with no name says how many, not what: the review's framed Gavella below zoom 13.
+    expect(markerCensus([venue('v'), badge('v', '2')], anchor, OPEN, [], 1).unlabelled).toBe(1);
+    // The whole-city window names no city place at all, and there the count is the mark's word.
+    expect(markerCensus([venue('v'), badge('v', '2')], anchor, OPEN, [], 1, { shown: false, suppressed: new Set() }).unlabelled).toBe(0);
+    // A name yielding to a passing pill is a hidden name, not a missing one.
+    expect(markerCensus([venue('v'), badge('v', '2'), venue('w', 15.98), badge('w', '1')], anchor, OPEN, [], 1, { shown: true, suppressed: new Set(['v']) }).unlabelled).toBe(1);
+    // A station's count is still its label, names on or off.
+    expect(markerCensus([dot('b', bike('4', false)), badge('b', '4')], anchor, OPEN, [], 1).unlabelled).toBe(0);
   });
 
   it('writes the census on the container at idle, beside the pills, and the names a pill crosses', async () => {
@@ -782,6 +804,36 @@ describe('the marker census of the city layers', () => {
     expect(container.dataset.unlabelled).toBe('0');
     expect(container.dataset.bajs).toBe('counted:1;zero:1;blank:1;far:0');
     expect(container.dataset.overlaps).toBe('discs:1;names:1');
+  });
+
+  it('writes the names the collision pass held back beside the overlaps: a candidate of a visible name layer that MapLibre did not place, and a venue whose name yields is not unlabelled', async () => {
+    const venue: MapPoint = { id: 'culture-1', lon: 15.972, lat: 45.814, title: 'Gavella', place: 'city', props: { category: 'culture', badge: '1', eventCount: 1, priority: 0 } };
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9705, lat: 45.8101, routes: ['6'] } as never;
+    const { map, container, frame, handle } = await harness({ lib: cityLib, points: [A, venue], extra: { symbolScale: 2, cityLabels: 'venues', stop } });
+    map.zoom = 13.2;
+    frame();
+    // The venue's disc and count drew, its name did not; the screen's stop name drew.
+    map.rendered = [
+      dot('culture-1', { category: 'culture', badge: '1', eventCount: 1, priority: 0 }, 15.972, 45.814), badge('culture-1', '1'),
+      { layer: { id: 'screen-stop-label' }, properties: { id: '106_1', name: 'Trg bana J. Jelačića' }, geometry: at(15.9705, 45.8101) },
+    ] as typeof map.rendered;
+    handle.update([A, venue], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.hiddenNames).toBe('1');
+    expect(container.dataset.unlabelled).toBe('0');
+    expect(container.dataset.discPills).toBe('0');
+    // Placed now: nothing hidden.
+    map.rendered = [...map.rendered, label('culture-1', 'Gavella')] as typeof map.rendered;
+    handle.update([A, venue], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.hiddenNames).toBe('0');
+    // The whole-city window draws no city names: nothing of theirs can be held back, and the count labels the venue.
+    handle.setCityLabels!('none');
+    map.rendered = map.rendered.filter((f) => f.layer.id !== CENSUS_LAYERS.labels) as typeof map.rendered;
+    handle.update([A, venue], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.hiddenNames).toBe('0');
+    expect(container.dataset.unlabelled).toBe('0');
   });
 
   it('re-takes the census at the next idle after update(), never on an idle with nothing new', async () => {
@@ -1230,5 +1282,63 @@ describe('tram interchanges on the stop features (Ruling 30)', () => {
     expect(hubs.size).toBeLessThan(tramNames.size / 3);
     // A stop with no tram is never an interchange however many buses end there.
     expect([...hubs].every((n) => tramNames.has(n))).toBe(true);
+  });
+});
+
+// The names the style would draw with nothing in the way, read off the name
+// layers' own expressions (city-map.ts nameCandidates): what data-hidden-names
+// subtracts the placed names from.
+describe('the names a layer would draw, from its own filter and text', () => {
+  const PROZOR: overlays.ProzorOptions = { networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: 4, overlapZoom: 13, stopRadius: false, labelPadding: 30 };
+  const framed = overlays.overlayLayers(basemap.OVERLAY_LIGHT, { prozor: PROZOR, screenStopId: '106_1', scale: 2 });
+  const byId = (id: string, from = framed) => from.find((l) => l.id === id)!;
+  const stop = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `Stop ${id}`, routes: ['6'], rank: 4, tram: true, bus: false, label: true, tramInterchange: false, ...extra });
+
+  it('evaluates the name layers’ filters the way MapLibre does', () => {
+    const filter = byId(overlays.LAYERS.stopLabels).filter;
+    expect(evaluateExpression(filter, stop('1'), 13)).toBe(true);
+    expect(evaluateExpression(filter, stop('1', { label: false }), 13)).toBe(false);
+    expect(evaluateExpression(filter, stop('106_1'), 13)).toBe(false); // the screen's own stop has its own label
+    expect(evaluateExpression(filter, stop('1', { rank: 1 }), 13)).toBe(false);
+    expect(evaluateExpression(filter, stop('1', { rank: 1, tramInterchange: true }), 13)).toBe(true);
+    expect(evaluateExpression(filter, stop('1', { tram: false, bus: false }), 13)).toBe(false);
+    // The phone's ranked steps are a zoom step inside the filter.
+    const phone = overlays.overlayLayers(basemap.OVERLAY_LIGHT).find((l) => l.id === overlays.LAYERS.stopLabels)!.filter;
+    expect(evaluateExpression(phone, stop('1', { rank: 2 }), 14)).toBe(false);
+    expect(evaluateExpression(phone, stop('1', { rank: 2 }), 15)).toBe(true);
+    // A route list reads as the array it is, never as a substring.
+    expect(evaluateExpression(['in', '6', ['get', 'routes']], { routes: ['16'] }, 13)).toBe(false);
+    expect(evaluateExpression(['in', '6', ['get', 'routes']], { routes: ['16', '6'] }, 13)).toBe(true);
+    const venues = cityPlaces.cityLayers(basemap.OVERLAY_LIGHT, null, 2, 'venues').find((l) => l.id === CENSUS_LAYERS.labels)!;
+    expect(evaluateExpression(venues.filter, { category: 'culture' }, 13)).toBe(true);
+    expect(evaluateExpression(venues.filter, { category: 'bikes' }, 13)).toBe(false);
+    expect(evaluateExpression(overlays.PLACE_FILTERS[overlays.LAYERS.placePharmacy], { place: 'pharmacy', address: 'Ilica 1' }, 13)).toBe(true);
+    expect(evaluateExpression(overlays.PLACE_FILTERS[overlays.LAYERS.placePharmacy], { place: 'pharmacy' }, 13)).toBe(false);
+    expect(evaluateExpression(['get', 'name'], { name: 'Trg' }, 13)).toBe('Trg');
+    expect(evaluateExpression(['within', {}], {}, 13)).toBe(UNKNOWN_EXPRESSION);
+  });
+
+  it('lists the names of visible layers in range whose text is set and whose anchor is on the screen, and leaves out a layer it cannot read', () => {
+    const point = (lon: number, lat: number, properties: Record<string, unknown>): SourcePoint => ({ geometry: { type: 'Point', coordinates: [lon, lat] }, properties });
+    const sources: Record<string, SourcePoint[]> = {
+      [overlays.SOURCES.stops]: [
+        point(15.97, 45.81, stop('1')),
+        point(15.97, 45.81, stop('2', { name: '' })), // nothing to write
+        point(15.5, 45.81, stop('3')), // off the screen
+        point(15.97, 45.81, stop('4', { label: false })), // filtered out
+      ],
+      [overlays.SOURCES.screenStop]: [point(15.9705, 45.8101, { id: '106_1', name: 'Trg bana J. Jelačića' })],
+    };
+    const project = ([lon, lat]: [number, number]) => ({ x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 });
+    const view = { width: 2000, height: 2000 };
+    const layers = [byId(overlays.LAYERS.stopLabels), byId(overlays.LAYERS.screenStopLabel)];
+    const names = nameCandidates(layers, (id) => sources[id] ?? [], 13.2, project, view);
+    expect([...names.keys()].sort()).toEqual([nameKey(overlays.LAYERS.screenStopLabel, { id: '106_1' }), nameKey(overlays.LAYERS.stopLabels, { id: '1' })].sort());
+    // Below the layer's own zoom: none of its names.
+    expect([...nameCandidates(layers, (id) => sources[id] ?? [], 12.9, project, view).keys()]).toEqual([nameKey(overlays.LAYERS.screenStopLabel, { id: '106_1' })]);
+    // Hidden, or unreadable: the layer is left out whole.
+    const hidden = { ...layers[0]!, layout: { ...layers[0]!.layout, visibility: 'none' } };
+    const strange = { ...layers[0]!, filter: ['within', {}] };
+    expect(nameCandidates([hidden, strange], (id) => sources[id] ?? [], 13.2, project, view).size).toBe(0);
   });
 });
