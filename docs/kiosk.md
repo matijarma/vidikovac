@@ -411,9 +411,9 @@ preklopljenih oznaka u jednu skupinu s natpisom tipa „6·11·12·14”, račun
 zaslonovoj skali oznaka, pa se oznake ne spajaju na pola stvarne udaljenosti.
 Spojena oznaka ispisuje svaku liniju, nikad „+N”, i širi se s natpisom: svih
 petnaest tramvajskih linija stane u jedan redak, natpis dulji od četrdeset
-znakova (veliko autobusno čvorište) prelama se u drugi redak, a tek natpis koji
-ne stane ni u dva retka od po četrdeset znakova zadržava samo cijele linije koje
-stanu.
+znakova (veliko autobusno čvorište) prelama se u drugi redak i, po potrebi, u
+treći; tek natpis koji ne stane ni u tri retka od po četrdeset znakova zadržava
+samo cijele linije koje stanu.
 Drugo: shema na zaslonu primjenjuje **isti sudarni prolaz naziva kao svaka
 druga površina**. Pregled grada pritom pokazuje cijelu mrežu, bez zasebnog
 kadra oko mjesta. Prekidača „samo ova linija”
