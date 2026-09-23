@@ -410,8 +410,9 @@ sudarni prolaz karte ne odbacuje nijednu oznaku, a gužvu drži čitljivom spaja
 preklopljenih oznaka u jednu skupinu s natpisom tipa „6·11·12·14”, računato na
 zaslonovoj skali oznaka, pa se oznake ne spajaju na pola stvarne udaljenosti.
 Spojena oznaka ispisuje svaku liniju, nikad „+N”, i širi se s natpisom: svih
-petnaest tramvajskih linija stane u jednu oznaku, a tek na autobusnom čvorištu
-s natpisom duljim od četrdeset znakova oznaka zadržava samo cijele linije koje
+petnaest tramvajskih linija stane u jedan redak, natpis dulji od četrdeset
+znakova (veliko autobusno čvorište) prelama se u drugi redak, a tek natpis koji
+ne stane ni u dva retka od po četrdeset znakova zadržava samo cijele linije koje
 stanu.
 Drugo: shema na zaslonu primjenjuje **isti sudarni prolaz naziva kao svaka
 druga površina**. Pregled grada pritom pokazuje cijelu mrežu, bez zasebnog
