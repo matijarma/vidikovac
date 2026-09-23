@@ -5,6 +5,8 @@ import {
   BODY_ZOOM,
   CITY_STOP_ZOOM,
   LAYERS,
+  NAME_ANCHORS,
+  NAME_ANCHOR_BASELINE_EM,
   NETWORK_OPACITY,
   NETWORK_OPACITY_DIMMED,
   NEVER,
@@ -22,6 +24,7 @@ import {
   WORKS_ONGOING_PHASE,
   firstSymbolLayer,
   kindFilter,
+  nameAnchorOffsets,
   noseOffsetPx,
   overlayImages,
   overlayLayers,
@@ -373,13 +376,16 @@ describe('the kiosk overlay set (prozor)', () => {
       // The selected vehicle's nose sits in the same band as every other nose, the field's zoom included.
       expect(by(LAYERS.vehicleSelectedNose).minzoom).toBe(14.6);
       expect(by(LAYERS.vehicleSelected).layout!['icon-image']).toEqual(pills.layout!['icon-image']);
-      // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
+      // The screen's stop: the biggest ring and the biggest name on the map,
+      // placed before every other name and yielding to the vehicle marks
+      // alone (decision 17: no pill is ever hidden or moved by a label).
       const screenStop = by(LAYERS.screenStop);
       expect(screenStop.paint!['circle-radius']).toBe(18);
       expect(screenStop.paint!['circle-stroke-width']).toBe(4);
       const screenStopLabel = by(LAYERS.screenStopLabel);
       expect(screenStopLabel.layout!['text-size']).toBe(30);
-      expect(screenStopLabel.layout!['text-allow-overlap']).toBe(true);
+      expect(screenStopLabel.layout!['text-allow-overlap']).toBe(false);
+      expect(screenStopLabel.layout!['text-ignore-placement']).toBe(false);
       expect(by(LAYERS.placeSeat).layout!.visibility).toBe('none');
     }
     // Every stop when the routes are unknown (today's drawing), none for an empty list.
@@ -408,6 +414,79 @@ describe('the kiosk overlay set (prozor)', () => {
       .toEqual(['match', ['get', 'kind'], 'tram', OVERLAY_LIGHT.routeTram, 'bus', OVERLAY_LIGHT.routeBus, OVERLAY_LIGHT.other]);
     expect(lit.find((l) => l.id === LAYERS.networkTram)!.layout!.visibility).toBe('visible');
     expect(lit.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toBe(NETWORK_OPACITY_DIMMED);
+  });
+});
+
+// Decision 17: on the public screen the vehicle pills have priority. The
+// names sit under the vehicle marks on every surface; on the public screen
+// the marks keep their collision boxes and a name tries its other anchors,
+// then yields while the tram passes. The BAJS counts do not move.
+describe('decision 17: the vehicle marks before the names', () => {
+  const PROZOR: ProzorOptions = { networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: 4, stopRadius: false, overlapZoom: 13, labelPadding: 30, placeTitles: true };
+  const NAMES = [LAYERS.stopLabels, LAYERS.placeWorks, LAYERS.placeEvents, LAYERS.placeSeat, LAYERS.placeAssembly, LAYERS.placePharmacy, LAYERS.placeQuakeLabels, LAYERS.screenStopLabel];
+  const MARKS = [LAYERS.vehicleNoses, LAYERS.vehicleTwoWayFore, LAYERS.vehicleTwoWayAft, LAYERS.vehicles, LAYERS.vehicleSelectedNose, LAYERS.vehicleSelected];
+
+  it('stacks every name under every vehicle mark and over the vehicle dots, on every surface, so MapLibre places the marks first', () => {
+    for (const options of [{}, { prozor: PROZOR, scale: 2 }]) {
+      const ids = overlayLayers(OVERLAY_LIGHT, options).map((l) => l.id);
+      const firstMark = Math.min(...MARKS.map((id) => ids.indexOf(id)));
+      for (const id of NAMES) {
+        expect(ids.indexOf(id), id).toBeGreaterThan(ids.indexOf(LAYERS.vehicleDots));
+        expect(ids.indexOf(id), id).toBeLessThan(firstMark);
+      }
+      // Among themselves the names keep their order: the screen's stop placed first of them.
+      expect(NAMES.map((id) => ids.indexOf(id))).toEqual([...NAMES.map((id) => ids.indexOf(id))].sort((a, b) => a - b));
+      // The layer list is one list whatever the options, so setProzor is one styleDiff.
+      expect(ids).toEqual(overlayLayers(OVERLAY_LIGHT).map((l) => l.id));
+    }
+  });
+
+  it('keeps every vehicle mark always drawn; on the public screen the marks also keep their boxes for the names, elsewhere they ignore placement', () => {
+    const wall = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, scale: 2 });
+    const phone = overlayLayers(OVERLAY_LIGHT);
+    for (const id of MARKS) {
+      const w = wall.find((l) => l.id === id)!.layout!;
+      const ph = phone.find((l) => l.id === id)!.layout!;
+      expect(w['icon-allow-overlap'], id).toBe(true);
+      expect(w['icon-ignore-placement'], id).toBe(false);
+      expect(ph['icon-allow-overlap'], id).toBe(true);
+      expect(ph['icon-ignore-placement'], id).toBe(true);
+    }
+    for (const id of [LAYERS.vehicles, LAYERS.vehicleSelected]) {
+      expect(wall.find((l) => l.id === id)!.layout!['text-allow-overlap'], id).toBe(true);
+      expect(wall.find((l) => l.id === id)!.layout!['text-ignore-placement'], id).toBe(false);
+      expect(phone.find((l) => l.id === id)!.layout!['text-ignore-placement'], id).toBe(true);
+    }
+    // No name on the public screen overlaps anything: each one yields.
+    for (const id of NAMES) {
+      const layout = wall.find((l) => l.id === id)!.layout!;
+      expect(layout['text-allow-overlap'] ?? false, id).toBe(false);
+      expect(layout['icon-allow-overlap'] ?? false, id).toBe(false);
+    }
+    // The pills stay ordered among themselves: a cluster over a tram over a bus.
+    expect(wall.find((l) => l.id === LAYERS.vehicles)!.layout!['symbol-sort-key']).toEqual(['get', 'sort']);
+  });
+
+  it('lets a name on the public screen try its other anchors before it yields, starting exactly where the fixed anchor stood', () => {
+    expect([...NAME_ANCHORS]).toEqual(['top', 'bottom', 'left', 'right']);
+    expect(nameAnchorOffsets(0.7)).toEqual(['top', [0, 0.7 + 7 / 24], 'bottom', [0, -(0.7 + 7 / 24)], 'left', [0.7, 0], 'right', [-0.7, 0]]);
+    expect(NAME_ANCHOR_BASELINE_EM).toBe(7 / 24);
+    const wall = overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR, scale: 2 });
+    const phone = overlayLayers(OVERLAY_LIGHT);
+    const offsets: Record<string, number> = { [LAYERS.stopLabels]: 0.7, [LAYERS.screenStopLabel]: 0.9, [LAYERS.placeQuakeLabels]: 0.9, [LAYERS.placeEvents]: 0.9, [LAYERS.placePharmacy]: 0.9 };
+    for (const [id, em] of Object.entries(offsets)) {
+      const w = wall.find((l) => l.id === id)!.layout!;
+      expect(w['text-variable-anchor-offset'], id).toEqual(nameAnchorOffsets(em));
+      expect(w['text-justify'], id).toBe('auto');
+      expect(w['text-anchor'], id).toBeUndefined();
+      expect(w['text-offset'], id).toBeUndefined();
+      // Everywhere else the one fixed place, as always.
+      const ph = phone.find((l) => l.id === id)!.layout!;
+      expect([ph['text-anchor'], ph['text-offset'], ph['text-variable-anchor-offset']], id).toEqual(['top', [0, em], undefined]);
+    }
+    // setProzor on a live map: the anchors are layout, applied by styleDiff.
+    const ops = styleDiff(phone, wall).filter((op) => op.id === LAYERS.stopLabels && op.kind === 'layout').map((op) => op.key).sort();
+    expect(ops).toEqual(expect.arrayContaining(['text-anchor', 'text-justify', 'text-offset', 'text-variable-anchor-offset']));
   });
 });
 

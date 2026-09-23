@@ -8,9 +8,14 @@
 //
 // Declutter is scale-aware (never a pile of squares) and, since round F, never
 // silent: below PILL_ZOOM every vehicle is a small dot in its mode's colour;
-// from there numbered pills join and *always draw* -- overlap and
-// ignore-placement are on at every zoom, so no pill is ever dropped by the
-// collision pass and no pill ever pushes a stop name off the map. What keeps a
+// from there numbered pills join and *always draw* -- overlap is on at every
+// zoom, so no pill is ever dropped by the collision pass, and every name is
+// drawn under the vehicle marks, so no name is ever printed over a number.
+// Who yields where they meet is the surface's: on the phone and the desk a
+// pill ignores placement and never pushes a stop name off the map; on the
+// public screen (decision 17) the vehicle marks take their place first and a
+// stop or place name tries its other anchors, then yields for as long as the
+// tram takes to pass (NAME_ANCHOR_OFFSETS, pillLayer, noseLayer). What keeps a
 // busy corner readable instead is the cluster: city-map.ts merges pills whose
 // boxes overlap on screen (motion/pills.ts) into one feature carrying
 // `cluster`, the joined label and its members' ids before the source is
@@ -143,6 +148,46 @@ export function noseOffsetPx(chars: number): number {
 }
 export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;
+
+// --- Decision 17: on the public screen the vehicle marks take their place first
+//
+// MapLibre places symbol layers from the top of the stack down, and within a
+// layer by symbol-sort-key; a mark whose layer allows overlap is placed
+// whatever it meets, and one that does not ignore placement keeps its box for
+// the layers placed after it. So the names sit UNDER the vehicle layers on
+// every surface (a name is never printed over a number), and on the public
+// screen the pills, their noses and the two-way arrows stop ignoring
+// placement: a stop or place name that meets one tries its other anchors
+// (text-variable-anchor-offset; MapLibre keeps the anchor it used last while
+// it is free, so a name moves once, not back and forth) and yields -- with
+// the collision pass's own fade -- for as long as the tram takes to pass. The
+// BAJS counts keep allow-overlap under the vehicles (city-layers.ts): a pill
+// passing over a disc covers its number for that time and nothing moves.
+
+/** The anchors a name tries, in order: under its point (where it has always
+ *  stood), over it, to its right, to its left. */
+export const NAME_ANCHORS = Object.freeze(['top', 'bottom', 'left', 'right'] as const);
+/** MapLibre measures a variable anchor's vertical offset to the glyphs'
+ *  baseline edge, 7/24 em nearer than a fixed text-anchor's box
+ *  (maplibre-gl style_layer/variable_text_anchor.ts baselineOffset): added
+ *  back, so an unobstructed name stands exactly where the fixed anchor put it. */
+export const NAME_ANCHOR_BASELINE_EM = 7 / 24;
+
+/** The four anchors of NAME_ANCHORS with the name's offset (em) from its
+ *  point, as text-variable-anchor-offset reads them. */
+export function nameAnchorOffsets(offsetEm: number): unknown[] {
+  const v = offsetEm + NAME_ANCHOR_BASELINE_EM;
+  const at: Record<(typeof NAME_ANCHORS)[number], [number, number]> = { top: [0, v], bottom: [0, -v], left: [offsetEm, 0], right: [-offsetEm, 0] };
+  return NAME_ANCHORS.flatMap((anchor) => [anchor, at[anchor]]);
+}
+
+/** Where a name stands from its point: under it on every surface, and on
+ *  the public screen under it first, then wherever NAME_ANCHORS finds room. */
+function nameAnchor(publicScreen: boolean, offsetEm: number): Record<string, unknown> {
+  return publicScreen
+    ? { 'text-variable-anchor-offset': nameAnchorOffsets(offsetEm), 'text-justify': 'auto' }
+    : { 'text-anchor': 'top', 'text-offset': [0, offsetEm] };
+}
 
 export const NOSE_IMAGE = 'vehicle-nose';
 export const RING_IMAGE = 'selection-ring';
@@ -471,16 +516,17 @@ export interface OverlayOptions {
   lineFocus?: boolean;
 }
 
-/** A pill layer. Overlap and ignore-placement are on for both the capsule and
- *  the number, at every zoom and on every surface: a vehicle the map knows
- *  about is a vehicle the map draws (plan section A), and a pill that ignores
- *  placement also stops pushing the stop name beneath it off the map. What
+/** A pill layer. Overlap is on for both the capsule and the number, at every
+ *  zoom and on every surface: a vehicle the map knows about is a vehicle the
+ *  map draws (plan section A). Where it `blocks` (the public screen, decision
+ *  17) it also keeps its box for the names placed after it; elsewhere it
+ *  ignores placement and never pushes the stop name beneath it off. What
  *  keeps the picture readable is upstream -- the overlapping marks arrive
  *  already merged into one cluster feature -- and a cluster says so with a
  *  ring: the selection ink at twice a pill's own halo width. Every vehicle
  *  feature carries `cluster` (city-map.ts writes false on a single), so the
  *  case never meets a missing property. */
-function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr): StyleLayerLike {
+function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr, blocks: boolean): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -498,7 +544,10 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'icon-text-fit-padding': [PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s, PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s],
       'icon-rotation-alignment': 'viewport',
       'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
+      // Decision 17: on the public screen the capsule keeps its box for the
+      // names placed after it, which then move or yield; elsewhere it never
+      // pushes a stop name off the map.
+      'icon-ignore-placement': !blocks,
       'icon-padding': 1,
       'text-field': PILL_TEXT,
       'text-font': [MAP_FONTS.medium],
@@ -510,7 +559,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       // instead of inside it.
       'text-max-width': 100,
       'text-allow-overlap': true,
-      'text-ignore-placement': true,
+      'text-ignore-placement': !blocks,
       'text-rotation-alignment': 'viewport',
       'text-optional': false,
       'symbol-sort-key': SORT_KEY,
@@ -528,8 +577,9 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
 
 /** The SDF triangle at a pill's edge -- the direction nose, or one arrow of an
  *  opposed merge -- turned by `rotate` from the feature's bearing, inside the
- *  zoom band `minzoom` to `maxzoom` (no maxzoom: open upward). */
-function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, maxzoom: number | undefined, rotate: Expr, s: number, opacity: Expr): StyleLayerLike {
+ *  zoom band `minzoom` to `maxzoom` (no maxzoom: open upward); `blocks` as
+ *  the pill's. */
+function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number, maxzoom: number | undefined, rotate: Expr, s: number, opacity: Expr, blocks: boolean): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -544,7 +594,9 @@ function noseLayer(p: OverlayPalette, id: string, filter: Expr, minzoom: number,
       'icon-rotation-alignment': 'map',
       'icon-offset': NOSE_OFFSET,
       'icon-allow-overlap': true,
-      'icon-ignore-placement': true,
+      // A nose or an arrow is part of its vehicle's mark: where the pills
+      // keep their box for the names (decision 17), so does the triangle.
+      'icon-ignore-placement': !blocks,
       'symbol-sort-key': SORT_KEY,
     },
     paint: { 'icon-color': kindColor(p, 'fill'), 'icon-halo-color': p.halo, 'icon-halo-width': 1, 'icon-opacity': opacity },
@@ -675,6 +727,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   /** Ruling 31: the square marks carry their names from THIN_NAMES_ZOOM up
    *  and nowhere below it; outside the kiosk's option set they always do. */
   const placeTitles = prozor === null || prozor.placeTitles !== false;
+  /** Decision 17: on the public screen the vehicle marks keep their boxes and the names move or yield. */
+  const blocks = prozor !== null;
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the
@@ -700,8 +754,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'text-field': ['get', 'title'],
         'text-font': [MAP_FONTS.medium],
         'text-size': PLACE_LABEL_PX * s,
-        'text-anchor': 'top',
-        'text-offset': [0, 0.9],
+        ...nameAnchor(blocks, 0.9),
         'text-max-width': 10,
         'text-optional': true,
       } : {}),
@@ -814,19 +867,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: kindFilter(modes) },
     ),
-    // The nose band's upper edge is the same on every surface: past it the rails say the direction themselves.
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha),
-    // An opposed merge (city-map.ts `twoWay`: two members facing more than its
-    // TWO_WAY_MIN_DEG apart, two trams of one line passing at a stop) keeps
-    // its one pill and gets the triangle fore and aft along the first member's
-    // bearing. From the first pill zoom and with no upper edge: the nose band
-    // closes at 16.5 because the rail under a tram says which way it faces,
-    // but no rail can say which way a pair going both ways is heading, so the
-    // arrows stay for as long as the two marks stay merged.
-    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE, s, alpha),
-    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE_AFT, s, alpha),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark),
-    // Stop names: on the public screen the hubs alone (rank from the option
+    // The names, under every vehicle mark (decision 17). Stop names: on the public screen the hubs alone (rank from the option
     // set), from the field's zoom and never below it -- as the layer's own
     // minzoom, which MapLibre reads against the camera's fractional zoom,
     // where a `zoom` step inside the filter would be read at the tile's
@@ -851,8 +892,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'text-field': ['get', 'name'],
         'text-font': [MAP_FONTS.medium],
         'text-size': prozor ? 11 * s : zoomInterpolate(STOP_LABEL_ZOOM, 11 * s, 16, 13 * s),
-        'text-anchor': 'top',
-        'text-offset': [0, 0.7],
+        ...nameAnchor(blocks, 0.7),
         'text-max-width': 9,
         'text-padding': 3,
         // Lower sorts first. Route count alone decided this, which is the
@@ -886,28 +926,45 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
         'text-field': ['get', 'title'],
         'text-font': [MAP_FONTS.medium],
         'text-size': PLACE_LABEL_PX * s,
-        'text-anchor': 'top',
-        'text-offset': [0, 0.9],
+        ...nameAnchor(blocks, 0.9),
         'text-max-width': 10,
         'symbol-sort-key': 15,
       },
       paint: { 'text-color': p.place, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
     },
     // The screen's stop's name: on the public screen the biggest name on the
-    // map (15 x s = 30 px at the screen's scale), always placed.
+    // map (15 x s = 30 px at the screen's scale), placed before every other
+    // name and never under one, and like them yielding only to the vehicle
+    // marks (decision 17), after trying its other anchors; elsewhere always
+    // placed.
     {
       id: LAYERS.screenStopLabel,
       type: 'symbol',
       source: SOURCES.screenStop,
-      layout: { 'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, 'text-anchor': 'top', 'text-offset': [0, 0.9], 'text-max-width': 9, 'text-allow-overlap': true, 'text-ignore-placement': true },
+      layout: {
+        'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, ...nameAnchor(blocks, 0.9), 'text-max-width': 9,
+        'text-allow-overlap': !blocks, 'text-ignore-placement': !blocks,
+      },
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
+    // The nose band's upper edge is the same on every surface: past it the rails say the direction themselves.
+    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
+    // An opposed merge (city-map.ts `twoWay`: two members facing more than its
+    // TWO_WAY_MIN_DEG apart, two trams of one line passing at a stop) keeps
+    // its one pill and gets the triangle fore and aft along the first member's
+    // bearing. From the first pill zoom and with no upper edge: the nose band
+    // closes at 16.5 because the rail under a tram says which way it faces,
+    // but no rail can say which way a pair going both ways is heading, so the
+    // arrows stay for as long as the two marks stay merged.
+    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark, blocks),
     // The selected vehicle's nose keeps the general nose's band (design D):
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing
     // else carries one -- or past 16.5, where the rails say it themselves.
-    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha),
-    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], 0, s, p, pillInks(p, null), mark),
+    noseLayer(p, LAYERS.vehicleSelectedNose, filters[LAYERS.vehicleSelectedNose], noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
+    pillLayer(LAYERS.vehicleSelected, filters[LAYERS.vehicleSelected], 0, s, p, pillInks(p, null), mark, blocks),
     {
       id: LAYERS.selectionRing,
       type: 'symbol',

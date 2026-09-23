@@ -227,9 +227,13 @@ slike; pauza sesije i uništavanje čiste petlju, događaje i zakašnjele dohvat
 ### Kako se vozila i nazivi crtaju (krug F)
 
 **Brojčane oznake i skupine.** Ispod zumiranja `PILL_ZOOM` = 12,5 vozilo je točkica u boji svoje vrste;
-od tog zumiranja svako vozilo nosi svoj broj, i **nikad ga ne izgubi**. Na karti su `icon-allow-overlap`
-i `icon-ignore-placement` uključeni na svakom zumiranju, pa MapLibreov sudarni prolaz nijednu oznaku ne
-odbacuje i nijedna oznaka ne gura naziv stajališta s karte. Ono što gužvu drži čitljivom je **skupina**:
+od tog zumiranja svako vozilo nosi svoj broj, i **nikad ga ne izgubi**. Na karti je `icon-allow-overlap`
+uključen na svakom zumiranju, pa MapLibreov sudarni prolaz nijednu oznaku ne odbacuje, a nazivi se crtaju
+ispod oznaka vozila. Na telefonu i računalu uključen je i `icon-ignore-placement`, pa nijedna oznaka ne gura
+naziv stajališta s karte. Na javnom zaslonu (odluka 17) oznake vozila zadržavaju svoje mjesto: naziv
+stajališta ili mjesta najprije se premjesti na drugu stranu točke, a ako ni ondje nema mjesta, skloni se dok
+vozilo ne prođe. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
+kruga na trenutak prekrije taj broj. Ono što gužvu drži čitljivom je **skupina**:
 prije nego što se izvor gurne u kartu, oznake čije se kutije na zaslonu preklapaju (`app/src/motion/pills.ts`,
 unija-nalaz uz `CLUSTER_PADDING_PX` = 2 px oko svake kutije) spajaju se u jedno obilježje s natpisom
 koji ispisuje svaku liniju, tipa „6·11·12·14”, i s popisom članova. Skupina se

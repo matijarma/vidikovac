@@ -553,14 +553,18 @@ describe('the basemap and the overlays on it', () => {
     expect(map.zoomRanges['vehicle-noses']).toEqual([15.1, overlays.NOSE_MAX_ZOOM]);
     expect(map.zoomRanges['stop-labels']).toEqual([15.1, 24]);
     // A pill is never dropped, at any zoom and under any option set: the layer
-    // went on with overlap and ignore-placement already true, and nothing the
-    // kiosk changes can turn them off again.
+    // went on with overlap already true, and nothing the kiosk changes can
+    // turn it off again. Under the option set it also keeps its box for the
+    // names (decision 17), which a name then yields to.
     expect(layer('vehicles')!.layout!['icon-allow-overlap']).toBe(true);
     expect(map.layout['vehicles']?.['icon-allow-overlap']).toBeUndefined();
+    expect(layer('vehicles')!.layout!['icon-ignore-placement']).toBe(false);
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(48);
     // Back to no option set: today's drawing, thresholds and the profile's own padding included.
     handle.setProzor!(null);
     expect(map.layout['network-bus']?.visibility).toBe('visible');
+    expect(map.layout['vehicles']?.['icon-ignore-placement']).toBe(true);
+    expect(map.layout['stop-labels']?.['text-anchor']).toBe('top');
     expect(map.zoomRanges['vehicle-noses']).toEqual([overlays.NOSE_MIN_ZOOM, overlays.NOSE_MAX_ZOOM]);
     expect(map.zoomRanges['stop-labels']).toEqual([overlays.STOP_LABEL_ZOOM, 24]);
     expect(map.layout['roads_labels_major']?.['text-padding']).toBe(basemap.PROZOR_LABEL_PADDING_PX);

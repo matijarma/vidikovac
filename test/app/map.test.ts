@@ -388,6 +388,14 @@ describe('the city places’ marks', () => {
     expect(all.minzoom).toBe(13);
     const venues = labels('venues');
     expect(venues.layout!.visibility).toBe('visible');
+    // On the framed wall a venue's name tries its other anchors before it
+    // yields to a passing pill (decision 17), starting where the fixed one stood.
+    expect(venues.layout!['text-variable-anchor-offset']).toEqual(overlays.nameAnchorOffsets(1.5));
+    expect(venues.layout!['text-justify']).toBe('auto');
+    expect([venues.layout!['text-anchor'], venues.layout!['text-offset']]).toEqual([undefined, undefined]);
+    expect([all.layout!['text-anchor'], all.layout!['text-offset'], all.layout!['text-variable-anchor-offset']]).toEqual(['top', [0, 1.5], undefined]);
+    // A count never moves and is never dropped: the badges keep allow-overlap on every surface.
+    expect(byId('city-place-badges', cityLayers(palette, null, 2, 'venues')).layout!['text-allow-overlap']).toBe(true);
     expect(evaluate(venues.filter, venue, 14)).toBe(true);
     expect(evaluate(venues.filter, bike('7'), 14)).toBe(false);
     expect(evaluate(venues.filter, { category: 'air', badge: '' }, 14)).toBe(false);

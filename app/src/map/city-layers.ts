@@ -1,5 +1,6 @@
 import type { OverlayPalette, StyleLayerLike } from './basemap';
 import { MAP_FONTS } from './basemap';
+import { nameAnchorOffsets } from './overlays';
 export const CITY_POINTS = 'city-places';
 export const CITY_PATHS = 'city-paths';
 export const CITY_LAYERS = ['city-place-dots','city-place-badges','city-place-labels','city-place-selection','city-path-lines'] as const;
@@ -50,7 +51,10 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,
       ...(mode==='venues'?{filter:['!',['in',['get','category'],['literal',['bikes','air']]]]}:{}),layout:{
       visibility:mode==='none'?'none':'visible',
-      'text-field':['get','title'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,'text-anchor':'top','text-offset':[0,1.5],
+      'text-field':['get','title'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,
+      // The framed wall's venue names move before they yield to a passing
+      // pill (overlays.ts decision 17); every other surface keeps the one place.
+      ...(mode==='venues'?{'text-variable-anchor-offset':nameAnchorOffsets(1.5),'text-justify':'auto'}:{'text-anchor':'top','text-offset':[0,1.5]}),
       'text-max-width':12,'text-optional':true,'symbol-sort-key':['get','priority']},
       paint:{'text-color':p.label,'text-halo-color':p.halo,'text-halo-width':2}},
     {id:'city-place-selection',type:'circle',source:CITY_POINTS,filter:['==',['get','id'],selected??''],
