@@ -37,13 +37,13 @@ const DEAD_KEYS = [
   // wall) and a screen without a stop simply has no such note to print.
   'kiosk.setup.handheld', 'kiosk.lines.noStop', 'kiosk.say.forecast',
   // WP5 A2: kiosk copy no screen paints any more: the header ticker's words,
-  // the teaser card's weather title, the retired header, join, delay and
-  // coverage lines, the stop search of the old setup and the area/stop/Spremi
-  // settings panel.
+  // the teaser card's weather title, the retired header, join and coverage
+  // lines, the stop search of the old setup and the area/stop/Spremi settings
+  // panel.
   'kiosk.ticker.weather', 'kiosk.ticker.transit', 'kiosk.ticker.works', 'kiosk.ticker.tonight', 'kiosk.ticker.city',
   'kiosk.invite.codeWaiting', 'kiosk.header.temporaryUntil', 'kiosk.header.venue', 'kiosk.weather.title', 'kiosk.weather.station',
   'kiosk.say.transitRegular', 'kiosk.say.quake', 'kiosk.say.tonight', 'kiosk.say.tonightMore_one', 'kiosk.front.tomorrowCity',
-  'kiosk.safety.basics', 'kiosk.session.join', 'kiosk.session.joinHint', 'kiosk.paired.delays', 'kiosk.paired.coverageLines_one',
+  'kiosk.safety.basics', 'kiosk.session.join', 'kiosk.session.joinHint', 'kiosk.paired.coverageLines_one',
   'kiosk.setup.intro', 'kiosk.setup.search', 'kiosk.setup.results_one', 'kiosk.setup.noResults', 'kiosk.setup.validity',
   'kiosk.setup.errorStops', 'kiosk.setup.loadingStops', 'kiosk.settings.save', 'kiosk.settings.saving', 'kiosk.settings.saved',
   'kiosk.settings.area', 'kiosk.settings.areaHint', 'kiosk.settings.stop', 'kiosk.settings.stopNone', 'kiosk.settings.stopHint',

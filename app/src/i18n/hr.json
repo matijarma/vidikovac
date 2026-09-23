@@ -1055,6 +1055,7 @@
     "paired": {
       "warnings": "Upozorenja DHMZ-a",
       "closures": "Zatvorene prometnice",
+      "delays": "Kašnjenja po linijama",
       "quakes": "Potresi u krugu 150 km, 72 sata",
       "today": "Danas",
       "tomorrow": "Sutra",
