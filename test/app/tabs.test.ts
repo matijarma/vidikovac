@@ -27,7 +27,7 @@ describe('the map has one word: Karta', () => {
     expect(TRANSPORT_TAB_WORD).toBe('Karta');
     expect(hr.layers['u-pokretu']).toBe(TRANSPORT_TAB_WORD);
     expect(en.layers['u-pokretu']).toBe('Map');
-    expect(hr.kiosk.ticker.transit).toBe('Promet');
+    expect(hr.kiosk.sentence.kicker.promet).toBe('Promet');
   });
   it('the phone tab and the wall pill read the same word; the desk header carries no link into Karta', () => {
     const i18n = createDefaultI18n('hr');
