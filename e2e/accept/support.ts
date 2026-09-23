@@ -84,18 +84,24 @@ export function pageNow(page: Pick<Page, 'evaluate'>): Promise<number> {
 const shiftIso = (value: string | undefined, delta: number): string | undefined =>
   value === undefined ? undefined : new Date(Date.parse(value) + delta).toISOString();
 
-/** A copy of the snapshots with every recorded time moved by `to − from` (the shift of installKioskFeedFixture, applied again later). */
+/**
+ * A subsequent poll, not another relocation of the fixture into the scene.
+ * Fetch times advance and live ZET vehicles get fresh observations. Published
+ * facts (closure ends, event dates, validity and stale-since) stay put.
+ */
 export function restampSnapshots(snapshots: Readonly<Record<ModuleId, ModuleSnapshot>>, from: number, to: number): Record<ModuleId, ModuleSnapshot> {
   const delta = to - from;
   const out = {} as Record<ModuleId, ModuleSnapshot>;
   for (const [id, s] of Object.entries(snapshots) as [ModuleId, ModuleSnapshot][]) {
+    const liveVehicles = id === 'zet-rt' && s.status === 'live';
     out[id] = {
       ...s,
       fetchedAt: shiftIso(s.fetchedAt, delta)!,
-      sourceUpdatedAt: shiftIso(s.sourceUpdatedAt, delta),
-      staleSince: shiftIso(s.staleSince, delta),
-      validUntil: shiftIso(s.validUntil, delta),
-      items: s.items.map((item) => ({ ...item, at: shiftIso(item.at, delta), until: shiftIso(item.until, delta) })),
+      sourceUpdatedAt: liveVehicles ? shiftIso(s.sourceUpdatedAt, delta) : s.sourceUpdatedAt,
+      items: s.items.map((item) => ({
+        ...item,
+        ...(liveVehicles && item.kind === 'vehicle' ? { at: shiftIso(item.at, delta) } : {}),
+      })),
     };
   }
   return out;
