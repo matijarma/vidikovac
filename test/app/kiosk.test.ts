@@ -1456,8 +1456,9 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna' });
     // Credentials that carry no screen yet name the city until the DO says which place (WP3).
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
-    // Without a stop the field is labelled by the lines title, never left nameless.
-    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Trg bana J. Jelačića');
+    // Without a stop the field is labelled by the lines title, never left nameless. The default Trg
+    // is the list's place, not the map's: the field follows the whole-city map [O-52], [O-65].
+    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ove stanice');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe(STOP.name);
@@ -1494,7 +1495,9 @@ describe('invitation: the screen a passer-by sees', () => {
     const eleven = MODULES.map((m) => (m.module === 'zet-rt' ? snap('zet-rt', Array.from({ length: 11 }, (_, i) => item('zet-rt', `vehicle:${i}`, 'vehicle', String(i + 1), { geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: String(i + 1), routeType: 0 } }))) : m));
     const many = mount({ hash: '#BEACON01.tajna', lightweight: true, fetchTeaser: async () => ({ modules: eleven }) });
     await flush();
-    expect(many.root.querySelectorAll('[data-testid=kiosk-live] li.k-line')).toHaveLength(STOP.routes.length);
+    // No chosen place: the board is the whole-city map's lightweight twin, the lines in the box, not Trg's own lines.
+    expect(many.root.querySelectorAll('[data-testid=kiosk-live] li.k-line')).toHaveLength(10);
+    expect(text(q(many.root, '[data-testid=kiosk-live] .k-line-more'))).toBe('još 1 linija');
     expect(text(q(many.root, '[data-testid=nearby-head]'))).toContain('U blizini');
   });
 });

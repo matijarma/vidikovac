@@ -794,8 +794,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return arrivalsAt(held, fleet, at, { stopIds });
   }
   function invitationModel(): InvitationModel {
+    // The field is the map's side of the invitation (its name, and lagano's
+    // lines board in place of the map), so it follows the map: the chosen
+    // place's stop, or the whole city while Trg is only the read-path default
+    // for the list and the departures [O-52], [O-65].
     return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, outage: outage(),
-      modules: teaser, stop: stopForNearby(), now: now(), composition: compositionOf(layout) };
+      modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout) };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
