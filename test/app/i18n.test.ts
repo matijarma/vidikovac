@@ -86,8 +86,7 @@ const DEAD_KEYS = [
   'cityOverview.title', 'cityOverview.nearby', 'cityOverview.next', 'cityOverview.city',
   // WP5 A1: city/strings.ts is the adapter over city.*; its unread words never entered the catalogue.
   'city.map', 'city.movement', 'city.network', 'city.all', 'city.city', 'city.useful', 'city.layers', 'city.list', 'city.here',
-  'city.locate', 'city.legend', 'city.streetBrowse', 'city.cluster', 'city.allVenues', 'city.activeVenues', 'city.reference',
-  'city.siteNote', 'city.scheduleNote', 'city.schedule', 'city.quiet', 'city.inactive', 'city.closed', 'city.start', 'city.next',
+  'city.locate', 'city.legend', 'city.streetBrowse', 'city.cluster', 'city.allVenues', 'city.activeVenues', 'city.schedule', 'city.quiet', 'city.inactive', 'city.closed', 'city.start', 'city.next',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';

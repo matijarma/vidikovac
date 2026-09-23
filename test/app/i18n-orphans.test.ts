@@ -116,15 +116,17 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1075 Croatian leaves and 1042 English ones', () => {
+  it('the catalogue holds 1078 Croatian leaves and 1045 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
     // -61 unread leaves (test/app/i18n.test.ts DEAD_KEYS, "WP5 A1", 58 in en, which writes no _few
     // form): 1,074 hr, 1,041 en; +1 kiosk.invitation restored as owner copy (decision 42): 1,075 hr,
-    // 1,042 en. A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1075);
-    expect(leafKeys(en).length).toBe(1042);
-    expect(leafKeys(hr.city).length).toBe(90);
+    // 1,042 en; +3 city.reference, city.siteNote, city.scheduleNote, the phone's register notes (the
+    // review's P2: §13 #12/#13 are wall-only, B1): 1,078 hr, 1,045 en. A new leaf changes this number
+    // on purpose, with its reader.
+    expect(leaves.length).toBe(1078);
+    expect(leafKeys(en).length).toBe(1045);
+    expect(leafKeys(hr.city).length).toBe(93);
   });
 });
