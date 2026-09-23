@@ -88,6 +88,11 @@ async function settle(page: Page, scene: Scene, leash: number, assert: boolean):
   };
   await poll(() => attrOf(page, WALL_PROBES.map, 'data-map-status'), (v) => typeof v === 'string' && v !== '' && v !== 'loading', leash,
     `the wall map (${WALL_PROBES.map}) leaves data-map-status=loading within ${leash / 1000} s`);
+  // The census (data-markers, data-unlabelled, …) is taken once the map has settled (map/name-census.ts, MapLibre's
+  // idle or a still frame after PROBE_SETTLE_MS), so a reading taken before it measures a map that has not drawn yet.
+  // Where vehicles are drawn the data-pills wait below implies it; in the outage nothing else waits for it.
+  await poll(() => attrOf(page, WALL_PROBES.map, 'data-unlabelled'), (v) => typeof v === 'string' && v !== '', leash,
+    `the wall map (${WALL_PROBES.map}) writes its census (data-unlabelled) within ${leash / 1000} s of loading`);
   await poll(() => page.locator(WALL_PROBES.row).count(), (n) => typeof n === 'number' && n >= 1, leash,
     `the "U blizini" list (${WALL_PROBES.row}) shows at least one row within ${leash / 1000} s`);
   if (scene.expect.pills === 'any') {
