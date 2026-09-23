@@ -8,9 +8,9 @@ Find your tram. Discover an exhibition. Check what is happening around you. Then
 
 [Try the prototype](https://zagreb.aningfilm.hr) · [Run locally](#run-locally) · [Under the hood](#under-the-hood) · [Project proposal](docs/prijava/prijedlog-projekta.md)
 
-![The public city window: a Zagreb map with tram routes and bike stations, weather, a road closure, a scanning invitation and persistent safety information.](app/public/landing/kiosk-en-light-1280.webp)
+![The public city screen at Trg bana J. Jelačića: the place and one written sentence in the header, a map framed around the place with every tram and bike station, the Nearby list (U blizini) with the next departure, tonight's last trams and tomorrow's first tram, the scanning card and the safety footer.](docs/readme/wall-en-light-1280.webp)
 
-*Actual application, English interface, September 21, 2026. Source data is real; pairing credentials are masked. This is an example capture, not current information.*
+*Actual application, English interface, September 23, 2026. Source data is real; pairing credentials are masked. This is an example capture, not current information.*
 
 ## A reason to look up
 
@@ -20,13 +20,13 @@ A screen in a café, library or neighbourhood office can be useful to anyone wal
 
 No account, installation, advertising or personal tracking. No push notifications calling you back. Access starts with a screen or another person. The code is an invitation, not proof of physical location.
 
-When time runs out, updates stop—not your ability to keep what you found. The last view remains as a dated snapshot, with attribution and export actions. Safety information at [`/hitno`](https://zagreb.aningfilm.hr/hitno) stays open without a code, time limit or JavaScript.
+When time runs out, updates stop—and the content clears, leaving the invitation to scan again. Keeping what you found, without fuss, is planned as a later layer. Safety information at [`/hitno`](https://zagreb.aningfilm.hr/hitno) stays open without a code, time limit or JavaScript.
 
 ## One city, three experiences
 
-- **On the wall:** a passive overview with an anchored map, moving transport, current conditions, rotating highlights and persistent safety information. The scanning invitation has its own space.
-- **In your hand:** local departures, search, saved stops and places, a map and an events agenda. Personal discovery stays on your device.
-- **At your desk:** room to explore the map and its details together, with direct access to transport, weather, events, civic information and safety.
+- **On the wall:** the screen's place and one written sentence in the header, a map framed around the place with every tram and bike station, and **U blizini**, one time-ordered list: the next departures, then what happens nearby, such as a closure ending, an event or the last trams tonight. The scanning invitation has its own card; safety and the on-duty pharmacy stay in the footer.
+- **In your hand:** the place as the title, one sentence, the next three departures and the same **U blizini** rows, under three tabs: **Sada · Karta · Još**. Karta is the map of that list, with vehicles at once and one search field; the week's events are one row in Još. Saved stops and places stay on your device.
+- **At your desk:** the phone, wider: Sada and the Karta map side by side, with room to explore the map and its details.
 
 These share data and a visual language, not an identical layout stretched to three sizes.
 
@@ -48,22 +48,22 @@ Nine feed modules, a reference catalogue and live city services bring together:
 These are different kinds of knowledge. ZET countdowns are **derived estimates** for tracked vehicles, using timetable and delay information with next-stop refinement from the motion model. Other departures retain clock times; HŽ Passenger Transport boards are schedule-only. A mapped garage does not imply available spaces. Heritage boundaries are not entrances. An undated notice is not a calendar event.
 
 <details>
-<summary>See the desktop map and phone agenda</summary>
+<summary>See the desktop and the phone</summary>
 
-![Desktop transport discovery with a city map, route search, moving vehicles and route details.](app/public/landing/transport-en-light-1280.webp)
+![Desktop session at Trg bana J. Jelačića: Sada with the sentence, three departures and the Nearby rows beside the Karta map with trams, bike stations, the search field and the same list.](docs/readme/desktop-en-light-1280.webp)
 
-<img src="app/public/landing/events-en-light-390.webp" width="260" alt="Phone events agenda with dates, venues, sources and separate ongoing exhibitions.">
+<img src="docs/readme/phone-en-light-390.webp" width="260" alt="Phone Sada at Trg bana J. Jelačića: the place as title, one sentence about tram 11, a map band, three departures with blue countdowns and a grey clock time, the Nearby rows, and the Now, Map and More tabs.">
 
-*September 21, 2026 captures from real local sessions. Interface controls are in English; original place names and event titles retain their source language.*
+*September 23, 2026 captures from real local sessions. Interface controls are in English; original place names and event titles retain their source language.*
 
 </details>
 
 ## Try it
 
-1. Open the [city screen](https://zagreb.aningfilm.hr/kiosk/) on a computer or display and start it.
+1. Open the [city screen](https://zagreb.aningfilm.hr/kiosk/) on a computer or display. Type an address or a stop into its one field, **Adresa ili stajalište** (Address or stop), or leave it empty for Trg bana Jelačića, and press **Pokreni** (Start). Place, frame, view, theme and rhythm change later with a long press on “Kaj ima?”.
 2. Keep it open. Scan the current QR code with your phone, or type the displayed code at [code entry](https://zagreb.aningfilm.hr/s/). The same Wi-Fi network works.
 3. Explore privately. Use **Screen** only when you want to show something publicly.
-4. Open the session controls and choose **Share the city** to give a second person their own five-minute session.
+4. Press **Share the city** in the header to give a second person their own five-minute session.
 
 One device is enough: keep the screen in one tab and redeem its code in another. Opening a screen does not grant a personal session. This is the real data and pairing system, not a separate demo.
 
@@ -73,7 +73,7 @@ One device is enough: keep the screen in one tab and redeem its code in another.
 
 The server-side transit engine combines each vehicle's sparse, delayed observations with the timetable, a directed rail graph and the stops its trip actually serves. It learns travel and dwell times and publishes motion plans; the browser draws along those plans instead of independently guessing where every tram went.
 
-Trams share track and ordering constraints; buses follow their own route geometry. The bias is conservative: prefer lagging behind to racing ahead and correcting backwards. Recorded ZET frames make real days replayable; hindsight metrics compare plans with later evidence. Path matching and silence handling remain active areas of refinement, not solved problems.
+Trams share track and ordering constraints; buses follow their own route geometry. The bias is conservative: prefer lagging behind to racing ahead and correcting backwards. Recorded ZET frames make real days replayable; hindsight metrics compare plans with later evidence. A tram keeps to its own trip's path and returns to it once it is moving within 60 m of it again; a tram off its route's rails is drawn at its reported positions, never on another line's track. A tram that falls silent holds at its next stop after 30 seconds, fades, and is gone after 180. The grader (`npm run replay:grade`) replays recorded days and counts path changes within a trip, foreign-path adoptions, direction flips and client jumps per 100 tram vehicle-hours; on the two recorded September days, path changes fell from 165.6 and 136.5 to 17.97 and 3.20, most of what remains a Sunday diversion of line 11.
 
 ### Data that keeps its meaning
 
@@ -81,7 +81,7 @@ Each source carries attribution, availability and timestamps. Observation, publi
 
 Missing is not zero. An unavailable warning feed is not an all-clear.
 
-The city catalogue publishes versioned chunks before its manifest and ships a bundled starting copy. Optional server-side AI condenses selected source texts into short display briefs, with cached results, validation and an original-title fallback. It does not generate vehicle movement or fill missing observations.
+The city catalogue publishes versioned chunks before its manifest and ships a bundled starting copy. The one written sentence on the wall and the phone comes from approved templates filled with facts already on screen; optional Workers AI may only choose among those checked offers, and without it the template is shown. It writes no free text, generates no vehicle movement and fills no missing observations.
 
 ### Shared infrastructure, private exploration
 
@@ -175,7 +175,7 @@ npm run frames:sample -- <recordings>/2026/09/21 --from 151500 --to 154459 --out
 E2E_KIOSK_URL=<screen setup URL> npm run observe:production -- --minutes 10
 ```
 
-Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry, source recovery, lightweight mode and attributed exports. See the [verification record](docs/readable-city-2026-09-20.md).
+Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry that clears the session, source recovery and lightweight mode. See the [verification record](docs/readable-city-2026-09-20.md).
 
 The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings.
 
@@ -196,7 +196,7 @@ The broader proposal would reuse screens venues already own, bring local publish
 - [Product](PRODUCT.md) and [design](DESIGN.md): governing decisions.
 - [Architecture](docs/arhitektura.md), [public screens](docs/kiosk.md), and [sources and licences](docs/izvori.md): technical and operational detail.
 - [City-data upgrade](docs/upgrade-city-2026-09-18.md) and [readable-city refinement](docs/readable-city-2026-09-20.md): implementation context and verification.
-- [Submitted proposal](docs/prijava/prijedlog-projekta.md): the public-service vision and funded deliverables. It is a submission record, not a current UI specification.
+- [Submitted proposal](docs/prijava/prijedlog-projekta.md): the public-service vision and funded deliverables. It is a submission record, not a current UI specification; its hosted page, [/prijava/](https://zagreb.aningfilm.hr/prijava/), can show dated [development notes since submission](docs/prijava/razvojne-biljeske.md) as an optional layer.
 
 Several supporting documents are in Croatian. Dated implementation records describe their own revisions. The [September 17 redesign](docs/redesign-2026-09-17.md) establishes the replacement of the historical [previous design system](newdesignsystem.md); earlier material under `docs/superpowers/` is history, not current visual guidance.
 
