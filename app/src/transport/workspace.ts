@@ -455,7 +455,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     ctx().navigate?.('u-pokretu', pub);
   }
 
-  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
+  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content.
+   *  A selection lifts the sheet to half, never leaves it at peek; a stop opens it, so its three departures and "Vozni red"
+   *  are in the viewport at once (§11, §16.4): the board is the answer, the map is one chevron away. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
     if(ctx().session?.frozen)return;
     if (next && query) {
@@ -474,10 +476,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       following = null;
       handle?.follow?.(null);
     }
-    // The sheet settles at half before the map moves, so the fit is padded for the detent the person will see;
-    // padded for an open sheet, MapLibre has no room left and refuses the fit.
-    if (next) sheet?.set('half');
-    handle?.select?.(next, { fit: opts.fit });
+    // The sheet settles at its detent before the map moves, so the fit is padded for the detent the person will see;
+    // padded for an open sheet MapLibre has no room left and refuses the fit, so a stop's board opens without one
+    // ("Prikaži na karti" in the board brings the map to the stop when the person wants it).
+    const opens = next?.kind === 'stop' && mode === 'phone';
+    if (next) sheet?.set(opens ? 'open' : 'half');
+    handle?.select?.(next, { fit: opens ? false : opts.fit });
     if (opts.relay !== false) relay(next);
     if (query) {
       query = '';

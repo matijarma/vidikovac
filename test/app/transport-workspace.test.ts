@@ -8,7 +8,6 @@ import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
 import { emptyCity } from '../../shared/city/types';
-import { HALF_MIN_REM } from '../../app/src/transport/sheet';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
 import { frameView } from '../../app/src/map/frame';
@@ -413,7 +412,7 @@ describe('search and selection', () => {
     const stopOption = q<HTMLElement>('[role=option][data-action=select-stop]');
     expect(text(stopOption)).toContain('Črnomerec');
     stopOption.click();
-    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: true });
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: false }); // a stop opens the sheet, so no fit (§16.4);
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
     expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
@@ -591,8 +590,7 @@ describe('detents on the phone stage', () => {
     // happy-dom lays nothing out: the stage is given the 740 px of a 390×844 phone, so half is 370 and open 700.
     Object.defineProperty(q<HTMLElement>('.transport-body'), 'clientHeight', { get: () => 740, configurable: true });
     const covered = (): number => Number.parseFloat(ws.style.getPropertyValue('--sheet-h'));
-    // Half: 38 % of the stage, never less than one board (transport/sheet.ts HALF_MIN_REM, §16.4).
-    const half = Math.max(740 * 0.38, HALF_MIN_REM * 16);
+    const half = 740 * 0.38;
     const chevron = (): HTMLButtonElement => q<HTMLButtonElement>('.t-sheet-toggle');
     const handle = last();
     const reset = (): void => { for (const fn of [handle.select, handle.fit, handle.setFitPadding]) spy(fn).mockClear(); };
@@ -837,6 +835,28 @@ describe('third-party text on the Karta sheet (WP4 review)', () => {
     expect(text(q('[data-testid=route-vehicles]'))).not.toContain('lozinku');
     expect(peek()).toContain('6');
     expect(document.body.textContent).not.toContain('lozinku');
+  });
+});
+
+describe('a stop opens the sheet (WP4 §11, §16.4)', () => {
+  it('a stop chosen from the search opens the sheet with no map fit, so its three departures and "Vozni red" are in view; a route lifts it to half with a fit', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const ws = q<HTMLElement>('[data-testid=transport-workspace]');
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    expect(ws.dataset.sheet).toBe('open');
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop' }), { fit: false });
+    expect(q('[data-testid=stop-board]')).not.toBeNull();
+    // A route is read beside the map: half, fitted.
+    input.value = '6';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-route][data-id="6"]').click();
+    expect(ws.dataset.sheet).toBe('half');
+    expect(last().select).toHaveBeenLastCalledWith({ kind: 'route', id: '6' }, { fit: true });
   });
 });
 
