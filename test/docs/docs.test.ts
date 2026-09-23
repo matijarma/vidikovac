@@ -128,7 +128,15 @@ describe('the §11 rewrite of PRODUCT.md, DESIGN.md, docs/kiosk.md and INTEGRATI
       /tri\s+ploče/,
       /bez\s+dodira\s+vraća\s+prozor/,
       /zamrznuti\s+prikaz\s+i\s+dostupne\s+izvoze/,
+      // D3/D4 facts: rows are inserted at their time (W-fix7), the first-tram row
+      // follows the lines still to start (decision 27), the wall's footer is text.
+      /novi\s+redak\s+ulazi\s+na\s+dnu/,
+      /prvi\s+jutarnji\s+tramvaj\s+od\s+22\s+sata\s+dok\s+ne\s+krene/,
+      /„Osnovno”,\s+koje\s+se\s+otvara/,
     ]) expect(kiosk).not.toMatch(re);
+    for (const re of [/60\s+sekundi\s+pokazuje\s+ploču\s+tog\s+stajališta/, /Vozni\s+red/, /barem\s+jedan\s+ritam/]) {
+      expect(kiosk).toMatch(re);
+    }
   });
 
   it('PRODUCT.md dates the approval, marks what it superseded and records the deferred vision', () => {
@@ -146,12 +154,31 @@ describe('the §11 rewrite of PRODUCT.md, DESIGN.md, docs/kiosk.md and INTEGRATI
       /frozen\s+attributed\s+exports/,
       /Touch\s+exploration\s+has\s+search/,
       /A\s+ZET\s+arrival\s+is\s+an\s+estimate\s+and\s+is\s+labelled\s+one/,
+      /enters\s+at\s+the\s+bottom,\s+fades\s+in\s+once\s+and\s+takes\s+its\s+place/,
+      /Otherwise\s+touch\s+opens\s+only\s+Osnovno/,
+      /Phone\s+destinations\s+are\s+Sada,\s+Karta,\s+Događanja\s+and\s+Još/,
     ]) expect(design).not.toMatch(re);
+    expect(design).toMatch(/Sada\s+·\s+Karta\s+·\s+Još/);
   });
 
   it('INTEGRATION.md names the catalogue adapter and none of the retired testids', () => {
     expect(integration).toContain('kiosk/strings.ts');
     for (const re of [/kiosk-ticker/, /kiosk-lastrun/, /strings-hr\.ts/, /strings-en\.ts/]) expect(integration).not.toMatch(re);
+    expect(integration).toContain('[data-testid=stop-board]');
+  });
+
+  // §16.8 and WP5 §0 ruling 3: the owner reads every new or changed Croatian
+  // string before it ships, and that read-through is the last row of the
+  // manual checklist in docs/kaj-verification.md.
+  it('ends the manual checklist with the owner\u2019s read-through of the Croatian copy', () => {
+    const verification = read('docs/kaj-verification.md');
+    const start = verification.indexOf('### Ručne provjere na uređaju');
+    expect(start, 'the manual checklist heading').toBeGreaterThan(-1);
+    const next = verification.indexOf(NL + '#', start + 1);
+    const section = verification.slice(start, next === -1 ? undefined : next);
+    const rows = section.split(NL).filter((line) => /^\| R\d+ \|/.test(line));
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[rows.length - 1]).toMatch(/vlasnik\s+čita\s+svaki\s+novi\s+ili\s+promijenjeni\s+hrvatski\s+tekst/);
   });
 
   it.each([
