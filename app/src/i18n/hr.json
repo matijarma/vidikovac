@@ -840,8 +840,6 @@
     "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
     "surface": "javni zaslon",
     "header": {
-      "temporaryUntil": "privremeni zaslon · vrijedi do {time}",
-      "venue": "zaslon u prostoru",
       "theme": "Tema: {pref}",
       "themeWord": {
         "auto": "automatski",
@@ -861,7 +859,6 @@
       "typeCode": "ili upiši kod na {host}",
       "qrLabel": "QR kod za otključavanje. Kod: {code}",
       "qrWaiting": "Kod stiže…",
-      "codeWaiting": "čekanje koda",
       "progressLabel": "Preostalo vrijeme ovog koda"
     },
     "legend": {
@@ -870,7 +867,6 @@
       "culture": "Kultura večeras"
     },
     "weather": {
-      "title": "Vrijeme sada",
       "humidity": "vlaga {value} %",
       "wind": "vjetar {dir} {speed} m/s",
       "windCalm": "bez vjetra",
@@ -883,7 +879,6 @@
       "range": "{min} do {max} °C",
       "unavailable": "Podaci DHMZ-a trenutačno nisu dostupni.",
       "loading": "Učitavanje podataka DHMZ-a…",
-      "station": "postaja {name}",
       "noReading": "bez očitanja temperature"
     },
     "lines": {
@@ -919,13 +914,11 @@
     },
     "say": {
       "transit": "Promet",
-      "transitRegular": "Sve linije voze redovito",
       "transitNoData": "Nema podataka o kašnjenju",
       "nearby_one": "{count} vozilo u blizini",
       "nearby_few": "{count} vozila u blizini",
       "nearby_other": "{count} vozila u blizini",
       "nearbyNone": "nema vozila u blizini",
-      "quake": "Potres",
       "closure": "Zatvoreno",
       "zet": "ZET javlja",
       "worksCity": "Radovi u gradu",
@@ -934,11 +927,7 @@
       "works_other": "{count} radova u tijeku",
       "today": "danas",
       "tomorrow": "sutra",
-      "tonight": "Večeras u gradu",
-      "allDay": "cijeli dan",
-      "tonightMore_one": "još {count} događanje",
-      "tonightMore_few": "još {count} događanja",
-      "tonightMore_other": "još {count} događanja"
+      "allDay": "cijeli dan"
     },
     "front": {
       "eventsToday_one": "{count} događanje danas",
@@ -948,7 +937,6 @@
       "eventsTomorrow_few": "{count} sutra",
       "eventsTomorrow_other": "{count} sutra",
       "eventsNone": "Otvoreni izvori večeras ne najavljuju ništa.",
-      "tomorrowCity": "Sutra u gradu",
       "city": "Grad",
       "around": "Oko stajališta",
       "acts_one": "{count} akt",
@@ -967,13 +955,6 @@
       "moreLate_one": "+{count} linija kasni",
       "moreLate_few": "+{count} linije kasne",
       "moreLate_other": "+{count} linija kasni"
-    },
-    "ticker": {
-      "weather": "Vrijeme",
-      "transit": "Promet",
-      "works": "Radovi",
-      "tonight": "Večeras",
-      "city": "Grad"
     },
     "sentence": {
       "kicker": {
@@ -1018,7 +999,6 @@
       "closuresUnknown": "Zatvaranja: podaci trenutačno nedostupni",
       "closuresStale": "Zatvaranja: zastarjelo, nepotvrđeno",
       "closuresNearest": "najbliže {street}",
-      "basics": "Osnovno",
       "sources": "DHMZ · EMSC",
       "confirmed": "DHMZ · EMSC · {time}",
       "openBasics": "Sigurnost: {verdict}. Otvori Osnovno",
@@ -1039,8 +1019,6 @@
       "closures": "Zatvorene prometnice"
     },
     "session": {
-      "join": "Pridruži se",
-      "joinHint": "Skeniraj za isti pregled na svom telefonu",
       "selected": "Odabrano na telefonu",
       "selectedRoute": "Linija {route}",
       "selectedStop": "Stanica {stop}"
@@ -1077,7 +1055,6 @@
     "paired": {
       "warnings": "Upozorenja DHMZ-a",
       "closures": "Zatvorene prometnice",
-      "delays": "Kašnjenja po linijama",
       "quakes": "Potresi u krugu 150 km, 72 sata",
       "today": "Danas",
       "tomorrow": "Sutra",
@@ -1104,9 +1081,6 @@
       "phase": "faza: {phase}",
       "amount": "iznos {amount} €",
       "coverage": "prikazano {shown} od {total}",
-      "coverageLines_one": "prikazano {shown} od {total} linije",
-      "coverageLines_few": "prikazano {shown} od {total} linije",
-      "coverageLines_other": "prikazano {shown} od {total} linija",
       "routeVehicles_one": "{count} vozilo",
       "routeVehicles_few": "{count} vozila",
       "routeVehicles_other": "{count} vozila",
@@ -1137,25 +1111,16 @@
     },
     "setup": {
       "title": "Pokreni gradski zaslon",
-      "intro": "Jedan gumb i zaslon pokazuje živi Zagreb. Četvrt i stajalište po želji odabereš poslije, u postavkama na samom zaslonu.",
-      "search": "Traži stanicu po imenu",
-      "results_one": "{count} stanica",
-      "results_few": "{count} stanice",
-      "results_other": "{count} stanica",
-      "noResults": "Nema stanice s tim imenom.",
       "routesAt": "linije {routes}",
       "create": "Pokreni",
       "creating": "Pokretanje zaslona…",
-      "validity": "Vrijedi 24 sata · najviše pet zaslona na sat s iste mreže",
       "errorAccess": "Poslužitelj je odbio postavljanje s ove veze. Pokušaj ponovno s druge mreže.",
       "errorQuota": "Dosegnut je broj privremenih zaslona za ovaj sat.",
       "errorNetwork": "Poslužitelj nije dostupan. Provjeri vezu i pokušaj ponovno.",
       "errorInvalid": "Odabir nije prihvaćen ({field}). Odaberi ponovno.",
       "errorFailed": "Stvaranje zaslona nije uspjelo. Pokušaj ponovno.",
-      "errorStops": "Popis stanica nije dostupan.",
       "retry": "Pokušaj ponovno",
       "retryIn": "Pokušaj ponovno za {time}",
-      "loadingStops": "Učitavanje stanica…",
       "place": "Adresa ili stajalište",
       "preview_one": "Na zaslonu: {place} i {count} stajalište uokolo",
       "preview_few": "Na zaslonu: {place} i {count} stajališta uokolo",
@@ -1172,18 +1137,10 @@
       "title": "Postavke",
       "hint": "Zatvara se samo od sebe nakon minute i pol.",
       "close": "Zatvori",
-      "save": "Spremi",
-      "saving": "Spremanje…",
       "saveOffline": "Promjena nije poslana: zaslon trenutačno nema vezu s poslužiteljem. Pokušaj ponovno.",
       "saveRefused": "Poslužitelj nije prihvatio mjesto. Odaberi ponovno.",
       "saveBusy": "Pričekaj koji trenutak pa odaberi ponovno.",
-      "saved": "Spremljeno.",
-      "area": "Područje",
       "areaWhole": "Cijeli grad",
-      "areaHint": "Karta pokazuje cijeli grad ili jednu gradsku četvrt.",
-      "stop": "Stajalište",
-      "stopNone": "Bez stajališta",
-      "stopHint": "Odabrano stajalište zaslon stavlja u sredinu i pokazuje njegove dolaske.",
       "theme": "Tema",
       "screen": "Zaslon",
       "expiry": "Vrijedi do {time}",

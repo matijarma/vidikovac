@@ -1205,14 +1205,11 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(sada.side).not.toContain('k-weather');
     expect(sada.side).toContain('data-testid="k-closures"');
   });
-  it('the strip pill and the coverage sentence exist in both catalogues; the hostname sentence carries a {host} slot', () => {
+  it('the strip pill exists in both catalogues; the hostname sentence carries a {host} slot', () => {
     expect(hr.safety.hitno).toBe('Sigurnost');
     expect(kioskStrings('en').safety.hitno).toBe('Safety');
     expect(hr.invitation.typeCode).toBe('ili upiši kod na {host}');
     expect(kioskStrings('en').invitation.typeCode).toBe('or type the code at {host}');
-    expect(plural('hr', hr.paired.coverageLines, 15)).toBe('prikazano {shown} od {total} linija');
-    expect(plural('hr', hr.paired.coverageLines, 3)).toBe('prikazano {shown} od {total} linije');
-    expect(plural('en', kioskStrings('en').paired.coverageLines, 15)).toBe('showing {shown} of {total} lines');
     expect(JSON.stringify(hr)).not.toContain('zagreb.aningfilm.hr');
   });
 });

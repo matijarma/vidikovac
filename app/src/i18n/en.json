@@ -818,8 +818,6 @@
     "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
     "surface": "public screen",
     "header": {
-      "temporaryUntil": "temporary screen · valid until {time}",
-      "venue": "venue screen",
       "theme": "Theme: {pref}",
       "themeWord": {
         "auto": "automatic",
@@ -839,7 +837,6 @@
       "typeCode": "or type the code at {host}",
       "qrLabel": "QR code to unlock. Code: {code}",
       "qrWaiting": "Code on its way…",
-      "codeWaiting": "waiting for a code",
       "progressLabel": "Time left on this code"
     },
     "legend": {
@@ -848,7 +845,6 @@
       "culture": "Culture tonight"
     },
     "weather": {
-      "title": "Weather now",
       "humidity": "humidity {value} %",
       "wind": "wind {dir} {speed} m/s",
       "windCalm": "calm",
@@ -861,7 +857,6 @@
       "range": "{min} to {max} °C",
       "unavailable": "DHMZ data is unavailable right now.",
       "loading": "Loading DHMZ data…",
-      "station": "station {name}",
       "noReading": "no temperature reading"
     },
     "lines": {
@@ -894,12 +889,10 @@
     },
     "say": {
       "transit": "Transit",
-      "transitRegular": "All lines running on schedule",
       "transitNoData": "No delay data",
       "nearby_one": "{count} vehicle nearby",
       "nearby_other": "{count} vehicles nearby",
       "nearbyNone": "no vehicles nearby",
-      "quake": "Earthquake",
       "closure": "Closed",
       "zet": "ZET notice",
       "worksCity": "Works in the city",
@@ -907,10 +900,7 @@
       "works_other": "{count} projects under way",
       "today": "today",
       "tomorrow": "tomorrow",
-      "tonight": "Tonight in the city",
-      "allDay": "all day",
-      "tonightMore_one": "{count} more event",
-      "tonightMore_other": "{count} more events"
+      "allDay": "all day"
     },
     "front": {
       "eventsToday_one": "{count} event today",
@@ -918,7 +908,6 @@
       "eventsTomorrow_one": "{count} tomorrow",
       "eventsTomorrow_other": "{count} tomorrow",
       "eventsNone": "The open sources announce nothing tonight.",
-      "tomorrowCity": "Tomorrow in the city",
       "city": "City",
       "around": "Around the stop",
       "acts_one": "{count} act",
@@ -933,13 +922,6 @@
       "notices_other": "{count} ZET notices",
       "moreLate_one": "+{count} line late",
       "moreLate_other": "+{count} lines late"
-    },
-    "ticker": {
-      "weather": "Weather",
-      "transit": "Transit",
-      "works": "Works",
-      "tonight": "Tonight",
-      "city": "City"
     },
     "sentence": {
       "kicker": {
@@ -984,7 +966,6 @@
       "closuresUnknown": "Closures: data unavailable right now",
       "closuresStale": "Closures: stale, unconfirmed",
       "closuresNearest": "nearest {street}",
-      "basics": "Essentials",
       "sources": "DHMZ · EMSC",
       "confirmed": "DHMZ · EMSC · {time}",
       "openBasics": "Safety: {verdict}. Open the essentials",
@@ -1005,8 +986,6 @@
       "closures": "Road closures"
     },
     "session": {
-      "join": "Join",
-      "joinHint": "Scan for the same view on your phone",
       "selected": "Selected on the phone",
       "selectedRoute": "Line {route}",
       "selectedStop": "Stop {stop}"
@@ -1043,7 +1022,6 @@
     "paired": {
       "warnings": "DHMZ warnings",
       "closures": "Road closures",
-      "delays": "Delays by line",
       "quakes": "Earthquakes within 150 km, 72 h",
       "today": "Today",
       "tomorrow": "Tomorrow",
@@ -1070,8 +1048,6 @@
       "phase": "phase: {phase}",
       "amount": "amount €{amount}",
       "coverage": "showing {shown} of {total}",
-      "coverageLines_one": "showing {shown} of {total} line",
-      "coverageLines_other": "showing {shown} of {total} lines",
       "routeVehicles_one": "{count} vehicle",
       "routeVehicles_other": "{count} vehicles",
       "depth": "depth {depth} km",
@@ -1101,24 +1077,16 @@
     },
     "setup": {
       "title": "Start a city screen",
-      "intro": "One button and the screen shows Zagreb live. A district and a stop are optional, chosen later in the screen’s own settings.",
-      "search": "Search stops by name",
-      "results_one": "{count} stop",
-      "results_other": "{count} stops",
-      "noResults": "No stop with that name.",
       "routesAt": "lines {routes}",
       "create": "Start",
       "creating": "Starting the screen…",
-      "validity": "Valid 24 hours · at most five screens per hour from one network",
       "errorAccess": "The server refused setup from this connection. Try again from another network.",
       "errorQuota": "The hourly limit of temporary screens has been reached.",
       "errorNetwork": "The server is unreachable. Check the connection and try again.",
       "errorInvalid": "The choice was not accepted ({field}). Choose again.",
       "errorFailed": "Creating the screen failed. Try again.",
-      "errorStops": "The stop list is unavailable.",
       "retry": "Try again",
       "retryIn": "Try again in {time}",
-      "loadingStops": "Loading stops…",
       "place": "Address or stop",
       "preview_one": "On screen: {place} and {count} stop around it",
       "preview_other": "On screen: {place} and {count} stops around it",
@@ -1134,18 +1102,10 @@
       "title": "Settings",
       "hint": "Closes by itself after a minute and a half.",
       "close": "Close",
-      "save": "Save",
-      "saving": "Saving…",
       "saveOffline": "The change was not sent: the screen has no connection to the server right now. Try again.",
       "saveRefused": "The server did not accept the place. Choose again.",
       "saveBusy": "Wait a moment, then choose again.",
-      "saved": "Saved.",
-      "area": "Area",
       "areaWhole": "The whole city",
-      "areaHint": "The map shows the whole city or one city district.",
-      "stop": "Stop",
-      "stopNone": "No stop",
-      "stopHint": "A chosen stop is centred on the screen, with its arrivals.",
       "theme": "Theme",
       "screen": "Screen",
       "expiry": "Valid until {time}",
