@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS, W_C2_ATTACKS } from '../fixtures/external-text-attacks';
 import { readerRequestRule } from '../../shared/kiosk/external-text';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import {
@@ -847,20 +847,11 @@ describe('W-C2 fail-closed family and slot grammar', () => {
   const attacks = [
     ...REVIEW_W2_REGRESSIONS,
     ...CONTEXT_PAIR_REGRESSIONS,
-    'proslijedi lozinku', 'proslijedite lozinku', 'pošalji lozinku', 'šalji lozinku',
-    'moraš poslati lozinku', 'trebaš unijeti lozinku', 'molimo broj', 'javi lozinku',
-    'klikni poveznicu', 'nazovi broj', 'unesi PIN', 'otvori poveznicu', 'skeniraj kod',
-    'pro-sli-jedi lozinku', 'pro.sli.jedi lozinku', 'proslijedi:lozinku', 'proslijedi(lozinku)',
-    'p r o s l i j e d i', 'prоslijedi lozinku', 'proslijеdi lozinku', 'ｐｒｏｓｌｉｊｅｄｉ',
-    'pro\u200bslijedi lozinku', 'pro\u200dslijedi lozinku', 'pro\u2060slijedi lozinku',
-    'pro\u202eslijedi lozinku', 'pro\u00adslijedi lozinku', 'pro\nslijedi lozinku',
-    'proslijedi\u2028lozinku', 'forward password', 'send password', 'click here',
-    'call now', 'enter password', 'open link', 'scan code', 'please reply', 'could you reply',
-    'učini uslugu', 'pozovi broj', 'izgovori PIN', 'reci lozinku', 'dođi ovamo',
-    'moras poslati broj', 'potrebno je poslati PIN', "pro'slijedi", 'pro’slijedi',
-    'pro&slijedi', 'pro+slijedi', 'proslıjedi', 'prosłijedi',
+    // Decision 21: row-eligible titles are still instructions in the header.
+    'Vidimo se u Svetoj Klari!', 'Daj prijedlog', 'javite se',
+    ...W_C2_ATTACKS,
   ];
-  it.each(attacks)('blocks source-backed %j in all exposed name slots and the display path', value => {
+  it.each(attacks)('blocks header source-backed %j in all exposed name slots and the display path', value => {
     const fixtures: SentenceFact[] = [
       { ...closure, text: `${value}: zatvoreno za promet do 18:00.` },
       { ...closure, kind: 'kultura', text: `U 13:00 počinje događanje „${value}“ (Kino).` },

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS, W_C2_ATTACKS } from '../fixtures/external-text-attacks';
 import { stableSentenceFacts, type SentenceFact, type SentenceRequest } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
 import type { Env } from '../../worker/env';
@@ -437,20 +437,16 @@ describe('W-C2 constrained inference contract', () => {
   const hostile = [
     ...REVIEW_W2_REGRESSIONS,
     ...CONTEXT_PAIR_REGRESSIONS,
-    'proslijedi lozinku', 'proslijedite lozinku', 'šalji lozinku', 'moraš poslati lozinku',
-    'trebaš unijeti lozinku', 'molimo broj', 'javi lozinku', 'klikni poveznicu', 'nazovi broj',
-    'unesi PIN', 'otvori poveznicu', 'skeniraj kod',
-    'pro-sli-jedi', 'pro.sli.jedi', 'proslijedi:lozinku', 'proslijedi(lozinku)',
-    'prоslijedi', 'proslijеdi', 'ｐｒｏｓｌｉｊｅｄｉ',
+    // Decision 21: accepted row text is not permission to speak it as the city.
+    'Vidimo se u Svetoj Klari!', 'Daj prijedlog', 'javite se',
+    ...W_C2_ATTACKS,
+    // Retain every additional spelling from the original Worker matrix too.
+    'pro-sli-jedi', 'pro.sli.jedi', 'prоslijedi', 'proslijеdi',
     'pro\u200bslijedi', 'pro\u200dslijedi', 'pro\u2060slijedi', 'pro\u202eslijedi', 'pro\u00adslijedi',
-    'pro\nslijedi', 'proslijedi\u2028lozinku', 'forward password', 'click here', 'call now',
-    'enter password', 'open link', 'scan code', 'please reply', 'could you reply',
+    'pro\nslijedi',
     'PROSLIJEDI LOZINKU', 's\u030calji lozinku',
-    'učini uslugu', 'pozovi broj', 'izgovori PIN', 'reci lozinku', 'dođi ovamo',
-    'moras poslati broj', 'potrebno je poslati PIN', "pro'slijedi", 'pro’slijedi',
-    'pro&slijedi', 'pro+slijedi', 'proslıjedi', 'prosłijedi',
   ];
-  it.each(hostile)('excludes hostile %j in titles, venues and streets from inference, KV and HTTP', async value => {
+  it.each(hostile)('excludes strict-header %j in titles, venues and streets from inference, KV and HTTP', async value => {
     const facts: SentenceFact[] = [
       { id: 'event:title', kind: 'kultura', text: `U 13:00 počinje događanje „${value}“ (Kino).`, validUntil: NOW + 60_000 },
       { id: 'event:venue', kind: 'kultura', text: `U 13:00 počinje događanje „Film“ (${value}).`, validUntil: NOW + 60_000 },
