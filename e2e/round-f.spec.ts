@@ -92,7 +92,12 @@ async function openScene(page: Page, scene: (time: number) => ModuleSnapshot, nu
   await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
   await page.clock.resume();
   await page.goto(FIXTURE_DASHBOARD);
-  await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
+  // The phone reaches Karta by its tab; the desk shows it beside Sada already (WP4 desk pair). Never the first
+  // data-action=nav on the page: a Sada U blizini row carries one with a selection (a closure), and taking it
+  // fitted the camera to that street, away from the scene.
+  const tab = page.locator('.ki-tab[data-layer=u-pokretu]:visible');
+  if (await tab.count()) await tab.first().click();
+  await expect(page.locator(MAP)).toBeVisible();
   // Karta draws every vehicle at once (WP4): there is no group to pick first.
   // Both marks on the screen before anything is measured. This is also the
   // map's own readiness: `data-pills` is a census of rendered features, so it
