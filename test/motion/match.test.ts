@@ -692,6 +692,37 @@ describe('terminal placement continuity', () => {
     expect(t.offPathCount).toBe(0);
   });
 
+  it('keeps a genuinely placed arrival at a handover until the cropped departure is entered', () => {
+    // 102419 at 17:27:11 and 102417 at 17:41:55 on 20 Sep:
+    // the new trip is named while the tram still occupies its arrival.
+    // A clipped departure 55-60 m away is not evidence of entering it.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1060, 2060) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('still-arriving', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1001, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    for (let at = 1020; at <= 1620; at += 10) {
+      m.matchFix(t, fix(999, 0, at), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+      expect(t.match.residual).toBe(0); // genuine placement, not endpoint grace
+    }
+    m.matchFix(t, fix(1070, 0, 1630), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+
   it('does not return to a clipped departure endpoint while approaching it', () => {
     const n = syntheticNetwork({
       edges: [

@@ -463,16 +463,26 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       resetOrder(track);
     }
 
-    // A new prior (a new trip, or the twin re-deriving from the index) starts
-    // the vehicle over ON THAT PATH: only the path-derived state goes. The
+    // A new prior normally starts the vehicle over on that path. A cropped
+    // departure's start is not evidence that it has left a better-fitting
+    // arrival yet: retain that genuine placement until the normal entry
+    // evidence admits the new prior (Kvaternikov's early trip handovers).
+    // Only path-derived state goes. The
     // ordering register stays (E3, D14) -- the tram is the same tram, and a
     // relation the new path leaves behind is dropped by the register's own
     // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
       delete track.endpointHold;
       delete track.unplacedDirection;
+      let keepArrival = false;
+      if (prior.pathIdx !== null && track.match.pathIdx !== null) {
+        const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
+        const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
+        keepArrival = own.s <= 0.5 && own.residual <= NEAR_M
+          && current.residual <= NEAR_M && current.residual < own.residual;
+      }
       track.priorPath = prior.pathIdx;
-      track.match = noMatch();
+      if (!keepArrival) track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
     }
