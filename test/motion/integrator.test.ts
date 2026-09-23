@@ -504,4 +504,64 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(after.s).toBeGreaterThanOrEqual(990);
     expect(after.s).toBeLessThan(999);
   });
+
+  it('re-seeds a held mark near its drawn point when the new plan window has moved far ahead', () => {
+    // Recorded 22139, 21 Sep 13:12:58: held at the end of 6_2, the
+    // 6_25 plan is 667 m along its departure, but that path starts only
+    // 89 m from the drawn mark. Do not add 667 m of plan lag to the jump.
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: Array.from({ length: 25 }, (_, i) => ({ x: 1089 + 50 * i, y: 0 })) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'arrival', still(T0, 1000), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'arrival', still(t1, 900), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    integrator.update([pathFix('v', 'departure', still(t1, 667), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.path).toBe(1);
+    expect(after.s).toBe(0);
+    expect(Math.hypot(after.p.x - before.p.x, after.p.y - before.p.y)).toBeCloseTo(89, 6);
+    expect(after.lastSnapAt).toBe(t1); // still measured as a re-seed
+    expect(integrator.size()).toBe(1); // no visibility suppression
+    const later = integrator.step(t1 + 1000)[0];
+    expect(later.s).toBeGreaterThan(after.s!);
+    expect(later.s).toBeLessThan(667);
+  });
+
+  it('keeps the plan fold when a held mark is near a later return leg', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: 6 })) },
+        { from: 3, to: 4, pts: [{ x: 1000, y: 6 }, { x: 1000, y: 300 }, { x: 0, y: 300 }, { x: 0, y: -4 }] },
+        { from: 4, to: 5, pts: straight(0, 1000, -4) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 0, edges: [1, 2, 3] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 200), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 100), 0)], t1);
+    expect(integrator.step(t1)[0].holding).toBe(true);
+    integrator.update([pathFix('v', 'loop', still(t1, 600), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBeCloseTo(200, 6);
+    expect(after.p.y).toBeCloseTo(6, 6); // not the closer, later return leg
+  });
 });
