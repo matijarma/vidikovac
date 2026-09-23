@@ -52,6 +52,25 @@ export function storeBeacon(storage: StorageLike | null | undefined, credentials
   }
 }
 
+/** Reuse the provisioning/restore path for a stale client bundle. A graph
+ *  identity pair is latched before navigation, even if the next page still
+ *  serves the old bundle. Without durable credentials AND latch, stay put. */
+export function reloadBeacon(credentials: BeaconCredentials, storage: StorageLike | null | undefined, reload = () => globalThis.location.reload(), networkPair?: readonly [string, string]): boolean {
+  storeBeacon(storage, credentials);
+  const saved = readBeacon(storage);
+  if (saved?.beaconId !== credentials.beaconId || saved.secret !== credentials.secret) return false;
+  if (networkPair) {
+    const key = `vidikovac-network-reload:${JSON.stringify(networkPair)}`;
+    try {
+      if (!storage || storage.getItem(key) !== null) return false;
+      storage.setItem(key, '1');
+      if (storage.getItem(key) !== '1') return false;
+    } catch { return false; }
+  }
+  reload();
+  return true;
+}
+
 export interface BeaconClientDeps {
   credentials: BeaconCredentials;
   createSocket?: (url: string) => WebSocketLike;

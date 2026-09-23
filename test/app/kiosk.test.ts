@@ -28,6 +28,7 @@ import type { MapSelection } from '../../app/src/map/city-map';
 import type { DepartureBoard, ScheduledDeparture } from '../../shared/city/types';
 import { fakeCityStore } from '../city/fake-store';
 import { emptyCity } from '../../shared/city/types';
+import { BUILT_AT } from '../../app/src/motion/network-meta';
 
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -65,7 +66,7 @@ function batch(start: number, count = 20): CodeSlot[] {
 }
 
 interface Timer { fn: () => void; ms: number; cleared: boolean }
-type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
+type MountOptions = Partial<Pick<KioskDeps, 'cityStore' | 'hash' | 'reducedMotion' | 'lightweight' | 'fetchTeaser' | 'mapFactory' | 'createScreen' | 'loadStops' | 'viewport' | 'locale' | 'now' | 'i18n' | 'codeBase' | 'loadLastRun' | 'mapMode' | 'createBoards' | 'storage'>> & { stored?: string | null; themeInitial?: ThemePreference } & { modules?: ModuleSnapshot[] };
 
 /** A theme controller the test drives and inspects: every `setPreference` call
  *  is recorded in order, and `onChange` behaves exactly like the real one
@@ -117,7 +118,7 @@ function mount(opts: MountOptions = {}) {
   const themeFake = fakeThemeController(opts.themeInitial ?? 'solar');
   const handle = mountKiosk(root, {
     cityStore:opts.cityStore??fakeCityStore(),
-    i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
+    i18n: opts.i18n ?? createDefaultI18n('hr'), hash: opts.hash ?? '', storage: opts.storage === undefined ? storage : opts.storage, now: opts.now ?? (() => NOW), codeBase: opts.codeBase ?? 'https://zagreb.aningfilm.hr',
     onRepaint: (listener) => { repaint = listener; return () => { repaint = null; }; },
     reducedMotion: opts.reducedMotion ?? false, lightweight: opts.lightweight ?? false, viewport: opts.viewport ?? { width: 1920, height: 1080 }, locale: opts.locale, mapMode: opts.mapMode,
     fetchTeaser: opts.fetchTeaser ?? (async () => ({ modules })), loadNetwork: async () => null, mapFactory: opts.mapFactory, fetchData, createScreen, loadStops, loadLastRun, createBoards: opts.createBoards ?? offlineBoards,
@@ -1240,6 +1241,110 @@ describe('alerts, polling, the first tap and disposal', () => {
     const handle = { update: vi.fn(), pause: () => { calls.push('pause'); }, resume: () => { calls.push('resume'); }, destroy: vi.fn(), resize: () => { calls.push('resize'); }, setFeedState: (s: string) => { calls.push(`feed:${s}`); }, setView: vi.fn() };
     return { factory: vi.fn(() => handle), handle, calls };
   }
+  it('forwards motion identity and generation through the kiosk factory on stale repaints', async () => {
+    const motion = { path: '6_1', plan: [[0, 100], [60, 600]] as [number, number][], network: 'new-graph', generatedAt: NOW, builtAt: BUILT_AT };
+    const modules = MODULES.map(m => m.module !== 'zet-rt' ? m : {
+      ...m, fetchedAt: new Date(NOW).toISOString(),
+      items: m.items.map(i => i.id === 'vehicle:1' ? { ...i, motion } : i),
+    });
+    const map = fakeMap();
+    let fail = false;
+    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => {
+      if (fail) throw new Error('offline');
+      return { modules };
+    } });
+    await flush();
+    const check = () => {
+      const points = map.handle.update.mock.calls.at(-1)![0] as { id: string; network?: string; generatedAt?: number; plan?: { knots: number[][] } }[];
+      const p = points.find(p => p.id === 'vehicle:1')!;
+      expect(p).toMatchObject({ network: 'new-graph', generatedAt: NOW });
+      expect(p.plan?.knots[0][0]).toBe(NOW); // never overwritten by raw relative knots
+    };
+    check();
+    fail = true;
+    k.poll();
+    await flush();
+    check();
+    k.handle.destroy();
+  });
+
+  it('reloads a stale kiosk bundle once before handing incompatible motion to the map', async () => {
+    const reload = vi.spyOn(globalThis.location, 'reload').mockImplementation(() => {});
+    const map = fakeMap();
+    const modules = MODULES.map(m => m.module !== 'zet-rt' ? m : {
+      ...m, items: m.items.map(i => i.id === 'vehicle:1' ? {
+        ...i, motion: { path: '6_1', plan: [[0, 100]] as [number, number][], network: 'deployed-graph', generatedAt: NOW, builtAt: 'different-build' },
+      } : i),
+    });
+    const k = mount({ stored: STORED, mapFactory: map.factory as never, modules });
+    await flush();
+    k.repaint();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(map.calls).toContain('pause');
+    const points = map.handle.update.mock.calls.flatMap(call => call[0] as { id: string }[]);
+    expect(points.some(p => p.id === 'vehicle:1')).toBe(false);
+    expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]).secret).toBe('tajna');
+    k.handle.destroy();
+    reload.mockRestore();
+  });
+
+  it('reloads an unresolved identity pair only once across three fresh mounts', async () => {
+    const reload = vi.spyOn(globalThis.location, 'reload').mockImplementation(() => {});
+    const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: STORED };
+    const storage = {
+      getItem: (key: string) => raw[key] ?? null,
+      setItem: (key: string, value: string) => { raw[key] = value; },
+      removeItem: (key: string) => { delete raw[key]; },
+    };
+    const modules = MODULES.map(m => m.module !== 'zet-rt' ? m : {
+      ...m, items: m.items.map(i => i.id === 'vehicle:1' ? {
+        ...i, motion: { path: '6_1', plan: [[0, 100]] as [number, number][], network: 'deployed-graph', generatedAt: NOW, builtAt: 'different-build' },
+      } : i),
+    });
+    try {
+      for (let n = 0; n < 3; n++) {
+        const map = fakeMap();
+        const k = mount({ storage, modules, mapFactory: map.factory as never });
+        await flush();
+        k.repaint();
+        try {
+          expect(reload).toHaveBeenCalledTimes(1);
+          expect(readStored()).toEqual(JSON.parse(STORED));
+          if (n > 0) {
+            expect(q(k.root, '[data-testid=kiosk-map-host]')?.dataset.networkStale).toBe('true');
+            const points = map.handle.update.mock.calls.at(-1)![0];
+            expect(points).toContainEqual(expect.objectContaining({ id: 'vehicle:1', network: 'deployed-graph', generatedAt: NOW }));
+            expect(map.calls.at(-1)).toBe('feed:live');
+          }
+        } finally { k.handle.destroy(); }
+      }
+    } finally { reload.mockRestore(); }
+    function readStored() { return JSON.parse(raw[BEACON_STORAGE_KEY]); }
+  });
+
+  it('keeps reconciling without pausing when the reload latch cannot persist', async () => {
+    const reload = vi.spyOn(globalThis.location, 'reload').mockImplementation(() => {});
+    const modules = MODULES.map(m => m.module !== 'zet-rt' ? m : {
+      ...m, items: m.items.map(i => i.id === 'vehicle:1' ? {
+        ...i, motion: { path: '6_1', plan: [[0, 100]] as [number, number][], network: 'deployed-graph', generatedAt: NOW, builtAt: 'different-build' },
+      } : i),
+    });
+    const storage = {
+      getItem: (key: string) => key === BEACON_STORAGE_KEY ? STORED : null,
+      setItem: () => { throw new Error('storage full'); }, removeItem: () => {},
+    };
+    const map = fakeMap();
+    const k = mount({ storage, modules, mapFactory: map.factory as never });
+    await flush();
+    try {
+      k.repaint();
+      expect(reload).not.toHaveBeenCalled();
+      expect(map.calls).not.toContain('pause');
+      expect(q(k.root, '[data-testid=kiosk-map-host]')?.dataset.networkStale).toBe('true');
+      expect(map.handle.update.mock.calls.at(-1)![0]).toContainEqual(expect.objectContaining({ network: 'deployed-graph' }));
+    } finally { k.handle.destroy(); reload.mockRestore(); }
+  });
+
   it('the map hears the ZET feed state on every paint: a stale teaser holds it, a reparent resizes and re-asserts the hold right after resume, basics pause and resume the same way', async () => {
     const stale = MODULES.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' as const } : m));
     const map = fakeMap();

@@ -3,6 +3,9 @@ import { newTrack, type Track } from '../../shared/motion/track';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import { buildPayload, type TripJoin } from '../../worker/twin/publish';
 import { emptyState, type TripNext, type TwinState } from '../../worker/twin/state';
+import { decodeNetwork } from '../../shared/motion/network';
+import graphBefore from '../fixtures/graph-migration/before.json';
+import graphAfter from '../fixtures/graph-migration/after.json';
 
 const HEADER_S = 1_800_000_000;
 const NOW_MS = (HEADER_S + 2) * 1000;
@@ -25,6 +28,18 @@ const update = (over: Partial<TripNext> = {}): TripNext => ({
 const joins = new Map<string, TripJoin>([['T1', { direction: 0, headsign: 'Sopot', shapeId: '6_25' }]]);
 const pin = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
   buildPayload(state(tracks, tripUpdates), joins, routes, NOW_MS, NOW_MS + 10_000, null).items.find((i) => i.id.startsWith('vehicle:'))!;
+
+it('names the actual graph and generation time on motion without changing legacy path/plan fields', () => {
+  for (const raw of [graphBefore, graphAfter]) {
+    const net = decodeNetwork(raw);
+    const t = track({ id: '1', plan: { on: 'path', pathIdx: 0, knots: [[0, 100], [60, 600]] } });
+    const motion = buildPayload(state([t]), joins, routes, NOW_MS, NOW_MS + 10_000, net).items[0].motion;
+    expect(motion).toMatchObject({
+      network: net.graphHash, generatedAt: NOW_MS,
+      path: 'path:6:1:e641be7c', plan: [[0, 100], [60, 600]],
+    });
+  }
+});
 
 // The next stop on the wire, and the one thing that may be said about when
 // the vehicle gets there. The twin plans an arrival at the platform in front
