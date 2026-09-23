@@ -750,7 +750,7 @@ export function csvField(text: string): string {
 function vetted(input: NearbyInput, texts: readonly (readonly [ExternalTextKind, string | undefined])[]): boolean {
   for (const [kind, value] of texts) {
     if (value === undefined || (value === '' && (kind === 'summary' || kind === 'address' || kind === 'register-text'))) continue;
-    const verdict = externalText(kind, value);
+    const verdict = externalText(kind, value, { surface: 'row' });
     if (!verdict.ok) { input.onSkip?.(verdict.reason); return false; }
   }
   return true;

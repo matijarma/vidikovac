@@ -1,8 +1,8 @@
 // Wire text is untrusted, including local text: decode an approved family into
 // typed slots, then bind those slots to one complete fact. No free-prose escape;
 // the one prose family, `always`, carries register text only as the typed datum
-// `register-text`, checked by the same externalText() as the wall's rows
-// (./external-text.ts, decision 18 revised).
+// `register-text`. Every external slot uses the strict header surface, never
+// the contextual row surface (./external-text.ts, decision 21).
 import { externalText, type ExternalTextKind } from './external-text';
 export { SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS, sentenceInstruction } from './external-text';
 
@@ -117,9 +117,9 @@ export function validateSentenceSlot(type: SentenceSlotType, value: string): Sen
   const rule = SENTENCE_SLOT_RULES[type];
   if ([...value].length > rule.max || value !== value.trim() || value.includes('  ')
     || value.normalize('NFKC') !== value || !rule.pattern.test(value) || /…|\.\.\./u.test(value)) return 'invalid-slot';
-  // Names are third-party text: the same check as the wall's rows (./external-text.ts).
+  // A sentence speaks for the city even when its source is an accepted row.
   if (rule.names) {
-    const verdict = externalText(rule.names, value);
+    const verdict = externalText(rule.names, value, { surface: 'header' });
     if (!verdict.ok) return verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot';
   }
   if (type === 'minutes' && Number(value) > 180) return 'invalid-slot';
@@ -163,7 +163,7 @@ export const SENTENCE_FAMILIES = {
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a
 // protected building nearby. Both values are third-party text: `register-name`
-// and `register-text`, each checked by externalText() exactly as the rows are,
+// and `register-text`, each checked by externalText() on the header surface,
 // never by identity with a snapshot. The model selects such a fact by id only
 // and is never offered its text to copy or write.
 export const SENTENCE_REGISTER_FAMILIES = { always: '{name}: {text}' } as const;
@@ -217,7 +217,7 @@ function decodeTyped(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'):
       // The same stop slot also carries BAJS station names. Only departure
       // destinations have GTFS's stricter headsign grammar; typed identity stays.
       if (!invalid && name === 'to') {
-        const verdict = externalText('headsign', value);
+        const verdict = externalText('headsign', value, { surface: 'header' });
         if (!verdict.ok) invalid = verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot';
       }
       if (invalid) break;
@@ -242,7 +242,7 @@ function decodeRegister(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en
     const value = values[slot];
     // Whole values only: the header's unquoting (normalizeSentence) must not have cut a quote off either end.
     if (!value || value !== value.trim() || !quotesPaired(value)) return { ok: false, reason: 'invalid-slot' };
-    const verdict = externalText(type, value);
+    const verdict = externalText(type, value, { surface: 'header' });
     if (!verdict.ok) return { ok: false, reason: verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot' };
   }
   const copy = registerCopyIssue(values.text);
@@ -276,7 +276,7 @@ function textIssue(text: string, max: number): SentenceRejection | null {
   if (CONTROLS.test(text) || /[*_`#[\]<>{}|]|https?:/iu.test(text)) return 'markup';
   return null;
 }
-/** Wire-compatible projection: unknown prose never becomes a typed fact. */
+/** Header-only wire projection: no caller can opt sentence facts into row rules. */
 export function typedSentenceFact(fact: SentenceFact, locale?: 'hr' | 'en'): Decoded {
   const issue = textIssue(fact.text, 160);
   return issue ? { ok: false, reason: issue } : decodeTemplate(fact.text, fact.kind, locale);

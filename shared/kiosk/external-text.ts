@@ -6,18 +6,21 @@
 // such value through externalText() before it is shown. A value that fails is
 // skipped, never repaired or shortened; the caller counts the reason code.
 //
-// Layers (decision 20): structural limits and contact/transaction vectors;
-// sentence-local sensitive pairs; reader requests amplify partial vectors in
-// prose only. Neither a lone sensitive word nor a reader request rejects. An event name
-// is not unsafe merely because it is imperative. Folding is rejection-only;
-// display and grounding always use the original source text.
+// Decision 21: structural limits/vectors are shared. Headers are the city's
+// voice: every sensitive lexeme and reader request rejects. Rows quote items:
+// sentence-local sensitive pairs reject, with requests only amplifying partial
+// vectors in prose (decision 20). Single hits and imperative names pass rows.
+// Folding is rejection-only; display/grounding always use the original text.
 import {
-  EXTERNAL_CONTACT_TARGETS, EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
+  EXTERNAL_CONTACT_TARGETS, EXTERNAL_HEADER_LEXICON, EXTERNAL_HEADER_SEPARATORS,
+  EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
   EXTERNAL_PAIR_RULES, EXTERNAL_PARTIAL_VECTORS, EXTERNAL_SENTENCE_BREAKS,
   EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
 } from './external-text-policy';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
+export type ExternalTextSurface = 'header' | 'row';
+export interface ExternalTextOptions { surface: ExternalTextSurface }
 export const EXTERNAL_TEXT_REJECTIONS = ['empty', 'too-long', 'control', 'charset', 'link', 'phone', 'account', 'payment', 'qr', 'instruction'] as const;
 export type ExternalTextRejection = (typeof EXTERNAL_TEXT_REJECTIONS)[number];
 export type ExternalTextVerdict = { ok: true } | { ok: false; reason: ExternalTextRejection };
@@ -60,7 +63,7 @@ export function foldText(text: string): string {
   return text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('hr').replace(/[^\x00-\x7f]/gu, ch => FOLD[ch] ?? ch);
 }
 
-// --- additional reader-action grammar, ONLY for summary/register-text ----------
+// --- reader-action grammar: all header kinds; row prose amplifier only ---------
 //
 // Croatian i-verbs write the singular imperative and the third person present
 // alike (javi, prati, slijedi), and some of those forms are also nouns (ugovori
@@ -145,6 +148,11 @@ const instructionPatterns = SENTENCE_INSTRUCTION_PATTERNS.map(rule => ({
   id: rule.id, pattern: bounded(rule.source),
   singular: 'singular' in rule ? bounded(`${notHomograph}(?:${rule.singular})`) : null,
 }));
+// Header slots keep the strict command grammar. The row signal's singular
+// homograph/capitalised-name exemptions cannot authorise the city's own voice.
+const headerRequests = SENTENCE_INSTRUCTION_PATTERNS.map(rule => ({
+  id: rule.id, pattern: bounded('singular' in rule ? `${rule.source}|${rule.singular}` : rule.source),
+}));
 // Where a clause opens: the start, sentence and clause marks, a spaced dash, an opening bracket or quote.
 const CLAUSE_OPENS = /(?:^|[.:;!?(\[–—„“"«]|\s-)[\s"„“«(]*$/u;
 /**
@@ -178,13 +186,13 @@ export function readerRequestRule(text: string): string | null {
 }
 // Tokenize the small policy grammar, keeping character classes and quantifiers
 // intact. Separators may occur at a stem/suffix boundary too ("n a z o v i").
-function separatedLexeme(source: string): string {
+function separatedLexeme(source: string, separators = EXTERNAL_LEXICON_SEPARATORS): string {
   return (source.match(/\[a-z\]\*|[a-z]| \*?|[^a-z]/gu) ?? []).map(token => {
     // Prefer the first whole-word boundary: a greedy suffix would swallow the
     // partner ("p a s s w o r d send") and turn two disjoint lexemes into one.
-    if (token === '[a-z]*') return `(?:[a-z]${EXTERNAL_LEXICON_SEPARATORS})*?`;
-    if (/^[a-z]$/u.test(token)) return `(?:${token}${EXTERNAL_LEXICON_SEPARATORS})`;
-    if (token.startsWith(' ')) return EXTERNAL_LEXICON_SEPARATORS;
+    if (token === '[a-z]*') return `(?:[a-z]${separators})*?`;
+    if (/^[a-z]$/u.test(token)) return `(?:${token}${separators})`;
+    if (token.startsWith(' ')) return separators;
     return token;
   }).join('');
 }
@@ -193,6 +201,10 @@ const sensitivePatterns = EXTERNAL_SENSITIVE_LEXICON.map(rule => ({
   role: rule.role,
   pattern: bounded(rule.source),
   separated: bounded(separatedLexeme(rule.source)),
+}));
+const headerPatterns = EXTERNAL_HEADER_LEXICON.map(rule => ({
+  id: rule.id, pattern: bounded(rule.source),
+  separated: bounded(separatedLexeme(rule.source, EXTERNAL_HEADER_SEPARATORS)),
 }));
 
 interface Evidence { list: string; value: string; start: number; end: number }
@@ -264,24 +276,42 @@ export function instructionRule(text: string): string | null {
   }
   return null;
 }
+/** Strict header policy: single sensitive hits and reader requests in any slot. */
+export function headerInstructionRule(text: string): string | null {
+  const folded = readings(text);
+  for (const reading of folded) {
+    for (const { id, pattern, separated } of headerPatterns) {
+      if (pattern.test(reading) || separated.test(reading)) return id;
+    }
+  }
+  for (const reading of folded) for (const { id, pattern } of headerRequests) {
+    if (pattern.test(reading)) return id;
+  }
+  return readerRequestRule(text);
+}
 export function sentenceInstruction(text: string): boolean {
-  return instructionRule(text) !== null;
+  return headerInstructionRule(text) !== null;
 }
 
-function vectorReason(text: string): ExternalTextRejection | null {
-  for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) if (source.test(text)) return reason;
+/** Structural evidence for corpus audits; production callers log codes only. */
+export function externalTextVector(value: string): { reason: ExternalTextRejection; value: string } | null {
+  const text = foldText(value);
+  for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) {
+    const match = source.exec(text);
+    if (match) return { reason, value: match[0] };
+  }
   // Match the complete numeric run before counting, never just six adjacent
   // digits: spacing, slashes, punctuation and parentheses cannot hide a number.
   for (const match of text.matchAll(/\d(?:[\d .,/'’():+–-]*\d)?/gu)) {
     const run = match[0];
     const digits = run.replace(/\D/gu, '');
     if (digits.length < 6 || EXTERNAL_NUMERIC_DATA.some(pattern => pattern.test(run))) continue;
-    return digits.length >= 13 ? 'account' : 'phone';
+    return { reason: digits.length >= 13 ? 'account' : 'phone', value: run };
   }
   return null;
 }
 
-function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
+function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurface): ExternalTextVerdict {
   const rule = EXTERNAL_TEXT_RULES[kind];
   if (INVISIBLE.test(value)) return { ok: false, reason: 'control' };
   if (kind === 'headsign' && value.includes('\u00a0')) return { ok: false, reason: 'charset' };
@@ -291,8 +321,8 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  const vector = vectorReason(folded);
-  if (vector) return { ok: false, reason: vector };
+  const vector = externalTextVector(text);
+  if (vector) return { ok: false, reason: vector.reason };
   for (const ch of text) {
     if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
   }
@@ -302,7 +332,10 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
   for (const ch of folded) {
     if (!/[a-z0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
   }
-  if ((kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text)) {
+  const instruction = surface === 'row'
+    ? (kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text)
+    : headerInstructionRule(text);
+  if (instruction) {
     return { ok: false, reason: 'instruction' };
   }
   return { ok: true };
@@ -312,16 +345,16 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
 const verdicts = new Map<string, ExternalTextVerdict>();
 /**
  * The one check for third-party text before the wall shows it, in a row or in the
- * header: structural limits/vectors, sensitive pairs, amplified prose requests.
- * Never repairs; a failing value is skipped.
+ * header. The surface is required: header slots must never inherit row leniency.
+ * Never repairs; a failing value is skipped on that surface only.
  */
-export function externalText(kind: ExternalTextKind, value: string): ExternalTextVerdict {
+export function externalText(kind: ExternalTextKind, value: string, { surface }: ExternalTextOptions): ExternalTextVerdict {
   // Do not retain arbitrarily large rejected source strings in the tick cache.
-  if (value.length > EXTERNAL_TEXT_RULES[kind].max * 3) return check(kind, value);
-  const key = `${kind}\u0000${value}`;
+  if (value.length > EXTERNAL_TEXT_RULES[kind].max * 3) return check(kind, value, surface);
+  const key = `${surface}\u0000${kind}\u0000${value}`;
   const known = verdicts.get(key);
   if (known) return known;
-  const verdict = check(kind, value);
+  const verdict = check(kind, value, surface);
   if (verdicts.size >= 2048) verdicts.clear();
   verdicts.set(key, verdict);
   return verdict;

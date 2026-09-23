@@ -171,8 +171,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     validUntil = sentenceDeadline(text, validUntil, now);
     if (!text || validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
     const fact: CitySentenceFact = { id, kind, text, validUntil };
-    // Long facts also cross the typed-slot boundary before any shorter projection;
-    // a long weather fact can then still supply one complete shorter claim to AI.
+    // The decoder always uses strict header slots, even for accepted row text.
+    // Long facts cross it before any shorter weather projection reaches AI.
     const typed = typedSentenceFact(fact);
     if (!typed.ok) { console.debug('sentence-rejected', typed.reason); return; }
     if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now,

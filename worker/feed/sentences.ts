@@ -92,6 +92,8 @@ function parseAnswer(answer: unknown, request: SentenceRequest, now: number): Wr
 export async function writeSentences(env: Env, input: SentenceRequest, waitUntil?: BriefWaitUntil): Promise<WrittenSentence[]> {
   if (isTestEnvironment(env)) return [];
   const now = Date.now();
+  // typedSentenceFact is header-only. The same strict slots also guard model
+  // choices, fallback, KV reads/writes and HTTP decoding; row rules never apply.
   for (const fact of input.facts) {
     const typed = typedSentenceFact(fact, input.locale);
     if (!typed.ok) logRejection(typed.reason);

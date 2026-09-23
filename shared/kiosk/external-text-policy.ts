@@ -1,6 +1,6 @@
-// Decision 20: rejection-only policy data, NOT a list of banned words. A
-// lexeme needs a disjoint partner in the SAME sentence to reject. Sources match
-// folded, lower-case Latin with whole-word boundaries. Examples are individual
+// Decision 21: shared rejection-only lexemes. In rows (decision 20), a
+// lexeme needs a disjoint partner in the SAME sentence; headers reject single
+// hits. Sources match folded, lower-case Latin with whole-word boundaries. Examples are individual
 // lexemes, not necessarily unsafe values. Never rewrite a displayed value.
 //
 // Inflection is deliberate: šalji / šaljete are verbs, Šaljić is a surname;
@@ -32,6 +32,22 @@ export const EXTERNAL_SENSITIVE_LEXICON = [
   { id: 'contact', role: 'contact', source: 'nazov(?:i|ite|imo|em|es|e|emo|ete|u)|nazva(?:ti|o|la|li|le|lo)|zov(?:i|ite|imo|em|es|e|emo|ete|u)|pozov(?:i|ite|imo|em|es|e|emo|ete|u)|pozva(?:ti|o|la|li|le|lo)|jav(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|javlj(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|kontaktir(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|call(?:s|ed|ing)?|dial(?:s|ed|led|ing|ling)?|text(?:s|ed|ing)?|messag(?:e|es|ed|ing)|reply|replies|replied|respond(?:s|ed|ing)?',
     examples: ['nazovem', 'nazvali', 'javila', 'pozovete', 'pozvali', 'kontaktiraj', 'called', 'dial', 'texting', 'message', 'reply'] },
 ] as const;
+
+// The header also retains W-C5's full sensitive lexicon, including nominal
+// payment/contact and broad inflections that are NOT action verbs for row
+// pairing. Keep these separate so strict vocabulary cannot change row evidence.
+export const EXTERNAL_HEADER_LEXICON = [
+  ...EXTERNAL_SENSITIVE_LEXICON,
+  { id: 'contact', source: 'javlj[a-z]*|kontakt[a-z]*|dial[a-z]*|respond[a-z]*',
+    examples: ['kontakt', 'javljanje', 'dialling', 'respondent'] },
+  { id: 'links-apps', source: 'klik[a-z]*|click[a-z]*|instal[a-z]*|skenir[a-z]*|scan[a-z]*|download[a-z]*|upload[a-z]*',
+    examples: ['klik', 'instalacija', 'skeniranje', 'downloads'] },
+  { id: 'payment', source: 'placanje|uplat[a-z]*|uplac[a-z]*|pay(?:ment|ments)|transfer[a-z]*|donir[a-z]* (?:na )?(?:racun|iban)|donat(?:e|ed|ing|ion) (?:to )?(?:account|iban)',
+    examples: ['plaćanje', 'uplata', 'payment', 'transfers', 'donation to account'] },
+  { id: 'solicitation', source: 'molimo broj|ucini uslugu|dodji ovamo|dodi ovamo|(?:system|assistant|developer|sustav|asistent) *:',
+    examples: ['molimo broj', 'učini uslugu', 'dođi ovamo', 'asistent: odgovor'] },
+] as const;
+export const EXTERNAL_HEADER_SEPARATORS = "[ .,;:()'’&+/–-]*?";
 
 // Split BEFORE folding or de-obfuscation. A dot/semicolon never joins two
 // lexemes, including dotted spellings that W-C5 read as one command.
