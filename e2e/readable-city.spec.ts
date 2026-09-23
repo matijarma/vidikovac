@@ -116,6 +116,8 @@ async function wallState(page:Page){
       rows:rows.length,
       hiddenRows:rows.filter(row=>row.hidden).length,
       cutRows:rows.filter(row=>row.getBoundingClientRect().bottom>listBox.bottom+1).length,
+      // A row's words stay inside its own row: a squeezed track spills them over the next row, unseen by the list's edge.
+      spilledRows:rows.filter(row=>row.scrollHeight>row.clientHeight+1).length,
       rowPx:rows.map(row=>Math.round(Number.parseFloat(getComputedStyle(row).minHeight)/zoom)),
       departures:rows.filter(row=>row.dataset.kind==='departure').length,
       order:{listOverCard:nearbyBox.bottom-cardBox.top,cardOverFooter:cardBox.bottom-footer.top},
@@ -134,6 +136,7 @@ function expectWall(state:Awaited<ReturnType<typeof wallState>>,label:string){
   expect(state.rows,why).toBeGreaterThan(0);
   expect(state.hiddenRows,why).toBe(0);
   expect(state.cutRows,why).toBe(0);
+  expect(state.spilledRows,why).toBe(0);
   for(const px of state.rowPx){expect(px,why).toBeGreaterThanOrEqual(64);expect(px,why).toBeLessThanOrEqual(92);}
   expect(state.departures,why).toBeLessThanOrEqual(3);
   expect(state.order.listOverCard,why).toBeLessThanOrEqual(1);

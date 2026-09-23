@@ -46,7 +46,12 @@ describe('public-screen design invariants', () => {
   const timelineRules = cityCss.split('\n').filter((line) => /k-nearby|nearby-(row|title|when|sub)/.test(line) && !line.startsWith('.kiosk[data-size=handheld]')).join('\n');
   it('draws the timeline as whole rows at least 64-92 px tall that are sliced, never hidden', () => {
     const rows = windowRule('.kiosk .k-nearby-rows');
-    expect(rows).toContain('grid-auto-rows:minmax(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)),auto)');
+    // The track is min-content, never minmax(<row>, auto) or auto: in a box too short for the words a fixed
+    // minimum (the row's min-height counts as one) shares the box out below the content, the words spill into
+    // the next row and the box never overflows, so the fit could not see it. The row's own min-height holds
+    // the 64-92 px floor.
+    expect(rows).toContain('grid-auto-rows:min-content');
+    expect(rows).not.toMatch(/grid-auto-rows:minmax/);
     expect(rows).toContain('align-content:start');
     const row = windowRule('.kiosk .k-nearby .nearby-row');
     expect(row).toContain('min-height:calc(var(--k-nearby-row,64px) * var(--k-zoom,1))');
