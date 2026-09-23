@@ -437,8 +437,8 @@ npm run review:visual
 node scripts/review-redesign.mjs
 ```
 
-`npm run accept` i `npm run accept:e2e` pokreću razinu prihvaćanja, namjerno crvenu dok ne stigne
-paket koji ta razina mjeri; `npm test` i `npm run e2e` ne pokreću tu razinu.
+`npm run accept` i `npm run accept:e2e` pokreću razinu prihvaćanja, namjerno crvenu do isporuke
+odgovarajućeg paketa; `npm test` i `npm run e2e` ne pokreću tu razinu.
 `npm run replay:grade` ocjenjuje staze tramvaja nad snimljenim okvirima i uz `--targets stage1`
 završava izlaznim kodom 1 čim ijedan redak ne dosegne prag. Pragovi, izmjerene vrijednosti i
 ručne provjere nalaze se u `docs/kaj-verification.md`, u odjeljku „Prihvaćanje, companion 2026-09”.
