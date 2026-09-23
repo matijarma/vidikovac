@@ -878,9 +878,9 @@ describe('a terminus loop between the arrival and the departure', () => {
   const spec: SynthSpec = {
     edges: [
       { from: 0, to: 1, pts: straight(0, 1000) },
-      { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 60 }] },
-      { from: 2, to: 3, pts: [{ x: 1000, y: 60 }, { x: 1060, y: 60 }] },
-      { from: 3, to: 4, pts: [{ x: 1060, y: 60 }, { x: 2060, y: 60 }] },
+      { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 40 }] },
+      { from: 2, to: 3, pts: [{ x: 1000, y: 40 }, { x: 1060, y: 40 }] },
+      { from: 3, to: 4, pts: [{ x: 1060, y: 40 }, { x: 2060, y: 40 }] },
     ],
     routes: [{ id: '1', type: 0, paths: [
       { id: 'arrival', direction: 0, edges: [0] },
@@ -900,12 +900,12 @@ describe('a terminus loop between the arrival and the departure', () => {
     m.matchFix(t, fix(1000, 0, 1010), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('loop');
     expect(t.match.s).toBeCloseTo(1000);
-    m.matchFix(t, fix(1000, 30, 1020), p, null);
+    m.matchFix(t, fix(1000, 20, 1020), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('loop');
-    expect(t.match.s).toBeCloseTo(1030);
-    m.matchFix(t, fix(1030, 60, 1030), p, null);
+    expect(t.match.s).toBeCloseTo(1020);
+    m.matchFix(t, fix(1030, 40, 1030), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('loop'); // still on the shared first edge of the departure
-    m.matchFix(t, fix(1120, 60, 1040), p, null);
+    m.matchFix(t, fix(1120, 40, 1040), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('departure');
     expect(t.match.s).toBeCloseTo(120);
   });
@@ -923,17 +923,19 @@ describe('a terminus loop between the arrival and the departure', () => {
       m.matchFix(t, fix(x, 0, 1010 + i * 10), p, null);
       expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
     }
-    m.matchFix(t, fix(1010, 60, 1040), p, null); // came round: on the departure's first edge, 10 m in
-    m.matchFix(t, fix(1060, 60, 1050), p, null);
+    m.matchFix(t, fix(1010, 40, 1040), p, null); // came round: on the departure's first edge, 10 m in, 41 m from the arrival's end
     expect(n.paths[t.match.pathIdx!].id).toBe('loop');
-    m.matchFix(t, fix(1120, 60, 1060), p, null);
+    m.matchFix(t, fix(1060, 40, 1050), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('departure');
-    expect(t.match.s).toBeCloseTo(120);
+    expect(t.match.s).toBeCloseTo(60);
   });
 });
 
 describe('a terminus loop between the arrival and the departure, off the arrival first', () => {
-  it('is taken when the second fix off the arrival lands on the departure start before the return has accumulated', () => {
+  it('is not taken on the departure\'s shared first edge once the arrival no longer fits: the departure itself is the placement', () => {
+    // Dubec, 20 Sep: 34_1 left by 63 m and the tram on 34_3's first edge, which
+    // the loop runs too. The loop there would read to the grader as another
+    // variant adopted with the prior in the pool (row D), and rightly.
     const n = syntheticNetwork({
       edges: [
         { from: 0, to: 1, pts: straight(0, 1000) },
@@ -957,8 +959,9 @@ describe('a terminus loop between the arrival and the departure, off the arrival
     expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
     m.matchFix(t, fix(1015, 60, 1040), p, null); // one stray fix: still the arrival
     expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
-    m.matchFix(t, fix(1035, 60, 1050), p, null); // two: re-derived, onto the loop, not straight onto the departure
-    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1035, 60, 1050), p, null); // two: re-derived onto the departure, 69 m from the arrival's end
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(35);
     m.matchFix(t, fix(1120, 60, 1060), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('departure');
   });
