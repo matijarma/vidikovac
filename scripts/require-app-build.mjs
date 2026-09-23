@@ -4,9 +4,10 @@
 // Playwright webServer entry; the first entry runs `npm run build` itself.
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { e2ePorts } from './e2e-ports.mjs';
 
 const marker = resolve(process.cwd(), 'app/dist/index.html');
 if (!existsSync(marker)) {
-  console.error('app/dist/index.html is missing. Run "npm run build" first; the :8787 webServer entry does this.');
+  console.error(`app/dist/index.html is missing. Run "npm run build" first; the :${e2ePorts().app} webServer entry does this.`);
   process.exit(1);
 }
