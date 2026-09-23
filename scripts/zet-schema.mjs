@@ -442,7 +442,7 @@ export async function main(argv = process.argv.slice(2)) {
   // Derive the date from the committed network input, not the wall clock:
   // two runs over identical source bytes must produce identical bytes.
   const { schema, report } = buildSchema(art, input.net, input.routes, input.overrides, input.rawNet.builtAt);
-  const { decodeSchema, loopPlacement, matchSchemaPath } = await loadShared('shared/motion/schema.ts');
+  const { decodeSchema, matchSchemaPath } = await loadShared('shared/motion/schema.ts');
   const decoded = decodeSchema(schema);
   report.paths = input.net.paths.map((path, i) => {
     const match = matchSchemaPath(decoded, input.net, i);
@@ -450,17 +450,18 @@ export async function main(argv = process.argv.slice(2)) {
     // along the artwork at all: the placer draws a vehicle on it at the
     // terminus circle of the loop's first stop that exists on ZET's schematic
     // (stops[0], else stops[1]), so it needs no exemption. A loop whose line's
-    // artwork prints neither end (a depot run between Mandlova and Ravnice on
-    // a line that does not serve Ravnice) is not drawn, and is counted apart.
-    const loop = match.reason === 'loop-path';
-    const exemption = loop ? 'loop-path' : input.overrides.unmappedPaths?.[path.id];
+    // artwork prints neither end ('loop-undrawn': a depot run between Mandlova
+    // and Ravnice on a line that does not serve Ravnice) is not drawn on the
+    // schematic, the tram staying on the map, and is counted on its own line.
+    const loop = match.reason === 'loop-path' || match.reason === 'loop-undrawn';
+    const exemption = loop ? match.reason : input.overrides.unmappedPaths?.[path.id];
     if (!match.placeable && !loop && !(match.reason === 'too-few-stops' && exemption)) {
       throw new Error(`Path ${path.id}: ${match.reason}; ${match.stops.length}/${match.sourceStops} stops matched`);
     }
     for (const leg of match.legs) {
       if (!leg.stops.every((stop, k) => k === 0 || (stop.u - leg.stops[k - 1].u) * leg.sign > 0)) throw new Error(`Path ${path.id}: non-monotone diagram leg`);
     }
-    return { id: path.id, matched: match.stops.length, source: match.sourceStops, legs: match.legs.map(l => l.sign), excluded: match.placeable ? null : exemption, ...(loop ? { drawn: loopPlacement(decoded, input.net, i) !== null } : {}) };
+    return { id: path.id, matched: match.stops.length, source: match.sourceStops, legs: match.legs.map(l => l.sign), excluded: match.placeable ? null : exemption };
   });
   const text = JSON.stringify(schema) + '\n';
   // The city map's line focus paints a route in the colour ZET prints it in
@@ -483,15 +484,16 @@ export async function main(argv = process.argv.slice(2)) {
     if (await readFile(resolve(ROOT, 'app/public/data/zet-schema.json'), 'utf8').catch(() => null) !== text) throw new Error('Committed zet-schema.json is missing or stale; run npm run build:schema');
     if (await readFile(resolve(ROOT, 'app/src/data/zet-line-colours.json'), 'utf8').catch(() => null) !== coloursText) throw new Error('Committed zet-line-colours.json is missing or stale; run npm run build:schema');
   }
+  const loops = report.paths.filter(p => p.excluded === 'loop-path' || p.excluded === 'loop-undrawn');
+  const undrawn = loops.filter(p => p.excluded === 'loop-undrawn');
   if (argv.includes('--verbose')) console.log(JSON.stringify(report, null, 2));
   else {
     for (const line of report.lines) console.log(`Line ${line.route.padStart(2)} ${line.colour}: ${line.votes.filter(v => v === line.route).length} badge votes, ${line.circles} stops, projected [${line.projected.join(', ')}], GTFS termini [${line.termini.join(' / ')}]`);
     console.log(`${report.matched}/${report.names} feed names matched; ${report.allowlisted.length} explicitly absent [${report.allowlisted.join(', ')}]; ${report.artworkOnly.length} artwork-only labels retained; ${report.unassignedGroups.length} unresolved groups.`);
-    const loops = report.paths.filter(p => p.excluded === 'loop-path');
-    const excluded = report.paths.filter(p => p.excluded && p.excluded !== 'loop-path');
-    const undrawn = loops.filter(p => !p.drawn);
-    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length - loops.length} paths placeable with strictly monotone legs; exclusions [${excluded.map(p => p.id).join(', ')}]; ${loops.length - undrawn.length} of ${loops.length} terminus loops drawn at a terminus circle${undrawn.length ? `, ${undrawn.length} not drawn because their line's artwork prints neither end [${undrawn.map(p => p.id).join(', ')}]` : ''}. Full coverage: --verbose.`);
+    const excluded = report.paths.filter(p => p.excluded && !loops.includes(p));
+    console.log(`${report.paths.filter(p => !p.excluded).length}/${report.paths.length - loops.length} paths placeable with strictly monotone legs; exclusions [${excluded.map(p => p.id).join(', ')}]; ${loops.length - undrawn.length} of ${loops.length} terminus loops drawn at a terminus circle. Full coverage: --verbose.`);
   }
+  console.log(`Undrawn terminus loops (loop-undrawn, neither end on the line's artwork; the tram stays on the map): ${undrawn.length} [${undrawn.map(p => p.id).join(', ')}]`);
   console.log(`zet-schema.json: ${Buffer.byteLength(text)} bytes raw, ${gzipSync(text).byteLength} bytes gzip; feed ${schema.feedVersion}.`);
 }
 
