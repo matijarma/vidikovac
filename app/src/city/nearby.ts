@@ -235,6 +235,9 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
     })
     // A timetable time already past (its tram is late) is not a departure to wait for.
     .filter((arrival): arrival is ArrivalRow => arrival !== null && arrival.atMs >= now - DEPARTURE_GRACE_MS)
+    // GTFS is external text too. Vet both fields before the cap, so a refused
+    // headsign cannot hide in the route fallback or displace a safe departure.
+    .filter(arrival => vetted(input, [['headsign', arrival.headsign || undefined], ['headsign', arrival.routeName]]))
     .sort((a, b) => a.atMs - b.atMs || a.routeName.localeCompare(b.routeName))
     .slice(0, MAX_DEPARTURES);
   return shown.map((arrival) => {
@@ -264,6 +267,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
     .map((c) => ({ item: c.item, until: c.item.until ? Date.parse(c.item.until) : NaN }))
     // A closure without a published end is not a timed row.
     .filter((c) => Number.isFinite(c.until) && c.until > now)
+    .filter(({ item }) => vetted(input, [['name', item.title], ['summary', item.brief], ['summary', item.summary]]))
     .map(({ item, until }) => {
       const map = itemMap(item);
       const sub = oneLine(item.brief ?? '');
@@ -304,9 +308,13 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     const venue = event.venueIds.length === 1 ? city.places.find((p) => p.id === event.venueIds[0] && located(p)) : undefined;
     const point = venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : pointOf(item);
     if (!point || distanceM(place, point) > radiusM) continue;
+    // Before oneLine/trim/shorterLabel: controls or vectors cannot be repaired
+    // away by presentation helpers or hidden in a discarded source suffix.
+    if (!vetted(input, [['title', item.title], ['title', item.brief], ['name', venue?.name ?? dataText(item, 'venue')]])) continue;
     const venueName = (venue?.name ?? dataText(item, 'venue')).trim();
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
+    if (tram && !vetted(input, [['headsign', tram]])) continue;
     const title = oneLine(item.brief ?? item.title);
     // The source's own title where a machine brief stands in for it; nothing else. The words before a colon
     // or a dash are not a name the source gave ("Javno predavanje: Povijest Zagreba" is not "Javno
@@ -405,7 +413,8 @@ function lastTramRows(input: NearbyInput): NearbyRow[] {
     const serviceDate = [shiftDay(today, -1), today].find((day) => lastDepartureOn(lastRun, routeId, day)?.at === last.at);
     const minutes = serviceDate ? gtfsMinutes(lastRun.routes[routeId]?.[serviceDate]) : null;
     if (minutes === null || minutes < MORNING_UNTIL_MIN) continue;
-    services.push({ routeId, routeName: shortName(routeId), atMs: last.at });
+    const routeName = shortName(routeId);
+    if (vetted(input, [['headsign', routeName]])) services.push({ routeId, routeName, atMs: last.at });
   }
   if (services.length === 0) return [];
   services.sort(byService);
@@ -441,7 +450,8 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
     const minutes = gtfsMinutes(lastRun.first?.[routeId]?.[serviceDate]);
     if (minutes === null || minutes < MORNING_FROM_MIN || minutes >= MORNING_UNTIL_MIN) continue;
     const first = firstDepartureOn(lastRun, routeId, serviceDate);
-    if (first) services.push({ routeId, routeName: shortName(routeId), atMs: first.at });
+    const routeName = shortName(routeId);
+    if (first && vetted(input, [['headsign', routeName]])) services.push({ routeId, routeName, atMs: first.at });
   }
   if (services.length === 0) return [];
   services.sort(byService);
@@ -572,7 +582,10 @@ function firstOpening(ranges: string): number | undefined {
 
 function timelessRows(input: NearbyInput): NearbyRow[] {
   const hour = zagrebHour(input.now) ?? 12;
-  if (hour >= NIGHT_FROM_HOUR || hour < NIGHT_UNTIL_HOUR) return [pharmacyRow(input)];
+  if (hour >= NIGHT_FROM_HOUR || hour < NIGHT_UNTIL_HOUR) {
+    const row = pharmacyRow(input);
+    return vetted(input, [['address', row.sub]]) ? [row] : [];
+  }
   const story = storyRow(input);
   const heritage = heritageRow(input);
   // Alternate on the clock's 20-minute boundaries; either one stands in when the other has nothing to say.
@@ -599,12 +612,14 @@ function pharmacyRow(input: NearbyInput): NearbyRow {
 
 function storyRow(input: NearbyInput): NearbyRow | null {
   const story = placeStory(input.place, input.city);
+  if (story && !vetted(input, [['name', story.name], ['register-text', story.description]])) return null;
   const text = story ? firstSentence(csvField(story.description)) : '';
   if (!story || !text || !vetted(input, [['name', story.name], ['register-text', text]])) return null;
   // The register's full name ("Trg bana Josipa Jelačića") and, where the stop's own name abbreviates it, that
   // name ("Trg bana J. Jelačića", the one in the header): the same place, whole, only shorter.
   const own = oneLine(input.place.name);
   const titleShort = abbreviates(normalName(own).split(' '), normalName(story.name).split(' ')) ? shorterLabel(story.name, [own]) : undefined;
+  if (titleShort && !vetted(input, [['name', input.place.name], ['name', titleShort]])) return null;
   return {
     id: `always:story:${story.id}`,
     kind: 'always',
@@ -672,7 +687,8 @@ function heritageRow(input: NearbyInput): NearbyRow | null {
       if (d <= radiusM && (!best || d < best.d || (d === best.d && p.id < best.p.id))) best = { p, d };
     }
     if (!best) return null;
-    if (vetted(input, [['name', heritageName(best.p.name)], ['address', best.p.address ? firstStreet(best.p.address) : '']])) break;
+    if (vetted(input, [['name', best.p.name], ['address', best.p.address],
+      ['name', heritageName(best.p.name)], ['address', best.p.address ? firstStreet(best.p.address) : '']])) break;
     refused.add(best.p.id);
   }
   const p = best.p;
@@ -730,10 +746,10 @@ export function csvField(text: string): string {
 
 // --- third-party text -------------------------------------------------------------
 
-/** Every given text passes externalText() (absent and empty ones are not shown); else the row is told to onSkip and left out. */
+/** Required labels cannot be empty; optional prose/address fields may be absent. Count one failure per omitted candidate. */
 function vetted(input: NearbyInput, texts: readonly (readonly [ExternalTextKind, string | undefined])[]): boolean {
   for (const [kind, value] of texts) {
-    if (!value) continue;
+    if (value === undefined || (value === '' && (kind === 'summary' || kind === 'address' || kind === 'register-text'))) continue;
     const verdict = externalText(kind, value);
     if (!verdict.ok) { input.onSkip?.(verdict.reason); return false; }
   }

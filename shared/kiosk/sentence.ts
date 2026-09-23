@@ -99,7 +99,7 @@ interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
 const nameChars = /^[A-Za-zČĆĐŠŽčćđšž0-9][A-Za-zČĆĐŠŽčćđšž0-9 .,'’():&/+–-]*$/u;
 export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> = {
-  route: { max: 6, pattern: /^[A-Za-z0-9]+$/u },
+  route: { max: 6, pattern: /^[A-Za-z0-9]+$/u, names: 'headsign' },
   stop: { max: 48, pattern: nameChars, names: 'name' },
   minutes: { max: 3, pattern: /^[1-9]\d{0,2}$/u },
   clock: { max: 5, pattern: /^(?:[01]\d|2[0-3]):[0-5]\d$/u },
@@ -110,7 +110,7 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   count: { max: 13, pattern: /^(?:0|[1-9]\d{0,2}) (?:bicikl|bicikla|bicikala|bike|bikes)$/u },
   title: { max: 64, pattern: nameChars, names: 'title' },
   venue: { max: 48, pattern: nameChars, names: 'name' },
-  street: { max: 64, pattern: nameChars, names: 'name' },
+  street: { max: 64, pattern: nameChars, names: 'address' },
   condition: { max: 32, pattern: /^(?:vedro|pretežno vedro|sunčano|pretežno sunčano|malo oblačno|umjereno oblačno|pretežno oblačno|oblačno|naoblaka|kiša|slaba kiša|jaka kiša|rosulja|pljusak|pljuskovi|grmljavina|snijeg|slab snijeg|susnježica|magla|sumaglica|clear|sunny|partly cloudy|mostly cloudy|cloudy|overcast|rain|light rain|heavy rain|drizzle|showers|thunderstorm|snow|sleet|fog|mist)$/u },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
@@ -214,6 +214,12 @@ function decodeTyped(text: string, kind?: SentenceKicker, locale?: 'hr' | 'en'):
       const type = matcher.spec.slots[name]!;
       const value = match[index + 1]!;
       invalid = validateSentenceSlot(type, value);
+      // The same stop slot also carries BAJS station names. Only departure
+      // destinations have GTFS's stricter headsign grammar; typed identity stays.
+      if (!invalid && name === 'to') {
+        const verdict = externalText('headsign', value);
+        if (!verdict.ok) invalid = verdict.reason === 'instruction' ? 'instruction' : 'invalid-slot';
+      }
       if (invalid) break;
       slots[name] = { type, value };
     }

@@ -6,13 +6,17 @@
 // such value through externalText() before it is shown. A value that fails is
 // skipped, never repaired or shortened; the caller counts the reason code.
 //
-// The grammar below is data about Croatian and English verb forms addressed to
-// the reader, not a classifier: a second-person or imperative form, a request
-// word, a prompt role or a link. Accent folding is ONLY for this check; display
-// and grounding always use the source text as it is.
+// Layers: structural limits and contact/transaction vectors; sensitive words
+// in any mood/person; then reader-action requests in prose only. An event name
+// is not unsafe merely because it is imperative. Folding is rejection-only;
+// display and grounding always use the original source text.
+import {
+  EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
+  EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
+} from './external-text-policy';
 
-export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text';
-export const EXTERNAL_TEXT_REJECTIONS = ['empty', 'too-long', 'control', 'charset', 'link', 'instruction'] as const;
+export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
+export const EXTERNAL_TEXT_REJECTIONS = ['empty', 'too-long', 'control', 'charset', 'link', 'phone', 'account', 'payment', 'qr', 'instruction'] as const;
 export type ExternalTextRejection = (typeof EXTERNAL_TEXT_REJECTIONS)[number];
 export type ExternalTextVerdict = { ok: true } | { ok: false; reason: ExternalTextRejection };
 
@@ -35,11 +39,13 @@ export const EXTERNAL_TEXT_RULES: Readonly<Record<ExternalTextKind, ExternalText
   title: { max: 180, punctuation: PROSE_PUNCTUATION },
   summary: { max: 180, punctuation: PROSE_PUNCTUATION },
   'register-text': { max: 180, punctuation: PROSE_PUNCTUATION },
+  // Both dash forms occur in the committed GTFS headsigns.
+  headsign: { max: 40, punctuation: "–-.,'" },
 };
 
 // Invisible and layout characters are never benign: format controls, line and
 // paragraph separators and every space but U+0020 and the no-break space.
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u1680\u2000-\u200a\u202f\u205f\u3000]/u;
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u1680\u2000-\u200a\u202f\u205f\u3000]/u;
 // Latin letters that NFKD leaves whole: folded so that "proslıjedi" and
 // "prosłijedi" read as the verb they imitate. Any other letter left after
 // folding (Cyrillic, Greek, any other script) fails the character class.
@@ -52,7 +58,7 @@ export function foldText(text: string): string {
   return text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('hr').replace(/[^\x00-\x7f]/gu, ch => FOLD[ch] ?? ch);
 }
 
-// --- the instruction grammar ----------------------------------------------------
+// --- additional reader-action grammar, ONLY for summary/register-text ----------
 //
 // Croatian i-verbs write the singular imperative and the third person present
 // alike (javi, prati, slijedi), and some of those forms are also nouns (ugovori
@@ -112,7 +118,7 @@ export const SENTENCE_INSTRUCTION_PATTERNS = [
   { id: 'hr-second-person', source: `(?:morate|moras|trebate|trebas|mozete|mozes|zelite|zelis|hocete|hoces|smijete|smijes|jeste)|(?:${I_STEMS})(?:is|es|ete)|[a-z]*(?:${PREFIXED_STEMS})(?:is|es|ete)`,
     examples: ['moraš poslati lozinku', 'trebaš unijeti lozinku', 'možete poslati broj', 'moras poslati broj', 'pošalješ poruku', 'ako proslijediš lozinku', 'možeš osvojiti nagradu', 'ćete dobiti'],
     passes: ['sportaš-košarkaš; 1964-1993', 'hrvatski velikaš i slavonski ban', 'posjed Rudeš', 'Podzmiš: naziv zemljišta', 'međaš, oznaka granice', 'partizanske čete'] },
-  { id: 'hr-request', source: '(?:molimo|molim|nemoj|nemojmo|nemojte|hajde|hajdemo|hajdete|izvolite|vas|vase|vasa|vasu|vasi|vasim|vasih|vam|tvoj|tvoja|tvoje|tvoju|tvoji|tvom|tvog|tvojim|tvojih)',
+  { id: 'hr-request', source: '(?:molimo|molim|biste\\s+li|bi\\s+li|nemoj|nemojmo|nemojte|hajde|hajdemo|hajdete|izvolite|vas|vase|vasa|vasu|vasi|vasim|vasih|vam|tvoj|tvoja|tvoje|tvoju|tvoji|tvom|tvog|tvojim|tvojih)',
     examples: ['molimo broj', 'vašu lozinku', 'nemoj čekati', 'šaljemo vam poklon'],
     passes: ['Vlaška 38'] },
   { id: 'hr-impersonal-request', source: '(?:potrebno|treba|valja|obavezno|obvezno)\\s+(?:je\\s+)?[a-z]+(?:ti|ci)',
@@ -158,7 +164,7 @@ const splitInstructions = new RegExp(`(?<![a-z0-9])(?:${SENTENCE_SPLIT_COMMANDS.
   [...word].join("[\\s.,:;()'’&+\\-–/]*")).join('|')})(?:[\\s.,:;()'’&+\\-–/]*t[\\s.,:;()'’&+\\-–/]*e)?(?![a-z0-9])`, 'u');
 
 /** The rule a text trips ('hr-i-imperative', …, 'hr-second-person', 'split-command'), or null. */
-export function instructionRule(text: string): string | null {
+function readerRequestRule(text: string): string | null {
   const nfc = text.normalize('NFC');
   const folded = foldText(nfc);
   const singular = foldText(singularReading(nfc));
@@ -168,27 +174,79 @@ export function instructionRule(text: string): string | null {
   if (SECOND_PERSON_UNFOLDED.test(nfc.toLocaleLowerCase('hr'))) return 'hr-second-person';
   return splitInstructions.test(folded) ? 'split-command' : null;
 }
+// Tokenize the small policy grammar, keeping character classes and quantifiers
+// intact. Separators may occur at a stem/suffix boundary too ("n a z o v i").
+function separatedLexeme(source: string): string {
+  return (source.match(/\[a-z\]\*|[a-z]| \*?|[^a-z]/gu) ?? []).map(token => {
+    if (token === '[a-z]*') return `(?:[a-z]${EXTERNAL_LEXICON_SEPARATORS})*`;
+    if (/^[a-z]$/u.test(token)) return `(?:${token}${EXTERNAL_LEXICON_SEPARATORS})`;
+    if (token.startsWith(' ')) return EXTERNAL_LEXICON_SEPARATORS;
+    return token;
+  }).join('');
+}
+const sensitivePatterns = EXTERNAL_SENSITIVE_LEXICON.map(rule => ({
+  id: rule.id,
+  pattern: bounded(rule.source),
+  separated: bounded(separatedLexeme(rule.source)),
+}));
+
+/** Sensitive lexemes, independent of case, script accents, person and mood. */
+export function sensitiveTextRule(text: string): string | null {
+  const folded = foldText(text);
+  const leet = folded.replace(/[0134578]/gu, ch => EXTERNAL_LEET[ch]!);
+  const leetL = folded.replace(/[0134578]/gu, ch => ch === '1' ? 'l' : EXTERNAL_LEET[ch]!);
+  for (const { id, pattern, separated } of sensitivePatterns) {
+    if ([folded, leet, leetL].some(reading => pattern.test(reading) || separated.test(reading))) return id;
+  }
+  return null;
+}
+
+/** Compatibility export: a prose signal, not the policy for titles or names. */
+export function instructionRule(text: string): string | null {
+  return sensitiveTextRule(text) ?? readerRequestRule(text);
+}
 export function sentenceInstruction(text: string): boolean {
   return instructionRule(text) !== null;
 }
 
-// A web or mail address, or a handle, sends the reader somewhere: the wall never prints one.
-const LINK = /https?:|www\.|@|(?<![\p{L}\p{N}])[a-z0-9-]+\.(?:hr|com|net|org|eu|info|io|me|app|link|ly)(?![\p{L}\p{N}])/u;
+function vectorReason(text: string): ExternalTextRejection | null {
+  for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) if (source.test(text)) return reason;
+  // Match the complete numeric run before counting, never just six adjacent
+  // digits: spacing, slashes, punctuation and parentheses cannot hide a number.
+  for (const match of text.matchAll(/\d(?:[\d .,/'’():+–-]*\d)?/gu)) {
+    const run = match[0];
+    const digits = run.replace(/\D/gu, '');
+    if (digits.length < 6 || EXTERNAL_NUMERIC_DATA.some(pattern => pattern.test(run))) continue;
+    return digits.length >= 13 ? 'account' : 'phone';
+  }
+  return null;
+}
 
 function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
   const rule = EXTERNAL_TEXT_RULES[kind];
   if (INVISIBLE.test(value)) return { ok: false, reason: 'control' };
+  if (kind === 'headsign' && value.includes('\u00a0')) return { ok: false, reason: 'charset' };
   const text = value.normalize('NFC').replace(/\u00a0/gu, ' ');
   if (!/[\p{L}\p{N}]/u.test(text)) return { ok: false, reason: 'empty' };
   if ([...text].length > rule.max) return { ok: false, reason: 'too-long' };
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  if (LINK.test(folded)) return { ok: false, reason: 'link' };
+  const vector = vectorReason(folded);
+  if (vector) return { ok: false, reason: vector };
+  for (const ch of text) {
+    if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
+  }
+  // Latin phonetic/lookalike letters not covered by the folding table cannot
+  // stand in for a lexeme's letters (for example pɑssword). Do not widen W-C4's
+  // supported alphabet merely because a character has Script=Latin.
   for (const ch of folded) {
     if (!/[a-z0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
   }
-  if (sentenceInstruction(text)) return { ok: false, reason: 'instruction' };
+  if (sensitiveTextRule(text)
+    || ((kind === 'summary' || kind === 'register-text') && readerRequestRule(text))) {
+    return { ok: false, reason: 'instruction' };
+  }
   return { ok: true };
 }
 
@@ -196,10 +254,12 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
 const verdicts = new Map<string, ExternalTextVerdict>();
 /**
  * The one check for third-party text before the wall shows it, in a row or in the
- * header: per-kind length and character class, no invisible characters, no link,
- * no verb form addressed to the reader. Never repairs; a failing value is skipped.
+ * header: structural limits/vectors, sensitive lexicon, prose requests.
+ * Never repairs; a failing value is skipped.
  */
 export function externalText(kind: ExternalTextKind, value: string): ExternalTextVerdict {
+  // Do not retain arbitrarily large rejected source strings in the tick cache.
+  if (value.length > EXTERNAL_TEXT_RULES[kind].max * 3) return check(kind, value);
   const key = `${kind}\u0000${value}`;
   const known = verdicts.get(key);
   if (known) return known;
