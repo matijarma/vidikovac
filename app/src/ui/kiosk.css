@@ -302,7 +302,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-paired[data-focus='1'] .k-main { display: block; }
 .k-paired[data-focus='1'] .k-main > .k-block { height: 100%; padding: calc(var(--k-pad) * 2); border: 1px solid var(--k-line); }
 .k-paired[data-focus='1'] .k-select-main--item { font-size: calc(var(--k-main-size) * 1.4); line-height: 1.15; max-width: 30ch; }
-.k-paired[data-focus='1'] .k-select-sub--long { max-height: none; -webkit-line-clamp: unset; font-size: var(--k-sup-size); line-height: 1.5; max-width: 64ch; }
+.k-paired[data-focus='1'] .k-select-sub--long { font-size: var(--k-sup-size); line-height: 1.5; max-width: 64ch; }
 .k-head-mid { gap: calc(var(--k-gap) * 0.6); min-width: 0; }
 .k-head-mid[role='status'] { font-size: var(--k-credit-size); color: var(--k-green); }
 .k-session { border-radius: var(--k-radius-s); font-size: var(--k-label-size); min-width: 0; white-space: normal; }
@@ -360,8 +360,8 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
    departures); the
    credit last. Rows a panel does not hold whole are hidden from the foot up
    by measurement (kiosk/invitation.ts fit); nothing is clipped mid-row.
-   Titles run to two lines at most and are then cut by the sheet: a list row
-   is a list row, not a headline. */
+   A title and its context wrap whole, however many lines they take: nothing
+   on a panel is clamped or ellipsised. */
 .k-panel { display: flex; flex-direction: column; box-sizing: border-box; min-width: 0; min-height: 0; padding: var(--k-gap) var(--k-pad); background: var(--k-surface); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); }
 /* Nothing inside a panel shrinks: what does not fit overflows the panel, which is what fit() measures and hides rows against (a shrinking child hides the overflow from the measurement and clips itself instead). */
 .k-panel > * { flex: none; }
@@ -397,8 +397,8 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-eta[data-live='true'] { color: var(--k-ink); }
 .k-live { display: inline-block; inline-size: 0.42em; block-size: 0.42em; margin-inline-end: 0.36em; border-radius: 50%; background: var(--k-green); vertical-align: 0.12em; }
 .k-fr-main { display: grid; gap: calc(var(--k-gap) * 0.15); min-width: 0; }
-.k-fr-title { display: -webkit-box; overflow: hidden; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--k-ink); -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: break-word; }
-.k-fr-sub { min-width: 0; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); }
+.k-fr-title { min-width: 0; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--k-ink); overflow-wrap: break-word; }
+.k-fr-sub { min-width: 0; font-size: var(--k-hint-size); line-height: 1.3; color: var(--k-ink-2); overflow-wrap: break-word; }
 /* A line's state word colours its title's context (late rose, early amber, on time green, unknown the third ink), as the line words always had. */
 .k-fr[data-tone='late'] .k-fr-sub { color: var(--k-rose); }
 .k-fr[data-tone='early'] .k-fr-sub { color: var(--k-amber); }
@@ -446,7 +446,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-panel[data-panel='tonight'] { padding-block: calc(var(--k-gap) * 0.4); }
 .k-panel[data-panel='tonight'] .k-fr { padding-block: calc(var(--k-gap) * 0.3); }
 .k-panel[data-panel='tonight'] .k-fr-title { font-size: calc(var(--k-sup-size) * 0.88); }
-.k-panel[data-panel='tonight'] .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
+.k-panel[data-panel='tonight'] .k-fr-sub { font-size: var(--k-credit-size); }
 .k-panel[data-panel='tonight'] .k-fr-lead { font-size: var(--k-hint-size); }
 .kiosk[data-size='compact']:not([data-portrait='1']) .k-panel { padding: calc(var(--k-gap) * 0.65) var(--k-gap); }
 /* --- The invitation card: the QR and one column of words -----------------
@@ -534,9 +534,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-weather-note[data-state='down'] { color: var(--k-rose); }
 .k-figure { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .k-figure-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
-.k-text { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
-/* The lead's summary has a whole column: ten supporting lines before it is cut, at both sizes with room to spare. */
-.k-text--long { -webkit-line-clamp: 10; }
+.k-text { margin-top: calc(var(--k-gap) * 0.5); font-size: var(--k-sup-size); line-height: 1.3; color: var(--k-ink-2); overflow-wrap: break-word; }
 .k-select-main { display: flex; align-items: center; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.2; }
 .k-select-main .k-line-badge { margin-right: var(--k-gap); }
 .k-select-sub { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); color: var(--k-ink-2); }
@@ -546,17 +544,18 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-select-sub--long { margin-top: calc(var(--k-gap) * 0.6); line-height: 1.3; }
 
 /* --- Rows inside blocks (paired only) -------------------------------------
-   A row is its whole title, then one line of detail. The aside (a time, a
+   A row is its whole title, then its whole detail. The aside (a time, a
    distance, a count) floats at the right of the title's first line and so
-   shortens that line only; no title is clamped -- the row fitter hides whole
-   rows that do not fit rather than cutting a title mid-sentence. */
+   shortens that line only; nothing is clamped -- the row fitter hides whole
+   rows that do not fit, then whole sentences of a source's paragraph (a
+   warning's description), rather than cutting a word. */
 .k-rows { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .k-row { display: block; padding: calc(var(--k-gap) * 0.45) 0; border-top: 1px solid var(--k-line); }
 .k-row:first-child { padding-top: 0; border-top: 0; }
 .k-row-main { display: block; display: flow-root; min-width: 0; font-size: var(--k-sup-size); font-weight: 600; line-height: 1.2; overflow-wrap: break-word; }
 .k-row-main .k-line-badge { vertical-align: middle; }
 .k-row-main .k-line-badge { margin-right: calc(var(--k-gap) * 0.6); }
-.k-row-sub { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.15); overflow: hidden; font-size: var(--k-sup-size); line-height: 1.25; color: var(--k-ink-2); -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.k-row-sub { display: block; margin-top: calc(var(--k-gap) * 0.15); font-size: var(--k-sup-size); line-height: 1.25; color: var(--k-ink-2); overflow-wrap: break-word; }
 .k-row-aside { float: right; margin-left: var(--k-gap); padding-top: calc(var(--k-sup-size) * 0.12); white-space: nowrap; text-align: right; font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); font-variant-numeric: tabular-nums; }
 .k-row-main[data-severity='severe'], .k-row-main[data-severity='extreme'] { color: var(--k-rose); }
 .k-row-main[data-severity='moderate'], .k-row-main[data-severity='minor'] { color: var(--k-amber); }
@@ -624,20 +623,23 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy { display: inline-flex; align-items: center; font-size: var(--k-main-size); white-space: normal; overflow: visible; }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy strong { overflow-wrap: break-word; }
 
-/* --- Basics: over the stage, sessionless, 90 s idle --------------------------- */
-.k-basics { position: absolute; top: var(--k-head-h); right: 0; bottom: var(--k-strip-h); left: 0; z-index: 4; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--k-pad); background: var(--k-canvas); }
+/* --- Basics: over the stage, sessionless, 90 s idle ---------------------------
+   An absolute box placed by the grid in the stage's own row: exactly the room
+   between the header and the strip, whatever height a wrapped place or a
+   wrapped trail has given them, so the card fitter measures what is there. */
+.k-basics { position: absolute; grid-row: 3 / 4; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--k-pad); background: var(--k-canvas); }
 .k-basics[hidden] { display: none; }
 .k-basics-head { display: flex; align-items: flex-start; justify-content: space-between; }
 .k-basics-title { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; }
 .k-basics-hint { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-sup-size); color: var(--k-ink-2); }
-/* Three columns in landscape: five cards in two rows whose heights are capped below (one value line, two detail lines, two credit lines), so the panel fits 1366 by 768 under any live data and never scrolls (a public screen has no scroll input). */
+/* Three columns in landscape, two in portrait. A card takes the height its whole words need; the cards the box does not hold are hidden whole, the last first (kiosk/essentials.ts fitEssentials), so the panel never scrolls (a public screen has no scroll input) and never cuts a line. */
 .k-basics-rows { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: min-content; align-content: start; grid-gap: var(--k-gap); gap: var(--k-gap); min-height: 0; margin-top: var(--k-gap); }
 .k-ess-row { box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
 .k-ess-row[data-row='empty'] { grid-column: 1 / -1; }
 .k-ess-label { font-size: var(--k-sup-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-ess-value { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; overflow-wrap: break-word; }
-.k-ess-detail { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); line-height: 1.25; color: var(--k-ink-2); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-.k-ess-row .k-meta { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.k-ess-detail { margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); line-height: 1.25; color: var(--k-ink-2); overflow-wrap: break-word; }
+.k-ess-row .k-meta { margin-top: calc(var(--k-gap) * 0.5); overflow-wrap: break-word; }
 
 /* --- Buttons and focus ----------------------------------------------------------- */
 .k-btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--k-control); padding: 0 calc(var(--k-gap) * 1.4); border: 2px solid transparent; border-radius: 999px; font: inherit; font-size: var(--k-sup-size); font-weight: 700; cursor: pointer; transition: background-color var(--k-dur) var(--k-ease), color var(--k-dur) var(--k-ease); }
@@ -701,13 +703,12 @@ button.k-strip-verdict { cursor: pointer; }
 .k-paired[data-layer='zrak-i-nebo'] .k-sun-text .k-figure { font-size: var(--k-sup-size); line-height: 1.3; }
 .k-paired[data-layer='zrak-i-nebo'] .k-sun-text .k-figure-sub { font-size: var(--k-hint-size); }
 .k-paired[data-layer='zrak-i-nebo'] .k-sunarc { align-self: center; width: min(100%, var(--k-arc-w)); height: auto; max-height: calc(150px * var(--k-zoom)); min-height: 0; flex: 1 1 0; }
-.kiosk[data-size='compact'] .k-paired[data-layer='zrak-i-nebo'] .k-text { -webkit-line-clamp: 3; line-clamp: 3; }
 .k-rail-summary { padding: var(--k-gap); }
 .k-rail-summary .k-panel-meta { display: none; }
 .k-rail-summary .k-fr { display: block; padding: 0; }
 .k-rail-summary .k-fr-lead { font-size: var(--k-hint-size); margin-bottom: calc(var(--k-gap) * 0.25); }
 .k-rail-summary .k-fr-title { font-size: var(--k-hint-size); }
-.k-rail-summary .k-fr-sub { font-size: var(--k-credit-size); -webkit-line-clamp: 1; line-clamp: 1; }
+.k-rail-summary .k-fr-sub { font-size: var(--k-credit-size); }
 .k-main-source { grid-column: 1 / -1; padding: 0 var(--k-pad); }
 .k-block--sun { grid-column: 1 / -1; }
 .k-block--sun .k-block-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-column-gap: var(--k-pad); column-gap: var(--k-pad); align-items: center; }

@@ -195,6 +195,36 @@ export function row(main: string, sub = '', aside = '', attrs = ''): string {
   return `<span class="k-row-main"${attrs}>${aside ? `<span class="k-row-aside">${aside}</span>` : ''}${main}</span>${sub ? `<span class="k-row-sub">${sub}</span>` : ''}`;
 }
 
+/** A source's paragraph split into its whole sentences: at a full stop, a
+ *  question or an exclamation mark followed by a space and a capital. A
+ *  date's "20. 10. 2025." or a time's "7.00" is no sentence end. */
+export function sentencesOf(text: string): string[] {
+  return text.trim().split(/(?<=[.!?])\s+(?=\p{Lu})/u).filter(Boolean);
+}
+
+/** A source's paragraph as whole sentences the row fitter can let go of from
+ *  the end, one sentence at a time, and then as a whole: a paragraph that does
+ *  not fit its box loses whole sentences, never words (never an ellipsis). */
+export function fitSentences(text: string, tag = 'span', className = 'k-fit'): string {
+  const parts = sentencesOf(text).map((part) => `<span class="k-fit-part">${escapeHtml(part)}</span>`).join(' ');
+  return `<${tag} class="${className}" data-fit="sentences">${parts}</${tag}>`;
+}
+
+/** Context segments joined with " · ", one of them a paragraph the fitter may
+ *  shorten or drop (fitSentences); the separator on the droppable side travels
+ *  with it, so a dropped paragraph never leaves "·" behind. Plain segments are
+ *  escaped here. */
+export function joinWithFit(segments: readonly { text: string; fit?: boolean }[]): string {
+  const shown = segments.filter((segment) => segment.text !== '');
+  return shown.map((segment, i) => {
+    const before = i > 0 && !(i === 1 && shown[0]!.fit) ? ' · ' : '';
+    if (!segment.fit) return `${before}${escapeHtml(segment.text)}`;
+    const after = i === 0 && shown.length > 1 ? ' · ' : '';
+    const parts = sentencesOf(segment.text).map((part) => `<span class="k-fit-part">${escapeHtml(part)}</span>`).join(' ');
+    return `<span class="k-fit" data-fit="sentences">${before}${parts}${after}</span>`;
+  }).join('');
+}
+
 /** A box and its content snap to whole pixels separately: a 159.4 px body reads
  *  clientHeight 159 against scrollHeight 160 with nothing cut (a block sized to
  *  its content, as under the portrait map), so an overflow counts from the
@@ -205,14 +235,31 @@ const ROUNDING_PX = 1;
  *  counted in one "prikazano N od M" line, so a block never shows half a row
  *  or runs into its own source line. A DOM without layout (tests) measures
  *  nothing and leaves every row in place; `measure` is injectable for that.
- *  Always retain the first useful row. If even that row cannot fit, flag a
- *  composition defect instead of turning a populated panel into a heading. */
+ *  Always retain the first useful row. What still does not fit then gives up
+ *  whole sentences of a source's paragraph (fitSentences: the forecast's
+ *  text, a warning's description), from the last paragraph's last sentence,
+ *  and a paragraph whose first sentence does not fit goes whole; no text is
+ *  ever cut. If even that is not enough, flag a composition defect instead of
+ *  turning a populated panel into a heading. */
 export function fitRows(
   root: ParentNode,
   coverage: string,
   measure: (el: HTMLElement) => { scroll: number; client: number } = (el) => ({ scroll: el.scrollHeight, client: el.clientHeight }),
 ): void {
   const bodies = [...root.querySelectorAll<HTMLElement>('.k-block-body')].filter((body) => body.querySelector('.k-rows'));
+  const overflows = (body: HTMLElement): boolean => { const m = measure(body); return m.client > 0 && m.scroll > m.client + ROUNDING_PX; };
+  const fitParagraphs = (body: HTMLElement): void => {
+    const paragraphs = [...body.querySelectorAll<HTMLElement>('[data-fit=sentences]')].filter((el) => !el.closest('.k-row[hidden]'));
+    for (const paragraph of paragraphs.reverse()) {
+      const parts = [...paragraph.querySelectorAll<HTMLElement>('.k-fit-part')];
+      for (let shown = parts.length - 1; shown >= 1 && overflows(body); shown -= 1) parts[shown]!.hidden = true;
+      if (overflows(body)) paragraph.hidden = true;
+      if (!overflows(body)) return;
+    }
+  };
+  for (const body of root.querySelectorAll<HTMLElement>('.k-block-body')) {
+    for (const el of body.querySelectorAll<HTMLElement>('[data-fit=sentences], .k-fit-part')) el.hidden = false;
+  }
   const rowsOf = (body: HTMLElement): HTMLElement[] => Array.from(body.querySelector('.k-rows')?.children ?? []).filter((el): el is HTMLElement => el instanceof HTMLElement && el.classList.contains('k-row'));
   const totalOf = (body: HTMLElement): number => Number(body.querySelector<HTMLElement>('.k-rows')?.dataset.total) || rowsOf(body).length;
   const setNote = (body: HTMLElement, visible: number, total: number): void => {
@@ -257,8 +304,14 @@ export function fitRows(
       }
       visible += 1;
     }
-    const size = measure(body);
-    body.dataset.overflow = size.client > 0 && size.scroll > size.client + ROUNDING_PX ? 'true' : 'false';
+    if (overflows(body)) fitParagraphs(body);
+    body.dataset.overflow = overflows(body) ? 'true' : 'false';
+  }
+  // A block without rows (the forecast) has only its paragraph to give.
+  for (const body of root.querySelectorAll<HTMLElement>('.k-block-body')) {
+    if (bodies.includes(body) || !body.querySelector('[data-fit=sentences]')) continue;
+    if (overflows(body)) fitParagraphs(body);
+    body.dataset.overflow = overflows(body) ? 'true' : 'false';
   }
 }
 
@@ -288,7 +341,11 @@ function warningRows(ctx: PairedContext): string[] {
   const cap = ctx.snapshots['dhmz-cap'];
   const rowOf = (w: FeedItem, upcoming: boolean): string => row(
     `<span class="badge k-badge" data-tone="${escapeAttribute(w.severity ?? 'info')}">${escapeHtml(ctx.i18n.t(`panels.severity.${w.severity ?? 'info'}`))}</span> ${escapeHtml(w.title)}`,
-    [upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '', w.summary ?? '', w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : ''].filter(Boolean).map(escapeHtml).join(' · '),
+    joinWithFit([
+      { text: upcoming && w.at ? fill(ctx.strings.paired.upcomingFrom, { time: dayTime(w.at) }) : '' },
+      { text: w.summary ?? '', fit: true },
+      { text: w.until ? fill(ctx.strings.paired.untilTime, { time: dayTime(w.until) }) : '' },
+    ]),
     '',
     ` data-severity="${escapeAttribute(w.severity ?? 'info')}" data-window="${upcoming ? 'upcoming' : 'active'}"`,
   );
@@ -480,7 +537,7 @@ function forecastBlock(ctx: PairedContext): string {
     // DHMZ's forecast 'vrijeme' is sometimes a symbol code, never a word to print.
     const raw = dataText(today, 'weather');
     const word = /^\d+$/.test(raw) ? '' : cleanCondition(raw);
-    body = `<p class="k-figure">${escapeHtml(range)}</p>${word ? `<p class="k-figure-sub">${escapeHtml(word)}</p>` : ''}${today.summary ? `<p class="k-text">${escapeHtml(today.summary)}</p>` : ''}`;
+    body = `<p class="k-figure">${escapeHtml(range)}</p>${word ? `<p class="k-figure-sub">${escapeHtml(word)}</p>` : ''}${today.summary ? fitSentences(today.summary, 'p', 'k-text') : ''}`;
   }
   return block(s.paired.forecast, body, { s, snapshot: snap, item: today, testid: 'k-forecast' });
 }

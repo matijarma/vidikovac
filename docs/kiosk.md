@@ -256,6 +256,10 @@ stajalište ili stavku te vremenski raspon tog pogleda.
 Šest područja imaju raspored za gledanje s udaljenosti.
 Tekst pretrage, spremljeni popisi i koordinate uređaja ne prenose se.
 
+Tekst se ne reže trotočjem ni u šest rasporeda za gledanje s udaljenosti:
+s popisa izlaze cijeli redovi, najprije posljednji, a opis prognoze ili
+upozorenja gubi cijele rečenice od kraja ili izostaje u cijelosti.
+
 Nova osoba koja skenira ne prekida postojeći prikaz. Ako želi prikazati
 svoj pogled, mora potvrditi **Preuzmi i prikaži**. Prethodna osoba
 nastavlja vlastitu sesiju, a oba uređaja vide promjenu upravljanja.
@@ -279,8 +283,11 @@ sesije.
 
 „Osnovno”, koje se otvara riječju stanja na sigurnosnoj traci (mirno,
 upozorenje ili nepotvrđeno), prikazuje dostupna upozorenja, zatvaranja, linije u blizini,
-vrijeme i podatke o dežurnoj ljekarni, bez otvaranja sesije. Nedostupni
-podaci nisu potvrda da je sve u redu. „Natrag”, Escape ili 90 sekundi bez
+vrijeme i podatke o dežurnoj ljekarni, bez otvaranja sesije. Kartice se ne
+režu: što ne stane u cijelosti, izostaje, počevši od posljednje kartice, pa
+na manjem zaslonu prva izostaje dežurna ljekarna, a zeleni križ i adresu
+ljekarne i tada nosi sigurnosna traka. Nedostupni podaci nisu potvrda da je
+sve u redu. „Natrag”, Escape ili 90 sekundi bez
 aktivnosti vraćaju poziv za skeniranje. Taj se vremenski povratak primjenjuje
 samo izvan aktivne povezane sesije.
 

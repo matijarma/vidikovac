@@ -11,7 +11,7 @@ import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen } from '../../app/src/kiosk/credentials';
 import { DISTRICTS, districtBySlug, districtLabel } from '../../app/src/kiosk/districts';
-import { essentialsRows } from '../../app/src/kiosk/essentials';
+import { essentialsRows, fitEssentials } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
@@ -22,7 +22,7 @@ import { emptyCity, type CityState } from '../../shared/city/types';
 import { CURATED_WALL, curatedCityPoints } from '../../app/src/city/curated';
 import { cityLabelsOf } from '../../app/src/map/city-map';
 import { weatherMarkup } from '../../app/src/kiosk/markup';
-import { creditText, eventGroups, fitRows, pairedMarkup, row, statusLine } from '../../app/src/kiosk/paired';
+import { creditText, eventGroups, fitRows, fitSentences, joinWithFit, pairedMarkup, row, sentencesOf, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
@@ -374,6 +374,95 @@ describe('local content from the stop-scoped teaser', () => {
     fitRows(host, hr.paired.coverage, measure);
     expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(1);
     expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 1 od 3');
+  });
+  // W-fix3: a source's paragraph is never cut with an ellipsis or a clamp. It gives up whole
+  // sentences from the end, then goes whole, and only once the rows have gone.
+  it('splits a source paragraph into whole sentences, never at a date or a time', () => {
+    expect(sentencesOf('Djelomice sunčano, uz mogućnost za malo kiše. Puhat će umjeren sjeverni vjetar. Najviša dnevna temperatura između 19 i 22 °C.'))
+      .toEqual(['Djelomice sunčano, uz mogućnost za malo kiše.', 'Puhat će umjeren sjeverni vjetar.', 'Najviša dnevna temperatura između 19 i 22 °C.']);
+    expect(sentencesOf('Lokalno mogući obilniji pljuskovi praćeni grmljavinom. Količina oborine > 20 mm')).toEqual(['Lokalno mogući obilniji pljuskovi praćeni grmljavinom.', 'Količina oborine > 20 mm']);
+    expect(sentencesOf('Stranica ažurirana 20. 10. 2025. u 7.00 sati')).toEqual(['Stranica ažurirana 20. 10. 2025. u 7.00 sati']);
+    expect(fitSentences('A b. C d.', 'p', 'k-text')).toBe('<p class="k-text" data-fit="sentences"><span class="k-fit-part">A b.</span> <span class="k-fit-part">C d.</span></p>');
+  });
+  it('carries the separator with a droppable paragraph, so dropping it never leaves a dot behind', () => {
+    const strip = (markup: string, drop: boolean) => {
+      const host = document.createElement('span');
+      host.innerHTML = markup;
+      if (drop) host.querySelector('.k-fit')!.remove();
+      return host.textContent;
+    };
+    const middle = joinWithFit([{ text: 'od 14:00' }, { text: 'Pljuskovi. Tuča.', fit: true }, { text: 'do 23:59' }]);
+    expect(strip(middle, false)).toBe('od 14:00 · Pljuskovi. Tuča. · do 23:59');
+    expect(strip(middle, true)).toBe('od 14:00 · do 23:59');
+    const first = joinWithFit([{ text: '' }, { text: 'Pljuskovi.', fit: true }, { text: 'do 23:59' }]);
+    expect(strip(first, false)).toBe('Pljuskovi. · do 23:59');
+    expect(strip(first, true)).toBe('do 23:59');
+    expect(strip(joinWithFit([{ text: 'od 14:00' }, { text: 'Pljuskovi.', fit: true }]), true)).toBe('od 14:00');
+    expect(joinWithFit([{ text: 'a < b' }, { text: 'x > 20 mm', fit: true }])).toBe('a &lt; b<span class="k-fit" data-fit="sentences"> · <span class="k-fit-part">x &gt; 20 mm</span></span>');
+  });
+  it('lets a paragraph give up whole sentences, then go whole, once only one row is left, and restores it on the next fit', () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<article class="k-block"><div class="k-block-body"><ul class="k-rows">${[1, 2].map((n) => `<li class="k-row">${row(`Upozorenje ${n}`, joinWithFit([{ text: 'Prva. Druga. Treća.', fit: true }, { text: 'do 23:59' }]))}</li>`).join('')}</ul></div></article>`;
+    const shownParts = () => [...host.querySelectorAll<HTMLElement>('.k-row:not([hidden]) .k-fit-part')].filter((el) => !el.hidden && !el.closest('[data-fit][hidden]')).length;
+    // A row is 40 px, a sentence 20 px, the note 10 px: a 70 px body holds one row with one sentence and the note.
+    const measure = (el: HTMLElement) => {
+      const rows = [...el.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden);
+      const parts = rows.flatMap((r) => [...r.querySelectorAll<HTMLElement>('.k-fit-part')]).filter((p) => !p.hidden && !p.closest('[data-fit][hidden]')).length;
+      return { client: 70, scroll: rows.length * 40 + parts * 20 + (el.querySelector('.k-row-more') ? 10 : 0) };
+    };
+    fitRows(host, hr.paired.coverage, measure);
+    expect([...host.querySelectorAll<HTMLElement>('.k-row')].filter((r) => !r.hidden)).toHaveLength(1);
+    expect(shownParts()).toBe(1);
+    expect(host.querySelector('.k-row-more')!.textContent).toBe('prikazano 1 od 2');
+    expect(host.querySelector<HTMLElement>('.k-block-body')!.dataset.overflow).toBe('false');
+    // 45 px: not even the first sentence fits, so the paragraph goes whole and the row keeps its title and end time.
+    fitRows(host, hr.paired.coverage, (el) => ({ ...measure(el), client: 50 }));
+    expect(host.querySelector<HTMLElement>('.k-row [data-fit=sentences]')!.hidden).toBe(true);
+    expect(host.querySelector('.k-row .k-row-sub')!.textContent).toContain('do 23:59');
+    // Room again: every row and every sentence is back.
+    fitRows(host, hr.paired.coverage, () => ({ client: 1000, scroll: 200 }));
+    expect(host.querySelectorAll('[hidden]')).toHaveLength(0);
+  });
+  it('fits the forecast\'s text, a block without rows, by whole sentences', () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<article class="k-block" data-testid="k-forecast"><div class="k-block-body"><p class="k-figure">8 – 21 °C</p>${fitSentences('Prva rečenica. Druga rečenica. Treća rečenica.', 'p', 'k-text')}</div></article>`;
+    const measure = (el: HTMLElement) => ({ client: 100, scroll: 50 + 25 * [...el.querySelectorAll<HTMLElement>('.k-fit-part')].filter((p) => !p.hidden && !p.closest('[data-fit][hidden]')).length });
+    fitRows(host, hr.paired.coverage, measure);
+    expect([...host.querySelectorAll<HTMLElement>('.k-fit-part')].map((p) => p.hidden)).toEqual([false, false, true]);
+    expect(host.querySelector('.k-row-more')).toBeNull();
+    fitRows(host, hr.paired.coverage);
+    expect(host.querySelectorAll('[hidden]')).toHaveLength(0);
+  });
+  it('renders the forecast\'s text and a warning\'s description as whole sentences the fitter can let go of', () => {
+    const cap = snap('dhmz-cap', [item('dhmz-cap', 'w', 'warning', 'Žuto upozorenje za grmljavinsku oluju', { severity: 'moderate', summary: 'Lokalno mogući obilniji pljuskovi praćeni grmljavinom. Količina oborine > 20 mm', until: '2026-09-11T21:59:00Z' })]);
+    const forecast = snap('dhmz-forecast', [item('dhmz-forecast', 'f', 'forecast', 'Prognoza za Zagreb', { at: '2026-09-10T22:00:00Z', summary: 'Djelomice sunčano. Puhat će umjeren vjetar.', data: { tmin: 8, tmax: 21, weather: '3' } })]);
+    const modules = [...MODULES.filter((m) => m.module !== 'dhmz-cap'), cap, forecast];
+    const host = document.createElement('div');
+    host.innerHTML = pairedMarkup({ layer: 'zrak-i-nebo', strings: hr, i18n, locale: 'hr', snapshots: Object.fromEntries(modules.map((m) => [m.module, m])), now: NOW, stop: STOP, selection: null, lightweight: false, size: 'wide' }).main;
+    const text = host.querySelector<HTMLElement>('[data-testid=k-forecast] .k-text')!;
+    expect(text.dataset.fit).toBe('sentences');
+    expect([...text.querySelectorAll('.k-fit-part')].map((p) => p.textContent)).toEqual(['Djelomice sunčano.', 'Puhat će umjeren vjetar.']);
+    const sub = host.querySelector<HTMLElement>('[data-testid=k-warnings] .k-row-sub')!;
+    expect(sub.textContent).toMatch(/^Lokalno mogući obilniji pljuskovi praćeni grmljavinom\. Količina oborine > 20 mm · do .*23:59$/);
+    expect(sub.querySelectorAll('[data-fit=sentences] .k-fit-part')).toHaveLength(2);
+  });
+  // Osnovno holds whole cards: at 1366 x 768 with a warning in the strip, five cards at the reading tiers do not fit the stage.
+  it('keeps the whole Osnovno cards the box holds, from the first, and hides nothing without layout', () => {
+    const rows = document.createElement('div');
+    rows.innerHTML = ['cap', 'closures', 'routes', 'weather', 'pharmacy'].map((id) => `<div class="k-ess-row" data-row="${id}"></div>`).join('');
+    fitEssentials(rows);
+    expect(rows.querySelectorAll('[hidden]')).toHaveLength(0);
+    // Three cards a row of 200 px each in a 343 px box: the second row does not fit, so its cards go, the last first.
+    const measure = (el: HTMLElement) => ({ client: 343, scroll: 200 * Math.ceil([...el.children].filter((c) => !(c as HTMLElement).hidden).length / 3) });
+    fitEssentials(rows, measure);
+    expect([...rows.children].filter((c) => !(c as HTMLElement).hidden).map((c) => (c as HTMLElement).dataset.row)).toEqual(['cap', 'closures', 'routes']);
+    expect(rows.dataset.overflow).toBe('false');
+    // Never below the first card; a box too small even for it says so.
+    fitEssentials(rows, () => ({ client: 100, scroll: 200 }));
+    expect([...rows.children].filter((c) => !(c as HTMLElement).hidden)).toHaveLength(1);
+    expect(rows.dataset.overflow).toBe('true');
+    fitEssentials(rows, () => ({ client: 1000, scroll: 400 }));
+    expect(rows.querySelectorAll('[hidden]')).toHaveLength(0);
   });
   it('computes the sun on the device for the day', () => {
     const sun = sunToday(NOW);

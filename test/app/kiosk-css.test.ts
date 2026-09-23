@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { pairedShell } from '../../app/src/kiosk/paired';
 import { kioskStrings } from '../../app/src/kiosk/strings';
@@ -170,26 +170,91 @@ describe('public-screen design invariants', () => {
     expect(rule('.k-head')).not.toMatch(/(?:^|[;\s])height: var\(--k-head-h\)/);
     expect(rule(".kiosk[data-size='compact'][data-phase='invitation'] .k-head")).toContain('grid-template-rows: auto auto');
   });
-  // No wall text is cut with an ellipsis: a public screen shows a whole name or a whole line, and
-  // a line that does not fit wraps (the header and the strip grow; the paired row fitters drop
-  // whole rows). The one exception is the operator's own address field in Postavke, whose
-  // suggestion list is a fixed whole-row listbox.
-  it('cuts no wall text with an ellipsis', () => {
-    const ellipsised = (sheet: string) => [...sheet.matchAll(/(?:^|\n)([^{}\n]+?)\s*\{([^}]*)\}/g)]
-      .filter(([, , body]) => /text-overflow:\s*ellipsis/.test(body!)).flatMap(([, selectors]) => selectors!.split(',').map(sel => sel.trim()));
-    const operatorField = ['.k-suggest-name', '.k-suggest-meta'];
-    expect(ellipsised(css).filter(sel => !operatorField.includes(sel))).toEqual([]);
-    expect(ellipsised(cityCss)).toEqual([]);
-    expect(ellipsised(read('app/src/ui/city.css').replace(/\/\*[\s\S]*?\*\//g, ''))).toEqual([]);
-    // signage.css also loads on the wall, but its ellipsising tiles (.tl-*) are the phone's: no wall renderer draws one.
+  // No wall text is cut: a public screen shows a whole name, a whole line or a whole sentence. A line
+  // that does not fit wraps (the header and the strip grow; a card or a row takes the height its words
+  // need), and where a box is fixed the fitters let go of whole things instead: whole rows
+  // (kiosk/paired.ts fitRows, kiosk/timeline.ts), whole sentences of a source's paragraph, whole
+  // Osnovno cards (kiosk/essentials.ts fitEssentials). The one text kept to one line by design, the
+  // header sentence, is measured by its twin before it is chosen (text-overflow: clip, never reached).
+  // The pin covers every stylesheet the wall loads: the kiosk entry's own (static and lazy) and every
+  // sheet a shared module imports for itself (the schema's, MapLibre's).
+  const walk = (dir: string): string[] => readdirSync(new URL(`../../${dir}`, import.meta.url), { withFileTypes: true })
+    .flatMap((entry) => entry.isDirectory() ? walk(`${dir}/${entry.name}`) : [`${dir}/${entry.name}`]);
+  const cssImports = (file: string): string[] => [...read(file).matchAll(/import\s*\(?\s*'([^']+\.css)'/g)].map(([, spec]) => spec!.startsWith('.')
+    ? new URL(spec!, new URL(`../../${file}`, import.meta.url)).pathname.replace(new URL('../../', import.meta.url).pathname, '')
+    : `node_modules/${spec}`);
+  const wallSheets = [...new Set([
+    ...cssImports('app/src/entries/kiosk.ts'),
+    ...walk('app/src').filter((file) => file.endsWith('.ts') && !file.startsWith('app/src/entries/')).flatMap(cssImports),
+  ])].sort();
+  /** Every style rule of a sheet with its selector list, @media and @supports blocks opened. */
+  const cssRules = (sheet: string): { selectors: string[]; body: string }[] => {
+    const out: { selectors: string[]; body: string }[] = [];
+    const open: string[] = [];
+    let text = '';
+    for (const ch of sheet.replace(/\/\*[\s\S]*?\*\//g, '')) {
+      if (ch === '{') { open.push(text.trim()); text = ''; }
+      else if (ch === '}') {
+        const selector = open.pop();
+        if (selector !== undefined && !selector.startsWith('@') && text.trim()) out.push({ selectors: selector.split(',').map((sel) => sel.trim()), body: text });
+        text = '';
+      } else text += ch;
+    }
+    return out;
+  };
+  // The two exceptions, neither of them the wall's product text: the operator's own address field in
+  // Postavke and on the start screen, whose suggestion list is a fixed whole-row listbox; and the
+  // phone's tiles (signage.css .tl-*), which the wall loads but no wall renderer draws.
+  const operatorField = new Set(['.k-suggest-name', '.k-suggest-meta']);
+  const phoneTile = (file: string, sel: string) => file === 'app/src/ui/signage.css' && /\.tl(?:-[\w-]+)?(?![\w-])/.test(sel) && !/\.k-/.test(sel);
+  const excepted = (file: string, sel: string) => operatorField.has(sel) || phoneTile(file, sel);
+  it('loads the stylesheets the pin reads: the entry\'s own and the ones shared modules import', () => {
+    expect(wallSheets).toEqual([
+      'app/src/motion/schema.css', 'app/src/motion/schematic.css', 'app/src/ui/base.css', 'app/src/ui/city.css', 'app/src/ui/fonts.css',
+      'app/src/ui/kiosk-city.css', 'app/src/ui/kiosk.css', 'app/src/ui/qr.css', 'app/src/ui/signage.css', 'app/src/ui/tokens.css',
+      'node_modules/maplibre-gl/dist/maplibre-gl.css',
+    ]);
+    for (const file of wallSheets) expect(cssRules(read(file)).length, file).toBeGreaterThan(file.endsWith('fonts.css') ? -1 : 0);
+  });
+  it('cuts no wall text: no ellipsis and no line clamp in any stylesheet the wall loads', () => {
+    const cut = wallSheets.flatMap((file) => cssRules(read(file))
+      .filter(({ body }) => /text-overflow:\s*ellipsis/.test(body) || /(?:^|[;\s])(?:-webkit-)?line-clamp:\s*(?!\s|none\b|unset\b)/.test(body))
+      .flatMap(({ selectors }) => selectors.filter((sel) => !excepted(file, sel)).map((sel) => `${file} ${sel}`)));
+    expect(cut).toEqual([]);
+    // Each exception is still what it claims to be: the operator field ellipsises only in its listbox rows, and the phone's tiles stay the phone's.
+    expect(rule('.k-suggest')).toContain('grid-auto-rows: var(--k-suggest-row)');
     for (const source of ['app/src/kiosk.ts', 'app/src/kiosk/paired.ts', 'app/src/kiosk/front.ts', 'app/src/kiosk/invitation.ts',
-      'app/src/kiosk/timeline.ts', 'app/src/kiosk/markup.ts', 'app/src/kiosk/frame.ts', 'app/src/city/markup.ts']) {
+      'app/src/kiosk/timeline.ts', 'app/src/kiosk/markup.ts', 'app/src/kiosk/frame.ts', 'app/src/kiosk/essentials.ts', 'app/src/city/markup.ts']) {
       expect(read(source), source).not.toMatch(/class="[^"]*\btl(?:-[\w-]+)?\b/);
     }
     // The strip's trail and pharmacy wrap in every composition, and the strip grows with them.
     expect(rule('.k-strip-item')).toContain('overflow-wrap: break-word');
     expect(rule('.k-strip-item')).not.toContain('nowrap');
     expect(rule('.k-strip')).toContain('min-height: var(--k-strip-h)');
+  });
+  it('clips no wall text either: nothing both forbids wrapping and hides what overflows', () => {
+    // A visually hidden label (clip: rect(0 ...)) is not shown text; the header sentence is the one line
+    // kept by design, chosen only once its twin measures it whole (kiosk.ts sentenceOverflows).
+    const oneLine = new Set(['.k-sentence-text']);
+    const clipped = wallSheets.flatMap((file) => cssRules(read(file))
+      .filter(({ body }) => /white-space:\s*nowrap/.test(body) && /overflow(?:-x)?:\s*(?:hidden|clip)/.test(body) && !/clip:\s*rect\(0/.test(body))
+      .flatMap(({ selectors }) => selectors.filter((sel) => !excepted(file, sel) && !oneLine.has(sel)).map((sel) => `${file} ${sel}`)));
+    expect(clipped).toEqual([]);
+    expect(read('app/src/kiosk.ts')).toContain('function sentenceOverflows(');
+  });
+  // The rows, cards and paragraphs the old clamps cut ("Nema podataka o kašnjenju · nijedno vozilo u
+  // blizini" in the Sada board; the forecast's text in Vrijeme; a warning's description; Osnovno's
+  // detail and credit lines) wrap whole, and Osnovno is exactly the stage's box, whatever height the
+  // header and the strip have grown to, so its fitter measures the room there really is.
+  it('wraps the paired rows, the forecast and Osnovno whole, and gives Osnovno the stage\'s own box', () => {
+    for (const selector of ['.k-fr-title', '.k-fr-sub', '.k-row-sub', '.k-text', '.k-ess-detail', '.k-ess-row .k-meta']) {
+      const body = rule(selector);
+      expect(body, selector).not.toBe('');
+      expect(body, selector).toContain('overflow-wrap: break-word');
+      expect(body, selector).not.toMatch(/overflow: hidden|-webkit-box|nowrap/);
+    }
+    expect(rule('.k-basics')).toContain('grid-row: 3 / 4; top: 0; right: 0; bottom: 0; left: 0;');
+    expect(rule('.k-basics')).not.toMatch(/var\(--k-(?:head|strip)-h\)/);
   });
   // The presented rail (review W, P2): 448 px beside the main region at 1920 and 1366 (the main
   // region is then 1404 and 868 px wide), and on the totem a row across the foot, the blocks beside
