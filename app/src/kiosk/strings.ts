@@ -245,7 +245,6 @@ export interface KioskStrings {
     notices: string;
     ongoing: string;
     ongoingWord: string;
-    ongoingUntil: string;
     overviewTransport: string;
     allDay: string;
     noData: string;
@@ -472,7 +471,7 @@ function build(code: SupportedLocale): KioskStrings {
     paired: {
       ...group('paired', [
         'warnings', 'closures', 'delays', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
-        'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'ongoingUntil', 'overviewTransport', 'allDay',
+        'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'overviewTransport', 'allDay',
         'noData', 'sourceDown', 'unconfirmed', 'dataFrom', 'fetchedAt', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
         'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
         'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',

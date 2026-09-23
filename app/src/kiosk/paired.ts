@@ -12,6 +12,7 @@ import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/co
 import type { I18n } from '../i18n/i18n';
 import { DOGADANJA_SOURCES, IZVORI } from '../izvori-render';
 import { safetyState } from '../experience/safety-state';
+import { isAllDay } from '../layers/kultura';
 import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -23,7 +24,7 @@ import { arrivalsEmptyText, ARRIVAL_ROWS, platformIds, vettedArrival, type StopA
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
-import { frontPanels, panelMarkup } from './front';
+import { frontPanels, panelMarkup, untilDay } from './front';
 import { kindOfRoute } from './exceptions';
 import { columnsFor } from '../experience/timeband';
 import type { CityState } from '../../../shared/city/types';
@@ -795,12 +796,15 @@ export function eventGroups(items: readonly FeedItem[], now: number): EventGroup
   return out;
 }
 
+/** A day's event: its clock, or for an all-day one the all-day word, or "do
+ *  25. 9." when it runs on for days (never "cijeli dan" for those [O-53]); a
+ *  later day's event names its start day first. A range of days has no clock. */
 function eventRow(item: FeedItem, ctx: PairedContext, withDay: boolean): string {
   const { strings: s, locale } = ctx;
-  const allDay = dataText(item, 'precision') === 'day';
+  const allDay = isAllDay(item);
   const when = withDay
     ? (allDay ? weekdayDayMonth(locale, item.at!) : `${weekdayDayMonth(locale, item.at!)} ${clock(item.at)}`)
-    : (allDay ? s.paired.allDay : clock(item.at));
+    : (allDay ? untilDay(item, ctx.i18n) || s.paired.allDay : clock(item.at));
   // A category slug is printed only as a word the catalogue knows; a raw slug never reaches the screen.
   const category = s.events[dataText(item, 'category')] ?? '';
   const sub = [category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
@@ -822,10 +826,10 @@ function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: numbe
 }
 
 function ongoingRow(item: FeedItem, ctx: PairedContext): string {
-  const { strings: s, locale } = ctx;
+  const { strings: s } = ctx;
   const category = s.events[dataText(item, 'category')] ?? '';
   const sub = [s.paired.ongoingWord, category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
-  const until = item.until ? fill(s.paired.ongoingUntil, { date: weekdayDayMonth(locale, item.until) }) : '';
+  const until = untilDay(item, ctx.i18n);
   return row(externalHtml('title', item.title), escapeHtml(sub), escapeHtml(until));
 }
 
