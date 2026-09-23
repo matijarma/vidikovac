@@ -1292,8 +1292,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     canvas.removeAttribute('aria-label');
     // The compact credit sits bottom-left: on the phone stage the right edge holds the zoom and the tools, and on a
     // short stage (a small phone, a landscape one) the two would collide.
-    const compact = options.attributionCompact === true;
-    created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), 'bottom-right');
+    const compact = !wallLabels && options.attributionCompact === true;
+    created.addControl(wallLabels ? new l.StaticAttributionControl()
+      : new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), 'bottom-right');
     if (compact) {
       // MapLibre initially expands even its compact control. Keep the full
       // credit in the native disclosure, without covering the phone's map

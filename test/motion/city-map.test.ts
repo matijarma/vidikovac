@@ -593,6 +593,23 @@ describe('lifecycle', () => {
 });
 
 describe('the map for people who cannot see it (R-F5), and its credit', () => {
+  it('keeps wall attribution as unfocusable text, with the complete linked credit on handheld', async () => {
+    for (const presentationProfile of ['public-display', 'handheld'] as const) {
+      const { map, handle } = await harness({ extra: { presentationProfile, interactive: false } });
+      const credit = map.controls[0] as FakeControl & { onAdd?: () => HTMLElement };
+      const element = credit.onAdd?.() ?? document.createElement('div');
+      if (!credit.onAdd) element.innerHTML = String(credit.options.customAttribution);
+      expect(element.textContent).toBe('© OpenStreetMap contributors · Protomaps');
+      if (presentationProfile === 'public-display') {
+        expect(element.querySelectorAll('a, button, summary, [tabindex], [role=button]')).toHaveLength(0);
+        expect(element.hasAttribute('tabindex')).toBe(false);
+        expect(element.tabIndex).toBe(-1);
+      } else {
+        expect(element.querySelectorAll('a[href]')).toHaveLength(2);
+      }
+      handle.destroy();
+    }
+  });
   it('names the container as a region from the first moment, puts role="img" with the same label on the canvas alone (keeping its tab stop), labels the controls in the page\u2019s language and hands MapLibre the linked credit', async () => {
     const container = document.createElement('div');
     container.id = 'u-pokretu-map-slot';

@@ -47,10 +47,10 @@ export function frameStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop 
  * when it sits on the screen's own stop, R-KP18); the /hitno pill. Closures
  * are said once, in the column's statement, never here.
  */
-export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean }): string {
+export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean; passive?: boolean }): string {
   const w = strip.parts.warning;
   const word = `${iconMarkup(SAFETY_ICON[strip.level], undefined, 'icon k-icon')}<span>${escapeHtml(strip.verdict)}</span>`;
-  const verdict = opts.noBasics
+  const verdict = opts.noBasics || opts.passive
     ? `<span class="k-strip-verdict" data-testid="strip-verdict" data-level="${strip.level}">${word}</span>`
     : `<button type="button" class="k-strip-verdict" data-testid="kiosk-essentials-open" data-level="${strip.level}" aria-label="${escapeAttribute(fill(strings.safety.openBasics, { verdict: strip.verdict }))}"><span data-testid="strip-verdict">${word}</span></button>`;
   const trail = w.state === 'none'
@@ -62,7 +62,9 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
     ${trail}
     ${pharmacyMarkup(strip, strings)}
     </div>
-    <a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`;
+    ${opts.passive
+      ? `<span class="k-strip-hitno">${escapeHtml(strings.safety.hitno)}</span>`
+      : `<a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`}`;
 }
 
 /** Green cross · 24/7 · the short address: `[data-symbol=pharmacy]` is the cross itself (the probe contract, §15.6). */

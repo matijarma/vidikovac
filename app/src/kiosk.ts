@@ -554,7 +554,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // fails (and vice versa). All visible safety copy must use the same choice.
     const noBasics = phase === 'paired' || phase === 'setup';
     const built = frameStrip(currentSafetyModules(), stop, i18n, s, now());
-    strip.innerHTML = stripMarkup(built, s, { noBasics });
+    strip.innerHTML = stripMarkup(built, s, { noBasics, passive: layout.size !== 'handheld' });
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
@@ -881,7 +881,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const codeEl = element.querySelector<HTMLElement>('[data-testid=kiosk-code]');
     const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]');
     const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]');
-    const link = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]');
+    let link = element.querySelector<HTMLElement>('[data-testid=pair-url]');
+    const linkTag = layout.size === 'handheld' ? 'A' : 'SPAN';
+    if (link && link.tagName !== linkTag) {
+      const next = document.createElement(linkTag.toLowerCase());
+      next.className = link.className;
+      next.dataset.testid = 'pair-url';
+      link.replaceWith(next);
+      link = next;
+    }
     if (!slot) {
       if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)}</p>`;
       if (codeA) codeA.textContent = '····';
@@ -900,7 +908,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (codeA) codeA.textContent = display.slice(0, 4);
     if (codeB) codeB.textContent = display.slice(5);
     if (codeEl) codeEl.dataset.state = 'live';
-    if (link) { link.href = payload; link.textContent = payload; link.hidden = false; }
+    if (link) {
+      if (link instanceof HTMLAnchorElement) link.href = payload;
+      link.textContent = payload;
+      link.hidden = false;
+    }
     if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous);
     paintProgress();
   }
