@@ -117,21 +117,45 @@ function dominatingRefusal(node: ts.Node, value: ts.Expression | string): boolea
   return false;
 }
 
+/** `collection.some((row) => vetExternal(kind, row, surface) === null)`:
+ * a refusal of the whole collection when any one of its elements fails. */
+function rejectsEvery(condition: ts.Expression, collection: string): boolean {
+  if (ts.isParenthesizedExpression(condition)) return rejectsEvery(condition.expression, collection);
+  if (!ts.isCallExpression(condition) || !ts.isPropertyAccessExpression(condition.expression)) return false;
+  if (condition.expression.name.text !== 'some' || condition.expression.expression.getText() !== collection) return false;
+  const callback = condition.arguments[0];
+  if (condition.arguments.length !== 1 || !callback || !ts.isArrowFunction(callback) || callback.parameters.length !== 1) return false;
+  const element = callback.parameters[0]!.name;
+  return ts.isIdentifier(element) && !ts.isBlock(callback.body) && rejectsField(callback.body, element.text);
+}
+
+function dominatingEveryRefusal(node: ts.Node, collection: string): boolean {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (!ts.isBlock(parent)) continue;
+    if (parent.statements.some(statement => statement.end < node.getStart() && ts.isIfStatement(statement)
+      && (ts.isReturnStatement(statement.thenStatement) || ts.isContinueStatement(statement.thenStatement))
+      && rejectsEvery(statement.expression, collection))) return true;
+  }
+  return false;
+}
+
 function guardedCanvas(node: ts.CallExpression): boolean {
   const arg = node.arguments[0]!;
   if (guardedValue(arg)) return true;
   const value = ts.isBinaryExpression(arg) && arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
     && guardedValue(arg.right) ? arg.left : arg;
   if (dominatingRefusal(node, value)) return true;
-  // A multiline name is vetted as a whole before forEach paints its rows.
+  // A multiline name is vetted as a whole before forEach paints its rows,
+  // and a wrapped pill label row by row (every row, or the mark is skipped).
   // Resolve the actual callback parameter/collection, not a same-named local.
   const parameter = ts.isIdentifier(value) ? checker.getSymbolAtLocation(value)?.valueDeclaration : undefined;
   if (!parameter || !ts.isParameter(parameter) || !ts.isArrowFunction(parameter.parent)) return false;
   const callback = parameter.parent;
   const call = callback.parent;
-  return ts.isCallExpression(call) && ts.isPropertyAccessExpression(call.expression)
-    && call.expression.name.text === 'forEach' && callback.parameters[0] === parameter
-    && dominatingRefusal(node, `${call.expression.expression.getText()}.join(' ')`);
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)
+    || call.expression.name.text !== 'forEach' || callback.parameters[0] !== parameter) return false;
+  const collection = call.expression.expression.getText();
+  return dominatingRefusal(node, `${collection}.join(' ')`) || dominatingEveryRefusal(node, collection);
 }
 
 function guardedEscape(node: ts.CallExpression, key: string): boolean {
@@ -232,6 +256,19 @@ describe('every wall text render boundary', () => {
   it('checks the actual canvas argument, including the guarded whole-name row projection', () => {
     expect(canvasWrites).toHaveLength(4);
     for (const node of canvasWrites) expect(guardedCanvas(node), node.getText()).toBe(true);
+  });
+
+  it('accepts a per-row refusal only when it vets each element of the painted collection', () => {
+    const condition = (text: string): ts.Expression =>
+      (ts.createSourceFile('rows.ts', text, ts.ScriptTarget.Latest, true).statements[0] as ts.ExpressionStatement).expression;
+    expect(rejectsEvery(condition("rows.some((row) => vetExternal('name', row, 'row') === null)"), 'rows')).toBe(true);
+    for (const text of [
+      "rows.some((row) => vetExternal('name', label, 'row') === null)",
+      "other.some((row) => vetExternal('name', row, 'row') === null)",
+      "rows.every((row) => vetExternal('name', row, 'row') === null)",
+      "rows.some((row) => vetExternal('name', row, 'row') !== null)",
+      "rows.some((row, i) => vetExternal('name', row, 'row') === null)",
+    ]) expect(rejectsEvery(condition(text), 'rows'), text).toBe(false);
   });
 
   it('does not mistake unused or wrong-field guards for guarded rendered values', () => {
