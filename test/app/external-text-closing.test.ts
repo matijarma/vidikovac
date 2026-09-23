@@ -16,11 +16,15 @@ describe('decision 24 finite structural close-out', () => {
       expect(vetExternal('name', `${value}Marko`, surface)).toBeNull();
     }
   });
-  it('keeps exact GTFS spellings only in headsigns, never as domain-prefix exceptions', () => {
-    expect(vetExternal('headsign', 'Dom Sv.Josipa', 'row')).toBe('Dom Sv.Josipa');
-    expect(vetExternal('name', 'Dom Sv.Josipa', 'row')).toBeNull();
+  it('keeps exact GTFS spellings in rendered kinds, never as domain-prefix exceptions', () => {
+    for (const kind of ['headsign', 'name', 'summary'] as const) {
+      for (const value of ['Dom Sv.Josipa', 'Zap.kol. - Borongaj', 'T.b.J.Jelačića']) {
+        expect(vetExternal(kind, value, 'row')).toBe(value);
+      }
+    }
     expect(vetExternal('headsign', 'sv.josipa.ai', 'row')).toBeNull();
     expect(vetExternal('headsign', 'spr.dubrava.ai', 'row')).toBeNull();
+    expect(vetExternal('headsign', 'T.b.J.Jelačića.ai', 'row')).toBeNull();
   });
   it('covers the complete currency data table, in either order and letter case', () => {
     expect(new Set(ISO_4217_CODES).size).toBe(ISO_4217_CODES.length);

@@ -317,19 +317,19 @@ export function externalTextVector(value: string, kind?: ExternalTextKind): { re
   }
   // Abbreviations "sv.", "dr.", "kn.", "br.", "tzv.", "npr.", "sl."
   // followed by space/end contain no letter-dot-letter token. Never exempt
-  // their prefixes in dr.ai, sv.example, etc. Only the exact GTFS spellings
-  // remain compatible, and only in the headsign kind.
+  // their prefixes in dr.ai, sv.example, etc. The existing exact GTFS tokens
+  // also occur in route names and accessible summaries, not just headsigns.
   for (const match of text.matchAll(/(?<![a-z0-9])([a-z0-9_-]+)\.([a-z][a-z0-9_-]*)(?![a-z0-9])/gu)) {
-    if (kind === 'headsign' && ((EXTERNAL_PLACE_ABBREVIATIONS.has(match[0])
+    if ((EXTERNAL_PLACE_ABBREVIATIONS.has(match[0])
       && !/^\.[a-z0-9]/u.test(text.slice(match.index + match[0].length)))
-      || /^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index)))) continue;
+      || /^t\.b\.j\.jelacica(?![a-z0-9]|\.[a-z0-9])/u.test(text.slice(match.index))) continue;
     return { reason: 'link', value: match[0] };
   }
   // A dotted run of single letters is not a sequence of independent safe
   // sentences. The sole multi-initial GTFS place spelling is explicit.
   for (const match of text.matchAll(/(?<![a-z0-9])(?:[a-z0-9]\.){2,}[a-z0-9]/gu)) {
     if (!/[a-z]/u.test(match[0])) continue; // Numeric runs retain phone/account evidence.
-    if (kind === 'headsign' && /^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index))) continue;
+    if (/^t\.b\.j\.jelacica(?![a-z0-9]|\.[a-z0-9])/u.test(text.slice(match.index))) continue;
     return { reason: 'link', value: match[0] };
   }
   // Match the complete numeric run before counting, never just six adjacent
