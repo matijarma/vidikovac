@@ -59,6 +59,8 @@ const SWIPE_STEP_MS = 16;
 const SWIPE_HOLD_MS = 200;
 /** The sheet transition is 220 ms; the map's camera ease is shorter. */
 const SETTLE_MS = 600;
+/** A line whose whole stop list is longer than the open sheet's body: what the body swipe scrolls. */
+const LONG_ROUTE = '6';
 /** Session clock marks the notices hang on: 600 s session, 60 s and 20 s warnings. */
 const SESSION_MS = 600_000;
 const WARN_60_MS = 60_000;
@@ -312,6 +314,10 @@ test('the Promet sheet cycles search-visible peek, 38% detail and open; handle a
 
 // --- 4. scroll versus pan --------------------------------------------------------------
 test('one finger does one thing: a swipe over the Promet map pans the camera and leaves the page put, a swipe over the open sheet body scrolls the body and not the camera, a swipe over Sada scrolls the page', async ({ page }) => {
+  // The basemap's tiles answer "no tile" at the browser, as in round-f.spec.ts and companion-phone.spec.ts: the local
+  // server has no basemap archive, and its slow 503s keep MapLibre's load (and so a drawing map) past the wait below.
+  // Nothing here is about the basemap; the overlays pan with the camera.
+  await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
   await openDashboard(page, PHONE);
   await openLayer(page, 'u-pokretu');
   await waitForMap(page, /^(ready|tiles-failed)$/); // drawing, with or without basemap tiles (the local server has none)
@@ -327,11 +333,19 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
   expect(y1, `a swipe over the map must not scroll the page: scrollY went ${y0} → ${y1} (Promet is a fixed stage)`).toBe(0);
   expect(await mapHash(page), `a ${SWIPE_PX} px swipe over the map must move the camera: the map pixels are identical before and after`).not.toBe(before);
 
+  // Content first: the default sheet is the place's U blizini rows, capped since WP4 (§11 Karta), and they fit the
+  // open detent, so there is nothing for a finger to scroll. A line's whole stop list does not fit: select the line
+  // the way a reader does (the sheet's search, then its result) and open all of its stops.
+  await page.getByTestId('transport-search').fill(LONG_ROUTE);
+  await page.locator(`[data-action=select-route][data-id="${LONG_ROUTE}"]`).first().click();
+  await expect(page.getByTestId('route-title'), `the sheet body shows line ${LONG_ROUTE}`).toContainText(LONG_ROUTE);
+  await page.getByTestId('toggle-stops').click();
+  await expect(page.getByTestId('toggle-stops'), `line ${LONG_ROUTE}'s whole stop list is open`).toHaveAttribute('aria-expanded', 'true');
   await cycleTo(page, 'open');
   const body = page.locator('[data-testid=transport-detail]');
   await body.evaluate((el) => { el.scrollTop = 0; });
   const scrollable = await body.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, overflowY: getComputedStyle(el).overflowY }));
-  // Soft: when the body is not a scroller yet, the Sada fact below still reports.
+  // Soft: when the body is not a scroller, the Sada fact below still reports.
   expect.soft(scrollable.scrollHeight > scrollable.clientHeight + 1 && /auto|scroll/.test(scrollable.overflowY), `at open the sheet body must be its own scroll container with more content than box: scrollHeight ${scrollable.scrollHeight}, clientHeight ${scrollable.clientHeight}, overflow-y ${scrollable.overflowY}`).toBe(true);
   const bodyBox = await boxOf(page, '[data-testid=transport-detail]');
   expect(bodyBox, 'the sheet body [data-testid=transport-detail] must be rendered').not.toBeNull();
