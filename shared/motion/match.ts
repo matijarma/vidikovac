@@ -618,9 +618,14 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // Once the arrival is done, within a stop zone of its end, it may.
       // (A tram past the end projects onto the end with a growing residual:
       // 68 m from the stand at node 73 it has come round, so the residual is
-      // bounded by the off-graph band, not the near band.)
+      // bounded by the off-graph band, not the near band.) The hold applies in
+      // the terminus area only, the arrival's last TERMINUS_NEAR_M: a line 6
+      // tram short-turning at Trg dr. F. Tuđmana, 2.5 km before the Črnomerec
+      // loop that joins 6_2 to 6_25, must return to 6_25 as before.
+      const currentLen = net.paths[track.match.pathIdx].len;
       const loopAhead = loopBetween(track.match.pathIdx, prior.pathIdx) !== null
-        && !(current.residual <= OFF_GRAPH_M && current.s >= net.paths[track.match.pathIdx].len - STOP_ZONE_M);
+        && current.s >= currentLen - TERMINUS_NEAR_M
+        && !(current.residual <= OFF_GRAPH_M && current.s >= currentLen - STOP_ZONE_M);
       if (prev !== null && !loopAhead && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
