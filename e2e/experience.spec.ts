@@ -6,6 +6,8 @@ import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { DESKTOP_MIN_PX } from './lib';
 
 const LAYERS: LayerId[] = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura'];
+/** The desk's pair (WP4 step 8): Sada's feed and Karta's map side by side, in this order. */
+const DESK_PAIR: readonly LayerId[] = ['grad-sada', 'u-pokretu'];
 /** Sada's promise at 390×844: the three departures at the chosen stop are on the first screen without a scroll, above the tab bar (WP4). */
 const SADA_FOLD_PX = 700;
 const SADA_DEPARTURES_IN_FOLD = 3;
@@ -41,7 +43,17 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.getByTestId('sada-place')).toBeVisible();
       for (const layer of LAYERS) {
         await openLayer(page, layer);
-        await expect(page.locator('[data-testid="dash-view"] > .layer')).toHaveCount(1);
+        // The desk is the phone, wider (WP4 step 8): Sada or Karta opens the .ki-desk pair, Sada then Karta and
+        // nothing else; every other domain, and every layer on the phone, is one workspace alone.
+        if (viewport.width >= DESKTOP_MIN_PX && DESK_PAIR.includes(layer)) {
+          const pair = page.locator('[data-testid="dash-view"] > .ki-desk > .layer');
+          await expect.poll(() => pair.evaluateAll((els) => els.map((el) => el.getAttribute('data-layer'))), { message: `the desk pair holds Sada and Karta when ${layer} is open` })
+            .toEqual([...DESK_PAIR]);
+          await expect(page.locator('[data-testid="dash-view"] > .layer'), 'no workspace stands outside the pair').toHaveCount(0);
+        } else {
+          await expect(page.locator('[data-testid="dash-view"] > .layer'), `${layer} is the one workspace`).toHaveCount(1);
+          await expect(page.locator('[data-testid="dash-view"] .ki-desk'), `no desk pair around ${layer}`).toHaveCount(0);
+        }
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width + 1);
         await expect(page.getByTestId('dash-view')).not.toContainText('[object Object]');
       }

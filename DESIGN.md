@@ -246,13 +246,15 @@ order: the wall's place or the screen's stop, then a saved stop, then the
 nearest tram stop within 400 m, then the nearest bus stop within 300 m, then
 the address alone; with none of these the place is Trg bana J. Jelačića. The
 departures come from the place's stop, else from the nearest platform within
-800 m, so an address still has departures.
+800 m, so an address near a stop still has departures; with no platform that
+near, Sada shows no departures block at all.
 
-A departure row always exists. A blue countdown with its dot is a vehicle ZET
-tracks, a grey clock time is the timetable, and no row carries a word for its
-kind. While a board is on its way one row-sized placeholder holds the place;
-only a source that cannot answer says so, in one line. Sada reads the same
-departure cache and arrival logic as the stop detail.
+Whenever Sada has a stop to board, a departure row exists. A blue countdown
+with its dot is a vehicle ZET tracks, a grey clock time is the timetable, and
+no row carries a word for its kind. While a board is on its way one row-sized
+placeholder holds the place; only a source that cannot answer says so, in one
+line. Sada reads the same departure cache and arrival logic as the stop
+detail.
 
 Karta is the timeline's map. It opens on the wall's frame around the place,
 with every vehicle drawn at once as a full-number pill and the wall's curated
