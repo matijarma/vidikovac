@@ -1,6 +1,5 @@
 // The transport sheet's markup, as strings a workspace sets into its stable
-// containers: route and stop rows, the search listbox, the four detail views
-// and the closures-and-notices list the lightweight face keeps. Pure and escaped --
+// containers: route and stop rows and the four detail views. Pure and escaped --
 // every interpolated value goes through escapeHtml/escapeAttribute (dom/
 // escape.ts), and every interactive element carries a `data-action` the
 // workspace's one delegated click handler reads, never a closure handler on
@@ -21,10 +20,9 @@ import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { externalTextReady } from '../city/feed';
 import type { CastState } from '../core/contracts';
 import type { SavedRef } from '../core/saved-store';
-import { lineBadge, signRow } from '../experience/blocks';
+import { lineBadge } from '../experience/blocks';
 import { snapshotLine } from '../experience/chrome';
 import { delayTone, type DelayTone } from '../experience/delay';
-import { castReasonText } from '../experience/presentation';
 import { zagrebDateTime, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { vettedArrival } from '../kiosk/arrivals';
@@ -37,27 +35,20 @@ import type { RouteStop } from './catalogue';
 import type { RouteEntry, SearchResults, StopGroup } from './search';
 import { tr, trPlural, type TransportKey } from './strings';
 
-/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle,
- *  every detail gets the ghost cast button ("Na zaslon", disabled with its reason when it cannot fire). */
+/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle. */
 export interface DetailHeadExtras {
   save?: SavedRef & { on: boolean };
-  cast?: CastState;
 }
 
 /** Route badges the rows show before "+n". */
 const ROW_BADGES = 6;
-/** Rows a list shows before its fold. */
-export const RUNNING_ROWS = 8;
-export const CLOSURE_ROWS = 4;
+/** Rows a route's stop list shows before its fold. */
 export const STOP_ROWS = 12;
 /** A stop's sheet leads with this many departures, the same three rows Sada shows, then "Vozni red". */
 export const STOP_DEPARTURES_FIRST = 3;
 /** What a stop's sheet lists in all: the three, then the timetable to the twelfth (shared/city/arrivals.ts rows). */
 export const STOP_ARRIVAL_ROWS = 12;
-/** ZET notices the lightweight face lists (the Karta sheet no longer carries them, WP4). */
-export const NOTICE_ROWS = 3;
-
-/** The folds a person opens in place: a route's stops, and the lightweight face's closures. */
+/** The folds a person opens in place: a route's stops. */
 export type Fold = 'routes' | 'closures' | 'stops';
 
 /** s in dense rows and the peek, m on boards, l on a detail head. */
@@ -191,40 +182,6 @@ export function stopRowInner(i18n: I18n, stop: StopGroup, routes: readonly Route
   return cells(badgeList(routes), esc(vetExternal('name', stop.name, 'row') ?? ''), esc(trPlural(i18n, 'platforms', stop.ids.length)));
 }
 
-export interface ResultIds {
-  list: string;
-  option: (kind: 'route' | 'stop', id: string) => string;
-}
-
-export interface ResultsData {
-  query: string;
-  results: SearchResults;
-  counts: ReadonlyMap<string, number>;
-  delays: ReadonlyMap<string, number>;
-  routeOf: (id: string) => RouteEntry;
-  /** The option id aria-activedescendant points at. */
-  active: string | null;
-  ids: ResultIds;
-}
-
-/** The combobox's listbox: routes first, then stops, one flat list with two headings. */
-export function resultsMarkup(i18n: I18n, d: ResultsData): string {
-  const total = d.results.routes.length + d.results.stops.length;
-  if (total === 0) return `<p class="t-empty" data-testid="transport-no-results">${esc(tr(i18n, 'noResults', { query: d.query }))}</p>`;
-  const option = (kind: 'route' | 'stop', id: string, inner: string): string => {
-    const oid = d.ids.option(kind, id);
-    return `<li role="option" id="${attr(oid)}" class="row t-option" data-action="select-${kind}" data-id="${attr(id)}" aria-selected="${d.active === oid ? 'true' : 'false'}">${inner}</li>`;
-  };
-  const heading = (label: string): string => `<li role="presentation" class="t-group-label">${esc(label)}</li>`;
-  const routes = d.results.routes.map((r) => option('route', r.id, routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id))));
-  const stops = d.results.stops.map((s) => option('stop', s.id, stopRowInner(i18n, s, s.routes.map(d.routeOf))));
-  return (
-    `<p class="visually-hidden" role="status">${esc(trPlural(i18n, 'resultsCount', total))}</p>` +
-    `<ul role="listbox" id="${attr(d.ids.list)}" class="t-list t-results" aria-label="${attr(tr(i18n, 'searchResults'))}" data-testid="transport-results">` +
-    `${routes.length > 0 ? heading(tr(i18n, 'routes')) + routes.join('') : ''}${stops.length > 0 ? heading(tr(i18n, 'stops')) + stops.join('') : ''}</ul>`
-  );
-}
-
 /** The map's own state line, or null while it draws. */
 export function statusLine(i18n: I18n, status: MapStatus): string | null {
   const key: TransportKey | null = status === 'loading' ? 'mapLoading' : status === 'tiles-failed' ? 'tilesFailed' : status === 'unavailable' ? 'mapUnavailable' : null;
@@ -276,16 +233,8 @@ function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
   return `<button type="button" class="btn-quiet icon-btn t-save" data-action="${save.on ? 'unsave' : 'save'}" data-kind="${attr(save.kind)}" data-id="${attr(save.id)}" aria-pressed="${save.on ? 'true' : 'false'}" aria-label="${attr(label)}">${iconMarkup('star')}</button>`;
 }
 
-/** The ghost cast button every detail carries (D5): disabled with its reason (presentation.ts's own
- *  castReasonText, the same sentence the FAB reads) when "Na zaslon" cannot fire. */
-function castButton(i18n: I18n, cast: CastState | undefined): string {
-  const can = cast?.can ?? false;
-  const disabled = can ? '' : ` aria-disabled="true" title="${attr(castReasonText(i18n, cast))}"`;
-  return `<button type="button" class="btn-ghost t-cast" data-action="cast" data-testid="detail-cast"${disabled}>${iconMarkup('cast')}<span>${esc(i18n.t('cast.fab'))}</span></button>`;
-}
-
-/** Every detail opens the same way: the way back, the save toggle (route and stop), the ghost cast button,
- *  then the title. A public screen has no finger to press any of them. */
+/** Every detail opens the same way: the way back, the save toggle (route and stop), then the title.
+ *  A public screen has no finger to press any of them. */
 function detailHead(i18n: I18n, title: string, kiosk: boolean, extras?: DetailHeadExtras): string {
   if (kiosk) return title;
   const buttons = [back(i18n)];
@@ -318,6 +267,7 @@ export interface VehicleDetailData {
    *  null where there is no device store to write the choice to, and the
    *  switch is then not offered at all. */
   lineFocus: boolean | null;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
 }
 
@@ -343,7 +293,7 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
       });
   const route = d.route ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk, { cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk) +
     `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(direction, locale))}</p>` +
     (nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(nextStop, locale))}</p>` : '') +
     `<p class="t-meta">${esc(line)}</p>` +
@@ -372,6 +322,7 @@ export interface RouteDetailData {
   lineFocus: boolean | null;
   /** Whether this route is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
 }
 
@@ -410,7 +361,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       ? `<ol class="t-list t-stops" id="${listId('stops')}" data-testid="route-stops">${stopRows}</ol>${stopsFold}`
       : `<p class="t-empty">${esc(i18n.t(d.hasNetwork ? 'status.empty' : 'status.loading'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(vetExternal('name', route.long, 'row') || tr(i18n, 'routeTitle', { short: vetExternal('headsign', route.short, 'row') ?? '' }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(vetExternal('name', route.long, 'row') || tr(i18n, 'routeTitle', { short: vetExternal('headsign', route.short, 'row') ?? '' }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false } }) +
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
@@ -428,6 +379,7 @@ export interface StopDetailData {
   kiosk: boolean;
   /** Whether this stop is in the reader's saved-store list; the head's save toggle reflects it. */
   saved?: boolean;
+  /** Unread since the ghost cast button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
   cast?: CastState;
   /** What comes next here, already merged across the stop's platforms and
    *  sorted (shared/city/arrivals.ts). Never computed in this file: the view
@@ -541,7 +493,7 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   // lands on; display: contents (map.css), so the sheet's own layout is untouched.
   return (
     `<div class="t-stop-board" data-testid="stop-board">` +
-    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(vetExternal('name', d.stop.name, 'row') ?? '')}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(vetExternal('name', d.stop.name, 'row') ?? '')}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false } }) +
     arrivalsSection(i18n, d) +
     '</div>' +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
@@ -555,12 +507,6 @@ function closureWords(i18n: I18n, item: FeedItem): string {
   const type = i18n.t(`panels.closureType.${dataText(item, 'subtype') || 'ROAD_CLOSED'}`);
   const direction = i18n.t(`panels.direction.${dataText(item, 'direction') || 'BOTH_DIRECTIONS'}`);
   return `${type} · ${direction}`;
-}
-
-/** A closure row's second line: the words, then "do 13. 9. 06:00" when the item names an end. */
-function closureLine(i18n: I18n, item: FeedItem): string {
-  const until = item.until ? i18n.t('panels.until', { time: zagrebDateTime(item.until) }) : '';
-  return [closureWords(i18n, item), until].filter(Boolean).join(' · ');
 }
 
 /** The closure's window as one sentence: "od 8. 9. 08:00 do 13. 9. 06:00", or the one end the item names, or nothing. */
@@ -587,51 +533,16 @@ function closureDescription(item: FeedItem): string {
 }
 
 /** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the
- *  description as prose when the module has one (closureDescription). */
-export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, cast?: CastState): string {
+ *  description as prose when the module has one (closureDescription). `_cast` is unread since the ghost cast
+ *  button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
+export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, _cast?: CastState): string {
   const window = closureWindow(i18n, item);
   const description = closureDescription(item);
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(vetExternal('name', item.title, 'row') ?? '')}</span></h3>`, kiosk, { cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(vetExternal('name', item.title, 'row') ?? '')}</span></h3>`, kiosk) +
     `<p class="t-lead">${esc(closureWords(i18n, item))}</p>` +
     (window ? `<p class="t-meta" data-testid="closure-window">${esc(window)}</p>` : '') +
     (description ? `<p class="t-prose">${esc(description)}</p>` : '') +
     (kiosk ? '' : actions([showOnMap(i18n)]))
   );
-}
-
-/** The closures beside the map (four, then "sve zatvaranja (n)") and ZET's own notices, as two blocks of the overview.
- *  `interactive` rows are buttons that open a closure (the workspace hears select-closure); otherwise the rows are
- *  static signage and the list shows every row (a public screen), unless `staticFold` names a control of the host's own
- *  that opens the rest (the lightweight face's page filter), in which case four show and the control follows. */
-export function closuresMarkup(
-  i18n: I18n,
-  closures: readonly FeedItem[],
-  notices: readonly FeedItem[],
-  sourceStatus: string | null,
-  selectedId: string | null,
-  interactive = true,
-  open = false,
-  staticFold?: string,
-): string {
-  const status = sourceStatus ? `<p class="t-status">${esc(sourceStatus)}</p>` : '';
-  const foldable = interactive || staticFold !== undefined;
-  const rows = closures
-    .map((c, i) => {
-      const hidden = foldable && i >= CLOSURE_ROWS && !open;
-      return interactive
-        ? rowButton({ kind: 'closure', id: c.id, action: 'select-closure', hidden, current: c.id === selectedId, inner: cells(closureMark(), esc(c.title), esc(closureLine(i18n, c))) })
-        : signRow({ lead: closureMark(), title: c.title, sub: closureLine(i18n, c), key: c.id, attrs: hidden ? { hidden: '' } : {} });
-    })
-    .join('');
-  const fold = closures.length > CLOSURE_ROWS ? (interactive ? foldButton(i18n, 'closures', open, tr(i18n, 'allClosures', { count: closures.length })) : (staticFold ?? '')) : '';
-  const list = closures.length > 0 ? `<ul class="t-list" id="${listId('closures')}" data-testid="transport-closures">${rows}</ul>${fold}` : `<p class="t-empty" data-testid="transport-no-closures">${esc(tr(i18n, 'noClosures'))}</p>`;
-  const noticeRows = notices
-    .map((n) => {
-      const link = n.link ? `<a class="t-link" href="${attr(n.link)}" rel="noopener noreferrer" target="_blank">${esc(tr(i18n, 'openNotice'))}</a>` : '';
-      return signRow({ lead: '', title: n.title, sub: n.at ? zagrebDateTime(n.at) : '', trail: link, key: n.id });
-    })
-    .join('');
-  const noticeList = notices.length > 0 ? `<section class="t-block">${sectionHead(tr(i18n, 'notices'))}<ul class="t-list" data-testid="transport-notices">${noticeRows}</ul></section>` : '';
-  return `<section class="t-block">${sectionHead(i18n.t('panels.closures'))}${status}${list}</section>${noticeList}`;
 }

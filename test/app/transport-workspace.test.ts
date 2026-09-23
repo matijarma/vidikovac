@@ -165,7 +165,7 @@ describe('the transport workspace', () => {
     const { raw, storage } = memoryStorage();
     const mapMode = createMapModeStore({ storage });
     expect(mapMode.snapshot()).toBe('map');
-    const { maps, last, made } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context, navigate } = ctx({ maps });
     context.mapMode = mapMode;
     const main = document.createElement('main');
@@ -241,11 +241,13 @@ describe('the transport workspace', () => {
     paint();
     expect(text(toggle)).toBe('Map');
     expect(toggle.getAttribute('aria-label')).toBe('City map');
-    const count = made.length;
     context.lightweight = true;
     paint();
-    expect(document.querySelector('[data-testid=map-mode-toggle]')).toBeNull();
-    expect(made).toHaveLength(count);
+    // R-L2 (WP5 A3): the lightweight path is this same workspace; the toggle is not offered and the renderer is
+    // never the schema. The page hands a lightweight workspace map slots without a factory (dashboard.ts), so no
+    // canvas is made there at all (test/app/layers.test.ts); these slots keep their factory, so a map is made here.
+    expect(document.querySelector<HTMLElement>('[data-testid=map-mode-toggle]')?.hidden ?? true).toBe(true);
+    expect(last().options.renderer).toBe('map');
     stop();
     maps.destroy();
     // Private mode and stale values do not change the default or break an in-tab choice.
