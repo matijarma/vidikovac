@@ -31,7 +31,7 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_LINE_HEIGHT_EM, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -130,7 +130,7 @@ const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM
 /** Pill geometry in CSS px, and the cluster label's cap: hoisted to
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
-export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX };
+export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, PLATE_IMAGE, PLATE_RADIUS_PX };
 /** The capsule's room around its number (icon-text-fit-padding): hoisted to
  *  motion/pills.ts beside the glyph advances, so the render census and the
  *  nose measure the capsule this layer draws; re-exported under its name. */
@@ -294,6 +294,12 @@ export interface ProzorOptions {
   majorStreetNames?: boolean;
 }
 
+/** The image rows across the middle of the pill and the plate that stretch
+ *  to a wrapped label's second row: two, one each side of the centre, so the
+ *  stretch is symmetric and every stretched row is within a hundredth of an
+ *  image pixel of the straight side it becomes. */
+export const PILL_STRETCH_ROWS = 2;
+
 /** A stretchable SDF capsule (or, with the plate's corner, a plate) drawn at
  *  the surface's symbol scale: a two-character pill whose middle, between
  *  two fixed ends as long as the capsule's round end (half its height, so a
@@ -302,9 +308,14 @@ export interface ProzorOptions {
  *  icon-text-fit lays that edge on the number plus PILL_FIT_PAD_*. The ends
  *  are fixed pixels, which MapLibre places without multiplying by icon-size
  *  -- hence the scale in the bitmap, where a 1x image under the wall's 2x
- *  number would draw oval ends. The fit height (a 14.4 px line plus 2 x 1.8,
- *  times the scale) is the image's own, so the default vertical stretch is
- *  exactly 1 and nothing else distorts. */
+ *  number would draw oval ends. The fit height of one row (a 14.4 px line
+ *  plus 2 x 1.8, times the scale) is the image's own, so a one-row pill is
+ *  drawn exactly as the bitmap is. A wrapped cluster label (decision 23,
+ *  pills.ts PILL_MAX_LINES) is a line taller: vertically only the two image
+ *  rows across the shape's middle stretch (stretchY), where a capsule's
+ *  round end is at its widest and runs straight up and down, so the second
+ *  row grows the flat sides and the corners keep their radius -- the whole
+ *  image stretched instead would have drawn the ends as ovals. */
 function stretchablePill(id: string, cornerPx: number, scale: number): OverlayImage {
   const w = pillWidthPx(2) * scale;
   const h = PILL_HEIGHT_PX * scale;
@@ -317,18 +328,24 @@ function stretchablePill(id: string, cornerPx: number, scale: number): OverlayIm
   const right = image.width / 2 + halfW;
   const top = image.height / 2 - halfH;
   const bottom = image.height / 2 + halfH;
+  // Whole image rows, so MapLibre's integer texture cuts fall on them.
+  const middle = Math.round(image.height / 2);
   return {
     id,
     image,
-    options: { stretchX: [[left + halfH, right - halfH]], content: [left, top, right, bottom], textFitWidth: 'stretchOrShrink', textFitHeight: 'stretchOrShrink' },
+    options: {
+      stretchX: [[left + halfH, right - halfH]], stretchY: [[middle - PILL_STRETCH_ROWS / 2, middle + PILL_STRETCH_ROWS / 2]],
+      content: [left, top, right, bottom], textFitWidth: 'stretchOrShrink', textFitHeight: 'stretchOrShrink',
+    },
   };
 }
 
 /** Every SDF image the overlays reference, generated once per map (and the
  *  pill and plate again whenever its symbol scale changes). One pill and one
  *  plate for every label: a merged mark writes every line,
- *  "6·11·12·14·221·K", and the capsule stretches to write it in (up to
- *  pills.ts's cap), where it used to take one image per label length. */
+ *  "6·11·12·14·221·K", and the capsule stretches to write it in -- wider
+ *  for a longer row, taller for a second one (up to pills.ts's cap), where
+ *  it used to take one image per label length. */
 export function overlayImages(scale = 1): OverlayImage[] {
   return [
     stretchablePill(PILL_IMAGE, PILL_HEIGHT_PX / 2, scale),
@@ -565,12 +582,17 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'text-field': PILL_TEXT,
       'text-font': [MAP_FONTS.medium],
       'text-size': 12 * s,
-      // A pill's number is one line, always: in ems, and a hundred of them is
-      // wider than any label can be (forty characters at most). MapLibre may
-      // break a line after the "·" that joins a cluster's lines, and its
-      // default of 10 em hung the tail of a long cluster under the capsule
-      // instead of inside it.
+      // The rows are the label's own: MapLibre never breaks one. In ems, a
+      // hundred of them is wider than any row can be (forty characters at
+      // most); MapLibre may break a line after the "·" that joins a
+      // cluster's lines, and its default of 10 em hung the tail of a long
+      // cluster under the capsule instead of inside it. A wrapped cluster
+      // label (pills.ts clusterLabel, decision 23) carries its own forced
+      // break between two whole lines, and the capsule fits both rows.
       'text-max-width': 100,
+      // The default, stated: pills.ts measures each further row as one line
+      // of it (PILL_LINE_HEIGHT_EM), for the census and the nose.
+      'text-line-height': PILL_LINE_HEIGHT_EM,
       'text-allow-overlap': true,
       'text-ignore-placement': !blocks,
       'text-rotation-alignment': 'viewport',

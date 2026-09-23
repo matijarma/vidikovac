@@ -17,6 +17,7 @@ import {
   PILL_FIT_PAD_X,
   PILL_FIT_PAD_Y,
   PILL_IMAGE,
+  PILL_STRETCH_ROWS,
   PILL_ZOOM,
   PLACE_FILTERS,
   PLATE_IMAGE,
@@ -37,7 +38,7 @@ import {
   vehicleKinds,
   type ProzorOptions,
 } from '../../app/src/map/overlays';
-import { PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, clusterLabel, noseCentrePx, pillChars, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_HEIGHT_PX, PILL_LINE_HEIGHT_EM, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, clusterLabel, noseCentrePx, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -72,9 +73,11 @@ describe('the overlay layer list', () => {
       expect(pills.layout![key], key).toBe(true);
     }
     expect(pills.layout!['text-optional']).toBe(false); // number and pill are one mark
-    // A cluster's label is one line or it is nothing: MapLibre may break after
-    // the "·" joining its lines, and its default 10 em hung the tail under the capsule.
+    // MapLibre never breaks a row: it may break after the "·" joining a
+    // cluster's lines, and its default 10 em hung the tail under the capsule.
+    // A wrapped hub label carries its own break (decision 23), a line apart.
     expect(pills.layout!['text-max-width']).toBe(100);
+    expect(pills.layout!['text-line-height']).toBe(PILL_LINE_HEIGHT_EM);
     // What reads as "several here": the ink ring around a merged pill.
     expect(pills.paint!['icon-halo-color']).toEqual(['case', ['get', 'cluster'], OVERLAY_LIGHT.selection, OVERLAY_LIGHT.halo]);
     expect(pills.paint!['icon-halo-width']).toEqual(['case', ['get', 'cluster'], 2, 1]);
@@ -111,8 +114,9 @@ describe('the overlay layer list', () => {
     // [0, 0] to [M, 0], linearly, the output at d is exactly [d, 0].
     expect(offset).toEqual(['interpolate', ['linear'], ['number', ['get', 'nose'], NOSE_FALLBACK_PX], 0, ['literal', [0, 0]], NOSE_OFFSET_MAX_PX, ['literal', [NOSE_OFFSET_MAX_PX, 0]]]);
     expect(JSON.stringify(offset)).not.toContain('"array"');
-    // Past every capsule there is: forty characters of the widest digit.
+    // Past every capsule there is: forty characters of the widest digit, and two rows of them.
     expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx('8'.repeat(PILL_MAX_CHARS_CLUSTER), 'bus', 90));
+    expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx(`${'8'.repeat(PILL_MAX_CHARS_CLUSTER)}\n${'8'.repeat(PILL_MAX_CHARS_CLUSTER)}`, 'bus', 45));
     // A mark without the property (none is pushed so) gets a two-digit pill's end.
     expect(NOSE_FALLBACK_PX).toBe(noseCentrePx('00', 'bus', 90));
     // The selected vehicle's nose and an opposed merge's arrows read the same distance.
@@ -187,16 +191,18 @@ describe('the overlay layer list', () => {
   it('generates one stretchable SDF pill and one plate, drawn at the surface\u2019s scale, then the nose, the ring and the place marks, and the pill layer picks a plate for a tram and a pill for a bus', () => {
     // The cap, and the reason it is what it is: a merged pill lists every
     // line [O-35], and all fifteen tram lines together are 35 characters, so
-    // every tram cluster is written whole. Forty is the widest capsule.
+    // every tram cluster is written on one row. Forty is the widest row, and
+    // a longer label wraps onto a second (decision 23).
     expect(PILL_MAX_CHARS_CLUSTER).toBe(40);
+    expect(PILL_MAX_LINES).toBe(2);
     const bus = (n: number): string[] => Array.from({ length: n }, (_, i) => String(109 + i));
-    // A bus hub of sixteen three-digit routes would be 63 characters: it keeps
-    // the ten whole lines that fit in the widest capsule, and never a count.
+    // A bus hub of sixteen three-digit routes is 63 characters: every line,
+    // eight a row, and never a count.
     const hub = clusterLabel(bus(16));
-    expect(hub).toBe(bus(10).join('\u00b7'));
-    expect(hub).not.toContain('+');
-    expect(hub.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
-    expect(pillChars(hub)).toBe(hub.length);
+    expect(hub).toBe(`${bus(8).join('\u00b7')}\n${bus(16).slice(8).join('\u00b7')}`);
+    expect(hub).not.toMatch(/\+\d/);
+    expect(pillRows(hub).every((row) => row.length <= PILL_MAX_CHARS_CLUSTER)).toBe(true);
+    expect(pillChars(hub)).toBe(31);
     // Five three-digit routes -- the everyday bus cluster -- are written whole.
     const five = clusterLabel(bus(5));
     expect(five).toBe('109\u00b7110\u00b7111\u00b7112\u00b7113');
@@ -236,6 +242,23 @@ describe('the overlay layer list', () => {
         for (let y = 0; y < image.height; y++) {
           for (let x = Math.ceil(x1); x < Math.floor(x2); x++) expect(alpha(x, y)).toBe(alpha(Math.ceil(x1), y));
         }
+        // Vertically, two whole image rows across the middle stretch for a
+        // wrapped label's second row (decision 23): the same row twice by
+        // the shape's symmetry, so the second row grows straight sides and
+        // the corners above and below keep their radius.
+        const middle = image.height / 2;
+        expect(Number.isInteger(middle), at).toBe(true);
+        expect(options!.stretchY, at).toEqual([[middle - PILL_STRETCH_ROWS / 2, middle + PILL_STRETCH_ROWS / 2]]);
+        for (let x = 0; x < image.width; x++) expect(alpha(x, middle - 1), `${at} x ${x}`).toBe(alpha(x, middle));
+        // Every corner lies in the fixed rows: the stretch begins below the
+        // whole arc of the round end, less the half pixel it shares with it.
+        const [[y1]] = options!.stretchY as [[number, number]];
+        expect((y1 - SDF_SPREAD_PX) / SDF_PIXEL_RATIO, at).toBeCloseTo((PILL_HEIGHT_PX / 2) * scale - 0.5, 9);
+        // One row's fit is the image's own content height, so a one-row pill
+        // stretches by exactly 1 on both axes and a two-row one by one line in
+        // the middle rows alone.
+        const [, top, , bottom] = options!.content as number[];
+        expect(((bottom! - top!) / SDF_PIXEL_RATIO), at).toBeCloseTo(pillHeightPx(1) * scale, 9);
       }
       // A plate is the pill's box with the corners barely rounded: the corner pixel a capsule leaves empty is filled.
       const corner = (img: { width: number; data: Uint8ClampedArray }) => img.data[((SDF_SPREAD_PX + 1) * img.width + SDF_SPREAD_PX + 1) * 4 + 3]!;

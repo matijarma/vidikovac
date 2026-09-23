@@ -2,8 +2,9 @@
 import '../../shared/kiosk/external-text';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSchemaMap, type SchemaFrame } from '../../app/src/motion/schema-map';
-import { LABEL_MIN_PX_PER_UNIT, PILL_EDGE_MARGIN_PX, SCHEMA_FOCUS_DIM_ALPHA } from '../../app/src/motion/schema-paint';
-import { PILL_INKS } from '../../app/src/motion/pills';
+import { clusterSchemaMarks, LABEL_MIN_PX_PER_UNIT, paintPills, PILL_EDGE_MARGIN_PX, SCHEMA_FOCUS_DIM_ALPHA, type SchemaContext } from '../../app/src/motion/schema-paint';
+import { clusterLabel, PILL_HEIGHT_PX, PILL_INKS, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
+import type { VehicleMark } from '../../app/src/motion/schematic';
 import { DENSITY } from '../../app/src/ui/canvas';
 import type { CityMapHandle, CityMapOptions, MapPoint } from '../../app/src/map/city-map';
 import { toLonLat } from '../../shared/motion/geo';
@@ -467,4 +468,58 @@ it('keeps the wall’s own place among the whole-network schema’s names at the
   expect(own.names).not.toContain('T0');
   expect(own.names).toContain('C1200'); // only the name it meets yields
   expect(own.px.every((px) => px >= 28)).toBe(true);
+});
+
+// Decision 23 on the canvas: a hub label past one row wraps onto a second,
+// the pill a line taller with the capsule's own corner, both rows painted a
+// line apart and vetted row by row -- the city map's stretchable pill, drawn
+// by hand.
+function paintRecorder(): { ctx: SchemaContext; calls: { op: string; args: unknown[] }[] } {
+  const calls: { op: string; args: unknown[] }[] = [];
+  const props: Record<string, unknown> = {};
+  const ctx = new Proxy({}, {
+    get: (_t, k: string) => k in props ? props[k]
+      : k === 'measureText' ? (text: string) => ({ width: text.length * 7 })
+      : (...args: unknown[]) => { calls.push({ op: k, args }); },
+    set: (_t, k: string, value: unknown) => { props[k] = value; calls.push({ op: `set ${k}`, args: [value] }); return true; },
+  }) as unknown as SchemaContext;
+  return { ctx, calls };
+}
+
+it('wraps a hub past one row onto a second on the canvas too: sixteen bus lines, eight a row, the pill a line taller with the capsule\u2019s own corner (decision 23)', () => {
+  const lines = Array.from({ length: 16 }, (_, i) => String(109 + i));
+  const viewport = { x: 0, y: 0, scale: 1, width: 800, height: 400, density: 2, symbolScale: 2 };
+  const size = viewport.density * viewport.symbolScale;
+  const marks: VehicleMark[] = lines.map((label, i) => ({
+    id: `b${i}`, kind: 'bus', x: (300 + i) * size, y: 200 * size, w: pillWidthPx(pillChars(label)) * size, h: PILL_HEIGHT_PX * size,
+    angle: 0, alpha: 1, label, pill: 'single',
+  }));
+  const merged = clusterSchemaMarks(marks, viewport);
+  expect(merged).toHaveLength(1);
+  const hub = merged[0]!;
+  expect(hub.pill).toBe('cluster');
+  expect(hub.label).toBe(clusterLabel(lines));
+  const rows = pillRows(hub.label!);
+  expect(rows).toHaveLength(2);
+  for (const row of rows) expect(row.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+  // Every line, whole, and never a count.
+  expect(hub.label!.split(/[\u00b7\n]/)).toEqual(lines);
+  expect(hub.label).not.toMatch(/\+\d/);
+  expect(hub.w).toBe(pillWidthPx(31) * size);
+  expect(hub.h).toBeCloseTo(pillHeightPx(2) * size, 9);
+
+  const { ctx, calls } = paintRecorder();
+  paintPills(ctx, { w: 1600, h: 800, density: 2 }, merged, { fill: PILL_INKS.light.bus, text: PILL_INKS.light.busText, halo: '#fbfcfe', ink: '#16226b' }, hub.id);
+  const texts = calls.filter((c) => c.op === 'fillText');
+  expect(texts.map((c) => c.args[0])).toEqual(rows);
+  // A line height apart about the mark's centre, as MapLibre sets them.
+  const ys = texts.map((c) => c.args[2] as number);
+  expect(ys[0]).toBeCloseTo(hub.y - (PILL_LINE_HEIGHT_PX * size) / 2, 9);
+  expect(ys[1]).toBeCloseTo(hub.y + (PILL_LINE_HEIGHT_PX * size) / 2, 9);
+  // The capsule's own corner on straight sides, and the selection ring
+  // concentric with it: four arcs of half a one-row pill, then four of that
+  // plus the ring's gap -- not two half-circles of the taller pill.
+  const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
+  expect(radii).toEqual([...Array<number>(4).fill((PILL_HEIGHT_PX / 2) * size), ...Array<number>(4).fill((PILL_HEIGHT_PX / 2 + 3) * size)]);
+  expect(calls.filter((c) => c.op === 'fill')).toHaveLength(1);
 });

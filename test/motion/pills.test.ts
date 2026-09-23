@@ -10,12 +10,14 @@ import {
   pillWidthPx,
   PILL_BASE_WIDTHS_PX,
   PILL_MAX_CHARS_CLUSTER,
+  PILL_MAX_LINES,
+  PILL_ROW_BREAK,
   type Cluster,
   type PillPoint,
   type Single,
 } from '../../app/src/motion/pills';
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
-import { capsuleHalfPx, markRadiusPx, noseCentrePx, NOSE_TUCK_PX, outlineDistancePx, PILL_FIT_PAD_X, PILL_TEXT_PX, pillTextWidthPx, PLATE_RADIUS_PX } from '../../app/src/motion/pills';
+import { capsuleHalfPx, markRadiusPx, noseCentrePx, NOSE_TUCK_PX, outlineDistancePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_LINE_HEIGHT_EM, PILL_LINE_HEIGHT_PX, PILL_TEXT_PX, pillHeightPx, pillRows, pillTextWidthPx, PLATE_RADIUS_PX } from '../../app/src/motion/pills';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -65,6 +67,25 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
     const past = '1234567890'.repeat(4) + '12345'; // 45 characters, past the cap
     expect(pillChars(past)).toBe(PILL_MAX_CHARS_CLUSTER);
     expect(pillWidthPx(pillChars(past))).toBe(290);
+    // A wrapped hub label is as wide as its longer row.
+    expect(pillChars('109\u00b7110\u00b7111\n112\u00b7113')).toBe(11);
+  });
+
+  it('is a line of the number taller for each further row, up to PILL_MAX_LINES (decision 23)', () => {
+    expect(PILL_MAX_LINES).toBe(2);
+    expect(PILL_ROW_BREAK).toBe('\n');
+    // MapLibre's default text-line-height at the pill's 12 px, the line one row already sits in.
+    expect(PILL_LINE_HEIGHT_EM).toBe(1.2);
+    expect(PILL_LINE_HEIGHT_PX).toBeCloseTo(PILL_TEXT_PX * PILL_LINE_HEIGHT_EM, 12);
+    expect(PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y).toBeCloseTo(PILL_HEIGHT_PX, 12);
+    expect(pillHeightPx(1)).toBe(PILL_HEIGHT_PX);
+    expect(pillHeightPx(2)).toBeCloseTo(32.4, 12);
+    expect(pillHeightPx(2)).toBeCloseTo(2 * PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y, 12);
+    // Never more rows than the cap, never fewer than one.
+    expect(pillHeightPx(3)).toBe(pillHeightPx(2));
+    expect(pillHeightPx(0)).toBe(PILL_HEIGHT_PX);
+    expect(pillRows('6\u00b711')).toEqual(['6\u00b711']);
+    expect(pillRows('109\u00b7110\n111')).toEqual(['109\u00b7110', '111']);
   });
 });
 
@@ -78,12 +99,22 @@ describe('the capsule the city map draws: its number\u2019s glyphs plus the fit 
     expect(pillTextWidthPx('6\u00b711\u00b712')).toBe(5 * 6.5 + 2 * 3);
     // A route nobody knows writes one no-break space.
     expect(pillTextWidthPx('')).toBe(pillTextWidthPx('\u00a0'));
+    // Two rows are as wide as the wider one: MapLibre centres the other under it.
+    expect(pillTextWidthPx('109\u00b7110\u00b7111\n112\u00b7113')).toBe(pillTextWidthPx('109\u00b7110\u00b7111'));
   });
 
   it('lands one to four digits on the widths WP2-A measured through MapLibre\u2019s own text fit: 18, 24, 30.5 and 37, always 18 tall', () => {
     expect(['6', '14', '268', '1234'].map((label) => 2 * capsuleHalfPx(label).halfWidth)).toEqual([18, 24, 30.5, 37]);
     expect(capsuleHalfPx('').halfWidth).toBe(9);
     expect(capsuleHalfPx('6\u00b711\u00b712')).toEqual({ halfWidth: (5 * 6.5 + 2 * 3) / 2 + PILL_FIT_PAD_X, halfHeight: 9 });
+  });
+
+  it('draws a wrapped hub label a line taller and as wide as its wider row', () => {
+    const hub = clusterLabel(Array.from({ length: 16 }, (_, i) => String(109 + i)));
+    const { halfWidth, halfHeight } = capsuleHalfPx(hub);
+    // Eight three-digit lines a row: 24 digits and 7 separators.
+    expect(halfWidth).toBe((24 * 6.5 + 7 * 3) / 2 + PILL_FIT_PAD_X);
+    expect(halfHeight).toBeCloseTo(pillHeightPx(2) / 2, 12);
   });
 });
 
@@ -100,9 +131,12 @@ describe('the nose meets its capsule on every heading', () => {
   const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
   const digits = Array.from({ length: 40 }, (_, i) => '1234567890'.repeat(4).slice(0, i + 1));
   const clusters = Array.from({ length: 20 }, (_, i) => ['6', '11', '12', '14', '17', '101', '219', '268'].slice(0, (i % 8) + 1).join('\u00b7').slice(0, 40));
-  const LABELS = ['', ...digits, ...clusters, '6\u00b77\u00b78', 'K'];
+  // Wrapped hub labels (decision 23): two rows, from just past one row's budget to the full eighty characters.
+  const wrapped = [11, 14, 16, 20].map((n) => clusterLabel(Array.from({ length: n }, (_, i) => String(109 + i))));
+  const LABELS = ['', ...digits, ...clusters, ...wrapped, '6\u00b77\u00b78', 'K'];
 
-  it('seats the triangle\u2019s base on the outline, within 2 px on the screen and never floating off, for the eight headings, labels of 1 to 40 characters, plate and capsule, scale 1 and 2', () => {
+  it('seats the triangle\u2019s base on the outline, within 2 px on the screen and never floating off, for the eight headings, labels of 1 to 40 characters and of two rows, plate and capsule, scale 1 and 2', () => {
+    expect(wrapped.every((label) => pillRows(label).length === 2)).toBe(true);
     let worst = 0;
     for (const label of LABELS) {
       const { halfWidth, halfHeight } = capsuleHalfPx(label);
@@ -171,19 +205,69 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
     expect(pillChars(label)).toBe(label.length);
   });
 
-  it('past the 40-character cap keeps the whole lines that fit and drops the rest, never a count', () => {
+  it('wraps a hub past one row\u2019s forty characters onto a second row: a sixteen-line bus hub lists all sixteen, eight a row, never a count (decision 23)', () => {
     const hub = Array.from({ length: 16 }, (_, i) => String(109 + i));
     const label = clusterLabel(hub);
-    expect(label).toBe('109·110·111·112·113·114·115·116·117·118');
-    expect(label.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
-    expect(label).not.toMatch(/\+/);
-    // Every name in it is a whole line of the cluster, never a number cut short.
-    for (const line of label.split('·')) expect(hub).toContain(line);
+    expect(label).toBe('109·110·111·112·113·114·115·116\n117·118·119·120·121·122·123·124');
+    expect(label).not.toMatch(/\+\d/);
+    const rows = pillRows(label);
+    expect(rows).toHaveLength(PILL_MAX_LINES);
+    for (const row of rows) expect(row.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+    // Every line, whole and in order: the rows break between two lines, never inside one.
+    expect(label.split(/[·\n]/)).toEqual(hub);
+    // Forty characters or fewer stay one row, as every tram cluster does.
+    expect(clusterLabel(hub.slice(0, 10))).toBe(hub.slice(0, 10).join('·'));
+    expect(clusterLabel(hub.slice(0, 10))).toHaveLength(39);
   });
 
-  it('holds every candidate to the cap, the first one too: an oversized single line is cut to forty characters, never emptied', () => {
+  it('balances the two rows by their drawn width, the first the fuller on a tie', () => {
+    const bus = (n: number) => Array.from({ length: n }, (_, i) => String(109 + i));
+    // Eleven lines, 43 characters: six over five, not ten over one.
+    expect(clusterLabel(bus(11))).toBe('109·110·111·112·113·114\n115·116·117·118·119');
+    // Fifteen: eight over seven and seven over eight are as wide; the first row takes the extra line.
+    expect(clusterLabel(bus(15))).toBe('109·110·111·112·113·114·115·116\n117·118·119·120·121·122·123');
+    // Mixed lengths balance on what is drawn, not on the count of lines.
+    const mixed = clusterLabel(['6', '11', '12', '14', '17', '101', '219', '268', '109', '110', '111', '112']);
+    expect(mixed).toBe('6·11·12·14·17·101·109\n110·111·112·219·268');
+    const [a, b] = pillRows(mixed).map(pillTextWidthPx);
+    expect(Math.abs(a! - b!)).toBeLessThan(pillTextWidthPx('\u00b7109'));
+  });
+
+  it('writes twenty three-digit lines whole on two full rows, and only past the eighty characters keeps the whole lines the rows hold, never a count', () => {
+    const bus = (n: number) => Array.from({ length: n }, (_, i) => String(109 + i));
+    expect(clusterLabel(bus(20))).toBe(`${bus(10).join('·')}\n${bus(20).slice(10).join('·')}`);
+    // Črnomerec, the committed data's one hub past two rows: 23 bus lines, 91 characters.
+    const crnomerec = ['109', '117', '119', '120', '121', '122', '123', '124', '125', '126', '127', '128', '130', '131', '134', '135', '136', '137', '144', '146', '172', '176', '177'];
+    const label = clusterLabel(crnomerec);
+    expect(label).toBe('109·117·119·120·121·122·123·124·125·126\n127·128·130·131·134·135·136·137·144·146');
+    expect(label).not.toMatch(/\+\d/);
+    expect(label.split(/[·\n]/)).toEqual(crnomerec.slice(0, 20));
+  });
+
+  it('writes every bus hub of the committed stop table whole on two rows at most, Črnomerec alone past them', () => {
+    const stops = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/public/data/stops.json'), 'utf8')) as { name: string; routes: string[] }[];
+    const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/src/data/zet-routes.json'), 'utf8')) as Record<string, { shortName: string; type: number }>;
+    const hubs = new Map<string, Set<string>>();
+    for (const stop of stops) {
+      const lines = hubs.get(stop.name) ?? new Set<string>();
+      for (const id of stop.routes) if (routes[id]?.type === 3) lines.add(routes[id]!.shortName);
+      hubs.set(stop.name, lines);
+    }
+    const past: string[] = [];
+    let wrapped = 0;
+    for (const [name, lines] of hubs) {
+      const label = clusterLabel([...lines]);
+      if (pillRows(label).length > 1) wrapped++;
+      if (label.split(/[·\n]/).length < lines.size) past.push(name);
+    }
+    // A name joining this list is a hub decision 23 no longer writes whole: the owner's call, not a test's.
+    expect(past).toEqual(['Črnomerec']);
+    expect(wrapped).toBeGreaterThan(20);
+  });
+
+  it('holds every line to one row, the first one too: an oversized single line is cut to forty characters, never emptied, and the next goes on the second row', () => {
     const long = 'K'.repeat(41);
-    expect(clusterLabel([long, 'Z'])).toBe('K'.repeat(PILL_MAX_CHARS_CLUSTER));
+    expect(clusterLabel([long, 'Z'])).toBe(`${'K'.repeat(PILL_MAX_CHARS_CLUSTER)}\nZ`);
     expect(clusterLabel([long])).toHaveLength(PILL_MAX_CHARS_CLUSTER);
     expect(pillLabel(long)).toBe('K'.repeat(PILL_MAX_CHARS_CLUSTER));
     // A real line, and a vehicle whose route nobody knows, pass through untouched.
@@ -194,7 +278,7 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
     expect(groups).toHaveLength(1);
     const cluster = groups[0]!;
     if (!isCluster(cluster)) throw new Error('expected a cluster');
-    expect(cluster.label.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+    for (const row of pillRows(cluster.label)) expect(row.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
   });
 
   it('is the same on every surface: no presentation profile carries a cluster budget of its own', () => {
