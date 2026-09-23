@@ -224,12 +224,14 @@ export function fabMarkup(i18n: I18n, s: ShellState): string {
 export function sessionMarkup(i18n: I18n, s: ShellState): string {
   const time = remainingText(s.secondsLeft);
   // The screen's label, kept across a reload (entries/dashboard.ts, T5); without one the
-  // screen's stop names it, and "zaslon" is left only for a screen with neither.
+  // screen's stop names it, and "zaslon" is left only for a screen with neither. A peer's
+  // minutes came from the person beside them, not from a screen: their sentence says so
+  // (session.joinedPeer) instead of naming a device.
   const screen = s.label ?? s.stopName ?? i18n.t('session.labelScreen');
   const sentence = s.frozen
     ? i18n.t('session.expiredTitle')
     : s.phase === 'live' && s.expiresAt !== null
-      ? i18n.t('session.unlocked', { label: screen, time: zagrebTime(s.expiresAt) })
+      ? i18n.t(s.role === 'phone' ? 'session.joinedPeer' : 'session.unlocked', { label: screen, time: zagrebTime(s.expiresAt) })
       : s.reconnecting
         ? i18n.t('session.disconnected')
         : i18n.t('session.connecting');

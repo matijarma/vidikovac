@@ -1045,6 +1045,15 @@ describe('the sticky header and notices in flow', () => {
     for (const tab of tabs) expect(tab.getAttribute('tabindex')).toBe('-1');
     expect(root.querySelector('[data-testid=safety-shortcut]')?.getAttribute('tabindex')).toBeNull();
   });
+  it('a peer\'s pill says whose minutes these are, never a device\'s slug', () => {
+    const { root, session } = mount({ deps: { label: null } });
+    session.join('phone');
+    const sentence = text(root.querySelector('[data-testid=session-label] .ki-session-sentence'));
+    expect(sentence).toBe('Pet minuta od osobe pokraj tebe · do 14:42');
+    expect(sentence).not.toContain('phone');
+    expect(sentence).not.toContain('zaslon');
+    expect(root.querySelector('[data-testid=session-label]')?.getAttribute('aria-label')).toBe('Otključano do 14:42, otvori postavke');
+  });
   it('the session pill names the expiry and the action for readers, and turns warn at 60 s and alert at 20 s', () => {
     const time = clock();
     const { root, session, tick } = mount({ now: time.now });
