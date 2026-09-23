@@ -8,7 +8,7 @@ export interface RowTextResidual {
   reason: ExternalTextRejection;
   cause: string | { rule: string; left: string; right: string } | null;
 }
-const numeric = (kind: ExternalTextKind, value: string, cause: string, reason: 'phone' | 'account' = 'phone'): RowTextResidual =>
+const numeric = (kind: ExternalTextKind, value: string, cause: string, reason: 'phone' | 'account' | 'link' = 'phone'): RowTextResidual =>
   ({ kind, value, reason, cause });
 const pair = (kind: ExternalTextKind, value: string, left: string, right: string): RowTextResidual =>
   ({ kind, value, reason: 'instruction', cause: { rule: 'noun-token', left, right } });
@@ -17,10 +17,9 @@ const pair = (kind: ExternalTextKind, value: string, left: string, right: string
 export const STREET_ROW_RESIDUALS: readonly RowTextResidual[] = [
   numeric('register-text', 'knez Panonske Hrvatske, 810-823', '810-823'),
   numeric('register-text', 'knez Panonske Hrvatske, 810-823', '810-823'),
-  pair('register-text', 'planina u Dinarskom gorju između prijevoja Dubci kod Brela i Saranač kod Gornjih Igrana (Sveti Jure 1762 mnv)/Dalmacija', 'kod', '1762'),
-  pair('register-text', 'dvorac iz 1546 kod Zaprešića', 'kod', '1546'),
-  pair('register-text', 'planina u Dinarskom gorju (1182 mnv) kod Ogulina/Lika', 'kod', '1182'),
-  pair('register-text', 'srednjovjekovni bosanski utvrđeni grad knezova Babonića iz 1286, nad rijekom Unom kod Cazina/Bosna i Hercegovina', 'kod', '1286'),
+  numeric('register-text', 'ulica nazvana po spremištu prnja Jakova Weissa na k.br. 21', 'k.br', 'link'),
+  numeric('register-text', 'novoplanirana cesta broj 44 nazvana 1896; Novom cestom', 'broj 44'),
+  numeric('register-text', 'gorski vrh nazvan po obližnjem selu Šestine/ljetnikovac veletrgovca A.Weissa', 'a.weissa', 'link'),
   numeric('register-text', 'knez Primorske Hrvatske, 878-879', '878-879'),
   numeric('register-text', 'biskup hrvatskoga kraljevstva, 900-929', '900-929'),
   numeric('register-text', 'knez Primorske Hrvatske, 810-821', '810-821'),
@@ -34,6 +33,37 @@ export const STREET_ROW_RESIDUALS: readonly RowTextResidual[] = [
 ];
 
 export const HERITAGE_ROW_RESIDUALS: readonly RowTextResidual[] = [
+  numeric('name', 'Stambeno - poslovna zgrada, Tratinska 77-79, Nova cesta 103', '77-79'),
+  numeric('address', 'Tratinska 77-79, Nova cesta 103', '77-79'),
+  numeric('name', 'Stambeno - poslovna zgrada, Tratinska 71 - 73', '71 - 73'),
+  numeric('address', 'Tratinska 71 - 73', '71 - 73'),
+  numeric('address', 'Zorkovačka 02 - 04', '02 - 04'),
+  numeric('name', 'Dvorac Kušević-Plavšić, Gradska ulica 17-19', '17-19'),
+  numeric('address', 'Gradska ulica 17-19', '17-19'),
+  numeric('name', 'Kuće Eisner, Petrinjska 50-52', '50-52'),
+  numeric('address', 'Petrinjska 50-52', '50-52'),
+  numeric('address', 'Prilaz Pavla Pavlovića 01-15 i 18', '01-15'),
+  numeric('address', 'Laginjina 07-09', '07-09'),
+  numeric('name', 'Zgrada, Vukovarska 56-60', '56-60'),
+  numeric('address', 'Ulica grada Vukovara 56-60', '56-60'),
+  numeric('address', 'Veprinečka 01-15 i Mošćenička 02-16', '01-15'),
+  numeric('name', 'Gradska klaonica i stočna tržnica, Heinzelova 66-68', '66-68'),
+  numeric('address', 'Heinzelova 66-68', '66-68'),
+  numeric('name', 'Stambeni blok, Grada Vukovara 43-43a', '43-43'),
+  numeric('address', 'Grada Vukovara 43-43a', '43-43'),
+  numeric('name', 'Kompleks samostana klarisa s kaptolskom kulom "Popov toranj", Opatička 20-22', '20-22'),
+  numeric('address', 'Opatička 20-22', '20-22'),
+  numeric('name', 'Kompleks Prve hrvatske štedionice - Oktogon, Ilica 5 - Margaretska 1-3 - Bogovićeva 6, Ilica 005 - Margaretska 01-03 - Bogovićeva 06', '01-03'),
+  numeric('address', 'Ilica 005 - Margaretska 01-03 - Bogovićeva 06', '01-03'),
+  numeric('address', 'Frankopanska 15-17', '15-17'),
+  numeric('address', 'Jurišićeva 01-01a', '01-01'),
+  numeric('name', 'Kuća Oršić-Divković, Masarykova 21-23', '21-23'),
+  numeric('address', 'Masarykova 21-23', '21-23'),
+  numeric('address', 'Palmotićeva 031-35', '031-35'),
+  numeric('address', 'Trg maršala Tita 09-11', '09-11'),
+  numeric('address', 'Katarinin trg 02-03, Ćirilometodska 02, Jezuitski trg 01', '02-03'),
+  numeric('name', 'Zgrada Hrvatsko-slavonske zemaljske centralne štedionice,Ilica 25-27/Gundulićeva 2', '25-27'),
+  numeric('address', 'Ilica 25-27/Gundulićeva 2', '25-27'),
   numeric('name', 'Niz najamnih stambenih zgrada, Gajeva 47, 49, 51, 51/1, 53, 55, 55/1', '47, 49, 51, 51/1, 53, 55, 55/1', 'account'),
   numeric('name', 'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,', '42, 44, 46'),
   numeric('name', 'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2', '95-95/1-95/2'),
@@ -47,6 +77,9 @@ export const HERITAGE_ROW_RESIDUALS: readonly RowTextResidual[] = [
 ];
 
 export const TITLE_ROW_RESIDUALS: readonly RowTextResidual[] = [
+  numeric('title', 'Novoselečki put, 31 - 35', '31 - 35'),
+  numeric('title', 'Osnovna škola Brezovica, Brezovička cesta k.br 98a', 'k.br', 'link'),
+  numeric('title', 'Kupinečki Kraljevec, Harabajsi, gornji dio ulice prema Štrpetu, kod k.br. 7 od k.br. 36 - 37, kod k.br. 46 - 47, k.br. 73 - 75, k.br. 79 - 68', 'k.br', 'link'),
   numeric('title', 'Čučerska cesta, 362 - 370', '362 - 370'),
   pair('title', 'Galerijski program MKC-a 2018 – 2025', 'program', '2018'),
   numeric('title', 'Ulica Marije Sniježne od kbr. 92 sa odvojcima prema 108-117-128', '108-117-128'),

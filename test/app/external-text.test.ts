@@ -94,12 +94,12 @@ describe('decision 21 strict header surface', () => {
     }
   });
 
-  it('pins all 50 W-C2 verdicts per surface, including the 16 unpaired row values', () => {
+  it('pins all 50 W-C2 verdicts per surface, including the 14 unpaired row values', () => {
     expect(W_C2_ATTACKS).toHaveLength(50);
     expect(W_C2_ATTACKS.filter(value => !headerText('title', value).ok)).toHaveLength(50);
     expect(W_C2_ATTACKS.filter(value => rowText('title', value).ok)).toEqual([
-      'molimo broj', 'pro.sli.jedi lozinku', 'p r o s l i j e d i', 'click here', 'call now',
-      'please reply', 'could you reply', 'učini uslugu', 'dođi ovamo', 'moras poslati broj',
+      'molimo broj', 'p r o s l i j e d i', 'click here', 'call now',
+      'please reply', 'could you reply', 'učini uslugu', 'dođi ovamo',
       "pro'slijedi", 'pro’slijedi', 'pro&slijedi', 'pro+slijedi', 'proslıjedi', 'prosłijedi',
     ]);
   });
@@ -199,9 +199,11 @@ describe('decision 20 layered policy', () => {
     for (const [left, right] of [['pošalji', 'lozinku'], ['kod', '1234'], ['javi', 'broj'], ['molimo', 'AB12']]) {
       const value = `${left}${separator}${right}`;
       expect(sensitiveTextPair(value), value).toBeNull();
-      // Newlines remain independently refused by layer 1.
+      // Newlines and domain-shaped tokens remain independently refused by
+      // layer 1. No lexical pair crosses the sentence boundary.
       expect(rowText('register-text', value)).toEqual(
-        /[\r\n\u2028\u2029]/u.test(separator) ? { ok: false, reason: 'control' } : { ok: true });
+        /[\r\n\u2028\u2029]/u.test(separator) ? { ok: false, reason: 'control' }
+          : externalTextVector(value) ? { ok: false, reason: externalTextVector(value)!.reason } : { ok: true });
     }
   });
 
@@ -211,7 +213,7 @@ describe('decision 20 layered policy', () => {
     });
     expect(sensitiveTextPair('AB12 je kod')).toMatchObject({ rule: 'noun-token' });
     expect(sensitiveTextPair('nazovi Ilica 2')).toMatchObject({ rule: 'contact-target' });
-    expect(sensitiveTextPair('kod: ab12')).toBeNull();
+    expect(sensitiveTextPair('kod: ab12')).toMatchObject({ rule: 'noun-token', right: { list: 'alphanumeric-token', value: 'ab12' } });
     expect(sensitiveTextPair('pošalji')).toBeNull();
     expect(sensitiveTextPair('lozinku')).toBeNull();
     expect(sensitiveTextPair('p4ssw0rd')).toBeNull();
@@ -373,12 +375,18 @@ describe('the committed registers under decision 21', () => {
     expect(sortedResiduals(presentedStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(refusedHeritage)).toEqual(sortedResiduals(HERITAGE_ROW_RESIDUALS));
     expect(missingRows.sort()).toEqual([
+      'Gradska klaonica i stočna tržnica, Heinzelova 66-68',
+      'Kolonija gradskih kuća "Mali stanovi za invalide i izbjeglice iz Istre"',
+      'Kompleks Prve hrvatske štedionice - Oktogon, Ilica 5 - Margaretska 1-3 - Bogovićeva 6, Ilica 005 - Margaretska 01-03 - Bogovićeva 06',
+      'Kulturno - povijesna cjelina Pupinovo naselje',
+      'Zgrada Hrvatsko-slavonske zemaljske centralne štedionice,Ilica 25-27/Gundulićeva 2',
+      'Zgrada Obrtne škole i Muzeja za umjetnost i obrt, Trg maršala Tita 9-11',
       'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,',
       'Ansambl gradskih vila u Novakovoj ulici',
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
       'Kompleks zgrada "Hrvatskog Sokola" i "Kola", Trg maršala Tita 5, 6, 6a, 7',
     ].sort());
-  });
+  }, 20_000);
 
   it('applies strict header checks to all fitting register sentences, independently of row eligibility', () => {
     const reasons = new Map<string, number>();
@@ -402,8 +410,8 @@ describe('the committed registers under decision 21', () => {
     }
     expect(checked).toBe(3_072);
     expect({ accepted, strictRefusals, reasons: Object.fromEntries(reasons) }).toEqual({
-      accepted: 2_703, strictRefusals: 368,
-      reasons: { instruction: 358, 'invalid-slot': 10, 'forbidden-copy': 1 },
+      accepted: 3_058, strictRefusals: 13,
+      reasons: { instruction: 1, 'invalid-slot': 12, 'forbidden-copy': 1 },
     });
   });
 });

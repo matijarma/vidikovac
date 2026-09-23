@@ -16,6 +16,7 @@ import {
   EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
   EXTERNAL_PAIR_RULES, EXTERNAL_PARTIAL_VECTORS, EXTERNAL_SENTENCE_BREAKS,
   EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
+  EXTERNAL_PLACE_ABBREVIATIONS,
 } from './external-text-policy';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
@@ -34,7 +35,7 @@ interface ExternalTextRule {
 // Names and addresses: what the registers write in a name (quotes, brackets,
 // dashes, slashes, "&", "+" and the dagger of a date of death). Titles, summaries
 // and descriptions also carry sentence marks, "%", "°", "=" and a quoted "…".
-const NAME_PUNCTUATION = '.,;:\'’‘"„“”«»()–—-/&+†';
+const NAME_PUNCTUATION = '.,;:\'’‘"„“”«»()–—-/&+†·';
 const PROSE_PUNCTUATION = `${NAME_PUNCTUATION}!?%°=…`;
 // Lengths bound a flood, not the register: the longest committed heritage name
 // and street description are 170 code points (app/public/data/city, 18 Sep).
@@ -42,7 +43,8 @@ export const EXTERNAL_TEXT_RULES: Readonly<Record<ExternalTextKind, ExternalText
   name: { max: 180, punctuation: NAME_PUNCTUATION },
   address: { max: 120, punctuation: NAME_PUNCTUATION },
   title: { max: 180, punctuation: PROSE_PUNCTUATION },
-  summary: { max: 180, punctuation: PROSE_PUNCTUATION },
+  // DHMZ writes numeric comparisons such as "> 20 mm", escaped by the DOM.
+  summary: { max: 180, punctuation: `${PROSE_PUNCTUATION}>` },
   'register-text': { max: 180, punctuation: PROSE_PUNCTUATION },
   // Both dash forms occur in the committed GTFS headsigns.
   headsign: { max: 40, punctuation: "–-.,'" },
@@ -238,6 +240,18 @@ function partialVectors(text: string): Evidence[] {
 }
 const disjoint = (a: Evidence, b: Evidence): boolean => a.end <= b.start || b.end <= a.start;
 
+/** Only the geographic preposition, never "kod:", digits or a code token.
+ * Preserve all other lexemes: a geographic phrase cannot excuse an action
+ * paired with a credential elsewhere in the same sentence. */
+function geographicReading(text: string): string {
+  return text.replace(/(?<![\p{L}\p{N}])kod(?= +([\p{L}\p{N}]+))/giu, (word, next: string) => {
+    const place = /^\p{Lu}\p{Ll}{2,}$/u.test(next);
+    const genitive = /^(?:crkve|crkvice|kapele|groblja|groblj[a-z]*|škole|skole|kuće|kuce|mosta|potoka|rijeke|jezera|grada|sela|naselja|dvorca|parka|parkirališta|parkiralista|hotela|samostana|mlina|planine|brda)$/iu.test(next);
+    const sensitive = sensitivePatterns.some(({ pattern }) => pattern.test(foldText(next)));
+    return (place || genitive) && !sensitive ? ' '.repeat(word.length) : word;
+  });
+}
+
 /** Exact pair evidence for tests/audits; callers still log reason codes only. */
 export function sensitiveTextPair(text: string): SensitiveTextPair | null {
   for (const sentence of text.split(EXTERNAL_SENTENCE_BREAKS)) {
@@ -245,7 +259,7 @@ export function sensitiveTextPair(text: string): SensitiveTextPair | null {
       noun: [], action: [], contact: [], 'partial-vector': partialVectors(sentence),
       'contact-target': contactPatterns.flatMap(rule => evidence(foldText(sentence), rule.id, rule.pattern)),
     };
-    for (const reading of readings(sentence)) for (const { id, role, pattern, separated } of sensitivePatterns) {
+    for (const reading of readings(geographicReading(sentence))) for (const { id, role, pattern, separated } of sensitivePatterns) {
       groups[role].push(...evidence(reading, id, pattern), ...evidence(reading, id, separated));
     }
     for (const rule of EXTERNAL_PAIR_RULES) for (const left of groups[rule.left]) {
@@ -278,7 +292,7 @@ export function instructionRule(text: string): string | null {
 }
 /** Strict header policy: single sensitive hits and reader requests in any slot. */
 export function headerInstructionRule(text: string): string | null {
-  const folded = readings(text);
+  const folded = readings(geographicReading(text));
   for (const reading of folded) {
     for (const { id, pattern, separated } of headerPatterns) {
       if (pattern.test(reading) || separated.test(reading)) return id;
@@ -300,12 +314,25 @@ export function externalTextVector(value: string): { reason: ExternalTextRejecti
     const match = source.exec(text);
     if (match) return { reason, value: match[0] };
   }
+  // Unknown/new TLDs fail closed too. Abbreviations need an explicit place
+  // grammar; "sv.Marka" and "dr.Tuđmana" are names, "secure.anything" is not.
+  for (const match of text.matchAll(/(?<![a-z0-9])([a-z0-9_-]+)\.([a-z][a-z0-9_-]+)(?![a-z0-9])/gu)) {
+    if (!/^(?:sv|dr|kn)$/u.test(match[1]!) && !EXTERNAL_PLACE_ABBREVIATIONS.has(match[0])) return { reason: 'link', value: match[0] };
+  }
+  // A dotted run of single letters is not a sequence of independent safe
+  // sentences. The sole multi-initial GTFS place spelling is explicit.
+  for (const match of text.matchAll(/(?<![a-z0-9])(?:[a-z0-9]\.){2,}[a-z0-9]/gu)) {
+    if (!/[a-z]/u.test(match[0])) continue; // Numeric runs retain phone/account evidence.
+    if (/^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index))) continue;
+    return { reason: 'link', value: match[0] };
+  }
   // Match the complete numeric run before counting, never just six adjacent
   // digits: spacing, slashes, punctuation and parentheses cannot hide a number.
   for (const match of text.matchAll(/\d(?:[\d .,/'’():+–-]*\d)?/gu)) {
     const run = match[0];
     const digits = run.replace(/\D/gu, '');
-    if (digits.length < 6 || EXTERNAL_NUMERIC_DATA.some(pattern => pattern.test(run))) continue;
+    const formatted = digits.length >= 4 && /^\d+(?:[ –-]+\d+)+$/u.test(run);
+    if ((!formatted && digits.length < 6) || EXTERNAL_NUMERIC_DATA.some(pattern => pattern.test(run))) continue;
     return { reason: digits.length >= 13 ? 'account' : 'phone', value: run };
   }
   return null;
@@ -358,4 +385,12 @@ export function externalText(kind: ExternalTextKind, value: string, { surface }:
   if (verdicts.size >= 2048) verdicts.clear();
   verdicts.set(key, verdict);
   return verdict;
+}
+
+/** Render-boundary API. Return the exact input or null, never a repair.
+ * Runtime checks also cover untyped callers and malformed remote payloads. */
+export function vetExternal(kind: ExternalTextKind, value: unknown, surface: ExternalTextSurface): string | null {
+  if (typeof value !== 'string' || !Object.hasOwn(EXTERNAL_TEXT_RULES, kind)
+    || (surface !== 'header' && surface !== 'row')) return null;
+  return externalText(kind, value, { surface }).ok ? value : null;
 }

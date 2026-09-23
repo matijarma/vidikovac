@@ -5,15 +5,41 @@
 //
 // Inflection is deliberate: šalji / šaljete are verbs, Šaljić is a surname;
 // otvori / otvarate are verbs, "Otvorene su prijave" is a programme description.
+// Productive verb classes, not a list of complete attack sentences. Croatian
+// stems include perfective/imperfective alternants; endings cover imperative,
+// present, infinitive, participle and conditional/future (with auxiliaries).
+const I = '(?:i|im|is|imo|ite|e|iti|it|io|ila|ilo|ili|ile|iv[a-z]*|uj[a-z]*)';
+const A = '(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|at|ao|ala|alo|ali|ale)';
+export const EXTERNAL_ACTION_CLASSES = [
+  { id: 'confirm-submit', role: 'action',
+    source: `(?:potvrd|potvrdj|dostav|priloz)${I}|(?:potvrdjuj|predaj)[a-z]*|preda(?:ti|t|o|la|lo|li|le)|potvrdi[a-z]*|(?:verificir|autentificir|autenticir)${A}|confirm(?:s|ed|ing)?|submit(?:s|ted|ting)?|authenticat(?:e|es|ed|ing)|verif(?:y|ies|ied|ying)|validat(?:e|es|ed|ing)`,
+    examples: ['potvrdi', 'potvrđujemo', 'predajte', 'dostavili', 'autentificirajte', 'submitted', 'authenticating'] },
+  { id: 'write-provide', role: 'action',
+    source: `(?:na|za|pre|u|is)?pis(?:i|imo|ite|em|es|e|emo|ete|u|ati|at|ao|ala|alo|ali|ale)|(?:napis|zapis|prepis)${I}|(?:naved|otkriv|objav|obznan)${I}|(?:objavlj|otkriv)${A}|pruz${I}|pruzaj[a-z]*|daj(?:em|es|e|emo|ete|u|te|mo)?|da(?:ti|o|la|li|le)|writ(?:e|es|ing|ten)|wrote|typ(?:e|es|ed|ing)|provid(?:e|es|ed|ing)|disclos(?:e|es|ed|ing)|suppl(?:y|ies|ied|ying)|giv(?:e|es|ing|en)|gave`,
+    examples: ['piši', 'pišemo', 'napisali', 'navedite', 'otkrivamo', 'pružite', 'written', 'providing', 'disclosed'] },
+  { id: 'send-enter', role: 'action',
+    source: `(?:u|po)?salj(?:i|ite|imo|em|es|e|emo|ete|u)|sl(?:ao|ala|ali|alo|ale|ati|at)|slanj[a-z]*|(?:po|pro)?sljedjuj[a-z]*|(?:pro)?slijed${I}|unij(?:eti|et|eo|ela|elo|eli|ele)|unos${I}|upisuj[a-z]*|dijel${I}|input(?:s|ted|ting)?|insert(?:s|ed|ing)?`,
+    examples: ['slala', 'prosljeđujete', 'unosili', 'upisujte', 'inputting', 'inserted'] },
+  { id: 'entry-submission', role: 'action',
+    source: `(?:utipk|tipk|ukuc|ukucav|popunjav|ispunjav|dostavlj)${A}|(?:popun|ispun|zalijep|zaljep|predoc)${I}|(?:iz|pod|do|pre)nes(?:i|ite|imo|em|es|e|emo|ete|u)|(?:iz|pod|do|pre)nij(?:eti|et|ela|eli|elo|ele)|(?:iz|pod|do|pre)nio|past(?:e|es|ed|ing)|key(?:s|ed|ing)? in|fill(?:s|ed|ing)?`,
+    examples: ['utipkajte', 'popunite', 'zalijepi', 'podnesi', 'predočite', 'paste', 'key in', 'filled'] },
+  { id: 'deposit', role: 'action',
+    source: `(?:deponir|depozitir)${A}|poloz${I}|polaz${I}|(?:u)?placuj[a-z]*|deposit(?:s|ed|ing)?|remit(?:s|ted|ting)?`,
+    examples: ['deponiraj', 'položite', 'uplaćujte', 'deposit', 'remitted'] },
+] as const;
+
 export const EXTERNAL_SENSITIVE_LEXICON = [
+  ...EXTERNAL_ACTION_CLASSES,
   // Nouns: credentials/codes, link/app/program targets, account/card targets.
   // "kod" is also a geographic preposition; on its own it is never evidence.
-  { id: 'credentials', role: 'noun', source: 'lozink[a-z]*|sifr[a-z]*|pin(?:a|u|om|ovi|ove)?|kod(?:a|u|om|ovi|ove|ova|ovima)?|password[a-z]*|passcode[a-z]*|code(?:s)?|otp|token[a-z]*|credential[a-z]*',
+  { id: 'credentials', role: 'noun', source: 'lozink[a-z]*|zapork[a-z]*|sifr[a-z]*|pin(?:a|u|om|ovi|ove|ova|ovima)?|kod(?:a|u|om|ovi|ove|ova|ovima)?|password[a-z]*|passcode[a-z]*|code(?:s)?|otp|token[a-z]*|credential[a-z]*',
     examples: ['lozinka', 'šifru', 'PIN', 'kod', 'password', 'passcode', 'OTP', 'token'] },
   { id: 'links-apps', role: 'noun', source: 'poveznic[a-z]*|link(?:s|a|u|om|ovi|ove|ova|ovima)?|aplikacij[a-z]*|app(?:s|lication[a-z]*)?|program(?:a|u|om|i|e|ima)?|software',
     examples: ['poveznicu', 'link', 'aplikaciju', 'app', 'program', 'software'] },
   { id: 'accounts-cards', role: 'noun', source: 'racun(?:a|u|om|i|e|ima)?|account(?:s)?|kartic[a-z]*|card(?:s)?',
     examples: ['račun', 'account', 'karticom', 'card'] },
+  { id: 'numbers', role: 'noun', source: 'broj(?:a|u|em|evi|eve|eva|evima)?|number(?:s)?|akreditiv[a-z]*|vjerodajnic[a-z]*',
+    examples: ['broj', 'number', 'vjerodajnice'] },
   // Actions: disclosure/use, entry and sharing, in any person/mood. "javi" can
   // disclose a credential as well as contact somebody. No arbitrary imperative
   // or request phrase ("učini uslugu", "molimo") counts as an action here.
@@ -66,6 +92,7 @@ export const EXTERNAL_LEET: Readonly<Record<string, string>> = {
 export const EXTERNAL_PARTIAL_VECTORS = [
   { id: 'digits', source: '\\d{3,}', casing: 'folded' },
   { id: 'uppercase-token', source: '(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\\d)[A-Z0-9]{3,}', casing: 'original' },
+  { id: 'alphanumeric-token', source: '(?=[a-z0-9]*[a-z])(?=[a-z0-9]*\\d)[a-z0-9]{3,}', casing: 'folded' },
   { id: 'web-marker', source: 'www|@', casing: 'folded' },
 ] as const;
 // Contact targets: the word number, a partial numeric run, web/e-mail marker,
@@ -79,6 +106,7 @@ export const EXTERNAL_CONTACT_TARGETS = [
 // spans in the same sentence; neither order nor person/mood changes the rule.
 export const EXTERNAL_PAIR_RULES = [
   { id: 'noun-action', left: 'noun', right: 'action' },
+  { id: 'noun-contact', left: 'noun', right: 'contact' },
   { id: 'noun-token', left: 'noun', right: 'partial-vector' },
   { id: 'contact-target', left: 'contact', right: 'contact-target' },
 ] as const;
@@ -91,10 +119,19 @@ export const EXTERNAL_NUMERIC_DATA = [
   /^(?:[1-9]|0[1-9]|[12]\d|3[01])\. *(?:[1-9]|0[1-9]|1[0-2])\. *(?:1\d{3}|20\d{2})\.?$/u,
 ] as const;
 
+// Exact GTFS place abbreviations, not arbitrary prefix exemptions for domains.
+export const EXTERNAL_PLACE_ABBREVIATIONS = new Set([
+  'spr.dubrava', 'zrt.fasizma', 'gl.kolodvor', 'g.stenjevec', 'g.breg-brezo',
+  'j.jelacica', 'st.dom', 's.radic', 'd.dragonozec', 'mark.trnava',
+  'ses.kraljev', 'ses.selnica', 's.bukevski',
+  'sav.most', 'zap.kol',
+]);
+
 export const EXTERNAL_VECTOR_PATTERNS = [
-  { reason: 'link', source: /h[ .:/-]*t[ .:/-]*t[ .:/-]*p|w[ .-]*w[ .-]*w|@|(?<![a-z0-9])[a-z0-9-]+\.(?:hr|com|net|org|eu|info|io|me|app|link|ly|dev|xyz|site|online|zip|test|co|uk|de|ru|biz|store|museum|travel|gov|edu)(?![a-z0-9])/u },
+  { reason: 'link', source: /h[ .:/-]*t[ .:/-]*t[ .:/-]*p|w[ .-]*w[ .-]*w|@|(?<![a-z0-9])[a-z0-9-]+\.(?:cc|hr|com|net|org|eu|info|io|me|app|link|ly|dev|xyz|site|online|zip|test|co|uk|de|ru|biz|store|museum|travel|gov|edu)(?![a-z0-9])/u },
   { reason: 'phone', source: /(?<![a-z0-9])(?:t[ .-]*e[ .-]*l|telefon[a-z]*|telephone[a-z]*|phone|fax|sms)(?![a-z0-9])|0[ .()/–-]*8[ .()/–-]*0[ .()/–-]*0|\+[ .()/–-]*\d/u },
-  { reason: 'account', source: /(?<![a-z0-9])(?:iban|i[ .-]+b[ .-]+a[ .-]+n|swift|bic)(?![a-z0-9])|(?<![a-z0-9])h[ .-]*r[ .-]*\d/u },
-  { reason: 'payment', source: /(?:\d[\d .,]* *(?:€|kn|eur|eura)(?![a-z])|(?:€|kn|eur|eura) *\d)/u },
+  { reason: 'account', source: /(?<![a-z0-9])(?:iban|i[ .-]+b[ .-]+a[ .-]+n|swift|bic)(?![a-z0-9])|(?<![a-z0-9])h[ .-]*r[ .-]*\d|(?<![a-z0-9])[a-z]{2}\d{2}(?:[ -]?[a-z0-9]){10,}/u },
+  { reason: 'payment', source: /(?:\d[\d .,]* *(?:€|\$|£|kn|eur|eura|usd|hrk|gbp)(?![a-z])|(?:€|\$|£|kn|eur|eura|usd|hrk|gbp) *\d)/u },
+  { reason: 'phone', source: /(?<![a-z0-9])(?:broj(?:a|u|em|evi|eve|eva|evima)?|number(?:s)?)[ :()-]*\d+/u },
   { reason: 'qr', source: /(?<![a-z0-9])q[ .–-]*r(?![a-z0-9])/u },
 ] as const;
