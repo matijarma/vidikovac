@@ -309,26 +309,26 @@ app/src/map/external-features.ts:67 #networkToGeoJson → vetExternal('headsign'
 app/src/map/external-features.ts:98 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:586 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:790 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:830 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:987 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1006 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:587 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:791 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:831 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:988 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1007 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:81 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:83 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
 app/src/motion/schema-map.ts:180 #refreshWords → legend.textContent = text
 app/src/motion/schema-map.ts:181 #refreshWords → vehicleCanvas.setAttribute('aria-label', `${title}. ${text}`)
 app/src/motion/schema-map.ts:182 #refreshWords → note.textContent = i18n.t('motion.note')
 app/src/motion/schema-map.ts:184 #refreshWords → hint.textContent = canvasHint()
-app/src/motion/schema-paint.ts:393 #paintPills → vetExternal('name', row, 'row')
-app/src/motion/schema-paint.ts:406 #paintPills → ctx.fillText(row, m.x, m.y + (i - (rows.length - 1) / 2) * PILL_LINE_HEIGHT_PX * size)
-app/src/motion/schema-paint.ts:543 #planNames → vetExternal('name', row, 'row')
-app/src/motion/schema-paint.ts:544 #planNames → vetExternal('name', rawRows.join(' '), 'row')
-app/src/motion/schema-paint.ts:598 #paintNames → vetExternal('name', plan.rows.join(' '), 'row')
-app/src/motion/schema-paint.ts:603 #paintNames → ctx.strokeText(row, plan.x, y)
-app/src/motion/schema-paint.ts:605 #paintNames → ctx.fillText(row, plan.x, y)
-app/src/motion/schema-paint.ts:659 #paintChips → vetExternal('headsign', chip.text, 'row')
-app/src/motion/schema-paint.ts:664 #paintChips → ctx.fillText(chip.text, x + chip.w / 2, plan.chipY)
+app/src/motion/schema-paint.ts:394 #paintPills → vetExternal('name', row, 'row')
+app/src/motion/schema-paint.ts:407 #paintPills → ctx.fillText(row, m.x, m.y + (i - (rows.length - 1) / 2) * PILL_LINE_HEIGHT_PX * size)
+app/src/motion/schema-paint.ts:544 #planNames → vetExternal('name', row, 'row')
+app/src/motion/schema-paint.ts:545 #planNames → vetExternal('name', rawRows.join(' '), 'row')
+app/src/motion/schema-paint.ts:599 #paintNames → vetExternal('name', plan.rows.join(' '), 'row')
+app/src/motion/schema-paint.ts:604 #paintNames → ctx.strokeText(row, plan.x, y)
+app/src/motion/schema-paint.ts:606 #paintNames → ctx.fillText(row, plan.x, y)
+app/src/motion/schema-paint.ts:660 #paintChips → vetExternal('headsign', chip.text, 'row')
+app/src/motion/schema-paint.ts:665 #paintChips → ctx.fillText(chip.text, x + chip.w / 2, plan.chipY)
 app/src/motion/schematic-view.ts:263 #sceneMarkup → escapeHtml(options.canvasHint ?? i18n.t('motion.canvasHint'))
 app/src/motion/schematic-view.ts:264 #sceneMarkup → escapeHtml(options.listHint ?? i18n.t('motion.listHint'))
 app/src/motion/schematic-view.ts:271 #sceneMarkup → escapeHtml(i18n.t('common.close'))

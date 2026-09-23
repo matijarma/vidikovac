@@ -72,7 +72,7 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
   });
 
   it('is a line of the number taller for each further row, up to PILL_MAX_LINES (decision 23)', () => {
-    expect(PILL_MAX_LINES).toBe(2);
+    expect(PILL_MAX_LINES).toBe(3);
     expect(PILL_ROW_BREAK).toBe('\n');
     // MapLibre's default text-line-height (1.2 em, overlays.ts) at the pill's 12 px, the line one row already sits in.
     expect(PILL_LINE_HEIGHT_PX).toBeCloseTo(PILL_TEXT_PX * 1.2, 12);
@@ -80,8 +80,11 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
     expect(pillHeightPx(1)).toBe(PILL_HEIGHT_PX);
     expect(pillHeightPx(2)).toBeCloseTo(32.4, 12);
     expect(pillHeightPx(2)).toBeCloseTo(2 * PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y, 12);
+    expect(pillHeightPx(3)).toBeCloseTo(46.8, 12);
+    expect(pillHeightPx(3)).toBeCloseTo(3 * PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y, 12);
     expect(pillRows('6\u00b711')).toEqual(['6\u00b711']);
     expect(pillRows('109\u00b7110\n111')).toEqual(['109\u00b7110', '111']);
+    expect(pillRows('109\u00b7110\n111\n112')).toEqual(['109\u00b7110', '111', '112']);
   });
 });
 
@@ -127,12 +130,13 @@ describe('the nose meets its capsule on every heading', () => {
   const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
   const digits = Array.from({ length: 40 }, (_, i) => '1234567890'.repeat(4).slice(0, i + 1));
   const clusters = Array.from({ length: 20 }, (_, i) => ['6', '11', '12', '14', '17', '101', '219', '268'].slice(0, (i % 8) + 1).join('\u00b7').slice(0, 40));
-  // Wrapped hub labels (decision 23): two rows, from just past one row's budget to the full eighty characters.
-  const wrapped = [11, 14, 16, 20].map((n) => clusterLabel(Array.from({ length: n }, (_, i) => String(109 + i))));
+  // Wrapped hub labels (decision 23): two rows from just past one row's budget to the full eighty
+  // characters, then three rows up to thirty three-digit lines.
+  const wrapped = [11, 14, 16, 20, 21, 23, 30].map((n) => clusterLabel(Array.from({ length: n }, (_, i) => String(109 + i))));
   const LABELS = ['', ...digits, ...clusters, ...wrapped, '6\u00b77\u00b78', 'K'];
 
-  it('seats the triangle\u2019s base on the outline, within 2 px on the screen and never floating off, for the eight headings, labels of 1 to 40 characters and of two rows, plate and capsule, scale 1 and 2', () => {
-    expect(wrapped.every((label) => pillRows(label).length === 2)).toBe(true);
+  it('seats the triangle\u2019s base on the outline, within 2 px on the screen and never floating off, for the eight headings, labels of 1 to 40 characters and of two and three rows, plate and capsule, scale 1 and 2', () => {
+    expect(wrapped.map((label) => pillRows(label).length)).toEqual([2, 2, 2, 2, 3, 3, 3]);
     let worst = 0;
     for (const label of LABELS) {
       const { halfWidth, halfHeight } = capsuleHalfPx(label);
@@ -207,7 +211,7 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
     expect(label).toBe('109·110·111·112·113·114·115·116\n117·118·119·120·121·122·123·124');
     expect(label).not.toMatch(/\+\d/);
     const rows = pillRows(label);
-    expect(rows).toHaveLength(PILL_MAX_LINES);
+    expect(rows).toHaveLength(2);
     for (const row of rows) expect(row.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
     // Every line, whole and in order: the rows break between two lines, never inside one.
     expect(label.split(/[·\n]/)).toEqual(hub);
@@ -229,18 +233,37 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
     expect(Math.abs(a! - b!)).toBeLessThan(pillTextWidthPx('\u00b7109'));
   });
 
-  it('writes twenty three-digit lines whole on two full rows, and only past the eighty characters keeps the whole lines the rows hold, never a count', () => {
+  it('balances three rows by their drawn width, the earlier rows the fuller on a tie (decision 23)', () => {
     const bus = (n: number) => Array.from({ length: n }, (_, i) => String(109 + i));
-    expect(clusterLabel(bus(20))).toBe(`${bus(10).join('·')}\n${bus(20).slice(10).join('·')}`);
-    // Črnomerec, the committed data's one hub past two rows: 23 bus lines, 91 characters.
-    const crnomerec = ['109', '117', '119', '120', '121', '122', '123', '124', '125', '126', '127', '128', '130', '131', '134', '135', '136', '137', '144', '146', '172', '176', '177'];
-    const label = clusterLabel(crnomerec);
-    expect(label).toBe('109·117·119·120·121·122·123·124·125·126\n127·128·130·131·134·135·136·137·144·146');
-    expect(label).not.toMatch(/\+\d/);
-    expect(label.split(/[·\n]/)).toEqual(crnomerec.slice(0, 20));
+    // Twenty-one three-digit lines are 83 characters: past two rows of forty, so seven a row.
+    expect(clusterLabel(bus(21))).toBe(`${bus(7).join('·')}\n${bus(14).slice(7).join('·')}\n${bus(21).slice(14).join('·')}`);
+    // Twenty-two: eight, seven, seven; twenty-three: eight, eight, seven.
+    expect(pillRows(clusterLabel(bus(22))).map((row) => row.split('·').length)).toEqual([8, 7, 7]);
+    expect(pillRows(clusterLabel(bus(23))).map((row) => row.split('·').length)).toEqual([8, 8, 7]);
+    // Mixed lengths balance on what is drawn, not on the count of lines.
+    const mixed = clusterLabel(['6', '11', '12', '14', '17', '101', '219', '268', ...bus(15)]);
+    expect(mixed).toBe('6·11·12·14·17·101·109·110·111\n112·113·114·115·116·117·118\n119·120·121·122·123·219·268');
+    const widths = pillRows(mixed).map(pillTextWidthPx);
+    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(pillTextWidthPx('\u00b7109'));
   });
 
-  it('writes every bus hub of the committed stop table whole on two rows at most, Črnomerec alone past them', () => {
+  it('writes twenty three-digit lines on two full rows and thirty on three, and only past the 120 characters keeps the whole lines the rows hold, never a count', () => {
+    const bus = (n: number) => Array.from({ length: n }, (_, i) => String(109 + i));
+    expect(clusterLabel(bus(20))).toBe(`${bus(10).join('·')}\n${bus(20).slice(10).join('·')}`);
+    const thirty = `${bus(10).join('·')}\n${bus(20).slice(10).join('·')}\n${bus(30).slice(20).join('·')}`;
+    expect(clusterLabel(bus(30))).toBe(thirty);
+    // Thirty-one lines are 123 characters: the first thirty are kept, whole and in order.
+    expect(clusterLabel(bus(31))).toBe(thirty);
+    expect(clusterLabel(bus(31))).not.toMatch(/\+\d/);
+    // Črnomerec, the committed data's largest hub: 23 bus lines, 91 characters, all of them on three rows.
+    const crnomerec = ['109', '117', '119', '120', '121', '122', '123', '124', '125', '126', '127', '128', '130', '131', '134', '135', '136', '137', '144', '146', '172', '176', '177'];
+    const label = clusterLabel(crnomerec);
+    expect(label).toBe('109·117·119·120·121·122·123·124\n125·126·127·128·130·131·134·135\n136·137·144·146·172·176·177');
+    expect(label).not.toMatch(/\+\d/);
+    expect(label.split(/[·\n]/)).toEqual(crnomerec);
+  });
+
+  it('writes every bus hub of the committed stop table whole on three rows at most, Črnomerec the largest and the only one on three', () => {
     const stops = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/public/data/stops.json'), 'utf8')) as { name: string; routes: string[] }[];
     const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/src/data/zet-routes.json'), 'utf8')) as Record<string, { shortName: string; type: number }>;
     const hubs = new Map<string, Set<string>>();
@@ -250,14 +273,22 @@ describe('clusterLabel: distinct labels, numeric order, never folded', () => {
       hubs.set(stop.name, lines);
     }
     const past: string[] = [];
+    const threeRows: string[] = [];
     let wrapped = 0;
+    let largest = { name: '', chars: 0 };
     for (const [name, lines] of hubs) {
       const label = clusterLabel([...lines]);
-      if (pillRows(label).length > 1) wrapped++;
+      const rows = pillRows(label).length;
+      if (rows > 1) wrapped++;
+      if (rows === 3) threeRows.push(name);
       if (label.split(/[·\n]/).length < lines.size) past.push(name);
+      const chars = [...lines].join('·').length;
+      if (chars > largest.chars) largest = { name, chars };
     }
     // A name joining this list is a hub decision 23 no longer writes whole: the owner's call, not a test's.
-    expect(past).toEqual(['Črnomerec']);
+    expect(past).toEqual([]);
+    expect(threeRows).toEqual(['Črnomerec']);
+    expect(largest).toEqual({ name: 'Črnomerec', chars: 91 });
     expect(wrapped).toBeGreaterThan(20);
   });
 

@@ -299,7 +299,7 @@ export interface ProzorOptions {
 }
 
 /** The image rows across the middle of the pill and the plate that stretch
- *  to a wrapped label's second row: two, one each side of the centre, so the
+ *  to a wrapped label's further rows: two, one each side of the centre, so the
  *  stretch is symmetric and every stretched row is within a hundredth of an
  *  image pixel of the straight side it becomes. */
 export const PILL_STRETCH_ROWS = 2;
@@ -315,11 +315,12 @@ export const PILL_STRETCH_ROWS = 2;
  *  number would draw oval ends. The fit height of one row (a 14.4 px line
  *  plus 2 x 1.8, times the scale) is the image's own, so a one-row pill is
  *  drawn exactly as the bitmap is. A wrapped cluster label (decision 23,
- *  pills.ts PILL_MAX_LINES) is a line taller: vertically only the two image
- *  rows across the shape's middle stretch (stretchY), where a capsule's
- *  round end is at its widest and runs straight up and down, so the second
- *  row grows the flat sides and the corners keep their radius -- the whole
- *  image stretched instead would have drawn the ends as ovals. */
+ *  pills.ts PILL_MAX_LINES) is a line taller for each further row:
+ *  vertically only the two image rows across the shape's middle stretch
+ *  (stretchY), where a capsule's round end is at its widest and runs
+ *  straight up and down, so each further row grows the flat sides and the
+ *  corners keep their radius -- the whole image stretched instead would
+ *  have drawn the ends as ovals. */
 function stretchablePill(id: string, cornerPx: number, scale: number): OverlayImage {
   const w = pillWidthPx(2) * scale;
   const h = PILL_HEIGHT_PX * scale;
@@ -592,7 +593,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       // cluster's lines, and its default of 10 em hung the tail of a long
       // cluster under the capsule instead of inside it. A wrapped cluster
       // label (pills.ts clusterLabel, decision 23) carries its own forced
-      // break between two whole lines, and the capsule fits both rows.
+      // breaks between whole lines, and the capsule fits every row.
       'text-max-width': 100,
       // The default, stated: pills.ts measures each further row as one line
       // of it (PILL_LINE_HEIGHT_PX), for the census and the nose.

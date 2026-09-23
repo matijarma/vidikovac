@@ -470,10 +470,10 @@ it('keeps the wall’s own place among the whole-network schema’s names at the
   expect(own.px.every((px) => px >= 28)).toBe(true);
 });
 
-// Decision 23 on the canvas: a hub label past one row wraps onto a second,
-// the pill a line taller with the capsule's own corner, both rows painted a
-// line apart and vetted row by row -- the city map's stretchable pill, drawn
-// by hand.
+// Decision 23 on the canvas: a hub label past one row wraps onto a second
+// (and past two onto a third), the pill a line taller for each with the
+// capsule's own corner, the rows painted a line apart and vetted row by row
+// -- the city map's stretchable pill, drawn by hand.
 function paintRecorder(): { ctx: SchemaContext; calls: { op: string; args: unknown[] }[] } {
   const calls: { op: string; args: unknown[] }[] = [];
   const props: Record<string, unknown> = {};
@@ -522,4 +522,34 @@ it('wraps a hub past one row onto a second on the canvas too: sixteen bus lines,
   const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
   expect(radii).toEqual([...Array<number>(4).fill((PILL_HEIGHT_PX / 2) * size), ...Array<number>(4).fill((PILL_HEIGHT_PX / 2 + 3) * size)]);
   expect(calls.filter((c) => c.op === 'fill')).toHaveLength(1);
+});
+
+it('wraps a hub past two rows onto a third on the canvas too: twenty-three bus lines, eight, eight and seven, the pill two lines taller with the same corner (decision 23)', () => {
+  const lines = Array.from({ length: 23 }, (_, i) => String(109 + i));
+  const viewport = { x: 0, y: 0, scale: 1, width: 800, height: 400, density: 2, symbolScale: 2 };
+  const size = viewport.density * viewport.symbolScale;
+  const marks: VehicleMark[] = lines.map((label, i) => ({
+    id: `b${i}`, kind: 'bus', x: (300 + i) * size, y: 200 * size, w: pillWidthPx(pillChars(label)) * size, h: PILL_HEIGHT_PX * size,
+    angle: 0, alpha: 1, label, pill: 'single',
+  }));
+  const merged = clusterSchemaMarks(marks, viewport);
+  expect(merged).toHaveLength(1);
+  const hub = merged[0]!;
+  expect(hub.label).toBe(clusterLabel(lines));
+  const rows = pillRows(hub.label!);
+  expect(rows.map((row) => row.split('\u00b7').length)).toEqual([8, 8, 7]);
+  expect(hub.label!.split(/[\u00b7\n]/)).toEqual(lines);
+  expect(hub.w).toBe(pillWidthPx(31) * size);
+  expect(hub.h).toBeCloseTo(pillHeightPx(3) * size, 9);
+
+  const { ctx, calls } = paintRecorder();
+  paintPills(ctx, { w: 1600, h: 800, density: 2 }, merged, { fill: PILL_INKS.light.bus, text: PILL_INKS.light.busText, halo: '#fbfcfe', ink: '#16226b' }, hub.id);
+  const texts = calls.filter((c) => c.op === 'fillText');
+  expect(texts.map((c) => c.args[0])).toEqual(rows);
+  const ys = texts.map((c) => c.args[2] as number);
+  expect(ys[0]).toBeCloseTo(hub.y - PILL_LINE_HEIGHT_PX * size, 9);
+  expect(ys[1]).toBeCloseTo(hub.y, 9);
+  expect(ys[2]).toBeCloseTo(hub.y + PILL_LINE_HEIGHT_PX * size, 9);
+  const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
+  expect(radii).toEqual([...Array<number>(4).fill((PILL_HEIGHT_PX / 2) * size), ...Array<number>(4).fill((PILL_HEIGHT_PX / 2 + 3) * size)]);
 });

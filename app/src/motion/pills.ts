@@ -20,17 +20,17 @@ export const PILL_EXTRA_CHAR_PX = 7;
  *  the budget of one row, the widest capsule there is (290 px): all fifteen
  *  tram lines, "1·2·3·4·5·6·7·8·9·11·12·13·14·15·17", are 35 characters
  *  and fit on one; ten three-digit bus routes are 39. A longer label wraps
- *  onto a second row (PILL_MAX_LINES), so a bus hub of twenty three-digit
+ *  onto further rows (PILL_MAX_LINES), so a bus hub of thirty three-digit
  *  routes is still written whole, and a single line's name never runs past
  *  one row (pillLabel). */
 export const PILL_MAX_CHARS_CLUSTER = 40;
-/** The rows a merged pill may take (decision 23): a label past one row's
- *  budget wraps onto a second before anything is left out, so two rows of
- *  PILL_MAX_CHARS_CLUSTER, eighty characters of lines, is the whole cap.
- *  Only past it does clusterLabel keep the whole lines that fit -- a
- *  shorter list, never a count. (clusterLabel lays out one row or two; a
- *  third would be a new decision and a new break search.) */
-export const PILL_MAX_LINES = 2;
+/** The rows a merged pill may take (decision 23, three since the
+ *  Črnomerec hub's 23 lines, 91 characters, did not fit two): a label past
+ *  one row's budget wraps onto a second, then a third, before anything is
+ *  left out, so three rows of PILL_MAX_CHARS_CLUSTER, 120 characters of
+ *  lines, is the whole cap. Only past it does clusterLabel keep the whole
+ *  lines that fit -- a shorter list, never a count. */
+export const PILL_MAX_LINES = 3;
 /** What a cluster label breaks its rows with, in place of the "·" between
  *  the last line of one row and the first of the next: MapLibre's forced
  *  line break in a text-field, and the next row the canvas schema paints.
@@ -273,39 +273,56 @@ export function pillLabel(label: string): string {
 }
 
 /**
- * The lines on one row where they fit, else on two (PILL_MAX_LINES) of at
- * most PILL_MAX_CHARS_CLUSTER characters each, broken only between two
- * lines and balanced: the break whose wider row is the narrower as drawn
- * (the glyph advances, so a row of narrow separators is not taken for a
- * long one), the first row the fuller on a tie. Null when two rows cannot
- * hold them.
+ * The lines on exactly `rows` rows of at most PILL_MAX_CHARS_CLUSTER
+ * characters each, broken only between two lines and balanced: the breaks
+ * whose widest row is the narrowest as drawn (the glyph advances, so a row
+ * of narrow separators is not taken for a long one), the earlier rows the
+ * fuller on a tie. Null when `rows` rows cannot hold them.
  */
-function wrapLines(lines: readonly string[]): string | null {
-  const one = lines.join(CLUSTER_SEPARATOR);
-  if (one.length <= PILL_MAX_CHARS_CLUSTER) return one;
-  let best: string | null = null;
+function balancedRows(lines: readonly string[], rows: number): string[] | null {
+  if (rows === 1) {
+    const one = lines.join(CLUSTER_SEPARATOR);
+    return one.length <= PILL_MAX_CHARS_CLUSTER ? [one] : null;
+  }
+  let best: string[] | null = null;
   let narrowest = Infinity;
   for (let k = lines.length - 1; k > 0; k--) {
     const head = lines.slice(0, k).join(CLUSTER_SEPARATOR);
-    const tail = lines.slice(k).join(CLUSTER_SEPARATOR);
-    const width = Math.max(rowAdvance24(head), rowAdvance24(tail));
-    if (head.length <= PILL_MAX_CHARS_CLUSTER && tail.length <= PILL_MAX_CHARS_CLUSTER && width < narrowest) {
-      best = head + PILL_ROW_BREAK + tail;
+    if (head.length > PILL_MAX_CHARS_CLUSTER) continue;
+    const tail = balancedRows(lines.slice(k), rows - 1);
+    if (!tail) continue;
+    const width = Math.max(rowAdvance24(head), ...tail.map(rowAdvance24));
+    if (width < narrowest) {
+      best = [head, ...tail];
       narrowest = width;
     }
   }
   return best;
 }
 
+/** The lines on the fewest rows, up to PILL_MAX_LINES, that hold them
+ *  (balancedRows), joined by PILL_ROW_BREAK; null when even those cannot. */
+function wrapLines(lines: readonly string[]): string | null {
+  // Each break stands in for one separator, so a label longer than this
+  // cannot fit however it is broken, and no break search is run for it.
+  if (lines.join(CLUSTER_SEPARATOR).length > PILL_MAX_LINES * (PILL_MAX_CHARS_CLUSTER + 1) - 1) return null;
+  for (let rows = 1; rows <= PILL_MAX_LINES; rows++) {
+    const wrapped = balancedRows(lines, rows);
+    if (wrapped) return wrapped.join(PILL_ROW_BREAK);
+  }
+  return null;
+}
+
 /** A cluster's name: every distinct line, numbers ascending then letters,
  *  joined by CLUSTER_SEPARATOR -- every line number, the pill grows
  *  [O-35]. Nothing is folded into a count. A name past one row's budget
  *  (PILL_MAX_CHARS_CLUSTER; every tram line together fits on one) wraps
- *  onto a second row at a separator, the rows balanced (decision 23), so a
- *  bus hub of up to eighty characters of lines is written whole. Only past
- *  PILL_MAX_LINES rows does the name stop at the last whole line the rows
- *  hold: a shorter list, never a count in place of the lines. Every line is
- *  held to one row first (pillLabel), so the name never outgrows its pill. */
+ *  onto a second row at a separator, and past two onto a third, the rows
+ *  balanced (decision 23), so a bus hub of up to 120 characters of lines is
+ *  written whole. Only past PILL_MAX_LINES rows does the name stop at the
+ *  last whole line the rows hold: a shorter list, never a count in place of
+ *  the lines. Every line is held to one row first (pillLabel), so the name
+ *  never outgrows its pill. */
 export function clusterLabel(labels: readonly string[]): string {
   const lines = [...new Set([...labels].sort(compareClusterLabel).map(pillLabel))];
   // One line always fits (pillLabel), and none at all is the empty name.

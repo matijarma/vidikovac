@@ -330,9 +330,10 @@ function capsulePath(ctx: SchemaContext, x: number, y: number, w: number, h: num
 
 /** The mark's outline, the badge rule (signage.css, the city map's
  *  MARK_IMAGE): a tram the plate, its corner `radius`; anything else the
- *  capsule, and for a label of two rows the capsule's own round corner
- *  (`endRadius`, half a one-row pill) on straight sides a row taller, as the
- *  city map's stretchable pill grows (overlays.ts). Centred on (x, y) like
+ *  capsule, and for a wrapped label (two or three rows) the capsule's own
+ *  round corner (`endRadius`, half a one-row pill) on straight sides a row
+ *  taller for each further row, as the city map's stretchable pill grows
+ *  (overlays.ts). Centred on (x, y) like
  *  capsulePath. */
 function markPath(ctx: SchemaContext, kind: VehicleMark['kind'], x: number, y: number, w: number, h: number, radius: number, rows: number, endRadius: number): void {
   if (kind === 'tram') roundRectPath(ctx, x - w / 2, y - h / 2, w, h, radius);

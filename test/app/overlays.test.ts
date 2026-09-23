@@ -119,9 +119,13 @@ describe('the overlay layer list', () => {
     // [0, 0] to [M, 0], linearly, the output at d is exactly [d, 0].
     expect(offset).toEqual(['interpolate', ['linear'], ['number', ['get', 'nose'], NOSE_FALLBACK_PX], 0, ['literal', [0, 0]], NOSE_OFFSET_MAX_PX, ['literal', [NOSE_OFFSET_MAX_PX, 0]]]);
     expect(JSON.stringify(offset)).not.toContain('"array"');
-    // Past every capsule there is: forty characters of the widest digit, and two rows of them.
-    expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx('8'.repeat(PILL_MAX_CHARS_CLUSTER), 'bus', 90));
-    expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx(`${'8'.repeat(PILL_MAX_CHARS_CLUSTER)}\n${'8'.repeat(PILL_MAX_CHARS_CLUSTER)}`, 'bus', 45));
+    // Past every capsule there is: forty characters of the widest digit, and two and three rows of them.
+    const row = '8'.repeat(PILL_MAX_CHARS_CLUSTER);
+    expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx(row, 'bus', 90));
+    for (const heading of [0, 45, 90]) {
+      expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx(`${row}\n${row}`, 'bus', heading));
+      expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx(`${row}\n${row}\n${row}`, 'bus', heading));
+    }
     // A mark without the property (none is pushed so) gets a two-digit pill's end.
     expect(NOSE_FALLBACK_PX).toBe(noseCentrePx('00', 'bus', 90));
     // The selected vehicle's nose and an opposed merge's arrows read the same distance.
@@ -197,9 +201,9 @@ describe('the overlay layer list', () => {
     // The cap, and the reason it is what it is: a merged pill lists every
     // line [O-35], and all fifteen tram lines together are 35 characters, so
     // every tram cluster is written on one row. Forty is the widest row, and
-    // a longer label wraps onto a second (decision 23).
+    // a longer label wraps onto a second and then a third (decision 23).
     expect(PILL_MAX_CHARS_CLUSTER).toBe(40);
-    expect(PILL_MAX_LINES).toBe(2);
+    expect(PILL_MAX_LINES).toBe(3);
     const bus = (n: number): string[] => Array.from({ length: n }, (_, i) => String(109 + i));
     // A bus hub of sixteen three-digit routes is 63 characters: every line,
     // eight a row, and never a count.
@@ -248,8 +252,8 @@ describe('the overlay layer list', () => {
           for (let x = Math.ceil(x1); x < Math.floor(x2); x++) expect(alpha(x, y)).toBe(alpha(Math.ceil(x1), y));
         }
         // Vertically, two whole image rows across the middle stretch for a
-        // wrapped label's second row (decision 23): the same row twice by
-        // the shape's symmetry, so the second row grows straight sides and
+        // wrapped label's further rows (decision 23): the same row twice by
+        // the shape's symmetry, so each further row grows straight sides and
         // the corners above and below keep their radius.
         const middle = image.height / 2;
         expect(Number.isInteger(middle), at).toBe(true);
@@ -260,8 +264,8 @@ describe('the overlay layer list', () => {
         const [[y1]] = options!.stretchY as [[number, number]];
         expect((y1 - SDF_SPREAD_PX) / SDF_PIXEL_RATIO, at).toBeCloseTo((PILL_HEIGHT_PX / 2) * scale - 0.5, 9);
         // One row's fit is the image's own content height, so a one-row pill
-        // stretches by exactly 1 on both axes and a two-row one by one line in
-        // the middle rows alone.
+        // stretches by exactly 1 on both axes and a wrapped one by one line a
+        // further row in the middle rows alone.
         const [, top, , bottom] = options!.content as number[];
         expect(((bottom! - top!) / SDF_PIXEL_RATIO), at).toBeCloseTo(pillHeightPx(1) * scale, 9);
       }
