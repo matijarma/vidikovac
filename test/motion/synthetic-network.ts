@@ -14,7 +14,8 @@ export interface SynthEdge {
 
 export interface SynthPath {
   id: string;
-  direction: 0 | 1;
+  /** GTFS direction, or -1 for a terminus loop path (scripts/gtfs-shapes.mjs LOOP_DIRECTION). */
+  direction: 0 | 1 | -1;
   edges: number[];
   /** A synthetic path (no shape of its own), as the builder makes for shapeless patterns. */
   synthetic?: boolean;
