@@ -15,7 +15,7 @@ import {
   type Single,
 } from '../../app/src/motion/pills';
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
-import { capsuleHalfPx, PILL_FIT_PAD_X, PILL_TEXT_PX, pillTextWidthPx } from '../../app/src/motion/pills';
+import { capsuleHalfPx, markRadiusPx, noseCentrePx, NOSE_TUCK_PX, outlineDistancePx, PILL_FIT_PAD_X, PILL_TEXT_PX, pillTextWidthPx, PLATE_RADIUS_PX } from '../../app/src/motion/pills';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -84,6 +84,72 @@ describe('the capsule the city map draws: its number\u2019s glyphs plus the fit 
     expect(['6', '14', '268', '1234'].map((label) => 2 * capsuleHalfPx(label).halfWidth)).toEqual([18, 24, 30.5, 37]);
     expect(capsuleHalfPx('').halfWidth).toBe(9);
     expect(capsuleHalfPx('6\u00b711\u00b712')).toEqual({ halfWidth: (5 * 6.5 + 2 * 3) / 2 + PILL_FIT_PAD_X, halfHeight: 9 });
+  });
+});
+
+// The direction nose and the two-way arrows: the capsule stays upright in the
+// viewport while the triangle turns with the heading, so the triangle's base
+// has to meet the capsule's own outline along that heading (lane-w-e2e-2.md:
+// the per-length table floated a vertical "6·7·8"'s arrows 14 to 21 px off).
+describe('the nose meets its capsule on every heading', () => {
+  /** Signed distance from (x, y) to a rounded rectangle centred on the origin, negative inside. */
+  const sdRoundRect = (x: number, y: number, hw: number, hh: number, r: number): number => {
+    const qx = Math.abs(x) - (hw - r), qy = Math.abs(y) - (hh - r);
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+  };
+  const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
+  const digits = Array.from({ length: 40 }, (_, i) => '1234567890'.repeat(4).slice(0, i + 1));
+  const clusters = Array.from({ length: 20 }, (_, i) => ['6', '11', '12', '14', '17', '101', '219', '268'].slice(0, (i % 8) + 1).join('\u00b7').slice(0, 40));
+  const LABELS = ['', ...digits, ...clusters, '6\u00b77\u00b78', 'K'];
+
+  it('seats the triangle\u2019s base on the outline, within 2 px on the screen and never floating off, for the eight headings, labels of 1 to 40 characters, plate and capsule, scale 1 and 2', () => {
+    let worst = 0;
+    for (const label of LABELS) {
+      const { halfWidth, halfHeight } = capsuleHalfPx(label);
+      for (const kind of ['tram', 'bus']) {
+        for (const s of [1, 2]) {
+          for (const heading of HEADINGS) {
+            const d = noseCentrePx(label, kind, heading) * s;
+            const ux = Math.sin((heading * Math.PI) / 180), uy = -Math.cos((heading * Math.PI) / 180);
+            const at = (t: number) => sdRoundRect(t * ux, t * uy, halfWidth * s, halfHeight * s, markRadiusPx(kind) * s);
+            const base = at(d - (NOSE_LENGTH_PX / 2) * s);
+            const tip = at(d + (NOSE_LENGTH_PX / 2) * s);
+            const where = `${kind} "${label}" @${heading} x${s}`;
+            expect(base, where).toBeLessThanOrEqual(1e-9); // touching: never a strip of street between
+            expect(base, where).toBeGreaterThanOrEqual(-2); // and never sunk into the capsule
+            // The arrow stands out of the capsule: its tip well clear of the outline, whichever side it leaves by.
+            expect(tip, where).toBeGreaterThan((NOSE_LENGTH_PX / 2) * s);
+            worst = Math.max(worst, Math.abs(base));
+          }
+        }
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(NOSE_TUCK_PX * 2 + 1e-9);
+  });
+
+  it('was the half-width alone before: the per-length table left a vertical "6\u00b77\u00b78" 21 px off the wall\u2019s capsule, and now it touches', () => {
+    const table = (n: number) => (n <= 4 ? [12, 14, 17, 20][n - 1]! : 20 + (n - 4) * 3.5);
+    const { halfWidth, halfHeight } = capsuleHalfPx('6\u00b77\u00b78');
+    const s = 2;
+    const gapAt = (centre: number, heading: number) => {
+      const ux = Math.sin((heading * Math.PI) / 180), uy = -Math.cos((heading * Math.PI) / 180);
+      const t = (centre - NOSE_LENGTH_PX / 2) * s;
+      return sdRoundRect(t * ux, t * uy, halfWidth * s, halfHeight * s, PLATE_RADIUS_PX * s);
+    };
+    expect(gapAt(table(5), 0)).toBeCloseTo(21, 5);
+    expect(gapAt(noseCentrePx('6\u00b77\u00b78', 'tram', 0), 0)).toBeCloseTo(-NOSE_TUCK_PX * s, 5);
+  });
+
+  it('measures the way out of a rounded rectangle through its sides and its corner arcs', () => {
+    expect(outlineDistancePx(12, 9, 9, 90)).toBe(12);
+    expect(outlineDistancePx(12, 9, 9, 0)).toBe(9);
+    expect(outlineDistancePx(12, 9, 9, 180)).toBe(9);
+    // 45 degrees through a capsule's round end: the point lies on the arc of radius 9 about (3, 0).
+    const t = outlineDistancePx(12, 9, 9, 45);
+    expect(Math.hypot(t * Math.SQRT1_2 - 3, t * Math.SQRT1_2)).toBeCloseTo(9, 9);
+    // A plate is nearly its box.
+    expect(outlineDistancePx(12, 9, 3, 45)).toBeLessThan(Math.hypot(9, 9));
+    expect([markRadiusPx('tram'), markRadiusPx('bus'), markRadiusPx('other')]).toEqual([PLATE_RADIUS_PX, 9, 9]);
   });
 });
 

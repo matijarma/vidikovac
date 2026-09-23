@@ -4,7 +4,7 @@ import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehicleLabel, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
-import { PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
+import { NOSE_LENGTH_PX, noseCentrePx, PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
 import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
@@ -288,6 +288,21 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(merged([tram('a', 15.97, null), tram('b', 15.971, null)])).toMatchObject({ bearing: 0, twoWay: false, hasHeading: false });
     // Every single carries twoWay, false: the layers filter on it, and a missing property is a runtime error in a case.
     expect(vehiclesToGeoJson([tram('a', 15.97, facing(0)), tram('c', 15.99, facing(180))]).features.map((f) => f.properties.twoWay)).toEqual([false, false]);
+  });
+
+  it('writes each mark\u2019s nose distance from its own capsule and heading: a single\u2019s from its number, a merged mark\u2019s from its joined label, a tram\u2019s from its plate', () => {
+    const at = (id: string, type: number, short: string, lon: number, deg: number): Drawn =>
+      ({ id, type, routeId: short, short, p: toPlane(lon, 45.81), heading: { x: Math.sin((deg * Math.PI) / 180), y: Math.cos((deg * Math.PI) / 180) }, speed: 5, confidence: 1, onShape: null });
+    const project = ([lon]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: 0 });
+    const fc = vehiclesToGeoJson([at('a', 0, '6', 15.97, 0), at('b', 0, '7', 15.971, 180), at('c', 3, '268', 15.99, 90), at('d', 3, '109', 16.01, 45)], { project });
+    const by = (id: string) => fc.features.find((f) => f.properties.id === id)!.properties;
+    expect(by('cluster:a,b').nose).toBe(noseCentrePx('6\u00b77', 'tram', 0));
+    expect(by('c').nose).toBe(noseCentrePx('268', 'bus', 90));
+    expect(by('d').nose).toBe(noseCentrePx('109', 'bus', 45));
+    // A north-bound "6·7" sits on its plate's top edge, nowhere near its half-width.
+    expect(by('cluster:a,b').nose).toBe(9 + NOSE_LENGTH_PX / 2 - 0.5);
+    // Without a camera too: the source always carries it, so the layer never meets a missing property.
+    expect(vehiclesToGeoJson([at('a', 0, '6', 15.97, 90)]).features[0]!.properties.nose).toBe(noseCentrePx('6', 'tram', 90));
   });
 
   it('never merges across modes: a bus swallowed by a tram’s cluster would vanish the moment trams are switched off', () => {

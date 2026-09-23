@@ -21,7 +21,7 @@ import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { bodiesToGeoJson } from '../motion/bodies';
-import { capsuleHalfPx, clusterPills, createLineColours, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
+import { capsuleHalfPx, clusterPills, createLineColours, noseCentrePx, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
@@ -186,6 +186,12 @@ export interface VehicleFeatureCollection {
        *  TWO_WAY_MIN_DEG of bearing apart): the two-way arrow layers filter on
        *  it. Written on every feature, false on a single, as `cluster` is. */
       twoWay: boolean;
+      /** How far from the mark's centre the direction nose (or a two-way
+       *  arrow) stands along `bearing`, in CSS px before the symbol scale:
+       *  motion/pills.ts noseCentrePx for this label's capsule and this
+       *  kind's mark, which overlays.ts NOSE_OFFSET reads. Written on every
+       *  feature, since a layer reading a missing property falls back. */
+      nose: number;
       /** Confidence carried as opacity, floored at vehicle-mark.ts's MIN_ICON_ALPHA. */
       alpha: number;
       /** Draw order (overlays.ts SORT_KEY, higher over lower): a cluster over
@@ -371,6 +377,7 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: str
       bearing: facing[0] ?? 0,
       hasHeading: false,
       twoWay,
+      nose: noseCentrePx(cluster.label, kind, facing[0] ?? 0),
       alpha: Math.max(...members.map((f) => f.properties.alpha)),
       sort: SORT_CLUSTER,
       held: false,
@@ -401,6 +408,8 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
   const features: VehicleFeature[] = [];
   for (const v of drawn) {
     const kind = vehicleKind(v.type);
+    const short = vehicleLabel(v);
+    const bearing = bearingOf(v.heading ?? v.track);
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: toLonLat(v.p) },
@@ -408,11 +417,12 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
         id: v.id,
         icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
         kind,
-        short: vehicleLabel(v),
+        short,
         routeId: v.routeId ?? '',
-        bearing: bearingOf(v.heading ?? v.track),
+        bearing,
         hasHeading: v.heading !== null,
         twoWay: false,
+        nose: noseCentrePx(short, kind, bearing),
         alpha: markAlpha(v.confidence),
         sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
         held: v.held === true,

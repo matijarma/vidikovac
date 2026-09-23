@@ -25,7 +25,8 @@ import {
   firstSymbolLayer,
   kindFilter,
   nameAnchorOffsets,
-  noseOffsetPx,
+  NOSE_FALLBACK_PX,
+  NOSE_OFFSET_MAX_PX,
   overlayImages,
   overlayLayers,
   pillInks,
@@ -36,7 +37,7 @@ import {
   vehicleKinds,
   type ProzorOptions,
 } from '../../app/src/map/overlays';
-import { PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, clusterLabel, pillChars, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, clusterLabel, noseCentrePx, pillChars, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -103,23 +104,18 @@ describe('the overlay layer list', () => {
     expect(noses.layout!['icon-rotation-alignment']).toBe('map');
   });
 
-  it('sets the nose at the capsule\u2019s edge for every label length by a step table of literal pairs: the four hand-tuned offsets verbatim, then half a character per character, to the cap', () => {
+  it('sets the nose where the capsule\u2019s outline meets its heading: the vehicle source\u2019s own `nose` distance as a [d, 0] pair, which MapLibre turns with the triangle', () => {
     const offset = layerById(LAYERS.vehicleNoses).layout!['icon-offset'] as unknown[];
-    // MapLibre has no expression that builds an array from computed numbers
-    // (['array', ...] only asserts a type): every output is a literal pair.
-    expect(offset[0]).toBe('step');
-    expect(offset[1]).toEqual(['max', 1, ['length', ['get', 'short']]]);
+    // MapLibre has no expression that builds an array from a computed number
+    // (['array', ...] only asserts a type), but it interpolates arrays: from
+    // [0, 0] to [M, 0], linearly, the output at d is exactly [d, 0].
+    expect(offset).toEqual(['interpolate', ['linear'], ['number', ['get', 'nose'], NOSE_FALLBACK_PX], 0, ['literal', [0, 0]], NOSE_OFFSET_MAX_PX, ['literal', [NOSE_OFFSET_MAX_PX, 0]]]);
     expect(JSON.stringify(offset)).not.toContain('"array"');
-    expect(offset.slice(2, 9)).toEqual([['literal', [12, 0]], 2, ['literal', [14, 0]], 3, ['literal', [17, 0]], 4, ['literal', [20, 0]]]);
-    // One step per length up to pills.ts's cap, each the length's own offset.
-    expect(offset).toHaveLength(3 + 2 * (PILL_MAX_CHARS_CLUSTER - 1));
-    for (let i = 3; i < offset.length; i += 2) {
-      expect(offset[i]).toBe((i - 1) / 2 + 1);
-      expect(offset[i + 1]).toEqual(['literal', [noseOffsetPx(offset[i] as number), 0]]);
-    }
-    expect([noseOffsetPx(0), noseOffsetPx(4), noseOffsetPx(5), noseOffsetPx(6)]).toEqual([12, 20, 23.5, 27]);
-    expect(offset.slice(-2)).toEqual([PILL_MAX_CHARS_CLUSTER, ['literal', [20 + 3.5 * (PILL_MAX_CHARS_CLUSTER - 4), 0]]]);
-    // The selected vehicle's nose and an opposed merge's arrows use the same table.
+    // Past every capsule there is: forty characters of the widest digit.
+    expect(NOSE_OFFSET_MAX_PX).toBeGreaterThan(noseCentrePx('8'.repeat(PILL_MAX_CHARS_CLUSTER), 'bus', 90));
+    // A mark without the property (none is pushed so) gets a two-digit pill's end.
+    expect(NOSE_FALLBACK_PX).toBe(noseCentrePx('00', 'bus', 90));
+    // The selected vehicle's nose and an opposed merge's arrows read the same distance.
     expect(layerById(LAYERS.vehicleSelectedNose).layout!['icon-offset']).toEqual(offset);
   });
 

@@ -31,7 +31,7 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_EXTRA_CHAR_PX, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -135,17 +135,14 @@ export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_
  *  nose measure the capsule this layer draws; re-exported under its name. */
 export { PILL_FIT_PAD_X, PILL_FIT_PAD_Y };
 /** The direction nose (pills.ts NOSE_LENGTH_PX by NOSE_WIDTH_PX) sits ahead
- *  of the pill, drawn under it, its centre this far out for a label of one to
- *  four characters: hand-tuned, and kept verbatim. */
-const NOSE_OFFSETS_PX: readonly number[] = [12, 14, 17, 20];
-/** The nose's centre for a label of `chars` characters: the hand-tuned four,
- *  then half of each further character's width (pills.ts
- *  PILL_EXTRA_CHAR_PX), since the capsule grows about its centre. */
-export function noseOffsetPx(chars: number): number {
-  const n = Math.max(1, chars);
-  if (n <= NOSE_OFFSETS_PX.length) return NOSE_OFFSETS_PX[n - 1]!;
-  return NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1]! + ((n - NOSE_OFFSETS_PX.length) * PILL_EXTRA_CHAR_PX) / 2;
-}
+ *  of the pill, drawn under it, its centre where pills.ts noseCentrePx puts
+ *  it: on the drawn capsule's outline along the heading, which city-map.ts
+ *  writes on every vehicle feature as `nose`. NOSE_OFFSET reads it as a pair
+ *  by interpolating from [0, 0] to [NOSE_OFFSET_MAX_PX, 0], which is exact
+ *  for every distance below the bound; the bound is past any capsule there is. */
+export const NOSE_OFFSET_MAX_PX = 1000;
+/** The distance a feature without `nose` gets (none is pushed so): a two-digit pill's round end. */
+export const NOSE_FALLBACK_PX = noseCentrePx('00', 'bus', 90);
 export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;
 
@@ -353,15 +350,15 @@ const MARK_IMAGE: Expr = ['match', ['get', 'kind'], 'tram', PLATE_IMAGE, PILL_IM
  *  would draw spread and all; the space gives the smallest capsule, as the
  *  one-character pill always did, and writes nothing on it. */
 const PILL_TEXT: Expr = ['case', ['==', ['get', 'short'], ''], '\u00a0', ['get', 'short']];
-/** noseOffsetPx as a data-driven icon-offset: a `step` over the label's
- *  length whose every output is a literal pair. MapLibre has no expression
- *  that builds an array from computed numbers (['array', ...] only asserts a
- *  type), so the table is written out, one step per length up to pills.ts's
- *  cap; icon-size multiplies it by the surface's scale. */
-const NOSE_OFFSET: Expr = [
-  'step', ['max', 1, ['length', ['get', 'short']]], ['literal', [noseOffsetPx(1), 0]],
-  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER - 1 }, (_, i) => [i + 2, ['literal', [noseOffsetPx(i + 2), 0]]]).flat(),
-];
+/** The feature's `nose` as a data-driven icon-offset. MapLibre has no
+ *  expression that builds an array from a computed number (['array', ...]
+ *  only asserts a type), but it interpolates arrays, and [0, 0] to [M, 0]
+ *  at d is exactly [d, 0]. The offset turns with icon-rotate, so [d, 0] lies
+ *  along the heading; icon-size multiplies it by the surface's scale, as it
+ *  does the capsule the distance was measured on. The per-length table this
+ *  replaces measured the half-width alone, right for an east-bound nose and
+ *  14 to 21 px off the wall's capsule for a north-bound "6·7·8". */
+const NOSE_OFFSET: Expr = ['interpolate', ['linear'], ['number', ['get', 'nose'], NOSE_FALLBACK_PX], 0, ['literal', [0, 0]], NOSE_OFFSET_MAX_PX, ['literal', [NOSE_OFFSET_MAX_PX, 0]]];
 /** The nose's turn from the feature's compass bearing. The triangle points
  *  along its own +x, so degrees clockwise from north less 90 stand a
  *  north-bound vehicle's nose upright. Plus 90 is the same triangle turned
