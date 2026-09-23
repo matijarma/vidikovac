@@ -449,7 +449,11 @@ export function buildPlan(
   // point, floored 20 m further, is still a tram at that stop, not one on its
   // way to the next). Failing that, the zone the floored anchor lies in,
   // which can only be a stop ahead of the fix.
-  const silentHere = silent ? geometry.stopAt(track.match.s) ?? here : null;
+  // Make the zone decision at the same decimetre precision as the plan.
+  // Otherwise 40.037 m past a platform is outside here but rounds to its
+  // 40.0 m boundary on the wire, sending a silent tram past its published
+  // current stop (22127, Savski gaj-rotor, 21 Sep 2026).
+  const silentHere = silent ? geometry.stopAt(round1(track.match.s)) ?? geometry.stopAt(round1(s)) : null;
   if (silentHere) {
     // T8 at a platform: a silent vehicle stays at the stop it was last seen
     // at, whatever the dwell history says. This comes before dwellRemaining,

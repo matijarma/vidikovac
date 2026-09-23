@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import en from '../../app/src/i18n/en.json';
+import hr from '../../app/src/i18n/hr.json';
 import { toPlane } from '../../shared/motion/geo';
 import type { Fix } from '../../app/src/motion/integrator';
 import type { Network, Shape } from '../../shared/motion/network';
@@ -43,14 +45,14 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 6; i += 1) await 
 const frame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 const legend = (el: HTMLElement) => el.querySelector('[data-testid=schematic-legend]')?.textContent;
 
-function host(opts: { scope?: 'network' | 'crop'; lightweight?: boolean; net?: Network | null; deferred?: boolean } = {}) {
+function host(opts: { scope?: 'network' | 'crop'; lightweight?: boolean; net?: Network | null; deferred?: boolean; locale?: 'hr' | 'en' } = {}) {
   let resolve: ((net: Network | null) => void) | null = null;
   const loadNetwork = vi.fn(() => new Promise<Network | null>((r) => {
     if (opts.deferred) resolve = r;
     else r(opts.net === undefined ? testNetwork() : opts.net);
   }));
   const h = createSchematicHost({
-    i18n: createDefaultI18n('hr'),
+    i18n: createDefaultI18n(opts.locale ?? 'hr'),
     scope: opts.scope === 'crop' ? { kind: 'crop', types: TRAMS_ONLY } : { kind: 'network' },
     lightweight: opts.lightweight ?? false,
     now: () => NOW,
@@ -69,6 +71,7 @@ describe('createSchematicHost', () => {
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     expect(root.querySelector('[data-testid=schematic-note]')!.textContent).toBe(HONESTY_NOTE_HR);
     expect(HONESTY_NOTE_HR).toBe('Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.');
+    expect(HONESTY_NOTE_HR).toBe(hr.motion.note);
     expect(root.querySelector('[data-testid=schematic-loading]')!.textContent).toBe('učitavanje podataka');
     expect(root.querySelector('[data-testid=schematic]')).toBeNull();
     await flush();
@@ -77,6 +80,13 @@ describe('createSchematicHost', () => {
     // Note after the view, so the map is read first and the caveat under it.
     const children = [...root.querySelector('[data-testid=schematic-host]')!.children].map((c) => c.getAttribute('data-testid'));
     expect(children.indexOf('schematic')).toBeLessThan(children.indexOf('schematic-note'));
+  });
+
+  it('prints the note from the catalogue in the page language, so an English page reads motion.note in English', () => {
+    const { h, root } = host({ locale: 'en', lightweight: true });
+    root.appendChild(h.mount());
+    expect(root.querySelector('[data-testid=schematic-note]')!.textContent).toBe(en.motion.note);
+    expect(en.motion.note).not.toBe(HONESTY_NOTE_HR);
   });
 
   it('returns the same element from every mount() and loads the network once', async () => {

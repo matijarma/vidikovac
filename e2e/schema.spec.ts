@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
-import { APP_URL, provisionKiosk } from './helpers';
+import { APP_URL, pickCityGroup, provisionKiosk } from './helpers';
 import { schemaSnapshot, TWO_TRAM_PATH_ROUTE, twoTramSnapshot } from './schema-fixtures';
 
 test('the transport switch draws moving trams on the SVG diagram and restores the city map', async ({ page }) => {
@@ -13,7 +13,7 @@ test('the transport switch draws moving trams on the SVG diagram and restores th
   await page.goto(FIXTURE_DASHBOARD);
   await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
   await page.getByTestId('transport-search').focus();
-  await page.locator('[data-action=city-group][data-group=transport]').click();
+  await pickCityGroup(page, 'transport');
   if(test.info().project.name==='mobile'){
     for(let i=0;i<3&&await page.getByTestId('transport-workspace').getAttribute('data-sheet')!=='peek';i++)
       await page.locator('[data-action=toggle-sheet]').click();
@@ -138,7 +138,7 @@ test('the diagram paints numbered pills, names that give way and come back, and 
   // landed; the diagram is the transport group's renderer, so pick that group
   // first -- the same step the two tests above take.
   await page.getByTestId('transport-search').focus();
-  await page.locator('[data-action=city-group][data-group=transport]').click();
+  await pickCityGroup(page, 'transport');
   const canvas = page.getByTestId('schema-vehicles');
   const diagram = page.getByTestId('schema-map');
   await expect(canvas).toBeVisible();

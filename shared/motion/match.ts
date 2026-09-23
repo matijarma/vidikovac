@@ -14,6 +14,8 @@
 //     the edge the vehicle is actually on;
 //   - off the route's rails, stay unplaced (free plane) and retry each fix;
 //     another line's path is never a substitute for missing own-route rails;
+//   - a confirmed backward adopted rail with no directed departure fit
+//     also uses real free-plane fixes until eligible forward rails fit;
 //   - two fixes further than OFF_GRAPH_M from every edge put the vehicle off
 //     the graph (a balloon loop, a depot track, a works detour no shape
 //     draws), a fix within NEAR_M of an edge brings it back;
@@ -30,6 +32,7 @@
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
 import { arcOnPath } from './order';
+import { EVICT_S, SILENCE_HOLD_S } from './plan';
 import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
@@ -122,6 +125,12 @@ interface Candidate {
 /** Matcher-owned, optional on older tracks. Kept on the track (not in a
  *  matcher cache) so the existing state serialization preserves progress. */
 interface TramTrack extends Track {
+  /** The short grace for a cropped terminal starts once, not on every
+   *  standing report. Optional so older persisted tracks remain readable. */
+  endpointHold?: { pathIdx: number; since: number };
+  /** A confirmed wrong-way adopted rail has no directed placement. Keep
+   *  its observed bearing while unplaced, including through standing fixes. */
+  unplacedDirection?: XY;
   priorReturn?: {
     pathIdx: number;
     fromPathIdx: number;
@@ -246,7 +255,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     return best;
   }
 
-  function candidatesFor(track: Track, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
+  function candidatesFor(track: TramTrack, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
     for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
@@ -255,6 +264,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const out: Candidate[] = [];
     for (const hit of hits) {
       if (!routeEdges.has(hit.edge)) continue;
+      if (track.unplacedDirection && !edgeTangentAgrees(hit.edge, hit.s, dir ?? track.unplacedDirection)) continue;
       const pathIdx = adoptPath(hit.edge, hit.s, track, prior, dir, ctx);
       if (pathIdx === null) continue;
       const path = net.paths[pathIdx];
@@ -414,6 +424,24 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const p = { x: fix.x, y: fix.y };
     const motion = motionOf(track, fix, prev);
     const dir = motion.dir;
+    let candidateDir = dir;
+    if (candidateDir === null) {
+      // The second off-path fix often arrives after the tram has stopped
+      // at the diverted platform. At Frankopanska the nearest rail then
+      // used to win by centimetres, despite the preceding southbound run.
+      for (let i = track.fixes.length - 2; i >= 0; i--) {
+        const before = track.fixes[i];
+        // A stopped report does not erase the approach: 22134's next fix
+        // arrived 43 s after its approach baseline. Retain the live track's
+        // evidence, bounded by the same age that would evict the vehicle.
+        // This is candidate selection only, never D4/return movement.
+        if (fix.atSec - before.atSec > EVICT_S) break;
+        if (dist(before, p) >= DEAD_ZONE_M) {
+          candidateDir = normalise({ x: p.x - before.x, y: p.y - before.y });
+          break;
+        }
+      }
+    }
     const dtSec = motion.dtSec;
     const previousReturn = track.priorReturn;
     // Every early exit or off-path fix breaks the run unless the eligible
@@ -427,20 +455,34 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       prior = { ...prior, pathIdx: null, shapeIdx: null };
     }
     if (invalidMatch) {
+      delete track.endpointHold;
+      delete track.unplacedDirection;
       track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
       resetOrder(track);
     }
 
-    // A new prior (a new trip, or the twin re-deriving from the index) starts
-    // the vehicle over ON THAT PATH: only the path-derived state goes. The
+    // A new prior normally starts the vehicle over on that path. A cropped
+    // departure's start is not evidence that it has left a better-fitting
+    // arrival yet: retain that genuine placement until the normal entry
+    // evidence admits the new prior (Kvaternikov's early trip handovers).
+    // Only path-derived state goes. The
     // ordering register stays (E3, D14) -- the tram is the same tram, and a
     // relation the new path leaves behind is dropped by the register's own
     // divergence rule, not by a change of trip id.
     if (prior.pathIdx !== track.priorPath) {
+      delete track.endpointHold;
+      delete track.unplacedDirection;
+      let keepArrival = false;
+      if (prior.pathIdx !== null && track.match.pathIdx !== null) {
+        const own = onPathMatch(track, prior.pathIdx, p, motion, nextStopId);
+        const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
+        keepArrival = own.s <= 0.5 && own.residual <= NEAR_M
+          && current.residual <= NEAR_M && current.residual < own.residual;
+      }
       track.priorPath = prior.pathIdx;
-      track.match = noMatch();
+      if (!keepArrival) track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
     }
@@ -450,6 +492,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (anyNear.length === 0) {
       track.offGraphCount++;
       if (track.offGraphCount >= OFF_GRAPH_FIXES) {
+        delete track.endpointHold;
+        delete track.unplacedDirection;
         track.offGraph = true;
         track.match = noMatch();
         resetOrder(track);
@@ -477,9 +521,23 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const delta = baseline ? { x: p.x - baseline.x, y: p.y - baseline.y } : motion.delta;
       const longitudinalM = pathForwardM(prior.pathIdx, own.s, delta);
       const forwardM = Math.abs(longitudinalM) < PRIOR_RETURN_NOISE_M ? 0 : longitudinalM;
-      if (prev !== null && own.residual <= NEAR_M && forwardM >= 0) {
+      // A tangent at a clipped endpoint is not evidence of entering the
+      // path. At Kvaternikov trg the arrival loop passes the departure
+      // path's start: accumulating approach motion there returned a tram
+      // before it had finished the loop, then immediately re-derived it.
+      const insidePrior = own.s > 0.5 && own.s < net.paths[prior.pathIdx].len - 0.5;
+      // A wrong-direction arrival rail is different: return as soon as the
+      // prior fits, including at its endpoint (Mandlova -> Ravnice). Waiting
+      // until past the endpoint only prolongs a known backward match.
+      // At a bend the previous arc's tangent can point along the motion
+      // while the current projection already runs backwards. Use the same
+      // current placement as D4, so the first return interval is not lost.
+      const current = onPathMatch(track, track.match.pathIdx, p, motion, nextStopId);
+      const againstCurrent = pathForwardM(track.match.pathIdx, current.s, delta) <= -PRIOR_RETURN_NOISE_M;
+      if (prev !== null && (insidePrior || againstCurrent) && own.residual <= NEAR_M && forwardM >= 0) {
         const total = (continued ? previousReturn.forwardM : 0) + forwardM;
         if (total >= FOLD_MOVE_M) {
+          delete track.unplacedDirection;
           resetOrder(track);
           track.match = own;
           track.offPathCount = 0;
@@ -495,14 +553,16 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     // Unplaced fixes carry their nearest edge as evidence, not as a path to
     // animate along. Re-derive on every such fix, including while standing.
     const rederive = (): Match => {
+      delete track.endpointHold;
       delete track.priorReturn;
-      const best = candidatesFor(track, p, dir, dtSec, prior, nextStopId, ctx)[0];
+      const best = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)[0];
       if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
       track.offPathCount = 0;
       track.againstCount = 0;
       track.match = best
         ? { pathIdx: best.pathIdx, shapeIdx: net.paths[best.pathIdx].shape, edge: best.edge, s: best.s, residual: best.d }
         : { pathIdx: null, shapeIdx: null, edge: anyNear[0].edge, s: 0, residual: anyNear[0].d };
+      if (best) delete track.unplacedDirection;
       return track.match;
     };
 
@@ -513,7 +573,8 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
       const unplaced = track.match.pathIdx === null && track.match.edge !== null;
       if (unplaced) {
-        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir)) {
+        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir ?? track.unplacedDirection ?? null)) {
+          delete track.unplacedDirection;
           resetOrder(track);
           track.match = onPath;
           track.offPathCount = 0;
@@ -525,6 +586,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         return rederive();
       }
       if (onPath.residual <= NEAR_M) {
+        delete track.endpointHold;
         track.offPathCount = 0;
         // (D4) Two consecutive fixes moving AGAINST the rail the vehicle is
         // read on, each further than scatter, with a rail within reach that
@@ -537,18 +599,64 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
           track.againstCount = 0;
           const turned = turnaroundMatch(working, p, motion, track, prior, ctx);
           if (turned) {
+            delete track.unplacedDirection;
             delete track.priorReturn;
             resetOrder(track);
             track.match = turned;
             return track.match;
           }
+          if (working !== prior.pathIdx) {
+            // An adopted arrival rail running backwards is not a usable
+            // departure path. At Mandlova the directed departure is absent
+            // until Ravnice. Publish real fixes through that gap instead of
+            // planning forward on the wrong-way rail and freezing the mark.
+            track.unplacedDirection = dir;
+            return rederive();
+          }
         }
         track.match = onPath;
         return track.match;
       }
+      // A cropped terminal permits a short longitudinal grace, not an
+      // indefinite placement off the rails. Lateral departures use the
+      // normal two-fix rule; a forward branch/loop also ends the grace.
+      // Standing reports cannot restart the shared 30-second hold window.
+      const atOwnEnd = working === prior.pathIdx
+        && (onPath.s <= 0.5 || onPath.s >= net.paths[working].len - 0.5);
+      if (track.match.pathIdx === working && atOwnEnd && onPath.residual <= OFF_GRAPH_M) {
+        const geo = net.pathGeometry(working);
+        const end = onPath.s <= 0.5 ? geo.pts[0] : geo.pts[geo.pts.length - 1];
+        const tan = tangent(geo.pts, geo.cum, onPath.s);
+        const lateralM = Math.abs((p.x - end.x) * tan.y - (p.y - end.y) * tan.x);
+        const continuation = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)
+          .some(candidate => net.paths[candidate.pathIdx].direction === -1
+            || (candidateDir !== null && pathTangentAgrees(candidate.pathIdx, candidate.s, candidateDir)));
+        if (!track.endpointHold || track.endpointHold.pathIdx !== working) {
+          track.endpointHold = { pathIdx: working, since: fix.atSec };
+        }
+        if (lateralM <= NEAR_M && !continuation && fix.atSec - track.endpointHold.since <= SILENCE_HOLD_S) {
+          track.match = onPath;
+          track.offPathCount = 0;
+          track.againstCount = 0;
+          return track.match;
+        }
+      }
       // An invalidated path gets no one-stray-fix hold. If the eligible
       // prior cannot explain this fix, immediately try other eligible rails.
       if (invalidMatch) return rederive();
+      // A new trip has no established placement to protect from a stray.
+      // Prefer an eligible nearby rail immediately to publishing a remote
+      // prior for one tick (Mandlova departures were placed 631 m away).
+      // A nearby cropped departure approached at a handover is different:
+      // allow the ordinary one-fix grace while entering its near band
+      // (10324 at Kvaternikov, 62 m then 43 m). Never grant this to a
+      // standing, receding, or remote initial fix.
+      const approachingStart = working === prior.pathIdx && prev !== null
+        && onPath.s <= 0.5 && onPath.residual <= OFF_GRAPH_M
+        && dir !== null && pathForwardM(working, onPath.s, motion.delta) >= PRIOR_RETURN_NOISE_M
+        && net.projectOntoPath(working, prev).d > onPath.residual;
+      if (track.match.pathIdx === null && (onPath.residual > OFF_GRAPH_M
+        || (!approachingStart && candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0))) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.

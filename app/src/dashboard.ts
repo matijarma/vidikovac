@@ -189,12 +189,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let lastRun: LastRunSnapshot | null = null;
   let lastRunStop: string | null = null;
   let networkPromise: Promise<Network | null> | null = null;
-  const loadNetworkOnce = (): Promise<Network | null> => {
-    networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
+  const loadNetworkOnce = (refresh = false): Promise<Network | null> => {
+    // Karta replaces this shared cache after a deploy, so later map mounts
+    // cannot reinstall the graph the current map just rejected.
+    if (!networkPromise || refresh) networkPromise = (deps.loadNetwork ?? (() => loadNetwork(
+      refresh ? (input, init) => fetch(input, { ...init, cache: 'reload' }) : fetch, lightweight,
+    )))();
     return networkPromise;
   };
   const maps = createMapSlots(
-    lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
+    lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce, undefined, () => loadNetworkOnce(true)), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
   );
   const schematic = createSchematicHost({
     i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,

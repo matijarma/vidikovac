@@ -12,11 +12,15 @@ import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
-import type { CityMapOptions } from '../../app/src/map/city-map';
+import { createCityMap, type CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 import { fakeCityStore } from '../city/fake-store';
+import { decodeNetwork } from '../../shared/motion/network';
+import { toPlane } from '../../shared/motion/geo';
+import graphBefore from '../fixtures/graph-migration/before.json';
+import graphAfter from '../fixtures/graph-migration/after.json';
 
 stubSessionStorage();
 stubLocalStorage();
@@ -138,6 +142,55 @@ function openViaMore(root: Root, layer: LayerId): void {
 }
 
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); });
+
+it('reconciles an open phone Karta and refreshes the shared network loader after a graph change', async () => {
+  const oldNet = decodeNetwork(graphBefore);
+  const newNet = decodeNetwork(graphAfter);
+  let deployed = false;
+  const loadNetwork = vi.fn(async () => deployed ? newNet : oldNet);
+  const factory = vi.fn((options: CityMapOptions) => createCityMap(options, {
+    now: () => NOW, loadMaplibre: async () => { throw new Error('no WebGL'); },
+  }));
+  const d = mount({
+    mapFactory: factory, deps: { loadNetwork },
+    snapshot: module => module !== 'zet-rt' ? snapshotOf(module) : {
+      ...base('zet-rt'), sourceUpdatedAt: new Date(NOW).toISOString(),
+      items: [{
+        id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6',
+        at: new Date(NOW - 12_000).toISOString(),
+        geo: { type: 'Point', coordinates: [15.978, 45.808] },
+        data: { routeId: '6', routeType: 0, confidence: 0.9 },
+        motion: {
+          path: 'path:6:1:e641be7c', network: (deployed ? newNet : oldNet).graphHash,
+          generatedAt: NOW + (deployed ? 1000 : 0),
+          plan: [[0, deployed ? 8427.7 : 10924.2], [90, deployed ? 8427.7 : 10924.2]],
+        },
+      }],
+    },
+  });
+  try {
+    d.session.join();
+    d.handle.selectLayer('u-pokretu');
+    await flush();
+    const index = factory.mock.calls.findIndex(([o]) => o.container.dataset.testid === 'map-canvas');
+    expect(index).toBeGreaterThanOrEqual(0);
+    const map = factory.mock.results[index].value;
+    const options = factory.mock.calls[index][0];
+    expect(map.network?.()).toBe(oldNet);
+    deployed = true;
+    d.tick();
+    await flush();
+    await flush();
+    expect(map.network?.()).toBe(newNet);
+    const vehicle = map.vehicles!()[0];
+    const p = toPlane(vehicle.lon, vehicle.lat);
+    const expected = newNet.toPathPoint(0, 8427.7);
+    expect(Math.hypot(p.x - expected.x, p.y - expected.y)).toBeLessThan(1);
+    expect(options.reloadNetwork).toBeTypeOf('function');
+    expect(await options.loadNetwork!()).toBe(newNet);
+    expect(loadNetwork).toHaveBeenCalledTimes(2);
+  } finally { d.handle.destroy(); }
+});
 
 describe('parseSessionHash', () => {
   it('reads room, ticket and label from the fragment /s/ navigates to', () => {

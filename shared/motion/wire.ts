@@ -22,19 +22,32 @@ export type PathKnot = readonly [tSec: number, s: number];
 /** One plan knot off geometry: [seconds relative to sourceUpdatedAt, lon, lat]. */
 export type FreeKnot = readonly [tSec: number, lon: number, lat: number];
 
+/** Additive for one-deploy compatibility: legacy readers ignore these,
+ *  and upgraded readers still accept motion without them. */
+export interface MotionMetadata {
+  /** Identity of the actual loaded network artefact, not its feed version. */
+  network?: string;
+  /** Network metadata compiled into the matching client bundle. Equality,
+   *  not chronological order: a rebuild can use an older pinned timestamp. */
+  builtAt?: string;
+  /** Epoch milliseconds when the producer generated this plan. Repainting
+   *  a last-good copy must not change it. */
+  generatedAt?: number;
+}
+
 /** Phase A: the vehicle's recent fixes, oldest first, newest last. */
-export interface HistoryMotion {
+export interface HistoryMotion extends MotionMetadata {
   history: HistoryFix[];
 }
 
 /** Phase B: a plan along a named path, a GTFS shape id or a `path:` id in the network artefact. */
-export interface PathMotion {
+export interface PathMotion extends MotionMetadata {
   path: string;
   plan: PathKnot[];
 }
 
 /** Phase B: a plan in the free plane, for a vehicle no geometry fits. */
-export interface FreeMotion {
+export interface FreeMotion extends MotionMetadata {
   plan: FreeKnot[];
 }
 

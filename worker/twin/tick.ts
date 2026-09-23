@@ -12,13 +12,13 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
-import { dist, toPlane } from '../../shared/motion/geo';
+import { dist, toPlane, type XY } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
 import { extractEvidence, recordEvidence, type DwellDropped, type DwellEvidence, type EdgeEvidence, type NodePassEvidence, type NodeWaitEvidence } from '../../shared/motion/learn';
 import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
-import type { MatchContext } from '../../shared/motion/match';
+import { OFF_GRAPH_M, type MatchContext } from '../../shared/motion/match';
 import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, EVICT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
 import { junctionWaitsAt } from '../../shared/motion/junction';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
@@ -92,7 +92,8 @@ function tripStartOf(join: TripJoin | undefined, startDate: string | undefined):
  * (D14)? ZET's VEHICLE ids are stable through the day and its TRIP ids
  * change at every terminus, so a trip change is usually the same tram
  * starting its next run: the new trip's path runs the rail it is standing
- * on, or it begins at the platform the tram is standing at. Then the fixes,
+ * on, it begins at the platform the tram is standing at, or the new report
+ * stays nearby despite a cropped terminal connection. Then the fixes,
  * the speed estimate and the ordering register are evidence about this
  * vehicle and are kept; only the path-derived match state resets, which the
  * matcher does itself on the new prior, and the register's own divergence
@@ -100,11 +101,16 @@ function tripStartOf(join: TripJoin | undefined, startDate: string | undefined):
  * vehicle id changing hands, a tram towed to the other end of the city -- is
  * a new track, as it was before.
  */
-function continuesRun(net: GraphNetwork, track: Track, priorPathIdx: number | null): boolean {
+function continuesRun(net: GraphNetwork, track: Track, priorPathIdx: number | null, reported: XY): boolean {
   if (priorPathIdx === null || priorPathIdx >= net.paths.length) return false;
   if (track.match.edge !== null && net.paths[priorPathIdx].edges.includes(track.match.edge)) return true;
   const last = lastFix(track);
-  return last !== null && dist(net.toPathPoint(priorPathIdx, 0), last) <= STOP_ZONE_M;
+  // At truncated terminals the next path need not reach the tram yet.
+  // Consecutive reports of the same vehicle at the same place are stronger
+  // identity evidence than that missing connection. Recreating the Track
+  // here discarded its queue and let a standing pair reverse immediately.
+  return last !== null && (dist(net.toPathPoint(priorPathIdx, 0), last) <= STOP_ZONE_M
+    || dist(last, reported) <= OFF_GRAPH_M);
 }
 
 /** The plan a vehicle gets with no geometry loaded at all: a straight line
@@ -160,14 +166,17 @@ export function runTick(input: TickInput): TickResult {
       const routeId = raw.routeId ?? tracks[raw.vehicleId]?.routeId ?? '';
       const tripId = raw.tripId ?? null;
       let track = tracks[raw.vehicleId];
+      const previousRouteId = track?.routeId;
       const join = tripId !== null ? joins.get(tripId) : undefined;
       const prior = engine ? engine.matcher.priorFor(join?.shapeId ?? null, routeId, join?.direction ?? null, join?.pathId ?? null) : null;
+      const plane = toPlane(raw.lon, raw.lat);
       // A trip change is a terminus turnaround, and a terminus turnaround is
       // the SAME tram (D14): it keeps its Track whenever the new trip
       // continues where this one stands. Otherwise the old fixes lie
       // somewhere else entirely and the vehicle starts over.
       const tripChanged = track !== undefined && track.tripId !== null && tripId !== null && track.tripId !== tripId;
-      const continues = tripChanged && engine !== null && continuesRun(engine.net, track!, prior?.pathIdx ?? null);
+      const continues = tripChanged && engine !== null && track!.kind === kindOf(engine, routes, routeId)
+        && continuesRun(engine.net, track!, prior?.pathIdx ?? null, plane);
       if (!track || (tripChanged && !continues)) {
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
         tracks[raw.vehicleId] = track;
@@ -179,12 +188,24 @@ export function runTick(input: TickInput): TickResult {
         track.routeId = routeId;
         if (tripId !== null) track.tripId = tripId;
       }
-      const plane = toPlane(raw.lon, raw.lat);
       const fix: PlaneFix = { x: plane.x, y: plane.y, lon: raw.lon, lat: raw.lat, atSec: raw.atSec };
       const before = lastFix(track)?.atSec ?? null;
       track.tripStartSec = tripStartOf(join, raw.startDate);
       if (engine && prior) {
+        const oldPathIdx = track.match.pathIdx ?? track.priorPath;
+        const oldOrder = track.order;
         engine.matcher.matchFix(track, fix, prior, tripId !== null ? tripUpdates[tripId]?.stopId ?? null : null, ctx);
+        // Matching can reset path-local state, but two eligible placements
+        // are still the same vehicle. Preserve the live queue and let the
+        // register's shared-rail check retire divergent relations. Losing
+        // both witnesses here let two returning departure paths establish
+        // the opposite order in one tick. The same applies while a directed
+        // gap is unplaced: the vehicle has not disappeared, and the register
+        // must retain the relation until both vehicles can be framed again.
+        const oldServices = oldPathIdx === null ? undefined : engine.pathRanks[oldPathIdx]?.services;
+        const oldEligible = oldPathIdx === null || (engine.net.paths[oldPathIdx]?.route === routeId
+          && (!ctx.runningServices?.size || !oldServices?.size || [...oldServices].some(service => ctx.runningServices!.has(service))));
+        if (previousRouteId === routeId && oldEligible && !track.offGraph) track.order = oldOrder;
       } else {
         pushFix(track, fix);
       }

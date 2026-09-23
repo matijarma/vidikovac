@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMatcher, type MatchContext, type PathRank } from '../../shared/motion/match';
+import { EVICT_S } from '../../shared/motion/plan';
 import { newTrack, type PlaneFix } from '../../shared/motion/track';
 import { corridorSpec, lonLatOf, straight, syntheticNetwork, type SynthSpec, type SynthStop } from './synthetic-network';
 
@@ -444,6 +445,336 @@ describe('own-path return and service eligibility', () => {
       m.matchFix(track, fix(x, y, t), prior, null, { runningServices: new Set(['wd']) });
     }
     expect(track.match.pathIdx).toBe(prior.pathIdx);
+  });
+});
+
+describe('terminal placement continuity', () => {
+  it.each(['own', 'foreign'] as const)('releases an endpoint after two off-path fixes onto an %s branch', (owner) => {
+    const branch = { id: 'branch', direction: 0 as const, edges: [1] };
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 1000 }] },
+      ],
+      routes: [
+        { id: '1', type: 0, paths: [{ id: 'out', direction: 0, edges: [0] }, ...(owner === 'own' ? [branch] : [])] },
+        ...(owner === 'foreign' ? [{ id: '2', type: 0 as const, paths: [branch] }] : []),
+      ],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('endpoint', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    m.matchFix(t, fix(950, 0, 1000), p, null);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    m.matchFix(t, fix(1000, 55, 1020), p, null);
+    m.matchFix(t, fix(1000, 80, 1030), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('out'); // one off-path fix
+    expect(t.offPathCount).toBe(1);
+    for (let at = 1040; at <= 1640; at += 10) {
+      m.matchFix(t, fix(1000, 130, at), p, null);
+      expect(t.offGraph).toBe(false);
+      expect(t.match.residual).toBeCloseTo(0);
+      if (owner === 'own') {
+        expect(n.paths[t.match.pathIdx!].id).toBe('branch');
+        expect(t.match.s).toBeCloseTo(130);
+      } else {
+        expect(t.match.pathIdx).toBeNull();
+        expect(t.match.shapeIdx).toBeNull();
+        expect(t.fixes.at(-1)).not.toHaveProperty('arc');
+      }
+    }
+  });
+
+  it('bounds even a longitudinal truncated-end hold instead of renewing it on standing reports', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1150, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'out', direction: 0, edges: [0] },
+        { id: 'back', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    let t = newTrack('truncated', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    m.matchFix(t, fix(990, 0, 1000), p, null);
+    for (let at = 1010; at <= 1610; at += 10) {
+      m.matchFix(t, fix(1100, 0, at), p, null);
+      if (at <= 1040) expect(n.paths[t.match.pathIdx!].id).toBe('out');
+      if (at === 1030) t = JSON.parse(JSON.stringify(t)); // cold restore cannot renew the hold
+      if (at === 1050) expect(t.offPathCount).toBe(1);
+      if (at >= 1060) expect(t.match.pathIdx === null || t.match.residual <= 60).toBe(true);
+    }
+  });
+
+  it('stays unplaced through a missing directed departure instead of running an adopted arrival backwards', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(600, 1600) },
+        { from: 2, to: 3, pts: straight(600, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [0] },
+        // Same direction_id is not evidence that the actual rail points the
+        // same way (the recorded Mandlova variants have this shape).
+        { id: 'arrival', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('missing-departure', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(0, 6, 1000), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(100, 6, 1010), p, null);
+    m.matchFix(t, fix(200, 6, 1020), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    for (const [i, x] of [200, 200, 300, 400, 500].entries()) {
+      m.matchFix(t, fix(x, 6, 1030 + i * 20), p, null);
+      expect(t.match.pathIdx).toBeNull();
+      expect(t.offGraph).toBe(false);
+    }
+    m.matchFix(t, fix(650, 0, 1140), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+
+  it('does not seed a remote prior when the first fix is outside the near band of every eligible rail', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 600) },
+        { from: 1, to: 2, pts: straight(600, 1600) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('off-departure', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(0, 80, 1000), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    expect(t.match.edge).toBe(0);
+    expect(t.offGraph).toBe(false);
+    m.matchFix(t, fix(0, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+  });
+
+  it('uses the recent approach direction when a diverted tram stops between opposite rails', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 400 }] },
+        { from: 3, to: 4, pts: [{ x: 1006, y: 400 }, { x: 1006, y: 0 }] },
+        { from: 1, to: 5, pts: straight(1000, 2000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'prior', direction: 0, edges: [0, 3] },
+        { id: 'diversion', direction: 0, edges: [0, 1] },
+        { id: 'opposite', direction: 1, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('diverted', '1', 'trip', 'tram');
+    const p = m.priorFor('prior', '1', 0);
+    m.matchFix(t, fix(950, 0, 980), p, null);
+    m.matchFix(t, fix(1000, 58, 1000), p, null);
+    m.matchFix(t, fix(1000, 90, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('prior'); // one stray is still tolerated
+    m.matchFix(t, fix(1006, 90, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+  });
+
+  it.each([53, EVICT_S, EVICT_S + 1])('keeps approach evidence through a standing fix, bounded by report lifetime (%i s)', (age) => {
+    // 22134, 20 Sep 11:50:34 -> 11:50:56 -> 11:51:17:
+    // a southbound approach followed by a stopped report; the 30 s
+    // lookback lost the approach and adopted the nearer northbound rail.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 2000) },
+        { from: 2, to: 3, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 400 }] },
+        { from: 4, to: 5, pts: [{ x: 1006, y: 400 }, { x: 1006, y: 0 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'prior', direction: 0, edges: [0] },
+        { id: 'diversion', direction: 0, edges: [1] },
+        { id: 'opposite', direction: 1, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('stopped-diversion', '1', 'trip', 'tram');
+    const p = m.priorFor('prior', '1', 0);
+    m.matchFix(t, fix(1000, 58, 1000), p, null);
+    m.matchFix(t, fix(1000, 90, 1010), p, null);
+    m.matchFix(t, fix(1006, 90, 1000 + age), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe(age <= EVICT_S ? 'diversion' : 'opposite');
+  });
+
+  it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1150, 0, 6) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'out', direction: 0, edges: [0] },
+        { id: 'back', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('terminal', '1', 'trip', 'tram');
+    const p = m.priorFor('out', '1', 0);
+    for (const [i, x] of [950, 990, 1070, 1100, 1100, 1100].entries()) {
+      m.matchFix(t, fix(x, 0, 1000 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('out');
+      expect(t.offGraph).toBe(false);
+    }
+    expect(t.match.s).toBe(1000);
+    // Actual return movement is still a turnaround, not a permanent hold.
+    m.matchFix(t, fix(980, 6, 1060), p, null);
+    m.matchFix(t, fix(880, 6, 1070), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('back');
+  });
+
+  it('places a new trip on nearby eligible rails without a remote-prior tick', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 600) },
+        { from: 1, to: 2, pts: straight(600, 1600) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('new-departure', '1', 'trip', 'tram');
+    m.matchFix(t, fix(0, 0, 1000), m.priorFor('departure', '1', 0), null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+    expect(t.match.residual).toBe(0);
+    expect(t.match.s).toBe(0);
+  });
+
+  it('allows one approaching fix at a nearby cropped prior after a trip handover', () => {
+    // 10324, 21 Sep 17:37:30: the new prior starts 62 m away, then
+    // 43 m away at the next fix. The arrival is real, but need not be
+    // adopted for one fix while entering the new trip's own near band.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(-200, 0) },
+        { from: 1, to: 2, pts: straight(0, 1000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('handover', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(-77, 0, 1000), m.priorFor('approach', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(-62, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.offPathCount).toBe(1);
+    m.matchFix(t, fix(-43, 0, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.offPathCount).toBe(0);
+  });
+
+  it('keeps a genuinely placed arrival at a handover until the cropped departure is entered', () => {
+    // 102419 at 17:27:11 and 102417 at 17:41:55 on 20 Sep:
+    // the new trip is named while the tram still occupies its arrival.
+    // A clipped departure 55-60 m away is not evidence of entering it.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1060, 2060) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('still-arriving', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1001, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    for (let at = 1020; at <= 1620; at += 10) {
+      m.matchFix(t, fix(999, 0, at), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+      expect(t.match.residual).toBe(0); // genuine placement, not endpoint grace
+    }
+    m.matchFix(t, fix(1070, 0, 1630), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+
+  it('does not return to a clipped departure endpoint while approaching it', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(-200, 0) },
+        { from: 1, to: 2, pts: straight(0, 1000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('approaching', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    for (const [i, x] of [-140, -80, -20, 0].entries()) {
+      m.matchFix(t, fix(x, 0, 1000 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('approach');
+    }
+    // Genuine motion onto the shared departure rail still restores the prior.
+    m.matchFix(t, fix(60, 0, 1040), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+
+  it('accumulates a return around a bend using the current projected tangent', () => {
+    // 102301, 20 Sep 17:51:07 and 17:51:17: the adopted rail's
+    // previous arc points along the new movement, but its CURRENT
+    // projection runs backwards. Losing the first interval deferred the
+    // return until the next fix, 118 s and 753 m later.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: [{ x: 0, y: 0 }, { x: -100, y: -100 }] },
+        { from: 1, to: 2, pts: straight(-100, 0, -100) },
+        { from: 3, to: 4, pts: [{ x: -50, y: -30 }, { x: -50, y: 970 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'adopted', direction: 1, edges: [0, 1] },
+        { id: 'departure', direction: 0, edges: [2] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('return-at-bend', '1', 'trip', 'tram');
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(-100, -100, 1000), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('adopted');
+    m.matchFix(t, fix(-70, -65, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('adopted'); // only 35 forward metres
+    m.matchFix(t, fix(-55, -40, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure'); // 35 + 25, at the real near endpoint
+    expect(t.match.s).toBe(0);
+    expect(t.match.residual).toBeLessThan(12);
   });
 });
 

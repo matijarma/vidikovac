@@ -21,6 +21,7 @@ import { delayWords, routeLabel, routeShortName, routeType } from '../feed/modul
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { FEED_TICK_MS } from './clock';
 import type { TwinState } from './state';
+import { BUILT_AT } from '../../app/src/motion/network-meta';
 
 /** What the trip index says about a realtime trip id. */
 export interface TripJoin {
@@ -161,7 +162,12 @@ export function buildPayload(
         // a relation that ended is off the wire the same tick it ended.
         behind: track.order.leader ?? undefined,
       }),
-      ...(placed.motion ? { motion: placed.motion } : {}),
+      ...(placed.motion ? { motion: {
+        ...placed.motion,
+        generatedAt: state.tickAtMs || nowMs,
+        builtAt: BUILT_AT,
+        ...(net ? { network: net.graphHash } : {}),
+      } } : {}),
     });
   }
 

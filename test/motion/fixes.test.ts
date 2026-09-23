@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { routeDelayMap, vehicleFixes } from '../../app/src/motion/fixes';
+import type { VehicleMotion } from '../../shared/motion/wire';
 
 const NOW = Date.parse('2026-09-12T10:00:00Z');
 const snapshot = (items: ModuleSnapshot['items'], sourceUpdatedAt?: string): ModuleSnapshot => ({
@@ -16,6 +17,24 @@ const snapshot = (items: ModuleSnapshot['items'], sourceUpdatedAt?: string): Mod
 // next-stop ETA is the one wire time that is absolute already (WP5: the twin
 // plans an arrival, not an offset), so it is only scaled to milliseconds.
 describe('vehicleFixes and routeDelayMap', () => {
+  it.each<VehicleMotion>([
+    { path: '6_25', plan: [[0, 1400], [30, 1700]] },
+    { plan: [[0, 15.98, 45.82], [20, 15.981, 45.821]] },
+    { history: [[-12, 15.98, 45.82]] },
+  ])('preserves graph identity and absolute generation for every motion variant: %j', motion => {
+    const wire = snapshot([{
+      id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6',
+      at: new Date(NOW - 12_000).toISOString(),
+      geo: { type: 'Point', coordinates: [15.98, 45.82] },
+      motion: { ...motion, network: 'deployed-graph', generatedAt: NOW },
+    }], new Date(NOW - 20_000).toISOString());
+    for (const now of [NOW, NOW + 60_000]) {
+      const fix = vehicleFixes(structuredClone(wire), now)[0];
+      expect(fix).toMatchObject({ network: 'deployed-graph', generatedAt: NOW, at: NOW - 12_000 });
+      if (fix.plan) expect(fix.plan.knots[0][0]).toBe(NOW - 20_000);
+    }
+  });
+
   it('decodes path plans, free plans and plain pins, dating knots against sourceUpdatedAt', () => {
     const origin = '2026-09-12T09:59:40Z';
     const T = Date.parse(origin);

@@ -41,6 +41,20 @@ const at = (track: Track, tSec: number, headerSec: number) => evalPathPlan(knots
 // a silent vehicle held at its next stop while its confidence fades (T8);
 // the free plane for a vehicle off every geometry.
 describe('buildPlan', () => {
+  it('uses the published decimetre anchor for the silent platform boundary', () => {
+    for (const x of [340, 340.037, 340.049]) {
+      const tram = tramOn1(`boundary-${x}`, [[280, 1000], [x, 1010]]);
+      buildPlan(tram, net, eightMs, null, 1050, 1050, BANDS);
+      expect(tram.next?.stopId).toBe('T300');
+      for (const [, s] of knotsOf(tram)) expect(s).toBe(340);
+    }
+    // One decimetre beyond the zone is genuinely on the next stretch.
+    const beyond = tramOn1('beyond-boundary', [[280, 1000], [340.06, 1010]]);
+    buildPlan(beyond, net, eightMs, null, 1050, 1050, BANDS);
+    expect(beyond.next?.stopId).toBe('T600');
+    expect(knotsOf(beyond).at(-1)?.[1]).toBe(600);
+  });
+
   it('anchors at the last fix, honours a plausible ETA, dwells, continues on expected times, holds at the terminus, fades with silence, and lerps in the free plane', () => {
     const headerSec = 1012;
     const nowSec = 1012;

@@ -219,7 +219,8 @@
     "quakesNone": "Nema zabilježenih potresa u posljednjih 7 dana.",
     "onFigure": "na slici {shown} od {total}",
     "magnitude": "M {mag}",
-    "depth": "dubina {depth} km"
+    "depth": "dubina {depth} km",
+    "reference": "Mjerenja, sunce, zrak i bilten Save"
   },
   "safety": {
     "hitnoSame": "Ista stranica bez skeniranja: Sigurnost",
@@ -368,7 +369,8 @@
       "venue": "Mjesto",
       "when": "Kada"
     },
-    "legalNote": "Naslov je preuzet iz glasnika; sadržaj i pravni učinak akta su na izvorniku."
+    "legalNote": "Naslov je preuzet iz glasnika; sadržaj i pravni učinak akta su na izvorniku.",
+    "consultations": "Nacionalna savjetovanja"
   },
   "transit": {
     "fromStop": "Sa stanice {stop}",
@@ -1265,5 +1267,20 @@
       "W": "zapad",
       "NW": "sjeverozapad"
     }
+  },
+  "city": {
+    "bikeCount_one": "{count} bicikl",
+    "bikeCount_few": "{count} bicikla",
+    "bikeCount_other": "{count} bicikala",
+    "bikeCountUnknown": "– bicikala",
+    "airIndex-1": "Dobra",
+    "airIndex-2": "Prihvatljiva",
+    "airIndex-3": "Umjerena",
+    "airIndex-4": "Loša",
+    "airIndex-5": "Vrlo loša",
+    "airIndex-6": "Izrazito loša",
+    "airNote": "Preliminarni indeks postaje, ne ocjena za cijeli grad.",
+    "airMethod": "Opažanja postaja su preliminarna, ne ocjena za cijeli grad. Indeksi čestica koriste pomične prosjeke.",
+    "consultationsNote": "Nacionalni izvori, ne savjetovanja Grada Zagreba."
   }
 }

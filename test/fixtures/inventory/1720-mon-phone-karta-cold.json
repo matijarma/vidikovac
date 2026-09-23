@@ -1,0 +1,932 @@
+{
+ "label": "phone-karta-cold",
+ "at": "2026-09-21T15:39:06.097Z",
+ "zagreb": "17:39:06",
+ "surface": "phone",
+ "scenario": "Karta cold open (first visit in session)",
+ "vw": 390,
+ "vh": 844,
+ "scrollY": 0,
+ "url": "https://zagreb.aningfilm.hr/d/#room=…&layer=u-pokretu",
+ "title": "Kaj ima? · Promet",
+ "theme": "light",
+ "map": {
+  "status": "ready",
+  "zoom": "13.00",
+  "frames": "35",
+  "feed": "live"
+ },
+ "elements": [
+  {
+   "i": 0,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "status-line",
+   "classes": "ki-wordmark-text",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Kaj ima",
+   "fullText": "Kaj ima?",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 12,
+    "y": 14,
+    "w": 58,
+    "h": 24
+   },
+   "clip": {
+    "top": 14,
+    "bottom": 38,
+    "h": 24
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>a.ki-wordmark>span.ki-wordmark-text",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 1,
+   "tag": "button",
+   "testid": "screen-control",
+   "nearestTestid": "screen-control",
+   "classes": "ki-screen",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Zaslon",
+   "action": "presentation",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 213,
+    "y": 4,
+    "w": 65,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[screen-control].ki-screen",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 2,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "screen-control",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zaslon",
+   "fullText": "Zaslon",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 222,
+    "y": 15,
+    "w": 47,
+    "h": 21
+   },
+   "clip": {
+    "top": 15,
+    "bottom": 36,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[screen-control].ki-screen>span",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 3,
+   "tag": "button",
+   "testid": "session-label",
+   "nearestTestid": "session-label",
+   "classes": "ki-session",
+   "role": null,
+   "ariaLabel": "Otključano do 17:48, otvori postavke",
+   "text": "",
+   "fullText": "Otključano · Kaj ima? · Zagreb · do 17:489:41",
+   "action": "session",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 282,
+    "y": 4,
+    "w": 52,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session",
+   "fontSize": 16,
+   "dataset": {
+    "state": "live"
+   }
+  },
+  {
+   "i": 4,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "session-label",
+   "classes": "ki-session-sentence",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Otključano · Kaj ima? · Zagreb · do 17:48",
+   "fullText": "Otključano · Kaj ima? · Zagreb · do 17:48",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 286,
+    "y": 19,
+    "w": 1,
+    "h": 1
+   },
+   "clip": {
+    "top": 19,
+    "bottom": 20,
+    "h": 1
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session>span.ki-session-text>span.ki-session-sentence",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 5,
+   "tag": "span",
+   "testid": "countdown",
+   "nearestTestid": "countdown",
+   "classes": "ki-session-time tabular",
+   "role": null,
+   "ariaLabel": null,
+   "text": "9:41",
+   "fullText": "9:41",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 286,
+    "y": 19,
+    "w": 32,
+    "h": 14
+   },
+   "clip": {
+    "top": 19,
+    "bottom": 33,
+    "h": 14
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>button[session-label].ki-session>span.ki-session-text>span[countdown].ki-session-time.tabular",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 6,
+   "tag": "a",
+   "testid": "safety-shortcut",
+   "nearestTestid": "safety-shortcut",
+   "classes": "ki-safety",
+   "role": null,
+   "ariaLabel": "Sigurnost",
+   "text": "",
+   "fullText": "",
+   "href": "#layer=sigurnost",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 338,
+    "y": 4,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 4,
+    "bottom": 48,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>header[status-line].ki-head.ki-status>a[safety-shortcut].ki-safety",
+   "fontSize": 16,
+   "dataset": {
+    "layer": "sigurnost"
+   }
+  },
+  {
+   "i": 7,
+   "tag": "canvas",
+   "testid": null,
+   "nearestTestid": "map-canvas",
+   "classes": "maplibregl-canvas",
+   "role": "img",
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": true,
+   "control": false,
+   "rect": {
+    "x": 0,
+    "y": 52,
+    "w": 390,
+    "h": 736
+   },
+   "clip": {
+    "top": 52,
+    "bottom": 788,
+    "h": 736
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>div[map-canvas].map-canvas.t-map-canvas>div.maplibregl-canvas-container.maplibregl-interactive>canvas.maplibregl-canvas",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 8,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "map-canvas",
+   "classes": "maplibregl-ctrl-zoom-in",
+   "role": null,
+   "ariaLabel": "Približi",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 338,
+    "y": 62,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 62,
+    "bottom": 106,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>div[map-canvas].map-canvas.t-map-canvas>div.maplibregl-control-container>div.maplibregl-ctrl-top-right>div.maplibregl-ctrl.maplibregl-ctrl-group>button.maplibregl-ctrl-zoom-in",
+   "fontSize": 13.3333,
+   "dataset": {}
+  },
+  {
+   "i": 9,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "map-canvas",
+   "classes": "maplibregl-ctrl-zoom-out",
+   "role": null,
+   "ariaLabel": "Udalji",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 338,
+    "y": 106,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 106,
+    "bottom": 150,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>div[map-canvas].map-canvas.t-map-canvas>div.maplibregl-control-container>div.maplibregl-ctrl-top-right>div.maplibregl-ctrl.maplibregl-ctrl-group>button.maplibregl-ctrl-zoom-out",
+   "fontSize": 13.3333,
+   "dataset": {}
+  },
+  {
+   "i": 10,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "map-canvas",
+   "classes": "maplibregl-ctrl-geolocate",
+   "role": null,
+   "ariaLabel": "Moja lokacija",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 338,
+    "y": 160,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 160,
+    "bottom": 204,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>div[map-canvas].map-canvas.t-map-canvas>div.maplibregl-control-container>div.maplibregl-ctrl-top-right>div.maplibregl-ctrl.maplibregl-ctrl-group>button.maplibregl-ctrl-geolocate",
+   "fontSize": 13.3333,
+   "dataset": {}
+  },
+  {
+   "i": 11,
+   "tag": "summary",
+   "testid": null,
+   "nearestTestid": "map-canvas",
+   "classes": "maplibregl-ctrl-attrib-button",
+   "role": null,
+   "ariaLabel": "Izvori karte",
+   "text": "",
+   "fullText": "",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 336,
+    "y": 610,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 610,
+    "bottom": 654,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>div[map-canvas].map-canvas.t-map-canvas>div.maplibregl-control-container>div.maplibregl-ctrl-bottom-right>details.maplibregl-ctrl.maplibregl-ctrl-attrib>summary.maplibregl-ctrl-attrib-button",
+   "fontSize": 12,
+   "dataset": {}
+  },
+  {
+   "i": 12,
+   "tag": "summary",
+   "testid": null,
+   "nearestTestid": "map-controls",
+   "classes": "t-map-menu-trigger",
+   "role": null,
+   "ariaLabel": "Alati karte",
+   "text": "",
+   "fullText": "Alati karte",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 12,
+    "y": 64,
+    "w": 120,
+    "h": 44
+   },
+   "clip": {
+    "top": 64,
+    "bottom": 108,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>summary.t-map-menu-trigger",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 13,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "map-controls",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Alati karte",
+   "fullText": "Alati karte",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 53,
+    "y": 76,
+    "w": 66,
+    "h": 21
+   },
+   "clip": {
+    "top": 76,
+    "bottom": 97,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>summary.t-map-menu-trigger>span",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 14,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "map-controls",
+   "classes": "t-toggle",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Zatvaranja",
+   "fullText": "Zatvaranja",
+   "action": "toggle-closures",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 25,
+    "y": 129,
+    "w": 122,
+    "h": 44
+   },
+   "clip": {
+    "top": 129,
+    "bottom": 173,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>div.t-map-menu-body>div.t-map-chips>button.t-toggle",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 15,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "map-controls",
+   "classes": "btn-ghost t-action",
+   "role": null,
+   "ariaLabel": "Cijeli grad",
+   "text": "",
+   "fullText": "Cijeli grad",
+   "action": "fit-city",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 25,
+    "y": 185,
+    "w": 122,
+    "h": 44
+   },
+   "clip": {
+    "top": 185,
+    "bottom": 229,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>div.t-map-menu-body>div.t-map-tools>button.btn-ghost.t-action",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 16,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "map-controls",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Cijeli grad",
+   "fullText": "Cijeli grad",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 66,
+    "y": 199,
+    "w": 63,
+    "h": 17
+   },
+   "clip": {
+    "top": 199,
+    "bottom": 215,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>div.t-map-menu-body>div.t-map-tools>button.btn-ghost.t-action>span",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 17,
+   "tag": "button",
+   "testid": "map-full-toggle",
+   "nearestTestid": "map-full-toggle",
+   "classes": "btn-ghost t-action",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Proširi kartu",
+   "fullText": "Proširi kartu",
+   "action": "toggle-full",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 25,
+    "y": 237,
+    "w": 122,
+    "h": 44
+   },
+   "clip": {
+    "top": 237,
+    "bottom": 281,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>div[transport-map].transport-map>details[map-controls].t-map-menu>div.t-map-menu-body>div.t-map-tools>button[map-full-toggle].btn-ghost.t-action",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 18,
+   "tag": "strong",
+   "testid": null,
+   "nearestTestid": "transport-peek",
+   "classes": "",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Grad oko tebe",
+   "fullText": "Grad oko tebe",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 12,
+    "y": 700,
+    "w": 96,
+    "h": 21
+   },
+   "clip": {
+    "top": 700,
+    "bottom": 721,
+    "h": 21
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div.t-sheet-head>div[transport-peek].t-peek>strong",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 19,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "transport-peek",
+   "classes": "city-meta",
+   "role": null,
+   "ariaLabel": null,
+   "text": "6 mjesta",
+   "fullText": "6 mjesta",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 116,
+    "y": 701,
+    "w": 52,
+    "h": 19
+   },
+   "clip": {
+    "top": 701,
+    "bottom": 719,
+    "h": 19
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div.t-sheet-head>div[transport-peek].t-peek>span.city-meta",
+   "fontSize": 13,
+   "dataset": {}
+  },
+  {
+   "i": 20,
+   "tag": "button",
+   "testid": null,
+   "nearestTestid": "transport-sheet",
+   "classes": "btn-quiet icon-btn t-sheet-toggle",
+   "role": null,
+   "ariaLabel": "Detalji",
+   "text": "",
+   "fullText": "",
+   "action": "toggle-sheet",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 334,
+    "y": 688,
+    "w": 44,
+    "h": 44
+   },
+   "clip": {
+    "top": 688,
+    "bottom": 732,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div.t-sheet-head>button.btn-quiet.icon-btn",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 21,
+   "tag": "label",
+   "testid": null,
+   "nearestTestid": "transport-toolbar",
+   "classes": "visually-hidden",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Mjesto, ulica, linija ili stajalište",
+   "fullText": "Mjesto, ulica, linija ili stajalište",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 11,
+    "y": 739,
+    "w": 1,
+    "h": 1
+   },
+   "clip": {
+    "top": 739,
+    "bottom": 740,
+    "h": 1
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div[transport-toolbar].transport-toolbar>div.t-search>label.visually-hidden",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 22,
+   "tag": "input",
+   "testid": "transport-search",
+   "nearestTestid": "transport-search",
+   "classes": "t-search-input",
+   "role": "combobox",
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "",
+   "value": "Mjesto, ulica, linija ili stajalište",
+   "action": null,
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 12,
+    "y": 740,
+    "w": 366,
+    "h": 44
+   },
+   "clip": {
+    "top": 740,
+    "bottom": 784,
+    "h": 44
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div[transport-toolbar].transport-toolbar>div.t-search>input[transport-search].t-search-input",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 23,
+   "tag": "p",
+   "testid": null,
+   "nearestTestid": "transport-toolbar",
+   "classes": "visually-hidden",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Upiši broj linije ili ime stanice. Strelicama biraj, Enter otvara, Escape briše.",
+   "fullText": "Upiši broj linije ili ime stanice. Strelicama biraj, Enter otvara, Escape briše.",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 11,
+    "y": 739,
+    "w": 1,
+    "h": 1
+   },
+   "clip": {
+    "top": 739,
+    "bottom": 740,
+    "h": 1
+   },
+   "path": "div>div[dash].ki>main[dash-view].ki-main>section.layer>div[layer-panels].layer-panels>div[transport-workspace].transport>div.transport-body>aside[transport-sheet].transport-sheet>div[transport-toolbar].transport-toolbar>div.t-search>p.visually-hidden",
+   "fontSize": 16,
+   "dataset": {}
+  },
+  {
+   "i": 24,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Sada",
+   "href": "#layer=grad-sada",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 0,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "grad-sada"
+   }
+  },
+  {
+   "i": 25,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Sada",
+   "fullText": "Sada",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 32,
+    "y": 822,
+    "w": 33,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 26,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Karta",
+   "href": "#layer=u-pokretu",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 98,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "u-pokretu"
+   }
+  },
+  {
+   "i": 27,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Karta",
+   "fullText": "Karta",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 128,
+    "y": 822,
+    "w": 37,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 28,
+   "tag": "a",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Događanja",
+   "href": "#layer=kultura",
+   "action": "nav",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 195,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab",
+   "fontSize": 14,
+   "dataset": {
+    "layer": "kultura"
+   }
+  },
+  {
+   "i": 29,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "dash",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Događanja",
+   "fullText": "Događanja",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 209,
+    "y": 822,
+    "w": 70,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>a.ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 30,
+   "tag": "button",
+   "testid": "tab-more",
+   "nearestTestid": "tab-more",
+   "classes": "ki-tab",
+   "role": null,
+   "ariaLabel": null,
+   "text": "",
+   "fullText": "Još",
+   "action": "directory",
+   "graphic": false,
+   "control": true,
+   "rect": {
+    "x": 293,
+    "y": 788,
+    "w": 98,
+    "h": 56
+   },
+   "clip": {
+    "top": 788,
+    "bottom": 844,
+    "h": 56
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>button[tab-more].ki-tab",
+   "fontSize": 14,
+   "dataset": {}
+  },
+  {
+   "i": 31,
+   "tag": "span",
+   "testid": null,
+   "nearestTestid": "tab-more",
+   "classes": "ki-nav-label",
+   "role": null,
+   "ariaLabel": null,
+   "text": "Još",
+   "fullText": "Još",
+   "action": null,
+   "graphic": false,
+   "control": false,
+   "rect": {
+    "x": 330,
+    "y": 822,
+    "w": 22,
+    "h": 17
+   },
+   "clip": {
+    "top": 822,
+    "bottom": 838,
+    "h": 17
+   },
+   "path": "div>div[dash].ki>nav.ki-tabbar>ul.ki-tabs>li>button[tab-more].ki-tab>span.ki-nav-label",
+   "fontSize": 14,
+   "dataset": {}
+  }
+ ]
+}
