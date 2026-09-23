@@ -2785,13 +2785,13 @@ describe('arrivals on the public screen', () => {
     const card = q(k.root, '[data-testid=k-selection]')!;
     const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
     // One line per row: the time, the plate, where it is going -- and no
-    // per-row "po redu vožnje", which doubled the height of every untracked row.
-    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+    // second line saying "vozni red", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // The tracked row, and only it, carries the live dot and is marked live;
     // the note under the list says what the unmarked times are.
     expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
     expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
-    expect(text(card)).toContain('po redu vožnje');
+    expect(text(card)).toContain('vozni red');
     // One note for the list, not one per row, and the stop's lines keep their place under it.
     expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
     expect(text(card)).toContain('linija 6, 11, 12');
@@ -2815,7 +2815,7 @@ describe('arrivals on the public screen', () => {
     expect(rows.map(row => text(q(row, '.nearby-title')))).toEqual(['6 Črnomerec', '11 Velika Gorica', '13 Žitnjak']);
     expect(rows.map(row => text(q(row, '.nearby-when')))).toEqual(['za 3 min', '14:38', '14:45']);
     expect(rows.map(row => row.dataset.live)).toEqual(['1', undefined, undefined]);
-    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|po redu vožnje|ZET|Dohvaćeno/);
+    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|vozni red|ZET|Dohvaćeno/);
     // Ten seconds later the poll comes round again; the minute's memo answers it.
     k.poll();
     await flush();
@@ -2917,7 +2917,7 @@ describe('arrivals on the public screen', () => {
     // And the wall shows the rows, not an empty card under the stop's name.
     const card = q(k.root, '[data-testid=k-selection]')!;
     expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
-      .toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+      .toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // A presented route is not a stop: the screen keeps quiet behind it, and
     // the screen's own stop is not polled behind the phone's subject either.
     const other = fakeBoards(JELACIC_BOARDS);

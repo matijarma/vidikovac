@@ -587,7 +587,7 @@ describe('buildTimeband: the real producers over the layers fixtures (DEFAULT_PR
     for (const tile of tiles) {
       expect(tile.stale).toBeUndefined();
       expect(tile.label).toBe('Zadnji polazak');
-      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.context).toBe('vozni red');
       expect(tile.labelMarkup).toContain('data-size="xs"');
     }
     expect(lane(model, 'sada').tiles.filter((t) => t.testid === 'tile-transit').every((t) => t.stale)).toBe(true);

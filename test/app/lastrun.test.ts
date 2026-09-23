@@ -246,7 +246,7 @@ describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelači
     expect(tiles).toHaveLength(2);
     for (const tile of tiles) {
       expect(tile.label).toBe('Zadnji polazak');
-      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.context).toBe('vozni red');
       expect(tile.labelMarkup).toContain('data-size="xs"');
       expect(bucketOf(now, columns, tile.at)).toBe('veceras');
       expect(JSON.stringify(tile).toLowerCase()).not.toContain('dolazak');

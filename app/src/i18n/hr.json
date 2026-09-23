@@ -164,7 +164,7 @@
     "gazette": "Glasnik",
     "event": "Događanje",
     "lastRun": "Zadnji polazak",
-    "scheduled": "po rasporedu · ZET GTFS",
+    "scheduled": "vozni red",
     "bikesFree": "Bicikli",
     "parkingFree": "Garaža",
     "waste": {
@@ -176,7 +176,7 @@
     "allClearConfirmed": "potvrđeno {time}"
   },
   "weather": {
-    "now": "Trenutno",
+    "now": "Sada",
     "observedAt": "izmjereno {time}",
     "humidity": "Vlaga",
     "pressure": "Tlak",
@@ -383,7 +383,7 @@
     "now": "sada",
     "inMinutes": "za {n} min",
     "live": "uživo",
-    "scheduled": "po redu vožnje",
+    "scheduled": "vozni red",
     "note": "Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.",
     "none": "Nema najavljenih polazaka.",
     "frozen": "Sesija je završila prije nego što je red vožnje stigao.",
@@ -426,7 +426,7 @@
     "tilesFailed": "Podloga karte trenutačno nije dostupna; linije, stajališta i vozila i dalje su prikazani.",
     "mapUnavailable": "Karta nije dostupna u ovom pregledniku. Pretraga, linije i stajališta rade i bez karte.",
     "showOnMap": "Prikaži na karti",
-    "mapRegion": "Karta prometa",
+    "mapRegion": "Karta",
     "moreVehicles_one": "još {count} vozilo",
     "moreVehicles_few": "još {count} vozila",
     "moreVehicles_other": "još {count} vozila",
@@ -450,7 +450,7 @@
     "allStops": "sva stajališta ({count})",
     "clearSearch": "Očisti pretragu",
     "modesLabel": "Prikaz na karti",
-    "sheetLabel": "Detalji prometa",
+    "sheetLabel": "Detalji",
     "toolsLabel": "Alati karte",
     "noClosures": "Nema zatvorenih prometnica.",
     "noStopVehicles": "Trenutačno nijedno vozilo linija s ovog stajališta nije u pokretu.",
@@ -687,7 +687,7 @@
       "dayBody": "Promet i promjene u tvom kvartu uz ono što slijedi: najave, događanja i gradske odluke, s vlastitim vremenom i izvorom.",
       "eventsTitle": "I nakon zadnjeg tramvaja.",
       "eventsBody": "Program grada s datumom, mjestom i izvornikom. Spremi događanje u svoj kalendar.",
-      "domains": "Sada · Promet · Vrijeme · Sigurnost · Grad · Događanja"
+      "domains": "Sada · Karta · Vrijeme · Sigurnost · Grad · Događanja"
     },
     "liveTitle": "Sada u Zagrebu",
     "liveWeather": "Vrijeme · Maksimir",

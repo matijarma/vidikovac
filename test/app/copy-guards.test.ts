@@ -84,14 +84,37 @@ describe('address: one person, informal, never Vi', () => {
 });
 
 describe('one name per concept: the transport surface (slop #11, [O-51])', () => {
-  // "Karta" is the destination's one word and "Promet" only the subject word of a kicker. The
-  // rename itself (layers.u-pokretu 'Promet' → 'Karta') is WP4's, so its assertion waits in the
-  // accept tier (test/accept/trust.test.ts, TRANSPORT_TAB_WORD) and folds in here once WP4 lands.
-  // What holds today: the two retired synonyms of app/src/city/strings.ts (`movement`, `network`)
-  // never enter the catalogue while WP4 and WP5 move that file's words into it.
+  // "Karta" is the destination's one word and "Promet" only the subject word of a kicker. WP4
+  // renamed the tab (layers.u-pokretu); WP5 gave the map region, the sheet and the paired
+  // presentation the same word. The two retired synonyms of app/src/city/strings.ts
+  // (`movement`, `network`) never enter the catalogue while WP5 moves that file's words into it.
+  const TRANSPORT_TAB_WORD = 'Karta';
   it('no hr.json value is "Kretanje" or "Prijevoz i raspored"', () => {
     const synonyms = leafKeys(HR).filter((key) => ['Kretanje', 'Prijevoz i raspored'].includes(leaf(HR, key)!.trim()));
     expect(synonyms).toEqual([]);
+  });
+  it('the tab, the map region and the landing line say "Karta"; the sheet says "Detalji"', () => {
+    expect(hr.layers['u-pokretu']).toBe(TRANSPORT_TAB_WORD);
+    expect(hr.transport.mapRegion).toBe(TRANSPORT_TAB_WORD);
+    expect(hr.transport.sheetLabel).toBe('Detalji');
+    expect(hr.kiosk.paired.overviewTransport).toBe(`${TRANSPORT_TAB_WORD} oko stajališta`);
+    expect(hr.landing.evidence.domains).toBe(`Sada · ${TRANSPORT_TAB_WORD} · Vrijeme · Sigurnost · Grad · Događanja`);
+    expect(read('app/index.html')).toContain(`>${hr.landing.evidence.domains}<`);
+    expect(read('app/src/izvori-render.ts')).toContain('<a href="#izvor-zet-rt">Promet</a>');
+    expect(JSON.stringify(hr)).not.toMatch(/Karta prometa|Detalji prometa|Promet oko/);
+  });
+});
+
+describe('one word per concept: "Sada" is now and "vozni red" the timetable (WP5 step 6)', () => {
+  it('the timetable word is "vozni red" wherever a time is not tracked', () => {
+    expect(hr.arrivals.scheduled).toBe('vozni red');
+    expect(hr.tiles.scheduled).toBe(hr.arrivals.scheduled);
+    expect(en.tiles.scheduled).toBe(en.arrivals.scheduled);
+    expect(JSON.stringify(hr)).not.toMatch(/po redu vožnje|po rasporedu|ZET GTFS/);
+  });
+  it('the weather now is "Sada"', () => {
+    expect(hr.weather.now).toBe('Sada');
+    expect(JSON.stringify(hr)).not.toMatch(/"Trenutno"/);
   });
 });
 

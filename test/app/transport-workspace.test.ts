@@ -913,7 +913,7 @@ describe('what comes next at a stop', () => {
     // Beyond the countdown horizon, and with no vehicle behind it: the clock and the timetable mark.
     expect(text(rows[1])).toContain('Dubec');
     expect(rows[1]!.dataset.live).toBe('false');
-    expect(text(rows[1])).not.toContain('po redu vožnje'); // the form says it, never a word per row [O-27]
+    expect(text(rows[1])).not.toContain('vozni red'); // the form says it, never a word per row [O-27]
     expect(rows[1]!.querySelector('time')).not.toBeNull();
     expect(rows[1]!.querySelector('.t-live')).toBeNull();
     // One note, first in the sheet, and the retired sentence and slot are gone.

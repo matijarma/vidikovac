@@ -155,7 +155,7 @@
     "gazette": "Gazette",
     "event": "Event",
     "lastRun": "Last departure",
-    "scheduled": "scheduled · ZET GTFS",
+    "scheduled": "timetable",
     "bikesFree": "Bikes",
     "parkingFree": "Garage",
     "waste": {
@@ -167,7 +167,7 @@
     "allClearConfirmed": "confirmed {time}"
   },
   "weather": {
-    "now": "Right now",
+    "now": "Now",
     "observedAt": "measured at {time}",
     "humidity": "Humidity",
     "pressure": "Pressure",
@@ -367,7 +367,7 @@
     "now": "now",
     "inMinutes": "in {n} min",
     "live": "live",
-    "scheduled": "scheduled",
+    "scheduled": "timetable",
     "note": "Estimated from ZET’s own vehicle data; the rest follow the timetable.",
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
@@ -410,7 +410,7 @@
     "tilesFailed": "The base map is unavailable right now; routes, stops and vehicles are still shown.",
     "mapUnavailable": "The map is not available in this browser. Search, routes and stops work without it.",
     "showOnMap": "Show on the map",
-    "mapRegion": "Transport map",
+    "mapRegion": "Map",
     "moreVehicles_one": "{count} more vehicle",
     "moreVehicles_few": "{count} more vehicles",
     "moreVehicles_other": "{count} more vehicles",
@@ -434,7 +434,7 @@
     "allStops": "all stops ({count})",
     "clearSearch": "Clear search",
     "modesLabel": "Show on the map",
-    "sheetLabel": "Transport details",
+    "sheetLabel": "Details",
     "toolsLabel": "Map tools",
     "noClosures": "No road closures.",
     "noStopVehicles": "No vehicle of this stop’s routes is moving right now.",
@@ -665,7 +665,7 @@
       "dayBody": "Transport and changes in your neighbourhood beside what is coming up: events, announcements and City decisions, each with its own time and source.",
       "eventsTitle": "Beyond the last tram.",
       "eventsBody": "The city’s programme with a date, a place and an original source. Save an event to your calendar.",
-      "domains": "Now · Transport · Weather · Safety · City · Events"
+      "domains": "Now · Map · Weather · Safety · City · Events"
     },
     "liveTitle": "Zagreb now",
     "liveWeather": "Weather · Maksimir",

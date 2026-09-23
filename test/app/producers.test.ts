@@ -416,7 +416,7 @@ describe('lastRunProducer', () => {
     const first = tiles[0]!;
     expect(first).toMatchObject({
       key: 'transit:lastrun:13', domain: 'transit', variant: 'time', layer: 'u-pokretu', testid: 'tile-lastrun',
-      label: 'Zadnji polazak', title: 'Žitnjak-Kvatern. trg', at: '2026-09-11T22:30:00.000Z', context: 'po rasporedu · ZET GTFS',
+      label: 'Zadnji polazak', title: 'Žitnjak-Kvatern. trg', at: '2026-09-11T22:30:00.000Z', context: 'vozni red',
     });
     expect(first.labelMarkup).toContain('data-size="xs"');
     expect(first.labelMarkup).toContain('data-kind="tram"');
@@ -426,11 +426,11 @@ describe('lastRunProducer', () => {
     expect(tiles[1]!.at).toBe('2026-09-11T22:31:00.000Z');
   });
 
-  it('never says an arrival: no tile text carries "dolazak", and the context names the schedule and its source', () => {
+  it('never says an arrival: no tile text carries "dolazak", and the context names the timetable', () => {
     for (const tile of lastRunProducer.produce(withLastRun(), options())) {
       const words = [tile.label, tile.title, tile.context, tile.value, tile.aria].join(' ').toLowerCase();
       expect(words).not.toContain('dolazak');
-      expect(tile.context).toBe('po rasporedu · ZET GTFS');
+      expect(tile.context).toBe('vozni red');
       expect(tile.value).toBeUndefined();
     }
   });
