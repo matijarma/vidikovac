@@ -67,11 +67,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     reduced:deps.reducedMotion||lightweight,
     designHeightPx:()=>NEARBY_DESIGN_HEIGHT[model?.composition??'wide'],
   });
-  const mapHost=element.querySelector<HTMLElement>('[data-testid=kiosk-map-host]')!;
-  function setFrame(frame:FrameStops):void {
-    const value=String(frame);
-    if(mapHost.dataset.frame!==value)mapHost.dataset.frame=value;
-  }
+  const setFrame=(frame:FrameStops):void=>field.setFrame(frame);
   function fit():void {
     if(model)timeline.update(model.items,model.radiusM,model.now);
   }
