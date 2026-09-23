@@ -1214,17 +1214,31 @@ export function createNameHysteresis(): NameHysteresis {
   const states = new Map<string, NameState>();
   const held = new Map<string, number>();
   const heldList = (): string[] => [...held.keys()].sort();
+  /** The first look: a name first seen a second after it was out of sight all along, and comes back like any other. */
+  let startedAt: number | null = null;
   return {
     held: heldList,
     tick(t, placed, covered) {
       const opacity = new Map<string, number | null>();
       let changed = false;
-      // A hold ends when its time is up, or at once when a pill covers the name.
+      startedAt ??= t;
+      // A hold ends when its time is up, or at once when a pill covers the
+      // name -- which then goes out of sight at once, for its full second,
+      // whatever the collision pass makes of the move back.
       for (const [id, until] of held) {
-        if (t < until && !covered.has(id)) continue;
+        const cover = covered.has(id);
+        if (t < until && !cover) continue;
         held.delete(id);
         const st = states.get(id);
-        if (st) st.swapAt = t;
+        if (st) {
+          st.swapAt = t;
+          if (cover) {
+            st.hiddenAt = t;
+            st.quietUntil = t + NAME_MIN_HIDDEN_MS;
+            st.fadeFrom = null;
+            opacity.set(id, 0);
+          }
+        }
         changed = true;
       }
       for (const [id, st] of states) {
@@ -1239,11 +1253,26 @@ export function createNameHysteresis(): NameHysteresis {
       for (const id of placed) {
         const st = states.get(id);
         if (!st) {
-          // First seen: the picture as it opens, nothing to hold.
-          states.set(id, { placed: true, hiddenAt: null, quietUntil: null, fadeFrom: null, swapAt: -Infinity });
+          // First seen as the picture opens: nothing to hold. Later, it was
+          // out of sight since then and comes back.
+          const late = t - startedAt >= NAME_MIN_HIDDEN_MS;
+          states.set(id, { placed: true, hiddenAt: null, quietUntil: null, fadeFrom: null, swapAt: late ? t : -Infinity });
+          if (late) {
+            held.set(id, t + NAME_HOLD_MS);
+            changed = true;
+          }
           continue;
         }
-        if (st.placed) continue;
+        if (st.placed) {
+          // Placed all along but sent out of sight by a covering pill: when
+          // its second is up it shows again, and is held from then.
+          if (st.quietUntil !== null && t >= st.quietUntil && !held.has(id)) {
+            held.set(id, t + NAME_HOLD_MS);
+            st.swapAt = t;
+            changed = true;
+          }
+          continue;
+        }
         st.placed = true;
         if (st.hiddenAt === null) continue;
         // Back: unseen until its second out of sight is up, then held.

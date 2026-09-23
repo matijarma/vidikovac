@@ -1444,13 +1444,27 @@ describe('the stop names\u2019 hysteresis (decision 19)', () => {
     expect(h.tick(2500 + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
   });
 
-  it('lets a pill that covers a held name end the hold at once', () => {
+  it('lets a pill that covers a held name end the hold at once and send the name out of sight for its full second', () => {
     const h = createNameHysteresis();
     h.tick(0, S('a'), NONE);
     h.tick(100, NONE, NONE);
     h.tick(1500, S('a'), NONE);
     expect(h.held()).toEqual(['a']);
-    expect(h.tick(1700, S('a'), S('a')).held).toEqual([]);
+    const covered = h.tick(1700, S('a'), S('a'));
+    expect(covered.held).toEqual([]);
+    expect(covered.opacity.get('a')).toBe(0);
+    // Still placed by MapLibre: out of sight to its second, then in, and held from then.
+    expect(h.tick(2000, S('a'), NONE).opacity.get('a')).toBeUndefined();
+    const again = h.tick(1700 + NAME_MIN_HIDDEN_MS, S('a'), NONE);
+    expect(again.opacity.get('a')).toBe(0);
+    expect(again.held).toEqual(['a']);
+  });
+
+  it('holds a name first seen a second after the picture opened: it was out of sight all along', () => {
+    const h = createNameHysteresis();
+    h.tick(0, S('a'), NONE);
+    expect(h.tick(500, S('a', 'b'), NONE).held).toBeNull(); // still opening
+    expect(h.tick(NAME_MIN_HIDDEN_MS, S('a', 'b', 'c'), NONE).held).toEqual(['c']);
   });
 
   it('keeps a name hidden for a moment out of sight until its second is up, then fades it in over NAME_FADE_MS, and holds it from then', () => {
