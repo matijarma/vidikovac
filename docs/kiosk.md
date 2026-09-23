@@ -11,7 +11,9 @@ upute o pretraživanju dodirom. Ukratko:
 - U zaglavlju su natpis „Kaj ima?”, mjesto (stajalište ili ulica, a za zaslon
   bez odabranog mjesta Trg bana J. Jelačića), jedna rečenica s obojenom
   natuknicom, datum i sat. Rečenica ima najviše 80 znakova, nikad se ne reže
-  trotočjem i mijenja se u ritmu zaslona, zadano svakih 20 sekundi.
+  trotočjem i mijenja se u ritmu zaslona, zadano svakih 20 sekundi; na
+  zaslonu ostaje barem jedan ritam, osim kad činjenica te rečenice prestane
+  vrijediti.
 - Karta prikazuje mjesto i 6 stajališta uokolo (postavka Kadar: 4, 6 ili 8
   stajališta odavde); polumjer kadra mjeri se za svako mjesto posebno. Zaslon
   postavljen na cijeli grad drži prozor cijeloga grada. Karta ističe ono o
@@ -27,18 +29,21 @@ upute o pretraživanju dodirom. Ukratko:
   ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, na
   podlozi od 264 piksela. Telefon na `/kiosk/` dobiva upute za postavljanje,
   kod i mali pregled.
-- Na pregledu grada nema vremena dohvata, napomena o izvoru, svježini ili
-  pouzdanosti ni brojeva bez imena. Nema ni gumba za posjetitelja: ni za
-  pauzu, ni za kopiranje koda, ni za temu ili postavke. Pozivnica nudi samo
-  jednu radnju: skeniranje.
+- Na zaslonu nema vremena dohvata ni opažanja, napomena o izvoru, svježini
+  ili pouzdanosti ni brojeva bez imena, ni na pregledu grada ni u
+  prezentaciji. Nema ni gumba za posjetitelja: ni za pauzu, ni za kopiranje
+  koda, ni za temu ili postavke, a riječ stanja i `/hitno` u sigurnosnoj
+  traci samo su tekst. Pozivnica nudi samo jednu radnju: skeniranje.
 - Sigurnosna traka uvijek je vidljiva i nosi stanje, izvore bez vremena i
   dežurnu ljekarnu kao zeleni križ, „24/7” i adresu.
 - Zadana tema zaslona prati sunce, pa zaslon noću prelazi na tamnu paletu.
   Kad ZET ne šalje položaje vozila, karta ostaje karta bez vozila, s jednom
   tihom napomenom, a svaki je polazak siv sat po voznom redu.
 - Dodir, gdje ga zaslon ima, služi samo za čitanje: dodir na prsten
-  stajališta 60 sekundi pokazuje polaske s tog stajališta, a zatim se zaslon
-  sam vraća. Sadržaj se može ponijeti samo skeniranjem.
+  stajališta 60 sekundi pokazuje polaske s tog stajališta, dodir na redak
+  popisa pokazuje pojedinosti retka, a dodir na dežurnu ljekarnu adresu i
+  telefon ljekarne; zatim se zaslon sam vraća. Sadržaj se može ponijeti samo
+  skeniranjem.
 - Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija zaustavlja
   rečenicu i popis; potvrda preuzimanja i potvrda iscrtavanja ostaju.
 - Za postavljanje postoje samo polje „Adresa ili stajalište” i **Pokreni**.
@@ -66,7 +71,7 @@ rute `/api/admin/*` i `/stats`.
 2. U polje **Adresa ili stajalište** upisati ulicu ili ime stajališta, ili
    polje ostaviti prazno. Već nakon dva slova polje predlaže tramvajska i
    autobusna stajališta te ulice; duga ulica nudi se po dijelovima, uz
-   stajališta na njoj. Upisani kućni broj ostaje zapisan kao tekst, jer
+   stajališta te ulice. Upisani kućni broj ostaje zapisan kao tekst, jer
    izvanmrežni popis ulica (`/data/streets-geo.json`, podaci OpenStreetMap,
    licenca ODbL 1.0) nema kućnih brojeva. Odabrano stajalište postaje mjesto
    zaslona. Kad je odabrana ulica, mjesto postaje najbliže tramvajsko
@@ -207,13 +212,19 @@ ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika
 `?lagano=1`, gdje karte nema, nema ni legende.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
-Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju dodira
-od 28 CSS piksela, jer prst na zaslonu nije miš na stolu. Dodir na prsten
-60 sekundi pokazuje sljedeće polaske s tog stajališta, dodir na redak popisa
-pokazuje pojedinosti retka (mjesto održavanja, adresu i tramvaj do
-odredišta), a dodir na dežurnu ljekarnu adresu i telefon ljekarne. Zatim se
-zaslon sam vraća. Karta se pritom ne pomiče, pretrage i izbornika nema, a
-sadržaj se može ponijeti samo skeniranjem.
+Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
+dodira od 28 CSS piksela, jer prst na zaslonu nije miš na stolu. Zaslon sam
+pronalazi dodirnuti prsten, pa karta ne mora primati dodir i ne pomiče se.
+Dodir na prsten 60 sekundi pokazuje ploču tog stajališta: sljedeća tri
+polaska u istom retku kao na telefonu, zatim jedan redak „Vozni red” s
+kasnijim polascima. Dodir na redak popisa pokazuje pojedinosti retka (mjesto
+održavanja, adresu i tramvaj do odredišta), a dodir na dežurnu ljekarnu
+adresu, naziv i telefon ljekarne. Ploča prekriva popis „U blizini” unutar
+okvira popisa, a drugi dodir zamjenjuje prvi. Zaslon se sam vraća nakon 60
+sekundi, kad ZET prestane slati položaje vozila dok je ploča otvorena, kad
+počne prezentacija ili kad se promijeni stanje zaslona. U prikazu sheme,
+tijekom prezentacije i u Postavkama dodir ne otvara ništa. Pretrage i
+izbornika nema, a sadržaj se može ponijeti samo skeniranjem.
 
 Desni stupac nosi popis „U blizini”, a ispod popisa pozivnicu. Naslov popisa
 ispisuje polumjer kruga i vrijeme hoda, na primjer
@@ -223,26 +234,31 @@ minuta, a sivi sat za vozni red i za svaki kasniji polazak. Zatim slijede
 redovi s vremenom: kraj zatvaranja prometnice, događanje s mjestom
 održavanja i tramvajem do mjesta događanja, sljedeći zalazak ili izlazak
 sunca (nikad oba), večerašnji zadnji polasci kao jedan redak, četiri sata
-unaprijed, prvi jutarnji tramvaj od 22 sata dok ne krene i, kad se večer
-isprazni, sutrašnja otvaranja tržnica i muzeja iz kataloga. Na kraju stoji
-jedan redak „uvijek”: priča o imenu mjesta ili zaštićena građevina u
+unaprijed, od 22 sata prvi jutarnji polazak linije koja sljedeća kreće, sve
+dok ne krenu sve linije koje ondje staju, a najkasnije do 6 sati, i, kad se
+večer isprazni, sutrašnja otvaranja tržnica i muzeja iz kataloga. Na kraju
+stoji jedan redak „uvijek”: priča o imenu mjesta ili zaštićena građevina u
 blizini, naizmjence svakih 20 minuta, a od 22 do 6 sati dežurna ljekarna
 24/7. Nijedan redak ne nosi napomenu o izvoru, svježini ili pouzdanosti:
 boja razlikuje praćeno vozilo od voznog reda, a izvori su na telefonu i na
 `/izvori`. Na popisu su samo cijeli redovi, onoliko koliko ih stane;
 najmanja visina retka, od 64 do 92 piksela, ovisi o broju stavki, pa manje
-stavki znači veće retke, a redak s duljim tekstom viši je. Ništa se ne reže
-trotočjem: predug redak ispisuje kraći cjeloviti naziv iz izvora ili se
-prelama u cijelosti; kad redovi ne stanu, s popisa izlaze cijeli redovi,
-najprije najkasniji, a prvi redak iza polazaka tek nakon kasnijih polazaka.
-Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak ulazi na dnu,
-postupno se pojavi i zatim zauzme svoje mjesto u vremenu; prošli izlazi na
-vrhu, a bez promjene ništa se ne pomiče. Zatvaranje prometnice ostaje na
-popisu i kad posljednji dohvat nije uspio: neuspjeli dohvat ne otvara ulicu.
-**Pozivnica** je visoka koliko i QR kod: uz QR stoje uvod
-„Skeniraj za 10 minuta grada.”, kod ispod teksta u istom stupcu i na stalnoj
-veličini, s trakom napretka ispod koda, i adresa za upis koda. Nema retka o
-koristi ni gumba za kopiranje.
+stavki znači veće retke, a redak s duljim tekstom viši je. Oznaka linije u
+retku polaska velika je koliko i naslov retka: najmanje 40 piksela, a u
+tamnoj temi 44. Ništa se ne reže trotočjem: predug redak ispisuje kraći
+cjeloviti naziv iz izvora ili se prelama u cijelosti; kad redovi ne stanu, s
+popisa izlaze cijeli redovi, najprije najkasniji, a prvi redak iza polazaka
+tek nakon kasnijih polazaka. Redak zadnjih polazaka, redak prvog jutarnjeg
+polaska i jedan redak „uvijek” zbog prostora nikad ne izlaze. Redovi se
+mjere u skrivenom popisu iste širine, a na vidljivi popis stiže samo konačni
+izbor. Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak umeće
+se jednom, odmah na svoje mjesto u vremenu, i ondje se postupno pojavi;
+prošli izlazi na vrhu, a bez promjene ništa se ne pomiče. Zatvaranje
+prometnice ostaje na popisu i kad posljednji dohvat nije uspio: neuspjeli
+dohvat ne otvara ulicu. **Pozivnica** je visoka koliko i QR kod: uz QR stoje
+uvod „Skeniraj za 10 minuta grada.”, kod ispod teksta u istom stupcu i na
+stalnoj veličini, s trakom napretka ispod koda, i adresa za upis koda. Nema
+retka o koristi ni gumba za kopiranje.
 
 Zaglavlje nosi naziv, mjesto, datum i vrijeme, a između mjesta i datuma
 jednu rečenicu: obojenu natuknicu (Promet, Kultura, Vrijeme, Bicikli, Noćas,
@@ -254,14 +270,25 @@ trotočja: preduga rečenica preskače se, a ne reže. Pločica sesije i
 obavijest o uparivanju imaju prednost pred rečenicom, a izričita
 prezentacija zaustavlja i rečenicu i popis. Rečenica nastaje iz istih
 činjenica kao popis, uz vremenske prilike, zatvaranja i BAJS stanice u
-krugu. Dok su na raspolaganju barem tri podatka, isti se podatak u zaglavlju
-ne pojavljuje više od jednom u deset minuta, ni drugim riječima; s manje
-podataka samo se ista rečenica ne ponavlja doslovno unutar deset minuta.
+krugu. Rečenica ostaje barem jedan ritam, osim kad činjenica te rečenice
+prestane vrijediti. Kad se ista činjenica ponovno izrekne (sljedeća minuta
+odbrojavanja, pomaknuta procjena, ponovljeni kraj zatvaranja), isti se tekst
+osvježi na mjestu, bez prijelaza, a rečenica nikad ne prelazi s „za N min”
+na sat. Odgovor modela čeka kraj rečenice koja je na zaslonu, a promjena
+ritma mijenja samo trajanje iste izmjene, bez novog početka. Dok su na
+raspolaganju barem tri podatka, isti se podatak u zaglavlju ne pojavljuje
+više od jednom u deset minuta, i to uvijek istim riječima; s manje podataka
+samo se ista rečenica ne ponavlja doslovno unutar deset minuta.
 
 Sigurnosna traka uvijek ostaje vidljiva i imenuje stanje izvora te
 upozorenje kada postoji; kad upozorenja nema, imenuje izvore („DHMZ · EMSC”)
 bez vremena dohvata. Dežurnu ljekarnu traka pokazuje kao zeleni križ, „24/7”
-i kratku adresu. Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
+i kratku adresu; čitač zaslona zeleni križ najavljuje nazivom i adresom
+dežurne ljekarne, a kad adresu nije moguće prikazati, samo kao „24/7”. Na
+javnom zaslonu traka je samo tekst: riječ stanja i riječ `/hitno` nisu ni
+gumbi ni poveznice, a ni navod izvora karte nije poveznica. Telefon ili
+tablet koji je otvorio `/kiosk/` zadržava poveznicu i gumb za „Osnovno”.
+Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
 
 Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena
 ploča ne smije postati prazna samo da bi se uklonilo prelijevanje teksta.
@@ -309,18 +336,19 @@ zaslona i poveznica na `/hitno`, a podaci se više ne dohvaćaju. Zamrznutog
 prikaza i izvoza nema. Istek 24-satne postave zaustavlja nove kodove, ali ne
 skraćuje već otvorene sesije.
 
-### Osnovno, bez telefona
+### Osnovno, bez sesije
 
-„Osnovno” se otvara riječju stanja na sigurnosnoj traci (mirno, upozorenje
-ili nepotvrđeno) i služi samo za čitanje: prikazuje dostupna upozorenja,
-zatvaranja, linije u blizini, vrijeme i podatke o dežurnoj ljekarni, bez
-otvaranja sesije. Kartice se ne
-režu: što ne stane u cijelosti, izostaje, počevši od posljednje kartice, pa
-na manjem zaslonu prva izostaje dežurna ljekarna, a zeleni križ i adresu
-ljekarne i tada nosi sigurnosna traka. Nedostupni podaci nisu potvrda da je
-sve u redu. „Natrag”, Escape ili 90 sekundi bez
-aktivnosti vraćaju poziv za skeniranje. Taj se vremenski povratak primjenjuje
-samo izvan aktivne povezane sesije.
+„Osnovno” se otvara na telefonu ili tabletu koji je otvorio `/kiosk/`,
+riječju stanja na sigurnosnoj traci (mirno, upozorenje ili nepotvrđeno), i
+služi samo za čitanje: prikazuje dostupna upozorenja, zatvaranja, linije u
+blizini, vrijeme i podatke o dežurnoj ljekarni, bez otvaranja sesije. Na
+javnom zaslonu riječ stanja samo je tekst, pa se „Osnovno” ondje ne otvara.
+Kartice se ne režu: što ne stane u cijelosti, izostaje, počevši od
+posljednje kartice, pa prva izostaje dežurna ljekarna, a zeleni križ i
+adresu ljekarne i tada nosi sigurnosna traka. Nedostupni podaci nisu potvrda
+da je sve u redu. „Natrag”, Escape ili 90 sekundi bez aktivnosti vraćaju
+poziv za skeniranje. Taj se vremenski povratak primjenjuje samo izvan
+aktivne povezane sesije.
 
 Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 
@@ -379,7 +407,11 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   provjerava se prije prikaza na zaslonu (`shared/kiosk/external-text.ts`).
   Ako vrijednost ne prođe provjeru, izostaje zajedno sa svojim retkom ili
   rečenicom; nikad se ne popravlja ni ne skraćuje. Zaglavlje, kao glas grada,
-  provjerava se strože od redaka popisa.
+  provjerava se strože od redaka popisa. Jedina je iznimka devet ulica iz
+  registra čiji naziv sadrži riječ nalik oznaci valute (primjerice Nova
+  Ves): u retku popisa prolaze samo gola adresa takve ulice s kućnim brojem i
+  25 polja iz registra baštine, znak po znak kako su zapisana; zaglavlje ih i
+  dalje odbija.
 
 ## Lagani prikaz
 
@@ -387,12 +419,16 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 Postavka se pamti lokalno. Bez izričitog izbora aplikacija može odabrati
 lagani prikaz prema dostupnoj memoriji, štednji podataka ili nedostupnom WebGL-u.
 
-Lagani prikaz ne učitava MapLibre, mrežni geometrijski artefakt ni web-fontove,
-i ne stvara canvas. Umjesto karte ostaje uporabiv popis linija i tekstualni
-sadržaj. Redovno uparivanje, QR, kod, sigurnost i „Osnovno” nastavljaju raditi.
-Na telefonu lagani prikaz Karte zadržava cijelu ploču, s pretragom,
-pojedinostima stajališta i popisom „U blizini”, samo bez karte i bez
-prekidača između karte i sheme.
+Lagani prikaz ne učitava MapLibre, mrežni geometrijski artefakt ni
+web-fontove, i ne stvara canvas. Umjesto karte ostaje uporabiv popis linija i
+tekstualni sadržaj s popisom „U blizini”. Redovno uparivanje, QR, kod i
+sigurnosna traka nastavljaju raditi. Na telefonu lagani prikaz Karte zadržava
+cijelu ploču, s pretragom, pojedinostima stajališta i popisom „U blizini”,
+samo bez karte i bez prekidača između karte i sheme; na računalu Sada i ploča
+Karte i tada stoje usporedno. Karta treba WebGL2: preglednik bez WebGL2 ne
+crta kartu, a na telefonu Karta to kaže jednom rečenicom, dok pretraga i
+popisi rade i dalje. Automatski izbor laganog prikaza zasad provjerava samo
+prvu inačicu WebGL-a.
 
 `test/app/budget.test.ts` gradi produkcijske datoteke i provjerava početni
 lagani graf ispod 200 kB komprimiranog HTML-a, CSS-a i JavaScripta. Zasebno
