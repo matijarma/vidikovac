@@ -52,8 +52,7 @@ export interface WeatherNow {
   condition: string;
   station: string;
   details: string[];
-  observedAt: string;
-  /** The observation's own time, for a freshness check by the caller. */
+  /** The observation's own time, for a freshness check by the caller; the wall never prints it (§12). */
   observedMs: number | null;
   attribution: string;
 }
@@ -63,7 +62,7 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
   const observation = snapshot?.items.find((item) => item.kind === 'observation') ?? snapshot?.items[0];
   const state = sourceState(snapshot);
   if (!snapshot || !observation) {
-    return { state, temperature: null, condition: '', station: '', details: [], observedAt: '', observedMs: null, attribution: snapshot?.attribution.text ?? '' };
+    return { state, temperature: null, condition: '', station: '', details: [], observedMs: null, attribution: snapshot?.attribution.text ?? '' };
   }
   const temp = dataNumber(observation, 'temp');
   const humidity = dataNumber(observation, 'humidity');
@@ -87,7 +86,6 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
     condition: cleanCondition(dataText(observation, 'weather')),
     station: observation.title,
     details,
-    observedAt: Number.isFinite(observedMs) ? fill(strings.weather.observed, { time: clock(observedMs) }) : '',
     observedMs: Number.isFinite(observedMs) ? observedMs : null,
     attribution: fillAttribution(snapshot.attribution, snapshot, observation),
   };

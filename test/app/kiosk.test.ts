@@ -3006,9 +3006,10 @@ describe('W-C4: third-party text on the wall is checked and counted (decision 18
 // update time, no disclaimer and no caveat anywhere on the wall. The phone
 // keeps its own notes; this reads only what the wall paints.
 describe('the wall carries no disclaimer, caveat or fetch time', () => {
-  /** WP5.md step 8's pattern, plus the two source-then-clock forms the wall printed
-   *  before it (the paired credit "ZET 14:31", the weather meta "DHMZ · 14:00"). */
-  const SLOP = /Podatak iz registra|Obuhvat zaštite|Procjena|Vozni red od|Zapis od|[Dd]ohvaćeno|podaci od \d|potvrđeno \d|Izračunato na uređaju|ne procjena dolaska|ostalo po voznom redu|Položaj (je|vozila)|\b\d\d:\d\d · (DHMZ|ZET)\b|\b(DHMZ|ZET)( ·)? \d\d:\d\d|nepotvrđeno\)|\?/;
+  /** WP5.md step 8's pattern, plus the forms the wall printed before it: the paired
+   *  credit "ZET 14:31", the weather meta "DHMZ · 14:00" and the Vrijeme card's
+   *  observation clock "opaženo 14:00 · Maksimir · DHMZ" (review of lane/c-B1, P1). */
+  const SLOP = /Podatak iz registra|Obuhvat zaštite|Procjena|Vozni red od|Zapis od|[Dd]ohvaćeno|podaci od \d|potvrđeno \d|[Oo]paženo \d|Izračunato na uređaju|ne procjena dolaska|ostalo po voznom redu|Položaj (je|vozila)|\b\d\d:\d\d(?: · [^·]{1,40})? · (DHMZ|ZET)\b|\b(DHMZ|ZET)( ·)? \d\d:\d\d|nepotvrđeno\)|\?/;
   /** Every text node on its own, space-separated: adjacent elements never fuse into one word ("blizini" + "ZET 14:31"). */
   const words = (el: Element | null): string => {
     const out: string[] = [];

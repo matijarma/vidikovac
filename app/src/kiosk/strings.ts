@@ -67,7 +67,6 @@ export interface KioskStrings {
     /** The eight compass points, the same words the app's vehicle cards use (motion.compass.*). */
     compass: Record<'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW', string>;
     pressure: string;
-    observed: string;
     sunrise: string;
     sunset: string;
     daylight: string;
@@ -384,7 +383,7 @@ function build(code: SupportedLocale): KioskStrings {
     invitation: group('invite', ['lead', 'typeCode', 'qrLabel', 'qrWaiting', 'progressLabel']),
     legend: group('legend', ['tram', 'bikes', 'culture']),
     weather: {
-      ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
+      ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
     arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },

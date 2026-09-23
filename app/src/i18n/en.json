@@ -744,7 +744,6 @@
       "windCalm": "calm",
       "windNoDir": "wind {speed} m/s",
       "pressure": "{value} hPa",
-      "observed": "observed {time}",
       "sunrise": "sunrise {time}",
       "sunset": "sunset {time}",
       "daylight": "daylight {hours} h {minutes} min",

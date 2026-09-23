@@ -219,14 +219,15 @@ describe('formatting for a screen read from steps away', () => {
 });
 
 describe('local content from the stop-scoped teaser', () => {
-  it('reads the observation into a reading, a condition, three details and its own time', () => {
+  it('reads the observation into a reading, a condition, three details and its own time (for freshness, never for print)', () => {
     const w = weatherNow(MODULES, hr, 'hr');
     expect(w.state).toBe('live');
     expect(w.temperature).toBe('21,4 °C');
     expect(w.condition).toBe('vedro');
     expect(w.station).toBe('Zagreb-Maksimir');
     expect(w.details).toEqual(['vlaga 55 %', 'vjetar sjeverozapad 2,3 m/s', '1016 hPa']);
-    expect(w.observedAt).toBe('opaženo 14:00');
+    expect(w.observedMs).toBe(Date.parse('2026-09-11T12:00:00Z'));
+    expect(w).not.toHaveProperty('observedAt');
     expect(weatherNow(MODULES.filter((m) => m.module !== 'dhmz-now'), hr, 'hr').state).toBe('loading');
     const dash = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { temp: 11.2, weather: '-' } })]) : m));
     expect(weatherNow(dash, hr, 'hr').condition).toBe(''); // DHMZ's "-" is "nothing to report", not a word
@@ -1174,7 +1175,9 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(markup).not.toContain('k-kicker');
     expect(markup).not.toContain('k-weather-sun');
     expect(markup).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s · 1016 hPa</p>');
-    expect(markup).toContain('<p class="k-meta">opaženo 14:00 · Zagreb-Maksimir · DHMZ</p>');
+    // The credit names the station and DHMZ, never the observation time (§12, review of lane/c-B1 P1).
+    expect(markup).toContain('<p class="k-meta">Zagreb-Maksimir · DHMZ</p>');
+    expect(markup).not.toMatch(/opaženo|\d\d:\d\d/);
     // The compact column holds two details on its one facts line; the pressure yields.
     expect(weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr, 2)).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s</p>');
     // A sky the words do not name gets no picture, and the word still prints.

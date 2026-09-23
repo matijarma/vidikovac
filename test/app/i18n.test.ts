@@ -20,7 +20,7 @@ const base = (k: string): string => { const s = PLURAL.find((p) => k.endsWith(p)
 // tile and countdown copy Prozor retired (R-KP23). None may come back.
 const DEAD_KEYS = [
   // WP5 B1 (step 8): the wall prints no fetch time, caveat or note (companion brief §12).
-  'kiosk.lines.modelNote', 'kiosk.paired.dataFrom', 'kiosk.paired.fetchedAt', 'panels.sunComputed',
+  'kiosk.lines.modelNote', 'kiosk.paired.dataFrom', 'kiosk.paired.fetchedAt', 'panels.sunComputed', 'kiosk.weather.observed',
   // WP5 B1 (step 9): the phone's tiles, their producers and the time band are gone; so are the words only they read.
   'tiles.line', 'tiles.closures', 'tiles.works', 'tiles.worksCity', 'tiles.worksNow_one', 'tiles.worksNow_few', 'tiles.worksNow_other',
   'tiles.gazette', 'tiles.event', 'tiles.lastRun', 'tiles.scheduled', 'tiles.bikesFree', 'tiles.parkingFree', 'tiles.waste.label',

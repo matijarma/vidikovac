@@ -758,7 +758,6 @@
       "windCalm": "bez vjetra",
       "windNoDir": "vjetar {speed} m/s",
       "pressure": "{value} hPa",
-      "observed": "opaženo {time}",
       "sunrise": "izlazak {time}",
       "sunset": "zalazak {time}",
       "daylight": "dan traje {hours} h {minutes} min",
