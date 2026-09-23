@@ -591,3 +591,4 @@ describe('the field camera and the paired camera', () => {
     expect(pairedView({ stop: null, selection: null }).center).toBeUndefined();
   });
 });
+import '../../shared/kiosk/external-text';

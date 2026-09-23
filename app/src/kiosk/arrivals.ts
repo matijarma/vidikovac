@@ -18,7 +18,7 @@ import { clock } from './format';
 import type { FrontRow } from './front';
 import { kBadge } from './markup';
 import { fill, type KioskStrings } from './strings';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 export function vettedArrival(row: ArrivalRow): boolean {
   return vetExternal('headsign', row.routeName, 'row') !== null

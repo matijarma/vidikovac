@@ -40,7 +40,6 @@ app/src/city/markup.ts:80 #streetDetail → e(s.name)
 app/src/city/markup.ts:80 #streetDetail → e(s.settlement)
 app/src/city/markup.ts:80 #streetDetail → e(s.description)
 app/src/city/markup.ts:80 #streetDetail → e(s.updatedAt??'')
-app/src/city/markup.ts:92 #departuresMarkup → vetExternal('headsign',d.headsign||d.routeName,'row')
 app/src/city/markup.ts:94 #departuresMarkup → e(zagrebTime(d.at))
 app/src/city/markup.ts:94 #departuresMarkup → e(d.headsign||d.routeName)
 app/src/kiosk.ts:156 #shellMarkup → escapeHtml(s.appName)
@@ -91,9 +90,9 @@ app/src/kiosk/essentials.ts:35 #essentialsMarkup → externalHtml('title', row.v
 app/src/kiosk/essentials.ts:35 #essentialsMarkup → externalHtml('summary', row.detail)
 app/src/kiosk/essentials.ts:35 #essentialsMarkup → externalHtml('summary', row.attribution)
 app/src/kiosk/essentials.ts:92 #essentialsRows → vetExternal('summary', dataText(observation, 'weather'), 'row')
-app/src/kiosk/external.ts:6 #externalHtml → vetExternal(kind, value, 'row')
-app/src/kiosk/external.ts:7 #externalHtml → escapeHtml(text)
-app/src/kiosk/external.ts:12 #optionalExternal → vetExternal(kind, value, 'row')
+app/src/kiosk/external.ts:7 #externalHtml → vetExternal(kind, value, 'row')
+app/src/kiosk/external.ts:8 #externalHtml → escapeHtml(text)
+app/src/kiosk/external.ts:13 #optionalExternal → vetExternal(kind, value, 'row')
 app/src/kiosk/field.ts:89 #mountField → vetExternal('name', model.stop.name, 'row')
 app/src/kiosk/frame.ts:52 #stripMarkup → escapeHtml(strip.verdict)
 app/src/kiosk/frame.ts:57 #stripMarkup → escapeHtml(strings.safety.sources)
@@ -280,14 +279,14 @@ app/src/kiosk/timeline.ts:252 #headMarkup → e(head.slice(0, cut))
 app/src/kiosk/timeline.ts:252 #headMarkup → e(head.slice(cut))
 app/src/map/city-layers.ts:49 #cityLayers → 'text-field':['case',far,'',['get','badge']]
 app/src/map/city-layers.ts:58 #cityLayers → 'text-field':['get','title']
-app/src/map/city-map.ts:232 #pointsToGeoJson → vetExternal('name', p.title, 'row')
-app/src/map/city-map.ts:239 #pointsToGeoJson → vetExternal(key === 'address' ? 'address' : 'name', value, 'row')
-app/src/map/city-map.ts:255 #linesToGeoJson → vetExternal('name', l.title, 'row')
-app/src/map/city-map.ts:294 #vehicleLabel → vetExternal('headsign', v.short, 'row')
-app/src/map/city-map.ts:297 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:495 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
-app/src/map/city-map.ts:566 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
-app/src/map/city-map.ts:1751 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/city-map.ts:241 #vehicleLabel → vetExternal('headsign', v.short, 'row')
+app/src/map/city-map.ts:244 #vehicleLabel → vetExternal('headsign', text, 'row')
+app/src/map/external-features.ts:24 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/external-features.ts:32 #pointsToGeoJson → vetExternal('name', p.title, 'row')
+app/src/map/external-features.ts:39 #pointsToGeoJson → vetExternal(key === 'address' ? 'address' : 'name', value, 'row')
+app/src/map/external-features.ts:51 #linesToGeoJson → vetExternal('name', l.title, 'row')
+app/src/map/external-features.ts:64 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
+app/src/map/external-features.ts:95 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
 app/src/map/overlays.ts:565 #pillLayer → 'text-field': PILL_TEXT
@@ -295,10 +294,10 @@ app/src/map/overlays.ts:764 #overlayLayers → 'text-field': ['get', 'name']
 app/src/map/overlays.ts:804 #overlayLayers → 'text-field': ['get', 'title']
 app/src/map/overlays.ts:961 #overlayLayers → 'text-field': ['get', 'title']
 app/src/map/overlays.ts:980 #overlayLayers → 'text-field': ['get', 'name']
-app/src/motion/schema-map.ts:80 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
-app/src/motion/schema-map.ts:179 #refreshWords → legend.textContent = text
-app/src/motion/schema-map.ts:181 #refreshWords → note.textContent = i18n.t('motion.note')
-app/src/motion/schema-map.ts:183 #refreshWords → hint.textContent = canvasHint()
+app/src/motion/schema-map.ts:81 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
+app/src/motion/schema-map.ts:180 #refreshWords → legend.textContent = text
+app/src/motion/schema-map.ts:182 #refreshWords → note.textContent = i18n.t('motion.note')
+app/src/motion/schema-map.ts:184 #refreshWords → hint.textContent = canvasHint()
 app/src/motion/schema-paint.ts:385 #paintPills → vetExternal('name', m.label, 'row')
 app/src/motion/schema-paint.ts:397 #paintPills → ctx.fillText(m.label ?? '', m.x, m.y)
 app/src/motion/schema-paint.ts:534 #planNames → vetExternal('name', row, 'row')
@@ -308,28 +307,26 @@ app/src/motion/schema-paint.ts:594 #paintNames → ctx.strokeText(row, plan.x, y
 app/src/motion/schema-paint.ts:596 #paintNames → ctx.fillText(row, plan.x, y)
 app/src/motion/schema-paint.ts:650 #paintChips → vetExternal('headsign', chip.text, 'row')
 app/src/motion/schema-paint.ts:655 #paintChips → ctx.fillText(chip.text, x + chip.w / 2, plan.chipY)
-app/src/motion/schematic-view.ts:264 #sceneMarkup → escapeHtml(options.canvasHint ?? i18n.t('motion.canvasHint'))
-app/src/motion/schematic-view.ts:265 #sceneMarkup → escapeHtml(options.listHint ?? i18n.t('motion.listHint'))
-app/src/motion/schematic-view.ts:272 #sceneMarkup → escapeHtml(i18n.t('common.close'))
-app/src/motion/schematic-view.ts:363 #paintCard → cardLine!.textContent = vetExternal('headsign', card.line, 'row') ?? ''
-app/src/motion/schematic-view.ts:363 #paintCard → vetExternal('headsign', card.line, 'row')
-app/src/motion/schematic-view.ts:364 #paintCard → cardDirection!.textContent = vetExternal('name', card.direction, 'row') ?? ''
-app/src/motion/schematic-view.ts:364 #paintCard → vetExternal('name', card.direction, 'row')
-app/src/motion/schematic-view.ts:365 #paintCard → cardDelay!.textContent = card.delay
-app/src/motion/schematic-view.ts:367 #paintCard → cardNextStop.textContent = vetExternal('name', card.nextStop, 'row') ?? ''
-app/src/motion/schematic-view.ts:367 #paintCard → vetExternal('name', card.nextStop, 'row')
-app/src/motion/schematic-view.ts:512 #paintVehicleButton → label.textContent = text
-app/src/motion/schematic-view.ts:628 #mountSceneAccessibility → hint.textContent = hints.canvas ?? i18n.t('motion.canvasHint')
-app/src/motion/schematic-view.ts:629 #mountSceneAccessibility → listHint.textContent = hints.list ?? i18n.t('motion.listHint')
-app/src/motion/schematic-view.ts:630 #mountSceneAccessibility → closeButton.textContent = i18n.t('common.close')
-app/src/motion/schematic-view.ts:724 #renderList → escapeHtml(i18n.t('status.loading'))
-app/src/motion/schematic-view.ts:728 #renderList → escapeHtml(statusText(latestSnapshot, i18n, now()))
-app/src/motion/schematic-view.ts:733 #renderList → escapeHtml(i18n.t('status.empty'))
-app/src/motion/schematic-view.ts:742 #renderList → externalHtml('headsign', r.label)
-app/src/motion/schematic-view.ts:742 #renderList → escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))
-app/src/motion/schematic-view.ts:742 #renderList → escapeHtml(r.word)
-app/src/motion/schematic-view.ts:746 #renderList → escapeHtml(i18n.t('panels.moreRoutes', { count: overflow }))
-app/src/motion/schematic-view.ts:769 #paintLegend → legend.textContent = text
+app/src/motion/schematic-view.ts:263 #sceneMarkup → escapeHtml(options.canvasHint ?? i18n.t('motion.canvasHint'))
+app/src/motion/schematic-view.ts:264 #sceneMarkup → escapeHtml(options.listHint ?? i18n.t('motion.listHint'))
+app/src/motion/schematic-view.ts:271 #sceneMarkup → escapeHtml(i18n.t('common.close'))
+app/src/motion/schematic-view.ts:362 #paintCard → cardLine!.textContent = card.line
+app/src/motion/schematic-view.ts:363 #paintCard → cardDirection!.textContent = card.direction
+app/src/motion/schematic-view.ts:364 #paintCard → cardDelay!.textContent = card.delay
+app/src/motion/schematic-view.ts:366 #paintCard → cardNextStop.textContent = card.nextStop ?? ''
+app/src/motion/schematic-view.ts:514 #paintVehicleButton → vetExternal('summary', summary, 'row')
+app/src/motion/schematic-view.ts:515 #paintVehicleButton → label.textContent = text
+app/src/motion/schematic-view.ts:631 #mountSceneAccessibility → hint.textContent = hints.canvas ?? i18n.t('motion.canvasHint')
+app/src/motion/schematic-view.ts:632 #mountSceneAccessibility → listHint.textContent = hints.list ?? i18n.t('motion.listHint')
+app/src/motion/schematic-view.ts:633 #mountSceneAccessibility → closeButton.textContent = i18n.t('common.close')
+app/src/motion/schematic-view.ts:727 #renderList → escapeHtml(i18n.t('status.loading'))
+app/src/motion/schematic-view.ts:731 #renderList → escapeHtml(statusText(latestSnapshot, i18n, now()))
+app/src/motion/schematic-view.ts:736 #renderList → escapeHtml(i18n.t('status.empty'))
+app/src/motion/schematic-view.ts:745 #renderList → escapeHtml(r.label)
+app/src/motion/schematic-view.ts:745 #renderList → escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))
+app/src/motion/schematic-view.ts:745 #renderList → escapeHtml(r.word)
+app/src/motion/schematic-view.ts:749 #renderList → escapeHtml(i18n.t('panels.moreRoutes', { count: overflow }))
+app/src/motion/schematic-view.ts:772 #paintLegend → legend.textContent = text
 shared/kiosk/sentence.ts:122 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
 shared/kiosk/sentence.ts:220 #decodeTyped → externalText('headsign', value, { surface: 'header' })
 shared/kiosk/sentence.ts:245 #decodeRegister → externalText(type, value, { surface: 'header' })

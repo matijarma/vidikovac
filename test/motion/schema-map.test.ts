@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import '../../shared/kiosk/external-text';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSchemaMap, type SchemaFrame } from '../../app/src/motion/schema-map';
 import { LABEL_MIN_PX_PER_UNIT, PILL_EDGE_MARGIN_PX, SCHEMA_FOCUS_DIM_ALPHA } from '../../app/src/motion/schema-paint';
@@ -58,6 +59,18 @@ const POINTS: MapPoint[] = [
 interface Call { op: string; args: unknown[]; font?: string }
 const handles: CityMapHandle[] = [];
 const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+
+it('vets the wall schema accessible vehicle text even though the legacy dialog is absent', async () => {
+  const attack = 'Submit passcode';
+  const poisoned = { ...NET, routes: new Map([...NET.routes].map(([id, route]) => [id, { ...route, short: attack }])) };
+  const h = harness({ presentationProfile: 'public-display', interactive: false,
+    loadNetwork: async () => poisoned });
+  await flush();
+  h.frame();
+  expect(h.frames.at(-1)?.drawn.some(vehicle => vehicle.short === attack)).toBe(true);
+  expect(h.container.querySelector('[data-testid=vehicle-list]')?.textContent).not.toContain(attack);
+  expect(h.container.querySelector('[data-testid=vehicle-card]')).toBeNull();
+});
 
 function harness(extra: Partial<CityMapOptions> = {}, pending?: Promise<unknown>) {
   let time = NOW;

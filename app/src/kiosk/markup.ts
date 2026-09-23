@@ -17,7 +17,7 @@ import { iconMarkup } from '../ui/icons';
 import { nearbyCountLine, type LinesBoard, type WeatherNow } from './local';
 import { plural, type KioskStrings } from './strings';
 import { externalHtml, optionalExternal } from './external';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 export function kicker(text: string, meta = '', tone = ''): string {
   return `<p class="k-kicker${tone ? ` k-kicker--${escapeAttribute(tone)}` : ''}"><span>${escapeHtml(text)}</span>${meta ? `<span class="k-kicker-meta">${escapeHtml(meta)}</span>` : ''}</p>`;

@@ -12,7 +12,7 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FILES = [
   'app/src/kiosk.ts',
   ...readdirSync(resolve(ROOT, 'app/src/kiosk')).filter(f => f.endsWith('.ts')).map(f => `app/src/kiosk/${f}`),
-  'app/src/city/markup.ts', 'app/src/map/city-map.ts', 'app/src/map/external-labels.ts',
+  'app/src/city/markup.ts', 'app/src/map/city-map.ts', 'app/src/map/external-labels.ts', 'app/src/map/external-features.ts',
   'app/src/map/overlays.ts', 'app/src/map/city-layers.ts',
   'app/src/motion/schema-paint.ts', 'app/src/motion/schema-map.ts', 'app/src/motion/schematic-view.ts',
   'shared/kiosk/sentence.ts',
@@ -31,7 +31,7 @@ const INDIRECT_GUARDS: Record<string, string> = {
 };
 // This renderer is used by phone discovery only. The wall calls placeDetail
 // with publicDisplay=true, never placesMarkup. Keep the exception exact.
-const PHONE_ONLY = new Set(['app/src/city/markup.ts#placesMarkup']);
+const PHONE_ONLY = new Set(['app/src/city/markup.ts#placesMarkup', 'app/src/city/markup.ts#departuresMarkup']);
 
 interface Site { file: string; line: number; boundary: string; expression: string }
 const sites: Site[] = [];
@@ -90,9 +90,15 @@ describe('every wall text render boundary', () => {
     expect(timeline).toContain('if (!vettedTimelineRow(row)) return');
     const map = readFileSync(resolve(ROOT, 'app/src/map/city-map.ts'), 'utf8');
     expect(map).toContain('style: safeStyle as never');
-    expect(map).toContain('wallLabels ? wallLabelLayers(raw).layers : raw');
+    expect(map).toContain('wallLabels ? l.wallLabelLayers(raw).layers : raw');
     const paired = readFileSync(resolve(ROOT, 'app/src/kiosk/paired.ts'), 'utf8');
     expect(paired).toContain('placeDetail(i18n,p,ctx.city,locatedEvents(ctx.snapshots.dogadanja?.items??[],ctx.city.places,ctx.now),false,true)');
     expect(paired).toContain('streetDetail(i18n,p,true)');
+    const schema = readFileSync(resolve(ROOT, 'app/src/motion/schema-map.ts'), 'utf8');
+    expect(schema).toContain('externalSelection: true');
+    const scene = readFileSync(resolve(ROOT, 'app/src/motion/schematic-view.ts'), 'utf8');
+    expect(scene).toContain("deps.externalSelection ? vetExternal('summary', summary, 'row') ?? '' : summary");
+    const boundary = readFileSync(resolve(ROOT, 'shared/kiosk/external-text-boundary.ts'), 'utf8');
+    expect(boundary).toContain('boundary?.(kind, value, surface) ?? null');
   });
 });

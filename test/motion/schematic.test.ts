@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import '../../shared/kiosk/external-text';
 import { dist, toPlane, type XY } from '../../shared/motion/geo';
 import { cumulative } from '../../shared/motion/polyline';
 import type { Network, Shape, Stop } from '../../shared/motion/network';

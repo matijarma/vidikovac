@@ -14,7 +14,7 @@ import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../../shared/city/frame
 import { PLACE_ADDRESS_MAX, PLACE_NAME_MAX, type ScreenPlace, type ScreenPlaceInput } from '../../../shared/city/place';
 import { loadStops as loadStopsImpl, ScreenError, type CreateScreenInput } from '../core/screens';
 import { escapeHtml } from '../ui/dom/escape';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { mmss } from './format';
 import { mountPlaceField } from './place-field';
 import { placeInputOf, type StreetGeo } from './places';

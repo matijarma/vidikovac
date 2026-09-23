@@ -469,7 +469,15 @@ describe('the uvijek row', () => {
     const oktogon = place('heritage-oktogon', 'heritage', 'Kompleks Prve hrvatske štedionice - Oktogon, Ilica 5 - Margaretska 1-3', 15.9772, 45.8125, { address: 'Ilica 005 - Margaretska 01-03 - Bogovićeva 06' });
     const row = (p: Place) => selectNearby(input(at('2026-09-22T10:30:00Z'), { city: { ...CITY, streets: [], places: [p] } })).at(-1)!;
     expect(row(block)).toMatchObject({ title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c' });
-    expect(row(oktogon)).toMatchObject({ title: 'Kompleks Prve hrvatske štedionice - Oktogon', sub: 'Ilica 5' });
+    // Decision 22: a formatted digit run in the raw address is a pinned
+    // exclusion, even when shortening would remove that rejected suffix.
+    const skips: string[] = [];
+    const rows = selectNearby(input(at('2026-09-22T10:30:00Z'), {
+      city: { ...CITY, streets: [], places: [oktogon] }, onSkip: reason => skips.push(reason),
+    }));
+    expect(rows.some(r => r.kind === 'always')).toBe(false);
+    expect(skips).toContain('phone');
+    expect(row({ ...oktogon, address: 'Ilica 005' })).toMatchObject({ title: 'Kompleks Prve hrvatske štedionice - Oktogon', sub: 'Ilica 5' });
   });
   it('cuts a story at its first sentence, never mid-word', () => {
     expect(firstSentence('hrvatski ban, 1848-1859; 1801-1859')).toBe('hrvatski ban, 1848-1859; 1801-1859');

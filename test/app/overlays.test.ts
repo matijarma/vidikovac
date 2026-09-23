@@ -727,3 +727,4 @@ describe('the city on the map: the rules that keep each mark honest', () => {
     expect(placedEvents(dogadanja, NOW).map((p) => p.id)).toEqual(['event:tonight', 'event:culture', 'event:work']);
   });
 });
+import '../../shared/kiosk/external-text';

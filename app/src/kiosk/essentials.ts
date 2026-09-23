@@ -13,7 +13,7 @@ import { dataNumber, dataText } from '../panels/panel';
 import { fmtTemp } from './format';
 import { activeWarnings, cleanCondition, closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
 import type { KioskStrings } from './strings';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { externalHtml, optionalExternal } from './external';
 import { escapeHtml } from '../ui/dom/escape';
 

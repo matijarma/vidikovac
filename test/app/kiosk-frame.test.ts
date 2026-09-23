@@ -117,3 +117,4 @@ describe('stripMarkup', () => {
     expect(markup).toContain('<span class="k-strip-verdict" data-testid="strip-verdict" data-level="calm">');
   });
 });
+import '../../shared/kiosk/external-text';

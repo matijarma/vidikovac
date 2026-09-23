@@ -37,7 +37,7 @@
 // it honest stated beside it, and most of them enforced in a layer filter
 // rather than in a comment (map/overlays.ts).
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
 import { matchStreet } from '../../../shared/city/geo';

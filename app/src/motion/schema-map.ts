@@ -2,6 +2,7 @@
 // The schema renderer is dynamically imported only when its slot is requested.
 import { toLonLat, type XY } from '../../../shared/motion/geo';
 import { loadNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
+import '../../../shared/kiosk/external-text';
 import { createSchemaPlacer, decodeSchema, pointAt, type Schema, type SchemaPlacement, type SchemaStop } from '../../../shared/motion/schema';
 import { createDefaultI18n } from '../i18n/create-default-i18n';
 import {

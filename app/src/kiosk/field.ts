@@ -20,7 +20,7 @@ import type { I18n } from '../i18n/i18n';
 import { linesMarkup } from './markup';
 import { linesAtStop } from './local';
 import type { KioskStrings } from './strings';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 /** The lagano board's rows: ten fit the board's height with the overflow line at 1080p (R-V1, measured in e2e/lagano.spec.ts). */
 export const BOARD_ROWS = 10;

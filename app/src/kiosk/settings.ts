@@ -26,7 +26,7 @@ import { placeFromStop, type ScreenPlace } from '../../../shared/city/place';
 import type { ScreenSetInput } from '../beacon';
 import type { ScreenStop } from '../core/contracts';
 import { escapeHtml } from '../ui/dom/escape';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { iconMarkup, type IconName } from '../ui/icons';
 import type { ThemePreference } from '../ui/theme';
 import { LONG_PRESS_MS } from './constants';

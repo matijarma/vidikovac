@@ -18,6 +18,7 @@ import {
   EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
   EXTERNAL_PLACE_ABBREVIATIONS,
 } from './external-text-policy';
+import { installExternalTextBoundary } from './external-text-boundary';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
 export type ExternalTextSurface = 'header' | 'row';
@@ -394,3 +395,4 @@ export function vetExternal(kind: ExternalTextKind, value: unknown, surface: Ext
     || (surface !== 'header' && surface !== 'row')) return null;
   return externalText(kind, value, { surface }).ok ? value : null;
 }
+installExternalTextBoundary(vetExternal);

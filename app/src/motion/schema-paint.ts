@@ -2,7 +2,7 @@
 // an integrator arc to this plane; reported GPS coordinates never enter a
 // painter. Canvas mounting, gestures and the clock live in schema-map.ts.
 import type { XY } from '../../../shared/motion/geo';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { pointAt, type Schema, type SchemaPlacement, type SchemaStop, type createSchemaPlacer } from '../../../shared/motion/schema';
 import { vehicleLabel } from '../map/city-map';
 import { contrastRatio } from '../ui/contrast';

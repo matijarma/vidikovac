@@ -41,8 +41,7 @@ import { summariseRoutes, type RouteVehicle } from '../layers/route-summary';
 import { statusText } from '../panels/panel';
 import { DENSITY, prepareCanvas, tone } from '../ui/canvas';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { vetExternal } from '../../../shared/kiosk/external-text';
-import { externalHtml } from '../kiosk/external';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 
 /** A network with nothing in it, standing in for `net === null` (not yet
@@ -360,11 +359,11 @@ export function mountSceneAccessibility(deps: SceneAccessibilityDeps): SceneAcce
     const text = `${card.line}\n${card.direction}\n${card.delay}\n${card.nextStop ?? ''}`;
     if (text === lastCardText) return;
     lastCardText = text;
-    cardLine!.textContent = vetExternal('headsign', card.line, 'row') ?? '';
-    cardDirection!.textContent = vetExternal('name', card.direction, 'row') ?? '';
+    cardLine!.textContent = card.line;
+    cardDirection!.textContent = card.direction;
     cardDelay!.textContent = card.delay;
     if (cardNextStop) {
-      cardNextStop.textContent = vetExternal('name', card.nextStop, 'row') ?? '';
+      cardNextStop.textContent = card.nextStop ?? '';
       cardNextStop.hidden = card.nextStop === undefined;
     }
   }
@@ -508,7 +507,11 @@ export function mountSceneAccessibility(deps: SceneAccessibilityDeps): SceneAcce
 
   function paintVehicleButton(label: HTMLElement, v: Drawn): void {
     const card = describeVehicle(i18n, net, v, deps.delays());
-    const text = [card.line, card.direction, card.delay, card.nextStop].filter(Boolean).join(', ');
+    const summary = [card.line, card.direction, card.delay, card.nextStop].filter(Boolean).join(', ');
+    // Schema/map hosts (including the wall) own selection and have no legacy
+    // dialog. Their accessible list is a render boundary too. The original
+    // phone-only crop/dialog path keeps its existing reading.
+    const text = deps.externalSelection ? vetExternal('summary', summary, 'row') ?? '' : summary;
     if (label.textContent !== text) label.textContent = text;
   }
 
@@ -739,7 +742,7 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
       shown
         .map(
           (r) => `<li class="schematic-route" data-testid="schematic-route">
-          <span class="schematic-route-label">${externalHtml('headsign', r.label)}</span> <span class="schematic-route-value">${escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))} · ${escapeHtml(r.word)}</span>
+          <span class="schematic-route-label">${escapeHtml(r.label)}</span> <span class="schematic-route-value">${escapeHtml(i18n.t('panels.vehiclesCount', { count: r.count }))} · ${escapeHtml(r.word)}</span>
         </li>`,
         )
         .join('') +

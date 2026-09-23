@@ -40,7 +40,7 @@ import { weatherNow } from './local';
 import { weatherIcon } from '../experience/weather-icon';
 import { iconMarkup } from '../ui/icons';
 import { externalHtml, optionalExternal } from './external';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 export type PanelId = 'tonight' | 'weather' | 'city' | 'promet' | 'around';
 export const PANEL_IDS: readonly PanelId[] = ['tonight', 'weather', 'city', 'promet', 'around'];

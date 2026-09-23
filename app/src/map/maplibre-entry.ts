@@ -5,6 +5,7 @@
 // lightweight path above all (R-L2, test/app/budget.test.ts) -- ever load
 // the library, its stylesheet, the layer generator or the SDF rasteriser.
 import 'maplibre-gl/dist/maplibre-gl.css';
+import '../../../shared/kiosk/external-text';
 // MapLibre v6 is ESM-only: Vite bundles the worker and its shared chunk, and
 // core/map-worker.ts names them through setWorkerUrl. Imported here and only
 // here, so the lightweight graph never carries either file.
@@ -14,3 +15,5 @@ export * from './basemap';
 export * from './overlays';
 export * from './city-layers';
 export * from './name-census';
+export * from './external-labels';
+export * from './external-features';

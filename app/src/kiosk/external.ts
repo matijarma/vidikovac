@@ -1,4 +1,5 @@
-import { vetExternal, type ExternalTextKind } from '../../../shared/kiosk/external-text';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { escapeHtml } from '../ui/dom/escape';
 
 /** Quoted wall text, escaped only after vetting. No caller can opt out. */

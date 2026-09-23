@@ -33,8 +33,9 @@ import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, Sty
 import type { OverlayOptions, ProzorOptions } from './overlays';
 import { SDF_PIXEL_RATIO } from './sdf';
 import type { NameHysteresis, SourcePoint } from './name-census';
-import { vetExternal } from '../../../shared/kiosk/external-text';
-import { wallLabelLayers, vettedTileLabels, type LabelSource, type TileLabelFeature } from './external-labels';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import type { TileLabelFeature } from './external-labels';
+export { pointsToGeoJson, linesToGeoJson, networkToGeoJson, stopsToGeoJson, outlineToGeoJson } from './external-features';
 
 // --- Kept for callers: the first basemap was the OpenStreetMap community
 // raster, whose usage policy forbids app traffic. The vector basemap
@@ -127,17 +128,6 @@ export interface LineStringFeatureCollection {
   features: { type: 'Feature'; geometry: { type: 'MultiLineString'; coordinates: [number, number][][] }; properties: { id: string } }[];
 }
 
-/** Every ring of every polygon as one multi-line feature; an outline with no
- *  ring produces an empty collection rather than a feature with no geometry. */
-export function outlineToGeoJson(outline: MapOutline | null): LineStringFeatureCollection {
-  const rings: [number, number][][] = [];
-  for (const polygon of outline?.polygons ?? []) {
-    for (const ring of polygon) if (ring.length >= 4) rings.push(ring);
-  }
-  if (!outline || rings.length === 0) return { type: 'FeatureCollection', features: [] };
-  return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'MultiLineString', coordinates: rings }, properties: { id: outline.id } }] };
-}
-
 export interface PointProperties {
   id: string;
   title: string;
@@ -217,49 +207,6 @@ export interface VehicleFeatureCollection {
 export type VehicleFeature = VehicleFeatureCollection['features'][number];
 
 export const isVehicleReport = (p: MapPoint): boolean => p.at !== undefined;
-
-/** Keys a place's own props may never overwrite. */
-const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'routeId', 'place']);
-
-/** Places only: a vehicle report never reaches a drawn source (R-P2). An
- *  untagged point produces exactly the properties it always did, so the
- *  dashboard's quake map is byte for byte unchanged. */
-export function pointsToGeoJson(points: readonly MapPoint[]): PointFeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: points
-      .filter((p) => !isVehicleReport(p) && Number.isFinite(p.lon) && Number.isFinite(p.lat)
-        && (p.title === '' || vetExternal('name', p.title, 'row') !== null))
-      .map((p) => {
-        const properties: PointProperties = p.routeId === undefined ? { id: p.id, title: p.title } : { id: p.id, title: p.title, routeId: p.routeId };
-        if (p.place !== undefined) properties.place = p.place;
-        for (const [key, value] of Object.entries(p.props ?? {})) {
-          if (RESERVED_POINT_PROPS.has(key) || value === undefined) continue;
-          properties[key] = typeof value === 'string' && ['name', 'address', 'badge', 'label'].includes(key)
-            ? vetExternal(key === 'address' ? 'address' : 'name', value, 'row') ?? '' : value;
-        }
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] },
-          properties,
-        };
-      }),
-  };
-}
-
-export function linesToGeoJson(lines: readonly MapLine[]): LineFeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: lines
-      .filter((l) => l.coordinates.length >= 2 && l.coordinates.every(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat))
-        && (l.title === '' || vetExternal('name', l.title, 'row') !== null))
-      .map((l) => ({
-        type: 'Feature' as const,
-        geometry: { type: 'LineString' as const, coordinates: l.coordinates },
-        properties: { id: l.id, title: l.title },
-      })),
-  };
-}
 
 /** The vehicle reports among `points`, as the model's evidence. */
 export function pointsToFixes(points: readonly MapPoint[]): Fix[] {
@@ -480,24 +427,6 @@ export interface NetworkFeatureCollection {
   }[];
 }
 
-/** Every shape of the artefact as one line, tagged with its route: the
- *  printed network under the vehicles, and what a selected route lights up. */
-export function networkToGeoJson(net: Network): NetworkFeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: net.shapes
-      .filter((shape) => shape.pts.length >= 2)
-      .map((shape, i) => {
-        const route = net.routes.get(shape.route);
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'LineString' as const, coordinates: shape.pts.map(toLonLat) },
-          properties: { shape: i, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1) },
-        };
-      }),
-  };
-}
-
 export interface StopFeatureCollection {
   type: 'FeatureCollection';
   features: {
@@ -539,39 +468,6 @@ export interface StopFeatureCollection {
  *  city's 19 tram routes overlap so heavily that 111 of the 114 tram-served
  *  names see two or more of them, so "two trams" names nearly every tram
  *  stop there is (measured against the shipped artefact, 20 Sept 2026). */
-export function stopsToGeoJson(net: Network): StopFeatureCollection {
-  const rows = net.stops.map((stop) => {
-    const routes = [...new Set(stop.on.map((on) => net.shapes[on.shape]?.route).filter((r): r is string => Boolean(r)))].sort((a, b) =>
-      a.localeCompare(b, 'hr', { numeric: true }),
-    );
-    const types = routes.map((r) => net.routes.get(r)?.type);
-    return { stop, routes, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
-  });
-  const labelled = new Map<string, { id: string; rank: number }>();
-  const interchange = new Map<string, { tram: boolean; terminal: boolean }>();
-  for (const { stop, routes, tram } of rows) {
-    const best = labelled.get(stop.name);
-    if (!best || routes.length > best.rank || (routes.length === best.rank && stop.id < best.id)) labelled.set(stop.name, { id: stop.id, rank: routes.length });
-    const seen = interchange.get(stop.name) ?? { tram: false, terminal: false };
-    interchange.set(stop.name, { tram: seen.tram || tram, terminal: seen.terminal || stop.terminal });
-  }
-  return {
-    type: 'FeatureCollection',
-    features: rows.map(({ stop, routes, tram, bus }) => {
-      const hub = interchange.get(stop.name)!;
-      return {
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
-        properties: {
-          id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '', routes, rank: routes.length, tram, bus,
-          label: labelled.get(stop.name)?.id === stop.id,
-          tramInterchange: hub.tram && hub.terminal,
-        },
-      };
-    }),
-  };
-}
-
 /** Coarse enough that convergence noise never keeps the loop awake, fine
  *  enough (a centimetre, a degree, a hundredth of alpha) that real motion
  *  always registers -- the same discipline as the schematic's signature.
@@ -1604,9 +1500,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  stop, the places and the city's own places as update() last set them. */
   function sourcePoints(l: MaplibreModule, id: string): readonly SourcePoint[] {
     if (id === l.SOURCES.stops) return stopsData.features;
-    if (id === l.SOURCES.screenStop) return screenStopGeoJson().features as SourcePoint[];
-    if (id === l.SOURCES.places) return pointsToGeoJson(points.filter((p) => p.place !== 'city')).features;
-    if (l.CITY_POINTS && id === l.CITY_POINTS) return pointsToGeoJson(points.filter((p) => p.place === 'city')).features;
+    if (id === l.SOURCES.screenStop) return l.screenStopGeoJson(stop).features as SourcePoint[];
+    if (id === l.SOURCES.places) return l.pointsToGeoJson(points.filter((p) => p.place !== 'city')).features;
+    if (l.CITY_POINTS && id === l.CITY_POINTS) return l.pointsToGeoJson(points.filter((p) => p.place === 'city')).features;
     return [];
   }
 
@@ -1741,14 +1637,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** Places and closures do not move: re-set at once on every update. */
   function applyStatic(): void {
     if (!styled || !lib) return;
-    setData(lib.SOURCES.places, pointsToGeoJson(points.filter(p=>p.place!=='city')));
-    if (lib.CITY_POINTS) setData(lib.CITY_POINTS, pointsToGeoJson(points.filter(p=>p.place==='city')));
-    setData(lib.SOURCES.closures, linesToGeoJson(lines));
-  }
-
-  function screenStopGeoJson(): { type: 'FeatureCollection'; features: unknown[] } {
-    if (!stop || !Number.isFinite(stop.lon) || !Number.isFinite(stop.lat)) return { type: 'FeatureCollection', features: [] };
-    return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [stop.lon, stop.lat] }, properties: { id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '' } }] };
+    setData(lib.SOURCES.places, lib.pointsToGeoJson(points.filter(p=>p.place!=='city')));
+    if (lib.CITY_POINTS) setData(lib.CITY_POINTS, lib.pointsToGeoJson(points.filter(p=>p.place==='city')));
+    setData(lib.SOURCES.closures, lib.linesToGeoJson(lines));
   }
 
   void (async () => {
@@ -1817,26 +1708,17 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return { center: ZAGREB_CENTER, zoom: options.zoom ?? l.CITY_ZOOM };
   }
 
-  let labelSources: LabelSource[] = [];
-  const labelSignatures = new Map<string, string>();
+  let updateTileLabels: ((map: MapApi, locale: string) => void) | undefined;
   const wallLabels = options.presentationProfile === 'public-display' || options.basemapProfile === 'prozor';
   function refreshTileLabels(): void {
-    if (!styled || !map?.querySourceFeatures) return;
-    for (const { id, source, sourceLayer } of labelSources) {
-      const data = vettedTileLabels(map.querySourceFeatures(source, { sourceLayer }), locale ?? 'hr');
-      const signature = JSON.stringify(data);
-      if (labelSignatures.get(id) === signature) continue;
-      labelSignatures.set(id, signature);
-      map.getSource(id)?.setData(data);
-    }
+    if (styled && map) updateTileLabels?.(map, locale ?? 'hr');
   }
   function buildMap(l: MaplibreModule): void {
     const style = l.basemapStyle(theme, basemapOptions());
-    const vetted = wallLabels ? wallLabelLayers(style.layers) : { layers: style.layers, sources: [] };
-    labelSources = vetted.sources;
-    basemap = vetted.layers;
-    const safeStyle = { ...style, layers: basemap, sources: { ...style.sources,
-      ...Object.fromEntries(labelSources.map(({ id }) => [id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }])) } };
+    const vetted = wallLabels ? l.prepareWallStyle(style) : null;
+    updateTileLabels = vetted?.refresh;
+    const safeStyle = vetted?.style ?? style;
+    basemap = safeStyle.layers;
     const start = initialCamera(l);
     const created = new l.Map({
       container,
@@ -1910,22 +1792,22 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     putOverlayImages(created, l, false);
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
-    created.addSource(l.SOURCES.network, geojson(net ? networkToGeoJson(net) : empty));
-    const stops = net ? stopsToGeoJson(net) : empty;
+    created.addSource(l.SOURCES.network, geojson(net ? l.networkToGeoJson(net) : empty));
+    const stops = net ? l.stopsToGeoJson(net) : empty;
     stopsData = stops;
     // Keyed by the platform id, so the name hysteresis addresses one stop's
     // name by feature state (decision 19).
     created.addSource(l.SOURCES.stops, { ...geojson(stops), promoteId: 'id' });
-    created.addSource(l.SOURCES.closures, geojson(linesToGeoJson(lines)));
-    created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points.filter(p=>p.place!=='city'))));
+    created.addSource(l.SOURCES.closures, geojson(l.linesToGeoJson(lines)));
+    created.addSource(l.SOURCES.places, geojson(l.pointsToGeoJson(points.filter(p=>p.place!=='city'))));
     if (l.CITY_POINTS) {
-      created.addSource(l.CITY_POINTS, geojson(pointsToGeoJson(points.filter(p=>p.place==='city'))));
-      created.addSource(l.CITY_PATHS, geojson(linesToGeoJson(cityPaths)));
+      created.addSource(l.CITY_POINTS, geojson(l.pointsToGeoJson(points.filter(p=>p.place==='city'))));
+      created.addSource(l.CITY_PATHS, geojson(l.linesToGeoJson(cityPaths)));
     }
     created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.bodies, geojson(empty));
-    created.addSource(l.SOURCES.screenStop, geojson(screenStopGeoJson()));
-    created.addSource(l.SOURCES.outline, geojson(outlineToGeoJson(outline)));
+    created.addSource(l.SOURCES.screenStop, geojson(l.screenStopGeoJson(stop)));
+    created.addSource(l.SOURCES.outline, geojson(l.outlineToGeoJson(outline)));
     const palette = l.overlayPalette(theme);
     created.addSource('ambient-highlight',geojson(highlightData()));
     created.addLayer({id:'ambient-highlight-area',type:'fill',source:'ambient-highlight',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':palette.selection,'fill-opacity':0.12}});
@@ -2313,7 +2195,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     if (!map || !styled || !l) return;
     const raw = l.basemapLayers(theme, basemapOptions());
-    const nextBasemap = wallLabels ? wallLabelLayers(raw).layers : raw;
+    const nextBasemap = wallLabels ? l.wallLabelLayers(raw).layers : raw;
     applyOps(map, l.styleDiff(basemap, nextBasemap));
     basemap = nextBasemap;
     refreshTileLabels();
@@ -2496,7 +2378,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       lineFocus = on;
       applyOverlays();
     },
-    setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,linesToGeoJson(next)); },
+    setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,lib.linesToGeoJson(next)); },
     setHighlight(next) {
       if(JSON.stringify(next)===JSON.stringify(highlight))return;
       highlight=next;
@@ -2535,12 +2417,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     },
     setStop(next) {
       stop = next;
-      if (styled && lib) setData(lib.SOURCES.screenStop, screenStopGeoJson());
+      if (styled && lib) setData(lib.SOURCES.screenStop, lib.screenStopGeoJson(stop));
     },
     setOutline(next) {
       if (next?.id === outline?.id) return;
       outline = next;
-      if (styled && lib) setData(lib.SOURCES.outline, outlineToGeoJson(outline));
+      if (styled && lib) setData(lib.SOURCES.outline, lib.outlineToGeoJson(outline));
     },
     fit(target) {
       if (!map || !lib) return;

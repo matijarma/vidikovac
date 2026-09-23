@@ -30,7 +30,7 @@ import { dynamicPlaces } from '../city/discovery';
 import { placeDetail,streetDetail } from '../city/markup';
 import { locatedEvents } from '../../../shared/city/events';
 import { externalHtml, optionalExternal } from './external';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */

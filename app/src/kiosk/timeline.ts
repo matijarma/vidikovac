@@ -46,7 +46,7 @@ import { reconcile } from '../ui/dom/reconcile';
 import { kindOfRoute } from './exceptions';
 import { clock, dayKey, dayMonth } from './format';
 import { kBadge } from './markup';
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { optionalExternal } from './external';
 
 /**

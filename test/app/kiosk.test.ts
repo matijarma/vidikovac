@@ -724,6 +724,9 @@ describe('start: the field turns what is typed into the screen’s place', () =>
       suggestPlaces: (query: string) => suggest(query),
     }));
     try {
+      // The real kiosk entry installs the canonical boundary before mounting
+      // start/settings. resetModules above deliberately removed that bootstrap.
+      await import('../../shared/kiosk/external-text');
       const [start, field, strings, stops] = await Promise.all([import('../../app/src/kiosk/start'), import('../../app/src/kiosk/place-field'), import('../../app/src/kiosk/strings'), import('../../app/src/kiosk/stops')]);
       expect(field.PLACE_DEBOUNCE_MS).toBe(PAUSE_MS);
       return { mountStart: start.mountStart, strings: strings.kioskStrings('hr'), isTram: (routeId) => stops.routeType(routeId) === 0 };

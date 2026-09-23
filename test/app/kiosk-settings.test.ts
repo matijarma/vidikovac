@@ -6,6 +6,7 @@
 // preferences (kiosk/prefs.ts). The kiosk's wiring of all this is in
 // test/app/kiosk.test.ts.
 import { describe, expect, it, vi } from 'vitest';
+import '../../shared/kiosk/external-text';
 import type { ScreenMetadata, ScreenPlaceInput } from '../../worker/protocol';
 import { SCREEN_SET_MIN_MS } from '../../worker/protocol';
 import { FRAME_RADIUS_M, frameRadiusM, frameSpanM, frameStopsFrom } from '../../shared/city/frame';

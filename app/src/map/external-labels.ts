@@ -1,4 +1,4 @@
-import { vetExternal } from '../../../shared/kiosk/external-text';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { StyleLayerLike } from './basemap';
 
 export interface TileLabelFeature {
@@ -44,4 +44,28 @@ export function vettedTileLabels(features: readonly TileLabelFeature[], locale: 
     kept.push(next);
   }
   return { type: 'FeatureCollection', features: kept };
+}
+
+/** Keep tile enumeration and copying with the lazy renderer, not the phone's
+ * startup graph. The returned style has empty safe sources before first paint. */
+export function prepareWallStyle<T extends { layers: StyleLayerLike[]; sources: object }>(original: T) {
+  const vetted = wallLabelLayers(original.layers);
+  const signatures = new Map<string, string>();
+  return {
+    style: { ...original, layers: vetted.layers, sources: { ...original.sources,
+      ...Object.fromEntries(vetted.sources.map(({ id }) => [id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }])) } },
+    refresh(map: {
+      querySourceFeatures?(source: string, options: { sourceLayer: string }): TileLabelFeature[];
+      getSource(id: string): { setData(data: unknown): void } | undefined;
+    }, locale: string): void {
+      if (!map.querySourceFeatures) return;
+      for (const { id, source, sourceLayer } of vetted.sources) {
+        const data = vettedTileLabels(map.querySourceFeatures(source, { sourceLayer }), locale);
+        const signature = JSON.stringify(data);
+        if (signatures.get(id) === signature) continue;
+        signatures.set(id, signature);
+        map.getSource(id)?.setData(data);
+      }
+    },
+  };
 }
