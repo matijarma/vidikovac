@@ -137,13 +137,30 @@ function categoryWord(s: KioskStrings, item: FeedItem): string {
   return s.events[dataText(item, 'category')] ?? '';
 }
 
-/** A dated event as a row: the clock (or the all-day word) in the lead, the title, category · venue · source under it. */
-function eventRow(item: FeedItem, s: KioskStrings, i18n: I18n, day?: string): FrontRow {
+/**
+ * "do 25. 9." for an event whose end falls on a later Zagreb day than its
+ * start (an exhibition, a fair, a range of days), in the catalogue's own words
+ * (events.untilDate, as the phone's Kultura says it); '' for one that ends the
+ * day it starts. A multi-day item never says "cijeli dan" [O-53]. The day and
+ * the month stay on one line, so a narrow cell breaks after "do".
+ */
+export function untilDay(item: FeedItem, i18n: I18n): string {
+  const end = item.until ? dayKey(item.until) : '';
+  if (end === '' || end === dayKey(item.at ?? '')) return '';
+  return i18n.t('events.untilDate', { date: dayMonth(item.until).replace(' ', '\u00a0') });
+}
+
+/** A dated event as a row: the clock (or the all-day word, or the end day of
+ *  one that runs on for days) in the lead, the title, category · venue ·
+ *  source under it. An ongoing row (begun on an earlier day) leads with its
+ *  end day even when its start had a clock: that start is not today's. */
+function eventRow(item: FeedItem, s: KioskStrings, i18n: I18n, day?: string, ongoing = false): FrontRow {
   const timed = dataText(item, 'precision') === 'time';
   const source = dataText(item, 'source');
+  const until = timed && !ongoing ? '' : untilDay(item, i18n);
   return {
     key: `event:${item.id}`,
-    lead: timed ? clock(item.at) : s.say.allDay,
+    lead: until || (timed ? clock(item.at) : s.say.allDay),
     day,
     title: item.title,
     sub: [categoryWord(s, item), dataText(item, 'venue'), sourceName(i18n, source)].filter(Boolean).join(' · '),
@@ -184,7 +201,7 @@ export function tonightPanel(input: FrontInput): FrontPanel {
     ...upcoming.map((item) => eventRow(item, s, i18n)),
     ...running.map((item) => eventRow(item, s, i18n)),
     ...tomorrow.map((item) => eventRow(item, s, i18n, s.say.tomorrow)),
-    ...ongoing.map(item => eventRow(item, s, i18n, s.paired.ongoingWord)),
+    ...ongoing.map(item => eventRow(item, s, i18n, s.paired.ongoingWord, true)),
     ...future.map(item => eventRow(item, s, i18n, weekdayDayMonth(input.locale, item.at!))),
   ];
   const meta = [today.length > 0 ? plural(input.locale, s.front.eventsToday, today.length) : '', tomorrow.length > 0 ? plural(input.locale, s.front.eventsTomorrow, tomorrow.length) : ''].filter(Boolean).join(' · ');

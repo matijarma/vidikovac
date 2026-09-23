@@ -7,8 +7,11 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { ActiveVenue, LocatedEvent } from '../../shared/city/events';
 import type { Place } from '../../shared/city/types';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { eventCardRows, exceptionRows, prometPanel, tonightPanel, type FrontInput } from '../../app/src/kiosk/front';
+import { eventCardRows, exceptionRows, prometPanel, tonightPanel, untilDay, type FrontInput } from '../../app/src/kiosk/front';
+import { pairedMarkup } from '../../app/src/kiosk/paired';
 import { kioskStrings } from '../../app/src/kiosk/strings';
+import hrCatalogue from '../../app/src/i18n/hr.json';
+import enCatalogue from '../../app/src/i18n/en.json';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb, a Friday
 const i18n = createDefaultI18n('hr');
@@ -204,5 +207,57 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     const panel = prometPanel(input([snap('zet-rt', [route('281', -4_440), route('6', 10)])], { prometMode: 'exceptions' }));
     expect(panel.rows).toEqual([]);
     expect(panel.note).toBe('Linije voze po redu');
+  });
+});
+
+// --- multi-day events --------------------------------------------------------------
+
+describe('a multi-day event says until when, never "cijeli dan" [O-53]', () => {
+  /** A culture event with a precision and an end, as the open sources publish it. */
+  function dated(id: string, at: string, precision: 'time' | 'day' | 'range', until?: string): Item {
+    return item('dogadanja', id, 'event', `Događanje ${id}`, { at, until, dateBasis: 'event', data: { source: 'etnografski', precision, venue: 'Etnografski muzej' } });
+  }
+  const oneDay = dated('d1', '2026-09-11T00:00:00+02:00', 'day');
+  const fair = dated('d2', '2026-09-11T00:00:00+02:00', 'day', '2026-09-25T23:59:00+02:00');
+  const range = dated('r1', '2026-09-12T00:00:00+02:00', 'range', '2026-09-14T23:59:00+02:00');
+  const festival = dated('t1', '2026-09-11T17:00:00Z', 'time', '2026-09-18T20:00:00Z');
+  const exhibition = dated('o1', '2026-09-01T07:00:00Z', 'time', '2026-09-30T16:00:00Z');
+  const lead = (rows: ReturnType<typeof tonightPanel>['rows'], id: string) => rows.find((row) => row.key === `event:${id}`);
+
+  it('reads "do 25. 9." from events.untilDate, the day and the month on one line, and nothing for an end the same day', () => {
+    expect(untilDay(fair, i18n)).toBe('do 25.\u00a09.');
+    expect(untilDay(oneDay, i18n)).toBe('');
+    expect(untilDay(dated('d3', '2026-09-11T00:00:00+02:00', 'day', '2026-09-11T23:59:00+02:00'), i18n)).toBe('');
+    expect(untilDay(fair, createDefaultI18n('en'))).toBe('until 25.\u00a09.');
+  });
+
+  it('the paired Kultura panel: an all-day row that runs on leads with its end day, a single day keeps "cijeli dan", a clock stays a clock', () => {
+    const rows = tonightPanel(input([snap('dogadanja', [oneDay, fair, range, festival, exhibition])])).rows;
+    expect(lead(rows, 'd1')).toMatchObject({ lead: 'cijeli dan' });
+    expect(lead(rows, 'd2')).toMatchObject({ lead: 'do 25.\u00a09.' });
+    expect(lead(rows, 'r1')).toMatchObject({ lead: 'do 14.\u00a09.', day: 'sutra' });
+    expect(lead(rows, 't1')).toMatchObject({ lead: '19:00' });
+    // Begun on an earlier day: its start clock is not today's, so the row says when it closes.
+    expect(lead(rows, 'o1')).toMatchObject({ lead: 'do 30.\u00a09.', day: 'u tijeku' });
+  });
+
+  it('the paired culture layer: today\'s and tomorrow\'s all-day rows say until when, a range has no midnight clock, a running one has no weekday', () => {
+    const snapshots = { dogadanja: snap('dogadanja', [oneDay, fair, range, festival, exhibition, dated('r2', '2026-09-11T00:00:00+02:00', 'range', '2026-09-13T23:59:00+02:00')]) };
+    const { main } = pairedMarkup({ layer: 'kultura', strings: s, i18n, locale: 'hr', snapshots, now: NOW, stop: null, selection: null, lightweight: false, size: 'wide' });
+    const aside = (title: string) => main.match(new RegExp(`k-row-aside">([^<]*)</span>${title}<`))?.[1];
+    expect(aside('Događanje d1')).toBe('cijeli dan');
+    expect(aside('Događanje d2')).toBe('do 25.\u00a09.');
+    expect(aside('Događanje r2')).toBe('do 13.\u00a09.');
+    expect(aside('Događanje r1')).toBe('do 14.\u00a09.');
+    expect(aside('Događanje o1')).toBe('do 30.\u00a09.');
+    expect(main).not.toContain('00:00');
+    expect(main).not.toMatch(/do (?:pon|uto|sri|čet|pet|sub|ned) /u);
+  });
+
+  it('keeps one "do {date}" in the catalogue: events.untilDate, no kiosk.paired twin', () => {
+    expect(hrCatalogue.events.untilDate).toBe('do {date}');
+    expect(enCatalogue.events.untilDate).toBe('until {date}');
+    expect(hrCatalogue.kiosk.paired).not.toHaveProperty('ongoingUntil');
+    expect(enCatalogue.kiosk.paired).not.toHaveProperty('ongoingUntil');
   });
 });

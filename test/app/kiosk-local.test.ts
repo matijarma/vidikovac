@@ -500,7 +500,7 @@ describe('local content from the stop-scoped teaser', () => {
     const culture = pairedMarkup(withOngoing);
     expect(culture.main).toContain('data-testid="k-ongoing"');
     expect(culture.main).toContain('u tijeku · izložba · Etnografski muzej, Zagreb');
-    expect(culture.main).toContain('do sri 30. 9.');
+    expect(culture.main).toContain('do 30.\u00a09.'); // events.untilDate, day and month only [O-53]
     expect(culture.main).not.toContain('13. sjednica');
     expect(culture.main).not.toContain('Splitu');
     // Promet's column is the departure board alone: ZET's notices are Događanja's undated notices (asserted above), closures stay on Sada and Sigurnost.
