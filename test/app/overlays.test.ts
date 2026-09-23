@@ -484,7 +484,7 @@ describe('decision 17: the vehicle marks before the names', () => {
     // Over a pill's box, never over another name; otherwise the stop name's own layout and paint.
     expect(twin.layout).toEqual({ ...normal.layout, 'text-overlap': 'cooperative' });
     expect(twin.paint).toEqual(normal.paint);
-    expect(normal.paint!['text-opacity']).toEqual(['number', ['feature-state', 'o'], 1]);
+    expect(normal.paint!['text-opacity']).toEqual(['number', ['feature-state', 'o'], 0]);
     // Nothing held: the same shape, an empty list. Off the public screen the twin draws nothing and the names keep their plain ink.
     expect(overlayLayers(OVERLAY_LIGHT, { prozor: PROZOR }).find((l) => l.id === LAYERS.stopLabelsHeld)!.filter).toEqual(['all', base, ['in', ['get', 'id'], ['literal', []]]]);
     const phone = overlayLayers(OVERLAY_LIGHT, { heldNames: ['1_1'] });

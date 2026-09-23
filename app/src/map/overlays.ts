@@ -169,7 +169,8 @@ export const RING_STROKE_PX = 2.5;
 // held for two seconds in `stop-labels-held` (text-overlap cooperative: drawn
 // over a pill's box, never over another name) unless a pill covers it, and a
 // name the collision pass has just hidden stays out of sight for a second
-// before it may show again, then fades in (the `o` feature state).
+// before it may show again, then fades in (the `o` feature state, 0 until the
+// hysteresis has looked at a name).
 
 /** The anchors a name tries, in order: under its point (where it has always
  *  stood), over it, to its right, to its left. */
@@ -773,8 +774,11 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       ? ['-', ['case', ['get', 'tramInterchange'], 0, 100], ['get', 'rank']]
       : ['-', 100, ['get', 'rank']],
   };
-  /** On the public screen a stop name's own opacity is the hysteresis's `o` feature state (0 while it waits, then its fade in), 1 without one. */
-  const stopLabelPaint: Record<string, unknown> = { ...labelInk, 'text-halo-width': 1.4, ...(prozor ? { 'text-opacity': ['number', ['feature-state', 'o'], 1] } : {}) };
+  /** On the public screen a stop name's own opacity is the hysteresis's `o`
+   *  feature state, and a name it has not looked at yet is out of sight, so
+   *  a name MapLibre places between two looks never flashes before the
+   *  hysteresis decides it may show. */
+  const stopLabelPaint: Record<string, unknown> = { ...labelInk, 'text-halo-width': 1.4, ...(prozor ? { 'text-opacity': ['number', ['feature-state', 'o'], 0] } : {}) };
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the

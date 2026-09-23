@@ -1197,8 +1197,8 @@ interface NameState { placed: boolean; hiddenAt: number | null; ink: NameInk; fa
 export interface NameTick {
   /** The held stop ids, sorted, when they changed on this tick; null otherwise. */
   held: readonly string[] | null;
-  /** The `o` feature state to write per stop id: a number, or null to remove it (full ink). */
-  opacity: ReadonlyMap<string, number | null>;
+  /** The `o` feature state to write per stop id, 0 to 1 (overlays.ts reads a name without one as out of sight). */
+  opacity: ReadonlyMap<string, number>;
 }
 
 export interface NameHysteresis {
@@ -1225,7 +1225,7 @@ export function createNameHysteresis(): NameHysteresis {
   return {
     held: heldList,
     tick(t, placed, covered) {
-      const opacity = new Map<string, number | null>();
+      const opacity = new Map<string, number>();
       let changed = false;
       startedAt ??= t;
       /** The ink a name has at `t`: a fade in counts on from where it started. */
@@ -1266,7 +1266,7 @@ export function createNameHysteresis(): NameHysteresis {
           const late = t - startedAt >= NAME_MIN_HIDDEN_MS;
           st = { placed: true, hiddenAt: late ? startedAt : null, ink: late ? 'out' : 'full', fadeFrom: t, o: late ? 0 : 1 };
           states.set(id, st);
-          if (late) opacity.set(id, 0);
+          opacity.set(id, st.o);
           continue;
         }
         st.placed = true;
@@ -1278,7 +1278,7 @@ export function createNameHysteresis(): NameHysteresis {
           if (st.ink === 'in') {
             if (k >= 1) st.ink = 'full';
             st.o = k;
-            opacity.set(id, k >= 1 ? null : k);
+            opacity.set(id, k);
           } else {
             if (k >= 1) st.ink = 'out';
             st.o = 1 - k;
@@ -1341,7 +1341,6 @@ interface MapApi {
   queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): RenderedFeature[];
   /** Decision 19's name hysteresis only; a stand-in without them runs none. */
   setFeatureState?(feature: { source: string; id: string }, state: Record<string, unknown>): void;
-  removeFeatureState?(feature: { source: string; id: string }, key?: string): void;
   easeTo(options: Record<string, unknown>): void;
   jumpTo(options: Record<string, unknown>): void;
   fitBounds(bounds: [[number, number], [number, number]], options?: Record<string, unknown>): void;
@@ -1864,11 +1863,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       container.dataset.ownNameCrossed = (ownCrossedMs / 1000).toFixed(1);
     }
     const result = nameHold.tick(t, placed, covered);
-    for (const [id, o] of result.opacity) {
-      const feature = { source: l.SOURCES.stops, id };
-      if (o === null) m.removeFeatureState?.(feature, 'o');
-      else m.setFeatureState(feature, { o });
-    }
+    for (const [id, o] of result.opacity) m.setFeatureState({ source: l.SOURCES.stops, id }, { o });
     if (result.held) {
       heldNames = result.held;
       applyOverlays();

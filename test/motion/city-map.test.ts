@@ -1429,10 +1429,11 @@ describe('the stop names\u2019 hysteresis (decision 19)', () => {
   /** Runs `h` over [t, placed, covered] looks and answers each look's result. */
   const run = (h: ReturnType<typeof createNameHysteresis>, looks: [number, Set<string>, Set<string>?][]) => looks.map(([t, placed, covered]) => h.tick(t, placed, covered ?? NONE));
 
-  it('draws the picture as it opens as it is: nothing held, no ink of its own', () => {
+  it('draws the picture as it opens as it is: full ink, nothing held', () => {
     const h = createNameHysteresis();
-    expect(h.tick(0, S('a', 'b'), NONE)).toEqual({ held: null, opacity: new Map() });
-    expect(h.tick(500, S('a', 'b', 'c'), NONE)).toEqual({ held: null, opacity: new Map() });
+    // Every name gets its full ink at the first look, and nothing else happens.
+    expect(h.tick(0, S('a', 'b'), NONE)).toEqual({ held: null, opacity: new Map([['a', 1], ['b', 1]]) });
+    expect(h.tick(500, S('a', 'b', 'c'), NONE)).toEqual({ held: null, opacity: new Map([['c', 1]]) });
     expect(h.held()).toEqual([]);
   });
 
@@ -1452,7 +1453,7 @@ describe('the stop names\u2019 hysteresis (decision 19)', () => {
     expect(up!.held).toEqual(['a']); // its second is up: back, held from now
     expect(up!.opacity.get('a')).toBe(0);
     expect(inHalf!.opacity.get('a')).toBeCloseTo(0.5, 5);
-    expect(full!.opacity.get('a')).toBeNull();
+    expect(full!.opacity.get('a')).toBe(1);
     expect(h.tick(2000 + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
     expect(h.tick(2000 + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
   });
@@ -1476,7 +1477,7 @@ describe('the stop names\u2019 hysteresis (decision 19)', () => {
     const late = h.tick(NAME_MIN_HIDDEN_MS, S('a', 'c'), NONE);
     expect(late.held).toEqual(['c']);
     expect(late.opacity.get('c')).toBe(0);
-    expect(h.tick(NAME_MIN_HIDDEN_MS + NAME_FADE_MS, S('a', 'c'), NONE).opacity.get('c')).toBeNull();
+    expect(h.tick(NAME_MIN_HIDDEN_MS + NAME_FADE_MS, S('a', 'c'), NONE).opacity.get('c')).toBe(1);
     expect([NAME_TICK_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_FADE_MS]).toEqual([100, 2000, 1000, 300]);
   });
 
@@ -1489,7 +1490,7 @@ describe('the stop names\u2019 hysteresis (decision 19)', () => {
     for (let t = 0; t <= 6000; t += 100) {
       const placed = h.held().includes('a') || Math.floor(t / 200) % 2 === 0 ? S('a') : NONE;
       const r = h.tick(t, placed, NONE);
-      if (r.opacity.has('a')) o = r.opacity.get('a') ?? 1;
+      if (r.opacity.has('a')) o = r.opacity.get('a')!;
       seen.push(placed.has('a') && o > 0);
     }
     const runs: { v: boolean; n: number }[] = [];
@@ -1507,7 +1508,6 @@ describe('the public screen runs the stop names\u2019 hysteresis and times the o
     const { map, container, frame } = await harness({ lib: cityLib, extra: { prozor, basemapProfile: 'prozor', interactive: false, symbolScale: 2, stop } });
     const states: [string, unknown][] = [];
     (map as unknown as { setFeatureState: unknown }).setFeatureState = (f: { id: string }, st: unknown) => { states.push([f.id, st]); };
-    (map as unknown as { removeFeatureState: unknown }).removeFeatureState = (f: { id: string }) => { states.push([f.id, null]); };
     const at = (lon: number, lat: number) => ({ type: 'Point', coordinates: [lon, lat] });
     const name = { layer: { id: 'stop-labels' }, properties: { id: '1_1', name: 'Zrinjevac' }, geometry: at(15.95, 45.85) };
     const own = { layer: { id: 'screen-stop-label' }, properties: { id: '106_1', name: 'Trg bana J. Jelačića' }, geometry: at(15.9705, 45.8101) };
