@@ -60,6 +60,7 @@ import { reconcile } from '../ui/dom/reconcile';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
 import type { StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
@@ -661,14 +662,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     let html: string;
     let peekHtml: string;
     let peekText: string | null = null;
+    /** The peek line's text kind: the detail's own (a name, or a title for a vehicle's composed line), fixed copy otherwise. */
+    let peekKind: ExternalTextKind = 'title';
     if (query) {
       cityData=discovery();
-      const results = searchCity(query, routeCatalogue(), groups ?? [], cityData.places, cityData.streets);
+      // Every result's name and detail are third-party text (GTFS, the registers): vetted by kind before the row is drawn,
+      // and a result whose name fails the row rule is not offered at all.
+      const results = searchCity(query, routeCatalogue(), groups ?? [], cityData.places, cityData.streets)
+        .map((r) => ({ r, texts: resultTexts(r) })).filter(({ texts }) => texts.name !== '');
       const total = results.length;
-      if (activeOption && !results.some(r => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
+      if (activeOption && !results.some(({ r }) => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
       const label = (r: CitySearchResult) => r.kind === 'place' ? placeCategory(i18n,r.record) : r.kind === 'street' ? ct(i18n,'streets') : tr(i18n,r.kind === 'stop' ? 'stop' : 'route');
-      html = `<div id="${ids.results}" role="listbox" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(r =>
-        `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(r.name)}</strong><span class="city-meta">${esc(r.detail)}</span></span></div>`).join('')}</div>`;
+      html = `<div id="${ids.results}" role="listbox" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(({ r, texts }) =>
+        `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(texts.name)}</strong><span class="city-meta">${esc(texts.detail)}</span></span></div>`).join('')}</div>`;
       if(total>cityLimit)html+=`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')} (${total-cityLimit})</button>`;
       if(!total)html+=`<p role="status">${ct(i18n,cityState().loading?'loading':'noResults')}</p>`;
       else if(cityState().loading)html+=`<p class="city-meta" role="status">${ct(i18n,'partial')} ${ct(i18n,'loading')}</p>`;
@@ -686,7 +692,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         relay(null);
       }
       if (detail) {
-        [html, peekText] = detail;
+        [html, peekText, peekKind] = detail;
+        // The peek repeats the detail's third-party text (a place's or street's name, a route's long name, a stop's
+        // name, a vehicle's headsign, a closure's street): vetted once here under the detail's kind, on the row surface,
+        // so a string the rule refuses leaves the peek empty rather than printed above the sheet.
+        peekText = vetExternal(peekKind, peekText, 'row') ?? '';
         peekHtml = esc(peekText);
       } else {
         [html, peekHtml] = nearbySheet();
@@ -694,7 +704,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     if (query && activeOption) searchInput.setAttribute('aria-activedescendant', activeOption);
     else searchInput.removeAttribute('aria-activedescendant');
-    peek.innerHTML = following && selection?.kind === 'vehicle' && peekText !== null ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
+    peek.innerHTML = following && selection?.kind === 'vehicle' && peekText ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
     swapBody(html);
     if(activeOption)document.getElementById(activeOption)?.scrollIntoView?.({block:'nearest'});
     element.dataset.searching=String(Boolean(query));
@@ -733,28 +743,40 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     return [c.nearby ? `<p class="t-empty" role="status" aria-busy="true" data-testid="nearby-pending">${esc(c.i18n.t('status.loading'))}</p>` : '', peekHtml];
   }
 
-  /** The selection's detail and its one-line summary; null once the thing has gone. */
-  function detailMarkup(sel: MapSelection, vehicles: readonly VehicleInfo[]): [string, string] | null {
+  /** A search result's name and detail as the row prints them: each field under its own kind (a route's number and
+   *  long name, a stop's name and its lines, a place's name and address, a street's name and settlement), '' when it fails. */
+  function resultTexts(r: CitySearchResult): { name: string; detail: string } {
+    const vet = (kind: ExternalTextKind, value: string | undefined): string => vetExternal(kind, value ?? '', 'row') ?? '';
+    switch (r.kind) {
+      case 'route': return { name: vet('headsign', r.record.short), detail: vet('name', r.record.long) };
+      case 'stop': return { name: vet('name', r.record.name), detail: r.record.routes.map((id) => vet('headsign', id)).filter(Boolean).join(', ') };
+      case 'place': return { name: vet('name', r.record.name), detail: vet('address', r.record.address) };
+      case 'street': return { name: vet('name', r.record.name), detail: vet('name', r.record.settlement) };
+    }
+  }
+
+  /** The selection's detail, its one-line summary and the summary's text kind (renderSheet vets it); null once the thing has gone. */
+  function detailMarkup(sel: MapSelection, vehicles: readonly VehicleInfo[]): [string, string, ExternalTextKind] | null {
     const c = ctx();
     const i18n = c.i18n;
     const k = kiosk();
     switch (sel.kind) {
       case 'place': {
         const p=[...cityState().places,...dynamicPlaces(cityState(),c.now)].find(p=>p.id===sel.id);
-        if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected')];}
-        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,PROGRAMME_WINDOW),c.saved?.has('place',p.id),false,referenceLocation()),p.name];
+        if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected'),'title'];}
+        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,PROGRAMME_WINDOW),c.saved?.has('place',p.id),false,referenceLocation()),p.name,'name'];
       }
       case 'street': {
         const s=cityState().streets.find(s=>s.id===sel.id);
-        if(!s){c.ensureCity?.(['streets','settlements']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'streets')];}
-        return [streetDetail(i18n,s),s.name];
+        if(!s){c.ensureCity?.(['streets','settlements']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'streets'),'title'];}
+        return [streetDetail(i18n,s),s.name,'name'];
       }
       case 'route': {
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
         const directions = new Map(onRoute.map((v): [string, string] => [v.id, vehicleDirection(i18n, net, v)]));
         const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), lineFocus: lineFocusRow(), saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
-        return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short })];
+        return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short }), 'name'];
       }
       case 'stop': {
         const screen = c.screen?.stop;
@@ -780,7 +802,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
         const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
         const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt });
-        return [html, `${tr(i18n, 'stop')} ${group.name}`];
+        return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {
         const v = vehicles.find((x) => x.id === sel.id);
@@ -797,12 +819,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           lineFocus: lineFocusRow(),
           cast: c.cast,
         });
-        return [html, `${vehicleTitle(i18n, v)} · ${direction}`];
+        return [html, `${vehicleTitle(i18n, v)} · ${direction}`, 'title'];
       }
       case 'closure': {
         const item = closureItems(c.snapshots.prometnice).find((x) => x.id === sel.id);
         if (!item) return null;
-        return [closureDetailMarkup(i18n, item, k, c.cast), item.title];
+        return [closureDetailMarkup(i18n, item, k, c.cast), item.title, 'name'];
       }
     }
   }

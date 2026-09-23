@@ -15,7 +15,8 @@ const FILES = [
   'app/src/city/markup.ts', 'app/src/map/city-map.ts', 'app/src/map/external-labels.ts', 'app/src/map/external-features.ts',
   'app/src/map/overlays.ts', 'app/src/map/city-layers.ts',
   // The phone's departures block, its Sada title and the stop sheet (WP4): the same row rule as the wall's rows.
-  'app/src/city/next-departures.ts', 'app/src/layers/grad-sada.ts', 'app/src/transport/view.ts',
+  'app/src/city/next-departures.ts', 'app/src/layers/grad-sada.ts', 'app/src/transport/view.ts', 'app/src/transport/workspace.ts',
+  'app/src/transport/detail.ts',
   'app/src/motion/schema-paint.ts', 'app/src/motion/schema-map.ts', 'app/src/motion/schematic-view.ts',
   'shared/kiosk/sentence.ts',
 ].sort();

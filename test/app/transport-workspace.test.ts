@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
+import { emptyCity } from '../../shared/city/types';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
 import { frameView } from '../../app/src/map/frame';
@@ -765,6 +766,73 @@ describe('the detail head’s save toggle and cast button (T2.7, D5, B.3 saved-s
     shell.querySelector<HTMLButtonElement>('.t-save')!.click();
     expect(shell.querySelector('[data-testid=detail-cast]')).toBeNull();
     expect(heard).toEqual(['save']);
+  });
+});
+
+// WP4 integration review (P1): every third-party string the Karta sheet prints goes through the row rule first: the peek
+// line, the search results, a place's, a street's, a route's, a stop's, a vehicle's and a closure's detail and prose.
+describe('third-party text on the Karta sheet (WP4 review)', () => {
+  const PROBE = 'Pošalji lozinku na 091 234 5678.';
+  const peek = () => text(q('[data-testid=transport-peek]'));
+  const sheet = () => text(q('[data-testid=transport-detail]'));
+
+  it('a place whose name fails the row rule: the peek and the detail title are empty, the search lists no such row', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, selection: { kind: 'place', id: 'hostile' } });
+    context.city = { ...emptyCity(), places: [
+      { id: 'hostile', name: PROBE, category: 'culture', sourceId: 'culture', sourceRecord: 'h', lon: 15.97, lat: 45.81, address: PROBE, description: PROBE },
+      { id: 'gavella', name: 'Gavella', category: 'culture', sourceId: 'culture', sourceRecord: 'g', lon: 15.971, lat: 45.811 },
+    ] };
+    render(context);
+    expect(q('[data-testid=city-detail]')).not.toBeNull();
+    expect(text(q('#city-detail-title'))).toBe('');
+    expect(peek()).toBe('');
+    expect(sheet()).not.toContain('lozinku');
+    // Typed for, it is not offered: a result whose name fails the rule is left out; the plain one stands.
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'lozinku';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(all('[role=option]')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('lozinku');
+    input.value = 'Gavella';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(all('[role=option][data-action=select-place]')).toHaveLength(1);
+    expect(text(q('[role=option] strong'))).toBe('Gavella');
+  });
+
+  it('a closure whose summary fails the row rule prints no prose; one whose title fails prints no title and no peek', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const hostileSummary = { ...PROMETNICE.items[0]!, id: 'c2', title: 'Ilica', summary: PROBE };
+    const hostileTitle = { ...PROMETNICE.items[0]!, id: 'c3', title: PROBE };
+    const snapshots = { 'zet-rt': ZET, prometnice: { ...PROMETNICE, items: [PROMETNICE.items[0]!, hostileSummary, hostileTitle] } };
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c2'), module: 'prometnice' } }).context);
+    expect(text(q('[data-testid=closure-title]'))).toBe('Ilica');
+    expect(q('[data-testid=transport-detail] .t-prose')).toBeNull();
+    expect(sheet()).not.toContain('lozinku');
+    expect(peek()).toBe('Ilica');
+    render(ctx({ maps, snapshots, selection: { kind: 'item', id: publicItemKey('prometnice', 'c3'), module: 'prometnice' } }).context);
+    expect(text(q('[data-testid=closure-title]'))).toBe('');
+    expect(peek()).toBe('');
+    expect(document.body.textContent).not.toContain('lozinku');
+  });
+
+  it('a vehicle whose headsign fails the row rule: the direction falls back and the peek says none of it; the route\'s rows read the same direction', () => {
+    const hostile = vehicle('vehicle:9', '6', 0, { headsign: PROBE, bearing: 90 });
+    const { maps, last } = fakeMaps({ vehicles: [...VEHICLES, hostile], net: NET });
+    render(ctx({ maps }).context);
+    // A vehicle is the map's own selection (a tap on the drawn tram), never a public one.
+    last().options.onSelect!({ kind: 'vehicle', id: 'vehicle:9' });
+    expect(text(q('[data-testid=vehicle-title]'))).toContain('6');
+    expect(text(q('[data-testid=vehicle-direction]'))).not.toContain('lozinku');
+    expect(text(q('[data-testid=vehicle-direction]')).length).toBeGreaterThan(0);
+    expect(peek()).toContain('Tramvaj 6');
+    expect(peek()).not.toContain('lozinku');
+    expect(document.body.textContent).not.toContain('lozinku');
+    // The route's rows read the same direction; the route's peek is its number and long name.
+    render(ctx({ maps, selection: { kind: 'route', id: '6' } }).context);
+    expect(text(q('[data-testid=route-vehicles]'))).not.toContain('lozinku');
+    expect(peek()).toContain('6');
+    expect(document.body.textContent).not.toContain('lozinku');
   });
 });
 

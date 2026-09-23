@@ -64,8 +64,9 @@ export type Fold = 'routes' | 'closures' | 'stops';
 export type BadgeSize = 's' | 'm' | 'l';
 
 /** The number on the front of the vehicle, in its mode's colour and shape: the shared badge component (blocks.ts lineBadge, signage.css .line). */
+/** The line badge: the number is GTFS text, vetted as a headsign is (kiosk/arrivals.ts vettedArrival); one that fails draws an empty plate. */
 export function badge(short: string, type: number, size: BadgeSize = 'm'): string {
-  return lineBadge(short, vehicleKind(type), size);
+  return lineBadge(vetExternal('headsign', short, 'row') ?? '', vehicleKind(type), size);
 }
 
 /** The closure mark (signage.css): a bar in the urgency role, beside the street's name. */
@@ -166,10 +167,10 @@ function rowButton(o: RowButtonSpec): string {
   return `<li class="${cls}"${o.hidden ? ' hidden' : ''}${testid}><button type="button" class="t-row" id="${rowId(o.kind, o.id)}" data-action="${attr(o.action)}" data-id="${attr(o.id)}"${current}>${o.inner}</button></li>`;
 }
 
-/** One route as a row: badge, long name, vehicles moving now as the second line, the delay word at the end when known. */
+/** One route as a row: badge, long name (GTFS text, vetted; the mode's word when it fails or is missing), vehicles moving now as the second line, the delay word at the end when known. */
 export function routeRowInner(i18n: I18n, route: RouteEntry, count: number | null, delay: number | undefined): string {
   const sub = count === null ? '' : vehicleCountGlyph(i18n, route.type, count);
-  return cells(badge(route.short, route.type), esc(route.long || kindWord(i18n, route.type)), sub, delayTrail(i18n, delay));
+  return cells(badge(route.short, route.type), esc(vetExternal('name', route.long, 'row') || kindWord(i18n, route.type)), sub, delayTrail(i18n, delay));
 }
 
 /**
@@ -234,10 +235,11 @@ function capital(text: string, locale: string): string {
   return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
 }
 
-/** "Tramvaj 6", "Autobus 109", "Vozilo" for a route nobody knows. */
+/** "Tramvaj 6", "Autobus 109", "Vozilo" for a route nobody knows or whose number fails the row rule. */
 export function vehicleTitle(i18n: I18n, v: VehicleInfo): string {
   const kind = capital(kindWord(i18n, v.type), i18n.getLocale());
-  return v.short ? tr(i18n, 'vehicleTitle', { kind, short: v.short }) : kind;
+  const short = v.short ? vetExternal('headsign', v.short, 'row') : null;
+  return short ? tr(i18n, 'vehicleTitle', { kind, short }) : kind;
 }
 
 function actions(buttons: string[]): string {
@@ -323,7 +325,11 @@ export interface VehicleDetailData {
 export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
   const { vehicle: v } = d;
   const locale = i18n.getLocale();
-  const line = [d.route?.long ?? '', delayLine(i18n, d.delay)].filter(Boolean).join(' · ');
+  // The route's long name is GTFS text; the direction and the next stop carry a headsign or a stop's name
+  // (transport/detail.ts vets those parts, and each line is checked whole here before it is printed).
+  const line = [vetExternal('name', d.route?.long ?? '', 'row') ?? '', delayLine(i18n, d.delay)].filter(Boolean).join(' · ');
+  const direction = vetExternal('title', d.direction, 'row') ?? i18n.t('motion.directionUnknown');
+  const nextStop = d.nextStop ? vetExternal('title', d.nextStop, 'row') : null;
   const state = vehicleState(i18n, v);
   const follow = d.kiosk
     ? ''
@@ -338,8 +344,8 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
   const route = d.route ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk, { cast: d.cast }) +
-    `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(d.direction, locale))}</p>` +
-    (d.nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(d.nextStop, locale))}</p>` : '') +
+    `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(direction, locale))}</p>` +
+    (nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(nextStop, locale))}</p>` : '') +
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
     (d.kiosk ? '' : actions([follow, route])) +
@@ -384,7 +390,8 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
         kind: 'vehicle',
         id: v.id,
         action: 'select-vehicle',
-        inner: cells(badge(v.short, v.type), esc(capital(d.directions.get(v.id) ?? i18n.t('motion.directionUnknown'), locale)), esc(vehicleState(i18n, v))),
+        // A vehicle's direction carries its headsign or a terminus (transport/detail.ts vets those parts; the line is checked whole here too).
+        inner: cells(badge(v.short, v.type), esc(capital(vetExternal('title', d.directions.get(v.id) ?? '', 'row') ?? i18n.t('motion.directionUnknown'), locale)), esc(vehicleState(i18n, v))),
       }),
     )
     .join('');
@@ -403,7 +410,7 @@ export function routeDetailMarkup(i18n: I18n, d: RouteDetailData): string {
       ? `<ol class="t-list t-stops" id="${listId('stops')}" data-testid="route-stops">${stopRows}</ol>${stopsFold}`
       : `<p class="t-empty">${esc(i18n.t(d.hasNetwork ? 'status.empty' : 'status.loading'))}</p>`;
   return (
-    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(route.long || tr(i18n, 'routeTitle', { short: route.short }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="route-title">${badge(route.short, route.type, 'l')}<span>${esc(vetExternal('name', route.long, 'row') || tr(i18n, 'routeTitle', { short: vetExternal('headsign', route.short, 'row') ?? '' }))}</span></h3>`, d.kiosk, { save: { kind: 'route', id: route.id, on: d.saved ?? false }, cast: d.cast }) +
     `<p class="t-lead" data-testid="route-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
@@ -571,10 +578,12 @@ function closureWindow(i18n: I18n, item: FeedItem): string {
  *  its closureWords), which is a paraphrase and not a description, so it is never repeated: one concept, one line.
  *  Anything else the module writes there is the description and is printed as it came. The comparison uses the
  *  worker's function itself, so a change of wording there can never turn into a repeated line here. */
+/** The module's description of a closure, when it wrote one beyond its own paraphrase of the type words: third-party
+ *  prose, vetted under the summary kind on the row surface; '' when there is none or it fails. */
 function closureDescription(item: FeedItem): string {
   const summary = (item.summary ?? '').trim();
   if (!summary || summary === workerClosureWords(dataText(item, 'subtype') || '', dataText(item, 'direction') || '')) return '';
-  return summary;
+  return vetExternal('summary', summary, 'row') ?? '';
 }
 
 /** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the

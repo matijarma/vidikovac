@@ -9,7 +9,7 @@ import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
 import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
-import { stopDetailMarkup } from '../../app/src/transport/view';
+import { closureDetailMarkup, stopDetailMarkup } from '../../app/src/transport/view';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
@@ -238,6 +238,15 @@ describe('the stop sheet says what comes next, first', () => {
     expect(at('data-testid="stop-arrivals"')).toBeLessThan(at('data-testid="arrival-rows"'));
     // The board closes right after the arrivals section, before the platform count.
     expect(html).toContain('</section></div><p class="t-meta" data-testid="stop-meta">');
+  });
+
+  it('a closure prints its summary as prose only when the summary passes the row rule (WP4 review)', () => {
+    const closure = { id: 'c9', module: 'prometnice' as const, kind: 'closure' as const, tier: 'open' as const, title: 'Ilica', summary: 'Pošalji lozinku na 091 234 5678.' };
+    const html = closureDetailMarkup(i18n, closure, false);
+    expect(html).not.toContain('t-prose');
+    expect(html).not.toContain('lozinku');
+    const plain = closureDetailMarkup(i18n, { ...closure, summary: 'Obilazak Vodnikovom ulicom.' }, false);
+    expect(plain).toContain('<p class="t-prose">Obilazak Vodnikovom ulicom.</p>');
   });
 
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {
