@@ -635,6 +635,34 @@ describe('terminal placement continuity', () => {
     expect(t.match.s).toBe(0);
   });
 
+  it('allows one approaching fix at a nearby cropped prior after a trip handover', () => {
+    // 10324, 21 Sep 17:37:30: the new prior starts 62 m away, then
+    // 43 m away at the next fix. The arrival is real, but need not be
+    // adopted for one fix while entering the new trip's own near band.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(-200, 0) },
+        { from: 1, to: 2, pts: straight(0, 1000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'departure', direction: 0, edges: [1] },
+        { id: 'approach', direction: 0, edges: [0, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('handover', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(-77, 0, 1000), m.priorFor('approach', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 0);
+    m.matchFix(t, fix(-62, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.offPathCount).toBe(1);
+    m.matchFix(t, fix(-43, 0, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.offPathCount).toBe(0);
+  });
+
   it('does not return to a clipped departure endpoint while approaching it', () => {
     const n = syntheticNetwork({
       edges: [

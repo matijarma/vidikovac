@@ -632,8 +632,16 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       // A new trip has no established placement to protect from a stray.
       // Prefer an eligible nearby rail immediately to publishing a remote
       // prior for one tick (Mandlova departures were placed 631 m away).
+      // A nearby cropped departure approached at a handover is different:
+      // allow the ordinary one-fix grace while entering its near band
+      // (10324 at Kvaternikov, 62 m then 43 m). Never grant this to a
+      // standing, receding, or remote initial fix.
+      const approachingStart = working === prior.pathIdx && prev !== null
+        && onPath.s <= 0.5 && onPath.residual <= OFF_GRAPH_M
+        && dir !== null && pathForwardM(working, onPath.s, motion.delta) >= PRIOR_RETURN_NOISE_M
+        && net.projectOntoPath(working, prev).d > onPath.residual;
       if (track.match.pathIdx === null && (onPath.residual > OFF_GRAPH_M
-        || candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0)) return rederive();
+        || (!approachingStart && candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0))) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.
