@@ -67,6 +67,7 @@ import { twinIndexSource, twinNetworkSource, twinOverridesSource, twinUpstream }
 import { emptyState, type TwinState } from '../twin/state';
 import { runTick } from '../twin/tick';
 import { TWIN_DO_NAME } from '../twin/twin-name';
+import { newTrack, pushFix } from '../../shared/motion/track';
 
 export { TWIN_DO_NAME };
 
@@ -378,6 +379,28 @@ export class TwinDO extends DurableObject<Env> {
     const joins = this.joinsFor([...tripIds]);
     const unknownTrips = [...tripIds].filter((id) => !joins.has(id)).length;
 
+    if (this.graphChanged) {
+      // No index, arc, ordering witness or matcher accumulator from another
+      // graph is evidence here. Rebuild from plain reports, oldest first,
+      // before runTick can plan even a vehicle absent from the next feed.
+      const running = new Set([...joins.values()].flatMap(join => join.service ? [join.service] : []));
+      const tracks: TwinState['tracks'] = {};
+      for (const old of Object.values(prev.tracks)) {
+        const track = newTrack(old.id, old.routeId, old.tripId, old.kind);
+        track.tripStartSec = old.tripStartSec;
+        const join = old.tripId === null ? undefined : joins.get(old.tripId);
+        const prior = this.engine?.matcher.priorFor(join?.shapeId ?? null, old.routeId, join?.direction ?? null, join?.pathId ?? null);
+        for (const report of old.fixes) {
+          const { arc: _obsolete, ...fix } = report;
+          if (this.engine && prior) {
+            this.engine.matcher.matchFix(track, fix, prior, old.tripId === null ? null : prev.tripUpdates[old.tripId]?.stopId ?? null,
+              { runningServices: running.size ? running : null });
+          } else pushFix(track, fix);
+        }
+        tracks[old.id] = track;
+      }
+      prev = { ...prev, tracks, published: {}, pendingLearned: { ...emptyAggregates(), stops: prev.pendingLearned.stops } };
+    }
     const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs) });
     // What the tick learned joins the live aggregates the planner reads now,
     // and the pending minute in the state row; once a minute the pending
@@ -392,6 +415,9 @@ export class TwinDO extends DurableObject<Env> {
     this.state = result.state;
     this.payload = result.payload;
     const stateBytes = saveState(this.ctx.storage.sql, result.state);
+    // An unavailable engine leaves reports unplaced; retry the rematch when
+    // assets arrive, never resurrecting a retained old arc.
+    if (this.engine) this.graphChanged = false;
     // Once a minute, on the same cadence as the flush: how big the serialized
     // row actually is, against the Durable Object's ~2 MB row cap (I5). The
     // round's own replay measured 1.42 MB at the morning peak and production

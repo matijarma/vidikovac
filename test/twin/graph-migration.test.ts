@@ -68,7 +68,9 @@ describe('TwinDO persisted graph migration', () => {
     expect(twin.state.tracks.v6.match.s).toBeCloseTo(8427.7, 0);
     const item = twin.payload.items.find(i => i.id === 'vehicle:v6')!;
     const [lon, lat] = (item.geo as { coordinates: number[] }).coordinates;
-    expect(dist(toPlane(lon, lat), stop.p)).toBeLessThan(2);
+    // The platform is 2.3 m beside the rail, so compare the published
+    // estimate with its real rail projection, not the platform centre.
+    expect(dist(toPlane(lon, lat), after.toPathPoint(0, 8427.7))).toBeLessThan(1);
     expect(twin.state.tracks.v6.fixes.every(f => !f.arc || f.arc.s < 8500)).toBe(true);
   });
 
