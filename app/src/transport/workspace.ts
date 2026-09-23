@@ -36,7 +36,7 @@ import { discover, dynamicPlaces, clusterPlaces, CATEGORY_SOURCE, GROUP_SOURCES,
 import { ct, type CityWord } from '../city/strings';
 import { searchCity, type CitySearchResult } from '../city/search';
 import { placeCategory } from '../city/markup';
-import { defaultLocation, locationLabel, type LocationContext } from '../city/location';
+import { defaultLocation, type LocationContext } from '../city/location';
 import { placeDetail, placesMarkup, streetDetail, departuresMarkup } from '../city/markup';
 import { createBoardCache, type BoardCache, type BoardOperator } from '../city/boards';
 import { arrivalsAt } from '../../../shared/city/arrivals';
@@ -695,7 +695,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       } else {
         const transport=cityGroup==='transport'&&!cityCategory;
         html = transport ? overview(shown) : `<section class="city-browse"><h3>${esc(ct(i18n,'list'))}</h3>
-          <p class="city-meta" data-testid="location-context">${esc(locationLabel(i18n,referenceLocation()))}</p>
           <p class="city-meta">${esc(ct(i18n,'legend'))}</p>${cityState().loading?`<p role="status">${ct(i18n,'loading')}</p>`:''}
           ${cityCategory==='streets'?`<p class="city-meta">${ct(i18n,'streetBrowse')}</p>${cityData.streets.slice(0,cityLimit).map(s=>`<button type="button" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span></button>`).join('')}${cityData.streets.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
             cityCategory==='cycle-paths'?`<p>${cityState().paths.length} ${ct(i18n,'cycle-paths')}</p>${cityState().paths.slice(0,cityLimit).map(p=>`<p>${esc(p.name)}${p.surface?` · ${esc(p.surface)}`:''}</p>`).join('')}${cityState().paths.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:

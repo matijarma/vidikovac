@@ -199,6 +199,40 @@ describe('parseSessionHash', () => {
     expect(parseSessionHash('#nothing')).toBeNull();
   });
 });
+describe('the stop catalogue failing (WP4)', () => {
+  const TRG = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11'] };
+  it('says once that the timetable is unavailable, in one row that is not busy, and asks again at most three times', async () => {
+    const load = vi.mocked((await import('../../app/src/core/screens')).loadStops);
+    load.mockClear();
+    load.mockImplementation(async () => { throw new Error('stops-unavailable'); });
+    try {
+      const { root, session, tick } = mount();
+      session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+      await flush();
+      const list = root.querySelector('[data-testid=day-departures]')!;
+      expect(list.hasAttribute('aria-busy')).toBe(false);
+      expect(text(list)).toBe('Vozni red trenutačno nije dostupan.');
+      for (let i = 0; i < 5; i += 1) { tick(); await flush(); }
+      expect(load).toHaveBeenCalledTimes(3);
+      expect(root.querySelector('[data-testid=day-departures]')?.hasAttribute('aria-busy')).toBe(false);
+    } finally {
+      load.mockImplementation(async () => []);
+    }
+  });
+  it('a retry that answers boards Trg bana J. Jelačića again', async () => {
+    const load = vi.mocked((await import('../../app/src/core/screens')).loadStops);
+    load.mockClear();
+    load.mockImplementationOnce(async () => { throw new Error('stops-unavailable'); }).mockImplementationOnce(async () => [TRG]);
+    const { root, session, tick } = mount();
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: null });
+    // The draw after the failure asks again; the second answer lands.
+    for (let i = 0; i < 3; i += 1) { tick(); await flush(); }
+    expect(load).toHaveBeenCalledTimes(2);
+    const section = root.querySelector('section.sada-departures')!;
+    expect(section.getAttribute('aria-label')).toBe('Sljedeći polasci, Trg bana J. Jelačića');
+    expect(text(section)).not.toContain('nije dostupan');
+  });
+});
 describe('shell and navigation', () => {
   it('renders the wordmark, one session element, the safety shortcut and four phone tabs; no kvart select, no sidebar, no canvas', () => {
     const { root } = mount();
