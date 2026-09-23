@@ -10,6 +10,7 @@ import {
   formatSummary,
   grade,
   gradeDirectory,
+  isParkedEpisode,
   judge,
   loadRealEngine,
   PARKED_MIN_S,
@@ -229,6 +230,18 @@ describe('the branch grader, fault injection on the corridor', () => {
       expect(report.unplaced).toMatchObject({ parkedEpisodes: 0, parkedVehicleHours: 0, shareOfTramVehicleHoursRaw: 1, shareOfTramVehicleHours: 1 });
       expect(acceptanceRows(report)).toMatchObject({ U: 100, U_raw: 100, U_parkedVh: 0 });
     }
+  });
+
+  // Decision 16's boundary is exact: 100.4 m is beyond 100 m even though the
+  // episode prints its farthest fix rounded to 100.
+  it('judges the parked radius on unrounded metres: ten minutes reaching 100.4 m from where it stood is counted in row U', () => {
+    expect(isParkedEpisode(600, 100)).toBe(true);
+    expect(isParkedEpisode(600, 100.4)).toBe(false);
+    expect(isParkedEpisode(599.9, 0)).toBe(false);
+    const edge = observeUnplaced(10, (k) => (k === 5 ? 100.4 : 0));
+    expect(edge.unplaced.longest[0]).toMatchObject({ durationS: 600, maxDistFromStartM: 100, parked: false });
+    expect(edge.unplaced).toMatchObject({ parkedEpisodes: 0, parkedVehicleHours: 0, shareOfTramVehicleHoursRaw: 1, shareOfTramVehicleHours: 1 });
+    expect(acceptanceRows(edge)).toMatchObject({ U: 100, U_raw: 100, U_parkedVh: 0 });
   });
 
   it('refuses an observation after the report', () => {

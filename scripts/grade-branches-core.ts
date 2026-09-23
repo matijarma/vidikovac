@@ -251,7 +251,8 @@ function inc<K>(map: Map<K, number>, key: K, by = 1): void {
   map.set(key, (map.get(key) ?? 0) + by);
 }
 
-/** Decision 16: a tram standing off-graph without moving for ten minutes or more is parked. */
+/** Decision 16: a tram standing off-graph without moving for ten minutes or more is parked. The distance is
+ *  the unrounded metres (the report prints it rounded); 100.4 m is beyond the radius. */
 export function isParkedEpisode(durationS: number, maxDistFromStartM: number): boolean {
   return durationS >= PARKED_MIN_S && maxDistFromStartM <= PARKED_RADIUS_M;
 }
@@ -840,7 +841,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       withEdgeTicks: ep.withEdgeTicks,
       groundM: Math.round(dist(ep.startP, ep.lastP)),
       maxDistFromStartM: Math.round(ep.maxDistFromStart),
-      parked: isParkedEpisode(ep.sec, Math.round(ep.maxDistFromStart)),
+      // Decision 16's boundary on unrounded metres: 100.4 m is not parked, though it prints as 100.
+      parked: isParkedEpisode(ep.sec, ep.maxDistFromStart),
       stop: near ? near.stop.name : null,
       stopM: near ? Math.round(near.d) : null,
       terminal: terminal ? terminal.stop.name : null,
@@ -1704,7 +1706,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round(((unplaced.sec - parkedSec) / tramTrackedSec) * 1e6) / 1e6 : null,
       // Every unplaced second, parked or not (the share before decision 16).
       shareOfTramVehicleHoursRaw: tramTrackedSec > 0 ? Math.round((unplaced.sec / tramTrackedSec) * 1e6) / 1e6 : null,
-      parkedRule: `episode durationS >= ${PARKED_MIN_S} && maxDistFromStartM <= ${PARKED_RADIUS_M}`,
+      parkedRule: `episode durationS >= ${PARKED_MIN_S} && maxDistFromStartM <= ${PARKED_RADIUS_M}, on unrounded metres`,
       parkedEpisodes: parkedEps.length,
       parkedVehicleHours: r2(parkedSec / 3600),
       withEdgeVehicleHours: r2(unplaced.withEdgeSec / 3600),
