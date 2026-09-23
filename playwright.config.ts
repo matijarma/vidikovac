@@ -1,17 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
+import { e2ePorts, localOrigin } from './scripts/e2e-ports.mjs';
 
 // Two local servers, both `wrangler dev` on the same code:
-//   :8787  .dev.vars as committed in .dev.vars.example (SESSION_MINUTES=10, NETWORK_CHECK=off)
-//   :8788  the same plus --var SESSION_MINUTES:0.2, so the expiry spec sees a
+//   app    .dev.vars as committed in .dev.vars.example (SESSION_MINUTES=10, NETWORK_CHECK=off)
+//   short  the same plus --var SESSION_MINUTES:0.2, so the expiry spec sees a
 //          12-second session without touching the main instance's state
 //          (separate --persist-to so the two local DO stores never mix).
+// Their ports come from E2E_PORT (scripts/e2e-ports.mjs): app on E2E_PORT, short
+// on the next one, each devtools inspector at a fixed offset; unset, the ports
+// this harness always used. A second run on the same host sets another E2E_PORT
+// and runs from another checkout, since both runs rebuild app/dist and one tree
+// shares its .wrangler/ state.
 // Point the suite at production with:
 //   E2E_NO_WEBSERVER=1 E2E_APP_URL=https://zagreb.aningfilm.hr E2E_KIOSK_URL=<provisioning URL of the E2E screen> npx playwright test
 // Same-network pairing must work on every environment. The expiry spec is
 // skipped for a hosted target unless E2E_SHORT_URL names a dedicated server
 // running with SESSION_MINUTES=0.2.
-const APP_URL = process.env.E2E_APP_URL ?? 'http://localhost:8787';
-const SHORT_URL = process.env.E2E_SHORT_URL ?? 'http://localhost:8788';
+const PORTS = e2ePorts();
+const APP_URL = process.env.E2E_APP_URL ?? localOrigin(PORTS.app);
+const SHORT_URL = process.env.E2E_SHORT_URL ?? localOrigin(PORTS.short);
 const MANAGED_SERVERS = !process.env.E2E_NO_WEBSERVER;
 
 export default defineConfig({
@@ -64,7 +71,7 @@ export default defineConfig({
   webServer: MANAGED_SERVERS
     ? [
         {
-          command: 'npm run build && npm run dev -- --port 8787 --inspector-port 9229 --var APP_ENV:test',
+          command: `npm run build && npm run dev -- --port ${PORTS.app} --inspector-port ${PORTS.appInspector} --var APP_ENV:test`,
           url: `${APP_URL}/api/health`,
           timeout: 240_000,
           reuseExistingServer: !process.env.CI,
@@ -73,7 +80,7 @@ export default defineConfig({
         },
         {
           command:
-            'node scripts/require-app-build.mjs && npx wrangler dev --port 8788 --inspector-port 9230 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
+            `node scripts/require-app-build.mjs && npx wrangler dev --port ${PORTS.short} --inspector-port ${PORTS.shortInspector} --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short`,
           url: `${SHORT_URL}/api/health`,
           timeout: 120_000,
           reuseExistingServer: !process.env.CI,

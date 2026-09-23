@@ -5,9 +5,10 @@ import AxeBuilder from '@axe-core/playwright';
 import { createServer } from 'vite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { e2ePorts, localOrigin } from './e2e-ports.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const base = process.env.REVIEW_APP_URL ?? 'http://127.0.0.1:8787';
+const base = process.env.REVIEW_APP_URL ?? localOrigin(e2ePorts().app, '127.0.0.1');
 if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Visual fixtures are local-only.');
 const output = resolve(root, 'review.local/final');
 mkdirSync(output, { recursive: true });

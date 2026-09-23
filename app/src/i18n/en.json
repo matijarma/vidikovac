@@ -994,7 +994,6 @@
       "closuresUnknown": "Closures: data unavailable right now",
       "closuresStale": "Closures: stale, unconfirmed",
       "closuresNearest": "nearest {street}",
-      "pharmacy": "On-duty pharmacy",
       "basics": "Essentials",
       "sources": "DHMZ · EMSC",
       "confirmed": "DHMZ · EMSC · {time}",
@@ -1012,7 +1011,6 @@
       "empty": "The source is not answering right now. The safety layer runs at /hitno.",
       "routes": "Lines nearby",
       "weather": "Weather now",
-      "pharmacy": "On-duty pharmacy",
       "warnings": "Warnings",
       "closures": "Road closures"
     },

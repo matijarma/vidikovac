@@ -35,7 +35,7 @@ import hr from '../../app/src/i18n/hr.json';
 import * as kioskModule from '../../app/src/kiosk';
 import * as frame from '../../app/src/kiosk/frame';
 import { kioskStrings } from '../../app/src/kiosk/strings';
-import { clusterLabel, pillChars, pillWidthPx } from '../../app/src/motion/pills';
+import { clusterLabel, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, pillChars, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import type { ThemeController, ThemePreference } from '../../app/src/ui/theme';
 import { ATTRIBUTION } from '../../worker/feed/registry';
 import type { Attribution, ModuleSnapshot } from '../../worker/feed/schema';
@@ -464,9 +464,14 @@ describe('(c) a cluster pill writes every line, never "+N" (P0.2, slop #26)', ()
     expect(pillWidthPx(pillChars(label13))).toBeGreaterThan(pillWidthPx(4));
     const label27 = clusterLabel(CRNOMEREC_27);
     expect(label27).not.toContain('+');
-    // Whatever fits is whole lines of the cluster, the lowest first.
+    // Decision 23 (revised): a hub label wraps at a '·' onto at most PILL_MAX_LINES rows of at most
+    // PILL_MAX_CHARS_CLUSTER characters each, and the 27 lines (101 characters) all fit, so every
+    // line is written whole, in order, the lowest first; nothing is folded or dropped.
     expect(label27.startsWith('2·6·11·31')).toBe(true);
-    for (const line of label27.split('·')) expect(CRNOMEREC_27).toContain(line);
+    const rows = pillRows(label27);
+    expect(rows.length, `rows of ${JSON.stringify(label27)}`).toBeLessThanOrEqual(PILL_MAX_LINES);
+    for (const r of rows) expect(r.length, `row "${r}"`).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
+    expect(rows.flatMap((r) => r.split('·'))).toEqual(CRNOMEREC_27);
   });
 
   row('c-no-fold', 'now', 'app/src/motion/pills.ts keeps no fold: no CLUSTER_MAX_NUMBERS below 27 and no " +${…}" tail', () => {

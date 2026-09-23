@@ -13,7 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createI18n, type I18n, type MessageCatalog } from '../../app/src/i18n/i18n';
-import type { NearbyRow } from '../../app/src/city/nearby';
+import { selectNearby, type NearbyRow } from '../../app/src/city/nearby';
+import type { LastRunLive } from '../../app/src/core/lastrun';
+import { emptyCity } from '../../shared/city/types';
+import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures } from '../../e2e/wall';
+import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
@@ -241,6 +245,41 @@ describe('the time words', () => {
 });
 
 describe('calm motion (principle 7)', () => {
+  it('keeps ten idle minutes within the recorder budget when rejected rows change on every poll', () => {
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure });
+    t.update(longRows(), 2000, NOW);
+    const kept = items();
+    const minutes: number[] = [];
+    for (let minute = 0; minute < 10; minute++) {
+      CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC);
+      for (let poll = 1; poll <= 6; poll++) {
+        const rows = longRows().map(r => r.kind === 'event' ? { ...r, sub: `${r.sub} ${minute * 6 + poll}` } : r);
+        t.update(rows, 2000, NOW + minute * MIN + poll * 10_000);
+      }
+      const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+      minutes.push(reading.mutations);
+      expect(calmMotionFailures(reading), JSON.stringify(minutes)).toEqual([]);
+      expect(reading.rebuilt).toEqual([]);
+      expect(items()).toEqual(kept);
+    }
+    expect(minutes).toEqual(Array(10).fill(0));
+  });
+
+  it('measures candidate words in a hidden same-width sibling, never in the live list', () => {
+    const measure = simulated(WALL_1920);
+    const lines = vi.fn((el: HTMLElement) => {
+      expect(el.closest('ol')).not.toBe(host.querySelector('[data-testid=nearby-rows]'));
+      expect(el.isConnected).toBe(true);
+      expect(getComputedStyle(el).visibility).toBe('hidden');
+      expect(el.closest('ol')!.style.width).toBe(`${WALL_1920.titleChars}px`);
+      return measure.lines(el);
+    });
+    const t = mount({ measure: { ...measure, lines } });
+    t.update(longRows(), 2000, NOW);
+    expect(lines).toHaveBeenCalled();
+    expect(host.children).toHaveLength(1);
+  });
   it('keeps every node across updates with the same rows and fades nothing in', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
@@ -375,6 +414,39 @@ describe('calm motion (principle 7)', () => {
 describe('whole rows from the row budget', () => {
   const many = (n: number): TimelineRow[] => [...Array.from({ length: n - 1 }, (_, i) => dep(i + 1)), always()];
 
+  it('re-fits the same rows when the dark read multiplier changes without a resize', () => {
+    const measure: TimelineMeasure = {
+      box: list => ({ height: 400, width: 472, overflow: list.children.length * 80 * Number(section().style.getPropertyValue('--k-read-scale')) > 400 }),
+      lines: () => 1,
+    };
+    const t = mount({ measure });
+    t.element.style.setProperty('--k-read-scale', '1');
+    t.update(many(5), 2000, NOW);
+    expect(t.shown()).toBe(5);
+    t.element.style.setProperty('--k-read-scale', '1.1');
+    t.update(many(5), 2000, NOW);
+    expect(t.shown()).toBe(4);
+    expect(section().dataset.fitOverflow).toBe('0');
+    t.element.style.setProperty('--k-read-scale', '1');
+    t.update(many(5), 2000, NOW);
+    expect(t.shown()).toBe(5);
+  });
+  it('reserves first, last and uvijek before both the initial row cap and the measured drop pass (decision 27)', () => {
+    const last = row({ id: 'last:night', kind: 'last', title: 'Zadnji tramvaji' });
+    const first = row({ id: 'first:morning', kind: 'first', title: 'Prvi tramvaj' });
+    const rows = [dep(1), dep(2), dep(3), row({ id: 'event:next', kind: 'event', title: 'Koncert' }), last, first, always()];
+    const required = ['dep:1', last.id, first.id, always().id];
+    expect(fitRows(rows, 4).map(r => r.id)).toEqual(required);
+    const measure: TimelineMeasure = {
+      box: list => ({ height: 400, width: 472, overflow: list.children.length > 4 }),
+      lines: () => 1,
+    };
+    const t = mount({ measure });
+    t.update(rows, 2000, NOW);
+    expect(ids()).toEqual(required);
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+    expect(dropCandidate([last, first, always()])).toBeNull();
+  });
   it('grows three rows to 92 px and shrinks twelve to whole 64 px rows', () => {
     const t = mount({ designHeightPx: 520 });
     t.update(many(3), 2000, NOW);
@@ -419,7 +491,7 @@ describe('whole rows from the row budget', () => {
     const rows = [dep(1), dep(2), always(), dep(3)];
     expect(fitRows(rows, 4)).toEqual(rows);
     expect(fitRows(rows, 2).map((r) => r.id)).toEqual(['dep:1', 'always:story:trg']);
-    expect(fitRows(rows, 0)).toEqual([]);
+    expect(fitRows(rows, 0)).toEqual([rows[2]]); // A zero estimate never removes the reserved place row.
     const closure = row({ id: 'closure:x', kind: 'closure', atMs: NOW + 30 * MIN });
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
     expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
@@ -487,7 +559,33 @@ function longRows(): TimelineRow[] {
 }
 
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
-  it.each(['departure', 'always', 'event'] as const)('skips the last oversized %s, records it, and restores it when room returns', kind => {
+  it.each(['22:40', '04:30'])('%s keeps the real Trg first-tram and pharmacy rows within the 1920 budget', time => {
+    const now = at(`2026-09-${time === '22:40' ? '22' : '23'}T${time}:00+02:00`);
+    const file = JSON.parse(readFileSync(join(import.meta.dirname, '../../app/public/data/lastrun/106_1.json'), 'utf8'));
+    const lastRun: LastRunLive = { ...file, status: 'live', fetchedAt: new Date(now).toISOString(), sourceUpdatedAt: file.generatedAt };
+    const rows = selectNearby({
+      place: { kind: 'tram', stopId: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286 },
+      radiusM: 2182, now, locale: 'hr', i18n, lastRun, snapshots: {}, city: emptyCity(), fixes: [],
+      boards: [{
+        operator: 'zet', stopId: '106_1', stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(now).toISOString(),
+        departures: [1, 2, 3].map(n => ({
+          operator: 'zet', tripId: `t${n}`, routeId: '6', routeName: '6', headsign: 'Črnomerec', at: new Date(now + n * MIN).toISOString(),
+        })),
+      }],
+    });
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure });
+    t.update(rows, 2182, now);
+    expect(items().filter(li => li.dataset.kind === 'departure').length).toBeGreaterThanOrEqual(1);
+    expect(items().filter(li => li.dataset.kind === 'departure').length).toBeLessThanOrEqual(3);
+    expect(items().filter(li => li.dataset.kind === 'first')).toHaveLength(1);
+    expect(items().filter(li => li.dataset.kind === 'pharmacy')).toHaveLength(1);
+    expect(items().filter(li => li.dataset.kind === 'last')).toHaveLength(time === '22:40' ? 1 : 0);
+    expect(text(host.querySelector('[data-kind=first] .nearby-sub'))).toMatch(time === '22:40' ? /^12 04:13/ : /^1 04:33/);
+    expect(section().dataset.fitOverflow).toBe('0');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
+  });
+  it.each(['departure', 'always', 'event'] as const)('fits an oversized %s without sacrificing a reserved row, and restores discretionary rows when room returns', kind => {
     let room = 80;
     const measure: TimelineMeasure = {
       box: list => ({ height: room, width: 400, overflow: list.children.length * 240 > room }),
@@ -496,29 +594,33 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const t = mount({ designHeightPx: 80, measure });
     const candidate = row({ id: 'oversized', kind, title: 'Črnomerec', always: kind === 'always' });
     t.update([candidate], 2000, NOW);
-    expect(ids()).toEqual([]);
-    expect(t.shown()).toBe(0);
-    expect(section().dataset.skippedFit).toBe('1');
-    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+    const reserved = kind === 'always';
+    expect(ids()).toEqual(reserved ? ['oversized'] : []);
+    expect(t.shown()).toBe(reserved ? 1 : 0);
+    expect(section().dataset.skippedFit).toBe(reserved ? '0' : '1');
+    expect(section().dataset.fitOverflow).toBe(reserved ? '1' : '0');
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(reserved);
     t.update([candidate], 2000, NOW + 1000);
-    expect(ids()).toEqual([]);
+    expect(ids()).toEqual(reserved ? ['oversized'] : []);
     room = 300;
     t.update([candidate], 2000, NOW + 2000);
     expect(ids()).toEqual(['oversized']);
     expect(section().dataset.skippedFit).toBe('0');
+    expect(section().dataset.fitOverflow).toBe('0');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
   });
 
-  it('never uses overflow:hidden to conceal a surviving row, even when all reservations overflow', () => {
+  it('reports an impossible box instead of deleting the reserved row to claim a fit', () => {
     const measure: TimelineMeasure = {
       box: list => ({ height: 64, width: 1, overflow: list.children.length > 0 }),
       lines: () => 100,
     };
     const t = mount({ measure, designHeightPx: 64 });
     t.update([dep(1), always()], 2000, NOW);
-    expect(ids()).toEqual([]);
-    expect(section().dataset.skippedFit).toBe('2');
-    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+    expect(ids()).toEqual([always().id]);
+    expect(section().dataset.skippedFit).toBe('1');
+    expect(section().dataset.fitOverflow).toBe('1');
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(true);
   });
 
   it('vets direct inputs, including unused short labels, before rendering or budgeting them', () => {
@@ -566,29 +668,26 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     });
   }
 
-  it('at 1920 x 1080 shortens the long labels, keeps the three departures and drops the latest rows whole', () => {
+  it('at 1920 x 1080 shortens the long labels and gives later departures to the reserved last-tram row', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ designHeightPx: 486, measure });
     t.update(longRows(), 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'always:heritage:stedionica']);
+    expect(ids()).toEqual(['dep:1', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
     // "Ulica grada Vukovara" and its three-line sub give way to their complete short twins.
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Vukovarska');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-sub'))).toBe('Savska – Miramarska');
     // "Zgrada nekadašnje Gradske štedionice" takes three title lines there; "Gradska štedionica" wraps onto two, whole.
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
-    // "Zapadni kolodvor" has no shorter twin: it wraps onto a second line, whole.
-    expect(text(byId('dep:2').querySelector('.nearby-title'))).toBe('11 Zapadni kolodvor');
-    expect(measure.rowHeight(byId('dep:2'))).toBe(96);
-    expect(measure.sum(host.querySelector('ol')!)).toBe(436);
+    expect(text(byId('last:2026-09-22').querySelector('.nearby-sub'))).toBe(longRows()[6]!.subShort);
+    expect(measure.sum(host.querySelector('ol')!)).toBe(392);
   });
 
   it('at 1080 x 1920 has the width for the full labels and keeps more rows', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ designHeightPx: 498, measure });
     t.update(longRows(), 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'event:gavella', 'always:heritage:stedionica']);
-    expect(text(byId('event:gavella').querySelector('.nearby-title'))).toBe('Gospoda Glembajevi');
-    expect(text(byId('event:gavella').querySelector('.nearby-sub'))).toBe('Gradsko dramsko kazalište Gavella · tramvaj 6');
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    expect(text(byId('last:2026-09-22').querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(TOTEM_1080.boxPx);
@@ -644,17 +743,19 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
       ];
     }
     // How many departures stay beside the whole title: all three where the rows fit, else the later ones give way.
-    const DEPARTURES = { kvaternik: { light: 3, dark: 2 }, trg: { light: 2, dark: 1 } } as const;
+    const DEPARTURES = { kvaternik: { light: 1, dark: 1 }, trg: { light: 1, dark: 1 } } as const;
     for (const variant of ['kvaternik', 'trg'] as const) for (const theme of ['light', 'dark'] as const) {
       const kept = DEPARTURES[variant][theme];
-      it(`${variant}, ${theme}: the event stays with its whole title wrapped beside ${kept} departure${kept > 1 ? 's' : ''}`, () => {
+      it(`${variant}, ${theme}: the reserved rows stay beside ${kept} departure and the event stays whole only if it fits`, () => {
         const measure = measured(theme);
         const t = mount({ designHeightPx: BOX_PX, measure });
         t.update(wall(variant), 2000, T);
-        expect(ids().slice(0, kept + 1)).toEqual([...['dep:1', 'dep:2', 'dep:3'].slice(0, kept), 'event:vis']);
+        expect(ids()).toEqual(['dep:1', ...(theme === 'light' ? ['event:vis'] : []), 'last:2026-09-22', `always:story:${variant}`]);
         expect(ids().at(-1)).toBe(`always:story:${variant}`);
-        expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe(LONG);
-        expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');
+        if (theme === 'light') {
+          expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe(LONG);
+          expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');
+        }
         // The story keeps its sentence whole; at Trg in dark its name gives way to the stop's shorter one.
         expect(text(byId(`always:story:${variant}`).querySelector('.nearby-title'))).toBe(variant === 'trg' && theme === 'dark' ? 'Trg bana J. Jelačića' : variant === 'trg' ? 'Trg bana Josipa Jelačića' : 'Kvaternikov trg');
         expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
@@ -690,6 +791,11 @@ function px(value: string): number {
 
 describe('the 3-metre floors in every wall composition (computed from the real sheets)', () => {
   const sheets = ['app/src/ui/kiosk.css', 'app/src/ui/kiosk-city.css'].map((f) => readFileSync(join(import.meta.dirname, '..', '..', f), 'utf8')).join('\n');
+  it('overrides the generic supporting-size badge with the departure title size on the wall', () => {
+    // happy-dom lets an inherited ancestor declaration outrank the badge's
+    // own smaller declaration. Pin the override too; D2 measured 28 px.
+    expect(sheets).toMatch(/\.kiosk:not\(\[data-size=handheld\]\) \.k-nearby \.nearby-title \.k-line-badge\{[^}]*font-size:inherit;[^}]*height:auto;/);
+  });
   function sizes(size: string, portrait: boolean, zoom = 1, theme = 'light'): Record<string, number> {
     document.head.innerHTML = '';
     const style = document.createElement('style');
@@ -705,13 +811,34 @@ describe('the 3-metre floors in every wall composition (computed from the real s
     document.body.replaceChildren(root);
     const t = mountTimeline(root, { i18n, reduced: true, designHeightPx: 486 });
     // Eight rows in the 486 px box: 64 px rows, so the type is at its base (no growth) and the floors are what is measured.
-    t.update([row({ id: 'first:x', kind: 'first', atMs: at('2026-09-23T02:16:00Z'), title: 'Prvi tramvaj', sub: '4 04:16' }), ...[1, 2, 3, 4, 5, 6].map((n) => dep(n)), always()], 2000, NOW);
+    t.update([row({ id: 'first:x', kind: 'first', atMs: at('2026-09-23T02:16:00Z'), title: 'Prvi tramvaj', sub: '4 04:16' }), ...[1, 2, 3, 4, 5, 6].map((n) => dep(n, { arrival: { routeId: '6', routeName: '6' } })), always()], 2000, NOW);
     const out: Record<string, number> = {};
-    for (const sel of ['.nearby-title', '.nearby-when', '.nearby-sub', '.k-nearby-day', '.k-nearby-heading']) out[sel] = px(getComputedStyle(root.querySelector(sel)!).fontSize);
+    for (const sel of ['.nearby-title', '.nearby-when', '.nearby-sub', '.k-nearby-day', '.k-nearby-heading', '.k-line-badge']) out[sel] = px(getComputedStyle(root.querySelector(sel)!).fontSize);
     t.destroy();
     delete document.documentElement.dataset.themeResolved;
     return out;
   }
+  it.each(['light', 'dark'])('puts departure badges in the read tier in %s, with the same floor as their titles (decision 26)', theme => {
+    const s = sizes('wide', false, 1, theme);
+    expect(s['.k-line-badge']).toBe(s['.nearby-title']);
+    expect(s['.k-line-badge']).toBeGreaterThanOrEqual(theme === 'dark' ? 44 : 40);
+    document.head.innerHTML = '';
+    document.documentElement.dataset.themeResolved = theme;
+    document.body.innerHTML = `<li class="nearby-row"><span class="nearby-title"><span class="k-line-badge" style="font-size:${s['.k-line-badge']}px">6</span></span></li>`;
+    const rect = new DOMRect(0, 0, 60, 60);
+    const measure = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(rect);
+    try {
+      const spec = pageSpec({ ...LEGIBILITY_WALL, map: undefined });
+      const report = LEGIBILITY_IN_PAGE(spec);
+      expect(report.violations).toEqual([]);
+      expect(report.warnings).toEqual([expect.objectContaining({ tier: 'read', text: '6', px: s['.k-line-badge'] })]);
+      (document.querySelector('.k-line-badge') as HTMLElement).style.fontSize = '28px';
+      expect(LEGIBILITY_IN_PAGE(spec).violations).toEqual([expect.objectContaining({ tier: 'read', text: '6', px: 28 })]);
+    } finally {
+      measure.mockRestore();
+      delete document.documentElement.dataset.themeResolved;
+    }
+  });
   for (const [name, size, portrait] of [['wide 1920 x 1080', 'wide', false], ['compact 1366 x 768', 'compact', false], ['portrait 1080 x 1920', 'compact', true]] as const) {
     it(`${name}: title and time at least 40 px, sub, day word and head at least 28 px`, () => {
       const s = sizes(size, portrait);

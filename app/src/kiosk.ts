@@ -20,7 +20,7 @@ import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { dynamicPlaces } from './city/discovery';
 import { selectNearby, skippedTextCensus, type NearbyRow } from './city/nearby';
-import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS } from './city/sentence';
+import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS, isSameSentence, sentencePool } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
 import { vetExternal, type ExternalTextRejection } from '../../shared/kiosk/external-text';
@@ -282,6 +282,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let sentencesFetchedAt = -Infinity;
   let sentenceFetchSeq = 0;
   let sentenceSwapTimer: unknown = null;
+  /** The sentence the header last painted: a fade marks a new one, not its refreshed words. */
+  let paintedSentence: WrittenSentence | null = null;
   // A Ritam change replaces the sequence's cadence, not its ten-minute memory.
   const shownSentences = new Map<string, number>();
   let paired: PairedHandle | null = null;
@@ -395,7 +397,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function paintSentence(): void {
     if (currentSentence && !typedSentenceFact({ id: 'render', kind: currentSentence.kicker, text: currentSentence.text, validUntil: currentSentence.validUntil }, locale.startsWith('en') ? 'en' : 'hr').ok) currentSentence = null;
     const hidden = sentenceSuspended() || currentSentence === null;
-    const previous = sentenceText.textContent;
+    const previous = paintedSentence;
     if (sentenceEl.hidden !== hidden) sentenceEl.hidden = hidden;
     if (hidden || !currentSentence) {
       if (sentenceSwapTimer !== null) { clearTimer(sentenceSwapTimer); sentenceSwapTimer = null; }
@@ -408,7 +410,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (sentenceEl.dataset.validUntil !== deadline) sentenceEl.dataset.validUntil = deadline;
     setText(sentenceKicker, s.sentence.kicker[next.kicker]);
     setText(sentenceText, next.text);
-    if (previous && previous !== next.text && !reducedMotion && !lightweight) {
+    paintedSentence = next;
+    // A new sentence fades in; the same sentence in refreshed words (decision 29) changes in place.
+    if (previous && previous.text !== next.text && !isSameSentence(previous, next) && !reducedMotion && !lightweight) {
       if (sentenceSwapTimer !== null) clearTimer(sentenceSwapTimer);
       sentenceEl.dataset.swap = '1';
       sentenceSwapTimer = oneShot(() => { sentenceSwapTimer = null; delete sentenceEl.dataset.swap; }, SENTENCE_SWAP_MS);
@@ -465,8 +469,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     for (const [text, shownAt] of shownSentences) {
       if (at - shownAt >= SENTENCE_NO_REPEAT_MS && text !== currentSentence?.text) shownSentences.delete(text);
     }
-    const pool = [...modelSentences, ...templateSentences(facts, i18n, budget, at)]
-      .filter(sentence => sentence.text === currentSentence?.text || !shownSentences.has(sentence.text));
+    // The sentence on screen keeps its refreshed words in the pool even where they were shown before
+    // (an estimate that moves back): decision 29 refreshes it in place instead of moving on.
+    const pool = sentencePool([...modelSentences, ...templateSentences(facts, i18n, budget, at)], currentSentence, shownSentences);
     const next = sentenceSequence.read(pool, at, sentenceSuspended(), sentenceOverflows);
     if (currentSentence && next?.text !== currentSentence.text) shownSentences.set(currentSentence.text, at);
     currentSentence = next;
@@ -554,7 +559,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // fails (and vice versa). All visible safety copy must use the same choice.
     const noBasics = phase === 'paired' || phase === 'setup';
     const built = frameStrip(currentSafetyModules(), stop, i18n, s, now());
-    strip.innerHTML = stripMarkup(built, s, { noBasics });
+    strip.innerHTML = stripMarkup(built, s, { noBasics, passive: layout.size !== 'handheld' });
   }
 
   // --- Basics: the sessionless panel over the stage, 90 s idle outside a grant --
@@ -881,7 +886,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const codeEl = element.querySelector<HTMLElement>('[data-testid=kiosk-code]');
     const codeA = element.querySelector<HTMLElement>('[data-testid=code-a]');
     const codeB = element.querySelector<HTMLElement>('[data-testid=code-b]');
-    const link = element.querySelector<HTMLAnchorElement>('[data-testid=pair-url]');
+    let link = element.querySelector<HTMLElement>('[data-testid=pair-url]');
+    const linkTag = layout.size === 'handheld' ? 'A' : 'SPAN';
+    if (link && link.tagName !== linkTag) {
+      const next = document.createElement(linkTag.toLowerCase());
+      next.className = link.className;
+      next.dataset.testid = 'pair-url';
+      link.replaceWith(next);
+      link = next;
+    }
     if (!slot) {
       if (qrBox) qrBox.innerHTML = `<p class="k-qr-waiting">${escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)}</p>`;
       if (codeA) codeA.textContent = '····';
@@ -900,7 +913,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (codeA) codeA.textContent = display.slice(0, 4);
     if (codeB) codeB.textContent = display.slice(5);
     if (codeEl) codeEl.dataset.state = 'live';
-    if (link) { link.href = payload; link.textContent = payload; link.hidden = false; }
+    if (link) {
+      if (link instanceof HTMLAnchorElement) link.href = payload;
+      link.textContent = payload;
+      link.hidden = false;
+    }
     if (codeEl && previous !== null && previous !== display) swapCode(codeEl, previous);
     paintProgress();
   }
@@ -1458,7 +1475,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
     if (crossed && phase === 'invitation') { setPhase('invitation'); return; }
-    if (changed) { paintLocal(); return; }
+    if (changed) { paintLocal(); if (crossed) paintCode(); return; }
     paintWall();
     paintMap();
     fitAll();

@@ -10,7 +10,8 @@ import {
 } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
 import {
-  createSentenceSequence, modelSentenceFacts, sentenceFactKeys, sentenceFacts, templateSentences,
+  createSentenceSequence, isSameSentence, modelSentenceFacts, sentenceFactKeys, sentenceFacts, sentencePool, templateSentences,
+  SENTENCE_NO_REPEAT_MS,
   SENTENCE_COPY_HR, SENTENCE_COPY_EN, type RotatingSentence, type SentenceFactsInput, type SentenceNearbyRow,
 } from '../../app/src/city/sentence';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -318,7 +319,8 @@ describe('facts and standalone deterministic fallback', () => {
       })));
     const facts = sentenceFacts(input({ rows, locale, i18n: t })).filter(f => f.id.startsWith('event:'));
     expect(facts).toHaveLength(rows.length);
-    expect(modelSentenceFacts(facts, NOW)).toEqual(facts);
+    // The request carries the wire fields only; the wording and fact key are the rotation's.
+    expect(modelSentenceFacts(facts, NOW)).toEqual(facts.map(({ id, kind, text, validUntil }) => ({ id, kind, text, validUntil })));
     const templates = templateSentences(facts, t, 80, NOW);
     expect(templates).toHaveLength(rows.length);
     for (const [index, source] of rows.entries()) {
@@ -599,7 +601,9 @@ describe('sentence sequence', () => {
   it('drops expired last trams even during a hold or suspension, and skips overflowing text', () => {
     const seq = createSentenceSequence({ rhythmMs: 60_000 });
     const last = sentence('Zadnji tramvaj 6 polazi u 23:52.', { validUntil: NOW + 1_000, kicker: 'promet' });
-    expect(seq.read([last, ...choices], NOW)).toBe(last);
+    // Alone it is shown (a sentence that cannot last a rhythm is only a last choice, decision 29) ...
+    expect(seq.read([last], NOW)).toBe(last);
+    // ... and it leaves at its deadline, inside the 60 s hold.
     expect(seq.read([last, ...choices], NOW + 1_001)).not.toBe(last);
     const seq2 = createSentenceSequence({ rhythmMs: 20_000 });
     expect(seq2.read([last], NOW)).toBe(last);
@@ -725,24 +729,115 @@ describe('sentence sequence: one fact, once in ten minutes', () => {
     expect(changes.some(s => s.refs.includes('dep:c'))).toBe(true);
   });
 
-  it('restates the fact on screen in fresh words instead of blanking, and never returns to a shown fact', () => {
-    const at = (s: WrittenSentence, factKey?: string): RotatingSentence => (factKey ? { ...s, factKey } : s);
+  it('refreshes the fact on screen in its own wording instead of blanking, never in the other, and never returns to a shown fact', () => {
+    const at = (s: WrittenSentence, extra: Partial<RotatingSentence>): RotatingSentence => ({ ...s, ...extra });
     // Approved families only: W-C2's typed boundary refuses free prose in the sequence as well.
     const y = sentence('U 13:00 počinje događanje „Film“ (Kino).', { refs: ['event:y'], kicker: 'kultura' });
     const z = sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['event:z'], kicker: 'vrijeme' });
-    const x1 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi za 3 min.', { refs: ['dep:a'], kicker: 'promet', validUntil: NOW + 50_000 }), 'departure:6');
-    const x2 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi u 12:45.', { refs: ['dep:b'], kicker: 'promet' }), 'departure:6');
+    const line = { factKey: 'departure:6', formUntil: NOW + 150_000 };
+    const x1 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi za 3 min.', { refs: ['dep:a'], kicker: 'promet', validUntil: NOW + 50_000 }), { ...line, wording: 'departureIn' });
+    const x2 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi za 2 min.', { refs: ['dep:b'], kicker: 'promet' }), { ...line, wording: 'departureIn' });
+    // The same line in the other wording is the fact reworded (decision 29).
+    const x3 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi u 12:45.', { refs: ['dep:b'], kicker: 'promet' }), { ...line, wording: 'departureAt' });
     // A model sentence citing the shown fact y is that fact in other words.
     const y2 = sentence('Kino: rad počinje u 13:00.', { refs: ['event:y'], kicker: 'kultura', origin: 'model' });
+    expect(isSameSentence(x1, x2)).toBe(true);
+    expect(isSameSentence(x1, x3)).toBe(false);
+    expect(isSameSentence(y, y2)).toBe(false);
     const seq = createSentenceSequence({ rhythmMs: 20_000 });
-    const pool = [y, z, x1, x2, y2];
+    const pool = [y, z, x1, x2, x3, y2];
     expect(seq.read(pool, NOW)?.text).toBe(y.text);
     expect(seq.read(pool, NOW + 20_000)?.text).toBe(z.text);
     expect(seq.read(pool, NOW + 40_000)?.text).toBe(x1.text);
-    expect(seq.read(pool, NOW + 60_000)?.text).toBe(x2.text);
-    for (let tick = 80_000; tick < 620_000; tick += 20_000) expect(seq.read(pool, NOW + tick)?.text).toBe(x2.text);
+    // x1's minute ends inside its dwell: the next minute of the same countdown takes its place there.
+    expect(seq.read(pool, NOW + 52_000)?.text).toBe(x2.text);
+    for (let tick = 60_000; tick < 620_000; tick += 20_000) expect(seq.read(pool, NOW + tick)?.text).toBe(x2.text);
     // Ten minutes after y left the screen, its fact may return.
     expect(seq.read(pool, NOW + 620_000)?.refs).toEqual(['event:y']);
+  });
+});
+
+describe('decision 29: one sentence per dwell through polls and re-estimates', () => {
+  const START = Date.parse('2026-09-23T15:40:40+02:00');
+  const POLL_MS = 20_000;
+  const POLL_OFFSET_MS = 7_000;
+  // The data a poll brings: its closure end restated every minute (the D2 fixture's), a tracked
+  // tram 11 whose estimate drifts a minute earlier and back, and a timetable tram 14.
+  const polledAt = (now: number) => now < START + POLL_OFFSET_MS ? START
+    : START + POLL_OFFSET_MS + Math.floor((now - START - POLL_OFFSET_MS) / POLL_MS) * POLL_MS;
+  const rowsAt = (data: number): SentenceNearbyRow[] => {
+    const drift = data - START >= 47_000 && data - START < 127_000 ? -60_000 : 0;
+    const at11 = Date.parse('2026-09-23T15:47:10+02:00') + drift;
+    const at14 = Date.parse('2026-09-23T15:52:00+02:00');
+    return [
+      row({ id: 'closure:gunduliceva', title: 'Gundulićeva', atMs: Math.floor(data / 60_000) * 60_000 + 2 * 3_600_000 }),
+      row({ id: `dep:t11-${data}`, kind: 'departure', title: 'Črnomerec', atMs: at11, live: true,
+        arrival: { tripId: `t11-${data}`, routeId: '11', routeName: '11', headsign: 'Črnomerec', atMs: at11, live: true, minutes: 6 } }),
+      row({ id: 'dep:t14', kind: 'departure', title: 'Zapruđe', atMs: at14, live: false,
+        arrival: { tripId: 't14', routeId: '14', routeName: '14', headsign: 'Zapruđe', atMs: at14, live: false, minutes: null } }),
+    ];
+  };
+  const identity = (s: WrittenSentence) => `${sentenceFactKeys(s).join('+')}|${(s as RotatingSentence).wording ?? s.text}`;
+  const templatesAt = (now: number) => templateSentences(sentenceFacts(input({ now, rows: rowsAt(polledAt(now)) })), i18n, 80, now);
+
+  it('reads every 2 s for ten minutes: each sentence holds a full rhythm, is refreshed in place, and is never reworded', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const shown = new Map<string, number>();
+    let current: WrittenSentence | null = null;
+    const samples: { at: number; s: WrittenSentence }[] = [];
+    for (let at = START; at <= START + 600_000; at += 2_000) {
+      // kiosk.ts paintWall, once a second: fresh words from the last poll's data, shown wordings left out.
+      for (const [text, seen] of shown) if (at - seen >= SENTENCE_NO_REPEAT_MS && text !== current?.text) shown.delete(text);
+      const pool = sentencePool(templatesAt(at), current, shown);
+      const next = seq.read(pool, at);
+      if (current && next?.text !== current.text) shown.set(current.text, at);
+      current = next;
+      if (next) shown.set(next.text, at);
+      expect(next, new Date(at).toISOString()).not.toBeNull();
+      samples.push({ at, s: next! });
+    }
+    const dwells: { id: string; from: number; to: number; texts: Set<string> }[] = [];
+    for (const { at, s } of samples) {
+      const last = dwells.at(-1);
+      if (last && last.id === identity(s)) { last.to = at; last.texts.add(s.text); } else dwells.push({ id: identity(s), from: at, to: at, texts: new Set([s.text]) });
+    }
+    for (const [index, dwell] of dwells.entries()) {
+      if (index === dwells.length - 1) continue;
+      const end = dwells[index + 1]!.from;
+      // Shorter than a rhythm only where the sentence could no longer be said in its words.
+      if (end - dwell.from < 20_000) expect(templatesAt(end).some(s => identity(s) === dwell.id), `${[...dwell.texts].join(' / ')} held ${(end - dwell.from) / 1000} s`).toBe(false);
+    }
+    // One fact, one dwell, one wording: no fact comes back reworded in the rotation.
+    const facts = dwells.map(d => d.id.split('|')[0]);
+    expect(new Set(facts).size).toBe(facts.length);
+    expect(facts.length).toBeGreaterThanOrEqual(4);
+    // The restated closure end and the drifting estimate were refreshed inside their dwells.
+    expect([...dwells.find(d => d.id.startsWith('closure:gunduliceva'))!.texts]).toEqual(
+      ['Gundulićeva: zatvoreno za promet do 17:40.', 'Gundulićeva: zatvoreno za promet do 17:41.']);
+    expect([...dwells.find(d => d.id.startsWith('departure:11'))!.texts]).toEqual(
+      ['Tramvaj 11, smjer Črnomerec, polazi za 6 min.', 'Tramvaj 11, smjer Črnomerec, polazi za 5 min.']);
+  });
+
+  it('never flips a departure between "za N min" and "u HH:MM" mid-dwell, and never picks a line that cannot last a rhythm', () => {
+    const at = (s: WrittenSentence, extra: Partial<RotatingSentence>): RotatingSentence => ({ ...s, ...extra });
+    const dep = (text: string, validUntil: number, wording: 'departureIn' | 'departureAt', formUntil: number) => at(
+      sentence(text, { refs: ['dep:a'], kicker: 'promet', validUntil }), { factKey: 'departure:11', wording, formUntil });
+    const closure = at(sentence('Gundulićeva: zatvoreno za promet do 17:40.', { refs: ['closure:g'], kicker: 'radovi' }), { wording: 'closureUntil' });
+    const weather = at(sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['weather:now'], kicker: 'vrijeme' }), { wording: 'weatherTemperature' });
+    const solar = at(sentence('Sunce zalazi u 18:55.', { refs: ['solar:sunset:x'], kicker: 'vrijeme' }), { wording: 'sunset' });
+    // "za 1 min" whose relative wording ends in 10 s is not chosen while a sentence that lasts the rhythm waits.
+    const soon = dep('Tramvaj 11, smjer Črnomerec, polazi za 1 min.', NOW + 10_000, 'departureIn', NOW + 10_000);
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    expect(seq.read([soon, closure, weather, solar], NOW)?.text).toBe(closure.text);
+    // A line on screen whose estimate jumps a minute earlier: "za 2 min" ends, and "u 15:45" is the
+    // same fact in the other wording, so the header moves on and the line does not return reworded.
+    const seq2 = createSentenceSequence({ rhythmMs: 20_000 });
+    const rel = dep('Tramvaj 11, smjer Črnomerec, polazi za 2 min.', NOW + 60_000, 'departureIn', NOW + 90_000);
+    expect(seq2.read([rel, closure, weather, solar], NOW)?.text).toBe(rel.text);
+    const abs = dep('Tramvaj 11, smjer Črnomerec, polazi u 15:45.', NOW + 120_000, 'departureAt', NOW + 120_000);
+    const after = seq2.read([abs, closure, weather, solar], NOW + 5_000);
+    expect(after?.text).not.toBe(abs.text);
+    for (let t = 25_000; t <= 115_000; t += 5_000) expect(seq2.read([abs, closure, weather, solar], NOW + t)?.text).not.toBe(abs.text);
   });
 });
 

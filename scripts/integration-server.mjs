@@ -2,6 +2,7 @@
 // real Worker API and pairing, no mock route or duplicated source checkout.
 import { createServer } from 'vite';
 import { resolve, dirname, isAbsolute } from 'node:path';
+import { e2ePorts, localOrigin } from './e2e-ports.mjs';
 
 const main = resolve(import.meta.dirname, '..');
 const parent = resolve(main, '../vidikovac-wt');
@@ -50,7 +51,8 @@ function mapSource(source, importer) {
   return null;
 }
 
-const backend = 'http://127.0.0.1:8787';
+// The app server of the local harness (E2E_PORT, scripts/e2e-ports.mjs).
+const backend = localOrigin(e2ePorts().app, '127.0.0.1');
 const server = await createServer({
   configFile: resolve(roots.ui, 'vite.config.ts'),
   root: resolve(roots.ui, 'app'),

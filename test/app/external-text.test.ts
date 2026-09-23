@@ -374,13 +374,9 @@ describe('the committed registers under decision 21', () => {
     expect(sortedResiduals(rawStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(presentedStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(refusedHeritage)).toEqual(sortedResiduals(HERITAGE_ROW_RESIDUALS));
+    // W-C10 restored the five rows lost to register abbreviations (d.d., sv.Vinka, Dr.Ante).
     expect(missingRows.sort()).toEqual([
-      'Palača Hrvatske poljodjelske banke d.d., Smičiklasova 17/Martićeva 6/Patačićkina 1',
-      'Sklop zgrada bivše Ženske realne gimnazije sestara Milosrdnica sv.Vinka Paulskog s igralištima i parkom, Savska 77',
       'Zgrada Biskupske ubožnice, Nova Ves 18',
-      'Zgrada Gospodarske sloge s cjelovito uređenim i opremljenim interijerom knjižare Znanje d.d. u prizemlju, danas KGZ – Knjižnica Medveščak, Odjel za djecu i Odjel za mlade',
-      'Zgrada Osnovne škole „Dr.Ante Starčević“, Sv. Leopolda Mandića 55',
-      'Zgrada kotlovnice i strojarnice Prve hrvatske tvornice ulja d.d, Ulica kneza Branimira bb',
       'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,',
       'Ansambl gradskih vila u Novakovoj ulici',
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
