@@ -46,6 +46,8 @@ import { reconcile } from '../ui/dom/reconcile';
 import { kindOfRoute } from './exceptions';
 import { clock, dayKey, dayMonth } from './format';
 import { kBadge } from './markup';
+import { vetExternal } from '../../../shared/kiosk/external-text';
+import { optionalExternal } from './external';
 
 /**
  * A row as the timeline reads it: the S5 NearbyRow, whose departure rows
@@ -191,8 +193,27 @@ export interface ShortLabels { title?: boolean; sub?: boolean }
 const titleOf = (row: TimelineRow, short?: ShortLabels): string => (short?.title && row.titleShort ? row.titleShort : row.title);
 const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.sub && row.subShort !== undefined ? row.subShort : row.sub);
 
+export function vettedTimelineRow(row: TimelineRow): boolean {
+  const kind = row.kind === 'departure' ? 'headsign' : 'title';
+  const sub = (value: string | undefined): boolean => {
+    // Internally composed last/first boards contain several route/time pairs.
+    // Validate the complete grammar and EACH external route, never mistake
+    // "12 23:45" for a phone number or allow arbitrary prose under this kind.
+    if ((row.kind === 'last' || row.kind === 'first') && value
+      && /^(?:[A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)(?: · [A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)*$/u.test(value)) {
+      return value.split(' · ').every(pair => vetExternal('headsign', pair.split(' ')[0], 'row') !== null);
+    }
+    return optionalExternal('summary', value);
+  };
+  return vetExternal(kind, row.title, 'row') !== null
+    && optionalExternal(kind, row.titleShort)
+    && sub(row.sub) && sub(row.subShort)
+    && (!row.arrival || vetExternal('headsign', row.arrival.routeName, 'row') !== null);
+}
+
 /** One row's markup: time cell (the time, the day word under it), the spine mark, title and sub (always present, empty when there is none). */
 export function rowMarkup(row: TimelineRow, now: number, i18n: I18n, short?: ShortLabels): string {
+  if (!vettedTimelineRow(row)) return '';
   const timeless = isTimeless(row);
   const text = e(timeLabel(row, now, i18n));
   const iso = timeless ? '' : new Date(row.atMs!).toISOString();
@@ -234,7 +255,8 @@ function headMarkup(head: string): string {
 /** The layout as a browser lays it out: the list's box, and a text's lines from its height over its line height. */
 export const DOM_MEASURE: TimelineMeasure = {
   box(list) {
-    return { height: list.clientHeight, width: list.clientWidth, overflow: list.scrollHeight > list.clientHeight + 1 };
+    return { height: list.clientHeight, width: list.clientWidth,
+      overflow: list.scrollHeight > list.clientHeight + 1 || list.scrollWidth > list.clientWidth + 1 };
   },
   lines(el) {
     const height = el.offsetHeight;
@@ -350,9 +372,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       }
       if (more) paint(shown, short, before, now);
     }
-    while (measure.box(list).overflow) {
-      const drop = dropCandidate(shown);
-      if (!drop) break;
+    while (shown.length > 0 && measure.box(list).overflow) {
+      // Reservation is a preference, never permission to clip the last row.
+      const drop = dropCandidate(shown) ?? shown[shown.length - 1]!;
       shown = shown.filter((row) => row !== drop);
       paint(shown, short, before, now);
     }
@@ -363,6 +385,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     element,
     update(rows, radiusM, now) {
       last = [rows, radiusM, now];
+      const inputCount = rows.length;
+      rows = rows.filter(vettedTimelineRow);
+      const skippedText = String(inputCount - rows.length);
+      if (element.dataset.skippedText !== skippedText) element.dataset.skippedText = skippedText;
       const head = nearbyHead(i18n, radiusM);
       if (head !== headText) {
         heading.innerHTML = headMarkup(head);
@@ -415,6 +441,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       }
       painted = true;
       count = shown.length;
+      const skippedFit = String(rows.length - count);
+      if (element.dataset.skippedFit !== skippedFit) element.dataset.skippedFit = skippedFit;
     },
     measureHeight,
     shown: () => count,

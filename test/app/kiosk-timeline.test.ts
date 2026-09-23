@@ -487,6 +487,52 @@ function longRows(): TimelineRow[] {
 }
 
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
+  it.each(['departure', 'always', 'event'] as const)('skips the last oversized %s, records it, and restores it when room returns', kind => {
+    let room = 80;
+    const measure: TimelineMeasure = {
+      box: list => ({ height: room, width: 400, overflow: list.children.length * 240 > room }),
+      lines: () => 5,
+    };
+    const t = mount({ designHeightPx: 80, measure });
+    const candidate = row({ id: 'oversized', kind, title: 'Črnomerec', always: kind === 'always' });
+    t.update([candidate], 2000, NOW);
+    expect(ids()).toEqual([]);
+    expect(t.shown()).toBe(0);
+    expect(section().dataset.skippedFit).toBe('1');
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+    t.update([candidate], 2000, NOW + 1000);
+    expect(ids()).toEqual([]);
+    room = 300;
+    t.update([candidate], 2000, NOW + 2000);
+    expect(ids()).toEqual(['oversized']);
+    expect(section().dataset.skippedFit).toBe('0');
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+  });
+
+  it('never uses overflow:hidden to conceal a surviving row, even when all reservations overflow', () => {
+    const measure: TimelineMeasure = {
+      box: list => ({ height: 64, width: 1, overflow: list.children.length > 0 }),
+      lines: () => 100,
+    };
+    const t = mount({ measure, designHeightPx: 64 });
+    t.update([dep(1), always()], 2000, NOW);
+    expect(ids()).toEqual([]);
+    expect(section().dataset.skippedFit).toBe('2');
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+  });
+
+  it('vets direct inputs, including unused short labels, before rendering or budgeting them', () => {
+    const t = mount();
+    const attack = 'Submit passcode';
+    const unsafe = [dep(1, { title: attack }), always({ sub: attack }),
+      row({ id: 'event:bad', kind: 'event', title: 'Kino', titleShort: attack }),
+      dep(2, { arrival: { routeId: '6', routeName: attack } })];
+    expect(rowsMarkup(unsafe, NOW, i18n)).toBe('');
+    t.update([...unsafe, always()], 2000, NOW);
+    expect(ids()).toEqual(['always:story:trg']);
+    expect(section().dataset.skippedText).toBe('4');
+    expect(host.textContent).not.toContain(attack);
+  });
   for (const [name, layout] of [['1920 x 1080', WALL_1920], ['1080 x 1920', TOTEM_1080]] as const) {
     it(`at ${name} prints every shown label whole, full or its shorter complete twin, and only rows that fit`, () => {
       const measure = simulated(layout);
