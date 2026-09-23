@@ -44,6 +44,8 @@ import { OPEN_DATASETS } from '../../worker/open/catalog';
 import { fakeCityStore } from '../city/fake-store';
 import { ATTRIBUTION_CASES } from '../fixtures/attribution-cases';
 import { emptyScan, scanI18n, scanI18nSource, type I18nRef, type I18nScan } from '../app/i18n-scan';
+import { FIXTURE_PHARMACY_ADDRESSES } from '../../e2e/experience-fixtures';
+import { pharmacyFailures } from '../../e2e/wall';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8');
@@ -643,21 +645,16 @@ describe('(e) the pharmacy is a green cross, 24/7 and an address, not the label 
     ['hr', HR, /^\s*Dežurna ljekarna\s*:?\s*$/i],
     ['en', EN, /^\s*On-duty pharmacy\s*:?\s*$/i],
   ];
-  const LABEL_BEFORE_COLON = /(Dežurna ljekarna|On-duty pharmacy)\s*:/i;
-  /** The on-duty pharmacy nearest the fixture stop, as worker/hitno/ljekarne.ts writes it: its label and its address. */
-  const FIXTURE_PHARMACY = ['Trg bana J. Jelačića 3', 'Trg bana Josipa Jelačića 3'];
+  /** The on-duty pharmacy nearest the fixture stop, as worker/hitno/ljekarne.ts writes it: its label and its address (e2e/experience-fixtures.ts). */
+  const FIXTURE_PHARMACY = FIXTURE_PHARMACY_ADDRESSES;
 
-  /** What keeps a strip-pharmacy element from being the green cross, 24/7 and the address (empty = it is). */
+  /**
+   * What keeps a strip-pharmacy element from being the green cross, 24/7 and the address (empty = it is). The rule
+   * itself is e2e/wall.ts pharmacyFailures, the one the wall spec's readings are judged by, so the tiers cannot drift.
+   */
   function pharmacyIssues(strip: Element | null, addresses: readonly string[]): string[] {
     if (!strip) return ['no [data-testid=strip-pharmacy]'];
-    const issues: string[] = [];
-    const symbols = strip.querySelectorAll('[data-symbol=pharmacy]').length;
-    if (symbols !== 1) issues.push(`${symbols} [data-symbol=pharmacy], not 1`);
-    const text = (strip.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (!text.includes('24/7')) issues.push('no "24/7"');
-    if (!addresses.some((address) => text.includes(address))) issues.push('no address');
-    if (LABEL_BEFORE_COLON.test(text)) issues.push('the label "Dežurna ljekarna:"');
-    return issues;
+    return pharmacyFailures({ symbols: strip.querySelectorAll('[data-symbol=pharmacy]').length, text: strip.textContent ?? '' }, addresses);
   }
   const stripOf = (markup: string): Element | null => {
     const host = document.createElement('div');

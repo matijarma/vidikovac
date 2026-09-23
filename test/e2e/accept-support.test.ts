@@ -17,9 +17,9 @@ import {
   sceneTeaser, textOf, TOUCH_BOARD_MS, VISIBLE_IN_PAGE, visibleOf, writeArtefact, type CalmMotionReading,
 } from '../../e2e/accept/support';
 import { SCENES } from '../../e2e/scenes';
-import { NEARBY_HEAD_2KM, summariseRotation, WALL_PROBES, type WallRow, type WallSample } from '../../e2e/wall';
-import { PHONE_PROBES } from '../../e2e/inventory';
-import { experienceSnapshots } from '../../e2e/experience-fixtures';
+import { NEARBY_HEAD_2KM, pharmacyFailures, pillFailures, summariseRotation, WALL_PROBES, type WallRow, type WallSample } from '../../e2e/wall';
+import { EXPIRY_READ_IN_PAGE, EXPIRY_SPEC, expiryFailures, PHONE_CONTENT_ROWS, PHONE_PROBES } from '../../e2e/inventory';
+import { experienceSnapshots, FIXTURE_PHARMACY_ADDRESSES } from '../../e2e/experience-fixtures';
 import { SENTENCE_KICKERS } from '../../shared/kiosk/sentence';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 
@@ -44,7 +44,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
     hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 0, zoom: '14.07', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: 'x', strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
-    pharmacy: `${PHARMACY_HOURS} Ilica 1`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
+    pharmacy: `${PHARMACY_HOURS} Trg bana J. Jelačića 3`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
     ...over,
     rows,
   };
@@ -167,6 +167,13 @@ describe('tiles and reads', () => {
     expect(Math.abs((await pageNow(page)) - Date.now())).toBeLessThan(1_000);
   });
 
+  it('skips a transparent match and one inside a transparent or invisible ancestor', () => {
+    document.body.innerHTML = '<ul><li class="a" style="opacity: 0">6</li><li class="a">11</li></ul><ul style="opacity: 0"><li class="a">12</li></ul><ul style="visibility: hidden"><li class="a">13</li></ul>';
+    document.querySelectorAll<HTMLElement>('li').forEach((el, i) => { el.getBoundingClientRect = () => rect(100 + i * 50); });
+    const shipped = new Function(`return (${String(VISIBLE_IN_PAGE)});`)() as typeof VISIBLE_IN_PAGE;
+    expect(shipped({ selector: 'li.a' }).map((b) => b.text)).toEqual(['11']);
+  });
+
   it('lists visible matches once each, in document order, skipping hidden and boxless ones', async () => {
     document.body.innerHTML = '<ul><li class="a" data-kind="departure">6 Sopot</li><li class="a" data-kind="departure" hidden>11</li><li class="a" data-kind="departure">12 Dubrava</li><li class="b" data-kind="departure">13</li></ul>';
     const items = [...document.querySelectorAll<HTMLElement>('li')];
@@ -280,14 +287,30 @@ describe('one reading against its scene', () => {
     ]);
   });
 
-  it('holds the footer to one pharmacy cross and no "Dežurna" caption, and the frame to drawn vehicles', () => {
-    expect(sceneReadingFailures(PEAK, sample({ pharmacySymbols: 0, pharmacy: 'Dežurna ljekarna: Ilica 1', pills: null, bodies: null }))).toEqual([
+  it('holds the frame to drawn vehicles', () => {
+    expect(sceneReadingFailures(PEAK, sample({ pills: null, bodies: null }))).toEqual([
       'no vehicle drawn on the frame (data-pills null, data-bodies null; target trams and buses on the frame at every hour, [O-71])',
-      '0 pharmacy cross(es) ([data-testid=strip-pharmacy] [data-symbol=pharmacy]) in the footer (target 1)',
-      'the footer\'s pharmacy reads "Dežurna ljekarna: Ilica 1" (target the cross, "24/7" and the address, no /Dežurna/ caption)',
     ]);
     // Bodies alone count as drawn vehicles (the kiosk map's pill census can read empty headless).
     expect(sceneReadingFailures(PEAK, sample({ pills: '', bodies: 4 }))).toEqual([]);
+  });
+
+  // The corrected V-C rule (test/accept/trust.test.ts runs the same pharmacyFailures of e2e/wall.ts): one
+  // cross, "24/7" and the fixture's address; "Dežurna ljekarna 24/7: {address}" is allowed, the bare label not.
+  it('holds the footer pharmacy to one cross, "24/7" and the address: an empty cross and the bare label fail, the full caption passes', () => {
+    const target = '(target one [data-testid=strip-pharmacy] [data-symbol=pharmacy], "24/7" and the address; "Dežurna ljekarna 24/7: {address}" is allowed, the bare label "Dežurna ljekarna:" is not)';
+    const fails = (pharmacy: string, pharmacySymbols = 1): string[] => sceneReadingFailures(PEAK, sample({ pharmacy, pharmacySymbols }));
+    expect(fails('24/7 Trg bana J. Jelačića 3')).toEqual([]);
+    expect(fails('Dežurna ljekarna 24/7: Trg bana Josipa Jelačića 3')).toEqual([]);
+    expect(fails('')).toEqual([`the footer's pharmacy ([data-testid=strip-pharmacy]) reads "": no "24/7", no address ${target}`]);
+    expect(fails('Dežurna ljekarna: Trg bana J. Jelačića 3', 0)).toEqual([
+      `the footer's pharmacy ([data-testid=strip-pharmacy]) reads "Dežurna ljekarna: Trg bana J. Jelačića 3": 0 [data-symbol=pharmacy], not 1, no "24/7", the label "Dežurna ljekarna:" ${target}`,
+    ]);
+    expect(fails('24/7 Trg bana J. Jelačića 3', 2)).toHaveLength(1);
+    expect(fails('24/7 Ilica 291')).toEqual([`the footer's pharmacy ([data-testid=strip-pharmacy]) reads "24/7 Ilica 291": no address ${target}`]);
+    // One helper for both tiers, and the fixture's address as worker/hitno/ljekarne.ts writes it (label and address).
+    expect(FIXTURE_PHARMACY_ADDRESSES).toEqual(['Trg bana J. Jelačića 3', 'Trg bana Josipa Jelačića 3']);
+    expect(pharmacyFailures({ symbols: 1, text: '' }, FIXTURE_PHARMACY_ADDRESSES)).toEqual(['no "24/7"', 'no address']);
   });
 });
 
@@ -399,17 +422,61 @@ describe('headings', () => {
 // --- the phone -----------------------------------------------------------------------------------
 describe('the phone\'s verdicts', () => {
   it('three departures fully inside 390×844, never more', () => {
-    const rows = [{ text: 'a', top: 400, bottom: 460 }, { text: 'b', top: 470, bottom: 530 }, { text: 'c', top: 540, bottom: 600 }];
-    expect(phoneDepartureFailures(phoneDepartures(rows, PHONE_VIEWPORT.height))).toEqual([]);
-    const low = phoneDepartures([...rows.slice(0, 2), { text: 'c', top: 820, bottom: 880 }], PHONE_VIEWPORT.height);
+    const at = (text: string, top: number, left = 16, width = 358) => ({ text, top, bottom: top + 60, left, right: left + width });
+    const rows = [at('a', 400), at('b', 470), at('c', 540)];
+    expect(phoneDepartureFailures(phoneDepartures(rows, PHONE_VIEWPORT))).toEqual([]);
+    const low = phoneDepartures([...rows.slice(0, 2), at('c', 820)], PHONE_VIEWPORT);
     expect(low).toMatchObject({ total: 3, inFold: 2 });
     expect(phoneDepartureFailures(low)).toEqual(['Sada: 2 departure row(s) fully inside the first viewport (target exactly 3): "a", "b", "c"']);
-    const board = phoneDepartures([...rows, { text: 'd', top: 610, bottom: 670 }], PHONE_VIEWPORT.height);
+    const board = phoneDepartures([...rows, at('d', 610)], PHONE_VIEWPORT);
     expect(phoneDepartureFailures(board, 'the stop board')).toEqual([
       'the stop board: 4 departure row(s) fully inside the first viewport (target exactly 3): "a", "b", "c", "d"',
       'the stop board: 4 departure rows in all (target ≤ 3, never a board)',
     ]);
-    expect(phoneDepartureFailures(phoneDepartures([], 844))).toEqual(['Sada: 0 departure row(s) fully inside the first viewport (target exactly 3): none']);
+    expect(phoneDepartureFailures(phoneDepartures([], PHONE_VIEWPORT))).toEqual(['Sada: 0 departure row(s) fully inside the first viewport (target exactly 3): none']);
+  });
+
+  it('a departure pushed sideways out of the viewport (a carousel, a scrolled strip) is not inside it', () => {
+    const at = (text: string, top: number, left: number) => ({ text, top, bottom: top + 60, left, right: left + 358 });
+    const sideways = phoneDepartures([at('a', 400, 16), at('b', 470, 16), at('c', 400, 16 + PHONE_VIEWPORT.width)], PHONE_VIEWPORT);
+    expect(sideways).toMatchObject({ total: 3, inFold: 2 });
+    expect(phoneDepartureFailures(sideways)).toEqual(['Sada: 2 departure row(s) fully inside the first viewport (target exactly 3): "a", "b", "c"']);
+    expect(phoneDepartures([at('a', 400, -380)], PHONE_VIEWPORT).inFold).toBe(0);
+    expect(phoneDepartures([at('a', 400, 200)], PHONE_VIEWPORT).inFold).toBe(0);
+  });
+
+  it('pills: at least one drawn, and "+N" on no label (6+2 fails, as "6|2 +11" does)', () => {
+    expect(pillFailures('6|11|12')).toEqual([]);
+    expect(pillFailures('6+2')).toEqual(['1 vehicle pill(s) folded into "+N": "6+2" (target none: /\\+\\d/ on every label)']);
+    expect(pillFailures('6|2 +11|14')).toEqual(['1 vehicle pill(s) folded into "+N": "2 +11" (target none: /\\+\\d/ on every label)']);
+    expect(pillFailures('')).toEqual(['no vehicle pill drawn (data-pills "")']);
+    expect(pillFailures(null)).toEqual(['no vehicle pill drawn (data-pills null)']);
+  });
+
+  it('after expiry no content row is kept: .nearby-row, li.sada-departure and [data-kind=departure] alike, and no request follows', () => {
+    const shipped = new Function(`return (${String(EXPIRY_READ_IN_PAGE)});`)() as typeof EXPIRY_READ_IN_PAGE;
+    expect(PHONE_CONTENT_ROWS).toBe(`${PHONE_PROBES.nearbyRow}, ${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`);
+    const ended = '<section data-testid="session-ended"><a href="/s/">Skeniraj ponovno</a><a href="/hitno">Hitno</a></section>';
+    document.body.innerHTML = `${ended}<ul data-testid="day-departures">${['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'].map((t) => `<li class="sada-departure">${t}</li>`).join('')}</ul>`;
+    const kept = shipped(EXPIRY_SPEC);
+    expect(kept).toMatchObject({ ended: true, scanLinks: 1, hitnoLinks: 1, rows: 3, exportControls: 0 });
+    expect(expiryFailures(kept)).toEqual([`3 content row(s) kept after the session ended (${PHONE_CONTENT_ROWS}; target 0): "6 Sopot 2 min", "11 Dubec 5 min", "12 Dubrava 8 min"`]);
+    document.body.innerHTML = `${ended}<ol><li class="nearby-row">Zalazak sunca 18:57</li></ol><button data-action="copy">Kopiraj</button>`;
+    expect(expiryFailures(shipped(EXPIRY_SPEC))).toEqual([
+      `1 content row(s) kept after the session ended (${PHONE_CONTENT_ROWS}; target 0): "Zalazak sunca 18:57"`,
+      `1 export, copy, print or calendar control(s) after the session ended (${PHONE_PROBES.exportControls}; target 0)`,
+    ]);
+    document.body.innerHTML = ended;
+    const clear = shipped(EXPIRY_SPEC);
+    expect(expiryFailures(clear)).toEqual([]);
+    expect(expiryFailures(clear, ['/api/data/zet-rt'])).toEqual(['1 /api/data request(s) after the session ended: /api/data/zet-rt (target none)']);
+    document.body.innerHTML = '<main></main>';
+    expect(expiryFailures(shipped(EXPIRY_SPEC))).toEqual([
+      `no ${PHONE_PROBES.sessionEnded} once the session ended ([O-59])`,
+      `the ended session has no link to scan again (${PHONE_PROBES.sessionEndedScan})`,
+      `the ended session has no /hitno link (${PHONE_PROBES.sessionEndedHitno})`,
+    ]);
+    document.body.innerHTML = '';
   });
 
   it('reads the sentence without the card\'s own kicker, and keeps a sentence that merely starts with the word', () => {

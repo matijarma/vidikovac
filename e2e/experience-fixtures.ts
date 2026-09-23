@@ -16,6 +16,8 @@ export const FIXTURE_STOP: ScreenStop = {
   id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286,
   routes: ['6', '11', '12', '13', '14', '17'], district: 'gornji-grad-medvescak',
 };
+/** The on-duty pharmacy nearest FIXTURE_STOP as worker/hitno/ljekarne.ts writes it: its label and its address, either of which the footer may print. */
+export const FIXTURE_PHARMACY_ADDRESSES: readonly string[] = Object.freeze(['Trg bana J. Jelačića 3', 'Trg bana Josipa Jelačića 3']);
 
 export async function experienceSnapshots(state: FixtureState = 'ready'): Promise<Record<ModuleId, ModuleSnapshot>> {
   const result = {} as Record<ModuleId, ModuleSnapshot>;

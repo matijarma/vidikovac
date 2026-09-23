@@ -111,6 +111,13 @@ export const CLOCK_RE = /\b\d{1,2}:\d{2}\b/;
 export const ELLIPSIS_RE = /…|\.\.\.$/;
 /** A "+N" fold in a vehicle pill (principle 6, public-service credibility). */
 export const PLUS_PILL_RE = /\+\d/;
+/** The pharmacy's hours on its row and in the footer (owner string, §11). */
+export const PHARMACY_HOURS = '24/7';
+/**
+ * The old caption, a label before its colon ("Dežurna ljekarna:", "On-duty pharmacy:"), gone from the wall
+ * (slop #29, [O-39]). WP1's full caption "Dežurna ljekarna 24/7: {address}" is not one: its colon follows the hours.
+ */
+export const PHARMACY_LABEL_RE = /(Dežurna ljekarna|On-duty pharmacy)\s*:/i;
 
 // --- one reading -------------------------------------------------------------------------------
 export interface WallRow {
@@ -498,6 +505,32 @@ export function sampleFailures(s: WallSample): string[] {
   if (!s.qr || s.qr.w < QR_MIN_PX || s.qr.h < QR_MIN_PX) out.push(`the QR SVG is ${s.qr ? `${s.qr.w} × ${s.qr.h}` : 'missing'} (target ≥ ${QR_MIN_PX} × ${QR_MIN_PX} px)`);
   if (s.stripHasClock) out.push(`the footer prints a clock time: "${s.strip}"`);
   if (s.solarRows > SOLAR_ROWS_MAX) out.push(`${s.solarRows} solar rows (only the next solar event, at most ${SOLAR_ROWS_MAX})`);
+  return out;
+}
+
+/** The labels of a data-pills census ("6|11|12"). */
+export const pillLabels = (pills: string | null): string[] => (pills ?? '').split('|').map((label) => label.trim()).filter(Boolean);
+/** Vehicle pills drawn, and no label folded into "+N" (principle 6); `[]` means the census holds. */
+export function pillFailures(pills: string | null): string[] {
+  const labels = pillLabels(pills);
+  if (!labels.length) return [`no vehicle pill drawn (data-pills ${JSON.stringify(pills)})`];
+  const folded = labels.filter((label) => PLUS_PILL_RE.test(label));
+  return folded.length ? [`${folded.length} vehicle pill(s) folded into "+N": ${folded.map((label) => `"${label}"`).join(', ')} (target none: ${String(PLUS_PILL_RE)} on every label)`] : [];
+}
+
+/** What the footer's pharmacy is read as: its `[data-symbol=pharmacy]` crosses and its text. */
+export interface PharmacyReading { symbols: number; text: string }
+/**
+ * The footer's pharmacy against the rule of test/accept/trust.test.ts and the wall spec alike: one cross, "24/7"
+ * and one of `addresses`, and not the bare label. `[]` means it holds; each entry is a short issue.
+ */
+export function pharmacyFailures(p: PharmacyReading, addresses: readonly string[]): string[] {
+  const text = p.text.replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  if (p.symbols !== 1) out.push(`${p.symbols} [data-symbol=pharmacy], not 1`);
+  if (!text.includes(PHARMACY_HOURS)) out.push(`no "${PHARMACY_HOURS}"`);
+  if (!addresses.some((address) => text.includes(address))) out.push('no address');
+  if (PHARMACY_LABEL_RE.test(text)) out.push('the label "Dežurna ljekarna:"');
   return out;
 }
 

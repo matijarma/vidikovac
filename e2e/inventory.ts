@@ -91,6 +91,66 @@ export const PHONE_SLOP_RE = /Sada u gradu|Odaberi i spremi|Gradska referentna|R
 export const KARTA_PILLS_WITHIN_MS = 2000;
 /** Taps from the tab to a stop's board through the search field (tab, field, result). */
 export const SEARCH_TAPS_MAX = 3;
+/** What the stop search types: the start of Trg bana J. Jelačića, a stop every build carries. */
+export const STOP_SEARCH_QUERY = 'Jela';
+
+// --- the phone's verdicts, shared by the accept spec and the production observer ------------------
+/** Every departure row of the Sada block and the shared timeline: `li.sada-departure` and `[data-kind=departure]`. */
+export const PHONE_DEPARTURE_ROWS = `${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`;
+
+export interface PhoneDepartures { total: number; inFold: number; texts: string[] }
+/** The visible departure rows and how many lie fully inside the viewport, across and down (a row pushed sideways is outside it). */
+export function phoneDepartures(rows: readonly { text: string; top: number; bottom: number; left: number; right: number }[], viewport: { width: number; height: number }): PhoneDepartures {
+  const inside = (r: { top: number; bottom: number; left: number; right: number }): boolean => r.top >= -1 && r.bottom <= viewport.height + 1 && r.left >= -1 && r.right <= viewport.width + 1;
+  return { total: rows.length, inFold: rows.filter(inside).length, texts: rows.map((r) => r.text) };
+}
+export function phoneDepartureFailures(d: PhoneDepartures, where = 'Sada'): string[] {
+  const out: string[] = [];
+  if (d.inFold !== PHONE_DEPARTURES) out.push(`${where}: ${d.inFold} departure row(s) fully inside the first viewport (target exactly ${PHONE_DEPARTURES}): ${d.texts.map((t) => `"${t}"`).join(', ') || 'none'}`);
+  if (d.total > PHONE_DEPARTURES) out.push(`${where}: ${d.total} departure rows in all (target ≤ ${PHONE_DEPARTURES}, never a board)`);
+  return out;
+}
+
+/** Every row the phone shows content in: the "U blizini" rows, Sada's departures and every departure row. None outlives the session ([O-59]). */
+export const PHONE_CONTENT_ROWS = `${PHONE_PROBES.nearbyRow}, ${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`;
+export interface ExpirySpec { ended: string; scan: string; hitno: string; rows: string; exports: string }
+export const EXPIRY_SPEC: ExpirySpec = Object.freeze({
+  ended: PHONE_PROBES.sessionEnded, scan: PHONE_PROBES.sessionEndedScan, hitno: PHONE_PROBES.sessionEndedHitno, rows: PHONE_CONTENT_ROWS, exports: PHONE_PROBES.exportControls,
+});
+export interface ExpiryReading {
+  /** The session-ended block is in the page and not hidden. */
+  ended: boolean;
+  scanLinks: number;
+  hitnoLinks: number;
+  /** Content rows still in the DOM, shown or not: the content clears. */
+  rows: number;
+  rowTexts: string[];
+  exportControls: number;
+}
+/** The phone once its session has ended, read in the page; references nothing but its argument and the DOM. */
+export const EXPIRY_READ_IN_PAGE = (spec: ExpirySpec): ExpiryReading => {
+  const ended = document.querySelector<HTMLElement>(spec.ended);
+  const rows = Array.from(document.querySelectorAll(spec.rows));
+  return {
+    ended: Boolean(ended) && !ended!.hidden && !ended!.closest('[hidden]'),
+    scanLinks: document.querySelectorAll(spec.scan).length,
+    hitnoLinks: document.querySelectorAll(spec.hitno).length,
+    rows: rows.length,
+    rowTexts: rows.slice(0, 3).map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)),
+    exportControls: document.querySelectorAll(spec.exports).length,
+  };
+};
+/** The end of the ten minutes against §16.4; `requestsAfter` are the /api/data paths requested after it. `[]` means it holds. */
+export function expiryFailures(r: ExpiryReading, requestsAfter: readonly string[] = []): string[] {
+  const out: string[] = [];
+  if (!r.ended) out.push(`no ${PHONE_PROBES.sessionEnded} once the session ended ([O-59])`);
+  if (r.scanLinks < 1) out.push(`the ended session has no link to scan again (${PHONE_PROBES.sessionEndedScan})`);
+  if (r.hitnoLinks < 1) out.push(`the ended session has no /hitno link (${PHONE_PROBES.sessionEndedHitno})`);
+  if (r.rows > 0) out.push(`${r.rows} content row(s) kept after the session ended (${PHONE_CONTENT_ROWS}; target 0): ${r.rowTexts.map((t) => `"${t}"`).join(', ')}`);
+  if (r.exportControls > 0) out.push(`${r.exportControls} export, copy, print or calendar control(s) after the session ended (${PHONE_PROBES.exportControls}; target 0)`);
+  if (requestsAfter.length) out.push(`${requestsAfter.length} /api/data request(s) after the session ended: ${requestsAfter.slice(0, 5).join(', ')} (target none)`);
+  return out;
+}
 
 // --- the raw inventory ------------------------------------------------------------
 export interface InventoryRect { x: number; y: number; w: number; h: number }

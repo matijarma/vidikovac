@@ -22,9 +22,10 @@ import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type 
 import { installCityFixture } from '../city-fixtures';
 import { departuresBoard, lastRunSnapshot, serviceDays } from '../departures-fixture';
 import {
-  firstViewport, firstViewportFailures, KARTA_PILLS_WITHIN_MS, PHONE_DEPARTURES, PHONE_PROBES, PHONE_SLOP_RE, SEARCH_TAPS_MAX, SHARE_CITY_LABEL,
-  TAB_LABELS, WEEK_EVENTS_LABEL,
+  EXPIRY_READ_IN_PAGE, EXPIRY_SPEC, expiryFailures, firstViewport, firstViewportFailures, KARTA_PILLS_WITHIN_MS, PHONE_CONTENT_ROWS, PHONE_DEPARTURES,
+  PHONE_PROBES, PHONE_SLOP_RE, SEARCH_TAPS_MAX, SHARE_CITY_LABEL, STOP_SEARCH_QUERY, TAB_LABELS, WEEK_EVENTS_LABEL,
 } from '../inventory';
+import { pillFailures, pillLabels, PLUS_PILL_RE } from '../wall';
 import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
 import {
   attrOf, AXE_BLOCKING, AXE_TAGS, DESK_VIEWPORT, intersects, nearbyHeadFailures, PHONE_DEPARTURE_ROWS, PHONE_VIEWPORT, phoneDepartureFailures,
@@ -108,7 +109,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     writeArtefact(`inventory-${label}.json`, { summary: view.summary, units: view.units.map((u) => ({ class: u.class, tag: u.tag, text: u.text, path: u.path })) });
     softly(firstViewportFailures(view), `${label}: INSTRUCTION 0, COUNT 0, UNCLASSIFIED 0 in the first viewport (principle 1)`).toEqual([]);
 
-    const rows = phoneDepartures(await visibleOf(page, PHONE_DEPARTURE_ROWS), PHONE_VIEWPORT.height);
+    const rows = phoneDepartures(await visibleOf(page, PHONE_DEPARTURE_ROWS), PHONE_VIEWPORT);
     softly(phoneDepartureFailures(rows), `${label}: ${PHONE_DEPARTURES} departures fully inside ${PHONE_VIEWPORT.width}×${PHONE_VIEWPORT.height}, never more (principle 3)`).toEqual([]);
 
     const kicker = await attrOf(page, PHONE_PROBES.sadaSentence, 'data-kicker');
@@ -140,9 +141,10 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     const label = 'phone-karta';
     const { recorder } = await openPhone(page, label);
     if (await openKarta(page, label)) {
-      await softly.poll(async () => (await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')) ?? '', {
+      await softly.poll(async () => pillLabels(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')).length, {
         timeout: KARTA_PILLS_WITHIN_MS, message: `${label}: at least one vehicle pill (data-pills) within ${KARTA_PILLS_WITHIN_MS} ms of data-map-status=ready, with no further tap`,
-      }).toMatch(/\S/);
+      }).toBeGreaterThanOrEqual(1);
+      softly(pillFailures(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')), `${label}: every vehicle pill drawn, none folded into "+N" (${String(PLUS_PILL_RE)} on every label of data-pills)`).toEqual([]);
       softly(await page.locator(PHONE_PROBES.kartaDisclosures).count(), `${label}: no map disclosure or group taxonomy (${PHONE_PROBES.kartaDisclosures})`).toBe(0);
       softly(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-unlabelled'), `${label}: every marker carries a label or a count (data-unlabelled "0")`).toBe('0');
       softly(Number(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-markers')), `${label}: curated markers are drawn (data-markers ≥ 1)`).toBeGreaterThanOrEqual(1);
@@ -159,7 +161,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     expect(box, `${label}: the Karta map (${PHONE_PROBES.mapCanvas}) has a box to tap`).not.toBeNull();
     await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await expect(page.locator(PHONE_PROBES.stopBoard), `${label}: a tap on the stop ring at the canvas centre opens ${PHONE_PROBES.stopBoard}`).toBeVisible({ timeout: PAINT_MS });
-    const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT.height);
+    const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT);
     expect(phoneDepartureFailures(rows, 'the stop board'), `${label}: the board's ${PHONE_DEPARTURES} departures lie inside the viewport`).toEqual([]);
   });
 
@@ -171,12 +173,12 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     taps++; // the tab
     await page.locator(`${PHONE_PROBES.transportSearch} >> visible=true`).first().click({ timeout: 5_000 });
     taps++; // the field
-    await page.locator(PHONE_PROBES.transportSearch).first().fill('Jela');
+    await page.locator(PHONE_PROBES.transportSearch).first().fill(STOP_SEARCH_QUERY);
     await page.locator(`${PHONE_PROBES.selectStop} >> visible=true`).first().click({ timeout: PAINT_MS });
     taps++; // the result
     await expect(page.locator(PHONE_PROBES.stopBoard), `${label}: the stop's board (${PHONE_PROBES.stopBoard}) opens from the search result`).toBeInViewport({ timeout: PAINT_MS });
     expect(taps, `${label}: tab, field and result, at most ${SEARCH_TAPS_MAX} taps`).toBeLessThanOrEqual(SEARCH_TAPS_MAX);
-    const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT.height);
+    const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT);
     expect(phoneDepartureFailures(rows, 'the stop board'), `${label}: the board's ${PHONE_DEPARTURES} departures lie inside the viewport`).toEqual([]);
   });
 
@@ -205,14 +207,13 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     }).toBeGreaterThanOrEqual(1);
     fixture.expire();
     await softly(page.locator(PHONE_PROBES.sessionEnded), `${label}: after expiry the page shows ${PHONE_PROBES.sessionEnded} ([O-59])`).toBeVisible({ timeout: PAINT_MS });
-    softly(await page.locator(PHONE_PROBES.sessionEndedScan).count(), `${label}: the ended session invites a new scan (${PHONE_PROBES.sessionEndedScan})`).toBeGreaterThanOrEqual(1);
-    softly(await page.locator(PHONE_PROBES.sessionEndedHitno).count(), `${label}: the ended session keeps /hitno (${PHONE_PROBES.sessionEndedHitno})`).toBeGreaterThanOrEqual(1);
-    softly(await page.locator(PHONE_PROBES.nearbyRow).count(), `${label}: the content clears (${PHONE_PROBES.nearbyRow} count 0)`).toBe(0);
-    softly(await page.locator(PHONE_PROBES.exportControls).count(), `${label}: no export, copy, print or calendar control after expiry (${PHONE_PROBES.exportControls})`).toBe(0);
+    // One verdict with the production observer (e2e/inventory.ts): the ended block with /s/ and /hitno, no content
+    // row of any kind retained (${PHONE_CONTENT_ROWS}), no export control.
+    softly(expiryFailures(await page.evaluate(EXPIRY_READ_IN_PAGE, EXPIRY_SPEC)), `${label}: the content clears to the scan invitation and /hitno: no ${PHONE_CONTENT_ROWS} row, no ${PHONE_PROBES.exportControls}`).toEqual([]);
     const requests = fixture.requests.length;
     await page.clock.runFor(AFTER_EXPIRY_MS);
     await page.waitForTimeout(500);
-    softly(fixture.requests.slice(requests), `${label}: no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after the session ended`).toEqual([]);
+    softly(expiryFailures(await page.evaluate(EXPIRY_READ_IN_PAGE, EXPIRY_SPEC), fixture.requests.slice(requests).map((id) => `/api/data/${id}`)), `${label}: still cleared, and no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after the session ended`).toEqual([]);
     recordersClean(recorder, label);
   });
 

@@ -19,20 +19,22 @@ import { fileURLToPath } from 'node:url';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { teaserSubset } from '../../worker/feed/registry';
 import { SENTENCE_KICKERS } from '../../shared/kiosk/sentence';
-import { FIXTURE_STOP } from '../experience-fixtures';
-import { PHONE_DEPARTURES, PHONE_PROBES } from '../inventory';
+import { FIXTURE_PHARMACY_ADDRESSES, FIXTURE_STOP } from '../experience-fixtures';
+import { PHONE_PROBES } from '../inventory';
 import type { Scene } from '../scenes';
-import { CLOCK_RE, ELLIPSIS_RE, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, SENTENCE_MAX_CHARS, WALL_PROBES, type RotationSummary, type WallSample } from '../wall';
+import {
+  CLOCK_RE, ELLIPSIS_RE, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, PHARMACY_HOURS, pharmacyFailures, SENTENCE_MAX_CHARS, WALL_PROBES, type RotationSummary, type WallSample,
+} from '../wall';
+
+// The phone's shared verdicts live beside its probes (e2e/inventory.ts), where the production observer reads them too.
+export { PHONE_DEPARTURE_ROWS, phoneDepartureFailures, phoneDepartures, type PhoneDepartures } from '../inventory';
+export { PHARMACY_HOURS } from '../wall';
 
 // --- numbers the specs hold that the instruments do not name ------------------------------------
 /** The place in the wall's header: a stop or street name, "Zagreb" for the whole city (acceptance A5). */
 export const PLACE_MIN_CHARS = 3;
 /** The time word of a timeless row (owner string, §11). */
 export const ALWAYS_WORD = 'uvijek';
-/** The pharmacy's hours on its row and in the footer (owner string, §11). */
-export const PHARMACY_HOURS = '24/7';
-/** The pharmacy's old caption, gone from the wall (verdict correction 9). */
-export const PHARMACY_CAPTION_RE = /Dežurna/;
 /** One idle minute of calm motion, stepped like the rotation. */
 export const IDLE_MINUTE_MS = 60_000;
 /** Structural mutations allowed in that minute: a departure leaving at the top and one row entering (principle 7). */
@@ -156,14 +158,17 @@ export function textOf(page: Pick<Page, 'evaluate'>, selector: string): Promise<
 
 export interface VisibleSpec { selector: string }
 export interface VisibleBox { text: string; top: number; bottom: number; left: number; right: number }
-/** Visible matches (a box, not display:none, not hidden), each once: their text and box. */
+/** Visible matches (a box, not display:none, not hidden, not transparent on itself or any ancestor), each once: their text and box. */
 export const VISIBLE_IN_PAGE = (spec: VisibleSpec): VisibleBox[] => {
   const shown = (el: Element): boolean => {
     if ((el as HTMLElement).hidden || el.closest('[hidden]')) return false;
     const r = el.getBoundingClientRect();
     if (r.width <= 1 || r.height <= 1) return false;
-    const cs = getComputedStyle(el);
-    return cs.display !== 'none' && cs.visibility !== 'hidden';
+    for (let a: Element | null = el; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
+    }
+    return true;
   };
   const out: VisibleBox[] = [];
   for (const el of Array.from(new Set(document.querySelectorAll(spec.selector)))) {
@@ -242,8 +247,9 @@ export function sceneReadingFailures(scene: Scene, s: WallSample, headings: read
   if (untimedWord.length) out.push(`${untimedWord.length} timeless row(s) not labelled "${ALWAYS_WORD}": ${untimedWord.map((r) => `"${r.whenText || r.text}"`).join(', ')}`);
   const pharmacyRows = s.rows.filter((r) => r.kind === 'pharmacy' && !r.text.includes(PHARMACY_HOURS));
   if (pharmacyRows.length) out.push(`${pharmacyRows.length} pharmacy row(s) without "${PHARMACY_HOURS}": ${pharmacyRows.map((r) => `"${r.text}"`).join(', ')}`);
-  if (s.pharmacySymbols !== 1) out.push(`${s.pharmacySymbols} pharmacy cross(es) (${WALL_PROBES.pharmacySymbol}) in the footer (target 1)`);
-  if (PHARMACY_CAPTION_RE.test(s.pharmacy)) out.push(`the footer's pharmacy reads "${s.pharmacy}" (target the cross, "${PHARMACY_HOURS}" and the address, no ${String(PHARMACY_CAPTION_RE)} caption)`);
+  // The corrected V-C rule, the one test/accept/trust.test.ts runs on the rendered strip (e2e/wall.ts pharmacyFailures).
+  const pharmacy = pharmacyFailures({ symbols: s.pharmacySymbols, text: s.pharmacy }, FIXTURE_PHARMACY_ADDRESSES);
+  if (pharmacy.length) out.push(`the footer's pharmacy (${WALL_PROBES.stripPharmacy}) reads "${s.pharmacy}": ${pharmacy.join(', ')} (target one ${WALL_PROBES.pharmacySymbol}, "${PHARMACY_HOURS}" and the address; "Dežurna ljekarna 24/7: {address}" is allowed, the bare label "Dežurna ljekarna:" is not)`);
   return out;
 }
 
@@ -390,20 +396,7 @@ export function calmMotionFailures(r: CalmMotionReading): string[] {
 }
 
 // --- the phone ---------------------------------------------------------------------------------
-/** Every departure row of the Sada block and the shared timeline: `li.sada-departure` and `[data-kind=departure]`. */
-export const PHONE_DEPARTURE_ROWS = `${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`;
-
-export interface PhoneDepartures { total: number; inFold: number; texts: string[] }
-/** The visible departure rows and how many lie fully inside the viewport's height. */
-export function phoneDepartures(rows: readonly { text: string; top: number; bottom: number }[], viewportHeight: number): PhoneDepartures {
-  return { total: rows.length, inFold: rows.filter((r) => r.top >= -1 && r.bottom <= viewportHeight + 1).length, texts: rows.map((r) => r.text) };
-}
-export function phoneDepartureFailures(d: PhoneDepartures, where = 'Sada'): string[] {
-  const out: string[] = [];
-  if (d.inFold !== PHONE_DEPARTURES) out.push(`${where}: ${d.inFold} departure row(s) fully inside the first viewport (target exactly ${PHONE_DEPARTURES}): ${d.texts.map((t) => `"${t}"`).join(', ') || 'none'}`);
-  if (d.total > PHONE_DEPARTURES) out.push(`${where}: ${d.total} departure rows in all (target ≤ ${PHONE_DEPARTURES}, never a board)`);
-  return out;
-}
+// PHONE_DEPARTURE_ROWS, phoneDepartures and phoneDepartureFailures: e2e/inventory.ts (re-exported above).
 
 /** The six kickers as printed (owner strings, brief §15.8 rule 9), by their data-kicker value. */
 export const KICKER_WORDS: Readonly<Record<(typeof SENTENCE_KICKERS)[number], string>> = Object.freeze({
