@@ -21,6 +21,7 @@ import {
 } from './external-text-policy';
 import { installExternalTextBoundary } from './external-text-boundary';
 import { TOP_LEVEL_DOMAINS } from './tlds';
+import { ISO_4217_CODES } from './iso-4217';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
 export type ExternalTextSurface = 'header' | 'row';
@@ -322,12 +323,25 @@ export function sentenceInstruction(text: string): boolean {
   return headerInstructionRule(text) !== null;
 }
 
+// A capitalised word right after another capitalised word inside a name is part of that name:
+// the structural reading the singular-imperative rule above makes of "posjed Rudeš". So in a
+// row's name or address a three-letter currency code written that way before a house number
+// ("Nova Ves 12", "Lepa Ves 3", "Nova Ves 04 i 4/1") is a street, not an amount. Nothing else
+// changes: "VES 2", "ves 2", a lone "Ves 2", "2 Ves", a four-digit number, a symbol or word
+// currency, every other kind and the header surface keep the code a currency (D2 read-through).
+const CURRENCY_CODES = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
+const NAME_CODE = /(?<=(?:^|[\s,(])\p{Lu}\p{Ll}+ )\p{Lu}\p{Ll}{2}(?= \d{1,3}\p{Ll}?(?:\/\d{1,3})?(?:$|[,;)]| i |\s*[-–]))/gu;
+function maskNameCodes(value: string): string {
+  return value.replace(NAME_CODE, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word);
+}
+
 /** Structural evidence for corpus audits; production callers log codes only. */
-export function externalTextVector(value: string, kind?: ExternalTextKind): { reason: ExternalTextRejection; value: string } | null {
+export function externalTextVector(value: string, kind?: ExternalTextKind, surface?: ExternalTextSurface): { reason: ExternalTextRejection; value: string } | null {
   const text = foldText(value);
-  for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) {
-    const match = source.exec(text);
-    if (match) return { reason, value: match[0] };
+  const named = surface === 'row' && isNameKind(kind) ? foldText(maskNameCodes(value.normalize('NFC'))) : text;
+  for (const entry of EXTERNAL_VECTOR_PATTERNS) {
+    const match = entry.source.exec('currency' in entry ? named : text);
+    if (match) return { reason: entry.reason, value: match[0] };
   }
   // Names and addresses write register shorthand without a space: "Muzej
   // suv.umjetnosti", "Inst. R.Bošković", "N.S.knjižnica", "Stud.dom S.Radić",
@@ -390,7 +404,7 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  const vector = externalTextVector(text, kind);
+  const vector = externalTextVector(text, kind, surface);
   if (vector) return { ok: false, reason: vector.reason };
   for (const ch of text) {
     if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };

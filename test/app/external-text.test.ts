@@ -314,6 +314,31 @@ const heritage = committed('heritage').flatMap(data => data.places);
 const HERITAGE_AT = Date.parse('2026-09-22T12:30:00+02:00');
 const STORY_AT = Date.parse('2026-09-22T12:10:00+02:00');
 
+// D2 read-through (unresolved): 25 heritage fields of Nova Ves, a Zagreb street, were refused as
+// payments because VES is an ISO 4217 code and codes match case-folded. The file's own structural
+// reading of names ("a capitalised word inside a clause is a name") settles it without a word
+// list: in a row's name or address, a code written as a capitalised word right after another
+// capitalised word, before a house number, is part of a proper name. Nothing else changes.
+describe('a capitalised currency code inside a proper name on a row (Nova Ves)', () => {
+  it.each([
+    ['address', 'Nova Ves 02'], ['address', 'Nova Ves 04 i 4/1'], ['address', 'Nova Ves 5 i 5a'], ['address', 'Nova Ves 018'],
+    ['name', 'Zgrada, Nova Ves 2'], ['name', 'Prebendarska kurija sv. Uršule, Nova Ves 04 i 4/1'],
+    ['name', 'Ljetnikovac biskupa Aleksandra Alagovića, Nova Ves 86'], ['address', 'Lepa Ves 3'],
+  ] as const)('%s "%s" is an address on a row', (kind, value) => {
+    expect(rowText(kind, value)).toEqual({ ok: true });
+  });
+  it('keeps every other currency reading, every other kind and the header strict', () => {
+    for (const value of ['VES 2', 'ves 2', 'Ves 2', 'Nova VES 2', 'Nova ves 2', '2 Ves', 'Nova Ves 5000', 'Cijena: 50 Eur', 'Nova Ves 2 €',
+      'Uplata Nova Ves 12', 'Plaćanje 20 EUR']) {
+      expect(rowText('address', value).ok, value).toBe(false);
+      expect(rowText('name', value).ok, value).toBe(false);
+    }
+    for (const kind of ['title', 'summary', 'register-text', 'headsign'] as const) expect(rowText(kind, 'Nova Ves 2').ok, kind).toBe(false);
+    expect(headerText('address', 'Nova Ves 02')).toEqual({ ok: false, reason: 'payment' });
+    expect(headerText('name', 'Zgrada, Nova Ves 2')).toEqual({ ok: false, reason: 'payment' });
+  });
+});
+
 describe('the sampled source and GTFS corpus', () => {
   it('keeps every sampled event title except the pinned row exclusions, including their exact causes', () => {
     expect(SAMPLED_EVENT_TITLES).toHaveLength(150);
@@ -374,9 +399,9 @@ describe('the committed registers under decision 21', () => {
     expect(sortedResiduals(rawStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(presentedStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(refusedHeritage)).toEqual(sortedResiduals(HERITAGE_ROW_RESIDUALS));
-    // W-C10 restored the five rows lost to register abbreviations (d.d., sv.Vinka, Dr.Ante).
+    // W-C10 restored the five rows lost to register abbreviations (d.d., sv.Vinka, Dr.Ante);
+    // W-fix6 the Nova Ves building (a capitalised code inside a proper name).
     expect(missingRows.sort()).toEqual([
-      'Zgrada Biskupske ubožnice, Nova Ves 18',
       'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,',
       'Ansambl gradskih vila u Novakovoj ulici',
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
