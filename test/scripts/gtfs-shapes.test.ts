@@ -432,7 +432,9 @@ describe('the committed artefact', () => {
   // 581,016 B raw, 136,412 B gzip -- 124 bytes SMALLER raw, 4 larger gzipped.
   // Both pins stand again. WP0 adds three connectors and sixteen terminus
   // loops, cutting seven long edges where the loops leave them: 582,808 B raw,
-  // 136,897 B gzip, 0.3 % and 0.4 % more; the pins stand.
+  // 136,897 B gzip, 0.3 % and 0.4 % more; the pins stand. Its second round
+  // tries every pair within the loop cap and adds the Dubrava loop's fourteen
+  // (thirty loops, ten cuts): 584,224 B raw, 137,084 B gzip; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -461,8 +463,8 @@ describe('the committed artefact', () => {
     // F8c: 287 plus two halves for each of the three junctions noded; WP0: plus
     // the three connectors of gtfs-shapes-overrides.json (Glavni kolodvor, the
     // top of the Mihaljevac loop, a joint in line 12's Dubrava loop) and the
-    // seven pieces the terminus loops cut off their long boundary edges.
-    expect(net.edges).toHaveLength(303);
+    // ten pieces the terminus loops cut off their long boundary edges.
+    expect(net.edges).toHaveLength(306);
     // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
     // none. The terminus loops are counted in their own test below.
     expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
