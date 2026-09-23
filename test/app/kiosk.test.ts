@@ -714,7 +714,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
   /** About 1.7 km from every stop of the fixture: a pick here stays the street. */
   const ILICA = street('Ilica', 15.955, 45.8125);
   const ZAPRUDJE_ROW: Suggestion = { kind: 'stop', stop: { ...STOPS[2], distanceM: null } };
-  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.';
+  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi polje prazno za cijeli grad.';
 
   interface StartEnv { mountStart: StartModule['mountStart']; strings: KioskStrings; isTram: (routeId: string) => boolean }
   /** start.ts over a places.ts whose suggestPlaces answers `suggest`; the rest of that module stays real. */

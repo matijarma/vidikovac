@@ -1138,7 +1138,7 @@
       "preview_few": "Na zaslonu: {place} i {count} stajališta uokolo",
       "preview_other": "Na zaslonu: {place} i {count} stajališta uokolo",
       "previewCity": "Na zaslonu: cijeli grad.",
-      "noMatch": "Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.",
+      "noMatch": "Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi polje prazno za cijeli grad.",
       "streetNear": "{street} · stajalište {stop}",
       "loadingPlaces": "Učitavanje adresa i stajališta",
       "errorPlaces": "Popis adresa i stajališta nije dostupan.",
@@ -1255,7 +1255,7 @@
     "airIndex-5": "Vrlo loša",
     "airIndex-6": "Izrazito loša",
     "airNote": "Preliminarni indeks postaje, ne ocjena za cijeli grad.",
-    "airMethod": "Opažanja postaja su preliminarna, ne ocjena za cijeli grad. Indeksi čestica koriste pomične prosjeke.",
+    "airMethod": "Opažanja postaja su preliminarna i ne vrijede za cijeli grad. Indeksi čestica računaju se iz pomičnih prosjeka.",
     "consultationsNote": "Nacionalni izvori, ne savjetovanja Grada Zagreba."
   },
   "sada": {

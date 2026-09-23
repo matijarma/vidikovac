@@ -1216,7 +1216,7 @@
     "airIndex-5": "Very poor",
     "airIndex-6": "Extremely poor",
     "airNote": "Preliminary station index, not a citywide assessment.",
-    "airMethod": "Station observations are preliminary, not a citywide assessment. Particulate indices use rolling averages.",
+    "airMethod": "Station observations are preliminary and do not apply to the whole city. Particulate indices are computed from rolling averages.",
     "consultationsNote": "National sources, not City of Zagreb consultations."
   },
   "sada": {
