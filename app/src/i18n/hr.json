@@ -686,7 +686,7 @@
       "transport": "Promet: karta vozila ZET-a, pretraga linija i stajališta te stanje linija.",
       "events": "Događanja na telefonu: datirane najave s mjestom, kategorijom i izvorom.",
       "peer": "Telefon druge osobe u vlastitoj petominutnoj sesiji.",
-      "frozen": "Istekla sesija: jasno označena snimka podataka ostaje na telefonu."
+      "frozen": "Istekla sesija: na telefonu više nema sadržaja, samo gumb za novo skeniranje i Sigurnost."
     },
     "story": {
       "label": "Od zaslona do susreta",
@@ -702,7 +702,7 @@
       "shareBody": "Osoba pokraj tebe skenira tvoj kod i dobiva svojih pet minuta. Tvoje vrijeme ostaje isto. Jedan mali razlog za susret.",
       "shareNote": "Pet minuta za drugu osobu, jednom.",
       "leaveTitle": "Nastavi.",
-      "leaveBody": "Deset minuta poslije osvježavanje prestaje. Ono što čitaš ostaje kao označena snimka, s izvorima i mogućnostima izvoza. Ništa te ne zove natrag.",
+      "leaveBody": "Deset minuta poslije sadržaj nestaje s telefona. Ostaju samo gumb za novo skeniranje i Sigurnost na /hitno. Ništa te ne zove natrag.",
       "leaveNote": "Grad te čeka.",
       "safety": "Sigurnost je uvijek otvorena, bez koda i bez ograničenja trajanja."
     },

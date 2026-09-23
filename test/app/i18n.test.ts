@@ -87,6 +87,11 @@ describe('catalogs', () => {
     expect(hr.session.expired).toBe('Deset minuta je prošlo. Zaslon u blizini otključava novih 10 minuta.');
     expect(hr.session.expiredHint).toBe('Sigurnost ostaje otvorena na /hitno.');
     expect(hr.session.expiredCta).toBe('Skeniraj za novih 10 minuta');
+    // The landing describes that same end: the content clears and the closing card stays (D3 read-through).
+    expect(hr.landing.story.leaveBody).toBe('Deset minuta poslije sadržaj nestaje s telefona. Ostaju samo gumb za novo skeniranje i Sigurnost na /hitno. Ništa te ne zove natrag.');
+    expect(en.landing.story.leaveBody).toBe('Ten minutes later, the content clears from your phone. What remains is a button to scan again and Safety at /hitno. Nothing calls you back.');
+    expect(hr.landing.alt.frozen).toBe('Istekla sesija: na telefonu više nema sadržaja, samo gumb za novo skeniranje i Sigurnost.');
+    expect(en.landing.alt.frozen).toBe('An expired session: no content is left on the phone, only a button to scan again and Safety.');
     expect(hr.scan.errors['same-network']).toBe('Ovaj kod trenutačno nije moguće iskoristiti s ove veze. Skeniraj ponovno.');
   });
 });
