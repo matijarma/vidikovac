@@ -35,7 +35,7 @@ import { SENTENCE_KICKERS } from '../shared/kiosk/sentence';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { installCityFixture } from './city-fixtures';
 import { departuresBoard, lastRunSnapshot, serviceDays } from './departures-fixture';
-import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type FixtureSession } from './experience-fixtures';
+import { experienceSnapshots, FIXTURE_DASHBOARD, FIXTURE_STOP, installExperienceFixture, type FixtureSession } from './experience-fixtures';
 import {
   EXPIRY_READ_IN_PAGE, EXPIRY_SPEC, expiryFailures, firstViewport, KARTA_PILLS_WITHIN_MS, PHONE_DEPARTURES, PHONE_PROBES, PHONE_SLOP_RE,
   SEARCH_TAPS_MAX, SHARE_CITY_LABEL, STOP_SEARCH_QUERY, TAB_LABELS, WEEK_EVENTS_LABEL, type FirstViewport, type InventoryClass,
@@ -265,8 +265,11 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
     await page.locator(`${PHONE_PROBES.transportSearch}:visible`).first().click();
     taps++; // the search field
     await page.locator(PHONE_PROBES.transportSearch).fill(STOP_SEARCH_QUERY);
-    await page.locator(`${PHONE_PROBES.selectStop}:visible`).first().click();
-    taps++; // the first stop in the results
+    // The fixture's stop among the results: the departures fixture keeps the timetable of Trg's platforms only
+    // (e2e/departures-fixture.ts, committed trip patterns), and the first stop for the query can be another one
+    // (Bana Josipa Jelačića, 791_23), which it answers with the two tracked trips alone.
+    await page.locator(`${PHONE_PROBES.selectStop}:visible`).filter({ hasText: FIXTURE_STOP.name }).first().click();
+    taps++; // the fixture's stop in the results
     expect(taps, `the tab, the field and the result: at most ${SEARCH_TAPS_MAX} taps`).toBeLessThanOrEqual(SEARCH_TAPS_MAX);
     await expect(page.locator(STOP_LEAD_ROWS), 'three departures lead the stop sheet').toHaveCount(PHONE_DEPARTURES, { timeout: PAINT_MS });
     // The sheet eases to its detent: read the rows once they have come to rest.
@@ -279,8 +282,11 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
   test(`stop board by a canvas tap: the stop ring at the place opens its board with three whole departures above ${PHONE.height} px`, async ({ page }) => {
     await openSession(page);
     const map = await openKarta(page);
-    // Karta frames the place at the middle of the map the sheet leaves uncovered (workspace.ts frameCamera, map
-    // offset by the sheet's height): once the camera has come to rest, that point is the screen stop's ring.
+    // Where the stop's ring is drawn: Karta frames the place with no padding and no offset (workspace.ts
+    // frameCamera, setView of map/frame.ts frameView: the place at the centre), and a screen stop's place is that
+    // stop's own point (shared/city/place.ts), so once the camera has come to rest the ring of the screen stop
+    // 106_1 is projected at the canvas centre. The sheet does not shift the frame; the tap must land on the ring
+    // itself (map/presentation.ts handheld: 22 px), so it goes to that point, never to the middle of the uncovered map.
     let zoom: string | null = null;
     await expect.poll(async () => {
       const before = await map.getAttribute('data-zoom');
@@ -289,12 +295,20 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
       return before !== null && before === zoom;
     }, { timeout: PAINT_MS, message: 'the Karta camera comes to rest on the place' }).toBe(true);
     const canvas = await map.boundingBox();
-    const sheet = await page.getByTestId('transport-sheet').boundingBox();
     expect(canvas, 'the Karta map has a box to tap').not.toBeNull();
-    const uncoveredBottom = sheet && sheet.y > canvas!.y ? Math.min(sheet.y, canvas!.y + canvas!.height) : canvas!.y + canvas!.height;
-    await page.touchscreen.tap(canvas!.x + canvas!.width / 2, canvas!.y + (uncoveredBottom - canvas!.y) / 2);
-    // needs lane/p integrator: the phone's stop sheet carries the §16.4 probe [data-testid=stop-board] (handoff lane-p-G → P-integrator)
-    await expect(page.locator(PHONE_PROBES.stopBoard), `a tap on the stop ring opens its board (${PHONE_PROBES.stopBoard}) at zoom ${zoom}`).toBeVisible({ timeout: PAINT_MS });
+    const ring = { x: canvas!.x + canvas!.width / 2, y: canvas!.y + canvas!.height / 2 };
+    // The ring's point is on the map itself, not under the sheet or a control.
+    const onMap = await page.evaluate(({ x, y }) => {
+      const hit = document.elementFromPoint(x, y);
+      return !!hit && !!document.querySelector('[data-testid=map-canvas]')?.contains(hit);
+    }, ring);
+    expect(onMap, `the stop ring's point (${Math.round(ring.x)}, ${Math.round(ring.y)}) lies on the uncovered map`).toBe(true);
+    await page.touchscreen.tap(ring.x, ring.y);
+    // What the tap opened, named when it is not the board (a vehicle's pill or a place standing on the ring wins the hit).
+    await expect.poll(async () => (await page.locator(PHONE_PROBES.stopBoard).isVisible()) ? 'stop-board' : page.evaluate(() => {
+      const title = document.querySelector('[data-testid=transport-detail] h3');
+      return title ? `another detail: "${(title.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)}"` : 'nothing';
+    }), { timeout: PAINT_MS, message: `a tap on the stop ring opens its board (${PHONE_PROBES.stopBoard}) at zoom ${zoom}` }).toBe('stop-board');
     // needs lane/p integrator
     await expect.poll(() => rowsWhole(page, STOP_BOARD_ROWS, PHONE_DEPARTURES), {
       timeout: 5_000, message: `the board's first ${PHONE_DEPARTURES} departures lie whole inside ${PHONE.width}×${PHONE.height}`,
