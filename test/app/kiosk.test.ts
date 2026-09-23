@@ -2640,8 +2640,9 @@ describe('the kiosk grid places every region explicitly', () => {
   it('gives the alert its own row and every other region a named one, the essentials panel included', () => {
     // Four rows: the header, the alert (collapsed to nothing while there is
     // none), the stage, the safety strip. Nothing may auto-place, or the next
-    // region added shuffles the page.
-    expect(css).toContain('grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);');
+    // region added shuffles the page. The header and strip rows are at least
+    // their drawn heights and grow with a wrapped place or trail.
+    expect(css).toContain('grid-template-rows: minmax(var(--k-head-h), auto) auto minmax(0, 1fr) minmax(var(--k-strip-h), auto);');
     expect(css).toMatch(/\.k-head \{ grid-row: 1;/);
     expect(css).toMatch(/\.k-alert \{ grid-row: 2;/);
     expect(css).toMatch(/\.k-stage \{ grid-row: 3;/);

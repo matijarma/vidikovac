@@ -151,6 +151,46 @@ describe('public-screen design invariants', () => {
     expect(css).not.toMatch(/\.k-weather(?![\w-])/);
     expect(css).not.toMatch(/\.k-sun(?![\w-])/);
   });
+  // The place is an owner string ("Trg bana J. Jelačića"): at 1080 × 1920 a 30vw cap printed
+  // "Trg bana J. Jela…". The chip takes the header row it has and wraps before it is ever cut;
+  // the header grows for a second line instead of cutting it.
+  it('shows the whole place in the header: the chip wraps, never ellipsised, and the header grows for it', () => {
+    const chip = rule('.k-context');
+    expect(chip).not.toContain('ellipsis');
+    expect(chip).not.toContain('nowrap');
+    expect(chip).not.toMatch(/(?:^|[;\s])(?:max-)?height:/);
+    expect(chip).toContain('overflow-wrap: break-word');
+    // On the two-row compact and portrait header the chip shares its row with the clock only.
+    expect(rule(".kiosk[data-size='compact'][data-phase='invitation'] .k-context")).toContain('max-width: none');
+    // It stays on the read tier there, above the 28 px walk-up floor.
+    expect(rule(".kiosk[data-phase='invitation']:not([data-size='handheld']) .k-context")).toContain('font-size: var(--k-main-size)');
+    // The header row is at least the drawn height and grows with a wrapped place, never overflows it.
+    expect(rule('.kiosk').replace(/\s+/g, ' ')).toContain('grid-template-rows: minmax(var(--k-head-h), auto) auto minmax(0, 1fr) minmax(var(--k-strip-h), auto)');
+    expect(rule('.k-head')).toContain('min-height: var(--k-head-h)');
+    expect(rule('.k-head')).not.toMatch(/(?:^|[;\s])height: var\(--k-head-h\)/);
+    expect(rule(".kiosk[data-size='compact'][data-phase='invitation'] .k-head")).toContain('grid-template-rows: auto auto');
+  });
+  // No wall text is cut with an ellipsis: a public screen shows a whole name or a whole line, and
+  // a line that does not fit wraps (the header and the strip grow; the paired row fitters drop
+  // whole rows). The one exception is the operator's own address field in Postavke, whose
+  // suggestion list is a fixed whole-row listbox.
+  it('cuts no wall text with an ellipsis', () => {
+    const ellipsised = (sheet: string) => [...sheet.matchAll(/(?:^|\n)([^{}\n]+?)\s*\{([^}]*)\}/g)]
+      .filter(([, , body]) => /text-overflow:\s*ellipsis/.test(body!)).flatMap(([, selectors]) => selectors!.split(',').map(sel => sel.trim()));
+    const operatorField = ['.k-suggest-name', '.k-suggest-meta'];
+    expect(ellipsised(css).filter(sel => !operatorField.includes(sel))).toEqual([]);
+    expect(ellipsised(cityCss)).toEqual([]);
+    expect(ellipsised(read('app/src/ui/city.css').replace(/\/\*[\s\S]*?\*\//g, ''))).toEqual([]);
+    // signage.css also loads on the wall, but its ellipsising tiles (.tl-*) are the phone's: no wall renderer draws one.
+    for (const source of ['app/src/kiosk.ts', 'app/src/kiosk/paired.ts', 'app/src/kiosk/front.ts', 'app/src/kiosk/invitation.ts',
+      'app/src/kiosk/timeline.ts', 'app/src/kiosk/markup.ts', 'app/src/kiosk/frame.ts', 'app/src/city/markup.ts']) {
+      expect(read(source), source).not.toMatch(/class="[^"]*\btl(?:-[\w-]+)?\b/);
+    }
+    // The strip's trail and pharmacy wrap in every composition, and the strip grows with them.
+    expect(rule('.k-strip-item')).toContain('overflow-wrap: break-word');
+    expect(rule('.k-strip-item')).not.toContain('nowrap');
+    expect(rule('.k-strip')).toContain('min-height: var(--k-strip-h)');
+  });
   it('keeps the QR SVG at 240px inside a 264px plate with 12px padding', () => {
     expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
     expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');

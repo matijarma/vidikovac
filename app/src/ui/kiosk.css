@@ -101,8 +101,10 @@
   --k-ease: cubic-bezier(0.25, 1, 0.5, 1);
   --k-dur: 180ms;
   display: grid;
-  /* head, the alert's own row (0 while there is none), the stage, safety. */
-  grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);
+  /* head, the alert's own row (0 while there is none), the stage, safety. The head and the
+     strip are at least their drawn heights and grow with a wrapped place or trail, so neither
+     is ever cut; with one line each they are exactly the drawing. */
+  grid-template-rows: minmax(var(--k-head-h), auto) auto minmax(0, 1fr) minmax(var(--k-strip-h), auto);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -191,7 +193,7 @@
 }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-context { font-size: var(--k-main-size); }
 .kiosk[data-size='compact'][data-phase='invitation'] { --k-head-h: calc(120px * var(--k-zoom)); }
-.kiosk[data-size='compact'][data-phase='invitation'] .k-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 1fr 1fr; }
+.kiosk[data-size='compact'][data-phase='invitation'] .k-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; }
 .kiosk[data-size='compact'][data-phase='invitation'] .k-head-mid { grid-column: 1 / -1; grid-row: 2; padding: 0; justify-content: flex-start; }
 .kiosk[data-size='compact'][data-phase='invitation'] .k-head-when { grid-column: 2; grid-row: 1; }
 .kiosk[data-size='compact'][data-phase='invitation'] .k-sentence-probe { left: 0; right: 0; }
@@ -206,8 +208,10 @@
 /* Icons at the kiosk's sizes: 28/22 inline (the shield before the strip label). */
 .kiosk .k-icon { width: var(--k-icon-size); height: var(--k-icon-size); flex: none; }
 
-.k-head { grid-row: 1; display: flex; align-items: center; min-width: 0; height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
-/* The brand group is the header's yielding part: the wordmark never shrinks, the chip ellipsises; the session pill keeps its own width (a flex item's automatic minimum), so it can never be squeezed under a neighbour. */
+.k-head { grid-row: 1; display: flex; align-items: center; min-width: 0; min-height: var(--k-head-h); box-sizing: border-box; padding: 0 var(--k-pad); border-bottom: 1px solid var(--k-line); background: var(--k-surface); }
+/* The brand group is the header's yielding part: the wordmark never shrinks, the chip wraps onto a second line (never an
+   ellipsis: the place is an owner string); the session pill keeps its own width (a flex item's automatic minimum), so it
+   can never be squeezed under a neighbour. */
 .k-head-brand { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; }
 .k-brand { flex: none; font-size: var(--k-sup-size); font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; }
 /* The brand is also the one way into Postavke: a press held on it (kiosk/settings.ts bindLongPress). It
@@ -216,7 +220,9 @@
 button.k-brand { display: inline-flex; align-items: center; min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: var(--k-radius-s); background: none; color: inherit; font-family: inherit; line-height: inherit; text-align: left; cursor: default; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
 button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset: 2px; }
 /* The stop chip: ink on paper, paper on night (kajimafix 03.1); the accent is kept for badges and the invitation card. */
-.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding-left: var(--k-gap); border-left: 1px solid var(--k-line); color: var(--k-ink-2); font-size: var(--k-hint-size); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Its box grows line by line and breaks a word too long for a line, so its hidden overflow trims only the font's
+   content area beyond the last line box (which would otherwise spill out of a header the chip fills), never text. */
+.k-context { display: inline-block; flex: 0 1 auto; min-width: 5em; max-width: 40vw; margin-left: var(--k-gap); padding-left: var(--k-gap); border-left: 1px solid var(--k-line); color: var(--k-ink-2); font-size: var(--k-hint-size); font-weight: 500; overflow: hidden; overflow-wrap: break-word; }
 .k-context:empty { display: none; }
 .k-head-mid { position: relative; display: flex; flex: 1 1 0; justify-content: center; padding: 0 var(--k-gap); }
 .k-session { padding: calc(var(--k-gap) * 0.35) var(--k-gap); border-radius: 999px; background: var(--k-action-soft); color: var(--k-action-on-soft); font-size: var(--k-sup-size); font-weight: 700; white-space: nowrap; }
@@ -329,7 +335,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
    bus a capsule in the transit blue, other a plain rectangle); the kiosk only
    sizes it, at the same geometry in the lagano board and in a panel's row. */
 .kiosk .k-line-badge { min-width: var(--k-badge); height: calc(var(--k-badge) * 0.62); padding: 0 0.35em; font-size: var(--k-sup-size); }
-.k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
+.k-line-name { flex: 1; min-width: 0; margin-left: var(--k-gap); overflow-wrap: break-word; font-size: var(--k-sup-size); font-weight: 600; }
 .k-line-word { flex: none; margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-line-near { flex: none; min-width: 9.5em; margin-left: var(--k-gap); text-align: right; font-size: var(--k-sup-size); color: var(--k-ink-3); }
 .k-line-more { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-sup-size); color: var(--k-ink-2); }
@@ -380,13 +386,13 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* A board row (WP5b): plate, destination, time hard right, on ONE line at
    every size -- a card read from four metres away is a column of times, not a
    column of paragraphs, and the aside's room is shared with the events and QR
-   cards. The destination ellipsises rather than wrapping under the time. A
+   cards. A destination too long for its cell wraps inside it, never under the time and never cut. A
    tracked estimate keeps the live dot in both time branches, the countdown and
    the clock; an untracked time carries none, and the note under the list says
    what that difference is. */
 .k-fr[data-trail] { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
 .k-fr-trail { justify-self: end; white-space: nowrap; font-size: var(--k-sup-size); font-weight: 700; line-height: 1.15; color: var(--k-ink); font-variant-numeric: tabular-nums; }
-.k-fr[data-trail] .k-fr-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.k-fr[data-trail] .k-fr-title { display: block; }
 .k-eta { white-space: nowrap; }
 .k-eta[data-live='true'] { color: var(--k-ink); }
 .k-live { display: inline-block; inline-size: 0.42em; block-size: 0.42em; margin-inline-end: 0.36em; border-radius: 50%; background: var(--k-green); vertical-align: 0.12em; }
@@ -412,7 +418,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-panel-attrib { margin-top: calc(var(--k-gap) * 0.35); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-2); }
 .k-pair { display: inline-flex; align-items: center; gap: calc(var(--k-gap) * 0.35); white-space: nowrap; }
 /* The credit at the foot of every panel, pushed down by the rows above it. */
-.k-panel-credit { margin-top: auto; padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.k-panel-credit { margin-top: auto; padding-top: calc(var(--k-gap) * 0.4); font-size: var(--k-credit-size); line-height: 1.3; color: var(--k-ink-3); overflow-wrap: break-word; }
 /* The card's own panel: the card at the column's foot, on the surface, padded like the others. */
 .k-panel--card { min-width: 0; align-self: end; }
 .k-panel[data-panel='promet'] { background: var(--k-surface); }
@@ -522,9 +528,8 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-temp--none { font-size: var(--k-sup-size); font-weight: 600; line-height: 1.2; letter-spacing: 0; color: var(--k-ink-2); }
 .k-condition { margin-left: var(--k-gap); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-weather-main .k-chip { margin-left: var(--k-gap); }
-.k-weather-details { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); color: var(--k-ink-2); }
-/* The Vrijeme hero sits in a narrower, taller block of the main grid: its facts may wrap where the side column's lockup keeps one line. */
-.k-main .k-weather-details { white-space: normal; }
+/* The weather facts wrap wherever the block is too narrow for one line (the side column's lockup, the Vrijeme hero). */
+.k-weather-details { overflow-wrap: break-word; font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-weather-note { font-size: var(--k-sup-size); color: var(--k-ink-2); }
 .k-weather-note[data-state='down'] { color: var(--k-rose); }
 .k-figure { font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
@@ -557,7 +562,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-row-main[data-severity='moderate'], .k-row-main[data-severity='minor'] { color: var(--k-amber); }
 /* The departure board's row: a badge, a destination, a word for the state, the vehicles out, on one line. */
 .k-row--line { display: flex; align-items: center; }
-.k-row--line .k-row-name { flex: 1; min-width: 0; margin-left: calc(var(--k-gap) * 0.7); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-sup-size); font-weight: 600; }
+.k-row--line .k-row-name { flex: 1; min-width: 0; margin-left: calc(var(--k-gap) * 0.7); overflow-wrap: break-word; font-size: var(--k-sup-size); font-weight: 600; }
 .k-row--line .k-row-word { flex: none; margin-left: calc(var(--k-gap) * 0.7); font-size: var(--k-sup-size); font-weight: 600; color: var(--k-ink-2); }
 .k-row--line .k-row-aside { float: none; flex: none; margin-left: calc(var(--k-gap) * 0.7); padding-top: 0; }
 /* Leading the Promet column, the board keeps five rows, their coverage line and ZET's three-line credit (measured: 500 px at wide, fits the 720 px paired side). */
@@ -591,7 +596,7 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-badge::before { inline-size: 0.5em; block-size: 0.5em; }
 
 /* --- Safety strip: always there, never a session's ------------------------ */
-.k-strip { grid-row: 4; display: flex; align-items: center; min-width: 0; height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
+.k-strip { grid-row: 4; display: flex; align-items: center; min-width: 0; min-height: var(--k-strip-h); box-sizing: border-box; padding: 0 var(--k-pad); border-top: 1px solid var(--k-line); background: var(--k-surface); font-size: var(--k-hint-size); line-height: 1.2; }
 .k-strip-label { display: inline-flex; flex: none; align-items: center; margin-right: var(--k-gap); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
 .k-strip-label .k-icon { margin-right: calc(var(--k-gap) * 0.4); }
 /* safetyState's verdict with its glyph, a pill with its own colour per level; while the invitation shows it is the 44 px button that opens Osnovno (kajimafix 03.5), otherwise a plain word. */
@@ -601,7 +606,7 @@ button.k-strip-verdict { cursor: pointer; }
 .k-strip-verdict[data-level='urgent'] { background: var(--k-rose-soft); color: var(--k-rose); }
 .k-strip-verdict[data-level='unknown'] { background: var(--k-amber-soft); color: var(--k-amber); }
 .k-strip-items { display: flex; flex: 1; flex-wrap: wrap; align-items: center; align-content: center; align-self: stretch; min-width: 0; overflow: hidden; }
-.k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-strip-item { flex: 0 1 auto; min-width: 0; margin-right: var(--k-gap); padding-right: var(--k-gap); border-right: 1px solid var(--k-line); color: var(--k-ink-2); overflow-wrap: break-word; }
 .k-strip-item strong { color: var(--k-ink); }
 /* The on-duty pharmacy (the wall of 22 September): the Greek cross filled in the calm green, "24/7" in the
    same green, then the short address in ink. The cross is the cell's symbol (data-symbol=pharmacy) and
@@ -630,7 +635,7 @@ button.k-strip-verdict { cursor: pointer; }
 .k-ess-row { box-sizing: border-box; min-height: 0; padding: calc(var(--k-gap) * 1.1) var(--k-pad); overflow: hidden; border-radius: var(--k-radius); background: var(--k-surface); }
 .k-ess-row[data-row='empty'] { grid-column: 1 / -1; }
 .k-ess-label { font-size: var(--k-sup-size); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--k-ink-3); }
-.k-ess-value { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k-ess-value { margin-top: calc(var(--k-gap) * 0.4); font-size: var(--k-main-size); font-weight: 800; line-height: 1.1; overflow-wrap: break-word; }
 .k-ess-detail { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.3); font-size: var(--k-sup-size); line-height: 1.25; color: var(--k-ink-2); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .k-ess-row .k-meta { display: -webkit-box; margin-top: calc(var(--k-gap) * 0.5); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 
@@ -758,6 +763,9 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-portrait='1'] .k-date { display: none; }
 .kiosk[data-portrait='1'] .k-context { max-width: 30vw; }
 .kiosk[data-portrait='1'][data-mode='unlocked'] .k-context { max-width: 22vw; }
+/* The front page's two-row header (1366 and the totem) gives the place its own row beside the clock: the whole name
+   ("Trg bana J. Jelačića" is 373 px at 40 px), wrapping only when it runs past the row. */
+.kiosk[data-size='compact'][data-phase='invitation'] .k-context { max-width: none; }
 
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
