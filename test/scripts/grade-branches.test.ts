@@ -22,7 +22,7 @@ import {
 } from '../../scripts/grade-branches-core';
 import type { GraphNetwork } from '../../shared/motion/network';
 import { evalPathPlan } from '../../shared/motion/plan';
-import type { PathKnot, Track } from '../../shared/motion/track';
+import type { Track } from '../../shared/motion/track';
 import type { FeedPayload } from '../../worker/feed/payload';
 import { createEngine, type Engine } from '../../worker/twin/engine';
 import type { TwinState } from '../../worker/twin/state';
@@ -148,46 +148,72 @@ describe('the branch grader, fault injection on the corridor', () => {
     expect(acceptanceRows(report).I).toBe(1);
   });
 
-  it('measures row S: a silent tram whose anchor moves on past its next stop, and the same silence with the anchor standing', () => {
-    const { state, victimId } = kept!;
-    const victim = state.tracks[victimId];
-    const plan = victim.plan as { on: 'path'; pathIdx: number; knots: PathKnot[] };
-    const anchor0 = evalPathPlan(plan.knots, 0);
-    const sStop = net.stopsOnPath(trunk).find((e) => e.stop.id === state.tripUpdates[victim.tripId!]!.stopId)!.s;
-    const shift = Math.round(sStop - anchor0) + 20;
-
-    // Observation 0 is the tick of the tram's newest fix; observations 1 and 2
-    // come 70 and 80 s later (+ the 2 s tick cushion): silent for more than 60 s.
-    const silentAt = (headerSec: number, k: number): number => headerSec + (k === 0 ? 0 : 60 + 10 * k);
-    const run = (moveOn: boolean): BranchReport => {
+  // Row S as D1 decision 3 redefined it (23 Sep): after 60 s of silence the
+  // published anchor may not move beyond the hold at the next stop (T8), and
+  // S-glide, the glide up to that hold, is printed without a target. The
+  // corridor's 1_0 serves no platform between T1200 (arc 1200) and C300
+  // (1800), so a tram last seen at 1260, past T1200's 40 m zone, is held at
+  // C300, 540 m on.
+  describe('row S, beyond the hold after 60 s of silence', () => {
+    /** The kept tick three times: the fix tick, then 70 and 80 s later (+ the
+     *  2 s tick cushion, silent for more than 60 s), with the victim's path
+     *  plan starting at the fix (arc `fixS`) and at `anchorAt(k)` at each header. */
+    function runSilence(anchorAt: (k: number, fixS: number, holdS: number) => number): BranchReport {
       const copy = structuredClone(kept!);
       const track = copy.state.tracks[copy.victimId];
-      const original = track.plan as typeof plan;
+      // The victim alone: every other track of the kept tick would fall silent too.
+      copy.state.tracks = { [copy.victimId]: track };
+      const hold = net.stopsOnPath(trunk).find((e) => e.stop.id === 'C300')!;
+      const fixS = hold.s - 540;
+      // ZET's TripUpdate names C300 as next, so the context counter reads the same stop.
+      copy.state.tripUpdates[track.tripId!] = { ...copy.state.tripUpdates[track.tripId!]!, stopId: 'C300' };
       const grader = createBranchGrader(engine, { stops });
       for (let k = 0; k < 3; k++) {
-        track.plan = moveOn && k > 0 ? { ...original, knots: original.knots.map(([t, s]) => [t, s + shift] as PathKnot) } : original;
-        grader.observe(copy.state, silentAt(copy.headerSec, k), copy.payload);
+        const s = anchorAt(k, fixS, hold.s);
+        track.plan = { on: 'path', pathIdx: trunk, knots: [[-10, fixS], [0, s], [90, s]] };
+        grader.observe(copy.state, copy.headerSec + (k === 0 ? 0 : 60 + 10 * k), copy.payload);
       }
       return grader.report();
-    };
+    }
 
-    const standing = run(false);
-    const standingRows = acceptanceRows(standing);
-    expect(standingRows.S_count).toBeGreaterThan(0);
-    expect(standingRows.S_max).toBe(0);
-    expect(standingRows.S_pastNextStop).toBe(0);
-    // Nothing changed path, so nothing else is counted.
-    expect(standing.totals.pathChangesSameTrip).toBe(0);
+    it('has no platform of 1_0 between the fix at 1260 and C300', () => {
+      const served = net.stopsOnPath(trunk);
+      const c300 = served.find((e) => e.stop.id === 'C300')!;
+      expect(c300.s).toBe(1800);
+      expect(served.filter((e) => e.s > c300.s - 540 - 40 && e.s < c300.s).map((e) => e.stop.id)).toEqual([]);
+    });
 
-    const movedOn = run(true);
-    const rows = acceptanceRows(movedOn);
-    expect(rows.S_count).toBe(standingRows.S_count);
-    expect(rows.S_max).toBeCloseTo(shift, 1);
-    expect(rows.S_pastNextStop).toBe(1);
-    expect(movedOn.ghostAdvance.pastNextStopSamples).toHaveLength(1);
-    expect(movedOn.ghostAdvance.pastNextStopSamples[0]).toMatchObject({ id: victimId, route: '1', pastNextStop: true });
-    // The anchor jumped between the fix tick and the first silent tick, then stood.
-    expect(movedOn.ghostAdvance.advanceWhileSilentM.max).toBe(0);
+    it('reads a standing silent tram as 0 beyond the hold and 0 glide', () => {
+      const report = runSilence((_k, fixS) => fixS);
+      const rows = acceptanceRows(report);
+      expect(rows.S_count).toBe(1);
+      expect(rows).toMatchObject({ S: 0, S_glide: 0, S_pastNextStop: 0 });
+      expect(report.totals.pathChangesSameTrip).toBe(0);
+    });
+
+    it('reads a glide to the next stop that holds there as S = 0 and S-glide = 540', () => {
+      const report = runSilence((k, fixS, holdS) => (k === 0 ? fixS : holdS));
+      const rows = acceptanceRows(report);
+      expect(rows).toMatchObject({ S_count: 1, S: 0, S_glide: 540, S_pastNextStop: 0 });
+      expect(report.ghostAdvance).toMatchObject({ measured: 1, beyondHold: 0, over50m: 0, largestBeyondHold: [] });
+      expect(report.ghostAdvance.largestGlides[0]).toMatchObject({ id: kept!.victimId, route: '1', beyondHoldM: 0, glideM: 540, holdStop: 'C300', holdS: 1800 });
+      expect(judge(rows, ACCEPTANCE_TARGETS.stage1).failures.filter((f) => f.startsWith('S'))).toEqual([]);
+    });
+
+    it('reads a glide that runs on past the hold as S > 0, the glide still counted up to the hold', () => {
+      const report = runSilence((k, fixS, holdS) => (k === 0 ? fixS : k === 1 ? holdS : holdS + 100));
+      const rows = acceptanceRows(report);
+      expect(rows).toMatchObject({ S_count: 1, S_glide: 540, S_pastNextStop: 1 });
+      expect(rows.S).toBeCloseTo(100, 1);
+      expect(report.ghostAdvance).toMatchObject({ beyondHold: 1, over50m: 1 });
+      expect(report.ghostAdvance.largestBeyondHold[0]).toMatchObject({ id: kept!.victimId, holdStop: 'C300', holdS: 1800, pastNextStop: true });
+      expect(judge(rows, ACCEPTANCE_TARGETS.stage1).failures).toContain('S 100 > 50');
+    });
+
+    it('reads an overshoot within the rounding slack as the hold itself', () => {
+      const report = runSilence((k, fixS, holdS) => (k === 0 ? fixS : holdS + 0.9));
+      expect(acceptanceRows(report)).toMatchObject({ S: 0, S_glide: 540 });
+    });
   });
 
   // Decision 16: an unplaced episode of at least PARKED_MIN_S whose fixes never
@@ -269,7 +295,7 @@ describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
   it('reproduces the baseline table of the brief', () => {
     expect(rows.A).toBeCloseTo(136.5, 1);
     expect(rows).toMatchObject({ Aprime: 130.9, B: 483, C_vh: 116.4, C_fixes: 19700, D: 620, E: 196, F: 191, G: 1922, G_p95: 629.4, H: 387 });
-    expect(rows).toMatchObject({ U: null, U_raw: null, U_parkedVh: null, S_count: null, S_max: null, S_pastNextStop: null, I: null });
+    expect(rows).toMatchObject({ U: null, U_raw: null, U_parkedVh: null, S_count: null, S: null, S_glide: null, S_pastNextStop: null, I: null });
   });
 
   it('reads an unplaced block from before decision 16 as its raw share, parked time not measured', () => {
@@ -282,9 +308,9 @@ describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
     const verdict = judge(rows, ACCEPTANCE_TARGETS.stage1);
     expect(verdict.ok).toBe(false);
     expect(verdict.failures).toContain('B 483 > 0');
-    expect(verdict.failures).toContain('S_max: not measured (target <= 50)');
+    expect(verdict.failures).toContain('S: not measured (target <= 50)');
     expect(verdict.failures).toContain('U: not measured (target <= 3)');
-    expect(verdict.failures).toHaveLength(15);
+    expect(verdict.failures).toHaveLength(14);
 
     const zero = Object.fromEntries(ACCEPTANCE_ROW_KEYS.map((key) => [key, 0])) as unknown as AcceptanceRows;
     expect(judge(zero, ACCEPTANCE_TARGETS.stage1)).toEqual({ ok: true, failures: [] });
@@ -292,7 +318,7 @@ describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
   });
 
   it('holds stage 2 to A and A-prime of at most 1 and every other row as stage 1', () => {
-    const three = { ...(Object.fromEntries(ACCEPTANCE_ROW_KEYS.map((key) => [key, 0])) as unknown as AcceptanceRows), A: 3, Aprime: 3, G_p95: 50, H: 60, S_max: 50 };
+    const three = { ...(Object.fromEntries(ACCEPTANCE_ROW_KEYS.map((key) => [key, 0])) as unknown as AcceptanceRows), A: 3, Aprime: 3, G_p95: 50, H: 60, S: 50, S_glide: 540, S_pastNextStop: 1 };
     expect(judge(three, ACCEPTANCE_TARGETS.stage1).ok).toBe(true);
     expect(judge(three, ACCEPTANCE_TARGETS.stage2).failures).toEqual(['A 3 > 1', 'Aprime 3 > 1']);
     expect(ACCEPTANCE_TARGETS.stage1.stage).toBe('stage1');

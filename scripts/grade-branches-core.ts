@@ -3,7 +3,8 @@
 // (Track E, extended by WP0 with the loops, unplaced and silence blocks),
 // plus what the companion plan judges WP0 by: the acceptance rows A to H and U
 // (unplaced time without parked trams, decision 16) read from the report's own
-// keys, row S (a silent tram's published anchor moving on without evidence),
+// keys, row S (a silent tram's published anchor moving beyond the next stop it
+// is held at),
 // row I (an adoption onto a path no service of the day runs), the unknown-trip
 // share that says whether the frames still join the committed artefacts, the
 // stage targets and the judge.
@@ -19,10 +20,11 @@
 // than hooking it because replay()'s snapshot drops the matcher state this
 // grader reads (residual, off-path and against counters, prior path).
 //
-// On the same frames the report equals the review grader's key for key; the
-// keys only this port writes are `unknownTripShare`, `tripObservations`,
-// `unknownTripObservations`, `ghostAdvance` (row S) and `serviceFilter`
-// (row I). scripts/grade-branches.mjs is the CLI (bundled with esbuild, as
+// On the same frames the report equals the review grader's key for key, row
+// S's `ghostAdvance` included (both carry the definition of 23 Sep); the keys
+// only this port writes are `unknownTripShare`, `tripObservations`,
+// `unknownTripObservations` and `serviceFilter` (row I).
+// scripts/grade-branches.mjs is the CLI (bundled with esbuild, as
 // scripts/replay-twin.mjs is); test/accept/wrong-turn.test.ts imports this
 // file directly.
 
@@ -98,9 +100,10 @@ const GAP_MIN_S = 60;
 const SILENCE_LOOKAHEAD_S = 60;
 /** Slack over the next stop's arc: the wire rounds arcs to 0.1 m and the planner to 0.1 m (round1). */
 const PAST_STOP_SLACK_M = 1;
-/** Row S (WP6 step 2): a tram whose newest fix is older than this, at the
- *  tick's own clock, is silent, and its published anchor should have stopped
- *  moving on without it. */
+/** Row S (WP6 step 2, redefined by D1 decision 3 on 23 Sep): a tram whose
+ *  newest fix is older than this, at the tick's own clock, is silent. T8 lets
+ *  its published anchor finish the glide to the next stop and hold there;
+ *  row S measures what the anchor does beyond that hold. */
 const GHOST_SILENCE_S = 60;
 /** Decision 16: an unplaced episode at least this long ... */
 export const PARKED_MIN_S = 600;
@@ -613,7 +616,8 @@ interface GkEntry {
 }
 
 /** Row S's watch over one track: the tick of its newest fresh fix, and what
- *  the published anchor did once that fix was more than GHOST_SILENCE_S old. */
+ *  the published anchor did once that fix was more than GHOST_SILENCE_S old,
+ *  against the hold of each such tick (holdOf). */
 interface GhostWatch {
   gen: number;
   fixAt: number;
@@ -621,14 +625,18 @@ interface GhostWatch {
   trip: string | null;
   path: number | null;
   anchor0: number | null;
+  /** The stop ZET's TripUpdate named as next at the fix tick, and its arc (context, S_pastNextStop). */
   nextStopId: string | null;
   sStop: number | null;
   openedH: number | null;
   maxSilenceS: number;
-  maxAdvance: number | null;
-  /** The anchor at the first tick past GHOST_SILENCE_S, and the largest advance past it. */
-  anchorAtOpen: number | null;
-  maxSilentAdvance: number | null;
+  /** Row S: the largest excess of the anchor over the tick's hold arc (negative while short of it). */
+  maxBeyond: number | null;
+  /** The hold at the tick of that excess. */
+  holdStop: string | null;
+  holdS: number | null;
+  /** S-glide: the largest advance past anchor0, the anchor capped at the tick's hold arc. */
+  maxGlide: number | null;
   passed: boolean;
   pathChanged: boolean;
 }
@@ -640,12 +648,19 @@ interface GhostEpisode {
   trip: string | null;
   path: string | null;
   silenceS: number;
-  advanceM: number | null;
-  advanceWhileSilentM: number | null;
+  /** Row S: metres the published anchor went beyond the hold (0 within PAST_STOP_SLACK_M). */
+  beyondHoldM: number | null;
+  /** S-glide: metres the published anchor travelled while silent, up to the hold. */
+  glideM: number | null;
+  holdStop: string | null;
+  holdS: number | null;
   nextStop: string | null;
   pastNextStop: boolean;
   pathChanged: boolean;
 }
+
+/** A served platform on a path, as the network lists them (graph.ts stopsOnPath). */
+type StopOnPath = ReturnType<GraphNetwork['stopsOnPath']>[number];
 
 export interface BranchGraderOptions {
   /** Every platform, for the nearest-stop and nearest-terminal columns (loadStops). */
@@ -687,6 +702,20 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   });
   const isSynthetic = (idx: number): boolean => paths[idx].shape === null;
   const servicesByPathIdx = servicesByPath(engine);
+
+  /** Where T8 holds a silent tram on path `pathIdx` (WP0 step 4; the rule A11's
+   *  S2 counter and row S both read): from `sRef`, the arc its path plan
+   *  starts at (buildPlan's first knot, the last fix, floored), the served
+   *  platform whose STOP_ZONE_M zone holds that arc (held at the stop, or
+   *  where it stands past the stop point: the larger of the two arcs), else
+   *  the first served platform ahead, else the path's end (a terminus holds). */
+  function holdOf(pathIdx: number, sRef: number): { limitS: number; here: StopOnPath | null; ahead: StopOnPath | null } {
+    const served = net.stopsOnPath(pathIdx);
+    let here: StopOnPath | null = null;
+    for (const entry of served) if (Math.abs(entry.s - sRef) <= STOP_ZONE_M && (here === null || Math.abs(entry.s - sRef) < Math.abs(here.s - sRef))) here = entry;
+    const ahead = here === null ? served.find((entry) => entry.s > sRef + 0.5) ?? null : null;
+    return { limitS: here !== null ? Math.max(here.s, sRef) : ahead !== null ? ahead.s : paths[pathIdx].len, here, ahead };
+  }
 
   // The Glavni kolodvor loop's arc range on each detour path.
   const gk: Record<string, GkEntry> = {};
@@ -863,8 +892,11 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       trip: watch.trip,
       path: watch.path !== null ? paths[watch.path].id : null,
       silenceS: watch.maxSilenceS,
-      advanceM: r1(watch.maxAdvance),
-      advanceWhileSilentM: r1(watch.maxSilentAdvance),
+      // The planner and the wire round arcs to 0.1 m: an excess within the slack is the hold itself.
+      beyondHoldM: watch.maxBeyond === null ? null : watch.maxBeyond > PAST_STOP_SLACK_M ? r1(watch.maxBeyond) : 0,
+      glideM: watch.maxGlide === null ? null : r1(Math.max(0, watch.maxGlide)),
+      holdStop: watch.holdStop,
+      holdS: r1(watch.holdS),
       nextStop,
       pastNextStop: watch.passed,
       pathChanged: watch.pathChanged,
@@ -1061,11 +1093,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       // (held at that stop, or where it stands past the stop point), else the
       // first served platform ahead, else the path's end (a terminus holds).
       const sRef = knots[0][1];
-      const served = net.stopsOnPath(pathIdx);
-      let here: (typeof served)[number] | null = null;
-      for (const entry of served) if (Math.abs(entry.s - sRef) <= STOP_ZONE_M && (here === null || Math.abs(entry.s - sRef) < Math.abs(here.s - sRef))) here = entry;
-      const ahead = here === null ? served.find((entry) => entry.s > sRef + 0.5) ?? null : null;
-      const limitS = here !== null ? Math.max(here.s, sRef) : ahead !== null ? ahead.s : paths[pathIdx].len;
+      const { limitS, here, ahead } = holdOf(pathIdx, sRef);
       const sAhead = evalPathPlan(knots, SILENCE_LOOKAHEAD_S);
       if (knots[knots.length - 1][1] > limitS + PAST_STOP_SLACK_M) silence.pastAtHorizon++;
       if (sAhead > limitS + PAST_STOP_SLACK_M) {
@@ -1177,31 +1205,35 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         lastFixByVehicle.set(track.id, { atSec: fix.atSec, trip: track.tripId, p: rec.p });
       }
 
-      // Row S (WP6 step 2, T8): the published anchor at the tick of the newest
-      // fresh fix, and how far the anchor moved on once that fix was older than
-      // GHOST_SILENCE_S; did it pass the stop ZET's TripUpdate named as next then?
+      // Row S (WP6 step 2, redefined by D1 decision 3 on 23 Sep): per silent
+      // episode, how far the published anchor went BEYOND the hold of the
+      // tick (holdOf: the next stop T8 holds a silent tram at) once the newest
+      // fresh fix was older than GHOST_SILENCE_S, and beside it S-glide, how
+      // far the anchor travelled while silent up to that hold, from the anchor
+      // published at the fix tick. Context: did it pass the stop ZET's
+      // TripUpdate named as next at that tick?
       const watch = ghostWatch.get(track.id);
       if (fresh || !watch || watch.gen !== gen) {
         if (watch) closeGhost(track.id);
         const nextStopId = rec.trip !== null ? state.tripUpdates[rec.trip]?.stopId ?? null : null;
         const sStop = nextStopId !== null && rec.planPath !== null ? net.stopsOnPath(rec.planPath).find((e) => e.stop.id === nextStopId)?.s ?? null : null;
-        ghostWatch.set(track.id, { gen, fixAt: rec.fixAt, route: rec.route, trip: rec.trip, path: rec.planPath, anchor0: rec.anchor, nextStopId, sStop, openedH: null, maxSilenceS: 0, maxAdvance: null, anchorAtOpen: null, maxSilentAdvance: null, passed: false, pathChanged: false });
+        ghostWatch.set(track.id, { gen, fixAt: rec.fixAt, route: rec.route, trip: rec.trip, path: rec.planPath, anchor0: rec.anchor, nextStopId, sStop, openedH: null, maxSilenceS: 0, maxBeyond: null, holdStop: null, holdS: null, maxGlide: null, passed: false, pathChanged: false });
       } else {
         const silentS = nowSec - rec.fixAt;
         if (silentS > GHOST_SILENCE_S) {
-          const onWatchedPath = watch.path !== null && rec.planPath === watch.path && rec.anchor !== null;
-          if (watch.openedH === null) {
-            watch.openedH = headerSec;
-            watch.anchorAtOpen = onWatchedPath ? rec.anchor : null;
-          }
+          if (watch.openedH === null) watch.openedH = headerSec;
           watch.maxSilenceS = Math.max(watch.maxSilenceS, silentS);
-          if (onWatchedPath && watch.anchor0 !== null && rec.anchor !== null) {
-            const advance = rec.anchor - watch.anchor0;
-            if (watch.maxAdvance === null || advance > watch.maxAdvance) watch.maxAdvance = advance;
-            if (watch.anchorAtOpen !== null) {
-              const silentAdvance = rec.anchor - watch.anchorAtOpen;
-              if (watch.maxSilentAdvance === null || silentAdvance > watch.maxSilentAdvance) watch.maxSilentAdvance = silentAdvance;
+          if (watch.path !== null && rec.planPath === watch.path && rec.planKnots !== null && rec.anchor !== null && watch.anchor0 !== null) {
+            const hold = holdOf(rec.planPath, rec.planKnots[0][1]);
+            const beyond = rec.anchor - hold.limitS;
+            if (watch.maxBeyond === null || beyond > watch.maxBeyond) {
+              watch.maxBeyond = beyond;
+              const stop = hold.here ?? hold.ahead;
+              watch.holdStop = stop ? stop.stop.name : '(path end)';
+              watch.holdS = hold.limitS;
             }
+            const glide = Math.min(rec.anchor, hold.limitS) - watch.anchor0;
+            if (watch.maxGlide === null || glide > watch.maxGlide) watch.maxGlide = glide;
             if (watch.sStop !== null && watch.anchor0 <= watch.sStop + PAST_STOP_SLACK_M && rec.anchor > watch.sStop + PAST_STOP_SLACK_M) watch.passed = true;
           } else if (watch.path !== null) watch.pathChanged = true;
         }
@@ -1775,25 +1807,28 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     };
 
     // ---- rows S and I (WP6 step 2; only this port writes them) ------------------
-    const ghostMeasured = ghostEpisodes.filter((e) => e.advanceM !== null);
-    const ghostAdvances = ghostMeasured.map((e) => e.advanceM!);
-    const ghostSilentAdvances = ghostMeasured.map((e) => e.advanceWhileSilentM).filter((m): m is number => m !== null);
+    const ghostMeasured = ghostEpisodes.filter((e) => e.beyondHoldM !== null);
+    const ghostBeyond = ghostMeasured.map((e) => e.beyondHoldM!);
+    const ghostGlides = ghostMeasured.map((e) => e.glideM!);
     const ghostReport = {
-      definition: `tram tracks whose newest fix is older than ${GHOST_SILENCE_S} s at the tick clock (header + ${REPLAY_NOW_CUSHION_S} s): per silent episode, the largest advance of the published anchor (the path plan at the header) past the anchor published at the tick of that fix, on the same path; past the next stop = the anchor crossed the stop ZET's TripUpdate named as next at that tick`,
+      definition: `tram tracks whose newest fix is older than ${GHOST_SILENCE_S} s at the tick clock (header + ${REPLAY_NOW_CUSHION_S} s), on the path plan of that fix: per silent episode, row S = the largest distance the published anchor (the path plan at the header) lies beyond the tick's hold, the next stop a silent tram is held at (the served platform whose ${STOP_ZONE_M} m zone holds the plan's first knot, at the larger of the two arcs, else the first served platform ahead, else the path's end; within ${PAST_STOP_SLACK_M} m reads 0); S-glide = the largest advance past the anchor published at the fix tick, up to that hold (no target); past the next stop = the anchor crossed the stop ZET's TripUpdate named as next at the fix tick (context)`,
       silenceS: GHOST_SILENCE_S,
       episodes: ghostEpisodes.length,
       measured: ghostMeasured.length,
       offPath: ghostEpisodes.filter((e) => e.path === null).length,
-      pathChanged: ghostEpisodes.filter((e) => e.pathChanged && e.advanceM === null).length,
-      advanceM: { p50: percentile(ghostAdvances, 0.5), p95: percentile(ghostAdvances, 0.95), max: maxOf(ghostAdvances) },
-      over50m: ghostAdvances.filter((m) => m > 50).length,
-      // Informational beside row S: the advance counted only from the first tick past silenceS, which a hold at the next stop keeps near 0.
-      advanceWhileSilentM: { p50: percentile(ghostSilentAdvances, 0.5), p95: percentile(ghostSilentAdvances, 0.95), max: maxOf(ghostSilentAdvances) },
+      pathChanged: ghostEpisodes.filter((e) => e.pathChanged && e.beyondHoldM === null).length,
+      // Row S (target: max <= 50 m): the anchor beyond the hold, per episode.
+      beyondHoldM: { p50: percentile(ghostBeyond, 0.5), p95: percentile(ghostBeyond, 0.95), max: maxOf(ghostBeyond) },
+      beyondHold: ghostBeyond.filter((m) => m > 0).length,
+      over50m: ghostBeyond.filter((m) => m > 50).length,
+      // S-glide, printed without a target: the glide to the hold while silent, which T8 allows.
+      glideM: { p50: percentile(ghostGlides, 0.5), p95: percentile(ghostGlides, 0.95), max: maxOf(ghostGlides) },
       pastNextStop: ghostEpisodes.filter((e) => e.pastNextStop).length,
       withoutNextStop: ghostMeasured.filter((e) => e.nextStop === null).length,
       silenceHist: { '60-120': ghostEpisodes.filter((e) => e.silenceS <= 120).length, '120-180': ghostEpisodes.filter((e) => e.silenceS > 120 && e.silenceS <= 180).length, over180: ghostEpisodes.filter((e) => e.silenceS > 180).length },
-      byRoute: Object.fromEntries(countBy(ghostMeasured.filter((e) => e.advanceM! > 50), (e) => e.route)),
-      largest: [...ghostMeasured].sort((a, b) => b.advanceM! - a.advanceM!).slice(0, 12),
+      byRoute: Object.fromEntries(countBy(ghostMeasured.filter((e) => e.beyondHoldM! > 0), (e) => e.route)),
+      largestBeyondHold: ghostMeasured.filter((e) => e.beyondHoldM! > 0).sort((a, b) => b.beyondHoldM! - a.beyondHoldM!).slice(0, 12),
+      largestGlides: [...ghostMeasured].sort((a, b) => b.glideM! - a.glideM!).slice(0, 12),
       pastNextStopSamples: ghostEpisodes.filter((e) => e.pastNextStop).slice(0, 12),
     };
 
@@ -1973,13 +2008,14 @@ export interface AcceptanceSource {
   client: { sameTripPathToPathOver50: number; sameTripPathToPathJumpP95: number | null };
   /** `shareOfTramVehicleHoursRaw` and `parkedVehicleHours` arrived with decision 16; before it the share was the raw one. */
   unplaced?: { shareOfTramVehicleHours: number | null; shareOfTramVehicleHoursRaw?: number | null; parkedVehicleHours?: number };
-  ghostAdvance?: { episodes: number; advanceM: { max: number | null }; pastNextStop: number };
+  /** Row S as redefined on 23 Sep (D1 decision 3); a report of the first port (advanceM) predates it and reads not measured. */
+  ghostAdvance?: { episodes: number; beyondHoldM?: { max: number | null }; glideM?: { max: number | null }; pastNextStop: number };
   serviceFilter?: { adoptionsWithoutService: number };
 }
 
 /**
  * The WP0 acceptance rows (brief §8, WP6 step 2). A distribution with no
- * sample reads 0 (no re-seed drawn, no correction, no silent anchor moving);
+ * sample reads 0 (no re-seed drawn, no correction, no silent episode);
  * null means the report cannot say: no tram time in the window, or a block
  * the report does not carry. `judge` fails a null row.
  */
@@ -2014,18 +2050,24 @@ export interface AcceptanceRows {
   U_parkedVh: number | null;
   /** ghostAdvance.episodes: silent episodes over 60 s (informational). */
   S_count: number | null;
-  /** ghostAdvance.advanceM.max. */
-  S_max: number | null;
-  /** ghostAdvance.pastNextStop. */
+  /** Row S, "no movement beyond the current hold after 60 s of silence"
+   *  (D1 decision 3): ghostAdvance.beyondHoldM.max, the metres a silent tram's
+   *  published anchor went beyond the next stop it is held at. */
+  S: number | null;
+  /** S-glide: ghostAdvance.glideM.max, the metres it travelled while silent up to that hold (informational). */
+  S_glide: number | null;
+  /** ghostAdvance.pastNextStop: episodes whose anchor crossed the stop ZET's
+   *  TripUpdate named next (informational; a hold in that stop's zone, past
+   *  its point, counts here and not in S; A11's S2 is the trust rule). */
   S_pastNextStop: number | null;
   /** serviceFilter.adoptionsWithoutService. */
   I: number | null;
 }
 
-export const ACCEPTANCE_ROW_KEYS = ['A', 'Aprime', 'B', 'C_vh', 'C_fixes', 'D', 'E', 'F', 'G', 'G_p95', 'H', 'U', 'U_raw', 'U_parkedVh', 'S_count', 'S_max', 'S_pastNextStop', 'I'] as const satisfies readonly (keyof AcceptanceRows)[];
+export const ACCEPTANCE_ROW_KEYS = ['A', 'Aprime', 'B', 'C_vh', 'C_fixes', 'D', 'E', 'F', 'G', 'G_p95', 'H', 'U', 'U_raw', 'U_parkedVh', 'S_count', 'S', 'S_glide', 'S_pastNextStop', 'I'] as const satisfies readonly (keyof AcceptanceRows)[];
 
 /** Rows printed beside the judged ones, with no target of their own. */
-export const INFORMATIONAL_ROW_KEYS = ['U_raw', 'U_parkedVh', 'S_count'] as const satisfies readonly (typeof ACCEPTANCE_ROW_KEYS)[number][];
+export const INFORMATIONAL_ROW_KEYS = ['U_raw', 'U_parkedVh', 'S_count', 'S_glide', 'S_pastNextStop'] as const satisfies readonly (typeof ACCEPTANCE_ROW_KEYS)[number][];
 
 /** Metric A as WP0 defines it: same-trip path changes less direction flips
  *  within 150 m of a terminal and own-route loop-path transitions, per 100
@@ -2060,7 +2102,8 @@ export function acceptanceRows(r: AcceptanceSource): AcceptanceRows {
     U_raw: u ? sharePercent(u.shareOfTramVehicleHoursRaw ?? u.shareOfTramVehicleHours) : null,
     U_parkedVh: u?.parkedVehicleHours ?? null,
     S_count: ghost ? ghost.episodes : null,
-    S_max: ghost ? ghost.advanceM.max ?? 0 : null,
+    S: ghost?.beyondHoldM ? ghost.beyondHoldM.max ?? 0 : null,
+    S_glide: ghost?.glideM ? ghost.glideM.max ?? 0 : null,
     S_pastNextStop: ghost ? ghost.pastNextStop : null,
     I: r.serviceFilter ? r.serviceFilter.adoptionsWithoutService : null,
   };
@@ -2073,7 +2116,11 @@ export type Stage = 'stage1' | 'stage2';
 /** A target set: the stage it belongs to, and the ceiling of every judged row. */
 export type AcceptanceTargets = { stage: Stage } & Record<TargetRow, number>;
 
-const STAGE1: AcceptanceTargets = { stage: 'stage1', A: 5, Aprime: 5, B: 0, C_vh: 0, C_fixes: 0, D: 0, E: 0, F: 0, G: 0, G_p95: 50, H: 60, U: 3, S_max: 50, S_pastNextStop: 0, I: 0 };
+// Row S (D1 decision 3, 23 Sep): at most 50 m beyond the hold. It replaced
+// "at most 50 m of anchor advance since the last fix, and never past the stop
+// ZET named next", which T8's own rule (glide on to the next stop, then hold)
+// could not meet: the glide alone reached 540 m on the committed sample.
+const STAGE1: AcceptanceTargets = { stage: 'stage1', A: 5, Aprime: 5, B: 0, C_vh: 0, C_fixes: 0, D: 0, E: 0, F: 0, G: 0, G_p95: 50, H: 60, U: 3, S: 50, I: 0 };
 
 /** Brief §8 / WP6 step 2: stage 1 is the coding session's gate, stage 2 the stretch (A and A' at most 1). */
 export const ACCEPTANCE_TARGETS: Readonly<Record<Stage, AcceptanceTargets>> = {
@@ -2180,7 +2227,7 @@ function acceptanceLines(r: BranchReport): string[] {
   const g = si.gaps.hist;
   L.push(`  fresh-fix gaps > ${si.gaps.minS} s: ${si.gaps.total} (over EVICT_S ${si.gaps.overEvictS}); same trip 60-120 s ${g['60-120'].sameTrip}, 120-180 s ${g['120-180'].sameTrip} (moved <= 50 m ${g['120-180'].sameTripMovedLe50m}, <= 150 m of a terminal ${g['120-180'].sameTripWithin150mOfTerminal}), 180-300 s ${g['180-300'].sameTrip}, > 300 s ${g.over300.sameTrip}`);
   const gh = r.ghostAdvance;
-  L.push(`  S  silent > ${gh.silenceS} s: ${gh.episodes} episodes (${gh.measured} on a path plan); published anchor advanced max ${fmt(gh.advanceM.max)} m, p95 ${fmt(gh.advanceM.p95)} m, > 50 m ${gh.over50m}; past the trip's next stop ${gh.pastNextStop}  [max <= 50 m; 0]`);
+  L.push(`  S  silent > ${gh.silenceS} s: ${gh.episodes} episodes (${gh.measured} on a path plan); published anchor beyond its hold at the next stop max ${fmt(gh.beyondHoldM.max)} m, p95 ${fmt(gh.beyondHoldM.p95)} m, in ${gh.beyondHold} episodes, > 50 m ${gh.over50m}  [max <= 50 m]; S-glide, silent up to the hold: max ${fmt(gh.glideM.max)} m, p95 ${fmt(gh.glideM.p95)} m; past the stop ZET's TripUpdate named next ${gh.pastNextStop} (context)`);
   const sf = r.serviceFilter;
   L.push(`  I  adoptions onto a path no service of the day runs: ${sf.adoptionsWithoutService} of ${sf.adoptions} onto/variant adoptions (services seen ${sf.servicesSeen.join(', ') || 'none'})  [0]`);
   return L;
@@ -2334,15 +2381,17 @@ export function formatMarkdown(r: BranchReport): string {
   L.push(mdTable(['largest overshoots', 'route', 'path', 'silence s', 'next stop', 'limit s', 's at +60 s', 'over m'], si.extrapolatedPastNextStopLargest.map((x) => [`${x.clock} ${x.id}`, x.route, x.path, x.silenceS, `${x.nextStop} (${x.nextStopIs})`, x.limitS, x.sAt60, x.overM])));
   L.push('');
   const gh = r.ghostAdvance;
-  L.push(`## Row S: the published anchor of a tram silent more than ${gh.silenceS} s`);
+  L.push(`## Row S: the published anchor of a tram silent more than ${gh.silenceS} s, beyond its hold`);
   L.push('');
-  L.push(`Definition: ${gh.definition}. Silent episodes: **${gh.episodes}** (on a path plan ${gh.measured}; no path plan at the last fix ${gh.offPath}; plan moved to another path while silent ${gh.pathChanged}); by longest silence ${JSON.stringify(gh.silenceHist)}. Anchor advance per episode: p50 ${fmt(gh.advanceM.p50)} m, p95 ${fmt(gh.advanceM.p95)} m, max **${fmt(gh.advanceM.max)} m**; > 50 m: ${gh.over50m} (by route ${JSON.stringify(gh.byRoute)}). Counted only from the first tick past ${gh.silenceS} s: p50 ${fmt(gh.advanceWhileSilentM.p50)} m, p95 ${fmt(gh.advanceWhileSilentM.p95)} m, max ${fmt(gh.advanceWhileSilentM.max)} m. Anchor past the trip's next stop while silent: **${gh.pastNextStop}**; measured episodes without a next stop on the path: ${gh.withoutNextStop}.`);
+  L.push(`Definition: ${gh.definition}. Silent episodes: **${gh.episodes}** (on a path plan ${gh.measured}; no path plan at the last fix ${gh.offPath}; plan moved to another path while silent ${gh.pathChanged}); by longest silence ${JSON.stringify(gh.silenceHist)}. Beyond the hold per episode (row S): p50 ${fmt(gh.beyondHoldM.p50)} m, p95 ${fmt(gh.beyondHoldM.p95)} m, max **${fmt(gh.beyondHoldM.max)} m**; episodes beyond it ${gh.beyondHold}, > 50 m ${gh.over50m} (by route ${JSON.stringify(gh.byRoute)}). S-glide, the glide to the hold while silent: p50 ${fmt(gh.glideM.p50)} m, p95 ${fmt(gh.glideM.p95)} m, max ${fmt(gh.glideM.max)} m. Anchor past the stop ZET's TripUpdate named next: ${gh.pastNextStop}; measured episodes without that stop on the path: ${gh.withoutNextStop}.`);
   L.push('');
-  const ghostRow = (x: (typeof gh.largest)[number]): Cell[] => [`${x.start} ${x.id}`, x.route, x.path, x.silenceS, x.advanceM, x.advanceWhileSilentM, x.nextStop, x.pastNextStop ? 'y' : 'n'];
-  const ghostHeader = ['route', 'path', 'silence s', 'advance m', 'while silent m', 'next stop', 'past it'];
-  L.push(mdTable(['largest advances', ...ghostHeader], gh.largest.map(ghostRow)));
+  const ghostRow = (x: (typeof gh.largestGlides)[number]): Cell[] => [`${x.start} ${x.id}`, x.route, x.path, x.silenceS, x.beyondHoldM, x.glideM, x.holdStop, x.nextStop, x.pastNextStop ? 'y' : 'n'];
+  const ghostHeader = ['route', 'path', 'silence s', 'beyond hold m', 'glide m', 'hold', 'ZET next stop', 'past it'];
+  L.push(mdTable(['beyond the hold', ...ghostHeader], gh.largestBeyondHold.map(ghostRow)));
   L.push('');
-  L.push(mdTable(['past the next stop', ...ghostHeader], gh.pastNextStopSamples.map(ghostRow)));
+  L.push(mdTable(['longest glides', ...ghostHeader], gh.largestGlides.map(ghostRow)));
+  L.push('');
+  L.push(mdTable(['past the ZET next stop', ...ghostHeader], gh.pastNextStopSamples.map(ghostRow)));
   L.push('');
   const sf = r.serviceFilter;
   L.push('## Row I: adoptions onto a path no service of the day runs');
