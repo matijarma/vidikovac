@@ -23,7 +23,7 @@ import { createBoardCache, type BoardCache } from './city/boards';
 import { loadSadaFeed, nearbyInput, sadaFeed } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
-import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
+import { bannersMarkup, fabMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
@@ -458,7 +458,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function repaintLocalData():void { if(!disposed&&!frozen)render(); }
+  /** After the end the workspace is the closing card alone (WP4 step 11): re-said on a locale change, never data. */
+  function renderEnded(): void {
+    main.replaceChildren(createElementFromHTML(sessionEndedMarkup(i18n, shellState(), scanUrl)));
+  }
   function render(): void {
+    if (frozen) { renderEnded(); return; }
     ensureStops();
     ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
@@ -485,16 +490,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       next.dataset.key = 'desk';
       next.append(renderLayer('grad-sada', ctx), renderLayer('u-pokretu', ctx));
     } else next = renderLayer(layer, ctx);
-    // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
-    // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
-    const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
     if (directory || pair || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
-      if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
       reconcile(main, wrapper);
     } else {
-      main.replaceChildren(...(dated ? [dated] : []), next);
+      main.replaceChildren(next);
     }
     // Motion that reports a fact: a genuine workspace switch (never a poll that
     // redraws the same place) fades `next` in -- it is the live node exactly
@@ -530,7 +531,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
     }
     maps.sweep();
-    if (frozen || error === 'no-ticket') maps.pause();
+    if (error === 'no-ticket') maps.pause();
   }
 
   /** The 245 kB stop catalogue, once per mount. A failed load marks the catalogue down, so the departures
@@ -912,21 +913,25 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     shareTick = setTimer(() => paintProgress(), 1_000);
   }
 
-  /** The end of the session: the view stays, refreshing stops, exports keep working. */
+  /**
+   * The end of the ten minutes [O-59], [O-62] (WP4 step 11): the content clears and the workspace
+   * holds the invitation to scan again and the way to /hitno (chrome.ts sessionEndedMarkup). Every
+   * refresh stops (no /api/data after this), the maps are released, the sheets close; only the
+   * shell's pill, the disabled tabs and the safety control remain of the session.
+   */
   function freeze(): void {
     if (frozen) return;
     frozen = true;
     cityStore.pause();
-    // The session's clock, not the phone's, and never later than the session's end: a phone that
-    // hears of the end late (a socket dropped in the background, a resume after the room is gone)
-    // still dates its data by the minute the pill promised. Revoked keeps the moment itself, its
-    // expiry being in the future.
+    // The session's clock, not the phone's, and never later than the session's end (a phone that hears
+    // of the end late still ends at the minute the pill promised). Revoked keeps the moment itself.
     frozenAt = Math.min(session.serverNow(), session.snapshot().expiresAt ?? Infinity);
     closeShare();
     sheet.close();
     notifySheet.close();
+    presentationOpen = false;
+    presentationConfirmRevision = null;
     schematic.pause();
-    maps.pause();
     store.pause(true);
     stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
@@ -934,11 +939,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // The closing card (role=alert) takes over from the notice and the assertive region.
     notice = null;
     assertive.textContent = '';
+    // The page's map view and the directory end with the content.
+    directory = false;
+    mapFull = false;
+    element.dataset.view = 'layers';
+    element.dataset.stage = '';
     paintShell();
-    // The workspace is painted once more so it carries its date (its cast control now frozen);
-    // after this only a locale or theme change repaints it (the store's subscriber stands down
-    // while frozen).
-    render();
+    renderEnded();
+    // The workspaces are gone from the document: their controllers and every map slot go with them.
+    workspaceDisposals.forEach((fn) => fn());
+    workspaceDisposals.clear();
+    maps.sweep();
+    maps.pause();
+    updateTitle();
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {

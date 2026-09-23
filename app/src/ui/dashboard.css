@@ -66,13 +66,8 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 /* The Promet stage (the transport layer writes data-stage): the shell is the viewport, main is the stage. */
 .ki[data-stage='map'] { block-size: 100vh; block-size: 100dvh; overflow: hidden; }
 .ki[data-stage='map'] .ki-main { padding: 0; overflow: hidden; }
-/* Frozen: the date line above every workspace, "podaci od 13:57" (render() adds it, keyed).
-   On the Promet stage main is a column, so the stage gives up the line's height instead of
-   hiding its own foot under the tab bar. */
-.ki-snapshot { font-size: var(--type-secondary); color: var(--tone-text-muted); padding: var(--sp-2) 0; }
 .ki[data-stage='map'] .ki-main { display: flex; flex-direction: column; }
 .ki[data-stage='map'] .ki-main > .layer { flex: 1 1 auto; min-block-size: 0; }
-.ki[data-stage='map'] .ki-snapshot { flex: none; padding-inline: var(--sp-4); }
 /* The desk pair (data-stage='desk', from 60rem): Sada and Karta side by side in
    .ki-desk, the feed in a reading column and the map beside it. The page scrolls
    with the feed; map.css keeps the Karta column in view under the status line. */
@@ -158,14 +153,18 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 .banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
 .banner-text { margin: 0; flex: 1 1 16rem; font-weight: var(--weight-medium); line-height: var(--leading-snug); }
 .banner-sub { margin: 0; flex: 1 1 100%; font-size: var(--text-sm); color: var(--tone-text-muted); }
-/* The closing card: the one thing that floats after the end (R-D3), so it alone
-   among the banners gets a strong stroke and the medium shadow. Title, hint and
-   a 48 px primary way to a new session, stacked. */
+/* The closing card (WP4 step 11, [O-59]): what the workspace holds after the end, the one
+   thing left of the session's content, so it gets a strong stroke and the medium shadow.
+   Title, hint, then the 48 px primary way to a new session and the way to /hitno, stacked. */
 .closing { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-md); }
-.closing-title { font-size: var(--type-title); font-weight: var(--weight-bold); line-height: var(--lh-title); }
+.closing-title { margin: 0; font-size: var(--type-title); font-weight: var(--weight-bold); line-height: var(--lh-title); }
 .closing .btn-primary { min-block-size: var(--target-primary); justify-self: start; min-inline-size: min(100%, 24rem); }
 /* The QR icon takes the button's own ink, not the banners' muted icon colour. */
 .closing .btn-primary .icon { color: inherit; }
+.session-ended { max-inline-size: 36rem; margin-block-start: var(--sp-4); }
+.session-ended-hint { margin: 0; color: var(--tone-text-muted); line-height: var(--leading-snug); }
+.session-ended-ways { display: grid; gap: var(--sp-2); justify-items: start; }
+.session-ended-safety { display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target); }
 .banner-warn { background: var(--tone-tint-weather); }
 .banner-quiet { background: var(--tone-surface-2); }
 .banner .icon { color: var(--tone-text-muted); }

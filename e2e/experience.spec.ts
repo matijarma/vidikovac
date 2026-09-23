@@ -83,16 +83,22 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.getByTestId('dash-view')).toContainText(/nedostup|nepozn|ne odgovar|potvrđen/);
     });
 
-    test('expiry freezes data but leaves safety and the renewal path available', async ({ page }) => {
+    test('expiry clears the content to the scan invitation and leaves safety and the renewal path available', async ({ page }) => {
       const fixture = await installExperienceFixture(page, await experienceSnapshots());
       await page.goto(FIXTURE_DASHBOARD);
-      await expect(page.getByTestId('tb')).toBeVisible();
+      await expect(page.getByTestId('sada-place')).toBeVisible();
       fixture.expire();
-      await expect(page.getByTestId('frozen-line')).toBeVisible();
+      // The end of the ten minutes (WP4 step 11): the content is gone, the card holds the way to a new session and /hitno.
+      const ended = page.getByTestId('session-ended');
+      await expect(ended).toBeVisible();
+      await expect(page.getByTestId('sada-place')).toHaveCount(0);
+      await expect(page.locator('[data-testid=dash-view] .layer')).toHaveCount(0);
+      await expect(page.locator('[data-action=copy-item], [data-action=share-item], [data-action=export]')).toHaveCount(0);
       const requestsAfterExpiry = fixture.requests.length;
       await page.clock.runFor(31_000);
       expect(fixture.requests.length).toBe(requestsAfterExpiry);
-      await expect(page.getByTestId('frozen-line').locator('a')).toBeVisible();
+      await expect(ended.locator('a[href^="/s/"]')).toBeVisible();
+      await expect(ended.locator('a[href="/hitno"]')).toBeVisible();
       await page.locator('[data-layer=sigurnost][href="/hitno"]:visible').first().click();
       await expect(page).toHaveURL(/\/hitno\/?$/);
       await expect(page.locator('a[href="tel:112"]')).toBeVisible();
@@ -151,14 +157,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await expect(page.getByTestId('session-label')).toBeVisible();
       if (phone) await expect(page.getByTestId('safety-shortcut')).toBeVisible();
       fixture.expire();
-      await expect(page.getByTestId('frozen-line')).toBeVisible();
-      await expect(page.getByTestId('frozen-line').locator('a')).toBeInViewport();
-      await page.keyboard.press('Escape');
+      // The end of the ten minutes (WP4 step 11): the map and its board leave with the content; the closing card's
+      // way to a new session is in view, the page's map view is over and the session chrome stays.
+      await expect(page.getByTestId('session-ended')).toBeVisible();
+      await expect(page.getByTestId('session-ended').locator('a[href^="/s/"]')).toBeInViewport();
+      await expect(page.getByTestId('transport-workspace')).toHaveCount(0);
       await expect(page.locator('.ki')).toHaveAttribute('data-view', 'layers');
-      // The frozen banner now sits in flow above the stage, so the stage is shorter than before; the board column is
-      // back at its width, and the phone's sheet stays at the peek it was lowered to.
-      if (phone) await expect(page.getByTestId('transport-workspace')).toHaveAttribute('data-sheet', 'peek');
-      else await expect.poll(async () => Math.abs((await uncovered()).width - before.width)).toBeLessThanOrEqual(4);
+      await expect(page.getByTestId('session-label')).toBeVisible();
     });
   });
 }

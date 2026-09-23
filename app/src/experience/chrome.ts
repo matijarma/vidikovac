@@ -247,18 +247,34 @@ export function sessionMarkup(i18n: I18n, s: ShellState): string {
 }
 
 /**
- * Session-state banners, all in flow: expired (with the way to a new session),
- * no ticket, access, reconnecting, then the one notice, the silent-sources
- * count and paused. Nothing here overlays the workspace.
+ * The end of the ten minutes [O-59] (WP4 step 11): the content has cleared and
+ * this card is what the workspace holds instead. Its title says the minutes
+ * are over (or that the screen was switched off, error 'revoked'), the hint
+ * that safety stays open, then the way to a new session (`a[href^="/s/"]`,
+ * the scan invitation with the QR glyph) and the way to /hitno. No snapshot
+ * line, no export: nothing of the session's content remains [O-62].
+ */
+export function sessionEndedMarkup(i18n: I18n, s: ShellState, scanUrl: string): string {
+  const revoked = s.error === 'revoked';
+  return `<section class="session-ended closing" role="alert" data-testid="session-ended" data-key="session-ended" aria-labelledby="session-ended-title">`
+    + `<h2 class="closing-title" id="session-ended-title" tabindex="-1">${escapeHtml(i18n.t(revoked ? 'session.revoked' : 'session.expired'))}</h2>`
+    + `<p class="session-ended-hint">${escapeHtml(i18n.t('session.expiredHint'))}</p>`
+    + `<div class="session-ended-ways">`
+    + `<a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t(revoked ? 'session.revokedCta' : 'session.expiredCta'))}</span></a>`
+    + `<a class="btn-ghost session-ended-safety" href="/hitno" data-layer="sigurnost">${iconMarkup('shield')}<span>${escapeHtml(i18n.t('nav.safety'))}</span></a>`
+    + `</div></section>`;
+}
+
+/**
+ * Session-state banners, all in flow: no ticket, access, reconnecting, then
+ * the one notice, the silent-sources count and paused. Nothing here overlays
+ * the workspace. After the end the row is empty: the closing card stands in
+ * the workspace itself (sessionEndedMarkup).
  */
 export function bannersMarkup(i18n: I18n, s: ShellState, scanUrl: string): string {
   const out: string[] = [];
   if (s.frozen) {
-    // The closing card, the one banner left after the end. A room closed under a live session
-    // (the screen switched off, error 'revoked') is told apart from the natural expiry by its
-    // title and its way out; the hint holds for both, since the view and the exports stay.
-    const revoked = s.error === 'revoked';
-    out.push(`<div class="banner banner-frozen closing" role="alert" data-testid="frozen-line" data-key="frozen"><p class="closing-title">${escapeHtml(i18n.t(revoked ? 'session.revoked' : 'session.expired'))}</p><p class="banner-sub">${escapeHtml(i18n.t('session.expiredHint'))}</p><a class="btn btn-primary" href="${escapeAttribute(scanUrl)}">${iconMarkup('qr-code')}<span>${escapeHtml(i18n.t(revoked ? 'session.revokedCta' : 'session.expiredCta'))}</span></a></div>`);
+    // Nothing: the workspace holds the closing card.
   } else if (s.error === 'no-ticket') {
     out.push(`<div class="banner banner-warn" role="alert" data-key="no-ticket"><p class="banner-text">${escapeHtml(i18n.t('session.noTicket'))}</p><a class="btn" href="${escapeAttribute(scanUrl)}">${escapeHtml(i18n.t('common.links.scan'))}</a></div>`);
   } else if (s.error === 'access') {

@@ -541,7 +541,8 @@ test('the expiry notices sit in the banners row without covering content: expiri
   expect(await geometryIssues(page, { ...PHONE_SHELL, rules: ['overlay'] }), 'the notice must not intersect any child of main').toEqual([]);
 
   fixture.expire();
-  await expect(page.getByTestId('frozen-line'), 'after expiry the frozen card must be visible').toBeVisible();
+  await expect(page.getByTestId('session-ended'), 'after expiry the closing card must stand in the workspace').toBeVisible();
+  await expect(page.getByTestId('frozen-line'), 'the frozen banner is retired (WP4 step 11)').toHaveCount(0);
   const afterExpiry = await kinds();
   expect(afterExpiry, `after expiry no notice may remain; found ${afterExpiry.join(', ')}`).toEqual([]);
 });
