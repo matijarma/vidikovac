@@ -229,6 +229,14 @@ describe('the stop sheet says what comes next, first', () => {
     expect(named).not.toContain('Pošalji');
   });
 
+  it('the save label names a stop by its name, never by its id; a refused name saves it without one [B-7]', () => {
+    const label = (html: string): string => html.split('class="btn-quiet icon-btn t-save"')[1]!.match(/aria-label="([^"]*)"/)![1]!;
+    const data = { routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' as const };
+    expect(label(stop([row()]))).toBe('Spremi stajalište Kvaternikov trg');
+    expect(label(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, ...data }))).toBe('Save stop Kvaternikov trg');
+    expect(label(stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, ...data }))).toBe('Spremi stajalište');
+  });
+
   it('the stop\'s name and its arrivals stand in one element, the stop-board probe (§15.6, §16.4), with the meta and the lines outside it', () => {
     const html = stop([row()]);
     const at = (marker: string): number => html.indexOf(marker);

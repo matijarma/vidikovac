@@ -35,9 +35,10 @@ import type { RouteStop } from './catalogue';
 import type { RouteEntry, SearchResults, StopGroup } from './search';
 import { tr, trPlural, type TransportKey } from './strings';
 
-/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle. */
+/** The transport detail head's own extras (T2.7, B.5): route and stop details get a save toggle.
+ *  `name` is what a stop's save label says: its vetted name, never its id [B-7]. */
 export interface DetailHeadExtras {
-  save?: SavedRef & { on: boolean };
+  save?: SavedRef & { on: boolean; name?: string };
 }
 
 /** Route badges the rows show before "+n". */
@@ -225,11 +226,12 @@ function lineFocusSwitch(i18n: I18n, on: boolean): string {
 const back = (i18n: I18n): string => button({ action: 'clear-selection', label: i18n.t('common.back'), id: 't-clear-selection', icon: 'arrow-left' });
 
 /** The save toggle (route and stop details only): a filled star once saved, "Ukloni iz spremljenog" generic
- *  once it is (the id already named it on the way in). */
-function saveButton(i18n: I18n, save: SavedRef & { on: boolean }): string {
+ *  once it is (the label already named it on the way in). A route is named by its number, a stop by its
+ *  vetted name; a stop whose name was refused is saved as "Spremi stajalište", never by its id. */
+function saveButton(i18n: I18n, save: SavedRef & { on: boolean; name?: string }): string {
   const label = save.on
     ? i18n.t('kvart.unsave')
-    : i18n.t(save.kind === 'route' ? 'kvart.saveRoute' : 'kvart.saveStop', save.kind === 'route' ? { id: save.id } : { name: save.id });
+    : save.kind === 'route' ? i18n.t('kvart.saveRoute', { id: save.id }) : i18n.t('kvart.saveStop', { name: save.name ?? '' }).trim();
   return `<button type="button" class="btn-quiet icon-btn t-save" data-action="${save.on ? 'unsave' : 'save'}" data-kind="${attr(save.kind)}" data-id="${attr(save.id)}" aria-pressed="${save.on ? 'true' : 'false'}" aria-label="${attr(label)}">${iconMarkup('star')}</button>`;
 }
 
@@ -491,9 +493,10 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   // The stop's board (probe §15.6 / §16.4 `stop-board`): its name and what comes next, one element a canvas tap
   // lands on; display: contents (map.css), so the sheet's own layout is untouched.
+  const name = vetExternal('name', d.stop.name, 'row') ?? '';
   return (
     `<div class="t-stop-board" data-testid="stop-board">` +
-    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(vetExternal('name', d.stop.name, 'row') ?? '')}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false } }) +
+    detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(name)}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, name, on: d.saved ?? false } }) +
     arrivalsSection(i18n, d) +
     '</div>' +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
