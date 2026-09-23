@@ -636,23 +636,22 @@ export function rowDetailVariants(i18n: I18n, row: TimelineRow, now: number, add
 const PHONE_DISPLAY = /^0\d{1,2}(?: \d{2,4}){1,3}$/u;
 
 /**
- * The on-duty pharmacy: "Dežurna ljekarna", its name, "24/7" with its address,
- * and its phone ("Nazovi 01 4816 198", or that the source gives none). The
- * name and the address are vetted as a name and an address; the phone is the
- * repository's own curated number, shown only in the list's display form (the
- * third-party text check refuses every phone number by design, which is why it
- * is not the check for the one number the owner asked the wall to show).
+ * The on-duty pharmacy, captioned as the strip and Osnovno caption it (kiosk/frame.ts, kiosk/essentials.ts):
+ * "Dežurna ljekarna 24/7: {address}." with its short address vetted as an address, "24/7" alone when the
+ * address is refused (never the bare label, slop #29); then its name and its phone ("Nazovi 01 4816 198", or
+ * that the source gives none). The phone is the repository's own curated number, shown only in the list's
+ * display form (the third-party text check refuses every phone number by design, which is why it is not the
+ * check for the one number the owner asked the wall to show).
  */
-export function pharmacyDetailVariants(i18n: I18n, words: { kicker: string; hours: string }, pharmacy: OnDutyPharmacy): string[] {
-  const address = vetExternal('address', pharmacy.address, 'row');
-  if (address === null) return [];
+export function pharmacyDetailVariants(i18n: I18n, words: { caption: string; hours: string }, pharmacy: OnDutyPharmacy): string[] {
+  const address = vetExternal('address', pharmacy.label, 'row');
+  const caption = address === null ? words.hours : words.caption.replace('{address}', address);
   const name = vetExternal('name', pharmacy.name, 'row');
   const phone = pharmacy.phoneDisplay !== null && PHONE_DISPLAY.test(pharmacy.phoneDisplay) ? pharmacy.phoneDisplay : null;
   const call = phone === null ? i18n.t('safety.noPhone') : i18n.t('safety.call', { number: phone });
   const variant = (named: boolean): string => `<div class="k-touch-body" data-testid="touch-detail" data-kind="pharmacy">`
-    + `<p class="k-touch-kicker"><span class="k-touch-cross" aria-hidden="true"></span>${e(words.kicker)}</p>`
+    + `<p class="k-touch-kicker"><span class="k-touch-cross" aria-hidden="true"></span>${e(caption)}</p>`
     + (named && name ? `<h2 class="k-touch-title">${e(name)}</h2>` : '')
-    + `<p class="k-touch-line k-touch-address"><span class="k-247">${e(words.hours)}</span> ${e(address)}</p>`
     + `<p class="k-touch-line k-touch-phone">${e(call)}</p>`
     + '</div>';
   return [...new Set([variant(true), variant(false)])];

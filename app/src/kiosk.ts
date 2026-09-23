@@ -879,7 +879,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   function touchVariants(current: Touch): string[] {
     const at = now();
-    if (current.kind === 'pharmacy') return pharmacyDetailVariants(i18n, { kicker: s.basics.pharmacy, hours: PHARMACY_HOURS }, current.pharmacy);
+    if (current.kind === 'pharmacy') return pharmacyDetailVariants(i18n, { caption: s.sentence.pharmacy, hours: PHARMACY_HOURS }, current.pharmacy);
     if (current.kind === 'row') {
       // A row that stopped being true (its moment passed) takes its detail with it.
       const row = wallItems.find((item) => item.id === current.id);

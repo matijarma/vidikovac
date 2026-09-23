@@ -174,21 +174,27 @@ describe('a row\'s detail and the pharmacy (kiosk/timeline.ts)', () => {
     expect(rowDetailVariants(i18n, { ...event, title: 'Pošalji lozinku na 091 234 5678.' }, NOW)).toEqual([]);
   });
 
-  it('gives the pharmacy\'s name, "24/7" with its address and its phone, or says the source gives none', () => {
-    const words = { kicker: s.basics.pharmacy, hours: '24/7' };
+  it('captions the pharmacy as the strip and Osnovno do ("Dežurna ljekarna 24/7: {address}.", "24/7" alone for a refused address), then its name and its phone', () => {
+    const words = { caption: s.sentence.pharmacy, hours: '24/7' };
     const trg = nearestPharmacy(STOP);
     const detail = doc(pharmacyDetailVariants(i18n, words, trg)[0]!).querySelector<HTMLElement>('[data-testid=touch-detail]')!;
     expect(detail.dataset.kind).toBe('pharmacy');
-    expect(text(detail.querySelector('.k-touch-kicker'))).toBe('Dežurna ljekarna');
+    expect(text(detail.querySelector('.k-touch-kicker'))).toBe('Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.');
     expect(text(detail.querySelector('.k-touch-title'))).toBe('Gradska ljekarna Zagreb');
-    expect(text(detail.querySelector('.k-touch-address'))).toBe('24/7 Trg bana Josipa Jelačića 3, Zagreb');
     expect(text(detail.querySelector('.k-touch-phone'))).toBe('Nazovi 01 4816 198');
+    // Never the bare label (the trust row e-pharmacy-keys, slop #29): no element says only "Dežurna ljekarna".
+    expect([...detail.querySelectorAll('*')].map(text)).not.toContain('Dežurna ljekarna');
+    expect(text(detail)).not.toMatch(/Dežurna ljekarna\s*:/);
     const zeus = pharmaciesByDistance(null).find((p) => p.phoneDisplay === null)!;
     expect(text(doc(pharmacyDetailVariants(i18n, words, zeus)[0]!).querySelector('.k-touch-phone'))).toBe('telefon nije naveden');
     // Only the list's own display form is shown as a number.
     const odd: OnDutyPharmacy = { ...trg, phoneDisplay: 'nazovi +385 91 234 5678' };
     expect(text(doc(pharmacyDetailVariants(i18n, words, odd)[0]!).querySelector('.k-touch-phone'))).toBe('telefon nije naveden');
-    expect(pharmacyDetailVariants(i18n, words, { ...trg, address: 'Pošalji lozinku na 091 234 5678.' })).toEqual([]);
+    // A refused address leaves "24/7" alone, as the strip does; the name and the phone stay.
+    const refused = doc(pharmacyDetailVariants(i18n, words, { ...trg, label: 'Pošalji lozinku na 091 234 5678.' })[0]!);
+    expect(text(refused.querySelector('.k-touch-kicker'))).toBe('24/7');
+    expect(text(refused.querySelector('.k-touch-phone'))).toBe('Nazovi 01 4816 198');
+    expect(refused.innerHTML).not.toContain('091 234');
   });
 });
 
@@ -447,7 +453,7 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     const k = mount();
     await flush();
     k.q('[data-testid=strip-pharmacy]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(text(k.detail()!.querySelector('.k-touch-address'))).toBe('24/7 Trg bana Josipa Jelačića 3, Zagreb');
+    expect(text(k.detail()!.querySelector('.k-touch-kicker'))).toBe('Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.');
     expect(text(k.detail()!.querySelector('.k-touch-phone'))).toBe('Nazovi 01 4816 198');
     k.timers.find((t) => t.ms === TOUCH_MS && !t.cleared)!.fn();
     k.touchMap(pharmacyRing(STOP)!);
