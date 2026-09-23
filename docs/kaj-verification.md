@@ -2084,7 +2084,7 @@ preglednikom i datumom; prazna ćelija znači da provjera još nije provedena.
 - Sve pod `review.local/` (pravilo `*.local` u `.gitignore`), uključujući
   `review.local/companion/screen.json` s oznakom i tajnom zaslona, i svaki `screen-<datum>.json`.
 - `recordings/` na bilo kojoj dubini, oko 700 MB snimaka na dan. Jedini uzorak okvira u
-  repozitoriju je `test/fixtures/frames/2026-09-21-1715-1744/`; piše ga `npm run frames:sample`,
+  repozitoriju je `test/fixtures/frames/2026-09-21-1715-1744/`; taj uzorak piše `npm run frames:sample`,
   a naredba odbija izlaz pod `recordings/`.
 - `test-results/`, `.wrangler/`, `.cache/`.
 - Adrese postave zaslona (`E2E_KIOSK_URL`, `AUDIT_KIOSK_URL`): tajna je u dijelu adrese iza `#`,

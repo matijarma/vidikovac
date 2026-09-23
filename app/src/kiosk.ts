@@ -273,10 +273,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let start: StartHandle | null = null;
   let settings: SettingsHandle | null = null;
   let invitation: InvitationHandle | null = null;
-  let sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+  const sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
   let wallItems: NearbyRow[] = [];
   let facts: SentenceFact[] = [];
   let modelSentences: WrittenSentence[] = [];
+  /** A model answer waiting for the rhythm's end (decision 29): never swapped in mid-dwell. */
+  let stagedModelSentences: unknown[] | null = null;
+  /** When the painted sentence went on screen; its refreshed words keep the time. */
+  let sentenceSince = -Infinity;
   let currentSentence: WrittenSentence | null = null;
   let sentenceFetchKey = '';
   let sentencesFetchedAt = -Infinity;
@@ -466,6 +470,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     }
     // Old answers are never trusted against the facts they were requested with.
     modelSentences = readWrittenSentences(modelSentences, { facts, budget, now: at });
+    // Decision 29 holds for the model too (review D2b finding 1): a new answer replaces the set only at
+    // the rhythm's end, or once the model sentence on screen no longer holds against the current facts.
+    if (stagedModelSentences) {
+      const dwelling = currentSentence?.origin === 'model' && at - sentenceSince < rhythm * 1000
+        && modelSentences.some(sentence => sentence.text === currentSentence!.text);
+      if (!dwelling) {
+        modelSentences = readWrittenSentences(stagedModelSentences, { facts, budget, now: at });
+        stagedModelSentences = null;
+      }
+    }
     for (const [text, shownAt] of shownSentences) {
       if (at - shownAt >= SENTENCE_NO_REPEAT_MS && text !== currentSentence?.text) shownSentences.delete(text);
     }
@@ -473,6 +487,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // (an estimate that moves back): decision 29 refreshes it in place instead of moving on.
     const pool = sentencePool([...modelSentences, ...templateSentences(facts, i18n, budget, at)], currentSentence, shownSentences);
     const next = sentenceSequence.read(pool, at, sentenceSuspended(), sentenceOverflows);
+    if (next && next.text !== currentSentence?.text && !isSameSentence(next, currentSentence)) sentenceSince = at;
     if (currentSentence && next?.text !== currentSentence.text) shownSentences.set(currentSentence.text, at);
     currentSentence = next;
     if (next && !sentenceSuspended()) shownSentences.set(next.text, at);
@@ -494,7 +509,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const seq = ++sentenceFetchSeq;
     void fetchSentences({ locale: locale.startsWith('en') ? 'en' : 'hr', budget, facts: stable }).then(answer => {
       if (disposed || seq !== sentenceFetchSeq || phase !== 'invitation') return;
-      modelSentences = readWrittenSentences(answer, { facts, budget: SENTENCE_BUDGET[compositionOf(layout)], now: now() });
+      // Staged, then decoded against the facts of the paint that adopts it.
+      stagedModelSentences = Array.isArray(answer) ? answer : [];
       paintWall();
     }, () => { /* Optional inference never replaces the useful local templates with an error. */ });
   }
@@ -1107,7 +1123,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       setRhythm: (next) => {
         rhythm = next;
         writeRhythm(storage, next);
-        sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+        // Re-time the same rotation (review-w-fix6 P2): a new sequence would drop the sentence on
+        // screen mid-dwell and forget which facts it has shown (decision 29).
+        sentenceSequence.setRhythm(rhythm * 1000);
         paintContext();
         paintWall();
       },

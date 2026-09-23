@@ -101,7 +101,7 @@ export const SENTENCE_COPY_HR = {
   sunriseTime: 'U {time} izlazi sunce.',
   lastTram: 'Zadnji tramvaj {route} polazi {time}.',
   firstTram: 'Prvi tramvaj {route} polazi {time}.',
-  event: '{time} počinje događanje „{title}“ ({venue}).',
+  event: '{time} počinje događanje „{title}” ({venue}).',
   opening: '{name}: rad počinje {time}.',
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
@@ -344,6 +344,9 @@ export interface SentenceSequenceOptions {
 }
 export interface SentenceSequence {
   read(sentences: readonly WrittenSentence[], now: number, suspended?: boolean, overflowed?: (s: WrittenSentence) => boolean): WrittenSentence | null;
+  /** A new cadence for the same rotation: the sentence on screen, its dwell start and the ten-minute
+   *  memory of shown wordings and facts stay (decision 29); only the next boundary moves. */
+  setRhythm(rhythmMs: number): void;
 }
 
 /** Cadence is a chance to change, not permission to repeat or to show expired data.
@@ -351,7 +354,8 @@ export interface SentenceSequence {
  * window whatever its wording; with fewer than SENTENCE_MIN_FACTS distinct facts at hand the
  * window binds the wording alone, so the three solar phrasings still rotate on a cold screen. */
 export function createSentenceSequence(options: SentenceSequenceOptions): SentenceSequence {
-  const rhythm = Number.isFinite(options.rhythmMs) && options.rhythmMs > 0 ? options.rhythmMs : SENTENCE_HOLD_MS;
+  const cadence = (ms: number) => Number.isFinite(ms) && ms > 0 ? ms : SENTENCE_HOLD_MS;
+  let rhythm = cadence(options.rhythmMs);
   const noRepeat = Number.isFinite(options.noRepeatMs)
     ? Math.max(SENTENCE_NO_REPEAT_MS, options.noRepeatMs!) : SENTENCE_NO_REPEAT_MS;
   const lastSeen = new Map<string, number>();
@@ -439,5 +443,6 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       if (current) remember(current, now, next === current && held ? held.validUntil : next!.validUntil);
       return current;
     },
+    setRhythm(rhythmMs) { rhythm = cadence(rhythmMs); },
   };
 }

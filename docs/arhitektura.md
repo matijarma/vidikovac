@@ -209,8 +209,8 @@ vozila su na odvojenim platnima; statika se ne crta ponovno za svaku sliku.
 fokusa između geografskog i novog koordinatnog sustava. Izbor na shemi
 otvara postojeći list prijevoza, ne dijalog. Nazivi koriste Manrope i postaju
 vidljivi od 1,4 CSS px po jedinici izvornika (oko 11px za izvornih 7,92).
-Javni zaslon s prikazom sheme pokazuje cijelu mrežu u jednom kadru i imenuje
-je nazivima iz nacrta od najmanje 28px, onoliko koliko ih stane bez
+Javni zaslon s prikazom sheme pokazuje cijelu mrežu u jednom kadru, s
+nazivima iz nacrta od najmanje 28px, onoliko koliko ih stane bez
 preklapanja: najprije okretišta, zatim stajališta na kojima staje najviše
 linija. Telefon kadrira svoje stajalište na čitljivoj skali, s podom naziva
 24px; bez prepoznatog stajališta pokazuje cijelu mrežu bez naziva. Početni kadar
@@ -235,9 +235,9 @@ uključen na svakom zumiranju, pa MapLibreov sudarni prolaz nijednu oznaku ne od
 ispod oznaka vozila. Na telefonu i računalu uključen je i `icon-ignore-placement`, pa nijedna oznaka ne gura
 naziv stajališta s karte. Na javnom zaslonu (odluka 17) oznake vozila zadržavaju svoje mjesto: naziv
 stajališta ili mjesta najprije se premjesti na drugu stranu točke, a ako ni ondje nema mjesta, skloni se dok
-vozilo ne prođe. Naziv koji se vrati ostaje na karti najmanje dvije sekunde, osim ako ga vozilo prekrije, a
+vozilo ne prođe. Naziv koji se vrati ostaje na karti najmanje dvije sekunde, osim ako vozilo prekrije taj naziv, a
 naziv koji se skloni ne vraća se prije isteka jedne sekunde (odluka 19). Naziv mjesta samog zaslona uvijek je
-na karti, ispod oznaka vozila, i drugi mu nazivi ustupaju mjesto. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
+na karti, ispod oznaka vozila, a ostali nazivi ustupaju mjesto tom nazivu. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
 kruga na trenutak prekrije taj broj. Ono što gužvu drži čitljivom je **skupina**:
 prije nego što se izvor gurne u kartu, oznake čije se kutije na zaslonu preklapaju (`app/src/motion/pills.ts`,
 unija-nalaz uz `CLUSTER_PADDING_PX` = 2 px oko svake kutije) spajaju se u jedno obilježje s natpisom

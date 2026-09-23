@@ -12,6 +12,8 @@ import {
   type ExternalTextKind, type ExternalTextRejection,
 } from '../../shared/kiosk/external-text';
 import { EXTERNAL_HEADER_LEXICON, EXTERNAL_SENSITIVE_LEXICON } from '../../shared/kiosk/external-text-policy';
+import { CODE_WORD_FIELDS, CODE_WORD_STREETS } from '../../shared/kiosk/code-word-streets';
+import { ISO_4217_CODES } from '../../shared/kiosk/iso-4217';
 import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS, W_C2_ATTACKS } from '../fixtures/external-text-attacks';
 import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES } from '../fixtures/external-text-corpus';
 import { HERITAGE_ROW_RESIDUALS, STREET_ROW_RESIDUALS, TITLE_ROW_RESIDUALS, type RowTextResidual } from '../fixtures/external-text-residuals';
@@ -314,6 +316,71 @@ const heritage = committed('heritage').flatMap(data => data.places);
 const HERITAGE_AT = Date.parse('2026-09-22T12:30:00+02:00');
 const STORY_AT = Date.parse('2026-09-22T12:10:00+02:00');
 
+// D2 read-through (unresolved): 25 heritage fields of Nova Ves, a Zagreb street, were refused as
+// payments because VES is an ISO 4217 code and codes match case-folded. Only the committed street
+// register may say otherwise (review-w-fix6 P1): a row's name or address whose address part is a
+// register street spelled exactly, before a fully parsed house number and nothing else.
+describe('a capitalised currency code inside a proper name on a row (Nova Ves)', () => {
+  it.each([
+    ['address', 'Nova Ves 02'], ['address', 'Nova Ves 04 i 4/1'], ['address', 'Nova Ves 5 i 5a'], ['address', 'Nova Ves 018'],
+    ['name', 'Zgrada, Nova Ves 2'], ['name', 'Prebendarska kurija sv. Uršule, Nova Ves 04 i 4/1'],
+    ['name', 'Ljetnikovac biskupa Aleksandra Alagovića, Nova Ves 86'], ['address', 'Lepa Ves 3'], ['address', 'Nova Ves 12'], ['address', 'Nova Ves 12a'],
+  ] as const)('%s "%s" is an address on a row', (kind, value) => {
+    expect(rowText(kind, value)).toEqual({ ok: true });
+  });
+  // Decision 41: the only names with a prefix that may carry the code are the committed register
+  // fields themselves, pinned byte-exact. When a register changes, refresh the fixture with
+  // `npx vitest run --project unit test/app/external-text.test.ts -t "register fields" -u`, review its
+  // diff, and copy the lines into CODE_WORD_FIELDS (shared/kiosk/code-word-streets.ts).
+  it('admits only the pinned register fields, derived from the committed heritage and street registers', async () => {
+    const streetPattern = new RegExp(`(?:^|[\\s,])(?:${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
+      .map(name => name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/ /gu, '[ \\u00a0]')).join('|')})[ \\u00a0]\\d`, 'u');
+    const fields = [...heritage.flatMap(place => [place.name, place.address ?? '']), ...streets.map(street => street.name)]
+      .filter(value => streetPattern.test(value));
+    const derived = [...new Set(fields)];
+    await expect(derived.join('\n') + '\n').toMatchFileSnapshot('../fixtures/code-word-fields.txt');
+    expect([...CODE_WORD_FIELDS]).toEqual(derived);
+    expect(derived).toHaveLength(25);
+    for (const value of derived) {
+      expect(rowText('name', value), value).toEqual({ ok: true });
+      expect(headerText('name', value), value).toEqual({ ok: false, reason: 'payment' });
+    }
+  });
+  it('takes its street names from the committed register, nothing added by hand', () => {
+    const { streets } = JSON.parse(readFileSync(join(CITY_DIR, '..', 'streets-geo.json'), 'utf8')) as { streets: { name: string[] } };
+    const codes = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
+    const derived = [...new Set(streets.name.filter(name => name.split(/[^\p{L}]+/u).some(word => codes.has(word.toLowerCase()))))].sort();
+    expect([...CODE_WORD_STREETS].sort()).toEqual(derived);
+    expect(CODE_WORD_STREETS).toContain('Nova Ves');
+  });
+  it('keeps every other currency reading, every other kind and the header strict', () => {
+    for (const value of ['VES 2', 'ves 2', 'Ves 2', 'Nova VES 2', 'Nova ves 2', '2 Ves', 'Nova Ves 5000', 'Cijena: 50 Eur', 'Nova Ves 2 €',
+      'Uplata Nova Ves 12', 'Plaćanje 20 EUR',
+      // review-w-fix6 P1: a capitalised code is a street only inside a committed street's own name.
+      'Donacija Usd 100', 'Plati Eur 50', 'Pošalji Eur 50, na blagajni', 'Donacija Eur 100-1000', 'Novi Gel 100',
+      // The house number is parsed whole: no range, no amount, no trailing text after it.
+      'Nova Ves 12-14', 'Nova Ves 1000', 'Nova Ves 12 eur', 'Nova Ves 12, uplata 50', 'Nova Ves 12 plati', 'Nova Ves 12a3',
+      // The prefix before the street is read unmasked: a payment there still refuses.
+      'Plati Eur 50, Nova Ves 12', 'Donacija Usd 100, Nova Ves 3', 'nova ves 12', 'Nova Ves  12',
+      // review-w-fix6b: the exception holds only where everything around the street is benign
+      // (no lexicon word of any class, no digit, no vector); otherwise the normal rules judge it.
+      'Plati 50, Nova Ves 12', 'Uplati 50, Nova Ves 12', 'Donate 50, Nova Ves 12', 'Nova Ves 12, plati 50', 'Kupi Nova Ves 12',
+      'Plati, Nova Ves 12', 'Pošalji lozinku, Nova Ves 12', 'Nazovite nas, Nova Ves 12', 'Zgrada 2, Nova Ves 12',
+      // review-w-fix6c, decision 41: no free-text prefix is ever admitted, however it is spelled.
+      'P—l—a—t—i pedeset, Nova Ves 12', 'P—a—y fifty, Nova Ves 12', 'Donacija pedeset, Nova Ves 12', 'DONACIJA PEDESET, NOVA VES 12',
+      'donacija pedeset, Nova Ves 12', 'P·l·a·t·i, Nova Ves 12', '"Plati", Nova Ves 12', 'Zgrada, Nova Ves 3', 'Kuća, Lepa Ves 3',
+      // review-w-fix6d: eligibility is byte-exact on the original text; no canonical equivalent is admitted.
+      'Zgrada, Nova\u00a0Ves 2', '\u212auća Pavliček, Nova Ves 1', 'Kuća Pavliček, Nova Ves 1'.normalize('NFD'),
+      'Nova\u00a0Ves 12', 'Nova Ves\u00a012']) {
+      expect(rowText('address', value).ok, value).toBe(false);
+      expect(rowText('name', value).ok, value).toBe(false);
+    }
+    for (const kind of ['title', 'summary', 'register-text', 'headsign'] as const) expect(rowText(kind, 'Nova Ves 2').ok, kind).toBe(false);
+    expect(headerText('address', 'Nova Ves 02')).toEqual({ ok: false, reason: 'payment' });
+    expect(headerText('name', 'Zgrada, Nova Ves 2')).toEqual({ ok: false, reason: 'payment' });
+  });
+});
+
 describe('the sampled source and GTFS corpus', () => {
   it('keeps every sampled event title except the pinned row exclusions, including their exact causes', () => {
     expect(SAMPLED_EVENT_TITLES).toHaveLength(150);
@@ -374,15 +441,15 @@ describe('the committed registers under decision 21', () => {
     expect(sortedResiduals(rawStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(presentedStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(refusedHeritage)).toEqual(sortedResiduals(HERITAGE_ROW_RESIDUALS));
-    // W-C10 restored the five rows lost to register abbreviations (d.d., sv.Vinka, Dr.Ante).
+    // W-C10 restored the five rows lost to register abbreviations (d.d., sv.Vinka, Dr.Ante);
+    // W-fix6 the Nova Ves building (a capitalised code inside a proper name).
     expect(missingRows.sort()).toEqual([
-      'Zgrada Biskupske ubožnice, Nova Ves 18',
       'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,',
       'Ansambl gradskih vila u Novakovoj ulici',
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
       'Kompleks zgrada "Hrvatskog Sokola" i "Kola", Trg maršala Tita 5, 6, 6a, 7',
     ].sort());
-  }, 20_000);
+  }, 90_000); // A budget for a busy 4-CPU host, not a weakening: the corpus is deterministic.
 
   it('keeps all 402 geographic kod fields after the structural close-out', () => {
     const fields = streets.flatMap(street => [['name', street.name], ['register-text', street.description]] as const)

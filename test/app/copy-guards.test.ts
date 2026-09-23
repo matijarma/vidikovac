@@ -350,7 +350,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     sunriseTime: 'U {time} izlazi sunce.',
     lastTram: 'Zadnji tramvaj {route} polazi {time}.',
     firstTram: 'Prvi tramvaj {route} polazi {time}.',
-    event: '{time} počinje događanje „{title}“ ({venue}).',
+    event: '{time} počinje događanje „{title}” ({venue}).',
     opening: '{name}: rad počinje {time}.',
     pharmacy: 'Dežurna ljekarna 24/7: {address}.',
     always: '{name}: {text}',
@@ -399,7 +399,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
       to: /, smjer \{to\}, /,
       street: /^\{street\}: /,
       name: /^\{name\}: /,
-      title: /„\{title\}“/,
+      title: /„\{title\}”/,
       venue: /\(\{venue\}\)/,
       station: /^BAJS \{station\}: /,
       address: /: \{address\}\.$/,
@@ -418,7 +418,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.closureUntil, { street: 'Trg bana Josipa Jelačića', until: '18:00' })).toBe('Trg bana Josipa Jelačića: zatvoreno za promet do 18:00.');
     expect(fill(s.closureUntil, { street: 'Vukovarska avenija', until: '18:00' })).toBe('Vukovarska avenija: zatvoreno za promet do 18:00.');
     expect(fill(s.opening, { name: 'Klovićevi dvori', time: 'sutra u 10:00' })).toBe('Klovićevi dvori: rad počinje sutra u 10:00.');
-    expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus“ (Kino Europa).');
+    expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus” (Kino Europa).');
     expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
   });

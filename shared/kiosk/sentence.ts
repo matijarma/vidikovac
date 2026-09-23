@@ -155,7 +155,7 @@ export const SENTENCE_FAMILIES = {
   sunriseTime: { hr: 'U {time} izlazi sunce.', en: 'At {time} the sun rises.', slots: { time: 'clock' }, kinds: ['vrijeme'], group: 'sunrise' },
   lastTram: { hr: 'Zadnji tramvaj {route} polazi {time}.', en: 'The last tram {route} leaves {time}.', slots: { route: 'route', time: 'time' }, kinds: ['promet', 'nocas'] },
   firstTram: { hr: 'Prvi tramvaj {route} polazi {time}.', en: 'The first tram {route} leaves {time}.', slots: { route: 'route', time: 'time' }, kinds: ['promet', 'nocas'] },
-  event: { hr: '{time} počinje događanje „{title}“ ({venue}).', en: '{title} starts {time}, {venue}.', slots: { time: 'time', title: 'title', venue: 'venue' }, kinds: ['kultura'] },
+  event: { hr: '{time} počinje događanje „{title}” ({venue}).', en: '{title} starts {time}, {venue}.', slots: { time: 'time', title: 'title', venue: 'venue' }, kinds: ['kultura'] },
   opening: { hr: '{name}: rad počinje {time}.', en: '{name} opens {time}.', slots: { name: 'venue', time: 'time' }, kinds: ['kultura'] },
   pharmacy: { hr: 'Dežurna ljekarna 24/7: {address}.', en: '24/7 duty pharmacy: {address}.', slots: { address: 'street' }, kinds: ['nocas'] },
   outage: { hr: 'ZET ne šalje položaje vozila; polasci su po voznom redu.', en: 'ZET is not sending vehicle positions; departures follow the timetable.', slots: {}, kinds: ['promet'] },
