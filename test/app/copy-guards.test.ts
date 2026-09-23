@@ -212,6 +212,18 @@ describe('canonical sentences', () => {
     expect(leaf(HR, 'kiosk.header.unlockedUntil')).toBeUndefined();
     expect(leaf(HR, 'kiosk.safety.hitno')).toBeUndefined();
   });
+  // §13 #13: the register caveat is said once, on /izvori, never on the wall [O-27]; the owner's words, byte-exact (WP5 B1).
+  it('/izvori says the city catalogue\'s register sentence once, in the owner\'s words, and no other page or catalogue repeats it', () => {
+    const REGISTER = 'Podaci gradskog kataloga (kultura, baština, voda, WC, tržnice …) su iz registara, ne provjera uživo; obuhvat zaštite baštine označava zaštićeno područje, ne ulaz.';
+    const page = read('app/izvori/index.html');
+    expect(page.split(`<p>${REGISTER}</p>`).length - 1).toBe(1);
+    // After the page's own intro, before the generated source list.
+    expect(page.indexOf(REGISTER)).toBeGreaterThan(page.indexOf('u trenutku prikaza.</p>'));
+    expect(page.indexOf(REGISTER)).toBeLessThan(page.indexOf('<!--IZVORI-->'));
+    for (const file of [...staticHtml().filter((f) => f !== 'app/izvori/index.html'), 'app/src/i18n/hr.json', 'app/src/i18n/en.json']) {
+      expect(read(file), file).not.toContain('Podaci gradskog kataloga');
+    }
+  });
   it('the Još heading is "Još" and the safety verdict has one calm sentence', () => {
     expect(hr.nav.moreTitle).toBe('Još');
     expect(hr.directory.safetySummaryCalm).toBe(hr.safety.calm);
