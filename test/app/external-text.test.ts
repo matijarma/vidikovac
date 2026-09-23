@@ -31,7 +31,7 @@ function refusal(kind: ExternalTextKind, value: string) {
   if (verdict.ok) return [];
   const pair = verdict.reason === 'instruction' ? sensitiveTextPair(value) : null;
   return [{ kind, value, reason: verdict.reason,
-    cause: pair ? { rule: pair.rule, left: pair.left.value, right: pair.right.value } : externalTextVector(value)?.value ?? null }];
+    cause: pair ? { rule: pair.rule, left: pair.left.value, right: pair.right.value } : externalTextVector(value, kind)?.value ?? null }];
 }
 const sortedResiduals = (rows: readonly RowTextResidual[]) =>
   [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en'));
@@ -203,7 +203,7 @@ describe('decision 20 layered policy', () => {
       // layer 1. No lexical pair crosses the sentence boundary.
       expect(rowText('register-text', value)).toEqual(
         /[\r\n\u2028\u2029]/u.test(separator) ? { ok: false, reason: 'control' }
-          : externalTextVector(value) ? { ok: false, reason: externalTextVector(value)!.reason } : { ok: true });
+          : separator === '.' && left !== 'kod' ? { ok: false, reason: 'link' } : { ok: true });
     }
   });
 
@@ -375,18 +375,25 @@ describe('the committed registers under decision 21', () => {
     expect(sortedResiduals(presentedStreet)).toEqual(sortedResiduals(STREET_ROW_RESIDUALS));
     expect(sortedResiduals(refusedHeritage)).toEqual(sortedResiduals(HERITAGE_ROW_RESIDUALS));
     expect(missingRows.sort()).toEqual([
-      'Gradska klaonica i stočna tržnica, Heinzelova 66-68',
-      'Kolonija gradskih kuća "Mali stanovi za invalide i izbjeglice iz Istre"',
-      'Kompleks Prve hrvatske štedionice - Oktogon, Ilica 5 - Margaretska 1-3 - Bogovićeva 6, Ilica 005 - Margaretska 01-03 - Bogovićeva 06',
-      'Kulturno - povijesna cjelina Pupinovo naselje',
-      'Zgrada Hrvatsko-slavonske zemaljske centralne štedionice,Ilica 25-27/Gundulićeva 2',
-      'Zgrada Obrtne škole i Muzeja za umjetnost i obrt, Trg maršala Tita 9-11',
+      'Palača Hrvatske poljodjelske banke d.d., Smičiklasova 17/Martićeva 6/Patačićkina 1',
+      'Sklop zgrada bivše Ženske realne gimnazije sestara Milosrdnica sv.Vinka Paulskog s igralištima i parkom, Savska 77',
+      'Zgrada Biskupske ubožnice, Nova Ves 18',
+      'Zgrada Gospodarske sloge s cjelovito uređenim i opremljenim interijerom knjižare Znanje d.d. u prizemlju, danas KGZ – Knjižnica Medveščak, Odjel za djecu i Odjel za mlade',
+      'Zgrada Osnovne škole „Dr.Ante Starčević“, Sv. Leopolda Mandića 55',
+      'Zgrada kotlovnice i strojarnice Prve hrvatske tvornice ulja d.d, Ulica kneza Branimira bb',
       'Kuće Hrvatske banke za promet nekretninama, Prilaz Gjure Deželića 42, 44, 46,',
       'Ansambl gradskih vila u Novakovoj ulici',
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
       'Kompleks zgrada "Hrvatskog Sokola" i "Kola", Trg maršala Tita 5, 6, 6a, 7',
     ].sort());
   }, 20_000);
+
+  it('keeps all 402 geographic kod fields after the structural close-out', () => {
+    const fields = streets.flatMap(street => [['name', street.name], ['register-text', street.description]] as const)
+      .filter(([, value]) => /\bkod\b/iu.test(value));
+    expect(fields).toHaveLength(402);
+    for (const [kind, value] of fields) expect(rowText(kind, value), value).toEqual({ ok: true });
+  });
 
   it('applies strict header checks to all fitting register sentences, independently of row eligibility', () => {
     const reasons = new Map<string, number>();

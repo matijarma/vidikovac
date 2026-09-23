@@ -469,11 +469,12 @@ describe('the uvijek row', () => {
     const oktogon = place('heritage-oktogon', 'heritage', 'Kompleks Prve hrvatske štedionice - Oktogon, Ilica 5 - Margaretska 1-3', 15.9772, 45.8125, { address: 'Ilica 005 - Margaretska 01-03 - Bogovićeva 06' });
     const row = (p: Place) => selectNearby(input(at('2026-09-22T10:30:00Z'), { city: { ...CITY, streets: [], places: [p] } })).at(-1)!;
     expect(row(block)).toMatchObject({ title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c' });
-    // Decision 22: a formatted digit run in the raw address is a pinned
-    // exclusion, even when shortening would remove that rejected suffix.
+    // Decision 24: a named house-number range is legitimate. Still inspect
+    // the complete raw field: a phone suffix cannot disappear in shortening.
+    expect(row(oktogon)).toMatchObject({ title: 'Kompleks Prve hrvatske štedionice - Oktogon', sub: 'Ilica 5' });
     const skips: string[] = [];
     const rows = selectNearby(input(at('2026-09-22T10:30:00Z'), {
-      city: { ...CITY, streets: [], places: [oktogon] }, onSkip: reason => skips.push(reason),
+      city: { ...CITY, streets: [], places: [{ ...oktogon, address: `${oktogon.address}, 01 234 567` }] }, onSkip: reason => skips.push(reason),
     }));
     expect(rows.some(r => r.kind === 'always')).toBe(false);
     expect(skips).toContain('phone');

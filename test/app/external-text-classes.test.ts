@@ -138,8 +138,11 @@ describe('decision 22 class product, independent of the policy regexes', () => {
     expect(vetExternal('name', `Kin${ch} Europa`, 'row')).toBeNull();
   });
   it.each(['kod crkve sv. Marka', 'dvorac iz 1546 kod Zaprešića', 'planina (1182 mnv) kod Ogulina',
-    'Ljeto kod Bartola', 'sv.Marka', 'dr.Tuđmana'])('keeps geographic grammar %j', value => {
+    'Ljeto kod Bartola', 'sv. Marka', 'dr. Tuđmana'])('keeps geographic grammar %j', value => {
     expect(vetExternal('title', value, 'row')).toBe(value);
+  });
+  it.each(['sv.Marka', 'dr.Tuđmana'])('requires whitespace after abbreviation %j under decision 24', value => {
+    for (const surface of ['header', 'row'] as const) expect(vetExternal('title', value, surface)).toBeNull();
   });
   it.each(['kod: 1234', 'kod AB12', 'kod 1 2 3 4', 'unesi kod Lozinka', 'pošalji kod Marka lozinku'])(
     'geographic grammar cannot hide credential text %j', value => expect(vetExternal('title', value, 'row')).toBeNull());

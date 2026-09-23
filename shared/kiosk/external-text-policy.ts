@@ -8,6 +8,8 @@
 // Productive verb classes, not a list of complete attack sentences. Croatian
 // stems include perfective/imperfective alternants; endings cover imperative,
 // present, infinitive, participle and conditional/future (with auxiliaries).
+import { ISO_4217_CODES } from './iso-4217';
+
 const I = '(?:i|im|is|imo|ite|e|iti|it|io|ila|ilo|ili|ile|iv[a-z]*|uj[a-z]*)';
 const A = '(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|at|ao|ala|alo|ali|ale)';
 export const EXTERNAL_ACTION_CLASSES = [
@@ -15,8 +17,8 @@ export const EXTERNAL_ACTION_CLASSES = [
     source: `(?:potvrd|potvrdj|dostav|priloz)${I}|(?:potvrdjuj|predaj)[a-z]*|preda(?:ti|t|o|la|lo|li|le)|potvrdi[a-z]*|(?:verificir|autentificir|autenticir)${A}|confirm(?:s|ed|ing)?|submit(?:s|ted|ting)?|authenticat(?:e|es|ed|ing)|verif(?:y|ies|ied|ying)|validat(?:e|es|ed|ing)`,
     examples: ['potvrdi', 'potvrđujemo', 'predajte', 'dostavili', 'autentificirajte', 'submitted', 'authenticating'] },
   { id: 'write-provide', role: 'action',
-    source: `(?:na|za|pre|u|is)?pis(?:i|imo|ite|em|es|e|emo|ete|u|ati|at|ao|ala|alo|ali|ale)|(?:napis|zapis|prepis)${I}|(?:naved|otkriv|objav|obznan)${I}|(?:objavlj|otkriv)${A}|pruz${I}|pruzaj[a-z]*|daj(?:em|es|e|emo|ete|u|te|mo)?|da(?:ti|o|la|li|le)|writ(?:e|es|ing|ten)|wrote|typ(?:e|es|ed|ing)|provid(?:e|es|ed|ing)|disclos(?:e|es|ed|ing)|suppl(?:y|ies|ied|ying)|giv(?:e|es|ing|en)|gave`,
-    examples: ['piši', 'pišemo', 'napisali', 'navedite', 'otkrivamo', 'pružite', 'written', 'providing', 'disclosed'] },
+    source: `(?:iz)?diktir${A}|(?:na|za|pre|u|is)?pis(?:i|imo|ite|em|es|e|emo|ete|u|ati|at|ao|ala|alo|ali|ale)|(?:napis|zapis|prepis)${I}|(?:naved|otkriv|objav|obznan)${I}|(?:objavlj|otkriv)${A}|pruz${I}|pruzaj[a-z]*|daj(?:em|es|e|emo|ete|u|te|mo)?|da(?:ti|o|la|li|le)|writ(?:e|es|ing|ten)|wrote|typ(?:e|es|ed|ing)|provid(?:e|es|ed|ing)|disclos(?:e|es|ed|ing)|suppl(?:y|ies|ied|ying)|giv(?:e|es|ing|en)|gave`,
+    examples: ['izdiktirati', 'diktirati', 'piši', 'pišemo', 'napisali', 'navedite', 'otkrivamo', 'pružite', 'written', 'providing', 'disclosed'] },
   { id: 'send-enter', role: 'action',
     source: `(?:u|po)?salj(?:i|ite|imo|em|es|e|emo|ete|u)|sl(?:ao|ala|ali|alo|ale|ati|at)|slanj[a-z]*|(?:po|pro)?sljedjuj[a-z]*|(?:pro)?slijed${I}|unij(?:eti|et|eo|ela|elo|eli|ele)|unos${I}|upisuj[a-z]*|dijel${I}|input(?:s|ted|ting)?|insert(?:s|ed|ing)?`,
     examples: ['slala', 'prosljeđujete', 'unosili', 'upisujte', 'inputting', 'inserted'] },
@@ -124,14 +126,22 @@ export const EXTERNAL_PLACE_ABBREVIATIONS = new Set([
   'spr.dubrava', 'zrt.fasizma', 'gl.kolodvor', 'g.stenjevec', 'g.breg-brezo',
   'j.jelacica', 'st.dom', 's.radic', 'd.dragonozec', 'mark.trnava',
   'ses.kraljev', 'ses.selnica', 's.bukevski',
-  'sav.most', 'zap.kol',
+  'sav.most', 'zap.kol', 'sv.josipa',
 ]);
+
+const CURRENCY = `(?:€|\\$|£|¥|₣|₽|kn|eura|${ISO_4217_CODES.join('|').toLowerCase()})`;
+const AMOUNT = '\\d(?:[\\d .,]*\\d)?';
+const PAYMENT_AMOUNT = new RegExp(`(?:${AMOUNT} *${CURRENCY}(?![a-z])|(?<![a-z])${CURRENCY} *${AMOUNT})`, 'u');
+// Payment nouns plus a number are structural even without a credential pair.
+// Keep the evidence sentence-local and require a whole payment word.
+const PAYMENT_NUMBER = /(?<![a-z])(?:isplata|uplata|payout|deposit|transfer)(?![a-z])[^.!?;\r\n]*\d|\d[^.!?;\r\n]*(?<![a-z])(?:isplata|uplata|payout|deposit|transfer)(?![a-z])/u;
 
 export const EXTERNAL_VECTOR_PATTERNS = [
   { reason: 'link', source: /h[ .:/-]*t[ .:/-]*t[ .:/-]*p|w[ .-]*w[ .-]*w|@|(?<![a-z0-9])[a-z0-9-]+\.(?:cc|hr|com|net|org|eu|info|io|me|app|link|ly|dev|xyz|site|online|zip|test|co|uk|de|ru|biz|store|museum|travel|gov|edu)(?![a-z0-9])/u },
   { reason: 'phone', source: /(?<![a-z0-9])(?:t[ .-]*e[ .-]*l|telefon[a-z]*|telephone[a-z]*|phone|fax|sms)(?![a-z0-9])|0[ .()/–-]*8[ .()/–-]*0[ .()/–-]*0|\+[ .()/–-]*\d/u },
   { reason: 'account', source: /(?<![a-z0-9])(?:iban|i[ .-]+b[ .-]+a[ .-]+n|swift|bic)(?![a-z0-9])|(?<![a-z0-9])h[ .-]*r[ .-]*\d|(?<![a-z0-9])[a-z]{2}\d{2}(?:[ -]?[a-z0-9]){10,}/u },
-  { reason: 'payment', source: /(?:\d[\d .,]* *(?:€|\$|£|kn|eur|eura|usd|hrk|gbp)(?![a-z])|(?:€|\$|£|kn|eur|eura|usd|hrk|gbp) *\d)/u },
+  { reason: 'payment', source: PAYMENT_AMOUNT },
+  { reason: 'payment', source: PAYMENT_NUMBER },
   { reason: 'phone', source: /(?<![a-z0-9])(?:broj(?:a|u|em|evi|eve|eva|evima)?|number(?:s)?)[ :()-]*\d+/u },
   { reason: 'qr', source: /(?<![a-z0-9])q[ .–-]*r(?![a-z0-9])/u },
 ] as const;

@@ -309,22 +309,27 @@ export function sentenceInstruction(text: string): boolean {
 }
 
 /** Structural evidence for corpus audits; production callers log codes only. */
-export function externalTextVector(value: string): { reason: ExternalTextRejection; value: string } | null {
+export function externalTextVector(value: string, kind?: ExternalTextKind): { reason: ExternalTextRejection; value: string } | null {
   const text = foldText(value);
   for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) {
     const match = source.exec(text);
     if (match) return { reason, value: match[0] };
   }
-  // Unknown/new TLDs fail closed too. Abbreviations need an explicit place
-  // grammar; "sv.Marka" and "dr.Tuđmana" are names, "secure.anything" is not.
-  for (const match of text.matchAll(/(?<![a-z0-9])([a-z0-9_-]+)\.([a-z][a-z0-9_-]+)(?![a-z0-9])/gu)) {
-    if (!/^(?:sv|dr|kn)$/u.test(match[1]!) && !EXTERNAL_PLACE_ABBREVIATIONS.has(match[0])) return { reason: 'link', value: match[0] };
+  // Abbreviations "sv.", "dr.", "kn.", "br.", "tzv.", "npr.", "sl."
+  // followed by space/end contain no letter-dot-letter token. Never exempt
+  // their prefixes in dr.ai, sv.example, etc. Only the exact GTFS spellings
+  // remain compatible, and only in the headsign kind.
+  for (const match of text.matchAll(/(?<![a-z0-9])([a-z0-9_-]+)\.([a-z][a-z0-9_-]*)(?![a-z0-9])/gu)) {
+    if (kind === 'headsign' && ((EXTERNAL_PLACE_ABBREVIATIONS.has(match[0])
+      && !/^\.[a-z0-9]/u.test(text.slice(match.index + match[0].length)))
+      || /^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index)))) continue;
+    return { reason: 'link', value: match[0] };
   }
   // A dotted run of single letters is not a sequence of independent safe
   // sentences. The sole multi-initial GTFS place spelling is explicit.
   for (const match of text.matchAll(/(?<![a-z0-9])(?:[a-z0-9]\.){2,}[a-z0-9]/gu)) {
     if (!/[a-z]/u.test(match[0])) continue; // Numeric runs retain phone/account evidence.
-    if (/^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index))) continue;
+    if (kind === 'headsign' && /^t\.b\.j\.jelacica(?![a-z0-9])/u.test(text.slice(match.index))) continue;
     return { reason: 'link', value: match[0] };
   }
   // Match the complete numeric run before counting, never just six adjacent
@@ -332,6 +337,11 @@ export function externalTextVector(value: string): { reason: ExternalTextRejecti
   for (const match of text.matchAll(/\d(?:[\d .,/'’():+–-]*\d)?/gu)) {
     const run = match[0];
     const digits = run.replace(/\D/gu, '');
+    // House-number ranges in names/addresses are data, not phone formatting.
+    // Require a preceding street-name word and the WHOLE run to be one range:
+    // 50-52 passes; 50-52-1234, numeric lists and unanchored 50-52 do not.
+    if ((kind === 'address' || kind === 'name') && /^\d{1,4} *[-–] *\d{1,4}$/u.test(run)
+      && /[a-z][a-z'’-]* +$/u.test(text.slice(0, match.index))) continue;
     const formatted = digits.length >= 4 && /^\d+(?:[ –-]+\d+)+$/u.test(run);
     if ((!formatted && digits.length < 6) || EXTERNAL_NUMERIC_DATA.some(pattern => pattern.test(run))) continue;
     return { reason: digits.length >= 13 ? 'account' : 'phone', value: run };
@@ -339,7 +349,7 @@ export function externalTextVector(value: string): { reason: ExternalTextRejecti
   return null;
 }
 
-function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurface): ExternalTextVerdict {
+function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurface, vectorsOnly = false): ExternalTextVerdict {
   const rule = EXTERNAL_TEXT_RULES[kind];
   if (INVISIBLE.test(value)) return { ok: false, reason: 'control' };
   if (kind === 'headsign' && value.includes('\u00a0')) return { ok: false, reason: 'charset' };
@@ -349,7 +359,7 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  const vector = externalTextVector(text);
+  const vector = externalTextVector(text, kind);
   if (vector) return { ok: false, reason: vector.reason };
   for (const ch of text) {
     if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
@@ -360,6 +370,7 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   for (const ch of folded) {
     if (!/[a-z0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
   }
+  if (vectorsOnly) return { ok: true };
   const instruction = surface === 'row'
     ? (kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text)
     : headerInstructionRule(text);
@@ -395,4 +406,11 @@ export function vetExternal(kind: ExternalTextKind, value: unknown, surface: Ext
     || (surface !== 'header' && surface !== 'row')) return null;
   return externalText(kind, value, { surface }).ok ? value : null;
 }
-installExternalTextBoundary(vetExternal);
+/** Personal maps retain quoted content unless the shared structural layer
+ * refuses it. Public maps keep the full contextual row check. */
+export function vetExternalMap(kind: ExternalTextKind, value: unknown, publicDisplay: boolean): string | null {
+  if (publicDisplay) return vetExternal(kind, value, 'row');
+  if (typeof value !== 'string' || !Object.hasOwn(EXTERNAL_TEXT_RULES, kind)) return null;
+  return check(kind, value, 'row', true).ok ? value : null;
+}
+installExternalTextBoundary(vetExternal, vetExternalMap);
