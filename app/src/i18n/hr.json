@@ -3,7 +3,6 @@
     "appName": "Kaj ima?",
     "copy": "Kopiraj",
     "share": "Podijeli",
-    "print": "Ispiši",
     "close": "Zatvori",
     "back": "Natrag",
     "unavailable": "Nedostupno",
@@ -34,8 +33,7 @@
     "closuresNone": "Nema zatvorenih prometnica.",
     "warningsNone": "Nema upozorenja DHMZ-a za Zagreb.",
     "unlockedUntil": "Otključano do {time}",
-    "safetyPage": "Sigurnost",
-    "safetyOpen": "Sigurnost, bez skeniranja"
+    "safetyPage": "Sigurnost"
   },
   "freshness": {
     "zivo": "Živo",
@@ -59,7 +57,6 @@
     "retry": "Pokušaj ponovno"
   },
   "attribution": {
-    "source": "Izvor",
     "licence": "Licenca",
     "sources": "Izvori i licence"
   },
@@ -81,12 +78,10 @@
   "shell": {
     "session": "Sesija",
     "remaining": "Preostalo {time}",
-    "connecting": "Povezivanje",
     "paused": "Osvježavanje je zaustavljeno; prikaz stoji na podacima od {time}.",
     "sourcesDown_one": "{count} izvor ne odgovara.",
     "sourcesDown_few": "{count} izvora ne odgovaraju.",
     "sourcesDown_other": "{count} izvora ne odgovara.",
-    "footerNote": "Sigurnosni sloj ostaje otvoren svima na /hitno, bez skeniranja.",
     "wordmarkLabel": "Kaj ima?, početna stranica",
     "wordmarkSada": "Kaj ima?, natrag na Sada",
     "skip": "Prijeđi na sadržaj",
@@ -94,8 +89,7 @@
     "emptyTitle": "Ovdje se otključava Zagreb",
     "emptyLead": "Skeniraj kod sa zaslona u prostoru ili upiši osam slova; deset minuta grada je na tvom uređaju.",
     "clockLabel": "{time}, {weather}. Otvori Vrijeme.",
-    "clockOnly": "{time}. Otvori Vrijeme.",
-    "sunset": "zalazak {time}"
+    "clockOnly": "{time}. Otvori Vrijeme."
   },
   "time": {
     "justNow": "upravo sada",
@@ -174,7 +168,6 @@
     }
   },
   "overview": {
-    "allClear": "Nema hitnih upozorenja",
     "allClearConfirmed": "potvrđeno {time}"
   },
   "weather": {
@@ -236,7 +229,6 @@
     "quakesNone": "U posljednja 72 sata EMSC nije zabilježio potres u okolici Zagreba.",
     "closures": "Zatvorene prometnice sada",
     "closuresNone": "Nema zatvorenih prometnica.",
-    "closuresUnknown": "Stanje prometnica nije potvrđeno. Provjeri službeni izvor.",
     "noEnd": "kraj nije najavljen",
     "allClosures": "sve zatvaranja ({count})",
     "pharmacies": "Dežurne ljekarne",
@@ -281,8 +273,6 @@
     },
     "today": "Danas",
     "tomorrow": "Sutra",
-    "thisWeek": "Ovaj tjedan",
-    "later": "Kasnije",
     "ongoingTitle": "U tijeku",
     "ongoingCount_one": "{count} događanje u tijeku",
     "ongoingCount_few": "{count} događanja u tijeku",
@@ -292,20 +282,14 @@
     "outsideNote": "Izvor navodi mjesto izvan Zagreba; prikazano odvojeno, ne kao zagrebačko događanje.",
     "upcomingNone": "Nema najavljenih budućih događanja iz dostupnih izvora.",
     "untilDate": "do {date}",
-    "fromDate": "od {date}",
     "undated": "Bez datuma",
     "undatedNote": "Izvor ne navodi datum događanja, pa ove obavijesti nisu današnje najave.",
     "venue": "Mjesto",
     "organiser": "Organizator",
     "source": "Izvor",
-    "licence": "Licenca",
     "detailTitle": "Detalji događanja",
-    "when": "Kada",
     "categoryLabel": "Kategorija",
-    "selectHint": "Odaberi događanje za detalje.",
-    "addToCalendar": "U kalendar (ICS)",
     "noCalendar": "Bez potvrđenog datuma stavka ne može u kalendar.",
-    "empty": "Nema najavljenih događanja iz dostupnih izvora.",
     "emptyFiltered": "Nijedno događanje ne odgovara odabranom filtru.",
     "count_one": "{count} događanje",
     "count_few": "{count} događanja",
@@ -313,7 +297,6 @@
     "countLine_one": "{count} događanje · {ongoing} u tijeku",
     "countLine_few": "{count} događanja · {ongoing} u tijeku",
     "countLine_other": "{count} događanja · {ongoing} u tijeku",
-    "sourcesTitle": "Izvori događanja",
     "sources": {
       "kulturpunkt": "Kulturpunkt",
       "etnografski": "Etnografski muzej",
@@ -323,14 +306,10 @@
       "zet-novosti": "ZET novosti",
       "zet-promet": "ZET promet"
     },
-    "timeUnknown": "vrijeme nije navedeno",
-    "dayCount_one": "{count} dan",
-    "dayCount_few": "{count} dana",
-    "dayCount_other": "{count} dana"
+    "timeUnknown": "vrijeme nije navedeno"
   },
   "civic": {
     "assembly": "Gradska skupština",
-    "assemblyNext": "Sljedeća sjednica",
     "assemblyNone": "U rokovniku Skupštine trenutačno nema najavljenih sjednica.",
     "pastSessions": "Održane sjednice",
     "plenary": "Sjednica Skupštine",
@@ -374,10 +353,6 @@
   },
   "transit": {
     "fromStop": "Sa stajališta {stop}",
-    "mostDeviating": "Linije koje sada najviše odstupaju",
-    "vehiclesMoving_one": "{count} vozilo ZET-a u pokretu",
-    "vehiclesMoving_few": "{count} vozila ZET-a u pokretu",
-    "vehiclesMoving_other": "{count} vozila ZET-a u pokretu",
     "noDelayData": "nema podataka"
   },
   "arrivals": {
@@ -394,17 +369,12 @@
   },
   "transport": {
     "searchHint": "Upiši broj linije ili ime stajališta. Strelicama biraj, Enter otvara, Escape briše.",
-    "noResults": "Nema linije ni stajališta za „{query}”.",
     "resultsCount_one": "{count} rezultat",
     "resultsCount_few": "{count} rezultata",
     "resultsCount_other": "{count} rezultata",
-    "trams": "Tramvaji",
-    "buses": "Autobusi",
-    "showClosures": "Zatvaranja",
     "follow": "Prati vozilo",
     "unfollow": "Prestani pratiti",
     "followingNote": "Karta prati ovo vozilo; pomak karte prekida praćenje.",
-    "fitCity": "Cijeli grad",
     "mapModeSchema": "Shema linija",
     "mapModeMap": "Karta grada",
     "schemaTramsOnly": "Shema prikazuje tramvaje",
@@ -446,21 +416,14 @@
     "coopWindows": "Kartu zumiraj s Ctrl i kotačićem",
     "coopMac": "Kartu zumiraj s ⌘ i kotačićem",
     "coopMobile": "Kartu pomiči dvama prstima",
-    "closuresNow_one": "{count} zatvaranje",
-    "closuresNow_few": "{count} zatvaranja",
-    "closuresNow_other": "{count} zatvaranja",
     "allStops": "sva stajališta ({count})",
     "clearSearch": "Očisti pretragu",
-    "modesLabel": "Prikaz na karti",
     "sheetLabel": "Detalji",
-    "toolsLabel": "Alati karte",
-    "noClosures": "Nema zatvorenih prometnica.",
     "noStopVehicles": "Trenutačno nijedno vozilo linija s ovog stajališta nije u pokretu.",
     "vehicleTitle": "{kind} {short}",
     "routeTitle": "Linija {short}",
     "showRoute": "Prikaži liniju",
     "lineFocusOn": "Samo ova linija na karti",
-    "peekLoading": "Vozila se učitavaju",
     "peekFollowing": "Praćenje: {title}",
     "windowFromUntil": "od {from} do {until}"
   },
@@ -502,9 +465,6 @@
     "safetySummaryUrgent": "Aktivna upozorenja",
     "safetySummaryUnknown": "Stanje nije potvrđeno",
     "civicSummary": "Glasnik {broj}/{godina}",
-    "eventsSummary_one": "{count} događanje danas",
-    "eventsSummary_few": "{count} događanja danas",
-    "eventsSummary_other": "{count} događanja danas",
     "noSummary": "Otvori za detalje",
     "eventsWeek": "Događanja ovaj tjedan",
     "saved": "Spremljeno",
@@ -520,7 +480,6 @@
     "unlocked": "Otključano · {label} · do {time}",
     "unlockedAnnounce": "Otključano do {time}",
     "pillLabel": "Otključano do {time}, otvori postavke",
-    "joinedNotice": "Otključano do {time} · {label}",
     "joinedPeer": "Pet minuta od osobe pokraj tebe · do {time}",
     "labelScreen": "zaslon",
     "expiring60": "Još minuta.",
@@ -580,7 +539,6 @@
     "printAct": "Ispiši ili spremi kao PDF"
   },
   "panels": {
-    "vehicles": "Vozila ZET-a u pokretu",
     "vehiclesCount_one": "{count} vozilo",
     "vehiclesCount_few": "{count} vozila",
     "vehiclesCount_other": "{count} vozila",
@@ -590,26 +548,16 @@
     "closuresCount_one": "{count} zatvaranje",
     "closuresCount_few": "{count} zatvaranja",
     "closuresCount_other": "{count} zatvaranja",
-    "map": "Karta",
-    "mapExpand": "Proširi kartu",
-    "mapCollapse": "Skupi kartu",
-    "schematic": "Tramvaji i autobusi sada",
     "schematicLegend": "{drawn} od {tracked} praćenih vozila u kadru",
-    "delays": "Kašnjenja po linijama",
     "delayOnTime": "na vrijeme",
     "delayLate": "kasni {minutes} min",
     "delayEarly": "rani {minutes} min",
-    "sun": "Sunce nad Zagrebom",
     "sunComputed": "Izračunato na uređaju za 45,815 N, 15,98 E.",
-    "events": "Događanja",
     "eventsEmpty": "Trenutačno nema najava iz ovih izvora.",
     "sourcesResponded": "Odgovorili: {list}",
     "sourcesQuiet": "Bez odgovora: {list}",
-    "cityWork": "Grad radi",
     "cityWorkEmpty": "Trenutačno nema stavki iz ovih izvora.",
-    "cityWorkChanged": "zadnja izmjena {time}",
     "temperature": "{value} °C",
-    "humidity": "vlaga {value} %",
     "direction": {
       "BOTH_DIRECTIONS": "oba smjera",
       "ONE_DIRECTION": "jedan smjer"
@@ -750,7 +698,6 @@
     "pagesNav": "Stranice",
     "pages": {
       "hitno": "Sigurnost, otvoreno svima",
-      "scan": "Upiši kod sa zaslona",
       "izvori": "Izvori podataka i licence",
       "open": "Otvoreni podaci za preuzimanje"
     },
@@ -814,7 +761,6 @@
     }
   },
   "kiosk": {
-    "invitation": "Skeniraj za 10 minuta grada. Manje ekrana, više Zagreba.",
     "surface": "javni zaslon",
     "header": {
       "theme": "Tema: {pref}",
@@ -832,7 +778,6 @@
     },
     "invite": {
       "lead": "Skeniraj za 10 minuta grada.",
-      "support": "Tvoji polasci, mjesta, događanja i spremljeni izbori. Bez računa i instalacije.",
       "typeCode": "ili upiši kod na {host}",
       "qrLabel": "QR kod za otključavanje. Kod: {code}",
       "qrWaiting": "Kod stiže",
@@ -977,7 +922,6 @@
       "closuresStale": "Zatvaranja: zastarjelo, nepotvrđeno",
       "closuresNearest": "najbliže {street}",
       "sources": "DHMZ · EMSC",
-      "confirmed": "DHMZ · EMSC · {time}",
       "openBasics": "Sigurnost: {verdict}. Otvori Osnovno",
       "verdict": {
         "urgent": "upozorenje",
@@ -1032,7 +976,6 @@
     "paired": {
       "warnings": "Upozorenja DHMZ-a",
       "closures": "Zatvorene prometnice",
-      "delays": "Kašnjenja po linijama",
       "quakes": "Potresi u krugu 150 km, 72 sata",
       "today": "Danas",
       "tomorrow": "Sutra",
@@ -1171,12 +1114,6 @@
     "notAllowed": "Ova sesija ne može voditi taj zaslon.",
     "tooMany": "Previše promjena prikaza. Nastavi pregledavati na svom uređaju.",
     "retry": "Pokušaj ponovno"
-  },
-  "cityOverview": {
-    "title": "Sada u gradu.",
-    "nearby": "Ovdje i sada",
-    "next": "Što slijedi",
-    "city": "Pogledaj što je novo"
   },
   "motion": {
     "note": "Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.",

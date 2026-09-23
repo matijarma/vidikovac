@@ -93,13 +93,14 @@ describe('workspace strings', () => {
   it('speak Croatian and English by the page locale, with Croatian plurals', () => {
     const hr = createDefaultI18n('hr');
     const en = createDefaultI18n('en');
-    expect(tr(hr, 'trams')).toBe('Tramvaji');
-    expect(tr(en, 'trams')).toBe('Trams');
+    expect(tr(hr, 'route')).toBe('Linija');
+    expect(tr(en, 'route')).toBe('Route');
     expect(trPlural(hr, 'vehiclesNow', 1)).toBe('1 vozilo u pokretu');
     expect(trPlural(hr, 'vehiclesNow', 3)).toBe('3 vozila u pokretu');
     expect(trPlural(hr, 'vehiclesNow', 5)).toBe('5 vozila u pokretu');
     expect(trPlural(en, 'vehiclesNow', 1)).toBe('1 vehicle moving');
     expect(trPlural(en, 'vehiclesNow', 2)).toBe('2 vehicles moving');
-    expect(tr(hr, 'noResults', { query: 'xy' })).toBe('Nema linije ni stajališta za „xy”.');
+    expect(tr(hr, 'routeTitle', { short: '6' })).toBe('Linija 6');
+    expect(tr(en, 'routeTitle', { short: '6' })).toBe('Route 6');
   });
 });

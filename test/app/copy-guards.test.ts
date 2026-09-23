@@ -180,24 +180,30 @@ describe('canonical sentences', () => {
     warningsNone: 'Nema upozorenja DHMZ-a za Zagreb.',
     unlockedUntil: 'Otključano do {time}',
     safetyPage: 'Sigurnost',
-    safetyOpen: 'Sigurnost, bez skeniranja',
   };
   /** Dashboard keys read by call sites that do not change; each says exactly what its shared sentence says. */
   const TWINS: Record<keyof typeof SHARED_HR, string[]> = {
-    closuresNone: ['safety.closuresNone', 'transport.noClosures'],
+    closuresNone: ['safety.closuresNone'],
     warningsNone: ['weather.warningsNone'],
     unlockedUntil: ['session.unlockedAnnounce', 'session.sheetTitle'],
     safetyPage: ['layers.sigurnost', 'nav.safety'],
-    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
-    safetyOpen: ['common.links.hitno', 'landing.actions.safety', 'scan.errors.actions.safety'],
   };
-  it('shared.* carries the five canonical Croatian sentences', () => {
+  it('shared.* carries the four canonical Croatian sentences', () => {
     expect(hr.shared).toEqual(SHARED_HR);
   });
   it.each(Object.entries(TWINS))('every twin of shared.%s says the same sentence in both languages', (key, twins) => {
     for (const twin of twins) {
       expect(leaf(HR, twin), `${twin} (hr)`).toBe(leaf(HR, `shared.${key}`));
       expect(leaf(EN, twin), `${twin} (en)`).toBe(leaf(EN, `shared.${key}`));
+    }
+  });
+  it('the /hitno link says one label everywhere it stands (common.links.hitno is canonical)', () => {
+    // shared.safetyOpen had no reader and is gone (WP5 A1); the labels it pinned still agree.
+    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
+    expect(hr.common.links.hitno).toBe('Sigurnost, bez skeniranja');
+    for (const twin of ['landing.actions.safety', 'scan.errors.actions.safety']) {
+      expect(leaf(HR, twin), `${twin} (hr)`).toBe(hr.common.links.hitno);
+      expect(leaf(EN, twin), `${twin} (en)`).toBe(en.common.links.hitno);
     }
   });
   it('the kiosk reads the shared sentences for the same concepts', () => {
@@ -208,7 +214,6 @@ describe('canonical sentences', () => {
   });
   it('the Još heading is "Još" and the safety verdict has one calm sentence', () => {
     expect(hr.nav.moreTitle).toBe('Još');
-    expect(hr.overview.allClear).toBe(hr.safety.calm);
     expect(hr.directory.safetySummaryCalm).toBe(hr.safety.calm);
   });
 });

@@ -3,7 +3,6 @@
     "appName": "Kaj ima?",
     "copy": "Copy",
     "share": "Share",
-    "print": "Print",
     "close": "Close",
     "back": "Back",
     "unavailable": "Unavailable",
@@ -33,8 +32,7 @@
     "closuresNone": "No road closures.",
     "warningsNone": "No DHMZ warnings for Zagreb.",
     "unlockedUntil": "Unlocked until {time}",
-    "safetyPage": "Safety",
-    "safetyOpen": "Safety, no scan needed"
+    "safetyPage": "Safety"
   },
   "freshness": {
     "zivo": "Live",
@@ -58,7 +56,6 @@
     "retry": "Try again"
   },
   "attribution": {
-    "source": "Source",
     "licence": "Licence",
     "sources": "Sources and licences"
   },
@@ -80,11 +77,9 @@
   "shell": {
     "session": "Session",
     "remaining": "{time} left",
-    "connecting": "Connecting",
     "paused": "Refreshing is paused; the view holds the data as of {time}.",
     "sourcesDown_one": "{count} source is not responding.",
     "sourcesDown_other": "{count} sources are not responding.",
-    "footerNote": "The safety layer stays open to everyone at /hitno, no scan needed.",
     "wordmarkLabel": "Kaj ima?, home page",
     "wordmarkSada": "Kaj ima?, back to Now",
     "skip": "Skip to content",
@@ -92,8 +87,7 @@
     "emptyTitle": "This is where Zagreb unlocks",
     "emptyLead": "Scan the code from a screen in the venue or type the eight letters; ten minutes of the city are on your device.",
     "clockLabel": "{time}, {weather}. Open Weather.",
-    "clockOnly": "{time}. Open Weather.",
-    "sunset": "sunset {time}"
+    "clockOnly": "{time}. Open Weather."
   },
   "time": {
     "justNow": "just now",
@@ -165,7 +159,6 @@
     }
   },
   "overview": {
-    "allClear": "No urgent warnings",
     "allClearConfirmed": "confirmed {time}"
   },
   "weather": {
@@ -227,7 +220,6 @@
     "quakesNone": "EMSC recorded no earthquake near Zagreb in the last 72 hours.",
     "closures": "Roads closed right now",
     "closuresNone": "No road closures.",
-    "closuresUnknown": "Road status not confirmed. Check the official source.",
     "noEnd": "no end announced",
     "allClosures": "all closures ({count})",
     "pharmacies": "On-duty pharmacies",
@@ -271,8 +263,6 @@
     },
     "today": "Today",
     "tomorrow": "Tomorrow",
-    "thisWeek": "This week",
-    "later": "Later",
     "ongoingTitle": "Ongoing",
     "ongoingCount_one": "{count} event ongoing",
     "ongoingCount_other": "{count} events ongoing",
@@ -281,26 +271,19 @@
     "outsideNote": "The source names a venue outside Zagreb; shown apart, not as a Zagreb event.",
     "upcomingNone": "No upcoming events announced by the available sources.",
     "untilDate": "until {date}",
-    "fromDate": "from {date}",
     "undated": "Undated",
     "undatedNote": "The source gives no event date, so these notices are not today's listings.",
     "venue": "Venue",
     "organiser": "Organiser",
     "source": "Source",
-    "licence": "Licence",
     "detailTitle": "Event details",
-    "when": "When",
     "categoryLabel": "Category",
-    "selectHint": "Choose an event for details.",
-    "addToCalendar": "Add to calendar (ICS)",
     "noCalendar": "Without a confirmed date this item cannot go into a calendar.",
-    "empty": "No announced events from the available sources.",
     "emptyFiltered": "No event matches the chosen filter.",
     "count_one": "{count} event",
     "count_other": "{count} events",
     "countLine_one": "{count} event · {ongoing} ongoing",
     "countLine_other": "{count} events · {ongoing} ongoing",
-    "sourcesTitle": "Event sources",
     "sources": {
       "kulturpunkt": "Kulturpunkt",
       "etnografski": "Ethnographic Museum",
@@ -310,13 +293,10 @@
       "zet-novosti": "ZET news",
       "zet-promet": "ZET traffic"
     },
-    "timeUnknown": "time not given",
-    "dayCount_one": "{count} day",
-    "dayCount_other": "{count} days"
+    "timeUnknown": "time not given"
   },
   "civic": {
     "assembly": "City Assembly",
-    "assemblyNext": "Next session",
     "assemblyNone": "The Assembly's schedule lists no upcoming sessions right now.",
     "pastSessions": "Past sessions",
     "plenary": "Assembly session",
@@ -359,9 +339,6 @@
   },
   "transit": {
     "fromStop": "From {stop}",
-    "mostDeviating": "Lines deviating most right now",
-    "vehiclesMoving_one": "{count} ZET vehicle moving",
-    "vehiclesMoving_other": "{count} ZET vehicles moving",
     "noDelayData": "no data"
   },
   "arrivals": {
@@ -378,17 +355,12 @@
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
-    "noResults": "No route or stop matches “{query}”.",
     "resultsCount_one": "{count} result",
     "resultsCount_few": "{count} results",
     "resultsCount_other": "{count} results",
-    "trams": "Trams",
-    "buses": "Buses",
-    "showClosures": "Closures",
     "follow": "Follow vehicle",
     "unfollow": "Stop following",
     "followingNote": "The map follows this vehicle; moving the map stops following.",
-    "fitCity": "Whole city",
     "mapModeSchema": "Line diagram",
     "mapModeMap": "City map",
     "schemaTramsOnly": "The diagram shows trams",
@@ -430,21 +402,14 @@
     "coopWindows": "Use Ctrl + scroll to zoom the map",
     "coopMac": "Use ⌘ + scroll to zoom the map",
     "coopMobile": "Use two fingers to move the map",
-    "closuresNow_one": "{count} closure",
-    "closuresNow_few": "{count} closures",
-    "closuresNow_other": "{count} closures",
     "allStops": "all stops ({count})",
     "clearSearch": "Clear search",
-    "modesLabel": "Show on the map",
     "sheetLabel": "Details",
-    "toolsLabel": "Map tools",
-    "noClosures": "No road closures.",
     "noStopVehicles": "No vehicle of this stop’s routes is moving right now.",
     "vehicleTitle": "{kind} {short}",
     "routeTitle": "Route {short}",
     "showRoute": "Show the route",
     "lineFocusOn": "Only this line on the map",
-    "peekLoading": "Loading vehicles",
     "peekFollowing": "Following: {title}",
     "windowFromUntil": "from {from} to {until}"
   },
@@ -485,8 +450,6 @@
     "safetySummaryUrgent": "Active warnings",
     "safetySummaryUnknown": "Status not confirmed",
     "civicSummary": "Gazette {broj}/{godina}",
-    "eventsSummary_one": "{count} event today",
-    "eventsSummary_other": "{count} events today",
     "noSummary": "Open for details",
     "eventsWeek": "Events this week",
     "saved": "Saved",
@@ -502,7 +465,6 @@
     "unlocked": "Unlocked · {label} · until {time}",
     "unlockedAnnounce": "Unlocked until {time}",
     "pillLabel": "Unlocked until {time}, open settings",
-    "joinedNotice": "Unlocked until {time} · {label}",
     "joinedPeer": "Five minutes from the person beside you · until {time}",
     "labelScreen": "screen",
     "expiring60": "One minute left.",
@@ -561,33 +523,22 @@
     "printAct": "Print or save as PDF"
   },
   "panels": {
-    "vehicles": "ZET vehicles moving",
     "vehiclesCount_one": "{count} vehicle",
     "vehiclesCount_other": "{count} vehicles",
     "moreRoutes_one": "{count} more route",
     "moreRoutes_other": "{count} more routes",
     "closuresCount_one": "{count} closure",
     "closuresCount_other": "{count} closures",
-    "map": "Map",
-    "mapExpand": "Expand the map",
-    "mapCollapse": "Shrink the map",
-    "schematic": "Trams and buses now",
     "schematicLegend": "{drawn} of {tracked} tracked vehicles in frame",
-    "delays": "Delays by route",
     "delayOnTime": "on time",
     "delayLate": "{minutes} min late",
     "delayEarly": "{minutes} min early",
-    "sun": "Sun over Zagreb",
     "sunComputed": "Computed on this device for 45.815 N, 15.98 E.",
-    "events": "Events",
     "eventsEmpty": "No announcements from these sources right now.",
     "sourcesResponded": "Responded: {list}",
     "sourcesQuiet": "No response: {list}",
-    "cityWork": "The city at work",
     "cityWorkEmpty": "No items from these sources right now.",
-    "cityWorkChanged": "last changed {time}",
     "temperature": "{value} °C",
-    "humidity": "humidity {value} %",
     "direction": {
       "BOTH_DIRECTIONS": "both directions",
       "ONE_DIRECTION": "one direction"
@@ -728,7 +679,6 @@
     "pagesNav": "Pages",
     "pages": {
       "hitno": "Safety, open to everyone",
-      "scan": "Type the code from a screen",
       "izvori": "Data sources and licences",
       "open": "Open data to download"
     },
@@ -792,7 +742,6 @@
     }
   },
   "kiosk": {
-    "invitation": "Scan for 10 minutes of the city. Less screen, more Zagreb.",
     "surface": "public screen",
     "header": {
       "theme": "Theme: {pref}",
@@ -810,7 +759,6 @@
     },
     "invite": {
       "lead": "Scan for 10 minutes of the city.",
-      "support": "Your departures, places, events and saved choices. No account or installation.",
       "typeCode": "or type the code at {host}",
       "qrLabel": "QR code to unlock. Code: {code}",
       "qrWaiting": "Code on its way",
@@ -944,7 +892,6 @@
       "closuresStale": "Closures: stale, unconfirmed",
       "closuresNearest": "nearest {street}",
       "sources": "DHMZ · EMSC",
-      "confirmed": "DHMZ · EMSC · {time}",
       "openBasics": "Safety: {verdict}. Open the essentials",
       "verdict": {
         "urgent": "warning",
@@ -999,7 +946,6 @@
     "paired": {
       "warnings": "DHMZ warnings",
       "closures": "Road closures",
-      "delays": "Delays by line",
       "quakes": "Earthquakes within 150 km, 72 h",
       "today": "Today",
       "tomorrow": "Tomorrow",
@@ -1136,12 +1082,6 @@
     "notAllowed": "This session cannot control that screen.",
     "tooMany": "Too many presentation changes. Continue browsing on your device.",
     "retry": "Try again"
-  },
-  "cityOverview": {
-    "title": "The city, right now.",
-    "nearby": "Here and now",
-    "next": "Coming up",
-    "city": "See what is new"
   },
   "motion": {
     "note": "Each position is computed from that vehicle’s own reports, the track geometry and the timetable; ZET publishes neither heading nor speed.",

@@ -218,7 +218,6 @@ export interface KioskStrings {
   paired: {
     warnings: string;
     closures: string;
-    delays: string;
     quakes: string;
     today: string;
     tomorrow: string;
@@ -438,7 +437,7 @@ function build(code: SupportedLocale): KioskStrings {
     events: record(Object.keys(raw.kiosk.events), (slug) => `kiosk.events.${slug}`),
     paired: {
       ...group('paired', [
-        'warnings', 'closures', 'delays', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
+        'warnings', 'closures', 'quakes', 'today', 'tomorrow', 'later', 'forecast', 'sun', 'pharmacies', 'assemblyPoints',
         'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'overviewTransport', 'allDay',
         'noData', 'sourceDown', 'unconfirmed', 'dataFrom', 'fetchedAt', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
         'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
