@@ -396,7 +396,8 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
         // drawn, so the change of mind is recorded, never shown as a jump.
-        v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s, v.holding);
+        const heldHeading = v.holding ? (v.geom ? tangent(v.geom.pts, v.geom.cum, v.s) : v.moveDir) : null;
+        v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s, heldHeading);
         v.lastSnapAt = now;
       }
       v.geom = geom;
@@ -419,7 +420,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
    * nearest point on the ground is regularly the wrong one, and a mark that
    * lands on it is a tram drawn a kilometre from where it is.
    */
-  function reseedArc(from: Geometry | null, to: Geometry, s: number, p: XY, expected: number, holding: boolean): number {
+  function reseedArc(from: Geometry | null, to: Geometry, s: number, p: XY, expected: number, heldHeading: XY | null): number {
     if (graph && from && from.path !== null && to.path !== null) {
       const mapped = mapArc(graph.paths[from.path], s, graph.paths[to.path]);
       if (mapped !== null) return mapped;
@@ -430,17 +431,23 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       graph && to.path !== null
         ? graph.projectionsOntoPath(to.path, p, sFrom, sTo, OFF_GRAPH_M)
         : projectionsWithin(to.pts, to.cum, p, sFrom, sTo, OFF_GRAPH_M).map((proj) => ({ s: proj.s, d: proj.d }));
-    if (holding && window.length === 0) {
+    if (heldHeading && window.length === 0) {
       // A held marker can be far behind the new plan's window. Before
       // falling to that plan (22139: 750 m), use nearby geometry behind
       // the target and catch up forwards (its departure starts 89 m away).
-      // The upper arc bound still excludes a later return leg on a loop;
-      // no nearby geometry means the original plan fallback remains.
+      // Nearby folds must agree with the held heading. Among those, prefer
+      // the plan's progress, not centimetres of ground-distance scatter:
+      // an earlier lap would invent a traversal the fixes never supported.
+      // The upper arc bound still excludes a later return leg; without a
+      // direction-compatible candidate the original plan fallback remains.
       const nearby = graph && to.path !== null
         ? graph.projectionsOntoPath(to.path, p, 0, sTo, OFF_GRAPH_M)
         : projectionsWithin(to.pts, to.cum, p, 0, sTo, OFF_GRAPH_M);
-      const best = nearby.filter(c => c.s <= sTo)
-        .sort((a, b) => a.d - b.d || Math.abs(a.s - expected) - Math.abs(b.s - expected))[0];
+      const best = nearby.filter(c => {
+        if (c.s > sTo) return false;
+        const heading = tangent(to.pts, to.cum, c.s);
+        return heading.x * heldHeading.x + heading.y * heldHeading.y > 0;
+      }).sort((a, b) => Math.abs(a.s - expected) - Math.abs(b.s - expected) || a.d - b.d)[0];
       if (best) return best.s;
     }
     // Nothing on the new geometry within the window leaves the plan's own
