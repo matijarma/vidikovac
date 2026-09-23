@@ -17,11 +17,18 @@
 //   6. the map host carries the Kadar (`data-frame`) and the map the
 //      public-display profile.
 //
+//   7. no pill is crossed by a name (decision 17: on the wall the vehicle
+//      marks take their place first and a name moves or yields), so
+//      `data-overlaps` names is 0; a BAJS number under a pill is a pill
+//      passing (its count stays drawn under it), so `discs` is never more
+//      than `data-disc-pills`, the pills over those numbers; the names the
+//      collision pass held back (`data-hidden-names`) are recorded.
+//
 // The census attributes are read off what MapLibre drew (city-map.ts,
-// writeRenderProbe and markerCensus), taken at the map's idle. `data-overlaps`
-// is recorded, not asserted: it counts where a pill covers a disc's number or
-// crosses a stop or place name, which the pills' ignore-placement allows by
-// design, and the report quotes the count the owner's screenshot raised.
+// writeRenderProbe and markerCensus), taken at the map's idle.
+//
+// A third test takes the feed down under a wall that has drawn its fleet:
+// the vehicle marks leave the map and the census, the stations stay.
 //
 // Local only: the feed is the recorded fixture (installKioskFeedFixture), the
 // city API the fixture of e2e/city-fixtures.ts with WALL_BIKES, and the
@@ -122,17 +129,48 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
   await expect(legend.locator('span')).toHaveCount(3);
   expect(await legend.innerText()).not.toContain('?');
 
-  // The overlaps, for the record (see the header).
+  // 7. The overlaps (decision 17): no name over a pill; a covered BAJS number is a pill passing.
   const overlaps = counts(await map.getAttribute('data-overlaps'));
+  expect(Object.keys(overlaps).sort()).toEqual(['discs', 'names']);
+  expect(overlaps.names, 'names crossed by a pill').toBe(0);
+  const discPills = Number(await map.getAttribute('data-disc-pills'));
+  expect(Number.isFinite(discPills)).toBe(true);
+  expect(overlaps.discs).toBeLessThanOrEqual(discPills);
+  const hiddenNames = Number(await map.getAttribute('data-hidden-names'));
+  expect(Number.isFinite(hiddenNames)).toBe(true);
   const census = {
     radiusM: Math.round(radiusM), expectedZoom: Number(expected.toFixed(2)), zoom: await map.getAttribute('data-zoom'),
     host: await hostBox(host), pills: pills.split('|').length, markers: await map.getAttribute('data-markers'),
-    unlabelled: await map.getAttribute('data-unlabelled'), bajs: await map.getAttribute('data-bajs'), overlaps,
+    unlabelled: await map.getAttribute('data-unlabelled'), bajs: await map.getAttribute('data-bajs'), overlaps, discPills, hiddenNames,
   };
   info.annotations.push({ type: 'census', description: JSON.stringify(census) });
   console.log(`wall-map census: ${JSON.stringify(census)}`);
-  expect(Object.keys(overlaps).sort()).toEqual(['discs', 'names']);
   await page.screenshot({ path: 'test-results/wall-map/wall-1920.png' });
+});
+
+// An outage under a wall that has drawn its fleet (review-w, P1): the feed
+// goes down and the vehicle marks leave the map and its census, while the
+// stops, the stations and their counts stay where they are.
+test('the framed wall in an outage: the vehicles leave the map, the BAJS stations stay', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await installKioskFeedFixture(page, 'ready');
+  await installCityFixture(page, Date.now(), WALL_BIKES);
+  await installWallFixture(page);
+  await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
+  const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
+  await page.goto(kioskUrl);
+  const map = page.getByTestId('kiosk-map');
+  await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
+  await expect.poll(async () => ((await map.getAttribute('data-pills')) ?? '') !== '', { timeout: 30_000, message: 'the fleet drawn' }).toBe(true);
+  await expect.poll(() => map.getAttribute('data-bajs'), { timeout: 30_000, message: 'data-bajs' }).toBe('counted:1;zero:1;blank:1;far:0');
+  // The next poll answers "down" (routes registered later win).
+  await installKioskFeedFixture(page, 'down');
+  await expect(map).toHaveAttribute('data-feed', 'down', { timeout: 90_000 });
+  await expect.poll(() => map.getAttribute('data-pills'), { timeout: 30_000, message: 'no pill drawn in the outage' }).toBe('');
+  await expect(map).toHaveAttribute('data-bajs', 'counted:1;zero:1;blank:1;far:0');
+  await expect(map).toHaveAttribute('data-markers', String(WALL_BIKES.length));
+  await expect(map).toHaveAttribute('data-unlabelled', '0');
+  await page.screenshot({ path: 'test-results/wall-map/wall-outage-1920.png' });
 });
 
 // The screen nobody placed (the admin route without a stop reads back as Trg
