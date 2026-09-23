@@ -146,7 +146,7 @@ export const EXTERNAL_VECTOR_PATTERNS = [
   { reason: 'link', source: /h[ .:/-]*t[ .:/-]*t[ .:/-]*p|w[ .-]*w[ .-]*w|@|(?<![a-z0-9])[a-z0-9-]+\.(?:cc|hr|com|net|org|eu|info|io|me|app|link|ly|dev|xyz|site|online|zip|test|co|uk|de|ru|biz|store|museum|travel|gov|edu)(?![a-z0-9])/u },
   { reason: 'phone', source: /(?<![a-z0-9])(?:t[ .-]*e[ .-]*l|telefon[a-z]*|telephone[a-z]*|phone|fax|sms)(?![a-z0-9])|0[ .()/–-]*8[ .()/–-]*0[ .()/–-]*0|\+[ .()/–-]*\d/u },
   { reason: 'account', source: /(?<![a-z0-9])(?:iban|i[ .-]+b[ .-]+a[ .-]+n|swift|bic)(?![a-z0-9])|(?<![a-z0-9])h[ .-]*r[ .-]*\d|(?<![a-z0-9])[a-z]{2}\d{2}(?:[ -]?[a-z0-9]){10,}/u },
-  // `currency`: the one vector a row's proper name may carry a code for (external-text.ts maskNameCodes).
+  // `currency`: the one vector a committed street's name may carry a code for (external-text.ts maskRegisterStreet).
   { reason: 'payment', source: PAYMENT_AMOUNT, currency: true },
   { reason: 'payment', source: PAYMENT_NUMBER },
   { reason: 'phone', source: /(?<![a-z0-9])(?:broj(?:a|u|em|evi|eve|eva|evima)?|number(?:s)?)[ :()-]*\d+/u },

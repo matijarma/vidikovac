@@ -46,8 +46,8 @@ export const HERITAGE_ROW_RESIDUALS: readonly RowTextResidual[] = [
   // W-C10: register initials and abbreviations (d.d., A.I., Dr.Ante, sv.Vinka)
   // are no longer lost; in a name or address a dotted token is a link only when
   // its last label is a top-level domain.
-  // Nova Ves (VES, an ISO 4217 code) left this list: a capitalised code inside a row's name
-  // or address before a house number is part of the name (external-text.ts maskNameCodes).
+  // Nova Ves (VES, an ISO 4217 code) left this list: the committed street's own name before a
+  // parsed house number is that street, not a currency (external-text.ts maskRegisterStreet).
 ];
 
 export const TITLE_ROW_RESIDUALS: readonly RowTextResidual[] = [

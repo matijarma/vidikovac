@@ -21,6 +21,7 @@ import {
 } from './external-text-policy';
 import { installExternalTextBoundary } from './external-text-boundary';
 import { TOP_LEVEL_DOMAINS } from './tlds';
+import { CODE_WORD_STREETS } from './code-word-streets';
 import { ISO_4217_CODES } from './iso-4217';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
@@ -323,22 +324,28 @@ export function sentenceInstruction(text: string): boolean {
   return headerInstructionRule(text) !== null;
 }
 
-// A capitalised word right after another capitalised word inside a name is part of that name:
-// the structural reading the singular-imperative rule above makes of "posjed Rudeš". So in a
-// row's name or address a three-letter currency code written that way before a house number
-// ("Nova Ves 12", "Lepa Ves 3", "Nova Ves 04 i 4/1") is a street, not an amount. Nothing else
-// changes: "VES 2", "ves 2", a lone "Ves 2", "2 Ves", a four-digit number, a symbol or word
-// currency, every other kind and the header surface keep the code a currency (D2 read-through).
+// A word of a committed street's own name that is spelled like an ISO 4217 code ("Nova Ves":
+// VES) is that street, not a currency, but only in exactly that context: in a row's name or
+// address whose address part is the register's street name, written as the register writes it,
+// followed by a fully parsed house number (12, 5a, 4/1, and at most one more after " i ") and
+// nothing else. No verb, amount, range or trailing text can ride on it; every other reading,
+// every other kind and the header surface keep the code a currency (review-w-fix6 P1).
 const CURRENCY_CODES = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
-const NAME_CODE = /(?<=(?:^|[\s,(])\p{Lu}\p{Ll}+ )\p{Lu}\p{Ll}{2}(?= \d{1,3}\p{Ll}?(?:\/\d{1,3})?(?:$|[,;)]| i |\s*[-–]))/gu;
-function maskNameCodes(value: string): string {
-  return value.replace(NAME_CODE, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word);
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const HOUSE = '\\d{1,3}[a-z]?(?:/\\d{1,3}[a-z]?)?';
+const REGISTER_STREET_ADDRESS = new RegExp(`^(?:(.+), )?(${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
+  .map(escapeRegExp).join('|')}) (${HOUSE}(?: i ${HOUSE})?)$`, 'u');
+function maskRegisterStreet(value: string): string {
+  const match = REGISTER_STREET_ADDRESS.exec(value);
+  if (!match) return value;
+  const street = match[2]!.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word);
+  return `${match[1] !== undefined ? `${match[1]}, ` : ''}${street} ${match[3]}`;
 }
 
 /** Structural evidence for corpus audits; production callers log codes only. */
 export function externalTextVector(value: string, kind?: ExternalTextKind, surface?: ExternalTextSurface): { reason: ExternalTextRejection; value: string } | null {
   const text = foldText(value);
-  const named = surface === 'row' && isNameKind(kind) ? foldText(maskNameCodes(value.normalize('NFC'))) : text;
+  const named = surface === 'row' && isNameKind(kind) ? foldText(maskRegisterStreet(value.normalize('NFC'))) : text;
   for (const entry of EXTERNAL_VECTOR_PATTERNS) {
     const match = entry.source.exec('currency' in entry ? named : text);
     if (match) return { reason: entry.reason, value: match[0] };
