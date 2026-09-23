@@ -95,10 +95,12 @@ place's naming story or a protected building nearby, alternating, and the
 24/7 pharmacy at night. No row carries a source, freshness or caveat caption.
 Rows are whole and at least 64–92px tall from the item count, so fewer items
 make larger rows; a row whose words need two lines is taller. Nothing is cut
-with an ellipsis: a long row prints its shorter complete label, or leaves the
-list. Each row keeps its node: a new row enters at the bottom, fades in once
-and takes its place in time on the next update, a past one leaves at the top,
-and nothing moves without a change. The map highlights what the header
+with an ellipsis: a long row prints the source's own shorter label or wraps
+whole; when the rows do not fit, whole rows leave the list, the latest first,
+and the first row after the departures only after the later departures.
+Each row keeps its node: a new row enters at the bottom, fades in once and
+takes its place in time on the next update, a past one leaves at the top, and
+nothing moves without a change. The map highlights what the header
 sentence names without fitting or moving the camera. Presentation suspends
 the sentence and the list; safety and QR remain available.
 

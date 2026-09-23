@@ -14,7 +14,6 @@ import {
   ALWAYS_ALTERNATE_MS,
   MAX_DEPARTURES,
   firstSentence,
-  mainTitle,
   nearbyHead,
   nearbyPill,
   openingTimes,
@@ -525,17 +524,17 @@ describe('shorter complete labels (titleShort, subShort)', () => {
   const eventRow = (ev: FeedItem, extra: Partial<NearbyInput> = {}): NearbyRow =>
     selectNearby(input(now, { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [ev]) }, ...extra })).find((r) => r.id === `event:${ev.id}`)!;
 
-  it('names an event without its subtitle, as the source writes it', () => {
-    const row = eventRow(event('ev-long', 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini'));
-    expect(row).toMatchObject({ title: 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini', titleShort: 'Večer u Kvaterniku' });
-    expect(eventRow(event('ev-dash', 'S druge strane zrcala – psihoanaliza i film')).titleShort).toBe('S druge strane zrcala');
-    expect(eventRow(event('ev-paren', 'Noć kazališta (program za djecu)')).titleShort).toBe('Noć kazališta');
-  });
-  it('offers no short title where none is whole: a category before the colon, a clock, an open quote, no subtitle at all', () => {
-    for (const title of ['Predavanje: Povijest Zagreba', 'Koncert u 19:30 sati', 'Koncert „Kiša: pjesme“', 'Intersonus', 'Erdödy-Keglević danas']) {
-      expect(eventRow(event(`ev-${title.length}`, title)).titleShort, title).toBeUndefined();
+  // Review W (P2): the words before a colon or a dash are not a name the source gave the event
+  // ("Javno predavanje: Povijest Zagreba" is not "Javno predavanje"). A short title comes only from
+  // the source's own words; without one the wall wraps the whole title (app/src/kiosk/timeline.ts).
+  it('never makes a short title by cutting the source title at its punctuation', () => {
+    for (const title of ['Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini', 'Javno predavanje: Povijest Zagreba',
+      'S druge strane zrcala – psihoanaliza i film', 'Noć kazališta (program za djecu)', '„Kiša: pjesme“ – koncert u dvorištu',
+      'Predavanje: Povijest Zagreba', 'Koncert u 19:30 sati', 'Koncert „Kiša: pjesme“', 'Intersonus', 'Erdödy-Keglević danas']) {
+      const row = eventRow(event(`ev-${title.length}`, title));
+      expect(row.title, title).toBe(title);
+      expect(row, title).not.toHaveProperty('titleShort');
     }
-    expect(mainTitle('„Kiša: pjesme“ – koncert u dvorištu')).toBe('„Kiša: pjesme“');
   });
   it('prefers the source’s own title where a machine brief stands in for it', () => {
     const row = eventRow(event('ev-brief', 'Jazz u Europi', { brief: 'Večer jazza u Kinu Europa s gostima iz Ljubljane i Beča' }));

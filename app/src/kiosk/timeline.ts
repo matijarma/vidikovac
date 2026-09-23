@@ -21,10 +21,12 @@
 // its words need, never less than the row budget's 64 to 92 px. Content
 // selection makes it fit: a title that takes more than one line, or a sub
 // more than two, is replaced by the row's shorter complete label when the
-// selection layer supplies one (titleShort, subShort); when the list still
-// overflows its box, every label that takes more than one line gives way to
-// its short one, then whole rows are dropped, the latest timed rows first, then
-// departures beyond the first. One "uvijek" row is reserved. The fit is measured once
+// selection layer supplies one (titleShort, subShort), and a label without one
+// wraps whole; when the list still overflows its box, every label that takes
+// more than one line gives way to its short one, then whole rows are dropped:
+// the latest timed rows first, then departures beyond the first, then the next
+// row that is not a departure (so a long title the source cannot shorten keeps
+// its row while a third departure can make room). One "uvijek" row is reserved. The fit is measured once
 // per change of content or box and remembered, so a steady wall does not
 // re-measure or re-insert anything.
 //
@@ -49,9 +51,10 @@ import { kBadge } from './markup';
  * A row as the timeline reads it: the S5 NearbyRow, whose departure rows
  * carry their `arrival` (the line badge leads the title), and whose
  * `titleShort` / `subShort` are the shorter complete labels the selection
- * layer offers ("Večer u Kvaterniku" for "Večer u Kvaterniku: razgovor o
- * gradu i kulturnoj baštini", the venue without the tram to it), never a cut;
- * the wall prints one only when the full label does not fit.
+ * layer offers from the source's own words (an event's own title where a
+ * machine brief stands in for it, the stop's shorter name, the venue without
+ * the tram to it), never a cut; the wall prints one only when the full label
+ * does not fit, and wraps the full one where none is offered.
  */
 export type TimelineRow = NearbyRow & {
   arrival?: Pick<ArrivalRow, 'routeId' | 'routeName'>;
@@ -129,16 +132,16 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
 
 /**
  * The row to drop when the rows do not fit, or null: the latest timed row
- * that is not a departure, then the latest departure while more than one
- * is left. Keep one timeless row as well (owner decision 10).
+ * that is not a departure, but not the first of them (the next thing on the
+ * list after its departures); then the latest departure while more than one
+ * is left; then that next thing. Keep one timeless row as well (owner decision 10).
  */
 export function dropCandidate<T extends NearbyRow>(rows: readonly T[]): T | null {
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i]!;
-    if (!isTimeless(row) && row.kind !== 'departure') return row;
-  }
+  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure');
+  if (others.length > 1) return others[others.length - 1]!;
   const departures = rows.filter((row) => row.kind === 'departure');
   if (departures.length > 1) return departures[departures.length - 1]!;
+  if (others.length === 1) return others[0]!;
   const timeless = rows.filter(isTimeless);
   return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
 }

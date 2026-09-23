@@ -308,8 +308,10 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
     const title = oneLine(item.brief ?? item.title);
-    // The source's own title where a machine brief stands in for it, else the event's name without its subtitle.
-    const titleShort = shorterLabel(title, [item.brief ? item.title : undefined, mainTitle(title)]);
+    // The source's own title where a machine brief stands in for it; nothing else. The words before a colon
+    // or a dash are not a name the source gave ("Javno predavanje: Povijest Zagreba" is not "Javno
+    // predavanje"), so without one the wall wraps the whole title (app/src/kiosk/timeline.ts).
+    const titleShort = shorterLabel(title, [item.brief ? item.title : undefined]);
     out.push({
       id: `event:${item.id}`,
       kind: 'event',
@@ -768,32 +770,6 @@ export function shorterLabel(full: string, candidates: readonly (string | undefi
     if (text && text.length < whole.length && !ELLIPSIS.test(text)) return text;
   }
   return undefined;
-}
-
-/** "Name: subtitle" (never a clock's colon), "Name – subtitle" (a spaced dash, never "Erdödy-Keglević"), "Name (subtitle)". */
-const SUBTITLE: readonly RegExp[] = [/^(.*?\D):\s+\S/u, /^(.*?\S)\s+[-–—]\s+\S/u, /^(.*?\S)\s*\([^()]*\)$/u];
-
-/**
- * An event's own name without its subtitle, as the source writes it: "Večer u
- * Kvaterniku: razgovor o gradu i kulturnoj baštini" is "Večer u Kvaterniku",
- * "S druge strane zrcala – psihoanaliza i film" is "S druge strane zrcala".
- * Only a name of two words or more with its quotes closed: "Predavanje:
- * Povijest Zagreba" says what the event is only in its second half, so it has
- * no shorter name. Undefined when the title has no such part.
- */
-export function mainTitle(title: string): string | undefined {
-  const text = oneLine(title);
-  for (const pattern of SUBTITLE) {
-    const head = pattern.exec(text)?.[1]?.replace(/[\s,;:–—-]+$/u, '').trim();
-    if (head && head.split(' ').length >= 2 && quotesClosed(head)) return head;
-  }
-  return undefined;
-}
-
-/** Every quote the head opens it also closes („…“, “…”, "…"). */
-function quotesClosed(text: string): boolean {
-  const count = (re: RegExp): number => (text.match(re) ?? []).length;
-  return count(/"/g) % 2 === 0 && count(/[„“”]/g) % 2 === 0;
 }
 
 // --- helpers ----------------------------------------------------------------------

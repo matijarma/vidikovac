@@ -24,6 +24,10 @@ const TERMINAL_LABEL_UNITS = 9.4;
 /** A public screen is read across a room, not at phone distance (R-P1). */
 export const KIOSK_LABEL_MIN_PX = 24;
 export const KIOSK_LABEL_SCALE = KIOSK_LABEL_MIN_PX / STOP_LABEL_UNITS;
+/** A wall's whole-network schema names its stops at the wall's walk-up tier
+ *  (28 px, kiosk.css --k-sub-size): as many as the collision pass has room
+ *  for, terminals first, then the stops the most lines call at. */
+export const WALL_LABEL_MIN_PX = 28;
 /** The artwork groups successive label baselines about one em apart. */
 const LABEL_ROW_ADVANCE = 1.1;
 

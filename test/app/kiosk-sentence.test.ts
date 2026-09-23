@@ -8,8 +8,8 @@ import {
 } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
 import {
-  createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences,
-  SENTENCE_COPY_HR, SENTENCE_COPY_EN, type SentenceFactsInput, type SentenceNearbyRow,
+  createSentenceSequence, modelSentenceFacts, sentenceFactKeys, sentenceFacts, templateSentences,
+  SENTENCE_COPY_HR, SENTENCE_COPY_EN, type RotatingSentence, type SentenceFactsInput, type SentenceNearbyRow,
 } from '../../app/src/city/sentence';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { sunTimes } from '../../app/src/ui/solar';
@@ -642,6 +642,94 @@ describe('sentence sequence', () => {
   it('never displays a timeless sentence, even with a solar paraphrase', () => {
     const seq = createSentenceSequence({ rhythmMs: 20_000 });
     expect(seq.read([sentence('Zalazak sunca je u 10:05.', { validUntil: null })], NOW)).toBeNull();
+  });
+});
+
+// One fact is its template family and subject, not its wording: the Trg wall said its sunrise
+// three times in three minutes ("Sunce izlazi…", "Izlazak sunca je…", "U 06:43 izlazi sunce.").
+describe('sentence sequence: one fact, once in ten minutes', () => {
+  const DAWN = Date.parse('2026-09-23T05:37:00+02:00');
+  const departure = (trip: string, route: string, headsign: string, atMs: number, live = false) => row({
+    id: `dep:${trip}`, kind: 'departure', title: headsign, atMs, live,
+    arrival: { tripId: trip, routeId: route, routeName: route, headsign, atMs, live, minutes: live ? 3 : null },
+  });
+  const solar = /sunc/i;
+  // What the wall paints every 20 s: fresh facts and templates, then the sequence; `prefilter` is
+  // kiosk.ts's own guard, which drops every wording already shown before the sequence sees the pool.
+  function run(rows: SentenceNearbyRow[], { prefilter = false, from = DAWN } = {}) {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const shown = new Set<string>();
+    const changes: RotatingSentence[] = [];
+    for (let tick = 0; tick <= 600_000; tick += 20_000) {
+      const now = from + tick;
+      const pool = templateSentences(sentenceFacts(input({ now, rows })), i18n, 80, now)
+        .filter(s => !prefilter || s.text === changes.at(-1)?.text || !shown.has(s.text));
+      const next = seq.read(pool, now);
+      expect(next).not.toBeNull();
+      shown.add(next!.text);
+      if (next!.text !== changes.at(-1)?.text) changes.push(next!);
+    }
+    return changes;
+  }
+
+  it.each([false, true])('shows the sunrise in one wording only while three facts exist (kiosk pre-filter %s)', prefilter => {
+    const rows = [departure('t14', '14', 'Zapruđe', Date.parse('2026-09-23T05:51:00+02:00')),
+      departure('t6', '6', 'Črnomerec', Date.parse('2026-09-23T05:55:00+02:00')),
+      departure('t13', '13', 'Žitnjak', Date.parse('2026-09-23T06:02:00+02:00'))];
+    const changes = run(rows, { prefilter });
+    expect(changes.filter(s => solar.test(s.text))).toHaveLength(1);
+    expect(new Set(changes.map(s => s.text)).size).toBe(changes.length);
+    const facts = new Set(changes.map(s => sentenceFactKeys(s).join('+')));
+    expect(facts.size).toBe(changes.length);
+    expect(facts.size).toBeGreaterThanOrEqual(3);
+    // The same clock and facts give the same rotation: the template fallback stays deterministic.
+    expect(run(rows, { prefilter }).map(s => s.text)).toEqual(changes.map(s => s.text));
+  });
+
+  it('falls back to the wording rule alone when only two facts exist', () => {
+    const changes = run([row({ id: 'closure:ilica', title: 'Ilica', atMs: DAWN + 3_600_000 })]);
+    expect(changes.filter(s => solar.test(s.text))).toHaveLength(3);
+    expect(changes.some(s => s.refs.includes('closure:ilica'))).toBe(true);
+    expect(new Set(changes.map(s => s.text)).size).toBe(changes.length);
+  });
+
+  it('treats every trip and countdown of one line and direction at this place as one fact', () => {
+    const rows = [departure('a', '6', 'Črnomerec', NOW + 180_000, true), departure('b', '6', 'Črnomerec', NOW + 900_000),
+      departure('c', '14', 'Zapruđe', NOW + 840_000), row({})];
+    const facts = sentenceFacts(input({ rows }));
+    const templates = templateSentences(facts, i18n, 80, NOW);
+    const key = (id: string) => sentenceFactKeys(templates.find(s => s.refs.includes(id))!).join('+');
+    expect(key('dep:a')).toBe(key('dep:b'));
+    expect(key('dep:a')).not.toBe(key('dep:c'));
+    expect(sentenceFactKeys(templates.find(s => solar.test(s.text))!)).toEqual([facts[0]!.id]);
+    const elsewhere = templateSentences(sentenceFacts(input({ rows, place: { ...input().place, stopId: '107_1' } })), i18n, 80, NOW);
+    expect(sentenceFactKeys(elsewhere.find(s => s.refs.includes('dep:a'))!)).not.toEqual(sentenceFactKeys(templates.find(s => s.refs.includes('dep:a'))!));
+    // The identity is the rotation's own; it never reaches the sentence request.
+    expect(JSON.stringify(modelSentenceFacts(facts, NOW))).not.toContain('factKey');
+    // Neither the next minute of trip a nor trip b comes back once line 6 to Črnomerec has left the screen.
+    const changes = run(rows, { from: NOW });
+    expect(changes.filter(s => /Tramvaj 6, smjer Črnomerec/.test(s.text))).toHaveLength(1);
+    expect(changes.some(s => s.refs.includes('dep:c'))).toBe(true);
+  });
+
+  it('restates the fact on screen in fresh words instead of blanking, and never returns to a shown fact', () => {
+    const at = (s: WrittenSentence, factKey?: string): RotatingSentence => (factKey ? { ...s, factKey } : s);
+    // Approved families only: W-C2's typed boundary refuses free prose in the sequence as well.
+    const y = sentence('U 13:00 počinje događanje „Film“ (Kino).', { refs: ['event:y'], kicker: 'kultura' });
+    const z = sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['event:z'], kicker: 'vrijeme' });
+    const x1 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi za 3 min.', { refs: ['dep:a'], kicker: 'promet', validUntil: NOW + 50_000 }), 'departure:6');
+    const x2 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi u 12:45.', { refs: ['dep:b'], kicker: 'promet' }), 'departure:6');
+    // A model sentence citing the shown fact y is that fact in other words.
+    const y2 = sentence('Kino: rad počinje u 13:00.', { refs: ['event:y'], kicker: 'kultura', origin: 'model' });
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const pool = [y, z, x1, x2, y2];
+    expect(seq.read(pool, NOW)?.text).toBe(y.text);
+    expect(seq.read(pool, NOW + 20_000)?.text).toBe(z.text);
+    expect(seq.read(pool, NOW + 40_000)?.text).toBe(x1.text);
+    expect(seq.read(pool, NOW + 60_000)?.text).toBe(x2.text);
+    for (let tick = 80_000; tick < 620_000; tick += 20_000) expect(seq.read(pool, NOW + tick)?.text).toBe(x2.text);
+    // Ten minutes after y left the screen, its fact may return.
+    expect(seq.read(pool, NOW + 620_000)?.refs).toEqual(['event:y']);
   });
 });
 

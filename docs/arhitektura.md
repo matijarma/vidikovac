@@ -209,8 +209,11 @@ vozila su na odvojenim platnima; statika se ne crta ponovno za svaku sliku.
 fokusa između geografskog i novog koordinatnog sustava. Izbor na shemi
 otvara postojeći list prijevoza, ne dijalog. Nazivi koriste Manrope i postaju
 vidljivi od 1,4 CSS px po jedinici izvornika (oko 11px za izvornih 7,92).
-Javni zaslon kadrira svoje stajalište na čitljivoj skali, s podom naziva 24px;
-bez prepoznatog stajališta pokazuje cijelu mrežu bez naziva. Početni kadar
+Javni zaslon s prikazom sheme pokazuje cijelu mrežu u jednom kadru i imenuje
+je nazivima iz nacrta od najmanje 28px, onoliko koliko ih stane bez
+preklapanja: najprije okretišta, zatim stajališta na kojima staje najviše
+linija. Telefon kadrira svoje stajalište na čitljivoj skali, s podom naziva
+24px; bez prepoznatog stajališta pokazuje cijelu mrežu bez naziva. Početni kadar
 obuhvaća zadržanu geometriju, ne praznine uklonjenog zaglavlja i legende.
 Povlačenje, pinch, kotačić i dvostruki dodir rade kroz Pointer Events;
 `+`, `-`, `0` mijenjaju skalu, Shift i strelice pomiču kadar, obične strelice

@@ -148,7 +148,9 @@ function expectWall(state:Awaited<ReturnType<typeof wallState>>,label:string){
   expect(state.sentenceOverflow,why).toBeLessThanOrEqual(1);
   expect(state.validUntil,why).not.toBeNull();
   const until=/^\d+$/.test(state.validUntil??'')?Number(state.validUntil):Date.parse(state.validUntil??'');
-  if(Number.isFinite(until))expect(until,why).toBeGreaterThanOrEqual(state.now-1500);
+  // A deadline that is not a number (data-valid-until="garbage") is a failure, not a pass.
+  expect(Number.isFinite(until),why).toBe(true);
+  expect(until,why).toBeGreaterThanOrEqual(state.now-1500);
 }
 /** Every departure on the list is a grey timetable time: no row claims a tracked vehicle. */
 async function expectTimetableOnly(page:Page){
