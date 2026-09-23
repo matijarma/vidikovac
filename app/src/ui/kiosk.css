@@ -478,7 +478,6 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-code-box { position: relative; min-width: 0; }
 .k-code-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .k-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
-.k-join-code[data-swap='1'] { animation: k-code-in 180ms var(--ease-enter) both; }
 @keyframes k-code-in { from { opacity: 0; } }
 @keyframes k-code-out { to { opacity: 0; } }
 .k-code-ghost { position: absolute; top: 0; left: 0; pointer-events: none; animation: k-code-out 180ms var(--ease-exit) both; }
@@ -727,20 +726,6 @@ button.k-strip-verdict { cursor: pointer; }
 .k-stack > * + * { margin-top: var(--k-gap); }
 .k-headline { font-size: var(--k-main-size); font-weight: 800; line-height: 1.12; letter-spacing: -0.015em; }
 
-/* The join card: the small QR the next person scans, painted by the controller. */
-.k-join { display: flex; flex: none; align-items: center; box-sizing: border-box; margin-top: auto; padding: var(--k-gap) var(--k-pad); border-radius: var(--k-radius); background: var(--k-surface); box-shadow: var(--k-shadow); }
-.k-side-blocks + .k-join { margin-top: var(--k-gap); }
-/* No side blocks in portrait: the join card sits at the foot of the side, not at its top. */
-.k-side-blocks:empty + .k-join { margin-top: auto; }
-.k-join-qr { flex: none; width: calc(120px * var(--k-zoom)); height: calc(120px * var(--k-zoom)); }
-.k-join-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: calc(var(--k-gap) * 0.4); border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
-.k-join-qr .qr svg { width: 100%; height: 100%; }
-.k-join-qr:empty { border-radius: var(--k-radius-s); background: var(--k-surface-2); }
-.k-join-text { min-width: 0; margin-left: var(--k-gap); }
-.k-join-title { font-size: var(--k-sup-size); font-weight: 800; }
-.k-join-code { font-family: var(--font-mono); margin-top: calc(var(--k-gap) * 0.2); font-size: min(var(--k-display-size), 15cqi); font-weight: 700; letter-spacing: 0.06em; color: var(--k-action); font-variant-numeric: tabular-nums; }
-.k-join-text .k-meta { margin-top: calc(var(--k-gap) * 0.2); }
-
 /* --- Lightweight: system type, no shadows, the lines board is the field --- */
 :root[data-lagano='1'] .kiosk { --k-font: 'Segoe UI', 'Avenir Next', system-ui, sans-serif; --k-shadow: none; }
 :root[data-lagano='1'] .k-field { background: var(--k-surface); }
@@ -770,12 +755,12 @@ button.k-strip-verdict { cursor: pointer; }
 /* --- Motion: one transition, none when unwanted --------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .kiosk *, .kiosk *::before, .kiosk *::after { transition: none !important; }
-  .kiosk .k-code[data-swap='1'], .kiosk .k-join-code[data-swap='1'], .kiosk .k-sentence[data-swap='1'] { animation: none; }
+  .kiosk .k-code[data-swap='1'], .kiosk .k-sentence[data-swap='1'] { animation: none; }
   .kiosk .k-code-ghost { display: none; }
   .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
-:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-join-code[data-swap='1'], :root[data-lagano='1'] .k-sentence[data-swap='1'] { animation: none; }
+:root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-sentence[data-swap='1'] { animation: none; }
 :root[data-lagano='1'] .k-code-ghost { display: none; }
 :root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }
 
