@@ -15,6 +15,7 @@ import {
   isParkedEpisode,
   judge,
   loadRealEngine,
+  metricA,
   LOOP_HANDOVER_TERMINUS_M,
   PARKED_MIN_S,
   PARKED_RADIUS_M,
@@ -273,6 +274,78 @@ describe('the branch grader, fault injection on the corridor', () => {
     expect(acceptanceRows(edge)).toMatchObject({ U: 100, U_raw: 100, U_parkedVh: 0 });
   });
 
+  // Decision 35's far hand-over rule at its boundary (delta review of c449b89,
+  // P2). The corridor gets two terminus loop paths appended after its own
+  // (its own indices unchanged, so the kept tick reads the same): route 1's over the
+  // trunk and route 2's, then, being synthetic, ahead of 'path:9:0:abc' only.
+  // The victim stands alone, its fix set `terminalD` metres east of T0 (the
+  // nearest terminal platform), and moves onto a loop at the second observation. The rule reads unrounded metres, as decision 16's
+  // parked radius does: 300.4 m prints as 300 and is a direction flip, in rows
+  // A and E; 300 m is a loop transition. The loops block accounts for every
+  // loop-touching event once: own-route transitions, foreign (row B), far
+  // (rows A and E).
+  describe('a hand-over onto a terminus loop at the 300 m boundary', () => {
+    const spec = corridorSpec();
+    spec.routes.find((r) => r.id === '1')!.paths!.push({ id: 'loop:1:aaaaaaaa', direction: -1, edges: [0], synthetic: true });
+    spec.routes.find((r) => r.id === '2')!.paths!.push({ id: 'loop:2:bbbbbbbb', direction: -1, edges: [0], synthetic: true });
+    const netLoop = syntheticNetwork(spec);
+    const ownLoop = netLoop.paths.findIndex((p) => p.id === 'loop:1:aaaaaaaa');
+    const foreignLoop = netLoop.paths.findIndex((p) => p.id === 'loop:2:bbbbbbbb');
+
+    function observeOntoLoop(terminalD: number, loopIdx: number): BranchReport {
+      const { state, headerSec, payload, victimId } = structuredClone(kept!);
+      const victim = state.tracks[victimId];
+      // The victim's path and plan index read the same path in the loop network (the synthetic 'path:9:0:abc' alone moves, from 3 to 5).
+      expect(netLoop.paths[victim.match.pathIdx!].id).toBe('1_0');
+      expect(victim.plan?.on === 'path' && netLoop.paths[victim.plan.pathIdx].id).toBe('1_0');
+      expect(victim.priorPath === null || victim.priorPath < 3).toBe(true);
+      state.tracks = { [victimId]: victim };
+      const t0 = netLoop.stops.find((s) => s.id === 'T0')!;
+      expect(t0.terminal).toBe(true);
+      const fix0 = victim.fixes[victim.fixes.length - 1];
+      victim.fixes = [...victim.fixes.slice(0, -1), { ...fix0, x: t0.p.x + terminalD, y: t0.p.y }];
+      const original = { ...victim.match };
+      const engineLoop = createEngine(netLoop, corridorIndex(netLoop, sim.trams.map((t) => ({ tripId: t.tripId, pathId: t.shapeId }))));
+      const grader = createBranchGrader(engineLoop, { stops: corridorStops(netLoop) });
+      for (let k = 0; k < 3; k++) {
+        victim.match = k === 0 ? { ...original } : { ...original, pathIdx: loopIdx };
+        grader.observe(state, headerSec + 10 * k, payload);
+      }
+      return grader.report();
+    }
+
+    it('reads 300.4 m from the terminal as a direction flip that rows A and E count, printed as 300', () => {
+      const report = observeOntoLoop(300.4, ownLoop);
+      expect(report.totals.pathChangesSameTrip).toBe(1);
+      expect(report.totals.byClass).toEqual({ 'direction-flip': 1 });
+      expect(report.events[0]).toMatchObject({ from: '1_0', to: 'loop:1:aaaaaaaa', cls: 'direction-flip', nearestTerminal: 'T0', nearestTerminalM: 300, atTerminus: false });
+      expect(report.flips).toMatchObject({ total: 1, atTerminus: 0, terminalDistanceHist: { le150: 0, le300: 0, le600: 1, gt600: 0 } });
+      expect(report.loops).toMatchObject({ events: 0, onto: 0, foreignEvents: 0, farEvents: 1 });
+      expect(metricA(report).n).toBe(1);
+      expect(acceptanceRows(report)).toMatchObject({ B: 0, E: 1 });
+    });
+
+    it('reads 300 m from the terminal as a loop transition that neither row counts', () => {
+      const report = observeOntoLoop(300, ownLoop);
+      expect(report.totals.byClass).toEqual({ 'loop-transition': 1 });
+      expect(report.events[0]).toMatchObject({ cls: 'loop-transition', nearestTerminalM: 300 });
+      expect(report.flips).toMatchObject({ total: 0, terminalDistanceHist: { le150: 0, le300: 0, le600: 0, gt600: 0 } });
+      expect(report.loops).toMatchObject({ events: 1, onto: 1, off: 0, loopToLoop: 0, foreignEvents: 0, farEvents: 0 });
+      expect(metricA(report).n).toBe(0);
+      expect(acceptanceRows(report)).toMatchObject({ B: 0, E: 0 });
+    });
+
+    it('reads another route\'s loop as an excursion in row B, foreign to the loops block, at any distance', () => {
+      for (const terminalD of [40, 300.4]) {
+        const report = observeOntoLoop(terminalD, foreignLoop);
+        expect(report.totals.byClass).toEqual({ 'onto-other-route': 1 });
+        expect(report.loops).toMatchObject({ events: 0, foreignEvents: 1, farEvents: 0 });
+        expect(report.flips.total).toBe(0);
+        expect(acceptanceRows(report)).toMatchObject({ B: 1, E: 0 });
+      }
+    });
+  });
+
   it('refuses an observation after the report', () => {
     const grader = createBranchGrader(engine, { stops });
     grader.observe(kept!.state, kept!.headerSec, kept!.payload);
@@ -289,9 +362,10 @@ describe('the branch grader, fault injection on the corridor', () => {
 // Decision 35 (23 Sep): A' is "the same as A inside the teaser box", so it
 // leaves out what A leaves out, terminus flips and loop transitions. The
 // review of lane/t-rail (finding 1): a hand-over onto or off a terminus loop
-// far from any terminal is no terminus turn; 4 + 5 a day, T8 silence returns
-// with 250 to 755 m corrections, read as loop transitions and so out of rows
-// A and E by construction. They are direction flips, and row E counts them.
+// far from any terminal is no terminus turn; 4 + 5 a day, returns from a plan
+// held at the loop stand (seven after 55 to 119 s of silence, two after 14 and
+// 27 s) with 249 to 754 m corrections, read as loop transitions and so out of
+// rows A and E by construction. They are direction flips, and row E counts them.
 describe('event classes and what rows A and A-prime count', () => {
   const base = { vehicleRoute: '13', oldRoute: '13', newRoute: '13', oldId: '13_11', newId: 'path:13:1:129fd87e', oldDirection: 1, newDirection: 1, terminalM: 40 as number | null };
 
@@ -300,6 +374,8 @@ describe('event classes and what rows A and A-prime count', () => {
     expect(classifyEvent({ ...base, oldId: 'loop:13:5c4b96ae', oldDirection: -1 })).toBe('loop-transition');
     expect(classifyEvent({ ...base, newId: 'loop:13:5c4b96ae', newDirection: -1, terminalM: 300 })).toBe('loop-transition');
     expect(classifyEvent({ ...base, oldId: 'loop:11:9297ea46', oldDirection: -1, newId: '11_3', terminalM: 308 })).toBe('direction-flip');
+    // The boundary on unrounded metres: 300.4 m prints as 300 and is beyond 300 m.
+    expect(classifyEvent({ ...base, newId: 'loop:13:5c4b96ae', newDirection: -1, terminalM: 300.4 })).toBe('direction-flip');
     // With no terminal platform known the loop's own word stands.
     expect(classifyEvent({ ...base, oldId: 'loop:13:5c4b96ae', oldDirection: -1, terminalM: null })).toBe('loop-transition');
     // Another line's loop stays in row B either way.
