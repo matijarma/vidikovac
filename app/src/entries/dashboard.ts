@@ -7,6 +7,7 @@ import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { fetchData } from '../api';
 import { bootPage } from '../boot';
 import { createMapModeStore } from '../core/map-mode-store';
+import { rememberScreenLabel } from '../core/screen-label';
 import { mountDashboard, parseSessionHash, type DashboardHandle } from '../dashboard';
 import { canExportCalendarItem, copyWithAttribution, geojsonFile, icsFile, icsForItem, itemExportText, printAct, shareLink } from '../export';
 import { fillAttribution } from '../attribution';
@@ -50,6 +51,9 @@ window.addEventListener('afterprint', () => {
 
 function safeLocalStorage(): Storage | undefined {
   try { return window.localStorage; } catch { return undefined; }
+}
+function safeSessionStorage(): Storage | undefined {
+  try { return window.sessionStorage; } catch { return undefined; }
 }
 
 // A WebGL context is the cheapest real probe for an old or weak GPU, which
@@ -108,7 +112,9 @@ if (!params) {
 
   // The ticket is single-use and the label is the screen's: drop only those
   // from the address bar, so a reload resumes and a shared link keeps its
-  // layer and public selection.
+  // layer and public selection. The label stays with this tab (T5), so a
+  // reload still names the screen.
+  const label = rememberScreenLabel(safeSessionStorage(), params.roomId, params.label);
   const kept = new URLSearchParams(location.hash.replace(/^#/, ''));
   kept.delete('ticket');
   kept.delete('label');
@@ -122,7 +128,7 @@ if (!params) {
     i18n,
     session,
     theme,
-    label: params.label,
+    label,
     reducedMotion,
     lightweight,
     onRepaint: repaintOn(theme),

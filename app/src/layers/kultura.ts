@@ -364,3 +364,18 @@ ${listDetail(i18n, { list, detail, detailTitle: i18n.t('events.detailTitle') })}
 ${notes}${attributionFoot(i18n, dogadanja)}
 </section>`);
 }
+
+/**
+ * The page's own count line as numbers, for Još's "Događanja ovaj tjedan" row
+ * [O-53, O-60]: the same deduplicated Zagreb subset renderKultura lists, the
+ * starts of the default seven-day window (today and the six days after) and
+ * what is running now. No filter applies: the row counts the page as it opens.
+ */
+export function eventsCount(snapshot: ModuleSnapshot | undefined, city: { places: Parameters<typeof deduplicateEvents>[1] } | null | undefined, now: number): { count: number; ongoing: number } {
+  const inZagreb = deduplicateEvents(cultureEvents(snapshot), city?.places ?? []).filter((item) => !venueOutsideZagreb(item));
+  const count = upcomingEvents(inZagreb, now).filter((item) => {
+    const offset = dayOffset(zagrebDayKey(item.at), zagrebDayKey(now));
+    return offset !== null && offset >= 0 && offset < 7;
+  }).length;
+  return { count, ongoing: ongoingEvents(inZagreb, now).length };
+}

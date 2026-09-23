@@ -510,7 +510,16 @@
     "civicSummary": "Gazette {broj}/{godina}",
     "eventsSummary_one": "{count} event today",
     "eventsSummary_other": "{count} events today",
-    "noSummary": "Open for details"
+    "noSummary": "Open for details",
+    "eventsWeek": "Events this week",
+    "saved": "Saved",
+    "savedEmpty": "Save a route, stop or place on the map. Find it here next time, on this device.",
+    "savedRecord": "Saved record {id}",
+    "route": "Route",
+    "stop": "Stop",
+    "remove": "Remove",
+    "destinations": "Destinations",
+    "preferences": "Preferences"
   },
   "session": {
     "unlocked": "Unlocked · {label} · until {time}",

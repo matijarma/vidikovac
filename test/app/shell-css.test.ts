@@ -92,8 +92,8 @@ describe('dashboard.css phone shell', () => {
     expect(head).toContain('min-block-size: var(--ki-top)');
     expect(head).toContain('padding-block-start: env(safe-area-inset-top, 0px)');
     expect(head).toContain('background: var(--tone-surface-1)');
-    // Three keyed controls on the phone: wordmark, session, safety, with a flexible gap pushing them right.
-    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto');
+    // Up to five keyed controls on the phone: wordmark, then Zaslon, Podijeli grad, session and safety, with a flexible gap pushing them right.
+    expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
     expect(rule(".ki[data-loading='true'] .ki-head::after")).toContain('opacity: 1');
   });
@@ -151,6 +151,24 @@ describe('dashboard.css header controls', () => {
     expect(rule('.ki-safety .ki-nav-label')).toBe('');
     expect(CSS).not.toContain('@media (max-width: 22.4375rem)');
   });
+  it('"Podijeli grad" is a labelled 44 px button in the brand tone beside the pill; the phone places it between Zaslon and the session', () => {
+    const share = rule('.ki-share');
+    expect(share).toContain('min-inline-size: var(--target)');
+    expect(share).toContain('min-block-size: var(--target)');
+    expect(share).toContain('color: var(--tone-action-brand)');
+    expect(share).toContain('font-weight: var(--weight-bold)');
+    expect(share).toContain('white-space: nowrap');
+    expect(share).toContain('touch-action: manipulation');
+    expect(rule('.ki-share > span')).toContain('position: static');
+    const phone = /@media \(max-width: 59\.99rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(phone).toContain(".ki-head > [data-key='screen'] { grid-column: 3; }");
+    expect(phone).toContain(".ki-head > [data-key='share'] { grid-column: 4; }");
+    expect(phone).toContain(".ki-head > [data-key='session'] { grid-column: 5; }");
+    expect(phone).toContain(".ki-head > [data-key='safety'] { grid-column: 6; }");
+    // Too narrow for the word (a 320 px phone, text zoom): the glyph and the aria-label stay.
+    const narrow = /@container header \(max-width: 21rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
+    expect(rule('.ki-share > span', narrow)).toContain('clip: rect(0 0 0 0)');
+  });
   it('the wordmark keeps its size and paints only the question mark in the brand tone', () => {
     expect(rule('.ki-wordmark-text')).toContain('font-size: var(--type-body)');
     expect(rule('.ki-wordmark-mark')).toContain('color: var(--tone-action-brand)');
@@ -176,13 +194,13 @@ describe('dashboard.css header controls', () => {
 });
 
 describe('dashboard.css desktop (60rem and up)', () => {
-  it('gives desktop one full workspace and direct domain navigation', () => {
+  it('gives desktop one full workspace under a one-row status line, with no domain bar (the desk is the phone, wider)', () => {
     const ki = rule('.ki', DESKTOP);
-    expect(ki).toContain('--ki-top: 6.5rem');
+    expect(ki).toContain('--ki-top: 3.5rem');
     expect(ki).toContain('grid-template-columns: minmax(0, 1fr)');
     expect(ki).toContain('grid-template-rows: auto auto auto 1fr');
     expect(ki).toContain("grid-template-areas: 'status' 'presentation' 'banners' 'main'");
-    expect(rule('.ki-domains', DESKTOP)).toContain('grid-column: 1 / -1');
+    expect(CSS).not.toContain('.ki-domains');
     expect(rule('.ki-banners', DESKTOP)).toContain('grid-area: banners');
     expect(rule('.ki-main', DESKTOP)).toContain('grid-area: main');
   });
@@ -191,9 +209,20 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
     expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('keeps the status line a real box with six columns, the search taking the room; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+  it('keeps the status line a real box with eight columns on one row, each control placed by its key; the tab bar and the FAB leave; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
-    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto');
+    // Eight while the temporary Karta link stands (chunk E returns to seven with the desk pair).
+    expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto auto;');
+    expect(rule('.ki-head', DESKTOP)).not.toContain('grid-template-rows');
+    for (const [key, column] of [['screen', 3], ['share', 4], ['session', 5], ['karta', 6], ['more', 7], ['safety', 8]] as const) {
+      expect(DESKTOP).toContain(`.ki-head > [data-key='${key}'] { grid-column: ${column}; }`);
+    }
+    // The temporary Karta link is a 44 px labelled target like Još.
+    const karta = rule('.ki-desk-karta', DESKTOP);
+    expect(karta).toContain('min-block-size: var(--target)');
+    expect(karta).toContain('font-size: var(--type-control)');
+    expect(karta).toContain('touch-action: manipulation');
+    expect(rule(".ki-desk-karta[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
     expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
     expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--type-title)');
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
@@ -237,6 +266,9 @@ describe('dashboard.css desktop (60rem and up)', () => {
 // T1.2: the tab bar, zoom-compact containers, hover gating, press states and
 // touch behaviour. map.css is T1.3's except the one deleted 40 px override.
 describe('tab bar: 56 px targets, the current tab a bold peacock bar, labels that never ellipsise', () => {
+  it('holds three equal tabs, Sada · Karta · Još', () => {
+    expect(rule('.ki-tabs')).toContain('grid-template-columns: repeat(3, 1fr)');
+  });
   it('the tab is 56 px tall with 14 px labels and a manipulation touch-action (no double-tap zoom delay)', () => {
     const tab = rule('.ki-tab');
     expect(tab).toContain('font-size: var(--text-sm)');
@@ -306,6 +338,8 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     expect(dash).toContain('.ki-session:active');
     expect(dash).toContain('.ki-safety:active');
     expect(dash).toContain('.ki-more:active');
+    expect(dash).toContain('.ki-share:active');
+    expect(dash).toContain('.ki-desk-karta:active');
     expect(dash).toContain('.ki-fab:active');
     const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
     expect(base).toContain('.btn:active');
@@ -370,7 +404,7 @@ describe('scroll padding keeps focused rows clear of the fixed chrome', () => {
   it('pads the document scrollport by the status line and the tab bar on the phone, and by the 3.5rem status line alone at the desk', () => {
     expect(CSS).toContain('html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }');
     const desk = /@media \(min-width: 60rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
-    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 6.5rem 0; }');
+    expect(desk).toContain('html:has(.ki) { scroll-padding-block: 3.5rem 0; }');
   });
 });
 
