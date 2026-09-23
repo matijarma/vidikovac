@@ -8,7 +8,7 @@
 //   npx vitest run --project accept test/accept/wrong-turn.test.ts
 //
 // wrong-turn.expect.json is data: the rows measured on this sample before WP0
-// (b300af3) and after lane T (38a65f3), printed beside today's rows. Nothing
+// (b300af3) and after lane T (f78ae0a), printed beside today's rows. Nothing
 // here compares against them; the test asserts the targets only.
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -84,7 +84,7 @@ describe('WP0 wrong turn on the committed 162-frame sample', () => {
     expect(report.unknownTripShare!, RERECORD).toBeLessThan(0.02);
   });
 
-  it('meets the stage-1 targets: A and A-prime at most 5, B to F and I 0, G 0 with p95 at most 50 m, H at most 60 m, U at most 3 % without parked trams, S at most 50 m and never past the next stop', () => {
+  it('meets the stage-1 targets: A and A-prime at most 5, B to F and I 0, G 0 with p95 at most 50 m, H at most 60 m, U at most 3 % without parked trams, S at most 50 m beyond the hold at the next stop', () => {
     expect(judge(rows, ACCEPTANCE_TARGETS[expected.targets]).failures).toEqual([]);
   });
 });
