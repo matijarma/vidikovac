@@ -39,16 +39,45 @@ export const SENTENCE_MIN_FACTS = 3;
  * never sends it. */
 export interface CitySentenceFact extends SentenceFact {
   factKey?: string;
+  /** The approved template family the text is written in (decision 29: a sentence keeps it for its dwell). */
+  wording?: SentenceWording;
+  /** Until when the fact can still be said in this wording: a countdown's "za N min" ends 30 s before
+   *  its tram, when the minute rounds to 0 and only "u HH:MM" is left. Absent: `validUntil`. */
+  formUntil?: number;
 }
-/** A written sentence as the rotation reads it, with its fact's `factKey`. */
+/** A written sentence as the rotation reads it, with its fact's `factKey`, `wording` and `formUntil`. */
 export interface RotatingSentence extends WrittenSentence {
   factKey?: string;
+  wording?: SentenceWording;
+  formUntil?: number;
 }
+export type SentenceWording = keyof typeof SENTENCE_COPY_HR;
 
 /** The facts a sentence says: every wording of one fact has the same keys. */
 export function sentenceFactKeys(sentence: WrittenSentence): string[] {
   const { factKey } = sentence as RotatingSentence;
   return factKey ? [factKey] : [...new Set(sentence.refs)];
+}
+
+/**
+ * Whether `a` is `b` in its refreshed words (decision 29): the same facts in the same approved
+ * template family, as when a closure's end is restated, an estimate moves or a countdown reaches
+ * its next minute. That is not a new sentence. The other family ("u 15:45" after "za 1 min") is
+ * the fact reworded, and a model's sentence is never refreshed, only kept or left.
+ */
+export function isSameSentence(a: WrittenSentence | null, b: WrittenSentence | null): boolean {
+  if (!a || !b || a.origin !== 'template' || b.origin !== 'template') return false;
+  const wording = (a as RotatingSentence).wording;
+  if (wording === undefined || wording !== (b as RotatingSentence).wording) return false;
+  const keys = sentenceFactKeys(a), other = sentenceFactKeys(b);
+  return keys.length === other.length && keys.every(key => other.includes(key));
+}
+
+/** The header's candidates: wordings shown in the last ten minutes leave the pool (they survive a
+ *  rhythm change that restarts the sequence), except the sentence on screen and its refreshed words. */
+export function sentencePool(candidates: readonly WrittenSentence[], current: WrittenSentence | null,
+  shown: ReadonlyMap<string, number>): WrittenSentence[] {
+  return candidates.filter(s => s.text === current?.text || isSameSentence(s, current) || !shown.has(s.text));
 }
 
 // WP1-D owns the catalogues. These defaults keep this pure seam usable before
@@ -166,7 +195,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const { now, i18n, locale } = input;
   if (!Number.isFinite(now)) return [];
   const facts: CitySentenceFact[] = [];
-  const add = (id: string, kind: SentenceKicker, text: string, validUntil: number, factKey?: string) => {
+  const add = (id: string, kind: SentenceKicker, text: string, validUntil: number,
+    { factKey, wording, formUntil }: { factKey?: string; wording?: SentenceWording; formUntil?: number } = {}) => {
     text = sentenceWithPeriod(text);
     validUntil = sentenceDeadline(text, validUntil, now);
     if (!text || validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
@@ -177,14 +207,15 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     if (!typed.ok) { console.debug('sentence-rejected', typed.reason); return; }
     if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now,
       onReject: reason => console.debug('sentence-rejected', reason) }).ok) return;
-    facts.push(factKey ? { ...fact, factKey } : fact);
+    facts.push({ ...fact, ...(factKey ? { factKey } : {}), ...(wording ? { wording } : {}),
+      ...(formUntil !== undefined ? { formUntil } : {}) });
   };
   const solar = nextSolar(now);
   const solarRow = input.rows.find(row => row.kind === 'solar' && row.atMs !== null && row.atMs > now);
   const solarAt = solarRow?.atMs ?? solar.at;
   const solarKind = solarRow?.id.includes('sunset') ? 'sunset' : solarRow?.id.includes('sunrise') ? 'sunrise' : solar.kind;
   add(solarRow?.id ?? `solar:${solarKind}:${dayKey(solarAt)}`, 'vrijeme',
-    copy(i18n, solarKind, { time: clock(solarAt) }), solarAt);
+    copy(i18n, solarKind, { time: clock(solarAt) }), solarAt, { wording: solarKind });
 
   const observation = weatherNow(Object.values(input.snapshots), kioskStrings(locale), locale);
   const weatherExpiry = observation.observedMs === null ? 0 : observation.observedMs + 3 * 3_600_000;
@@ -200,7 +231,7 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     const key = condition ? (max === null ? 'weatherNoRange' : 'weather') : 'weatherTemperature';
     add('weather:now', 'vrijeme', copy(i18n, key, {
       temp: observation.temperature, condition, max: max === null ? '' : fmtNumber(locale, max),
-    }), Math.min(weatherExpiry, nextMidnight(now)));
+    }), Math.min(weatherExpiry, nextMidnight(now)), { wording: key });
   }
 
   if (input.radiusM !== undefined && input.radiusM > 0) {
@@ -211,9 +242,9 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       .sort((a, b) => distanceM(input.place, a) - distanceM(input.place, b))[0];
     if (station) add(station.id, 'bicikli', copy(i18n, 'bikes', {
       station: station.name.replace(/^BAJS\s*[-:·]?\s*/i, ''), bikes: bikeCount(i18n, station.facts!.bikes),
-    }), Date.parse(station.updatedAt!) + 180_000);
+    }), Date.parse(station.updatedAt!) + 180_000, { wording: 'bikes' });
   }
-  if (input.outage) add('outage:zet', 'promet', copy(i18n, 'outage'), now + SENTENCE_REFRESH_MS);
+  if (input.outage) add('outage:zet', 'promet', copy(i18n, 'outage'), now + SENTENCE_REFRESH_MS, { wording: 'outage' });
 
   const hour = zagrebHour(now) ?? 12;
   const atNight = hour >= 20 || hour < 5;
@@ -237,14 +268,19 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       const expires = live ? Math.min(at, at - (minutes - 0.5) * 60_000) : at;
       // One fact per line and direction at this place: the next trip, or the next minute of a
       // countdown, is that fact again in other words.
-      add(row.id, 'promet', copy(i18n, mode === 'bus' ? (live ? 'busIn' : 'busAt') : (live ? 'departureIn' : 'departureAt'), {
+      const wording = mode === 'bus' ? (live ? 'busIn' : 'busAt') : (live ? 'departureIn' : 'departureAt');
+      add(row.id, 'promet', copy(i18n, wording, {
         route: arrival.routeName, to: arrival.headsign, n: minutes, time: clock(at),
-      }), expires, `departure:${arrival.routeId}:${arrival.headsign}@${input.place.stopId ?? input.place.name}`);
+      }), expires, {
+        factKey: `departure:${arrival.routeId}:${arrival.headsign}@${input.place.stopId ?? input.place.name}`,
+        // "za N min" can be said until the minute rounds to 0; "u HH:MM" until the tram leaves.
+        wording, formUntil: live ? at - 30_000 : at,
+      });
     } else if (row.kind === 'closure' && row.atMs !== null) {
       add(row.id, 'radovi', copy(i18n, 'closureUntil', {
         // The template owns the final full stop, including after a Croatian ordinal date.
         street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),
-      }), Math.min(row.atMs, nextMidnight(now)));
+      }), Math.min(row.atMs, nextMidnight(now)), { wording: 'closureUntil' });
     } else if ((row.kind === 'last' || row.kind === 'first') && row.services) {
       for (const service of row.services) {
         if (kindOfRoute(service.routeId) !== 'tram' || service.atMs <= now) continue;
@@ -252,21 +288,22 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
           route: service.routeName, time: timedLabel(service.atMs, input),
         });
         add(`${row.id}:${service.routeId}`, atNight ? 'nocas' : 'promet', text,
-          Math.min(service.atMs, atNight ? nightEnd(now) : nextMidnight(now)));
+          Math.min(service.atMs, atNight ? nightEnd(now) : nextMidnight(now)), { wording: row.kind === 'last' ? 'lastTram' : 'firstTram' });
       }
     } else if (row.kind === 'event' && row.atMs !== null && row.sub) {
       const venue = row.sub.split(' · ')[0]!;
       const time = timedLabel(row.atMs, input);
       add(row.id, 'kultura', copy(i18n, 'event', { time: time[0]!.toLocaleUpperCase(locale) + time.slice(1), title: row.title, venue }),
-        Math.min(row.atMs, nextMidnight(now)));
+        Math.min(row.atMs, nextMidnight(now)), { wording: 'event' });
     } else if (row.kind === 'opening' && row.atMs !== null) {
       add(row.id, 'kultura', copy(i18n, 'opening', { name: row.title, time: timedLabel(row.atMs, input) }),
-        Math.min(row.atMs, nextMidnight(now)));
+        Math.min(row.atMs, nextMidnight(now)), { wording: 'opening' });
     } else if (row.kind === 'pharmacy' && atNight && row.sub) {
-      add(row.id, 'nocas', copy(i18n, 'pharmacy', { address: row.sub }), Math.min(solar.at, nightEnd(now)));
+      add(row.id, 'nocas', copy(i18n, 'pharmacy', { address: row.sub }), Math.min(solar.at, nightEnd(now)), { wording: 'pharmacy' });
     } else if (row.kind === 'always' && row.sub) {
       // Entire source sentence or nothing. No mid-word or mid-sentence trimming.
-      add(row.id, 'kultura', copy(i18n, 'always', { name: row.title, text: row.sub }), (Math.floor(now / 1_200_000) + 1) * 1_200_000);
+      add(row.id, 'kultura', copy(i18n, 'always', { name: row.title, text: row.sub }), (Math.floor(now / 1_200_000) + 1) * 1_200_000,
+        { wording: 'always' });
     }
   }
   return facts.slice(0, MAX_FACTS);
@@ -281,18 +318,21 @@ export function modelSentenceFacts(facts: readonly SentenceFact[], now?: number)
 /** Three solar phrasings keep the cold/offline path useful without inventing facts. */
 export function templateSentences(facts: readonly SentenceFact[], i18n: I18n, budget = 80, now?: number): WrittenSentence[] {
   const sentences: WrittenSentence[] = [];
-  const add = (text: string, fact: SentenceFact) => {
+  const add = (text: string, fact: SentenceFact, wording = (fact as CitySentenceFact).wording) => {
     const s = writeSentence(text, { facts: [fact], budget, now, refs: [fact.id] }, 'template');
-    const { factKey } = fact as CitySentenceFact;
-    if (s && !sentences.some(other => other.text === s.text)) sentences.push(factKey ? { ...s, factKey } as RotatingSentence : s);
+    const { factKey, formUntil } = fact as CitySentenceFact;
+    if (s && !sentences.some(other => other.text === s.text)) {
+      sentences.push(factKey || wording || formUntil !== undefined ? { ...s, ...(factKey ? { factKey } : {}), ...(wording ? { wording } : {}),
+        ...(formUntil !== undefined ? { formUntil } : {}) } as RotatingSentence : s);
+    }
   };
   for (const fact of facts) add(fact.text, fact);
   for (const fact of facts) {
     const kind = fact.id.startsWith('solar:sunrise:') ? 'sunrise' : fact.id.startsWith('solar:sunset:') ? 'sunset' : null;
     const time = fact.text.match(/\b\d{2}:\d{2}\b/)?.[0];
     if (kind && time) {
-      add(copy(i18n, `${kind}At`, { time }), fact);
-      add(copy(i18n, `${kind}Time`, { time }), fact);
+      add(copy(i18n, `${kind}At`, { time }), fact, `${kind}At`);
+      add(copy(i18n, `${kind}Time`, { time }), fact, `${kind}Time`);
     }
   }
   return sentences;
@@ -341,7 +381,20 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
-      const held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
+      let held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
+      // Decision 29: the sentence on screen in its refreshed words (a restated end, a moved estimate,
+      // a countdown's next minute) is the same sentence. It keeps its dwell and its wording; only a
+      // fact that can no longer be said in that wording ends the dwell early.
+      if (!held && current) {
+        const leased = current.refs.some(ref => ref.startsWith('always:')) && current.kicker === 'kultura';
+        const refreshed = sentences.find(s => s.text !== current!.text && isSameSentence(s, current) && valid(s)
+          && (!leased || current!.validUntil! > now));
+        if (refreshed) {
+          remember(current, now, current.validUntil);
+          current = leased ? { ...refreshed, validUntil: Math.min(refreshed.validUntil!, current.validUntil!) } : refreshed;
+          held = refreshed;
+        }
+      }
       // Retain object identity on ordinary refreshes, but update a shortened deadline.
       if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
         || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {
@@ -367,11 +420,13 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const choices = byFact ? fresh.filter(s => sentenceFactKeys(s).every(key => !factSeen.has(key))) : fresh;
       const factAge = (s: WrittenSentence) => Math.max(...sentenceFactKeys(s).map(key => factSeen.get(key)?.at ?? -Infinity));
       const kickerAge = (s: WrittenSentence) => kickers.get(s.kicker) ?? -Infinity;
-      choices.sort((a, b) => (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
-      // The fact on screen in fresh words (a countdown's next minute, its next trip) continues
-      // it rather than blanking the header; it never brings back a fact that has left.
-      const restated = byFact && current && !held ? fresh.find(s => sentenceFactKeys(s).every(key => onScreen.includes(key))) : undefined;
-      const next = choices[0] ?? (held ? current : restated ?? null);
+      // A sentence that can be said in its words for a whole rhythm comes first: "za 1 min" ten
+      // seconds before its minute rounds to 0 would stand ten seconds (decision 29).
+      const lasts = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm ? 0 : 1;
+      choices.sort((a, b) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
+      // No restatement in another wording: with three facts at hand the header waits for a fact it has
+      // not shown rather than say the one that just left in other words.
+      const next = choices[0] ?? (held ? current : null);
       if (next !== current) {
         if (current) remember(current, now, current.validUntil);
         // Timeless source descriptions are only leased for this display rhythm.

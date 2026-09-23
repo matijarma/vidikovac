@@ -331,6 +331,38 @@ describe('the integrated companion sentence', () => {
     k.handle.destroy();
   });
 
+  // Decision 29 (D2-e2e defect 5): a poll that restates the closure's end while its sentence is on
+  // screen refreshes the words in place: no fade, no early turn, the rhythm unchanged.
+  it('refreshes the sentence on screen in place when a poll restates its fact, and keeps the dwell', async () => {
+    let now = NOW;
+    let modules = MODULES;
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules }) });
+    await flush();
+    now += 20_000;
+    k.tick(CODE_TICK_MS);
+    const sentence = q(k.root, '[data-testid=kiosk-sentence]')!;
+    expect(sentence.dataset.kicker).toBe('radovi');
+    expect(sentenceText(k.root)).toBe('Ilica: zatvoreno za promet do 20:00.');
+    k.tick(CODE_TICK_MS);
+    delete sentence.dataset.swap;
+    now += 7_000;
+    modules = MODULES.map(module => module.module === 'prometnice'
+      ? { ...module, items: module.items.map(item => ({ ...item, until: '2026-09-11T18:30:00Z' })) } : module);
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(sentence.dataset.kicker).toBe('radovi');
+    expect(sentenceText(k.root)).toBe('Ilica: zatvoreno za promet do 20:30.');
+    expect(sentence.dataset.swap).toBeUndefined();
+    now += 12_000; // 39 s: still inside the rhythm that began at 20 s
+    k.tick(CODE_TICK_MS);
+    expect(sentenceText(k.root)).toBe('Ilica: zatvoreno za promet do 20:30.');
+    now += 1_000;
+    k.tick(CODE_TICK_MS);
+    expect(sentenceText(k.root)).not.toContain('Ilica');
+    k.handle.destroy();
+  });
+
   it('highlights a sentence reference without moving the map, then removes only vehicles on outage', async () => {
     let now = NOW;
     let modules = MODULES;
