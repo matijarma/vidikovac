@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bodiesToGeoJson, bodyOf } from '../../app/src/motion/bodies';
 import type { Drawn } from '../../app/src/motion/integrator';
-import { vehiclesToGeoJson } from '../../app/src/map/city-map';
+import { vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
 import { toPlane, type XY } from '../../shared/motion/geo';
 import { VEHICLE_LENGTH_M } from '../../shared/motion/vehicle';
 import { syntheticNetwork } from './synthetic-network';

@@ -5,6 +5,8 @@
 // constants from here; they keep their own tests and behaviour (F1 only
 // moves the source of truth, F2/F3 wire the layers and the schema to it).
 
+import { PILL_MAX_CHARS_CLUSTER, pillLabel } from './pill-label';
+
 /** Pill geometry in CSS px: the hand-tuned capsule widths for a label of 1
  *  to 4 characters. On the city map the capsule follows its own text
  *  (overlays.ts: one stretchable SDF image, icon-text-fit), and these
@@ -15,15 +17,9 @@ export const PILL_BASE_WIDTHS_PX: readonly number[] = [18, 24, 31, 38];
 /** A cluster label ("6·11·12·14") can run past four characters; each one
  *  beyond the hand-tuned table widens the pill instead of clipping it. */
 export const PILL_EXTRA_CHAR_PX = 7;
-/** A merged pill names every line in it and grows with them [O-35]: a
- *  count of hidden lines tells someone waiting for a tram nothing. This is
- *  the budget of one row, the widest capsule there is (290 px): all fifteen
- *  tram lines, "1·2·3·4·5·6·7·8·9·11·12·13·14·15·17", are 35 characters
- *  and fit on one; ten three-digit bus routes are 39. A longer label wraps
- *  onto further rows (PILL_MAX_LINES), so a bus hub of thirty three-digit
- *  routes is still written whole, and a single line's name never runs past
- *  one row (pillLabel). */
-export const PILL_MAX_CHARS_CLUSTER = 40;
+/** The budget of one row and the one line's cap (pill-label.ts, where the
+ *  lightweight graph reads them without the rest of this module). */
+export { PILL_MAX_CHARS_CLUSTER, pillLabel };
 /** The rows a merged pill may take (decision 23, three since the
  *  Črnomerec hub's 23 lines, 91 characters, did not fit two): a label past
  *  one row's budget wraps onto a second, then a third, before anything is
@@ -262,15 +258,6 @@ function compareClusterLabel(a: string, b: string): number {
   return a.localeCompare(b, 'hr');
 }
 
-/** One line's name as its pill writes it: whole, as it always is for a
- *  ZET line (four characters at most). Only an identifier longer than one
- *  row of the widest capsule (PILL_MAX_CHARS_CLUSTER) is cut to it, so no
- *  label ever runs past its pill; it is never emptied. The standalone and
- *  selected pills (city-map.ts's vehicleLabel) and every line of a cluster
- *  pass through here, so the cap holds on every mark. */
-export function pillLabel(label: string): string {
-  return label.length > PILL_MAX_CHARS_CLUSTER ? label.slice(0, PILL_MAX_CHARS_CLUSTER) : label;
-}
 
 /**
  * The lines on exactly `rows` rows of at most PILL_MAX_CHARS_CLUSTER

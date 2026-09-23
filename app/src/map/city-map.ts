@@ -20,23 +20,19 @@ import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
-import { bodiesToGeoJson } from '../motion/bodies';
-import { capsuleHalfPx, clusterPills, createLineColours, noseCentrePx, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
+import { pillLabel } from '../motion/pill-label';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
-import LINE_COLOURS from '../data/zet-line-colours.json';
 import { loadNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
 import type { MotionMetadata } from '../../../shared/motion/wire';
-import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
-import { markAlpha, vehicleKind, type VehicleKind } from './vehicle-mark';
+import { ROUTE_TYPE_TRAM } from '../motion/schematic';
+import { vehicleKind, type VehicleKind } from './vehicle-mark';
 import { tr } from '../transport/strings';
 import type { CityLabels } from './city-layers';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
-import { SDF_PIXEL_RATIO } from './sdf';
-import type { NameHysteresis, SourcePoint } from './name-census';
+import type { RenderedFeature, SourcePoint } from './name-census';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { TileLabelFeature } from './external-labels';
-export { pointsToGeoJson, linesToGeoJson, networkToGeoJson, stopsToGeoJson, outlineToGeoJson } from './external-features';
 
 // --- Kept for callers: the first basemap was the OpenStreetMap community
 // raster, whose usage policy forbids app traffic. The vector basemap
@@ -227,12 +223,6 @@ export function bearingOf(dir: { x: number; y: number } | null | undefined): num
   return Math.round(((deg % 360) + 360) % 360);
 }
 
-/** The shortest way round the compass between two bearings, 0 to 180 degrees. */
-function bearingGap(a: number, b: number): number {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
-}
-
 /** The number on the front of the vehicle: the network's own short name,
  *  else the static GTFS table's, else the route id itself; '' for a vehicle
  *  whose route nobody knows. Held to the widest capsule (pills.ts's
@@ -243,180 +233,6 @@ export function vehicleLabel(v: { short?: string; routeId?: string }): string {
   if (v.routeId === undefined) return '';
   const text = ZET_ROUTES[v.routeId]?.shortName || v.routeId;
   return vetExternal('headsign', text, 'row') === null ? '' : pillLabel(text);
-}
-
-/** Draw order among the vehicle marks (overlays.ts reads `sort` straight as
- *  the symbol sort key, and with overlap allowed the higher one covers the
- *  lower). A cluster last, because it stands for the marks beneath it. */
-const SORT_BUS = 1;
-const SORT_TRAM = 2;
-const SORT_CLUSTER = 3;
-
-/** How far apart two merged members' bearings must be, the shortest way
- *  round the compass, before their mark says "both ways": two trams of one
- *  line passing each other at a stop are 180° apart, two following each
- *  other round the sharpest bend in the network are well under this. */
-const TWO_WAY_MIN_DEG = 120;
-
-/** The colour ZET prints a line in, from the table the schema build writes
- *  beside the artefact (scripts/zet-schema.mjs, F5). A route the table does
- *  not carry -- every bus, and a tram line added between two builds -- keeps
- *  its mode's pinned ink. */
-const lineColour = createLineColours(LINE_COLOURS.colours);
-
-/** How `vehiclesToGeoJson` is asked to merge overlapping pills. */
-export interface VehicleGeoJsonOptions {
-  /** [lon, lat] to CSS px on the live camera (MapLibre's own `map.project`).
-   *  Absent, nothing is merged and every vehicle is its own mark, exactly as
-   *  before -- clustering is a screen-space question and there is no screen
-   *  without a camera. A point the camera cannot place (null) keeps its own
-   *  mark too, rather than joining a group it was never measured against. */
-  project?: (lonLat: [number, number]) => { x: number; y: number } | null;
-  /** The selected or followed vehicle: never absorbed into a cluster, so a
-   *  tap never loses the mark it was aimed at (motion/pills.ts). */
-  selectedId?: string | null;
-  /** The map's symbol scale (CityMapOptions.symbolScale; 2 on the public
-   *  screen). motion/pills.ts writes its boxes in the CSS px the pill geometry
-   *  itself is stated in, while the layer paints them at `icon-size: scale`:
-   *  the projected positions are divided by it so two marks are compared at
-   *  the size they are actually drawn. Without this the public screen would
-   *  merge only inside half the distance at which its pills really overlap --
-   *  and with the collision pass no longer thinning anything, a busy hub would
-   *  pile up worse than before. */
-  symbolScale?: number;
-  /** The line the map is about (F5). A cluster of several routes has no one
-   *  route id and carries '' -- which, under a selection, is every route but
-   *  the lit one, so a merged mark standing partly *on* the lit line took the
-   *  stepped-back ink of the lines it is not. Named here, a cluster with any
-   *  member on that line answers with it, and the mark reads as what it
-   *  partly is. Absent, the '' of a mixed cluster stands as before. */
-  focusedRoute?: string;
-}
-
-/** A vehicle's mark as `clusterPills` measures it: its pill's centre on screen
- *  and the label written in it, with the feature it came from riding along. */
-interface VehiclePillPoint extends PillPoint {
-  feature: VehicleFeature;
-}
-
-/** One merged mark for a group of overlapping pills: the members' joined label
- *  ("6·11"), their ids, their centroid, and the properties a layer still has
- *  to be able to read -- the mode they all share (the group is built inside
- *  one mode, see below), the one route id they share or none at all, the
- *  members' best alpha, and no single heading, because a merged mark has no
- *  one facing and draws no direction nose. What it does say is whether its
- *  members face opposite ways: its bearing is the first member's that knows
- *  its facing, and `twoWay` is set when two such members are more than
- *  TWO_WAY_MIN_DEG apart -- two trams of one line passing each other read as
- *  one number with an arrow each way (the owner's ruling), while a merge
- *  going one way changes nothing. */
-function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: string): VehicleFeature {
-  const members = cluster.members.map((m) => m.feature);
-  const kind: VehicleKind = members[0]!.properties.kind;
-  const facing = members.filter((f) => f.properties.hasHeading).map((f) => f.properties.bearing);
-  const twoWay = facing.some((a, i) => facing.slice(i + 1).some((b) => bearingGap(a, b) > TWO_WAY_MIN_DEG));
-  const routes = new Set(members.map((f) => f.properties.routeId));
-  const routeId = routes.size === 1 ? [...routes][0]!
-    : focusedRoute !== undefined && routes.has(focusedRoute) ? focusedRoute : '';
-  const lon = members.reduce((sum, f) => sum + f.geometry.coordinates[0], 0) / members.length;
-  const lat = members.reduce((sum, f) => sum + f.geometry.coordinates[1], 0) / members.length;
-  return {
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [lon, lat] },
-    properties: {
-      id: cluster.id,
-      icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
-      kind,
-      short: cluster.label,
-      routeId,
-      bearing: facing[0] ?? 0,
-      hasHeading: false,
-      twoWay,
-      nose: noseCentrePx(cluster.label, kind, facing[0] ?? 0),
-      alpha: Math.max(...members.map((f) => f.properties.alpha)),
-      sort: SORT_CLUSTER,
-      held: false,
-      cluster: true,
-      ids: members.map((f) => f.properties.id),
-      n: members.length,
-    },
-  };
-}
-
-/**
- * The model's output as the vehicle source: one feature per vehicle (the
- * model evicts what has gone quiet, R-F2, so everything it draws is fresh),
- * at the model's own position (R-P2), with its number, its facing when the
- * model knows it (decision 5: the nose is drawn only then; the bearing
- * otherwise follows the track so a tram's mark still lies along its rails)
- * and its confidence as alpha.
- *
- * With a `project` (the live camera's), tram and bus marks whose pills would
- * overlap on screen leave as one cluster feature instead of a pile: the pill
- * layer draws every mark it is given, so the thinning happens here, where the
- * app knows what the marks mean, rather than in MapLibre's collision pass,
- * which only knew that two boxes touched. Trams merge with trams and buses
- * with buses, never across (see below); an untyped mark ('other') is never
- * merged at all -- it has no number to join a label with.
- */
-export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJsonOptions = {}): VehicleFeatureCollection {
-  const features: VehicleFeature[] = [];
-  for (const v of drawn) {
-    const kind = vehicleKind(v.type);
-    const short = vehicleLabel(v);
-    const bearing = bearingOf(v.heading ?? v.track);
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: toLonLat(v.p) },
-      properties: {
-        id: v.id,
-        icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
-        kind,
-        short,
-        routeId: v.routeId ?? '',
-        bearing,
-        hasHeading: v.heading !== null,
-        twoWay: false,
-        nose: noseCentrePx(short, kind, bearing),
-        alpha: markAlpha(v.confidence),
-        sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
-        held: v.held === true,
-        cluster: false,
-      },
-    });
-  }
-  const project = options.project;
-  if (!project) return { type: 'FeatureCollection', features };
-  const scale = options.symbolScale ?? 1;
-  const selectedId = options.selectedId ?? null;
-
-  // One group per mode, never across them. Every vehicle layer filters on
-  // `kind` (overlays.ts kindFilter), and the mode toggle is a live control: a
-  // bus swallowed into a cluster that called itself a tram would disappear
-  // from the pills *and* the dots the moment a reader turned trams off. A pill
-  // also carries its mode's ink, and a tram-blue capsule labelled with a bus
-  // route would be a lie about both.
-  const byKind = new Map<VehicleKind, VehiclePillPoint[]>();
-  const alone: VehicleFeature[] = [];
-  for (const feature of features) {
-    const kind = feature.properties.kind;
-    const at = kind === 'other' ? null : project(feature.geometry.coordinates);
-    if (!at) {
-      alone.push(feature);
-      continue;
-    }
-    const point: VehiclePillPoint = { id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, feature };
-    const mode = byKind.get(kind);
-    if (mode) mode.push(point);
-    else byKind.set(kind, [point]);
-  }
-  const merged: VehicleFeature[] = [...alone];
-  for (const points of byKind.values()) {
-    for (const group of clusterPills(points, { selectedId })) {
-      merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
-    }
-  }
-  return { type: 'FeatureCollection', features: merged };
 }
 
 export interface NetworkFeatureCollection {
@@ -469,24 +285,6 @@ export interface StopFeatureCollection {
  *  city's 19 tram routes overlap so heavily that 111 of the 114 tram-served
  *  names see two or more of them, so "two trams" names nearly every tram
  *  stop there is (measured against the shipped artefact, 20 Sept 2026). */
-/** Coarse enough that convergence noise never keeps the loop awake, fine
- *  enough (a centimetre, a degree, a hundredth of alpha) that real motion
- *  always registers -- the same discipline as the schematic's signature.
- *
- *  It is taken over the *unclustered* marks, and `selectedId` is the second
- *  half of the question: the merged collection a frame would push is a pure
- *  function of these features, the camera (a move clears the signature in
- *  onCameraMove), the map's fixed symbol scale and the one vehicle the
- *  clustering must leave standing. So a frame can decide whether to push
- *  without running the clustering pass first. An empty fleet keeps its empty
- *  signature, selected vehicle or not: there is nothing to push either way. */
-function signatureOf(fc: VehicleFeatureCollection, selectedId: string | null): string {
-  if (fc.features.length === 0) return '';
-  return `${selectedId ?? ''}|${fc.features
-    .map((f) => `${f.properties.id}:${f.geometry.coordinates[0].toFixed(7)},${f.geometry.coordinates[1].toFixed(7)},${f.properties.bearing},${f.properties.hasHeading ? 1 : 0},${f.properties.alpha.toFixed(2)},${f.properties.short}`)
-    .join('|')}`;
-}
-
 /** What the map can have selected. Route and stop are the two kinds the
  *  public selection may relay to a paired screen (worker/public-selection.ts);
  *  a vehicle or a closure stays on the device that picked it. */
@@ -793,158 +591,9 @@ export interface CityMapDeps {
 // station is not renting, never "?"), every venue on it named, nothing a
 // mark without a word. So the census reads back what MapLibre drew -- the
 // dots, the counts and the names it placed -- rather than the points it was
-// handed, like data-pills does for the vehicles. Pure, so the rules are
-// tested without a map; writeRenderProbe (below) feeds it.
-
-/** The city-place layers the census reads. map/city-layers.ts owns them, and
- *  it lives in the MapLibre chunk this module must not import, so the ids are
- *  written out here; test/motion/city-map.test.ts holds the two together. */
-export const CENSUS_LAYERS = Object.freeze({ dots: 'city-place-dots', badges: 'city-place-badges', labels: 'city-place-labels' });
-/** Half the side of the square a disc's number takes, in CSS px before the
- *  symbol scale: half of city-layers.ts BIKE_COUNT_PX (12). A pill lying over
- *  that square hides the number, whatever the disc's own radius. */
-export const CENSUS_COUNT_HALF_PX = 6;
-/** How long a new census key must have waited, on a still camera, before a
- *  plain `render` takes the census that no `idle` came to take (the live
- *  wall's fallback; writeRenderProbe's comment). Long enough for the push
- *  after an update() to be placed, short enough that every poll beat is read. */
-export const PROBE_SETTLE_MS = 1000;
-
-/** A feature as queryRenderedFeatures answers it; the geometry is there on a
- *  real map and may be missing on a stand-in. */
-export interface RenderedFeature {
-  layer: { id: string };
-  properties: Record<string, unknown>;
-  geometry?: { type: string; coordinates: unknown };
-}
-
-/** A box on the screen in CSS px, as a pill's is reckoned (motion/pills.ts). */
-export interface ScreenBox { left: number; top: number; right: number; bottom: number }
-
-export interface MarkerCensus {
-  /** data-markers: the curated city marks drawn with their centre on the screen, once each. */
-  markers: number;
-  /** data-unlabelled: marks drawn with nothing that says what they are, the
-   *  deliberate exceptions below aside. Must be 0. A BAJS disc says it with
-   *  its count; a venue (any mark but a station's or an air station's) with
-   *  its NAME, never with its programme count alone -- the framed wall at
-   *  Kadar 8 lost Gavella's name below zoom 13 and still read 0 while its
-   *  disc said "1" (review-w, P2). */
-  unlabelled: number;
-  /** data-bajs, by what a station's disc says: `counted` a number above
-   *  zero, `zero` the grey "0", `blank` the grey disc without a number (the
-   *  count unknown, the station not renting: city/curated.ts bikeDisc), `far`
-   *  the whole-city window's small dot without its number (points carrying
-   *  `far`). The last two are deliberate and never unlabelled. */
-  bajs: { counted: number; zero: number; blank: number; far: number };
-  /** data-overlaps `discs`: marks whose number (or, for a disc without one,
-   *  its centre) lies under a pill, so the reader sees the pill, not the mark.
-   *  Transient on a live map: a tram passing a station covers it for as long
-   *  as it takes to pass. */
-  covered: number;
-  /** data-disc-pills: the pills over those numbers, counted per mark (a
-   *  pill over two discs counts twice), so `covered` never exceeds it: a
-   *  covered disc is a pill passing, never a mark drawn under something else. */
-  discPills: number;
-}
-
-/** What the city places' name layer did, as markerCensus needs it: whether
- *  the surface draws their names at all (city-layers.ts 'none', the
- *  whole-city window, draws none, and there a venue's count is its label),
- *  and the ids whose name the style would draw but the collision pass held
- *  back -- a name yielding to a passing pill (decision 17) is a hidden name
- *  (data-hidden-names), not a mark without one. */
-export interface CensusNames {
-  shown: boolean;
-  suppressed: ReadonlySet<string>;
-}
-const NAMES_SHOWN: CensusNames = Object.freeze({ shown: true, suppressed: new Set<string>() });
-
-function boxesMeet(a: ScreenBox, b: ScreenBox): boolean {
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-}
-
-/**
- * The census of the city marks from what the three census layers rendered.
- * `anchorOf` places a feature on the screen (null when it cannot: the mark
- * then counts, since MapLibre drew it); `view` is the map's box, 0 x 0 before
- * layout (every mark counts), so a disc whose edge alone reaches in from off
- * the screen, number outside, is not a mark somebody sees; `pills` are the
- * rendered pills' boxes at the map's `scale`.
- */
-export function markerCensus(
-  rendered: readonly RenderedFeature[],
-  anchorOf: (feature: RenderedFeature) => { x: number; y: number } | null,
-  view: { width: number; height: number },
-  pills: readonly ScreenBox[],
-  scale: number,
-  names: CensusNames = NAMES_SHOWN,
-): MarkerCensus {
-  // By feature id: a point on a tile seam comes back once from each tile.
-  const dots = new Map<string, RenderedFeature>();
-  const counts = new Map<string, string>();
-  const named = new Set<string>();
-  for (const feature of rendered) {
-    const id = String(feature.properties.id ?? '');
-    if (!id) continue;
-    if (feature.layer.id === CENSUS_LAYERS.dots) {
-      if (!dots.has(id)) dots.set(id, feature);
-    } else if (feature.layer.id === CENSUS_LAYERS.badges) {
-      // The badge layer draws nothing for '' (and for a `far` point), so a
-      // rendered badge is a rendered word.
-      const text = String(feature.properties.badge ?? '');
-      if (text) counts.set(id, text);
-    } else if (feature.layer.id === CENSUS_LAYERS.labels && String(feature.properties.title ?? '')) {
-      named.add(id);
-    }
-  }
-  const census: MarkerCensus = { markers: 0, unlabelled: 0, bajs: { counted: 0, zero: 0, blank: 0, far: 0 }, covered: 0, discPills: 0 };
-  const laidOut = view.width > 0 && view.height > 0;
-  const half = CENSUS_COUNT_HALF_PX * scale;
-  for (const [id, feature] of dots) {
-    const at = anchorOf(feature);
-    if (at && laidOut && (at.x < 0 || at.y < 0 || at.x > view.width || at.y > view.height)) continue;
-    census.markers++;
-    const p = feature.properties;
-    const bike = p.category === 'bikes';
-    const count = counts.get(id);
-    // A count is a whole number: "?", "—" or a "+3" is a mark without one.
-    const counted = count !== undefined && /^\d+$/.test(count);
-    const far = bike && p.far === true;
-    const blank = bike && !far && count === undefined && p.spent === true && String(p.badge ?? '') === '';
-    if (far) census.bajs.far++;
-    else if (bike && counted) census.bajs[count === '0' ? 'zero' : 'counted']++;
-    else if (blank) census.bajs.blank++;
-    // A venue is named or it is a number on a disc: its count says how many
-    // happenings, not where. Only a surface that names no city place at all
-    // lets the count stand for it.
-    const venue = !bike && p.category !== 'air';
-    const saysIt = named.has(id) || names.suppressed.has(id) || (counted && (!venue || !names.shown));
-    if (!saysIt && !far && !blank) census.unlabelled++;
-    if (at) {
-      const number: ScreenBox = { left: at.x - half, top: at.y - half, right: at.x + half, bottom: at.y + half };
-      const over = pills.filter((box) => boxesMeet(box, number)).length;
-      if (over > 0) census.covered++;
-      census.discPills += over;
-    }
-  }
-  return census;
-}
-
-
-/** A rendered pill's box as MapLibre draws it: the capsule icon-text-fit
- *  lays on its number (motion/pills.ts capsuleHalfPx, from the glyph
- *  advances), at the map's symbol scale, centred on the mark. Inside the
- *  pill's own collision box (that plus icon-padding), so a name MapLibre
- *  placed clear of a pill is never counted as crossed by it -- where the
- *  clustering's table width, a few pixels wider for a merged label's narrow
- *  "·", would have counted names that sit beside the capsule. */
-export function pillBox(at: { x: number; y: number }, label: string, scale: number): ScreenBox {
-  const { halfWidth, halfHeight } = capsuleHalfPx(label);
-  const halfW = halfWidth * scale;
-  const halfH = halfHeight * scale;
-  return { left: at.x - halfW, top: at.y - halfH, right: at.x + halfW, bottom: at.y + halfH };
-}
+// handed, like data-pills does for the vehicles. The census (markerCensus,
+// pillBox) and the passes that feed it (createRenderCensus, bound below in
+// buildMap) live in name-census.ts, in the MapLibre chunk.
 
 /** The slice of a MapLibre Map this wrapper drives, structurally, so a test's stand-in stays small. */
 interface MapApi {
@@ -980,7 +629,7 @@ interface MapApi {
   getCenter(): { lng: number; lat: number };
   getZoom(): number;
   /** Whether the camera is being moved (a pan, a zoom, an ease). Read only
-   *  by the census's still-frame fallback (writeSettledProbe), so a stand-in
+   *  by the census's still-frame fallback (name-census.ts settled), so a stand-in
    *  without it counts as still. */
   isMoving?(): boolean;
   /** [lon, lat] to CSS px on the current camera; how the pills are clustered
@@ -1202,12 +851,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return selection?.kind === 'route' ? selection.id : null;
   }
 
-  function overlayOptions(p: OverlayPalette): OverlayOptions {
+  function overlayOptions(l: MaplibreModule, p: OverlayPalette): OverlayOptions {
     const routeId = focusRouteId();
     const type = routeId === null ? undefined : net?.routes.get(routeId)?.type ?? ZET_ROUTES[routeId]?.type;
     const focus = routeId === null
       ? null
-      : { routeId, colour: lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
+      : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
     return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames };
   }
 
@@ -1262,7 +911,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // painting, and a browser round on 23 September counted one `idle` in a
   // minute (the cold map's, before the fleet) against some 500 frames. So a
   // `render` on a still camera takes the census too, once the key it would be
-  // taken for has waited PROBE_SETTLE_MS (writeSettledProbe) -- the same
+  // taken for has waited PROBE_SETTLE_MS (name-census.ts settled) -- the same
   // passes as below, whichever of the two events comes first.
   //
   // It is taken only when the answer can have changed: the camera's
@@ -1283,7 +932,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // once at start-up would say nothing about the hours after it.
   //
   // WP2 adds the marker census of the city layers to the same pass (see
-  // markerCensus above), written beside the vehicle attributes:
+  // name-census.ts markerCensus), written beside the vehicle attributes:
   //
   //   data-markers    the curated city marks drawn with their centre on the
   //                   screen (dots, once each)
@@ -1303,16 +952,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //                   not): decision 19 draws it always, and data-overlaps
   //                   counts every OTHER name a pill crosses
   //   data-own-name-crossed the seconds a pill has crossed the own name, on
-  //                   the public screen (nameHysteresisTick, ten looks a
+  //                   the public screen (name-census.ts nameTick, ten looks a
   //                   second)
   //   data-hidden-names the names the style would draw on the screen (the
   //                   name layers' own filter, text and zoom over what their
   //                   sources were handed, nameCandidates) that the collision
   //                   pass held back: where the wall's names yield to its
   //                   pills (decision 17), this is how many are yielding
-  /** zoom, selection, "has any marks" and the evidence version the census was last taken for. */
-  let renderProbeKey = '';
-  /** Whether the last pushed collection had any mark at all; see the key above. */
+  /** Whether the last pushed collection had any mark at all; see probeKeyOf. */
   let probeHasMarks = false;
   /** Bumped by update() and applyCityOverlays(): the census is re-taken at the next idle, or the next settled still frame. */
   let probeVersion = 0;
@@ -1326,189 +973,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function probeKeyOf(m: MapApi): string {
     return `${m.getZoom().toFixed(2)}|${selection ? `${selection.kind}:${selection.id}` : ''}|${probeHasMarks ? 1 : 0}|${probeVersion}`;
   }
-  /** The key a still frame first saw untaken, and when: writeSettledProbe's clock. */
-  let settlingKey = '';
-  let settlingSince = 0;
-
-  /** The fallback for a map that never idles (the probe comment above): on a
-   *  `render` with the camera still, a key not yet taken is timed, and taken
-   *  once it has stood for PROBE_SETTLE_MS. A key already taken costs one
-   *  string per frame and nothing else. */
-  function writeSettledProbe(): void {
-    const m = map;
-    if (!m || !styled || m.isMoving?.()) return;
-    const key = probeKeyOf(m);
-    if (key === renderProbeKey) return;
-    if (key !== settlingKey) {
-      settlingKey = key;
-      settlingSince = now();
-      return;
-    }
-    if (now() - settlingSince >= PROBE_SETTLE_MS) writeRenderProbe();
-  }
-
-  function writeRenderProbe(): void {
-    const m = map;
-    const l = lib;
-    if (!m || !styled || !l) return;
-    const key = probeKeyOf(m);
-    if (key === renderProbeKey) return;
-    renderProbeKey = key;
-    // Asking MapLibre about a layer the style does not carry fires an error
-    // event, which onMapError logs as a bug; placedNames() guards the same way.
-    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies, l.LAYERS.vehicleTwoWayFore]
-      .filter((id) => !m.getLayer || m.getLayer(id));
-    // By feature id, so a mark queried twice (a point on a tile seam, a line
-    // across one) is one pill, one body, one arrow; the pills in id order, so
-    // the attribute is stable frame to frame.
-    const pills = new Map<string, string>();
-    const pillFeatures = new Map<string, RenderedFeature>();
-    const bodies = new Set<string>();
-    const twoWay = new Set<string>();
-    let noses = 0;
-    for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
-      if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
-      else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies.add(String(feature.properties.id));
-      else if (feature.layer.id === l.LAYERS.vehicleTwoWayFore) twoWay.add(String(feature.properties.id));
-      else {
-        pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
-        pillFeatures.set(String(feature.properties.id), feature);
-      }
-    }
-    container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
-    container.dataset.noses = String(noses);
-    container.dataset.bodies = String(bodies.size);
-    container.dataset.twoway = String(twoWay.size);
-    writeMarkerCensus(m, l, [...pillFeatures.values()]);
-  }
-
-  /** The marker census and the overlaps (see the probe comment above), from
-   *  the pills the vehicle census just read. */
-  function writeMarkerCensus(m: MapApi, l: MaplibreModule, pillFeatures: readonly RenderedFeature[]): void {
-    const has = (id: string): boolean => !m.getLayer || Boolean(m.getLayer(id));
-    const anchorOf = (feature: RenderedFeature): { x: number; y: number } | null => {
-      const g = feature.geometry;
-      if (!m.project || g?.type !== 'Point' || !Array.isArray(g.coordinates)) return null;
-      const [lon, lat] = g.coordinates as number[];
-      return Number.isFinite(lon) && Number.isFinite(lat) ? m.project([lon!, lat!]) : null;
-    };
-    const pillBoxes: ScreenBox[] = [];
-    for (const feature of pillFeatures) {
-      const at = anchorOf(feature);
-      if (at) pillBoxes.push(pillBox(at, String(feature.properties.short ?? ''), scale));
-    }
-    const view = { width: container.clientWidth, height: container.clientHeight };
-    const nameIds: string[] = [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
-      l.LAYERS.placeSeat, l.LAYERS.placeAssembly, l.LAYERS.placePharmacy, CENSUS_LAYERS.labels].filter(has);
-    /** Decision 19: the screen's own name is drawn whatever crosses it; data-overlaps counts every other name. */
-    const crossable = nameIds.filter((id) => id !== l.LAYERS.screenStopLabel);
-    // The names placed, and the names the style would place with nothing in
-    // the way: what the second has and the first lacks, the collision pass
-    // held back (data-hidden-names).
-    const placed = new Set<string>();
-    let ownName = '';
-    for (const feature of nameIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: nameIds })) {
-      placed.add(l.nameKey(feature.layer.id, feature.properties));
-      if (feature.layer.id === l.LAYERS.screenStopLabel) ownName = String(feature.properties.name ?? '');
-    }
-    const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : () => null;
-    const specs = [...overlays, ...cityOverlays].filter((layer) => nameIds.includes(layer.id));
-    const hidden = [...l.nameCandidates(specs, (id) => sourcePoints(l, id), m.getZoom(), project, view)].filter(([key]) => !placed.has(key));
-    const cityLabels = cityOverlays.find((layer) => layer.id === CENSUS_LAYERS.labels);
-    const names: CensusNames = {
-      shown: cityLabels !== undefined && (cityLabels.layout as Record<string, unknown> | undefined)?.visibility !== 'none',
-      suppressed: new Set(hidden.filter(([, name]) => name.layer === CENSUS_LAYERS.labels).map(([, name]) => name.id)),
-    };
-    const cityIds = [CENSUS_LAYERS.dots, CENSUS_LAYERS.badges, CENSUS_LAYERS.labels].filter(has);
-    const census = markerCensus(
-      cityIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: cityIds }),
-      anchorOf, view, pillBoxes, scale, names,
-    );
-    const crossed = new Set<string>();
-    if (crossable.length > 0) {
-      for (const box of pillBoxes) {
-        for (const feature of m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: crossable })) {
-          crossed.add(l.nameKey(feature.layer.id, feature.properties));
-        }
-      }
-    }
-    container.dataset.markers = String(census.markers);
-    container.dataset.unlabelled = String(census.unlabelled);
-    container.dataset.bajs = `counted:${census.bajs.counted};zero:${census.bajs.zero};blank:${census.bajs.blank};far:${census.bajs.far}`;
-    container.dataset.overlaps = `discs:${census.covered};names:${crossed.size}`;
-    container.dataset.discPills = String(census.discPills);
-    container.dataset.hiddenNames = String(hidden.length);
-    container.dataset.ownName = ownName;
-  }
-
-  /** Decision 19 on the public screen (name-census.ts createNameHysteresis), made with the MapLibre chunk. */
-  let nameHold: NameHysteresis | null = null;
+  /** The names decision 19's hysteresis holds on the public screen
+   *  (name-census.ts createRenderCensus), which the overlays are built with. */
   let heldNames: readonly string[] = [];
-  let nameTickAt = -Infinity;
-  /** How long a pill has crossed the screen's own name, in ms, and when that was last looked at (data-own-name-crossed). */
-  let ownCrossedMs = 0;
-  let ownLookedAt: number | null = null;
-
-  /** One look at the public screen's stop names (decision 19), at most every
-   *  NAME_TICK_MS on a still camera: what MapLibre placed, which held name a
-   *  pill's drawn capsule covers (the capsule less the names' 3 px padding,
-   *  so a touch is not a cover), and whether a pill crosses the screen's own
-   *  name. A handful of small queries, each around a held name or the own
-   *  name only. */
-  function nameHysteresisTick(): void {
-    const m = map;
-    const l = lib;
-    if (!m || !l || !styled || prozor === null || !m.setFeatureState || m.isMoving?.()) return;
-    if (m.getLayer && !m.getLayer(l.LAYERS.stopLabelsHeld)) return;
-    const t = now();
-    if (t - nameTickAt < l.NAME_TICK_MS) return;
-    nameTickAt = t;
-    nameHold ??= l.createNameHysteresis();
-    const has = (id: string): boolean => !m.getLayer || Boolean(m.getLayer(id));
-    const at = (f: RenderedFeature): { x: number; y: number } | null => {
-      const c = f.geometry?.type === 'Point' ? f.geometry.coordinates as number[] : null;
-      return c && m.project ? m.project([c[0]!, c[1]!]) : null;
-    };
-    const placed = new Set<string>();
-    const heldAt = new Map<string, { x: number; y: number }>();
-    for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld] })) {
-      const id = String(f.properties.id ?? '');
-      if (!id) continue;
-      placed.add(id);
-      const p = f.layer.id === l.LAYERS.stopLabelsHeld ? at(f) : null;
-      if (p) heldAt.set(id, p);
-    }
-    const ownAt = stop && m.project && Number.isFinite(stop.lon) && Number.isFinite(stop.lat) ? m.project([stop.lon, stop.lat]) : null;
-    const pills: ScreenBox[] = [];
-    if (heldAt.size > 0 || ownAt) {
-      for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.vehicles, l.LAYERS.vehicleSelected].filter(has) })) {
-        const p = at(f);
-        if (p) pills.push(pillBox(p, String(f.properties.short ?? ''), scale));
-      }
-    }
-    const near = (box: ScreenBox, p: { x: number; y: number }): boolean => box.right > p.x - 400 && box.left < p.x + 400 && box.bottom > p.y - 160 && box.top < p.y + 160;
-    const covered = new Set<string>();
-    const pad = 3;
-    for (const [id, p] of heldAt) {
-      for (const box of pills) {
-        if (!near(box, p) || box.right - box.left <= 2 * pad) continue;
-        const hits = m.queryRenderedFeatures([[box.left + pad, box.top + pad], [box.right - pad, box.bottom - pad]], { layers: [l.LAYERS.stopLabelsHeld] });
-        if (hits.some((f) => String(f.properties.id ?? '') === id)) { covered.add(id); break; }
-      }
-    }
-    if (ownAt && has(l.LAYERS.screenStopLabel)) {
-      const crossed = pills.some((box) => near(box, ownAt) && m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: [l.LAYERS.screenStopLabel] }).length > 0);
-      if (crossed && ownLookedAt !== null) ownCrossedMs += Math.min(t - ownLookedAt, 1000);
-      ownLookedAt = t;
-      container.dataset.ownNameCrossed = (ownCrossedMs / 1000).toFixed(1);
-    }
-    const result = nameHold!.tick(t, placed, covered);
-    for (const [id, o] of result.opacity) m.setFeatureState({ source: l.SOURCES.stops, id }, { o });
-    if (result.held) {
-      heldNames = result.held;
-      applyOverlays();
-    }
-  }
 
   /** The point features a name layer's source was last handed, for
    *  nameCandidates: the stops as the map was built with them, the screen's
@@ -1554,10 +1021,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // the string over it. The clustering is a screen-space pass over every
     // mark, and it runs where its result is used -- inside the push below --
     // not sixty times a second to answer a question the plain marks already
-    // answer (signatureOf).
+    // answer (vehicle-features.ts vehicleSignature).
     const kept = keptVehicleId();
     container.dataset.frames = String(loop.frames());
-    const signature = signatureOf(vehiclesToGeoJson(lastDrawn), kept);
+    const signature = l.vehicleSignature(l.vehiclesToGeoJson(lastDrawn), kept);
     const changed = signature !== lastPushedSignature;
     const pushing = changed && t >= nextPushAt - PUSH_TOLERANCE_MS;
     let fc: VehicleFeatureCollection | null = null;
@@ -1568,7 +1035,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
       const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-      fc = vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+      fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
       lastPushedSignature = signature;
@@ -1610,7 +1077,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function pushBodies(m: MapApi, l: MaplibreModule): void {
     const shown = m.getZoom() >= l.BODY_ZOOM;
     if (!shown && !bodiesShown) return;
-    m.getSource(l.SOURCES.bodies)?.setData(shown ? bodiesToGeoJson(lastDrawn, graph) : { type: 'FeatureCollection', features: [] });
+    m.getSource(l.SOURCES.bodies)?.setData(shown ? l.bodiesToGeoJson(lastDrawn, graph) : { type: 'FeatureCollection', features: [] });
     bodiesShown = shown;
   }
 
@@ -1851,10 +1318,40 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // The one moment MapLibre has finished painting what it was given: the
     // honest place to ask it what it drew (see the probe comment above), and,
     // for the live wall that never gets there, a still frame that has settled.
-    created.on('idle', writeRenderProbe);
-    created.on('render', writeSettledProbe);
-    created.on('render', nameHysteresisTick);
-    if (interactive) bindPointer(created);
+    const census = l.createRenderCensus(created, l, {
+      container,
+      now,
+      styled: () => styled && map === created,
+      key: () => probeKeyOf(created),
+      scale: () => scale,
+      overlays: () => overlays,
+      cityOverlays: () => cityOverlays,
+      sourcePoints: (id) => sourcePoints(l, id),
+      stop: () => stop,
+      prozor: () => prozor !== null,
+      hold: (names) => { heldNames = names; applyOverlays(); },
+    });
+    created.on('idle', census.idle);
+    created.on('render', census.settled);
+    created.on('render', census.nameTick);
+    if (interactive) {
+      l.bindCityMapPointer(created, l, {
+        container,
+        styled: () => styled,
+        hitTolerance: () => hitTolerance,
+        closuresVisible: () => closuresVisible,
+        basemap: () => basemap,
+        resolveStreet: options.resolveStreet,
+        siblingPlatforms,
+        drawn: () => lastDrawn,
+        fitCoordinates,
+        selection: () => selection,
+        choose: (next) => {
+          select(next);
+          options.onSelect?.(next);
+        },
+      });
+    }
     created.once('load', () => onLoad(l, created));
     watchTheme();
   }
@@ -1884,7 +1381,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const palette = l.overlayPalette(theme);
     created.addSource('ambient-highlight',geojson(highlightData()));
     created.addLayer({id:'ambient-highlight-area',type:'fill',source:'ambient-highlight',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':palette.selection,'fill-opacity':0.12}});
-    overlays = l.overlayLayers(palette, overlayOptions(palette));
+    overlays = l.overlayLayers(palette, overlayOptions(l, palette));
     focusedApplied = focusRouteId();
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
@@ -1974,7 +1471,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     for (const { id, image, options } of l.overlayImages(scale)) {
       if (replace && !options) continue;
       if (replace && m.hasImage?.(id)) m.removeImage?.(id);
-      m.addImage(id, image, { sdf: true, pixelRatio: SDF_PIXEL_RATIO, ...options });
+      m.addImage(id, image, { sdf: true, pixelRatio: l.SDF_PIXEL_RATIO, ...options });
     }
   }
 
@@ -2020,125 +1517,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return ids.length > 1 ? ids : undefined;
   }
 
-  /** A cluster mark's members, or null when the picked feature is one vehicle.
-   *  MapLibre hands an array property back as an array (it JSON-tags the value
-   *  through its own tile encoding and parses it again on the way out), so the
-   *  ids the source wrote are the ids read here. */
-  function clusterMembers(properties: Record<string, unknown>): string[] | null {
-    if (properties.cluster !== true) return null;
-    const ids = properties.ids;
-    return Array.isArray(ids) ? ids.map(String) : [];
-  }
-
-  /** Where the model currently draws each of these vehicles; one that has gone
-   *  since the frame the tap hit is simply left out. */
-  function memberCoordinates(ids: readonly string[]): [number, number][] {
-    const coords: [number, number][] = [];
-    for (const id of ids) {
-      const v = lastDrawn.find((d) => d.id === id);
-      if (v) coords.push(toLonLat(v.p));
-    }
-    return coords;
-  }
-
-  /** A tap on a merged mark. While the members are a few pixels apart no tap
-   *  can mean one of them, so the camera goes in on them instead of guessing
-   *  (CLUSTER_ZOOM_IN_UNTIL); close in, the pills are apart and the tap means
-   *  the one under it. Nothing is selected on the way in: a selection the
-   *  reader did not aim at is worse than one more tap. */
-  function openCluster(m: MapApi, ids: readonly string[], point: { x: number; y: number }): void {
-    const coords = memberCoordinates(ids);
-    if (coords.length === 0) return;
-    if (m.getZoom() < CLUSTER_ZOOM_IN_UNTIL) {
-      fitCoordinates(coords, CLUSTER_ZOOM_IN_UNTIL);
-      return;
-    }
-    let nearest: string | null = null;
-    let best = Infinity;
-    for (const id of ids) {
-      const v = lastDrawn.find((d) => d.id === id);
-      if (!v) continue;
-      const at = m.project?.(toLonLat(v.p));
-      const distance = at ? Math.hypot(at.x - point.x, at.y - point.y) : 0;
-      if (distance < best) {
-        best = distance;
-        nearest = id;
-      }
-    }
-    if (!nearest) return;
-    const picked: MapSelection = { kind: 'vehicle', id: nearest };
-    select(picked);
-    options.onSelect?.(picked);
-  }
-
-  /** What a tap landed on: one of the map's selectable things, or a cluster of
-   *  vehicles, which is not a selection but a request to look closer. */
-  type Picked = MapSelection | { kind: 'cluster'; ids: string[] };
-
-  /** The mark under a tap, by priority: a vehicle over a city place over a
-   *  stop over a closure; nothing under it clears. The vehicle wins because a
-   *  numbered pill is what this map is for -- it is drawn last, over
-   *  everything, and it moves; a place dot standing under one is still
-   *  reachable by tapping beside the pill or by zooming, where a pill covered
-   *  by a dot could not be tapped at all. */
-  function pick(m: MapApi, point: { x: number; y: number }): Picked | null {
-    const l = lib;
-    if (!l) return null;
-    const box = [
-      [point.x - hitTolerance, point.y - hitTolerance],
-      [point.x + hitTolerance, point.y + hitTolerance],
-    ];
-    const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
-    const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
-    if (vehicle) {
-      const members = clusterMembers(vehicle.properties);
-      return members ? { kind: 'cluster', ids: members } : { kind: 'vehicle', id: String(vehicle.properties.id) };
-    }
-    const place = l.CITY_LAYERS ? first(['city-place-dots','city-place-badges','city-place-labels']) : undefined;
-    if (place) return {kind:'place',id:String(place.properties.id)};
-    const platform = first([l.LAYERS.stopsSelected, l.LAYERS.stopsRoute, l.LAYERS.stops, l.LAYERS.stopLabels]);
-    if (platform) return { kind: 'stop', id: String(platform.properties.id), ids: siblingPlatforms(String(platform.properties.name)) };
-    const closure = closuresVisible ? first([l.LAYERS.closures, l.LAYERS.closuresCasing]) : undefined;
-    if (closure) return { kind: 'closure', id: String(closure.properties.id) };
-    if (options.resolveStreet && m.unproject) {
-      const labelLayers=basemap.filter(layer=>layer.type==='symbol'&&layer.id.startsWith('roads_labels')).map(layer=>layer.id);
-      const road=labelLayers.length?first(labelLayers):undefined;
-      const name=road?.properties['name:hr']??road?.properties.name;
-      if (typeof name==='string') {
-        const p=m.unproject(point),id=options.resolveStreet(name,{lon:p.lng,lat:p.lat});
-        if(id)return {kind:'street',id};
-      }
-    }
-    return null;
-  }
-
-  function bindPointer(m: MapApi): void {
-    const canvas = m.getCanvas();
-    m.on('click', (event) => {
-      if (!styled || !event.point) return;
-      const picked = pick(m, event.point);
-      if (picked?.kind === 'cluster') {
-        openCluster(m, picked.ids, event.point);
-        return;
-      }
-      select(picked);
-      options.onSelect?.(picked);
-    });
-    m.on('mousemove', (event) => {
-      if (!styled || !event.point) return;
-      canvas.style.cursor = pick(m, event.point) ? 'pointer' : '';
-    });
-    // Escape on the map clears the selection: the keyboard's tap on nothing.
-    // Stopped here so the page's own Escape (leaving the full map) takes a second press.
-    container.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !selection) return;
-      event.preventDefault();
-      event.stopPropagation();
-      select(null);
-      options.onSelect?.(null);
-    });
-  }
-
   /** Applies style ops to the live map; a layer the style lost is skipped, never fatal. */
   function applyOps(m: MapApi, ops: readonly StyleOp[]): void {
     for (const op of ops) {
@@ -2177,7 +1555,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     if (!map || !styled || !l) return;
     const palette = l.overlayPalette(theme);
-    const next = l.overlayLayers(palette, overlayOptions(palette));
+    const next = l.overlayLayers(palette, overlayOptions(l, palette));
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
     focusedApplied = focusRouteId();

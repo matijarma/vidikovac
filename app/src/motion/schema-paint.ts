@@ -257,7 +257,7 @@ interface MarkPillPoint extends PillPoint {
 
 /**
  * Merges the pills that would pile up into one cluster mark each, exactly as
- * the city map does (city-map.ts vehiclesToGeoJson): within one mode, never
+ * the city map does (vehicle-features.ts vehiclesToGeoJson): within one mode, never
  * across it, and measured in the CSS px the pill geometry is stated in --
  * marks are in backing-store pixels, so they are divided by density and by
  * the symbol scale, which is the size the pills are actually painted at. The

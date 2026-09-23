@@ -41,7 +41,8 @@ import {
 } from '../../app/src/map/overlays';
 import { PILL_HEIGHT_PX, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, clusterLabel, noseCentrePx, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
-import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
+import type { MapPoint } from '../../app/src/map/city-map';
+import { pointsToGeoJson } from '../../app/src/map/external-features';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
 import { ASSEMBLY_CAP, assemblyPoints, placedEvents, quakePoints, seatPoint } from '../../app/src/kiosk/mapview';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';

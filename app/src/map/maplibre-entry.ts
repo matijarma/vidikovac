@@ -17,3 +17,5 @@ export * from './city-layers';
 export * from './name-census';
 export * from './external-labels';
 export * from './external-features';
+export * from './vehicle-features';
+export * from './map-pointer';

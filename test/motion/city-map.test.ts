@@ -2,7 +2,9 @@
 import '../../shared/kiosk/external-text';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
-import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, stopsToGeoJson, vehicleLabel, vehiclesToGeoJson, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
+import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, vehicleLabel, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
+import { vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
+import { stopsToGeoJson } from '../../app/src/map/external-features';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
 import { NOSE_LENGTH_PX, noseCentrePx, PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
@@ -10,10 +12,12 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/name-census';
 import * as nameCensus from '../../app/src/map/name-census';
 import * as externalLabels from '../../app/src/map/external-labels';
 import * as externalFeatures from '../../app/src/map/external-features';
+import * as vehicleFeatures from '../../app/src/map/vehicle-features';
+import * as mapPointer from '../../app/src/map/map-pointer';
 import { createNameHysteresis, evaluateExpression, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_TICK_MS, UNKNOWN_EXPRESSION, type SourcePoint } from '../../app/src/map/name-census';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
@@ -110,7 +114,7 @@ class FakeMap {
   remove(): void { this.removed = true; }
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
-const lib = { ...basemap, ...overlays, ...nameCensus, ...externalLabels, ...externalFeatures, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
+const lib = { ...basemap, ...overlays, ...nameCensus, ...externalLabels, ...externalFeatures, ...vehicleFeatures, ...mapPointer, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
 /** The real entry (maplibre-entry.ts) also re-exports the city-places layers;
  *  the transport tests leave them out so they see the transport style alone,
  *  and the test that is about those layers asks for this one. */

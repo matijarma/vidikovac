@@ -1,7 +1,10 @@
 // The wall's name census and its hysteresis (WP2-A2, decisions 17 and 19),
-// pure and without MapLibre, in the MapLibre chunk (maplibre-entry.ts): only a
-// drawn map ever runs them, so a lightweight screen never loads them.
+// the marker census, and the render census that reads them all back off a
+// drawn map: without MapLibre, in the MapLibre chunk (maplibre-entry.ts).
+// Only a drawn map ever runs them, so a lightweight screen never loads them;
 // city-map.ts reaches them through the loaded module, as it does the layers.
+// Everything but createRenderCensus is pure.
+import { capsuleHalfPx } from '../motion/pills';
 import type { StyleLayerLike } from './basemap';
 
 // --- Names the collision pass held back (data-hidden-names) ----------------
@@ -283,4 +286,405 @@ export function createNameHysteresis(): NameHysteresis {
       return { held: changed ? heldList() : null, opacity };
     },
   };
+}
+
+// --- The marker census (WP2, the probe contract of the companion plan §15.6)
+//
+// What the wall promises about its city marks is a claim about the screen:
+// every BAJS station a disc with its count in it (a grey "0" when it has no
+// bike, a grey disc without a number when the count is unknown or the
+// station is not renting, never "?"), every venue on it named, nothing a
+// mark without a word. So the census reads back what MapLibre drew -- the
+// dots, the counts and the names it placed -- rather than the points it was
+// handed, like data-pills does for the vehicles. Pure, so the rules are
+// tested without a map; city-map.ts writeRenderProbe feeds it.
+
+/** The city-place layers the census reads. map/city-layers.ts owns them; the
+ *  ids are written out here so the census stays a pure module without the
+ *  layer builders, and test/motion/city-map.test.ts holds the two together. */
+export const CENSUS_LAYERS = Object.freeze({ dots: 'city-place-dots', badges: 'city-place-badges', labels: 'city-place-labels' });
+/** Half the side of the square a disc's number takes, in CSS px before the
+ *  symbol scale: half of city-layers.ts BIKE_COUNT_PX (12). A pill lying over
+ *  that square hides the number, whatever the disc's own radius. */
+export const CENSUS_COUNT_HALF_PX = 6;
+
+/** A feature as queryRenderedFeatures answers it; the geometry is there on a
+ *  real map and may be missing on a stand-in. */
+export interface RenderedFeature {
+  layer: { id: string };
+  properties: Record<string, unknown>;
+  geometry?: { type: string; coordinates: unknown };
+}
+
+/** A box on the screen in CSS px, as a pill's is reckoned (motion/pills.ts). */
+export interface ScreenBox { left: number; top: number; right: number; bottom: number }
+
+export interface MarkerCensus {
+  /** data-markers: the curated city marks drawn with their centre on the screen, once each. */
+  markers: number;
+  /** data-unlabelled: marks drawn with nothing that says what they are, the
+   *  deliberate exceptions below aside. Must be 0. A BAJS disc says it with
+   *  its count; a venue (any mark but a station's or an air station's) with
+   *  its NAME, never with its programme count alone -- the framed wall at
+   *  Kadar 8 lost Gavella's name below zoom 13 and still read 0 while its
+   *  disc said "1" (review-w, P2). */
+  unlabelled: number;
+  /** data-bajs, by what a station's disc says: `counted` a number above
+   *  zero, `zero` the grey "0", `blank` the grey disc without a number (the
+   *  count unknown, the station not renting: city/curated.ts bikeDisc), `far`
+   *  the whole-city window's small dot without its number (points carrying
+   *  `far`). The last two are deliberate and never unlabelled. */
+  bajs: { counted: number; zero: number; blank: number; far: number };
+  /** data-overlaps `discs`: marks whose number (or, for a disc without one,
+   *  its centre) lies under a pill, so the reader sees the pill, not the mark.
+   *  Transient on a live map: a tram passing a station covers it for as long
+   *  as it takes to pass. */
+  covered: number;
+  /** data-disc-pills: the pills over those numbers, counted per mark (a
+   *  pill over two discs counts twice), so `covered` never exceeds it: a
+   *  covered disc is a pill passing, never a mark drawn under something else. */
+  discPills: number;
+}
+
+/** What the city places' name layer did, as markerCensus needs it: whether
+ *  the surface draws their names at all (city-layers.ts 'none', the
+ *  whole-city window, draws none, and there a venue's count is its label),
+ *  and the ids whose name the style would draw but the collision pass held
+ *  back -- a name yielding to a passing pill (decision 17) is a hidden name
+ *  (data-hidden-names), not a mark without one. */
+export interface CensusNames {
+  shown: boolean;
+  suppressed: ReadonlySet<string>;
+}
+const NAMES_SHOWN: CensusNames = Object.freeze({ shown: true, suppressed: new Set<string>() });
+
+function boxesMeet(a: ScreenBox, b: ScreenBox): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+/**
+ * The census of the city marks from what the three census layers rendered.
+ * `anchorOf` places a feature on the screen (null when it cannot: the mark
+ * then counts, since MapLibre drew it); `view` is the map's box, 0 x 0 before
+ * layout (every mark counts), so a disc whose edge alone reaches in from off
+ * the screen, number outside, is not a mark somebody sees; `pills` are the
+ * rendered pills' boxes at the map's `scale`.
+ */
+export function markerCensus(
+  rendered: readonly RenderedFeature[],
+  anchorOf: (feature: RenderedFeature) => { x: number; y: number } | null,
+  view: { width: number; height: number },
+  pills: readonly ScreenBox[],
+  scale: number,
+  names: CensusNames = NAMES_SHOWN,
+): MarkerCensus {
+  // By feature id: a point on a tile seam comes back once from each tile.
+  const dots = new Map<string, RenderedFeature>();
+  const counts = new Map<string, string>();
+  const named = new Set<string>();
+  for (const feature of rendered) {
+    const id = String(feature.properties.id ?? '');
+    if (!id) continue;
+    if (feature.layer.id === CENSUS_LAYERS.dots) {
+      if (!dots.has(id)) dots.set(id, feature);
+    } else if (feature.layer.id === CENSUS_LAYERS.badges) {
+      // The badge layer draws nothing for '' (and for a `far` point), so a
+      // rendered badge is a rendered word.
+      const text = String(feature.properties.badge ?? '');
+      if (text) counts.set(id, text);
+    } else if (feature.layer.id === CENSUS_LAYERS.labels && String(feature.properties.title ?? '')) {
+      named.add(id);
+    }
+  }
+  const census: MarkerCensus = { markers: 0, unlabelled: 0, bajs: { counted: 0, zero: 0, blank: 0, far: 0 }, covered: 0, discPills: 0 };
+  const laidOut = view.width > 0 && view.height > 0;
+  const half = CENSUS_COUNT_HALF_PX * scale;
+  for (const [id, feature] of dots) {
+    const at = anchorOf(feature);
+    if (at && laidOut && (at.x < 0 || at.y < 0 || at.x > view.width || at.y > view.height)) continue;
+    census.markers++;
+    const p = feature.properties;
+    const bike = p.category === 'bikes';
+    const count = counts.get(id);
+    // A count is a whole number: "?", "—" or a "+3" is a mark without one.
+    const counted = count !== undefined && /^\d+$/.test(count);
+    const far = bike && p.far === true;
+    const blank = bike && !far && count === undefined && p.spent === true && String(p.badge ?? '') === '';
+    if (far) census.bajs.far++;
+    else if (bike && counted) census.bajs[count === '0' ? 'zero' : 'counted']++;
+    else if (blank) census.bajs.blank++;
+    // A venue is named or it is a number on a disc: its count says how many
+    // happenings, not where. Only a surface that names no city place at all
+    // lets the count stand for it.
+    const venue = !bike && p.category !== 'air';
+    const saysIt = named.has(id) || names.suppressed.has(id) || (counted && (!venue || !names.shown));
+    if (!saysIt && !far && !blank) census.unlabelled++;
+    if (at) {
+      const number: ScreenBox = { left: at.x - half, top: at.y - half, right: at.x + half, bottom: at.y + half };
+      const over = pills.filter((box) => boxesMeet(box, number)).length;
+      if (over > 0) census.covered++;
+      census.discPills += over;
+    }
+  }
+  return census;
+}
+
+
+/** A rendered pill's box as MapLibre draws it: the capsule icon-text-fit
+ *  lays on its number (motion/pills.ts capsuleHalfPx, from the glyph
+ *  advances), at the map's symbol scale, centred on the mark. Inside the
+ *  pill's own collision box (that plus icon-padding), so a name MapLibre
+ *  placed clear of a pill is never counted as crossed by it -- where the
+ *  clustering's table width, a few pixels wider for a merged label's narrow
+ *  "·", would have counted names that sit beside the capsule. */
+export function pillBox(at: { x: number; y: number }, label: string, scale: number): ScreenBox {
+  const { halfWidth, halfHeight } = capsuleHalfPx(label);
+  const halfW = halfWidth * scale;
+  const halfH = halfHeight * scale;
+  return { left: at.x - halfW, top: at.y - halfH, right: at.x + halfW, bottom: at.y + halfH };
+}
+
+// --- The render census on a drawn map (city-map.ts binds it on `idle` and
+// `render`; what each attribute says, and what the passes cost, is the probe
+// comment there). Here, in the MapLibre chunk, because only a drawn map is
+// ever read back: the lightweight graph carries the key it is taken for and
+// nothing of the passes (test/app/budget.test.ts).
+
+/** How long a new census key must have waited, on a still camera, before a
+ *  plain `render` takes the census that no `idle` came to take (the live
+ *  wall's fallback; city-map.ts's probe comment). Long enough for the push
+ *  after an update() to be placed, short enough that every poll beat is read. */
+export const PROBE_SETTLE_MS = 1000;
+
+/** The slice of a MapLibre map the census reads: city-map.ts's MapApi, structurally. */
+export interface CensusMap {
+  getLayer?(id: string): unknown;
+  getZoom(): number;
+  isMoving?(): boolean;
+  project?(lonLat: [number, number]): { x: number; y: number };
+  queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): RenderedFeature[];
+  setFeatureState?(feature: { source: string; id: string }, state: Record<string, unknown>): void;
+}
+
+/** The layer and source ids the census reads, as the loaded module carries them. */
+export type CensusIds = Pick<typeof import('./overlays'), 'LAYERS' | 'SOURCES'>;
+
+/** What the census reads off the map wrapper that owns it (city-map.ts). */
+export interface RenderCensusHost {
+  /** The map's container: its box, and the probe attributes the census writes on it. */
+  readonly container: HTMLElement;
+  now(): number;
+  /** Whether the overlays sit on the style of this map: nothing is read before, or after destroy. */
+  styled(): boolean;
+  /** The key a census is taken once for: zoom, selection, "has any marks", evidence version. */
+  key(): string;
+  /** The map's symbol scale (CityMapOptions.symbolScale). */
+  scale(): number;
+  /** The overlay and city-place layer lists as the live style carries them. */
+  overlays(): readonly StyleLayerLike[];
+  cityOverlays(): readonly StyleLayerLike[];
+  /** The point features a name layer's source was last handed (nameCandidates). */
+  sourcePoints(sourceId: string): readonly SourcePoint[];
+  /** The screen's own stop, whose name decision 19 always draws; null without one. */
+  stop(): { lon: number; lat: number } | null;
+  /** Whether this is the public screen's map (prozor), where the name hysteresis runs. */
+  prozor(): boolean;
+  /** The names the hysteresis holds changed: the overlays are re-derived with them. */
+  hold(names: readonly string[]): void;
+}
+
+export interface RenderCensus {
+  /** MapLibre's `idle`: the census, once per key. */
+  idle(): void;
+  /** A `render` on a still camera: the census once its key has settled (PROBE_SETTLE_MS). */
+  settled(): void;
+  /** A `render`: one look at the public screen's names, at most every NAME_TICK_MS. */
+  nameTick(): void;
+}
+
+/** The render census of one drawn map `m` (city-map.ts's probe comment): the
+ *  vehicle attributes (data-pills, data-noses, data-bodies, data-twoway), the
+ *  marker census and the overlaps, and decision 19's name hysteresis. */
+export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensusHost): RenderCensus {
+  /** The key the census was last taken for. */
+  let renderProbeKey = '';
+  /** The key a still frame first saw untaken, and when: settled()'s clock. */
+  let settlingKey = '';
+  let settlingSince = 0;
+
+  /** The fallback for a map that never idles (city-map.ts's probe comment):
+   *  on a `render` with the camera still, a key not yet taken is timed, and
+   *  taken once it has stood for PROBE_SETTLE_MS. A key already taken costs
+   *  one string per frame and nothing else. */
+  function settled(): void {
+    if (!host.styled() || m.isMoving?.()) return;
+    const key = host.key();
+    if (key === renderProbeKey) return;
+    if (key !== settlingKey) {
+      settlingKey = key;
+      settlingSince = host.now();
+      return;
+    }
+    if (host.now() - settlingSince >= PROBE_SETTLE_MS) idle();
+  }
+
+  /** The census on MapLibre's `idle`: the vehicle attributes, then the marker census. */
+  function idle(): void {
+    if (!host.styled()) return;
+    const key = host.key();
+    if (key === renderProbeKey) return;
+    renderProbeKey = key;
+    // Asking MapLibre about a layer the style does not carry fires an error
+    // event, which city-map.ts onMapError logs as a bug; its placedNames()
+    // guards the same way.
+    const ids = [l.LAYERS.vehicles, l.LAYERS.vehicleSelected, l.LAYERS.vehicleNoses, l.LAYERS.vehicleBodies, l.LAYERS.vehicleTwoWayFore]
+      .filter((id) => !m.getLayer || m.getLayer(id));
+    // By feature id, so a mark queried twice (a point on a tile seam, a line
+    // across one) is one pill, one body, one arrow; the pills in id order, so
+    // the attribute is stable frame to frame.
+    const pills = new Map<string, string>();
+    const pillFeatures = new Map<string, RenderedFeature>();
+    const bodies = new Set<string>();
+    const twoWay = new Set<string>();
+    let noses = 0;
+    for (const feature of ids.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: ids })) {
+      if (feature.layer.id === l.LAYERS.vehicleNoses) noses++;
+      else if (feature.layer.id === l.LAYERS.vehicleBodies) bodies.add(String(feature.properties.id));
+      else if (feature.layer.id === l.LAYERS.vehicleTwoWayFore) twoWay.add(String(feature.properties.id));
+      else {
+        pills.set(String(feature.properties.id), String(feature.properties.short ?? ''));
+        pillFeatures.set(String(feature.properties.id), feature);
+      }
+    }
+    host.container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
+    host.container.dataset.noses = String(noses);
+    host.container.dataset.bodies = String(bodies.size);
+    host.container.dataset.twoway = String(twoWay.size);
+    writeMarkerCensus([...pillFeatures.values()]);
+  }
+
+  /** The marker census and the overlaps (city-map.ts's probe comment), from
+   *  the pills the vehicle census just read. */
+  function writeMarkerCensus(pillFeatures: readonly RenderedFeature[]): void {
+    const has = (id: string): boolean => !m.getLayer || Boolean(m.getLayer(id));
+    const anchorOf = (feature: RenderedFeature): { x: number; y: number } | null => {
+      const g = feature.geometry;
+      if (!m.project || g?.type !== 'Point' || !Array.isArray(g.coordinates)) return null;
+      const [lon, lat] = g.coordinates as number[];
+      return Number.isFinite(lon) && Number.isFinite(lat) ? m.project([lon!, lat!]) : null;
+    };
+    const pillBoxes: ScreenBox[] = [];
+    for (const feature of pillFeatures) {
+      const at = anchorOf(feature);
+      if (at) pillBoxes.push(pillBox(at, String(feature.properties.short ?? ''), host.scale()));
+    }
+    const view = { width: host.container.clientWidth, height: host.container.clientHeight };
+    const nameIds: string[] = [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
+      l.LAYERS.placeSeat, l.LAYERS.placeAssembly, l.LAYERS.placePharmacy, CENSUS_LAYERS.labels].filter(has);
+    /** Decision 19: the screen's own name is drawn whatever crosses it; data-overlaps counts every other name. */
+    const crossable = nameIds.filter((id) => id !== l.LAYERS.screenStopLabel);
+    // The names placed, and the names the style would place with nothing in
+    // the way: what the second has and the first lacks, the collision pass
+    // held back (data-hidden-names).
+    const placed = new Set<string>();
+    let ownName = '';
+    for (const feature of nameIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: nameIds })) {
+      placed.add(nameKey(feature.layer.id, feature.properties));
+      if (feature.layer.id === l.LAYERS.screenStopLabel) ownName = String(feature.properties.name ?? '');
+    }
+    const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : () => null;
+    const specs = [...host.overlays(), ...host.cityOverlays()].filter((layer) => nameIds.includes(layer.id));
+    const hidden = [...nameCandidates(specs, host.sourcePoints, m.getZoom(), project, view)].filter(([key]) => !placed.has(key));
+    const cityLabels = host.cityOverlays().find((layer) => layer.id === CENSUS_LAYERS.labels);
+    const names: CensusNames = {
+      shown: cityLabels !== undefined && (cityLabels.layout as Record<string, unknown> | undefined)?.visibility !== 'none',
+      suppressed: new Set(hidden.filter(([, name]) => name.layer === CENSUS_LAYERS.labels).map(([, name]) => name.id)),
+    };
+    const cityIds = [CENSUS_LAYERS.dots, CENSUS_LAYERS.badges, CENSUS_LAYERS.labels].filter(has);
+    const census = markerCensus(
+      cityIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: cityIds }),
+      anchorOf, view, pillBoxes, host.scale(), names,
+    );
+    const crossed = new Set<string>();
+    if (crossable.length > 0) {
+      for (const box of pillBoxes) {
+        for (const feature of m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: crossable })) {
+          crossed.add(nameKey(feature.layer.id, feature.properties));
+        }
+      }
+    }
+    host.container.dataset.markers = String(census.markers);
+    host.container.dataset.unlabelled = String(census.unlabelled);
+    host.container.dataset.bajs = `counted:${census.bajs.counted};zero:${census.bajs.zero};blank:${census.bajs.blank};far:${census.bajs.far}`;
+    host.container.dataset.overlaps = `discs:${census.covered};names:${crossed.size}`;
+    host.container.dataset.discPills = String(census.discPills);
+    host.container.dataset.hiddenNames = String(hidden.length);
+    host.container.dataset.ownName = ownName;
+  }
+
+  /** Decision 19 on the public screen (createNameHysteresis above). */
+  let nameHold: NameHysteresis | null = null;
+  let nameTickAt = -Infinity;
+  /** How long a pill has crossed the screen's own name, in ms, and when that was last looked at (data-own-name-crossed). */
+  let ownCrossedMs = 0;
+  let ownLookedAt: number | null = null;
+
+  /** One look at the public screen's stop names (decision 19), at most every
+   *  NAME_TICK_MS on a still camera: what MapLibre placed, which held name a
+   *  pill's drawn capsule covers (the capsule less the names' 3 px padding,
+   *  so a touch is not a cover), and whether a pill crosses the screen's own
+   *  name. A handful of small queries, each around a held name or the own
+   *  name only. */
+  function nameTick(): void {
+    if (!host.styled() || !host.prozor() || !m.setFeatureState || m.isMoving?.()) return;
+    if (m.getLayer && !m.getLayer(l.LAYERS.stopLabelsHeld)) return;
+    const t = host.now();
+    if (t - nameTickAt < NAME_TICK_MS) return;
+    nameTickAt = t;
+    nameHold ??= createNameHysteresis();
+    const has = (id: string): boolean => !m.getLayer || Boolean(m.getLayer(id));
+    const at = (f: RenderedFeature): { x: number; y: number } | null => {
+      const c = f.geometry?.type === 'Point' ? f.geometry.coordinates as number[] : null;
+      return c && m.project ? m.project([c[0]!, c[1]!]) : null;
+    };
+    const placed = new Set<string>();
+    const heldAt = new Map<string, { x: number; y: number }>();
+    for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld] })) {
+      const id = String(f.properties.id ?? '');
+      if (!id) continue;
+      placed.add(id);
+      const p = f.layer.id === l.LAYERS.stopLabelsHeld ? at(f) : null;
+      if (p) heldAt.set(id, p);
+    }
+    const stop = host.stop();
+    const ownAt = stop && m.project && Number.isFinite(stop.lon) && Number.isFinite(stop.lat) ? m.project([stop.lon, stop.lat]) : null;
+    const pills: ScreenBox[] = [];
+    if (heldAt.size > 0 || ownAt) {
+      for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.vehicles, l.LAYERS.vehicleSelected].filter(has) })) {
+        const p = at(f);
+        if (p) pills.push(pillBox(p, String(f.properties.short ?? ''), host.scale()));
+      }
+    }
+    const near = (box: ScreenBox, p: { x: number; y: number }): boolean => box.right > p.x - 400 && box.left < p.x + 400 && box.bottom > p.y - 160 && box.top < p.y + 160;
+    const covered = new Set<string>();
+    const pad = 3;
+    for (const [id, p] of heldAt) {
+      for (const box of pills) {
+        if (!near(box, p) || box.right - box.left <= 2 * pad) continue;
+        const hits = m.queryRenderedFeatures([[box.left + pad, box.top + pad], [box.right - pad, box.bottom - pad]], { layers: [l.LAYERS.stopLabelsHeld] });
+        if (hits.some((f) => String(f.properties.id ?? '') === id)) { covered.add(id); break; }
+      }
+    }
+    if (ownAt && has(l.LAYERS.screenStopLabel)) {
+      const crossed = pills.some((box) => near(box, ownAt) && m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: [l.LAYERS.screenStopLabel] }).length > 0);
+      if (crossed && ownLookedAt !== null) ownCrossedMs += Math.min(t - ownLookedAt, 1000);
+      ownLookedAt = t;
+      host.container.dataset.ownNameCrossed = (ownCrossedMs / 1000).toFixed(1);
+    }
+    const result = nameHold!.tick(t, placed, covered);
+    for (const [id, o] of result.opacity) m.setFeatureState({ source: l.SOURCES.stops, id }, { o });
+    if (result.held) host.hold(result.held);
+  }
+
+  return { idle, settled, nameTick };
 }

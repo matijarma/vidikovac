@@ -31,7 +31,8 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import { createLineColours, NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import LINE_COLOURS from '../data/zet-line-colours.json';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -139,6 +140,10 @@ export const PILL_LINE_HEIGHT_EM = 1.2;
  *  motion/pills.ts beside the glyph advances, so the render census and the
  *  nose measure the capsule this layer draws; re-exported under its name. */
 export { PILL_FIT_PAD_X, PILL_FIT_PAD_Y };
+/** The pixel ratio every overlay image is rasterised at (sdf.ts), which
+ *  city-map.ts hands MapLibre with each image: re-exported with the images,
+ *  so the lightweight graph never carries the rasteriser for one number. */
+export { SDF_PIXEL_RATIO };
 /** The direction nose (pills.ts NOSE_LENGTH_PX by NOSE_WIDTH_PX) sits ahead
  *  of the pill, drawn under it, its centre where pills.ts noseCentrePx puts
  *  it: on the drawn capsule's outline along the heading, which city-map.ts
@@ -349,7 +354,7 @@ function stretchablePill(id: string, cornerPx: number, scale: number): OverlayIm
  *  pill and plate again whenever its symbol scale changes). One pill and one
  *  plate for every label: a merged mark writes every line,
  *  "6·11·12·14·221·K", and the capsule stretches to write it in -- wider
- *  for a longer row, taller for a second one (up to pills.ts's cap), where
+ *  for a longer row, taller for each further one (up to pills.ts's cap), where
  *  it used to take one image per label length. */
 export function overlayImages(scale = 1): OverlayImage[] {
   return [
@@ -510,6 +515,13 @@ export function selectionFilters(selection: MapSelection | null): Record<string,
     [LAYERS.selectionRing]: vehicle,
   };
 }
+
+/** The colour ZET prints a line in, from the table the schema build writes
+ *  beside the artefact (scripts/zet-schema.mjs, F5): what city-map.ts hands
+ *  back as OverlayOptions.focus. A route the table does not carry -- every
+ *  bus, and a tram line added between two builds -- keeps its mode's pinned
+ *  ink. Here, with the layers, so the lightweight graph never carries it. */
+export const lineColour = createLineColours(LINE_COLOURS.colours);
 
 export interface OverlayOptions {
   /** Symbol and circle size multiplier: 1 on a phone or desk, larger on a screen read from across a room. */
