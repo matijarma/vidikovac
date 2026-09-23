@@ -57,35 +57,38 @@ six stops around it by default (Kadar: 4, 6 or 8 "stajališta odavde"), the
 radius measured per place; a screen set to the whole city keeps the whole-city
 window. One written sentence with a coloured kicker (Promet, Kultura, Vrijeme,
 Bicikli, Noćas, Radovi) changes with the screen's rhythm, every 20 seconds by
-default: at most 80 characters, never cut with an ellipsis, and shown only
-while the fact it states holds. The right column is "U blizini" with the
-measured circle and its walking time ("U blizini · 2 km · ~15 min" at 2 km):
-one time-ordered list of at most three departures (a blue countdown for a
-tracked vehicle, a grey clock time for the timetable, never the word
-"procjena"), then the timed rows, then one "uvijek" row, above the QR card
-with the lead "Skeniraj za 10 minuta grada.", the code and the address to type
-it at. No fetch time, disclaimer, count without a name or operator control
-stands on the wall; the footer carries safety, its sources without a time and
-the on-duty pharmacy as a green cross, "24/7" and its address. In a ZET outage
-the map stays a map without vehicles, with one quiet note, and every departure
-is a timetable time. Where the screen has touch, touch is read-only and the
-wall returns by itself: a stop ring shows that stop's departures for 60
-seconds, and scanning stays the only way to take content along.
+default: at most 80 characters, never cut with an ellipsis, shown only while
+the fact it states holds and, unless that fact expires, for at least one
+rhythm. The right column is "U blizini" with the measured circle and its
+walking time ("U blizini · 2 km · ~15 min" at 2 km): one time-ordered list of
+at most three departures (a blue countdown for a tracked vehicle, a grey clock
+time for the timetable, never the word "procjena"), then the timed rows, then
+one "uvijek" row, above the QR card with the lead
+"Skeniraj za 10 minuta grada.", the code and the address to type it at. No
+fetch time, disclaimer, count without a name or operator control stands on the
+wall, in the overview or in a presentation; the footer is text, not controls,
+and carries safety, its sources without a time and the on-duty pharmacy as a
+green cross, "24/7" and its address. In a ZET outage the map stays a map
+without vehicles, with one quiet note, and every departure is a timetable
+time. Where the screen has touch, touch is read-only and the wall returns by
+itself: a stop ring shows that stop's departures for 60 seconds, a row its
+detail and the pharmacy its address and phone, and scanning stays the only way
+to take content along.
 
 Setup is one optional field, "Adresa ili stajalište", a line under it saying
 what the screen will show, and "Pokreni". Settings are click-toggles behind a
 long press on the brand: Mjesto, Kadar, Prikaz (karta or shema), Tema and
 Ritam. The phone opens on the place as its title, one sentence, a map band and
-three departures, then the same "U blizini" rows; its tabs are
-Sada · Karta · Još, the week's agenda is the Još row "Događanja ovaj tjedan",
-and "Podijeli grad" is a labelled header button beside Zaslon and the session
-timer. Karta is the timeline's map: vehicles at once, curated markers, one
-search field and a small map/schema toggle. Desktop is the phone, wider: the
-Sada feed and the Karta map side by side, without the six-domain bar. After
-ten minutes the content clears to the invitation to scan again and the
-`/hitno` link. Vocabulary: Karta is the destination, Promet the subject word,
-"stajalište" the stop, "uvijek" the timeless row and "vozni red" the
-timetable.
+three departures, then the same "U blizini" rows, with the phone asking for a
+new sentence at most once a minute; its tabs are Sada · Karta · Još, the
+week's agenda is the Još row "Događanja ovaj tjedan", and "Podijeli grad" is a
+labelled header button beside Zaslon and the session timer. Karta is the
+timeline's map: vehicles at once, curated markers, one search field and a
+small map/schema toggle. Desktop is the phone, wider: the Sada feed and the
+Karta map side by side, without the six-domain bar. After ten minutes the
+content clears to the invitation to scan again and the `/hitno` link.
+Vocabulary: Karta is the destination, Promet the subject word, "stajalište"
+the stop, "uvijek" the timeless row and "vozni red" the timetable.
 
 Recorded for later, not built in this round: the owner's vision for what
 follows the cleared screen is that people keep whatever data they need
