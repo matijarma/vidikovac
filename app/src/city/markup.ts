@@ -48,6 +48,9 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   // The public component's default text escape checks every optional field,
   // including facts/provenance. Phone rendering retains its existing policy.
   const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
+  // The name and the address under their own kinds, never as prose: a house-number range ("Petrinjska 50-52") is data there.
+  const nameHtml = publicDisplay ? externalHtml('name', p.name) : e(p.name);
+  const addressHtml = !p.address ? '' : publicDisplay ? externalHtml('address', p.address) : e(p.address);
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const en=i18n.getLocale().startsWith('en');
@@ -56,8 +59,8 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(airIndexLabel(i18n,p.facts?.index))}</p><p class="city-meta">${e(en?'Preliminary station index, not a citywide assessment.':'Preliminarni indeks postaje, ne ocjena za cijeli grad.')} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`:'';
   return `<article class="city-detail" data-testid="city-detail" data-place-id="${a(p.id)}">
     ${publicDisplay?'':`<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n,'back'))}</button>`}
-    <p class="city-kicker">${e(placeCategory(i18n,p))}</p><h3 tabindex="-1" id="city-detail-title">${e(p.name)}</h3>
-    ${p.address?`<p>${e(p.address)}</p>`:''}${!located(p)?`<p class="city-meta">${e(ct(i18n,'noLocation'))}</p>`:''}
+    <p class="city-kicker">${e(placeCategory(i18n,p))}</p><h3 tabindex="-1" id="city-detail-title">${nameHtml}</h3>
+    ${addressHtml?`<p>${addressHtml}</p>`:''}${!located(p)?`<p class="city-meta">${e(ct(i18n,'noLocation'))}</p>`:''}
     ${reference&&located(p)?`<p class="city-meta">${e(Math.round(distanceM(reference,p)).toLocaleString(en?'en-GB':'hr-HR'))} m · ${e(locationLabel(i18n,reference))}</p>`:''}
     ${bike}${air}${facts?`<dl class="city-facts">${facts}</dl>`:''}
     ${p.hours?`<p class="city-meta">${e(p.hours)}</p>`:''}
@@ -77,7 +80,9 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
 export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string {
   if (publicDisplay && (vetExternal('name', s.name, 'row') === null || vetExternal('register-text', s.description, 'row') === null)) return '';
   const e = publicDisplay ? (value: unknown) => typeof value === 'string' ? externalHtml('summary', value) : escapePhone(value) : escapePhone;
-  return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${e(s.name)}</h3><p class="city-meta">${e(s.settlement)}</p><p lang="hr">${e(s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
+  const nameHtml = publicDisplay ? externalHtml('name', s.name) : e(s.name);
+  const settlementHtml = publicDisplay ? externalHtml('name', s.settlement) : e(s.settlement);
+  return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${nameHtml}</h3><p class="city-meta">${settlementHtml}</p><p lang="hr">${e(s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
 }
 /** A minute of grace: a train due at 10:00 is still the one you are running
  *  for at 10:00:45. Anything older has left. */

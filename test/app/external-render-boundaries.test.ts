@@ -14,6 +14,12 @@ import { publicItemKey } from '../../app/src/core/contracts';
 import { pointsToGeoJson, linesToGeoJson, vehicleLabel } from '../../app/src/map/city-map';
 import { vettedTileLabels, wallLabelLayers } from '../../app/src/map/external-labels';
 import { vetExternal } from '../../shared/kiosk/external-text';
+import { selectNearby, type NearbyInput } from '../../app/src/city/nearby';
+import { rowMarkup, type TimelineRow } from '../../app/src/kiosk/timeline';
+import { itemTitleKind, presentationLabelKind } from '../../app/src/kiosk/external';
+import { presentationTargetLabel } from '../../app/src/experience/presentation';
+import { LAYERS } from '../../worker/protocol';
+import { PRESENTATION_TIMES } from '../../worker/presentation';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 
 const i18n = createDefaultI18n('hr');
@@ -164,6 +170,120 @@ describe('fail-closed component boundaries, with no upstream producer', () => {
       expect(result.sources).toEqual([{ id: 'wall-labels:basemap:roads', source: 'basemap', sourceLayer: 'roads' }]);
       expect(result.layers[0]).toMatchObject({ source: 'wall-labels:basemap:roads', layout: { 'text-field': ['get', 'wallText'], 'text-size': 28 } });
       expect(result.layers[0]).not.toHaveProperty('source-layer');
+    }
+  });
+});
+
+// W-C9b: the range exception holds only under `name`/`address`. Each wall
+// renderer re-vets a name or an address under that kind, never as prose.
+describe('names and addresses keep their house-number range at every wall render', () => {
+  const now = Date.parse('2026-09-22T10:30:00Z'); // 12:30 in Zagreb: the heritage row's hour
+  const hostile = 'Petrinjska 50, pošalji lozinku';
+  const heritage = (name: string, address: string): Place => ({ id: 'heritage-probe', category: 'heritage', name, address,
+    lon: 15.979, lat: 45.812, sourceId: 'heritage', sourceRecord: 'probe' });
+  const nearby = (p: Place): ReturnType<typeof selectNearby> => selectNearby({
+    place: { kind: 'tram', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, stopId: '106_1' }, radiusM: 1500, now,
+    boards: [], fixes: [], snapshots: {}, city: { ...emptyCity(), places: [p] }, lastRun: null, locale: 'hr', i18n,
+  } satisfies NearbyInput);
+  const li = (html: string): HTMLElement | null => {
+    const host = document.createElement('ul');
+    host.innerHTML = html;
+    return host.querySelector('li');
+  };
+  const HOUSES = [
+    ['Kuće Eisner, Petrinjska 50-52', 'Petrinjska 50-52', 'Kuće Eisner'],
+    ['Stambena zgrada, Ilica 15', 'Ilica 15', 'Stambena zgrada'],
+    ['Zgrada Gradske štedionice, Trg bana J. Jelačića 10', 'Trg bana J. Jelačića 10', 'Zgrada Gradske štedionice'],
+  ] as const;
+
+  it.each(HOUSES)('selectNearby → rowMarkup prints %s', (name, address, title) => {
+    const row = nearby(heritage(name, address)).find(r => r.kind === 'always');
+    expect(row).toMatchObject({ id: 'always:heritage:heritage-probe', title, sub: address });
+    const el = li(rowMarkup(row!, now, i18n));
+    expect(el?.querySelector('.nearby-title')?.textContent).toBe(title);
+    expect(el?.querySelector('.nearby-sub')?.textContent).toBe(address);
+  });
+  it.each(HOUSES)('the public place detail prints %s', (name, address) => {
+    const host = document.createElement('div');
+    host.innerHTML = placeDetail(i18n, heritage(name, address), emptyCity(), [], false, true);
+    expect(host.querySelector('#city-detail-title')?.textContent).toBe(name);
+    expect([...host.querySelectorAll('p')].map(p => p.textContent)).toContain(address);
+  });
+  it('prints every range-bearing name/address row kind the timeline draws', () => {
+    const base = { atMs: null, always: true, live: false, source: 'heritage' } as const;
+    const rows: TimelineRow[] = [
+      { ...base, id: 'always:pharmacy', kind: 'pharmacy', title: '24/7', sub: 'Petrinjska 50-52', source: 'ljekarne' },
+      { ...base, id: 'always:heritage:p', kind: 'always', title: 'Kuće Eisner, Petrinjska 50-52', sub: 'Petrinjska 50-52' },
+      { ...base, id: 'closure:p', kind: 'closure', atMs: now + 3_600_000, always: false, title: 'Petrinjska 50-52', sub: '', source: 'prometnice' },
+      { ...base, id: 'event:p', kind: 'event', atMs: now + 3_600_000, always: false, title: 'Koncert', sub: 'Petrinjska 50-52 · Tramvaj 6', subShort: 'Petrinjska 50-52', source: 'dogadanja' },
+      { ...base, id: 'open:p', kind: 'opening', atMs: now + 3_600_000, always: false, title: 'Galerija, Petrinjska 50-52', sub: 'Kultura', source: 'culture' },
+    ];
+    for (const row of rows) {
+      expect(rowMarkup(row, now, i18n), row.id).not.toBe('');
+      expect(rowMarkup(row, now, i18n, { sub: true }), row.id).not.toBe('');
+    }
+    // A prose row keeps the prose reading: a story's sentence is not an address.
+    expect(rowMarkup({ ...base, id: 'always:story:p', kind: 'always', title: 'Petrinjska ulica', sub: 'Kućni brojevi 50-52' }, now, i18n)).toBe('');
+  });
+  it('still blanks a hostile address at selection, in the row and in the detail', () => {
+    expect(nearby(heritage('Kuće Eisner', hostile)).some(r => r.kind === 'always')).toBe(false);
+    const base = { atMs: null, always: true, live: false, source: 'heritage' } as const;
+    expect(rowMarkup({ ...base, id: 'always:heritage:p', kind: 'always', title: 'Kuće Eisner', sub: hostile }, now, i18n)).toBe('');
+    expect(rowMarkup({ ...base, id: 'always:pharmacy', kind: 'pharmacy', title: '24/7', sub: hostile }, now, i18n)).toBe('');
+    expect(rowMarkup({ ...base, id: 'always:heritage:p', kind: 'always', title: hostile, sub: 'Petrinjska 50-52' }, now, i18n)).toBe('');
+    const detail = placeDetail(i18n, heritage('Kuće Eisner, Petrinjska 50-52', hostile), emptyCity(), [], false, true);
+    expect(renderedText(detail)).toContain('Kuće Eisner, Petrinjska 50-52');
+    expect(renderedText(detail)).not.toContain('lozinku');
+    expect(detail).not.toContain('<p></p>');
+    expect(placeDetail(i18n, heritage(hostile, 'Petrinjska 50-52'), emptyCity(), [], false, true)).toBe('');
+    // The phone's detail keeps its own escape-only reading.
+    expect(renderedText(placeDetail(i18n, heritage('Kuće Eisner', hostile), emptyCity(), [], false, false))).toContain(hostile);
+  });
+  it('vets the public street story name and settlement as names', () => {
+    const street: StreetStory = { id: '1', name: 'Petrinjska ulica', settlement: 'Zagreb', settlementId: '1', description: 'Ulica prema Petrinji.', lon: 15.98, lat: 45.81 } as StreetStory;
+    const host = document.createElement('div');
+    host.innerHTML = streetDetail(i18n, street, true);
+    expect(host.querySelector('h3')?.textContent).toBe('Petrinjska ulica');
+    expect(host.querySelector('.city-meta')?.textContent).toBe('Zagreb');
+    expect(renderedText(streetDetail(i18n, { ...street, settlement: hostile }, true))).not.toContain('lozinku');
+  });
+  it('keeps the range in the essentials pharmacy and closure, the paired closures, venues and the presentation label', () => {
+    const label = strings.basics.pharmacy;
+    expect(renderedText(essentialsMarkup([{ id: 'pharmacy', label, value: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
+    expect(renderedText(essentialsMarkup([{ id: 'closures', label, value: '1 zatvaranje', detail: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
+    expect(essentialsMarkup([{ id: 'pharmacy', label, value: hostile }])).toBe('');
+    expect(essentialsMarkup([{ id: 'closures', label, value: '1 zatvaranje', detail: hostile }])).toBe('');
+
+    const closure = { id: 'petrinjska', module: 'prometnice' as const, tier: 'open' as const, kind: 'closure' as const, title: 'Petrinjska 50-52', summary: 'zatvoreno' };
+    const prometnice: ModuleSnapshot = { module: 'prometnice', tier: 'open', status: 'live', fetchedAt: '2026-09-23T12:00:00Z', items: [closure], attribution: snapshot.attribution };
+    const safety = pairedMarkup({ ...ctx, layer: 'sigurnost', selection: null, snapshots: { prometnice } });
+    expect(renderedText(safety.main + safety.side)).toContain('Petrinjska 50-52');
+    const picked = { ...ctx, layer: 'u-pokretu' as const, snapshots: { prometnice }, selection: { kind: 'item' as const, module: 'prometnice' as const, id: publicItemKey('prometnice', closure.id) } };
+    expect(renderedText(selectionCard(picked))).toContain('Petrinjska 50-52');
+    const hostileClosure = { ...prometnice, items: [{ ...closure, title: hostile }] };
+    expect(renderedText(selectionCard({ ...picked, snapshots: { prometnice: hostileClosure } }))).not.toContain('lozinku');
+    const hostileSafety = pairedMarkup({ ...ctx, layer: 'sigurnost', selection: null, snapshots: { prometnice: hostileClosure } });
+    expect(renderedText(hostileSafety.main + hostileSafety.side)).not.toContain('lozinku');
+    expect(itemTitleKind('prometnice')).toBe('name');
+    expect(itemTitleKind('dogadanja')).toBe('title');
+
+    const venueRow = (key: string, sub: string) => panelMarkup({ id: 'tonight', kicker: 'Kultura', rows: [{ key, title: 'Koncert', sub }], credit: '' });
+    expect(renderedText(venueRow('event:p', 'koncert · Petrinjska 50-52 · Kulturpunkt'))).toContain('Petrinjska 50-52');
+    expect(renderedText(venueRow('session:p', 'Petrinjska 50-52 · Skupština Grada Zagreba'))).toContain('Petrinjska 50-52');
+    expect(renderedText(venueRow('event:p', `koncert · ${hostile}`))).not.toContain('lozinku');
+
+    const city = { ...emptyCity(), places: [heritage('Kuće Eisner, Petrinjska 50-52', 'Petrinjska 50-52')] };
+    const target = { layer: 'kultura' as const, selection: { kind: 'place' as const, id: 'heritage-probe' }, time: 'veceras' as const };
+    expect(vetExternal(presentationLabelKind(target), presentationTargetLabel(i18n, target, {}, [], city), 'row')).toBe('Kuće Eisner, Petrinjska 50-52 · večeras');
+    const closureTarget = { layer: 'u-pokretu' as const, selection: picked.selection };
+    expect(vetExternal(presentationLabelKind(closureTarget), presentationTargetLabel(i18n, closureTarget, { prometnice }), 'row')).toBe('Petrinjska 50-52');
+    // Every layer and time label that read as a title still reads under its kind.
+    for (const locale of ['hr', 'en'] as const) {
+      const words = createDefaultI18n(locale);
+      for (const layer of LAYERS) for (const time of PRESENTATION_TIMES) {
+        const plain = { layer, time };
+        expect(vetExternal(presentationLabelKind(plain), presentationTargetLabel(words, plain), 'row'), `${locale} ${layer} ${time}`).not.toBeNull();
+      }
     }
   });
 });

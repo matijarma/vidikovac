@@ -29,7 +29,7 @@ import type { CityState } from '../../../shared/city/types';
 import { dynamicPlaces } from '../city/discovery';
 import { placeDetail,streetDetail } from '../city/markup';
 import { locatedEvents } from '../../../shared/city/events';
-import { externalHtml, optionalExternal } from './external';
+import { externalHtml, itemTitleKind, optionalExternal } from './external';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
@@ -384,7 +384,8 @@ function closureRows(ctx: PairedContext, limit: number): string[] {
     const type = translated === key ? s.paired.closures : translated;
     const until = item.until ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : '';
     const detail = `${escapeHtml(type)}${until ? ` · ${escapeHtml(until)}` : ''}`;
-    return row(externalHtml('title', item.title), detail, distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
+    // The title is the closed street's name, vetted as one (a house-number range is data).
+    return row(externalHtml('name', item.title), detail, distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));
   });
 }
 
@@ -434,7 +435,7 @@ function renderPromet(ctx: PairedContext): PairedMarkup {
 function findItem(ctx: PairedContext, module: ModuleId, key: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
   const snapshot = ctx.snapshots[module];
   const item = snapshot?.items.find((candidate) => publicItemKey(module, candidate.id) === key);
-  return snapshot && item && vetExternal('title', item.title, 'row') !== null
+  return snapshot && item && vetExternal(itemTitleKind(module), item.title, 'row') !== null
     && optionalExternal('summary', item.summary) ? { item, snapshot } : null;
 }
 
@@ -534,7 +535,7 @@ export function selectionCard(ctx: PairedContext): string {
   if (!found) return '';
   const { item, snapshot } = found;
   const when = cityDateLine(item, s, ctx.locale);
-  const body = `<p class="k-select-main k-select-main--item">${externalHtml('title', item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${externalHtml('summary', item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
+  const body = `<p class="k-select-main k-select-main--item">${externalHtml(itemTitleKind(selection.module), item.title)}</p>${item.summary ? `<p class="k-select-sub k-select-sub--long">${externalHtml('summary', item.summary)}</p>` : ''}${when ? `<p class="k-select-sub">${escapeHtml(when)}</p>` : ''}`;
   return block(s.session.selected, body, { ...o, snapshot, item });
 }
 

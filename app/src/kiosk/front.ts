@@ -40,6 +40,7 @@ import { weatherNow } from './local';
 import { weatherIcon } from '../experience/weather-icon';
 import { iconMarkup } from '../ui/icons';
 import { externalHtml, optionalExternal } from './external';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 export type PanelId = 'tonight' | 'weather' | 'city' | 'promet' | 'around';
@@ -513,8 +514,12 @@ export function frontPanels(input: FrontInput): Record<PanelId, FrontPanel> {
   return all;
 }
 
+/** An event's or a session's sub carries its venue, a name, where a
+ *  house-number range is data ("Petrinjska 50-52"); every other sub is prose. */
+const subKind = (row: FrontRow): ExternalTextKind => (/^(?:event|session):/u.test(row.key) ? 'name' : 'summary');
+
 function rowMarkup(row: FrontRow): string {
-  if (vetExternal('title', row.title, 'row') === null || !optionalExternal('summary', row.sub)) return '';
+  if (vetExternal('title', row.title, 'row') === null || !optionalExternal(subKind(row), row.sub)) return '';
   const leadText = vetExternal('name', row.lead ?? '', 'row') ?? '';
   const dayText = vetExternal('name', row.day ?? '', 'row') ?? '';
   const lead = row.leadMarkup

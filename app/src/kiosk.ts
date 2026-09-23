@@ -41,6 +41,7 @@ import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
+import { presentationLabelKind } from './kiosk/external';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
@@ -529,7 +530,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const until = document.createElement('span');
     until.className = 'k-session-until';
     until.textContent = presentation?.target
-      ? i18n.t('presentation.showing', { name: vetExternal('title', presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' })
+      ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' })
       : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) });
     const layer = document.createElement('span');
     layer.className = 'k-session-layer';

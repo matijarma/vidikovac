@@ -13,6 +13,7 @@ import { dataNumber, dataText } from '../panels/panel';
 import { fmtTemp } from './format';
 import { activeWarnings, cleanCondition, closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
 import type { KioskStrings } from './strings';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { externalHtml, optionalExternal } from './external';
 import { escapeHtml } from '../ui/dom/escape';
@@ -29,10 +30,16 @@ export interface EssentialsRow {
   attribution?: string;
 }
 
+/** The pharmacy's value is its address (the on-duty label) and the closures'
+ *  detail the nearest closed street: names and addresses keep their own kinds,
+ *  where a house-number range is data, never a prose reading. */
+const valueKind = (row: EssentialsRow): ExternalTextKind => (row.id === 'pharmacy' ? 'address' : 'title');
+const detailKind = (row: EssentialsRow): ExternalTextKind => (row.id === 'closures' ? 'name' : 'summary');
+
 /** The card boundary also accepts direct callers, never unchecked field text. */
 export function essentialsMarkup(rows: readonly EssentialsRow[]): string {
-  return rows.filter(row => vetExternal('title', row.value, 'row') !== null && optionalExternal('summary', row.detail))
-    .map(row => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${externalHtml('title', row.value)}</p>${row.detail ? `<p class="k-ess-detail">${externalHtml('summary', row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${externalHtml('summary', row.attribution)}</p>` : ''}</div>`).join('');
+  return rows.filter(row => vetExternal(valueKind(row), row.value, 'row') !== null && optionalExternal(detailKind(row), row.detail))
+    .map(row => `<div class="ess-row k-ess-row" data-testid="ess-row" data-row="${row.id}">${row.label ? `<p class="k-ess-label">${escapeHtml(row.label)}</p>` : ''}<p class="k-ess-value">${externalHtml(valueKind(row), row.value)}</p>${row.detail ? `<p class="k-ess-detail">${externalHtml(detailKind(row), row.detail)}</p>` : ''}${row.attribution ? `<p class="k-meta ess-attr">${externalHtml('summary', row.attribution)}</p>` : ''}</div>`).join('');
 }
 
 export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, strings: KioskStrings, locale: string, stop: ScreenStop | null, now: number): EssentialsRow[] {

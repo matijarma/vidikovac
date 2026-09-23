@@ -46,6 +46,7 @@ import { reconcile } from '../ui/dom/reconcile';
 import { kindOfRoute } from './exceptions';
 import { clock, dayKey, dayMonth } from './format';
 import { kBadge } from './markup';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { optionalExternal } from './external';
 
@@ -193,8 +194,30 @@ export interface ShortLabels { title?: boolean; sub?: boolean }
 const titleOf = (row: TimelineRow, short?: ShortLabels): string => (short?.title && row.titleShort ? row.titleShort : row.title);
 const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.sub && row.subShort !== undefined ? row.subShort : row.sub);
 
+/**
+ * Each field under the kind selectNearby vetted it with (app/src/city/nearby.ts),
+ * never a name or an address as prose: "Petrinjska 50-52" is a house-number
+ * range under `name`/`address` and phone-like under every prose kind. The
+ * timeless rows are told apart by their ids ("always:heritage:…",
+ * "always:story:…"); any other row keeps the prose reading.
+ */
+function rowTextKinds(row: TimelineRow): { title: ExternalTextKind; sub: ExternalTextKind } {
+  switch (row.kind) {
+    case 'departure': return { title: 'headsign', sub: 'summary' };
+    case 'closure': return { title: 'name', sub: 'summary' };
+    case 'event': return { title: 'title', sub: 'name' };
+    case 'opening': return { title: 'name', sub: 'summary' };
+    case 'pharmacy': return { title: 'title', sub: 'address' };
+    case 'always':
+      if (row.id.startsWith('always:heritage:')) return { title: 'name', sub: 'address' };
+      if (row.id.startsWith('always:story:')) return { title: 'name', sub: 'register-text' };
+      return { title: 'title', sub: 'summary' };
+    default: return { title: 'title', sub: 'summary' };
+  }
+}
+
 export function vettedTimelineRow(row: TimelineRow): boolean {
-  const kind = row.kind === 'departure' ? 'headsign' : 'title';
+  const { title: kind, sub: subKind } = rowTextKinds(row);
   const sub = (value: string | undefined): boolean => {
     // Internally composed last/first boards contain several route/time pairs.
     // Validate the complete grammar and EACH external route, never mistake
@@ -203,7 +226,7 @@ export function vettedTimelineRow(row: TimelineRow): boolean {
       && /^(?:[A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)(?: · [A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)*$/u.test(value)) {
       return value.split(' · ').every(pair => vetExternal('headsign', pair.split(' ')[0], 'row') !== null);
     }
-    return optionalExternal('summary', value);
+    return optionalExternal(subKind, value);
   };
   return vetExternal(kind, row.title, 'row') !== null
     && optionalExternal(kind, row.titleShort)
