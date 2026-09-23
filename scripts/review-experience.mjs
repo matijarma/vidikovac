@@ -60,12 +60,14 @@ async function captureLayer(page, sceneName, layer) {
     scene: sceneName, layer, problem: violation.id,
     targets: violation.nodes.map((node) => node.target),
   });
+  // One workspace at a time, except the desk pair (WP4 step 8, [O-56]): Sada and Karta side by side inside .ki-desk.
   const geometry = await page.evaluate(() => ({
     overflow: document.documentElement.scrollWidth - innerWidth,
-    regions: document.querySelectorAll('[data-testid=dash-view] > .layer').length,
+    regions: document.querySelectorAll('[data-testid=dash-view] .layer').length,
+    pair: document.querySelector('[data-testid=dash-view] .ki-desk') !== null,
     lang: document.documentElement.lang,
   }));
-  if (geometry.overflow > 1 || geometry.regions !== 1) findings.push({ scene: sceneName, layer, problem: 'geometry', ...geometry });
+  if (geometry.overflow > 1 || geometry.regions !== (geometry.pair ? 2 : 1)) findings.push({ scene: sceneName, layer, problem: 'geometry', ...geometry });
   const file = `${sceneName}-${layer}.png`;
   await page.screenshot({ path: resolve(output, file), fullPage: false });
   records.push({ scene: sceneName, layer, file, ...geometry, seriousOrCritical: blocking.length });
@@ -101,14 +103,16 @@ async function capturePage(browser, { path, slug }) {
 
 /** The phone's tab when the domain has one; otherwise the directory (Još in the desk's status line, the tab bar's Još on the phone, D10), then the domain's row or any other way in. A Sada tile also carries data-action=nav with a selection, so the tab and the directory come first. */
 async function openLayer(page, layer) {
+  // The desk pair (WP4 chunk E) shows Sada and Karta side by side inside .ki-desk: either is already on the page there.
+  const shown = page.locator(`[data-testid=dash-view] .layer[data-layer="${layer}"]`);
   const tab = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
   if (await tab.count()) {
     await tab.click();
-  } else {
+  } else if (!(await shown.count())) {
     await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
     await page.locator(`[data-testid="dir-${layer}"], [data-action=nav][data-layer="${layer}"]:visible`).first().click();
   }
-  await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor();
+  await shown.waitFor();
 }
 
 /** Promet, then its transport group. Since the city sources landed the
@@ -149,7 +153,7 @@ try {
     }, scene);
     const session = await installExperienceFixture(page, await experienceSnapshots());
     await page.goto(`${base}${FIXTURE_DASHBOARD}`);
-    await page.locator('[data-testid=tb]').waitFor();
+    await page.locator('[data-testid=sada-place]').waitFor();
     if (scene.textZoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     for (const layer of layers) {
@@ -232,6 +236,8 @@ try {
   /** The zoom the round's clustering rule is about: close enough that two
    *  trams 20 m apart are two pills the reader can tell apart (F2). */
   const CLUSTER_SCENE_ZOOM = 17;
+  /** The map's ceiling (app/src/map/basemap.ts MAP_MAX_ZOOM): a keyboard step that would pass it stops on it exactly. */
+  const MAP_CEILING = 18;
 
   // Is this machine serving the basemap at all? One tile decides it; see
   // openTwoTrams just below for what hangs on the answer.
@@ -262,7 +268,7 @@ try {
     }));
     await page.clock.resume();
     await page.goto(`${base}${FIXTURE_DASHBOARD}`);
-    await page.locator('[data-testid=tb]').waitFor();
+    await page.locator('[data-testid=sada-place]').waitFor();
     await openTransport(page);
   }
 
@@ -294,16 +300,22 @@ try {
       await page.waitForFunction(
         () => (document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-pills') ?? '').length > 0,
         null, { timeout: 25_000 });
-      // The camera opens where the session and the workspace put it -- the
-      // screen's stop at 15 for a paired reader, the city's own zoom since the
-      // city sources landed -- and MapLibre's keyboard step is +1 from the
-      // rounded zoom it is at *now*. So the steps are taken one at a time from
-      // wherever it opened and land on exactly 17, the zoom the cluster rule
-      // is about.
+      // The camera opens on the WP4 frame around the place (workspace.ts
+      // frameCamera), a fractional zoom that follows the stage, and
+      // MapLibre's keyboard step is +1 from the zoom it is at with no rounding
+      // (zoomSnap 0). So the steps climb to the map's ceiling (basemap.ts
+      // MAP_MAX_ZOOM 18), where the last one clamps to an integer, and one
+      // step down lands on exactly 17, the zoom the cluster rule is about
+      // (e2e/round-f.spec.ts fromFrameTo).
       await page.locator('[data-testid=map-canvas] canvas').focus();
-      const from = Math.round(Number(await page.getAttribute('[data-testid=map-canvas]', 'data-zoom')));
-      for (let stop = from + 1; stop <= CLUSTER_SCENE_ZOOM; stop++) {
+      for (let i = 0; i < 8 && (await page.getAttribute('[data-testid=map-canvas]', 'data-zoom')) !== `${MAP_CEILING}.00`; i++) {
+        const before = Number(await page.getAttribute('[data-testid=map-canvas]', 'data-zoom'));
         await page.keyboard.press('=');
+        const next = Math.min(MAP_CEILING, before + 1);
+        await page.waitForFunction((want) => Math.abs(Number(document.querySelector('[data-testid=map-canvas]')?.getAttribute('data-zoom')) - want) < 0.011, next, { timeout: 30_000 });
+      }
+      for (let stop = MAP_CEILING - 1; stop >= CLUSTER_SCENE_ZOOM; stop--) {
+        await page.keyboard.press('-');
         await waitForProbe(page, '[data-testid=map-canvas]', 'zoom', stop.toFixed(2));
       }
       await captureLayer(page, scene.name, 'u-pokretu');
@@ -451,9 +463,16 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const { kioskUrl } = await provisionKiosk(context.request, base);
+    // As in openTwoTrams: where the basemap's bucket is empty its slow 503s keep MapLibre's load past the wait below.
+    if (tilesMissing) await page.route('**/maps/zagreb-v1/**', route => route.fulfill({ status: 404, body: '' }));
     await page.goto(kioskUrl);
     await page.getByTestId('kiosk-invitation').waitFor();
-    await page.waitForFunction(() => document.querySelector('[data-testid=kiosk-map]')?.getAttribute('data-map-status') === 'ready');
+    // Drawing: 'ready', or 'tiles-failed' on a machine that serves no basemap (tilesMissing, probed above), where the
+    // overlays still draw over the background.
+    await page.waitForFunction((missing) => {
+      const status = document.querySelector('[data-testid=kiosk-map]')?.getAttribute('data-map-status');
+      return status === 'ready' || (missing && status === 'tiles-failed');
+    }, tilesMissing);
     const audit = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
     const blocking = audit.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
     for (const violation of blocking) findings.push({ scene: 'kiosk-window', problem: violation.id, targets: violation.nodes.map(n => n.target) });
@@ -476,7 +495,7 @@ try {
     await page.addInitScript(() => { localStorage.setItem('vidikovac-locale', 'hr'); });
     const session = await installExperienceFixture(page, await experienceSnapshots());
     await page.goto(`${base}${FIXTURE_DASHBOARD.replace('/d/', '/d/?lagano=1')}`);
-    await page.locator('[data-testid=tb]').waitFor();
+    await page.locator('[data-testid=sada-place]').waitFor();
     await openLayer(page, 'u-pokretu');
     if (await page.locator('canvas').count()) findings.push({ scene: 'phone-lagano', layer: 'u-pokretu', problem: 'canvas-on-lightweight-path' });
     await captureLayer(page, 'phone-lagano', 'u-pokretu');
