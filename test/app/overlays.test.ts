@@ -12,14 +12,17 @@ import {
   NOSE_MAX_ZOOM,
   NOSE_MIN_ZOOM,
   VEHICLE_OPACITY_DIMMED,
-  PILL_IMAGE_PREFIX,
+  PILL_FIT_PAD_X,
+  PILL_FIT_PAD_Y,
+  PILL_IMAGE,
   PILL_ZOOM,
   PLACE_FILTERS,
-  PLATE_IMAGE_PREFIX,
+  PLATE_IMAGE,
   SOURCES,
   WORKS_ONGOING_PHASE,
   firstSymbolLayer,
   kindFilter,
+  noseOffsetPx,
   overlayImages,
   overlayLayers,
   pillInks,
@@ -30,7 +33,7 @@ import {
   vehicleKinds,
   type ProzorOptions,
 } from '../../app/src/map/overlays';
-import { PILL_MAX_CHARS_CLUSTER, clusterLabel, pillChars, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, clusterLabel, pillChars, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -71,6 +74,14 @@ describe('the overlay layer list', () => {
     // What reads as "several here": the ink ring around a merged pill.
     expect(pills.paint!['icon-halo-color']).toEqual(['case', ['get', 'cluster'], OVERLAY_LIGHT.selection, OVERLAY_LIGHT.halo]);
     expect(pills.paint!['icon-halo-width']).toEqual(['case', ['get', 'cluster'], 2, 1]);
+    // The capsule is its number's size: the stretchable image fitted to the
+    // text plus its padding, at icon-size 1 (the fit already carries the scale).
+    expect(pills.layout!['icon-size']).toBe(1);
+    expect(pills.layout!['icon-text-fit']).toBe('both');
+    expect(pills.layout!['icon-text-fit-padding']).toEqual([PILL_FIT_PAD_Y, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_FIT_PAD_X]);
+    // A vehicle whose route nobody knows still has a text box to fit: one
+    // no-break space, the smallest capsule, nothing written on it.
+    expect(pills.layout!['text-field']).toEqual(['case', ['==', ['get', 'short'], ''], '\u00a0', ['get', 'short']]);
     // The direction nose's band (section D): from 16.5 the rails themselves say the direction.
     expect([NOSE_MIN_ZOOM, NOSE_MAX_ZOOM]).toEqual([14.5, 16.5]);
     const noses = layerById(LAYERS.vehicleNoses);
@@ -87,6 +98,26 @@ describe('the overlay layer list', () => {
     expect(pills.layout!['icon-rotation-alignment']).toBe('viewport');
     expect(noses.layout!['icon-rotate']).toEqual(['-', ['get', 'bearing'], 90]);
     expect(noses.layout!['icon-rotation-alignment']).toBe('map');
+  });
+
+  it('sets the nose at the capsule\u2019s edge for every label length by a step table of literal pairs: the four hand-tuned offsets verbatim, then half a character per character, to the cap', () => {
+    const offset = layerById(LAYERS.vehicleNoses).layout!['icon-offset'] as unknown[];
+    // MapLibre has no expression that builds an array from computed numbers
+    // (['array', ...] only asserts a type): every output is a literal pair.
+    expect(offset[0]).toBe('step');
+    expect(offset[1]).toEqual(['max', 1, ['length', ['get', 'short']]]);
+    expect(JSON.stringify(offset)).not.toContain('"array"');
+    expect(offset.slice(2, 9)).toEqual([['literal', [12, 0]], 2, ['literal', [14, 0]], 3, ['literal', [17, 0]], 4, ['literal', [20, 0]]]);
+    // One step per length up to pills.ts's cap, each the length's own offset.
+    expect(offset).toHaveLength(3 + 2 * (PILL_MAX_CHARS_CLUSTER - 1));
+    for (let i = 3; i < offset.length; i += 2) {
+      expect(offset[i]).toBe((i - 1) / 2 + 1);
+      expect(offset[i + 1]).toEqual(['literal', [noseOffsetPx(offset[i] as number), 0]]);
+    }
+    expect([noseOffsetPx(0), noseOffsetPx(4), noseOffsetPx(5), noseOffsetPx(6)]).toEqual([12, 20, 23.5, 27]);
+    expect(offset.slice(-2)).toEqual([PILL_MAX_CHARS_CLUSTER, ['literal', [20 + 3.5 * (PILL_MAX_CHARS_CLUSTER - 4), 0]]]);
+    // The selected vehicle's nose and an opposed merge's arrows use the same table.
+    expect(layerById(LAYERS.vehicleSelectedNose).layout!['icon-offset']).toEqual(offset);
   });
 
   it('an opposed merge carries a triangle each way: two nose layers on the twoWay cluster alone, fore and aft of the pill, from PILL_ZOOM with no upper edge', () => {
@@ -154,53 +185,69 @@ describe('the overlay layer list', () => {
     expect(layers.find((l) => l.id === LAYERS.networkTram)!.paint!['line-opacity']).toEqual(['interpolate', ['linear'], ['zoom'], 10, 0.4, 14, 0.55, 17, 0.7]);
   });
 
-  it('generates one SDF pill and one plate for every label length a cluster can take, at pills.ts\u2019s own widths, a nose and a ring, and the pill layer picks a plate for a tram and a pill for a bus, by the label\u2019s length', () => {
-    const images = overlayImages();
-    const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
+  it('generates one stretchable SDF pill and one plate, drawn at the surface\u2019s scale, then the nose, the ring and the place marks, and the pill layer picks a plate for a tram and a pill for a bus', () => {
     // The cap, and the reason it is what it is: a merged pill lists every
     // line [O-35], and all fifteen tram lines together are 35 characters, so
     // every tram cluster is written whole. Forty is the widest capsule.
     expect(PILL_MAX_CHARS_CLUSTER).toBe(40);
     const bus = (n: number): string[] => Array.from({ length: n }, (_, i) => String(109 + i));
     // A bus hub of sixteen three-digit routes would be 63 characters: it keeps
-    // the ten whole lines that fit in the widest capsule, and never a "+n".
+    // the ten whole lines that fit in the widest capsule, and never a count.
     const hub = clusterLabel(bus(16));
     expect(hub).toBe(bus(10).join('\u00b7'));
     expect(hub).not.toContain('+');
     expect(hub.length).toBeLessThanOrEqual(PILL_MAX_CHARS_CLUSTER);
     expect(pillChars(hub)).toBe(hub.length);
-    // Five three-digit routes -- the everyday bus cluster -- get a pill wide
-    // enough to write every one of them in, not a clamped one that drops characters.
+    // Five three-digit routes -- the everyday bus cluster -- are written whole.
     const five = clusterLabel(bus(5));
     expect(five).toBe('109\u00b7110\u00b7111\u00b7112\u00b7113');
     expect(pillChars(five)).toBe(five.length);
-    expect(images.map((i) => i.id)).toEqual([
-      ...lengths.map((n) => `vehicle-pill-${n}`),
-      ...lengths.map((n) => `vehicle-plate-${n}`),
-      'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
-    ]);
-    // Forty pills, forty plates, the nose, the selection ring and the three place marks.
-    expect(images).toHaveLength(2 * PILL_MAX_CHARS_CLUSTER + 5);
-    // Every one is pillWidthPx's box plus the distance field's own spread around it.
-    for (const n of lengths) {
-      const pill = images[n - 1]!.image;
-      const plate = images[PILL_MAX_CHARS_CLUSTER + n - 1]!.image;
-      expect(pill.width, `pill ${n}`).toBe(pillWidthPx(n) * SDF_PIXEL_RATIO + 2 * SDF_SPREAD_PX);
-      // A plate is the pill's box with the corners barely rounded: same size, and the corner pixel a capsule leaves empty is filled.
-      expect([plate.width, plate.height]).toEqual([pill.width, pill.height]);
+    // One capsule stretches to every label: no image per label length.
+    const images = overlayImages();
+    expect([PILL_IMAGE, PLATE_IMAGE]).toEqual(['vehicle-pill', 'vehicle-plate']);
+    expect(images.map((i) => i.id)).toEqual(['vehicle-pill', 'vehicle-plate', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring']);
+    // Only the pill and the plate stretch; the fixed marks carry no options, are
+    // drawn once at 1x and are sized by icon-size.
+    for (const { id, options } of images.slice(2)) expect(options, id).toBeUndefined();
+    expect(overlayImages(2).slice(2)).toEqual(images.slice(2));
+    // The fit's height is the capsule's: a 12 px line (MapLibre's 1.2 em)
+    // plus the padding twice, so the vertical stretch is exactly 1.
+    expect(12 * 1.2 + 2 * PILL_FIT_PAD_Y).toBeCloseTo(PILL_HEIGHT_PX, 9);
+    // And two digits of the map's medium face (6.5 px each at 12 px, its glyph
+    // advance) plus the padding are the two-character capsule pills.ts states.
+    expect(2 * 6.5 + 2 * PILL_FIT_PAD_X).toBe(pillWidthPx(2));
+    for (const scale of [1, 1.5, 2]) {
+      const [pill, plate] = overlayImages(scale);
+      for (const { id, image, options } of [pill!, plate!]) {
+        const at = `${id} at ${scale}`;
+        // A two-character capsule at this scale plus the distance field's own spread around it.
+        expect(image.width, at).toBe(pillWidthPx(2) * scale * SDF_PIXEL_RATIO + 2 * SDF_SPREAD_PX);
+        expect(image.height, at).toBe(PILL_HEIGHT_PX * scale * SDF_PIXEL_RATIO + 2 * SDF_SPREAD_PX);
+        // The content box is the shape's own edge, so the fit lays that edge on
+        // the number plus its padding (image px, as MapLibre reads them).
+        expect(options!.content, at).toEqual([SDF_SPREAD_PX, SDF_SPREAD_PX, image.width - SDF_SPREAD_PX, image.height - SDF_SPREAD_PX]);
+        // Only the middle stretches, between two fixed ends as long as the capsule's round end.
+        const end = (PILL_HEIGHT_PX * scale * SDF_PIXEL_RATIO) / 2;
+        expect(options!.stretchX, at).toEqual([[SDF_SPREAD_PX + end, image.width - SDF_SPREAD_PX - end]]);
+        expect(options, at).toMatchObject({ textFitWidth: 'stretchOrShrink', textFitHeight: 'stretchOrShrink' });
+        // Every stretched column is the same column: the field there varies
+        // with the row alone, so stretching lengthens the shape and nothing else.
+        const [[x1, x2]] = options!.stretchX as [[number, number]];
+        const alpha = (x: number, y: number): number => image.data[(y * image.width + x) * 4 + 3]!;
+        for (let y = 0; y < image.height; y++) {
+          for (let x = Math.ceil(x1); x < Math.floor(x2); x++) expect(alpha(x, y)).toBe(alpha(Math.ceil(x1), y));
+        }
+      }
+      // A plate is the pill's box with the corners barely rounded: the corner pixel a capsule leaves empty is filled.
       const corner = (img: { width: number; data: Uint8ClampedArray }) => img.data[((SDF_SPREAD_PX + 1) * img.width + SDF_SPREAD_PX + 1) * 4 + 3]!;
-      expect(corner(plate), `plate ${n}`).toBeGreaterThan(corner(pill) + 60);
+      expect(corner(plate!.image), `plate at ${scale}`).toBeGreaterThan(corner(pill!.image) + 60);
     }
-    const image = JSON.stringify(layerById(LAYERS.vehicles).layout!['icon-image']);
-    expect(image).toContain('"length",["get","short"]');
-    expect(image).toContain(`["min",${PILL_MAX_CHARS_CLUSTER},`); // a cluster label takes the widest pill, never a clipped one
     // The badge rule on every surface, not only the public screen: a tram
-    // takes the plate of its label's length, anything else the pill; the
-    // selected vehicle's own layer draws the same mark.
-    expect(image).toContain(PLATE_IMAGE_PREFIX);
-    expect(image).toContain(PILL_IMAGE_PREFIX);
-    expect(image).toContain('"tram"');
-    expect(JSON.stringify(layerById(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
+    // takes the plate, anything else the pill; the selected vehicle's own
+    // layer draws the same mark.
+    const mark = ['match', ['get', 'kind'], 'tram', PLATE_IMAGE, PILL_IMAGE];
+    expect(layerById(LAYERS.vehicles).layout!['icon-image']).toEqual(mark);
+    expect(layerById(LAYERS.vehicleSelected).layout!['icon-image']).toEqual(mark);
   });
 });
 
@@ -311,18 +358,21 @@ describe('the kiosk overlay set (prozor)', () => {
       expect(labels.layout!['text-size']).toBe(22);
       // Vehicles: the same plate-or-pill mark as every surface; every mark places unconditionally and the noses draw from the field's zoom.
       const pills = by(LAYERS.vehicles);
-      const image = JSON.stringify(pills.layout!['icon-image']);
-      expect(image).toContain(PLATE_IMAGE_PREFIX);
-      expect(image).toContain(PILL_IMAGE_PREFIX);
-      expect(image).toContain('"tram"');
-      expect(image).toContain('"length",["get","short"]');
+      expect(pills.layout!['icon-image']).toEqual(['match', ['get', 'kind'], 'tram', PLATE_IMAGE, PILL_IMAGE]);
+      // At the screen's scale 2 the number is 24 px and the fit's padding doubles
+      // with it; icon-size stays 1, the nose (a fixed mark) takes the scale.
+      expect(pills.layout!['text-size']).toBe(24);
+      expect(pills.layout!['icon-size']).toBe(1);
+      expect(pills.layout!['icon-text-fit']).toBe('both');
+      expect(pills.layout!['icon-text-fit-padding']).toEqual([2 * PILL_FIT_PAD_Y, 2 * PILL_FIT_PAD_X, 2 * PILL_FIT_PAD_Y, 2 * PILL_FIT_PAD_X]);
+      expect(by(LAYERS.vehicleNoses).layout!['icon-size']).toBe(2);
       expect(pills.layout!['icon-allow-overlap']).toBe(true);
       expect(pills.layout!['text-allow-overlap']).toBe(true);
       expect(by(LAYERS.vehicleNoses).minzoom).toBe(14.6); // the kiosk's own threshold stays its own
       expect(by(LAYERS.vehicleNoses).maxzoom).toBe(NOSE_MAX_ZOOM);
       // The selected vehicle's nose sits in the same band as every other nose, the field's zoom included.
       expect(by(LAYERS.vehicleSelectedNose).minzoom).toBe(14.6);
-      expect(JSON.stringify(by(LAYERS.vehicleSelected).layout!['icon-image'])).toContain(PLATE_IMAGE_PREFIX);
+      expect(by(LAYERS.vehicleSelected).layout!['icon-image']).toEqual(pills.layout!['icon-image']);
       // The screen's stop: the biggest ring and the biggest name on the map, never thinned.
       const screenStop = by(LAYERS.screenStop);
       expect(screenStop.paint!['circle-radius']).toBe(18);

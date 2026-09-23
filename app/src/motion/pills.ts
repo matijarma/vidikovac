@@ -5,8 +5,11 @@
 // constants from here; they keep their own tests and behaviour (F1 only
 // moves the source of truth, F2/F3 wire the layers and the schema to it).
 
-/** Pill geometry in CSS px: one capsule per label length, 1 to 4 characters
- *  (overlays.ts's overlayImages() generates the matching SDF image). */
+/** Pill geometry in CSS px: the hand-tuned capsule widths for a label of 1
+ *  to 4 characters. On the city map the capsule follows its own text
+ *  (overlays.ts: one stretchable SDF image, icon-text-fit), and these
+ *  widths are what that fit lands on for a route number; the cluster rule
+ *  below and the schema's painted pill measure with them directly. */
 export const PILL_HEIGHT_PX = 18;
 export const PILL_BASE_WIDTHS_PX: readonly number[] = [18, 24, 31, 38];
 /** A cluster label ("6·11·12·14") can run past four characters; each one
@@ -20,12 +23,14 @@ export const PILL_EXTRA_CHAR_PX = 7;
  *  keeps the whole lines that fit (clusterLabel), never a count. */
 export const PILL_MAX_CHARS_CLUSTER = 40;
 
-export const PILL_IMAGE_PREFIX = 'vehicle-pill-';
+/** The city map's one stretchable pill image: every label length is the
+ *  same capsule, widened in its flat middle to the text it carries. */
+export const PILL_IMAGE = 'vehicle-pill';
 /** The tram's plate (the badge rule of signage.css: a tram is a plate, a bus
  *  a capsule -- first on the public screen under plan D4, on every map and in
  *  the legend chips since): the pill's box with the corners barely rounded,
- *  one per label length like the pills. */
-export const PLATE_IMAGE_PREFIX = 'vehicle-plate-';
+ *  one stretchable image like the pill's. */
+export const PLATE_IMAGE = 'vehicle-plate';
 export const PLATE_RADIUS_PX = 3;
 /** The direction nose: an isosceles triangle, its length along the direction
  *  of travel and its width across it. The city map draws it as an SDF image
@@ -54,12 +59,6 @@ export function pillWidthPx(chars: number): number {
   if (n <= PILL_BASE_WIDTHS_PX.length) return PILL_BASE_WIDTHS_PX[n - 1]!;
   const last = PILL_BASE_WIDTHS_PX[PILL_BASE_WIDTHS_PX.length - 1]!;
   return last + (n - PILL_BASE_WIDTHS_PX.length) * PILL_EXTRA_CHAR_PX;
-}
-
-/** The SDF image id for a pill (a bus, or anything not a tram) or a plate
- *  (a tram) of the given label length. */
-export function pillImageId(chars: number, plate = false): string {
-  return `${plate ? PLATE_IMAGE_PREFIX : PILL_IMAGE_PREFIX}${chars}`;
 }
 
 /** The tram/bus fill and text colours (and the shared halo), light and dark:

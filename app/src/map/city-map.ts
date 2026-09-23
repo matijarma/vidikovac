@@ -864,6 +864,9 @@ interface MapApi {
   getCanvas(): HTMLCanvasElement;
   addImage(id: string, image: { width: number; height: number; data: Uint8ClampedArray }, options?: Record<string, unknown>): void;
   hasImage?(id: string): boolean;
+  /** Only to replace the scale-drawn pill images (putOverlayImages); a
+   *  stand-in without it still satisfies this slice. */
+  removeImage?(id: string): void;
   addSource(id: string, spec: Record<string, unknown>): void;
   getSource(id: string): { setData(data: unknown): void } | undefined;
   addLayer(layer: Record<string, unknown>, beforeId?: string): void;
@@ -1454,7 +1457,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** The style is up: images, sources and overlay layers go on, then the loop starts. */
   function onLoad(l: MaplibreModule, created: MapApi): void {
     if (disposed || map !== created) return;
-    for (const { id, image } of l.overlayImages()) created.addImage(id, image, { sdf: true, pixelRatio: SDF_PIXEL_RATIO });
+    putOverlayImages(created, l, false);
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
     created.addSource(l.SOURCES.network, geojson(net ? networkToGeoJson(net) : empty));
@@ -1547,6 +1550,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (lib === null || event.sourceId !== lib.BASEMAP_SOURCE || event.tile === undefined) return;
     basemapFailing = false;
     if (styled && status === 'tiles-failed') setStatus('ready');
+  }
+
+  /** The overlays' SDF images at the map's symbol scale. The pill and the
+   *  plate stretch to their numbers (icon-text-fit) and are drawn at that
+   *  scale, since MapLibre places a stretchable image's fixed ends in pixels
+   *  it never multiplies by icon-size (overlays.ts overlayImages); so a new
+   *  scale replaces exactly the images that carry stretch options, and the
+   *  fixed marks, sized by icon-size, stay. MapLibre re-lays out the tiles
+   *  that use a replaced image. */
+  function putOverlayImages(m: MapApi, l: MaplibreModule, replace: boolean): void {
+    for (const { id, image, options } of l.overlayImages(scale)) {
+      if (replace && !options) continue;
+      if (replace && m.hasImage?.(id)) m.removeImage?.(id);
+      m.addImage(id, image, { sdf: true, pixelRatio: SDF_PIXEL_RATIO, ...options });
+    }
   }
 
   /** An image the style names but the sprite lacks (basemap.ts bounds the known
@@ -2027,8 +2045,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setPresentationProfile(name,nextScale) {
       const next=MAP_PRESENTATIONS[name],size=nextScale??next.symbolScale;
       if(next===profile&&size===scale)return;
+      const rescaled=size!==scale;
       profile=next;scale=size;hitTolerance=next.hitTolerancePx;
       container.dataset.presentationProfile=name;
+      if(rescaled&&map&&styled&&lib)putOverlayImages(map,lib,true);
       lastPushedSignature='';
       applyOverlays();applyCityOverlays();applyHighlightStyle();
     },

@@ -26,12 +26,12 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX, pillImageId, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, PILL_EXTRA_CHAR_PX, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
 import { metresPerPixel } from './scale';
-import { sdfRing, sdfRoundedRect, sdfSquareRing, sdfTriangle, type SdfImage } from './sdf';
+import { SDF_PIXEL_RATIO, sdfRing, sdfRoundedRect, sdfSquareRing, sdfTriangle, type SdfImage } from './sdf';
 
 export const SOURCES = Object.freeze({
   network: 'network',
@@ -124,10 +124,27 @@ const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM
 /** Pill geometry in CSS px, and the cluster label's cap: hoisted to
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
-export { PILL_HEIGHT_PX, PILL_IMAGE_PREFIX, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE_PREFIX, PLATE_RADIUS_PX };
+export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX };
+/** The capsule's room around its number, in CSS px before the surface's
+ *  symbol scale (icon-text-fit-padding, top/bottom and left/right). The
+ *  pill's 12 px Noto Sans Medium sets every digit 6.5 px wide (its glyph
+ *  advance, 13 at 24 px) on a 14.4 px line, so two digits land on the
+ *  24 x 18 capsule pills.ts states, three and four within a pixel of its 31
+ *  and 38, and one (or none) on the ends' own 18. */
+export const PILL_FIT_PAD_X = 5.5;
+export const PILL_FIT_PAD_Y = 1.8;
 /** The direction nose (pills.ts NOSE_LENGTH_PX by NOSE_WIDTH_PX) sits ahead
- *  of the pill, drawn under it, its centre this far out per label length. */
+ *  of the pill, drawn under it, its centre this far out for a label of one to
+ *  four characters: hand-tuned, and kept verbatim. */
 const NOSE_OFFSETS_PX: readonly number[] = [12, 14, 17, 20];
+/** The nose's centre for a label of `chars` characters: the hand-tuned four,
+ *  then half of each further character's width (pills.ts
+ *  PILL_EXTRA_CHAR_PX), since the capsule grows about its centre. */
+export function noseOffsetPx(chars: number): number {
+  const n = Math.max(1, chars);
+  if (n <= NOSE_OFFSETS_PX.length) return NOSE_OFFSETS_PX[n - 1]!;
+  return NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1]! + ((n - NOSE_OFFSETS_PX.length) * PILL_EXTRA_CHAR_PX) / 2;
+}
 export const RING_DIAMETER_PX = 30;
 export const RING_STROKE_PX = 2.5;
 
@@ -169,7 +186,11 @@ export const WORKS_ONGOING_PHASE = 'Radovi u tijeku';
 export const QUAKE_BASE_RADIUS_PX = 2;
 export const QUAKE_RADIUS_PER_MAG_PX = 3;
 
-export interface OverlayImage { id: string; image: SdfImage }
+/** One SDF image for map.addImage. `options` is the stretch metadata of an
+ *  image drawn at the surface's symbol scale (stretchX, content and the text
+ *  fit, in image px), which city-map.ts spreads over the SDF defaults and
+ *  replaces when the scale changes; the fixed marks carry none. */
+export interface OverlayImage { id: string; image: SdfImage; options?: Record<string, unknown> }
 
 /** The public screen's overlay set (plan D4, R-KP4): present, the tram network
  *  is a thin neutral rail (the `rail` palette key, 1.2 to 3 px on the kiosk),
@@ -224,17 +245,45 @@ export interface ProzorOptions {
   majorStreetNames?: boolean;
 }
 
-/** Every SDF image the overlays reference, generated once per map. One pill
- *  and one plate per label length a *cluster* can take, not only a route
- *  number's four: a merged mark writes every line, "6·11·12·14·221·K", and
- *  must have a capsule that long to write it in (up to pills.ts's cap). */
-export function overlayImages(): OverlayImage[] {
-  const lengths = Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => i + 1);
-  const pills = lengths.map((n) => ({ id: pillImageId(n), image: sdfRoundedRect(pillWidthPx(n), PILL_HEIGHT_PX, PILL_HEIGHT_PX / 2) }));
-  const plates = lengths.map((n) => ({ id: pillImageId(n, true), image: sdfRoundedRect(pillWidthPx(n), PILL_HEIGHT_PX, PLATE_RADIUS_PX) }));
+/** A stretchable SDF capsule (or, with the plate's corner, a plate) drawn at
+ *  the surface's symbol scale: a two-character pill whose middle, between
+ *  two fixed ends as long as the capsule's round end (half its height, so a
+ *  plate is never narrower than a capsule either), is the one part MapLibre
+ *  stretches, and whose content box is the shape's own edge, so
+ *  icon-text-fit lays that edge on the number plus PILL_FIT_PAD_*. The ends
+ *  are fixed pixels, which MapLibre places without multiplying by icon-size
+ *  -- hence the scale in the bitmap, where a 1x image under the wall's 2x
+ *  number would draw oval ends. The fit height (a 14.4 px line plus 2 x 1.8,
+ *  times the scale) is the image's own, so the default vertical stretch is
+ *  exactly 1 and nothing else distorts. */
+function stretchablePill(id: string, cornerPx: number, scale: number): OverlayImage {
+  const w = pillWidthPx(2) * scale;
+  const h = PILL_HEIGHT_PX * scale;
+  const image = sdfRoundedRect(w, h, cornerPx * scale);
+  // The shape's box in image px, exactly as sdfRoundedRect centres
+  // them inside SDF_SPREAD_PX of field (a fractional scale included).
+  const halfW = (w * SDF_PIXEL_RATIO) / 2;
+  const halfH = (h * SDF_PIXEL_RATIO) / 2;
+  const left = image.width / 2 - halfW;
+  const right = image.width / 2 + halfW;
+  const top = image.height / 2 - halfH;
+  const bottom = image.height / 2 + halfH;
+  return {
+    id,
+    image,
+    options: { stretchX: [[left + halfH, right - halfH]], content: [left, top, right, bottom], textFitWidth: 'stretchOrShrink', textFitHeight: 'stretchOrShrink' },
+  };
+}
+
+/** Every SDF image the overlays reference, generated once per map (and the
+ *  pill and plate again whenever its symbol scale changes). One pill and one
+ *  plate for every label: a merged mark writes every line,
+ *  "6·11·12·14·221·K", and the capsule stretches to write it in (up to
+ *  pills.ts's cap), where it used to take one image per label length. */
+export function overlayImages(scale = 1): OverlayImage[] {
   return [
-    ...pills,
-    ...plates,
+    stretchablePill(PILL_IMAGE, PILL_HEIGHT_PX / 2, scale),
+    stretchablePill(PLATE_IMAGE, PLATE_RADIUS_PX, scale),
     { id: NOSE_IMAGE, image: sdfTriangle(NOSE_LENGTH_PX, NOSE_WIDTH_PX) },
     { id: RING_IMAGE, image: sdfRing(RING_DIAMETER_PX, RING_STROKE_PX) },
     { id: PLACE_SQUARE_IMAGE, image: sdfRoundedRect(PLACE_SQUARE_PX, PLACE_SQUARE_PX, 0) },
@@ -252,16 +301,26 @@ type Expr = unknown[];
 export const NEVER: Expr = ['literal', false];
 
 const zoomInterpolate = (...stops: number[]): Expr => ['interpolate', ['linear'], ['zoom'], ...stops];
-/** The label length clamped to the pill sizes, pills.ts's pillChars as an
- *  expression: '' (route unknown) takes the smallest pill, a cluster label
- *  past the cap the widest. */
-const PILL_CHARS: Expr = ['min', PILL_MAX_CHARS_CLUSTER, ['max', 1, ['length', ['get', 'short']]]];
 /** The vehicle's mark, the badge rule of signage.css on every surface (the
  *  kiosk's plan D4 first, the legend chips and the city map since): a tram
- *  takes the plate of its label's length, anything else the pill, so the two
- *  modes differ in shape as well as ink. */
-const MARK_IMAGE: Expr = ['concat', ['match', ['get', 'kind'], 'tram', PLATE_IMAGE_PREFIX, PILL_IMAGE_PREFIX], ['to-string', PILL_CHARS]];
-const NOSE_OFFSET: Expr = ['match', PILL_CHARS, ...NOSE_OFFSETS_PX.slice(0, -1).flatMap((px, i) => [i + 1, ['literal', [px, 0]]]), ['literal', [NOSE_OFFSETS_PX[NOSE_OFFSETS_PX.length - 1], 0]]];
+ *  takes the plate, anything else the pill, so the two modes differ in shape
+ *  as well as ink; either one stretches to its label (pillLayer). */
+const MARK_IMAGE: Expr = ['match', ['get', 'kind'], 'tram', PLATE_IMAGE, PILL_IMAGE];
+/** The pill's text: the label, or for a vehicle whose route nobody knows
+ *  ('') one no-break space. MapLibre shapes no text for an empty string, and
+ *  without a text box icon-text-fit has nothing to fit, so the bare image
+ *  would draw spread and all; the space gives the smallest capsule, as the
+ *  one-character pill always did, and writes nothing on it. */
+const PILL_TEXT: Expr = ['case', ['==', ['get', 'short'], ''], '\u00a0', ['get', 'short']];
+/** noseOffsetPx as a data-driven icon-offset: a `step` over the label's
+ *  length whose every output is a literal pair. MapLibre has no expression
+ *  that builds an array from computed numbers (['array', ...] only asserts a
+ *  type), so the table is written out, one step per length up to pills.ts's
+ *  cap; icon-size multiplies it by the surface's scale. */
+const NOSE_OFFSET: Expr = [
+  'step', ['max', 1, ['length', ['get', 'short']]], ['literal', [noseOffsetPx(1), 0]],
+  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER - 1 }, (_, i) => [i + 2, ['literal', [noseOffsetPx(i + 2), 0]]]).flat(),
+];
 /** The nose's turn from the feature's compass bearing. The triangle points
  *  along its own +x, so degrees clockwise from north less 90 stand a
  *  north-bound vehicle's nose upright. Plus 90 is the same triangle turned
@@ -434,12 +493,18 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
     filter,
     layout: {
       'icon-image': image,
-      'icon-size': s,
+      // The capsule is the number's size, not a table's: icon-text-fit lays
+      // the stretchable image (drawn at this scale, overlayImages) on the
+      // text plus its padding, so icon-size stays 1 -- the fit already
+      // carries the scale, and a second factor would double the box.
+      'icon-size': 1,
+      'icon-text-fit': 'both',
+      'icon-text-fit-padding': [PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s, PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s],
       'icon-rotation-alignment': 'viewport',
       'icon-allow-overlap': true,
       'icon-ignore-placement': true,
       'icon-padding': 1,
-      'text-field': ['get', 'short'],
+      'text-field': PILL_TEXT,
       'text-font': [MAP_FONTS.medium],
       'text-size': 12 * s,
       // A pill's number is one line, always: in ems, and a hundred of them is

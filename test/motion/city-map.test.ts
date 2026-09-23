@@ -61,6 +61,8 @@ class FakeMap {
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
   hasImage(id: string): boolean { return this.images.has(id); }
+  readonly removedImages: string[] = [];
+  removeImage(id: string): void { this.removedImages.push(id); this.images.delete(id); }
   addSource(id: string, spec: { type: string; data: unknown }): void {
     const calls: unknown[] = [];
     this.sources.set(id, { type: spec.type, data: spec.data, calls, setData: (d) => { calls.push(d); } });
@@ -101,13 +103,9 @@ const lib = { ...basemap, ...overlays, Map: FakeMap, AttributionControl: FakeCon
  *  and the test that is about those layers asks for this one. */
 const cityLib = { ...lib, ...cityPlaces };
 
-/** Every SDF image the overlays put on a map, in order: one pill and one plate
- *  for each label length a cluster can take, then the four shared marks. */
-const OVERLAY_IMAGE_IDS = [
-  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => `vehicle-pill-${i + 1}`),
-  ...Array.from({ length: PILL_MAX_CHARS_CLUSTER }, (_, i) => `vehicle-plate-${i + 1}`),
-  'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring',
-];
+/** Every SDF image the overlays put on a map, in order: the one stretchable
+ *  pill and plate every label fits, then the nose, the ring and the place marks. */
+const OVERLAY_IMAGE_IDS = ['vehicle-pill', 'vehicle-plate', 'vehicle-nose', 'selection-ring', 'place-square', 'place-square-ring', 'place-ring'];
 
 const T0 = Date.parse('2026-09-12T10:00:00Z');
 const FRAME_MS = 1000 / 60;
@@ -488,10 +486,35 @@ describe('the basemap and the overlays on it', () => {
     expect(ids[ids.length - 1]).toBe('ambient-highlight-point');
     expect(ids.indexOf('selection-ring')).toBeGreaterThan(ids.indexOf('vehicles'));
     expect([...map.images.keys()]).toEqual(OVERLAY_IMAGE_IDS);
-    expect(map.images.get('vehicle-pill-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
-    expect(map.images.get('vehicle-plate-2')!.options).toMatchObject({ sdf: true, pixelRatio: 2 });
+    // The pill and the plate carry their stretch metadata over the SDF defaults; the fixed marks only the defaults.
+    const [pill, plate] = overlays.overlayImages(1);
+    expect(map.images.get('vehicle-pill')!.options).toEqual({ sdf: true, pixelRatio: 2, ...pill!.options });
+    expect(map.images.get('vehicle-plate')!.options).toEqual({ sdf: true, pixelRatio: 2, ...plate!.options });
+    expect(map.images.get('vehicle-pill')!.options).toHaveProperty('stretchX');
+    expect(map.images.get('vehicle-nose')!.options).toEqual({ sdf: true, pixelRatio: 2 });
     expect([...map.sources.keys()].sort()).toEqual(['ambient-highlight', 'bodies', 'closures', 'network', 'outline', 'places', 'screen-stop', 'stops', 'vehicles']);
     expect(map.getSource('bodies')!.data).toEqual({ type: 'FeatureCollection', features: [] });
+  });
+
+  it('draws the stretchable pill and plate at the map\u2019s own symbol scale and, when the scale changes, replaces exactly those two, with the fit padding following', async () => {
+    const { map, handle } = await harness({ extra: { symbolScale: 2, presentationProfile: 'public-display', interactive: false } });
+    const at = (scale: number) => overlays.overlayImages(scale);
+    // Drawn at the wall's scale: MapLibre never multiplies a stretchable image's fixed ends by icon-size.
+    expect(map.images.get('vehicle-pill')!.image.width).toBe(at(2)[0]!.image.width);
+    expect(map.images.get('vehicle-plate')!.options).toEqual({ sdf: true, pixelRatio: 2, ...at(2)[1]!.options });
+    const nose = map.images.get('vehicle-nose');
+    // The same scale again replaces nothing.
+    handle.setPresentationProfile!('public-display', 2);
+    expect(map.removedImages).toEqual([]);
+    // A new scale (the wall's display scale moved) replaces the two that stretch, and nothing else.
+    handle.setPresentationProfile!('public-display', 3);
+    expect(map.removedImages).toEqual(['vehicle-pill', 'vehicle-plate']);
+    expect(map.images.get('vehicle-pill')!.image.width).toBe(at(3)[0]!.image.width);
+    expect(map.images.get('vehicle-pill')!.options).toEqual({ sdf: true, pixelRatio: 2, ...at(3)[0]!.options });
+    expect(map.images.get('vehicle-nose')).toBe(nose);
+    expect([...map.images.keys()].sort()).toEqual([...OVERLAY_IMAGE_IDS].sort());
+    // The layer's fit padding and number grow with the same scale, at icon-size 1.
+    expect(map.layout['vehicles']).toMatchObject({ 'text-size': 36, 'icon-text-fit-padding': [3 * overlays.PILL_FIT_PAD_Y, 3 * overlays.PILL_FIT_PAD_X, 3 * overlays.PILL_FIT_PAD_Y, 3 * overlays.PILL_FIT_PAD_X] });
   });
 
   it('the public screen’s option set reaches the overlays and the basemap, follows setProzor live (filters, paint, zoom ranges and the street names’ padding), and placedNames answers the names MapLibre placed for one layer: none before the style is up or for a layer the style lacks', async () => {
@@ -505,7 +528,7 @@ describe('the basemap and the overlays on it', () => {
     expect(layer('vehicle-noses')!.minzoom).toBe(14.6);
     expect(layer('stop-labels')!.minzoom).toBe(14.6);
     expect(JSON.stringify(layer('stops')!.filter)).toContain('"6"');
-    expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('vehicle-plate-'); // the mark every surface draws; the prozor-specific claims are the lines around it
+    expect(JSON.stringify(layer('vehicles')!.layout!['icon-image'])).toContain('"vehicle-plate"'); // the mark every surface draws; the prozor-specific claims are the lines around it
     expect(layer('roads_labels_major')!.layout!['text-padding']).toBe(30); // the set's padding reaches the basemap's names layer
     // The names MapLibre actually placed, once each: the e2e's proof that few street names survive the field.
     map.rendered = [

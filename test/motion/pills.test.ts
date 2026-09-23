@@ -6,7 +6,6 @@ import {
   NOSE_LENGTH_PX,
   NOSE_WIDTH_PX,
   pillChars,
-  pillImageId,
   pillLabel,
   pillWidthPx,
   PILL_BASE_WIDTHS_PX,
@@ -18,7 +17,7 @@ import {
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
 
 describe('pillWidthPx / pillChars: the pill grows past four characters instead of clipping', () => {
-  it('gives the four hand-tuned widths verbatim, then +7px per character up to the cluster cap, mapping onto the SDF image ids', () => {
+  it('gives the four hand-tuned widths verbatim, then +7px per character up to the cluster cap', () => {
     expect(PILL_BASE_WIDTHS_PX.map((_, i) => pillWidthPx(i + 1))).toEqual(PILL_BASE_WIDTHS_PX);
     expect(pillWidthPx(5)).toBe(45);
     // The widest capsule: forty characters, the hard cap. All fifteen tram
@@ -33,8 +32,6 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
     const past = '1234567890'.repeat(4) + '12345'; // 45 characters, past the cap
     expect(pillChars(past)).toBe(PILL_MAX_CHARS_CLUSTER);
     expect(pillWidthPx(pillChars(past))).toBe(290);
-    expect(pillImageId(3)).toBe('vehicle-pill-3');
-    expect(pillImageId(3, true)).toBe('vehicle-plate-3');
   });
 });
 
