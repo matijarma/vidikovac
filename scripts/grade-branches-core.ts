@@ -94,6 +94,28 @@ const WINDOW_TO_S = 17 * 3600 + 44 * 60;
  *  own-route transition onto or off such a path is its own class
  *  ('loop-transition'), counted in `loops` and excluded from metric A. */
 const LOOP_ID_PREFIX = 'loop:';
+/** A hand-over onto or off a terminus loop path is a terminus turn within this
+ *  of a terminal platform, row E's own band; farther from every terminal it is
+ *  a direction flip like any other and counts in rows A and E (23 Sep, the
+ *  review of lane/t-rail: 4 + 5 T8 silence returns a day off a loop stand, 250
+ *  to 755 m from the tram, read as loop transitions and so out of both rows). */
+export const LOOP_HANDOVER_TERMINUS_M = 300;
+/** The class of a same-trip path change (describeEvent), from what it joins. */
+export function classifyEvent(x: { vehicleRoute: string; oldRoute: string; newRoute: string; oldId: string; newId: string; oldDirection: number; newDirection: number; terminalM: number | null }): EventClass {
+  if (x.newRoute !== x.vehicleRoute) return 'onto-other-route';
+  if (x.oldRoute !== x.vehicleRoute) return 'back-to-own-route';
+  // Own-route transitions onto or off a terminus loop path (direction -1) are
+  // their own class at a terminus: otherwise they would read as direction flips.
+  const loop = isLoopId(x.oldId) || isLoopId(x.newId);
+  if (loop && (x.terminalM === null || x.terminalM <= LOOP_HANDOVER_TERMINUS_M)) return 'loop-transition';
+  if (x.oldDirection !== x.newDirection) return 'direction-flip';
+  return 'same-route-variant';
+}
+/** What row A counts, and A' inside the teaser box (decision 35): every
+ *  same-trip path change but a direction flip at a terminal and a loop transition. */
+export function countsInA(e: { cls: string; atTerminus: boolean }): boolean {
+  return e.cls !== 'loop-transition' && !(e.cls === 'direction-flip' && e.atTerminus);
+}
 /** Silence gaps (fresh fix to fresh fix of one vehicle) shorter than this are ZET's ordinary cadence. */
 const GAP_MIN_S = 60;
 /** How far ahead of the header a silent tram's published plan is read (WP0 step 7c). */
@@ -920,14 +942,9 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     const oldPath = paths[oldIdx];
     const newPath = paths[newIdx];
     const veh = rec.route;
-    let cls: EventClass;
-    if (newPath.route !== veh) cls = 'onto-other-route';
-    else if (oldPath.route !== veh) cls = 'back-to-own-route';
-    // Own-route transitions onto or off a terminus loop path (direction -1) are
-    // their own class: before this line they would read as direction flips.
-    else if (isLoopId(oldPath.id) || isLoopId(newPath.id)) cls = 'loop-transition';
-    else if (oldPath.direction !== newPath.direction) cls = 'direction-flip';
-    else cls = 'same-route-variant';
+    const near = nearestStop(rec.p);
+    const terminal = nearestStop(rec.p, (s) => s.terminal);
+    const cls = classifyEvent({ vehicleRoute: veh, oldRoute: oldPath.route, newRoute: newPath.route, oldId: oldPath.id, newId: newPath.id, oldDirection: oldPath.direction, newDirection: newPath.direction, terminalM: terminal ? Math.round(terminal.d) : null });
 
     // Motion exactly as match.ts motionOf computed it for this fix.
     const groundM = dist(prev.p, rec.p);
@@ -974,8 +991,6 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     let planGapM: number | null = null;
     if (prev.planKnots && prev.planPath !== null) planGapM = dist(net.toPathPoint(prev.planPath, evalPathPlan(prev.planKnots, rec.h - prev.h)), rec.p);
 
-    const near = nearestStop(rec.p);
-    const terminal = nearestStop(rec.p, (s) => s.terminal);
     return {
       h: rec.h,
       clock: localClock(rec.h),
@@ -1622,8 +1637,12 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     };
 
     const windowEvents = events.filter((e) => inWindow(e.h));
-    const windowBoxEvents = windowEvents.filter((e) => e.inBox);
-    const boxEvents = events.filter((e) => e.inBox);
+    // Decision 35: A' is A inside the box, so the box rows take A's exclusions;
+  // the counts of every class stay beside them as eventsAllClasses.
+  const windowBoxEventsAll = windowEvents.filter((e) => e.inBox);
+  const windowBoxEvents = windowBoxEventsAll.filter(countsInA);
+    const boxEventsAll = events.filter((e) => e.inBox);
+  const boxEvents = boxEventsAll.filter(countsInA);
     const windowVh = windowSec / 3600;
     const boxVh = boxSec / 3600;
     const boxWindowVh = boxWindowSec / 3600;
@@ -1907,11 +1926,12 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         centre: TEASER_BOX_CENTRE,
         halfM: TEASER_BOX_HALF_M,
         events: boxEvents.length,
+      eventsAllClasses: boxEventsAll.length,
         vehicleHours: r1(boxVh),
         per100vh: per100(boxEvents.length, boxVh),
         meanVehiclesInBoxPerTick: boxTicks > 0 ? r1(boxVehicleTicks / boxTicks) : null,
-        byClass: Object.fromEntries(countBy(boxEvents, (e) => e.cls)),
-        window: { events: windowBoxEvents.length, vehicleHours: r1(boxWindowVh), per100vh: per100(windowBoxEvents.length, boxWindowVh), byClass: Object.fromEntries(countBy(windowBoxEvents, (e) => e.cls)), topStops: countBy(windowBoxEvents, (e) => e.nearestStop ?? '?', 8) },
+        byClass: Object.fromEntries(countBy(boxEventsAll, (e) => e.cls)),
+        window: { events: windowBoxEvents.length, eventsAllClasses: windowBoxEventsAll.length, vehicleHours: r1(boxWindowVh), per100vh: per100(windowBoxEvents.length, boxWindowVh), byClass: Object.fromEntries(countBy(windowBoxEventsAll, (e) => e.cls)), topStops: countBy(windowBoxEventsAll, (e) => e.nearestStop ?? '?', 8) },
       },
       dossierWindow: { events: windowEvents.length, vehicleHours: r1(windowVh), per100vh: per100(windowEvents.length, windowVh), byClass: Object.fromEntries(countBy(windowEvents, (e) => e.cls)) },
       byRoute: routeRows,
@@ -2232,7 +2252,7 @@ function acceptanceLines(r: BranchReport): string[] {
   const L: string[] = [];
   L.push('acceptance rows (targets: ACCEPTANCE_TARGETS in scripts/grade-branches-core.ts):');
   L.push(`  A  (pathChangesSameTrip ${r.totals.pathChangesSameTrip} - flips.atTerminus ${r.flips.atTerminus} - loops.events ${r.loops?.events ?? 0}) / ${r.tramVehicleHours} vh * 100 = ${fmt(A.per100vh, 2)} per 100 vh  [target <= 5, stretch <= 1]`);
-  L.push(`  A' teaser box 17:15-17:44: ${fmt(r.teaserBox.window.per100vh)} per 100 vh (${r.teaserBox.window.events} events)  [<= 5]`);
+  L.push(`  A' teaser box 17:15-17:44, with A's exclusions: ${fmt(r.teaserBox.window.per100vh)} per 100 vh (${r.teaserBox.window.events} events; every class ${r.teaserBox.window.eventsAllClasses})  [<= 5]`);
   L.push(`  B  onto another route's path: ${r.otherRoute.onto}  [0]`);
   L.push(`  C  foreign-path vehicle-hours ${r.otherRoute.ticks.foreignVehicleHours}; fresh fixes off the own path while it was within 60 m ${r.otherRoute.ticks.foreignFreshFixesWithPriorWithin60m}  [0; 0]`);
   L.push(`  D  re-derives with the own path in the pool but another adopted: ${r.rederive.priorInPoolButOtherAdopted}  [0]`);

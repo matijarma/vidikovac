@@ -5,6 +5,8 @@ import {
   ACCEPTANCE_ROW_KEYS,
   ACCEPTANCE_TARGETS,
   acceptanceRows,
+  classifyEvent,
+  countsInA,
   createBranchGrader,
   formatRows,
   formatSummary,
@@ -13,6 +15,7 @@ import {
   isParkedEpisode,
   judge,
   loadRealEngine,
+  LOOP_HANDOVER_TERMINUS_M,
   PARKED_MIN_S,
   PARKED_RADIUS_M,
   type AcceptanceRows,
@@ -283,6 +286,41 @@ describe('the branch grader, fault injection on the corridor', () => {
 // with events, reseeds, priorChangeSamples and arcJumps.all left out). The
 // file predates the loops, unplaced and silence blocks and the rows S and I,
 // so A subtracts no loop events and U, S and I read "not measured".
+// Decision 35 (23 Sep): A' is "the same as A inside the teaser box", so it
+// leaves out what A leaves out, terminus flips and loop transitions. The
+// review of lane/t-rail (finding 1): a hand-over onto or off a terminus loop
+// far from any terminal is no terminus turn; 4 + 5 a day, T8 silence returns
+// with 250 to 755 m corrections, read as loop transitions and so out of rows
+// A and E by construction. They are direction flips, and row E counts them.
+describe('event classes and what rows A and A-prime count', () => {
+  const base = { vehicleRoute: '13', oldRoute: '13', newRoute: '13', oldId: '13_11', newId: 'path:13:1:129fd87e', oldDirection: 1, newDirection: 1, terminalM: 40 as number | null };
+
+  it('classes a hand-over onto or off a terminus loop as a loop transition only within 300 m of a terminal platform', () => {
+    expect(LOOP_HANDOVER_TERMINUS_M).toBe(300);
+    expect(classifyEvent({ ...base, oldId: 'loop:13:5c4b96ae', oldDirection: -1 })).toBe('loop-transition');
+    expect(classifyEvent({ ...base, newId: 'loop:13:5c4b96ae', newDirection: -1, terminalM: 300 })).toBe('loop-transition');
+    expect(classifyEvent({ ...base, oldId: 'loop:11:9297ea46', oldDirection: -1, newId: '11_3', terminalM: 308 })).toBe('direction-flip');
+    // With no terminal platform known the loop's own word stands.
+    expect(classifyEvent({ ...base, oldId: 'loop:13:5c4b96ae', oldDirection: -1, terminalM: null })).toBe('loop-transition');
+    // Another line's loop stays in row B either way.
+    expect(classifyEvent({ ...base, newId: 'loop:4:7cceb982', newRoute: '4', newDirection: -1, terminalM: 500 })).toBe('onto-other-route');
+    expect(classifyEvent({ ...base, oldId: 'loop:4:7cceb982', oldRoute: '4', oldDirection: -1, terminalM: 10 })).toBe('back-to-own-route');
+    // The other classes are untouched.
+    expect(classifyEvent({ ...base })).toBe('same-route-variant');
+    expect(classifyEvent({ ...base, newDirection: 0 })).toBe('direction-flip');
+  });
+
+  it('counts in A, and so in A-prime, everything but a terminus flip and a loop transition', () => {
+    expect(countsInA({ cls: 'loop-transition', atTerminus: true })).toBe(false);
+    expect(countsInA({ cls: 'loop-transition', atTerminus: false })).toBe(false);
+    expect(countsInA({ cls: 'direction-flip', atTerminus: true })).toBe(false);
+    expect(countsInA({ cls: 'direction-flip', atTerminus: false })).toBe(true);
+    expect(countsInA({ cls: 'same-route-variant', atTerminus: true })).toBe(true);
+    expect(countsInA({ cls: 'onto-other-route', atTerminus: false })).toBe(true);
+    expect(countsInA({ cls: 'back-to-own-route', atTerminus: true })).toBe(true);
+  });
+});
+
 describe('acceptanceRows and judge over the recorded Monday aggregates', () => {
   let aggregates: AcceptanceSource;
   let rows: AcceptanceRows;
