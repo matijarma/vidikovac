@@ -1126,7 +1126,7 @@ describe('without WebGL, following, the kiosk view and an outage', () => {
     // Two hundred seconds into the outage: still nothing drawn.
     for (let i = 0; i < 20; i++) frame(10_000);
     expect(lastPush()!.features).toEqual([]);
-    expect(handle.vehicles()).toEqual([]);
+    expect(handle.vehicles!()).toEqual([]);
     // Live again with no new report: the old tram does not come back from its history.
     handle.setFeedState!('live');
     for (let i = 0; i < 12; i++) frame();
