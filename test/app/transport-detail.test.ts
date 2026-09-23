@@ -229,6 +229,17 @@ describe('the stop sheet says what comes next, first', () => {
     expect(named).not.toContain('Pošalji');
   });
 
+  it('the stop\'s name and its arrivals stand in one element, the stop-board probe (§15.6, §16.4), with the meta and the lines outside it', () => {
+    const html = stop([row()]);
+    const at = (marker: string): number => html.indexOf(marker);
+    expect(html.split('data-testid="stop-board"').length - 1).toBe(1);
+    expect(at('data-testid="stop-board"')).toBeLessThan(at('data-testid="stop-title"'));
+    expect(at('data-testid="stop-title"')).toBeLessThan(at('data-testid="stop-arrivals"'));
+    expect(at('data-testid="stop-arrivals"')).toBeLessThan(at('data-testid="arrival-rows"'));
+    // The board closes right after the arrivals section, before the platform count.
+    expect(html).toContain('</section></div><p class="t-meta" data-testid="stop-meta">');
+  });
+
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {
     const frozenAt = Date.parse('2026-09-19T10:02:00Z');
     const html = stop([row()], 'live', frozenAt);

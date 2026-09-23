@@ -309,6 +309,9 @@
 .ki[data-stage='desk'][data-view='map'] .t-sheet-head { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-2) 0; }
 .ki[data-stage='desk'][data-view='map'] .t-sheet-toggle .icon { transform: rotate(90deg); }
 
+/* The stop's board (probe stop-board) is one element for a canvas tap to land on; it draws no box of its own. */
+.t-stop-board { display: contents; }
+
 /* --- The full-map view mode: .ki[data-view='map'] ------------------------
    dashboard.css hides the banners in this mode; the expiry line must stay in view, and above MapLibre's controls (z-index 2). */
 .ki[data-view='map'] .ki-banners { display: grid; z-index: 3; }

@@ -530,9 +530,13 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const rows = d.routes.map((r) => rowButton({ kind: 'route', id: r.id, action: 'select-route', inner: routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id)) })).join('');
   const moving = d.routes.reduce((sum, r) => sum + (d.counts.get(r.id) ?? 0), 0);
   const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
+  // The stop's board (probe §15.6 / §16.4 `stop-board`): its name and what comes next, one element a canvas tap
+  // lands on; display: contents (map.css), so the sheet's own layout is untouched.
   return (
+    `<div class="t-stop-board" data-testid="stop-board">` +
     detailHead(i18n, `<h3 class="t-title" data-testid="stop-title">${esc(vetExternal('name', d.stop.name, 'row') ?? '')}</h3>`, d.kiosk, { save: { kind: 'stop', id: d.stop.id, on: d.saved ?? false }, cast: d.cast }) +
     arrivalsSection(i18n, d) +
+    '</div>' +
     `<p class="t-meta" data-testid="stop-meta">${esc(meta)}</p>` +
     (d.kiosk ? '' : actions([showOnMap(i18n)])) +
     `<section class="t-block">${sectionHead(tr(i18n, 'stopRoutes'), 4)}${lead}<ul class="t-list" data-testid="stop-routes">${rows}</ul></section>`
