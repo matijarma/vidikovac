@@ -27,6 +27,12 @@ export const INVITATION_TIMEOUT_MS: number;
 export const CODE_TIMEOUT_MS: number;
 export const CODE_MIN_PROGRESS: number;
 export const KARTA_POLL_MS: number;
+export const SHARE_TIMEOUT_MS: number;
+export const STOP_BOARD_TIMEOUT_MS: number;
+export const SESSION_LENGTH_MS: number;
+export const EXPIRY_MARGIN_MS: number;
+export const AFTER_EXPIRY_MS: number;
+export const OUTAGE_FEEDS: readonly string[];
 export const CODE_TESTIDS: readonly string[];
 export const PAIRING_PROBES: Readonly<{ codeA: string; codeB: string; link: string; progress: string }>;
 export const SESSION_LIVE: string;
@@ -54,7 +60,10 @@ export function makeScrubber(secrets?: readonly string[]): Scrubber;
 export interface RedemptionBudget {
   waitMs(surface: Surface, now: number): number;
   take(surface: Surface, now: number): void;
+  /** The surface's /api/scan answered at `at` (or, none seen, the observer stopped waiting). */
+  redeemed(surface: Surface, at: number): void;
   counts(): Record<string, number>;
+  /** Redemption times: the answers, in the order they came. */
   times(): { surface: Surface; at: number }[];
 }
 export function redemptionBudget(options?: { perSurface?: number; spacingMs?: number }): RedemptionBudget;
@@ -78,6 +87,10 @@ export interface DesktopRead { sadaInViewport: boolean; kartaInViewport: boolean
 export const PHONE_READ_IN_PAGE: InPage<Record<string, unknown>, PhoneRead>;
 export const KARTA_READ_IN_PAGE: InPage<{ map: string; disclosures: string }, KartaRead>;
 export const DESKTOP_READ_IN_PAGE: InPage<{ sada: string; karta: string; domains: string; shareCity: string }, DesktopRead>;
+export interface ShareCodeRead { present: boolean; visible: boolean; text: string }
+export const SHARE_CODE_IN_PAGE: InPage<{ code: string }, ShareCodeRead>;
+export interface StopBoardRead { open: boolean; total: number; inViewport: number; texts: string[] }
+export const STOP_BOARD_READ_IN_PAGE: InPage<{ board: string; rows: string }, StopBoardRead>;
 
 /** The TypeScript modules the observer loads through Vite (the unit tier imports them directly). */
 export interface Instruments {
@@ -104,7 +117,20 @@ export interface ViewportEntry {
   failures: string[];
 }
 export interface AxeResult { seriousCritical: number; rules: string[] }
-export interface PhoneObservation { landingMs: number | null; sada: PhoneRead | null; karta: (KartaRead & { pillsAfterMs: number | null }) | null; axe: { sada: AxeResult | null; karta: AxeResult | null }; viewports: ViewportEntry[]; failed?: string }
+export interface ShareObservation { tapped: boolean; code: boolean; afterMs: number | null; detail: string | null }
+export interface StopBoardObservation extends StopBoardRead { taps: number; query: string; error: string | null }
+export interface ExpiryObservation { seen: boolean; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
+export interface PhoneObservation {
+  landingMs: number | null;
+  sada: PhoneRead | null;
+  share: ShareObservation | null;
+  karta: (KartaRead & { pillsAfterMs: number | null }) | null;
+  stopBoard: StopBoardObservation | null;
+  expiry: ExpiryObservation | null;
+  axe: { sada: AxeResult | null; karta: AxeResult | null };
+  viewports: ViewportEntry[];
+  failed?: string;
+}
 export interface DesktopObservation { landingMs: number | null; read: DesktopRead | null; viewports: ViewportEntry[]; failed?: string }
 export interface KioskObservation {
   first: Wall.WallSample | null;
@@ -134,10 +160,14 @@ export interface Threshold { id: string; stage: Stage; surface: Surface | 'all';
 export const THRESHOLDS: readonly Threshold[];
 export function stageIndex(stage: StageChoice): number;
 export function thresholdsFor(stage: StageChoice): Threshold[];
-export function fillTarget(text: string, instruments: Pick<Instruments, 'wall' | 'inventory' | 'legibility'>): string;
+export function fillTarget(text: string, instruments: Pick<Instruments, 'wall' | 'inventory' | 'legibility' | 'scenes'>): string;
 export interface Measure { value: number | null; detail: string[] }
 export const METRICS: Readonly<Record<string, (obs: Observation, instruments: Instruments) => Measure>>;
 export function readingsOf(obs: Observation): Wall.WallSample[] | null;
+/** The rotation's planned readings for `minutes`, one every `stepMs`. */
+export function plannedRotationSteps(minutes: number, stepMs: number): number;
+export interface DistinctWindow { from: number; to: number; required: number; distinct: number }
+export function distinctPerWindow(rotation: readonly (Wall.WallSample | Wall.WallSampleError | Wall.RotationRow)[], planned: number, stepMs: number, windowMs: number, min: number): { windows: DistinctWindow[]; short: number };
 export function repeatsWithin(readings: readonly Wall.WallSample[], windowMs: number): { turns: number; distinct: number; repeats: { at: string; afterMs: number; sentence: string }[] };
 export type RowStatus = 'pass' | 'fail' | 'info' | 'not observed';
 export interface VerdictRow extends Omit<Threshold, 'target'> { target: string; value: number | null; holds: boolean; detail: string[]; status: RowStatus }
@@ -147,7 +177,7 @@ export function renderReport(observation: Observation, verdict: Verdict, instrum
 export function writeOutputs(outDir: string, observation: Observation, verdict: Verdict, instruments: Instruments, scrub: Scrubber): void;
 
 /** The page surface the observer drives; Playwright's Page satisfies it and the unit tier fakes it. */
-export type ObserverPage = Pick<Page, 'goto' | 'evaluate' | 'waitForFunction' | 'waitForTimeout' | 'screenshot' | 'click' | 'on'> & { clock: Pick<Page['clock'], 'runFor'> };
+export type ObserverPage = Pick<Page, 'goto' | 'evaluate' | 'waitForFunction' | 'waitForTimeout' | 'screenshot' | 'click' | 'fill' | 'on'> & { clock: Pick<Page['clock'], 'runFor'>; keyboard: Pick<Page['keyboard'], 'press'> };
 export interface ObserverBrowser {
   newContext(options?: Record<string, unknown>): Promise<{ newPage(): Promise<ObserverPage>; close(): Promise<void> }>;
   close(): Promise<void>;

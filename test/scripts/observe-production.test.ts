@@ -23,12 +23,13 @@ import * as scenes from '../../e2e/scenes';
 import * as lib from '../../e2e/lib';
 import type { WallRow, WallSample } from '../../e2e/wall';
 import type { PageInventory, RawInventory } from '../../e2e/inventory';
+import type { ExpiryReading } from '../../e2e/inventory';
 import {
   ANY_PRESENT_IN_PAGE, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
-  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, STAGES, SURFACES, THRESHOLDS,
-  USER_AGENT_SUFFIX, configFrom, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
-  redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
-  type Instruments, type KartaRead, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime,
+  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
+  USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
+  plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
+  type Instruments, type KartaRead, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
 } from '../../scripts/observe-production.mjs';
 
 const root = resolve(import.meta.dirname, '..', '..');
@@ -165,19 +166,27 @@ describe('refusals happen before anything is loaded', () => {
 
 // --- budget and masking -----------------------------------------------------------------------
 describe('the redemption budget', () => {
-  it('allows one redemption per surface and says how long to wait for the spacing', () => {
+  it('allows one redemption per surface, spaced from the moment each was redeemed (its /api/scan response), not from its navigation', () => {
     const b = redemptionBudget();
     expect(b.waitMs('phone', 0)).toBe(0);
     b.take('phone', 1_000);
-    expect(b.waitMs('desktop', 1_000)).toBe(REDEMPTION_SPACING_MS);
-    expect(b.waitMs('desktop', 11_000)).toBe(2_000);
-    expect(b.waitMs('desktop', 13_000)).toBe(0);
+    // Until the phone's scan has answered, nothing else may start: its redemption time is not known yet.
+    expect(() => b.waitMs('desktop', 2_000)).toThrow(/the phone's redemption is not confirmed yet/);
+    expect(() => b.take('desktop', 2_000)).toThrow(/not confirmed yet/);
+    // The scan answered 8 s after the navigation: the spacing runs from there.
+    b.redeemed('phone', 9_000);
+    expect(b.waitMs('desktop', 9_000)).toBe(REDEMPTION_SPACING_MS);
+    expect(b.waitMs('desktop', 19_000)).toBe(2_000);
+    expect(b.waitMs('desktop', 21_000)).toBe(0);
+    expect(() => b.take('desktop', 13_000)).toThrow(/redemptions 4000 ms apart \(at least 12000 ms\)/);
     expect(() => b.take('phone', 60_000)).toThrow(/already redeemed 1 code/);
     expect(() => b.waitMs('phone', 60_000)).toThrow(/already redeemed/);
-    expect(() => b.take('desktop', 5_000)).toThrow(/ms apart \(at least 12000 ms\)/);
-    b.take('desktop', 13_000);
+    b.take('desktop', 21_000);
+    b.redeemed('desktop', 21_400);
+    // A late answer still moves the spacing on: the next wait counts from the latest redemption.
+    b.redeemed('phone', 30_000);
     expect(b.counts()).toEqual({ phone: 1, desktop: 1 });
-    expect(b.times().map((t) => t.surface)).toEqual(['phone', 'desktop']);
+    expect(b.times()).toEqual([{ surface: 'phone', at: 9_000 }, { surface: 'desktop', at: 21_400 }, { surface: 'phone', at: 30_000 }]);
   });
 });
 
@@ -248,8 +257,8 @@ describe('the thresholds are one table with a stage per row', () => {
 
 // --- page-side readings, shipped from their own text -----------------------------------------------
 const shipped = <F extends (...args: never[]) => unknown>(fn: F): F => new Function(`return (${String(fn)});`)() as F;
-const box = (el: Element, top: number, height = 40, width = 200): void => {
-  (el as HTMLElement).getBoundingClientRect = () => ({ x: 0, y: top, left: 0, top, right: width, bottom: top + height, width, height, toJSON: () => ({}) }) as DOMRect;
+const box = (el: Element, top: number, height = 40, width = 200, left = 0): void => {
+  (el as HTMLElement).getBoundingClientRect = () => ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) }) as DOMRect;
 };
 
 describe('the page-side readings reference only their argument and the DOM', () => {
@@ -275,20 +284,37 @@ describe('the page-side readings reference only their argument and the DOM', () 
     document.body.innerHTML = `
       <p data-testid="sada-place">Trg bana J. Jelačića</p>
       <p data-testid="sada-sentence" data-kicker="promet">Tramvaj 6 kreće za dvije minute.</p>
-      <ul data-testid="day-departures">${[0, 1, 2, 3].map((i) => `<li class="sada-departure" data-kind="departure">6 Sopot ${i + 2} min</li>`).join('')}</ul>
+      <ul data-testid="day-departures">${[0, 1, 2, 3].map((i) => `<li class="sada-departure" data-kind="departure">6 Sopot ${i + 2} min</li>`).join('')}<li class="sada-departure" style="opacity: 0">11 Dubec</li><li class="sada-departure">12 Dubrava</li></ul>
       <nav><a class="ki-tab">Sada</a><a class="ki-tab">Karta</a><a class="ki-tab">Još</a><a class="ki-tab" hidden>Promet</a></nav>
       <button data-testid="share-city">Podijeli grad</button><p>Sada u gradu.</p>`;
-    const rows = document.querySelectorAll('[data-kind=departure]');
+    const rows = document.querySelectorAll('li.sada-departure');
     rows.forEach((el, i) => box(el, 200 + i * 60));
     box(rows[3], innerHeight - 10);
+    // A transparent row is not shown; a row pushed sideways out of the viewport is shown but not inside it.
+    box(rows[5], 260, 40, 200, innerWidth + 20);
     document.querySelectorAll('.ki-tab, [data-testid=share-city], [data-testid=sada-place], [data-testid=sada-sentence]').forEach((el) => box(el, 10));
-    const read = shipped(PHONE_READ_IN_PAGE)({ place: P.sadaPlace, sentence: P.sadaSentence, departures: P.departureRows, tab: P.tab, shareCity: P.shareCity, slop: { source: inventory.PHONE_SLOP_RE.source, flags: inventory.PHONE_SLOP_RE.flags } }) as PhoneRead;
+    const read = shipped(PHONE_READ_IN_PAGE)({ place: P.sadaPlace, sentence: P.sadaSentence, departures: inventory.PHONE_DEPARTURE_ROWS, tab: P.tab, shareCity: P.shareCity, slop: { source: inventory.PHONE_SLOP_RE.source, flags: inventory.PHONE_SLOP_RE.flags } }) as PhoneRead;
     expect(read.place).toBe('Trg bana J. Jelačića');
     expect(read.sentenceChars).toBe('Tramvaj 6 kreće za dvije minute.'.length);
-    expect(read.departures).toEqual({ total: 4, inViewport: 3 });
+    expect(read.departures).toEqual({ total: 5, inViewport: 3 });
     expect(read.slop).toEqual(['Sada u gradu']);
     expect(read.tabs).toEqual(['Sada', 'Karta', 'Još']);
     expect(read.shareCity).toEqual({ present: true, visible: true, text: 'Podijeli grad' });
+  });
+
+  it('the share code, and the stop board with its departures inside the viewport', () => {
+    const P = inventory.PHONE_PROBES;
+    document.body.innerHTML = '<p data-testid="share-code">W4TN-8KQZ</p><section data-testid="stop-board"><ol><li data-kind="departure">6 Sopot 2 min</li><li data-kind="departure">11 Dubec 5 min</li><li data-kind="departure">12 Dubrava 8 min</li><li data-kind="departure">13 Žitnjak 9 min</li></ol></section>';
+    box(document.querySelector('[data-testid=share-code]')!, 300);
+    expect(shipped(SHARE_CODE_IN_PAGE)({ code: P.shareCode })).toEqual({ present: true, visible: true, text: 'W4TN-8KQZ' });
+    box(document.querySelector('[data-testid=stop-board]')!, 400, 400, 390);
+    const items = document.querySelectorAll('[data-testid=stop-board] li');
+    items.forEach((el, i) => box(el, 420 + i * 60, 50, 358, 16));
+    box(items[3], 420, 50, 358, innerWidth + 10);
+    const board = shipped(STOP_BOARD_READ_IN_PAGE)({ board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` }) as StopBoardRead;
+    expect(board).toEqual({ open: true, total: 4, inViewport: 3, texts: ['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min', '13 Žitnjak 9 min'] });
+    document.querySelector<HTMLElement>('[data-testid=stop-board]')!.hidden = true;
+    expect(shipped(STOP_BOARD_READ_IN_PAGE)({ board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` })).toMatchObject({ open: false, total: 0 });
   });
 
   it('Karta and the desktop: the map probes, disclosures, and whether Sada and Karta both sit in the viewport', () => {
@@ -331,6 +357,9 @@ const CANVAS_MAP = { selector: '[data-testid=kiosk-map]', element: 'div[data-tes
 const GOOD_PHONE: PhoneRead = { place: 'Trg bana J. Jelačića', sentence: 'Tramvaj 6 kreće za dvije minute.', sentenceChars: 32, departures: { total: 3, inViewport: 3 }, slop: [], tabs: ['Sada', 'Karta', 'Još'], shareCity: { present: true, visible: true, text: 'Podijeli grad' } };
 const GOOD_KARTA: KartaRead = { status: 'ready', pills: '6|11|12', bodies: 40, unlabelled: 0, markers: 10, disclosures: 0 };
 const GOOD_DESKTOP: DesktopRead = { sadaInViewport: true, kartaInViewport: true, domains: 0, shareCityVisible: true };
+const GOOD_SHARE = { present: true, visible: true, text: 'W4TN-8KQZ' };
+const GOOD_BOARD: StopBoardRead = { open: true, total: 3, inViewport: 3, texts: ['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'] };
+const GOOD_EXPIRY: ExpiryReading = { ended: true, scanLinks: 1, hitnoLinks: 1, rows: 0, rowTexts: [], exportControls: 0 };
 
 type Kind = 'kiosk' | 'portrait' | 'proxy' | 'phone' | 'desktop';
 interface FakeOptions {
@@ -342,14 +371,31 @@ interface FakeOptions {
   axeViolations?: { id: string; impact: string; nodes: unknown[] }[];
   kioskConsoleError?: string;
   noInvitation?: boolean;
+  /** Only these pages never show their invitation (the portrait, say). */
+  noInvitationOn?: Kind[];
+  /** The wall reading number `n` (0 the first, 1… the rotation) throws, as a page that navigated would. */
+  failReading?: (n: number) => boolean;
+  /** How long the phone's /api/scan takes to answer after its navigation. */
+  scanDelayMs?: number;
+  /** How long each code stays on the fake screen (30 s, the real rotation, by default). */
+  codeWindowMs?: number;
+  /** What share-code shows after the tap on share-city. */
+  shareCode?: { present: boolean; visible: boolean; text: string };
+  stopBoard?: StopBoardRead;
+  expiry?: ExpiryReading;
+  /** An /api/data request the phone makes after its session ended. */
+  requestAfterExpiry?: string;
 }
 interface Handler { (arg: unknown): unknown }
 
 function fakeRuntime(options: FakeOptions = {}) {
   let t = T0;
   const clock = { now: () => t, sleep: async (ms: number) => { t += ms; } };
-  const log = { contexts: [] as { kind: Kind; options: Record<string, unknown> }[], gotos: [] as { kind: Kind; url: string; at: number }[], clicks: [] as { kind: Kind; selector: string }[], readings: 0 };
-  const codeNow = (): string => CODES[Math.floor((t - T0) / 30_000) % CODES.length];
+  const log = {
+    contexts: [] as { kind: Kind; options: Record<string, unknown> }[], gotos: [] as { kind: Kind; url: string; at: number }[], clicks: [] as { kind: Kind; selector: string }[],
+    keys: [] as { kind: Kind; key: string }[], fills: [] as { kind: Kind; selector: string; value: string }[], scans: [] as { kind: Kind; at: number }[], readings: 0,
+  };
+  const codeNow = (): string => CODES[Math.floor((t - T0) / (options.codeWindowMs ?? 30_000)) % CODES.length];
   const kindOf = (o: Record<string, unknown>): Kind => {
     const vp = o.viewport as { width: number } | undefined;
     if (o.isMobile) return 'phone';
@@ -361,6 +407,7 @@ function fakeRuntime(options: FakeOptions = {}) {
     const handlers = new Map<string, Handler[]>();
     const emit = (event: string, arg: unknown): void => { for (const fn of handlers.get(event) ?? []) void fn(arg); };
     let onKarta = false;
+    let expiryReads = 0;
     const inv = (key: keyof NonNullable<FakeOptions['inventories']>, vw: number, vh: number): PageInventory => options.inventories?.[key] ?? EMPTY_INVENTORY(vw, vh);
     return {
       on(event: string, fn: Handler) { handlers.set(event, [...(handlers.get(event) ?? []), fn]); return this; },
@@ -368,19 +415,27 @@ function fakeRuntime(options: FakeOptions = {}) {
         log.gotos.push({ kind, url, at: t });
         if (kind === 'kiosk' && options.kioskConsoleError) emit('console', { type: () => 'error', text: () => options.kioskConsoleError, location: () => ({ url: 'https://zagreb.example/assets/kiosk.js' }) });
         if (url.includes('/s/#')) {
+          if (kind === 'phone' && options.scanDelayMs) t += options.scanDelayMs;
+          log.scans.push({ kind, at: t });
           emit('response', { url: () => 'https://zagreb.example/api/scan', status: () => 200, request: () => ({ method: () => 'POST' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => ({ ticket: 'T-secret', room: 'R-secret' }), body: async () => Buffer.from('') });
         }
       },
       async waitForFunction(fn: unknown) {
-        if (fn === INVITATION_READY_IN_PAGE && options.noInvitation) throw new Error('Timeout 90000ms exceeded.');
+        if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
         return true;
       },
+      async fill(selector: string, value: string) { log.fills.push({ kind, selector, value }); },
+      keyboard: { press: async (key: string) => { log.keys.push({ kind, key }); } },
       async waitForTimeout(ms: number) { t += ms; },
       async screenshot({ path }: { path: string }) { writeFileSync(path, 'png'); },
       async click(selector: string) { log.clicks.push({ kind, selector }); if (kind === 'phone') onKarta = true; },
       clock: { runFor: async () => { throw new Error('the observer runs on the real clock'); } },
       async evaluate(fn: unknown, _arg?: unknown) {
-        if (fn === wall.WALL_SAMPLE_IN_PAGE) { const n = log.readings++; return (options.reading ?? wallReading)(n, t, codeNow().replace('-', '·')); }
+        if (fn === wall.WALL_SAMPLE_IN_PAGE) {
+          const n = log.readings++;
+          if (options.failReading?.(n)) throw new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation');
+          return (options.reading ?? wallReading)(n, t, codeNow().replace('-', '·'));
+        }
         if (fn === inventory.COLLECT_IN_PAGE) {
           if (kind === 'phone') return onKarta ? inv('phone-karta', 412, 839) : inv('phone-sada', 412, 839);
           if (kind === 'desktop') return inv('desktop', 1440, 900);
@@ -391,6 +446,13 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === PHONE_READ_IN_PAGE) return options.phone ?? GOOD_PHONE;
         if (fn === KARTA_READ_IN_PAGE) return options.karta ?? GOOD_KARTA;
         if (fn === DESKTOP_READ_IN_PAGE) return options.desktop ?? GOOD_DESKTOP;
+        if (fn === SHARE_CODE_IN_PAGE) return options.shareCode ?? GOOD_SHARE;
+        if (fn === STOP_BOARD_READ_IN_PAGE) return options.stopBoard ?? GOOD_BOARD;
+        if (fn === inventory.EXPIRY_READ_IN_PAGE) {
+          // The second read comes after the observer's wait: the request falls between the two.
+          if (options.requestAfterExpiry && ++expiryReads === 2) emit('request', { url: () => `https://zagreb.example${options.requestAfterExpiry}`, method: () => 'GET' });
+          return options.expiry ?? GOOD_EXPIRY;
+        }
         throw new Error(`unexpected page function on the ${kind} page`);
       },
     };
@@ -436,7 +498,7 @@ describe('a run over a fake browser', () => {
   it('a wall, phone and desktop that hold every row: exit 0, the four files and the extras written', async () => {
     const r = await observe([]);
     expect(r.code, r.lines.join('\n')).toBe(0);
-    expect(files(r.out).sort()).toEqual(['captures/desktop-1440.png', 'captures/kiosk-1080x1920.png', 'captures/kiosk-1920x1080-dpr025-3m.png', 'captures/kiosk-1920x1080.png', 'captures/phone-karta-cold.png', 'captures/phone-sada.png', 'inventory.json', 'legibility.json', 'recorders.json', 'report.md', 'rotation.jsonl']);
+    expect(files(r.out).sort()).toEqual(['captures/desktop-1440.png', 'captures/kiosk-1080x1920.png', 'captures/kiosk-1920x1080-dpr025-3m.png', 'captures/kiosk-1920x1080.png', 'captures/phone-expired.png', 'captures/phone-karta-cold.png', 'captures/phone-sada.png', 'captures/phone-stop-board.png', 'inventory.json', 'legibility.json', 'recorders.json', 'report.md', 'rotation.jsonl']);
     expect(read(r.out, 'rotation.jsonl').trim().split('\n')).toHaveLength(3);
     expect((JSON.parse(read(r.out, 'inventory.json')) as { label: string }[]).map((v) => v.label)).toEqual(['kiosk-1920x1080', 'phone-sada', 'phone-karta-cold', 'desktop-1440', 'kiosk-1080x1920']);
     expect(Object.keys((JSON.parse(read(r.out, 'legibility.json')) as { captures: object }).captures)).toEqual(['kiosk-1920x1080', 'kiosk-1080x1920']);
@@ -451,9 +513,17 @@ describe('a run over a fake browser', () => {
     expect(report).not.toContain('**fail**');
   });
 
-  it('never creates a screen, presents or opens settings: the only tap is the phone\'s Karta tab, the only redemptions are one per surface 12 s apart', async () => {
+  it('never creates a screen, presents or opens settings: nothing is pressed on the wall, the phone taps only its own controls, the only redemptions are one per surface 12 s apart', async () => {
     const r = await observe([]);
-    expect(r.log.clicks).toEqual([{ kind: 'phone', selector: `${inventory.PHONE_PROBES.kartaTab}:visible` }]);
+    const P = inventory.PHONE_PROBES;
+    expect(r.log.clicks).toEqual([
+      { kind: 'phone', selector: `${P.shareCity}:visible` },
+      { kind: 'phone', selector: `${P.kartaTab}:visible` },
+      { kind: 'phone', selector: `${P.transportSearch}:visible` },
+      { kind: 'phone', selector: `${P.selectStop}:visible` },
+    ]);
+    expect(r.log.fills).toEqual([{ kind: 'phone', selector: `${P.transportSearch}:visible`, value: inventory.STOP_SEARCH_QUERY }]);
+    expect(r.log.keys).toEqual([{ kind: 'phone', key: 'Escape' }]);
     const scans = r.log.gotos.filter((g) => g.url.includes('/s/#'));
     expect(scans.map((g) => g.kind)).toEqual(['phone', 'desktop']);
     expect(scans[1].at - scans[0].at).toBeGreaterThanOrEqual(REDEMPTION_SPACING_MS);
@@ -522,6 +592,116 @@ describe('a run over a fake browser', () => {
     for (const id of ['place', 'departures', 'sentence-length', 'unlabelled', 'phone-departures', 'phone-tabs', 'karta-pills', 'karta-unlabelled', 'phone-axe', 'desktop-domains']) expect(failed, id).toContain(id);
     expect(failed).not.toContain('pills-plus');
     expect(read(r.out, 'report.md')).toContain('Sada: serious color-contrast (2)');
+  });
+
+  // Review P1: the spacing ran from the phone's navigation, so a first scan answering late let the second
+  // /api/scan follow it by less than 12 s. It runs from the answer now.
+  it('spaces the second redemption from the first /api/scan answer: a scan answering 10 s after its navigation still leaves ≥ 12 s', async () => {
+    // A code a second, so the desktop is never held back by waiting for a fresh one: only the spacing holds it.
+    const r = await observe([], { scanDelayMs: 10_000, codeWindowMs: 1_000 });
+    expect(r.log.scans.map((x) => x.kind)).toEqual(['phone', 'desktop']);
+    expect(r.log.scans[1].at - r.log.scans[0].at).toBeGreaterThanOrEqual(REDEMPTION_SPACING_MS);
+    expect(r.code, r.lines.join('\n')).toBe(0);
+    expect(read(r.out, 'report.md')).toMatch(/\| redemptions \| d1 \| all \| .* \| ≤ 0 \| 0 \| pass \|/);
+  });
+
+  // Review P1: failed readings were filtered out and a missing portrait dropped silently, so a run with
+  // 299 of 300 rotation readings failed and no portrait passed D2.
+  it('a failed or missing reading never leaves the judgment: 299 of 300 rotation readings failed and no portrait fail every stage', async () => {
+    const broken = { failReading: (n: number) => n >= 2 && n <= 300, noInvitationOn: ['portrait'] as Kind[] };
+    const d2 = await observe(['--minutes', '10', '--stage', 'd2'], broken);
+    expect(d2.code).toBe(1);
+    expect(d2.lines.join('\n')).toContain('FAIL wall-read');
+    const report = read(d2.out, 'report.md');
+    expect(report).toMatch(/\| wall-read \| d1 \| kiosk \| .* \| ≤ 0 \| 300 \| \*\*fail\*\* \|/);
+    expect(report).toContain('299 of 300 rotation readings failed');
+    expect(report).toContain('the portrait reading (1080 × 1920) was not made');
+    expect(report).toMatch(/\*\*legibility\*\* \(fail\): no legibility report for kiosk-1080x1920/);
+    const d1 = await observe(['--minutes', '10', '--stage', 'd1'], broken);
+    expect(d1.code).toBe(1);
+    expect(d1.lines.join('\n')).toContain('FAIL wall-read');
+    // The whole plan read is the row's pass: the first, 300 rotation readings, the portrait.
+    const whole = await observe(['--minutes', '10', '--stage', 'd1']);
+    expect(whole.code, whole.lines.join('\n')).toBe(0);
+    expect(plannedRotationSteps(10, wall.ROTATION_STEP_MS)).toBe(wall.ROTATION_STEPS);
+  });
+
+  it('a missing 3-metre proxy fails d2', async () => {
+    const r = await observe(['--stage', 'd2'], { noInvitationOn: ['proxy'] });
+    expect(r.code).toBe(1);
+    expect(r.lines.join('\n')).toContain('FAIL proxy');
+  });
+
+  // Review P2: pills were required in every reading, so a correct outage failed. They are required while
+  // data-feed is live; once it is down the wall must show no pill and no live countdown.
+  it('a correct outage needs no pill; an outage that still draws pills or live countdowns fails', async () => {
+    // A correct outage (§16.3 outage0800): no pill, no live countdown, the one map note, markers kept, timetable times only.
+    const timetable = (at: number): WallRow => row({ id: 'trip-t', when: new Date(at + 180_000).toISOString(), title: '6 Sopot', whenText: '17:48', text: '6 Sopot 17:48' });
+    const outage = (over: Partial<WallSample>) => (n: number, at: number, code: string): WallSample => {
+      const base = wallReading(n, at, code);
+      return { ...base, rows: [timetable(at), ...base.rows.slice(1)], feed: 'down', pills: '', bodies: 0, liveRows: 0, mapNotes: 1, ...over };
+    };
+    const correct = await observe(['--stage', 'd2'], { reading: outage({}) });
+    expect(correct.code, correct.lines.join('\n')).toBe(0);
+    expect(read(correct.out, 'report.md')).toMatch(/\| pills-drawn \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    const stale = await observe(['--stage', 'd2'], { reading: outage({ feed: 'stale' }) });
+    expect(stale.code, stale.lines.join('\n')).toBe(0);
+    const pills = await observe(['--stage', 'd2'], { reading: outage({ pills: '6|12' }) });
+    expect(pills.code).toBe(1);
+    expect(pills.lines.join('\n')).toContain('FAIL outage');
+    const live = await observe(['--stage', 'd2'], { reading: outage({ liveRows: 1 }) });
+    expect(live.lines.join('\n')).toContain('FAIL outage');
+    const countdown = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...outage({})(n, at, code), rows: wallReading(n, at, code).rows }) });
+    expect(read(countdown.out, 'report.md')).toContain('data-feed down: 1 departure(s) without a clock time');
+    const noNote = await observe(['--stage', 'd2'], { reading: outage({ mapNotes: 0, markers: 0 }) });
+    expect(read(noNote.out, 'report.md')).toContain('data-feed down: 0 map note(s), not 1; data-markers 0');
+    const empty = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), pills: '' }) });
+    expect(empty.lines.join('\n')).toContain('FAIL pills-drawn');
+    expect(empty.lines.join('\n')).not.toContain('FAIL outage');
+  });
+
+  it('fewer than three distinct sentences in ten minutes fail d2', async () => {
+    const two = await observe(['--minutes', '10', '--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), sentence: n % 2 ? 'Tramvaj 6 kreće.' : 'Sunce zalazi u 18:57.', validUntil: new Date(Math.floor(at / 20_000) * 20_000 + 20_000).toISOString() }) });
+    expect(two.lines.join('\n')).toContain('FAIL sentence-distinct');
+    expect(read(two.out, 'report.md')).toContain('2 distinct of 3 required');
+    expect(distinctPerWindow([], 300, wall.ROTATION_STEP_MS, 600_000, 3)).toMatchObject({ short: 3 });
+    expect(distinctPerWindow([], 10, wall.ROTATION_STEP_MS, 600_000, 3)).toMatchObject({ short: 1, windows: [{ from: 0, to: 9, required: 1, distinct: 0 }] });
+    const rows = (sentences: string[]): WallSample[] => sentences.map((sentence, n) => ({ ...wallReading(n), n, sentence }) as WallSample & { n: number });
+    expect(distinctPerWindow(rows(['a', 'b', 'c']), 3, wall.ROTATION_STEP_MS, 600_000, 3)).toMatchObject({ short: 0, windows: [{ required: 1, distinct: 3 }] });
+    expect(distinctPerWindow(rows(Array.from({ length: 600 }, (_, i) => (i < 300 ? ['a', 'b', 'c'][i % 3] : 'a'))), 600, wall.ROTATION_STEP_MS, 600_000, 3))
+      .toMatchObject({ short: 2, windows: [{ required: 3, distinct: 3 }, { required: 3, distinct: 1 }] });
+  });
+
+  it('the share code, the stop board and the end of the session are judged on the phone at d3', async () => {
+    const good = await observe([]);
+    const report = read(good.out, 'report.md');
+    for (const id of ['phone-share-code', 'phone-stop-board', 'phone-expiry']) expect(report).toMatch(new RegExp(`\\| ${id} \\| d3 \\| phone \\| .* \\| ≤ 0 \\| 0 \\| pass \\|`));
+    for (const f of files(good.out)) expect(read(good.out, f), f).not.toContain('W4TN');
+    const bad = await observe([], {
+      shareCode: { present: true, visible: true, text: '' },
+      stopBoard: { open: true, total: 4, inViewport: 2, texts: ['a', 'b', 'c', 'd'] },
+      expiry: { ...GOOD_EXPIRY, rows: 3, rowTexts: ['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'] },
+    });
+    const failed = bad.lines.join('\n');
+    for (const id of ['phone-share-code', 'phone-stop-board', 'phone-expiry']) expect(failed).toContain(`FAIL ${id}`);
+    expect(read(bad.out, 'report.md')).toContain('3 content row(s) kept after the session ended');
+    const late = await observe([], { requestAfterExpiry: '/api/data/zet-rt' });
+    expect(late.lines.join('\n')).toContain('FAIL phone-expiry');
+    expect(read(late.out, 'report.md')).toContain('1 /api/data request(s) after the session ended: /api/data/zet-rt');
+    // Before WP4 the share button is not at rest in the header: nothing is tapped, the row fails at d3 and is information below it.
+    const hidden = await observe(['--stage', 'd2'], { phone: { ...GOOD_PHONE, shareCity: { present: false, visible: false, text: '' } } });
+    expect(hidden.log.clicks.map((c) => c.selector)).not.toContain(`${inventory.PHONE_PROBES.shareCity}:visible`);
+    expect(hidden.code, hidden.lines.join('\n')).toBe(0);
+    expect(read(hidden.out, 'report.md')).toMatch(/\| phone-share-code \| d3 \| phone \| .* \| ≤ 0 \| 1 \| info \|/);
+  });
+
+  it('a phone that never landed in its session fails its recorder row: an empty recorder proves nothing', () => {
+    const obs = newObservation(configFrom({ argv: [], env: ENV, root, now: new Date(T0) }), null);
+    obs.desktop = { landingMs: null, read: null, viewports: [], failed: 'no fresh code on the screen within 90 s' };
+    obs.recorders = [{ surface: 'desktop', page: 'desktop-1440', dataResponses: 0, failed: [], httpErrors: [], consoleErrors: [], consoleWarnings: [], pageErrors: [], moduleStatuses: {}, redemptions: 0, screenCreations: 0, problems: [], aborted: 0, scanTimes: [] }];
+    const m = METRICS['desktop.recorderProblems'](obs, instruments);
+    expect(m.value).toBeNull();
+    expect(m.detail.join(' ')).toContain('the desktop never landed in its session (no fresh code on the screen within 90 s)');
   });
 
   it('--surfaces kiosk redeems nothing and reports the phone and desktop rows as not observed', async () => {
