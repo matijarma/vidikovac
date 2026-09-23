@@ -236,7 +236,9 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await expect(page.getByTestId('kiosk-code')).toBeVisible({ timeout: 30_000 });
     await waitForFrames(page, '[data-testid=kiosk-map]');
     await expect(page.getByTestId('kiosk-map')).toHaveAttribute('role', 'region');
-    await expect(page.getByTestId('kiosk-essentials-open')).toBeVisible();
+    // The wall's safety verdict is a word, not a button (lane/w-D2fix, [O-43]); Osnovno stays on the handheld stage.
+    await expect(page.getByTestId('kiosk-essentials-open')).toHaveCount(0);
+    await expect(page.locator('span.k-strip-verdict[data-testid=strip-verdict]')).toBeVisible();
     // A public screen's list is glanceable, not a hidden interactive phone
     // list. Its actual controls still need a complete keyboard path.
     await assertTextPath(page, '/kiosk/', false);
@@ -263,6 +265,9 @@ test.describe('the moving map has a text path (R-F5)', () => {
     await expect(page.getByTestId('kiosk-settings-panel')).toBeHidden();
     await expect(page.getByTestId('kiosk-invitation')).toBeVisible();
     await expect(page.locator('.k-map-legend')).toContainText('Tramvajska linija');
+    // Three plain legend items, the bikes one without its old "? nepotvrđeno" (§13 #14).
+    await expect(page.locator('.k-map-legend')).toContainText('BAJS: broj bicikala');
+    await expect(page.locator('.k-map-legend')).not.toContainText('?');
     await expect(page.locator('[data-action=kiosk-explore], #kiosk-city-search')).toHaveCount(0);
   });
 

@@ -66,21 +66,21 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
       }
       await phone.getByTestId('stop-presentation').click();
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
-      await kiosk.getByTestId('kiosk-essentials-open').click();
-      await expect(kiosk.getByTestId('kiosk-essentials')).toBeVisible();
-      await kiosk.keyboard.press('Escape');
-      await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
+      // No operator control on the wall (lane/w-D2fix, [O-43]): the verdict is a word; Osnovno stays on the handheld stage.
+      await expect(kiosk.getByTestId('kiosk-essentials-open')).toHaveCount(0);
+      await expect(kiosk.locator('span.k-strip-verdict[data-testid=strip-verdict]')).toBeVisible();
     } finally { await Promise.all([kctx.close(), pctx.close()]); }
   });
 }
 
 // The wall of 22 September says freshness by selection, never by caption
-// (brief §10, principle 5): a stale ZET feed leaves the place's timetable
-// departures on the list as grey clock times, at most three, and no row, card
-// or head names a fetch time or the word "zastarjelo". The fixture board's trip
-// ids are no tracked vehicle's, so not one row may claim a live countdown.
-const CAPTION_RE = /zastarjel|Dohvaćeno|nepotvrđen|nije provjera|Obuhvat|registra|Čekamo/i;
-test('stale transit keeps its timetable rows through basics and never captions them', async ({ page, request }) => {
+// (brief §10, principle 5, §12 "Never"): a stale ZET feed leaves the place's
+// timetable departures on the list as grey clock times, at most three, and no
+// row, card or head names a fetch time, a note or the word "zastarjelo". The
+// fixture board's trip ids are no tracked vehicle's, so not one row may claim
+// a live countdown, and no paired panel's credit (.k-panel-credit) is there.
+const CAPTION_RE = /zastarjel|Dohvaćeno|podaci od|nepotvrđen|nije provjera|Obuhvat|registra|Procjena|ostalo po voznom redu|Čekamo|(?:ZET|DHMZ)(?: ·)? \d\d:\d\d/i;
+test('stale transit keeps its timetable rows and never captions them', async ({ page, request }) => {
   await page.setViewportSize(sizes[0]!);
   await installKioskFeedFixture(page, 'stale');
   await installWallFixture(page);
@@ -93,11 +93,11 @@ test('stale transit keeps its timetable rows through basics and never captions t
     await expect(page.locator('[data-testid=nearby] .nearby-row[data-live]')).toHaveCount(0);
     for (const when of await departures.locator('.nearby-when').allInnerTexts()) expect(when.trim()).toMatch(/^\d{2}:\d{2}$/);
     for (const region of ['nearby', 'kiosk-invite']) await expect(page.getByTestId(region)).not.toContainText(CAPTION_RE);
+    await expect(page.locator('[data-testid=kiosk-invitation] .k-panel-credit')).toHaveCount(0);
   };
   await assertRows();
-  await page.getByTestId('kiosk-essentials-open').click();
-  await expect(page.getByTestId('kiosk-essentials')).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The wall has no Osnovno button to pass through any more (lane/w-D2fix, [O-43]).
+  await expect(page.getByTestId('kiosk-essentials-open')).toHaveCount(0);
   await expect(page.getByTestId('kiosk-invitation')).toBeVisible();
   await assertRows();
 });
