@@ -9,6 +9,75 @@ import { lastFix, newTrack, type Track } from '../../shared/motion/track';
 import { createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
 import { simulate } from './simulator';
 import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
+import { createLoop } from '../../app/src/motion/loop';
+
+describe('stale polls through the real planner and frame loop', () => {
+  function planned() {
+    const net = syntheticNetwork(corridorSpec());
+    const matcher = createMatcher(net);
+    const track = newTrack('stale', '1', 't1', 'tram');
+    const t = 1_800_000_000;
+    for (const [x, atSec] of [[400, t - 10], [500, t]]) {
+      const [lon, lat] = toLonLat({ x, y: 0 });
+      matcher.matchFix(track, { x, y: 0, lon, lat, atSec }, matcher.priorFor('1_0', '1', 0), null);
+    }
+    track.speed = 10;
+    buildPlan(track, net, { segmentSeconds: (_p, a, b) => (b - a) / 10, dwellSeconds: () => 20 },
+      null, t, t, { hourBand: 12, dayType: 0 });
+    const plan = track.plan!;
+    if (plan.on !== 'path') throw new Error('expected a real path plan');
+    expect(track.next?.s).toBe(600);
+    expect(evalPathPlan(plan.knots, 60)).toBeGreaterThan(600);
+    const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, 500));
+    const fix: Fix & { generatedAt: number } = {
+      id: track.id, lon, lat, at: t * 1000, generatedAt: t * 1000,
+      routeId: '1', type: 0, path: '1_0', speed: track.speed, confidence: track.confidence,
+      nextStopId: track.next!.stopId,
+      plan: { on: 'path', knots: plan.knots.map(([s, arc]) => [t * 1000 + s * 1000, arc]) },
+    };
+    return { net, fix, now: t * 1000 };
+  }
+
+  it.each([false, true])('does not renew hold, confidence or eviction on 12 s stale repaints (reduced=%s)', reducedMotion => {
+    const { net, fix, now: start } = planned();
+    const model = createIntegrator(net);
+    let now = start;
+    let frame: (() => void) | undefined;
+    let drawn: Drawn[] = [];
+    model.update([fix], now);
+    const loop = createLoop(() => { drawn = model.step(now); return true; }, {
+      now: () => now, reducedMotion,
+      raf: cb => { frame = () => cb(now); return 1; }, cancel: () => { frame = undefined; },
+      setTimer: cb => { frame = cb; return 1; }, clearTimer: () => {},
+    });
+    loop.start();
+    const step = reducedMotion ? 1000 : 1000 / 12;
+    for (let elapsed = step; elapsed <= 181_000 + 1; elapsed += step) {
+      now = start + Math.round(elapsed);
+      if (Math.round(elapsed) % 12_000 === 0) model.update([structuredClone(fix)], now);
+      frame?.();
+      if (now - start >= 60_000 && now - start < 60_000 + step) {
+        expect(drawn[0].s).toBeLessThanOrEqual(600);
+        expect(drawn[0].held).toBe(true);
+        expect(drawn[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+      }
+      if (now - start >= 140_000 && drawn.length) expect(drawn[0].heading).toBeNull();
+    }
+    expect(drawn).toEqual([]);
+    loop.stop();
+  });
+
+  it('accepts a genuinely new plan with the same report and rejects an older response', () => {
+    const { net, fix, now } = planned();
+    const model = createIntegrator(net);
+    model.update([fix], now);
+    const newer = { ...fix, generatedAt: now + 12_000, confidence: 0.5 };
+    model.update([newer], now + 12_000);
+    expect(model.step(now + 12_000)[0].confidence).toBe(0.5);
+    model.update([fix], now + 24_000);
+    expect(model.step(now + 24_000)[0].confidence).toBe(0.5);
+  });
+});
 
 // The client side of the engine (B6, R-TE10): the twin's plans arrive as
 // wire fixes every tick, and the integrator turns them into what is drawn
