@@ -1,13 +1,14 @@
 // The /s/ page: take a code from the URL fragment, the camera or the field,
-// POST it, show the confirm card (the possession check the whole mechanic rests
-// on), then hand the room and the ticket to /d/ in the fragment. Every browser
+// POST it (the redemption is the possession check the whole mechanic rests
+// on), say whose minutes they are in the status line, then hand the room and
+// the ticket to /d/ in the fragment. Every browser
 // global it needs is injected, so the flow is unit-tested under happy-dom with
 // no camera, no network and no real location.
 import type { ScanFail, ScanOk } from '../../worker/protocol';
 import { scan as scanRequest } from './api';
-import { codeFromScan, formatCode, isCompleteCode, normalizeCode, speakableCode } from './code';
+import { codeFromScan, formatCode, isCompleteCode, normalizeCode } from './code';
 import type { I18n } from './i18n/i18n';
-import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/escape';
+import { createElementFromHTML, escapeHtml } from './ui/dom/escape';
 import { iconMarkup } from './ui/icons';
 import { createQrScanner, type QrScannerDeps, type QrScannerHandle } from './ui/qrScanner';
 
@@ -19,10 +20,7 @@ const HASH_CODE = /^[0-9A-Za-z]{4}-?[0-9A-Za-z]{4}$/;
 /** How long the person waits after the Worker asked them to slow down: the
  *  status line counts it down from here to zero, then the check reopens. */
 const WAIT_MS = 60_000;
-/** Route short names on the confirm card's stop line; a hub stop serves more,
- *  the card names the first six and the session shows the rest. */
-const STOP_ROUTES_SHOWN = 6;
-/** The part separator of the confirm line, the same middle dot as the session label. */
+/** The part separator of the status line's session label, the same middle dot as the dashboard's pill. */
 const PART = ' · ';
 
 /** One thing the person can do after each error, or nothing beyond the sentence.
@@ -77,7 +75,7 @@ export function codeFromHash(hash: string): string | null {
   return isCompleteCode(code) ? code : null;
 }
 
-/** The venue word heads the confirm line when the operator gave the screen no
+/** The venue word heads the session label when the operator gave the screen no
  *  label, so it takes the sentence case every line on the page has. */
 function sentenceCase(word: string): string {
   return word.charAt(0).toLocaleUpperCase('hr-HR') + word.slice(1);
@@ -85,7 +83,8 @@ function sentenceCase(word: string): string {
 
 /** "Kavana Velebit · Donji grad · 10 minuta": the screen's label (its kind when
  *  the operator gave none), the district, the minutes; a peer's phone names
- *  itself. Assembled from parts, so an absent part leaves no hole behind. */
+ *  itself. Assembled from parts, so an absent part leaves no hole behind. The
+ *  status line says it while the page hands over to /d/. */
 export function confirmLabel(ok: ScanOk, i18n: I18n, now: number): string {
   const minutes = Math.max(1, Math.round((ok.expiresAt - now) / 60_000));
   const minutesText = i18n.t('common.minutes', { count: minutes });
@@ -94,17 +93,6 @@ export function confirmLabel(ok: ScanOk, i18n: I18n, now: number): string {
       ? i18n.t('scan.confirmPeer')
       : (ok.screenLabel ?? sentenceCase(i18n.t(`scan.venue.${ok.venueType ?? 'ostalo'}`)));
   return [head, ok.area, minutesText].filter(Boolean).join(PART);
-}
-
-/** "Stanica Trg bana J. Jelačića · linije 6, 11, 12, 13" when the screen stands
- *  at a stop; the stop alone when the data lists no lines for it; null otherwise. */
-export function confirmStopLine(ok: ScanOk, i18n: I18n): string | null {
-  const stop = ok.screen?.stop;
-  if (!stop) return null;
-  const routes = stop.routes.slice(0, STOP_ROUTES_SHOWN).join(', ');
-  return routes
-    ? i18n.t('scan.confirmStop', { stop: stop.name, routes })
-    : i18n.t('scan.confirmStopOnly', { stop: stop.name });
 }
 
 /** The fragment /d/ opens with. Only an operator's own label travels: a kind ('phone', a venue type) is a slug,
@@ -138,15 +126,13 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
 
   // Order: the h1, then the field with everything that belongs to it (label,
   // input, the error line directly under it, hint, the primary check, "ili",
-  // the camera), the status line, the intro last. The confirm card and the
-  // viewfinder sit above the form and appear only when there is something to
-  // show. `autofocus` only when nothing came in the fragment: a code that is
+  // the camera), the status line, the intro last. The viewfinder sits above
+  // the form and appears only when the camera is on. `autofocus` only when
+  // nothing came in the fragment: a code that is
   // already being checked has no use for a keyboard.
   const element = createElementFromHTML(`
     <section class="scan">
       <h1 class="scan-title">${escapeHtml(i18n.t('scan.title'))}</h1>
-      <section class="scan-confirm card" data-testid="confirm-card" role="group"
-        aria-labelledby="scan-confirm-title" tabindex="-1" hidden></section>
       ${cameraOffered ? '<div class="scan-camera" id="scan-camera-region" data-testid="scan-camera-region" hidden></div>' : ''}
       <form class="scan-form" novalidate>
         <div class="scan-code-head">
@@ -175,7 +161,6 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
 
   const errorBox = element.querySelector<HTMLElement>('.scan-error')!;
   const errorText = element.querySelector<HTMLElement>('[data-testid=scan-error]')!;
-  const confirmBox = element.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
   const form = element.querySelector<HTMLFormElement>('form')!;
   const input = element.querySelector<HTMLInputElement>('[data-testid=code-input]')!;
   const submitButton = element.querySelector<HTMLButtonElement>('[data-testid=code-submit]')!;
@@ -202,16 +187,10 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     pasteButton.disabled = busy || waiting || pasting || navigated;
   }
 
-  function hideConfirm(): void {
-    confirmBox.hidden = true;
-    confirmBox.replaceChildren();
-  }
-
   /** One visible, announced sentence with at most one action under it; the
    *  field carries the same error for AT. The box is shown before the text is
    *  written so the alert changes while it is rendered. */
   function showMessage(message: string, recovery: Recovery | null = null): void {
-    hideConfirm();
     errorBox.querySelector('.scan-error-action')?.remove();
     errorBox.hidden = false;
     errorText.textContent = message;
@@ -274,31 +253,6 @@ export function createScanPage(root: HTMLElement, deps: ScanPageDeps): ScanPageH
     tick();
     syncSubmit();
     waitTimer = setInterval(tick, 1000);
-  }
-
-  function renderConfirm(code: string, ok: ScanOk): void {
-    const stopLine = confirmStopLine(ok, i18n);
-    confirmBox.innerHTML = `
-      <h2 class="scan-confirm-title" id="scan-confirm-title">${escapeHtml(i18n.t('scan.confirmTitle'))}</h2>
-      <p class="scan-confirm-code" data-testid="confirm-code" aria-label="${escapeAttribute(speakableCode(code))}">${escapeHtml(formatCode(code))}</p>
-      <p class="scan-confirm-label" data-testid="confirm-label">${escapeHtml(confirmLabel(ok, i18n, now()))}</p>
-      ${stopLine ? `<p class="scan-confirm-stop" data-testid="confirm-stop">${escapeHtml(stopLine)}</p>` : ''}
-      <p class="scan-confirm-hint">${escapeHtml(i18n.t('scan.confirmHint'))}</p>
-      <div class="scan-confirm-actions">
-        <button type="button" class="btn btn-primary" data-testid="unlock">${escapeHtml(i18n.t('scan.unlock'))}</button>
-        <button type="button" class="btn-ghost" data-testid="confirm-cancel">${escapeHtml(i18n.t('scan.cancel'))}</button>
-      </div>`;
-    confirmBox.hidden = false;
-    confirmBox.querySelector<HTMLButtonElement>('[data-testid=unlock]')!.addEventListener('click', () => {
-      if (navigated) return;
-      navigated = true;
-      deps.navigate(dashboardUrl(ok));
-    });
-    confirmBox.querySelector<HTMLButtonElement>('[data-testid=confirm-cancel]')!.addEventListener('click', () => {
-      hideConfirm();
-      input.focus();
-    });
-    confirmBox.focus();
   }
 
   async function submitCode(raw: string): Promise<void> {
