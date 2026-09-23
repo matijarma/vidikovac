@@ -159,16 +159,25 @@ Manual dwell settings live in [`stop-dwell-overrides.json`](app/public/data/stop
 
 ```sh
 npm run typecheck
+npm run typecheck:tests        # Tests, e2e/ and scripts/ type-checked as four programs
 npm run build
 npm test                       # Unit tests and local Worker integration tests
 npx playwright install chromium
 npm run e2e                    # Browser flows, including real pairing and expiry
 npm run e2e:a11y               # Accessibility checks
 npm run a11y:lighthouse        # Requires a running local server
+npm run review:visual          # Screenshot matrix of every surface, with overflow and axe checks
 npm run check:izvori           # Source coverage and external-link checks
+npm run accept                 # Acceptance tier: red until the package it measures lands
+npm run accept:e2e             # Acceptance tier in the browser: wall and phone scenes
+npm run replay:grade -- test/fixtures/frames/2026-09-21-1715-1744 --out <prefix> --targets stage1
+npm run frames:sample -- <recordings>/2026/09/21 --from 151500 --to 154459 --out <dir>
+E2E_KIOSK_URL=<screen setup URL> npm run observe:production -- --minutes 10
 ```
 
 Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry, source recovery, lightweight mode and attributed exports. See the [verification record](docs/readable-city-2026-09-20.md).
+
+The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings.
 
 Deployment uses **`git push` to `main` → Cloudflare Workers Builds**, not `wrangler deploy`. A production `SESSION_SECRET` is required. Unset `APP_ENV` means production; `E2E_ADMIN_BYPASS` works only with `APP_ENV=test`. The retired `NETWORK_CHECK` cannot enable test mode. Operator routes `/api/admin/*` and `/stats` require Cloudflare Access; unauthorised requests receive 404. Workers.dev and preview URLs are disabled.
 

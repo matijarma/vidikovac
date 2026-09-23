@@ -11,7 +11,7 @@
 //   - then the timed rows by their time: closures within the circle by their
 //     end, events within the circle by their start with the venue and the tram
 //     to it, the next solar event only, the evening's last trams as ONE row
-//     from four hours ahead, the first morning tram from 22:00 until it leaves,
+//     from four hours ahead, the next line to start from 22:00 until all have started (or 06:00),
 //     tomorrow's openings from the catalogue's hours when the evening empties;
 //   - last, one timeless row: the place's naming story or a protected building
 //     nearby, alternating every 20 minutes, and the 24/7 pharmacy at night.
@@ -433,13 +433,14 @@ function lastTramRows(input: NearbyInput): NearbyRow[] {
   }];
 }
 
-// --- (f) the first morning tram, from 22:00 until it leaves -----------------------
+// --- (f) the next morning line to start, from 22:00 until all start or 06:00 -------
 
 function firstTramRows(input: NearbyInput): NearbyRow[] {
   const { now, lastRun, place, i18n } = input;
   if (lastRun?.status !== 'live') return [];
   const today = zagrebDayKey(now);
   const hour = zagrebHour(now) ?? 12;
+  if (hour < FIRST_TRAM_FROM_HOUR && hour >= NIGHT_UNTIL_HOUR) return [];
   // From 22:00 the next morning is tomorrow's service date; after midnight it is today's.
   const serviceDate = hour >= FIRST_TRAM_FROM_HOUR ? shiftDay(today, 1) : today;
   const services: NearbyService[] = [];
@@ -451,12 +452,11 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
     if (minutes === null || minutes < MORNING_FROM_MIN || minutes >= MORNING_UNTIL_MIN) continue;
     const first = firstDepartureOn(lastRun, routeId, serviceDate);
     const routeName = shortName(routeId);
-    if (first && vetted(input, [['headsign', routeName]])) services.push({ routeId, routeName, atMs: first.at });
+    if (first && first.at > now && vetted(input, [['headsign', routeName]])) services.push({ routeId, routeName, atMs: first.at });
   }
   if (services.length === 0) return [];
   services.sort(byService);
-  // The row belongs to the stop's first tram: once that one has left, the morning has begun.
-  if (!(services[0]!.atMs > now)) return [];
+  // Decision 27: one line starting does not mean all lines are running.
   return [{
     id: `first:${serviceDate}`,
     kind: 'first',

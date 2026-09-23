@@ -600,6 +600,7 @@ interface MapApi {
   on(type: string, listener: (event: MapEventLike) => void): unknown;
   once(type: string, listener: (event: MapEventLike) => void): unknown;
   addControl(control: unknown, position?: string): unknown;
+  removeControl?(control: unknown): unknown;
   getCanvas(): HTMLCanvasElement;
   addImage(id: string, image: { width: number; height: number; data: Uint8ClampedArray }, options?: Record<string, unknown>): void;
   hasImage?(id: string): boolean;
@@ -632,6 +633,7 @@ interface MapApi {
    *  by the census's still-frame fallback (name-census.ts settled), so a stand-in
    *  without it counts as still. */
   isMoving?(): boolean;
+  isSourceLoaded?(id: string): boolean;
   /** [lon, lat] to CSS px on the current camera; how the pills are clustered
    *  and how a tap on a cluster finds the member nearest to it. Optional so a
    *  stand-in without a camera still satisfies this slice. */
@@ -735,6 +737,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   container.dataset.presentationProfile=options.presentationProfile??'desktop';
   let scale = options.symbolScale ?? profile.symbolScale;
   let highlight: MapHighlight | null = null;
+  let destroyCensus: (() => void) | null = null;
+  let attribution: unknown = null;
   const highlightData=()=>({type:'FeatureCollection',features:highlight?[{type:'Feature',properties:{id:highlight.id},geometry:highlight.geometry}]:[]});
   let points = options.points ?? [];
   let lines = options.lines ?? [];
@@ -1292,8 +1296,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     canvas.removeAttribute('aria-label');
     // The compact credit sits bottom-left: on the phone stage the right edge holds the zoom and the tools, and on a
     // short stage (a small phone, a landscape one) the two would collide.
-    const compact = options.attributionCompact === true;
-    created.addControl(new l.AttributionControl({ compact, customAttribution: l.MAP_ATTRIBUTION_HTML }), 'bottom-right');
+    mountAttribution(created, l);
+    const compact = profile !== MAP_PRESENTATIONS['public-display'] && options.attributionCompact === true;
     if (compact) {
       // MapLibre initially expands even its compact control. Keep the full
       // credit in the native disclosure, without covering the phone's map
@@ -1321,6 +1325,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const census = l.createRenderCensus(created, l, {
       container,
       now,
+      setTimer: options.setTimer,
+      clearTimer: options.clearTimer,
       styled: () => styled && map === created,
       key: () => probeKeyOf(created),
       scale: () => scale,
@@ -1331,6 +1337,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       prozor: () => prozor !== null,
       hold: (names) => { heldNames = names; applyOverlays(); },
     });
+    destroyCensus = census.destroy;
     created.on('idle', census.idle);
     created.on('render', census.settled);
     created.on('render', census.nameTick);
@@ -1354,6 +1361,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     }
     created.once('load', () => onLoad(l, created));
     watchTheme();
+  }
+
+  function mountAttribution(created: MapApi, l: MaplibreModule): void {
+    if (attribution) created.removeControl?.(attribution);
+    const passive = profile === MAP_PRESENTATIONS['public-display'];
+    attribution = passive ? new l.StaticAttributionControl()
+      : new l.AttributionControl({ compact: options.attributionCompact === true, customAttribution: l.MAP_ATTRIBUTION_HTML });
+    created.addControl(attribution, 'bottom-right');
   }
 
   /** The style is up: images, sources and overlay layers go on, then the loop starts. */
@@ -1788,6 +1803,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     destroy() {
       disposed = true;
       loop.stop();
+      destroyCensus?.();
       observer?.disconnect();
       observer = null;
       styled = false;
@@ -1843,8 +1859,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       const next=MAP_PRESENTATIONS[name],size=nextScale??next.symbolScale;
       if(next===profile&&size===scale)return;
       const rescaled=size!==scale;
+      const changedProfile = next !== profile;
       profile=next;scale=size;hitTolerance=next.hitTolerancePx;
       container.dataset.presentationProfile=name;
+      if (changedProfile && map && lib) mountAttribution(map, lib);
       if(rescaled&&map&&styled&&lib)putOverlayImages(map,lib,true);
       lastPushedSignature='';
       applyOverlays();applyCityOverlays();applyHighlightStyle();

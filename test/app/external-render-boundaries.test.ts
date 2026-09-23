@@ -251,7 +251,7 @@ describe('names and addresses keep their house-number range at every wall render
     expect(renderedText(streetDetail(i18n, { ...street, settlement: hostile }, true))).not.toContain('lozinku');
   });
   it('keeps the range in the essentials pharmacy and closure, the paired closures, venues and the presentation label', () => {
-    const label = strings.basics.pharmacy;
+    const label = strings.sentence.pharmacy.replace('{address}', 'Petrinjska 50-52');
     expect(renderedText(essentialsMarkup([{ id: 'pharmacy', label, value: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
     expect(renderedText(essentialsMarkup([{ id: 'closures', label, value: '1 zatvaranje', detail: 'Petrinjska 50-52' }]))).toContain('Petrinjska 50-52');
     expect(essentialsMarkup([{ id: 'pharmacy', label, value: hostile }])).toBe('');

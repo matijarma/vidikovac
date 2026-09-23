@@ -32,7 +32,7 @@ export interface KioskStrings {
   appName: string;
   surface: string;
   header: {
-    temporaryUntil: string; venue: string; unlockedUntil: string;
+    unlockedUntil: string;
     /** "Tema: {pref}", filled with themeWord[preference]; the header button's own label. */
     theme: string;
     themeWord: Record<ThemePreference, string>;
@@ -59,7 +59,6 @@ export interface KioskStrings {
     culture: string;
   };
   weather: {
-    title: string;
     humidity: string;
     wind: string;
     windCalm: string;
@@ -75,7 +74,6 @@ export interface KioskStrings {
     range: string;
     unavailable: string;
     loading: string;
-    station: string;
     /** A live observation with no temperature: said in a word, never a dash. */
     noReading: string;
   };
@@ -133,8 +131,6 @@ export interface KioskStrings {
     eventsToday: PluralForms;
     eventsTomorrow: PluralForms;
     eventsNone: string;
-    /** "Sutra u gradu": the events kicker once tonight is over. */
-    tomorrowCity: string;
     city: string;
     around: string;
     acts: PluralForms;
@@ -174,20 +170,15 @@ export interface KioskStrings {
   /** The handheld invitation's one line: how a public display is started, and that scanning changes nothing on it. */
   handheld: { info: string };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
-   *  transit's three value states, its "N vozila u blizini" plural and its
-   *  zero, the other seven statements' kickers and the works plural, and
-   *  "danas"/"sutra" for the Assembly's context line. */
+   *  transit's word and its no-data state, its "N vozila u blizini" plural and
+   *  its zero, the closure, ZET and works kickers with the works plural, the
+   *  all-day word, and "danas"/"sutra" for the Assembly's context line. */
   say: {
-    /** "Večeras u gradu": the events kicker. */
-    tonight: string;
     allDay: string;
-    tonightMore: PluralForms;
     transit: string;
-    transitRegular: string;
     transitNoData: string;
     nearby: PluralForms;
     nearbyNone: string;
-    quake: string;
     closure: string;
     zet: string;
     worksCity: string;
@@ -208,7 +199,6 @@ export interface KioskStrings {
     closuresStale: string;
     closuresNearest: string;
     hitno: string;
-    basics: string;
     /** "DHMZ · EMSC": the sources, the calm trail, never with a time. */
     sources: string;
     /** "Sigurnost: {verdict}. Otvori Osnovno": the verdict button's name while the invitation shows. */
@@ -216,10 +206,8 @@ export interface KioskStrings {
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
   };
-  basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
+  basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; warnings: string; closures: string };
   session: {
-    join: string;
-    joinHint: string;
     selected: string;
     selectedRoute: string;
     selectedStop: string;
@@ -257,8 +245,6 @@ export interface KioskStrings {
     phase: string;
     amount: string;
     coverage: string;
-    /** The departure board's own coverage line, counted in lines; `{shown}` and `{total}` stay for the row fitter. */
-    coverageLines: PluralForms;
     routeVehicles: PluralForms;
     depth: string;
     magUnknown: string;
@@ -295,23 +281,16 @@ export interface KioskStrings {
    *  screen. */
   setup: {
     title: string;
-    intro: string;
-    search: string;
-    results: PluralForms;
-    noResults: string;
     routesAt: string;
     create: string;
     creating: string;
-    validity: string;
     errorAccess: string;
     errorQuota: string;
     errorNetwork: string;
     errorInvalid: string;
     errorFailed: string;
-    errorStops: string;
     retry: string;
     retryIn: string;
-    loadingStops: string;
     /** The one field's label, "Adresa ili stajalište" (kiosk/place-field.ts). */
     place: string;
     /** "Na zaslonu: {place} i {count} stajališta uokolo": what a screen with a place shows, {count} its Kadar. */
@@ -329,27 +308,17 @@ export interface KioskStrings {
   };
   /** The on-screen settings overlay (kiosk/settings.ts): the click-toggle rows
    *  (Mjesto, Kadar, Prikaz, Tema, Ritam, Zaslon) and the forget-screen
-   *  confirmation. `area`, `areaHint`, `stop`, `stopNone`, `stopHint`, `save`,
-   *  `saving` and `saved` belonged to the area/stop/Spremi panel and are read
-   *  by nothing any more (ready to delete, WP5). */
+   *  confirmation. */
   settings: {
     open: string;
     title: string;
     hint: string;
     close: string;
-    save: string;
-    saving: string;
-    saved: string;
     /** The three ways a save does not land: no socket, a refusal, a repeat inside the DO's window. */
     saveOffline: string;
     saveRefused: string;
     saveBusy: string;
-    area: string;
     areaWhole: string;
-    areaHint: string;
-    stop: string;
-    stopNone: string;
-    stopHint: string;
     theme: string;
     screen: string;
     expiry: string;
@@ -413,7 +382,7 @@ function build(code: SupportedLocale): KioskStrings {
     appName: t('common.appName'),
     surface: t('kiosk.surface'),
     header: {
-      ...group('header', ['temporaryUntil', 'venue', 'theme']),
+      ...group('header', ['theme']),
       unlockedUntil: t('shared.unlockedUntil'),
       themeWord: record(THEME_PREFERENCES, (pref) => `kiosk.header.themeWord.${pref}`),
     },
@@ -421,7 +390,7 @@ function build(code: SupportedLocale): KioskStrings {
     invitation: group('invite', ['lead', 'typeCode', 'qrLabel', 'qrWaiting', 'progressLabel']),
     legend: group('legend', ['tram', 'bikes', 'culture']),
     weather: {
-      ...group('weather', ['title', 'humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'station', 'noReading']),
+      ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'observed', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),
     },
     arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'note', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
@@ -434,7 +403,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     story: group('story', ['city', 'assembly', 'zet', 'neighbourhood', 'works', 'quake', 'published', 'changed', 'quakeBody', 'empty']),
     front: {
-      ...group('front', ['eventsNone', 'tomorrowCity', 'city', 'around', 'actLead', 'kvartLead', 'worksLead', 'linesRegular']),
+      ...group('front', ['eventsNone', 'city', 'around', 'actLead', 'kvartLead', 'worksLead', 'linesRegular']),
       eventsToday: forms('front', 'eventsToday'),
       eventsTomorrow: forms('front', 'eventsTomorrow'),
       acts: forms('front', 'acts'),
@@ -453,20 +422,19 @@ function build(code: SupportedLocale): KioskStrings {
     },
     handheld: group('handheld', ['info']),
     say: {
-      ...group('say', ['transit', 'transitRegular', 'transitNoData', 'nearbyNone', 'quake', 'closure', 'zet', 'worksCity', 'today', 'tomorrow', 'tonight', 'allDay']),
+      ...group('say', ['transit', 'transitNoData', 'nearbyNone', 'closure', 'zet', 'worksCity', 'today', 'tomorrow', 'allDay']),
       nearby: forms('say', 'nearby'),
       works: forms('say', 'works'),
-      tonightMore: forms('say', 'tonightMore'),
     },
     safety: {
-      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'basics', 'sources', 'openBasics']),
+      ...group('safety', ['warningsUnknown', 'warningsStale', 'warningsUpcoming', 'warningsLoading', 'closuresUnknown', 'closuresStale', 'closuresNearest', 'sources', 'openBasics']),
       label: t('shared.safetyPage'),
       hitno: t('shared.safetyPage'),
       warningsNone: fragment(t('shared.warningsNone')),
       verdict: record(['urgent', 'calm', 'unknown'] as const, (level) => `kiosk.safety.verdict.${level}`),
     },
-    basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'pharmacy', 'warnings', 'closures']),
-    session: group('session', ['join', 'joinHint', 'selected', 'selectedRoute', 'selectedStop']),
+    basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'warnings', 'closures']),
+    session: group('session', ['selected', 'selectedRoute', 'selectedStop']),
     layers: record(Object.keys(raw.layers) as LayerId[], (layer) => `layers.${layer}`),
     events: record(Object.keys(raw.kiosk.events), (slug) => `kiosk.events.${slug}`),
     paired: {
@@ -477,7 +445,6 @@ function build(code: SupportedLocale): KioskStrings {
         'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
         'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',
       ]),
-      coverageLines: forms('paired', 'coverageLines'),
       routeVehicles: forms('paired', 'routeVehicles'),
       warningsNone: t('shared.warningsNone'),
       closuresNone: t('shared.closuresNone'),
@@ -485,17 +452,16 @@ function build(code: SupportedLocale): KioskStrings {
     notice: group('notice', ['expiredTitle', 'expiredBody', 'revokedTitle', 'revokedBody', 'setupAgain', 'endsAfterSession']),
     setup: {
       ...group('setup', [
-        'title', 'intro', 'search', 'noResults', 'routesAt', 'create', 'creating', 'validity',
-        'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed', 'errorStops',
-        'retry', 'retryIn', 'loadingStops',
+        'title', 'routesAt', 'create', 'creating',
+        'errorAccess', 'errorQuota', 'errorNetwork', 'errorInvalid', 'errorFailed',
+        'retry', 'retryIn',
         'place', 'previewCity', 'noMatch', 'streetNear', 'loadingPlaces', 'errorPlaces', 'ambiguous',
       ]),
-      results: forms('setup', 'results'),
       preview: forms('setup', 'preview'),
     },
     settings: group('settings', [
-      'open', 'title', 'hint', 'close', 'save', 'saving', 'saved', 'saveOffline', 'saveRefused', 'saveBusy',
-      'area', 'areaWhole', 'areaHint', 'stop', 'stopNone', 'stopHint',
+      'open', 'title', 'hint', 'close', 'saveOffline', 'saveRefused', 'saveBusy',
+      'areaWhole',
       'theme', 'screen', 'expiry', 'expiryNone', 'forget', 'forgetAsk', 'forgetYes', 'forgetNo',
       'place', 'placeChange', 'frame', 'frameValue', 'view', 'viewMap', 'viewSchema', 'rhythm', 'rhythmValue',
     ]),
