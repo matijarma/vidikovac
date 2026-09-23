@@ -77,6 +77,29 @@ describe('stale polls through the real planner and frame loop', () => {
     model.update([fix], now + 24_000);
     expect(model.step(now + 24_000)[0].confidence).toBe(0.5);
   });
+
+  it('does not evaluate a versioned arc on another graph in alternate renderers', () => {
+    const { net, fix, now } = planned();
+    const model = createIntegrator(net);
+    model.update([{ ...fix, network: net.graphHash }], now);
+    expect(model.step(now)).toHaveLength(1);
+    model.update([{ ...fix, generatedAt: now + 12_000, network: 'other-graph' }], now + 12_000);
+    expect(model.step(now + 12_000)).toEqual([]);
+  });
+
+  it('recognizes cloned legacy plans without producer metadata', () => {
+    const { net, fix, now } = planned();
+    delete (fix as Partial<Fix>).generatedAt;
+    const model = createIntegrator(net);
+    model.update([fix], now);
+    let last: Drawn[] = [];
+    for (let elapsed = 0; elapsed <= 60_000; elapsed += 1000) {
+      if (elapsed % 12_000 === 0) model.update([structuredClone(fix)], now + elapsed);
+      last = model.step(now + elapsed);
+    }
+    expect(last[0].s).toBeLessThanOrEqual(600);
+    expect(last[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+  });
 });
 
 // The client side of the engine (B6, R-TE10): the twin's plans arrive as
@@ -525,6 +548,9 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     let gap30 = 0;
     let gap60 = 0;
     for (let t = T0; t <= T0 + 60_000; t += 1000) {
+      // This is the live convergence-rate control, not a one-minute
+      // outage: renew reports without changing its eight-metre/s target.
+      if ((t - T0) % 10_000 === 0) integrator.update([{ ...pathFix('v', '1_0', knots, SPEED), at: t, generatedAt: t }], t);
       const gap = gapAt(t);
       if (t === T0 + 30_000) gap30 = gap;
       if (t === T0 + 60_000) gap60 = gap;
