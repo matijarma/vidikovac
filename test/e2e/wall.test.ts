@@ -415,16 +415,15 @@ describe('the departures board and the last-run file', () => {
     expect(early.departures.every((d) => Date.parse(d.at) <= scheduleInstant('2026-09-21', gtfsSeconds('21:40')) || Date.parse(d.at) >= firstTram)).toBe(true);
   });
 
-  it('scene-anchored rows carry the trip ids of zet-rt vehicles on the stop\'s lines, so the arrivals join gives them a countdown', async () => {
+  it('the first tracked rows carry the trip ids of zet-rt vehicles on the stop\'s lines, so the arrivals join gives them a countdown', async () => {
     const vehicles = await vehiclesOf();
     const now = SCENES.morning0745.now;
     const snapshots = await experienceSnapshots('ready');
     const b = departuresBoard({ now, vehicles: snapshots['zet-rt'].items });
     const tracked = trackedTrips(snapshots['zet-rt'].items, FIXTURE_STOP.routes, 2);
     expect(tracked.every((t) => FIXTURE_STOP.routes.includes(t.routeId))).toBe(true);
-    const live = b.departures.filter((d) => tracked.some((t) => t.tripId === d.tripId));
-    expect(live.map((d) => d.tripId)).toEqual(tracked.map((t) => t.tripId));
-    expect(live.map((d) => d.routeId)).toEqual(tracked.map((t) => t.routeId));
+    expect(b.departures.slice(0, 2).map((d) => d.tripId)).toEqual(tracked.map((t) => t.tripId));
+    expect(b.departures.slice(0, 2).map((d) => d.routeId)).toEqual(tracked.map((t) => t.routeId));
     const { rows } = arrivalsAt([b], vehicles, now, { stopIds: [b.stopId] });
     expect(rows.filter((r) => r.live).map((r) => r.minutes)).toEqual([2, 8]);
     // Timetable departures may also be inside ten minutes; only the tracked

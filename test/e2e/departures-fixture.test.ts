@@ -1,9 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import type { Page } from '@playwright/test';
 import { departuresBoard, gtfsSeconds, lastRunSnapshot, serviceDays } from '../../e2e/departures-fixture';
+import { FIXTURE_PHARMACY_ADDRESSES, FIXTURE_STOP, installKioskFeedFixture } from '../../e2e/experience-fixtures';
+import { CITY_VENUE } from '../../e2e/city-fixtures';
 import { SCENES, SCENE_IDS } from '../../e2e/scenes';
 import { scheduleInstant } from '../../worker/city/schedules';
-import { arrivalsAt } from '../../shared/city/arrivals';
+import { emptyCity } from '../../shared/city/types';
+import { selectNearby } from '../../app/src/city/nearby';
+import { loadLastRun } from '../../app/src/core/lastrun';
+import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import { vehicleFixes } from '../../app/src/motion/fixes';
 import type { FeedItem } from '../../worker/feed/schema';
 
 const MIN = 60_000;
@@ -13,6 +20,9 @@ const data = (path: string) => JSON.parse(readFileSync(new URL(`../../app/public
 const tables = Object.fromEntries(PLATFORMS.map((id) => [id, data(`lastrun/${id}.json`)]));
 const trips = data('zet-trips.json');
 const network = data('zet-network.json');
+const i18n = createDefaultI18n('hr');
+// Only register the fixture routes. No browser, server or external request.
+const page = { route: async () => {} } as unknown as Page;
 
 describe('departures fixture realism', () => {
   it.each(PLATFORMS)('%s keeps timetable ids and times across polls, including a reconstructed options object', (stopId) => {
@@ -50,7 +60,78 @@ describe('departures fixture realism', () => {
         .toEqual(tracked.filter((d) => Date.parse(d.at) >= now + minutes * MIN));
     }
     expect(departuresBoard({ now, stopId: '106_2', vehicles }).departures.some((d) => d.tripId.startsWith('scene-'))).toBe(false);
-    expect(arrivalsAt([first], vehicles.map((v) => ({ id: v.id, tripId: String(v.data!.tripId) })), now, { stopIds: ['106_1'] }).rows.some((r) => r.live)).toBe(true);
+  });
+
+  it.each(SCENE_IDS)('%s retains the spec-required rows in the real merged selection at its pinned clock', async (id) => {
+    const scene = SCENES[id];
+    const { now } = scene;
+    const snapshots = await installKioskFeedFixture(page, scene.feedState, { now });
+    const vehicles = snapshots['zet-rt'].items;
+    const boards = PLATFORMS.map((stopId) => departuresBoard({ now, stopId, vehicles }));
+    const file = lastRunSnapshot(FIXTURE_STOP.id, serviceDays(now));
+    const lastRun = await loadLastRun(`selection-${id}`, (async () => new Response(JSON.stringify(file))) as typeof fetch, now);
+    const rows = selectNearby({
+      place: { ...FIXTURE_STOP, kind: 'tram', stopId: FIXTURE_STOP.id }, radiusM: 2000, now,
+      boards, fixes: vehicleFixes(snapshots['zet-rt'], now), snapshots,
+      city: { ...emptyCity(), places: [CITY_VENUE] }, lastRun, locale: 'hr', i18n,
+    });
+    const departures = rows.filter((r) => r.kind === 'departure');
+    expect(departures.length).toBeGreaterThanOrEqual(1);
+    expect(departures.length).toBeLessThanOrEqual(3);
+    expect(new Set(departures.map((r) => `${r.arrival!.routeId}/${r.title}/${r.atMs}`)).size).toBe(departures.length);
+    for (const kind of scene.expect.requiredKinds) expect(rows.some((r) => r.kind === kind), kind).toBe(true);
+    for (const kind of scene.expect.noPastKinds) expect(rows.filter((r) => r.kind === kind).every((r) => r.atMs! >= now), kind).toBe(true);
+    expect(rows.filter((r) => r.kind === 'solar').length).toBeGreaterThanOrEqual(scene.expect.solarMin);
+    expect(rows.filter((r) => r.kind === 'solar').length).toBeLessThanOrEqual(1);
+    expect(departures.filter((r) => r.live).length).toBeGreaterThanOrEqual(scene.expect.liveMin);
+    if (scene.expect.liveMax !== null) expect(rows.filter((r) => r.live).length).toBeLessThanOrEqual(scene.expect.liveMax);
+    if (scene.expect.departuresAsClockTimes) {
+      expect(departures.every((r) => !r.live && r.source === 'zet-gtfs' && Number.isFinite(r.atMs))).toBe(true);
+    }
+    if (['afterLast0045', 'night0430', 'lastTrams2240'].includes(id)) {
+      const firstRoute = id === 'night0430' ? '1' : '12';
+      expect(rows.find((r) => r.kind === 'first')?.services?.[0]).toEqual({
+        routeId: firstRoute, routeName: firstRoute,
+        atMs: scheduleInstant('2026-09-22', gtfsSeconds(tables['106_1'].first[firstRoute]['2026-09-22'])),
+      });
+      const last = rows.filter((r) => r.kind === 'last');
+      expect(last).toHaveLength(id === 'lastTrams2240' ? 1 : 0);
+      if (last.length) expect(last[0].services).toEqual(
+        DAY_ROUTES.map((routeId) => ({
+          routeId, routeName: routeId,
+          atMs: scheduleInstant('2026-09-21', gtfsSeconds(tables['106_1'].routes[routeId]['2026-09-21'])),
+        })).sort((a, b) => a.atMs - b.atMs),
+      );
+      const pharmacy = rows.find((r) => r.kind === 'pharmacy');
+      expect(pharmacy).toMatchObject({ title: '24/7', always: true, live: false });
+      expect(FIXTURE_PHARMACY_ADDRESSES).toContain(pharmacy?.sub);
+    }
+  });
+
+  it('anchors tracked departures to the stamped scene even when its first board poll is late', async () => {
+    const now = SCENES.morning0745.now;
+    const snapshots = await installKioskFeedFixture(page, 'ready', { now });
+    const vehicles = snapshots['zet-rt'].items;
+    const onTime = departuresBoard({ now, vehicles });
+    for (const elapsed of [1000, MIN, 3 * MIN, 9 * MIN, 11 * MIN]) {
+      // Independent array: do not accidentally prime the weak cache for the late poll.
+      const late = departuresBoard({ now: now + elapsed, vehicles: [...vehicles] });
+      const remaining = onTime.departures.filter((d) => Date.parse(d.at) >= now + elapsed);
+      expect(late.departures.slice(0, remaining.length)).toEqual(remaining);
+    }
+  });
+
+  it('never hides a committed first tram to make room for tracked fixture slots', () => {
+    const now = SCENES.night0430.now;
+    const vehicles: Pick<FeedItem, 'id' | 'data'>[] = [
+      { id: 'vehicle:a', data: { tripId: 'scene-12', routeId: '12' } },
+      { id: 'vehicle:b', data: { tripId: 'scene-17', routeId: '17' } },
+    ];
+    const board = departuresBoard({ now, vehicles });
+    expect(board.departures.filter((d) => d.tripId.startsWith('scene-'))).toHaveLength(2);
+    expect(board.departures).toContainEqual(expect.objectContaining({
+      routeId: '1', at: new Date(scheduleInstant('2026-09-22', gtfsSeconds('04:33'))).toISOString(),
+    }));
   });
 
   it.each(PLATFORMS)('%s uses its own committed lines, headsigns and service windows', (stopId) => {
@@ -68,8 +149,11 @@ describe('departures fixture realism', () => {
         expect(Object.keys(tables[stopId].routes)).toContain(routeId);
         expect(network.routes.id).toContain(routeId);
         const p = trips.patterns;
+        // Patterns prove this platform reaches that terminus; the network
+        // supplies its rendered name, not GTFS's abbreviated trip_headsign.
         const heads = p.stops.flatMap((stops: string[], i: number) =>
-          p.route[i] === routeId && stops.includes(stopId) ? [trips.headsigns[p.headsign[i]]] : []);
+          p.route[i] === routeId && stops.includes(stopId)
+            ? [network.stops.name[network.stops.id.indexOf(stops.at(-1))]] : []);
         expect(heads).toContain(departure.headsign);
         const at = Date.parse(departure.at);
         expect(serviceDays(now, 1, 2).some((day) =>

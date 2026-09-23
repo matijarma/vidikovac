@@ -19,13 +19,15 @@
 // items (pass `vehicles`). Only vehicles on the stop's own lines are eligible,
 // each is placed while it is being scheduled, in a slot within the live horizon
 // where its own line runs, so a tracked row never breaks its line's service
-// window. Their times are anchored once per scene (the vehicles array is the
-// scene's identity), never moved by a poll. Timetable rows use each line's
-// first departure as a fixed service-day anchor. Both kinds expire normally.
+// window. Their times use the scene-stamped vehicle observation, not the first
+// poll's startup drift (the vehicles array retains that anchor across polls).
+// Timetable rows use each line's first departure as a fixed service-day anchor,
+// leaving room for the scene's tracked slots. Both kinds expire normally.
 import east from '../app/public/data/lastrun/106_1.json';
 import west from '../app/public/data/lastrun/106_2.json';
 import busDeparture from '../app/public/data/lastrun/1849_23.json';
 import busArrival from '../app/public/data/lastrun/1849_24.json';
+import network from '../app/public/data/zet-network.json';
 import type { DepartureBoard, ScheduledDeparture } from '../shared/city/types';
 import type { FeedItem } from '../worker/feed/schema';
 import { scheduleInstant, zagrebDay } from '../worker/city/schedules';
@@ -52,12 +54,22 @@ export const FIXTURE_LAST_DEPARTURES: Readonly<Record<string, string>> = Object.
 ));
 /** Legacy fallback for a custom route without committed timetable data; not used for Trg's lines. */
 export const FIXTURE_FIRST_TRAM = '04:16';
-/** Directional headsigns from zet-trips.json patterns containing 106_1 (same feed as zet-network.json). */
-export const FIXTURE_HEADSIGNS: Readonly<Record<string, string>> = Object.freeze({ '1': 'Borongaj', '6': 'Sopot', '11': 'Dubec', '12': 'Dubrava', '13': 'Kvat. trg', '14': 'Mihaljevac', '17': 'Borongaj' });
+// Terminus platform ids corroborated by zet-trips.json patterns serving each
+// platform. Read names from the network, as motion/vehicle-card.ts's terminus
+// fallback does. nearby.ts renders a board's headsign verbatim, with no expansion
+// of GTFS abbreviations, so the board must already carry the full network name.
+const headsignsFor = (termini: Readonly<Record<string, string>>): Readonly<Record<string, string>> =>
+  Object.freeze(Object.fromEntries(Object.entries(termini).map(([route, stop]) => {
+    const name = network.stops.name[network.stops.id.indexOf(stop)];
+    if (!name) throw new Error(`missing fixture terminus ${stop}`);
+    return [route, name];
+  })));
+/** Directional headsigns for 106_1, byte-exact network terminus names. */
+export const FIXTURE_HEADSIGNS: Readonly<Record<string, string>> = headsignsFor({ '1': '193_1', '6': '1794_12', '11': '206_11', '12': '209_12', '13': '236_13', '14': '177_3', '17': '193_1' });
 const PLATFORM_HEADSIGNS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   '106_1': FIXTURE_HEADSIGNS,
-  '106_2': { '1': 'Z. kolodvor', '6': 'Črnomerec', '11': 'Črnomerec', '12': 'Ljubljanica', '13': 'Žitnjak', '14': 'Zapruđe', '17': 'Prečko' },
-  '1849_23': { '150': 'G. Tuškanac' },
+  '106_2': headsignsFor({ '1': '317_2', '6': '98_2', '11': '98_2', '12': '245_12', '13': '1781_11', '14': '1780_11', '17': '259_2' }),
+  '1849_23': headsignsFor({ '150': '1840_23' }),
   // The return direction ends here; its committed last-run file is empty.
   '1849_24': {},
 };
@@ -140,6 +152,21 @@ function timetableTime(stopId: string, field: 'routes' | 'first', routeId: strin
 // in the outage. Weak keys avoid leaking state across pages or parallel tests.
 const SCENE_ANCHORS = new WeakMap<NonNullable<DeparturesBoardOptions['vehicles']>, number>();
 
+function sceneAnchor(vehicles: NonNullable<DeparturesBoardOptions['vehicles']>, now: number): number {
+  const held = SCENE_ANCHORS.get(vehicles);
+  if (held !== undefined) return held;
+  // installKioskFeedFixture stamps every vehicle at the pinned scene clock.
+  // Legacy callers may pass only id/data, or the unrelocated September 11
+  // parser snapshot: those retain the first-read fallback, never Date.now().
+  const observed = vehicles.flatMap((v) => {
+    const at = v.id.startsWith('vehicle:') && 'at' in v && typeof v.at === 'string' ? Date.parse(v.at) : NaN;
+    return at <= now && now - at < DAY_MS ? [at] : [];
+  });
+  const anchor = observed.length ? Math.min(...observed) : now;
+  SCENE_ANCHORS.set(vehicles, anchor);
+  return anchor;
+}
+
 /** Fixed service-day departures plus up to two scene-anchored tracked trips.
  * Only freshness and the future-row window change on a later poll. */
 export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard {
@@ -167,27 +194,14 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
     operator: 'zet', tripId, routeId, routeName, headsign: headsigns[routeId] ?? '', at: new Date(at).toISOString(),
   });
   const departures: ScheduledDeparture[] = [];
-  for (const day of days) for (const routeId of routes) {
-    const bounds = window(routeId, day);
-    if (!bounds) continue;
-    const [first, last] = bounds;
-    const period = headwayMs * routes.length;
-    const slot = Math.max(0, Math.ceil((now - first) / period));
-    for (let n = slot; n < slot + wanted && first + n * period <= last; n++) {
-      const at = first + n * period;
-      departures.push(row(routeId, at, `fixture-${stopId}-${routeId}-${new Date(at).toISOString()}`));
-    }
-  }
+  let reservedFrom = Infinity;
+  let reservedThrough = -Infinity;
 
   // The fixture's tracked vehicles belong to 106_1, not simultaneously to the
   // opposite direction or the bus terminal. Synthetic custom stops retain the
   // previous opt-in via vehicles/routes.
   if (options.vehicles && !['106_2', '1849_23', '1849_24'].includes(stopId)) {
-    let anchor = SCENE_ANCHORS.get(options.vehicles);
-    if (anchor === undefined) {
-      anchor = now;
-      SCENE_ANCHORS.set(options.vehicles, anchor);
-    }
+    const anchor = sceneAnchor(options.vehicles, now);
     const pending = trackedTrips(options.vehicles, routes);
     let left = Math.max(0, options.tracked ?? 2);
     const sceneDays = serviceDays(anchor, 1, 1);
@@ -200,8 +214,28 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
       if (i >= 0) {
         const [trip] = pending.splice(i, 1);
         left--;
+        reservedFrom = anchor;
+        reservedThrough = at;
         if (at >= now) departures.push(row(trip.routeId, at, trip.tripId, trip.routeName || trip.routeId));
       }
+    }
+  }
+
+  for (const day of days) for (const routeId of routes) {
+    const bounds = window(routeId, day);
+    if (!bounds) continue;
+    const [first, last] = bounds;
+    const period = headwayMs * routes.length;
+    const slot = Math.max(0, Math.ceil((now - first) / period));
+    for (let n = slot; n < slot + wanted && first + n * period <= last; n++) {
+      const at = first + n * period;
+      // These interior grid times are synthetic, not committed departures.
+      // Reserve this platform's initial slots for its tracked trips so grid
+      // fillers do not hide them in the wall's real three-row selection.
+      // Never suppress a committed first/last boundary, nor move the reserved
+      // interval as polls advance and the tracked trips leave.
+      if (at >= reservedFrom && at <= reservedThrough && at !== first && at !== last) continue;
+      departures.push(row(routeId, at, `fixture-${stopId}-${routeId}-${new Date(at).toISOString()}`));
     }
   }
 
