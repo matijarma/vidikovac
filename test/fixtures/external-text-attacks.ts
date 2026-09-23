@@ -24,3 +24,15 @@ export const REVIEW_W2_REGRESSIONS = [
   'paid 50 EUR',
   '0 8 0 0 1 2 3',
 ] as const;
+
+// Decision 20's explicit sentence-local pairs. Keep the historical 21 values
+// above byte-exact, including the lone "javili ste se" conflict with this rule.
+export const CONTEXT_PAIR_REGRESSIONS = [
+  'kod: 1234',
+  'unesi kod',
+  'PIN kod 4821',
+  'pošalji kod',
+  'javi broj',
+  'nazovi 01 4567',
+  'plati 20 € na IBAN HR12…',
+] as const;

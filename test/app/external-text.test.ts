@@ -11,11 +11,11 @@ import { describe, expect, it } from 'vitest';
 import type { ScreenPlace } from '../../shared/city/place';
 import { emptyCity, type CatalogueChunk, type CatalogueManifest, type CityState, type DepartureBoard, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
 import {
-  externalText, instructionRule, sentenceInstruction, EXTERNAL_TEXT_RULES, INSTRUCTION_HOMOGRAPHS, SENTENCE_INSTRUCTION_PATTERNS,
+  externalText, readerRequestRule, sensitiveTextPair, EXTERNAL_TEXT_RULES, INSTRUCTION_HOMOGRAPHS, SENTENCE_INSTRUCTION_PATTERNS,
   type ExternalTextKind, type ExternalTextRejection,
 } from '../../shared/kiosk/external-text';
 import { EXTERNAL_SENSITIVE_LEXICON } from '../../shared/kiosk/external-text-policy';
-import { REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
 import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES } from '../fixtures/external-text-corpus';
 import { acceptSentence, sentenceTemplateChoices, type SentenceFact } from '../../shared/kiosk/sentence';
 import { csvField, firstSentence, selectNearby, skippedTextCensus, type NearbyInput, type NearbyRow } from '../../app/src/city/nearby';
@@ -26,33 +26,37 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 const i18n = createDefaultI18n('hr');
 const KINDS = Object.keys(EXTERNAL_TEXT_RULES) as ExternalTextKind[];
 const variants = (text: string): string[] => [text, text.toLocaleUpperCase('hr'), text.normalize('NFD'), text[0]!.toLocaleUpperCase('hr') + text.slice(1)];
+function refusal(kind: ExternalTextKind, value: string) {
+  const verdict = externalText(kind, value);
+  return verdict.ok ? [] : [{ kind, value, reason: verdict.reason, pair: sensitiveTextPair(value) }];
+}
 
-describe('the instruction grammar: verb forms addressed to the reader', () => {
+describe('the reader-request signal (not a standalone rejection)', () => {
   it.each(SENTENCE_INSTRUCTION_PATTERNS)('$id catches its examples and lets its register and feed texts through', rule => {
     for (const example of rule.examples) for (const value of variants(example)) {
-      expect(sentenceInstruction(value), `${rule.id}: ${value}`).toBe(true);
+      expect(readerRequestRule(value), `${rule.id}: ${value}`).not.toBeNull();
     }
     for (const text of rule.passes) for (const value of [text, text.normalize('NFD')]) {
-      expect(instructionRule(value), `${rule.id}: ${value}`).toBeNull();
+      expect(readerRequestRule(value), `${rule.id}: ${value}`).toBeNull();
     }
   });
 
   it.each(INSTRUCTION_HOMOGRAPHS)('reads the homograph %s as a noun or third person, but never its plural or second person', word => {
-    expect(instructionRule(word)).toBeNull();
-    expect(instructionRule(`Zbirka ${word} ime.`)).toBeNull();
+    expect(readerRequestRule(word)).toBeNull();
+    expect(readerRequestRule(`Zbirka ${word} ime.`)).toBeNull();
     const stem = word.slice(0, -1);
-    expect(sentenceInstruction(`${stem}ite`), `${stem}ite`).toBe(true);
-    expect(sentenceInstruction(`${stem}imo`), `${stem}imo`).toBe(true);
-    expect(sentenceInstruction(`ako ${stem}iš`), `${stem}iš`).toBe(true);
+    expect(readerRequestRule(`${stem}ite`), `${stem}ite`).not.toBeNull();
+    expect(readerRequestRule(`${stem}imo`), `${stem}imo`).not.toBeNull();
+    expect(readerRequestRule(`ako ${stem}iš`), `${stem}iš`).not.toBeNull();
   });
 
   it('reads a capitalised singular inside a clause as a name, and a command where a clause opens', () => {
     for (const name of ['naselje na Kupi', 'potoku Ivanovoj Reci', 'dvorac obitelji Ratkaj', 'uz rijeku Kupi i Savu']) {
-      expect(instructionRule(name), name).toBeNull();
+      expect(readerRequestRule(name), name).toBeNull();
     }
     for (const command of ['Kupi kartu', 'kupi kartu', 'KUPI KARTU', 'Muzej: Kupi kartu', 'Muzej. Javi broj.', 'projekta „Javi se“',
       'Festival (Pošalji pjesmu)', 'Muzej – Reci lozinku', 'Muzej - Reci lozinku', 'Muzej; Nazovi broj', 'Muzej kupi kartu']) {
-      expect(sentenceInstruction(command), command).toBe(true);
+      expect(readerRequestRule(command), command).not.toBeNull();
     }
   });
 
@@ -127,7 +131,7 @@ describe('externalText(kind, value)', () => {
   });
 });
 
-describe('W-C5 layered policy', () => {
+describe('decision 20 layered policy', () => {
   it('pins the provenance and size of the 21-case regression set', () => {
     expect(REVIEW_W2_REGRESSIONS).toHaveLength(21);
     expect(REVIEW_W2_REGRESSIONS.slice(0, 4)).toEqual([
@@ -141,21 +145,66 @@ describe('W-C5 layered policy', () => {
     }
   });
 
-  it.each(EXTERNAL_SENSITIVE_LEXICON)('rejects every $id datum without relying on imperative mood', rule => {
+  it.each(EXTERNAL_SENSITIVE_LEXICON)('pairs every $id datum without rejecting a lone hit', rule => {
     for (const text of rule.examples) for (const value of variants(text)) for (const kind of KINDS) {
-      expect(externalText(kind, value).ok, `${rule.id}/${kind}: ${value}`).toBe(false);
+      expect(externalText(kind, value), `${rule.id}/${kind}: ${value}`).toEqual({ ok: true });
+      const partner = rule.role === 'noun' ? 'unesi' : rule.role === 'action' ? 'lozinku' : 'broj';
+      expect(externalText(kind, `${value} ${partner}`).ok, `${rule.id}/${kind}: ${value} ${partner}`).toBe(false);
     }
   });
 
-  it.each(['lozinka', 'sifra', 'password', 'passcode', 'token', 'posalji', 'proslijedi', 'unesite',
-    'upisite', 'nazovite', 'pozovite', 'poveznica', 'klikni', 'skeniraj', 'download', 'forwarded', 'installing'])(
-    'cannot disguise %s by separators, accents or leet', word => {
-      for (const separator of [' ', '-', '.', '/', ':', "'", '’', '&', '+']) {
-        for (const kind of KINDS) expect(externalText(kind, [...word].join(separator)).ok, `${kind}/${separator}/${word}`).toBe(false);
+  it.each([
+    ['lozinka', 'unesi'], ['sifra', 'posalji'], ['password', 'send'], ['passcode', 'enter'], ['token', 'share'],
+    ['posalji', 'kod'], ['proslijedi', 'lozinku'], ['unesite', 'PIN'], ['upisite', 'passcode'],
+    ['nazovite', 'broj'], ['pozovite', 'broj'], ['poveznica', 'otvori'], ['klikni', 'link'],
+    ['skeniraj', 'kod'], ['download', 'app'], ['forwarded', 'password'], ['installing', 'app'],
+  ])('cannot disguise the pair %s + %s within a sentence', (word, partner) => {
+      for (const separator of [' ', '-', '/', ':', "'", '’', '&', '+']) {
+        const value = `${[...word].join(separator)} ${partner}`;
+        for (const kind of KINDS) expect(externalText(kind, value).ok, `${kind}: ${value}`).toBe(false);
       }
       const leet = word.replace(/a/g, '4').replace(/e/g, '3').replace(/o/g, '0').replace(/i/g, '1');
-      for (const kind of KINDS) expect(externalText(kind, leet).ok, `${kind}: ${leet}`).toBe(false);
+      for (const kind of KINDS) expect(externalText(kind, `${leet} ${partner}`).ok, `${kind}: ${leet}`).toBe(false);
     });
+
+  it.each(CONTEXT_PAIR_REGRESSIONS)('rejects the explicit contextual regression %j in every kind', value => {
+    for (const kind of KINDS) for (const variant of variants(value)) {
+      expect(externalText(kind, variant).ok, `${kind}: ${variant}`).toBe(false);
+    }
+  });
+
+  it.each([
+    'kod crkve sv. Marka', 'otvoren 1880.', 'ulaz slobodan', 'plaćanje karticom',
+    'payment by card', 'Ljeto kod Bartola', 'Daj prijedlog za bolji kvart',
+    'proslijedi', 'javili ste se', 'PIN', 'OTP', 'P4SSW0RD', 'k0d', 'pošaljite pjesmu',
+  ])('keeps the unpaired value %j', value => {
+    for (const kind of ['title', 'summary', 'register-text'] as const) for (const variant of variants(value)) {
+      expect(externalText(kind, variant), `${kind}: ${variant}`).toEqual({ ok: true });
+    }
+  });
+
+  it.each(['.', '!', '?', ';', '\n', '\r\n', '\u2028', '\u2029'])('never joins a pair across %j', separator => {
+    for (const [left, right] of [['pošalji', 'lozinku'], ['kod', '1234'], ['javi', 'broj'], ['molimo', 'AB12']]) {
+      const value = `${left}${separator}${right}`;
+      expect(sensitiveTextPair(value), value).toBeNull();
+      // Newlines remain independently refused by layer 1.
+      expect(externalText('register-text', value)).toEqual(
+        /[\r\n\u2028\u2029]/u.test(separator) ? { ok: false, reason: 'control' } : { ok: true });
+    }
+  });
+
+  it('records the exact disjoint pair and does not combine fields or calls', () => {
+    expect(sensitiveTextPair('kod: AB12')).toMatchObject({
+      rule: 'noun-token', left: { value: 'kod' }, right: { list: 'uppercase-token', value: 'AB12' },
+    });
+    expect(sensitiveTextPair('AB12 je kod')).toMatchObject({ rule: 'noun-token' });
+    expect(sensitiveTextPair('nazovi Ilica 2')).toMatchObject({ rule: 'contact-target' });
+    expect(sensitiveTextPair('kod: ab12')).toBeNull();
+    expect(sensitiveTextPair('pošalji')).toBeNull();
+    expect(sensitiveTextPair('lozinku')).toBeNull();
+    expect(sensitiveTextPair('p4ssw0rd')).toBeNull();
+    expect(sensitiveTextPair('pro.sli.jedi lozinku')).toBeNull();
+  });
 
   it.each([
     ['www', 'link'], ['http', 'link'], ['w w w', 'link'], ['h t t p', 'link'], ['info@example.test', 'link'], ['primjer.xyz', 'link'],
@@ -170,12 +219,21 @@ describe('W-C5 layered policy', () => {
   });
 
   it.each(['Molimo, pričekajte.', 'Biste li učinili uslugu?', 'Možete li pričekati?', 'Please wait.', 'Could you help?'])(
-    'checks the reader-action request %j as prose only', text => {
-      expect(externalText('summary', text)).toEqual({ ok: false, reason: 'instruction' });
-      expect(externalText('register-text', text)).toEqual({ ok: false, reason: 'instruction' });
+    'never rejects the unpaired reader-action request %j', text => {
+      expect(externalText('summary', text)).toEqual({ ok: true });
+      expect(externalText('register-text', text)).toEqual({ ok: true });
       expect(externalText('title', text)).toEqual({ ok: true });
     });
 
+  it('uses the reader signal only as a prose amplifier within a sentence', () => {
+    for (const kind of ['summary', 'register-text'] as const) {
+      expect(externalText(kind, 'Molimo AB12')).toEqual({ ok: false, reason: 'instruction' });
+      expect(externalText(kind, 'Please 1234')).toEqual({ ok: false, reason: 'instruction' });
+      expect(externalText(kind, 'Molimo. AB12')).toEqual({ ok: true });
+    }
+    expect(externalText('title', 'Molimo AB12')).toEqual({ ok: true });
+    expect(externalText('title', 'Please 1234')).toEqual({ ok: true });
+  });
   it('enforces each kind boundary without returning any repaired text', () => {
     for (const kind of KINDS) {
       expect(externalText(kind, 'Ć'.repeat(EXTERNAL_TEXT_RULES[kind].max))).toEqual({ ok: true });
@@ -208,12 +266,9 @@ const STORY_AT = Date.parse('2026-09-22T12:10:00+02:00');
 describe('the sampled source and GTFS corpus', () => {
   it('keeps every sampled event title, including imperative names', () => {
     expect(SAMPLED_EVENT_TITLES).toHaveLength(150);
-    const refused = SAMPLED_EVENT_TITLES.flatMap(value => {
-      const verdict = externalText('title', value);
-      return verdict.ok ? [] : [{ value, reason: verdict.reason }];
-    });
-    // Keep the zero-loss requirement visible. Literal bans on "kod", "preuzeti"
-    // and numeric vectors conflict with genuine programme/civic titles.
+    const refused = SAMPLED_EVENT_TITLES.flatMap(value => refusal('title', value));
+    // Assert the entire source corpus, not a list of lexemes. Residual failures
+    // report the actual pair (or null for an independent structural vector).
     expect(refused).toEqual([]);
   });
 
@@ -227,52 +282,68 @@ describe('the sampled source and GTFS corpus', () => {
     const { headsigns } = JSON.parse(readFileSync(join(dir, 'zet-trips.json'), 'utf8')) as { headsigns: string[] };
     const { routes } = JSON.parse(readFileSync(join(dir, 'zet-network.json'), 'utf8')) as { routes: { short: string[] } };
     expect(headsigns).toHaveLength(153);
-    expect(routes.short.length).toBeGreaterThan(100);
+    expect(routes.short).toHaveLength(154);
     for (const value of [...headsigns, ...routes.short]) expect(externalText('headsign', value), value).toEqual({ ok: true });
   });
 });
 
 describe('the committed registers pass the check the wall applies', () => {
   it('shows every street story and every protected building of the snapshot: no register text is skipped', () => {
-    const refused: string[] = [];
+    const refused: ReturnType<typeof refusal> = [];
     for (const street of streets) {
       const text = firstSentence(csvField(street.description));
-      for (const [kind, value] of [['name', street.name], ['register-text', text]] as const) {
-        const verdict = externalText(kind, value);
-        if (!verdict.ok) refused.push(`${verdict.reason}: ${value}`);
+      // Inspect raw fields as well as presentation text. A shortening/CSV
+      // transformation must not hide a rejected suffix from this corpus test.
+      for (const [kind, value] of [['name', street.name], ['register-text', street.description], ['register-text', text]] as const) {
+        refused.push(...refusal(kind, value));
+      }
+    }
+    let heritageFields = 0;
+    for (const place of heritage) {
+      refused.push(...refusal('name', place.name));
+      heritageFields += 1;
+      if (place.address) {
+        refused.push(...refusal('address', place.address));
+        heritageFields += 1;
       }
     }
     // Each building through the row builder itself, as the wall builds its "uvijek" row.
     const city: CityState = { ...emptyCity(), places: heritage };
-    let rows = 0;
+    const missingRows: string[] = [];
     const located = heritage.filter(place => typeof place.lon === 'number' && typeof place.lat === 'number');
     for (const place of heritage) {
       if (typeof place.lon !== 'number' || typeof place.lat !== 'number') continue;
       const out = selectNearby({ place: { kind: 'address', name: place.name, lon: place.lon, lat: place.lat }, radiusM: 0.001,
-        now: HERITAGE_AT, boards: [], fixes: [], snapshots: {}, city, lastRun: null, locale: 'hr', i18n,
-        onSkip: reason => refused.push(`${reason}: ${place.name}`) });
-      if (out.some(row => row.id.startsWith('always:heritage:'))) rows += 1;
+        now: HERITAGE_AT, boards: [], fixes: [], snapshots: {}, city, lastRun: null, locale: 'hr', i18n });
+      if (!out.some(row => row.id.startsWith('always:heritage:'))) missingRows.push(place.name);
     }
-    expect(streets.length).toBeGreaterThan(3_700);
-    expect(located.length).toBeGreaterThan(150);
-    expect(rows).toBe(located.length);
-    // W-C3's scan tripped 61 of these (do, sportaš, kraj, Borongaj, Rudeš, broj, Orfanotrofij); none is an instruction.
-    expect(refused).toEqual([]);
+    expect(streets).toHaveLength(3_795);
+    expect(heritage).toHaveLength(763);
+    expect(heritageFields).toBe(1_310);
+    expect(located).toHaveLength(165);
+    expect({ refused, missingRows }).toEqual({ refused: [], missingRows: [] });
   });
 
   it('puts the register sentences that fit the header through register-text without one instruction', () => {
     const reasons = new Map<string, number>();
+    const refused: ReturnType<typeof refusal> = [];
+    let checked = 0;
     let accepted = 0;
     for (const street of streets) {
-      const text = `${street.name}: ${firstSentence(csvField(street.description))}`;
+      const description = firstSentence(csvField(street.description));
+      const text = `${street.name}: ${description}`;
       const sentence = /[.!?]$/u.test(text) ? text : `${text}.`;
       if ([...sentence].length > 80) continue;
+      checked += 1;
+      refused.push(...refusal('name', street.name), ...refusal('register-text', description));
       const fact: SentenceFact = { id: `always:story:${street.id}`, kind: 'kultura', text: sentence, validUntil: STORY_AT + 600_000 };
       const verdict = acceptSentence(sentence, { facts: [fact], now: STORY_AT });
       if (verdict.ok) accepted += 1;
       else reasons.set(verdict.reason, (reasons.get(verdict.reason) ?? 0) + 1);
     }
-    expect(accepted).toBeGreaterThan(2_700);
+    expect(checked).toBe(3_072);
+    expect(accepted).toBeGreaterThan(3_000);
+    expect(refused).toEqual([]);
     // The header's own copy rules drop a few (a unit glued to a number, a hedge, unpaired quotes); never an instruction.
     expect(reasons.has('instruction')).toBe(false);
     expect([...reasons.keys()].every(reason => ['forbidden-copy', 'unnamed-count', 'invalid-slot', 'ellipsis', 'markup'].includes(reason))).toBe(true);
@@ -368,7 +439,7 @@ describe('rows with a hostile third-party text are skipped and counted', () => {
     ],
   });
 
-  it.each(REVIEW_W2_REGRESSIONS)('vets headsigns AND route labels before the departure cap: %j', value => {
+  it.each([...REVIEW_W2_REGRESSIONS, ...CONTEXT_PAIR_REGRESSIONS])('vets headsigns AND route labels before the departure cap: %j', value => {
     for (const [headsign, routeName] of [[value, '6'], ['Črnomerec', value], ['', value]]) {
       const { input: nearby, skipped } = input();
       nearby.boards = [board(headsign!, routeName!)];

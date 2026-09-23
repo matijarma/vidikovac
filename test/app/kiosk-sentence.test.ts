@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { readerRequestRule } from '../../shared/kiosk/external-text';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import {
   acceptSentence, readWrittenSentences, sentenceDeadline, sentenceMidnight, sentenceValue, writeSentence, SENTENCE_VALUE_MAX_CHARS,
   SENTENCE_FAMILIES, SENTENCE_REGISTER_FAMILIES, SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS,
-  SENTENCE_SLOT_RULES, sentenceInstruction, typedSentenceFact, validateSentenceSlot, sentenceTemplateChoices, fillSentenceChoice,
+  SENTENCE_SLOT_RULES, typedSentenceFact, validateSentenceSlot, sentenceTemplateChoices, fillSentenceChoice,
   type SentenceFact, type WrittenSentence, type SentenceSlotType,
 } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
@@ -821,17 +822,17 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     expect(validateSentenceSlot(type, '')).toBe('invalid-slot');
   });
 
-  it.each(SENTENCE_INSTRUCTION_PATTERNS)('tests grammar rule $id including NFC/NFD and capitals', rule => {
+  it.each(SENTENCE_INSTRUCTION_PATTERNS)('tests reader signal $id including NFC/NFD and capitals, independently of rejection', rule => {
     for (const example of rule.examples) {
       for (const value of [example, example.toLocaleUpperCase('hr'), example.normalize('NFD')]) {
-        expect(sentenceInstruction(value), `${rule.id}: ${value}`).toBe(true);
+        expect(readerRequestRule(value), `${rule.id}: ${value}`).not.toBeNull();
       }
     }
   });
 
-  it.each(SENTENCE_SPLIT_COMMANDS)('rejects separated letters in %s', command => {
+  it.each(SENTENCE_SPLIT_COMMANDS)('recognises the reader signal in separated %s', command => {
     for (const separator of ['', '-', '.', ' ', '/', ':', "'", '’', '&', '+']) {
-      expect(sentenceInstruction(`${[...command].join(separator)} lozinku`)).toBe(true);
+      expect(readerRequestRule(`${[...command].join(separator)} lozinku`)).not.toBeNull();
     }
   });
 
@@ -845,6 +846,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
 
   const attacks = [
     ...REVIEW_W2_REGRESSIONS,
+    ...CONTEXT_PAIR_REGRESSIONS,
     'proslijedi lozinku', 'proslijedite lozinku', 'pošalji lozinku', 'šalji lozinku',
     'moraš poslati lozinku', 'trebaš unijeti lozinku', 'molimo broj', 'javi lozinku',
     'klikni poveznicu', 'nazovi broj', 'unesi PIN', 'otvori poveznicu', 'skeniraj kod',
