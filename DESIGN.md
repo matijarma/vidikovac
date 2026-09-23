@@ -217,52 +217,95 @@ controller distinguishes a pending request from a kiosk-confirmed render.
 
 ### Phone and desktop
 
-Phone destinations are Sada, Karta, Događanja and Još. The current
-destination retains a readable label at text zoom. Desktop exposes all
-six domains directly. Do not reintroduce the permanent competing
-neighborhood-map sidebar or a Kvart workspace.
+**22 September 2026 companion contract (WP4), superseding the earlier
+destinations, the two Sada regions, the map groups and the Događanja tab:**
+the ten-minute visit answers before it explains. The phone's destinations are
+the three tabs Sada · Karta · Još; the current destination retains a readable
+label at text zoom. The desktop is the phone, wider: the Sada feed and the
+Karta map stand side by side, and there is no six-domain bar; weather, civic
+and safety content arrive as rows of the feed, as search results or through
+Još. Do not reintroduce the permanent competing neighborhood-map sidebar or a
+Kvart workspace.
 
-Sada has two reading regions: local facts now, and what comes next. Names
-and destinations are readable; weather is useful in the first view.
-Time filters change the agenda without removing the local context.
+The header carries the wordmark, the single Zaslon control, "Podijeli grad",
+the session pill and the safety shortcut; the desk adds Još. "Podijeli grad"
+is a labelled button beside the session pill on every screen of a direct
+session, absent for a one-hop peer and once the session has ended; one tap
+opens the rotating code and its QR. Under a narrow header it keeps its icon
+and its accessible name. A reload keeps the screen's name in the session pill.
 
-Karta has one map, one search entry, a peek/detail/open sheet on a phone,
-and a contextual board on desktop. Secondary map actions live in one
-disclosure. The peek state keeps search visible; focus must not wait for
-an animation to clear the navigation bar.
+Sada reads, in this order: the place as the title; one sentence with its
+coloured kicker (Promet, Kultura, Vrijeme, Bicikli, Noćas or Radovi); on the
+phone a 112px still map band around the place that opens Karta; three
+departures at the automatically chosen stop; then the "U blizini" list, the
+wall's own time-ordered rows continuing after those departures under the
+circle measured for the place ("U blizini · 2 km · ~15 min"); below the fold
+the sources, crediting ZET. There is no generic heading sentence, no date
+line, no instruction, no count and no time filter. The place follows one
+order: the wall's place or the screen's stop, then a saved stop, then the
+nearest tram stop within 400 m, then the nearest bus stop within 300 m, then
+the address alone; with none of these the place is Trg bana J. Jelačića. The
+departures come from the place's stop, else from the nearest platform within
+800 m, so an address near a stop still has departures; with no platform that
+near, Sada shows no departures block at all.
 
-Search focus now opens the full available sheet immediately. Its geometry
-uses the visual viewport, visible navigation and keyboard occlusion. Short
-landscape is list-first. Filters use one labelled disclosure rather than an
-unmarked horizontal strip. Routes, stops, places and streets share one
-keyboard result system and one scoped count. Detail/back preserves the
-query, filters and list position; private tab filters survive refresh.
-Map symbols use explicit handheld, desktop and public-display profiles;
-visual size is independent of hit tolerance and device pixel ratio.
+Whenever Sada has a stop to board, a departure row exists. A blue countdown
+with its dot is a vehicle ZET tracks, a grey clock time is the timetable, and
+no row carries a word for its kind. While a board is on its way one row-sized
+placeholder holds the place; only a source that cannot answer says so, in one
+line. Sada reads the same departure cache and arrival logic as the stop
+detail.
 
-Sada reads the same departure cache and arrival logic as the stop detail.
-Its agenda flows vertically without empty time quadrants or duplicated
-preview events. Još separates Saved, preferences, additional destinations
-and help. “In-app highlights” describes local emphasis, never push delivery.
+Karta is the timeline's map. It opens on the wall's frame around the place,
+with every vehicle drawn at once as a full-number pill and the wall's curated
+marks (every BAJS station counted, venues with a programme tonight named,
+closures); there is no group taxonomy, no chip row and no map menu, and there
+are no geographic clusters on any surface. One small control in the sheet
+head switches between the map and the schematic network ("Shema" / "Karta")
+and is remembered on the device. A selected place stays drawn whatever the
+search.
 
-Living city, culture, transport, useful places and heritage are progressive
-map groups. Active venue pins have bounded size and explicit event counts;
-there are no geographic clusters on any surface: the map curates (every BAJS
-station counted, venues only with a programme tonight). Selected places stay
-outside filters. Venue programs open the in-app event detail
-before its original source. Street stories have map-label and search paths.
-Heritage selections draw the protection outline, never an assumed entrance.
-Every category has a map-free list path.
+Karta has one map, one search field over routes, stops, places and streets,
+a peek/detail/open sheet on a phone and a board column on the desk. The peek
+names the place and its circle; the open sheet lists the same "U blizini"
+rows. Categories (toilets, water, markets and the like) appear only as
+search results and, once searched, as pins. A stop's detail leads with three
+departures in Sada's row, then "Vozni red" with the rest of the list, then
+the one note that says the blue times are ZET's estimate. ZET's notices
+and the per-line delay table are not on the phone.
+
+Search focus opens the full available sheet immediately. Its geometry uses
+the visual viewport, visible navigation and keyboard occlusion. Short
+landscape is list-first. The peek state keeps search visible; focus must not
+wait for an animation to clear the navigation bar. Routes, stops, places and
+streets share one keyboard result system and one scoped count. Detail/back
+preserves the query and the list position. Map symbols use explicit
+handheld, desktop and public-display profiles; visual size is independent of
+hit tolerance and device pixel ratio. Venue programs open the in-app event
+detail before its original source. Street stories have map-label and search
+paths. Heritage selections draw the protection outline, never an assumed
+entrance. Every search result has a map-free list path.
+
+Događanja is no longer a destination: timed events live in "U blizini",
+venues with a programme tonight on the map, and the week's agenda is one row
+in Još, "Događanja ovaj tjedan" with its count line. That page keeps a dated
+agenda, the day choices and a compact category selection; a multi-day item
+says until when ("do 25. 9.") rather than "cijeli dan". Ongoing exhibitions
+and undated notices are separate. Još separates Spremljeno (saved lines,
+stops and places), the destinations (the week's agenda, then Vrijeme, Grad
+and Sigurnost as full pages), preferences and the help pages (`/hitno`,
+sources, privacy, accessibility). “In-app highlights” describes local
+emphasis, never push delivery. Weather uses actual observations and daily
+ranges; civic content remains attributable metadata and original documents,
+never invented legal summaries.
 
 The single Zaslon control is consistently placed in the shared header.
 Its panel explains the target, current presentation, pending/confirmed
 state, stopping and takeover. No floating cast button covers content,
 and no duplicate detail/aside buttons compete with it.
 
-Događanja uses a dated agenda and compact category selection. Ongoing
-exhibitions and undated notices are separate. Weather uses actual
-observations and daily ranges; civic content remains attributable
-metadata and original documents, never invented legal summaries.
+When the ten minutes end, the content clears: what remains is the invitation
+to scan again and the `/hitno` link.
 
 ## Data, access and acceptance
 

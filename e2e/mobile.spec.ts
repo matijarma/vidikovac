@@ -37,9 +37,9 @@ const PEEK_TOLERANCE_PX = 2;
 const HALF_TOLERANCE = 0.02;
 const OPEN_GAP_PX = 40;
 const OPEN_GAP_TOLERANCE_PX = 4;
-/** Sada's promise at 390×844: three tiles of the city's now are on the first screen without a scroll. */
+/** Sada's promise at 390×844: the three departures at the chosen stop are on the first screen without a scroll, above the tab bar (WP4). */
 const SADA_FOLD_PX = 700;
-const SADA_TILES_IN_FOLD = 3;
+const SADA_DEPARTURES_IN_FOLD = 3;
 /** A lane snapped into place starts at the row's content edge within this much (sub-pixel layout, the row's 2 px inline padding). */
 const LANE_SNAP_PX = 2;
 /** A lane-changing swipe travels this much of the row: past half a lane pitch (the lane plus the 1.25rem gap, 378 px at 390) once the touch slop is spent; the mandatory snap then takes the nearer lane. 200 px lands within 4 px of the midpoint. */
@@ -89,7 +89,7 @@ async function openDashboard(page: Page, viewport: Viewport, url = FIXTURE_DASHB
   await page.setViewportSize(viewport);
   const fixture = await installExperienceFixture(page, await experienceSnapshots());
   await page.goto(url);
-  await expect(page.getByTestId('tb'), 'Sada must paint from the fixture').toBeVisible();
+  await expect(page.getByTestId('sada-place'), 'Sada must paint from the fixture').toBeVisible();
   await expect(page.getByTestId('session-label')).toBeVisible();
   return fixture;
 }
@@ -229,13 +229,13 @@ for (const viewport of [PHONE, SMALL, LANDSCAPE]) {
     expect(await geometryIssues(page, PHONE_SHELL), `Sada at ${viewport.width}×${viewport.height}`).toEqual([]);
 
     if (viewport === PHONE) {
-      // The composition, not the scroll: three tiles of the city's now are on the first screen (a skeleton is not the city).
-      const tiles = await page.evaluate((fold) => [...document.querySelectorAll('[data-testid=tb-lane-sada] .tl:not([data-skeleton])')].map((el) => {
+      // The composition, not the scroll: the three departures at the chosen stop are on the first screen (a placeholder row is not a departure).
+      const rows = await page.evaluate((fold) => [...document.querySelectorAll('[data-testid=day-departures] > li.sada-departure')].map((el) => {
         const r = el.getBoundingClientRect();
-        return { id: el.getAttribute('data-key') ?? el.getAttribute('data-testid') ?? el.className, top: Math.round(r.top), bottom: Math.round(r.bottom), inFold: r.top < fold && r.bottom > 0 };
+        return { id: el.getAttribute('data-key') ?? el.className, top: Math.round(r.top), bottom: Math.round(r.bottom), inFold: r.top < fold && r.bottom > 0 };
       }), SADA_FOLD_PX);
-      const inFold = tiles.filter((t) => t.inFold);
-      expect(inFold.length, `at least ${SADA_TILES_IN_FOLD} sada tiles ([data-testid=tb-lane-sada] .tl, skeletons excluded) must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the tiles measure ${tiles.map((t) => `${t.id} ${t.top}→${t.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_TILES_IN_FOLD);
+      const inFold = rows.filter((t) => t.inFold);
+      expect(inFold.length, `at least ${SADA_DEPARTURES_IN_FOLD} departures ([data-testid=day-departures] > li.sada-departure) must reach into the first ${SADA_FOLD_PX} px of Sada at ${PHONE.width}×${PHONE.height}; the rows measure ${rows.map((t) => `${t.id} ${t.top}→${t.bottom}`).join(', ') || 'nothing'}`).toBeGreaterThanOrEqual(SADA_DEPARTURES_IN_FOLD);
     }
 
     for (const layer of ['kultura', 'sigurnost'] as const) {
@@ -352,24 +352,6 @@ test('one finger does one thing: a swipe over the Promet map pans the camera and
   expect(sadaScroll, `a swipe over Sada must scroll the document; scrollY stayed at ${sadaScroll}`).toBeGreaterThan(0);
 });
 
-// --- 4b. the time band's phone form ---------------------------------------------------------
-test('time filtering changes the agenda without losing local information or presenting it automatically', async ({ page }) => {
-  const fixture = await openDashboard(page, PHONE);
-  await settle(page, fixture);
-  const segment = (col: string) => page.locator(`[data-testid=tb-seg] .day-time[data-filter-value=${col}]`);
-  await expect(segment('sada'), 'the sada segment is pressed at first').toHaveAttribute('aria-pressed', 'true');
-  await segment('sutra').click();
-  await expect(segment('sutra')).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.locator('.day-event').evaluateAll(rows => rows.every(row => row.getAttribute('data-col') === 'sutra'))).toBe(true);
-  await expect(page.getByTestId('tb-lane-sada')).toBeVisible();
-  await segment('veceras').click();
-  await expect(segment('veceras')).toHaveAttribute('aria-pressed', 'true');
-  expect(await page.locator('.day-event').evaluateAll(rows => rows.every(row => row.getAttribute('data-col') === 'veceras'))).toBe(true);
-  expect(fixture.events.filter(event => event.t === 'present' || event.t === 'view')).toEqual([]);
-  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-  expect(scrollWidth, `the lane row scrolls inside itself; the document must not widen past ${PHONE.width} px (it is ${scrollWidth} px)`).toBeLessThanOrEqual(PHONE.width + EDGE_TOLERANCE_PX);
-});
-
 // --- 5. type floor ----------------------------------------------------------------------
 test(`no visible text on any layer at 390 px is set below ${TYPE_FLOOR_PX} px (attribution lines excepted), and every link in a source line is a ${TARGET_MIN_PX} px target`, async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
@@ -419,21 +401,17 @@ test(`with fixtures at 390 px Sigurnost stays under ${SIGURNOST_MAX_HEIGHT_PX} p
 });
 
 // --- 7. zoom-compact ----------------------------------------------------------------------
-/** The five time words the segments carry (A.4): one pill each, in time order. */
-const SEGMENT_COUNT = 5;
-
 /**
  * The zoom-compact facts at 200% text. The document keeps the viewport's width
  * (a document wider than the viewport widens the layout viewport under mobile
- * emulation, the fixed tab bar follows it and a tab's tap lands on a tile);
- * no overflow in the header or the tab bar; on Sada every time segment shows
- * its whole word (WCAG 1.4.4: a pill that clips or ellipsises one loses
- * content for a sighted reader while its aria-label keeps it from AT only);
- * the current tab's label whole. `segments` says whether Sada's segments are
- * expected on the page: the directory replaces the workspace, so they are not there.
+ * emulation, the fixed tab bar follows it and a tab's tap lands on a row);
+ * no overflow in the header or the tab bar; the current tab's label whole
+ * (WCAG 1.4.4: a label that clips or ellipsises loses content for a sighted
+ * reader). Sada's time segments went with the time band (WP4), so there is no
+ * segment to measure.
  */
-async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: { segments: boolean }): Promise<string[]> {
-  return page.evaluate(({ header, tabbar, width, tolerance, segments, count }) => {
+async function zoomCompactIssues(page: Page, viewport: Viewport): Promise<string[]> {
+  return page.evaluate(({ header, tabbar, width, tolerance }) => {
     const out: string[] = [];
     const docWidth = document.documentElement.scrollWidth;
     if (docWidth > width + tolerance) out.push(`the document widens past the ${width} px viewport at 200%: scrollWidth ${docWidth} px, layout viewport ${window.innerWidth} px; a widened page moves the fixed tab bar out from under a finger`);
@@ -441,30 +419,6 @@ async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: {
       const el = document.querySelector<HTMLElement>(sel);
       if (!el || el.getBoundingClientRect().height <= 0) { out.push(`the ${label} ${sel} is missing or hidden`); continue; }
       if (el.scrollWidth > el.clientWidth + 1) out.push(`the ${label} ${sel} overflows horizontally at 200%: scrollWidth ${el.scrollWidth} > clientWidth ${el.clientWidth}`);
-    }
-    if (segments) {
-      const seg = document.querySelector<HTMLElement>('[data-testid=tb-seg]');
-      const spans = seg ? [...seg.querySelectorAll<HTMLElement>('.day-time')] : [];
-      if (!seg || seg.getBoundingClientRect().height <= 0) out.push('the time segments [data-testid=tb-seg] must show on the phone at 200%');
-      else if (spans.length !== count) out.push(`the segments carry ${spans.length} words; ${count} time words expected`);
-      for (const span of spans) {
-        const word = span.textContent?.trim() ?? '';
-        const pill = span.getBoundingClientRect();
-        if (pill.width < 1 || pill.height < 1) { out.push(`the segment "${word}" has no box at 200%`); continue; }
-        // The text's own laid-out extent (a Range rect: layout geometry, unchanged by clipping or by the ellipsis
-        // text-overflow paints over it) against the pill it is painted in. The pill has no border, so its rect is the
-        // padding box overflow: hidden clips at; text inside it is whole even where it eats the padding, text past
-        // it is lost. scrollWidth is not the measure here: a flex container counts its end padding as scrollable
-        // overflow, so it reports a word that merely touches the padding as overflowing.
-        const range = document.createRange();
-        range.selectNodeContents(span);
-        const text = range.getBoundingClientRect();
-        const lostStart = Math.round(pill.left - text.left);
-        const lostEnd = Math.round(text.right - pill.right);
-        if (lostStart > tolerance || lostEnd > tolerance) {
-          out.push(`the segment "${word}" is not whole at 200%: its text runs ${Math.round(text.width)} px in a ${Math.round(pill.width)} px pill, ${Math.max(0, lostStart)} px lost at the start and ${Math.max(0, lostEnd)} px at the end; the time words never clip or ellipsise`);
-        }
-      }
     }
     const tab = document.querySelector<HTMLElement>('.ki-tab[aria-current="page"]');
     const text = tab?.querySelector<HTMLElement>('.ki-nav-label');
@@ -478,21 +432,21 @@ async function zoomCompactIssues(page: Page, viewport: Viewport, { segments }: {
       if (r.left < t.left - 1 || r.right > t.right + 1) out.push(`the current tab's label "${text.textContent?.trim()}" spills out of its tab cell at 200%`);
     }
     return out;
-  }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar, width: viewport.width, tolerance: EDGE_TOLERANCE_PX, segments, count: SEGMENT_COUNT });
+  }, { header: PHONE_SHELL.header, tabbar: PHONE_SHELL.tabbar, width: viewport.width, tolerance: EDGE_TOLERANCE_PX });
 }
 
-test('at 200% text the document keeps its width, the header and the tab bar have no horizontal overflow, every time segment keeps a whole word and the current tab keeps a whole label, on Sada and with the directory open', async ({ page }) => {
+test('at 200% text the document keeps its width, the header and the tab bar have no horizontal overflow and the current tab keeps a whole label, on Sada and with the directory open', async ({ page }) => {
   const fixture = await openDashboard(page, PHONE);
   await settle(page, fixture);
   await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
   await page.waitForTimeout(300);
-  expect(await zoomCompactIssues(page, PHONE, { segments: true }), 'zoom-compact state at 200% text on Sada').toEqual([]);
+  expect(await zoomCompactIssues(page, PHONE), 'zoom-compact state at 200% text on Sada').toEqual([]);
   await page.getByTestId('tab-more').click();
   await expect(page.locator('#layer-directory'), 'Još must open the directory').toBeVisible();
   await expect(page.getByTestId('tab-more')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('tab-more')).toHaveText('Još');
   await page.waitForTimeout(300);
-  expect(await zoomCompactIssues(page, PHONE, { segments: false }), 'zoom-compact state at 200% text with the directory open').toEqual([]);
+  expect(await zoomCompactIssues(page, PHONE), 'zoom-compact state at 200% text with the directory open').toEqual([]);
 });
 
 // --- 8. landing -----------------------------------------------------------------------------
