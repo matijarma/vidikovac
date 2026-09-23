@@ -197,6 +197,41 @@ it('reconciles an open phone Karta and refreshes the shared network loader after
   } finally { d.handle.destroy(); }
 });
 
+// After one deploy the map and the schematic host both ask the shared loader
+// for the artefact past the cache; while one such request is pending the
+// second joins it (review of lane/t-schema, finding 2).
+it('coalesces concurrent forced network reloads into one request, and a later one asks again', async () => {
+  const net = decodeNetwork(graphBefore);
+  let finish!: (value: typeof net | null) => void;
+  const loadNetwork = vi.fn(() => new Promise<typeof net | null>((resolve) => { finish = resolve; }));
+  const factory = vi.fn((options: CityMapOptions) => createCityMap(options, {
+    now: () => NOW, loadMaplibre: async () => { throw new Error('no WebGL'); },
+  }));
+  const d = mount({ mapFactory: factory, deps: { loadNetwork } });
+  try {
+    d.session.join();
+    d.handle.selectLayer('u-pokretu');
+    await flush();
+    finish(net);
+    await flush();
+    const options = factory.mock.calls.find(([o]) => o.container.dataset.testid === 'map-canvas')![0];
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    const first = options.reloadNetwork!();
+    const second = options.reloadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(2);
+    finish(net);
+    expect(await first).toBe(net);
+    expect(await second).toBe(net);
+    // Settled: the next forced call is a new request, and the plain loader now answers with it.
+    const third = options.reloadNetwork!();
+    expect(loadNetwork).toHaveBeenCalledTimes(3);
+    finish(net);
+    expect(await third).toBe(net);
+    expect(await options.loadNetwork!()).toBe(net);
+    expect(loadNetwork).toHaveBeenCalledTimes(3);
+  } finally { d.handle.destroy(); }
+});
+
 describe('parseSessionHash', () => {
   it('reads room, ticket and label from the fragment /s/ navigates to', () => {
     expect(parseSessionHash('#room=r1&ticket=t1&label=Kavana%20Velebit')).toEqual({ roomId: 'r1', ticket: 't1', label: 'Kavana Velebit' });

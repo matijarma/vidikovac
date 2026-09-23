@@ -9,6 +9,7 @@ import type { Network, Shape } from '../../shared/motion/network';
 import { cumulative } from '../../shared/motion/polyline';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../../app/src/motion/schematic';
 import { createSchematicHost, HONESTY_NOTE_HR, TRAMS_ONLY } from '../../app/src/motion/schematic-host';
+import { NETWORK_RELOAD_RETRY_MS } from '../../app/src/motion/network-reload';
 import { corridorSpec, syntheticNetwork } from './synthetic-network';
 
 const NOW = Date.parse('2026-09-12T10:00:00Z');
@@ -208,10 +209,13 @@ describe('createSchematicHost', () => {
   it('in lightweight mode a fix naming a graph reloads nothing (R-L4), and a matching graph is never reloaded', async () => {
     const graph = { ...syntheticNetwork(corridorSpec()), graphHash: 'aaaaaaaaaaaaaaaa' };
     const named = fix({ id: 'tram', lon: 16, lat: 46, routeId: '1', type: ROUTE_TYPE_TRAM, path: '1_0', network: graph.graphHash, plan: { on: 'path', knots: [[NOW, 500], [NOW + 60_000, 500]] } });
-    const light = host({ lightweight: true, reloadNetwork: vi.fn() });
+    const lightReload = vi.fn<() => Promise<Network | null>>();
+    const light = host({ lightweight: true, reloadNetwork: lightReload });
     light.root.appendChild(light.h.mount());
     light.h.update({ fixes: [named] }, NOW);
     await frame();
+    expect(lightReload).not.toHaveBeenCalled();
+    expect(light.loadNetwork).not.toHaveBeenCalled();
     const reloadNetwork = vi.fn();
     const full = host({ net: graph, reloadNetwork });
     full.root.appendChild(full.h.mount());
@@ -220,10 +224,41 @@ describe('createSchematicHost', () => {
     await frame();
     expect(legend(full.root)).toBe('1 od 1 praćenih vozila u kadru');
     expect(reloadNetwork).not.toHaveBeenCalled();
+    expect(lightReload).not.toHaveBeenCalled();
     expect(light.h.element.dataset.networkStale).toBeUndefined();
   });
 
-  it('retries a failed or wrong-graph reload at the next update(), and a completion after destroy() mounts nothing', async () => {
+  // update() runs on every dashboard render and kiosk repaint, not only per
+  // poll (review of lane/t-schema, finding 1): a failed reload is asked again
+  // at most once per poll interval, on the update's own clock.
+  it('spends at most one artefact reload attempt per poll interval: twenty identical updates on one clock are one fetch, the next interval one more', async () => {
+    const oldGraph = { ...syntheticNetwork(corridorSpec()), graphHash: 'aaaaaaaaaaaaaaaa' };
+    const newGraph = { ...syntheticNetwork(corridorSpec()), graphHash: 'bbbbbbbbbbbbbbbb' };
+    const reloadNetwork = vi.fn<() => Promise<Network | null>>().mockResolvedValue(null);
+    const { h, root } = host({ net: oldGraph, reloadNetwork });
+    root.appendChild(h.mount());
+    await flush();
+    const named = fix({ id: 'tram', lon: 16, lat: 46, routeId: '1', type: ROUTE_TYPE_TRAM, path: '1_0', network: newGraph.graphHash, plan: { on: 'path', knots: [[NOW, 500], [NOW + 60_000, 500]] } });
+    for (let i = 0; i < 20; i++) {
+      h.update({ fixes: [named] }, NOW);
+      await flush();
+    }
+    expect(reloadNetwork).toHaveBeenCalledTimes(1);
+    h.update({ fixes: [named] }, NOW + NETWORK_RELOAD_RETRY_MS - 1);
+    await flush();
+    expect(reloadNetwork).toHaveBeenCalledTimes(1);
+    h.update({ fixes: [named] }, NOW + NETWORK_RELOAD_RETRY_MS);
+    await flush();
+    expect(reloadNetwork).toHaveBeenCalledTimes(2);
+    reloadNetwork.mockResolvedValueOnce(newGraph);
+    h.update({ fixes: [named] }, NOW + 2 * NETWORK_RELOAD_RETRY_MS);
+    await flush();
+    expect(reloadNetwork).toHaveBeenCalledTimes(3);
+    await frame();
+    expect(legend(root)).toBe('1 od 1 praćenih vozila u kadru');
+  });
+
+  it('retries a failed or wrong-graph reload at the next poll interval, and a completion after destroy() mounts nothing', async () => {
     const oldGraph = { ...syntheticNetwork(corridorSpec()), graphHash: 'aaaaaaaaaaaaaaaa' };
     const newGraph = { ...syntheticNetwork(corridorSpec()), graphHash: 'bbbbbbbbbbbbbbbb' };
     const reloadNetwork = vi.fn<() => Promise<Network | null>>().mockResolvedValueOnce(null).mockResolvedValueOnce(oldGraph).mockResolvedValueOnce(newGraph);
@@ -231,8 +266,9 @@ describe('createSchematicHost', () => {
     root.appendChild(h.mount());
     await flush();
     const onPath = (network: string): Fix => fix({ id: 'tram', lon: 16, lat: 46, routeId: '1', type: ROUTE_TYPE_TRAM, path: '1_0', network, plan: { on: 'path', knots: [[NOW, 500], [NOW + 60_000, 500]] } });
+    // One poll interval apart: the budget (network-reload.ts) allows one attempt per interval.
     for (let i = 0; i < 3; i++) {
-      h.update({ fixes: [onPath(newGraph.graphHash)] }, NOW + 1000 * (i + 1));
+      h.update({ fixes: [onPath(newGraph.graphHash)] }, NOW + NETWORK_RELOAD_RETRY_MS * (i + 1));
       if (i === 2) h.destroy();
       await flush();
       expect(root.querySelector('[data-testid=schematic]')).toBeNull();

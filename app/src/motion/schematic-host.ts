@@ -21,6 +21,7 @@ import type { I18n } from '../i18n/i18n';
 import { escapeHtml } from '../ui/dom/escape';
 import { loadNetwork, type Network } from '../../../shared/motion/network';
 import type { Fix } from './integrator';
+import { createReloadBudget } from './network-reload';
 import { DEFAULT_CROP, ROUTE_TYPE_TRAM, wholeNetworkCrop, type Crop } from './schematic';
 import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } from './schematic-view';
 
@@ -101,6 +102,9 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
   let expectedNetwork: string | undefined;
   let networkBlocked = false;
   let networkRequest: Promise<void> | null = null;
+  // update() runs on every render and repaint: one reload attempt per poll interval (network-reload.ts), on the update's own clock.
+  const reloadBudget = createReloadBudget();
+  const clock = (): number => deps.now?.() ?? Date.now();
   const loadingLine = `<p class="schematic-legend" data-testid="schematic-loading">${escapeHtml(i18n.t('status.loading'))}</p>`;
 
   function cropFor(net: Network | null): Crop {
@@ -130,7 +134,7 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
     if (paused) view.pause();
     // Evidence that landed meanwhile may already name a newer graph than the
     // cached artefact: reconciled before the first arc, as the map does.
-    if (pending && acceptNetwork(pending.data.fixes)) {
+    if (pending && acceptNetwork(pending.data.fixes, pending.at ?? clock())) {
       view.update(pending.data, pending.at);
       pending = null;
     }
@@ -141,9 +145,10 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
    *  the view was mounted on takes the view down to the loading line, marks
    *  the host stale and reloads the artefact with cache: 'reload'; the view is
    *  remounted on the graph when its hash is the one named, and the evidence
-   *  kept meanwhile replayed into it. A failed or wrong-graph load retries at
-   *  the next update(). A lightweight host never fetches (R-L4). */
-  function acceptNetwork(fixes: readonly Fix[]): boolean {
+   *  kept meanwhile replayed into it. A failed or wrong-graph load is asked
+   *  again at the next poll interval, at most once per interval however often
+   *  update() runs. A lightweight host never fetches (R-L4). */
+  function acceptNetwork(fixes: readonly Fix[], at: number): boolean {
     if (lightweight) return true;
     expectedNetwork = fixes.find((f) => f.network)?.network ?? expectedNetwork;
     const drawnOn = net && 'graphHash' in net ? net.graphHash : undefined;
@@ -155,20 +160,21 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
       view = null;
       slot.innerHTML = loadingLine;
     }
-    if (!networkRequest) {
+    if (!networkRequest && reloadBudget.take(at)) {
       const requested = expectedNetwork;
       const reload = deps.reloadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' })));
       networkRequest = (async () => {
         const loaded = await reload();
         if (destroyed || requested !== expectedNetwork || !loaded || !('graphHash' in loaded) || loaded.graphHash !== expectedNetwork) return;
+        reloadBudget.reset();
         networkBlocked = false;
         delete element.dataset.networkStale;
         mountView(loaded);
       })().catch(() => {
-        // Last-good geometry is not usable for this payload. Retry next update().
+        // Last-good geometry is not usable for this payload. Retry next poll interval.
       }).finally(() => {
         networkRequest = null;
-        if (!destroyed && requested !== expectedNetwork && pending) acceptNetwork(pending.data.fixes);
+        if (!destroyed && requested !== expectedNetwork && pending) acceptNetwork(pending.data.fixes, pending.at ?? clock());
       });
     }
     return false;
@@ -197,7 +203,7 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
       // Before the artefact has settled the evidence waits for the view; once
       // it has, or while a replacement graph is on its way, the graph the
       // evidence names is checked first (and a failed reload retried).
-      if ((view || networkBlocked) && acceptNetwork(data.fixes) && view) {
+      if ((view || networkBlocked) && acceptNetwork(data.fixes, now ?? clock()) && view) {
         view.update(data, now);
         return;
       }

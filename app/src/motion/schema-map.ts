@@ -14,6 +14,7 @@ import { MAP_PRESENTATIONS } from '../map/presentation';
 import { escapeHtml } from '../ui/dom/escape';
 import { createPanZoom, MAX_ZOOM_FROM_FIT, type PanZoom, type PanZoomViewport } from '../ui/pan-zoom';
 import { createIntegrator, type Drawn, type Fix, type Model } from './integrator';
+import { createReloadBudget } from './network-reload';
 import { createLoop } from './loop';
 import { PILL_INKS } from './pills';
 import { hitVehicle, type VehicleMark } from './schematic';
@@ -96,6 +97,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   let placer: ReturnType<typeof createSchemaPlacer> | null = null, pan: PanZoom | null = null;
   // The graph the motion names (city-map.ts acceptNetwork): while it is not the one drawn on, nothing is.
   let expectedNetwork: string | undefined, networkBlocked = false, networkRequest: Promise<void> | null = null;
+  // update() runs on search input and slot repaints too: one reload attempt per poll interval (network-reload.ts).
+  const reloadBudget = createReloadBudget();
   let a11y: SceneAccessibility | null = null;
   let points = options.points ?? [];
   // Two views of one frame: one pill per vehicle for the accessible list and
@@ -227,7 +230,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
    *  graph than the one drawn on clears the marks and the list and reloads
    *  the artefact with cache: 'reload'; the graph is installed when its hash
    *  is the one named and its feed the artwork's. A failed or wrong-graph
-   *  load stays empty and retries at the next poll. */
+   *  load stays empty and is asked again at the next poll interval, at most
+   *  once per interval however often update() runs. */
   function acceptNetwork(fixes: readonly Fix[]): boolean {
     expectedNetwork = fixes.find(f => f.network)?.network ?? expectedNetwork;
     if (!expectedNetwork || (net?.graphHash === expectedNetwork && !networkBlocked)) return true;
@@ -240,13 +244,14 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       // At startup the load below reports the (null) network itself.
       if (pan) options.onNetwork?.(null);
     }
-    if (!networkRequest && schema) {
+    if (!networkRequest && schema && reloadBudget.take(now())) {
       const requested = expectedNetwork;
       const reload = options.reloadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' })));
       networkRequest = (async () => {
         const loaded = await reload();
         const graph = loaded && 'paths' in loaded ? loaded as GraphNetwork : null;
         if (destroyed || requested !== expectedNetwork || !graph || graph.graphHash !== expectedNetwork || graph.feedVersion !== schema!.feedVersion) return;
+        reloadBudget.reset();
         installNetwork(graph);
         model!.update(pointsToFixes(points), now());
         lastDrawn = model!.step(now());
@@ -254,7 +259,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
         options.onNetwork?.(net);
         if (active()) loop.nudge();
       })().catch(() => {
-        // Last-good geometry is not usable for this payload. Retry next poll.
+        // Last-good geometry is not usable for this payload. Retry next poll interval.
       }).finally(() => {
         networkRequest = null;
         if (!destroyed && requested !== expectedNetwork) acceptNetwork(pointsToFixes(points));
