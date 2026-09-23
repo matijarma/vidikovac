@@ -280,6 +280,126 @@ describe('calm motion (principle 7)', () => {
     expect(lines).toHaveBeenCalled();
     expect(host.children).toHaveLength(1);
   });
+
+  // The D2 gate as the browser runs it (e2e/accept/wall.spec.ts block D): the accept recorder on
+  // [data-testid=nearby], childList records with an element node, over one idle minute in which
+  // kiosk.ts repaints the timeline on every 1 s code tick and once more per platform board that
+  // lands (city/boards.ts, 60 s TTL). The earlier simulated minute drove six polls with a fixed
+  // departure set, so it never saw what a departure that leaves or changes identity costs.
+  describe('the accept recorder mirrored: one second per update, the rows of peak1745', () => {
+    /** The timed rows the 10ed458 re-run read at 17:45 (reading-peak1745.json): the sunset, two closures, the place row. */
+    const timed = (): TimelineRow[] => [
+      row({ id: 'solar:sunset:2026-09-22', kind: 'solar', atMs: at('2026-09-22T16:57:00Z'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: at('2026-09-22T19:45:00Z'), title: 'Gundulićeva', source: 'prometnice' }),
+      row({ id: 'closure:palmoticeva', kind: 'closure', atMs: at('2026-09-22T20:45:00Z'), title: 'Palmotićeva', source: 'prometnice' }),
+      row({ id: 'always:heritage:zgrada', kind: 'always', atMs: null, always: true, title: 'Povijesna zgrada', source: 'heritage' }),
+    ];
+    /** childList records under the section that add or remove an element: what the recorder counts, node by node. */
+    function structure(): { records(): { added: string[]; removed: string[] }[]; stop(): void } {
+      const observer = new MutationObserver(() => undefined);
+      observer.observe(section(), { subtree: true, childList: true });
+      const keyed = (nodes: NodeList): string[] => [...nodes].filter((n): n is Element => n.nodeType === 1).map((n) => `${n.tagName.toLowerCase()}[${n.getAttribute('data-key') ?? ''}]`);
+      return {
+        records: () => observer.takeRecords().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))
+          .map((r) => ({ added: keyed(r.addedNodes), removed: keyed(r.removedNodes) })),
+        stop: () => observer.disconnect(),
+      };
+    }
+
+    it('spends two records on a departure turnover: the one that left, the one that entered under the departures that stay', () => {
+      const measure = simulated(WALL_1920);
+      const t = mount({ measure });
+      const board = [
+        dep(1, { atMs: NOW + 30_000, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+        dep(2, { atMs: NOW + 4 * MIN, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+        dep(3, { atMs: NOW + 8 * MIN, live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '17', routeName: '17' } }),
+        dep(4, { atMs: NOW + 14 * MIN, live: false, title: 'Dubrava', source: 'zet-gtfs', arrival: { routeId: '12', routeName: '12' } }),
+      ];
+      // A departure whose moment has passed leaves the board; the next one takes the third row.
+      const rows = (now: number): TimelineRow[] => [...board.filter((d) => d.atMs! >= now).slice(0, 3), ...timed()];
+      t.update(rows(NOW), 2200, NOW);
+      expect(ids().slice(0, 3)).toEqual(['dep:1', 'dep:2', 'dep:3']);
+      const nodes = new Map(items().map((li) => [li.dataset.id, li]));
+      const w = structure();
+      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+      for (let s = 1; s <= 60; s++) t.update(rows(NOW + s * 1000), 2200, NOW + s * 1000);
+      const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+      const records = w.records();
+      w.stop();
+      expect(reading.left).toEqual(['departure|dep:1']);
+      expect(reading.entered).toEqual(['departure|dep:4']);
+      expect(reading.rebuilt).toEqual([]);
+      expect(reading.kept).toBe(6);
+      // Exactly the two content changes, one record each; no node is taken out and put back (a move is two records).
+      expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['li[dep:1]'] }, { added: ['li[dep:4]'], removed: [] }]);
+      expect(reading.mutations).toBe(2);
+      expect(calmMotionFailures(reading)).toEqual([]);
+      // The entering row sits at its time position from its first paint, and the rows that stayed are the same nodes in the same order.
+      expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']);
+      for (const id of ['dep:2', 'dep:3', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']) expect(byId(id)).toBe(nodes.get(id));
+    });
+
+    it('spends two records per identity change of the third departure, so four platform boards landing cost eight, never sixteen', () => {
+      // The accept fixture (e2e/departures-fixture.ts, lane V-H's items a and b) gives each of the four Trg platforms a
+      // line-12 row at its own fetch instant, so every board that lands makes another platform's row the earliest:
+      // four identity changes a minute (calm-peak1745.json: left …T16:09, entered …T16:10, sixteen mutations).
+      const measure = simulated(WALL_1920);
+      const t = mount({ measure });
+      const fetchedAt = [1, 2, 3, 4].map((platform) => NOW - 40_000 + platform);
+      const fixture = (platform: number): TimelineRow => {
+        const atMs = fetchedAt[platform - 1]! + 14 * MIN;
+        return dep(platform, {
+          atMs, live: false, title: 'Dubrava', source: 'zet-gtfs', arrival: { routeId: '12', routeName: '12' },
+          id: `dep:fixture-106_${platform}-12-${new Date(atMs).toISOString().slice(0, 16)}`,
+        });
+      };
+      const rows = (): TimelineRow[] => {
+        const departures = [
+          dep(10, { atMs: NOW + 2 * MIN, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+          dep(11, { atMs: NOW + 8 * MIN, live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '17', routeName: '17' } }),
+          ...[1, 2, 3, 4].map(fixture),
+        ].sort((a, b) => a.atMs! - b.atMs!).slice(0, 3);
+        return [...departures, ...timed()];
+      };
+      /** The fixture row on the list, wherever the paint put it. */
+      const third = (): string | undefined => ids().find((id) => id.startsWith('dep:fixture-'));
+      t.update(rows(), 2200, NOW);
+      expect(ids()[2]).toBe('dep:fixture-106_1-12-2026-09-22T15:58');
+      const w = structure();
+      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+      let flips = 0;
+      for (let s = 1; s <= 60; s++) {
+        const now = NOW + s * 1000;
+        if (s >= 20 && s <= 23) {
+          // The four boards land a step apart, each landing repaints the wall (kiosk.ts onBoardSettled) before the next tick.
+          const platform = s - 19;
+          fetchedAt[platform - 1] = now + platform;
+          const shown = third();
+          t.update(rows(), 2200, now);
+          if (third() !== shown) flips++;
+        }
+        t.update(rows(), 2200, now);
+      }
+      const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+      const records = w.records();
+      w.stop();
+      expect(flips).toBe(4);
+      expect(reading.left).toEqual(['departure|dep:fixture-106_1-12-2026-09-22T15:58']);
+      expect(reading.entered).toEqual(['departure|dep:fixture-106_1-12-2026-09-22T15:59']);
+      expect(reading.rebuilt).toEqual([]);
+      expect(reading.kept).toBe(6);
+      // One removal and one insertion per identity change, in landing order, and no node taken out and put back.
+      const key = (platform: number, minute: string): string => `li[dep:fixture-106_${platform}-12-2026-09-22T${minute}]`;
+      expect(records).toEqual([
+        { added: [], removed: [key(1, '15:58')] }, { added: [key(2, '15:58')], removed: [] },
+        { added: [], removed: [key(2, '15:58')] }, { added: [key(3, '15:58')], removed: [] },
+        { added: [], removed: [key(3, '15:58')] }, { added: [key(4, '15:58')], removed: [] },
+        { added: [], removed: [key(4, '15:58')] }, { added: [key(1, '15:59')], removed: [] },
+      ]);
+      expect(reading.mutations).toBe(2 * flips);
+    });
+  });
+
   it('keeps every node across updates with the same rows and fades nothing in', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
@@ -292,33 +412,35 @@ describe('calm motion (principle 7)', () => {
     expect(after.some((li) => li.hasAttribute('data-enter'))).toBe(false);
   });
 
-  it('lets a new row enter at the bottom, fade in once and settle into its time position on the next update', () => {
+  it('lets a new row enter at its time position in one insertion, fade in once there, and never move afterwards', () => {
     vi.useFakeTimers();
     const t = mount();
     t.update(scene(), 2000, NOW);
     const kept = items();
     const next = scene();
     next.splice(5, 0, row({ id: 'opening:dolac', kind: 'opening', atMs: at('2026-09-22T16:30:00Z'), title: 'Tržnica Dolac' }));
-    // Update 1: the new row is appended below every row that was there, the others keep their order and nodes.
+    // Update 1: the new row is inserted where its time puts it; the others keep their order and nodes. One record, no move.
+    const first = watch();
     t.update(next, 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:ilica', 'event:gavella', 'solar:sunset:2026-09-22', 'always:story:trg', 'opening:dolac']);
-    expect(items().slice(0, kept.length)).toEqual(kept);
+    const records = first.structural().filter((r) => r.type === 'childList');
+    first.stop();
+    expect(ids()).toEqual(next.map((r) => r.id));
+    expect(items().filter((li) => li !== byId('opening:dolac'))).toEqual(kept);
+    expect(records.map((r) => [[...r.addedNodes].length, [...r.removedNodes].length])).toEqual([[1, 0]]);
     expect(items().filter((li) => li.dataset.enter === '1').map((li) => li.dataset.id)).toEqual(['opening:dolac']);
     const entering = byId('opening:dolac');
-    // An update while the row is still fading keeps the fade.
+    // An update while the row is still fading keeps the fade and moves nothing.
     vi.advanceTimersByTime(100);
-    // Update 2: it settles into its time position; every node is the same one.
+    const w = watch();
     t.update(next, 2000, NOW + 20_000);
-    expect(ids()).toEqual(next.map((r) => r.id));
+    expect(w.structural()).toHaveLength(0);
     expect(byId('opening:dolac')).toBe(entering);
     expect(entering.dataset.enter).toBe('1');
-    for (const li of kept) expect(items()).toContain(li);
     vi.advanceTimersByTime(ENTER_CLEAR_MS);
     expect(entering.hasAttribute('data-enter')).toBe(false);
-    // Update 3: nothing moves any more.
-    const w = watch();
+    // Update 3: still nothing moves.
     t.update(next, 2000, NOW + 40_000);
-    expect(w.structural()).toHaveLength(0);
+    expect(w.structural().filter((r) => r.type === 'childList')).toHaveLength(0);
     w.stop();
   });
 
@@ -336,18 +458,28 @@ describe('calm motion (principle 7)', () => {
     expect(records.filter((r) => r.type === 'childList' && r.addedNodes.length > 0)).toHaveLength(0);
   });
 
-  it('runs a departure sequence: the top leaves, a later one enters at the bottom, nodes survive throughout', () => {
+  it('runs a departure sequence: the top leaves, the next one enters under the departures that stay, nodes survive throughout', () => {
     const t = mount();
     const rows = (first: number): TimelineRow[] => [dep(first), dep(first + 1), dep(first + 2), always()];
     t.update(rows(1), 2000, NOW);
     const node2 = byId('dep:2');
     const node3 = byId('dep:3');
-    // dep:1 has left, dep:4 is the next one: it is appended at the bottom (below "uvijek") for one update.
+    const nodeAlways = byId('always:story:trg');
+    // dep:1 has left, dep:4 is the next one: it enters at the bottom of the departures, above "uvijek", in the same update.
+    const w = watch();
     t.update(rows(2), 2000, NOW + 5 * MIN);
-    expect(ids()).toEqual(['dep:2', 'dep:3', 'always:story:trg', 'dep:4']);
+    const records = w.structural().filter((r) => r.type === 'childList');
+    expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'always:story:trg']);
     expect(byId('dep:2')).toBe(node2);
     expect(byId('dep:3')).toBe(node3);
+    expect(byId('always:story:trg')).toBe(nodeAlways);
+    // One removal, one insertion: the two content changes and nothing else.
+    expect(records.map((r) => [[...r.addedNodes].length, [...r.removedNodes].length])).toEqual([[0, 1], [1, 0]]);
+    w.stop();
+    const later = watch();
     t.update(rows(2), 2000, NOW + 5 * MIN + 20_000);
+    expect(later.structural().filter((r) => r.type === 'childList')).toHaveLength(0);
+    later.stop();
     expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'always:story:trg']);
     expect(byId('dep:2')).toBe(node2);
   });
