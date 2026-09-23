@@ -26,7 +26,8 @@
 // more than one line gives way to its short one, then whole rows are dropped:
 // the latest timed rows first, then departures beyond the first, then the next
 // row that is not a departure (so a long title the source cannot shorten keeps
-// its row while a third departure can make room). One "uvijek" row is reserved. The fit is measured once
+// its row while a third departure can make room). First/last trams and one
+// "uvijek" row are reserved (decision 27). The fit is measured once
 // per change of content or box and remembered, so a steady wall does not
 // re-measure or re-insert anything.
 //
@@ -119,18 +120,27 @@ export function isTimeless(row: NearbyRow): boolean {
   return row.always || row.atMs === null || !Number.isFinite(row.atMs);
 }
 
+/** Decision 27: these rows are promises, not overflow candidates. */
+function reservedRows<T extends NearbyRow>(rows: readonly T[]): Set<T> {
+  const keep = new Set(rows.filter(row => row.kind === 'first' || row.kind === 'last'));
+  const timeless = rows.find(isTimeless);
+  if (timeless) keep.add(timeless);
+  return keep;
+}
+
 /**
- * The first `n` rows in order, but the timeless rows are kept and the latest
- * timed rows give way to them: the mock the owner approved always ends with
- * its "uvijek" row, however short the box.
+ * The first `n` rows in order, reserving first/last trams and one timeless
+ * row before filling the rest. The initial estimate cannot remove these
+ * promises; the hidden measurement pass makes other whole rows yield.
  */
 export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[] {
   if (rows.length <= n) return [...rows];
-  if (n <= 0) return [];
-  const keep = new Set<T>(rows.filter(isTimeless).slice(0, n));
+  const keep = reservedRows(rows);
+  const departure = rows.find(row => row.kind === 'departure');
+  if (n > 0 && departure) keep.add(departure);
   for (const row of rows) {
     if (keep.size >= n) break;
-    if (!isTimeless(row)) keep.add(row);
+    keep.add(row);
   }
   return rows.filter((row) => keep.has(row));
 }
@@ -139,10 +149,11 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
  * The row to drop when the rows do not fit, or null: the latest timed row
  * that is not a departure, but not the first of them (the next thing on the
  * list after its departures); then the latest departure while more than one
- * is left; then that next thing. Keep one timeless row as well (owner decision 10).
+ * is left; then that next thing. First/last trams and one timeless row never
+ * enter the drop order (owner decisions 10 and 27).
  */
 export function dropCandidate<T extends NearbyRow>(rows: readonly T[]): T | null {
-  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure');
+  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
   if (others.length > 1) return others[others.length - 1]!;
   const departures = rows.filter((row) => row.kind === 'departure');
   if (departures.length > 1) return departures[departures.length - 1]!;
@@ -293,10 +304,10 @@ export const DOM_MEASURE: TimelineMeasure = {
   },
 };
 
-/** Everything a fit depends on except the ticking time words: when it is unchanged, so is the fit. */
-function fitSignature(rows: readonly TimelineRow[], now: number, i18n: I18n, rowPx: number, box: { height: number; width: number }): string {
-  const parts = rows.map((r) => [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n)].join('\u0001'));
-  return `${parts.join('\u0002')}|${rowPx}|${box.height}|${box.width}`;
+/** Content, time-word widths, typography and the box: unchanged means the fit is reusable. */
+function fitSignature(rows: readonly TimelineRow[], now: number, i18n: I18n, rowPx: number, box: { height: number; width: number }, typography: string): string {
+  const parts = rows.map((r) => [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n), timeLabel(r, now, i18n)].join('\u0001'));
+  return `${parts.join('\u0002')}|${rowPx}|${typography}|${box.height}|${box.width}`;
 }
 
 export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHandle {
@@ -363,47 +374,79 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   }
 
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
-  function fit(candidates: readonly TimelineRow[], before: ReadonlySet<string>, now: number): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
-    let shown = [...candidates];
-    const short = new Map<string, ShortLabels>();
-    const byId = new Map(shown.map((row) => [row.id, row] as const));
-    const set = (row: TimelineRow, which: keyof ShortLabels): boolean => {
-      const offered = which === 'title' ? row.titleShort : row.subShort;
-      if (offered === undefined || offered === (which === 'title' ? row.title : row.sub) || short.get(row.id)?.[which]) return false;
-      short.set(row.id, { ...short.get(row.id), [which]: true });
-      return true;
-    };
-    paint(shown, short, before, now);
-    let changed = false;
-    for (const li of list.children) {
-      const row = byId.get(li.getAttribute('data-key') ?? '');
-      if (!row) continue;
-      const title = li.querySelector<HTMLElement>('.nearby-title');
-      const sub = li.querySelector<HTMLElement>('.nearby-sub');
-      if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
-      if (sub && measure.lines(sub) > SUB_MAX_LINES) changed = set(row, 'sub') || changed;
+  function fit(candidates: readonly TimelineRow[], before: ReadonlySet<string>, now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+    // A detached tree has no layout. This hidden sibling inherits the same
+    // kiosk/aside styles and variables but is outside the live timeline. Give
+    // its list exactly the live content box, then dispose of it before paint.
+    const measuring = element.cloneNode(false) as HTMLElement;
+    measuring.removeAttribute('data-testid');
+    measuring.removeAttribute('aria-labelledby');
+    measuring.setAttribute('aria-hidden', 'true');
+    measuring.inert = true;
+    Object.assign(measuring.style, { position: 'fixed', visibility: 'hidden', pointerEvents: 'none', left: '0', top: '0' });
+    const measuringList = list.cloneNode(false) as HTMLOListElement;
+    measuringList.removeAttribute('data-testid');
+    measuringList.style.boxSizing = 'border-box';
+    if (box.width > 0) measuringList.style.width = `${box.width}px`;
+    if (box.height > 0) measuringList.style.height = `${box.height}px`;
+    measuring.appendChild(measuringList);
+    element.parentElement!.appendChild(measuring);
+    try {
+      return fitIn(measuringList);
+    } finally {
+      measuring.remove();
     }
-    if (changed) paint(shown, short, before, now);
-    if (measure.box(list).overflow) {
-      // Still too tall: every label that takes more than one line gives way to its short twin, where that saves a line.
-      let more = false;
+
+    function fitIn(list: HTMLOListElement): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+      let shown = [...candidates];
+      const short = new Map<string, ShortLabels>();
+      const draw = (): void => {
+        const ordered = painted
+          ? [...shown.filter(row => before.has(row.id)), ...shown.filter(row => !before.has(row.id))]
+          : shown;
+        list.innerHTML = rowsMarkup(ordered, now, i18n, short);
+      };
+      const byId = new Map(shown.map((row) => [row.id, row] as const));
+      const set = (row: TimelineRow, which: keyof ShortLabels): boolean => {
+        const offered = which === 'title' ? row.titleShort : row.subShort;
+        if (offered === undefined || offered === (which === 'title' ? row.title : row.sub) || short.get(row.id)?.[which]) return false;
+        short.set(row.id, { ...short.get(row.id), [which]: true });
+        return true;
+      };
+      draw();
+      let changed = false;
       for (const li of list.children) {
         const row = byId.get(li.getAttribute('data-key') ?? '');
         if (!row) continue;
         const title = li.querySelector<HTMLElement>('.nearby-title');
         const sub = li.querySelector<HTMLElement>('.nearby-sub');
-        if (title && measure.lines(title) > 1) more = set(row, 'title') || more;
-        if (sub && measure.lines(sub) > 1) more = set(row, 'sub') || more;
+        if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
+        if (sub && measure.lines(sub) > SUB_MAX_LINES) changed = set(row, 'sub') || changed;
       }
-      if (more) paint(shown, short, before, now);
+      if (changed) draw();
+      if (measure.box(list).overflow) {
+        // Still too tall: every label that takes more than one line gives way to its short twin, where that saves a line.
+        let more = false;
+        for (const li of list.children) {
+          const row = byId.get(li.getAttribute('data-key') ?? '');
+          if (!row) continue;
+          const title = li.querySelector<HTMLElement>('.nearby-title');
+          const sub = li.querySelector<HTMLElement>('.nearby-sub');
+          if (title && measure.lines(title) > 1) more = set(row, 'title') || more;
+          if (sub && measure.lines(sub) > 1) more = set(row, 'sub') || more;
+        }
+        if (more) draw();
+      }
+      while (shown.length > 0 && measure.box(list).overflow) {
+        const reserved = reservedRows(shown);
+        const drop = dropCandidate(shown) ?? [...shown].reverse().find(row => !reserved.has(row));
+        // No more discretionary content: never silently remove a reserved row.
+        if (!drop) break;
+        shown = shown.filter((row) => row !== drop);
+        draw();
+      }
+      return { shown, short };
     }
-    while (shown.length > 0 && measure.box(list).overflow) {
-      // Reservation is a preference, never permission to clip the last row.
-      const drop = dropCandidate(shown) ?? shown[shown.length - 1]!;
-      shown = shown.filter((row) => row !== drop);
-      paint(shown, short, before, now);
-    }
-    return { shown, short };
   }
 
   const handle: TimelineHandle = {
@@ -434,18 +477,17 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       if (unbounded) {
         paint(shown, new Map(), before, now);
       } else {
-        const sig = fitSignature(candidates, now, i18n, budget.rowPx, box);
-        if (memo && memo.sig === sig) {
-          const kept = memo.ids;
-          shown = candidates.filter((row) => kept.has(row.id));
-          paint(shown, memo.short, before, now);
+        const style = getComputedStyle(element);
+        const typography = [style.fontFamily, '--k-read-scale', '--k-main-size', '--k-sup-size', '--k-zoom']
+          .map(value => value.startsWith('--') ? style.getPropertyValue(value) : value).join(';');
+        const sig = fitSignature(candidates, now, i18n, budget.rowPx, box, typography);
+        if (!memo || memo.sig !== sig) {
+          const fitted = fit(candidates, before, now, box);
+          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short };
         }
-        // A new content or box is fitted afresh, and so is a remembered fit the words no longer keep inside the box.
-        if (!memo || memo.sig !== sig || measure.box(list).overflow) {
-          const fitted = fit(candidates, before, now);
-          shown = fitted.shown;
-          memo = { sig, ids: new Set(shown.map((row) => row.id)), short: fitted.short };
-        }
+        shown = candidates.filter((row) => memo!.ids.has(row.id));
+        // The only live-list commit. No rejected row ever enters this tree.
+        paint(shown, memo.short, before, now);
       }
 
       if (painted && !deps.reduced) {
@@ -468,6 +510,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       count = shown.length;
       const skippedFit = String(rows.length - count);
       if (element.dataset.skippedFit !== skippedFit) element.dataset.skippedFit = skippedFit;
+      const overflow = !unbounded && measure.box(list).overflow ? '1' : '0';
+      if (element.dataset.fitOverflow !== overflow) element.dataset.fitOverflow = overflow;
     },
     measureHeight,
     shown: () => count,

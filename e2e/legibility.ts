@@ -246,6 +246,22 @@ export const LEGIBILITY_IN_PAGE = (spec: PageLegibilitySpec): LegibilityReport =
     if (r.width <= 1 || r.height <= 1 || r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) continue;
     const cs = getComputedStyle(parent);
     if (cs.visibility === 'hidden' || cs.display === 'none' || (cs.opacity !== '' && Number(cs.opacity) === 0)) continue;
+    // Text a clipping ancestor cuts away entirely is not on the wall: the visually-hidden pattern (a 1 px box with
+    // overflow hidden and a clip, kept for screen readers, e.g. the typed address link) or a run scrolled out of its
+    // box. The rule of e2e/wall.ts (a row counts only inside every box that clips it); a run partly inside is measured.
+    let clippedAway = false;
+    for (let a: Element | null = parent; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+      const acs = getComputedStyle(a);
+      const clips = [acs.overflow, acs.overflowX, acs.overflowY].some((v) => v !== '' && v !== 'visible')
+        || (acs.clip !== undefined && acs.clip !== '' && acs.clip !== 'auto');
+      if (!clips) continue;
+      const b = a.getBoundingClientRect();
+      if (Math.min(r.right, b.right) - Math.max(r.left, b.left) <= 1 || Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) <= 1) {
+        clippedAway = true;
+        break;
+      }
+    }
+    if (clippedAway) continue;
     const px = parseFloat(cs.fontSize);
     if (!Number.isFinite(px)) continue;
     const mm = mmOf(px);

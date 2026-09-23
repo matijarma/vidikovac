@@ -21,13 +21,23 @@ export const TEMPORARY_SCREEN_MS = 24 * 60 * 60_000;
 /** BeaconDO's operator-label bound (OPERATOR_LABEL_MAX there). */
 const LABEL_MAX = 80;
 
-/** The default operator label, shortened with an ellipsis when a long street name would pass the bound. */
-function defaultLabel(name: string): string {
-  const label = `Kaj ima? · ${name}`;
-  if (label.length <= LABEL_MAX) return label;
-  let cut = label.slice(0, LABEL_MAX - 1);
-  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
-  return `${cut.trimEnd()}…`;
+const LABEL_PREFIX = 'Kaj ima? · ';
+
+/**
+ * The default operator label, built to fit the bound: never cut mid-word, never
+ * an ellipsis. A long place name loses its trailing parts whole, the least
+ * significant first: the components after a comma, then the trailing words.
+ * A name with no fitting part stands alone (place names are at most 80).
+ */
+export function defaultLabel(name: string): string {
+  const fits = (text: string) => LABEL_PREFIX.length + text.length <= LABEL_MAX;
+  if (fits(name)) return `${LABEL_PREFIX}${name}`;
+  const cuts = (separator: RegExp) => [...name.matchAll(separator)].map(match => match.index).reverse();
+  for (const at of [...cuts(/\s*,/gu), ...cuts(/\s+/gu)]) {
+    const head = name.slice(0, at).replace(/[\s,;:·–—/-]+$/u, '');
+    if (head && fits(head)) return `${LABEL_PREFIX}${head}`;
+  }
+  return name.length <= LABEL_MAX ? name : 'Kaj ima?';
 }
 
 /**

@@ -89,7 +89,7 @@ describe('stripMarkup', () => {
   it('shows the on-duty pharmacy as the green cross, 24/7 and its short address, the cross naming it for a screen reader', () => {
     const cell = /<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">(.*?)<\/span>\s*<\/div>/s.exec(stripMarkup(strip, s, { noBasics: false }))?.[1] ?? '';
     // The probe contract (§15.6): [data-testid=strip-pharmacy] [data-symbol=pharmacy] is the cross itself.
-    expect(cell).toMatch(/^<svg data-symbol="pharmacy" class="icon k-icon k-cross" role="img" aria-label="Dežurna ljekarna"><use href="#icon-cross"><\/use><\/svg>/);
+    expect(cell).toMatch(/^<svg data-symbol="pharmacy" class="icon k-icon k-cross" role="img" aria-label="Dežurna ljekarna 24\/7: Trg bana J. Jelačića 3."><use href="#icon-cross"><\/use><\/svg>/);
     expect(cell).toContain('<span class="k-247">24/7</span>');
     // The screen stands at Trg bana Jelačića, so the nearest on-duty unit is the one on the square.
     expect(cell).toContain('<strong>Trg bana J. Jelačića 3</strong>');
@@ -98,7 +98,7 @@ describe('stripMarkup', () => {
     expect(cell.replace(/<svg[^>]*>.*?<\/svg>/s, '')).not.toContain('ljekarna');
     const en = kioskStrings('en');
     const english = stripMarkup(frameStrip(CALM_MODULES, STOP, createDefaultI18n('en'), en, NOW), en, { noBasics: true });
-    expect(english).toContain('aria-label="On-duty pharmacy"');
+    expect(english).toContain('aria-label="24/7 duty pharmacy: Trg bana J. Jelačića 3."');
     expect(english).toContain('<span class="k-247">24/7</span>');
     expect(english).toContain('<span class="k-strip-item" data-testid="strip-sources">DHMZ · EMSC</span>');
   });

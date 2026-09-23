@@ -13,12 +13,14 @@
 // Folding is rejection-only; display/grounding always use the original text.
 import {
   EXTERNAL_CONTACT_TARGETS, EXTERNAL_HEADER_LEXICON, EXTERNAL_HEADER_SEPARATORS,
-  EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
+  EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NAME_SENTENCE_BREAKS,
+  EXTERNAL_NAME_SEPARATORS, EXTERNAL_NUMERIC_DATA,
   EXTERNAL_PAIR_RULES, EXTERNAL_PARTIAL_VECTORS, EXTERNAL_SENTENCE_BREAKS,
   EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
   EXTERNAL_PLACE_ABBREVIATIONS,
 } from './external-text-policy';
 import { installExternalTextBoundary } from './external-text-boundary';
+import { TOP_LEVEL_DOMAINS } from './tlds';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
 export type ExternalTextSurface = 'header' | 'row';
@@ -26,6 +28,8 @@ export interface ExternalTextOptions { surface: ExternalTextSurface }
 export const EXTERNAL_TEXT_REJECTIONS = ['empty', 'too-long', 'control', 'charset', 'link', 'phone', 'account', 'payment', 'qr', 'instruction'] as const;
 export type ExternalTextRejection = (typeof EXTERNAL_TEXT_REJECTIONS)[number];
 export type ExternalTextVerdict = { ok: true } | { ok: false; reason: ExternalTextRejection };
+/** Names and addresses: the kinds whose register shorthand keeps its dots (W-C10). */
+const isNameKind = (kind: ExternalTextKind | undefined): boolean => kind === 'name' || kind === 'address';
 
 interface ExternalTextRule {
   /** Unicode code points, spaces and punctuation included. */
@@ -204,6 +208,7 @@ const sensitivePatterns = EXTERNAL_SENSITIVE_LEXICON.map(rule => ({
   role: rule.role,
   pattern: bounded(rule.source),
   separated: bounded(separatedLexeme(rule.source)),
+  nameSeparated: bounded(separatedLexeme(rule.source, EXTERNAL_NAME_SEPARATORS)),
 }));
 const headerPatterns = EXTERNAL_HEADER_LEXICON.map(rule => ({
   id: rule.id, pattern: bounded(rule.source),
@@ -243,25 +248,34 @@ const disjoint = (a: Evidence, b: Evidence): boolean => a.end <= b.start || b.en
 
 /** Only the geographic preposition, never "kod:", digits or a code token.
  * Preserve all other lexemes: a geographic phrase cannot excuse an action
- * paired with a credential elsewhere in the same sentence. */
-function geographicReading(text: string): string {
-  return text.replace(/(?<![\p{L}\p{N}])kod(?= +([\p{L}\p{N}]+))/giu, (word, next: string) => {
+ * paired with a credential elsewhere in the same sentence. In a name or an
+ * address, a house number is a place too when "kod" hangs on a street word by
+ * a hyphen ("Sopnička-kod 10D", the stop at number 10D). */
+function geographicReading(text: string, names = false): string {
+  const insensitive = (word: string) => !sensitivePatterns.some(({ pattern }) => pattern.test(foldText(word)));
+  return text.replace(/(?<![\p{L}\p{N}])kod(?= +([\p{L}\p{N}]+))/giu, (word, next: string, offset: number) => {
     const place = /^\p{Lu}\p{Ll}{2,}$/u.test(next);
-    const genitive = /^(?:crkve|crkvice|kapele|groblja|groblj[a-z]*|škole|skole|kuće|kuce|mosta|potoka|rijeke|jezera|grada|sela|naselja|dvorca|parka|parkirališta|parkiralista|hotela|samostana|mlina|planine|brda)$/iu.test(next);
-    const sensitive = sensitivePatterns.some(({ pattern }) => pattern.test(foldText(next)));
-    return (place || genitive) && !sensitive ? ' '.repeat(word.length) : word;
+    const genitive = /^(?:crkve|crkvice|kapele|groblja|groblj[a-z]*|škole|skole|kuće|kuce|mosta|potoka|rijeke|jezera|grada|sela|naselja|dvorca|parka|parkirališta|parkiralista|hotela|samostana|mlina|planine|brda|benzinske)$/iu.test(next);
+    const street = names && /^\d{1,3}\p{L}?$/u.test(next)
+      ? /(?<![\p{L}\p{N}])(\p{Lu}\p{Ll}{2,})-$/u.exec(text.slice(0, offset))?.[1] : undefined;
+    const house = street !== undefined && insensitive(street);
+    return (place || genitive || house) && insensitive(next) ? ' '.repeat(word.length) : word;
   });
 }
 
-/** Exact pair evidence for tests/audits; callers still log reason codes only. */
-export function sensitiveTextPair(text: string): SensitiveTextPair | null {
-  for (const sentence of text.split(EXTERNAL_SENTENCE_BREAKS)) {
+/** Exact pair evidence for tests/audits; callers still log reason codes only.
+ * A name or an address (`kind`) is split and read with its dots kept inside words. */
+export function sensitiveTextPair(text: string, kind?: ExternalTextKind): SensitiveTextPair | null {
+  const names = isNameKind(kind);
+  for (const sentence of text.split(names ? EXTERNAL_NAME_SENTENCE_BREAKS : EXTERNAL_SENTENCE_BREAKS)) {
     const groups: Record<(typeof EXTERNAL_PAIR_RULES)[number]['left' | 'right'], Evidence[]> = {
       noun: [], action: [], contact: [], 'partial-vector': partialVectors(sentence),
       'contact-target': contactPatterns.flatMap(rule => evidence(foldText(sentence), rule.id, rule.pattern)),
     };
-    for (const reading of readings(geographicReading(sentence))) for (const { id, role, pattern, separated } of sensitivePatterns) {
-      groups[role].push(...evidence(reading, id, pattern), ...evidence(reading, id, separated));
+    for (const reading of readings(geographicReading(sentence, names))) {
+      for (const { id, role, pattern, separated, nameSeparated } of sensitivePatterns) {
+        groups[role].push(...evidence(reading, id, pattern), ...evidence(reading, id, names ? nameSeparated : separated));
+      }
     }
     for (const rule of EXTERNAL_PAIR_RULES) for (const left of groups[rule.left]) {
       const right = groups[rule.right].find(candidate => disjoint(left, candidate));
@@ -272,8 +286,8 @@ export function sensitiveTextPair(text: string): SensitiveTextPair | null {
 }
 
 /** A sensitive noun/verb is evidence only when it has a sentence-local partner. */
-export function sensitiveTextRule(text: string): string | null {
-  return sensitiveTextPair(text)?.rule ?? null;
+export function sensitiveTextRule(text: string, kind?: ExternalTextKind): string | null {
+  return sensitiveTextPair(text, kind)?.rule ?? null;
 }
 
 /** Prose-only layer 3: a reader request amplifies a pair or partial vector. */
@@ -292,8 +306,8 @@ export function instructionRule(text: string): string | null {
   return null;
 }
 /** Strict header policy: single sensitive hits and reader requests in any slot. */
-export function headerInstructionRule(text: string): string | null {
-  const folded = readings(geographicReading(text));
+export function headerInstructionRule(text: string, kind?: ExternalTextKind): string | null {
+  const folded = readings(geographicReading(text, isNameKind(kind)));
   for (const reading of folded) {
     for (const { id, pattern, separated } of headerPatterns) {
       if (pattern.test(reading) || separated.test(reading)) return id;
@@ -315,7 +329,20 @@ export function externalTextVector(value: string, kind?: ExternalTextKind): { re
     const match = source.exec(text);
     if (match) return { reason, value: match[0] };
   }
-  // Abbreviations "sv.", "dr.", "kn.", "br.", "tzv.", "npr.", "sl."
+  // Names and addresses write register shorthand without a space: "Muzej
+  // suv.umjetnosti", "Inst. R.Bošković", "N.S.knjižnica", "Stud.dom S.Radić",
+  // "d.d.". There a dotted token is a web address only when its last label is
+  // a top-level domain (dr.ai, secure.cc, muzej.hr, kino.xyz); www, http and @
+  // are refused above in every kind. The lexical layer reads such a name with
+  // its dots inside words (EXTERNAL_NAME_SENTENCE_BREAKS).
+  if (isNameKind(kind)) {
+    for (const match of text.matchAll(/(?<![a-z0-9_-])[a-z0-9_-]+(?:\.[a-z0-9_-]+)+/gu)) {
+      const last = match[0].slice(match[0].lastIndexOf('.') + 1).replace(/^[_-]+|[_-]+$/gu, '');
+      if (TOP_LEVEL_DOMAINS.has(last) || last.startsWith('xn--')) return { reason: 'link', value: match[0] };
+    }
+    return numericVector(text, kind);
+  }
+  // Other kinds: abbreviations "sv.", "dr.", "kn.", "br.", "tzv.", "npr.", "sl."
   // followed by space/end contain no letter-dot-letter token. Never exempt
   // their prefixes in dr.ai, sv.example, etc. The existing exact GTFS tokens
   // also occur in route names and accessible summaries, not just headsigns.
@@ -332,6 +359,10 @@ export function externalTextVector(value: string, kind?: ExternalTextKind): { re
     if (/^t\.b\.j\.jelacica(?![a-z0-9]|\.[a-z0-9])/u.test(text.slice(match.index))) continue;
     return { reason: 'link', value: match[0] };
   }
+  return numericVector(text, kind);
+}
+
+function numericVector(text: string, kind: ExternalTextKind | undefined): { reason: ExternalTextRejection; value: string } | null {
   // Match the complete numeric run before counting, never just six adjacent
   // digits: spacing, slashes, punctuation and parentheses cannot hide a number.
   for (const match of text.matchAll(/\d(?:[\d .,/'’():+–-]*\d)?/gu)) {
@@ -372,8 +403,8 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   }
   if (vectorsOnly) return { ok: true };
   const instruction = surface === 'row'
-    ? (kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text)
-    : headerInstructionRule(text);
+    ? (kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text, kind)
+    : headerInstructionRule(text, kind);
   if (instruction) {
     return { ok: false, reason: 'instruction' };
   }
