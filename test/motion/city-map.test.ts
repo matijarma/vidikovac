@@ -10,6 +10,8 @@ import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import graphBefore from '../fixtures/graph-migration/before.json';
+import graphAfter from '../fixtures/graph-migration/after.json';
 
 // --- A MapLibre stand-in: records what the wrapper hands it, fires events on demand.
 interface FakeSource { type: string; data: unknown; calls: unknown[]; setData(d: unknown): void }
@@ -186,6 +188,62 @@ async function harness(opts: HarnessOptions = {}) {
 }
 
 afterEach(() => { FakeMap.instances.length = 0; FakeMap.failConstruction = false; document.body.replaceChildren(); document.documentElement.removeAttribute('data-theme-resolved'); });
+
+describe('graph identity on an already-open map', () => {
+  const oldNet = decodeNetwork(graphBefore);
+  const newNet = decodeNetwork(graphAfter);
+  const point = (network: string, s: number): MapPoint & { network: string } => ({
+    ...A, at: T0, network, path: 'path:6:1:e641be7c',
+    plan: { on: 'path', knots: [[T0, s], [T0 + 90_000, s]] },
+    confidence: 0.9,
+  });
+
+  it('clears incompatible marks and derived geometry until the replacement graph loads', async () => {
+    let finish!: (net: typeof NET | null) => void;
+    const reloadNetwork = vi.fn(() => new Promise<typeof NET | null>(resolve => { finish = resolve; }));
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    h.frame();
+    h.handle.update([point(newNet.graphHash, 8427.7)], []);
+    expect(h.handle.vehicles?.()).toEqual([]);
+    expect(reloadNetwork).toHaveBeenCalledTimes(1);
+    h.frame();
+    expect((h.vehicles().calls.at(-1) as FC).features).toEqual([]);
+    finish(newNet);
+    await flush();
+    h.frame();
+    expect(h.handle.network?.()).toBe(newNet);
+    const v = h.handle.vehicles!()[0];
+    const expected = newNet.toPathPoint(0, 8427.7);
+    const actual = toPlane(v.lon, v.lat);
+    expect(Math.hypot(actual.x - expected.x, actual.y - expected.y)).toBeLessThan(1);
+    expect(h.map.sources.get('network')!.calls.length).toBeGreaterThan(0);
+    expect(h.map.sources.get('stops')!.calls.length).toBeGreaterThan(0);
+    h.handle.destroy();
+  });
+
+  it('retries failed or wrong-graph loads and ignores completions after destroy', async () => {
+    const reloadNetwork = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(oldNet).mockResolvedValueOnce(newNet);
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    for (let i = 0; i < 3; i++) {
+      h.handle.update([point(newNet.graphHash, 8427.7)], []);
+      if (i === 2) h.handle.destroy();
+      await flush();
+      expect(h.handle.vehicles?.()).toEqual([]);
+    }
+    expect(reloadNetwork).toHaveBeenCalledTimes(3);
+    expect(h.handle.network?.()).not.toBe(newNet);
+  });
+
+  it('accepts one-deploy legacy motion without identity and never reloads a matching graph', async () => {
+    const reloadNetwork = vi.fn();
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    h.handle.update([A], []);
+    h.frame();
+    expect(h.handle.vehicles?.()).toHaveLength(1);
+    expect(reloadNetwork).not.toHaveBeenCalled();
+    h.handle.destroy();
+  });
+});
 
 describe('the full map draws the model, never the report (R-P2)', () => {
   it('converges onto a new fix over frames instead of jumping: the drawn vehicle is at neither the old nor the new report', async () => {
