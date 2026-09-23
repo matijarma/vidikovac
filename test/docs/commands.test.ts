@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 // WP6 step 11: every command the verification documents tell a reader to run
 // exists. An `npm run <name>` is a script in package.json, a `node scripts/<file>`
@@ -31,6 +32,17 @@ function tableRows(markdown: string, heading: string): string[] {
 }
 
 describe('commands cited in the verification documents', () => {
+  it.each([['accept:e2e', ['accept']], ['e2e', ['chromium', 'mobile']]] as const)('%s keeps an appended filename out of the variadic project option', (name, projects) => {
+    // Only the bundled argument parser, never the Playwright runner, browser
+    // or web server. This is the same variadic option declared by its CLI.
+    const { program } = createRequire(import.meta.url)('playwright-core/lib/utilsBundle');
+    const parser = program.createCommand().argument('[files...]').option('--project <project-name...>').exitOverride();
+    const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts;
+    const file = 'e2e/accept/wall.spec.ts';
+    parser.parse([...scripts[name]!.split(/\s+/).slice(2), file], { from: 'user' });
+    expect(parser.opts().project).toEqual(projects);
+    expect(parser.args).toEqual([file]);
+  });
   it.each(DOCS)('%s names only npm scripts that package.json defines', (doc) => {
     const cited = [...read(doc).matchAll(/\bnpm run ([a-z][\w:-]*)/g)].map((m) => m[1]);
     expect(cited.length).toBeGreaterThan(0);

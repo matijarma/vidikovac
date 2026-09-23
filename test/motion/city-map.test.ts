@@ -46,6 +46,7 @@ class FakeMap {
   zoom = 12.6;
   /** What isMoving() answers: the census fallback takes nothing while the camera moves. */
   moving = false;
+  citySourceLoaded = true;
   sprite: string | null = null;
   removed = false;
   rendered: { layer: { id: string }; properties: Record<string, unknown> }[] = [];
@@ -74,8 +75,10 @@ class FakeMap {
   once(type: string, cb: Listener): void { this.on(type, cb); }
   fire(type: string, event: Record<string, unknown> = {}): void { for (const cb of [...(this.handlers[type] ?? [])]) cb(event); }
   addControl(control: unknown): void { this.controls.push(control); }
+  removeControl(control: unknown): void { this.controls.splice(this.controls.indexOf(control), 1); }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   isMoving(): boolean { return this.moving; }
+  isSourceLoaded(id: string): boolean { return id !== cityPlaces.CITY_POINTS || this.citySourceLoaded; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
   hasImage(id: string): boolean { return this.images.has(id); }
   readonly removedImages: string[] = [];
@@ -593,6 +596,34 @@ describe('lifecycle', () => {
 });
 
 describe('the map for people who cannot see it (R-F5), and its credit', () => {
+  it('keeps wall attribution as unfocusable text, with the complete linked credit on handheld', async () => {
+    for (const presentationProfile of ['public-display', 'handheld'] as const) {
+      const { map, handle } = await harness({ extra: { presentationProfile, basemapProfile: 'prozor', interactive: false } });
+      const credit = map.controls[0] as FakeControl & { onAdd?: () => HTMLElement };
+      const element = credit.onAdd?.() ?? document.createElement('div');
+      if (!credit.onAdd) element.innerHTML = String(credit.options.customAttribution);
+      expect(element.textContent).toBe('© OpenStreetMap contributors · Protomaps');
+      if (presentationProfile === 'public-display') {
+        expect(element.querySelectorAll('a, button, summary, [tabindex], [role=button]')).toHaveLength(0);
+        expect(element.hasAttribute('tabindex')).toBe(false);
+        expect(element.tabIndex).toBe(-1);
+      } else {
+        expect(element.querySelectorAll('a[href]')).toHaveLength(2);
+      }
+      handle.destroy();
+    }
+  });
+  it('switches the attribution with the presentation profile without rebuilding the map', async () => {
+    const { map, handle } = await harness({ extra: { presentationProfile: 'handheld', basemapProfile: 'prozor', interactive: false } });
+    expect(map.controls[0]).toBeInstanceOf(FakeControl);
+    handle.setPresentationProfile!('public-display');
+    expect(map.controls).toHaveLength(1);
+    expect(map.controls[0]).toBeInstanceOf(basemap.StaticAttributionControl);
+    handle.setPresentationProfile!('handheld');
+    expect(map.controls).toHaveLength(1);
+    expect(map.controls[0]).toBeInstanceOf(FakeControl);
+    handle.destroy();
+  });
   it('names the container as a region from the first moment, puts role="img" with the same label on the canvas alone (keeping its tab stop), labels the controls in the page\u2019s language and hands MapLibre the linked credit', async () => {
     const container = document.createElement('div');
     container.id = 'u-pokretu-map-slot';
@@ -854,6 +885,30 @@ describe('the two-way arrows on an opposed merge', () => {
 // data-unlabelled, data-bajs and data-overlaps, read back off what the city
 // layers rendered, beside the vehicle census and on the same idle.
 describe('the marker census of the city layers', () => {
+  it('cold outage: publishes no provisional zero and reads the first settled city frame without a later poll', async () => {
+    const { map, container, handle, frame, tickTimers } = await harness({ lib: cityLib, points: [], load: false });
+    handle.setFeedState!('down');
+    map.citySourceLoaded = false;
+    map.fire('load');
+    map.fire('idle');
+    expect(container.dataset.markers).toBeUndefined();
+    map.citySourceLoaded = true;
+    map.rendered = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4')] as typeof map.rendered;
+    map.fire('render');
+    expect(container.dataset.markers).toBeUndefined();
+    frame(PROBE_SETTLE_MS);
+    // With the feed held there is no perpetual render loop or eight-second
+    // overlay refresh to rescue the initial reading.
+    tickTimers();
+    expect(container.dataset.markers).toBe('1');
+    expect(container.dataset.unlabelled).toBe('0');
+    expect(container.dataset.pills).toBe('');
+    expect(container.dataset.zoom).toBe(map.zoom.toFixed(2));
+    const queries = map.queries.length;
+    handle.destroy();
+    tickTimers();
+    expect(map.queries).toHaveLength(queries);
+  });
   const at = (lon: number, lat: number) => ({ type: 'Point', coordinates: [lon, lat] });
   const dot = (id: string, props: Record<string, unknown>, lon = 15.97, lat = 45.81): RenderedFeature =>
     ({ layer: { id: CENSUS_LAYERS.dots }, properties: { id, ...props }, geometry: at(lon, lat) });

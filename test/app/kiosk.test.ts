@@ -178,6 +178,32 @@ const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=ki
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
 describe('passive public city',()=>{
+  it('keeps presentation payload and safety links consistent when crossing the handheld boundary', async () => {
+    const viewport = { width: 1920, height: 1080 };
+    const k = await pairedKiosk({ viewport });
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    viewport.width = 390; viewport.height = 844; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('A');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('A');
+    viewport.width = 1920; viewport.height = 1080; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    k.handle.destroy();
+  });
+  it('offers plain safety and payload text on the wall, keeping the handheld links and basics button', async () => {
+    for (const viewport of [{ width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
+      const k = mount({ stored: STORED, viewport });
+      await flush();
+      k.handlers.onCodes(batch(NOW), NOW);
+      const wall = viewport.width === 1920;
+      expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe(wall ? 'SPAN' : 'A');
+      expect(q(k.root, '[data-testid=pair-url]')?.hasAttribute('href')).toBe(!wall);
+      expect(q(k.root, '.k-strip-hitno')?.tagName).toBe(wall ? 'SPAN' : 'A');
+      expect(q(k.root, '[data-testid=kiosk-essentials-open]') !== null).toBe(!wall);
+      expect(text(q(k.root, '[data-testid=strip-verdict]'))).not.toBe('');
+      k.handle.destroy();
+    }
+  });
   it('keeps nearby nodes through sentence changes and yields to explicit presentation',async()=>{
     const cityStore=fakeCityStore({...emptyCity(),places:[{id:'culture-a',name:'Gavella',category:'culture',sourceId:'culture',sourceRecord:'a',lon:15.97,lat:45.81}]});
     let now=NOW;
@@ -1387,7 +1413,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(k.root.innerHTML).not.toContain('tajna');
     expect(text(q(k.root, '[data-testid=kiosk-clock]'))).toBe('14:32');
   });
-  it('shows the current code as two groups with a QR of the scan URL and its payload link, and asks for more when low', () => {
+  it('shows the current code as two groups with a QR of the scan URL and passive payload text, and asks for more when low', () => {
     const k = mount({ stored: STORED });
     k.handlers.onCodes(batch(NOW), NOW);
     expect(text(q(k.root, '[data-testid=code-a]'))).toBe('ABCD');
@@ -1397,8 +1423,10 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(qr.getAttribute('role')).toBe('img');
     expect(qr.getAttribute('aria-label')).toContain('A B C D, E F G 0');
     expect(k.root.querySelector('svg')).not.toBeNull();
-    const link = q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement;
-    expect(link.getAttribute('href')).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
+    const link = q(k.root, '[data-testid=pair-url]')!;
+    expect(link.tagName).toBe('SPAN');
+    expect(link.hasAttribute('href')).toBe(false);
+    expect(link.textContent).toBe('https://zagreb.aningfilm.hr/s/#ABCD-EFG0');
     expect(link.hidden).toBe(false);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('1.00');
     k.handlers.onCodes(batch(NOW - 17 * 30_000), NOW);
@@ -1585,7 +1613,9 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
     expect(text(q(k.root, '.k-rail-summary'))).toContain('Ilica');
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(q(k.root, '.k-strip-hitno')?.getAttribute('href')).toBe('/hitno');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    expect(q(k.root, '.k-strip-hitno')?.hasAttribute('href')).toBe(false);
+    expect(text(q(k.root, '.k-strip-hitno'))).toBe('Sigurnost');
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
     expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });
@@ -1691,7 +1721,8 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
     expect(k.handle.phase()).toBe('revoked');
     expect(text(q(k.root, '[data-testid=kiosk-notice]'))).toContain('Ovaj je zaslon isključen.');
     expect(q(k.root, '[data-testid=kiosk-qr]')).toBeNull();
-    expect(q(k.root, '[data-testid=kiosk-essentials-open]')!.hidden).toBe(false);
+    expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull();
+    expect(text(q(k.root, '[data-testid=strip-verdict]'))).not.toBe('');
   });
   it('a fresh screen after starting over rotates only its own codes', async () => {
     const k = mount({ stored: JSON.stringify({ beaconId: 'OLD00001', secret: 'stara', screen: { ...SCREEN, expiresAt: NOW - 1 } }) });
@@ -1706,9 +1737,9 @@ describe('expiry and revocation: no codes, no loop, one manual way back', () => 
   });
 });
 
-describe('basics: sessionless, one touch, 90 s idle only outside a grant', () => {
+describe('handheld basics: sessionless, one touch, 90 s idle only outside a grant', () => {
   it('opens with the five rows, re-arms on a touch, closes on Escape with focus back, and closes on its own after 90 s', async () => {
-    const k = mount({ stored: STORED });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 } });
     await flush();
     const open = q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement;
     expect(open.hidden).toBe(false);
@@ -1718,7 +1749,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
     expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(true);
     expect(document.activeElement?.id).toBe('ess-title');
     const labels = [...k.root.querySelectorAll('[data-testid=ess-row] .k-ess-label')].map((el) => text(el));
-    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna']);
+    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.']);
     expect(text(q(k.root, '[data-row=pharmacy]'))).toContain('Ljekarna Centar, Ilica 1');
     expect([...k.root.querySelectorAll('.ess-attr')].every((el) => !(el.textContent ?? '').includes('{'))).toBe(true);
     expect(ESSENTIALS_IDLE_MS).toBe(90_000);
@@ -1735,7 +1766,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
     expect(panel.hidden).toBe(true);
   });
   it('never opens over a grant (the verdict is a plain word then, not a button), and the close button closes it', async () => {
-    const k = await pairedKiosk();
+    const k = await pairedKiosk({ viewport: { width: 390, height: 844 } });
     expect(q(k.root, '[data-testid=kiosk-essentials-open]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-essentials]')!.hidden).toBe(true);
     k.expire();
@@ -1746,7 +1777,7 @@ describe('basics: sessionless, one touch, 90 s idle only outside a grant', () =>
   });
   it('with every source down the panel says so once and points at /hitno', async () => {
     const down = (module: ModuleId): ModuleSnapshot => snap(module, [], 'down');
-    const k = mount({ stored: STORED, fetchTeaser: async () => ({ modules: (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down) }) });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, fetchTeaser: async () => ({ modules: (['dhmz-cap', 'prometnice', 'zet-rt', 'dhmz-now', 'ckan-geo'] as ModuleId[]).map(down) }) });
     await flush();
     (q(k.root, '[data-testid=kiosk-essentials-open]') as HTMLButtonElement).click();
     expect(k.root.querySelectorAll('[data-testid=ess-row]')).toHaveLength(1);
@@ -1980,7 +2011,7 @@ describe('alerts, polling, the first tap and disposal', () => {
   it('the map hears the ZET feed state on every paint: a stale teaser holds it, a reparent resizes and re-asserts the hold right after resume, basics pause and resume the same way', async () => {
     const stale = MODULES.map((m) => (m.module === 'zet-rt' ? { ...m, status: 'stale' as const } : m));
     const map = fakeMap();
-    const k = mount({ stored: STORED, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
     // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
     expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
     await flush();
@@ -2127,15 +2158,16 @@ describe('the invitation composition: the timeline, sentence and strip', () => {
     expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
     expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
   });
-  it('the strip label carries the shield and the pill reads Sigurnost, linking the same page', async () => {
+  it('the strip label carries the shield and the passive pill reads Sigurnost', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const label = q(k.root, '.k-strip-label')!;
     expect(q(label, 'svg use')!.getAttribute('href')).toBe('#icon-shield');
     expect(text(label)).toBe('Sigurnost');
-    const pill = q(k.root, '.k-strip-hitno') as HTMLAnchorElement;
+    const pill = q(k.root, '.k-strip-hitno')!;
     expect(text(pill)).toBe('Sigurnost');
-    expect(pill.getAttribute('href')).toBe('/hitno');
+    expect(pill.tagName).toBe('SPAN');
+    expect(pill.hasAttribute('href')).toBe(false);
     expect(k.root.innerHTML).not.toContain('>/hitno<');
   });
   it('paired: the header centre names the mirrored domain and follows every layer change', async () => {

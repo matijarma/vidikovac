@@ -216,7 +216,7 @@ export interface KioskStrings {
     /** "hitno" / "mirno" / "nepotvrđeno": the strip's verdict word, from safetyState's level. */
     verdict: Record<'urgent' | 'calm' | 'unknown', string>;
   };
-  basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; pharmacy: string; warnings: string; closures: string };
+  basics: { title: string; hint: string; close: string; empty: string; routes: string; weather: string; warnings: string; closures: string };
   session: {
     join: string;
     joinHint: string;
@@ -465,7 +465,7 @@ function build(code: SupportedLocale): KioskStrings {
       warningsNone: fragment(t('shared.warningsNone')),
       verdict: record(['urgent', 'calm', 'unknown'] as const, (level) => `kiosk.safety.verdict.${level}`),
     },
-    basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'pharmacy', 'warnings', 'closures']),
+    basics: group('basics', ['title', 'hint', 'close', 'empty', 'routes', 'weather', 'warnings', 'closures']),
     session: group('session', ['join', 'joinHint', 'selected', 'selectedRoute', 'selectedStop']),
     layers: record(Object.keys(raw.layers) as LayerId[], (layer) => `layers.${layer}`),
     events: record(Object.keys(raw.kiosk.events), (slug) => `kiosk.events.${slug}`),
