@@ -178,6 +178,18 @@ const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=ki
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
 describe('passive public city',()=>{
+  it('keeps presentation payload and safety links consistent when crossing the handheld boundary', async () => {
+    const viewport = { width: 1920, height: 1080 };
+    const k = await pairedKiosk({ viewport });
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    viewport.width = 390; viewport.height = 844; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('A');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('A');
+    viewport.width = 1920; viewport.height = 1080; k.repaint();
+    expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
+    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    k.handle.destroy();
+  });
   it('offers plain safety and payload text on the wall, keeping the handheld links and basics button', async () => {
     for (const viewport of [{ width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
       const k = mount({ stored: STORED, viewport });
@@ -1737,7 +1749,7 @@ describe('handheld basics: sessionless, one touch, 90 s idle only outside a gran
     expect(q(k.root, '[data-testid=kiosk-stage]')!.hidden).toBe(true);
     expect(document.activeElement?.id).toBe('ess-title');
     const labels = [...k.root.querySelectorAll('[data-testid=ess-row] .k-ess-label')].map((el) => text(el));
-    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna']);
+    expect(labels).toEqual(['Upozorenja', 'Zatvorene prometnice', 'Linije u blizini', 'Vrijeme sada', 'Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.']);
     expect(text(q(k.root, '[data-row=pharmacy]'))).toContain('Ljekarna Centar, Ilica 1');
     expect([...k.root.querySelectorAll('.ess-attr')].every((el) => !(el.textContent ?? '').includes('{'))).toBe(true);
     expect(ESSENTIALS_IDLE_MS).toBe(90_000);

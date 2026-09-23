@@ -1470,7 +1470,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
     if (crossed && phase === 'invitation') { setPhase('invitation'); return; }
-    if (changed) { paintLocal(); return; }
+    if (changed) { paintLocal(); if (crossed) paintCode(); return; }
     paintWall();
     paintMap();
     fitAll();

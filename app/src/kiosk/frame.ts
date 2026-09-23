@@ -17,6 +17,7 @@ import { iconMarkup } from '../ui/icons';
 import { byModule, safetyStrip, type SafetyStrip } from './local';
 import { fill, type KioskStrings } from './strings';
 import { externalHtml } from './external';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 // --- The safety strip: the verdict, the trail, the pharmacy -----------------
 
@@ -69,6 +70,7 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
 
 /** Green cross · 24/7 · the short address: `[data-symbol=pharmacy]` is the cross itself (the probe contract, §15.6). */
 function pharmacyMarkup(strip: FrameStrip, strings: KioskStrings): string {
-  const cross = iconMarkup('cross', strings.basics.pharmacy, 'icon k-icon k-cross').replace('<svg ', '<svg data-symbol="pharmacy" ');
+  const caption = fill(strings.sentence.pharmacy, { address: vetExternal('address', strip.parts.pharmacy.label, 'row') ?? '' });
+  const cross = iconMarkup('cross', caption, 'icon k-icon k-cross').replace('<svg ', '<svg data-symbol="pharmacy" ');
   return `<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">${cross}<span class="k-247">${PHARMACY_HOURS}</span> <strong>${externalHtml('address', strip.parts.pharmacy.label)}</strong></span>`;
 }

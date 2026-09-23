@@ -12,7 +12,7 @@ import type { I18n } from '../i18n/i18n';
 import { dataNumber, dataText } from '../panels/panel';
 import { fmtTemp } from './format';
 import { activeWarnings, cleanCondition, closuresNear, isLive, byModule, linesNearby, nearestPharmacy } from './local';
-import type { KioskStrings } from './strings';
+import { fill, type KioskStrings } from './strings';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { externalHtml, optionalExternal } from './external';
@@ -111,7 +111,7 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
     const onDuty = nearestPharmacy(stop);
     rows.push({
       id: 'pharmacy',
-      label: strings.basics.pharmacy,
+      label: fill(strings.sentence.pharmacy, { address: onDuty.label }),
       value: tagged ? tagged.title : onDuty.label,
       detail: tagged ? undefined : onDuty.hours,
       attribution: tagged ? fillAttribution(poiSnap.attribution, poiSnap, tagged) : LJEKARNE_SOURCE.text,
