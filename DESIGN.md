@@ -5,9 +5,11 @@ description: "Useful city information, a public overview and deliberate presenta
 
 # Kaj ima? Design system
 
-Approved direction: 17 September 2026, extended on 18 and 19 September 2026.
-Product intent is in `PRODUCT.md`; current implementation and verification
-are tracked in `docs/upgrade-city-2026-09-18.md`.
+Approved direction: 17 September 2026, extended on 18, 19 and 20 September
+2026 and revised by the companion round of 22 September 2026
+(`docs/companion-2026-09-22.md`). Product intent is in `PRODUCT.md`; current
+implementation and verification are tracked in
+`docs/upgrade-city-2026-09-18.md` and `docs/kaj-verification.md`.
 The authoritative values are `app/src/ui/tokens.css`, not a second palette
 invented by a component or this document.
 
@@ -77,130 +79,155 @@ honour reduced motion. Do not animate layout width for countdown bars.
 
 ### Public screen
 
-**20 September passive-view contract, superseding the historical composition
-below, as amended on 22 September:** one steady geographic map beside a
-reserved 520–760px information column at 1×, scaled for 4K; the conditions
-card and the rotating highlight are gone. The "U blizini" list and the QR card
-occupy independent grid regions. No kiosk discovery/search/filter list or
-idle map-navigation controls. The map has a legend of three plain items (tram
-route, BAJS bike count, culture tonight), never a caveat, and no legend
-stands where no map is drawn (lagano).
-The list is one time axis around the place: at most three departures, blue
-"za N min" for a tracked vehicle and a grey clock time for the timetable; then
-the timed rows (a closure's end, an event with its venue and the tram to it,
-the next sunset or sunrise, never both, the evening's last departures as one
-row from four hours ahead, the first morning tram from 22:00 until it leaves,
-tomorrow's openings when the evening empties); then one "uvijek" row, the
-place's naming story or a protected building nearby, alternating, and the
-24/7 pharmacy at night. No row carries a source, freshness or caveat caption.
-Rows are whole and at least 64–92px tall from the item count, so fewer items
-make larger rows; a row whose words need two lines is taller. Nothing is cut
-with an ellipsis: a long row prints the source's own shorter label or wraps
-whole; when the rows do not fit, whole rows leave the list, the latest first,
-and the first row after the departures only after the later departures.
-Each row keeps its node: a new row enters at the bottom, fades in once and
-takes its place in time on the next update, a past one leaves at the top, and
-nothing moves without a change. The map highlights what the header
-sentence names without fitting or moving the camera. Presentation suspends
-the sentence and the list; safety and QR remain available.
+**22 September 2026 contract** (the companion round,
+`docs/companion-2026-09-22.md` §11 and §12), superseding the 20 September
+passive view and every earlier public-screen composition: one steady
+geographic map beside a reserved 520–760px information column at 1×, scaled
+for 4K. The header carries "Kaj ima?", the place (a stop or a street;
+Trg bana J. Jelačića for a screen without a chosen place), one sentence, the
+date and a small clock. The information column holds the "U blizini" list over
+the QR card, in independent grid regions, and the footer carries safety.
+Nothing on the wall is an operator control for the passer-by: no pause, copy,
+theme or gear button, no kiosk discovery, search or filter list and no idle
+map-navigation controls; settings open only by a long press on the brand.
 
-Portrait puts the map above the "U blizini" list and the invitation,
-allocating space to legible content and a QR code of at least 240px before
-the map. Handheld `/kiosk/` puts setup/code information first and uses
-handheld symbols in its compact preview. Short opacity transitions only;
-reduced motion and lagano drop the transitions, never the rows, and
-preserve useful information. The settings panel is a column of
-click-toggles, each naming its current state and changing it at once; there
-is no draft and no save action (22 September 2026).
+The map has a legend of three plain items (tram route, BAJS bike count,
+culture tonight), never a caveat, and no legend stands where no map is drawn
+(lagano). A screen with a place (a stop or an address) opens on a frame of N
+stops around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
+measured per place and the same number the "U blizini" circle and its pill
+use. The frame is a neighbourhood: buses at every hour, every BAJS station a
+disc carrying its count (grey at zero, grey and blank when the count is
+unknown, never "?"), venues only with a programme tonight and named, ranked
+stop names with every tram interchange, and the major street names. There is
+no "+N" mark on the wall map: no geographic clusters, and a merged vehicle
+pill lists every line number. The map highlights what the header sentence
+names without fitting or moving the camera.
 
-The earlier public-screen description is retained as implementation history;
-its references to touch discovery, the header ticker and separate events and
-exceptions cards no longer define the current product.
-
-The normal `/kiosk/` surface is a live city window, not a locked dashboard
-and not an ambient decoration. Pairing acknowledges access without replacing
-it. The map takes the whole left column. A screen with a place (a stop or an
-address) opens on a frame of N stops around it (Kadar: 4, 6 or 8
-"stajališta odavde", default 6), its radius measured per place and the same
-number the "U blizini" circle and its pill use. The frame is a neighbourhood:
-buses at every hour, every BAJS station a disc carrying its count (grey at
-zero, grey and blank when the count is unknown, never "?"), venues only with a
-programme tonight and named, ranked stop names with every tram interchange,
-and the major street names. A screen set to the whole city opens on the whole
-city, with the live transit picture on it: the tram network as a thin neutral
-ground, tram plates, bike-share stations as small dots without a number,
-closures, the on-duty pharmacy and tonight's venues. On this surface transport
-is the default cartography; the earlier rule that it must not dominate applies
-to the phone and the desk. On the whole-city window place names are a
-reader's, not a passer-by's: no neighbourhood names, no station or venue
-names. Buses join the whole-city window only once the camera is in a
-neighbourhood. Compact landscape and portrait keep the same grammar in their
-own arrangements.
-
-The other column carries the "U blizini" list over the pairing card. The
-list's head names the circle it covers, measured per place, and its walking
-time ("U blizini · 2,2 km · ~16 min"). The list never renders empty: a
-departure row always exists, timetable when no vehicle is tracked, and when
-the evening empties the rows grow and the horizon reaches into the next
-morning instead of padding. Weather, transit exceptions and events are no
-longer cards on the wall: weather speaks through the header sentence,
-closures and events are timed rows, and the paired compositions keep their
-own panels.
+The list is one time axis around the place, its head naming the measured
+circle and its walking time ("U blizini · 2,2 km · ~16 min";
+"U blizini · 2 km · ~15 min" at 2 km). First come at most three departures, a
+blue "za N min" for a tracked vehicle within ten minutes and a grey clock time
+for the timetable; then the timed rows (a closure's end, an event with its
+venue and the tram to it, the next sunset or sunrise, never both, the
+evening's last departures as one row from four hours ahead, the first morning
+tram from 22:00 until it leaves, tomorrow's openings when the evening
+empties); then one "uvijek" row, the place's naming story or a protected
+building nearby, alternating every 20 minutes, and from 22:00 to 06:00 the
+24/7 pharmacy. The list never renders empty: a departure row always exists,
+timetable when no vehicle is tracked, and when the evening empties the rows
+grow and the horizon reaches into the next morning instead of padding. No row
+carries a source, freshness or caveat caption. Rows are whole and at least
+64–92px tall from the item count, so fewer items make larger rows; a row whose
+words need two lines is taller. Nothing is cut with an ellipsis: a long row
+prints the source's own shorter label or wraps whole; when the rows do not
+fit, whole rows leave the list, the latest first, and the first row after the
+departures only after the later departures. Each row keeps its node: a new row
+enters at the bottom, fades in once and takes its place in time on the next
+update, a past one leaves at the top, and nothing moves without a change.
+Weather, transit exceptions and events are not cards on the wall: weather
+speaks through the header sentence, closures and events are timed rows, and
+the paired compositions keep their own panels. Presentation suspends the
+sentence and the list; safety and QR remain available.
 
 The header's middle carries one sentence at a time: a coloured kicker (Promet,
-Kultura, Vrijeme, Bicikli, Noćas, Radovi) and at most 80 characters, replaced
-at the screen's rhythm (20 seconds by default) with a short crossfade, instant
+Kultura, Vrijeme, Bicikli, Noćas, Radovi) and at most 80 characters (64 on the
+compact, portrait and handheld compositions), replaced at the screen's rhythm
+(20 seconds by default, 30 or 60 by setting) with a short crossfade, instant
 under reduced motion. No marquee, no scrolling text and never an ellipsis: a
 sentence that does not fit its line is skipped, not cut. Session and pairing
-notices outrank it. Workers AI writes the sentences from the wall's own facts,
-the list's rows plus weather, closures and bikes, and a sentence is shown only
-when its claims are those facts and only while they hold (a last-tram line
-leaves when the tram has left). Fixed templates over the same facts are always
-in the pool, so the header never waits for the model and still speaks when it
-is unavailable. No sentence repeats verbatim within ten minutes.
+notices outrank it. Every sentence is an approved template filled with one of
+the wall's own facts (the list's rows plus weather, closures and bikes);
+Workers AI may only choose among these templates and never writes words of its
+own, and a sentence is shown only while its fact holds (a last-tram line
+leaves when the tram has left). The templates are always in the pool, so the
+header never waits for the model and still speaks when it is unavailable. A
+fact is on screen at most once in ten minutes, whatever its wording, while at
+least three facts are at hand; with fewer, no sentence repeats word for word
+within ten minutes.
 
-Keep location/date/time in the header and safety in the footer, where the
-on-duty pharmacy is a green cross, "24/7" and its short address and the
-sources are named without a time. The QR card holds the lead, the code and
-the address to type it at, with no benefit line and no copy button, beside a
-QR code of at least 240 CSS pixels on a 264px plate at the design sizes, with
-the code under the text at a fixed size, never stretched across a column.
-Starting a screen is one optional field, "Adresa ili stajalište", a line
-under it saying what the screen will show, and "Pokreni"; place, frame, view,
-theme, rhythm and expiry belong to an on-screen settings panel opened by a long
-press on the brand, not a setup wizard, not a gear or theme glyph in the header
-and not a screen full of large district pills. A refused or rate-dropped change
-is stated in the panel, never swallowed, and the toggles return to what the
-server holds.
+Keep the place, date and time in the header and safety in the footer, where
+the on-duty pharmacy is a green cross, "24/7" and its short address and the
+sources are named without a time. The QR card holds the lead, the code and the
+address to type it at, with no benefit line and no copy button, beside a QR
+code of at least 240 CSS pixels on a 264px plate at the design sizes, with the
+code under the text at a fixed size, never stretched across a column. No fetch
+time, freshness mark or count without a name stands on the city overview.
+
+At night the solar theme turns the wall to its separately tuned dark palette.
+In a ZET outage the map stays a map: the network, stops, BAJS, closures and
+places without vehicles, with one quiet note on the map; every departure is a
+grey timetable time and the header sentence says what is known. No headline
+says "unavailable".
+
+Touch, where the screen has it, is read-only: a stop ring opens that stop's
+next departures for 60 seconds, a row shows its detail (venue, address, the
+tram to it), the pharmacy its address and phone, and the wall returns by
+itself. Otherwise touch opens only Osnovno, from the verdict word on the
+footer; the camera never moves, and scanning is the only way to take content
+along.
+
+Starting a screen is one optional field, "Adresa ili stajalište", a line under
+it saying what the screen will show, and "Pokreni"; place, frame, view, theme,
+rhythm and expiry belong to an on-screen settings panel opened by a long press
+on the brand, not a setup wizard, not a gear or theme glyph in the header and
+not a screen full of large district pills. The settings panel is a column of
+click-toggles (Mjesto, Kadar, Prikaz, Tema, Ritam and the screen's expiry),
+each naming its current state and changing it at once; there is no draft and
+no save action. A refused or rate-dropped change is stated in the panel, never
+swallowed, and the toggles return to what the server holds.
+
+Portrait puts the map above the "U blizini" list and the invitation,
+allocating space to legible content and a QR code of at least 240px before the
+map. Handheld `/kiosk/` puts setup/code information first and uses handheld
+symbols in its compact preview. Short opacity transitions only; reduced motion
+and lagano drop the transitions, never the rows, and preserve useful
+information.
+
+The public-screen descriptions of 17 to 20 September (touch discovery with a
+90-second return, the header ticker, the conditions card, the rotating
+highlight and the separate weather, exceptions and events cards) are history;
+`docs/companion-2026-09-22.md` §13 lists what was retired and why.
+
+The normal `/kiosk/` surface is a live city window, not a locked dashboard and
+not an ambient decoration. Pairing acknowledges access without replacing it.
+The map takes the whole left column. A screen set to the whole city opens on
+the whole city, with the live transit picture on it: the tram network as a
+thin neutral ground, tram plates, bike-share stations as small dots without a
+number, closures, the on-duty pharmacy and tonight's venues. On this surface
+transport is the default cartography; the earlier rule that it must not
+dominate applies to the phone and the desk. On the whole-city window place
+names are a reader's, not a passer-by's: no neighbourhood names, no station or
+venue names. Buses join the whole-city window only once the camera is in a
+neighbourhood. Compact landscape and portrait keep the same grammar in their
+own arrangements.
 
 The map is a meaningful geographic view, not a background beneath a route
 board. The screen's place and frame (Kadar: 4, 6 or 8 stops around it,
 measured per place), and public selections, determine framing; without a
-chosen place the whole-city window stays. Do
-not force every vehicle number to overlap at terminals: retain dots and
-collision-aware labels. Stops stay tap-able at city zoom, with a hit tolerance
-sized for a finger on a wall, and a tapped stop leads with its arrivals. A
-window onto the whole city is four times the ground the wall's field was sized
-for, so below the thinning zoom it names less, not smaller: the basemap's
-promoted street names go, the assembly points keep their squares and lose their
-titles, and of the stops only the tram interchanges are named -- a tram calls
-there and some trip begins or ends there. Route count is not a measure of
-importance and is not used for this. From the thinning zoom up every name is
-back, exactly as derived. A framed screen names by being framed, not by zoom:
-whatever its Kadar, it draws the ranked stop names with every tram interchange
-and the major street names, so Kadar 4, 6 or 8 never changes the naming
-grammar; the thinning rule belongs to the whole-city window alone.
-Preserve the map instance across polling and composition changes.
+chosen place the whole-city window stays. Do not force every vehicle number to
+overlap at terminals: retain dots and collision-aware labels. Stop rings keep
+a hit tolerance sized for a finger on a wall. A window onto the whole city is
+four times the ground the wall's field was sized for, so below the thinning
+zoom it names less, not smaller: the basemap's promoted street names go, the
+assembly points keep their squares and lose their titles, and of the stops
+only the tram interchanges are named -- a tram calls there and some trip
+begins or ends there. Route count is not a measure of importance and is not
+used for this. From the thinning zoom up every name is back, exactly as
+derived. A framed screen names by being framed, not by zoom: whatever its
+Kadar, it draws the ranked stop names with every tram interchange and the
+major street names, so Kadar 4, 6 or 8 never changes the naming grammar; the
+thinning rule belongs to the whole-city window alone. Preserve the map
+instance across polling and composition changes.
 
-Overview content has deliberate budgets. A fitting routine may not hide
-every row of a populated panel to make a screenshot test pass. A genuine
-empty, loading or unavailable source is stated explicitly.
+Overview content has deliberate budgets. A fitting routine may not hide every
+row of a populated panel to make a screenshot test pass. A genuine empty,
+loading or unavailable source is stated explicitly.
 
 On the wall, quiet-day discovery is the "uvijek" row: a real street-register
 or heritage record, shown without a caption; its attribution is on the phone
-and `/izvori`. Touch exploration has search, categories, list/details and
-an explicit return action; 90-second inactivity restores the overview.
-Refreshes preserve focus and scroll. Remote presentation makes the map inert.
+and `/izvori`. Refreshes preserve focus and scroll. Remote presentation makes
+the map inert.
 
 ### Presented content
 
@@ -267,9 +294,10 @@ metadata and original documents, never invented legal summaries.
 ## Data, access and acceptance
 
 Preserve ten-minute direct sessions, five-minute one-hop peer sessions,
-resume behavior, frozen attributed exports and no-JavaScript `/hitno`.
-Successful redemption opens the personal view directly; there is no
-redundant second unlock button.
+resume behavior and no-JavaScript `/hitno`. At the end of the ten minutes the
+content clears to the invitation to scan again and the `/hitno` link: no
+frozen view and no exports. Successful redemption opens the personal view
+directly; there is no redundant second unlock button.
 
 Missing is not zero. A request time is not an observation or event time.
 An unavailable safety source is not an all-clear. Vehicle positions are
@@ -283,14 +311,20 @@ stop, or of its other end where ZET's artwork does not print the first
 Ravnice loop of a line that does not serve Ravnice), the schematic does not
 draw the tram, which stays on the geographic map.
 BAJS counts require a recent observation; air is a
-preliminary station observation. A ZET arrival is an estimate and is labelled
-one: a countdown only where a tracked vehicle carries that trip, built from
-the scheduled departure and ZET's own reported delay for that vehicle, with
-every other row keeping its scheduled clock time. No tracked vehicle, no
-countdown; HŽ boards stay scheduled times only. Text the Worker condensed for
-the public screen is a derived reading, carries its source, and is never
-republished as the source. Inventory capacity is never live availability. No
-push delivery or unverified open-now claims are implied.
+preliminary station observation. A ZET countdown exists only where a tracked
+vehicle carries that trip, built from the scheduled departure and ZET's own
+reported delay for that vehicle; every other departure keeps its scheduled
+clock time. Colour and form carry the difference, never a caption on the row:
+a blue countdown for a tracked vehicle, a grey clock time for the timetable,
+and no row says "procjena". On the phone a tracked row's marker is announced
+as "uživo", and the one sentence on where the estimate comes from stands once,
+in a stop's detail. No tracked vehicle, no countdown; HŽ boards stay scheduled
+times only. The header sentence is a derived reading of the wall's own facts
+and is never republished as a source. Text from a register or feed that no
+one here edits (names, titles, addresses, descriptions) is checked before the
+wall shows it, and a value that fails is left out with its row or sentence,
+never repaired or shortened. Inventory capacity is never live availability.
+No push delivery or unverified open-now claims are implied.
 
 Verify both themes, Croatian/English, reduced motion, 200% text,
 keyboard navigation, small phones, tablet, landscape/portrait displays
