@@ -126,9 +126,6 @@ describe('dashboard.css phone shell', () => {
     for (const [, property, twin] of fallbacks) expect(twin).toBe(property);
     expect(CSS).not.toContain('!important');
   });
-  it('the phone FAB reserves its room: with data-fab main pads by the tab bar plus 5rem', () => {
-    expect(rule(".ki[data-fab='1'] .ki-main")).toContain('padding-block-end: calc(var(--ki-tabs) + 5rem)');
-  });
 });
 
 describe('dashboard.css header controls', () => {
@@ -173,16 +170,8 @@ describe('dashboard.css header controls', () => {
     expect(rule('.ki-wordmark-text')).toContain('font-size: var(--type-body)');
     expect(rule('.ki-wordmark-mark')).toContain('color: var(--tone-action-brand)');
   });
-  it('the FAB is a fixed 48 px accent pill above the tab bar, flat under lagano', () => {
-    const fab = rule('.ki-fab');
-    expect(fab).toContain('position: fixed');
-    expect(fab).toContain('inset-block-end: calc(var(--ki-tabs) + var(--sp-4))');
-    expect(fab).toContain('min-block-size: var(--target-primary)');
-    expect(fab).toContain('border-radius: var(--r-pill)');
-    expect(fab).toContain('background: var(--tone-action-brand)');
-    expect(fab).toContain('color: var(--tone-action-brand-fg)');
-    expect(fab).toContain('z-index: var(--z-sticky)');
-    expect(rule(":root[data-lagano='1'] .ki-fab")).toContain('box-shadow: none');
+  it('carries no FAB: "Na zaslon" left the phone with the legacy cast (WP5 A3), Zaslon is a header control', () => {
+    expect(CSS).not.toMatch(/ki-fab|data-fab/);
   });
   it('notice banners take the tint of their kind and keep the dismiss control beside the text at every width', () => {
     expect(rule('.banner-notice')).toContain('flex-wrap: nowrap');
@@ -209,7 +198,7 @@ describe('dashboard.css desktop (60rem and up)', () => {
     expect(rule('.ki-main', wide)).toContain('padding-inline: var(--sp-8)');
     expect(rule('.ki-banners', wide)).toContain('padding-inline: var(--sp-8)');
   });
-  it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar and the FAB leave; nothing places by a retired area name', () => {
+  it('keeps the status line a real box with seven columns on one row, each control placed by its key; the tab bar leaves; nothing places by a retired area name', () => {
     expect(rule('.ki-head', DESKTOP)).not.toContain('display: contents');
     // Seven: the desk pair stands Karta beside Sada on the page, so the header carries no way into it (WP4 chunk E).
     expect(rule('.ki-head', DESKTOP)).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;');
@@ -219,29 +208,17 @@ describe('dashboard.css desktop (60rem and up)', () => {
     }
     expect(DESKTOP).not.toContain("[data-key='karta']");
     expect(CSS).not.toContain('.ki-desk-karta');
-    expect(rule('.ki-tabbar, .ki-fab', DESKTOP)).toContain('display: none');
+    expect(rule('.ki-tabbar', DESKTOP)).toContain('display: none');
     expect(rule('.ki-wordmark-text', DESKTOP)).toContain('font-size: var(--type-title)');
     expect(DESKTOP).not.toMatch(/grid-area: (?:top|side|session|rail)\b/);
     expect(DESKTOP).not.toContain('display: contents');
   });
-  it('the desktop-only controls are 44 px: Još, the search launcher (a 420 px pill), the clock link and the bell with its dot', () => {
+  it('the desktop-only controls are 44 px: Još and the clock link; the search launcher and the bell left with their markup (WP5 A3)', () => {
     const more = rule('.ki-more', DESKTOP);
     expect(more).toContain('min-block-size: var(--target)');
     expect(more).toContain('font-size: var(--type-control)');
     expect(rule(".ki-more[aria-current='page']", DESKTOP)).toContain('background: var(--tone-tint-action)');
-    const search = rule('.ki-search', DESKTOP);
-    // At 200 % text the desk header is about 45rem: the search keeps its glyph and its aria-label, the words wait for room; the pill never wraps over the clock.
-    expect(rule('.ki-search > span', DESKTOP)).toContain('text-overflow: ellipsis');
-    const narrowHeader = CSS.slice(CSS.indexOf('@container header (max-width: 56rem)'));
-    expect(narrowHeader).toContain('.ki-search > span { display: none; }');
-    expect(narrowHeader).toContain('.ki-search { inline-size: var(--target); max-inline-size: var(--target); padding: 0; justify-content: center; }');
-    // On a very narrow viewport the FAB keeps its glyph and aria-label and drops the word.
-    const narrowFab = CSS.slice(CSS.indexOf('@media (max-width: 24rem)'));
-    expect(narrowFab).toContain('.ki-fab > span { display: none; }');
-    expect(search).toContain('max-inline-size: 26.25rem');
-    expect(search).toContain('min-block-size: var(--target)');
-    expect(search).toContain('border-radius: var(--r-pill)');
-    expect(search).toContain('cursor: text');
+    expect(CSS).not.toMatch(/\.ki-(?:search|bell)\b/);
     const clock = rule('.ki-clock', DESKTOP);
     expect(clock).toContain('min-block-size: var(--target)');
     expect(clock).toContain('font-size: var(--type-control)');
@@ -251,7 +228,6 @@ describe('dashboard.css desktop (60rem and up)', () => {
     // Hairlines, not dots, separate the clock from the weather group and the temperature from the sunset (kajimafix 01.9).
     expect(rule('.ki-weather', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
     expect(rule('.ki-clock .tb-sun', DESKTOP)).toContain('border-inline-start: 1px solid var(--tone-stroke)');
-    expect(rule(".ki-bell[data-active]:not([data-active='0'])::after", DESKTOP)).toContain('background: var(--tone-action-brand)');
   });
   it('never reintroduces a side rail: no aside width variable stands', () => {
     expect(CSS).not.toContain('--ki-side');
@@ -338,7 +314,6 @@ describe('every :hover lives under @media (hover: hover); :active gives instant 
     expect(dash).toContain('.ki-safety:active');
     expect(dash).toContain('.ki-more:active');
     expect(dash).toContain('.ki-share:active');
-    expect(dash).toContain('.ki-fab:active');
     const base = /@media \(hover: none\) \{([\s\S]*?)\n\}/.exec(BASE_CSS)?.[1] ?? '';
     expect(base).toContain('.btn:active');
     expect(base).toContain('.chip:active');
@@ -361,8 +336,8 @@ describe('touch: the main scrolls vertically only; controls get the browser out 
     expect(rule('.ki-main')).toContain('touch-action: pan-y');
   });
   it('every S-owned control is touch-action: manipulation (no 300 ms tap delay)', () => {
-    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab', '.ki-fab']) expect(rule(selector)).toContain('touch-action: manipulation');
-    for (const selector of ['.ki-more', '.ki-search']) expect(rule(selector, DESKTOP)).toContain('touch-action: manipulation');
+    for (const selector of ['.ki-session', '.ki-safety', '.ki-tab']) expect(rule(selector)).toContain('touch-action: manipulation');
+    expect(rule('.ki-more', DESKTOP)).toContain('touch-action: manipulation');
     for (const selector of ['.btn, .btn-ghost, .btn-quiet', '.chip']) expect(rule(selector, BASE_CSS)).toContain('touch-action: manipulation');
     for (const selector of ['.row-button', '.route-link', '.dir-item', '.link-arrow, .link-ext', '.source-link']) {
       expect(rule(selector, LAYERS_CSS)).toContain('touch-action: manipulation');

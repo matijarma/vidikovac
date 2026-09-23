@@ -65,10 +65,11 @@ export interface ShellState {
   /** The screen stop's name, for the cast reason line. */
   stopName: string | null;
   hasScreen: boolean;
-  canCast: boolean;
-  castReason: CastReason | null;
-  /** True for the moment after a cast, while the polite region says so: the FAB carries data-sent. */
-  castSent: boolean;
+  /** Read by nothing since the FAB and the legacy cast buttons went (WP5 A3); optional only until
+   *  test/app/tabs.test.ts stops writing them (plan/WP5/handoff.md), then they go too. */
+  canCast?: boolean;
+  castReason?: CastReason | null;
+  castSent?: boolean;
   presentation?: PresentationState;
   presentationOpen?: boolean;
   notify: NotifyFlags;
@@ -155,11 +156,6 @@ export function moreButtonMarkup(i18n: I18n, s: ShellState): string {
   return `<button type="button" class="ki-more" data-key="more" data-action="directory" data-testid="status-more" aria-expanded="${s.directory ? 'true' : 'false'}" aria-current="${current ? 'page' : 'false'}"${frozenAttrs(s)}>${iconMarkup('ellipsis')}<span>${escapeHtml(i18n.t('nav.more'))}</span></button>`;
 }
 
-/** Desktop: the search launcher, a pill that reads like a field and opens Karta's search. Unused since the desk lost its second row (WP5 deletes it). */
-export function searchLaunchMarkup(i18n: I18n, s: ShellState): string {
-  return `<button type="button" class="ki-search" data-key="search" data-action="search" data-testid="status-search" aria-label="${escapeAttribute(i18n.t('transport.search'))}"${frozenAttrs(s)}>${iconMarkup('search', undefined, 'icon icon-sm')}<span>${escapeHtml(i18n.t('transport.search'))}</span></button>`;
-}
-
 /**
  * Unused since the desk header lost its clock [O-56] (WP5 deletes it with its CSS).
  * Desktop: the clock, wrapping the shared weather group (weather-status.ts) in
@@ -172,12 +168,6 @@ export function clockMarkup(i18n: I18n, s: ShellState, now: number, weather: Wea
   const time = zagrebTime(now);
   const label = weather ? i18n.t('shell.clockLabel', { time, weather: weather.aria }) : i18n.t('shell.clockOnly', { time });
   return `<a class="ki-clock tabular" data-key="clock" href="#layer=zrak-i-nebo" data-action="nav" data-layer="zrak-i-nebo" data-testid="status-clock" aria-label="${escapeAttribute(label)}"${frozenAttrs(s)}><time datetime="${new Date(now).toISOString()}">${escapeHtml(time)}</time>${weather ? `<span class="ki-weather">${weatherStatusMarkup(weather)}</span>` : ''}</a>`;
-}
-
-/** Desktop: the bell opens the notify sheet; its label counts the switches that are on, the dot shows any. */
-export function bellMarkup(i18n: I18n, s: ShellState): string {
-  const state = s.notifyActive > 0 ? i18n.t('kvart.notifyOn', { count: s.notifyActive }) : i18n.t('kvart.notifyOff');
-  return `<button type="button" class="ki-bell btn-quiet icon-btn" data-key="bell" data-action="notify" data-testid="status-bell" data-active="${s.notifyActive}" aria-haspopup="dialog" aria-label="${escapeAttribute(i18n.t('notify.bellLabel', { state }))}">${iconMarkup('bell')}</button>`;
 }
 
 /** One-tap safety, icon-only on both surfaces: the word lives in the aria-label and the title. Frozen keeps /hitno open. */
@@ -204,16 +194,6 @@ export function tabbarMarkup(i18n: I18n, s: ShellState): string {
   const moreLabel = showsLayer ? layerLabel(i18n, s.layer) : i18n.t('nav.more');
   const tabs = PHONE_TABS.map((tab) => layerTab(i18n, s, tab.layer)).join('');
   return `<ul class="ki-tabs" role="list">${tabs}<li><button type="button" class="ki-tab" data-action="directory" data-testid="tab-more" aria-current="${moreCurrent ? 'page' : 'false'}" aria-expanded="${s.directory ? 'true' : 'false'}"${frozenAttrs(s)}>${iconMarkup(showsLayer ? LAYER_ICONS[s.layer] : 'ellipsis')}<span class="ki-nav-label">${escapeHtml(moreLabel)}</span></button></li></ul>`;
-}
-
-/**
- * "Na zaslon" (D5): the phone's one primary touch action, for a scanner with a
- * screen, on every place but Promet (whose detail head carries the ghost cast
- * button) and the directory. '' when hidden.
- */
-export function fabMarkup(i18n: I18n, s: ShellState): string {
-  // One stable header control on every workspace. Never cover city content.
-  return '';
 }
 
 /**

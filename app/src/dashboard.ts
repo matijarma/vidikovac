@@ -24,12 +24,11 @@ import { fetchSentences as fetchSentencesImpl } from './api';
 import { askBoards, loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
-import { bannersMarkup, fabMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
+import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { tickTimebandClock } from './experience/timeband';
-import { attachTimebandSync } from './experience/timeband-sync';
 import { storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -57,8 +56,6 @@ import { ct } from './city/strings';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
-/** How long a cast button says "sent" after its frame went out. */
-const CAST_SENT_MS = 1_500;
 /** How many times a session asks for the stop catalogue before it leaves it down (one per draw after a failure). */
 const STOPS_ATTEMPTS = 3;
 
@@ -246,9 +243,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let countdownHidden = false;
   let directory = false;
   const agendaScroll=new Map<LayerId,{top:number;focus:string}>();
-  /** The moment the last cast frame went out; the cast buttons say "sent" for CAST_SENT_MS after it. */
-  let castSentAt: number | null = null;
-  let castTimer: unknown = null;
   let presentationOpen = false;
   let presentationState: PresentationState | undefined = session.snapshot().presentation;
   let presentationConfirmRevision: number | null = null;
@@ -285,8 +279,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   // --- stable shell --------------------------------------------------------
   // The two live regions are visually hidden, never display: none, so readers hear them.
-  // Six regions in reading order on both surfaces (B.5); the CSS places them, never hides a control that exists.
-  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting" data-fab="0">
+  // Five regions in reading order on both surfaces (B.5); the CSS places them, never hides a control that exists.
+  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting">
 <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
@@ -294,7 +288,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <div class="ki-presentation" data-region="presentation"></div>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
-<div class="ki-fab-slot" data-region="fab"></div>
 <nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
 </div>`);
   root.appendChild(element);
@@ -303,7 +296,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const main = element.querySelector<HTMLElement>('main')!;
-  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), fab: region('fab'), tabs: region('tabs') };
+  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), tabs: region('tabs') };
 
   /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
   function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
@@ -323,7 +316,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function shellState(): ShellState {
     const s = session.snapshot();
     const feed = store.snapshot();
-    const cast = castState();
     const stop = s.screen?.stop ?? undefined;
     const notify = notifyStore.snapshot();
     return {
@@ -333,7 +325,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
       notice, sourcesDown: sourcesDown(feed),
       surface: surface(), stopName: stop?.name ?? null,
-      hasScreen: Boolean(s.screen), canCast: cast.can, castReason: cast.reason, castSent: castSentAt !== null,
+      hasScreen: Boolean(s.screen),
       presentation: presentationState, presentationOpen,
       notify, notifyActive: activeCount(notify, notifyKeys), notifyKeys,
     };
@@ -394,9 +386,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     // One status row on both surfaces: no clock, so no weather here; weather is a row of the feed [O-56].
     paintRegion(regions.status, statusLineMarkup(i18n, s));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
-    const fab = fabMarkup(i18n, s);
-    paintRegion(regions.fab, fab);
-    element.dataset.fab = fab ? '1' : '0';
     paintRegion(regions.tabs, tabbarMarkup(i18n, s));
     regions.tabs.setAttribute('aria-label', i18n.t('nav.label'));
     sheet.refresh();
@@ -433,8 +422,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function layerContext(): LayerContext {
     const feed = store.snapshot();
-    // The cast state plus the moment of the last cast, which the panel's button shows as data-sent.
-    const cast: CastState & { sentAt: number | null } = { ...castState(), sentAt: castSentAt };
     const ctx: LayerContext = {
       city: cityStore.snapshot(),
       ensureCity: ids => { if (!frozen && !disposed) void cityStore.ensure(ids); },
@@ -452,7 +439,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
-      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, stopsDown, lastRun,
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
       frame: session.snapshot().screen?.frame, frameLines,
     };
@@ -738,13 +725,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     paintPresentation();
   }
 
-  /** The status search and "+ stanica": Promet with its search field focused (the phone workspace raises its sheet on focus). */
-  function openSearch(): void {
-    navigate('u-pokretu', null, true);
-    const field = doc.getElementById('u-pokretu-light-search') ?? main.querySelector<HTMLElement>('[data-testid=transport-search]');
-    field?.focus();
-  }
-
   function findItem(module: ModuleId, id: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
     const snapshot = store.snapshot().snapshots[module];
     const item = snapshot?.items.find((candidate) => candidate.id === id);
@@ -1009,7 +989,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     store.pause(true);
     stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
-    if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
     // The closing card (role=alert) takes over from the notice and the assertive region.
     notice = null;
     assertive.textContent = '';
@@ -1150,7 +1129,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'directory': toggleDirectory(); return;
-      case 'cast': cast(); return;
       case 'presentation': cast(); return;
       case 'presentation-close': presentationOpen = false; presentationConfirmRevision = null; paintPresentation(); paintShell(); return;
       case 'present-request': present('present'); return;
@@ -1168,7 +1146,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'notify': notifySheet.open(); return;
-      case 'search': openSearch(); return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;
@@ -1212,8 +1189,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.addEventListener('keydown', (event) => {
     if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) element.dataset.modality = 'keyboard';
   }, true);
-  // Sada's phone form: a segment tap scrolls the lane row; a settled swipe selects the column through the same filter.
-  const detachTimebandSync = attachTimebandSync(element, setFilterAction, { reducedMotion: Boolean(deps.reducedMotion), lightweight });
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });
@@ -1296,8 +1271,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       disposed = true;
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
-      if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
-      stopView();
+        stopView();
       stopCity();
       stopStore();
       stopTheme?.();
@@ -1307,7 +1281,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopLineFocus();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
-      detachTimebandSync();
       closeShare();
       sheet.destroy();
       notifySheet.destroy();
