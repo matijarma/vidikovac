@@ -45,6 +45,51 @@ describe('runTick on the corridor', () => {
   const routes = { '1': { shortName: '1', longName: 'Trunk east', type: 0 }, '2': { shortName: '2', longName: 'Trunk north', type: 0 }, '109': { shortName: '109', longName: 'Bus', type: 3 } };
   const tramById = new Map(sim.trams.map((t) => [t.id, t]));
 
+  it('keeps a nearby trip handover at a truncated terminal, but not a relocated vehicle id', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: [{ x: 0, y: 0 }, { x: 1000, y: 0 }] },
+        { from: 2, to: 3, pts: [{ x: 500, y: 6 }, { x: 0, y: 6 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const idx = corridorIndex(n, [{ tripId: 'in', pathId: 'arrival' }, { tripId: 'out', pathId: 'departure' }]);
+    const joins = new Map<string, TripJoin>([
+      ['in', { direction: 0, headsign: 'End', shapeId: 'arrival', service: 'wd' }],
+      ['out', { direction: 1, headsign: 'Back', shapeId: 'departure', service: 'wd' }],
+    ]);
+    let state = emptyState();
+    const tick = (offset: number, b: number, trip: string) => {
+      const result = runTick({
+        state, engine: createEngine(n, idx), routes, joins, nowMs: (start + offset + 2) * 1000, validUntilMs: 0,
+        feed: { headerTs: start + offset, tripUpdates: [], vehicles: [
+          { vehicleId: 'A', tripId: 'in', routeId: '1', ...lonLatOf({ x: 970, y: 0 }), atSec: start + offset },
+          { vehicleId: 'B', tripId: trip, routeId: '1', ...lonLatOf({ x: b, y: 0 }), atSec: start + offset },
+        ] },
+      });
+      state = result.state;
+      return result;
+    };
+    tick(0, 800, 'in');
+    tick(10, 820, 'in');
+    const before = state.tracks.B;
+    expect(before.order.leader).toBe('A');
+    tick(20, 830, 'out');
+    expect(state.tracks.B).toBe(before);
+    expect(state.tracks.B.fixes).toHaveLength(3);
+    expect(state.tracks.B.order.leader).toBe('A');
+    // The next valid prior also lacks the current edge, but this report is
+    // genuinely elsewhere. A nearby-handover rule must not retain it.
+    joins.set('elsewhere', joins.get('out')!);
+    tick(30, 2500, 'elsewhere');
+    expect(state.tracks.B).not.toBe(before);
+    expect(state.tracks.B.fixes).toHaveLength(1);
+  });
+
   it('publishes actual fixes through a directed gap and keeps that decision across cold restores', () => {
     const n = syntheticNetwork({
       edges: [
@@ -66,6 +111,7 @@ describe('runTick on the corridor', () => {
         state, engine: createEngine(n, idx), routes, joins, nowMs: (start + offset + 2) * 1000, validUntilMs: 0,
         feed: { headerTs: start + offset, tripUpdates: [], vehicles: [
           { vehicleId: 'gap', tripId: 'gap', routeId: '1', ...ll, atSec: start + offset },
+          { vehicleId: 'ahead', tripId: 'gap', routeId: '1', ...lonLatOf({ x: 900, y: 0 }), atSec: start + offset },
         ] },
       });
       const pin = result.payload.items.find(i => i.id === 'vehicle:gap')!;
@@ -75,9 +121,17 @@ describe('runTick on the corridor', () => {
         expect(isFreeMotion(pin.motion!)).toBe(true);
         expect(pin.geo!.coordinates[0]).toBeCloseTo(ll.lon, 5);
         expect(pin.geo!.coordinates[1]).toBeCloseTo(ll.lat, 5);
+        expect(result.state.tracks.gap.order.leader).toBe('ahead');
+        expect(pin.data?.behind).toBe('ahead');
       }
-      if (offset === 90) expect(n.paths[result.state.tracks.gap.match.pathIdx!].id).toBe('departure');
+      if (offset === 90) {
+        expect(n.paths[result.state.tracks.gap.match.pathIdx!].id).toBe('departure');
+        expect(result.state.tracks.gap.order.leader).toBe('ahead');
+      }
       state = deserializeState(serializeState(result.state));
+      // A real queue may have been established before entering the gap.
+      // Neither a lost geometry nor its recovery is permission to erase it.
+      if (offset === 10) state.tracks.gap.order.leader = 'ahead';
     }
   });
 
