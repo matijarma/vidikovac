@@ -30,6 +30,7 @@ export const CODE_MIN_PROGRESS: number;
 export const KARTA_POLL_MS: number;
 export const SHARE_TIMEOUT_MS: number;
 export const STOP_BOARD_TIMEOUT_MS: number;
+export const SESSION_MINUTES: number;
 export const SESSION_LENGTH_MS: number;
 export const EXPIRY_MARGIN_MS: number;
 export const AFTER_EXPIRY_MS: number;
@@ -61,14 +62,17 @@ export function makeScrubber(secrets?: readonly string[]): Scrubber;
 export interface RedemptionBudget {
   waitMs(surface: Surface, now: number): number;
   take(surface: Surface, now: number): void;
-  /** The surface's /api/scan answered at `at`: a confirmed redemption. */
-  redeemed(surface: Surface, at: number): void;
-  /** No /api/scan answer came: the redemption failed, its page was left (the scan cancelled) at `at`. */
+  /** An /api/scan answer at `at`: confirms the redemption unless it has already failed (then it is late). Whether it confirmed. */
+  redeemed(surface: Surface, at: number): boolean;
+  /** No /api/scan answer came by `at`: the redemption failed for good. */
   failed(surface: Surface, at: number): void;
+  /** The failed redemption's page was left at `at`, or leaving it failed with `cancelError`. */
+  settle(surface: Surface, at: number, cancelError?: string | null): void;
   counts(): Record<string, number>;
   /** Confirmed redemptions: the answers, in the order they came. */
   times(): { surface: Surface; at: number }[];
-  failures(): { surface: Surface; at: number }[];
+  failures(): { surface: Surface; at: number; cancelError?: string }[];
+  lates(): { surface: Surface; at: number }[];
 }
 export function redemptionBudget(options?: { perSurface?: number; spacingMs?: number }): RedemptionBudget;
 
@@ -126,7 +130,7 @@ export interface ViewportEntry {
 export interface AxeResult { seriousCritical: number; rules: string[] }
 export interface ShareObservation { tapped: boolean; code: boolean; afterMs: number | null; detail: string | null }
 export interface StopBoardObservation extends StopBoardRead { taps: number; query: string; error: string | null }
-export interface ExpiryObservation { seen: boolean; stamped: boolean; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
+export interface ExpiryObservation { seen: boolean; stamped: boolean; boundary: 'stamp' | 'estimate'; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
 export interface PhoneObservation {
   landingMs: number | null;
   sada: PhoneRead | null;
@@ -162,7 +166,7 @@ export interface Observation {
   errors: { phase: string; error: string }[];
   notes: string[];
   /** Confirmed redemptions (their /api/scan answers) and failed ones (no answer, the scan cancelled). */
-  redemptions: { confirmed: { surface: Surface; at: number }[]; failed: { surface: Surface; at: number }[] };
+  redemptions: { confirmed: { surface: Surface; at: number }[]; failed: { surface: Surface; at: number; cancelError?: string }[]; late: { surface: Surface; at: number }[] };
 }
 export function newObservation(config: ObserverConfig, health: unknown): Observation;
 export function newPhone(): PhoneObservation;

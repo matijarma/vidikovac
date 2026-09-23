@@ -82,8 +82,13 @@ export const PROXY_SETTLE_MS = 3_000;
 export const SHARE_TIMEOUT_MS = 15_000;
 /** The stop board must open this long after the search result is tapped. */
 export const STOP_BOARD_TIMEOUT_MS = 15_000;
-/** A redeemed session: "Skeniraj za 10 minuta grada." */
-export const SESSION_LENGTH_MS = 10 * 60_000;
+/**
+ * A redeemed session's length in minutes ("Skeniraj za 10 minuta grada."). The page keeps its own expiresAt in memory
+ * only (app/src/session.ts), so this configured length is the observer's estimate of the end when the page's own
+ * end stamp cannot be read.
+ */
+export const SESSION_MINUTES = 10;
+export const SESSION_LENGTH_MS = SESSION_MINUTES * 60_000;
 /** How long past the session's end the phone may take to show session-ended. */
 export const EXPIRY_MARGIN_MS = 90_000;
 /** Past the shell's 30 s data poll: no /api/data request may follow once the session has ended (the phone spec's AFTER_EXPIRY_MS). */
@@ -260,6 +265,7 @@ export function redemptionBudget({ perSurface = REDEMPTIONS_PER_SURFACE, spacing
   const counts = new Map();
   const times = [];
   const failures = [];
+  const lates = [];
   let pending = null;
   const guard = (surface) => {
     if ((counts.get(surface) ?? 0) >= perSurface) throw new Error(`the ${surface} has already redeemed ${perSurface} code(s); the observer redeems at most ${perSurface} per surface`);
@@ -268,7 +274,7 @@ export function redemptionBudget({ perSurface = REDEMPTIONS_PER_SURFACE, spacing
   // A failed redemption's scan was cancelled at its `at`; the server may have redeemed it up to then, so the
   // spacing runs from there too. It is never a confirmation.
   const latest = () => {
-    const all = [...times, ...failures].map((t) => t.at);
+    const all = [...times, ...failures, ...lates].map((t) => t.at);
     return all.length ? Math.max(...all) : undefined;
   };
   return {
@@ -287,19 +293,38 @@ export function redemptionBudget({ perSurface = REDEMPTIONS_PER_SURFACE, spacing
       pending = surface;
     },
     /** The surface's code was redeemed at `at`: its /api/scan answered, or (none seen) the observer stopped waiting. A later answer moves it on. */
+    /**
+     * An /api/scan answer came for the surface at `at`. It confirms the redemption unless that has already failed:
+     * a failed redemption stays failed for good, and its answer is only late (it still moves the spacing on).
+     * Returns whether it confirmed.
+     */
     redeemed(surface, at) {
+      if (failures.some((f) => f.surface === surface)) {
+        lates.push({ surface, at });
+        return false;
+      }
       times.push({ surface, at });
       if (pending === surface) pending = null;
+      return true;
     },
-    /** The surface's redemption failed: no /api/scan answer came, and its page was left at `at` (the scan cancelled). */
+    /** The surface's redemption failed for good: no /api/scan answer came by `at`. */
     failed(surface, at) {
       failures.push({ surface, at });
       if (pending === surface) pending = null;
+    },
+    /** The failed redemption's page was left (the scan cancelled) at `at`, or leaving it failed with `cancelError`. */
+    settle(surface, at, cancelError = null) {
+      const f = failures.find((x) => x.surface === surface);
+      if (!f) return;
+      f.at = Math.max(f.at, at);
+      if (cancelError) f.cancelError = cancelError;
     },
     counts: () => Object.fromEntries(counts),
     /** Confirmed redemptions: /api/scan answers, in the order they came. */
     times: () => times.map((t) => ({ ...t })),
     failures: () => failures.map((t) => ({ ...t })),
+    /** Answers for redemptions that had already failed: reported, never confirmations. */
+    lates: () => lates.map((t) => ({ ...t })),
   };
 }
 
@@ -601,10 +626,11 @@ export async function freshScanUrl(kioskPage, ctx) {
 /**
  * One redemption for `surface` inside the budget: wait out the spacing from the latest redemption (its /api/scan
  * answer), read a fresh code, land in the live session. A redemption counts only when its POST /api/scan answers
- * on this page. When no answer comes, the page is left for about:blank, so the browser cancels a scan still in
- * flight and no late answer can land beside the next surface's; the redemption is recorded as failed (its recorder
- * row fails), and the next surface still waits the spacing from that moment. An answer that does arrive late
- * moves the spacing on.
+ * on this page before the wait for the live session ends. Without one the redemption is failed for good, first,
+ * and only then is the page left for about:blank, so the browser cancels a scan still in flight: an answer during
+ * or after that cancellation is a late answer in the report, never a confirmation (it still moves the spacing on).
+ * A cancellation that rejects is recorded (the recorder row names it) and the redemption stays failed. The next
+ * surface waits the spacing from the latest answer, failure or late answer.
  */
 export async function redeem(page, kioskPage, surface, ctx) {
   let scanUrl = null;
@@ -620,12 +646,18 @@ export async function redeem(page, kioskPage, surface, ctx) {
   }
   const { pathOf } = ctx.instruments.recorders;
   let answeredAt = null;
+  let timedOut = false;
   page.on('response', (res) => {
     try {
       if (res.request().method() !== 'POST' || !pathOf(res.url()).startsWith('/api/scan')) return;
     } catch { return; }
-    answeredAt = ctx.now();
-    ctx.budget.redeemed(surface, answeredAt);
+    const at = ctx.now();
+    if (timedOut) {
+      ctx.budget.redeemed(surface, at);
+      ctx.note(`${surface}: a late /api/scan answer after its redemption failed; reported, not counted as confirmed`);
+      return;
+    }
+    if (ctx.budget.redeemed(surface, at)) answeredAt = at;
   });
   ctx.budget.take(surface, ctx.now());
   const t0 = ctx.now();
@@ -634,11 +666,18 @@ export async function redeem(page, kioskPage, surface, ctx) {
     await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [SESSION_LIVE, ctx.instruments.inventory.PHONE_PROBES.sadaPlace] }, { timeout: SESSION_TIMEOUT_MS });
   } finally {
     if (answeredAt === null) {
-      await page.goto('about:blank', { timeout: 10_000 }).catch(() => {});
-      if (answeredAt === null) {
-        ctx.budget.failed(surface, ctx.now());
-        ctx.note(`${surface}: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s; the redemption failed and its page was left, so the scan is cancelled`);
+      // Failed for good before the cancellation starts: nothing that answers from here on can confirm it.
+      timedOut = true;
+      ctx.budget.failed(surface, ctx.now());
+      let cancelError = null;
+      try {
+        await page.goto('about:blank', { timeout: 10_000 });
+      } catch (e) {
+        cancelError = errText(e);
+        ctx.error(`${surface} cancellation`, e);
       }
+      ctx.budget.settle(surface, ctx.now(), cancelError);
+      ctx.note(`${surface}: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s; the redemption failed${cancelError ? ', and leaving its page to cancel the scan failed' : ' and its page was left, so the scan is cancelled'}`);
     }
   }
   return ctx.now() - t0;
@@ -743,13 +782,17 @@ export async function observeExpiry(page, ctx, out) {
     : await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sessionEnded] }, { timeout }).then(() => true, () => false);
   if (!seen) ctx.note(`phone: no ${P.sessionEnded} by ${(SESSION_LENGTH_MS + EXPIRY_MARGIN_MS) / 1000} s after its redemption`);
   const stamp = ctx.expiryWatch ? await page.evaluate(EXPIRY_STAMP_IN_PAGE, spec).catch(() => null) : null;
-  if (seen && stamp === null) ctx.note('phone: the page kept no stamp of its session\'s end; requests count from the moment the observer saw it');
-  const endedAt = stamp ?? ctx.now();
+  // Without the page's own stamp there is no blind window: the boundary is the observer's estimate of the end, the
+  // confirmed redemption + SESSION_MINUTES, never the later moment it came to look. A missing stamp fails the row.
+  const estimate = redeemedAt + SESSION_LENGTH_MS;
+  const endedAt = stamp ?? estimate;
+  if (stamp === null) ctx.note(`phone: the page kept no stamp of its session's end; /api/data requests count from the redemption + ${SESSION_MINUTES} min`);
   const ended = await page.evaluate(inventory.EXPIRY_READ_IN_PAGE, inventory.EXPIRY_SPEC);
-  await ctx.sleep(Math.max(0, endedAt + AFTER_EXPIRY_MS - ctx.now()));
+  // A full AFTER_EXPIRY_MS past the end: from the stamp, or (the real end unknown) from now.
+  await ctx.sleep(Math.max(0, (stamp ?? ctx.now()) + AFTER_EXPIRY_MS - ctx.now()));
   const later = await page.evaluate(inventory.EXPIRY_READ_IN_PAGE, inventory.EXPIRY_SPEC);
   const requestsAfter = (ctx.phoneDataRequests ?? []).filter((r) => r.at >= endedAt).map((r) => r.path);
-  out.expiry = { seen, stamped: stamp !== null, afterRedemptionMs: endedAt - redeemedAt, ended, later, requestsAfter };
+  out.expiry = { seen: seen || ended.ended, stamped: stamp !== null, boundary: stamp !== null ? 'stamp' : 'estimate', afterRedemptionMs: endedAt - redeemedAt, ended, later, requestsAfter };
   await shot(page, 'phone-expired', ctx);
   return out.expiry;
 }
@@ -1001,8 +1044,16 @@ function recorderProblems(obs, surface) {
   if (!recs.length) return { value: null, detail: [`no ${surface} page was opened`] };
   // A phone or desktop that never landed in its session saw nothing: its empty recorder proves nothing.
   const visit = surface === 'phone' ? obs.phone : surface === 'desktop' ? obs.desktop : null;
-  const unconfirmed = (obs.redemptions?.failed ?? []).some((f) => f.surface === surface);
-  if (unconfirmed) return { value: null, detail: [`the ${surface}'s redemption was not confirmed: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s, so it failed and its page was left`] };
+  const unconfirmed = (obs.redemptions?.failed ?? []).find((f) => f.surface === surface);
+  if (unconfirmed) {
+    const late = (obs.redemptions?.late ?? []).filter((l) => l.surface === surface);
+    return {
+      value: null,
+      detail: [`the ${surface}'s redemption was not confirmed: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s, so it failed for good`
+        + (unconfirmed.cancelError ? `; leaving its page to cancel the scan failed: ${unconfirmed.cancelError}` : '; its page was left, so the scan is cancelled')
+        + (late.length ? `; ${late.length} late answer(s), not counted as confirmed` : '')],
+    };
+  }
   if (visit && visit.landingMs === null) return { value: null, detail: [`the ${surface} never landed in its session${visit.failed ? ` (${visit.failed})` : ''}: its recorder proves nothing`] };
   const problems = recs.flatMap((r) => r.problems.map((p) => `${r.page}: ${p}`));
   const aborted = recs.reduce((n, r) => n + (r.aborted ?? 0), 0);
@@ -1206,6 +1257,7 @@ export const METRICS = Object.freeze({
     const x = obs.phone?.expiry;
     if (!x) return notMeasured('the end of the phone\'s session');
     const f = [...new Set([...k.inventory.expiryFailures(x.ended), ...k.inventory.expiryFailures(x.later, x.requestsAfter)])];
+    if (!x.stamped) f.push(`the page kept no stamp of its session's end (a defect): requests counted from the observer's estimate, the redemption + ${SESSION_MINUTES} min`);
     return { value: f.length, detail: f.length ? f : [`session-ended ${Math.round(x.afterRedemptionMs / 1000)} s after the redemption; cleared, and no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after`] };
   },
   'phone.kartaPillsLate': (obs, k) => {
@@ -1326,6 +1378,13 @@ export function renderReport(observation, verdict, instruments) {
   lines.push('## Footprint', '');
   lines.push(`- Screens created: ${recs.reduce((n, r) => n + r.screenCreations, 0)} (the observer has no code path that creates one).`);
   lines.push(`- Code redemptions: ${Object.entries(red).filter(([s]) => s !== 'kiosk').map(([s, n]) => `${s} ${n}`).join(', ') || 'none'} (at most ${REDEMPTIONS_PER_SURFACE} per surface, at least ${REDEMPTION_SPACING_MS / 1000} s apart).`);
+  const failedRedemptions = observation.redemptions?.failed ?? [];
+  if (failedRedemptions.length) {
+    lines.push(`- Failed redemptions: ${failedRedemptions.map((f) => {
+      const late = (observation.redemptions.late ?? []).filter((l) => l.surface === f.surface);
+      return `${f.surface} (no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s${f.cancelError ? '; the cancellation failed' : ''}${late.length ? `; a late answer ${late.map((l) => `+${Math.max(0, Math.round((l.at - f.at) / 1000))} s`).join(', ')} after it failed, not counted as confirmed` : ''})`;
+    }).join(', ')}.`);
+  }
   lines.push('- Nothing pressed on the screen, no view presented, settings never opened; the phone tapped only its own controls ("Podijeli grad" when at rest, the Karta tab, the stop search\'s field and first result).', '');
 
   lines.push('## Thresholds (§16.3, §16.4)', '');
@@ -1423,7 +1482,7 @@ export function newObservation(config, health) {
   return {
     meta: { origin: config.origin, startedAt: config.startedAt, endedAt: null, minutes: config.minutes, stage: config.stage, surfaces: config.surfaces, health, userAgentSuffix: USER_AGENT_SUFFIX.trim() },
     kiosk: null, phone: null, desktop: null, recorders: [], inventories: [], captures: [], errors: [], notes: [],
-    redemptions: { confirmed: [], failed: [] },
+    redemptions: { confirmed: [], failed: [], late: [] },
   };
 }
 
@@ -1480,7 +1539,7 @@ export async function run(config, runtime, { log = console.log, error = console.
     ctx.error(e instanceof KioskUnavailable ? 'kiosk' : 'observation', e);
   } finally {
     observation.recorders = ctx.recorders.map(freeze);
-    observation.redemptions = { confirmed: ctx.budget.times(), failed: ctx.budget.failures() };
+    observation.redemptions = { confirmed: ctx.budget.times(), failed: ctx.budget.failures(), late: ctx.budget.lates() };
     await browser.close().catch(() => {});
   }
   observation.meta.endedAt = new Date(now()).toISOString();

@@ -28,7 +28,7 @@ import type { CalmMotionReading } from '../../e2e/wall';
 import {
   ANY_PRESENT_IN_PAGE, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
-  EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE,
+  EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
   USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
   plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
@@ -208,6 +208,12 @@ describe('the redemption budget', () => {
     b.take('desktop', 72_000);
     b.redeemed('desktop', 72_300);
     expect(b.times()).toEqual([{ surface: 'desktop', at: 72_300 }]);
+    // Failed for good: a late phone answer is late, never a confirmation, though it still moves the spacing on.
+    expect(b.redeemed('phone', 80_000)).toBe(false);
+    expect(b.times()).toEqual([{ surface: 'desktop', at: 72_300 }]);
+    expect(b.lates()).toEqual([{ surface: 'phone', at: 80_000 }]);
+    b.settle('phone', 61_000, 'page.goto: net::ERR_FAILED');
+    expect(b.failures()).toEqual([{ surface: 'phone', at: 61_000, cancelError: 'page.goto: net::ERR_FAILED' }]);
   });
 });
 
@@ -460,6 +466,12 @@ interface FakeOptions {
   phoneRequests?: { path: string; afterScanMs: number }[];
   /** The calm-motion reading of each rotation minute, by its index. */
   calm?: (i: number) => CalmMotionReading;
+  /** How the phone's cancellation (its page left for about:blank) goes: the held answer lands during it, or it rejects. */
+  cancel?: 'answers' | 'rejects';
+  /** The page-side end stamp: its watch cannot be installed, or it never stamps. */
+  expiryWatch?: 'rejects' | 'no-stamp';
+  /** The observer comes to look at the ended session this long after the phone's scan answered. */
+  expirySeenAfterScanMs?: number;
 }
 interface Handler { (arg: unknown): unknown }
 
@@ -469,13 +481,16 @@ function fakeRuntime(options: FakeOptions = {}) {
   // clock passes them; a page's own are cancelled when it leaves for about:blank, as a browser cancels them.
   const due: { at: number; kind: Kind; fire: () => void }[] = [];
   const advance = (ms: number): void => {
-    t += ms;
+    const target = t + ms;
+    // Each event fires at its own due time, the clock standing there while it does.
     for (;;) {
-      const next = due.filter((e) => e.at <= t).sort((a, b) => a.at - b.at)[0];
+      const next = due.filter((e) => e.at <= target).sort((a, b) => a.at - b.at)[0];
       if (!next) break;
       due.splice(due.indexOf(next), 1);
+      t = Math.max(t, next.at);
       next.fire();
     }
+    t = Math.max(t, target);
   };
   const clock = { now: () => t, sleep: async (ms: number) => { advance(ms); } };
   const log = {
@@ -505,6 +520,9 @@ function fakeRuntime(options: FakeOptions = {}) {
       async goto(url: string) {
         log.gotos.push({ kind, url, at: t });
         if (url === 'about:blank') {
+          if (kind === 'phone' && options.cancel === 'rejects') throw new Error('page.goto: net::ERR_FAILED at about:blank');
+          const held = due.find((x) => x.kind === kind && x.at === Infinity);
+          if (kind === 'phone' && options.cancel === 'answers' && held) { due.splice(due.indexOf(held), 1); held.fire(); }
           for (const e of due.filter((x) => x.kind === kind)) { due.splice(due.indexOf(e), 1); log.cancelled.push(kind); }
           return;
         }
@@ -528,6 +546,12 @@ function fakeRuntime(options: FakeOptions = {}) {
         }
       },
       async waitForFunction(fn: unknown, arg?: unknown) {
+        const waitsForEnd = fn === EXPIRY_STAMP_IN_PAGE || (fn === ANY_PRESENT_IN_PAGE && (arg as { selectors: string[] }).selectors.includes(inventory.PHONE_PROBES.sessionEnded));
+        if (kind === 'phone' && waitsForEnd && options.expirySeenAfterScanMs !== undefined) {
+          const scan = log.scans.find((x) => x.kind === 'phone')!.at;
+          advance(Math.max(0, scan + options.expirySeenAfterScanMs - t));
+        }
+        if (kind === 'phone' && fn === EXPIRY_STAMP_IN_PAGE && options.expiryWatch === 'no-stamp') throw new Error('Timeout 690000ms exceeded.');
         if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
         // The session goes live only once the scan has answered; the observer waits SESSION_TIMEOUT_MS for it.
         if (fn === ANY_PRESENT_IN_PAGE && (arg as { selectors: string[] }).selectors.includes(SESSION_LIVE) && !answered) {
@@ -565,7 +589,12 @@ function fakeRuntime(options: FakeOptions = {}) {
           if (options.requestAfterExpiry && ++expiryReads === 2) emit('request', { url: () => `https://zagreb.example${options.requestAfterExpiry}`, method: () => 'GET' });
           return options.expiry ?? GOOD_EXPIRY;
         }
-        if (fn === EXPIRY_WATCH_IN_PAGE) { log.watches.push(kind); return true; }
+        if (fn === EXPIRY_WATCH_IN_PAGE) {
+          if (options.expiryWatch === 'rejects') throw new Error('page.evaluate: Execution context was destroyed');
+          log.watches.push(kind);
+          return true;
+        }
+        if (fn === EXPIRY_STAMP_IN_PAGE && options.expiryWatch === 'no-stamp') return null;
         // The page's own stamp of the moment session-ended showed; by default the session has just ended.
         if (fn === EXPIRY_STAMP_IN_PAGE) return endedAt !== null ? (endedAt <= t ? endedAt : null) : t;
         if (fn === wall.CALM_MOTION_START_IN_PAGE) return 3;
@@ -840,6 +869,49 @@ describe('a run over a fake browser', () => {
     const report = read(r.out, 'report.md');
     expect(report).toMatch(/\*\*recorders-phone\*\* \(fail\): the phone's redemption was not confirmed: no \/api\/scan answer within 60 s/);
     expect(report).toMatch(/\| redemptions \| d1 \| all \| .* \| ≤ 0 \| 0 \| pass \|/);
+  });
+
+  // Review round 3, item 1: once a redemption has timed out it is failed for good. An answer that lands while its
+  // page is being left, or after a cancellation that rejected, is a late answer in the report, never a confirmation.
+  it('an /api/scan answer during the cancellation never confirms a timed-out redemption: it is reported as late', async () => {
+    const r = await observe([], { phoneAnswersAfterDesktopMs: 1_000, cancel: 'answers', codeWindowMs: 1_000 });
+    expect(r.log.scans.map((x) => x.kind)).toEqual(['phone', 'desktop']);
+    const [phone, desktop] = r.log.scans.map((x) => x.at);
+    expect(desktop - phone).toBeGreaterThanOrEqual(REDEMPTION_SPACING_MS);
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\*\*recorders-phone\*\* \(fail\): the phone's redemption was not confirmed: no \/api\/scan answer within 60 s/);
+    expect(report).toContain('- Failed redemptions: phone (no /api/scan answer within 60 s; a late answer +0 s after it failed, not counted as confirmed).');
+    expect(r.code).toBe(1);
+  });
+
+  it('a cancellation that rejects is recorded on the phone\'s recorder row, and a later answer still does not confirm the redemption', async () => {
+    const r = await observe([], { phoneAnswersAfterDesktopMs: 3_000, cancel: 'rejects', codeWindowMs: 1_000 });
+    expect(r.log.scans.map((x) => x.kind)).toEqual(['desktop', 'phone']);
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\*\*recorders-phone\*\* \(fail\): the phone's redemption was not confirmed: no \/api\/scan answer within 60 s, so it failed for good; leaving its page to cancel the scan failed: page\.goto: net::ERR_FAILED at about:blank; 1 late answer\(s\), not counted as confirmed/);
+    expect(report).toMatch(/- Failed redemptions: phone \(no \/api\/scan answer within 60 s; the cancellation failed; a late answer \+\d+ s after it failed, not counted as confirmed\)\./);
+    expect(report).toContain('error, phone cancellation: page.goto: net::ERR_FAILED at about:blank');
+    // The scan the failed cancellation left in flight landed 3 s after the desktop's: the spacing row says so.
+    expect(report).toMatch(/\| redemptions \| d1 \| all \| .* \| ≤ 0 \| 1 \| \*\*fail\*\* \|/);
+    expect(r.code).toBe(1);
+  });
+
+  // Review round 3, item 2: without the page's own end stamp the boundary fell back to the moment the observer looked
+  // (700 s), so a request at 610 s escaped a session that ended at 600 s. The boundary is now the observer's estimate,
+  // the redemption + SESSION_MINUTES, and a missing stamp is itself a failure.
+  it('no end stamp: the boundary is the redemption + the session length, so a request at 610 s fails an expiry looked at 700 s', async () => {
+    expect(SESSION_LENGTH_MS).toBe(SESSION_MINUTES * 60_000);
+    expect(SESSION_MINUTES).toBe(10);
+    const late = await observe([], { expiryWatch: 'no-stamp', expirySeenAfterScanMs: 700_000, phoneRequests: [{ path: '/api/data/dhmz-now', afterScanMs: 590_000 }, { path: '/api/data/zet-rt', afterScanMs: 610_000 }] });
+    expect(late.lines.join('\n')).toContain('FAIL phone-expiry');
+    const report = read(late.out, 'report.md');
+    expect(report).toContain('1 /api/data request(s) after the session ended: /api/data/zet-rt');
+    expect(report).not.toContain('/api/data/dhmz-now (target none)');
+    expect(report).toContain('the page kept no stamp of its session\'s end (a defect): requests counted from the observer\'s estimate, the redemption + 10 min');
+    // No stamp and no request: still a failure, never ungraded.
+    const unstamped = await observe([], { expiryWatch: 'rejects', expirySeenAfterScanMs: 700_000 });
+    expect(unstamped.lines.join('\n')).toContain('FAIL phone-expiry');
+    expect(read(unstamped.out, 'report.md')).toContain('the page kept no stamp of its session\'s end (a defect)');
   });
 
   // Review round 2, item 2: the watcher for /api/data after expiry was attached only once the observer saw
