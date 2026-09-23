@@ -48,7 +48,9 @@ async function wall(extra: Partial<KioskMapInput>, direct?: Partial<CityMapOptio
   const queue = new Map<number, (t: number) => void>();
   let id = 0;
   const deps = { now: () => time, raf: (cb: (t: number) => void) => { queue.set(++id, cb); return id; }, cancel: (h: number) => { queue.delete(h); }, loadSchema: async () => ART };
+  let created: CityMapOptions | null = null;
   const factory = (options: CityMapOptions): CityMapHandle => {
+    created = options;
     const handle = createSchemaMap({ ...options, ...direct, loadNetwork: async () => NET }, deps);
     handles.push(handle);
     return handle;
@@ -63,7 +65,7 @@ async function wall(extra: Partial<KioskMapInput>, direct?: Partial<CityMapOptio
   time += 16;
   for (const cb of [...queue.values()]) cb(time);
   const scene = container.querySelector<HTMLElement>('[data-testid=schema-map]')!;
-  return { container, status: container.dataset.mapStatus, scale: Number(scene.dataset.scale), labels: scene.dataset.labels };
+  return { container, status: container.dataset.mapStatus, scale: Number(scene.dataset.scale), labels: scene.dataset.labels, options: created! as CityMapOptions };
 }
 
 it('draws the whole network without zoom for the wall’s Prikaz "shema", where the boot renderer alone crops round the stop', async () => {
@@ -86,4 +88,18 @@ it('keeps the phone’s band on its stop: a handheld schema is not the wall’s 
   const shema = await wall({ view: 'schema' });
   expect(phone.scale).toBeGreaterThan(shema.scale);
   expect(phone.labels).toBe('true');
+});
+
+it('hands the wall\u2019s whole-network schema its own place as the one name the collision pass never drops, with no stop to crop round', async () => {
+  const shema = await wall({ view: 'schema' });
+  expect(shema.options.stop).toBeNull();
+  expect(shema.options.priorityStopId).toBe('T600');
+  // The boot renderer's crop has its stop, which is already its priority; a phone's band too.
+  const crop = await wall({ renderer: 'schema', view: 'map' });
+  expect(crop.options.stop?.id).toBe('T600');
+  expect(crop.options.priorityStopId ?? null).toBeNull();
+  const phone = await wall({ view: 'schema', handheld: true, spanM: HANDHELD_SPAN_M });
+  expect(phone.options.priorityStopId ?? null).toBeNull();
+  // The geographic wall has its own screen-stop label: nothing to hand.
+  expect((await wall({ view: 'map' })).options.priorityStopId ?? null).toBeNull();
 });

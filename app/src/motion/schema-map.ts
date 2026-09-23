@@ -137,6 +137,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     return namedStops.get(name) ?? null;
   };
   const screenStop = (): SchemaStop | null => stopForId(stop?.id);
+  /** The name the collision pass never drops when there is no stop to crop round (CityMapOptions.priorityStopId). */
+  let priorityStopId: string | null = options.priorityStopId ?? null;
   const labels = (): boolean => publicDisplay ? screenStop() !== null : (pan?.snapshot().scale ?? 0) >= LABEL_MIN_PX_PER_UNIT;
   const tones = (): SchemaTones => ({
     ink: tone(container, '--tone-text-primary', 'CanvasText'),
@@ -190,7 +192,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       // a second job: the name the collision pass may never drop. A surface
       // with no stop of its own hands in nothing and ranks by terminal as
       // before.
-      priorityStop: screenStop()?.name,
+      priorityStop: (screenStop() ?? stopForId(priorityStopId))?.name,
       // The artwork names its lines by GTFS route id; a terminal's chips
       // show what ZET calls them, which only the network knows.
       routeShort: (routeId: string) => net?.routes.get(routeId)?.short ?? routeId };
@@ -476,6 +478,10 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     setStop(next) {
       if (destroyed || JSON.stringify(stop) === JSON.stringify(next)) return;
       stop = next; kioskFit(); paintStatic(); paintMarks();
+    },
+    setPriorityStop(id) {
+      if (destroyed || id === priorityStopId) return;
+      priorityStopId = id; paintStatic();
     },
     fit,
     setFitPadding(next) {

@@ -236,7 +236,7 @@ export interface KioskMapRequest extends MapSlotOptions {
 export type KioskMapView = Pick<KioskMapRequest, 'center' | 'zoom' | 'selectedRoute' | 'selectedStop' | 'selection' | 'follow' | 'emphasis'>;
 /** Creation-time options of a public screen, merged by the adapter itself so
  *  they reach the factory whatever the slot layer passes through. */
-export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor' | 'cityLabels' | 'hitTolerancePx' | 'presentationProfile'>;
+export type KioskMapExtras = Pick<KioskMapRequest, 'renderer' | 'stop' | 'priorityStopId' | 'interactive' | 'symbolScale' | 'locale' | 'basemapProfile' | 'outline' | 'prozor' | 'cityLabels' | 'hitTolerancePx' | 'presentationProfile'>;
 
 /** The handle's additive methods the kiosk drives; each optional on the type
  *  so a page's stub factory still satisfies it, every one implemented by the
@@ -946,6 +946,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
     stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop,
+    // The whole network has no stop to crop round, but the wall still names
+    // its own place (Trg bana J. Jelačića by default [O-65], or the chosen
+    // one): the schema's collision pass places that name first, at the same
+    // tier as the rest, and the name it would have met yields.
+    priorityStopId: wholeNetwork && input.renderer === 'schema' ? input.stop?.id ?? null : null,
     interactive: Boolean(input.onSelect),
     symbolScale: MAP_PRESENTATIONS[input.handheld?'handheld':'public-display'].symbolScale*(input.handheld?1:input.displayScale??1),
     presentationProfile: input.handheld?'handheld':'public-display',
@@ -1005,6 +1010,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   // neighbourhood; nothing at all where the picture is not about transit.
   adapter?.handle()?.setModes?.(transit?(buses?null:new Set([ROUTE_TYPE_TRAM])):new Set());
   adapter?.handle()?.setCityLabels?.(extras.cityLabels ?? true);
+  adapter?.handle()?.setPriorityStop?.(extras.priorityStopId ?? null);
   adapter?.handle()?.setPresentationProfile?.(input.handheld?'handheld':'public-display',extras.symbolScale);
   // A container means the page gave map-slots a factory, which lagano never
   // does: the outline is fetched only where there is a map to draw it on.

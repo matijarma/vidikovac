@@ -396,3 +396,25 @@ it('keeps the selection while the model still draws the vehicle, even after its 
   expect(h.onSelect).not.toHaveBeenCalled();
   expect(h.handle.selection!()).toEqual({ kind: 'vehicle', id: 'tram' });
 });
+
+it('names a surface\u2019s priority stop first when it has no stop to crop round (the wall\u2019s whole-network place): the collision pass never drops it, and a name it meets yields', async () => {
+  const firstName = async (extra: Partial<CityMapOptions>, live?: (h: ReturnType<typeof harness>) => void) => {
+    const h = harness(extra);
+    await flush();
+    h.resize(390, 400);
+    h.frame();
+    for (let i = 0; i < 8; i++) key(h.canvas(), '+');
+    h.frame();
+    live?.(h);
+    const before = h.staticCalls().length;
+    h.handle.setTheme!('light');
+    const names = h.staticCalls().slice(before).filter((c) => c.op === 'fillText' && c.args[0] !== '1');
+    return { first: names[0]?.args[0] };
+  };
+  // Ranked by terminal first with no priority; the priority stop's rows first with one.
+  expect((await firstName({})).first).not.toBe('Two');
+  const ranked = await firstName({ priorityStopId: 'T600' });
+  expect(ranked.first).toBe('Two');
+  // Live, the same.
+  expect((await firstName({}, (h) => h.handle.setPriorityStop!('T600'))).first).toBe('Two');
+});

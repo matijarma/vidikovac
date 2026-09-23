@@ -708,6 +708,11 @@ export interface CityMapOptions {
   follow?: string | boolean | null;
   /** The screen's own stop: marked and named on the map. */
   stop?: ScreenStop | null;
+  /** A stop whose name the schema's collision pass places first and never
+   *  drops, for a surface handed no stop to crop round: the wall's
+   *  whole-network Prikaz shema [O-72] still names its own place [O-65]
+   *  (setPriorityStop live). The geographic map has its screen-stop label. */
+  priorityStopId?: string | null;
   /** The district outline to draw, dashed; null draws none. */
   outline?: MapOutline | null;
   /** GTFS route types drawn (0 trams, 3 buses); null, the default, is every type. */
@@ -807,9 +812,11 @@ export interface CityMapHandle {
    *  separate name from setEmphasis, which already means city-point kinds. */
   setLineFocus?(on: boolean): void;
   setClosuresVisible?(visible: boolean): void;
-  /** The feed's own state: anything but 'live' holds every vehicle where it is (an outage is no evidence of motion) until the feed is live again. */
+  /** The feed's own state: 'down' stops the motion and takes the vehicles off the map (an outage is no evidence of where a tram is) until the feed is live again; 'stale' keeps the motion. */
   setFeedState?(state: 'live' | 'stale' | 'down'): void;
   setStop?(stop: ScreenStop | null): void;
+  /** CityMapOptions.priorityStopId, live. */
+  setPriorityStop?(id: string | null): void;
   /** The district outline to draw, dashed; null clears it. */
   setOutline?(outline: MapOutline | null): void;
   setCityPaths?(lines: MapLine[]): void;
