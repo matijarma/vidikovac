@@ -42,9 +42,9 @@ const DEAD_KEYS = [
   // panel.
   'kiosk.ticker.weather', 'kiosk.ticker.transit', 'kiosk.ticker.works', 'kiosk.ticker.tonight', 'kiosk.ticker.city',
   'kiosk.invite.codeWaiting', 'kiosk.header.temporaryUntil', 'kiosk.header.venue', 'kiosk.weather.title', 'kiosk.weather.station',
-  'kiosk.say.transitRegular', 'kiosk.say.quake', 'kiosk.say.tonight', 'kiosk.say.tonightMore_one', 'kiosk.front.tomorrowCity',
-  'kiosk.safety.basics', 'kiosk.session.join', 'kiosk.session.joinHint', 'kiosk.paired.coverageLines_one',
-  'kiosk.setup.intro', 'kiosk.setup.search', 'kiosk.setup.results_one', 'kiosk.setup.noResults', 'kiosk.setup.validity',
+  'kiosk.say.transitRegular', 'kiosk.say.quake', 'kiosk.say.tonight', 'kiosk.say.tonightMore_one', 'kiosk.say.tonightMore_few', 'kiosk.say.tonightMore_other', 'kiosk.front.tomorrowCity',
+  'kiosk.safety.basics', 'kiosk.session.join', 'kiosk.session.joinHint', 'kiosk.paired.coverageLines_one', 'kiosk.paired.coverageLines_few', 'kiosk.paired.coverageLines_other',
+  'kiosk.setup.intro', 'kiosk.setup.search', 'kiosk.setup.results_one', 'kiosk.setup.results_few', 'kiosk.setup.results_other', 'kiosk.setup.noResults', 'kiosk.setup.validity',
   'kiosk.setup.errorStops', 'kiosk.setup.loadingStops', 'kiosk.settings.save', 'kiosk.settings.saving', 'kiosk.settings.saved',
   'kiosk.settings.area', 'kiosk.settings.areaHint', 'kiosk.settings.stop', 'kiosk.settings.stopNone', 'kiosk.settings.stopHint',
   // WP5: the stop sheet now says what comes next, so the sentence that said
