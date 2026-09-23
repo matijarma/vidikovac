@@ -5,7 +5,7 @@ import { distanceM, located } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState } from '../../../shared/city/types';
 import {
-  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, writeSentence,
+  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, writeSentence,
   type SentenceFact, type SentenceKicker, type WrittenSentence,
 } from '../../../shared/kiosk/sentence';
 import { zagrebIso } from '../../../worker/feed/time';
@@ -151,8 +151,11 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     validUntil = sentenceDeadline(text, validUntil, now);
     if (!text || validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
     const fact: SentenceFact = { id, kind, text, validUntil };
-    // A long weather fact can still supply one complete shorter claim to AI.
-    if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now }).ok) return;
+    // Long facts also cross the typed-slot boundary before any shorter projection.
+    const typed = typedSentenceFact(fact);
+    if (!typed.ok) { console.debug('sentence-rejected', typed.reason); return; }
+    if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now,
+      onReject: reason => console.debug('sentence-rejected', reason) }).ok) return;
     facts.push(fact);
   };
   const solar = nextSolar(now);

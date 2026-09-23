@@ -21,9 +21,9 @@ const NOW = Date.parse('2026-09-22T15:45:00Z');
 const REQUEST: SentenceRequest = {
   locale: 'hr',
   budget: 80,
-  facts: [{ id: 'closure:1', kind: 'radovi', text: 'Ilica zatvorena do 18:00.', validUntil: NOW + 3_600_000 }],
+  facts: [{ id: 'closure:1', kind: 'radovi', text: 'Ilica: zatvoreno za promet do 18:00.', validUntil: NOW + 3_600_000 }],
 };
-const WRITTEN: WrittenSentence = { kicker: 'radovi', text: 'Ilica je zatvorena do 18:00.', refs: ['closure:1'], validUntil: NOW + 3_600_000, origin: 'model' };
+const WRITTEN: WrittenSentence = { kicker: 'radovi', text: 'Ilica: zatvoreno za promet do 18:00.', refs: ['closure:1'], validUntil: NOW + 3_600_000, origin: 'model' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('sentence client seam', () => {

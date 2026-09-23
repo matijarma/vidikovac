@@ -15,7 +15,7 @@ import {
   type WrittenSentence,
 } from '../../shared/kiosk/sentence';
 
-const FACT: SentenceFact = { id: 'closure:1', kind: 'radovi', text: 'Ilica zatvorena do 18:00.', validUntil: Date.parse('2026-09-22T16:00:00Z') };
+const FACT: SentenceFact = { id: 'closure:1', kind: 'radovi', text: 'Ilica: zatvoreno za promet do 18:00.', validUntil: Date.parse('2026-09-22T16:00:00Z') };
 const CTX: SentenceContext = { facts: [FACT] };
 
 describe('sentence wire types', () => {
@@ -36,9 +36,9 @@ describe('sentence wire types', () => {
 
 describe('acceptSentence', () => {
   it('requires a grounded claim even within the 1 to 80 character budget', () => {
-    expect(acceptSentence('Ilica zatvorena do 18:00.', CTX)).toEqual<SentenceVerdict>({ ok: true });
-    expect(acceptSentence('x', CTX)).toEqual({ ok: false, reason: 'unrelated' });
-    expect(acceptSentence('š'.repeat(80), CTX)).toEqual({ ok: false, reason: 'unrelated' });
+    expect(acceptSentence('Ilica: zatvoreno za promet do 18:00.', CTX)).toEqual<SentenceVerdict>({ ok: true });
+    expect(acceptSentence('x', CTX)).toEqual({ ok: false, reason: 'unknown-family' });
+    expect(acceptSentence('š'.repeat(80), CTX)).toEqual({ ok: false, reason: 'unknown-family' });
   });
 
   it('refuses an empty, an over-long or a cut sentence', () => {
