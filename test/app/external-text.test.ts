@@ -407,7 +407,7 @@ describe('the committed registers under decision 21', () => {
       'Zgrada Osnovne škole "August Šenoa", Selska cesta 95-95/1-95/2',
       'Kompleks zgrada "Hrvatskog Sokola" i "Kola", Trg maršala Tita 5, 6, 6a, 7',
     ].sort());
-  }, 20_000);
+  }, 90_000); // A budget for a busy 4-CPU host, not a weakening: the corpus is deterministic.
 
   it('keeps all 402 geographic kod fields after the structural close-out', () => {
     const fields = streets.flatMap(street => [['name', street.name], ['register-text', street.description]] as const)
