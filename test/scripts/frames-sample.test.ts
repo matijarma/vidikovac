@@ -1,12 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { closeSync, existsSync, openSync, readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { main, parseArgs, realPathOf, refusalFor, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
+import { main, parseArgs, realPathOf, refusalFor, renderReadme, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
 import { decodeFeed } from '../../worker/twin/feed-decode';
 import { recordingKey } from '../../worker/twin/record';
 
@@ -49,6 +49,7 @@ function nameOf(headerTs: number): string {
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const CLOCKS = ['151455', '151500', '151505', '154459', '154500'];
+const FIXTURE = join(REPO, 'test/fixtures/frames/2026-09-21-1715-1744');
 
 let root: string;
 let input: string;
@@ -238,6 +239,52 @@ describe('frames-sample refusals', () => {
     expect(status).toBe(2);
     expect(readFileSync(log, 'utf8')).toMatch(/refusing --out .*recordings\//);
     expect(existsSync(out)).toBe(false);
+  });
+});
+
+describe('frames-sample README regeneration', () => {
+  it('renderReadme owns the byte-exact grading section and verification link and reads the current artefact hash', async () => {
+    const result = await run([input, '--from', '151500', '--to', '154459', '--out', join(root, 'sample')]);
+    const committed = await readFile(join(FIXTURE, 'README.md'), 'utf8');
+    const network = JSON.parse(await readFile(join(REPO, 'app/public/data/zet-network.json'), 'utf8'));
+    const rendered = renderReadme({ ...result, graphHash: 'stale-cut-hash', outRel: 'test/fixtures/frames/2026-09-21-1715-1744' });
+    expect(rendered.slice(rendered.indexOf('## How it is graded'))).toBe(committed.slice(committed.indexOf('## How it is graded')));
+    expect(rendered).toContain(`graphHash \`${network.graphHash}\``);
+    expect(rendered).not.toContain('stale-cut-hash');
+  });
+
+  it('--readme-only regenerates a copied fixture without touching frames, expectations or original-cut statistics', async () => {
+    const out = join(root, 'sample');
+    await cp(FIXTURE, out, { recursive: true });
+    await writeFile(join(out, 'expect.json'), '{"preserve":"baseline"}\n');
+    const names = (await readdir(out)).filter((name) => name !== 'README.md');
+    const before = await Promise.all(names.map(async (name) => ({
+      name, bytes: await readFile(join(out, name)), mtime: (await stat(join(out, name))).mtimeMs,
+    })));
+    const original = await readFile(join(out, 'README.md'), 'utf8');
+    await main({ argv: ['--readme-only', out], log: () => {} });
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    const network = JSON.parse(await readFile(join(REPO, 'app/public/data/zet-network.json'), 'utf8'));
+    expect(readme).toContain(`graphHash \`${network.graphHash}\``);
+    for (const row of original.split('\n').filter((line) => line.startsWith('|'))) expect(readme).toContain(row);
+    for (const file of before) {
+      expect(await readFile(join(out, file.name))).toEqual(file.bytes);
+      expect((await stat(join(out, file.name))).mtimeMs).toBe(file.mtime);
+    }
+    await main({ argv: ['--readme-only', out], log: () => {} });
+    expect(await readFile(join(out, 'README.md'), 'utf8')).toBe(readme);
+  }, 20_000);
+
+  it('refuses mixed cutting flags, recordings paths and a symlinked README in readme-only mode', async () => {
+    expect(() => parseArgs(['--readme-only', input, '--out', 'sample'])).toThrow(SampleRefusal);
+    await expect(run(['--readme-only', join(root, 'recordings', 'sample')])).rejects.toThrow(/recordings\//);
+    const out = join(root, 'sample');
+    await mkdir(out);
+    const victim = join(root, 'victim.md');
+    await writeFile(victim, 'keep me');
+    await symlink(victim, join(out, 'README.md'));
+    await expect(run(['--readme-only', out])).rejects.toThrow(/README\.md: it is a symlink/);
+    expect(await readFile(victim, 'utf8')).toBe('keep me');
   });
 });
 
