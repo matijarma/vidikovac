@@ -79,6 +79,18 @@ describe('address: one person, informal, never Vi', () => {
   });
 });
 
+describe('one name per concept: the transport surface (slop #11, [O-51])', () => {
+  // "Karta" is the destination's one word and "Promet" only the subject word of a kicker. The
+  // rename itself (layers.u-pokretu 'Promet' → 'Karta') is WP4's, so its assertion waits in the
+  // accept tier (test/accept/trust.test.ts, TRANSPORT_TAB_WORD) and folds in here once WP4 lands.
+  // What holds today: the two retired synonyms of app/src/city/strings.ts (`movement`, `network`)
+  // never enter the catalogue while WP4 and WP5 move that file's words into it.
+  it('no hr.json value is "Kretanje" or "Prijevoz i raspored"', () => {
+    const synonyms = leafKeys(HR).filter((key) => ['Kretanje', 'Prijevoz i raspored'].includes(leaf(HR, key)!.trim()));
+    expect(synonyms).toEqual([]);
+  });
+});
+
 describe('canonical sentences', () => {
   const SHARED_HR = {
     closuresNone: 'Nema zatvorenih prometnica.',

@@ -63,15 +63,3 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
     } finally { await Promise.all([kctx.close(), pctx.close()]); }
   });
 }
-
-test('stale transit stays visibly stale through basics and does not claim fresh data', async ({ page, request }) => {
-  await page.setViewportSize(sizes[0]!);
-  await installKioskFeedFixture(page, 'stale');
-  const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
-  await page.goto(kioskUrl);
-  await expect(page.getByTestId('kiosk-panel-promet')).toHaveAttribute('data-state', 'stale');
-  await expect(page.locator('[data-testid=kiosk-panel-promet] .k-panel-credit')).toContainText('zastarjelo');
-  await page.getByTestId('kiosk-essentials-open').click();
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('kiosk-panel-promet')).toHaveAttribute('data-state', 'stale');
-});

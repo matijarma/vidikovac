@@ -139,6 +139,12 @@ pristupnim tokenom iz okoline i vraća izlazni kod 1 kad zakaže bilo koje pravi
 geometrije, veličine teksta, cilja ili prelijevanja. Ovaj odlomak opisuje metodu;
 rezultati se bilježe tek nakon pokretanja na spojenoj grani.
 
+Promatranje produkcije nakon svake isporuke, samo čitanjem i na postojećem zaslonu:
+`E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10`
+(prije isporuke D2 s `--stage d1`). Skripta ne stvara zaslon; pragovi, izlazni
+kodovi i datoteke opisani su u `docs/kiosk.md`, u odjeljku „Razvoj i automatska
+provjera”.
+
 ## Preinaka za telefon, 13. i 14. rujna 2026.
 
 Preinaka je isporučena u tri koraka, svaki nakon zelenog prolaza cijelog
@@ -1784,9 +1790,10 @@ WP0 (`b300af3`); rezultat na spojenoj grani upisuje integracijski prolaz.
 | F | vožnje unatrag po luku od 500 m i više | `backward.runsOver500m` | 275 | 191 | 0 |
 | G | ponovna postavljanja oznake na klijentu za više od 50 m unutar iste vožnje; p95 pomaka | `client.sameTripPathToPathOver50`, `client.sameTripPathToPathJumpP95` | 1.990; 683 m | 1.922; 629 m | 0; < 50 m |
 | H | vidljiva korekcija pri ponovnom izvođenju, p95 | `rederive.planGapM.p95` | 324 m | 387 m | < 60 m |
-| U | tramvaj bez staze, a ne izvan grafa (slobodna ravnina na tračnicama), udio vozilo-sati | `unplaced.shareOfTramVehicleHours` | 0,000359 | 0,000538 | ≤ 0,03 |
+| U | tramvaj bez staze, a ne izvan grafa (slobodna ravnina na tračnicama), udio vozilo-sati; ne broji se razdoblje od deset minuta i dulje u kojem se tramvaj ne udalji više od 100 m od mjesta gdje je ostao bez staze (stoji u spremištu ili na okretištu), a sirovi udio i sati stajanja ispisuju se uz redak | `unplaced.shareOfTramVehicleHours` (sirovi udio `unplaced.shareOfTramVehicleHoursRaw`, stajanje `unplaced.parkedVehicleHours`) | 0,000359 | 0,000538 | ≤ 0,03 |
 | S1 | objavljena vozila čije je zadnje očitanje starije od `EVICT_S` | `silence.publishedOlderThanEvict` | 0 uz 300 s | 0 uz 300 s | 0 uz 180 s |
 | S2 | tramvaji tihi dulje od 30 s čiji objavljeni plan 60 s unaprijed prelazi iduće posluženo stajalište | `silence.extrapolatedPastNextStop` | 26.764 | 30.645 | 0 |
+| S | tramvaj koji šuti dulje od 60 s: najveći pomak objavljenog položaja preko mjesta zadržavanja na idućem posluženom stajalištu; uz redak se bez praga ispisuje put prijeđen tijekom tišine do mjesta zadržavanja | `ghostAdvance.beyondHoldM.max` (put do mjesta zadržavanja `ghostAdvance.glideM.max`) | nije mjereno | nije mjereno na cijelom danu; uzorak od 17:15 do 17:44: 989,7 m | ≤ 50 m |
 
 Uz ocjenjivač vrijede reci kapije kruga F na 20. rujna (`node scripts/replay-twin.mjs
 <direktorij-okvira>`): slike unatrag 0, obrati 0, preticanja 0 (polazište 5), vidljiva križanja
