@@ -9,6 +9,8 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, type RenderedFeature } from '../../app/src/map/city-map';
+import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
 // --- A MapLibre stand-in: records what the wrapper hands it, fires events on demand.
@@ -654,6 +656,123 @@ describe('the two-way arrows on an opposed merge', () => {
     expect(container.dataset.twoway).toBe('1');
     expect(container.dataset.noses).toBe('1');
     expect(container.dataset.pills).toBe('6');
+  });
+});
+
+// WP2's marker census (the probe contract, §15.6): data-markers,
+// data-unlabelled, data-bajs and data-overlaps, read back off what the city
+// layers rendered, beside the vehicle census and on the same idle.
+describe('the marker census of the city layers', () => {
+  const at = (lon: number, lat: number) => ({ type: 'Point', coordinates: [lon, lat] });
+  const dot = (id: string, props: Record<string, unknown>, lon = 15.97, lat = 45.81): RenderedFeature =>
+    ({ layer: { id: CENSUS_LAYERS.dots }, properties: { id, ...props }, geometry: at(lon, lat) });
+  const badge = (id: string, text: string): RenderedFeature => ({ layer: { id: CENSUS_LAYERS.badges }, properties: { id, badge: text } });
+  const label = (id: string, title: string): RenderedFeature => ({ layer: { id: CENSUS_LAYERS.labels }, properties: { id, title } });
+  const bike = (badgeText: string, spent: boolean, extra: Record<string, unknown> = {}) => ({ category: 'bikes', badge: badgeText, spent, eventCount: 0, priority: 2, ...extra });
+  /** The FakeMap's projection: 10 000 px per degree from 15.9 E, 45.9 N. */
+  const anchor = (f: RenderedFeature) => {
+    const [lon, lat] = (f.geometry?.coordinates ?? []) as number[];
+    return lon === undefined || lat === undefined ? null : { x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 };
+  };
+  const OPEN = { width: 0, height: 0 };
+
+  it('names the three city layers city-layers.ts draws, and half the size of the count inside a disc', () => {
+    expect(cityPlaces.CITY_LAYERS).toEqual(expect.arrayContaining(Object.values(CENSUS_LAYERS)));
+    expect(CENSUS_COUNT_HALF_PX * 2).toBe(cityPlaces.BIKE_COUNT_PX);
+  });
+
+  it('sorts the BAJS discs by what they say: a number, the grey "0", the grey blank and the far dot; none of them is unlabelled', () => {
+    const census = markerCensus([
+      dot('bajs-a', bike('4', false)), badge('bajs-a', '4'),
+      dot('bajs-b', bike('0', true)), badge('bajs-b', '0'),
+      dot('bajs-c', bike('', true)),
+      dot('bajs-d', bike('', false, { far: true })),
+      dot('culture-1', { category: 'culture', badge: '2', eventCount: 2 }), badge('culture-1', '2'), label('culture-1', 'Gavella'),
+    ], anchor, OPEN, [], 1);
+    expect(census).toEqual({ markers: 5, unlabelled: 0, bajs: { counted: 1, zero: 1, blank: 1, far: 1 }, covered: 0 });
+  });
+
+  it('counts a mark without a whole-number count or a name as unlabelled: a "?", a "+3", a lost number, a nameless air station', () => {
+    const census = markerCensus([
+      dot('q', bike('?', true)), badge('q', '?'),
+      dot('plus', { category: 'culture', badge: '+3' }), badge('plus', '+3'),
+      // A disc whose number MapLibre did not draw is not the deliberate blank: it has a count to show.
+      dot('lost', bike('7', false)),
+      dot('air-1', { category: 'air', badge: '' }),
+      // A name is enough: the paired map names its stations, with the older "?" still in the disc.
+      dot('named', bike('?', true)), badge('named', '?'), label('named', 'BAJS Trg'),
+    ], anchor, OPEN, [], 1);
+    expect(census.markers).toBe(5);
+    expect(census.unlabelled).toBe(4);
+    expect(census.bajs).toEqual({ counted: 0, zero: 0, blank: 0, far: 0 });
+  });
+
+  it('counts a mark once across a tile seam, and not at all when only its edge reaches in from off the screen', () => {
+    const view = { width: 1000, height: 1000 };
+    const census = markerCensus([
+      dot('seam', bike('3', false)), dot('seam', bike('3', false)), badge('seam', '3'), badge('seam', '3'),
+      // 15.899 E is x = -10: the disc's edge is on the screen, its number is not.
+      dot('edge', bike('', true), 15.899, 45.81),
+    ], anchor, view, [], 2);
+    expect(census).toEqual({ markers: 1, unlabelled: 0, bajs: { counted: 1, zero: 0, blank: 0, far: 0 }, covered: 0 });
+  });
+
+  it('counts a mark whose number a pill covers, by the pill box the clustering reckons at the map scale', () => {
+    // bajs-a at (700, 900); a one-digit pill 18 x 18 px at scale 2 is 36 x 36.
+    const over = pillBox({ x: 710, y: 905 }, '6', 2);
+    const beside = pillBox({ x: 760, y: 900 }, '6', 2);
+    expect(over).toEqual({ left: 692, top: 887, right: 728, bottom: 923 });
+    expect(pillBox({ x: 0, y: 0 }, '6·11·12', 1).right).toBe(pillWidthPx(7) / 2);
+    const marks = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4')];
+    expect(markerCensus(marks, anchor, OPEN, [over], 2).covered).toBe(1);
+    expect(markerCensus(marks, anchor, OPEN, [beside], 2).covered).toBe(0);
+    // Covered is not unlabelled: MapLibre drew the number, a passing tram hides it.
+    expect(markerCensus(marks, anchor, OPEN, [over], 2).unlabelled).toBe(0);
+  });
+
+  it('writes the census on the container at idle, beside the pills, and the names a pill crosses', async () => {
+    const { map, container, frame } = await harness({ lib: cityLib, extra: { symbolScale: 2 } });
+    frame();
+    // A box-aware stand-in: a query box answers the features whose anchor lies inside it.
+    const everything = (): RenderedFeature[] => map.rendered as RenderedFeature[];
+    map.queryRenderedFeatures = (geometry, options) => {
+      map.queries.push(geometry);
+      const inLayers = everything().filter((f) => !options?.layers || options.layers.includes(f.layer.id));
+      if (!Array.isArray(geometry)) return inLayers;
+      const [[x1, y1], [x2, y2]] = geometry as [[number, number], [number, number]];
+      return inLayers.filter((f) => { const p = anchor(f); return p !== null && p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2; });
+    };
+    map.rendered = [
+      { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1', short: '6' }, geometry: at(15.971, 45.81) },
+      dot('bajs-a', bike('4', false)), badge('bajs-a', '4'),
+      dot('bajs-b', bike('0', true), 15.95, 45.85), badge('bajs-b', '0'),
+      dot('bajs-c', bike('', true), 15.96, 45.86),
+      { layer: { id: 'stop-labels' }, properties: { id: '106_1', name: 'Trg bana J. Jelačića' }, geometry: at(15.9705, 45.8101) },
+      { layer: { id: 'stop-labels' }, properties: { id: '107_1', name: 'Zrinjevac' }, geometry: at(15.99, 45.80) },
+    ] as typeof map.rendered;
+    map.fire('idle');
+    expect(container.dataset.pills).toBe('6');
+    expect(container.dataset.markers).toBe('3');
+    expect(container.dataset.unlabelled).toBe('0');
+    expect(container.dataset.bajs).toBe('counted:1;zero:1;blank:1;far:0');
+    expect(container.dataset.overlaps).toBe('discs:1;names:1');
+  });
+
+  it('re-takes the census at the next idle after update(), never on an idle with nothing new', async () => {
+    const { map, container, handle, frame } = await harness({ lib: cityLib });
+    frame();
+    map.rendered = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4')] as typeof map.rendered;
+    map.fire('idle');
+    expect(container.dataset.markers).toBe('1');
+    const queried = map.queries.length;
+    map.rendered = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4'), dot('bajs-b', bike('', false))] as typeof map.rendered;
+    map.fire('idle');
+    expect(map.queries.length).toBe(queried);
+    expect(container.dataset.markers).toBe('1');
+    handle.update([A], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.markers).toBe('2');
+    expect(container.dataset.unlabelled).toBe('1');
   });
 });
 
