@@ -129,10 +129,10 @@ app/src/kiosk/invitation.ts:55 #mountInvitation → e(s.legend.tram)
 app/src/kiosk/invitation.ts:55 #mountInvitation → e(s.legend.bikes)
 app/src/kiosk/invitation.ts:55 #mountInvitation → e(s.legend.culture)
 app/src/kiosk/invitation.ts:62 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:981 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:981 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:982 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:983 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/mapview.ts:987 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:987 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:988 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:989 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
