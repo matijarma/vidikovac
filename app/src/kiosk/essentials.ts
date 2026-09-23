@@ -109,13 +109,18 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
   if (isLive(poiSnap) && poiSnap.items.length > 0) {
     const tagged = poiSnap.items.find((item) => dataText(item, 'category') === 'ljekarne');
     const onDuty = nearestPharmacy(stop);
-    rows.push({
-      id: 'pharmacy',
-      label: fill(strings.sentence.pharmacy, { address: onDuty.label }),
-      value: tagged ? tagged.title : onDuty.label,
-      detail: tagged ? undefined : onDuty.hours,
-      attribution: tagged ? fillAttribution(poiSnap.attribution, poiSnap, tagged) : LJEKARNE_SOURCE.text,
-    });
+    // The label quotes the curated address: vetted like the value, and a
+    // refused address drops the card rather than leaving "{address}" empty.
+    const address = vetExternal('address', onDuty.label, 'row');
+    if (address !== null) {
+      rows.push({
+        id: 'pharmacy',
+        label: fill(strings.sentence.pharmacy, { address }),
+        value: tagged ? tagged.title : onDuty.label,
+        detail: tagged ? undefined : onDuty.hours,
+        attribution: tagged ? fillAttribution(poiSnap.attribution, poiSnap, tagged) : LJEKARNE_SOURCE.text,
+      });
+    }
   }
 
   if (rows.length === 0) rows.push({ id: 'empty', label: '', value: strings.basics.empty });
