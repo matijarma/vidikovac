@@ -5,8 +5,8 @@
 // Red by design until WP4 lands (D3). A red row is a finding, never skipped: every
 // check is a soft assertion whose message names the probe and the target, and no
 // action waits on a probe that may not exist yet (a missing target fails on the
-// assertion that names it, never on a selector timeout). The only fixmes are the
-// two stop-board rows (the canvas tap and the search path), until D3.
+// assertion that names it, never on a selector timeout). The two stop-board rows
+// (the canvas tap and the search path) run since D3.
 //
 // Fixtures: the session spine of e2e/experience-fixtures.ts (a routed room socket and
 // /api/data, the fake clock at FIXTURE_NOW, the screen stop 106_1), the departures
@@ -18,7 +18,7 @@ import { devices, expect, test, type Page } from '@playwright/test';
 import { FIXTURE_NOW } from '../../test/feed/fixture-contexts';
 import { isolateLocalNetwork } from '../helpers';
 import { CODE_RE } from '../lib';
-import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture, type FixtureSession } from '../experience-fixtures';
+import { experienceSnapshots, FIXTURE_DASHBOARD, FIXTURE_STOP, installExperienceFixture, type FixtureSession } from '../experience-fixtures';
 import { installCityFixture } from '../city-fixtures';
 import { departuresBoard, lastRunSnapshot, serviceDays } from '../departures-fixture';
 import {
@@ -26,7 +26,7 @@ import {
   PHONE_PROBES, PHONE_SLOP_RE, SEARCH_TAPS_MAX, SHARE_CITY_LABEL, STOP_SEARCH_QUERY, TAB_LABELS, WEEK_EVENTS_LABEL,
 } from '../inventory';
 import { pillFailures, pillLabels, PLUS_PILL_RE } from '../wall';
-import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
+import { attachRecorders, problemsAfterTeardown, TILE_REQUESTS, type Recorder } from '../recorders';
 import {
   attrOf, AXE_BLOCKING, AXE_TAGS, DESK_VIEWPORT, intersects, nearbyHeadFailures, PHONE_DEPARTURE_ROWS, PHONE_VIEWPORT, phoneDepartureFailures,
   phoneDepartures, phoneSentenceFailures, phoneSentenceText, routeTiles, sceneClock, textOf, visibleOf, writeArtefact,
@@ -73,9 +73,20 @@ async function present(page: Page, selector: string, message: string, timeout = 
   return target.isVisible();
 }
 
-function recordersClean(recorder: Recorder, label: string): void {
+/**
+ * The recorders empty. With `teardownSince` (the moment the page tears down on purpose, the end of the session),
+ * the static assets the browser cancelled from then on (sprites, images, fonts) are listed in
+ * recorders-<label>-teardown.json instead of counted; every /api/ request and everything else stays a finding.
+ */
+function recordersClean(recorder: Recorder, label: string, teardownSince?: string): void {
   writeArtefact(`recorders-${label}.json`, recorder.report());
-  softly(recorder.problems(), `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted)`).toEqual([]);
+  if (teardownSince === undefined) {
+    softly(recorder.problems(), `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted)`).toEqual([]);
+    return;
+  }
+  const { problems, tolerated } = problemsAfterTeardown(recorder, teardownSince);
+  writeArtefact(`recorders-${label}-teardown.json`, tolerated);
+  softly(problems, `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted; ${tolerated.length} static asset(s) the session's end cancelled are listed, never an /api/ request)`).toEqual([]);
 }
 
 async function axeBlocking(page: Page): Promise<string[]> {
@@ -152,8 +163,8 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     recordersClean(recorder, label);
   });
 
-  // The two stop-board rows land with the read-only board of D3; until then they are the tier's fixmes.
-  test.fixme('Karta: a tap on the stop ring at the canvas centre opens the stop board with three departures in the viewport (stop-board, D3)', async ({ page }) => {
+  // The two stop-board rows landed with the read-only board of D3.
+  test('Karta: a tap on the stop ring at the canvas centre opens the stop board with three departures in the viewport (stop-board, D3)', async ({ page }) => {
     const label = 'phone-karta-tap';
     await openPhone(page, label);
     expect(await openKarta(page, label), `${label}: Karta opens with its map ready`).toBe(true);
@@ -165,7 +176,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     expect(phoneDepartureFailures(rows, 'the stop board'), `${label}: the board's ${PHONE_DEPARTURES} departures lie inside the viewport`).toEqual([]);
   });
 
-  test.fixme(`Karta: the search field reaches a stop's board in at most ${SEARCH_TAPS_MAX} taps, rows in the viewport (stop-board, D3)`, async ({ page }) => {
+  test(`Karta: the search field reaches a stop's board in at most ${SEARCH_TAPS_MAX} taps, rows in the viewport (stop-board, D3)`, async ({ page }) => {
     const label = 'phone-karta-search';
     await openPhone(page, label);
     let taps = 0;
@@ -174,9 +185,13 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     await page.locator(`${PHONE_PROBES.transportSearch} >> visible=true`).first().click({ timeout: 5_000 });
     taps++; // the field
     await page.locator(PHONE_PROBES.transportSearch).first().fill(STOP_SEARCH_QUERY);
-    await page.locator(`${PHONE_PROBES.selectStop} >> visible=true`).first().click({ timeout: PAINT_MS });
+    // The fixture's stop among the results: the departures fixture keeps the timetable of Trg's platforms only
+    // (e2e/departures-fixture.ts), and the first stop for the query can be another one (Bana Josipa Jelačića).
+    await page.locator(`${PHONE_PROBES.selectStop} >> visible=true`).filter({ hasText: FIXTURE_STOP.name }).first().click({ timeout: PAINT_MS });
     taps++; // the result
-    await expect(page.locator(PHONE_PROBES.stopBoard), `${label}: the stop's board (${PHONE_PROBES.stopBoard}) opens from the search result`).toBeInViewport({ timeout: PAINT_MS });
+    // The probe wrapper is display: contents (app/src/ui/map.css), so it has no box of its own and a viewport read
+    // of it is 0 by construction: the board is in the viewport when its first rendered child is.
+    await expect(page.locator(`${PHONE_PROBES.stopBoard} > * >> visible=true`).first(), `${label}: the stop's board (${PHONE_PROBES.stopBoard}) opens from the search result, its first rendered child in the viewport`).toBeInViewport({ timeout: PAINT_MS });
     expect(taps, `${label}: tab, field and result, at most ${SEARCH_TAPS_MAX} taps`).toBeLessThanOrEqual(SEARCH_TAPS_MAX);
     const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT);
     expect(phoneDepartureFailures(rows, 'the stop board'), `${label}: the board's ${PHONE_DEPARTURES} departures lie inside the viewport`).toEqual([]);
@@ -207,6 +222,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     }).toBeGreaterThanOrEqual(1);
     // The expiry moment itself: every /api/data request from here on is one too many (none may slip in while the page is read).
     const requests = fixture.requests.length;
+    const expiredAt = new Date().toISOString();
     fixture.expire();
     await softly(page.locator(PHONE_PROBES.sessionEnded), `${label}: after expiry the page shows ${PHONE_PROBES.sessionEnded} ([O-59])`).toBeVisible({ timeout: PAINT_MS });
     // One verdict with the production observer (e2e/inventory.ts): the ended block with /s/ and /hitno, no content
@@ -215,7 +231,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     await page.clock.runFor(AFTER_EXPIRY_MS);
     await page.waitForTimeout(500);
     softly(expiryFailures(await page.evaluate(EXPIRY_READ_IN_PAGE, EXPIRY_SPEC), fixture.requests.slice(requests).map((id) => `/api/data/${id}`)), `${label}: still cleared, and no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after the session ended`).toEqual([]);
-    recordersClean(recorder, label);
+    recordersClean(recorder, label, expiredAt);
   });
 
   test('axe on Sada and Karta: no serious or critical WCAG 2.1 A/AA violation', async ({ page }) => {
