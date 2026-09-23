@@ -16,16 +16,17 @@
 //
 // And it carries the honesty note under the map, verbatim: the user-facing
 // statement of R-P2, on both surfaces, not optional.
+import hr from '../i18n/hr.json';
 import type { I18n } from '../i18n/i18n';
 import { escapeHtml } from '../ui/dom/escape';
 import { loadNetwork, type Network } from '../../../shared/motion/network';
 import { DEFAULT_CROP, ROUTE_TYPE_TRAM, wholeNetworkCrop, type Crop } from './schematic';
 import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } from './schematic-view';
 
-/** R-P2's user-facing sentence, pinned here as a constant so the test that
- *  guards the verbatim wording reads the same source the page does. The
- *  catalogue carries it under motion.note; the two must agree. */
-export const HONESTY_NOTE_HR = 'Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.';
+/** R-P2's user-facing sentence in Croatian: the catalogue's motion.note,
+ *  the one source the page renders (the host prints i18n.t('motion.note')),
+ *  exported so the test that guards the verbatim wording reads it. */
+export const HONESTY_NOTE_HR: string = hr.motion.note;
 
 /** R-P1: a locked kiosk shows trams only by default. */
 export const TRAMS_ONLY: ReadonlySet<number> = new Set([ROUTE_TYPE_TRAM]);

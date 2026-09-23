@@ -33,6 +33,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
+import { pickCityGroup } from './helpers';
 import type { ModuleSnapshot } from '../worker/feed/schema';
 import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
 
@@ -95,9 +96,10 @@ async function openScene(page: Page, scene: (time: number) => ModuleSnapshot, nu
   // transport modes are switched off entirely (workspace.ts modesArg) and no
   // vehicle is drawn. "Kretanje" is the transport group; picking it is what a
   // reader looking for a tram does, and it is what the schema spec's own
-  // tests do since the city sources landed.
+  // tests do since the city sources landed. The groups sit in the collapsed
+  // filter disclosure since b300af3; pickCityGroup opens and closes it.
   await page.getByTestId('transport-search').focus();
-  await page.locator('[data-action=city-group][data-group=transport]').click();
+  await pickCityGroup(page, 'transport');
   // Both marks on the screen before anything is measured. This is also the
   // map's own readiness: `data-pills` is a census of rendered features, so it
   // says nothing until the style is up, the model has stepped and MapLibre

@@ -223,7 +223,7 @@ export interface SchemaPathLeg {
 }
 export type SchemaPathFailure =
   | 'invalid-path' | 'non-tram' | 'missing-line' | 'too-few-stops'
-  | 'non-increasing-arc' | 'ambiguous-stops' | 'no-progress' | 'loop-path';
+  | 'non-increasing-arc' | 'ambiguous-stops' | 'no-progress' | 'loop-path' | 'loop-undrawn';
 
 /** The direction a terminus loop path carries (scripts/gtfs-shapes.mjs
  *  LOOP_DIRECTION): stops [L, F], from one trip's last platform to the next
@@ -297,8 +297,11 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
   if (!line) return fail('missing-line');
   result.line = line;
   // A terminus loop has no legs to lay along the artwork: it is where the
-  // line turns, and the placer puts it on the terminus circle instead.
-  if (path.direction === LOOP_PATH_DIRECTION) return fail('loop-path');
+  // line turns, and the placer puts it on the terminus circle instead
+  // ('loop-path'). A loop neither of whose platforms this line's artwork
+  // prints has no circle to go to ('loop-undrawn', see loopPlacement): the
+  // schematic does not draw it, and the tram stays on the geographic map.
+  if (path.direction === LOOP_PATH_DIRECTION) return fail(loopEntry(line, net, path) ? 'loop-path' : 'loop-undrawn');
   // The GEOMETRIC list, not the served one (F8): this is artwork placement,
   // not planning. Every platform the rails pass is a legitimate anchor for
   // the arc -> u mapping -- only names printed on this line become anchors
@@ -453,20 +456,30 @@ export function matchSchemaPath(schema: Schema, net: GraphNetwork, pathIdx: numb
  *  ZET's schematic (stops[0], else stops[1]), on its own line. stops[0] is
  *  the platform its last trip ended at, stops[1] the one its next trip leaves
  *  from; the second is reached only where the artwork prints no stop of the
- *  first's name (Mandlova, the depot, for four loops on feed 000395). The
+ *  first's name (Mandlova, the depot, which the artwork leaves out). The
  *  whole loop is one point of the artwork, so the arc does not move the
- *  vehicle, and it has no track to point along. Null when the line's artwork
- *  names neither stop. */
+ *  vehicle, and it has no track to point along. Null exactly where
+ *  matchSchemaPath says 'loop-undrawn': the line's artwork names neither
+ *  stop (on feed 000395 the depot run from Mandlova to Ravnice of the lines
+ *  that do not serve Ravnice: 6, 8, 13, 14, 15, 31, 33). Such a tram is not
+ *  drawn on the schematic, because another line's terminus circle would
+ *  misplace it; it stays on the geographic map. */
 export function loopPlacement(schema: Schema, net: GraphNetwork, pathIdx: number): SchemaPlacement | null {
   const path = net.paths[pathIdx];
   if (!path || path.direction !== LOOP_PATH_DIRECTION) return null;
   const line = schema.lines.find((l) => l.route === path.route);
   if (!line) return null;
+  const entry = loopEntry(line, net, path);
+  return entry ? { ...pointAt(line, entry.u), sign: 1, colour: line.colour, line: line.route, chord: false } : null;
+}
+
+/** The artwork stop a loop is drawn at: stops[0], else stops[1], its own
+ *  printed circle first, then a projection onto the line. */
+function loopEntry(line: SchemaLine, net: GraphNetwork, path: GraphNetwork['paths'][number]): SchemaLineStop | null {
   for (const stopId of path.stops ?? []) {
     const name = net.stops.find((stop) => stop.id === stopId)?.name;
-    // Its own printed circle first, then a projection onto the line.
     const entry = line.stops.find((stop) => stop.name === name && stop.ownCircle) ?? line.stops.find((stop) => stop.name === name);
-    if (entry) return { ...pointAt(line, entry.u), sign: 1, colour: line.colour, line: line.route, chord: false };
+    if (entry) return entry;
   }
   return null;
 }

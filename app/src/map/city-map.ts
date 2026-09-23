@@ -24,7 +24,8 @@ import { bodiesToGeoJson } from '../motion/bodies';
 import { capsuleHalfPx, clusterPills, createLineColours, noseCentrePx, pillLabel, type Cluster, type PillPoint } from '../motion/pills';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
 import LINE_COLOURS from '../data/zet-line-colours.json';
-import type { GraphNetwork, Network } from '../../../shared/motion/network';
+import { loadNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
+import type { MotionMetadata } from '../../../shared/motion/wire';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { markAlpha, vehicleKind, type VehicleKind } from './vehicle-mark';
 import { tr } from '../transport/strings';
@@ -585,6 +586,8 @@ export interface CityMapOptions {
    *  and no network or stops are drawn. A page passes the same memoised
    *  loader its schematic uses so the artefact is fetched once (R-L4). */
   loadNetwork?: () => Promise<Network | null>;
+  /** A non-memoised load after motion names a different graph. */
+  reloadNetwork?: () => Promise<Network | null>;
   /** The page's clock-tick timer pair for the reduced-motion loop (R-F6,
    *  R-F12); bound by `withTimers`. Absent, the loop uses the globals. */
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -749,8 +752,14 @@ export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
 /** Binds a network loader into a factory, so a page's map slots and its
  *  schematic share one artefact fetch. `undefined` in stays `undefined` out. */
-export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => Promise<Network | null>): MapFactory | undefined {
-  return factory && ((options) => factory({ ...options, loadNetwork }));
+export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => Promise<Network | null>, motionFor?: (id: string) => MotionMetadata | undefined, reloadNetwork?: () => Promise<Network | null>): MapFactory | undefined {
+  return factory && ((options) => {
+    // The kiosk has the raw snapshot even during the decoder's one-deploy
+    // transition. Forward metadata before either renderer sees a point.
+    const enrich = (points: MapPoint[]) => motionFor ? points.map(p => ({ ...p, ...motionFor(p.id) })) : points;
+    const handle = factory({ ...options, loadNetwork, ...(reloadNetwork ? { reloadNetwork } : {}), points: enrich(options.points ?? []) });
+    return motionFor ? { ...handle, update: (points, lines) => handle.update(enrich(points), lines) } : handle;
+  });
 }
 
 /** Binds the page's timer pair into a factory, beside `withNetwork`, so the
@@ -1090,6 +1099,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  bodies can read a path's geometry; the option's type is the phase A
    *  superset, so the graph is checked for, as the integrator checks. */
   let graph: GraphNetwork | null = null;
+  let expectedNetwork: string | undefined;
+  let networkRequest: Promise<void> | null = null;
+  let networkBlocked = false;
   let model: Model | null = null;
   let lib: MaplibreModule | null = null;
   let map: MapApi | null = null;
@@ -1645,6 +1657,63 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     setData(lib.SOURCES.closures, lib.linesToGeoJson(lines, wallLabels));
   }
 
+  function installNetwork(network: Network | null): void {
+    net = network;
+    graph = network && 'paths' in network ? network as GraphNetwork : null;
+    model = createIntegrator(net);
+    lastDrawn = [];
+    lastPushedSignature = '';
+    nextPushAt = -Infinity;
+    if (styled && lib) {
+      // The named features come from the lazy renderer (external-features.ts
+      // through maplibre-entry), and the census reads the stops it was last handed.
+      const empty = { type: 'FeatureCollection', features: [] };
+      setData(lib.SOURCES.network, net ? lib.networkToGeoJson(net) : empty);
+      const stops = net ? lib.stopsToGeoJson(net) : empty;
+      stopsData = stops;
+      setData(lib.SOURCES.stops, stops);
+      applyOverlays();
+    }
+    options.onNetwork?.(net);
+  }
+
+  /** Never evaluate a new arc on old rails, even for the frame before an
+   *  async reload settles. A failed load stays empty and retries next poll. */
+  function acceptNetwork(fixes: readonly Fix[]): boolean {
+    expectedNetwork = fixes.find(f => f.network)?.network ?? expectedNetwork;
+    if (!expectedNetwork || (graph?.graphHash === expectedNetwork && !networkBlocked)) return true;
+    if (!networkBlocked) {
+      networkBlocked = true;
+      container.dataset.networkStale = 'true';
+      installNetwork(null);
+      model = null;
+      const empty = { type: 'FeatureCollection', features: [] };
+      if (styled && lib) {
+        setData(lib.SOURCES.vehicles, empty);
+        setData(lib.SOURCES.bodies, empty);
+      }
+    }
+    if (!networkRequest) {
+      const requested = expectedNetwork;
+      const reload = options.reloadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' })));
+      networkRequest = (async () => {
+        const network = await reload();
+        if (disposed || requested !== expectedNetwork || !network || !('graphHash' in network) || network.graphHash !== expectedNetwork) return;
+        networkBlocked = false;
+        delete container.dataset.networkStale;
+        installNetwork(network);
+        model!.update(pointsToFixes(points), now());
+        loop.nudge();
+      })().catch(() => {
+        // Last-good geometry is not usable for this payload. Retry next poll.
+      }).finally(() => {
+        networkRequest = null;
+        if (!disposed && requested !== expectedNetwork) acceptNetwork(pointsToFixes(points));
+      });
+    }
+    return false;
+  }
+
   void (async () => {
     // Both arrive after first paint; the model wants the geometry from its
     // first step, so the two waits run side by side. loadNetwork() resolves
@@ -1657,11 +1726,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       options.loadNetwork ? options.loadNetwork().catch(() => null) : Promise.resolve(null),
     ]);
     if (disposed) return;
-    net = network;
-    graph = network && 'paths' in network ? (network as GraphNetwork) : null;
-    model = createIntegrator(net);
-    model.update(pointsToFixes(points), now());
-    options.onNetwork?.(net);
+    installNetwork(network);
+    const fixes = pointsToFixes(points);
+    if (acceptNetwork(fixes)) model!.update(fixes, now());
     if (!loaded) {
       setStatus('unavailable');
       return;
@@ -2324,7 +2391,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // Evidence in, motion out: the model folds the reports into each
       // vehicle's own history and the loop draws where it says. Places and
       // closures do not move and are re-set at once.
-      model?.update(pointsToFixes(points), now());
+      const fixes = pointsToFixes(points);
+      if (model || networkBlocked) {
+        if (acceptNetwork(fixes)) model?.update(fixes, now());
+      }
       applyStatic();
       probeVersion++;
       loop.nudge();

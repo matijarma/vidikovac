@@ -267,7 +267,7 @@ export function renderUpravaIPravo(ctx: LayerContext): HTMLElement {
   // The domain's name is the tab's; it stays for assistive technology and the focus after a switch, not as a repeated title.
   return createElementFromHTML(`<section class="layer ws ws-civic" id="layer-uprava-i-pravo" data-layer="uprava-i-pravo" data-reconcile aria-labelledby="layer-title-uprava-i-pravo">
 <h2 class="layer-title visually-hidden" id="layer-title-uprava-i-pravo" tabindex="-1">${escapeHtml(i18n.t('layers.uprava-i-pravo'))}</h2>
-<nav class="cv-jump" aria-label="${escapeAttribute(i18n.t('layers.uprava-i-pravo'))}">${[['cv-works',i18n.t('civic.works')],['cv-sessions',i18n.t('civic.assembly')],['cv-gazette',i18n.t('civic.gazette')],['cv-consultations',ctx.i18n.getLocale().startsWith('en')?'National consultations':'Nacionalna savjetovanja']].map(([id,label])=>`<button type="button" data-action="section-jump" data-id="${id}">${escapeHtml(label)}</button>`).join('')}</nav>
+<nav class="cv-jump" aria-label="${escapeAttribute(i18n.t('layers.uprava-i-pravo'))}">${[['cv-works',i18n.t('civic.works')],['cv-sessions',i18n.t('civic.assembly')],['cv-gazette',i18n.t('civic.gazette')],['cv-consultations',i18n.t('civic.consultations')]].map(([id,label])=>`<button type="button" data-action="section-jump" data-id="${id}">${escapeHtml(label)}</button>`).join('')}</nav>
 ${listDetail(i18n, { list, detail, detailTitle: i18n.t('civic.actDetail') })}
 ${provenanceBlock(i18n, [dogadanja, glasnik])}
 </section>`);

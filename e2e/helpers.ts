@@ -114,3 +114,21 @@ export async function unlockOnPhone(phone: Page, scanUrl: string, expectedMinute
 export function readDataToken(phone: Page): Promise<string | null> {
   return phone.evaluate(() => sessionStorage.getItem('vidikovac.dataToken'));
 }
+
+/** The transport workspace's city groups (workspace.ts paintCityFilters). */
+export type CityGroupKey = 'living' | 'culture' | 'transport' | 'useful' | 'heritage';
+
+/**
+ * Picks one of the workspace's city groups the way a reader does. Since b300af3 the group buttons sit inside the
+ * collapsed `.city-filter-disclosure` (workspace.ts), so the summary is opened first, the group is pressed and
+ * confirmed, and the disclosure is closed again so it covers neither the map nor the sheet. The one place that knows
+ * the disclosure: when WP4 removes it, only this helper changes.
+ */
+export async function pickCityGroup(page: Page, group: CityGroupKey): Promise<void> {
+  const summary = page.locator('.city-filter-disclosure > summary');
+  await summary.click();
+  const button = page.locator(`[data-action=city-group][data-group=${group}]`);
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+  await summary.click();
+}

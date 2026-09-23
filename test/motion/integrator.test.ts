@@ -9,6 +9,204 @@ import { lastFix, newTrack, type Track } from '../../shared/motion/track';
 import { createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
 import { simulate } from './simulator';
 import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
+import { createLoop } from '../../app/src/motion/loop';
+
+describe('stale polls through the real planner and frame loop', () => {
+  function planned(generationDelay = 0) {
+    const net = syntheticNetwork(corridorSpec());
+    const matcher = createMatcher(net);
+    const track = newTrack('stale', '1', 't1', 'tram');
+    const t = 1_800_000_000;
+    for (const [x, atSec] of [[400, t - 10], [500, t]]) {
+      const [lon, lat] = toLonLat({ x, y: 0 });
+      matcher.matchFix(track, { x, y: 0, lon, lat, atSec }, matcher.priorFor('1_0', '1', 0), null);
+    }
+    track.speed = 10;
+    buildPlan(track, net, { segmentSeconds: (_p, a, b) => (b - a) / 10, dwellSeconds: () => 20 },
+      null, t + generationDelay, t, { hourBand: 12, dayType: 0 });
+    const plan = track.plan!;
+    if (plan.on !== 'path') throw new Error('expected a real path plan');
+    expect(track.next?.s).toBe(600);
+    expect(evalPathPlan(plan.knots, 60)).toBeGreaterThan(600);
+    const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, 500));
+    const fix: Fix & { generatedAt: number } = {
+      id: track.id, lon, lat, at: t * 1000, generatedAt: (t + generationDelay) * 1000,
+      routeId: '1', type: 0, path: '1_0', speed: track.speed, confidence: track.confidence,
+      nextStopId: track.next!.stopId,
+      plan: { on: 'path', knots: plan.knots.map(([s, arc]) => [t * 1000 + s * 1000, arc]) },
+    };
+    return { net, fix, now: t * 1000 };
+  }
+
+  it.each([false, true])('does not renew hold, confidence or eviction on 12 s stale repaints (reduced=%s)', reducedMotion => {
+    const { net, fix, now: start } = planned();
+    const model = createIntegrator(net);
+    let now = start;
+    let frame: (() => void) | undefined;
+    let drawn: Drawn[] = [];
+    model.update([fix], now);
+    const loop = createLoop(() => { drawn = model.step(now); return true; }, {
+      now: () => now, reducedMotion,
+      raf: cb => { frame = () => cb(now); return 1; }, cancel: () => { frame = undefined; },
+      setTimer: cb => { frame = cb; return 1; }, clearTimer: () => {},
+    });
+    loop.start();
+    const step = reducedMotion ? 1000 : 1000 / 12;
+    for (let elapsed = step; elapsed <= 181_000 + 1; elapsed += step) {
+      now = start + Math.round(elapsed);
+      if (Math.round(elapsed) % 12_000 === 0) model.update([structuredClone(fix)], now);
+      frame?.();
+      if (now - start >= 60_000 && now - start < 60_000 + step) {
+        expect(drawn[0].s).toBeLessThanOrEqual(600);
+        expect(drawn[0].held).toBe(true);
+        expect(drawn[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+      }
+      if (now - start >= 140_000 && drawn.length) expect(drawn[0].heading).toBeNull();
+    }
+    expect(drawn).toEqual([]);
+    loop.stop();
+  });
+
+  it('accepts a genuinely new plan with the same report and rejects an older response', () => {
+    const { net, fix, now } = planned();
+    const model = createIntegrator(net);
+    model.update([fix], now);
+    const newer = { ...fix, generatedAt: now + 12_000, confidence: 0.5 };
+    model.update([newer], now + 12_000);
+    expect(model.step(now + 12_000)[0].confidence).toBe(0.5);
+    model.update([fix], now + 24_000);
+    expect(model.step(now + 24_000)[0].confidence).toBe(0.5);
+  });
+
+  it.each([false, true])('holds and fades from the last report when the real plan is generated 12 s later (reduced=%s)', reducedMotion => {
+    const { net, fix, now: reportAt } = planned(12);
+    const model = createIntegrator(net);
+    let now = fix.generatedAt;
+    let frame: (() => void) | undefined;
+    let drawn: Drawn[] = [];
+    model.update([fix], now);
+    const loop = createLoop(() => { drawn = model.step(now); return true; }, {
+      now: () => now, reducedMotion,
+      raf: cb => { frame = () => cb(now); return 1; }, cancel: () => { frame = undefined; },
+      setTimer: cb => { frame = cb; return 1; }, clearTimer: () => {},
+    });
+    loop.start();
+    const framesPerSecond = reducedMotion ? 1 : 12;
+    try {
+      for (let frameNo = 1; frameNo <= 168 * framesPerSecond; frameNo++) {
+        now = fix.generatedAt + Math.round(frameNo * 1000 / framesPerSecond);
+        if (frameNo % (12 * framesPerSecond) === 0) model.update([structuredClone(fix)], now);
+        frame?.();
+        if (now === reportAt + 60_000) {
+          expect(drawn[0].s).toBeLessThanOrEqual(600);
+          expect(drawn[0].held).toBe(true);
+          expect(drawn[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+        }
+        if (now === reportAt + 140_000) expect(drawn[0].heading).toBeNull();
+        if (now === reportAt + 179_000) expect(drawn).toHaveLength(1);
+      }
+      expect(now).toBe(reportAt + 180_000);
+      expect(drawn).toEqual([]);
+    } finally { loop.stop(); }
+  });
+
+  it('does not evaluate a versioned arc on another graph in alternate renderers', () => {
+    const { net, fix, now } = planned();
+    const model = createIntegrator(net);
+    model.update([{ ...fix, network: net.graphHash }], now);
+    expect(model.step(now)).toHaveLength(1);
+    model.update([{ ...fix, generatedAt: now + 12_000, network: 'other-graph' }], now + 12_000);
+    expect(model.step(now + 12_000)).toEqual([]);
+  });
+
+  it('recognizes cloned legacy plans without producer metadata', () => {
+    const { net, fix, now } = planned();
+    delete (fix as Partial<Fix>).generatedAt;
+    const model = createIntegrator(net);
+    model.update([fix], now);
+    let last: Drawn[] = [];
+    for (let elapsed = 0; elapsed <= 60_000; elapsed += 1000) {
+      if (elapsed % 12_000 === 0) model.update([structuredClone(fix)], now + elapsed);
+      last = model.step(now + elapsed);
+    }
+    expect(last[0].s).toBeLessThanOrEqual(600);
+    expect(last[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+  });
+
+  it.each([true, false])('does not restart the report lifetime on a first delivery at 60 s (versioned=%s)', versioned => {
+    const { net, fix, now: reportAt } = planned(12);
+    if (!versioned) delete (fix as Partial<Fix>).generatedAt;
+    const model = createIntegrator(net);
+    model.update([fix], reportAt + 60_000);
+    const drawn = model.step(reportAt + 60_000)[0];
+    expect(drawn.s).toBeLessThanOrEqual(600);
+    expect(drawn.confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+    expect(model.step(reportAt + 179_000)).toHaveLength(1);
+    expect(model.step(reportAt + 180_000)).toEqual([]);
+  });
+
+  it('extends confidence already decayed by a producer without fading it twice', () => {
+    const { net, fix, now: reportAt } = planned();
+    const model = createIntegrator(net);
+    model.update([{ ...fix, generatedAt: reportAt + 60_000, confidence: 0.9 * 0.8 }], reportAt + 60_000);
+    expect(model.step(reportAt + 60_000)[0].confidence).toBeCloseTo(0.9 * 0.8, 3);
+    expect(model.step(reportAt + 90_000)[0].confidence).toBeCloseTo(0.9 * 0.6, 3);
+  });
+
+  it('preserves a real post-silence plan hold when two platform zones overlap', () => {
+    const spec = corridorSpec();
+    spec.stops.push({ id: 'T650', edge: 0, s: 650 });
+    spec.routes[0].paths![0].served!.push('T650');
+    const net = syntheticNetwork(spec);
+    const matcher = createMatcher(net);
+    const track = newTrack('overlap', '1', 't1', 'tram');
+    const t = 1_800_000_000;
+    for (const [x, atSec] of [[583, t - 10], [633, t]]) {
+      const [lon, lat] = toLonLat({ x, y: 0 });
+      matcher.matchFix(track, { x, y: 0, lon, lat, atSec }, matcher.priorFor('1_0', '1', 0), null);
+    }
+    track.speed = 5;
+    buildPlan(track, net, { segmentSeconds: (_p, a, b) => (b - a) / 5, dwellSeconds: () => 20 },
+      null, t + 42, t + 42, { hourBand: 12, dayType: 0 });
+    expect(track.next?.stopId).toBe('T650'); // nearest platform, not the first within 40 m
+    const plan = track.plan!;
+    if (plan.on !== 'path') throw new Error('expected a real path plan');
+    const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, 633));
+    const fix: Fix = {
+      id: track.id, lon, lat, at: t * 1000, generatedAt: (t + 42) * 1000,
+      routeId: '1', type: 0, path: '1_0', speed: 5, confidence: track.confidence,
+      plan: { on: 'path', knots: plan.knots.map(([s, arc]) => [(t + 42 + s) * 1000, arc]) },
+    };
+    const model = createIntegrator(net);
+    model.update([fix], (t + 42) * 1000);
+    const drawn = model.step((t + 60) * 1000)[0];
+    expect(drawn.s).toBe(650);
+    expect(drawn.held).toBe(true);
+    expect(drawn.confidence).toBeCloseTo(0.9 * 0.8, 3);
+    expect(model.step((t + 180) * 1000)).toEqual([]);
+  });
+
+  it.each([false, true])('chooses the next forward stop unless the report explicitly holds the platform behind (held=%s)', held => {
+    const { net, fix, now } = planned(12);
+    const report: Fix = {
+      ...fix, held, nextStopId: 'T900',
+      plan: { on: 'path', knots: held
+        ? [[now, 633], [now + 30_000, 633], [now + 90_000, 1200]]
+        : [[now, 633], [now + 20_000, 900], [now + 40_000, 900], [now + 90_000, 1200]] },
+    };
+    const model = createIntegrator(net);
+    model.update([report], now + 12_000);
+    let drawn: Drawn[] = [];
+    for (let sec = 12; sec <= 60; sec++) {
+      if (sec % 12 === 0) model.update([structuredClone(report)], now + sec * 1000);
+      drawn = model.step(now + sec * 1000);
+    }
+    expect(drawn[0].s).toBeLessThanOrEqual(900);
+    if (held) expect(drawn[0].s).toBe(633);
+    else expect(drawn[0].s).toBeGreaterThan(895);
+    expect(drawn[0].confidence).toBeCloseTo(0.9 * 0.8, 3);
+  });
+});
 
 // The client side of the engine (B6, R-TE10): the twin's plans arrive as
 // wire fixes every tick, and the integrator turns them into what is drawn
@@ -456,6 +654,9 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     let gap30 = 0;
     let gap60 = 0;
     for (let t = T0; t <= T0 + 60_000; t += 1000) {
+      // This is the live convergence-rate control, not a one-minute
+      // outage: renew reports without changing its eight-metre/s target.
+      if ((t - T0) % 10_000 === 0) integrator.update([{ ...pathFix('v', '1_0', knots, SPEED), at: t, generatedAt: t }], t);
       const gap = gapAt(t);
       if (t === T0 + 30_000) gap30 = gap;
       if (t === T0 + 60_000) gap60 = gap;
@@ -503,5 +704,172 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     // was not testing the window at all (the review's M7).
     expect(after.s).toBeGreaterThanOrEqual(990);
     expect(after.s).toBeLessThan(999);
+  });
+
+  it('re-seeds a held mark near its drawn point when the new plan window has moved far ahead', () => {
+    // Recorded 22139, 21 Sep 13:12:58: held at the end of 6_2, the
+    // 6_25 plan is 667 m along its departure, but that path starts only
+    // 89 m from the drawn mark. Do not add 667 m of plan lag to the jump.
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: Array.from({ length: 25 }, (_, i) => ({ x: 1089 + 50 * i, y: 0 })) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'arrival', still(T0, 1000), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'arrival', still(t1, 900), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    integrator.update([pathFix('v', 'departure', still(t1, 667), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.path).toBe(1);
+    expect(after.s).toBe(0);
+    expect(Math.hypot(after.p.x - before.p.x, after.p.y - before.p.y)).toBeCloseTo(89, 6);
+    expect(after.lastSnapAt).toBe(t1); // still measured as a re-seed
+    expect(integrator.size()).toBe(1); // no visibility suppression
+    const later = integrator.step(t1 + 1000)[0];
+    expect(later.s).toBeGreaterThan(after.s!);
+    expect(later.s).toBeLessThan(667);
+  });
+
+  it('keeps the plan fold when a held mark is near a later return leg', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: 6 })) },
+        { from: 3, to: 4, pts: [{ x: 1000, y: 6 }, { x: 1000, y: 300 }, { x: 0, y: 300 }, { x: 0, y: -4 }] },
+        { from: 4, to: 5, pts: straight(0, 1000, -4) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 0, edges: [1, 2, 3] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 200), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 100), 0)], t1);
+    expect(integrator.step(t1)[0].holding).toBe(true);
+    integrator.update([pathFix('v', 'loop', still(t1, 600), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBeCloseTo(200, 6);
+    expect(after.p.y).toBeCloseTo(6, 6); // not the closer, later return leg
+  });
+
+  it.each([
+    { heading: 'westbound', mirror: false },
+    { heading: 'eastbound', mirror: true },
+  ])('re-seeds a held $heading mark onto the matching earlier loop segment', ({ mirror }) => {
+    // Review P1: (200,0) is 4 m from eastbound s=200, but 6 m from
+    // westbound s=1810. Choosing s=200 invents another 1.61 km of travel.
+    // Reflect x for the mirror case; segmentation keeps the plan window
+    // genuinely empty instead of projecting onto a long segment's end.
+    const x = (value: number): number => mirror ? 1000 - value : value;
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(x(1000), x(0)) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: x(50 * i), y: -4 })),
+          ...Array.from({ length: 21 }, (_, i) => ({ x: x(1000 - 50 * i), y: 6 })),
+          ...Array.from({ length: 20 }, (_, i) => ({ x: x(0), y: 56 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 800), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 700), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(before.p).toEqual({ x: x(200), y: 0 });
+    expect(before.heading).toEqual({ x: mirror ? 1 : -1, y: 0 });
+    const candidates = net.projectionsOntoPath(1, before.p, 0, 2700, 150);
+    expect(candidates).toEqual([{ s: 200, d: 4 }, { s: 1810, d: 6 }]);
+    integrator.update([pathFix('v', 'loop', still(t1, 2700), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(1810);
+    expect(after.p).toEqual({ x: x(200), y: 6 });
+    expect(after.heading).toEqual(before.heading);
+    expect(after.lastSnapAt).toBe(t1);
+    expect(integrator.size()).toBe(1);
+  });
+
+  it('falls back to the plan when a held mark only has a wrong-direction nearby segment', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(1000, 0) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: -4 })),
+          ...Array.from({ length: 40 }, (_, i) => ({ x: 1000, y: 46 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 800), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 700), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(before.heading).toEqual({ x: -1, y: 0 });
+    expect(net.projectionsOntoPath(1, before.p, 0, 2700, 150)).toEqual([{ s: 200, d: 4 }]);
+    integrator.update([pathFix('v', 'departure', still(t1, 2700), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(2700);
+    expect(after.p).toEqual(net.toPathPoint(1, 2700));
+    expect(after.lastSnapAt).toBe(t1);
+  });
+
+  it('re-seeds a held mark nearest the plan progress among matching nearby segments', () => {
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: [
+          ...Array.from({ length: 21 }, (_, i) => ({ x: 50 * i, y: -4 })),
+          { x: 1000, y: 306 }, { x: 0, y: 306 }, { x: 0, y: 6 },
+          ...Array.from({ length: 20 }, (_, i) => ({ x: 50 + 50 * i, y: 6 })),
+          ...Array.from({ length: 20 }, (_, i) => ({ x: 1000, y: 56 + 50 * i })),
+        ] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'stem', direction: 0, edges: [0] },
+        { id: 'loop', direction: 0, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'stem', still(T0, 200), 0)], T0);
+    integrator.step(T0);
+    const t1 = T0 + 10_000;
+    integrator.update([pathFix('v', 'stem', still(t1, 100), 0)], t1);
+    const before = integrator.step(t1)[0];
+    expect(before.holding).toBe(true);
+    expect(net.projectionsOntoPath(1, before.p, 0, 4300, 150)).toEqual([{ s: 200, d: 4 }, { s: 2810, d: 6 }]);
+    integrator.update([pathFix('v', 'loop', still(t1, 4300), 0)], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.s).toBe(2810);
+    expect(after.p).toEqual({ x: 200, y: 6 });
+    expect(after.heading).toEqual(before.heading);
   });
 });

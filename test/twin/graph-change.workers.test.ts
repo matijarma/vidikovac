@@ -9,6 +9,10 @@ import { nodeKey } from '../../shared/motion/junction';
 import { corridorIndex } from './engine-fixture';
 import { frame, type FrameVehicle } from './frames';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
+import { decodeNetwork } from '../../shared/motion/network';
+import { dist, toLonLat, toPlane } from '../../shared/motion/geo';
+import graphBefore from '../fixtures/graph-migration/before.json';
+import graphAfter from '../fixtures/graph-migration/after.json';
 
 const testEnv = env as unknown as Env;
 
@@ -109,6 +113,29 @@ describe('TwinDO on a rebuilt rail graph', () => {
     setTwinIndexSourceForTest(async () => INDEX);
     setTwinNetworkSourceForTest(async () => network);
     setTwinUpstreamForTest(async () => new Response(frame(T0, [tram(100, T0)], []), { status: 200, headers: { etag: 'W/"g1"' } }));
+  });
+
+  it('restores a real Zrinjevac report onto the new graph without waiting for another feed', async () => {
+    const oldNet = decodeNetwork(graphBefore);
+    const newNet = decodeNetwork(graphAfter);
+    const pathId = 'path:6:1:e641be7c';
+    network = oldNet;
+    setTwinIndexSourceForTest(async () => corridorIndex(network, [{ tripId: 't6', pathId }]));
+    const [lon, lat] = toLonLat(oldNet.stops.find(s => s.name === 'Zrinjevac')!.p);
+    const upstream = vi.fn(async () => new Response(frame(T0, [{ vehicleId: 'v6', tripId: 't6', routeId: '6', lon, lat, at: T0 }]), { status: 200 }));
+    setTwinUpstreamForTest(upstream);
+    const stub = freshTwin();
+    await pinClock(stub, T0 * 1000);
+    await stub.publish();
+    network = newNet;
+    await runInDurableObject(stub, instance => instance.forgetForTest());
+    const payload = await stub.publish();
+    expect(upstream).toHaveBeenCalledTimes(1);
+    const item = payload.items.find(i => i.id === 'vehicle:v6')!;
+    expect(item.motion && 'path' in item.motion ? item.motion.plan[0][1] : null).toBeCloseTo(8427.7, 0);
+    expect(item.motion).toHaveProperty('network', newNet.graphHash);
+    const [x, y] = (item.geo as { coordinates: number[] }).coordinates;
+    expect(dist(toPlane(x, y), newNet.toPathPoint(0, 8427.7))).toBeLessThan(1);
   });
 
   it('drops the edge-keyed rows when the graph hash changes and keeps them when it does not, keeping the stop dwells either way', async () => {

@@ -17,6 +17,9 @@ import * as externalFeatures from '../../app/src/map/external-features';
 import { createNameHysteresis, evaluateExpression, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_TICK_MS, UNKNOWN_EXPRESSION, type SourcePoint } from '../../app/src/map/name-census';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
+import graphBefore from '../fixtures/graph-migration/before.json';
+import graphAfter from '../fixtures/graph-migration/after.json';
+import { vehicleFixes } from '../../app/src/motion/fixes';
 
 // --- A MapLibre stand-in: records what the wrapper hands it, fires events on demand.
 interface FakeSource { type: string; data: unknown; calls: unknown[]; setData(d: unknown): void }
@@ -194,6 +197,116 @@ async function harness(opts: HarnessOptions = {}) {
 }
 
 afterEach(() => { FakeMap.instances.length = 0; FakeMap.failConstruction = false; document.body.replaceChildren(); document.documentElement.removeAttribute('data-theme-resolved'); });
+
+describe('graph identity on an already-open map', () => {
+  const oldNet = decodeNetwork(graphBefore);
+  const newNet = decodeNetwork(graphAfter);
+  const point = (network: string, s: number): MapPoint & { network: string } => ({
+    ...A, at: T0, network, path: 'path:6:1:e641be7c',
+    plan: { on: 'path', knots: [[T0, s], [T0 + 90_000, s]] },
+    confidence: 0.9,
+  });
+
+  it('clears incompatible marks and derived geometry until the replacement graph loads', async () => {
+    let finish!: (net: typeof NET | null) => void;
+    const reloadNetwork = vi.fn(() => new Promise<typeof NET | null>(resolve => { finish = resolve; }));
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    h.frame();
+    h.handle.update([point(newNet.graphHash, 8427.7)], []);
+    expect(h.handle.vehicles?.()).toEqual([]);
+    expect(reloadNetwork).toHaveBeenCalledTimes(1);
+    expect(h.container.dataset.networkStale).toBe('true');
+    h.frame();
+    expect((h.vehicles().calls.at(-1) as FC).features).toEqual([]);
+    finish(newNet);
+    await flush();
+    h.frame();
+    expect(h.handle.network?.()).toBe(newNet);
+    expect(h.container.dataset.networkStale).toBeUndefined();
+    const v = h.handle.vehicles!()[0];
+    const expected = newNet.toPathPoint(0, 8427.7);
+    const actual = toPlane(v.lon, v.lat);
+    expect(Math.hypot(actual.x - expected.x, actual.y - expected.y)).toBeLessThan(1);
+    expect(h.map.sources.get('network')!.calls.length).toBeGreaterThan(0);
+    expect(h.map.sources.get('stops')!.calls.length).toBeGreaterThan(0);
+    h.handle.destroy();
+  });
+
+  it('reconciles shared-decoder points before painting new arcs on the personal-device map', async () => {
+    let finish!: (net: typeof NET) => void;
+    const h = await harness({
+      loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)],
+      extra: { reloadNetwork: () => new Promise<typeof NET>(resolve => { finish = resolve; }) },
+    });
+    const fixes = vehicleFixes({
+      module: 'zet-rt', tier: 'session', status: 'live',
+      fetchedAt: new Date(T0 + 12_000).toISOString(), sourceUpdatedAt: new Date(T0).toISOString(),
+      attribution: { text: 'ZET', url: 'https://example.test', licence: 'test' },
+      items: [{
+        id: A.id, module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', at: new Date(T0).toISOString(),
+        geo: { type: 'Point', coordinates: [A.lon, A.lat] }, data: { routeId: '6', routeType: 0, confidence: 0.9 },
+        motion: { path: 'path:6:1:e641be7c', network: newNet.graphHash, generatedAt: T0 + 12_000, plan: [[0, 8427.7], [90, 8427.7]] },
+      }],
+    }, T0 + 12_000);
+    h.handle.update(fixes.map(f => ({ ...f, title: '6' })), []);
+    h.frame();
+    expect(h.handle.vehicles?.()).toEqual([]);
+    finish(newNet);
+    await flush();
+    h.frame();
+    const v = h.handle.vehicles!()[0];
+    const expected = newNet.toPathPoint(0, 8427.7);
+    const actual = toPlane(v.lon, v.lat);
+    expect(Math.hypot(actual.x - expected.x, actual.y - expected.y)).toBeLessThan(1);
+    h.handle.destroy();
+  });
+
+  it('reconciles a cached graph at startup and uses the latest points received during the load', async () => {
+    const oldPoint = oldNet.toPathPoint(0, 8427.7);
+    const newPoint = newNet.toPathPoint(0, 8427.7);
+    expect(Math.hypot(oldPoint.x - newPoint.x, oldPoint.y - newPoint.y)).toBeGreaterThan(500);
+    let finish!: (net: typeof NET) => void;
+    const h = await harness({
+      loadNetwork: async () => oldNet, points: [point(newNet.graphHash, 8427.7)],
+      extra: { reloadNetwork: () => new Promise<typeof NET>(resolve => { finish = resolve; }) },
+    });
+    h.frame();
+    expect(h.handle.vehicles?.()).toEqual([]);
+    h.handle.update([{ ...point(newNet.graphHash, 8500), id: 'vehicle:latest' }], []);
+    finish(newNet);
+    await flush();
+    h.frame();
+    const v = h.handle.vehicles!()[0];
+    expect(v.id).toBe('vehicle:latest');
+    const expected = newNet.toPathPoint(0, 8500);
+    const actual = toPlane(v.lon, v.lat);
+    expect(Math.hypot(actual.x - expected.x, actual.y - expected.y)).toBeLessThan(1);
+    h.handle.destroy();
+  });
+
+  it('retries failed or wrong-graph loads and ignores completions after destroy', async () => {
+    const reloadNetwork = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(oldNet).mockResolvedValueOnce(newNet);
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    for (let i = 0; i < 3; i++) {
+      h.handle.update([point(newNet.graphHash, 8427.7)], []);
+      if (i === 2) h.handle.destroy();
+      await flush();
+      expect(h.handle.vehicles?.()).toEqual([]);
+    }
+    expect(reloadNetwork).toHaveBeenCalledTimes(3);
+    expect(h.handle.network?.()).not.toBe(newNet);
+  });
+
+  it('accepts one-deploy legacy motion without identity and never reloads a matching graph', async () => {
+    const reloadNetwork = vi.fn();
+    const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });
+    h.handle.update([A], []);
+    h.frame();
+    expect(h.handle.vehicles?.()).toHaveLength(1);
+    expect(reloadNetwork).not.toHaveBeenCalled();
+    h.handle.destroy();
+  });
+});
 
 describe('the full map draws the model, never the report (R-P2)', () => {
   it('guards the map region ARIA value even without a kiosk producer', async () => {

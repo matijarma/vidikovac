@@ -30,8 +30,9 @@
 // there, stops, and `held` reads true once it stands in the stop's zone.
 // The twin's `confidence` is the fade: whole while fixes arrive, then
 // linear to 0 at EVICT_S (180 s) of the vehicle's silence. The client
-// multiplies it by silenceDecay of the plan's own age, so a client that
-// misses polls fades its marks on the same curve. Below
+// extends it by the remaining report lifetime. Repeated or
+// out-of-order payloads never renew the clock; a stalled plan is additionally
+// capped at its next platform. Below
 // HEADING_CONFIDENCE_THRESHOLD (0.3, about 130 s of silence for a tram on
 // its rails) the heading is unknown and the mark stops pointing. Opacity
 // follows the same confidence through markAlpha (app/src/map/vehicle-mark.ts),
@@ -48,7 +49,8 @@ import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 import { ARC_PRIOR_WEIGHT, BACK_WINDOW_M, OFF_GRAPH_M, REACH_SLACK_M } from '../../../shared/motion/match';
 import type { GraphNetwork, Network } from '../../../shared/motion/network';
 import { edgeIndexAt, HEADWAY_M, mapArc, mapArcNear, onSharedRails, SWAP_LIMIT_M } from '../../../shared/motion/order';
-import { CONFIDENCE_FREE_CAP, EVICT_S, silenceDecay } from '../../../shared/motion/plan';
+import { CONFIDENCE_FREE_CAP, EVICT_S, SILENCE_HOLD_S, silenceDecay } from '../../../shared/motion/plan';
+import { STOP_ZONE_M } from '../../../shared/motion/speed';
 import { at, projectionsWithin, tangent } from '../../../shared/motion/polyline';
 import { REDUCED_MOTION_INTERVAL_MS } from './loop';
 
@@ -69,6 +71,11 @@ export interface Fix {
   lat: number;
   /** Epoch milliseconds of the vehicle's own last report; eviction counts from here. */
   at: number;
+  /** Producer's plan generation time, epoch ms, not the poll/paint time.
+   *  Optional during the one-deploy transition from unversioned motion. */
+  generatedAt?: number;
+  /** Artefact graph hash carried by the motion, not the GTFS feed version. */
+  network?: string;
   tripId?: string;
   routeId?: string;
   /** GTFS route_type as the wire carries it (0 tram, 3 bus). */
@@ -106,7 +113,7 @@ export interface Drawn {
   heading: XY | null;
   /** m/s, the twin's estimate. */
   speed: number;
-  /** 0 to 1, the twin's confidence faded by the plan's age; drives alpha. */
+  /** 0 to 1, the twin's confidence faded by the report's age; drives alpha. */
   confidence: number;
   /** The shape index the mark rides (a bus shape, or the shape a tram path
    *  is), -1 on a synthetic path, null in the free plane. Renderers read
@@ -217,8 +224,12 @@ interface VehicleState {
   nextStopEtaMs?: number;
   geom: Geometry | null;
   plan: FixPlan | null;
-  /** When the current plan (or bare fix) arrived, epoch ms: its age fades the confidence. */
+  /** Producer time, or first receipt of unversioned evidence, epoch ms. */
   planAt: number;
+  generatedAt?: number;
+  evidenceKey: string;
+  /** Last report's next platform (or path end), never an old plan's horizon. */
+  silenceCeiling: number;
   /** Drawn arc along `geom`, and the drawn point. */
   s: number;
   p: XY;
@@ -336,10 +347,42 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
   }
 
   function applyFix(v: VehicleState | null, fix: Fix, now: number): VehicleState {
+    const generatedAt = Number.isFinite(fix.generatedAt) ? fix.generatedAt : undefined;
+    // Cloned last-good snapshots are the same evidence. Legacy senders have
+    // no sequence yet; compare the plan and its scalars, not object identity
+    // or a title changed by repainting in another locale.
+    const evidenceKey = JSON.stringify([fix.at, fix.path, fix.plan, fix.lon, fix.lat,
+      fix.tripId, fix.routeId, fix.speed, fix.confidence, fix.held, fix.behind,
+      fix.nextStopId, fix.nextStopEtaMs]);
+    if (v && ((generatedAt !== undefined && v.generatedAt !== undefined && generatedAt <= v.generatedAt)
+      || (generatedAt === undefined && (v.generatedAt !== undefined || evidenceKey === v.evidenceKey)))) return v;
+    const planAt = Math.min(now, generatedAt ?? now);
     const meta = routeMeta(fix);
     const geom = fix.plan && fix.plan.on === 'path' && fix.path !== undefined ? resolveGeometry(fix.path) : null;
     const onPath = geom !== null && fix.plan !== undefined && fix.plan.on === 'path';
     const target = targetOf(fix, geom, now);
+    let silenceCeiling = Infinity;
+    if (geom && fix.plan?.on === 'path') {
+      const anchor = evalPath(fix.plan.knots, fix.at);
+      // A moving report has already passed any platform behind its anchor.
+      // Only an explicitly held vehicle may still occupy that stop's zone.
+      const stopFrom = anchor - (fix.held ? STOP_ZONE_M : 0);
+      const stop = graph && geom.path !== null
+        ? graph.stopsOnPath(geom.path).find(entry => entry.s >= stopFrom)
+        : net?.nextStop(geom.onShape, stopFrom);
+      silenceCeiling = Math.max(anchor, stop?.s ?? geom.cum[geom.cum.length - 1]);
+      // A plan generated after report-age T8 already carries the producer's
+      // stop/queue hold, including its published-arc floor. Preserve that
+      // bounded plan; only pre-silence (or legacy) plans need a client stop
+      // derived from geometry. Neither case grants another 30 s at receipt.
+      if (generatedAt !== undefined && generatedAt - fix.at > SILENCE_HOLD_S * 1000) {
+        silenceCeiling = fix.plan.knots.reduce((ceiling, [, s]) => Math.max(ceiling, s), anchor);
+      }
+      if (now - fix.at > SILENCE_HOLD_S * 1000) {
+        target.s = Math.min(target.s, silenceCeiling);
+        target.p = at(geom.pts, geom.cum, target.s);
+      }
+    }
     if (!v) {
       // Nothing drawn yet: the mark starts where the plan says it is now
       // (R-P2 concerns a mark already on screen), and moves from its first frame.
@@ -355,7 +398,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         nextStopEtaMs: fix.nextStopEtaMs,
         geom: onPath ? geom : null,
         plan: fix.plan ?? null,
-        planAt: now,
+        planAt,
+        generatedAt,
+        evidenceKey,
+        silenceCeiling,
         s: target.s,
         p: target.p,
         targetP: target.p,
@@ -390,13 +436,17 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     // relation stands whatever the plans do.
     v.leader = fix.behind ?? null;
     v.lastFixAt = Math.max(v.lastFixAt, fix.at);
-    v.planAt = now;
+    v.planAt = planAt;
+    v.generatedAt = generatedAt;
+    v.evidenceKey = evidenceKey;
+    v.silenceCeiling = silenceCeiling;
     v.plan = fix.plan ?? null;
     if (onPath) {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
         // drawn, so the change of mind is recorded, never shown as a jump.
-        v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s);
+        const heldHeading = v.holding ? (v.geom ? tangent(v.geom.pts, v.geom.cum, v.s) : v.moveDir) : null;
+        v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s, heldHeading);
         v.lastSnapAt = now;
       }
       v.geom = geom;
@@ -419,7 +469,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
    * nearest point on the ground is regularly the wrong one, and a mark that
    * lands on it is a tram drawn a kilometre from where it is.
    */
-  function reseedArc(from: Geometry | null, to: Geometry, s: number, p: XY, expected: number): number {
+  function reseedArc(from: Geometry | null, to: Geometry, s: number, p: XY, expected: number, heldHeading: XY | null): number {
     if (graph && from && from.path !== null && to.path !== null) {
       const mapped = mapArc(graph.paths[from.path], s, graph.paths[to.path]);
       if (mapped !== null) return mapped;
@@ -430,6 +480,25 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       graph && to.path !== null
         ? graph.projectionsOntoPath(to.path, p, sFrom, sTo, OFF_GRAPH_M)
         : projectionsWithin(to.pts, to.cum, p, sFrom, sTo, OFF_GRAPH_M).map((proj) => ({ s: proj.s, d: proj.d }));
+    if (heldHeading && window.length === 0) {
+      // A held marker can be far behind the new plan's window. Before
+      // falling to that plan (22139: 750 m), use nearby geometry behind
+      // the target and catch up forwards (its departure starts 89 m away).
+      // Nearby folds must agree with the held heading. Among those, prefer
+      // the plan's progress, not centimetres of ground-distance scatter:
+      // an earlier lap would invent a traversal the fixes never supported.
+      // The upper arc bound still excludes a later return leg; without a
+      // direction-compatible candidate the original plan fallback remains.
+      const nearby = graph && to.path !== null
+        ? graph.projectionsOntoPath(to.path, p, 0, sTo, OFF_GRAPH_M)
+        : projectionsWithin(to.pts, to.cum, p, 0, sTo, OFF_GRAPH_M);
+      const best = nearby.filter(c => {
+        if (c.s > sTo) return false;
+        const heading = tangent(to.pts, to.cum, c.s);
+        return heading.x * heldHeading.x + heading.y * heldHeading.y > 0;
+      }).sort((a, b) => Math.abs(a.s - expected) - Math.abs(b.s - expected) || a.d - b.d)[0];
+      if (best) return best.s;
+    }
     // Nothing on the new geometry within the window leaves the plan's own
     // arc, which is the twin's matched position: still evidence, and still
     // not a point picked by centimetres of scatter half a circuit away.
@@ -649,6 +718,12 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     update(fixes, now) {
       for (const fix of fixes) {
         if (!Number.isFinite(fix.lon) || !Number.isFinite(fix.lat)) continue;
+        // Alternate renderers also use this model. A missing/reloading or
+        // incompatible graph cannot interpret this arc as a free-plane fix.
+        if (fix.network && graph?.graphHash !== fix.network && fix.plan?.on === 'path') {
+          vehicles.delete(fix.id);
+          continue;
+        }
         const v = vehicles.get(fix.id) ?? null;
         vehicles.set(fix.id, applyFix(v, fix, now));
       }
@@ -670,6 +745,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         v.holding = false;
         if (v.geom && v.plan && v.plan.on === 'path') {
           v.targetS = evalPath(v.plan.knots, now);
+          // A newer plan or poll is not a newer vehicle report. Apply T8
+          // before a stale pre-silence plan can leave the next platform.
+          if (now - v.lastFixAt > SILENCE_HOLD_S * 1000) v.targetS = Math.min(v.targetS, v.silenceCeiling);
           onGeometry.push(v);
         } else if (v.plan && v.plan.on === 'free') {
           const [lon, lat] = evalFree(v.plan.knots, now);
@@ -695,8 +773,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       for (const v of onGeometry) convergeInOrder(v);
 
       for (const v of vehicles.values()) {
-        const decay = silenceDecay((now - v.planAt) / 1000);
-        let confidence = v.confidence * decay;
+        const atGeneration = silenceDecay(v.generatedAt === undefined ? 0 : (v.planAt - v.lastFixAt) / 1000);
+        const reportDecay = atGeneration > 0 ? silenceDecay((now - v.lastFixAt) / 1000) / atGeneration : 0;
+        let confidence = v.confidence * reportDecay;
         let rawHeading: XY | null;
         let track: XY | undefined;
         if (v.geom && v.plan && v.plan.on === 'path') {
@@ -724,7 +803,8 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           drawn.path = v.geom.path;
           drawn.s = v.s;
         }
-        if (v.held) drawn.held = true;
+        if (v.held || (v.geom && now - v.lastFixAt > SILENCE_HOLD_S * 1000
+          && Math.abs(v.s - v.silenceCeiling) <= DEAD_ZONE_M)) drawn.held = true;
         if (v.holding) drawn.holding = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
         if (v.headsign !== undefined) drawn.headsign = v.headsign;

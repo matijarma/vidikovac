@@ -279,7 +279,10 @@ at its next stop and fades; after 180 s it leaves the map. A tram is drawn only
 on its own line's rails; off them it is drawn at its reported positions. On the
 schematic, a tram on a terminus loop is drawn at the circle of the loop's first
 stop, or of its other end where ZET's artwork does not print the first
-(Mandlova). BAJS counts require a recent observation; air is a
+(Mandlova); where its line's artwork prints neither end (the Mandlova to
+Ravnice loop of a line that does not serve Ravnice), the schematic does not
+draw the tram, which stays on the geographic map.
+BAJS counts require a recent observation; air is a
 preliminary station observation. A ZET arrival is an estimate and is labelled
 one: a countdown only where a tracked vehicle carries that trip, built from
 the scheduled departure and ZET's own reported delay for that vehicle, with

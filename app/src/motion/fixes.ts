@@ -44,6 +44,8 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
       lon,
       lat,
       at: parseTime(item.at) ?? fallbackAt,
+      network: item.motion?.network,
+      generatedAt: item.motion?.generatedAt,
       tripId: dataText(item, 'tripId') || undefined,
       routeId: dataText(item, 'routeId') || undefined,
       type: type ?? undefined,

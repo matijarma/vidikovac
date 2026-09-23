@@ -8,7 +8,9 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { CITY_AREA } from '../../worker/pairing/areas';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchSentences as fetchSentencesImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
-import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
+import { createBeaconClient, parseProvisionHash, readBeacon, reloadBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
+import { BUILT_AT } from './motion/network-meta';
+import type { MotionMetadata } from '../../shared/motion/wire';
 import { codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
@@ -302,8 +304,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // One network artefact and one map for the screen's whole life (R-54); the
   // lightweight path has neither: no factory, so map-slots hands out nothing.
   let networkPromise: Promise<Network | null> | null = null;
+  let motionMetadata = new Map<string, MotionMetadata>();
+  let reloadingBundle = false;
   const loadNetworkOnce = (): Promise<Network | null> => (networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))());
-  const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer, clearTimer));
+  const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce, id => motionMetadata.get(id)), setTimer, clearTimer));
   const maps = createMapSlots(mapAdapter.factory);
 
   // WP2: the frame's radius around the wall's place, measured along the tram
@@ -641,6 +645,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  otherwise, a phone's band HANDHELD_SPAN_M. A paired screen keeps the
    *  Promet contract (R-KP8). */
   function paintMap(): void {
+    // A stale bundle is navigating away (reloadBeacon): nothing more is painted.
+    if (reloadingBundle) return;
     // Postavke over the stage: the map's box is nothing, and a camera moved
     // against it lands off centre. The camera waits for the close (onClose
     // repaints after showStage has re-measured).
@@ -648,6 +654,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     invitation?.setFrame(wall.frame);
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
+    motionMetadata = new Map((snapshots['zet-rt']?.items ?? []).filter(i => i.motion).map(i => [
+      i.id, { network: i.motion!.network, generatedAt: i.motion!.generatedAt, builtAt: i.motion!.builtAt },
+    ]));
+    const staleNetwork = [...motionMetadata.values()].find(m => m.builtAt && m.builtAt !== BUILT_AT);
+    if (host) {
+      if (staleNetwork) host.dataset.networkStale = 'true';
+      else delete host.dataset.networkStale;
+    }
+    if (credentials && staleNetwork) {
+      reloadingBundle = reloadBeacon(credentials, storage, () => {
+        mapAdapter.handle()?.pause();
+        globalThis.location.reload();
+      }, [BUILT_AT, staleNetwork.network ?? staleNetwork.builtAt!]);
+      if (reloadingBundle) return;
+    }
     // A phase without a map keeps the container parked, and the feed state
     // still reaches it: a map that returns mid-outage must already be holding,
     // never coasting on a state it heard before the outage.
