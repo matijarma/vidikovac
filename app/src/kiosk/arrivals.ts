@@ -1,23 +1,17 @@
-// What comes next at one stop, as the public screen says it: the rows
-// shared/city/arrivals.ts already merged and sorted, dressed for a wall.
+// What comes next at one stop, as the public screen asks for it: the
+// platforms a rider means, what a card knows about the board it shows, and
+// the sentence an empty list says. How a row reads -- the plate, the
+// destination, the time with the word that says what it is worth -- is
+// arrival-cells.ts, which only the wall's views import; the phone's Sada
+// asks this module for the platform ids alone, so the wall's markup stays off
+// the lightweight graph (test/app/budget.test.ts).
 //
 // Pure, like the panel builders beside it: rows in, cells out. The asking is
 // the controller's (app/src/kiosk.ts owns the one board cache), the merging
-// is the shared module's, and this file only decides how a kiosk row reads --
-// the plate a rider looks for, the destination, and the time with the word
-// that says what that time is worth.
-//
-// The wording is the phone's (`arrivals.*` in the one catalogue), not a
-// second vocabulary: a person who read "za 3 min · uživo" on the screen and
-// then opens the same stop on their phone must not be told it differently.
+// is the shared module's (shared/city/arrivals.ts).
 import { type ArrivalRow, type ArrivalsStatus } from '../../../shared/city/arrivals';
 import type { ScreenStop } from '../core/contracts';
-import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { kindOfRoute } from './exceptions';
-import { clock } from './format';
-import type { FrontRow } from './front';
-import { kBadge } from './markup';
-import { fill, type KioskStrings } from './strings';
+import type { KioskStrings } from './strings';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 export function vettedArrival(row: ArrivalRow): boolean {
@@ -66,66 +60,6 @@ export function platformIds(stop: { id: string; name?: string }, stops?: readonl
   const ids = stops.filter((s) => s.name.trim() === name).map((s) => s.id);
   if (ids.length === 0) return [stop.id];
   return ids.includes(stop.id) ? ids : [stop.id, ...ids];
-}
-
-/**
- * A row's time, with the word that says what it is worth -- in BOTH branches,
- * exactly as the phone sheet does it (transport/view.ts arrivalTime).
- *
- * Inside the countdown horizon the row says how long the wait is, because
- * that is the question a person in front of a screen is asking, and `sada` at
- * zero: a tram due in under half a minute is the one pulling in. Beyond the
- * horizon a countdown would be a guess dressed as a fact, so the row shows a
- * clock -- and a tracked row's clock is the schedule plus ZET's delay, not the
- * timetable moment, so it keeps the live dot exactly as its countdown would.
- * An unlabelled clock would read as the timetable and make the note under the
- * list say the wrong thing about it.
- */
-function etaMarkup(row: ArrivalRow, s: KioskStrings, className: string): string {
-  const time = !row.live || row.minutes === null
-    ? `<time datetime="${escapeAttribute(new Date(row.atMs).toISOString())}">${escapeHtml(clock(row.atMs))}</time>`
-    : escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }));
-  const dot = row.live ? `<span class="k-live" role="img" aria-label="${escapeAttribute(s.arrivals.live)}"></span>` : '';
-  return `<span class="${className}"${row.live ? ' data-live="true"' : ''}>${dot}${time}<small class="k-eta-kind">${escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)}</small></span>`;
-}
-
-/** What a badge is called when it is read out rather than seen: "tramvaj 6",
- *  the same shape the stop's line rows use (front.ts linesRows). */
-function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string {
-  const kind = kindOfRoute(routeId);
-  const word = kind === 'tram' ? s.lines.tram : kind === 'bus' ? s.lines.bus : '';
-  return `${word} ${routeName}`.trim();
-}
-
-/** The two cells of one arrival on a kiosk board row (paired.ts's `row`): the
- *  plate and the destination, with the time floated at their right. One line,
- *  like every other board row on this screen.
- *
- *  What is NOT here is the per-row "po redu vožnje": a second line under every
- *  untracked row doubled the height of a card read from four metres away. The
- *  distinction survives whole -- a tracked estimate carries the live dot, a
- *  timetable time carries nothing -- and the note under the list says in one
- *  sentence what that means. */
-export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; aside: string } {
-  if (!vettedArrival(row)) return { main: '', aside: '' };
-  return {
-    main: `${kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s))} ${escapeHtml(row.headsign || row.routeName)}`,
-    aside: etaMarkup(row, s, 'k-eta'),
-  };
-}
-
-/** The same rows as the front page's Promet card reads them (front.ts
- *  FrontRow): the plate at the lead, the destination across the middle, the
- *  time hard right. One line, the same shape as the exceptions the card shows
- *  when it has no board -- so a stop's arrivals cost the aside the room three
- *  or four exception lines cost it, and the events and QR cards keep theirs. */
-export function arrivalFrontRows(arrivals: StopArrivals, s: KioskStrings, limit: number): FrontRow[] {
-  return arrivals.rows.filter(vettedArrival).slice(0, Math.max(0, limit)).map((row) => ({
-    key: `arrival:${row.tripId}|${row.atMs}`,
-    leadMarkup: kBadge(row.routeName, kindOfRoute(row.routeId), badgeLabel(row.routeId, row.routeName, s)),
-    title: row.headsign || row.routeName,
-    trail: etaMarkup(row, s, 'k-eta'),
-  }));
 }
 
 /** The sentence a list with no rows says, and each of the four states is a

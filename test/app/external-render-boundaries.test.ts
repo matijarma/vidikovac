@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { kioskStrings } from '../../app/src/kiosk/strings';
-import { arrivalCells, arrivalFrontRows } from '../../app/src/kiosk/arrivals';
+import { arrivalCells, arrivalFrontRows } from '../../app/src/kiosk/arrival-cells';
 import { essentialsMarkup } from '../../app/src/kiosk/essentials';
 import { selectionCard, fitSentences, pairedMarkup, type PairedContext } from '../../app/src/kiosk/paired';
 import { panelMarkup } from '../../app/src/kiosk/front';

@@ -26,7 +26,7 @@ function owner(node: ts.Node): ts.FunctionDeclaration | null {
 }
 const EXTERNAL_FIELD = /\b(?:item|row|act|p|s|strip|weather|observed|panel|stop|named|w|q|d|x\.item)\.(?:title|name|sub|summary|headsign|longName|condition|station|description|address|hours|value|detail|attribution|settlement)\b/;
 const INDIRECT_GUARDS: Record<string, string> = {
-  'app/src/kiosk/arrivals.ts#arrivalCells': 'if (!vettedArrival(row)) return',
+  'app/src/kiosk/arrival-cells.ts#arrivalCells': 'if (!vettedArrival(row)) return',
   'app/src/kiosk/timeline.ts#rowMarkup': 'if (!vettedTimelineRow(row)) return',
 };
 // This renderer is used by phone discovery only. The wall calls placeDetail
