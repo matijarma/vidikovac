@@ -1256,6 +1256,7 @@
   },
   "sada": {
     "departuresAt": "Next departures, {stop}",
+    "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
     "viewMap": "Map"
   }

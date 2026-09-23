@@ -1295,6 +1295,7 @@
   },
   "sada": {
     "departuresAt": "Sljedeći polasci, {stop}",
+    "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
     "viewSchema": "Shema",
     "viewMap": "Karta"
   }
