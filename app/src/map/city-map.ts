@@ -824,12 +824,12 @@ export type MapFactory = (options: CityMapOptions) => CityMapHandle;
 
 /** Binds a network loader into a factory, so a page's map slots and its
  *  schematic share one artefact fetch. `undefined` in stays `undefined` out. */
-export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => Promise<Network | null>, motionFor?: (id: string) => MotionMetadata | undefined): MapFactory | undefined {
+export function withNetwork(factory: MapFactory | undefined, loadNetwork: () => Promise<Network | null>, motionFor?: (id: string) => MotionMetadata | undefined, reloadNetwork?: () => Promise<Network | null>): MapFactory | undefined {
   return factory && ((options) => {
     // The kiosk has the raw snapshot even during the decoder's one-deploy
     // transition. Forward metadata before either renderer sees a point.
     const enrich = (points: MapPoint[]) => motionFor ? points.map(p => ({ ...p, ...motionFor(p.id) })) : points;
-    const handle = factory({ ...options, loadNetwork, points: enrich(options.points ?? []) });
+    const handle = factory({ ...options, loadNetwork, ...(reloadNetwork ? { reloadNetwork } : {}), points: enrich(options.points ?? []) });
     return motionFor ? { ...handle, update: (points, lines) => handle.update(enrich(points), lines) } : handle;
   });
 }
@@ -1348,6 +1348,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (!expectedNetwork || (graph?.graphHash === expectedNetwork && !networkBlocked)) return true;
     if (!networkBlocked) {
       networkBlocked = true;
+      container.dataset.networkStale = 'true';
       installNetwork(null);
       model = null;
       const empty = { type: 'FeatureCollection', features: [] };
@@ -1363,6 +1364,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         const network = await reload();
         if (disposed || requested !== expectedNetwork || !network || !('graphHash' in network) || network.graphHash !== expectedNetwork) return;
         networkBlocked = false;
+        delete container.dataset.networkStale;
         installNetwork(network);
         model!.update(pointsToFixes(points), now());
         loop.nudge();
