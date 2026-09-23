@@ -15,6 +15,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { stopDetailMarkup } from '../../app/src/transport/view';
 import * as sentenceModule from '../../app/src/city/sentence';
+import { acceptSentence } from '../../shared/kiosk/sentence';
 import { fill, kioskStrings } from '../../app/src/kiosk/strings';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -127,6 +128,24 @@ describe('one word per concept: a tram or bus stop is "stajalište" (WP5 step 6)
     for (const key of BAJS_STANICA_KEYS) expect(key, 'BAJS keys live under city.*').toMatch(/^city\./);
     const stanica = leafKeys(HR).filter((key) => /(?<![\p{L}\p{N}_])[Ss]tanic/u.test(leaf(HR, key)!));
     expect(stanica.filter((key) => !BAJS_STANICA_KEYS.includes(key))).toEqual([]);
+  });
+});
+
+describe('the word "zid": never the screen, while a proper name keeps it [O-66]', () => {
+  // The header's register family ("{name}: {text}") keeps the slop register; the street
+  // "Pod zidom" is data, so a register sentence that names it may stand in the header.
+  const NOW = Date.parse('2026-09-22T12:10:00+02:00');
+  const header = (text: string) => acceptSentence(text, { facts: [{ id: 'always:heritage:kolmar', kind: 'kultura', text, validUntil: NOW + 600_000 }], now: NOW });
+  it('takes a register sentence that names the street Pod zidom', () => {
+    expect(header('Kuća Kolmar: servisni ulaz s ulice Pod zidom.')).toEqual({ ok: true });
+  });
+  it('still refuses every other "zid", the common noun included', () => {
+    for (const text of [
+      'Kuća Kolmar: slika na zidu u prizemlju.',
+      'Kuća Kolmar: ulaz je pod zidom.',
+      'Kuća Kolmar: servisni ulaz s ulice POD ZIDOM.',
+      'Pod zidom: ulica podno negdašnjeg obrambenog zida Kaptola.',
+    ]) expect(header(text), text).toEqual({ ok: false, reason: 'forbidden-copy' });
   });
 });
 
