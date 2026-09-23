@@ -40,7 +40,7 @@ import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { createQr } from './ui/qr';
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
-import { essentialsRows } from './kiosk/essentials';
+import { essentialsRows, fitEssentials } from './kiosk/essentials';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
@@ -569,6 +569,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintEssentials();
     basics.hidden = false;
     stage.hidden = true;
+    fitEssentials(basicsRows);
     mapAdapter.handle()?.pause();
     basicsHeading.focus();
     armEssentialsIdle();
@@ -838,10 +839,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     fitAll();
     acknowledgePresentation();
   }
-  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
+  /** Rows that do not fit a paired block are hidden and counted, never half-shown; a statement past two lines is shortened at a word and one the column does not hold is hidden whole; Osnovno keeps the whole cards its box holds. Runs after every paint and on a resize (the invitation also re-fits itself once the fonts arrive); never on the 1 s tick, which has nothing new to measure. */
   function fitAll(): void {
     invitation?.fit();
     if (paired) pairedRenderer?.fitRows(paired.element, s.paired.coverage);
+    if (!basics.hidden) fitEssentials(basicsRows);
   }
 
   // --- Codes: the rotation's slot into the QR and the readable code -------------

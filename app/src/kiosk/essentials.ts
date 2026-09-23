@@ -105,3 +105,18 @@ export function essentialsRows(modules: readonly ModuleSnapshot[], i18n: I18n, s
   if (rows.length === 0) rows.push({ id: 'empty', label: '', value: strings.basics.empty });
   return rows;
 }
+
+/** Osnovno holds whole cards only. The panel is the stage's own box, and at
+ *  1366 x 768 with a warning in the strip five cards at the reading tiers do
+ *  not fit it: after a paint and on a resize the cards the box does not hold
+ *  are hidden from the last one up (the pharmacy first, which the strip under
+ *  the panel keeps in view with its address), never cut and never scrolled;
+ *  the first card always stays. A DOM without layout measures nothing and
+ *  hides nothing; `measure` is injectable for that. */
+export function fitEssentials(rows: HTMLElement, measure: (el: HTMLElement) => { scroll: number; client: number } = (el) => ({ scroll: el.scrollHeight, client: el.clientHeight })): void {
+  const cards = [...rows.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
+  for (const card of cards) card.hidden = false;
+  const over = (): boolean => { const m = measure(rows); return m.client > 0 && m.scroll > m.client + 1; };
+  for (let visible = cards.length; visible > 1 && over(); visible -= 1) cards[visible - 1]!.hidden = true;
+  rows.dataset.overflow = over() ? 'true' : 'false';
+}
