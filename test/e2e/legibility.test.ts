@@ -68,7 +68,7 @@ describe('the tiers fixed in lane S (brief §15.2)', () => {
 });
 
 describe('the page-side pass', () => {
-  const empty: LegibilityReport = { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false };
+  const empty: LegibilityReport = { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false, map: null };
 
   it('ships the spec and every number in its argument; the source names no module identifier', async () => {
     const { page, shipped } = recorder(empty);
@@ -82,7 +82,7 @@ describe('the page-side pass', () => {
 
   it('legibilityViolations fails on violations and other small text, and only reports warnings and symbols', async () => {
     const finding = (tier: 'read' | 'walk-up' | 'other', detail: string) => ({ tier, selector: '', element: 'p', text: 't', px: 20, mm: 5.4, floorMm: 10.5, detail });
-    const report: LegibilityReport = { violations: [finding('read', 'v')], warnings: [finding('read', 'w')], symbols: [{ selector: 's', element: 'span', diameterPx: 40, mm: 20 }], otherSmall: [finding('other', 'o')], dark: false };
+    const report: LegibilityReport = { violations: [finding('read', 'v')], warnings: [finding('read', 'w')], symbols: [{ selector: 's', element: 'span', diameterPx: 40, mm: 20 }], otherSmall: [finding('other', 'o')], dark: false, map: null };
     const { page } = recorder(report);
     expect((await legibilityViolations(page, WALL_1920)).map((f) => f.detail)).toEqual(['v', 'o']);
   });
@@ -124,5 +124,44 @@ describe('the page-side pass', () => {
       Range.prototype.getBoundingClientRect = realRange;
       delete document.documentElement.dataset.themeResolved;
     }
+  });
+
+  // The kiosk map draws BAJS discs and vehicle pills on one canvas (WP2-E): no [data-symbol] child exists,
+  // so the pass reads the container's census, and says so loudly when there is none to read.
+  describe('the canvas map', () => {
+    const shippedFn = new Function(`return (${String(LEGIBILITY_IN_PAGE)});`)() as typeof LEGIBILITY_IN_PAGE;
+    const run = (markup: string): LegibilityReport => {
+      document.body.innerHTML = markup;
+      try { return shippedFn(pageSpec(WALL_1920)); } finally { document.body.innerHTML = ''; }
+    };
+
+    it('names the container and the census attributes it reads', () => {
+      expect(WALL_1920.map).toEqual({ selector: '[data-testid=kiosk-map]', census: ['markers', 'unlabelled', 'bajs', 'overlaps', 'pills'] });
+      expect(pageSpec(WALL_1920)).toMatchObject({ map: { selector: '[data-testid=kiosk-map]', census: ['markers', 'unlabelled', 'bajs', 'overlaps', 'pills'] }, symbolMm: SYMBOL_MM });
+    });
+
+    it('reads data-markers, data-unlabelled, data-bajs, data-overlaps and data-pills from the container of a canvas map', () => {
+      const report = run('<div data-testid="kiosk-map" data-markers="3" data-unlabelled="0" data-bajs="counted:1;zero:1;blank:1;far:0" data-overlaps="discs:2;names:17" data-pills="6|11|12|17"><canvas></canvas></div>');
+      expect(report.violations).toEqual([]);
+      expect(report.map).toEqual({
+        selector: '[data-testid=kiosk-map]', element: 'div[data-testid=kiosk-map]', domSymbols: 0, missing: [],
+        markers: 3, unlabelled: 0, bajs: { counted: 1, zero: 1, blank: 1, far: 0 }, overlaps: { discs: 2, names: 17 }, pills: 4,
+      });
+    });
+
+    it('fails loudly when the map has neither [data-symbol] marks nor its census, instead of measuring nothing', () => {
+      const bare = run('<div data-testid="kiosk-map" data-pills="6|11"><canvas></canvas></div>');
+      expect(bare.map).toMatchObject({ domSymbols: 0, missing: ['markers', 'unlabelled', 'bajs', 'overlaps'], pills: 2 });
+      expect(bare.violations.map((f) => [f.tier, f.selector])).toEqual([['symbol', '[data-testid=kiosk-map]']]);
+      expect(bare.violations[0].detail).toContain('no [data-symbol] mark and no data-markers, data-unlabelled, data-bajs, data-overlaps');
+      const gone = run('<main></main>');
+      expect(gone.map).toBeNull();
+      expect(gone.violations.map((f) => f.detail)).toEqual(['the map [data-testid=kiosk-map] is missing: its BAJS discs and vehicle pills cannot be measured']);
+    });
+
+    it('legibilityViolations carries the loud failure, so the wall spec and the observer both fail on it', async () => {
+      const page = { evaluate: (fn: typeof LEGIBILITY_IN_PAGE, arg: ReturnType<typeof pageSpec>) => { document.body.innerHTML = '<div data-testid="kiosk-map"><canvas></canvas></div>'; try { return Promise.resolve(shippedFn(arg)); } finally { document.body.innerHTML = ''; } } } as unknown as LegibilityPage;
+      expect((await legibilityViolations(page, WALL_1920)).map((f) => f.tier)).toEqual(['symbol']);
+    });
   });
 });

@@ -892,6 +892,13 @@ const pct = (x) => `${Math.round((x ?? 0) * 100)} %`;
 const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 const bound = (r) => (r.min !== undefined && r.max !== undefined ? `${r.min}–${r.max}` : r.min !== undefined ? `≥ ${r.min}` : `≤ ${r.max}`);
 
+/** The canvas map's census (e2e/legibility.ts) in one cell: what its container says, or what it lacks. */
+const mapCensus = (m) => {
+  if (!m) return '—';
+  const pairs = (o) => (o ? Object.entries(o).map(([k, n]) => `${k} ${n}`).join(' ') : '—');
+  return `markers ${m.markers ?? '—'}, unlabelled ${m.unlabelled ?? '—'}, BAJS ${pairs(m.bajs)}, overlaps ${pairs(m.overlaps)}, pills ${m.pills ?? '—'}${m.missing.length ? `; missing ${m.missing.map((k) => `data-${k}`).join(', ')}` : ''}`;
+};
+
 /** report.md: the verdict table first, then what the instruments saw. */
 export function renderReport(observation, verdict, instruments) {
   const { meta } = observation;
@@ -942,8 +949,8 @@ export function renderReport(observation, verdict, instruments) {
   const leg = Object.entries(k?.legibility ?? {}).filter(([, r]) => r);
   if (leg.length) {
     lines.push('## Legibility at 3 m (legibility.json)', '');
-    lines.push('| Capture | Theme | Violations | Other < 28 px | Warnings | Symbols |', '|---|---|---:|---:|---:|---|');
-    for (const [label, r] of leg) lines.push(`| ${label} | ${r.dark ? 'dark' : 'light'} | ${r.violations.length} | ${r.otherSmall.length} | ${r.warnings.length} | ${cell(r.symbols.slice(0, 4).map((x) => `${x.selector.replace(/^.*\[data-symbol=([a-z]+)\]$/, '$1')} ${x.mm} mm`).join(', ')) || '—'} |`);
+    lines.push('| Capture | Theme | Violations | Other < 28 px | Warnings | Symbols | Map census |', '|---|---|---:|---:|---:|---|---|');
+    for (const [label, r] of leg) lines.push(`| ${label} | ${r.dark ? 'dark' : 'light'} | ${r.violations.length} | ${r.otherSmall.length} | ${r.warnings.length} | ${cell(r.symbols.slice(0, 4).map((x) => `${x.selector.replace(/^.*\[data-symbol=([a-z]+)\]$/, '$1')} ${x.mm} mm`).join(', ')) || '—'} | ${cell(mapCensus(r.map))} |`);
     lines.push('');
   }
 

@@ -23,6 +23,13 @@
 // tier selector matches (the sentence's kicker is walk-up although the
 // sentence is read); an element both tiers match is read tier.
 //
+// Symbols are measured by diameter and reported, not asserted (P3 is the owner's
+// call). The kiosk map draws its BAJS discs and vehicle pills on one canvas, so
+// they have no element to measure: the pass reads the census WP2-E writes on the
+// map's container (data-markers, data-unlabelled, data-bajs, data-overlaps,
+// data-pills) into the report, and a map with neither a [data-symbol] mark nor
+// that census is a violation, so an unmeasured map can never pass as "no symbols".
+//
 // One source: these selectors are the only place the tiers live, and the
 // page-side pass receives them in its argument (the rule of e2e/geometry.ts).
 import type { Page } from '@playwright/test';
@@ -70,6 +77,12 @@ export interface LegibilitySpec {
   exempt: string;
   /** Measured by diameter and reported; the text inside them is part of the symbol. */
   symbols: readonly string[];
+  /**
+   * A map that draws its marks on one canvas (WP2-E): no `[data-symbol]` child exists there, so the pass reads
+   * the census the render probe writes on the container (`data-<name>` for each name) and fails loudly when the
+   * map is missing, or has neither a `[data-symbol]` mark nor the whole census, instead of measuring nothing.
+   */
+  map?: { selector: string; census: readonly string[] };
 }
 
 /** The wall at 1920×1080 on a 43″ panel. */
@@ -101,9 +114,12 @@ export const WALL_1920: LegibilitySpec = Object.freeze({
     '[data-testid=kiosk-map] [data-symbol=pill]',
     '[data-testid=strip-pharmacy] [data-symbol=pharmacy]',
   ]),
+  /** WP2-E's census: data-markers, data-unlabelled, data-bajs="counted:N;zero:N;blank:N;far:N", data-overlaps="discs:N;names:N", data-pills. */
+  map: Object.freeze({ selector: '[data-testid=kiosk-map]', census: Object.freeze(['markers', 'unlabelled', 'bajs', 'overlaps', 'pills']) }),
 });
 
-export type LegibilityTier = 'read' | 'walk-up' | 'other';
+/** `symbol`: a map whose marks could not be measured at all (no `[data-symbol]` mark, no census). */
+export type LegibilityTier = 'read' | 'walk-up' | 'other' | 'symbol';
 export interface LegibilityFinding {
   tier: LegibilityTier;
   /** The tier selector the text fell under ('' for other text). */
@@ -119,6 +135,23 @@ export interface LegibilityFinding {
   detail: string;
 }
 export interface SymbolReading { selector: string; element: string; diameterPx: number; mm: number }
+/** The canvas map's census as its container carries it; null counts where an attribute is missing. */
+export interface MapCensus {
+  selector: string;
+  element: string;
+  /** `[data-symbol]` elements inside the map (0 on the canvas map). */
+  domSymbols: number;
+  /** Census names whose `data-<name>` attribute is not on the container. */
+  missing: string[];
+  markers: number | null;
+  unlabelled: number | null;
+  /** data-bajs: counted, zero, blank and far discs. */
+  bajs: Record<string, number> | null;
+  /** data-overlaps: BAJS discs and stop or place names under a vehicle pill. */
+  overlaps: Record<string, number> | null;
+  /** Labels in data-pills. */
+  pills: number | null;
+}
 export interface LegibilityReport {
   /** Read tier under the floor, walk-up tier under 28 px. */
   violations: LegibilityFinding[];
@@ -129,6 +162,8 @@ export interface LegibilityReport {
   otherSmall: LegibilityFinding[];
   /** The theme the floors were taken for. */
   dark: boolean;
+  /** The canvas map's census; null when the spec names no map or the map is missing (then a `symbol` violation says so). */
+  map: MapCensus | null;
 }
 
 /** What the browser receives: the spec plus every number, so the page-side pass needs nothing from module scope. */
@@ -138,6 +173,8 @@ export interface PageLegibilitySpec {
   walkUpTier: string[];
   exempt: string;
   symbols: string[];
+  map: { selector: string; census: string[] } | null;
+  symbolMm: number;
   ratio: number;
   floorMm: number;
   comfortMm: number;
@@ -152,6 +189,8 @@ export function pageSpec(spec: LegibilitySpec): PageLegibilitySpec {
     walkUpTier: [...spec.walkUpTier],
     exempt: spec.exempt,
     symbols: [...spec.symbols],
+    map: spec.map ? { selector: spec.map.selector, census: [...spec.map.census] } : null,
+    symbolMm: SYMBOL_MM,
     ratio: MANROPE_X_HEIGHT_RATIO,
     floorMm: X_HEIGHT_FLOOR_MM,
     comfortMm: X_HEIGHT_COMFORT_MM,
@@ -233,7 +272,46 @@ export const LEGIBILITY_IN_PAGE = (spec: PageLegibilitySpec): LegibilityReport =
       symbols.push({ selector, element: name(el), diameterPx: round(diameterPx), mm: round(diameterPx * spec.mmPerPx) });
     }
   }
-  return { violations, warnings, symbols, otherSmall, dark };
+
+  // The canvas map: its marks have no element, so their census is read from the container. A map with neither
+  // a [data-symbol] mark nor the whole census is a violation, never a silent "no symbols".
+  let map: MapCensus | null = null;
+  if (spec.map) {
+    const sel = spec.map.selector;
+    const loud = (element: string, detail: string): LegibilityFinding => ({ tier: 'symbol', selector: sel, element, text: '', px: 0, mm: 0, floorMm: spec.symbolMm, detail });
+    const host = document.querySelector(sel);
+    if (!host) {
+      violations.push(loud(sel, `the map ${sel} is missing: its BAJS discs and vehicle pills cannot be measured`));
+    } else {
+      const attr = (key: string): string | null => host.getAttribute(`data-${key}`);
+      const count = (v: string | null): number | null => (v === null || v.trim() === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+      const pairs = (v: string | null): Record<string, number> | null => {
+        if (v === null) return null;
+        const out: Record<string, number> = {};
+        for (const part of v.split(';')) {
+          const [k, n] = part.split(':');
+          if (k && k.trim() && n !== undefined && Number.isFinite(Number(n))) out[k.trim()] = Number(n);
+        }
+        return out;
+      };
+      const pills = attr('pills');
+      map = {
+        selector: sel,
+        element: name(host),
+        domSymbols: host.querySelectorAll('[data-symbol]').length,
+        missing: spec.map.census.filter((key) => attr(key) === null),
+        markers: count(attr('markers')),
+        unlabelled: count(attr('unlabelled')),
+        bajs: pairs(attr('bajs')),
+        overlaps: pairs(attr('overlaps')),
+        pills: pills === null ? null : pills.split('|').filter((label) => label.trim() !== '').length,
+      };
+      if (map.domSymbols === 0 && map.missing.length) {
+        violations.push(loud(map.element, `the map ${sel} draws on one canvas with no [data-symbol] mark and no ${map.missing.map((key) => `data-${key}`).join(', ')}: its BAJS discs and vehicle pills would go unmeasured`));
+      }
+    }
+  }
+  return { violations, warnings, symbols, otherSmall, dark, map };
 };
 
 /** The full report (the wall spec writes it to test-results/accept/legibility-<scene>.json). */

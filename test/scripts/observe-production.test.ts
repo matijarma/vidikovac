@@ -326,6 +326,8 @@ const recorded = (name: string): PageInventory => {
   const { label: _l, at: _a, zagreb: _z, surface: _s, scenario: _c, ...raw } = JSON.parse(readFileSync(join(root, 'test/fixtures/inventory', name), 'utf8')) as RawInventory;
   return raw;
 };
+/** The wall map's census as WP2-E's render probe writes it on the canvas map's container. */
+const CANVAS_MAP = { selector: '[data-testid=kiosk-map]', element: 'div[data-testid=kiosk-map]', domSymbols: 0, missing: [], markers: 3, unlabelled: 0, bajs: { counted: 1, zero: 1, blank: 1, far: 0 }, overlaps: { discs: 2, names: 17 }, pills: 28 };
 const GOOD_PHONE: PhoneRead = { place: 'Trg bana J. Jelačića', sentence: 'Tramvaj 6 kreće za dvije minute.', sentenceChars: 32, departures: { total: 3, inViewport: 3 }, slop: [], tabs: ['Sada', 'Karta', 'Još'], shareCity: { present: true, visible: true, text: 'Podijeli grad' } };
 const GOOD_KARTA: KartaRead = { status: 'ready', pills: '6|11|12', bodies: 40, unlabelled: 0, markers: 10, disclosures: 0 };
 const GOOD_DESKTOP: DesktopRead = { sadaInViewport: true, kartaInViewport: true, domains: 0, shareCityVisible: true };
@@ -384,7 +386,7 @@ function fakeRuntime(options: FakeOptions = {}) {
           if (kind === 'desktop') return inv('desktop', 1440, 900);
           return kind === 'portrait' ? inv('portrait', 1080, 1920) : inv('kiosk', 1920, 1080);
         }
-        if (fn === legibility.LEGIBILITY_IN_PAGE) return { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false };
+        if (fn === legibility.LEGIBILITY_IN_PAGE) return { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false, map: CANVAS_MAP };
         if (fn === PAIRING_IN_PAGE) return { code: codeNow(), href: `https://zagreb.example/s/#${codeNow()}`, progress: 80 };
         if (fn === PHONE_READ_IN_PAGE) return options.phone ?? GOOD_PHONE;
         if (fn === KARTA_READ_IN_PAGE) return options.karta ?? GOOD_KARTA;
@@ -443,6 +445,8 @@ describe('a run over a fake browser', () => {
     expect(report).toContain('build abc1234');
     expect(report).toContain('- Screens created: 0');
     expect(report).toContain('- Code redemptions: phone 1, desktop 1');
+    // The canvas map's census reaches the legibility table (e2e/legibility.ts reads it off the container).
+    expect(report).toContain('| markers 3, unlabelled 0, BAJS counted 1 zero 1 blank 1 far 0, overlaps discs 2 names 17, pills 28 |');
     expect(report).toMatch(/\| pills-plus \| d1 \| kiosk \| no vehicle pill matches \/\\\+\\d\/ in any reading \| ≤ 0 \| 0 \| pass \|/);
     expect(report).not.toContain('**fail**');
   });
