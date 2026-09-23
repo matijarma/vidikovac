@@ -24,9 +24,11 @@ import * as lib from '../../e2e/lib';
 import type { WallRow, WallSample } from '../../e2e/wall';
 import type { PageInventory, RawInventory } from '../../e2e/inventory';
 import type { ExpiryReading } from '../../e2e/inventory';
+import type { CalmMotionReading } from '../../e2e/wall';
 import {
   ANY_PRESENT_IN_PAGE, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
-  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
+  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
+  EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE,
   USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
   plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
@@ -187,6 +189,25 @@ describe('the redemption budget', () => {
     b.redeemed('phone', 30_000);
     expect(b.counts()).toEqual({ phone: 1, desktop: 1 });
     expect(b.times()).toEqual([{ surface: 'phone', at: 9_000 }, { surface: 'desktop', at: 21_400 }, { surface: 'phone', at: 30_000 }]);
+    expect(b.failures()).toEqual([]);
+  });
+
+  // Review round 2: a redemption that timed out was treated as confirmed at the timeout, so a late answer could land
+  // beside the next surface's. It is recorded as failed, never as a confirmation; the next one still waits the spacing.
+  it('records a redemption with no /api/scan answer as failed, not confirmed, and keeps the next one spaced from it', () => {
+    const b = redemptionBudget();
+    b.take('phone', 0);
+    b.failed('phone', 60_000);
+    expect(b.times()).toEqual([]);
+    expect(b.failures()).toEqual([{ surface: 'phone', at: 60_000 }]);
+    expect(b.counts()).toEqual({ phone: 1 });
+    expect(() => b.take('phone', 90_000)).toThrow(/already redeemed 1 code/);
+    // The cancelled scan may have been redeemed up to its failure: the desktop waits the spacing from there.
+    expect(b.waitMs('desktop', 60_000)).toBe(REDEMPTION_SPACING_MS);
+    expect(() => b.take('desktop', 65_000)).toThrow(/ms apart/);
+    b.take('desktop', 72_000);
+    b.redeemed('desktop', 72_300);
+    expect(b.times()).toEqual([{ surface: 'desktop', at: 72_300 }]);
   });
 });
 
@@ -302,6 +323,51 @@ describe('the page-side readings reference only their argument and the DOM', () 
     expect(read.shareCity).toEqual({ present: true, visible: true, text: 'Podijeli grad' });
   });
 
+  // Review round 2, item 2: a share code that is transparent, invisible, collapsed or boxless is not shown; the
+  // page-side readings of the observer use wall.ts's rule, and one battery holds them all to it.
+  it('one visibility rule for every page-side reading: transparent, invisible, collapsed, boxless and [hidden] elements are not shown', () => {
+    const P = inventory.PHONE_PROBES;
+    const cases: [string, string, (el: HTMLElement) => void][] = [
+      ['opacity 0', 'style="opacity: 0"', () => {}],
+      ['a transparent ancestor', '', (el) => { el.parentElement!.style.opacity = '0'; }],
+      ['visibility hidden', 'style="visibility: hidden"', () => {}],
+      ['display none', 'style="display: none"', () => {}],
+      ['an invisible ancestor', '', (el) => { el.parentElement!.style.visibility = 'hidden'; }],
+      ['zero size', '', (el) => box(el, 300, 0, 0)],
+      ['a [hidden] ancestor', '', (el) => { el.parentElement!.hidden = true; }],
+    ];
+    for (const [name, attr, tweak] of cases) {
+      document.body.innerHTML = `<div class="host"><p data-testid="share-code" ${attr}>W4TN-8KQZ</p></div>`;
+      const code = document.querySelector<HTMLElement>('[data-testid=share-code]')!;
+      box(code, 300);
+      tweak(code);
+      expect(shipped(SHARE_CODE_IN_PAGE)({ code: P.shareCode }), `share code, ${name}`).toMatchObject({ present: true, visible: false });
+
+      document.body.innerHTML = `<section data-testid="stop-board"><div class="host"><li data-kind="departure" ${attr}>6 Sopot 2 min</li></div></section>`;
+      box(document.querySelector('[data-testid=stop-board]')!, 200, 400, 390);
+      const li = document.querySelector<HTMLElement>('li')!;
+      box(li, 220, 50, 358, 16);
+      tweak(li);
+      expect(shipped(STOP_BOARD_READ_IN_PAGE)({ board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` }), `stop board row, ${name}`).toMatchObject({ total: 0 });
+
+      document.body.innerHTML = `<ul data-testid="day-departures"><div class="host"><li class="sada-departure" ${attr}>6 Sopot</li></div></ul>`;
+      const row = document.querySelector<HTMLElement>('li')!;
+      box(row, 220);
+      tweak(row);
+      const read = shipped(PHONE_READ_IN_PAGE)({ place: P.sadaPlace, sentence: P.sadaSentence, departures: inventory.PHONE_DEPARTURE_ROWS, tab: P.tab, shareCity: P.shareCity, slop: { source: 'x^', flags: '' } }) as PhoneRead;
+      expect(read.departures, `Sada row, ${name}`).toEqual({ total: 0, inViewport: 0 });
+
+      document.body.innerHTML = `<div class="host"><section data-testid="session-ended" ${attr}><a href="/s/">Skeniraj</a><a href="/hitno">Hitno</a></section></div>`;
+      const ended = document.querySelector<HTMLElement>('[data-testid=session-ended]')!;
+      box(ended, 100, 300, 390);
+      document.querySelectorAll('a').forEach((a) => box(a, 120, name === 'zero size' ? 0 : 40, name === 'zero size' ? 0 : 200));
+      tweak(ended);
+      const x = shipped(inventory.EXPIRY_READ_IN_PAGE)(inventory.EXPIRY_SPEC) as ExpiryReading;
+      expect([x.ended, x.scanLinks, x.hitnoLinks], `session-ended, ${name}`).toEqual([false, 0, 0]);
+    }
+    document.body.innerHTML = '';
+  });
+
   it('the share code, and the stop board with its departures inside the viewport', () => {
     const P = inventory.PHONE_PROBES;
     document.body.innerHTML = '<p data-testid="share-code">W4TN-8KQZ</p><section data-testid="stop-board"><ol><li data-kind="departure">6 Sopot 2 min</li><li data-kind="departure">11 Dubec 5 min</li><li data-kind="departure">12 Dubrava 8 min</li><li data-kind="departure">13 Žitnjak 9 min</li></ol></section>';
@@ -344,7 +410,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
     departures: 1, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
-    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
+    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: ['U blizini'],
   };
 }
 const EMPTY_INVENTORY = (vw: number, vh: number): PageInventory => ({ vw, vh, scrollY: 0, url: 'https://zagreb.example/kiosk/#ABCDEFGH.s3cr3t-part', title: 'Kaj ima?', theme: 'light', map: null, elements: [] });
@@ -360,6 +426,7 @@ const GOOD_DESKTOP: DesktopRead = { sadaInViewport: true, kartaInViewport: true,
 const GOOD_SHARE = { present: true, visible: true, text: 'W4TN-8KQZ' };
 const GOOD_BOARD: StopBoardRead = { open: true, total: 3, inViewport: 3, texts: ['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'] };
 const GOOD_EXPIRY: ExpiryReading = { ended: true, scanLinks: 1, hitnoLinks: 1, rows: 0, rowTexts: [], exportControls: 0 };
+const GOOD_CALM: CalmMotionReading = { rootFound: true, before: 3, after: 3, mutations: 2, textSwaps: 5, kept: 2, rebuilt: [], left: ['departure|trip-0'], entered: ['departure|trip-9'], untracked: 0 };
 
 type Kind = 'kiosk' | 'portrait' | 'proxy' | 'phone' | 'desktop';
 interface FakeOptions {
@@ -385,15 +452,36 @@ interface FakeOptions {
   expiry?: ExpiryReading;
   /** An /api/data request the phone makes after its session ended. */
   requestAfterExpiry?: string;
+  /** The phone's /api/scan answers only after the observer stopped waiting: this long after the desktop's navigation. */
+  phoneAnswersAfterDesktopMs?: number;
+  /** The phone's session ends this long after its scan answered (the page stamps it). */
+  endsAfterScanMs?: number;
+  /** /api/data requests the phone makes this long after its scan answered. */
+  phoneRequests?: { path: string; afterScanMs: number }[];
+  /** The calm-motion reading of each rotation minute, by its index. */
+  calm?: (i: number) => CalmMotionReading;
 }
 interface Handler { (arg: unknown): unknown }
 
 function fakeRuntime(options: FakeOptions = {}) {
   let t = T0;
-  const clock = { now: () => t, sleep: async (ms: number) => { t += ms; } };
+  // Events due at a later fake time (a late /api/scan answer, a poll after the session ended), fired as the
+  // clock passes them; a page's own are cancelled when it leaves for about:blank, as a browser cancels them.
+  const due: { at: number; kind: Kind; fire: () => void }[] = [];
+  const advance = (ms: number): void => {
+    t += ms;
+    for (;;) {
+      const next = due.filter((e) => e.at <= t).sort((a, b) => a.at - b.at)[0];
+      if (!next) break;
+      due.splice(due.indexOf(next), 1);
+      next.fire();
+    }
+  };
+  const clock = { now: () => t, sleep: async (ms: number) => { advance(ms); } };
   const log = {
     contexts: [] as { kind: Kind; options: Record<string, unknown> }[], gotos: [] as { kind: Kind; url: string; at: number }[], clicks: [] as { kind: Kind; selector: string }[],
     keys: [] as { kind: Kind; key: string }[], fills: [] as { kind: Kind; selector: string; value: string }[], scans: [] as { kind: Kind; at: number }[], readings: 0,
+    cancelled: [] as Kind[], watches: [] as Kind[],
   };
   const codeNow = (): string => CODES[Math.floor((t - T0) / (options.codeWindowMs ?? 30_000)) % CODES.length];
   const kindOf = (o: Record<string, unknown>): Kind => {
@@ -408,25 +496,49 @@ function fakeRuntime(options: FakeOptions = {}) {
     const emit = (event: string, arg: unknown): void => { for (const fn of handlers.get(event) ?? []) void fn(arg); };
     let onKarta = false;
     let expiryReads = 0;
+    let answered = false;
+    let calmReads = 0;
+    let endedAt: number | null = null;
     const inv = (key: keyof NonNullable<FakeOptions['inventories']>, vw: number, vh: number): PageInventory => options.inventories?.[key] ?? EMPTY_INVENTORY(vw, vh);
     return {
       on(event: string, fn: Handler) { handlers.set(event, [...(handlers.get(event) ?? []), fn]); return this; },
       async goto(url: string) {
         log.gotos.push({ kind, url, at: t });
+        if (url === 'about:blank') {
+          for (const e of due.filter((x) => x.kind === kind)) { due.splice(due.indexOf(e), 1); log.cancelled.push(kind); }
+          return;
+        }
         if (kind === 'kiosk' && options.kioskConsoleError) emit('console', { type: () => 'error', text: () => options.kioskConsoleError, location: () => ({ url: 'https://zagreb.example/assets/kiosk.js' }) });
         if (url.includes('/s/#')) {
+          const answer = (): void => {
+            log.scans.push({ kind, at: t });
+            answered = true;
+            emit('response', { url: () => 'https://zagreb.example/api/scan', status: () => 200, request: () => ({ method: () => 'POST' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => ({ ticket: 'T-secret', room: 'R-secret' }), body: async () => Buffer.from('') });
+            for (const r of kind === 'phone' ? options.phoneRequests ?? [] : []) {
+              due.push({ at: t + r.afterScanMs, kind, fire: () => emit('request', { url: () => `https://zagreb.example${r.path}`, method: () => 'GET' }) });
+            }
+            if (kind === 'phone' && options.endsAfterScanMs !== undefined) endedAt = t + options.endsAfterScanMs;
+          };
+          if (kind === 'phone' && options.phoneAnswersAfterDesktopMs !== undefined) { due.push({ at: Infinity, kind, fire: answer }); return; }
+          // The phone's late answer, still in flight, lands just after the desktop's own.
+          const late = kind === 'desktop' ? due.find((e) => e.kind === 'phone' && e.at === Infinity) : undefined;
+          if (late) late.at = t + options.phoneAnswersAfterDesktopMs!;
           if (kind === 'phone' && options.scanDelayMs) t += options.scanDelayMs;
-          log.scans.push({ kind, at: t });
-          emit('response', { url: () => 'https://zagreb.example/api/scan', status: () => 200, request: () => ({ method: () => 'POST' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => ({ ticket: 'T-secret', room: 'R-secret' }), body: async () => Buffer.from('') });
+          answer();
         }
       },
-      async waitForFunction(fn: unknown) {
+      async waitForFunction(fn: unknown, arg?: unknown) {
         if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
+        // The session goes live only once the scan has answered; the observer waits SESSION_TIMEOUT_MS for it.
+        if (fn === ANY_PRESENT_IN_PAGE && (arg as { selectors: string[] }).selectors.includes(SESSION_LIVE) && !answered) {
+          advance(SESSION_TIMEOUT_MS);
+          if (!answered) throw new Error(`Timeout ${SESSION_TIMEOUT_MS}ms exceeded.`);
+        }
         return true;
       },
       async fill(selector: string, value: string) { log.fills.push({ kind, selector, value }); },
       keyboard: { press: async (key: string) => { log.keys.push({ kind, key }); } },
-      async waitForTimeout(ms: number) { t += ms; },
+      async waitForTimeout(ms: number) { advance(ms); },
       async screenshot({ path }: { path: string }) { writeFileSync(path, 'png'); },
       async click(selector: string) { log.clicks.push({ kind, selector }); if (kind === 'phone') onKarta = true; },
       clock: { runFor: async () => { throw new Error('the observer runs on the real clock'); } },
@@ -453,6 +565,11 @@ function fakeRuntime(options: FakeOptions = {}) {
           if (options.requestAfterExpiry && ++expiryReads === 2) emit('request', { url: () => `https://zagreb.example${options.requestAfterExpiry}`, method: () => 'GET' });
           return options.expiry ?? GOOD_EXPIRY;
         }
+        if (fn === EXPIRY_WATCH_IN_PAGE) { log.watches.push(kind); return true; }
+        // The page's own stamp of the moment session-ended showed; by default the session has just ended.
+        if (fn === EXPIRY_STAMP_IN_PAGE) return endedAt !== null ? (endedAt <= t ? endedAt : null) : t;
+        if (fn === wall.CALM_MOTION_START_IN_PAGE) return 3;
+        if (fn === wall.CALM_MOTION_READ_IN_PAGE) return (options.calm ?? (() => GOOD_CALM))(calmReads++);
         throw new Error(`unexpected page function on the ${kind} page`);
       },
     };
@@ -654,7 +771,8 @@ describe('a run over a fake browser', () => {
     const countdown = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...outage({})(n, at, code), rows: wallReading(n, at, code).rows }) });
     expect(read(countdown.out, 'report.md')).toContain('data-feed down: 1 departure(s) without a clock time');
     const noNote = await observe(['--stage', 'd2'], { reading: outage({ mapNotes: 0, markers: 0 }) });
-    expect(read(noNote.out, 'report.md')).toContain('data-feed down: 0 map note(s), not 1; data-markers 0');
+    expect(read(noNote.out, 'report.md')).toContain('data-feed down: data-markers 0');
+    expect(read(noNote.out, 'report.md')).toContain('data-feed down: 0 map note(s), not 1');
     const empty = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), pills: '' }) });
     expect(empty.lines.join('\n')).toContain('FAIL pills-drawn');
     expect(empty.lines.join('\n')).not.toContain('FAIL outage');
@@ -702,6 +820,78 @@ describe('a run over a fake browser', () => {
     const m = METRICS['desktop.recorderProblems'](obs, instruments);
     expect(m.value).toBeNull();
     expect(m.detail.join(' ')).toContain('the desktop never landed in its session (no fresh code on the screen within 90 s)');
+  });
+
+  // Review round 2, item 1: the phone's scan answered only after the observer stopped waiting. The timeout was taken
+  // as a confirmation, the desktop redeemed 15 s later (75 s) and the phone's answer landed 1 s after it (76 s). The
+  // unanswered redemption now fails, its page is left so the browser cancels the scan, and every answer that does
+  // arrive is at least 12 s from the others.
+  it('a phone scan that never answers in time is a failed redemption: its page is left, the desktop stays ≥ 12 s from every answer', async () => {
+    const r = await observe([], { phoneAnswersAfterDesktopMs: 1_000, codeWindowMs: 1_000 });
+    const answers = r.log.scans.map((x) => x.at).sort((a, b) => a - b);
+    for (let i = 1; i < answers.length; i++) expect(answers[i] - answers[i - 1], `answers ${answers.join(', ')}`).toBeGreaterThanOrEqual(REDEMPTION_SPACING_MS);
+    expect(r.log.scans.map((x) => x.kind)).toEqual(['desktop']);
+    expect(r.log.cancelled).toContain('phone');
+    expect(r.log.gotos.filter((g) => g.kind === 'phone').map((g) => g.url)).toEqual([expect.stringContaining('/s/#'), 'about:blank']);
+    const desktopNav = r.log.gotos.find((g) => g.kind === 'desktop' && g.url.includes('/s/#'))!;
+    const phoneLeft = r.log.gotos.find((g) => g.kind === 'phone' && g.url === 'about:blank')!;
+    expect(desktopNav.at - phoneLeft.at).toBeGreaterThanOrEqual(REDEMPTION_SPACING_MS);
+    expect(r.code).toBe(1);
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\*\*recorders-phone\*\* \(fail\): the phone's redemption was not confirmed: no \/api\/scan answer within 60 s/);
+    expect(report).toMatch(/\| redemptions \| d1 \| all \| .* \| ≤ 0 \| 0 \| pass \|/);
+  });
+
+  // Review round 2, item 2: the watcher for /api/data after expiry was attached only once the observer saw
+  // session-ended, so a poll made after the end but before that moment escaped. It is attached at the redemption,
+  // and the end is the page's own stamp of when session-ended showed.
+  it('an /api/data request between the end of the session and the observer\'s look at it still fails phone-expiry', async () => {
+    const r = await observe([], { endsAfterScanMs: 8_000, phoneRequests: [{ path: '/api/data/zet-rt', afterScanMs: 5_000 }, { path: '/api/data/dhmz-now', afterScanMs: 9_000 }] });
+    expect(r.log.watches).toEqual(['phone']);
+    expect(r.lines.join('\n')).toContain('FAIL phone-expiry');
+    const report = read(r.out, 'report.md');
+    expect(report).toContain('1 /api/data request(s) after the session ended: /api/data/dhmz-now');
+    expect(report).not.toContain('/api/data/zet-rt (target none)');
+    const clean = await observe([], { endsAfterScanMs: 8_000, phoneRequests: [{ path: '/api/data/zet-rt', afterScanMs: 5_000 }] });
+    expect(read(clean.out, 'report.md')).toMatch(/\| phone-expiry \| d3 \| phone \| .* \| ≤ 0 \| 0 \| pass \|/);
+  });
+
+  // Review round 2, item 3: §16.3's calm motion is a D2 observer row: every minute of the rotation, ≤ 2 structural
+  // mutations under the timeline and every row that stays keeps its node (e2e/wall.ts, the accept spec's own).
+  it('calm motion: a minute with three structural mutations or a rebuilt row fails d2; every minute is measured', async () => {
+    const calm = await observe(['--minutes', '10', '--stage', 'd2']);
+    expect(calm.code, calm.lines.join('\n')).toBe(0);
+    expect(read(calm.out, 'report.md')).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    const busy = await observe(['--minutes', '10', '--stage', 'd2'], { calm: (i) => (i === 4 ? { ...GOOD_CALM, mutations: 3 } : i === 7 ? { ...GOOD_CALM, rebuilt: ['departure|trip-2'] } : GOOD_CALM) });
+    expect(busy.lines.join('\n')).toContain('FAIL calm-motion');
+    const report = read(busy.out, 'report.md');
+    expect(report).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 2 \| \*\*fail\*\* \|/);
+    expect(report).toContain('readings 120–150: 3 structural mutations under the timeline in an idle minute');
+    expect(report).toContain('readings 210–240: 1 row(s) stayed on the list but were re-created: departure\\|trip-2');
+    const gone = await observe(['--stage', 'd2'], { calm: () => ({ ...GOOD_CALM, rootFound: false }) });
+    expect(gone.lines.join('\n')).toContain('FAIL calm-motion');
+  });
+
+  // §16.3 outage0800: while the feed is down no headline reads "unavailable" and the map note shows once.
+  it('outage headline: a /nedostup/ heading or sentence, or a missing map note, fails d2 while the feed is down', async () => {
+    const timetable = (at: number): WallRow => row({ id: 'trip-t', when: new Date(at + 180_000).toISOString(), title: '6 Sopot', whenText: '17:48', text: '6 Sopot 17:48' });
+    const down = (over: Partial<WallSample>) => (n: number, at: number, code: string): WallSample => {
+      const base = wallReading(n, at, code);
+      return { ...base, rows: [timetable(at), ...base.rows.slice(1)], feed: 'down', pills: '', bodies: 0, liveRows: 0, mapNotes: 1, ...over };
+    };
+    const quiet = await observe(['--stage', 'd2'], { reading: down({}) });
+    expect(quiet.code, quiet.lines.join('\n')).toBe(0);
+    const heading = await observe(['--stage', 'd2'], { reading: down({ headings: ['Kaj ima?', 'Promet nedostupan'] }) });
+    expect(heading.lines.join('\n')).toContain('FAIL outage-heading');
+    expect(read(heading.out, 'report.md')).toContain('a headline matches /nedostup/i: "Promet nedostupan"');
+    const sentence = await observe(['--stage', 'd2'], { reading: down({ sentence: 'Podaci nedostupni.', sentenceChars: 18 }) });
+    expect(sentence.lines.join('\n')).toContain('FAIL outage-heading');
+    const note = await observe(['--stage', 'd2'], { reading: down({ mapNotes: 2 }) });
+    expect(read(note.out, 'report.md')).toContain('2 map note(s), not 1');
+    expect(note.lines.join('\n')).toContain('FAIL outage-heading');
+    // A live feed may say anything about a closed road; the headline rule is the outage's.
+    const live = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), headings: ['Nedostupno'] }) });
+    expect(live.lines.join('\n')).not.toContain('FAIL outage-heading');
   });
 
   it('--surfaces kiosk redeems nothing and reports the phone and desktop rows as not observed', async () => {

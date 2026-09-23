@@ -118,23 +118,33 @@ export const EXPIRY_SPEC: ExpirySpec = Object.freeze({
   ended: PHONE_PROBES.sessionEnded, scan: PHONE_PROBES.sessionEndedScan, hitno: PHONE_PROBES.sessionEndedHitno, rows: PHONE_CONTENT_ROWS, exports: PHONE_PROBES.exportControls,
 });
 export interface ExpiryReading {
-  /** The session-ended block is in the page and not hidden. */
+  /** The session-ended block is shown: a box, not hidden, collapsed, invisible or transparent on itself or any ancestor (e2e/wall.ts's rule). */
   ended: boolean;
+  /** Shown links to scan again and to /hitno, by the same rule. */
   scanLinks: number;
   hitnoLinks: number;
-  /** Content rows still in the DOM, shown or not: the content clears. */
+  /** Content rows still in the DOM, shown or not (the stricter reading of §16.4: the content goes, hiding it is not enough). */
   rows: number;
   rowTexts: string[];
   exportControls: number;
 }
 /** The phone once its session has ended, read in the page; references nothing but its argument and the DOM. */
 export const EXPIRY_READ_IN_PAGE = (spec: ExpirySpec): ExpiryReading => {
-  const ended = document.querySelector<HTMLElement>(spec.ended);
+  const shown = (el: Element | null): boolean => {
+    if (!el || (el as HTMLElement).hidden || el.closest('[hidden]')) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 1 || r.height <= 1) return false;
+    for (let a: Element | null = el; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
+    }
+    return true;
+  };
   const rows = Array.from(document.querySelectorAll(spec.rows));
   return {
-    ended: Boolean(ended) && !ended!.hidden && !ended!.closest('[hidden]'),
-    scanLinks: document.querySelectorAll(spec.scan).length,
-    hitnoLinks: document.querySelectorAll(spec.hitno).length,
+    ended: shown(document.querySelector(spec.ended)),
+    scanLinks: Array.from(document.querySelectorAll(spec.scan)).filter(shown).length,
+    hitnoLinks: Array.from(document.querySelectorAll(spec.hitno)).filter(shown).length,
     rows: rows.length,
     rowTexts: rows.slice(0, 3).map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)),
     exportControls: document.querySelectorAll(spec.exports).length,

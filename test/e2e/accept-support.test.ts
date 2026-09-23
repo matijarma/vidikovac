@@ -44,7 +44,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
     hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 0, zoom: '14.07', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: 'x', strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
-    pharmacy: `${PHARMACY_HOURS} Trg bana J. Jelačića 3`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false,
+    pharmacy: `${PHARMACY_HOURS} Trg bana J. Jelačića 3`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],
     ...over,
     rows,
   };
@@ -457,6 +457,9 @@ describe('the phone\'s verdicts', () => {
     const shipped = new Function(`return (${String(EXPIRY_READ_IN_PAGE)});`)() as typeof EXPIRY_READ_IN_PAGE;
     expect(PHONE_CONTENT_ROWS).toBe(`${PHONE_PROBES.nearbyRow}, ${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`);
     const ended = '<section data-testid="session-ended"><a href="/s/">Skeniraj ponovno</a><a href="/hitno">Hitno</a></section>';
+    // happy-dom lays nothing out: every element gets a box, so only the styles decide what is shown.
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = () => rect(100);
     document.body.innerHTML = `${ended}<ul data-testid="day-departures">${['6 Sopot 2 min', '11 Dubec 5 min', '12 Dubrava 8 min'].map((t) => `<li class="sada-departure">${t}</li>`).join('')}</ul>`;
     const kept = shipped(EXPIRY_SPEC);
     expect(kept).toMatchObject({ ended: true, scanLinks: 1, hitnoLinks: 1, rows: 3, exportControls: 0 });
@@ -466,6 +469,12 @@ describe('the phone\'s verdicts', () => {
       `1 content row(s) kept after the session ended (${PHONE_CONTENT_ROWS}; target 0): "Zalazak sunca 18:57"`,
       `1 export, copy, print or calendar control(s) after the session ended (${PHONE_PROBES.exportControls}; target 0)`,
     ]);
+    // The stricter reading of §16.4: a row hidden by display:none is still retained content (the content must go).
+    document.body.innerHTML = `${ended}<ul data-testid="day-departures"><li class="sada-departure" style="display: none">6 Sopot 2 min</li></ul>`;
+    expect(expiryFailures(shipped(EXPIRY_SPEC))).toEqual([`1 content row(s) kept after the session ended (${PHONE_CONTENT_ROWS}; target 0): "6 Sopot 2 min"`]);
+    // A session-ended block that is display:none, transparent or boxless is no ended session, and its links are not shown.
+    document.body.innerHTML = ended.replace('<section data-testid="session-ended"', '<section data-testid="session-ended" style="display: none"');
+    expect(shipped(EXPIRY_SPEC)).toMatchObject({ ended: false, scanLinks: 0, hitnoLinks: 0 });
     document.body.innerHTML = ended;
     const clear = shipped(EXPIRY_SPEC);
     expect(expiryFailures(clear)).toEqual([]);
@@ -476,6 +485,7 @@ describe('the phone\'s verdicts', () => {
       `the ended session has no link to scan again (${PHONE_PROBES.sessionEndedScan})`,
       `the ended session has no /hitno link (${PHONE_PROBES.sessionEndedHitno})`,
     ]);
+    HTMLElement.prototype.getBoundingClientRect = realRect;
     document.body.innerHTML = '';
   });
 

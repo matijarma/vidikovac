@@ -24,6 +24,7 @@ export const USER_AGENT_SUFFIX: string;
 export const REPEAT_WINDOW_MS: number;
 export const AXE_TAGS: readonly string[];
 export const INVITATION_TIMEOUT_MS: number;
+export const SESSION_TIMEOUT_MS: number;
 export const CODE_TIMEOUT_MS: number;
 export const CODE_MIN_PROGRESS: number;
 export const KARTA_POLL_MS: number;
@@ -60,11 +61,14 @@ export function makeScrubber(secrets?: readonly string[]): Scrubber;
 export interface RedemptionBudget {
   waitMs(surface: Surface, now: number): number;
   take(surface: Surface, now: number): void;
-  /** The surface's /api/scan answered at `at` (or, none seen, the observer stopped waiting). */
+  /** The surface's /api/scan answered at `at`: a confirmed redemption. */
   redeemed(surface: Surface, at: number): void;
+  /** No /api/scan answer came: the redemption failed, its page was left (the scan cancelled) at `at`. */
+  failed(surface: Surface, at: number): void;
   counts(): Record<string, number>;
-  /** Redemption times: the answers, in the order they came. */
+  /** Confirmed redemptions: the answers, in the order they came. */
   times(): { surface: Surface; at: number }[];
+  failures(): { surface: Surface; at: number }[];
 }
 export function redemptionBudget(options?: { perSurface?: number; spacingMs?: number }): RedemptionBudget;
 
@@ -91,6 +95,9 @@ export interface ShareCodeRead { present: boolean; visible: boolean; text: strin
 export const SHARE_CODE_IN_PAGE: InPage<{ code: string }, ShareCodeRead>;
 export interface StopBoardRead { open: boolean; total: number; inViewport: number; texts: string[] }
 export const STOP_BOARD_READ_IN_PAGE: InPage<{ board: string; rows: string }, StopBoardRead>;
+export const EXPIRY_KEY: string;
+export const EXPIRY_WATCH_IN_PAGE: InPage<{ ended: string; key: string }, boolean>;
+export const EXPIRY_STAMP_IN_PAGE: InPage<{ ended: string; key: string }, number | null>;
 
 /** The TypeScript modules the observer loads through Vite (the unit tier imports them directly). */
 export interface Instruments {
@@ -119,7 +126,7 @@ export interface ViewportEntry {
 export interface AxeResult { seriousCritical: number; rules: string[] }
 export interface ShareObservation { tapped: boolean; code: boolean; afterMs: number | null; detail: string | null }
 export interface StopBoardObservation extends StopBoardRead { taps: number; query: string; error: string | null }
-export interface ExpiryObservation { seen: boolean; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
+export interface ExpiryObservation { seen: boolean; stamped: boolean; afterRedemptionMs: number; ended: Inventory.ExpiryReading; later: Inventory.ExpiryReading; requestsAfter: string[] }
 export interface PhoneObservation {
   landingMs: number | null;
   sada: PhoneRead | null;
@@ -132,10 +139,13 @@ export interface PhoneObservation {
   failed?: string;
 }
 export interface DesktopObservation { landingMs: number | null; read: DesktopRead | null; viewports: ViewportEntry[]; failed?: string }
+export interface CalmWindow { from: number; to: number; reading?: Wall.CalmMotionReading; error?: string }
 export interface KioskObservation {
   first: Wall.WallSample | null;
   portrait: Wall.WallSample | null;
   rotation: Wall.RotationRow[];
+  /** Calm motion over each minute of the rotation. */
+  calm: CalmWindow[];
   viewports: ViewportEntry[];
   legibility: Record<string, Legibility.LegibilityReport | null>;
   proxy: string | null;
@@ -151,6 +161,8 @@ export interface Observation {
   captures: string[];
   errors: { phase: string; error: string }[];
   notes: string[];
+  /** Confirmed redemptions (their /api/scan answers) and failed ones (no answer, the scan cancelled). */
+  redemptions: { confirmed: { surface: Surface; at: number }[]; failed: { surface: Surface; at: number }[] };
 }
 export function newObservation(config: ObserverConfig, health: unknown): Observation;
 export function newPhone(): PhoneObservation;

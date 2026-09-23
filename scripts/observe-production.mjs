@@ -259,12 +259,18 @@ export function makeScrubber(secrets = []) {
 export function redemptionBudget({ perSurface = REDEMPTIONS_PER_SURFACE, spacingMs = REDEMPTION_SPACING_MS } = {}) {
   const counts = new Map();
   const times = [];
+  const failures = [];
   let pending = null;
   const guard = (surface) => {
     if ((counts.get(surface) ?? 0) >= perSurface) throw new Error(`the ${surface} has already redeemed ${perSurface} code(s); the observer redeems at most ${perSurface} per surface`);
     if (pending !== null) throw new Error(`the ${pending}'s redemption is not confirmed yet (no /api/scan answer); no other may start`);
   };
-  const latest = () => (times.length ? Math.max(...times.map((t) => t.at)) : undefined);
+  // A failed redemption's scan was cancelled at its `at`; the server may have redeemed it up to then, so the
+  // spacing runs from there too. It is never a confirmation.
+  const latest = () => {
+    const all = [...times, ...failures].map((t) => t.at);
+    return all.length ? Math.max(...all) : undefined;
+  };
   return {
     /** How long to wait before this surface may redeem (0 when the latest redemption is ≥ spacingMs ago). */
     waitMs(surface, now) {
@@ -285,8 +291,15 @@ export function redemptionBudget({ perSurface = REDEMPTIONS_PER_SURFACE, spacing
       times.push({ surface, at });
       if (pending === surface) pending = null;
     },
+    /** The surface's redemption failed: no /api/scan answer came, and its page was left at `at` (the scan cancelled). */
+    failed(surface, at) {
+      failures.push({ surface, at });
+      if (pending === surface) pending = null;
+    },
     counts: () => Object.fromEntries(counts),
+    /** Confirmed redemptions: /api/scan answers, in the order they came. */
     times: () => times.map((t) => ({ ...t })),
+    failures: () => failures.map((t) => ({ ...t })),
   };
 }
 
@@ -348,12 +361,67 @@ export const KARTA_READ_IN_PAGE = (spec) => {
   const d = m ? m.dataset : {};
   return { status: d.mapStatus ?? null, pills: d.pills ?? null, bodies: num(d.bodies), unlabelled: num(d.unlabelled), markers: num(d.markers), disclosures: document.querySelectorAll(spec.disclosures).length };
 };
-/** The share code as the page shows it after the tap on "Podijeli grad". */
+/**
+ * The share code as the page shows it after the tap on "Podijeli grad". Visible by e2e/wall.ts's rule for a row
+ * on the wall: a box, not hidden, collapsed, invisible or transparent on itself or any ancestor, wholly inside the
+ * viewport and inside every ancestor that clips its overflow.
+ */
 export const SHARE_CODE_IN_PAGE = (spec) => {
   const el = document.querySelector(spec.code);
-  const r = el ? el.getBoundingClientRect() : null;
-  const visible = Boolean(el) && !el.hidden && !el.closest('[hidden]') && r.width > 1 && r.height > 1 && getComputedStyle(el).visibility !== 'hidden';
+  const within = (r, c) => r.top >= c.top - 1 && r.bottom <= c.bottom + 1 && r.left >= c.left - 1 && r.right <= c.right + 1;
+  const clips = (v) => v !== '' && v !== 'visible';
+  const visible = (() => {
+    if (!el || el.hidden || el.closest('[hidden]')) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 1 || r.height <= 1) return false;
+    if (!(r.top >= -1 && r.left >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1)) return false;
+    for (let a = el; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
+      const root = a === el || a === document.body || a === document.documentElement;
+      if (!root && (clips(cs.overflowX) || clips(cs.overflowY) || clips(cs.overflow)) && !within(r, a.getBoundingClientRect())) return false;
+    }
+    return true;
+  })();
   return { present: Boolean(el), visible, text: ((el && el.textContent) || '').replace(/\s+/g, ' ').trim() };
+};
+
+/** The key on `window` under which the phone page stamps the moment its session ended. */
+export const EXPIRY_KEY = '__kajimaObserverSessionEnded';
+/**
+ * Installed on the phone right after its redemption: a MutationObserver that stamps (Date.now()) the moment the
+ * session-ended block first shows by the same visibility rule, so "no /api/data after the end" counts from the
+ * page's own end, not from whenever the observer comes to look. Reads nothing else and changes nothing.
+ */
+export const EXPIRY_WATCH_IN_PAGE = (spec) => {
+  const w = window;
+  if (w[spec.key]) return true;
+  const state = { endedAt: null, observer: null };
+  const shown = (el) => {
+    if (!el || el.hidden || el.closest('[hidden]')) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 1 || r.height <= 1) return false;
+    for (let a = el; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (cs.opacity !== '' && Number(cs.opacity) === 0)) return false;
+    }
+    return true;
+  };
+  const check = () => {
+    if (state.endedAt !== null || !shown(document.querySelector(spec.ended))) return;
+    state.endedAt = Date.now();
+    if (state.observer) state.observer.disconnect();
+  };
+  state.observer = new MutationObserver(check);
+  state.observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+  w[spec.key] = state;
+  check();
+  return true;
+};
+/** The page's stamp of its session's end (epoch ms), or null while the session lasts or without the watch. */
+export const EXPIRY_STAMP_IN_PAGE = (spec) => {
+  const s = window[spec.key];
+  return s && typeof s.endedAt === 'number' ? s.endedAt : null;
 };
 /** The stop board: open and in the viewport, and its departure rows fully inside the viewport (the phone spec's rule). */
 export const STOP_BOARD_READ_IN_PAGE = (spec) => {
@@ -479,17 +547,39 @@ export async function readKiosk(page, label, surface, ctx) {
 /** The rotation's planned readings for `minutes` of real time, one every `stepMs`: 300 for ten minutes. */
 export const plannedRotationSteps = (minutes, stepMs) => Math.max(1, Math.round((minutes * 60_000) / stepMs));
 
-/** The rotation in real time, every reading appended to rotation.jsonl as it is made. */
-export async function rotate(page, ctx) {
+/**
+ * The rotation in real time, every reading appended to rotation.jsonl as it is made. Meanwhile calm motion
+ * (principle 7, e2e/wall.ts, the accept spec's own watcher and verdict) is measured over every minute of it: a
+ * window opens at reading 0, 30, 60 … and closes at the next, the last one at the end of the rotation; each goes
+ * to `calm` as { from, to, reading } or { from, to, error }.
+ */
+export async function rotate(page, ctx, calm = []) {
   const { wall } = ctx.instruments;
   const steps = plannedRotationSteps(ctx.minutes, wall.ROTATION_STEP_MS);
-  return wall.sampleRotation(page, {
+  const per = Math.max(1, Math.round(wall.IDLE_MINUTE_MS / wall.ROTATION_STEP_MS));
+  let open = null;
+  const close = async (to) => {
+    if (open === null) return;
+    const from = open;
+    open = null;
+    try { calm.push({ from, to, reading: await page.evaluate(wall.CALM_MOTION_READ_IN_PAGE, wall.CALM_MOTION_SPEC) }); } catch (e) { calm.push({ from, to, error: errText(e) }); }
+  };
+  const start = async (n) => {
+    try { await page.evaluate(wall.CALM_MOTION_START_IN_PAGE, wall.CALM_MOTION_SPEC); open = n; } catch (e) { calm.push({ from: n, to: n, error: errText(e) }); }
+  };
+  let last = -1;
+  const rows = await wall.sampleRotation(page, {
     steps, stepMs: wall.ROTATION_STEP_MS, clock: 'real',
-    onSample: (row) => {
+    onSample: async (row) => {
       if (!('error' in row)) ctx.scrub.noteCode(row.code);
       ctx.appendRotation(row);
+      last = row.n;
+      if (row.n % per === 0) { await close(row.n); await start(row.n); }
     },
   });
+  if (open !== null && open < last) await close(last);
+  else if (open !== null) await page.evaluate(wall.CALM_MOTION_READ_IN_PAGE, wall.CALM_MOTION_SPEC).catch(() => {});
+  return rows;
 }
 
 /** A code from the screen's own page that this run has not spent, as a scan URL on the observed origin. */
@@ -510,8 +600,10 @@ export async function freshScanUrl(kioskPage, ctx) {
 
 /**
  * One redemption for `surface` inside the budget: wait out the spacing from the latest redemption (its /api/scan
- * answer), read a fresh code, land in the live session. The redemption's own time is its POST /api/scan answer,
- * seen on this page; when none is seen, the moment the observer stopped waiting counts, and a later answer still
+ * answer), read a fresh code, land in the live session. A redemption counts only when its POST /api/scan answers
+ * on this page. When no answer comes, the page is left for about:blank, so the browser cancels a scan still in
+ * flight and no late answer can land beside the next surface's; the redemption is recorded as failed (its recorder
+ * row fails), and the next surface still waits the spacing from that moment. An answer that does arrive late
  * moves the spacing on.
  */
 export async function redeem(page, kioskPage, surface, ctx) {
@@ -541,7 +633,13 @@ export async function redeem(page, kioskPage, surface, ctx) {
     await page.goto(scanUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [SESSION_LIVE, ctx.instruments.inventory.PHONE_PROBES.sadaPlace] }, { timeout: SESSION_TIMEOUT_MS });
   } finally {
-    if (answeredAt === null) ctx.budget.redeemed(surface, ctx.now());
+    if (answeredAt === null) {
+      await page.goto('about:blank', { timeout: 10_000 }).catch(() => {});
+      if (answeredAt === null) {
+        ctx.budget.failed(surface, ctx.now());
+        ctx.note(`${surface}: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s; the redemption failed and its page was left, so the scan is cancelled`);
+      }
+    }
   }
   return ctx.now() - t0;
 }
@@ -616,29 +714,42 @@ export async function stopBoardBySearch(page, ctx) {
   return out;
 }
 
+/** Every /api/data request `page` makes from now on, with the observer's clock (Date.now() on a real run, as the page's stamp). */
+export function watchDataRequests(page, ctx) {
+  const { pathOf } = ctx.instruments.recorders;
+  const list = [];
+  page.on('request', (req) => {
+    try {
+      const path = pathOf(req.url());
+      if (/^\/api\/data(\/|$|\?)/.test(path)) list.push({ path: path.slice(0, 120), at: ctx.now() });
+    } catch { /* a request without a URL is not a data request */ }
+  });
+  return list;
+}
+
 /**
  * The phone once its ten minutes are over: session-ended with /s/ and /hitno, no content row, no export control,
- * and no /api/data request in the AFTER_EXPIRY_MS after it (e2e/inventory.ts expiryFailures, the phone spec's own).
+ * and no /api/data request from the page's own stamp of the end through AFTER_EXPIRY_MS after it (e2e/inventory.ts
+ * expiryFailures, the phone spec's own). The request watcher has run since the redemption.
  */
 export async function observeExpiry(page, ctx, out) {
-  const { inventory, recorders } = ctx.instruments;
+  const { inventory } = ctx.instruments;
   const P = inventory.PHONE_PROBES;
   const redeemedAt = ctx.budget.times().find((t) => t.surface === 'phone')?.at ?? ctx.now();
   const timeout = Math.max(EXPIRY_MARGIN_MS, redeemedAt + SESSION_LENGTH_MS + EXPIRY_MARGIN_MS - ctx.now());
-  const seen = await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sessionEnded] }, { timeout }).then(() => true, () => false);
+  const spec = { ended: P.sessionEnded, key: EXPIRY_KEY };
+  const seen = ctx.expiryWatch
+    ? await page.waitForFunction(EXPIRY_STAMP_IN_PAGE, spec, { timeout }).then(() => true, () => false)
+    : await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sessionEnded] }, { timeout }).then(() => true, () => false);
   if (!seen) ctx.note(`phone: no ${P.sessionEnded} by ${(SESSION_LENGTH_MS + EXPIRY_MARGIN_MS) / 1000} s after its redemption`);
-  const endedAt = ctx.now();
-  const requestsAfter = [];
-  page.on('request', (req) => {
-    try {
-      const path = recorders.pathOf(req.url());
-      if (/^\/api\/data(\/|$|\?)/.test(path)) requestsAfter.push(path.slice(0, 120));
-    } catch { /* a request without a URL is not a data request */ }
-  });
+  const stamp = ctx.expiryWatch ? await page.evaluate(EXPIRY_STAMP_IN_PAGE, spec).catch(() => null) : null;
+  if (seen && stamp === null) ctx.note('phone: the page kept no stamp of its session\'s end; requests count from the moment the observer saw it');
+  const endedAt = stamp ?? ctx.now();
   const ended = await page.evaluate(inventory.EXPIRY_READ_IN_PAGE, inventory.EXPIRY_SPEC);
-  await ctx.sleep(AFTER_EXPIRY_MS);
+  await ctx.sleep(Math.max(0, endedAt + AFTER_EXPIRY_MS - ctx.now()));
   const later = await page.evaluate(inventory.EXPIRY_READ_IN_PAGE, inventory.EXPIRY_SPEC);
-  out.expiry = { seen, afterRedemptionMs: endedAt - redeemedAt, ended, later, requestsAfter: [...requestsAfter] };
+  const requestsAfter = (ctx.phoneDataRequests ?? []).filter((r) => r.at >= endedAt).map((r) => r.path);
+  out.expiry = { seen, stamped: stamp !== null, afterRedemptionMs: endedAt - redeemedAt, ended, later, requestsAfter };
   await shot(page, 'phone-expired', ctx);
   return out.expiry;
 }
@@ -647,7 +758,10 @@ export async function observeExpiry(page, ctx, out) {
 export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
   const { inventory } = ctx.instruments;
   const P = inventory.PHONE_PROBES;
+  // Every /api/data request from the redemption on, so none made after the session's end can slip past.
+  ctx.phoneDataRequests = watchDataRequests(page, ctx);
   out.landingMs = await redeem(page, kioskPage, 'phone', ctx);
+  ctx.expiryWatch = await page.evaluate(EXPIRY_WATCH_IN_PAGE, { ended: P.sessionEnded, key: EXPIRY_KEY }).then(() => true, (e) => { ctx.error('phone expiry watch', e); return false; });
   await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sadaPlace, P.sadaDepartures] }, { timeout: SADA_TIMEOUT_MS })
     .catch(() => ctx.note(`phone: neither ${P.sadaPlace} nor ${P.sadaDepartures} within ${SADA_TIMEOUT_MS / 1000} s`));
   await ctx.sleep(SETTLE_MS);
@@ -700,7 +814,7 @@ export async function observeAll(browser, ctx, observation) {
   const { scenes } = ctx.instruments;
   const surfaces = observation.meta.surfaces;
   const desktopUa = `${ctx.devices['Desktop Chrome'].userAgent}${USER_AGENT_SUFFIX}`;
-  const kiosk = { first: null, portrait: null, rotation: [], viewports: [], legibility: {}, proxy: null };
+  const kiosk = { first: null, portrait: null, rotation: [], calm: [], viewports: [], legibility: {}, proxy: null };
   observation.kiosk = kiosk;
 
   const landscape = await openPage(browser, ctx, 'kiosk-1920x1080', 'kiosk', { viewport: { ...scenes.WALL_LANDSCAPE }, deviceScaleFactor: 1, userAgent: desktopUa });
@@ -710,7 +824,7 @@ export async function observeAll(browser, ctx, observation) {
   kiosk.viewports.push(first.viewport);
   kiosk.legibility['kiosk-1920x1080'] = first.legibility;
   ctx.note(`kiosk: first reading; rotation for ${ctx.minutes} min`);
-  const rotation = rotate(landscape.page, ctx);
+  const rotation = rotate(landscape.page, ctx, kiosk.calm);
 
   // Nothing below may throw past this point: the rotation is running and must be awaited.
   let phonePage = null;
@@ -786,7 +900,9 @@ export const THRESHOLDS = Object.freeze([
   T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departure rows in every reading', '§16.3, [O-65]'),
   T('unlabelled', 'd2', 'kiosk', 'kiosk.unlabelledReadings', NONE, 'data-unlabelled = 0 in every reading (a missing probe counts)', '§16.3, D2'),
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live; an outage (stale, down) needs none', '[O-71], §16.3'),
-  T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, the map note once, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
+  T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
+  T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
+  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline, and every row that stays keeps its node', '§16.3, principle 7'),
   T('sentence-length', 'd2', 'kiosk', 'kiosk.sentenceOutOfRange', NONE, 'the sentence has 1–{SENTENCE_MAX_CHARS} characters in every reading', '§16.3, §12'),
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
@@ -865,10 +981,18 @@ function outageIssues(s, k) {
   const out = [];
   if (k.wall.pillLabels(s.pills).length) out.push(`vehicle pills ${quote(s.pills, 40)}`);
   if (s.liveRows > 0) out.push(`${s.liveRows} live countdown row(s)`);
-  if (s.mapNotes !== 1) out.push(`${s.mapNotes} map note(s), not 1`);
   if (!((s.markers ?? 0) > 0)) out.push(`data-markers ${s.markers ?? 'missing'}`);
   const untimed = s.rows.filter((r) => r.kind === 'departure' && !(r.hasTime && k.wall.CLOCK_RE.test(r.whenText)));
   if (untimed.length) out.push(`${untimed.length} departure(s) without a clock time`);
+  return out;
+}
+/** An outage reading's headline against the outage scene's rule (e2e/scenes.ts outage0800 headingNot) and its one map note. */
+function outageHeadlineIssues(s, k) {
+  const out = [];
+  const rule = k.scenes.SCENES.outage0800.expect.headingNot;
+  const hits = [...(s.headings ?? []), s.sentence].filter((t) => t && rule && rule.test(t));
+  if (hits.length) out.push(`a headline matches ${String(rule)}: ${hits.map((t) => quote(t, 60)).join(', ')}`);
+  if (s.mapNotes !== 1) out.push(`${s.mapNotes} map note(s), not 1`);
   return out;
 }
 const recordersOf = (obs, surface) => (obs.recorders ?? []).filter((r) => surface === 'all' || r.surface === surface);
@@ -877,6 +1001,8 @@ function recorderProblems(obs, surface) {
   if (!recs.length) return { value: null, detail: [`no ${surface} page was opened`] };
   // A phone or desktop that never landed in its session saw nothing: its empty recorder proves nothing.
   const visit = surface === 'phone' ? obs.phone : surface === 'desktop' ? obs.desktop : null;
+  const unconfirmed = (obs.redemptions?.failed ?? []).some((f) => f.surface === surface);
+  if (unconfirmed) return { value: null, detail: [`the ${surface}'s redemption was not confirmed: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s, so it failed and its page was left`] };
   if (visit && visit.landingMs === null) return { value: null, detail: [`the ${surface} never landed in its session${visit.failed ? ` (${visit.failed})` : ''}: its recorder proves nothing`] };
   const problems = recs.flatMap((r) => r.problems.map((p) => `${r.page}: ${p}`));
   const aborted = recs.reduce((n, r) => n + (r.aborted ?? 0), 0);
@@ -946,7 +1072,8 @@ export const METRICS = Object.freeze({
     const times = recs.flatMap((r) => r.scanTimes).map((t) => Date.parse(t)).filter(Number.isFinite).sort((a, b) => a - b);
     const gaps = times.slice(1).map((t, i) => t - times[i]);
     const close = gaps.filter((g) => g < REDEMPTION_SPACING_MS).length;
-    return { value: over + close, detail: [`redemptions ${Object.entries(per).map(([s, n]) => `${s} ${n}`).join(' · ') || 'none'}${gaps.length ? `; gaps ${gaps.map((g) => `${(g / 1000).toFixed(1)} s`).join(', ')}` : ''}`] };
+    const failed = obs.redemptions?.failed ?? [];
+    return { value: over + close, detail: [`redemptions ${Object.entries(per).map(([s, n]) => `${s} ${n}`).join(' · ') || 'none'}${gaps.length ? `; gaps ${gaps.map((g) => `${(g / 1000).toFixed(1)} s`).join(', ')}` : ''}${failed.length ? `; failed (no /api/scan answer, the scan cancelled): ${failed.map((f) => f.surface).join(', ')}` : ''}`] };
   },
   'kiosk.emptyPlaceReadings': (obs) => countReadings(obs, (s) => !s.place, () => 'kiosk-context empty'),
   // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
@@ -958,6 +1085,13 @@ export const METRICS = Object.freeze({
     const outage = (readingsOf(obs) ?? []).filter((s) => OUTAGE_FEEDS.includes(s.feed)).length;
     if (outage) m.detail.push(`${outage} reading(s) during an outage (data-feed ${OUTAGE_FEEDS.join(' or ')}) owe no pill`);
     return m;
+  },
+  'kiosk.outageHeadline': (obs, k) => countReadings(obs, (s) => s.feed === 'down' && outageHeadlineIssues(s, k).length > 0, (s) => `data-feed down: ${outageHeadlineIssues(s, k).join('; ')}`),
+  'kiosk.calmMotion': (obs, k) => {
+    const windows = obs.kiosk?.calm ?? [];
+    if (!windows.length) return { value: null, detail: ['calm motion was not measured (no minute of the rotation)'] };
+    const bad = windows.map((w) => ({ w, f: w.error ? [`not measured: ${w.error}`] : k.wall.calmMotionFailures(w.reading) })).filter((x) => x.f.length);
+    return { value: bad.length, detail: bad.length ? bad.slice(0, 5).map((x) => `readings ${x.w.from}–${x.w.to}: ${x.f.join('; ')}`) : [`${windows.length} minute(s) measured, each within ${k.wall.IDLE_MUTATIONS_MAX} structural mutations, every staying row on its node`] };
   },
   'kiosk.outageDishonest': (obs, k) => countReadings(obs, (s) => s.feed === 'down' && outageIssues(s, k).length > 0, (s) => `data-feed down: ${outageIssues(s, k).join('; ')}`),
   'kiosk.sentenceOutOfRange': (obs, k) => countReadings(obs, (s) => s.sentenceChars < 1 || s.sentenceChars > k.wall.SENTENCE_MAX_CHARS, (s) => `${s.sentenceChars} characters ${quote(s.sentence, 90)}`),
@@ -1289,6 +1423,7 @@ export function newObservation(config, health) {
   return {
     meta: { origin: config.origin, startedAt: config.startedAt, endedAt: null, minutes: config.minutes, stage: config.stage, surfaces: config.surfaces, health, userAgentSuffix: USER_AGENT_SUFFIX.trim() },
     kiosk: null, phone: null, desktop: null, recorders: [], inventories: [], captures: [], errors: [], notes: [],
+    redemptions: { confirmed: [], failed: [] },
   };
 }
 
@@ -1345,6 +1480,7 @@ export async function run(config, runtime, { log = console.log, error = console.
     ctx.error(e instanceof KioskUnavailable ? 'kiosk' : 'observation', e);
   } finally {
     observation.recorders = ctx.recorders.map(freeze);
+    observation.redemptions = { confirmed: ctx.budget.times(), failed: ctx.budget.failures() };
     await browser.close().catch(() => {});
   }
   observation.meta.endedAt = new Date(now()).toISOString();
