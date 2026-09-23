@@ -11,6 +11,8 @@ import { selectNearby } from '../../app/src/city/nearby';
 import { loadLastRun } from '../../app/src/core/lastrun';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { vehicleFixes } from '../../app/src/motion/fixes';
+import { decodeTripIndex } from '../../shared/motion/trips';
+import type { ScheduledDeparture } from '../../shared/city/types';
 import type { FeedItem } from '../../worker/feed/schema';
 
 const MIN = 60_000;
@@ -19,10 +21,32 @@ const DAY_ROUTES = ['1', '6', '11', '12', '13', '14', '17'];
 const data = (path: string) => JSON.parse(readFileSync(new URL(`../../app/public/data/${path}`, import.meta.url), 'utf8'));
 const tables = Object.fromEntries(PLATFORMS.map((id) => [id, data(`lastrun/${id}.json`)]));
 const trips = data('zet-trips.json');
+const tripIndex = decodeTripIndex(trips);
 const network = data('zet-network.json');
 const i18n = createDefaultI18n('hr');
 // Only register the fixture routes. No browser, server or external request.
 const page = { route: async () => {} } as unknown as Page;
+
+function assertCommittedTrip(departure: ScheduledDeparture, stopId: string, now: number): void {
+  const trip = tripIndex.tripsById.get(departure.tripId);
+  expect(trip, `${stopId}/${departure.routeId}/${departure.at}: ${departure.tripId}`).toBeDefined();
+  if (!trip) return;
+  const pattern = tripIndex.patterns[trip.pattern];
+  expect(pattern.route).toBe(departure.routeId);
+  const stop = pattern.stops.indexOf(stopId);
+  expect(stop).toBeGreaterThanOrEqual(0);
+  expect(stop).toBeLessThan(pattern.stops.length - 1);
+  expect(departure.headsign).toBe(network.stops.name[network.stops.id.indexOf(pattern.stops.at(-1))]);
+  // Independently walk the committed pattern from the decoded trip start.
+  // lastrun publishes whole minutes, not fabricated regular headways.
+  const seconds = pattern.stops.slice(0, stop).reduce((at, _, i) =>
+    at + pattern.sched[Math.floor(at / 3600) % 24][i] + pattern.dwell[i + 1], trip.start);
+  expect(serviceDays(now, 1, 2).some((day) => {
+    const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+    const service = weekday === 0 ? '0_25' : weekday === 6 ? '0_24' : '0_23';
+    return trip.service === service && Date.parse(departure.at) === scheduleInstant(day, Math.floor(seconds / 60) * 60);
+  }), `${departure.tripId}: service and platform departure`).toBe(true);
+}
 
 describe('departures fixture realism', () => {
   it.each(PLATFORMS)('%s keeps timetable ids and times across polls, including a reconstructed options object', (stopId) => {
@@ -68,6 +92,21 @@ describe('departures fixture realism', () => {
     const snapshots = await installKioskFeedFixture(page, scene.feedState, { now });
     const vehicles = snapshots['zet-rt'].items;
     const boards = PLATFORMS.map((stopId) => departuresBoard({ now, stopId, vehicles }));
+    const trackedIds = vehicles.filter((v) => v.id.startsWith('vehicle:') && DAY_ROUTES.includes(String(v.data?.routeId)))
+      .map((v) => String(v.data?.tripId)).slice(0, 2);
+    for (const board of boards) for (const departure of board.departures) {
+      const tracked = trackedIds.indexOf(departure.tripId);
+      if (tracked < 0) assertCommittedTrip(departure, board.stopId, now);
+      else {
+        // The only exceptions are the original scene's two time-relocated
+        // live trips. Their identities/routes must still exist in the index.
+        const trip = tripIndex.tripsById.get(departure.tripId);
+        expect(trip).toBeDefined();
+        expect(tripIndex.patterns[trip!.pattern].route).toBe(departure.routeId);
+        expect(board.stopId).toBe('106_1');
+        expect(Date.parse(departure.at)).toBe(now + (2 + tracked * 6) * MIN);
+      }
+    }
     const file = lastRunSnapshot(FIXTURE_STOP.id, serviceDays(now));
     const lastRun = await loadLastRun(`selection-${id}`, (async () => new Response(JSON.stringify(file))) as typeof fetch, now);
     const rows = selectNearby({
@@ -134,9 +173,8 @@ describe('departures fixture realism', () => {
     }));
   });
 
-  it.each(PLATFORMS)('%s uses its own committed lines, headsigns and service windows', (stopId) => {
-    for (const id of SCENE_IDS) {
-      const now = SCENES[id].now;
+  it.each(PLATFORMS)('%s offers only committed trips with its own lines, headsigns and service-day times', (stopId) => {
+    for (const now of [...SCENE_IDS.map((id) => SCENES[id].now), Date.UTC(2026, 8, 26, 10, 30), Date.UTC(2026, 8, 27, 10, 30)]) {
       const board = departuresBoard({ now, stopId });
       if (stopId === '1849_24') {
         expect(tables[stopId].routes).toEqual({});
@@ -145,6 +183,7 @@ describe('departures fixture realism', () => {
       }
       expect(board.departures).toHaveLength(12);
       for (const departure of board.departures) {
+        assertCommittedTrip(departure, stopId, now);
         const routeId = departure.routeId;
         expect(Object.keys(tables[stopId].routes)).toContain(routeId);
         expect(network.routes.id).toContain(routeId);
@@ -162,6 +201,39 @@ describe('departures fixture realism', () => {
           at <= scheduleInstant(day, gtfsSeconds(tables[stopId].routes[routeId][day])),
         )).toBe(true);
       }
+    }
+  });
+
+  it.each([
+    ['2026-09-21', '0_23', 44, '22:15'],
+    ['2026-09-26', '0_24', 31, '22:15'],
+    ['2026-09-27', '0_25', 25, '19:15'],
+  ] as const)('150 on %s offers every exact trip start on service %s, including its real last bus', (day, service, count, last) => {
+    const now = scheduleInstant(day, 0);
+    const board = departuresBoard({ now, stopId: '1849_23', rows: 1000 });
+    const today = board.departures.filter((d) => Date.parse(d.at) < scheduleInstant(day, 86400));
+    const expected = [...tripIndex.tripsById].filter(([, t]) =>
+      t.service === service && tripIndex.patterns[t.pattern].route === '150' && tripIndex.patterns[t.pattern].stops[0] === '1849_23',
+    ).map(([tripId, t]) => ({ tripId, at: new Date(scheduleInstant(day, t.start)).toISOString() }))
+      .sort((a, b) => a.at.localeCompare(b.at) || a.tripId.localeCompare(b.tripId));
+    expect(today.map(({ tripId, at }) => ({ tripId, at }))).toEqual(expected);
+    expect(today).toHaveLength(count);
+    expect(today.at(-1)?.at).toBe(new Date(scheduleInstant(day, gtfsSeconds(last))).toISOString());
+    expect(today.some((d) => /T(?:19:33|10:33|06:03):/.test(d.at))).toBe(false);
+    const later = departuresBoard({ now: scheduleInstant(day, gtfsSeconds(last)) + 1, stopId: '1849_23' });
+    expect(later.departures.every((d) => Date.parse(d.at) >= scheduleInstant(day, 86400))).toBe(true);
+  });
+
+  it('150 never changes its timetable to honor a synthetic headway or first/last override', () => {
+    const now = SCENES.morning0745.now;
+    const options = { now, stopId: '1849_23', rows: 1000 };
+    const original = departuresBoard(options).departures;
+    expect(departuresBoard({ ...options, headwayMin: 1 }).departures).toEqual(original);
+    const clipped = departuresBoard({ ...options, firstTram: '08:03', serviceEnd: '21:33' }).departures;
+    expect(clipped.length).toBeGreaterThan(0);
+    for (const departure of clipped) {
+      expect(original).toContainEqual(departure);
+      assertCommittedTrip(departure, options.stopId, now);
     }
   });
 

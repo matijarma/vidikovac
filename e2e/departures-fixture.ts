@@ -21,13 +21,17 @@
 // where its own line runs, so a tracked row never breaks its line's service
 // window. Their times use the scene-stamped vehicle observation, not the first
 // poll's startup drift (the vehicles array retains that anchor across polls).
-// Timetable rows use each line's first departure as a fixed service-day anchor,
-// leaving room for the scene's tracked slots. Both kinds expire normally.
+// Timetable rows carry decoded committed trip ids. Bus 150 starts at 1849_23:
+// its trip starts are exact departures. Tram times follow the committed pattern
+// timings, in whole minutes like lastrun; the old cadence only samples those
+// trips, never creates missing departures. Both kinds expire normally.
 import east from '../app/public/data/lastrun/106_1.json';
 import west from '../app/public/data/lastrun/106_2.json';
 import busDeparture from '../app/public/data/lastrun/1849_23.json';
 import busArrival from '../app/public/data/lastrun/1849_24.json';
 import network from '../app/public/data/zet-network.json';
+import trips from '../app/public/data/zet-trips.json';
+import { decodeTripIndex } from '../shared/motion/trips';
 import type { DepartureBoard, ScheduledDeparture } from '../shared/city/types';
 import type { FeedItem } from '../worker/feed/schema';
 import { scheduleInstant, zagrebDay } from '../worker/city/schedules';
@@ -73,6 +77,43 @@ const PLATFORM_HEADSIGNS: Readonly<Record<string, Readonly<Record<string, string
   // The return direction ends here; its committed last-run file is empty.
   '1849_24': {},
 };
+
+interface TimetableTrip { tripId: string; seconds: number }
+// Feed 000395's scene services: the brief's §8 identifies 0_23 on Monday
+// and 0_25 on Sunday; the lastrun weekend boundaries corroborate 0_24 on
+// Saturday. Do not mix earlier-feed services 0_20/21/22 or 0_26/27 variants.
+const serviceFor = (day: string): string => {
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+  return weekday === 0 ? '0_25' : weekday === 6 ? '0_24' : '0_23';
+};
+const tripKey = (stopId: string, routeId: string, service: string): string => `${stopId}/${routeId}/${service}`;
+const TIMETABLE_TRIPS = (() => {
+  const index = decodeTripIndex(trips);
+  const result = new Map<string, TimetableTrip[]>();
+  for (const [tripId, trip] of index.tripsById) {
+    if (!['0_23', '0_24', '0_25'].includes(trip.service)) continue;
+    const pattern = index.patterns[trip.pattern];
+    const terminus = network.stops.name[network.stops.id.indexOf(pattern.stops.at(-1)!)];
+    for (const stopId of PLATFORM_IDS) {
+      const stop = pattern.stops.indexOf(stopId);
+      if (stop < 0 || stop === pattern.stops.length - 1 || PLATFORM_HEADSIGNS[stopId][pattern.route] !== terminus) continue;
+      let seconds = trip.start;
+      for (let i = 0; i < stop; i++) {
+        const band = Math.floor(seconds / 3600) % 24;
+        seconds += pattern.sched[band][i] + pattern.dwell[i + 1];
+      }
+      // These are the artefact's median pattern timings, not a claim to
+      // recover per-trip stop_times seconds absent from the committed index.
+      // No interpolation is needed at bus 150's departure terminus.
+      const key = tripKey(stopId, pattern.route, trip.service);
+      const rows = result.get(key) ?? [];
+      rows.push({ tripId, seconds: Math.floor(seconds / 60) * 60 });
+      result.set(key, rows);
+    }
+  }
+  for (const rows of result.values()) rows.sort((a, b) => a.seconds - b.seconds || a.tripId.localeCompare(b.tripId));
+  return result;
+})();
 /** Rows a board carries (worker/city/schedules.ts DEPARTURES_ROWS). */
 export const BOARD_ROWS = 12;
 /** The first tracked row is due this long after the scene anchor. */
@@ -104,7 +145,8 @@ export interface DeparturesBoardOptions {
   now: number;
   stopId?: string;
   stopName?: string;
-  /** Average minutes between rows; each line runs every `headwayMin × routes.length` from its own first departure. */
+  /** Tracked-slot spacing and tram sampling cadence (`headwayMin × routes.length`).
+   * Never generates a timetable time; bus 150 is not sampled. */
   headwayMin?: number;
   routes?: readonly string[];
   headsigns?: Readonly<Record<string, string>>;
@@ -194,6 +236,7 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
     operator: 'zet', tripId, routeId, routeName, headsign: headsigns[routeId] ?? '', at: new Date(at).toISOString(),
   });
   const departures: ScheduledDeparture[] = [];
+  const trackedIds = new Set<string>();
   let reservedFrom = Infinity;
   let reservedThrough = -Infinity;
 
@@ -214,6 +257,7 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
       if (i >= 0) {
         const [trip] = pending.splice(i, 1);
         left--;
+        trackedIds.add(trip.tripId);
         reservedFrom = anchor;
         reservedThrough = at;
         if (at >= now) departures.push(row(trip.routeId, at, trip.tripId, trip.routeName || trip.routeId));
@@ -226,16 +270,25 @@ export function departuresBoard(options: DeparturesBoardOptions): DepartureBoard
     if (!bounds) continue;
     const [first, last] = bounds;
     const period = headwayMs * routes.length;
-    const slot = Math.max(0, Math.ceil((now - first) / period));
-    for (let n = slot; n < slot + wanted && first + n * period <= last; n++) {
-      const at = first + n * period;
-      // These interior grid times are synthetic, not committed departures.
-      // Reserve this platform's initial slots for its tracked trips so grid
-      // fillers do not hide them in the wall's real three-row selection.
-      // Never suppress a committed first/last boundary, nor move the reserved
-      // interval as polls advance and the tracked trips leave.
+    const sampledSlots = new Set<number>();
+    for (const trip of TIMETABLE_TRIPS.get(tripKey(stopId, routeId, serviceFor(day))) ?? []) {
+      const at = scheduleInstant(day, trip.seconds);
+      if (at < first || at > last) continue;
+      // Sample the first real tram in each fixed cadence bucket. Pick before
+      // filtering by now, so an expired sample never promotes another trip
+      // from that bucket on a later poll. Bus 150 offers every actual start.
+      if (stopId !== '1849_23') {
+        const slot = Math.floor((at - first) / period);
+        if (sampledSlots.has(slot)) continue;
+        sampledSlots.add(slot);
+      }
+      if (at < now) continue;
+      if (trackedIds.has(trip.tripId)) continue;
+      // Keep the existing tracked-slot reservation on this platform only.
+      // Never suppress a committed first/last boundary or shift the interval
+      // as polls advance. This selects a subset; it never retimes a trip.
       if (at >= reservedFrom && at <= reservedThrough && at !== first && at !== last) continue;
-      departures.push(row(routeId, at, `fixture-${stopId}-${routeId}-${new Date(at).toISOString()}`));
+      departures.push(row(routeId, at, trip.tripId));
     }
   }
 

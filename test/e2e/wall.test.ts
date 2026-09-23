@@ -27,6 +27,8 @@ import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
+import tripData from '../../app/public/data/zet-trips.json';
+import { decodeTripIndex } from '../../shared/motion/trips';
 import type { FeedItem } from '../../worker/feed/schema';
 
 const MIN = 60_000;
@@ -375,17 +377,20 @@ describe('the departures board and the last-run file', () => {
     return snapshots['zet-rt'].items.filter((i) => i.id.startsWith('vehicle:')).map((i) => ({ id: i.id, tripId: i.data?.tripId as string | undefined, routeId: i.data?.routeId as string | undefined }));
   };
 
-  it('twelve sorted rows on fixed per-line grids, in the DepartureBoard shape', () => {
+  it('twelve sorted committed trips sampled in fixed per-line buckets, in the DepartureBoard shape', () => {
     const now = SCENES.peak1745.now;
     const b = departuresBoard({ now });
     expect(b).toMatchObject({ operator: 'zet', stopId: '106_1', stopName: FIXTURE_STOP.name, status: 'live', generatedAt: iso(now) });
     expect(b.departures).toHaveLength(12);
     const times = b.departures.map((d) => Date.parse(d.at));
     expect(times).toEqual([...times].sort((a, b) => a - b));
-    for (const d of b.departures) {
+    const index = decodeTripIndex(tripData);
+    const slots = b.departures.map((d) => {
+      expect(index.tripsById.has(d.tripId)).toBe(true);
       const first = scheduleInstant('2026-09-21', gtfsSeconds(firstByRoute[d.routeId]));
-      expect((Date.parse(d.at) - first) % (6 * MIN * dayRoutes.length)).toBe(0);
-    }
+      return `${d.routeId}/${Math.floor((Date.parse(d.at) - first) / (6 * MIN * dayRoutes.length))}`;
+    });
+    expect(new Set(slots).size).toBe(12);
     expect(new Set(b.departures.map((d) => d.tripId)).size).toBe(12);
     expect(b.departures.every((d) => d.operator === 'zet' && d.routeName === d.routeId && d.headsign !== '')).toBe(true);
   });
@@ -409,10 +414,15 @@ describe('the departures board and the last-run file', () => {
     const night = departuresBoard({ now: SCENES.night0430.now });
     expect(Date.parse(night.departures[0].at) - SCENES.night0430.now).toBe(3 * MIN);
     expect(night.departures[0].routeId).toBe('1');
-    // A global service end overrides the per-line table.
-    const early = departuresBoard({ now: SCENES.late2130.now, serviceEnd: '21:40' });
-    expect(early.departures.some((d) => Date.parse(d.at) <= scheduleInstant('2026-09-21', gtfsSeconds('21:40')))).toBe(true);
-    expect(early.departures.every((d) => Date.parse(d.at) <= scheduleInstant('2026-09-21', gtfsSeconds('21:40')) || Date.parse(d.at) >= firstTram)).toBe(true);
+    // A global service end clips the offered real trips; it cannot create a
+    // departure in an empty interval. Use the first sampled trip as the cutoff.
+    const evening = departuresBoard({ now: SCENES.late2130.now });
+    const cutoff = Date.parse(evening.departures[0].at);
+    const seconds = (cutoff - scheduleInstant('2026-09-21', 0)) / 1000;
+    const serviceEnd = `${Math.floor(seconds / 3600)}:${String(seconds % 3600 / 60).padStart(2, '0')}`;
+    const early = departuresBoard({ now: SCENES.late2130.now, serviceEnd });
+    expect(early.departures[0]).toEqual(evening.departures[0]);
+    expect(early.departures.every((d) => Date.parse(d.at) <= cutoff || Date.parse(d.at) >= firstTram)).toBe(true);
   });
 
   it('the first tracked rows carry the trip ids of zet-rt vehicles on the stop\'s lines, so the arrivals join gives them a countdown', async () => {
@@ -462,7 +472,8 @@ describe('the departures board and the last-run file', () => {
     const foreign: Pick<FeedItem, 'id' | 'data'>[] = [{ id: 'vehicle:1', data: { tripId: 'bus-trip', routeId: '268', routeShortName: '268' } }, { id: 'route:6', data: { tripId: 'x', routeId: '6' } }];
     expect(trackedTrips(foreign, FIXTURE_STOP.routes)).toEqual([]);
     const b = departuresBoard({ now: SCENES.morning0745.now, vehicles: foreign });
-    expect(b.departures.every((d) => d.tripId.startsWith('fixture-') && dayRoutes.includes(d.routeId))).toBe(true);
+    const index = decodeTripIndex(tripData);
+    expect(b.departures.every((d) => index.tripsById.has(d.tripId) && dayRoutes.includes(d.routeId))).toBe(true);
     expect(trackedTrips([{ id: 'vehicle:2', data: { tripId: 't', routeId: '6' } }, { id: 'vehicle:3', data: { tripId: 't', routeId: '6' } }], ['6'])).toHaveLength(1);
   });
 
