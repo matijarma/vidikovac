@@ -12,7 +12,7 @@ import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synt
 import { createLoop } from '../../app/src/motion/loop';
 
 describe('stale polls through the real planner and frame loop', () => {
-  function planned() {
+  function planned(generationDelay = 0) {
     const net = syntheticNetwork(corridorSpec());
     const matcher = createMatcher(net);
     const track = newTrack('stale', '1', 't1', 'tram');
@@ -23,14 +23,14 @@ describe('stale polls through the real planner and frame loop', () => {
     }
     track.speed = 10;
     buildPlan(track, net, { segmentSeconds: (_p, a, b) => (b - a) / 10, dwellSeconds: () => 20 },
-      null, t, t, { hourBand: 12, dayType: 0 });
+      null, t + generationDelay, t, { hourBand: 12, dayType: 0 });
     const plan = track.plan!;
     if (plan.on !== 'path') throw new Error('expected a real path plan');
     expect(track.next?.s).toBe(600);
     expect(evalPathPlan(plan.knots, 60)).toBeGreaterThan(600);
     const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, 500));
     const fix: Fix & { generatedAt: number } = {
-      id: track.id, lon, lat, at: t * 1000, generatedAt: t * 1000,
+      id: track.id, lon, lat, at: t * 1000, generatedAt: (t + generationDelay) * 1000,
       routeId: '1', type: 0, path: '1_0', speed: track.speed, confidence: track.confidence,
       nextStopId: track.next!.stopId,
       plan: { on: 'path', knots: plan.knots.map(([s, arc]) => [t * 1000 + s * 1000, arc]) },
@@ -78,6 +78,38 @@ describe('stale polls through the real planner and frame loop', () => {
     expect(model.step(now + 24_000)[0].confidence).toBe(0.5);
   });
 
+  it.each([false, true])('holds and fades from the last report when the real plan is generated 12 s later (reduced=%s)', reducedMotion => {
+    const { net, fix, now: reportAt } = planned(12);
+    const model = createIntegrator(net);
+    let now = fix.generatedAt;
+    let frame: (() => void) | undefined;
+    let drawn: Drawn[] = [];
+    model.update([fix], now);
+    const loop = createLoop(() => { drawn = model.step(now); return true; }, {
+      now: () => now, reducedMotion,
+      raf: cb => { frame = () => cb(now); return 1; }, cancel: () => { frame = undefined; },
+      setTimer: cb => { frame = cb; return 1; }, clearTimer: () => {},
+    });
+    loop.start();
+    const framesPerSecond = reducedMotion ? 1 : 12;
+    try {
+      for (let frameNo = 1; frameNo <= 168 * framesPerSecond; frameNo++) {
+        now = fix.generatedAt + Math.round(frameNo * 1000 / framesPerSecond);
+        if (frameNo % (12 * framesPerSecond) === 0) model.update([structuredClone(fix)], now);
+        frame?.();
+        if (now === reportAt + 60_000) {
+          expect(drawn[0].s).toBeLessThanOrEqual(600);
+          expect(drawn[0].held).toBe(true);
+          expect(drawn[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+        }
+        if (now === reportAt + 140_000) expect(drawn[0].heading).toBeNull();
+        if (now === reportAt + 179_000) expect(drawn).toHaveLength(1);
+      }
+      expect(now).toBe(reportAt + 180_000);
+      expect(drawn).toEqual([]);
+    } finally { loop.stop(); }
+  });
+
   it('does not evaluate a versioned arc on another graph in alternate renderers', () => {
     const { net, fix, now } = planned();
     const model = createIntegrator(net);
@@ -99,6 +131,80 @@ describe('stale polls through the real planner and frame loop', () => {
     }
     expect(last[0].s).toBeLessThanOrEqual(600);
     expect(last[0].confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+  });
+
+  it.each([true, false])('does not restart the report lifetime on a first delivery at 60 s (versioned=%s)', versioned => {
+    const { net, fix, now: reportAt } = planned(12);
+    if (!versioned) delete (fix as Partial<Fix>).generatedAt;
+    const model = createIntegrator(net);
+    model.update([fix], reportAt + 60_000);
+    const drawn = model.step(reportAt + 60_000)[0];
+    expect(drawn.s).toBeLessThanOrEqual(600);
+    expect(drawn.confidence).toBeCloseTo(fix.confidence! * 0.8, 3);
+    expect(model.step(reportAt + 179_000)).toHaveLength(1);
+    expect(model.step(reportAt + 180_000)).toEqual([]);
+  });
+
+  it('extends confidence already decayed by a producer without fading it twice', () => {
+    const { net, fix, now: reportAt } = planned();
+    const model = createIntegrator(net);
+    model.update([{ ...fix, generatedAt: reportAt + 60_000, confidence: 0.9 * 0.8 }], reportAt + 60_000);
+    expect(model.step(reportAt + 60_000)[0].confidence).toBeCloseTo(0.9 * 0.8, 3);
+    expect(model.step(reportAt + 90_000)[0].confidence).toBeCloseTo(0.9 * 0.6, 3);
+  });
+
+  it('preserves a real post-silence plan hold when two platform zones overlap', () => {
+    const spec = corridorSpec();
+    spec.stops.push({ id: 'T650', edge: 0, s: 650 });
+    spec.routes[0].paths![0].served!.push('T650');
+    const net = syntheticNetwork(spec);
+    const matcher = createMatcher(net);
+    const track = newTrack('overlap', '1', 't1', 'tram');
+    const t = 1_800_000_000;
+    for (const [x, atSec] of [[583, t - 10], [633, t]]) {
+      const [lon, lat] = toLonLat({ x, y: 0 });
+      matcher.matchFix(track, { x, y: 0, lon, lat, atSec }, matcher.priorFor('1_0', '1', 0), null);
+    }
+    track.speed = 5;
+    buildPlan(track, net, { segmentSeconds: (_p, a, b) => (b - a) / 5, dwellSeconds: () => 20 },
+      null, t + 42, t + 42, { hourBand: 12, dayType: 0 });
+    expect(track.next?.stopId).toBe('T650'); // nearest platform, not the first within 40 m
+    const plan = track.plan!;
+    if (plan.on !== 'path') throw new Error('expected a real path plan');
+    const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, 633));
+    const fix: Fix = {
+      id: track.id, lon, lat, at: t * 1000, generatedAt: (t + 42) * 1000,
+      routeId: '1', type: 0, path: '1_0', speed: 5, confidence: track.confidence,
+      plan: { on: 'path', knots: plan.knots.map(([s, arc]) => [(t + 42 + s) * 1000, arc]) },
+    };
+    const model = createIntegrator(net);
+    model.update([fix], (t + 42) * 1000);
+    const drawn = model.step((t + 60) * 1000)[0];
+    expect(drawn.s).toBe(650);
+    expect(drawn.held).toBe(true);
+    expect(drawn.confidence).toBeCloseTo(0.9 * 0.8, 3);
+    expect(model.step((t + 180) * 1000)).toEqual([]);
+  });
+
+  it.each([false, true])('chooses the next forward stop unless the report explicitly holds the platform behind (held=%s)', held => {
+    const { net, fix, now } = planned(12);
+    const report: Fix = {
+      ...fix, held, nextStopId: 'T900',
+      plan: { on: 'path', knots: held
+        ? [[now, 633], [now + 30_000, 633], [now + 90_000, 1200]]
+        : [[now, 633], [now + 20_000, 900], [now + 40_000, 900], [now + 90_000, 1200]] },
+    };
+    const model = createIntegrator(net);
+    model.update([report], now + 12_000);
+    let drawn: Drawn[] = [];
+    for (let sec = 12; sec <= 60; sec++) {
+      if (sec % 12 === 0) model.update([structuredClone(report)], now + sec * 1000);
+      drawn = model.step(now + sec * 1000);
+    }
+    expect(drawn[0].s).toBeLessThanOrEqual(900);
+    if (held) expect(drawn[0].s).toBe(633);
+    else expect(drawn[0].s).toBeGreaterThan(895);
+    expect(drawn[0].confidence).toBeCloseTo(0.9 * 0.8, 3);
   });
 });
 

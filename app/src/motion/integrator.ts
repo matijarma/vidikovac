@@ -30,7 +30,7 @@
 // there, stops, and `held` reads true once it stands in the stop's zone.
 // The twin's `confidence` is the fade: whole while fixes arrive, then
 // linear to 0 at EVICT_S (180 s) of the vehicle's silence. The client
-// extends it by the plan's age and remaining report lifetime. Repeated or
+// extends it by the remaining report lifetime. Repeated or
 // out-of-order payloads never renew the clock; a stalled plan is additionally
 // capped at its next platform. Below
 // HEADING_CONFIDENCE_THRESHOLD (0.3, about 130 s of silence for a tram on
@@ -113,7 +113,7 @@ export interface Drawn {
   heading: XY | null;
   /** m/s, the twin's estimate. */
   speed: number;
-  /** 0 to 1, the twin's confidence faded by the plan's age; drives alpha. */
+  /** 0 to 1, the twin's confidence faded by the report's age; drives alpha. */
   confidence: number;
   /** The shape index the mark rides (a bus shape, or the shape a tram path
    *  is), -1 on a synthetic path, null in the free plane. Renderers read
@@ -364,11 +364,21 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     let silenceCeiling = Infinity;
     if (geom && fix.plan?.on === 'path') {
       const anchor = evalPath(fix.plan.knots, fix.at);
+      // A moving report has already passed any platform behind its anchor.
+      // Only an explicitly held vehicle may still occupy that stop's zone.
+      const stopFrom = anchor - (fix.held ? STOP_ZONE_M : 0);
       const stop = graph && geom.path !== null
-        ? graph.stopsOnPath(geom.path).find(entry => entry.s >= anchor - STOP_ZONE_M)
-        : net?.nextStop(geom.onShape, anchor - STOP_ZONE_M);
+        ? graph.stopsOnPath(geom.path).find(entry => entry.s >= stopFrom)
+        : net?.nextStop(geom.onShape, stopFrom);
       silenceCeiling = Math.max(anchor, stop?.s ?? geom.cum[geom.cum.length - 1]);
-      if (now - planAt > SILENCE_HOLD_S * 1000) {
+      // A plan generated after report-age T8 already carries the producer's
+      // stop/queue hold, including its published-arc floor. Preserve that
+      // bounded plan; only pre-silence (or legacy) plans need a client stop
+      // derived from geometry. Neither case grants another 30 s at receipt.
+      if (generatedAt !== undefined && generatedAt - fix.at > SILENCE_HOLD_S * 1000) {
+        silenceCeiling = fix.plan.knots.reduce((ceiling, [, s]) => Math.max(ceiling, s), anchor);
+      }
+      if (now - fix.at > SILENCE_HOLD_S * 1000) {
         target.s = Math.min(target.s, silenceCeiling);
         target.p = at(geom.pts, geom.cum, target.s);
       }
@@ -735,10 +745,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         v.holding = false;
         if (v.geom && v.plan && v.plan.on === 'path') {
           v.targetS = evalPath(v.plan.knots, now);
-          // A fresh server plan already implements report-age T8, including
-          // its published arc floor. This additional limit is only for a
-          // client that has stopped receiving genuinely new plans.
-          if (now - v.planAt > SILENCE_HOLD_S * 1000) v.targetS = Math.min(v.targetS, v.silenceCeiling);
+          // A newer plan or poll is not a newer vehicle report. Apply T8
+          // before a stale pre-silence plan can leave the next platform.
+          if (now - v.lastFixAt > SILENCE_HOLD_S * 1000) v.targetS = Math.min(v.targetS, v.silenceCeiling);
           onGeometry.push(v);
         } else if (v.plan && v.plan.on === 'free') {
           const [lon, lat] = evalFree(v.plan.knots, now);
@@ -764,10 +773,9 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       for (const v of onGeometry) convergeInOrder(v);
 
       for (const v of vehicles.values()) {
-        const atGeneration = silenceDecay((v.planAt - v.lastFixAt) / 1000);
+        const atGeneration = silenceDecay(v.generatedAt === undefined ? 0 : (v.planAt - v.lastFixAt) / 1000);
         const reportDecay = atGeneration > 0 ? silenceDecay((now - v.lastFixAt) / 1000) / atGeneration : 0;
-        const decay = Math.min(silenceDecay((now - v.planAt) / 1000), reportDecay);
-        let confidence = v.confidence * decay;
+        let confidence = v.confidence * reportDecay;
         let rawHeading: XY | null;
         let track: XY | undefined;
         if (v.geom && v.plan && v.plan.on === 'path') {
@@ -795,7 +803,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           drawn.path = v.geom.path;
           drawn.s = v.s;
         }
-        if (v.held || (v.geom && now - v.planAt > SILENCE_HOLD_S * 1000
+        if (v.held || (v.geom && now - v.lastFixAt > SILENCE_HOLD_S * 1000
           && Math.abs(v.s - v.silenceCeiling) <= DEAD_ZONE_M)) drawn.held = true;
         if (v.holding) drawn.holding = true;
         if (v.lastSnapAt !== undefined) drawn.lastSnapAt = v.lastSnapAt;
