@@ -102,7 +102,7 @@ describe('every layer renders the real feed output', () => {
     expect(clean(gradSada)).not.toMatch(/\d+ vozil/);
   });
 
-  it('lists a delay per route in Promet', () => {
+  it('computes a delay per route from the feed, but Karta lists none of them: the per-route table left the phone (WP4, Q8)', () => {
     const delays = routeDelays(snapshots['zet-rt']);
     expect(delays.length).toBeGreaterThan(0);
     // Every value is a delay word: never an arrival, never the fleet count.
@@ -111,10 +111,11 @@ describe('every layer renders the real feed output', () => {
     // The per-route summary rows are the only source of a delay; the pins carry none.
     expect(delays.length).toBe(snapshots['zet-rt']!.items.filter((i) => i.id.startsWith('route:')).length);
 
-    const body = panel(renderLayer('u-pokretu', ctx()), 'u-pokretu-delays');
-    expect(body.querySelectorAll('[data-testid=delay-row]').length).toBe(delays.length);
-    expect(clean(body)).not.toContain(i18n.t('status.empty'));
-    expect(clean(body)).not.toContain(DASH);
+    // Karta is the timeline's map: the place, its list and the vehicles, with no delay table and no fleet count.
+    const karta = renderLayer('u-pokretu', ctx());
+    expect(karta.querySelectorAll('[data-testid=delay-row], [data-testid=u-pokretu-delays]').length).toBe(0);
+    expect(clean(karta)).not.toMatch(/\d+ vozil/);
+    expect(clean(karta)).not.toContain(DASH);
   });
 
   it('lists Događanja for culture/community sources and Grad radi for the Assembly and communal works, from the real dogadanja fixtures', () => {

@@ -595,8 +595,11 @@ describe('polling on the feed store', () => {
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'prometnice', 'zet-rt']);
     expect(fetchData.mock.calls[0]![1]).toBe('dt1');
+    // Kultura is a Još row now: the directory's own refresh is cleared away, the row's switch is what is measured.
+    click(root, '[data-testid=tab-more]');
+    await flush();
     fetchData.mockClear();
-    click(root, '[data-action=nav][data-layer=kultura]');
+    click(root, '[data-testid=dir-kultura]');
     await flush();
     expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja']);
     fetchData.mockClear();
