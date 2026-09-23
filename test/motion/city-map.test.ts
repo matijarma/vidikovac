@@ -1080,7 +1080,7 @@ describe('without WebGL, following, the kiosk view and an outage', () => {
     expect(map.cameraCalls.slice(before).some((c) => c.kind === 'fitBounds' || c.kind === 'easeTo')).toBe(true);
   });
 
-  it('a stale copy keeps the motion going (R-TE5); only a down feed holds every vehicle where it is, and live again the motion resumes', async () => {
+  it('a stale copy keeps the motion going (R-TE5); only a down feed stops it, and live again the motion resumes', async () => {
     const { handle, frame, pending, container } = await harness();
     handle.update([B], [CLOSURE]);
     frame();
@@ -1095,6 +1095,46 @@ describe('without WebGL, following, the kiosk view and an outage', () => {
     expect(container.dataset.frames).toBe(heldAt);
     handle.setFeedState!('live');
     expect(pending()).toBe(1);
+  });
+
+  it('an outage empties the drawn vehicles, not only the inputs: live to down clears the vehicle marks and their census and keeps the stops, the places and the city; live again, a vehicle comes back only from a fresh report (review-w, P1)', async () => {
+    const bikes: MapPoint = { id: 'bajs-1', lon: 15.975, lat: 45.811, title: 'BAJS Trg', place: 'city', props: { category: 'bikes', badge: '4', spent: false, eventCount: 0, priority: 2 } };
+    const { map, handle, frame, vehicles, container, clock } = await harness({ lib: cityLib, loadNetwork: async () => NET, points: [A, QUAKE, bikes] });
+    const lastPush = () => vehicles().calls.at(-1) as FC | undefined;
+    handle.setFeedState!('live');
+    for (let i = 0; i < 12; i++) frame();
+    expect(lastPush()!.features.map((f) => f.properties.id)).toEqual(['vehicle:1']);
+    map.rendered = [{ layer: { id: 'vehicles' }, properties: { id: 'vehicle:1', short: '6' } }] as typeof map.rendered;
+    map.fire('idle');
+    expect(container.dataset.pills).toBe('6');
+    // The kiosk's outage: the vehicle inputs emptied, then the feed state.
+    const places = map.getSource('places')!.calls.length;
+    const stops = map.getSource('stops')!.calls.length;
+    handle.update([QUAKE, bikes], [CLOSURE]);
+    handle.setFeedState!('down');
+    expect(lastPush()!.features).toEqual([]);
+    expect((map.getSource('bodies')!.calls.at(-1) as FC).features).toEqual([]);
+    // What MapLibre draws now carries no pill, and the census says so.
+    map.rendered = [];
+    map.fire('idle');
+    expect(container.dataset.pills).toBe('');
+    // The stops were never touched and the places were set again, whole.
+    expect(map.getSource('stops')!.calls.length).toBe(stops);
+    expect(map.getSource('places')!.calls.length).toBeGreaterThan(places);
+    expect((map.getSource('places')!.calls.at(-1) as FC).features.map((f) => f.properties.id)).toEqual(['q1']);
+    expect((map.getSource('city-places')!.calls.at(-1) as FC).features.map((f) => f.properties.id)).toEqual(['bajs-1']);
+    // Two hundred seconds into the outage: still nothing drawn.
+    for (let i = 0; i < 20; i++) frame(10_000);
+    expect(lastPush()!.features).toEqual([]);
+    expect(handle.vehicles()).toEqual([]);
+    // Live again with no new report: the old tram does not come back from its history.
+    handle.setFeedState!('live');
+    for (let i = 0; i < 12; i++) frame();
+    expect(lastPush()!.features).toEqual([]);
+    // A fresh report draws it.
+    handle.update([{ ...A, at: clock() - 1000 }, QUAKE, bikes], [CLOSURE]);
+    for (let i = 0; i < 12; i++) frame();
+    expect(lastPush()!.features.map((f) => f.properties.id)).toEqual(['vehicle:1']);
   });
 });
 

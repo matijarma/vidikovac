@@ -1719,6 +1719,26 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return changed;
   }
 
+  /** The outage (setFeedState('down')): every vehicle mark off the map and
+   *  out of the model, so neither a held mark nor a vehicle's history outlives
+   *  it; the stops, the network, the places and the city's own marks are
+   *  other sources and stay. The census follows at the next idle. */
+  function clearVehicles(): void {
+    if (model) model = createIntegrator(net);
+    lastDrawn = [];
+    lastPushedSignature = '';
+    const m = map;
+    const l = lib;
+    if (m && styled && l) {
+      const empty: VehicleFeatureCollection = { type: 'FeatureCollection', features: [] };
+      m.getSource(l.SOURCES.vehicles)?.setData(empty);
+      m.getSource(l.SOURCES.bodies)?.setData({ type: 'FeatureCollection', features: [] });
+      bodiesShown = false;
+      writeMarkProbe(m, empty);
+    }
+    probeVersion++;
+  }
+
   /** The bodies go with the pills on the frames that push, from BODY_ZOOM up.
    *  Below it the layer draws nothing whatever the source holds, so the
    *  source is emptied once and then left alone -- one setData per push
@@ -2520,13 +2540,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // R-TE5: the snapshot's status is the twin's health. `stale` is the
       // twin's last-good copy, whose vehicles carry their own history and
       // confidence, so the motion keeps integrating and fades on its own;
-      // only `down` (nothing at all) holds every mark where it is.
+      // only `down` (nothing at all) stops it -- and takes the vehicles off
+      // the map (review-w, P1): an outage is no evidence of where a tram is,
+      // and a mark held where it last was said so for as long as the outage
+      // lasted. Live again, a vehicle is drawn from a fresh report only.
       const next = state === 'down';
       container.dataset.feed = state;
       if (next === held) return;
       held = next;
-      if (held) loop.stop();
-      else if (styled && !paused) loop.start();
+      if (held) {
+        loop.stop();
+        clearVehicles();
+      } else if (styled && !paused) loop.start();
     },
     setStop(next) {
       stop = next;
