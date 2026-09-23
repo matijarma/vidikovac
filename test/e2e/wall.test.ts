@@ -18,7 +18,7 @@ import {
 import { TILE_REQUESTS, attachRecorders, pathOf, summariseBody, type RecorderPage } from '../../e2e/recorders';
 import { PORTRAIT_SCENES, SCENES, SCENE_IDS } from '../../e2e/scenes';
 import {
-  FIXTURE_FIRST_TRAM, FIXTURE_LAST_DEPARTURES, departuresBoard, gtfsSeconds, lastRunSnapshot, serviceDays, trackedTrips,
+  FIXTURE_LAST_DEPARTURES, departuresBoard, gtfsSeconds, lastRunSnapshot, serviceDays, trackedTrips,
 } from '../../e2e/departures-fixture';
 import { FIXTURE_STOP, experienceSnapshots, installKioskFeedFixture } from '../../e2e/experience-fixtures';
 import { installCityFixture } from '../../e2e/city-fixtures';
@@ -27,6 +27,8 @@ import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
+import tripData from '../../app/public/data/zet-trips.json';
+import { decodeTripIndex } from '../../shared/motion/trips';
 import type { FeedItem } from '../../worker/feed/schema';
 
 const MIN = 60_000;
@@ -368,18 +370,27 @@ describe('the eight scenes', () => {
 
 // --- the departures fixture ---------------------------------------------------------------------
 describe('the departures board and the last-run file', () => {
+  const dayRoutes = ['1', '6', '11', '12', '13', '14', '17'];
+  const firstByRoute: Record<string, string> = { '1': '04:33', '6': '04:57', '11': '04:51', '12': '04:13', '13': '05:27', '14': '05:11', '17': '04:24' };
   const vehiclesOf = async (): Promise<LiveVehicleRef[]> => {
     const snapshots = await experienceSnapshots('ready');
     return snapshots['zet-rt'].items.filter((i) => i.id.startsWith('vehicle:')).map((i) => ({ id: i.id, tripId: i.data?.tripId as string | undefined, routeId: i.data?.routeId as string | undefined }));
   };
 
-  it('twelve rows on a six-minute grid from now + 2 min, each line in turn, in the DepartureBoard shape', () => {
+  it('twelve sorted committed trips sampled in fixed per-line buckets, in the DepartureBoard shape', () => {
     const now = SCENES.peak1745.now;
     const b = departuresBoard({ now });
     expect(b).toMatchObject({ operator: 'zet', stopId: '106_1', stopName: FIXTURE_STOP.name, status: 'live', generatedAt: iso(now) });
     expect(b.departures).toHaveLength(12);
-    expect(b.departures.map((d) => (Date.parse(d.at) - now) / MIN)).toEqual([2, 8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68]);
-    expect(b.departures.map((d) => d.routeId)).toEqual(['6', '11', '12', '13', '14', '17', '6', '11', '12', '13', '14', '17']);
+    const times = b.departures.map((d) => Date.parse(d.at));
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    const index = decodeTripIndex(tripData);
+    const slots = b.departures.map((d) => {
+      expect(index.tripsById.has(d.tripId)).toBe(true);
+      const first = scheduleInstant('2026-09-21', gtfsSeconds(firstByRoute[d.routeId]));
+      return `${d.routeId}/${Math.floor((Date.parse(d.at) - first) / (6 * MIN * dayRoutes.length))}`;
+    });
+    expect(new Set(slots).size).toBe(12);
     expect(new Set(b.departures.map((d) => d.tripId)).size).toBe(12);
     expect(b.departures.every((d) => d.operator === 'zet' && d.routeName === d.routeId && d.headsign !== '')).toBe(true);
   });
@@ -393,22 +404,28 @@ describe('the departures board and the last-run file', () => {
     }
   });
 
-  it('no line runs past its own last departure; after the last tram the rows are the next morning\'s from 04:16', () => {
+  it('no line runs past its own last departure; after the last tram the rows start with line 12 at 04:13', () => {
     const late = departuresBoard({ now: SCENES.lastTrams2240.now });
     for (const d of late.departures) expect(Date.parse(d.at)).toBeLessThanOrEqual(scheduleInstant('2026-09-21', gtfsSeconds(FIXTURE_LAST_DEPARTURES[d.routeId])));
     const after = departuresBoard({ now: SCENES.afterLast0045.now });
-    const firstTram = scheduleInstant('2026-09-22', gtfsSeconds(FIXTURE_FIRST_TRAM));
-    expect(Date.parse(after.departures[0].at)).toBeGreaterThanOrEqual(firstTram);
-    expect(Date.parse(after.departures[0].at) - firstTram).toBeLessThan(6 * MIN);
+    const firstTram = scheduleInstant('2026-09-22', gtfsSeconds('04:13'));
+    expect(Date.parse(after.departures[0].at)).toBe(firstTram);
+    expect(after.departures[0].routeId).toBe('12');
     const night = departuresBoard({ now: SCENES.night0430.now });
-    expect(Date.parse(night.departures[0].at) - SCENES.night0430.now).toBe(2 * MIN);
-    // A global service end overrides the per-line table.
-    const early = departuresBoard({ now: SCENES.late2130.now, serviceEnd: '21:40' });
-    expect(early.departures.slice(0, 2).map((d) => (Date.parse(d.at) - SCENES.late2130.now) / MIN)).toEqual([2, 8]);
-    expect(Date.parse(early.departures[2].at)).toBeGreaterThanOrEqual(scheduleInstant('2026-09-22', gtfsSeconds(FIXTURE_FIRST_TRAM)));
+    expect(Date.parse(night.departures[0].at) - SCENES.night0430.now).toBe(3 * MIN);
+    expect(night.departures[0].routeId).toBe('1');
+    // A global service end clips the offered real trips; it cannot create a
+    // departure in an empty interval. Use the first sampled trip as the cutoff.
+    const evening = departuresBoard({ now: SCENES.late2130.now });
+    const cutoff = Date.parse(evening.departures[0].at);
+    const seconds = (cutoff - scheduleInstant('2026-09-21', 0)) / 1000;
+    const serviceEnd = `${Math.floor(seconds / 3600)}:${String(seconds % 3600 / 60).padStart(2, '0')}`;
+    const early = departuresBoard({ now: SCENES.late2130.now, serviceEnd });
+    expect(early.departures[0]).toEqual(evening.departures[0]);
+    expect(early.departures.every((d) => Date.parse(d.at) <= cutoff || Date.parse(d.at) >= firstTram)).toBe(true);
   });
 
-  it('the first `tracked` rows carry the trip ids of zet-rt vehicles on the stop\'s lines, so the arrivals join gives them a countdown', async () => {
+  it('the first tracked rows carry the trip ids of zet-rt vehicles on the stop\'s lines, so the arrivals join gives them a countdown', async () => {
     const vehicles = await vehiclesOf();
     const now = SCENES.morning0745.now;
     const snapshots = await experienceSnapshots('ready');
@@ -419,10 +436,12 @@ describe('the departures board and the last-run file', () => {
     expect(b.departures.slice(0, 2).map((d) => d.routeId)).toEqual(tracked.map((t) => t.routeId));
     const { rows } = arrivalsAt([b], vehicles, now, { stopIds: [b.stopId] });
     expect(rows.filter((r) => r.live).map((r) => r.minutes)).toEqual([2, 8]);
-    expect(rows.filter((r) => !r.live).every((r) => r.minutes === null)).toBe(true);
+    // Timetable departures may also be inside ten minutes; only the tracked
+    // join, not proximity to now, grants a live badge.
+    expect(rows.filter((r) => !r.live).every((r) => r.vehicleId === undefined)).toBe(true);
     // No vehicles (the outage), or rows beyond the live horizon (the night), give no live row.
     expect(arrivalsAt([departuresBoard({ now, vehicles: [] })], vehicles, now, { stopIds: ['106_1'] }).rows.some((r) => r.live)).toBe(false);
-    const night = departuresBoard({ now: SCENES.afterLast0045.now, vehicles: snapshots['zet-rt'].items });
+    const night = departuresBoard({ now: SCENES.afterLast0045.now, vehicles: [...snapshots['zet-rt'].items] });
     expect(night.departures.some((d) => tracked.some((t) => t.tripId === d.tripId))).toBe(false);
   });
 
@@ -432,16 +451,16 @@ describe('the departures board and the last-run file', () => {
     const eligible = trackedTrips(items, FIXTURE_STOP.routes);
     expect(eligible[0].routeId).toBe('12');
     const lastOf = (routeId: string, day: string) => scheduleInstant(day, gtfsSeconds(FIXTURE_LAST_DEPARTURES[routeId]));
-    const firstOf = (day: string) => scheduleInstant(day, gtfsSeconds(FIXTURE_FIRST_TRAM));
-    const runs = (routeId: string, at: number) => ['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23'].some((day) => at >= firstOf(day) && at <= lastOf(routeId, day));
+    const firstOf = (routeId: string, day: string) => scheduleInstant(day, gtfsSeconds(firstByRoute[routeId]));
+    const runs = (routeId: string, at: number) => ['2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23'].some((day) => at >= firstOf(routeId, day) && at <= lastOf(routeId, day));
     for (const now of [Date.UTC(2026, 8, 21, 21, 44), Date.UTC(2026, 8, 21, 21, 40), SCENES.lastTrams2240.now, SCENES.morning0745.now, SCENES.afterLast0045.now]) {
-      const b = departuresBoard({ now, vehicles: items });
+      const b = departuresBoard({ now, vehicles: [...items] });
       for (const d of b.departures) {
-        expect(FIXTURE_STOP.routes, iso(now)).toContain(d.routeId);
+        expect(dayRoutes, iso(now)).toContain(d.routeId);
         expect(runs(d.routeId, Date.parse(d.at)), `${iso(now)} line ${d.routeId} at ${d.at}`).toBe(true);
       }
     }
-    const b = departuresBoard({ now: Date.UTC(2026, 8, 21, 21, 44), vehicles: items });
+    const b = departuresBoard({ now: Date.UTC(2026, 8, 21, 21, 44), vehicles: [...items] });
     const live = b.departures.filter((d) => eligible.some((t) => t.tripId === d.tripId));
     expect(live).toHaveLength(2);
     expect(live.map((d) => d.routeId)).not.toContain('12');
@@ -453,7 +472,8 @@ describe('the departures board and the last-run file', () => {
     const foreign: Pick<FeedItem, 'id' | 'data'>[] = [{ id: 'vehicle:1', data: { tripId: 'bus-trip', routeId: '268', routeShortName: '268' } }, { id: 'route:6', data: { tripId: 'x', routeId: '6' } }];
     expect(trackedTrips(foreign, FIXTURE_STOP.routes)).toEqual([]);
     const b = departuresBoard({ now: SCENES.morning0745.now, vehicles: foreign });
-    expect(b.departures.every((d) => d.tripId.startsWith('fixture-') && FIXTURE_STOP.routes.includes(d.routeId))).toBe(true);
+    const index = decodeTripIndex(tripData);
+    expect(b.departures.every((d) => index.tripsById.has(d.tripId) && dayRoutes.includes(d.routeId))).toBe(true);
     expect(trackedTrips([{ id: 'vehicle:2', data: { tripId: 't', routeId: '6' } }, { id: 'vehicle:3', data: { tripId: 't', routeId: '6' } }], ['6'])).toHaveLength(1);
   });
 
@@ -461,9 +481,9 @@ describe('the departures board and the last-run file', () => {
     const now = SCENES.lastTrams2240.now;
     const file = lastRunSnapshot('106_1', serviceDays(now));
     expect(file.source).toBe('ZET GTFS');
-    expect(Object.keys(file.routes)).toEqual(FIXTURE_STOP.routes);
+    expect(Object.keys(file.routes)).toEqual(dayRoutes);
     expect(file.routes['14']['2026-09-21']).toBe('24:31');
-    expect(file.first?.['6']['2026-09-22']).toBe('04:16');
+    expect(file.first?.['6']['2026-09-22']).toBe('04:57');
     expect(lastRunSnapshot('106_1', ['2026-09-21'], { withFirst: false }).first).toBeUndefined();
     const fetchImpl = (async () => new Response(JSON.stringify(file), { status: 200 })) as typeof fetch;
     const snap = await loadLastRun('fixture-lastrun-2240', fetchImpl, now);
@@ -607,4 +627,3 @@ describe('the data-status recorder', () => {
     expect(TILE_REQUESTS.test('http://localhost:8787/maps/zagreb-v1/12/1/1.pbf')).toBe(true);
   });
 });
-
