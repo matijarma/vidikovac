@@ -36,6 +36,7 @@ import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from
 import { pickCityGroup } from './helpers';
 import type { ModuleSnapshot } from '../worker/feed/schema';
 import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
+import { pillRows } from '../app/src/motion/pills';
 
 const root = resolve(import.meta.dirname, '..');
 /** The table scripts/zet-schema.mjs writes beside the artefact (F5): what ZET
@@ -48,10 +49,11 @@ const MAP = '[data-testid=map-canvas]';
 const CANVAS = `${MAP} canvas`;
 
 /** Every line number the pill layer is carrying, whether as its own pill or
- *  inside a cluster's label ("6·11"), sorted so the assertion does not depend
- *  on which mark the push happened to emit first. */
+ *  inside a cluster's label ("6·11", read row by row when a hub's label wraps,
+ *  pills.ts pillRows), sorted so the assertion does not depend on which mark
+ *  the push happened to emit first. */
 function numbersIn(pills: string | null): string[] {
-  return (pills ?? '').split('|').filter(Boolean).flatMap((label) => label.split('·')).sort();
+  return (pills ?? '').split('|').filter(Boolean).flatMap((label) => pillRows(label).flatMap((row) => row.split('·'))).sort();
 }
 
 function probe(page: Page, name: 'zoom' | 'pills' | 'noses' | 'bodies' | 'twoway' | 'focus'): Promise<string | null> {
