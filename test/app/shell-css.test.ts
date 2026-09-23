@@ -299,6 +299,9 @@ describe('zoom-compact containers: 390 px at 200% text is 12.2rem, so container 
     expect(CSS).toContain('@container tabs (max-width: 18rem)');
     const header = /@container header \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
     expect(rule('.ki-session .g-ring', header)).toContain('display: none');
+    // Five controls at 200 % text: the header's targets keep the 44 px minimum in device pixels rather than growing to
+    // 2.75rem (88 px), or the row (44 + 4 × 88 + gaps + padding = 460 px) widens the 390 px document (WP4, mobile.spec 200 %).
+    expect(rule('.ki-head', header)).toContain('--target: 44px');
     expect(rule('.ki-wordmark-text', header)).toContain('font-size: 0');
     expect(rule('.ki-wordmark-mark', header)).toContain('font-size: var(--type-title)');
     const tabs = /@container tabs \(max-width: 18rem\) \{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? '';
