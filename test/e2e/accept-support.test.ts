@@ -100,11 +100,15 @@ describe('the scene clock and the re-stamped teaser', () => {
     expect(clock.now()).toBe(PEAK.now + 600_250);
   });
 
-  it('moves every recorded time by the same delta and leaves the input untouched', () => {
+  it('refreshes live vehicle observations without moving closure or event facts and leaves the input untouched', () => {
     const snap: ModuleSnapshot = {
       module: 'zet-rt', tier: 'open', status: 'live', fetchedAt: '2026-09-21T15:45:00.000Z', sourceUpdatedAt: '2026-09-21T15:44:50.000Z',
       attribution: { text: 't', url: 'https://example.test', licence: 'l' } as ModuleSnapshot['attribution'],
-      items: [{ id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '6', at: '2026-09-21T15:44:55.000Z' }, { id: 'closure', module: 'zet-rt', kind: 'closure', tier: 'open', title: 'x', until: '2026-09-21T18:00:00.000Z' }],
+      items: [
+        { id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '6', at: '2026-09-21T15:44:55.000Z' },
+        { id: 'closure', module: 'zet-rt', kind: 'closure', tier: 'open', title: 'x', until: '2026-09-21T18:00:00.000Z' },
+        { id: 'event', module: 'zet-rt', kind: 'event', tier: 'open', title: 'x', at: '2026-09-21T16:00:00.000Z', until: '2026-09-21T18:00:00.000Z' },
+      ],
     } as ModuleSnapshot;
     const input = { 'zet-rt': snap } as Record<ModuleId, ModuleSnapshot>;
     const copy = JSON.parse(JSON.stringify(input));
@@ -113,8 +117,26 @@ describe('the scene clock and the re-stamped teaser', () => {
     expect(out.sourceUpdatedAt).toBe('2026-09-21T15:54:50.000Z');
     expect(out.validUntil).toBeUndefined();
     expect(out.staleSince).toBeUndefined();
-    expect(out.items.map((i) => [i.at, i.until])).toEqual([['2026-09-21T15:54:55.000Z', undefined], [undefined, '2026-09-21T18:10:00.000Z']]);
+    expect(out.items.map((i) => [i.at, i.until])).toEqual([
+      ['2026-09-21T15:54:55.000Z', undefined],
+      [undefined, '2026-09-21T18:00:00.000Z'],
+      ['2026-09-21T16:00:00.000Z', '2026-09-21T18:00:00.000Z'],
+    ]);
     expect(input).toEqual(copy);
+  });
+
+  it('does not rejuvenate stale data or extend published validity on subsequent polls', async () => {
+    const input = await experienceSnapshots('stale');
+    const before = structuredClone(input);
+    const out = restampSnapshots(input, PEAK.now, PEAK.now + 10 * MIN);
+    for (const id of Object.keys(input) as ModuleId[]) {
+      expect(out[id].fetchedAt).toBe(new Date(Date.parse(input[id].fetchedAt) + 10 * MIN).toISOString());
+      expect(out[id].sourceUpdatedAt).toBe(input[id].sourceUpdatedAt);
+      expect(out[id].staleSince).toBe(input[id].staleSince);
+      expect(out[id].validUntil).toBe(input[id].validUntil);
+      expect(out[id].items).toEqual(input[id].items);
+    }
+    expect(input).toEqual(before);
   });
 
   it('serves the teaser stamped for the scene clock: generatedAt and the vehicles move with it', async () => {

@@ -6,15 +6,19 @@
 //
 // Calm motion [O-24], [O-33]: rows are reconciled by id (ui/dom/reconcile.ts,
 // keyed on data-key), so a row that stays keeps its node and only a changed
-// text node is touched. Rows enter at the bottom and leave at the top: a new
-// row is appended below the others and fades in once (never on the first
-// paint, never under reduced motion), then settles into its time position on
-// the next update; a row whose moment has passed leaves from the top. A row
-// that stops being true elsewhere in the list (a cancelled event) leaves
-// where it stands, because keeping it would show something false. The
-// mutation budget counts structure: an idle update writes nothing, an idle
-// minute at most two childList/attribute changes; the text of a <time> that
-// counts down is content and changes as often as it is true.
+// text node is touched. Rows leave at the top and enter at the bottom of
+// their block: a departure whose moment has passed is removed, and the next
+// one is inserted once, at its time position under the departures that stay
+// (a new timed row lands above "uvijek"), where it fades in once (never on
+// the first paint, never under reduced motion). Nothing is appended elsewhere
+// and moved later: a node move is two childList records to a MutationObserver
+// (removed, then added), so the D2 recorder (e2e/wall.ts CALM_MOTION_*) would
+// read one entering row as three. A row that stops being true elsewhere in
+// the list (a cancelled event) leaves where it stands, because keeping it
+// would show something false. The mutation budget counts structure: an idle
+// update writes nothing, an idle minute at most two childList records (one
+// row leaving, one entering); the text of a <time> that counts down is
+// content and changes as often as it is true.
 //
 // Whole rows, whole words: nothing on the wall is cut with an ellipsis or
 // clipped (principles 4 and 5). Titles and subs wrap; a row takes the height
@@ -348,16 +352,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   }
 
   /**
-   * Reconciles the list to `shown`: the rows that were there before this
-   * update in their time order, then the new ones appended below them (they
-   * settle into place on the next update). Departed rows go first, so the
-   * rows that stay are matched in place, not moved one by one.
+   * Reconciles the list to `shown` in its time order. Departed rows go first,
+   * so the rows that stay are matched where they stand, not moved one by one;
+   * a row that enters is then inserted once, at its time position, and stays
+   * there. One childList record per changed row is the whole budget.
    */
-  function paint(shown: readonly TimelineRow[], short: ReadonlyMap<string, ShortLabels>, before: ReadonlySet<string>, now: number): void {
-    const settled = painted ? shown.filter((row) => before.has(row.id)) : [...shown];
-    const arriving = painted ? shown.filter((row) => !before.has(row.id)) : [];
+  function paint(shown: readonly TimelineRow[], short: ReadonlyMap<string, ShortLabels>, now: number): void {
     const next = document.createElement('ol');
-    next.innerHTML = rowsMarkup([...settled, ...arriving], now, i18n, short);
+    next.innerHTML = rowsMarkup(shown, now, i18n, short);
     const live = new Map<string, Element>();
     for (const li of list.children) live.set(li.getAttribute('data-key') ?? '', li);
     const wanted = new Set<string>();
@@ -372,7 +374,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   }
 
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
-  function fit(candidates: readonly TimelineRow[], before: ReadonlySet<string>, now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+  function fit(candidates: readonly TimelineRow[], now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
     // A detached tree has no layout. This hidden sibling inherits the same
     // kiosk/aside styles and variables but is outside the live timeline. Give
     // its list exactly the live content box, then dispose of it before paint.
@@ -398,12 +400,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     function fitIn(list: HTMLOListElement): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
       let shown = [...candidates];
       const short = new Map<string, ShortLabels>();
-      const draw = (): void => {
-        const ordered = painted
-          ? [...shown.filter(row => before.has(row.id)), ...shown.filter(row => !before.has(row.id))]
-          : shown;
-        list.innerHTML = rowsMarkup(ordered, now, i18n, short);
-      };
+      const draw = (): void => { list.innerHTML = rowsMarkup(shown, now, i18n, short); };
       const byId = new Map(shown.map((row) => [row.id, row] as const));
       const set = (row: TimelineRow, which: keyof ShortLabels): boolean => {
         const offered = which === 'title' ? row.titleShort : row.subShort;
@@ -473,19 +470,19 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       for (const li of list.children) before.add(li.getAttribute('data-key') ?? '');
       let shown: TimelineRow[] = candidates;
       if (unbounded) {
-        paint(shown, new Map(), before, now);
+        paint(shown, new Map(), now);
       } else {
         const style = getComputedStyle(element);
         const typography = [style.fontFamily, '--k-read-scale', '--k-main-size', '--k-sup-size', '--k-zoom']
           .map(value => value.startsWith('--') ? style.getPropertyValue(value) : value).join(';');
         const sig = fitSignature(candidates, now, i18n, budget.rowPx, box, typography);
         if (!memo || memo.sig !== sig) {
-          const fitted = fit(candidates, before, now, box);
+          const fitted = fit(candidates, now, box);
           memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short };
         }
         shown = candidates.filter((row) => memo!.ids.has(row.id));
         // The only live-list commit. No rejected row ever enters this tree.
-        paint(shown, memo.short, before, now);
+        paint(shown, memo.short, now);
       }
 
       if (painted && !deps.reduced) {
