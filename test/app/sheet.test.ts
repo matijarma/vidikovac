@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSheet, type Detent } from '../../app/src/transport/sheet';
+import { createSheet, HALF_MIN_REM, type Detent } from '../../app/src/transport/sheet';
 
 // The phone stage is 740 px tall at 390×844 (844 minus the 48 px header and the
 // 56 px tab bar): peek 5rem = 80, half 370, open 740 - 2.5rem = 700.
 const STAGE = 740;
-const HALF = STAGE * 0.38;
+// Half is 38 % of the stage but never less than one board (HALF_MIN_REM, 18rem = 288 px: the head, three departure
+// rows and the note under them, §16.4), so a selected stop's departures lie in view without a second gesture.
+const REM = 16;
+const HALF = Math.max(STAGE * 0.38, HALF_MIN_REM * REM);
 
 interface MountOptions { stageHeight?: number; initial?: Detent; reducedMotion?: boolean; onChange?: (d: Detent, h: number) => void; now?: () => number }
 
@@ -64,6 +67,20 @@ describe('detent heights from the stage', () => {
     expect(changes).toEqual([['peek', 120]]);
   });
 
+  it('half is never shorter than one board, so a selected stop\'s three departures lie in view; a tall stage keeps its 38 %, a short one clamps to open (WP4 §16.4)', () => {
+    // 390×844 as the page measures it in a browser (the banners and the toolbar take from the stage): 38 % would be 204 px.
+    expect(mount({ stageHeight: 537 }).controller.heightFor('half')).toBe(HALF_MIN_REM * REM);
+    // A tall stage (a tablet) keeps the proportion.
+    expect(mount({ stageHeight: 1000 }).controller.heightFor('half')).toBe(380);
+    // A stage that just holds a board: half is the board, under the open sheet.
+    const tight = mount({ stageHeight: 300 }).controller;
+    expect(tight.heightFor('half')).toBe(HALF_MIN_REM * REM);
+    expect(tight.heightFor('half')).toBeLessThanOrEqual(tight.heightFor('open'));
+    // A stage too short for a board: half is the open sheet, never taller than the stage allows.
+    const short = mount({ stageHeight: 250 }).controller;
+    expect(short.heightFor('half')).toBe(short.heightFor('open'));
+    expect(short.heightFor('half')).toBeLessThanOrEqual(250);
+  });
   it('set() writes data-sheet and --sheet-h and reports the change; the body says whether it is scrolled to its top', () => {
     const changes: [Detent, number][] = [];
     const { root, body, controller } = mount({ onChange: (d, h) => changes.push([d, h]) });
@@ -106,9 +123,9 @@ describe('detent heights from the stage', () => {
     resize(640);
     window.dispatchEvent(new Event('resize'));
     expect(controller.detent()).toBe('half');
-    expect(sheetH(root)).toBe(640 * 0.38);
+    expect(sheetH(root)).toBe(Math.max(640 * 0.38, HALF_MIN_REM * REM));
     expect(root.style.getPropertyValue('--sheet-open-h')).toBe('600px');
-    expect(changes.at(-1)).toEqual(['half', 640 * 0.38]);
+    expect(changes.at(-1)).toEqual(['half', Math.max(640 * 0.38, HALF_MIN_REM * REM)]);
     expect(root.dataset.dragging).toBeUndefined();
   });
 

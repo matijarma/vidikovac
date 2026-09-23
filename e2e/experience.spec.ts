@@ -67,7 +67,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await page.goto(FIXTURE_DASHBOARD);
       await expect(page.getByTestId('sada-place')).toHaveText(/\S/);
       await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
-      await expect(page.getByTestId('nearby')).toBeVisible();
+      // Sada's own list: the desk pair shows Karta's beside it (chunk E), so the probe is scoped to the feed.
+      await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
       const order = await page.locator('#layer-grad-sada').evaluate((sada) => {
         const parts = ['sada-place', 'sada-sentence', 'day-departures', 'nearby'];
         const nodes = parts.map((id) => sada.querySelector(`[data-testid="${id}"]`));
@@ -208,7 +209,7 @@ test('text zoom keeps the place, the departures and U blizini without horizontal
     await page.addStyleTag({ content: `html { font-size: ${zoom}% !important; }` });
     await expect(page.getByTestId('sada-place')).toBeVisible();
     await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
-    await expect(page.getByTestId('nearby')).toBeVisible();
+    await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });

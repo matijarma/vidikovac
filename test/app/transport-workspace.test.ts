@@ -8,6 +8,7 @@ import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
 import { emptyCity } from '../../shared/city/types';
+import { HALF_MIN_REM } from '../../app/src/transport/sheet';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
 import { frameView } from '../../app/src/map/frame';
@@ -590,7 +591,8 @@ describe('detents on the phone stage', () => {
     // happy-dom lays nothing out: the stage is given the 740 px of a 390×844 phone, so half is 370 and open 700.
     Object.defineProperty(q<HTMLElement>('.transport-body'), 'clientHeight', { get: () => 740, configurable: true });
     const covered = (): number => Number.parseFloat(ws.style.getPropertyValue('--sheet-h'));
-    const half = 740 * 0.38;
+    // Half: 38 % of the stage, never less than one board (transport/sheet.ts HALF_MIN_REM, §16.4).
+    const half = Math.max(740 * 0.38, HALF_MIN_REM * 16);
     const chevron = (): HTMLButtonElement => q<HTMLButtonElement>('.t-sheet-toggle');
     const handle = last();
     const reset = (): void => { for (const fn of [handle.select, handle.fit, handle.setFitPadding]) spy(fn).mockClear(); };
@@ -798,6 +800,8 @@ describe('third-party text on the Karta sheet (WP4 review)', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(all('[role=option][data-action=select-place]')).toHaveLength(1);
     expect(text(q('[role=option] strong'))).toBe('Gavella');
+    // The results listbox keeps its probe (e2e/experience.spec.ts reads it without WebGL too).
+    expect(q('[data-testid=transport-results][role=listbox]')).not.toBeNull();
   });
 
   it('a closure whose summary fails the row rule prints no prose; one whose title fails prints no title and no peek', () => {
