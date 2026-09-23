@@ -920,7 +920,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     const h = harness(await startWith((query) => (query.startsWith('Zapr') ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending });
     h.type('Zapr');
     h.tick(PAUSE_MS);
-    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    expect(h.status()).toBe('Učitavanje adresa i stajališta');
     h.blur();
     expect(h.box().hidden).toBe(true);
     release(STOPS);
@@ -948,7 +948,9 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     const h = harness(await startWith((query) => (query === 'Zapr' ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending, loadStreets: async () => { throw new Error('streets-unavailable'); } });
     h.type('Zapr');
     h.tick(PAUSE_MS);
-    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    // A status in the field is a whole phrase, never trailed by an ellipsis (§13), in both catalogues.
+    expect(h.status()).toBe('Učitavanje adresa i stajališta');
+    expect(createDefaultI18n('en').t('kiosk.setup.loadingPlaces')).toBe('Loading addresses and stops');
     release(STOPS);
     await flush();
     // The street index failing leaves the stops to suggest from.
