@@ -175,7 +175,7 @@ npm run frames:sample -- <recordings>/2026/09/21 --from 151500 --to 154459 --out
 E2E_KIOSK_URL=<screen setup URL> npm run observe:production -- --minutes 10
 ```
 
-Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry that clears the session, source recovery and lightweight mode. See the [verification record](docs/readable-city-2026-09-20.md).
+Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry that clears the session, source recovery and lightweight mode. See the [verification record](docs/kaj-verification.md).
 
 The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings.
 
@@ -191,14 +191,15 @@ The broader proposal would reuse screens venues already own, bring local publish
 
 ## Explore the project
 
-`app/` holds the interfaces, `worker/` the services, and `shared/` their common city and motion logic. `test/` and `e2e/` hold checks; `scripts/` contains builders, replay and review tools. `video/` holds Remotion title and end cards.
+`app/` holds the interfaces, `worker/` the services, and `shared/` their common city and motion logic. `test/` and `e2e/` hold checks; `scripts/` contains builders, replay and review tools. `video/` holds the Remotion title and end cards of the demo video, cut to its [shot list](docs/video/shot-list.md).
 
 - [Product](PRODUCT.md) and [design](DESIGN.md): governing decisions.
 - [Architecture](docs/arhitektura.md), [public screens](docs/kiosk.md), and [sources and licences](docs/izvori.md): technical and operational detail.
-- [City-data upgrade](docs/upgrade-city-2026-09-18.md) and [readable-city refinement](docs/readable-city-2026-09-20.md): implementation context and verification.
+- [Companion brief](docs/companion-2026-09-22.md): the research, interviews and plan of the September 22 round.
+- [Development history](docs/history/README.md): executed plans and dated implementation records, from the [city-data upgrade](docs/history/upgrade-city-2026-09-18.md) and the [readable-city refinement](docs/history/readable-city-2026-09-20.md) to the companion round's execution files.
 - [Submitted proposal](docs/prijava/prijedlog-projekta.md): the public-service vision and funded deliverables. It is a submission record, not a current UI specification; its hosted page, [/prijava/](https://zagreb.aningfilm.hr/prijava/), can show dated [development notes since submission](docs/prijava/razvojne-biljeske.md) as an optional layer.
 
-Several supporting documents are in Croatian. Dated implementation records describe their own revisions. The [September 17 redesign](docs/redesign-2026-09-17.md) establishes the replacement of the historical [previous design system](newdesignsystem.md); earlier material under `docs/superpowers/` is history, not current visual guidance.
+Several supporting documents are in Croatian. Dated implementation records describe their own revisions. The [September 17 redesign](docs/history/redesign-2026-09-17.md) establishes the replacement of the historical [previous design system](newdesignsystem.md); earlier material under `docs/superpowers/` is history, not current visual guidance.
 
 ## Licence and authorship
 

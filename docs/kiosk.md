@@ -54,7 +54,7 @@ upute o pretraživanju dodirom. Ukratko:
   skeniranje i poveznica na `/hitno`.
 
 Plan i razlozi izmjene: `docs/companion-2026-09-22.md` (§11 do §13); provjera
-od 20. rujna ostaje u `docs/readable-city-2026-09-20.md`. Snimka preglednika
+od 20. rujna ostaje u `docs/history/readable-city-2026-09-20.md`. Snimka preglednika
 nije dokaz čitljivosti stvarnog zaslona ili skeniranja s udaljenosti. Ti
 testovi te Safari/VoiceOver ostaju uvjet prije pilota.
 

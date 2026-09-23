@@ -8,8 +8,8 @@ description: "Useful city information, a public overview and deliberate presenta
 Approved direction: 17 September 2026, extended on 18, 19 and 20 September
 2026 and revised by the companion round of 22 September 2026
 (`docs/companion-2026-09-22.md`). Product intent is in `PRODUCT.md`; current
-implementation and verification are tracked in
-`docs/upgrade-city-2026-09-18.md` and `docs/kaj-verification.md`.
+implementation and verification are tracked in `docs/kaj-verification.md`;
+the 18 September upgrade is recorded in `docs/history/upgrade-city-2026-09-18.md`.
 The authoritative values are `app/src/ui/tokens.css`, not a second palette
 invented by a component or this document.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { Env } from '../../worker/env';
 import { codeRotateSeconds, peerMinutes, sessionMinutes } from '../../worker/config';
 import { CODE_EARLY_MS, CODE_GRACE_MS, CODE_LENGTH } from '../../worker/protocol';
@@ -174,6 +174,10 @@ describe('/prijava/: the submitted text and the development-notes layer', () => 
       expect(e.title.length, `entry ${e.date} has no title`).toBeGreaterThan(0);
       const links = [...e.paragraphs.join(' ').matchAll(/\]\((https:\/\/github\.com\/matijarma\/vidikovac\/blob\/main\/([^)]+))\)/g)];
       expect(links.length, `entry ${e.date} has no link to the record`).toBeGreaterThan(0);
+    }
+    // The records sit in the repository the notes link to (docs/history/ since WP7's move).
+    for (const [, url, path] of md.matchAll(/\]\((https:\/\/github\.com\/matijarma\/vidikovac\/blob\/main\/([^)]+))\)/g)) {
+      expect(existsSync(root(path)), `${url} names a missing file`).toBe(true);
     }
     const isos = entries.map((e) => e.iso as string);
     expect([...isos].sort()).toEqual(isos);
