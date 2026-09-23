@@ -40,8 +40,12 @@ import {
   textOf, TOUCH_BOARD_MS, visibleOf, writeArtefact, type SceneClock,
 } from './support';
 
-/** Load, settle, one reading, 3 m, 300 readings, one idle minute, the settings, a proxy page: well past the project's 300 s. */
-const SCENE_TIMEOUT_MS = 600_000;
+/**
+ * Load, settle, one reading, 3 m, 300 readings, one idle minute, the settings, a proxy page: well past the project's 300 s.
+ * A harness budget, never a verdict: the 300 fake-clock steps cost real CPU, and on a host shared with other gates a
+ * scene has taken 10 minutes of real time (D2-e2e re-run, load 16), so a timeout cut the rotation and dropped its rows.
+ */
+const SCENE_TIMEOUT_MS = 1_800_000;
 /** How long the wall may take to paint its invitation (harness: provisioning, fixtures and clock work at all). */
 const LOAD_MS = 30_000;
 /** How long the map may stay at data-map-status=loading, and the timeline empty, before the first reading. */
