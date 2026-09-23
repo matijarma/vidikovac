@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
 import { APP_URL, provisionKiosk } from './helpers';
-import { KIOSK_HANDHELD_MAX_PX } from './lib';
 import { schemaSnapshot, TWO_TRAM_PATH_ROUTE, twoTramSnapshot } from './schema-fixtures';
 
 test('the transport switch draws moving trams on the SVG diagram and restores the city map', async ({ page }) => {
@@ -107,10 +106,11 @@ test('a kiosk keeps the schema setting through provisioning URL cleanup', async 
   await page.goto(url.href);
   await expect(page.getByTestId('schema-vehicles')).toBeVisible();
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status', 'ready');
-  // A wall's schema is the whole network without zoom [O-72]: no stop is handed to it to crop
-  // round, so no stop is lettered. A handheld still frames its stop and names it.
-  const handheld = (page.viewportSize()?.width ?? 0) < KIOSK_HANDHELD_MAX_PX;
-  await expect(page.getByTestId('schema-map')).toHaveAttribute('data-labels', String(handheld));
+  // A wall's schema is the whole network without zoom [O-72], and it names that network: the
+  // artwork's own names at the walk-up tier, as many as the collision pass has room for
+  // (terminals, then the stops the most lines call at). A handheld frames its stop and names it.
+  await expect(page.getByTestId('schema-map')).toHaveAttribute('data-labels', 'true');
+  await expect.poll(async () => Number(await page.getByTestId('schema-map').getAttribute('data-names'))).toBeGreaterThan(0);
   expect(new URL(page.url()).searchParams.get('prikaz')).toBe('shema');
   expect(new URL(page.url()).hash).toBe('');
   expect(requested.some(u => /maplibre-(entry|gl-worker)/.test(u))).toBe(false);

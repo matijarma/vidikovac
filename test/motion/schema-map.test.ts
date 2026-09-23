@@ -263,11 +263,25 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   kiosk.handle.setView!({ center: [15, 45], zoom: 2, selectedStop: 'T0' });
   kiosk.frame();
   expect(kiosk.frames.at(-1)!.viewport).toEqual(crop);
+  // A wall's schema is the whole network without zoom [O-72], and it still names that network (review W, P2):
+  // the artwork's own names at the wall's walk-up tier, the ones the collision pass has room for.
+  const beforeStop = kiosk.staticCalls().length;
   kiosk.handle.setStop!(null);
-  const afterStop = kiosk.staticCalls().length;
   kiosk.frame();
-  expect(kiosk.frames.at(-1)!.labels).toBe(false);
-  expect(kiosk.staticCalls().slice(afterStop).some((c) => c.op === 'fillText')).toBe(false);
+  expect(kiosk.frames.at(-1)!.labels).toBe(true);
+  expect(kiosk.container.querySelector<HTMLElement>('[data-testid=schema-map]')!.dataset.labels).toBe('true');
+  const names = kiosk.staticCalls().slice(beforeStop).filter((c) => c.op === 'fillText');
+  expect(names.map((c) => c.args[0])).toEqual(expect.arrayContaining(['T0', 'C1200']));
+  expect(names.every((c) => Number(c.font?.match(/([\d.]+)px/)?.[1]) / DENSITY >= 28)).toBe(true);
+  // A handheld still frames its stop and names it; without one it draws the clean network.
+  const phone = harness({ interactive: false, presentationProfile: 'handheld', stop: { id: 'T600', name: 'T600', lon: 0, lat: 0, routes: [] } });
+  await flush();
+  phone.resize(390, 800);
+  phone.frame();
+  expect(phone.frames.at(-1)!.labels).toBe(true);
+  phone.handle.setStop!(null);
+  phone.frame();
+  expect(phone.frames.at(-1)!.labels).toBe(false);
 
   let resolve!: (raw: unknown) => void;
   const late = harness({}, new Promise((r) => { resolve = r; }));

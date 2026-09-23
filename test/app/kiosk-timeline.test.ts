@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createI18n, type I18n, type MessageCatalog } from '../../app/src/i18n/i18n';
-import { mainTitle, type NearbyRow } from '../../app/src/city/nearby';
+import type { NearbyRow } from '../../app/src/city/nearby';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
@@ -424,6 +424,9 @@ describe('whole rows from the row budget', () => {
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
     expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
     expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
+    // The next thing that is not a departure outlasts a second departure, and goes before the first one.
+    expect(dropCandidate([dep(1), dep(2), closure, always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), closure, always()])?.id).toBe('closure:x');
     expect(dropCandidate([dep(1), always()])).toBeNull();
     expect(dropCandidate([dep(1), dep(2)])?.id).toBe('dep:2');
     expect(dropCandidate([dep(1)])).toBeNull();
@@ -547,8 +550,9 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
 
   // The lane W wall check of 22 September at 1920 x 1080 (review.local/companion/run/logs/w-e2e/wall-visual.json):
   // the line counts Chromium measured, a 40 px title line box of 44 px (48.4 px in dark, 44 px type) and a 28 px sub
-  // line of 32.2 px. With no short label the long event left the list in dark at both places and in light at Trg,
-  // under a story row that needs its three sub lines; its own name without the subtitle keeps it on the wall.
+  // line of 32.2 px. The source gives the long event no shorter name, and the words before its colon are not one
+  // (review W, P2): the whole title wraps onto three lines, and the list makes room with its later departures
+  // (the first one always stays), never by cutting the title or dropping the next thing on it.
   describe('the long event title of the 22 September wall check', () => {
     const LONG = 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini';
     const LINES: Record<'light' | 'dark', Record<string, number>> = {
@@ -577,46 +581,40 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
       return { box: (list) => ({ height: BOX_PX, width: 472, overflow: sum(list) > BOX_PX }), lines, sum };
     }
     const T = at('2026-09-22T17:30:00Z'); // Tue 19:30
-    function wall(variant: 'kvaternik' | 'trg', short: boolean): TimelineRow[] {
+    function wall(variant: 'kvaternik' | 'trg'): TimelineRow[] {
       const kv = variant === 'kvaternik';
       const heads = kv ? ['Mihaljevac', 'Prečko', 'Črnomerec'] : ['Dubec', 'Dubrava', 'Žitnjak'];
+      // The story's shorter name is the stop's own ("Trg bana J. Jelačića"), a name the source gives.
       const story = kv
         ? { title: 'Kvaternikov trg', sub: 'Trg je nazvan po Eugenu Kvaterniku, hrvatskom političaru iz 19. stoljeća.' }
         : { title: 'Trg bana Josipa Jelačića', titleShort: 'Trg bana J. Jelačića', sub: 'Središnji zagrebački trg nosi ime bana Josipa Jelačića od 1848. godine.' };
-      const rows: TimelineRow[] = [
+      return [
         ...heads.map((title, i) => dep(i + 1, { title, atMs: T + (6 + 5 * i) * MIN, live: false, arrival: { routeId: String(5 + i), routeName: String(5 + i) } })),
-        row({ id: 'event:vis', kind: 'event', atMs: at('2026-09-22T18:00:00Z'), title: LONG, titleShort: mainTitle(LONG), sub: kv ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella', source: 'dogadanja' }),
+        row({ id: 'event:vis', kind: 'event', atMs: at('2026-09-22T18:00:00Z'), title: LONG, sub: kv ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella', source: 'dogadanja' }),
         row({ id: 'closure:vlaska', kind: 'closure', atMs: at('2026-09-22T20:00:00Z'), title: 'Vlaška', source: 'prometnice' }),
         row({ id: 'last:2026-09-22', kind: 'last', atMs: at('2026-09-22T21:31:00Z'), title: 'Zadnji tramvaji', sub: '1 23:31 · 12 23:45', source: 'zet-gtfs' }),
         row({ id: 'solar:sunrise:2026-09-23', kind: 'solar', atMs: at('2026-09-23T04:43:00Z'), title: 'Izlazak sunca', source: 'solar' }),
         always({ id: `always:story:${variant}`, ...story }),
       ];
-      return short ? rows : rows.map(({ titleShort: _t, subShort: _s, ...rest }) => rest);
     }
-    for (const [variant, theme, droppedBefore] of [
-      ['kvaternik', 'light', false], ['kvaternik', 'dark', true], ['trg', 'light', true], ['trg', 'dark', true],
-    ] as const) {
-      it(`${variant}, ${theme}: ${droppedBefore ? 'the event dropped without its short name and stays with it' : 'the event stays, printed by its short name'}`, () => {
-        expect(mainTitle(LONG)).toBe('Večer u Kvaterniku');
-        const before = measured(theme);
-        const t = mount({ designHeightPx: BOX_PX, measure: before });
-        t.update(wall(variant, false), 2000, T);
-        expect(ids().includes('event:vis')).toBe(!droppedBefore);
-        expect(before.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
-        t.destroy();
-        handle = null;
-
-        const after = measured(theme);
-        const fitted = mount({ designHeightPx: BOX_PX, measure: after });
-        fitted.update(wall(variant, true), 2000, T);
-        expect(ids().slice(0, 4)).toEqual(['dep:1', 'dep:2', 'dep:3', 'event:vis']);
+    // How many departures stay beside the whole title: all three where the rows fit, else the later ones give way.
+    const DEPARTURES = { kvaternik: { light: 3, dark: 2 }, trg: { light: 2, dark: 1 } } as const;
+    for (const variant of ['kvaternik', 'trg'] as const) for (const theme of ['light', 'dark'] as const) {
+      const kept = DEPARTURES[variant][theme];
+      it(`${variant}, ${theme}: the event stays with its whole title wrapped beside ${kept} departure${kept > 1 ? 's' : ''}`, () => {
+        const measure = measured(theme);
+        const t = mount({ designHeightPx: BOX_PX, measure });
+        t.update(wall(variant), 2000, T);
+        expect(ids().slice(0, kept + 1)).toEqual([...['dep:1', 'dep:2', 'dep:3'].slice(0, kept), 'event:vis']);
         expect(ids().at(-1)).toBe(`always:story:${variant}`);
-        expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe('Večer u Kvaterniku');
+        expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe(LONG);
         expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');
         // The story keeps its sentence whole; at Trg in dark its name gives way to the stop's shorter one.
         expect(text(byId(`always:story:${variant}`).querySelector('.nearby-title'))).toBe(variant === 'trg' && theme === 'dark' ? 'Trg bana J. Jelačića' : variant === 'trg' ? 'Trg bana Josipa Jelačića' : 'Kvaternikov trg');
-        expect(after.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
+        expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(BOX_PX);
         for (const li of items()) expect(text(li)).not.toMatch(/…|\.\.\./);
+        t.destroy();
+        handle = null;
       });
     }
   });
