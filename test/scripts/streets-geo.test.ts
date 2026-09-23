@@ -29,7 +29,7 @@ import {
   tilePointToLonLat,
   tilesFor,
 } from '../../scripts/streets-geo.mjs';
-import { decodeStreets } from '../../app/src/core/screens';
+import { decodeStreets } from '../../app/src/core/streets';
 import type { StreetGeo } from '../../app/src/kiosk/places';
 import stopsJson from '../../app/public/data/stops.json';
 import { distanceM, normalName } from '../../shared/city/geo';

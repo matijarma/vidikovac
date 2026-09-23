@@ -68,7 +68,7 @@ export const COVERAGE_TARGET = 2_800;
  * outward; `lines[i]`, only for streets longer than LINE_MIN_M, is the
  * simplified line as deltas in 1/SHAPE_SCALE of a degree, the first from the
  * point. SHAPE_SCALE (about 10 m) is finer than the 15 m simplification.
- * app/src/core/screens.ts decodeStreets reads it back; decodeIndex below is its twin.
+ * app/src/core/streets.ts decodeStreets reads it back; decodeIndex below is its twin.
  */
 export const STREET_KEYS = ['name', 'id', 'settlement', 'lon', 'lat', 'bbox', 'lengthM', 'stops'];
 export const POINT_SCALE = 100_000;
@@ -717,7 +717,7 @@ export function toColumnar(rows, keys) {
 }
 
 /**
- * The wire back to street rows, exactly as app/src/core/screens.ts decodeStreets
+ * The wire back to street rows, exactly as app/src/core/streets.ts decodeStreets
  * reads it (test/scripts/streets-geo.test.ts holds the two to the same answer):
  * `{ name, id?, settlementId, settlement, lon, lat, bbox, lengthM, stops, line? }`.
  */

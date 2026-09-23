@@ -1,8 +1,8 @@
 // The start screen's and the settings' one field, "Adresa ili stajalište":
 // suggestions over the stop table and the offline street index, and the two
 // conversions around seam S3. Pure: the stop table and the street index are
-// handed in (core/screens.ts loadStops and loadStreets fetch them lazily, on
-// the field's first use, never on the entry graph).
+// handed in (core/screens.ts loadStops and core/streets.ts loadStreets fetch
+// them lazily, on the field's first use, never on the entry graph).
 //
 // The street index (app/public/data/streets-geo.json, scripts/streets-geo.mjs)
 // is OpenStreetMap data from the served Protomaps archive, ODbL 1.0. It has no

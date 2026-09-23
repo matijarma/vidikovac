@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import stopsJson from '../../app/public/data/stops.json';
-import { loadStreets } from '../../app/src/core/screens';
+import { loadStreets } from '../../app/src/core/streets';
 import {
   MAX_SEGMENTS,
   anchorOf,
