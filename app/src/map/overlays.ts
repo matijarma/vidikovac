@@ -31,7 +31,7 @@
 // enough to show it.
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
-import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_LINE_HEIGHT_EM, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
+import { NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { MAP_FONTS, type OverlayPalette, type StyleLayerLike } from './basemap';
 import type { MapSelection, PlaceKind, VehicleKind } from './city-map';
@@ -130,7 +130,11 @@ const BODY_WIDTH: Expr = ['interpolate', ['exponential', 2], ['zoom'], BODY_ZOOM
 /** Pill geometry in CSS px, and the cluster label's cap: hoisted to
  *  motion/pills.ts (F1) so the schema paints the same pill; re-exported here
  *  under their long-standing names. */
-export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, PLATE_IMAGE, PLATE_RADIUS_PX };
+export { PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX };
+/** The pill number's line height, MapLibre's default stated (pillLayer):
+ *  pills.ts measures one row as PILL_LINE_HEIGHT_PX, this at its 12 px, and
+ *  each further row of a wrapped hub label as one more. */
+export const PILL_LINE_HEIGHT_EM = 1.2;
 /** The capsule's room around its number (icon-text-fit-padding): hoisted to
  *  motion/pills.ts beside the glyph advances, so the render census and the
  *  nose measure the capsule this layer draws; re-exported under its name. */
@@ -591,7 +595,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       // break between two whole lines, and the capsule fits both rows.
       'text-max-width': 100,
       // The default, stated: pills.ts measures each further row as one line
-      // of it (PILL_LINE_HEIGHT_EM), for the census and the nose.
+      // of it (PILL_LINE_HEIGHT_PX), for the census and the nose.
       'text-line-height': PILL_LINE_HEIGHT_EM,
       'text-allow-overlap': true,
       'text-ignore-placement': !blocks,

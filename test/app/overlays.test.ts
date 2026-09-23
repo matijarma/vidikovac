@@ -17,6 +17,7 @@ import {
   PILL_FIT_PAD_X,
   PILL_FIT_PAD_Y,
   PILL_IMAGE,
+  PILL_LINE_HEIGHT_EM,
   PILL_STRETCH_ROWS,
   PILL_ZOOM,
   PLACE_FILTERS,
@@ -38,7 +39,7 @@ import {
   vehicleKinds,
   type ProzorOptions,
 } from '../../app/src/map/overlays';
-import { PILL_HEIGHT_PX, PILL_LINE_HEIGHT_EM, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, clusterLabel, noseCentrePx, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
+import { PILL_HEIGHT_PX, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, clusterLabel, noseCentrePx, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
 import { pointsToGeoJson, type MapPoint } from '../../app/src/map/city-map';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -78,6 +79,10 @@ describe('the overlay layer list', () => {
     // A wrapped hub label carries its own break (decision 23), a line apart.
     expect(pills.layout!['text-max-width']).toBe(100);
     expect(pills.layout!['text-line-height']).toBe(PILL_LINE_HEIGHT_EM);
+    // MapLibre's own default, and the line pills.ts measures a row in at the pill's 12 px.
+    expect(PILL_LINE_HEIGHT_EM).toBe(1.2);
+    expect(PILL_LINE_HEIGHT_PX).toBeCloseTo(12 * PILL_LINE_HEIGHT_EM, 12);
+    expect(pills.layout!['text-size']).toBe(12);
     // What reads as "several here": the ink ring around a merged pill.
     expect(pills.paint!['icon-halo-color']).toEqual(['case', ['get', 'cluster'], OVERLAY_LIGHT.selection, OVERLAY_LIGHT.halo]);
     expect(pills.paint!['icon-halo-width']).toEqual(['case', ['get', 'cluster'], 2, 1]);

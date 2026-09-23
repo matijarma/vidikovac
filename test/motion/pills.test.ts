@@ -17,7 +17,7 @@ import {
   type Single,
 } from '../../app/src/motion/pills';
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
-import { capsuleHalfPx, markRadiusPx, noseCentrePx, NOSE_TUCK_PX, outlineDistancePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_LINE_HEIGHT_EM, PILL_LINE_HEIGHT_PX, PILL_TEXT_PX, pillHeightPx, pillRows, pillTextWidthPx, PLATE_RADIUS_PX } from '../../app/src/motion/pills';
+import { capsuleHalfPx, markRadiusPx, noseCentrePx, NOSE_TUCK_PX, outlineDistancePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_LINE_HEIGHT_PX, PILL_TEXT_PX, pillHeightPx, pillRows, pillTextWidthPx, PLATE_RADIUS_PX } from '../../app/src/motion/pills';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -74,16 +74,12 @@ describe('pillWidthPx / pillChars: the pill grows past four characters instead o
   it('is a line of the number taller for each further row, up to PILL_MAX_LINES (decision 23)', () => {
     expect(PILL_MAX_LINES).toBe(2);
     expect(PILL_ROW_BREAK).toBe('\n');
-    // MapLibre's default text-line-height at the pill's 12 px, the line one row already sits in.
-    expect(PILL_LINE_HEIGHT_EM).toBe(1.2);
-    expect(PILL_LINE_HEIGHT_PX).toBeCloseTo(PILL_TEXT_PX * PILL_LINE_HEIGHT_EM, 12);
+    // MapLibre's default text-line-height (1.2 em, overlays.ts) at the pill's 12 px, the line one row already sits in.
+    expect(PILL_LINE_HEIGHT_PX).toBeCloseTo(PILL_TEXT_PX * 1.2, 12);
     expect(PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y).toBeCloseTo(PILL_HEIGHT_PX, 12);
     expect(pillHeightPx(1)).toBe(PILL_HEIGHT_PX);
     expect(pillHeightPx(2)).toBeCloseTo(32.4, 12);
     expect(pillHeightPx(2)).toBeCloseTo(2 * PILL_LINE_HEIGHT_PX + 2 * PILL_FIT_PAD_Y, 12);
-    // Never more rows than the cap, never fewer than one.
-    expect(pillHeightPx(3)).toBe(pillHeightPx(2));
-    expect(pillHeightPx(0)).toBe(PILL_HEIGHT_PX);
     expect(pillRows('6\u00b711')).toEqual(['6\u00b711']);
     expect(pillRows('109\u00b7110\n111')).toEqual(['109\u00b7110', '111']);
   });

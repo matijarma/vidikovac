@@ -28,7 +28,8 @@ export const PILL_MAX_CHARS_CLUSTER = 40;
  *  budget wraps onto a second before anything is left out, so two rows of
  *  PILL_MAX_CHARS_CLUSTER, eighty characters of lines, is the whole cap.
  *  Only past it does clusterLabel keep the whole lines that fit -- a
- *  shorter list, never a count. */
+ *  shorter list, never a count. (clusterLabel lays out one row or two; a
+ *  third would be a new decision and a new break search.) */
 export const PILL_MAX_LINES = 2;
 /** What a cluster label breaks its rows with, in place of the "·" between
  *  the last line of one row and the first of the next: MapLibre's forced
@@ -63,11 +64,11 @@ export const NOSE_WIDTH_PX = 9;
 
 /** The pill's number, in CSS px before the surface's symbol scale. */
 export const PILL_TEXT_PX = 12;
-/** The line height of the pill's number, MapLibre's text-line-height
- *  (overlays.ts sets it to the default, 1.2 em, explicitly): one row is the
- *  14.4 px line inside PILL_HEIGHT_PX, and each further row of a wrapped
- *  label adds exactly one line to the capsule's height. */
-export const PILL_LINE_HEIGHT_EM = 1.2;
+/** The line the pill's number is set in, in CSS px before the symbol
+ *  scale: MapLibre's text-line-height at PILL_TEXT_PX (overlays.ts states
+ *  the default, PILL_LINE_HEIGHT_EM = 1.2 em). One row is this line inside
+ *  PILL_HEIGHT_PX, and each further row of a wrapped label adds exactly one
+ *  of it to the capsule's height. */
 export const PILL_LINE_HEIGHT_PX = 14.4;
 /** The capsule's room around its number, in CSS px before the symbol scale
  *  (overlays.ts icon-text-fit-padding, top/bottom and left/right). The
@@ -79,15 +80,16 @@ export const PILL_FIT_PAD_X = 5.5;
 export const PILL_FIT_PAD_Y = 1.8;
 /** Glyph advances of Noto Sans Medium at the glyph set's 24 px (the PBF
  *  ranges under app/public/maps/fonts, which MapLibre shapes the pill with):
- *  the digits, the cluster's separator, the no-break space an unknown route
- *  writes, and the capitals a route name may carry. Anything else is taken
- *  as wide as a digit. */
-const PILL_GLYPH_ADVANCE_24: Readonly<Record<string, number>> = Object.freeze({
-  '0': 13, '1': 13, '2': 13, '3': 13, '4': 13, '5': 13, '6': 13, '7': 13, '8': 13, '9': 13,
+ *  the cluster's separator, the no-break space an unknown route writes, and
+ *  the capitals a route name may carry. Every digit, and anything else, is
+ *  DIGIT_ADVANCE_24 wide (the PBF's own figure for all ten: tabular digits),
+ *  so the digits need no entry -- which keeps the phone's lightweight graph
+ *  under its budget (test/app/budget.test.ts). */
+const PILL_GLYPH_ADVANCE_24: Readonly<Record<string, number>> = {
   '·': 6, ' ': 6, ' ': 6, '-': 7,
   A: 15, B: 15, C: 15, D: 17, E: 13, F: 12, G: 17, H: 17, I: 8, J: 6, K: 15, L: 12, M: 22,
   N: 18, O: 18, P: 14, Q: 18, R: 15, S: 13, T: 13, U: 17, V: 14, W: 22, X: 14, Y: 13, Z: 13,
-});
+};
 const DIGIT_ADVANCE_24 = 13;
 
 /** A label's rows: one, or the rows a wrapped cluster label (clusterLabel)
@@ -113,12 +115,13 @@ export function pillTextWidthPx(label: string): number {
   return (widest * PILL_TEXT_PX) / 24;
 }
 
-/** The capsule's height for a label of `rows` rows, in CSS px before the
- *  symbol scale: PILL_HEIGHT_PX for one, one PILL_LINE_HEIGHT_PX more for
- *  each further row (MapLibre shapes rows a line height apart, and the fit
- *  padding stays top and bottom), never more rows than PILL_MAX_LINES. */
+/** The capsule's height for a label of `rows` rows (one, or up to
+ *  PILL_MAX_LINES for a wrapped cluster), in CSS px before the symbol scale:
+ *  PILL_HEIGHT_PX for one, one PILL_LINE_HEIGHT_PX more for each further row
+ *  (MapLibre shapes rows a line height apart, and the fit padding stays top
+ *  and bottom). */
 export function pillHeightPx(rows: number): number {
-  return PILL_HEIGHT_PX + (Math.min(PILL_MAX_LINES, Math.max(1, rows)) - 1) * PILL_LINE_HEIGHT_PX;
+  return PILL_HEIGHT_PX + (rows - 1) * PILL_LINE_HEIGHT_PX;
 }
 
 /** The drawn capsule's half extents in CSS px before the symbol scale: the
@@ -270,61 +273,28 @@ export function pillLabel(label: string): string {
 }
 
 /**
- * The lines laid out in the fewest rows that hold them, at most
- * PILL_MAX_LINES of at most PILL_MAX_CHARS_CLUSTER characters each, broken
- * only between two lines and balanced: of the ways to break them into that
- * many rows, the one whose widest row is narrowest as drawn (the glyph
- * advances, so a row of narrow separators is not taken for a long one),
- * the earlier rows the fuller on a tie. Null when the rows cannot hold them.
+ * The lines on one row where they fit, else on two (PILL_MAX_LINES) of at
+ * most PILL_MAX_CHARS_CLUSTER characters each, broken only between two
+ * lines and balanced: the break whose wider row is the narrower as drawn
+ * (the glyph advances, so a row of narrow separators is not taken for a
+ * long one), the first row the fuller on a tie. Null when two rows cannot
+ * hold them.
  */
-function wrapLines(lines: readonly string[]): string[] | null {
-  const n = lines.length;
-  const sepAdvance = rowAdvance24(CLUSTER_SEPARATOR);
-  const chars = [0];
-  const advance = [0];
-  for (const line of lines) {
-    chars.push(chars.at(-1)! + line.length);
-    advance.push(advance.at(-1)! + rowAdvance24(line));
-  }
-  /** Lines [a, b) as one row: its characters and its drawn width. */
-  const rowChars = (a: number, b: number): number => chars[b]! - chars[a]! + (b - a - 1);
-  const rowWidth = (a: number, b: number): number => advance[b]! - advance[a]! + (b - a - 1) * sepAdvance;
-  // The fewest rows: filling each row as far as it goes is optimal for that.
-  let rows = 0;
-  for (let a = 0; a < n; rows++) {
-    let b = a + 1;
-    if (rowChars(a, b) > PILL_MAX_CHARS_CLUSTER) return null;
-    while (b < n && rowChars(a, b + 1) <= PILL_MAX_CHARS_CLUSTER) b++;
-    a = b;
-  }
-  if (rows > PILL_MAX_LINES) return null;
-  // Then the balanced break into exactly that many rows: widest[k][a] is the
-  // narrowest widest row lines [a, n) take in k rows, next[k][a] where the
-  // first of those rows ends.
-  const widest: number[][] = [Array.from({ length: n + 1 }, (_, a) => (a === n ? 0 : Infinity))];
-  const next: number[][] = [[]];
-  for (let k = 1; k <= rows; k++) {
-    widest.push(Array<number>(n + 1).fill(Infinity));
-    next.push(Array<number>(n + 1).fill(-1));
-    for (let a = 0; a < n; a++) {
-      // Longest first row first, so a tie keeps the fuller one.
-      for (let b = n; b > a; b--) {
-        if (rowChars(a, b) > PILL_MAX_CHARS_CLUSTER) continue;
-        const w = Math.max(rowWidth(a, b), widest[k - 1]![b]!);
-        if (w < widest[k]![a]!) {
-          widest[k]![a] = w;
-          next[k]![a] = b;
-        }
-      }
+function wrapLines(lines: readonly string[]): string | null {
+  const one = lines.join(CLUSTER_SEPARATOR);
+  if (one.length <= PILL_MAX_CHARS_CLUSTER) return one;
+  let best: string | null = null;
+  let narrowest = Infinity;
+  for (let k = lines.length - 1; k > 0; k--) {
+    const head = lines.slice(0, k).join(CLUSTER_SEPARATOR);
+    const tail = lines.slice(k).join(CLUSTER_SEPARATOR);
+    const width = Math.max(rowAdvance24(head), rowAdvance24(tail));
+    if (head.length <= PILL_MAX_CHARS_CLUSTER && tail.length <= PILL_MAX_CHARS_CLUSTER && width < narrowest) {
+      best = head + PILL_ROW_BREAK + tail;
+      narrowest = width;
     }
   }
-  const out: string[] = [];
-  for (let k = rows, a = 0; k > 0; k--) {
-    const b = next[k]![a]!;
-    out.push(lines.slice(a, b).join(CLUSTER_SEPARATOR));
-    a = b;
-  }
-  return out;
+  return best;
 }
 
 /** A cluster's name: every distinct line, numbers ascending then letters,
@@ -337,17 +307,17 @@ function wrapLines(lines: readonly string[]): string[] | null {
  *  hold: a shorter list, never a count in place of the lines. Every line is
  *  held to one row first (pillLabel), so the name never outgrows its pill. */
 export function clusterLabel(labels: readonly string[]): string {
-  const lines = [...new Set([...new Set(labels)].sort(compareClusterLabel).map(pillLabel))];
-  for (let n = lines.length; n > 1; n--) {
-    const rows = wrapLines(lines.slice(0, n));
-    if (rows) return rows.join(PILL_ROW_BREAK);
+  const lines = [...new Set([...labels].sort(compareClusterLabel).map(pillLabel))];
+  // One line always fits (pillLabel), and none at all is the empty name.
+  for (let n = lines.length; ; n--) {
+    const label = wrapLines(lines.slice(0, n));
+    if (label !== null) return label;
   }
-  return lines[0] ?? '';
 }
 
 /** A vehicle's pill in screen px: the box `clusterPills` tests for overlap is
- *  `pillWidthPx(pillChars(label)) x pillHeightPx(rows)` centred on (x, y),
- *  PILL_HEIGHT_PX tall for every one-line label a vehicle carries. */
+ *  `pillWidthPx(pillChars(label)) x PILL_HEIGHT_PX` centred on (x, y): a
+ *  vehicle's own label is one line (pillLabel), only a cluster's wraps. */
 export interface PillPoint {
   id: string;
   x: number;
@@ -378,7 +348,7 @@ interface Box {
 
 function boxOf(p: PillPoint): Box {
   const halfW = pillWidthPx(pillChars(p.label)) / 2 + CLUSTER_PADDING_PX;
-  const halfH = pillHeightPx(pillRows(p.label).length) / 2 + CLUSTER_PADDING_PX;
+  const halfH = PILL_HEIGHT_PX / 2 + CLUSTER_PADDING_PX;
   return { left: p.x - halfW, right: p.x + halfW, top: p.y - halfH, bottom: p.y + halfH };
 }
 

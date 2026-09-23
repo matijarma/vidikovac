@@ -289,11 +289,11 @@ app/src/map/external-features.ts:64 #networkToGeoJson → vetExternal('headsign'
 app/src/map/external-features.ts:95 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:582 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:786 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:826 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:983 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1002 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:586 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:790 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:830 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:987 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1006 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:81 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:180 #refreshWords → legend.textContent = text
 app/src/motion/schema-map.ts:182 #refreshWords → note.textContent = i18n.t('motion.note')
