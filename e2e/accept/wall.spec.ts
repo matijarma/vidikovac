@@ -6,7 +6,7 @@
 // Red by design until WP1–WP3 land (D2) and the read-only touch lands (D3). A
 // red row is a finding, never skipped: every check is a soft assertion whose
 // message names the probe and the target, so one run lists every row a scene
-// misses. The only fixme is the touch block (stop-board), until D3.
+// misses. The touch block (stop-board) runs since D3 (WP2 step 9).
 //
 // Per scene, on one page: (A) the first-viewport inventory, the "U blizini"
 // head, the QR card's lead; (B) one reading of the header, list, map, QR card
@@ -14,7 +14,7 @@
 // legibility; (C) the ten-minute rotation (300 readings 2 s apart); (D) one
 // idle minute of calm motion; (E) the settings behind a 900 ms hold on the
 // brand; (I) the recorders; then (H) a DPR 0.25 proxy of the scene on a second
-// screen for the eye. (F) read-only touch is its own fixme test per scene.
+// screen for the eye. (F) read-only touch is its own test per scene.
 //
 // Fixtures: the kiosk feed stamped for the scene (then re-stamped to the page's
 // clock as it advances), the departures board and the last-run file of
@@ -225,8 +225,8 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       await proxyShot(browser, request, scene, WALL_LANDSCAPE, label);
     });
 
-    // (F) Read-only touch [O-58] lands with D3; until then this is the one fixme of the tier.
-    test.fixme(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 60 s and the wall returns by itself`, async ({ page, request }) => {
+    // (F) Read-only touch [O-58], D3 (WP2 step 9): the ring at the frame's centre is the place's own stop.
+    test(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 60 s and the wall returns by itself`, async ({ page, request }) => {
       test.setTimeout(SCENE_TIMEOUT_MS);
       await openWall(page, request, scene, `${label}-touch`, false);
       await expect(page.getByTestId('kiosk-invitation'), `${label}: the wall paints its invitation within ${LOAD_MS / 1000} s`).toBeVisible({ timeout: LOAD_MS });
