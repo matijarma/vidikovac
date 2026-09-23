@@ -82,6 +82,12 @@ export const EXTERNAL_HEADER_SEPARATORS = "[ .,;:()'’&+/–-]*?";
 export const EXTERNAL_SENTENCE_BREAKS = /[.!?;\r\n\u2028\u2029]+/u;
 // Common inter-letter disguises within one sentence only.
 export const EXTERNAL_LEXICON_SEPARATORS = "[ :()'’&+/–-]*?";
+// Names and addresses keep register shorthand ("Muzej suv.umjetnosti",
+// "N.S.knjižnica"), so a dot between two letters or digits does not end a
+// sentence there, and it counts as one more inter-letter disguise:
+// "pošalji.lozinku" and "lo.zin.ku" stay one sentence with one lexeme each.
+export const EXTERNAL_NAME_SENTENCE_BREAKS = /[!?;\r\n\u2028\u2029]+|(?<![\p{L}\p{N}])\.+|\.+(?![\p{L}\p{N}])/u;
+export const EXTERNAL_NAME_SEPARATORS = "[ .:()'’&+/–-]*?";
 export const EXTERNAL_LEET: Readonly<Record<string, string>> = {
   '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b',
 };

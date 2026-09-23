@@ -43,19 +43,9 @@ export const HERITAGE_ROW_RESIDUALS: readonly RowTextResidual[] = [
   numeric('address', 'Selska cesta 95-95/1-95/2', '95-95/1-95/2'),
   numeric('address', 'Trg maršala Tita 05, 06, 06a, 07', '05, 06, 06'),
   numeric('address', 'Kaptol 27/1, 27/2', '27/1, 27/2'),
-  // Decision 24's letter-dot-letter rule; these are register initials and
-  // abbreviations, still listed as legitimate losses rather than attacks.
-  numeric('name', 'Zgrade Strižić, Ugao Trga A.I. i V. Mažuranića 8 i ul. J. Žerjavića 16', 'a.i', 'link'),
-  numeric('address', 'Ugao Trga A.I. i V. Mažuranića 8 i ul. J. Žerjavića 16', 'a.i', 'link'),
-  numeric('name', 'Zgrada Osnovne škole „Dr.Ante Starčević“, Sv. Leopolda Mandića 55', 'dr.ante', 'link'),
-  numeric('name', 'Dokumentacijske zbirke arhivskog gradiva iz područja istraživanja i proizvodnje nafte i plina u posjedu INA-Industrije nafte d.d.', 'd.d', 'link'),
-  numeric('name', 'Dokumentacijske zbirke arhivskog gradiva u posjedu CROATIA RECORDS d.d.', 'd.d', 'link'),
-  numeric('name', 'Cjelina filmskog i popratnog filmskog arhivskog gradiva u posjedu Jadran film d.d., Zagreb, Oporovečka 12', 'd.d', 'link'),
-  numeric('name', 'Zgrada kotlovnice i strojarnice Prve hrvatske tvornice ulja d.d, Ulica kneza Branimira bb', 'd.d', 'link'),
-  numeric('name', 'Zgrada Gospodarske sloge s cjelovito uređenim i opremljenim interijerom knjižare Znanje d.d. u prizemlju, danas KGZ – Knjižnica Medveščak, Odjel za djecu i Odjel za mlade', 'd.d', 'link'),
-  numeric('name', 'Zgrada Našičke tvornice tanina i paropila d.d., danas Exportdrvo d.d., Trg Marka Marulića 18/Ulica Ljudevita Farkaša Vukotinovića 1', 'd.d', 'link'),
-  numeric('name', 'Palača Hrvatske poljodjelske banke d.d., Smičiklasova 17/Martićeva 6/Patačićkina 1', 'd.d', 'link'),
-  numeric('name', 'Sklop zgrada bivše Ženske realne gimnazije sestara Milosrdnica sv.Vinka Paulskog s igralištima i parkom, Savska 77', 'sv.vinka', 'link'),
+  // W-C10: register initials and abbreviations (d.d., A.I., Dr.Ante, sv.Vinka)
+  // are no longer lost; in a name or address a dotted token is a link only when
+  // its last label is a top-level domain.
   // VES is an ISO currency code. Case-folding also matches Nova Ves addresses.
   numeric('name', 'Zgrada, Nova Ves 2', 'ves 2', 'payment'),
   numeric('address', 'Nova Ves 02', 'ves 02', 'payment'),
