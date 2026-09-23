@@ -260,6 +260,10 @@ export interface KioskMapAdapter {
   feedState(): FeedState;
   /** Remembers the public-screen options for the next creation. */
   setExtras(extras: KioskMapExtras): void;
+  /** The view last asked for (WP2 step 9: a touch reads the camera the screen asked for when the map cannot say). */
+  view(): KioskMapView;
+  /** The public-screen options last asked for: the renderer and the overlay set a touch reads (which stops are drawn). */
+  extras(): Readonly<KioskMapExtras>;
 }
 
 /** Wraps the page's factory so the kiosk's centre, zoom and selection ride on
@@ -297,6 +301,8 @@ export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMap
     setExtras(next) {
       extras = { ...extras, ...next };
     },
+    view: () => view,
+    extras: () => extras,
   };
 }
 
@@ -1021,4 +1027,74 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     });
   }
   return container;
+}
+
+// --- The read-only touch (WP2 step 9, [O-58]) -------------------------------------
+//
+// A wall with a touch panel answers a finger on a stop ring with that stop's
+// board, and on the pharmacy's ring with its address and phone; nothing else
+// on the picture reacts. The map itself stays what it is on every wall: inert,
+// no pointer handling and no gestures (`interactive` false, so MapLibre binds
+// no pan or zoom and the camera cannot move), which is why the hit is not
+// MapLibre's own pick. It is this arithmetic: the kiosk knows the camera it
+// asked for (or the one the map reports), the field's box and the stops it
+// draws, and a north-up, unpitched Web Mercator camera puts a coordinate on a
+// pixel exactly (MapLibre's world is 512 px at zoom 0, map/frame.ts boundsView).
+
+/** A coordinate's pixel on a field `widthPx` x `heightPx` under a north-up,
+ *  unpitched camera, CSS px from the field's top-left corner. */
+export function fieldPixel(camera: { center: readonly [number, number]; zoom: number }, widthPx: number, heightPx: number, point: { lon: number; lat: number }): [number, number] {
+  const world = 512 * 2 ** camera.zoom;
+  const x = (lon: number): number => ((lon + 180) / 360) * world;
+  const y = (lat: number): number => {
+    const phi = (Math.max(-85.05, Math.min(85.05, lat)) * Math.PI) / 180;
+    return ((1 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / Math.PI) / 2) * world;
+  };
+  return [widthPx / 2 + x(point.lon) - x(camera.center[0]), heightPx / 2 + y(point.lat) - y(camera.center[1])];
+}
+
+/** The stops the picture draws a ring for, as map/overlays.ts routeStopsFilter
+ *  selects them from this overlay set: only the listed routes' stops when the
+ *  set names routes, and only tram stops while the buses are off the picture. */
+export function drawnStops(stops: readonly ScreenStop[], prozor: Pick<ProzorOptions, 'networkKinds' | 'stopRoutes'> | null | undefined, isTram: (routeId: string) => boolean): ScreenStop[] {
+  const buses = !prozor || prozor.networkKinds.includes('bus');
+  const routes = prozor?.stopRoutes ?? null;
+  return stops.filter((stop) => (buses || stop.routes.some(isTram)) && (routes === null || stop.routes.some((route) => routes.includes(route))));
+}
+
+/** Where the on-duty pharmacy's ring stands on the picture (pharmacyPoint), or null when it draws none. */
+export function pharmacyRing(stop: ScreenStop | null): { lon: number; lat: number } | null {
+  const point = pharmacyPoint(stop)[0];
+  return point ? { lon: point.lon, lat: point.lat } : null;
+}
+
+/** What a touch on the picture landed on: a stop's ring, the pharmacy's ring, or nothing that reacts. */
+export type KioskTouch = { kind: 'stop'; stop: ScreenStop } | { kind: 'pharmacy' };
+
+export interface KioskTouchInput {
+  /** The touch, CSS px from the field's top-left corner. */
+  x: number;
+  y: number;
+  widthPx: number;
+  heightPx: number;
+  camera: { center: readonly [number, number]; zoom: number };
+  /** The rings the picture draws (drawnStops). */
+  stops: readonly ScreenStop[];
+  pharmacy: { lon: number; lat: number } | null;
+  /** How far from a ring a finger may land and still pick it (KIOSK_HIT_TOLERANCE_PX, times the display's zoom). */
+  tolerancePx: number;
+}
+
+/** The ring nearest the touch within the tolerance; null when the finger landed
+ *  on anything else (a vehicle, a venue, a disc, the ground): nothing else reacts. */
+export function touchAt(input: KioskTouchInput): KioskTouch | null {
+  let best: { hit: KioskTouch; distance: number } | null = null;
+  const consider = (hit: KioskTouch, point: { lon: number; lat: number }): void => {
+    const [px, py] = fieldPixel(input.camera, input.widthPx, input.heightPx, point);
+    const distance = Math.hypot(px - input.x, py - input.y);
+    if (distance <= input.tolerancePx && (!best || distance < best.distance)) best = { hit, distance };
+  };
+  for (const stop of input.stops) if (Number.isFinite(stop.lon) && Number.isFinite(stop.lat)) consider({ kind: 'stop', stop }, stop);
+  if (input.pharmacy) consider({ kind: 'pharmacy' }, input.pharmacy);
+  return (best as { hit: KioskTouch } | null)?.hit ?? null;
 }

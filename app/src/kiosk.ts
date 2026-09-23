@@ -46,11 +46,14 @@ import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase
 import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
 import { presentationLabelKind } from './kiosk/external';
 import { clock, weekdayDayMonth } from './kiosk/format';
-import { frameStrip, stripMarkup } from './kiosk/frame';
+import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
-import { busesVisible, createKioskMapAdapter, feedStateOf, requestKioskMap, vehiclePoints } from './kiosk/mapview';
+import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
+import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
+import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
+import { liveFixes } from './city/feed';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
 import type { PairedContext, PairedHandle } from './kiosk/paired';
@@ -495,6 +498,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
     // Templates above paint synchronously, including the cold and failed-network paths.
     ensureSentences();
+    // A touch's board follows the same beat, and its deadline is read on it too.
+    paintTouch();
   }
   function ensureSentences(): void {
     if (disposed || lightweight || phase !== 'invitation' || presentation?.target) return;
@@ -850,6 +855,116 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // many it trimmed, and that count is this one.
     return arrivalsAt(held, fleet, at, { stopIds });
   }
+
+  // --- The read-only touch (WP2 step 9, [O-58]) ----------------------------------
+  // Where the screen has touch: a stop ring on the map opens that stop's board
+  // (three departures as Sada, then the timetable line), a row of "U blizini"
+  // its detail (a departure, the last trams and the first tram open the place's
+  // own board), the pharmacy (the footer's, its ring, its night row) its address
+  // and phone, each for TOUCH_MS in the aside's box, and then the wall returns
+  // by itself: the timer, the deadline read again on every tick and poll, an
+  // outage, and anything else taking the stage. Nothing else reacts, nothing is
+  // a control (no button, no link, no focus), and the camera never moves: the
+  // map stays inert and the hit is mapview.ts touchAt over the camera, never
+  // MapLibre's pointer. Not on a handheld, which is a setup page, not a wall.
+  type Touch = { kind: 'stop'; stop: ScreenStop } | { kind: 'row'; id: string } | { kind: 'pharmacy'; pharmacy: OnDutyPharmacy };
+  let touch: Touch | null = null;
+  let touchUntil = 0;
+  let touchTimer: unknown = null;
+  /** Whether the feed was down when the touch opened: an outage that begins under the board ends it. */
+  let touchOutage = false;
+  let touchPanel: TouchPanelHandle | null = null;
+  function touchable(): boolean {
+    return !disposed && phase === 'invitation' && !presentation?.target && invitation !== null
+      && layout.size !== 'handheld' && basics.hidden && !settings?.isOpen();
+  }
+  function closeTouch(): void {
+    if (touchTimer !== null) { clearTimer(touchTimer); touchTimer = null; }
+    touch = null;
+    touchPanel?.clear();
+    touchPanel = null;
+  }
+  function openTouch(next: Touch): void {
+    touch = next;
+    touchUntil = now() + TOUCH_MS;
+    touchOutage = outage();
+    if (touchTimer !== null) clearTimer(touchTimer);
+    touchTimer = oneShot(() => { touchTimer = null; closeTouch(); }, TOUCH_MS);
+    // A stop that is not the screen's own has no board in hand yet: asked once, drawn when it lands; the row
+    // renderer is its own chunk, drawn as soon as it is in hand.
+    if (next.kind === 'stop') {
+      boards.ensure('zet', platformIds(next.stop, stops), onBoardSettled);
+      void loadStopBoardRows().then(() => { if (!disposed) paintTouch(); });
+    }
+    paintTouch();
+  }
+  function touchVariants(current: Touch): string[] {
+    const at = now();
+    if (current.kind === 'pharmacy') return pharmacyDetailVariants(i18n, { caption: s.sentence.pharmacy, hours: PHARMACY_HOURS }, current.pharmacy);
+    if (current.kind === 'row') {
+      // A row that stopped being true (its moment passed) takes its detail with it.
+      const row = wallItems.find((item) => item.id === current.id);
+      if (!row) return [];
+      const venue = row.kind === 'event' && row.map ? cityStore.snapshot().places.find((place) => place.id === row.map!.id) : undefined;
+      return rowDetailVariants(i18n, row, at, venue?.address);
+    }
+    const ids = platformIds(current.stop, stops);
+    const held = ids.map((id) => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
+    // Live exactly when Sada and Karta are (city/feed.ts): no live time during an outage or off a fix the twin evicted.
+    const next = arrivalsAt(held, liveFixes(byModule(teaser)['zet-rt'], at), at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS });
+    const timetable = arrivalsAt(held, [], at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS }).rows;
+    return stopBoardVariants(i18n, { name: current.stop.name, rows: next.rows, timetable, status: next.status });
+  }
+  function paintTouch(): void {
+    if (!touch) return;
+    const host = invitation?.element.querySelector<HTMLElement>('.k-nearby-host') ?? null;
+    if (!host || !touchable() || now() >= touchUntil || (!touchOutage && outage())) { closeTouch(); return; }
+    const variants = touchVariants(touch);
+    if (variants.length === 0) { closeTouch(); return; }
+    touchPanel ??= mountTouchPanel(host);
+    touchPanel.show(touch.kind, variants);
+  }
+  /** The ring under a finger on the map: the drawn stops and the pharmacy, against the camera the map reports (or the one asked for). */
+  function touchOnMap(event: MouseEvent): Touch | null {
+    const container = mapContainer;
+    if (!container || !stops?.length || mapAdapter.extras().renderer === 'schema') return null;
+    const asked = mapAdapter.view();
+    const camera = mapAdapter.handle()?.camera?.() ?? (asked.center && asked.zoom !== undefined ? { center: asked.center, zoom: asked.zoom } : null);
+    if (!camera) return null;
+    const box = container.getBoundingClientRect();
+    const composition = compositionOf(layout);
+    const hit = touchAt({
+      x: event.clientX - box.left, y: event.clientY - box.top,
+      widthPx: box.width || container.clientWidth || FIELD_DESIGN_WIDTH[composition],
+      heightPx: box.height || container.clientHeight || FIELD_DESIGN_HEIGHT[composition],
+      camera, stops: drawnStops(stops, mapAdapter.extras().prozor, isTram), pharmacy: pharmacyRing(stop),
+      tolerancePx: KIOSK_HIT_TOLERANCE_PX * Math.max(1, layout.zoom),
+    });
+    if (hit?.kind === 'stop') return { kind: 'stop', stop: hit.stop };
+    return hit?.kind === 'pharmacy' ? { kind: 'pharmacy', pharmacy: nearestPharmacy(stop) } : null;
+  }
+  function touchOnRow(li: HTMLElement): Touch | null {
+    const row = wallItems.find((item) => item.id === li.dataset.id);
+    if (!row) return null;
+    if (row.kind === 'departure' || row.kind === 'last' || row.kind === 'first') {
+      const subject = stopForNearby();
+      return subject ? { kind: 'stop', stop: subject } : null;
+    }
+    if (row.kind === 'pharmacy') return { kind: 'pharmacy', pharmacy: pharmaciesByDistance(null).find((p) => p.label === row.sub) ?? nearestPharmacy(stop) };
+    return { kind: 'row', id: row.id };
+  }
+  function onTouch(event: MouseEvent): void {
+    if (!touchable() || !(event.target instanceof Element)) return;
+    const target = event.target;
+    // The open detail is read, not pressed.
+    if (target.closest('.k-touch')) return;
+    const row = target.closest<HTMLElement>('[data-testid=nearby-rows] > .nearby-row');
+    const next = row ? touchOnRow(row)
+      : target.closest('[data-testid=strip-pharmacy]') ? { kind: 'pharmacy' as const, pharmacy: nearestPharmacy(stop) }
+        : target.closest('[data-testid=kiosk-map-host]') ? touchOnMap(event) : null;
+    if (next) openTouch(next);
+  }
+
   function invitationModel(): InvitationModel {
     // The field is the map's side of the invitation (its name, and lagano's
     // lines board in place of the map), so it follows the map: the chosen
@@ -999,6 +1114,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // replaces it -- a grant, a notice, the start screen -- gets the stage
     // back at once, never behind a panel waiting out its 90 s.
     closeSettings(false);
+    closeTouch();
     phase = next;
     renderAlert();
     // The sheet reads the phase for the stage's room: the invitation is edge to edge, the wizard and the notices keep their padding.
@@ -1460,6 +1576,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if ((event.target as HTMLElement).closest('[data-testid=kiosk-essentials-open]')) openEssentials();
   });
   basicsClose.addEventListener('click', () => closeEssentials());
+  // The read-only touch (WP2 step 9): the map's rings, the list's rows and the footer's pharmacy, by delegation;
+  // the finger coming down starts the board's row renderer before the click lands.
+  element.addEventListener('pointerdown', () => { if (touchable()) void loadStopBoardRows(); });
+  element.addEventListener('click', onTouch);
   // Postavke open on a press held on the brand (or Enter/Space on it), never on
   // a tap: the header carries no operator control a passer-by could meet.
   const unbindBrand = bindLongPress(brand, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer });
@@ -1543,6 +1663,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
       disarmExpiry();
       disarmEssentialsIdle();
+      closeTouch();
       stopRepaint?.();
       stopTheme();
       unbindBrand();
