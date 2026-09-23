@@ -6,12 +6,14 @@
 // such value through externalText() before it is shown. A value that fails is
 // skipped, never repaired or shortened; the caller counts the reason code.
 //
-// Layers: structural limits and contact/transaction vectors; sensitive words
-// in any mood/person; then reader-action requests in prose only. An event name
+// Layers (decision 20): structural limits and contact/transaction vectors;
+// sentence-local sensitive pairs; reader requests amplify partial vectors in
+// prose only. Neither a lone sensitive word nor a reader request rejects. An event name
 // is not unsafe merely because it is imperative. Folding is rejection-only;
 // display and grounding always use the original source text.
 import {
-  EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
+  EXTERNAL_CONTACT_TARGETS, EXTERNAL_LEET, EXTERNAL_LEXICON_SEPARATORS, EXTERNAL_NUMERIC_DATA,
+  EXTERNAL_PAIR_RULES, EXTERNAL_PARTIAL_VECTORS, EXTERNAL_SENTENCE_BREAKS,
   EXTERNAL_SENSITIVE_LEXICON, EXTERNAL_VECTOR_PATTERNS,
 } from './external-text-policy';
 
@@ -164,7 +166,7 @@ const splitInstructions = new RegExp(`(?<![a-z0-9])(?:${SENTENCE_SPLIT_COMMANDS.
   [...word].join("[\\s.,:;()'’&+\\-–/]*")).join('|')})(?:[\\s.,:;()'’&+\\-–/]*t[\\s.,:;()'’&+\\-–/]*e)?(?![a-z0-9])`, 'u');
 
 /** The rule a text trips ('hr-i-imperative', …, 'hr-second-person', 'split-command'), or null. */
-function readerRequestRule(text: string): string | null {
+export function readerRequestRule(text: string): string | null {
   const nfc = text.normalize('NFC');
   const folded = foldText(nfc);
   const singular = foldText(singularReading(nfc));
@@ -178,7 +180,9 @@ function readerRequestRule(text: string): string | null {
 // intact. Separators may occur at a stem/suffix boundary too ("n a z o v i").
 function separatedLexeme(source: string): string {
   return (source.match(/\[a-z\]\*|[a-z]| \*?|[^a-z]/gu) ?? []).map(token => {
-    if (token === '[a-z]*') return `(?:[a-z]${EXTERNAL_LEXICON_SEPARATORS})*`;
+    // Prefer the first whole-word boundary: a greedy suffix would swallow the
+    // partner ("p a s s w o r d send") and turn two disjoint lexemes into one.
+    if (token === '[a-z]*') return `(?:[a-z]${EXTERNAL_LEXICON_SEPARATORS})*?`;
     if (/^[a-z]$/u.test(token)) return `(?:${token}${EXTERNAL_LEXICON_SEPARATORS})`;
     if (token.startsWith(' ')) return EXTERNAL_LEXICON_SEPARATORS;
     return token;
@@ -186,24 +190,79 @@ function separatedLexeme(source: string): string {
 }
 const sensitivePatterns = EXTERNAL_SENSITIVE_LEXICON.map(rule => ({
   id: rule.id,
+  role: rule.role,
   pattern: bounded(rule.source),
   separated: bounded(separatedLexeme(rule.source)),
 }));
 
-/** Sensitive lexemes, independent of case, script accents, person and mood. */
-export function sensitiveTextRule(text: string): string | null {
+interface Evidence { list: string; value: string; start: number; end: number }
+export interface SensitiveTextPair {
+  rule: (typeof EXTERNAL_PAIR_RULES)[number]['id'];
+  sentence: string;
+  left: Evidence;
+  right: Evidence;
+}
+const partialPatterns = EXTERNAL_PARTIAL_VECTORS.map(rule => ({ ...rule, pattern: bounded(rule.source) }));
+const contactPatterns = EXTERNAL_CONTACT_TARGETS.map(rule => ({ ...rule, pattern: bounded(rule.source) }));
+function readings(text: string): string[] {
   const folded = foldText(text);
   const leet = folded.replace(/[0134578]/gu, ch => EXTERNAL_LEET[ch]!);
   const leetL = folded.replace(/[0134578]/gu, ch => ch === '1' ? 'l' : EXTERNAL_LEET[ch]!);
-  for (const { id, pattern, separated } of sensitivePatterns) {
-    if ([folded, leet, leetL].some(reading => pattern.test(reading) || separated.test(reading))) return id;
+  return [...new Set([folded, leet, leetL])];
+}
+function evidence(text: string, list: string, pattern: RegExp): Evidence[] {
+  return [...text.matchAll(new RegExp(pattern.source, 'gu'))].map(match => ({
+    list, value: match[0].trim(), start: match.index, end: match.index + match[0].trimEnd().length,
+  }));
+}
+function caseReading(text: string): string {
+  // Preserve case while retaining folded offsets (Đ -> DJ, ß -> ss).
+  return text.normalize('NFC').replace(/\p{L}[\p{L}\p{M}]*/gu,
+    word => word === word.toLocaleUpperCase('hr') ? foldText(word).toUpperCase() : foldText(word));
+}
+function partialVectors(text: string): Evidence[] {
+  const cased = caseReading(text);
+  return partialPatterns.flatMap(rule => evidence(rule.casing === 'original' ? cased : foldText(text), rule.id, rule.pattern));
+}
+const disjoint = (a: Evidence, b: Evidence): boolean => a.end <= b.start || b.end <= a.start;
+
+/** Exact pair evidence for tests/audits; callers still log reason codes only. */
+export function sensitiveTextPair(text: string): SensitiveTextPair | null {
+  for (const sentence of text.split(EXTERNAL_SENTENCE_BREAKS)) {
+    const groups: Record<(typeof EXTERNAL_PAIR_RULES)[number]['left' | 'right'], Evidence[]> = {
+      noun: [], action: [], contact: [], 'partial-vector': partialVectors(sentence),
+      'contact-target': contactPatterns.flatMap(rule => evidence(foldText(sentence), rule.id, rule.pattern)),
+    };
+    for (const reading of readings(sentence)) for (const { id, role, pattern, separated } of sensitivePatterns) {
+      groups[role].push(...evidence(reading, id, pattern), ...evidence(reading, id, separated));
+    }
+    for (const rule of EXTERNAL_PAIR_RULES) for (const left of groups[rule.left]) {
+      const right = groups[rule.right].find(candidate => disjoint(left, candidate));
+      if (right) return { rule: rule.id, sentence, left, right };
+    }
   }
   return null;
 }
 
-/** Compatibility export: a prose signal, not the policy for titles or names. */
+/** A sensitive noun/verb is evidence only when it has a sentence-local partner. */
+export function sensitiveTextRule(text: string): string | null {
+  return sensitiveTextPair(text)?.rule ?? null;
+}
+
+/** Prose-only layer 3: a reader request amplifies a pair or partial vector. */
 export function instructionRule(text: string): string | null {
-  return sensitiveTextRule(text) ?? readerRequestRule(text);
+  const pair = sensitiveTextRule(text);
+  if (pair) return pair;
+  for (const sentence of text.split(EXTERNAL_SENTENCE_BREAKS)) {
+    if (!readerRequestRule(sentence)) continue;
+    for (const token of partialVectors(sentence)) {
+      // Do not turn an uppercase/leet command into its own second signal.
+      const cased = caseReading(sentence);
+      const request = readerRequestRule(`${cased.slice(0, token.start)} ${cased.slice(token.end)}`);
+      if (request) return `reader-${request}`;
+    }
+  }
+  return null;
 }
 export function sentenceInstruction(text: string): boolean {
   return instructionRule(text) !== null;
@@ -243,8 +302,7 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
   for (const ch of folded) {
     if (!/[a-z0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };
   }
-  if (sensitiveTextRule(text)
-    || ((kind === 'summary' || kind === 'register-text') && readerRequestRule(text))) {
+  if ((kind === 'summary' || kind === 'register-text') ? instructionRule(text) : sensitiveTextRule(text)) {
     return { ok: false, reason: 'instruction' };
   }
   return { ok: true };
@@ -254,7 +312,7 @@ function check(kind: ExternalTextKind, value: string): ExternalTextVerdict {
 const verdicts = new Map<string, ExternalTextVerdict>();
 /**
  * The one check for third-party text before the wall shows it, in a row or in the
- * header: structural limits/vectors, sensitive lexicon, prose requests.
+ * header: structural limits/vectors, sensitive pairs, amplified prose requests.
  * Never repairs; a failing value is skipped.
  */
 export function externalText(kind: ExternalTextKind, value: string): ExternalTextVerdict {

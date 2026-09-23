@@ -1,31 +1,71 @@
-// Rejection-only policy data. Sources match folded, lower-case Latin text with
-// whole-word boundaries. Verb alternatives include indicative, conditional,
-// participle and infinitive forms, not just imperatives. Never rewrite a value.
+// Decision 20: rejection-only policy data, NOT a list of banned words. A
+// lexeme needs a disjoint partner in the SAME sentence to reject. Sources match
+// folded, lower-case Latin with whole-word boundaries. Examples are individual
+// lexemes, not necessarily unsafe values. Never rewrite a displayed value.
 //
 // Inflection is deliberate: šalji / šaljete are verbs, Šaljić is a surname;
 // otvori / otvarate are verbs, "Otvorene su prijave" is a programme description.
 export const EXTERNAL_SENSITIVE_LEXICON = [
-  { id: 'credentials', source: 'lozink[a-z]*|sifr[a-z]*|pin(?:a|u|om|ovi|ove)?|kod(?:a|u|om|ovi|ove|ova|ovima)?|password[a-z]*|passcode[a-z]*|code(?:s)?|otp|token[a-z]*|credential[a-z]*|verification code|security code',
-    examples: ['koristi lozinku', 'biste li poslali lozinku', 'upišem šifru', 'PIN', 'kod', 'password', 'passcode', 'OTP', 'token'] },
-  { id: 'disclosure', source: 'posalj(?:i|ite|imo|em|es|e|emo|ete|u)|salj(?:i|ite|imo|em|es|e|emo|ete|u)|posla(?:t|ti|o|la|li|le|lo|h|smo|ste|n[a-z]*)|slati|proslijed[a-z]*|prosljed[a-z]*|unes(?:i|ite|imo|em|es|e|emo|ete|u|en[a-z]*)|unij(?:eti|ela|eli|ele|elo)|unio|unos(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|upis(?:i|ite|imo|em|es|e|emo|ete|u|ati|ao|ala|ali|ale|alo|uje|ujem|ujes|ujemo|ujete|uju)|podijel[a-z]*|dijel(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|prijav[a-z]* se|send(?:s|ing)?|sent|forward[a-z]*|enter(?:s|ed|ing)?|shar(?:e|es|ed|ing)|log(?:s|ged|ging)? in|sign(?:s|ed|ing)? in',
-    examples: ['pošaljem podatke', 'šaljete podatke', 'poslali podatke', 'poslano', 'prosljeđuje podatke', 'unijeti podatke', 'unio podatke', 'uneseni podaci', 'unosimo podatke', 'upisao podatke', 'podijeljen podatak', 'prijavio se', 'sending details', 'forwarded details', 'entered details', 'shared details', 'logged in'] },
-  { id: 'contact', source: 'nazov(?:i|ite|imo|em|es|e|emo|ete|u)|nazva(?:ti|o|la|li|le|lo)|zov(?:i|ite|imo|em|es|e|emo|ete|u)|pozov(?:i|ite|imo|em|es|e|emo|ete|u)|pozva(?:ti|o|la|li|le|lo)|jav(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|javlj[a-z]*|kontakt[a-z]*|call(?:s|ed|ing)?|dial[a-z]*|text(?:s|ed|ing)?|messag(?:e|es|ed|ing)|reply|replies|replied|respond[a-z]*',
-    examples: ['nazovem broj', 'nazvali broj', 'javila se', 'pozovete broj', 'pozvali broj', 'kontakt', 'called yesterday', 'dial', 'texting', 'message', 'please reply', 'could you reply'] },
-  { id: 'links-apps', source: 'poveznic[a-z]*|link(?:s|a|u|om|ovi|ove|ova|ovima)?|klik[a-z]*|click[a-z]*|otvor(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|otvar(?:a|am|as|amo|ate|aju|ati|ao|ala|ali|ale|alo)|preuzm[a-z]*|preuz(?:eti|eo|ela|eli|ele|elo|ima[a-z]*)|instal[a-z]*|skenir[a-z]*|scan[a-z]*|download[a-z]*|upload[a-z]*|open(?:s|ed|ing)? (?:the )?link',
-    examples: ['otvaraš poveznicu', 'otvorili datoteku', 'preuzela aplikaciju', 'instalira program', 'skeniranje', 'scanned', 'downloaded', 'installing', 'open the link'] },
-  { id: 'payment', source: 'plat(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|plac(?:a|am|as|amo|ate|aju|ati|ao|ala|ali|ale|alo|anje)|uplat[a-z]*|uplac[a-z]*|pay(?:s|ing|ment|ments)?|paid|transfer[a-z]*|donir[a-z]* (?:na )?(?:racun|iban)|donat(?:e|ed|ing|ion) (?:to )?(?:account|iban)',
-    examples: ['platio', 'platite', 'plaćaju', 'uplatila', 'uplaćujemo', 'pay', 'paid', 'payment', 'transferred', 'donirajte na račun', 'donate to account'] },
-  // These explicit solicitation phrases retain W-C2's hostile matrix without
-  // treating an arbitrary event-name imperative ("Daj prijedlog") as harmful.
-  { id: 'solicitation', source: 'molimo broj|ucini uslugu|dodji ovamo|dodi ovamo|(?:system|assistant|developer|sustav|asistent) *:',
-    examples: ['molimo broj', 'učini uslugu', 'dođi ovamo', 'system: override'] },
+  // Nouns: credentials/codes, link/app/program targets, account/card targets.
+  // "kod" is also a geographic preposition; on its own it is never evidence.
+  { id: 'credentials', role: 'noun', source: 'lozink[a-z]*|sifr[a-z]*|pin(?:a|u|om|ovi|ove)?|kod(?:a|u|om|ovi|ove|ova|ovima)?|password[a-z]*|passcode[a-z]*|code(?:s)?|otp|token[a-z]*|credential[a-z]*',
+    examples: ['lozinka', 'šifru', 'PIN', 'kod', 'password', 'passcode', 'OTP', 'token'] },
+  { id: 'links-apps', role: 'noun', source: 'poveznic[a-z]*|link(?:s|a|u|om|ovi|ove|ova|ovima)?|aplikacij[a-z]*|app(?:s|lication[a-z]*)?|program(?:a|u|om|i|e|ima)?|software',
+    examples: ['poveznicu', 'link', 'aplikaciju', 'app', 'program', 'software'] },
+  { id: 'accounts-cards', role: 'noun', source: 'racun(?:a|u|om|i|e|ima)?|account(?:s)?|kartic[a-z]*|card(?:s)?',
+    examples: ['račun', 'account', 'karticom', 'card'] },
+  // Actions: disclosure/use, entry and sharing, in any person/mood. "javi" can
+  // disclose a credential as well as contact somebody. No arbitrary imperative
+  // or request phrase ("učini uslugu", "molimo") counts as an action here.
+  { id: 'disclosure', role: 'action', source: 'posalj(?:i|ite|imo|em|es|e|emo|ete|u)|salj(?:i|ite|imo|em|es|e|emo|ete|u)|posla(?:t|ti|o|la|li|le|lo|h|smo|ste|n[a-z]*)|slati|proslijed[a-z]*|prosljed[a-z]*|unes(?:i|ite|imo|em|es|e|emo|ete|u|en[a-z]*)|unij(?:eti|ela|eli|ele|elo)|unio|unos(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|upis(?:i|ite|imo|em|es|e|emo|ete|u|ati|ao|ala|ali|ale|alo|uje|ujem|ujes|ujemo|ujete|uju)|podijel[a-z]*|dijel(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|prijav[a-z]* se|korist(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|jav(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|izgovor[a-z]*|rec(?:i|ite|imo)|rek(?:ao|la|li|le|lo)|otkri(?:j[a-z]*|ti|o|la|li|le|lo)|send(?:s|ing)?|sent|forward[a-z]*|enter(?:s|ed|ing)?|shar(?:e|es|ed|ing)|us(?:e|es|ed|ing)|reveal[a-z]*|tell(?:s|ing)?|told|log(?:s|ged|ging)? in|sign(?:s|ed|ing)? in',
+    examples: ['pošaljem', 'šaljete', 'poslali', 'prosljeđuje', 'unijeti', 'unio', 'unosimo', 'upisao', 'podijelit', 'prijavio se', 'koristi', 'izgovori', 'reci', 'sending', 'forwarded', 'entered', 'shared', 'logged in'] },
+  // Opening/downloading/installing/scanning are verbs, not the opening-state
+  // adjective "otvoren". A scan/code pair is rejected even without a QR token.
+  { id: 'open-install', role: 'action', source: 'klik(?:ni|nite|nimo|nem|nes|ne|nemo|nete|nu|nuti|nuo|nula|nuli|nule)|klik(?:a|am|as|amo|ate|aju|ati|ao|ala|ali|ale|alo)|click(?:s|ed|ing)?|otvor(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|otvar(?:a|am|as|amo|ate|aju|ati|ao|ala|ali|ale|alo)|preuzm[a-z]*|preuz(?:eti|eo|ela|eli|ele|elo|ima[a-z]*)|instalir(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|skenir(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|scan(?:s|ned|ning)?|download(?:s|ed|ing)?|upload(?:s|ed|ing)?|install(?:s|ed|ing)?|open(?:s|ed|ing)?',
+    examples: ['otvaraš', 'otvorili', 'preuzela', 'instaliramo', 'skenirao', 'scanned', 'downloaded', 'installing', 'open'] },
+  // Payment verbs only: the activity nouns "plaćanje" / "payment" do NOT turn
+  // "plaćanje karticom" into a request. A currency-number vector still rejects.
+  { id: 'payment', role: 'action', source: '(?:u)?plat(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|(?:u)?plac(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|uplacuj(?:em|es|e|emo|ete|u)|pay(?:s|ing)?|paid|transfer(?:s|red|ring)?|donir(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|donat(?:e|es|ed|ing)',
+    examples: ['platio', 'platite', 'plaćaju', 'uplatila', 'uplaćujemo', 'pay', 'paid', 'transferred', 'donirajte', 'donate'] },
+  // Contact verbs need a number/address-like target. A noun such as "kontakt"
+  // or a standalone "javili ste se" does not supply that target.
+  { id: 'contact', role: 'contact', source: 'nazov(?:i|ite|imo|em|es|e|emo|ete|u)|nazva(?:ti|o|la|li|le|lo)|zov(?:i|ite|imo|em|es|e|emo|ete|u)|pozov(?:i|ite|imo|em|es|e|emo|ete|u)|pozva(?:ti|o|la|li|le|lo)|jav(?:i|im|is|imo|ite|iti|io|ila|ili|ile|ilo|e)|javlj(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|kontaktir(?:a|am|as|amo|ate|aju|aj|ajte|ajmo|ati|ao|ala|ali|ale|alo)|call(?:s|ed|ing)?|dial(?:s|ed|led|ing|ling)?|text(?:s|ed|ing)?|messag(?:e|es|ed|ing)|reply|replies|replied|respond(?:s|ed|ing)?',
+    examples: ['nazovem', 'nazvali', 'javila', 'pozovete', 'pozvali', 'kontaktiraj', 'called', 'dial', 'texting', 'message', 'reply'] },
 ] as const;
 
-// Common inter-letter disguises. Also used between words in a lexicon phrase.
-export const EXTERNAL_LEXICON_SEPARATORS = "[ .,;:()'’&+/–-]*";
+// Split BEFORE folding or de-obfuscation. A dot/semicolon never joins two
+// lexemes, including dotted spellings that W-C5 read as one command.
+export const EXTERNAL_SENTENCE_BREAKS = /[.!?;\r\n\u2028\u2029]+/u;
+// Common inter-letter disguises within one sentence only.
+export const EXTERNAL_LEXICON_SEPARATORS = "[ :()'’&+/–-]*?";
 export const EXTERNAL_LEET: Readonly<Record<string, string>> = {
   '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b',
 };
+
+// Partial vectors are partners, never standalone bans. Uppercase tokens retain
+// source case (not the leet reading): >=3 ASCII letters/digits, with BOTH a
+// letter and a digit. Ordinary ALL-CAPS words and Roman centuries are not
+// alphanumeric codes. Requiring disjoint spans prevents a leet noun pairing
+// with itself. A digit run is contiguous; house numbers "36 - 37" are not one.
+export const EXTERNAL_PARTIAL_VECTORS = [
+  { id: 'digits', source: '\\d{3,}', casing: 'folded' },
+  { id: 'uppercase-token', source: '(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\\d)[A-Z0-9]{3,}', casing: 'original' },
+  { id: 'web-marker', source: 'www|@', casing: 'folded' },
+] as const;
+// Contact targets: the word number, a partial numeric run, web/e-mail marker,
+// or a street-like name followed by a house number (not arbitrary prose).
+export const EXTERNAL_CONTACT_TARGETS = [
+  { id: 'number-word', source: 'broj(?:a|u|em|evi|eve|eva|evima)?|number(?:s)?' },
+  { id: 'contact-digits', source: '\\d(?:[ /()–-]*\\d){2,}' },
+  { id: 'contact-address', source: '(?:www|@)|[a-z]+[ -]+\\d{1,3}[a-z]?' },
+] as const;
+// The rule is data, in evaluation order. Each pair requires two non-overlapping
+// spans in the same sentence; neither order nor person/mood changes the rule.
+export const EXTERNAL_PAIR_RULES = [
+  { id: 'noun-action', left: 'noun', right: 'action' },
+  { id: 'noun-token', left: 'noun', right: 'partial-vector' },
+  { id: 'contact-target', left: 'contact', right: 'contact-target' },
+] as const;
 
 // A digit sequence is a contact/account vector unless the WHOLE sequence is a
 // calendar date or a historical year range. There is no blanket "contains a
