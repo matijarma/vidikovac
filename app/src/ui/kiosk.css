@@ -121,7 +121,7 @@
   --k-gap: calc(20px * var(--k-zoom));
   /* The front page's aside: the QR's 240 px plus the column of words beside it (ui/kiosk-city.css). */
   --k-side-w: calc(600px * var(--k-sign-zoom));
-  --k-paired-side-w: calc(720px * var(--k-zoom));
+  --k-paired-side-w: calc(448px * var(--k-sign-zoom));
   --k-qr: calc(264px * var(--k-sign-zoom));
   --k-code-size: calc(36px * var(--k-sign-zoom));
   --k-sentence-size: calc(40px * var(--k-zoom));
@@ -152,7 +152,7 @@
   --k-pad: calc(18px * var(--k-zoom));
   --k-gap: calc(14px * var(--k-zoom));
   --k-side-w: calc(520px * var(--k-sign-zoom));
-  --k-paired-side-w: calc(540px * var(--k-zoom));
+  --k-paired-side-w: calc(448px * var(--k-sign-zoom));
   --k-qr: calc(264px * var(--k-sign-zoom));
   --k-code-size: calc(32px * var(--k-sign-zoom));
   --k-sentence-size: calc(40px * var(--k-zoom));
@@ -265,8 +265,15 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* --- Compositions: the paired main and side -----------------------------
    The front page's own layout is ui/kiosk-city.css (the window: the map
    beside the aside, in four drawings); what follows is the paired
-   compositions' main-and-side frame, which has not changed this wave. */
-.k-paired { display: grid; grid-template-columns: minmax(0, 1fr) calc(320px * var(--k-sign-zoom)); gap: var(--k-gap); }
+   compositions' main-and-side frame. The side is the QR rail: the card stood
+   up (the 264 px plate over its words) and the one local fact above it. Its
+   width (--k-paired-side-w, on the sign scale like the card) is the card's
+   words at their 28 px walk-up size: the lead keeps one line in both
+   catalogues ("Skeniraj za 10 minuta grada." 370 px, "Scan for 10 minutes of
+   the city." 413 px) and the typed address one line under "ili upiši kod
+   na". At 320 px the lead took two lines and the address three, and the
+   card grew into the fact above it until that fact was cut. */
+.k-paired { display: grid; grid-template-columns: minmax(0, 1fr) var(--k-paired-side-w); gap: var(--k-gap); }
 .k-present-local { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--k-gap); min-width: 0; min-height: 0; }
 .k-present-board { padding: var(--k-gap) var(--k-pad); border: 1px solid var(--k-line); border-radius: var(--k-radius-s); background: var(--k-surface); }
 .k-present-board .k-line-near { display: none; }
@@ -279,6 +286,8 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-present-board .k-select-sub { font-size: var(--k-sup-size); }
 .k-present-board .k-source { margin-top: var(--k-gap); }
 .k-present-invite { margin-top: auto; align-self: end; }
+/* Across the rail, as wide as the fact above it, so the two share both edges. */
+.kiosk:not([data-portrait='1']) .k-side > .k-present-invite { align-self: stretch; }
 .k-present-invite .k-invite { justify-content: center; }
 .k-paired .k-side-blocks .k-block { padding: var(--k-gap); }
 .k-paired .k-side-blocks .k-source { font-size: var(--k-credit-size); }
