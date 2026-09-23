@@ -5,8 +5,8 @@ import { createSheet, HALF_MIN_REM, type Detent } from '../../app/src/transport/
 // The phone stage is 740 px tall at 390×844 (844 minus the 48 px header and the
 // 56 px tab bar): peek 5rem = 80, half 370, open 740 - 2.5rem = 700.
 const STAGE = 740;
-// Half is 38 % of the stage but never less than one board (HALF_MIN_REM, 18rem = 288 px: the head, three departure
-// rows and the note under them, §16.4), so a selected stop's departures lie in view without a second gesture.
+// Half is 38 % of the stage but never less than one board (HALF_MIN_REM, 21rem = 336 px: the head, the search toolbar,
+// three departure rows and the note's first line, §16.4), so a selected stop's departures lie in view without a second gesture.
 const REM = 16;
 const HALF = Math.max(STAGE * 0.38, HALF_MIN_REM * REM);
 
@@ -73,7 +73,7 @@ describe('detent heights from the stage', () => {
     // A tall stage (a tablet) keeps the proportion.
     expect(mount({ stageHeight: 1000 }).controller.heightFor('half')).toBe(380);
     // A stage that just holds a board: half is the board, under the open sheet.
-    const tight = mount({ stageHeight: 300 }).controller;
+    const tight = mount({ stageHeight: 400 }).controller;
     expect(tight.heightFor('half')).toBe(HALF_MIN_REM * REM);
     expect(tight.heightFor('half')).toBeLessThanOrEqual(tight.heightFor('open'));
     // A stage too short for a board: half is the open sheet, never taller than the stage allows.

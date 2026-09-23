@@ -43,9 +43,11 @@ const ORDER: readonly Detent[] = ['peek', 'half', 'open'];
 const PEEK_REM = 7.5;
 /** The strip of map left above an open sheet. */
 const OPEN_GAP_REM = 2.5;
-/** The least a half sheet shows: a stop's board whole, the head (3.75rem), three departure rows (3.5rem each) and the
- *  note under them, so a selected stop's three departures lie in the viewport without a second gesture (§16.4). */
-export const HALF_MIN_REM = 18;
+/** The least a half sheet shows: a stop's board whole. The head (3.75rem) and the search toolbar (about 4.75rem) keep
+ *  their height and only the body gives way, so the body of a 21rem sheet is about 12.5rem: three departure rows
+ *  (3.5rem each) and the first line of the note. A selected stop's three departures then lie in the viewport without
+ *  a second gesture (§16.4). */
+export const HALF_MIN_REM = 21;
 /** Faster than this at release, the sheet goes one detent further in the finger's direction. */
 const FLICK_PX_PER_MS = 0.3;
 /** Movement below this is a tap, never a drag. */

@@ -231,8 +231,13 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
   await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
   await page.getByTestId('transport-search').fill('Jela');
-  await expect(page.getByTestId('transport-results').getByRole('option').first()).toBeVisible();
-  await page.getByTestId('transport-search').press('ArrowDown');
+  const options = page.getByTestId('transport-results').getByRole('option');
+  await expect(options.first()).toBeVisible();
+  // One field over routes, stops, places and streets (WP4): the street stories of the Jelačić streets rank before the
+  // stops here, so the keyboard walks down to the first stop and takes it, the way a person would.
+  const stopIndex = await options.evaluateAll((els) => els.findIndex((el) => el.getAttribute('data-action') === 'select-stop'));
+  expect(stopIndex, 'a stop is among the results').toBeGreaterThanOrEqual(0);
+  for (let i = 0; i <= stopIndex; i++) await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');
   await expect(page.getByTestId('stop-title')).toContainText('Jela');
   await expect(page.getByTestId('stop-routes').locator('button').first()).toBeVisible();
