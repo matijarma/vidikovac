@@ -8,7 +8,9 @@ import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { CITY_AREA } from '../../worker/pairing/areas';
 import type { CodeSlot, CreateBeaconResponse, LayerId, ScreenMetadata } from '../../worker/protocol';
 import { fetchData as fetchDataImpl, fetchTeaser as fetchTeaserImpl, type TeaserResponse } from './api';
-import { createBeaconClient, parseProvisionHash, readBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
+import { createBeaconClient, parseProvisionHash, readBeacon, reloadBeacon, storeBeacon, type BeaconClient, type BeaconClientDeps, type BeaconCredentials } from './beacon';
+import { BUILT_AT } from './motion/network-meta';
+import type { MotionMetadata } from '../../shared/motion/wire';
 import { codeUrl, formatCode, speakableCode } from './code';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
@@ -265,8 +267,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // One network artefact and one map for the screen's whole life (R-54); the
   // lightweight path has neither: no factory, so map-slots hands out nothing.
   let networkPromise: Promise<Network | null> | null = null;
+  let motionMetadata = new Map<string, MotionMetadata>();
+  let reloadingBundle = false;
   const loadNetworkOnce = (): Promise<Network | null> => (networkPromise ??= (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))());
-  const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce), setTimer, clearTimer));
+  const mapAdapter = createKioskMapAdapter(lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce, id => motionMetadata.get(id)), setTimer, clearTimer));
   const maps = createMapSlots(mapAdapter.factory);
 
   // --- Alerts: the beacon socket and the teaser fetch fail independently -------
@@ -496,8 +500,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    *  spans FIELD_SPAN_M of ground whatever the screen (R-KP2; a phone's band
    *  spans half of it). A paired screen keeps the Promet contract (R-KP8). */
   function paintMap(): void {
+    if (reloadingBundle) return;
     const host = currentMapHost();
     const snapshots = phase === 'paired' ? mergedSnapshots() : byModule(teaser);
+    motionMetadata = new Map((snapshots['zet-rt']?.items ?? []).filter(i => i.motion).map(i => [
+      i.id, { network: i.motion!.network, generatedAt: i.motion!.generatedAt, builtAt: i.motion!.builtAt },
+    ]));
+    if (credentials && [...motionMetadata.values()].some(m => m.builtAt && m.builtAt !== BUILT_AT)) {
+      mapAdapter.handle()?.pause();
+      reloadingBundle = reloadBeacon(credentials, storage);
+      if (reloadingBundle) return;
+    }
     // A phase without a map keeps the container parked, and the feed state
     // still reaches it: a map that returns mid-outage must already be holding,
     // never coasting on a state it heard before the outage.

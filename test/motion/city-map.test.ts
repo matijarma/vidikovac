@@ -221,6 +221,29 @@ describe('graph identity on an already-open map', () => {
     h.handle.destroy();
   });
 
+  it('reconciles a cached graph at startup and uses the latest points received during the load', async () => {
+    const oldPoint = oldNet.toPathPoint(0, 8427.7);
+    const newPoint = newNet.toPathPoint(0, 8427.7);
+    expect(Math.hypot(oldPoint.x - newPoint.x, oldPoint.y - newPoint.y)).toBeGreaterThan(500);
+    let finish!: (net: typeof NET) => void;
+    const h = await harness({
+      loadNetwork: async () => oldNet, points: [point(newNet.graphHash, 8427.7)],
+      extra: { reloadNetwork: () => new Promise<typeof NET>(resolve => { finish = resolve; }) },
+    });
+    h.frame();
+    expect(h.handle.vehicles?.()).toEqual([]);
+    h.handle.update([{ ...point(newNet.graphHash, 8500), id: 'vehicle:latest' }], []);
+    finish(newNet);
+    await flush();
+    h.frame();
+    const v = h.handle.vehicles!()[0];
+    expect(v.id).toBe('vehicle:latest');
+    const expected = newNet.toPathPoint(0, 8500);
+    const actual = toPlane(v.lon, v.lat);
+    expect(Math.hypot(actual.x - expected.x, actual.y - expected.y)).toBeLessThan(1);
+    h.handle.destroy();
+  });
+
   it('retries failed or wrong-graph loads and ignores completions after destroy', async () => {
     const reloadNetwork = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(oldNet).mockResolvedValueOnce(newNet);
     const h = await harness({ loadNetwork: async () => oldNet, points: [point(oldNet.graphHash, 10924.2)], extra: { reloadNetwork } });

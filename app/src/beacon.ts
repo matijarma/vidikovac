@@ -52,6 +52,16 @@ export function storeBeacon(storage: StorageLike | null | undefined, credentials
   }
 }
 
+/** Reuse the provisioning/restore path for a stale client bundle. Never
+ *  reload a private-mode screen whose only credential copy is in memory. */
+export function reloadBeacon(credentials: BeaconCredentials, storage: StorageLike | null | undefined, reload = () => globalThis.location.reload()): boolean {
+  storeBeacon(storage, credentials);
+  const saved = readBeacon(storage);
+  if (saved?.beaconId !== credentials.beaconId || saved.secret !== credentials.secret) return false;
+  reload();
+  return true;
+}
+
 export interface BeaconClientDeps {
   credentials: BeaconCredentials;
   createSocket?: (url: string) => WebSocketLike;

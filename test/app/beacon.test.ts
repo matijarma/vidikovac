@@ -6,6 +6,7 @@ import {
   createBeaconClient,
   parseProvisionHash,
   readBeacon,
+  reloadBeacon,
   storeBeacon,
   type WebSocketLike,
 } from '../../app/src/beacon';
@@ -48,6 +49,19 @@ function boot() {
   return { client, sockets, timers, onCodes, onUnlocked, onRevoked, onStatus, onError };
 }
 const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+
+it('reloads only after the existing credential restore path can recover the screen', () => {
+  const credentials = { beaconId: 'BEACON01', secret: 'test-only-secret' };
+  let value: string | null = null;
+  const storage = { getItem: () => value, setItem: (_key: string, next: string) => { value = next; }, removeItem: () => {} };
+  const reload = vi.fn(() => { expect(readBeacon(storage)).toEqual(credentials); });
+  expect(reloadBeacon(credentials, storage, reload)).toBe(true);
+  expect(reload).toHaveBeenCalledTimes(1);
+  const unavailable = { ...storage, getItem: () => null, setItem: () => { throw new Error('private mode'); } };
+  expect(reloadBeacon(credentials, unavailable, reload)).toBe(false);
+  expect(reloadBeacon(credentials, null, reload)).toBe(false);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
 
 describe('provisioning', () => {
   it('reads beaconId.secret from the fragment and rejects anything else', () => {
