@@ -18,6 +18,7 @@ import {
   ACCEPTANCE_TARGETS,
   acceptanceRows,
   gradeDirectory,
+  isTargetRow,
   judge,
   loadRealEngine,
   type AcceptanceRows,
@@ -63,7 +64,7 @@ describe('WP0 wrong turn on the committed 162-frame sample', () => {
       `wrong turn, ${expected.fixture}: ${report.frames} frames, ${report.tramVehicleHours} tram vehicle-hours, feed ${engine.index.feedVersion}, graphHash ${engine.net.graphHash}, unknown trips ${cell(report.unknownTripShare === null ? null : report.unknownTripShare * 100)} %`,
       `  ${'row'.padEnd(15)}${expected.baseline.commit.padStart(10)}${expected.measured.commit.padStart(10)}${'now'.padStart(10)}  ${targets.stage}`,
       ...ACCEPTANCE_ROW_KEYS.map((key) => {
-        const target = key === 'S_count' ? '' : `<= ${targets[key]}`;
+        const target = isTargetRow(key) ? `<= ${targets[key]}` : '';
         return `  ${key.padEnd(15)}${cell(expected.baseline.rows[key]).padStart(10)}${cell(expected.measured.rows[key]).padStart(10)}${cell(rows[key]).padStart(10)}  ${target}`;
       }),
     ];
@@ -83,7 +84,7 @@ describe('WP0 wrong turn on the committed 162-frame sample', () => {
     expect(report.unknownTripShare!, RERECORD).toBeLessThan(0.02);
   });
 
-  it('meets the stage-1 targets: A and A-prime at most 5, B to F and I 0, G 0 with p95 at most 50 m, H at most 60 m, S at most 50 m and never past the next stop', () => {
+  it('meets the stage-1 targets: A and A-prime at most 5, B to F and I 0, G 0 with p95 at most 50 m, H at most 60 m, U at most 3 % without parked trams, S at most 50 m and never past the next stop', () => {
     expect(judge(rows, ACCEPTANCE_TARGETS[expected.targets]).failures).toEqual([]);
   });
 });
