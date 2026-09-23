@@ -1024,7 +1024,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         reducedMotion: c.reducedMotion,
         theme: c.screen?.theme,
         locale: i18n.getLocale(),
-        stop: c.screen?.stop ?? null,
+        // The map's own stop, the ring it draws largest: the screen's, else the place's departures stop (Sada's band
+        // does the same), so a screenless session's place still carries its ring on Karta.
+        stop: c.screen?.stop ?? placeNow().departuresStop ?? null,
         selection,
         follow: following,
         modes: modesArg(),

@@ -1033,6 +1033,30 @@ describe('the frame: Karta opens on the place', () => {
     expect(last().setView).not.toHaveBeenCalled();
   });
 
+  it('rings the place\'s departures stop as the map\'s own stop when the session has no screen stop, so the place carries a ring to tap; a screen stop keeps its own', () => {
+    const trg = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11'] };
+    const place: PlaceContext = { ...JELACIC, kind: 'city', departuresStop: trg };
+    // No screen (a screenless session, the default place Trg bana J. Jelačića): the departures stop, as Sada's band.
+    const bare = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps: bare.maps, place });
+    render(context);
+    expect(bare.last().options.stop).toEqual(trg);
+    // The catalogue settles the place on another stop: the live map moves its ring there.
+    const kvaternikov = { id: '123_1', name: 'Kvaternikov trg', lon: 15.9936, lat: 45.8149, routes: ['4'] };
+    context.place = { ...KVATERNIKOV, departuresStop: kvaternikov };
+    render(context);
+    expect(bare.last().setStop).toHaveBeenLastCalledWith(kvaternikov);
+    // A screen stop is the screen's anchor and stays the ring.
+    const screen = { id: '1849_23', name: 'Glavni kolodvor', lon: 15.978, lat: 45.805, routes: ['2'] };
+    const paired = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps: paired.maps, place, stop: screen }).context);
+    expect(paired.last().options.stop).toEqual(screen);
+    // Neither: no ring.
+    const none = fakeMaps({ vehicles: VEHICLES, net: NET });
+    render(ctx({ maps: none.maps, place: KVATERNIKOV }).context);
+    expect(none.last().options.stop).toBeNull();
+  });
+
   it('draws every mode on the phone, trams alone on the schema, and trams first only on the kiosk board', () => {
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const phone = ctx({ maps }).context;
