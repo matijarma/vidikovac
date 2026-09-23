@@ -248,25 +248,31 @@ describe('an arrival time is never bare (WP5)', () => {
     return list.split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
   };
 
-  it.each(['hr', 'en'] as const)('%s: every row carries the live marker or the schedule mark, and the note names the source', (locale) => {
+  it.each(['hr', 'en'] as const)('%s: a live row carries the dot and data-live, a timetable row a plain clock and neither; the note names the source once', (locale) => {
+    const catalogue = locale === 'hr' ? HR : EN;
     const html = sheet(locale);
     const rows = arrivalRows(html);
     expect(rows).toHaveLength(ROWS.length);
-    for (const row of rows) {
-      const live = row.includes('class="t-live"');
-      const scheduled = row.includes(leaf(locale === 'hr' ? HR : EN, 'arrivals.scheduled')!);
-      expect(live || scheduled, row).toBe(true);
-      // Never both: a row is one thing or the other.
-      expect(live && scheduled, row).toBe(false);
-    }
-    expect(html).toContain(leaf(locale === 'hr' ? HR : EN, 'arrivals.note'));
+    rows.forEach((row, i) => {
+      const live = ROWS[i]!.live;
+      expect(row.includes('class="t-live"'), row).toBe(live);
+      expect(row.includes('data-live="true"'), row).toBe(live);
+      if (!live) expect(row, row).toContain('<time');
+      // No word per row [O-27]: the form carries it and the note says it once.
+      expect(row, row).not.toContain(leaf(catalogue, 'arrivals.scheduled')!);
+      expect(row, row).not.toMatch(/Procjena|Estimate/);
+    });
+    expect(html.split(leaf(catalogue, 'arrivals.note')!).length - 1).toBe(1);
+    // The live word names the dot for a screen reader; it is never text on the sheet.
+    expect(html.replace(/<[^>]*>/g, ' ')).not.toContain(leaf(catalogue, 'arrivals.live')!);
   });
 
   it('a frozen sheet keeps the marker but never says the live word', () => {
     const html = sheet('hr', Date.parse('2026-09-19T10:02:00Z'));
-    for (const row of arrivalRows(html)) {
-      expect(row.includes('class="t-live"') || row.includes(leaf(HR, 'arrivals.scheduled')!), row).toBe(true);
-    }
+    arrivalRows(html).forEach((row, i) => {
+      expect(row.includes('class="t-live"'), row).toBe(ROWS[i]!.live);
+      expect(row, row).not.toContain('data-live="true"');
+    });
     expect(html).not.toContain(leaf(HR, 'arrivals.live'));
     expect(html).toContain(leaf(HR, 'session.snapshotAt')!.replace('{time}', '12:02'));
   });

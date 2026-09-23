@@ -1282,5 +1282,8 @@
     "airNote": "Preliminarni indeks postaje, ne ocjena za cijeli grad.",
     "airMethod": "Opažanja postaja su preliminarna, ne ocjena za cijeli grad. Indeksi čestica koriste pomične prosjeke.",
     "consultationsNote": "Nacionalni izvori, ne savjetovanja Grada Zagreba."
+  },
+  "sada": {
+    "departuresAt": "Sljedeći polasci, {stop}"
   }
 }

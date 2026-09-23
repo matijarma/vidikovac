@@ -510,22 +510,23 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
   return routes.find((r) => r.id === routeId)?.type ?? -1;
 }
 
-/** A row's time at the row's end. Inside the countdown horizon every row says
- *  how long the wait is, because that is the question, and `sada` at zero: a
- *  tram due in under half a minute is the one pulling in, not "za 0 min".
- *  Beyond the horizon a countdown would be a guess dressed as a fact, so the
- *  row shows a clock.
+/** A row's time at the row's end. A tracked row inside the countdown horizon
+ *  says how long the wait is, because that is the question, and `sada` at
+ *  zero: a tram due in under half a minute is the one pulling in, not "za 0
+ *  min". Beyond the horizon a countdown would be a guess dressed as a fact, so
+ *  the row shows a clock; a row off the timetable alone always shows its clock.
  *
- *  What the number is worth is said beside it, not in it, and in BOTH forms: a
- *  tracked row's clock is the schedule plus ZET's delay, not the timetable
- *  moment, so it keeps the live marker exactly as its countdown would; and a
- *  row off the timetable alone carries "po redu vožnje" on its second line
- *  whether it counts down or shows a time. An unlabelled clock would read as
- *  the timetable and make the note under the list say the wrong thing about it.
+ *  What the number is worth is said by its form, never by a word per row
+ *  [O-27]: a tracked row carries the live dot (named "uživo" for a screen
+ *  reader) and the blue tone, and a tracked row's clock is the schedule plus
+ *  ZET's delay, so it keeps the dot exactly as its countdown would; a
+ *  timetable row is a plain grey `<time>`. The note under the stop's list
+ *  says once where the estimate comes from.
  *
  *  Frozen, the marker stays -- the figure did come off a tracked vehicle -- but
  *  it says the shell's own snapshot sentence (chrome.ts snapshotLine, "podaci
- *  od 13:57") and loses the live tone with it. */
+ *  od 13:57") and loses the live tone with it: "uživo" is never said once the
+ *  view has stopped. */
 export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
   const time = !row.live || row.minutes === null
     ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
@@ -535,21 +536,22 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
   return `<span class="t-eta"${frozenAt === undefined ? ' data-live="true"' : ''}><span class="t-live" role="img" aria-label="${attr(label)}"></span>${time}</span>`;
 }
 
-/** The arrivals list: the board's own row (blocks.ts signRow) with the line
- *  badge as its lead, the headsign as its destination and the time at its end.
- *  A row off the timetable alone says so on its second line; a row an estimate
- *  stands behind says nothing there, because the note under the list already
- *  says where the estimate comes from. */
+/**
+ * One departure, the same row on Sada and in the stop's sheet: the line badge,
+ * the destination, the time (arrivalTime). `data-live` says whether a tracked
+ * vehicle carries the trip right now; it reads "false" once the view is frozen,
+ * like the time's own marker. `kindOf` gives the badge its mode's shape.
+ */
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number): string {
+  const live = row.live && frozenAt === undefined;
+  return `<li class="sada-departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
+}
+
+/** The arrivals list: one departureRow per trip, then the note that says once
+ *  where the estimate comes from. No row carries a word for its kind. */
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
-  const rows = d.arrivals
-    .map((row) => signRow({
-      lead: badge(row.routeName, routeTypeAt(d.routes, row.routeId), 'm'),
-      title: row.headsign || row.routeName,
-      sub: row.live && d.frozenAt !== undefined ? snapshotLine(i18n,d.frozenAt) : row.live ? (i18n.getLocale().startsWith('en')?'Estimate':'Procjena') : i18n.t('arrivals.scheduled'),
-      trail: arrivalTime(i18n, row, d.frozenAt),
-      key: `${row.tripId}|${row.atMs}`,
-    }))
-    .join('');
+  const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
+  const rows = d.arrivals.map((row) => departureRow(i18n, row, kindOf, d.frozenAt)).join('');
   // 'none' is "no board in hand", which live means "still on its way" and
   // frozen means "the session ended first, and none is coming": a frozen sheet
   // that said "učitavanje" would say it for good.
@@ -557,7 +559,7 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
     ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
     : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
   const body = d.arrivals.length > 0
-    ? `<ul class="t-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${rows}</ul><p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
     : `<p class="t-empty">${esc(empty)}</p>`;
   return `<section class="t-block" data-testid="stop-arrivals">${sectionHead(i18n.t('arrivals.title'), 4)}${body}</section>`;
 }

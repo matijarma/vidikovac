@@ -1243,5 +1243,8 @@
     "airNote": "Preliminary station index, not a citywide assessment.",
     "airMethod": "Station observations are preliminary, not a citywide assessment. Particulate indices use rolling averages.",
     "consultationsNote": "National sources, not City of Zagreb consultations."
+  },
+  "sada": {
+    "departuresAt": "Next departures, {stop}"
   }
 }

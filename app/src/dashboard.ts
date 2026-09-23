@@ -21,6 +21,7 @@ import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { defaultLocation, type LocationContext } from './city/location';
+import { resolvePlace } from './city/place';
 import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
@@ -55,6 +56,8 @@ import { ct } from './city/strings';
 const TICK_MS = 1_000;
 /** How long a cast button says "sent" after its frame went out. */
 const CAST_SENT_MS = 1_500;
+/** How many times a session asks for the stop catalogue before it leaves it down (one per draw after a failure). */
+const STOPS_ATTEMPTS = 3;
 
 /** The layer last opened, mirrored so the next scan reopens it (R-60). */
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
@@ -182,9 +185,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const boards = deps.createBoards?.() ?? createBoardCache({now});
   let locationContext: LocationContext | undefined;
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
-  /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
+  /** The stop catalogue, fetched once per session: the place and its departures stop are resolved from it (B.10, WP4). */
   let stops: readonly ScreenStop[] | null = null;
   let stopsRequested = false;
+  /** How many times the catalogue has been asked for, and whether the last answer failed (the departures block then says so). */
+  let stopsAttempts = 0;
+  let stopsDown = false;
   /** The screen stop's last scheduled departures (T3.1, FEED_LASTRUN): fetched once per stop, null until it answers. */
   let lastRun: LastRunSnapshot | null = null;
   let lastRunStop: string | null = null;
@@ -409,6 +415,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onDispose:fn=>workspaceDisposals.add(fn),
       i18n, snapshots: feed.snapshots, now: frozenAt??now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
       location: locationContext ?? defaultLocation(screen()),
+      // Sada's title and the stop its departures come from (city/place.ts), resolved on every draw.
+      place: resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }),
       setLocation: value => { locationContext=value; },
       boards, onLocalData: repaintLocalData,
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
@@ -418,14 +426,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
-      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, stopsDown, lastRun,
     };
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function repaintLocalData():void { if(!disposed&&!frozen)render(); }
   function render(): void {
-    if (screen().stop || saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
+    ensureStops();
     ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
@@ -488,23 +496,31 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen || error === 'no-ticket') maps.pause();
   }
 
-  /** The 245 kB stop catalogue, once per mount and only when a saved stop needs its walking row. */
+  /** The 245 kB stop catalogue, once per mount. A failed load marks the catalogue down, so the departures
+   *  block says so in one row instead of waiting, and the next draw asks again, at most STOPS_ATTEMPTS times. */
   function ensureStops(): void {
     if (stopsRequested) return;
     stopsRequested = true;
+    stopsAttempts += 1;
     loadStops().then((list) => {
       if (disposed) return;
       stops = list;
+      stopsDown = false;
       render();
     }, () => {
-      // The walking row stays absent; nothing else depends on the catalogue.
+      if (disposed) return;
+      stopsDown = true;
+      render();
+      // Re-armed after this draw, not before it, so a retry waits for the next poll rather than looping here.
+      if (stopsAttempts < STOPS_ATTEMPTS && !frozen) stopsRequested = false;
     });
   }
 
   /** The stop's last-departure file, once per stop and only behind FEED_LASTRUN; a failed answer leaves the tile absent. */
   function ensureLastRun(): void {
     if (!FLAGS.FEED_LASTRUN) return;
-    const stop = session.snapshot().screen?.stop;
+    // The stop the departures block boards: the screen's, a saved one, or the one nearest the place.
+    const stop = resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }).departuresStop;
     if (!stop || stop.id === lastRunStop) return;
     lastRunStop = stop.id;
     // A new stop: the previous stop's schedule leaves the band at once rather than posing as this one until the fetch answers.
