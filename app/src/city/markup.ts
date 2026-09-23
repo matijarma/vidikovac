@@ -62,8 +62,11 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
   const source=state.manifest?.sources.find(s=>s.id===p.sourceId)??state.live?.sources.find(s=>s.id===p.sourceId);
   const program=events.filter(x=>x.venueIds.includes(p.id));
   const facts=Object.entries(p.facts??{}).filter(([key])=>isSafeFact(key)).map(([key,value])=>`<div><dt>${e(ct(i18n,`fact-${key as SafeFact}`))}</dt><dd>${externalHtml('summary',value)}</dd></div>`).join('');
-  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div><p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`:'';
-  const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(airIndexLabel(i18n,p.facts?.index))}</p><p class="city-meta">${e(ct(i18n,'airNote'))} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`:'';
+  // The wall (publicDisplay) prints no observation time, note or caveat (companion brief §12, §13 #12,
+  // #13): a count that is not fresh says the stale word, the air index stands alone. The phone keeps them.
+  const bikeMeta=publicDisplay?(p.facts?.fresh?'':`<p class="city-meta">${e(ct(i18n,'stale'))}</p>`):`<p class="city-meta">${e(ct(i18n,p.facts?.fresh?'observed':'freshUnknown'))}${p.updatedAt?` · ${zagrebTime(p.updatedAt)}`:''}</p>`;
+  const bike=p.sourceId==='bajs'?`<div class="city-bike-values"><div><strong class="city-bike-count">${e(bikeAvailability(p,'rent'))}</strong><span>${e(ct(i18n,'available'))}</span></div><div><strong class="city-bike-count">${e(bikeAvailability(p,'return'))}</strong><span>${e(ct(i18n,'returns'))}</span></div></div>${bikeMeta}`:'';
+  const air=p.sourceId==='air'?`<p>${e(ct(i18n,'air'))}: ${e(airIndexLabel(i18n,p.facts?.index))}</p>${publicDisplay?'':`<p class="city-meta">${e(ct(i18n,'airNote'))} ${p.updatedAt?`${ct(i18n,'observed')} ${zagrebTime(p.updatedAt)}`:''}</p><div data-city-air="${a(p.sourceRecord)}"></div>`}`:'';
   return `<article class="city-detail" data-testid="city-detail" data-place-id="${a(p.id)}">
     ${publicDisplay?'':`<button type="button" class="btn-quiet" data-action="clear-selection">${e(ct(i18n,'back'))}</button>`}
     <p class="city-kicker">${e(placeCategory(i18n,p))}</p><h3 tabindex="-1" id="city-detail-title">${nameHtml}</h3>
@@ -72,7 +75,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     ${bike}${air}${facts?`<dl class="city-facts">${facts}</dl>`:''}
     ${p.hours?`<p class="city-meta">${externalHtml('summary',p.hours)}</p>`:''}
     ${p.description?`<div class="city-description" lang="hr">${sourceLanguageNote(i18n)}<p>${externalHtml('summary',p.description)}</p></div>`:''}
-    ${p.category==='heritage'?`<p class="city-meta">${ct(i18n,'siteNote')}</p>`:''}
+    ${p.category==='heritage'&&!publicDisplay?`<p class="city-meta">${ct(i18n,'siteNote')}</p>`:''}
     ${p.category==='culture'?`<section><h4>${ct(i18n,'program')}</h4>${program.length?eventLinks(i18n,program,!publicDisplay):`<p class="city-meta">${ct(i18n,'noProgram')}</p>`}</section>`:''}
     ${p.category==='rail'?`<div data-city-departures="hz" data-stop="${a(p.sourceRecord)}"></div>`:''}
     ${publicDisplay?'':`<div class="city-actions">${p.website?`<a class="btn-ghost" href="${a(p.website)}" target="_blank" rel="noopener noreferrer">${e(p.sourceId==='bajs'?ct(i18n,'rent'):ct(i18n,'original'))} ↗</a>`:''}
@@ -81,7 +84,7 @@ export function placeDetail(i18n:I18n,p:Place,state:CityState,events:readonly Lo
     <button type="button" class="btn-quiet" data-action="city-save" data-id="${a(p.id)}">${ct(i18n,saved?'saved':'save')}</button>
     <button type="button" class="btn-quiet" data-action="city-copy" data-id="${a(p.id)}">${ct(i18n,'copy')}</button></div>`}
     <p class="city-meta">${externalHtml('summary',source?.name??p.sourceId)}${source?.status==='stale'?` · ${ct(i18n,'stale')}`:''}${source?.licence?` · ${externalHtml('summary',source.licence)}`:''}</p>
-    ${p.sourceId!=='bajs'&&p.sourceId!=='air'?`<p class="city-meta">${ct(i18n,'reference')}${p.updatedAt&&referenceDate(p.updatedAt)?` · ${e(referenceDate(p.updatedAt))}`:''}</p>`:''}
+    ${!publicDisplay&&p.sourceId!=='bajs'&&p.sourceId!=='air'?`<p class="city-meta">${ct(i18n,'reference')}${p.updatedAt&&referenceDate(p.updatedAt)?` · ${e(referenceDate(p.updatedAt))}`:''}</p>`:''}
   </article>`;
 }
 export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string {
@@ -90,7 +93,9 @@ export function streetDetail(i18n:I18n,s:StreetStory,publicDisplay=false):string
   // The register's own fields under their kinds on both surfaces (WP4 review): never unchecked text on the phone either.
   const nameHtml = externalHtml('name', s.name);
   const settlementHtml = externalHtml('name', s.settlement);
-  return `<article class="city-detail" data-testid="street-story"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${nameHtml}</h3><p class="city-meta">${settlementHtml}</p><p lang="hr">${externalHtml('register-text', s.description)}</p><p class="city-meta">Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola</p></article>`;
+  // The wall has no control and no register date (companion brief §12, [O-43]); the phone keeps both.
+  const credit = publicDisplay ? 'Grad Zagreb · Registar naziva ulica · Otvorena dozvola' : `Grad Zagreb · Registar naziva ulica · ${e(s.updatedAt??'')} · Otvorena dozvola`;
+  return `<article class="city-detail" data-testid="street-story">${publicDisplay?'':`<button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button>`}<p class="city-kicker">${ct(i18n,'whyStreet')}</p><h3 tabindex="-1">${nameHtml}</h3><p class="city-meta">${settlementHtml}</p><p lang="hr">${externalHtml('register-text', s.description)}</p><p class="city-meta">${credit}</p></article>`;
 }
 /** A minute of grace: a train due at 10:00 is still the one you are running
  *  for at 10:00:45. Anything older has left. */
