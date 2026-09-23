@@ -232,7 +232,9 @@ uključen na svakom zumiranju, pa MapLibreov sudarni prolaz nijednu oznaku ne od
 ispod oznaka vozila. Na telefonu i računalu uključen je i `icon-ignore-placement`, pa nijedna oznaka ne gura
 naziv stajališta s karte. Na javnom zaslonu (odluka 17) oznake vozila zadržavaju svoje mjesto: naziv
 stajališta ili mjesta najprije se premjesti na drugu stranu točke, a ako ni ondje nema mjesta, skloni se dok
-vozilo ne prođe. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
+vozilo ne prođe. Naziv koji se vrati ostaje na karti najmanje dvije sekunde, osim ako ga vozilo prekrije, a
+naziv koji se skloni ne vraća se prije isteka jedne sekunde (odluka 19). Naziv mjesta samog zaslona uvijek je
+na karti, ispod oznaka vozila, i drugi mu nazivi ustupaju mjesto. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
 kruga na trenutak prekrije taj broj. Ono što gužvu drži čitljivom je **skupina**:
 prije nego što se izvor gurne u kartu, oznake čije se kutije na zaslonu preklapaju (`app/src/motion/pills.ts`,
 unija-nalaz uz `CLUSTER_PADDING_PX` = 2 px oko svake kutije) spajaju se u jedno obilježje s natpisom

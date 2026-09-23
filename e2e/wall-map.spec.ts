@@ -17,9 +17,10 @@
 //   6. the map host carries the Kadar (`data-frame`) and the map the
 //      public-display profile.
 //
-//   7. no pill is crossed by a name (decision 17: on the wall the vehicle
-//      marks take their place first and a name moves or yields), so
-//      `data-overlaps` names is 0; a BAJS number under a pill is a pill
+//   7. the screen's own name is always drawn (decision 19: under the
+//      pills, a pill may cross it); no other name crosses a pill (decision
+//      17: on the wall the vehicle marks take their place first and a name
+//      moves or yields), so `data-overlaps` names is 0; a BAJS number under a pill is a pill
 //      passing (its count stays drawn under it), so `discs` is never more
 //      than `data-disc-pills`, the pills over those numbers; the names the
 //      collision pass held back (`data-hidden-names`) are recorded.
@@ -129,7 +130,8 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
   await expect(legend.locator('span')).toHaveCount(3);
   expect(await legend.innerText()).not.toContain('?');
 
-  // 7. The overlaps (decision 17): no name over a pill; a covered BAJS number is a pill passing.
+  // 7. The own name always drawn (decision 19); no other name over a pill; a covered BAJS number is a pill passing.
+  await expect(map).toHaveAttribute('data-own-name', 'Trg bana J. Jelačića');
   const overlaps = counts(await map.getAttribute('data-overlaps'));
   expect(Object.keys(overlaps).sort()).toEqual(['discs', 'names']);
   expect(overlaps.names, 'names crossed by a pill').toBe(0);
@@ -142,6 +144,7 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
     radiusM: Math.round(radiusM), expectedZoom: Number(expected.toFixed(2)), zoom: await map.getAttribute('data-zoom'),
     host: await hostBox(host), pills: pills.split('|').length, markers: await map.getAttribute('data-markers'),
     unlabelled: await map.getAttribute('data-unlabelled'), bajs: await map.getAttribute('data-bajs'), overlaps, discPills, hiddenNames,
+    ownNameCrossed: await map.getAttribute('data-own-name-crossed'),
   };
   info.annotations.push({ type: 'census', description: JSON.stringify(census) });
   console.log(`wall-map census: ${JSON.stringify(census)}`);

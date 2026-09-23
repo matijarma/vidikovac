@@ -1167,6 +1167,112 @@ export function nameCandidates(
   return out;
 }
 
+// --- Decision 19: the stop names' hysteresis on the public screen ------------
+//
+// Decision 17 hands a name to MapLibre's collision pass, which hides it the
+// moment a pill's box meets it and shows it again one placement cycle after
+// the box has gone. A 3-minute live capture at Trg counted 9 blinks under a
+// second: clusters merging and splitting beside a name, one name coming back
+// and knocking out its neighbour. So on the public screen a stop name that
+// comes back is HELD (overlays.ts stop-labels-held, cooperative: drawn over
+// a pill's box, never over another name) for NAME_HOLD_MS unless a pill's
+// drawn capsule covers it, and a name the pass hid less than
+// NAME_MIN_HIDDEN_MS ago comes back unseen (the `o` feature state at 0) until
+// that second is up, then fades in over NAME_FADE_MS. Pure: city-map.ts asks
+// MapLibre what it placed and what a pill covers, and applies the answer.
+
+/** How long a stop name that came back is held against a pill that only touches it. */
+export const NAME_HOLD_MS = 2000;
+/** The shortest a hidden stop name stays out of sight. */
+export const NAME_MIN_HIDDEN_MS = 1000;
+/** The fade in after that second, on top of MapLibre's own. */
+export const NAME_FADE_MS = 300;
+/** How often the public screen looks at its names. */
+export const NAME_TICK_MS = 100;
+/** A name moving between stop-labels and stop-labels-held is re-laid out
+ *  with its source; for this long after a move, missing from both is the
+ *  reload, not a hide. */
+export const NAME_SWAP_GRACE_MS = 600;
+
+interface NameState { placed: boolean; hiddenAt: number | null; quietUntil: number | null; fadeFrom: number | null; swapAt: number }
+
+export interface NameTick {
+  /** The held stop ids, sorted, when they changed on this tick; null otherwise. */
+  held: readonly string[] | null;
+  /** The `o` feature state to write per stop id: a number, or null to remove it. */
+  opacity: ReadonlyMap<string, number | null>;
+}
+
+export interface NameHysteresis {
+  /** One look at the stop names at `t`: `placed` the ids MapLibre placed in
+   *  either layer, `covered` the held ones a pill's drawn capsule covers. */
+  tick(t: number, placed: ReadonlySet<string>, covered: ReadonlySet<string>): NameTick;
+  held(): readonly string[];
+}
+
+export function createNameHysteresis(): NameHysteresis {
+  const states = new Map<string, NameState>();
+  const held = new Map<string, number>();
+  const heldList = (): string[] => [...held.keys()].sort();
+  return {
+    held: heldList,
+    tick(t, placed, covered) {
+      const opacity = new Map<string, number | null>();
+      let changed = false;
+      // A hold ends when its time is up, or at once when a pill covers the name.
+      for (const [id, until] of held) {
+        if (t < until && !covered.has(id)) continue;
+        held.delete(id);
+        const st = states.get(id);
+        if (st) st.swapAt = t;
+        changed = true;
+      }
+      for (const [id, st] of states) {
+        if (!st.placed || placed.has(id) || t - st.swapAt < NAME_SWAP_GRACE_MS) continue;
+        st.placed = false;
+        st.hiddenAt = t;
+        if (held.delete(id)) changed = true;
+        if (st.quietUntil !== null || st.fadeFrom !== null) opacity.set(id, null);
+        st.quietUntil = null;
+        st.fadeFrom = null;
+      }
+      for (const id of placed) {
+        const st = states.get(id);
+        if (!st) {
+          // First seen: the picture as it opens, nothing to hold.
+          states.set(id, { placed: true, hiddenAt: null, quietUntil: null, fadeFrom: null, swapAt: -Infinity });
+          continue;
+        }
+        if (st.placed) continue;
+        st.placed = true;
+        if (st.hiddenAt === null) continue;
+        // Back: unseen until its second out of sight is up, then held.
+        const quietUntil = st.hiddenAt + NAME_MIN_HIDDEN_MS;
+        if (t < quietUntil) {
+          st.quietUntil = quietUntil;
+          opacity.set(id, 0);
+        }
+        held.set(id, Math.max(t, quietUntil) + NAME_HOLD_MS);
+        st.swapAt = t;
+        changed = true;
+      }
+      for (const [id, st] of states) {
+        if (st.quietUntil !== null && t >= st.quietUntil) {
+          st.quietUntil = null;
+          st.fadeFrom = t;
+        }
+        if (st.fadeFrom === null) continue;
+        const k = (t - st.fadeFrom) / NAME_FADE_MS;
+        if (k >= 1) {
+          st.fadeFrom = null;
+          opacity.set(id, null);
+        } else opacity.set(id, Math.max(0, k));
+      }
+      return { held: changed ? heldList() : null, opacity };
+    },
+  };
+}
+
 /** A rendered pill's box as MapLibre draws it: the capsule icon-text-fit
  *  lays on its number (motion/pills.ts capsuleHalfPx, from the glyph
  *  advances), at the map's symbol scale, centred on the mark. Inside the
@@ -1206,6 +1312,9 @@ interface MapApi {
   getLayer?(id: string): unknown;
   setSprite?(url: string): void;
   queryRenderedFeatures(geometry: unknown, options?: { layers?: string[] }): RenderedFeature[];
+  /** Decision 19's name hysteresis only; a stand-in without them runs none. */
+  setFeatureState?(feature: { source: string; id: string }, state: Record<string, unknown>): void;
+  removeFeatureState?(feature: { source: string; id: string }, key?: string): void;
   easeTo(options: Record<string, unknown>): void;
   jumpTo(options: Record<string, unknown>): void;
   fitBounds(bounds: [[number, number], [number, number]], options?: Record<string, unknown>): void;
@@ -1434,7 +1543,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const focus = routeId === null
       ? null
       : { routeId, colour: lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames };
   }
 
   /** The vehicle the clustering must leave standing: the selected one, or the
@@ -1525,6 +1634,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //                   rendered pill.
   //   data-disc-pills the pills over those numbers, per mark: `discs` never
   //                   exceeds it, because a covered number is a pill passing
+  //   data-own-name   the screen's own name as MapLibre drew it ('' when
+  //                   not): decision 19 draws it always, and data-overlaps
+  //                   counts every OTHER name a pill crosses
+  //   data-own-name-crossed the seconds a pill has crossed the own name, on
+  //                   the public screen (nameHysteresisTick, ten looks a
+  //                   second)
   //   data-hidden-names the names the style would draw on the screen (the
   //                   name layers' own filter, text and zoom over what their
   //                   sources were handed, nameCandidates) that the collision
@@ -1618,13 +1733,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       if (at) pillBoxes.push(pillBox(at, String(feature.properties.short ?? ''), scale));
     }
     const view = { width: container.clientWidth, height: container.clientHeight };
-    const nameIds: string[] = [l.LAYERS.stopLabels, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
+    const nameIds: string[] = [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld, l.LAYERS.screenStopLabel, l.LAYERS.placeQuakeLabels, l.LAYERS.placeWorks, l.LAYERS.placeEvents,
       l.LAYERS.placeSeat, l.LAYERS.placeAssembly, l.LAYERS.placePharmacy, CENSUS_LAYERS.labels].filter(has);
+    /** Decision 19: the screen's own name is drawn whatever crosses it; data-overlaps counts every other name. */
+    const crossable = nameIds.filter((id) => id !== l.LAYERS.screenStopLabel);
     // The names placed, and the names the style would place with nothing in
     // the way: what the second has and the first lacks, the collision pass
     // held back (data-hidden-names).
     const placed = new Set<string>();
-    for (const feature of nameIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: nameIds })) placed.add(nameKey(feature.layer.id, feature.properties));
+    let ownName = '';
+    for (const feature of nameIds.length === 0 ? [] : m.queryRenderedFeatures(undefined, { layers: nameIds })) {
+      placed.add(nameKey(feature.layer.id, feature.properties));
+      if (feature.layer.id === l.LAYERS.screenStopLabel) ownName = String(feature.properties.name ?? '');
+    }
     const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : () => null;
     const specs = [...overlays, ...cityOverlays].filter((layer) => nameIds.includes(layer.id));
     const hidden = [...nameCandidates(specs, (id) => sourcePoints(l, id), m.getZoom(), project, view)].filter(([key]) => !placed.has(key));
@@ -1639,9 +1760,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       anchorOf, view, pillBoxes, scale, names,
     );
     const crossed = new Set<string>();
-    if (nameIds.length > 0) {
+    if (crossable.length > 0) {
       for (const box of pillBoxes) {
-        for (const feature of m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: nameIds })) {
+        for (const feature of m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: crossable })) {
           crossed.add(nameKey(feature.layer.id, feature.properties));
         }
       }
@@ -1652,6 +1773,79 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     container.dataset.overlaps = `discs:${census.covered};names:${crossed.size}`;
     container.dataset.discPills = String(census.discPills);
     container.dataset.hiddenNames = String(hidden.length);
+    container.dataset.ownName = ownName;
+  }
+
+  /** Decision 19 on the public screen (createNameHysteresis). */
+  const nameHold = createNameHysteresis();
+  let heldNames: readonly string[] = [];
+  let nameTickAt = -Infinity;
+  /** How long a pill has crossed the screen's own name, in ms, and when that was last looked at (data-own-name-crossed). */
+  let ownCrossedMs = 0;
+  let ownLookedAt: number | null = null;
+
+  /** One look at the public screen's stop names (decision 19), at most every
+   *  NAME_TICK_MS on a still camera: what MapLibre placed, which held name a
+   *  pill's drawn capsule covers (the capsule less the names' 3 px padding,
+   *  so a touch is not a cover), and whether a pill crosses the screen's own
+   *  name. A handful of small queries, each around a held name or the own
+   *  name only. */
+  function nameHysteresisTick(): void {
+    const m = map;
+    const l = lib;
+    if (!m || !l || !styled || prozor === null || !m.setFeatureState || m.isMoving?.()) return;
+    if (m.getLayer && !m.getLayer(l.LAYERS.stopLabelsHeld)) return;
+    const t = now();
+    if (t - nameTickAt < NAME_TICK_MS) return;
+    nameTickAt = t;
+    const has = (id: string): boolean => !m.getLayer || Boolean(m.getLayer(id));
+    const at = (f: RenderedFeature): { x: number; y: number } | null => {
+      const c = f.geometry?.type === 'Point' ? f.geometry.coordinates as number[] : null;
+      return c && m.project ? m.project([c[0]!, c[1]!]) : null;
+    };
+    const placed = new Set<string>();
+    const heldAt = new Map<string, { x: number; y: number }>();
+    for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.stopLabels, l.LAYERS.stopLabelsHeld] })) {
+      const id = String(f.properties.id ?? '');
+      if (!id) continue;
+      placed.add(id);
+      const p = f.layer.id === l.LAYERS.stopLabelsHeld ? at(f) : null;
+      if (p) heldAt.set(id, p);
+    }
+    const ownAt = stop && m.project && Number.isFinite(stop.lon) && Number.isFinite(stop.lat) ? m.project([stop.lon, stop.lat]) : null;
+    const pills: ScreenBox[] = [];
+    if (heldAt.size > 0 || ownAt) {
+      for (const f of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.vehicles, l.LAYERS.vehicleSelected].filter(has) })) {
+        const p = at(f);
+        if (p) pills.push(pillBox(p, String(f.properties.short ?? ''), scale));
+      }
+    }
+    const near = (box: ScreenBox, p: { x: number; y: number }): boolean => box.right > p.x - 400 && box.left < p.x + 400 && box.bottom > p.y - 160 && box.top < p.y + 160;
+    const covered = new Set<string>();
+    const pad = 3;
+    for (const [id, p] of heldAt) {
+      for (const box of pills) {
+        if (!near(box, p) || box.right - box.left <= 2 * pad) continue;
+        const hits = m.queryRenderedFeatures([[box.left + pad, box.top + pad], [box.right - pad, box.bottom - pad]], { layers: [l.LAYERS.stopLabelsHeld] });
+        if (hits.some((f) => String(f.properties.id ?? '') === id)) { covered.add(id); break; }
+      }
+    }
+    if (ownAt && has(l.LAYERS.screenStopLabel)) {
+      const crossed = pills.some((box) => near(box, ownAt) && m.queryRenderedFeatures([[box.left, box.top], [box.right, box.bottom]], { layers: [l.LAYERS.screenStopLabel] }).length > 0);
+      if (crossed && ownLookedAt !== null) ownCrossedMs += Math.min(t - ownLookedAt, 1000);
+      ownLookedAt = t;
+      container.dataset.ownNameCrossed = (ownCrossedMs / 1000).toFixed(1);
+    }
+    const result = nameHold.tick(t, placed, covered);
+    for (const [id, o] of result.opacity) {
+      const feature = { source: l.SOURCES.stops, id };
+      if (o === null) m.removeFeatureState?.(feature, 'o');
+      else m.setFeatureState(feature, { o });
+    }
+    if (result.held) {
+      heldNames = result.held;
+      applyOverlays();
+    }
   }
 
   /** The point features a name layer's source was last handed, for
@@ -1890,7 +2084,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       pitchWithRotate: false,
       touchPitch: false,
       cooperativeGestures: options.cooperative === true,
-      fadeDuration: reduced ? 0 : 300,
+      // The collision fade: 300 ms, and on the public screen always (decision
+      // 19): a name yielding to a passing pill fades rather than blinks, and a
+      // fade is no movement across the screen.
+      fadeDuration: reduced && !options.prozor ? 0 : 300,
       locale: controlStrings(),
     }) as unknown as MapApi;
     map = created;
@@ -1932,6 +2129,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // for the live wall that never gets there, a still frame that has settled.
     created.on('idle', writeRenderProbe);
     created.on('render', writeSettledProbe);
+    created.on('render', nameHysteresisTick);
     if (interactive) bindPointer(created);
     created.once('load', () => onLoad(l, created));
     watchTheme();
@@ -1946,7 +2144,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addSource(l.SOURCES.network, geojson(net ? networkToGeoJson(net) : empty));
     const stops = net ? stopsToGeoJson(net) : empty;
     stopsData = stops;
-    created.addSource(l.SOURCES.stops, geojson(stops));
+    // Keyed by the platform id, so the name hysteresis addresses one stop's
+    // name by feature state (decision 19).
+    created.addSource(l.SOURCES.stops, { ...geojson(stops), promoteId: 'id' });
     created.addSource(l.SOURCES.closures, geojson(linesToGeoJson(lines)));
     created.addSource(l.SOURCES.places, geojson(pointsToGeoJson(points.filter(p=>p.place!=='city'))));
     if (l.CITY_POINTS) {

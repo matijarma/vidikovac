@@ -70,6 +70,7 @@ export const LAYERS = Object.freeze({
   vehicleTwoWayAft: 'vehicle-twoway-aft',
   vehicles: 'vehicles',
   stopLabels: 'stop-labels',
+  stopLabelsHeld: 'stop-labels-held',
   placeWorks: 'place-works',
   placeEvents: 'place-events',
   placeAssembly: 'place-assembly',
@@ -160,6 +161,15 @@ export const RING_STROKE_PX = 2.5;
 // the collision pass's own fade -- for as long as the tram takes to pass. The
 // BAJS counts keep allow-overlap under the vehicles (city-layers.ts): a pill
 // passing over a disc covers its number for that time and nothing moves.
+
+// Decision 19: the screen's own place name is exempt. It is always drawn,
+// in its one place under its ring and under the pills, a pill may cross it,
+// and every other name yields to it. The other names keep decision 17, with
+// a hysteresis city-map.ts runs (nameHysteresis): a name that comes back is
+// held for two seconds in `stop-labels-held` (text-overlap cooperative: drawn
+// over a pill's box, never over another name) unless a pill covers it, and a
+// name the collision pass has just hidden stays out of sight for a second
+// before it may show again, then fades in (the `o` feature state).
 
 /** The anchors a name tries, in order: under its point (where it has always
  *  stood), over it, to its right, to its left. */
@@ -511,6 +521,11 @@ export interface OverlayOptions {
    *  a quieter line, it is one the reader is not looking for -- while every
    *  pill still draws, so no tram ever disappears from the map. */
   lineFocus?: boolean;
+  /** Decision 19's hysteresis (city-map.ts nameHysteresis): the stop ids
+   *  whose names just came back and are held for a moment, drawn by
+   *  `stop-labels-held` whatever a pill does short of covering them, and
+   *  left out of `stop-labels`. Only the public screen's option set reads it. */
+  heldNames?: readonly string[];
 }
 
 /** A pill layer. Overlap is on for both the capsule and the number, at every
@@ -726,6 +741,40 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const placeTitles = prozor === null || prozor.placeTitles !== false;
   /** Decision 17: on the public screen the vehicle marks keep their boxes and the names move or yield. */
   const blocks = prozor !== null;
+  const held = prozor ? [...(options.heldNames ?? [])] : [];
+  // Stop names: on the public screen the hubs alone (rank from the option
+  // set), from the field's zoom and never below it -- as the layer's own
+  // minzoom, which MapLibre reads against the camera's fractional zoom,
+  // where a `zoom` step inside the filter would be read at the tile's
+  // integer zoom and arrive one whole level late. Elsewhere the ranked
+  // steps as always.
+  const stopLabelMinzoom = prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM;
+  const stopLabelBase: Expr = prozor
+    ? ['all', stops, ['get', 'label'],
+      // Ruling 30: the far window names interchanges, not the busiest
+      // corners -- route count put Elka and Savski gaj-rotor on the
+      // picture and left Trg bana Jelačića, Glavni kolodvor and Savski
+      // most off it. Nearer in (a quarter, the wall's frame) the rank
+      // names a stop, and an interchange is always worth its name.
+      prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['any', ['get', 'tramInterchange'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank]],
+      ['!=', ['get', 'id'], screenStopId ?? '']]
+    : stopLabelFilter(stops);
+  const stopLabelLayout: Record<string, unknown> = {
+    'text-field': ['get', 'name'],
+    'text-font': [MAP_FONTS.medium],
+    'text-size': prozor ? 11 * s : zoomInterpolate(STOP_LABEL_ZOOM, 11 * s, 16, 13 * s),
+    ...nameAnchor(blocks, 0.7),
+    'text-max-width': 9,
+    'text-padding': 3,
+    // Lower sorts first. Route count alone decided this, which is the
+    // scale Ruling 30 threw out: below the line an interchange is placed
+    // before anything else and the rank is only the tiebreak among them.
+    'symbol-sort-key': prozor?.stopLabelTramInterchanges
+      ? ['-', ['case', ['get', 'tramInterchange'], 0, 100], ['get', 'rank']]
+      : ['-', 100, ['get', 'rank']],
+  };
+  /** On the public screen a stop name's own opacity is the hysteresis's `o` feature state (0 while it waits, then its fade in), 1 without one. */
+  const stopLabelPaint: Record<string, unknown> = { ...labelInk, 'text-halo-width': 1.4, ...(prozor ? { 'text-opacity': ['number', ['feature-state', 'o'], 1] } : {}) };
   /** One city point: its mark, its own name under it, and the honesty rule in
    *  its filter. The name is `text-optional`: the mark is the claim, the name
    *  is the convenience, and a crowded viewport drops the second, never the
@@ -864,42 +913,27 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: kindFilter(modes) },
     ),
-    // The names, under every vehicle mark (decision 17). Stop names: on the public screen the hubs alone (rank from the option
-    // set), from the field's zoom and never below it -- as the layer's own
-    // minzoom, which MapLibre reads against the camera's fractional zoom,
-    // where a `zoom` step inside the filter would be read at the tile's
-    // integer zoom and arrive one whole level late. Elsewhere the ranked
-    // steps as always.
+    // The names, under every vehicle mark (decision 17), the stop names first (stopLabelBase).
     {
       id: LAYERS.stopLabels,
       type: 'symbol',
       source: SOURCES.stops,
-      minzoom: prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM,
-      filter: prozor
-        ? ['all', stops, ['get', 'label'],
-          // Ruling 30: the far window names interchanges, not the busiest
-          // corners -- route count put Elka and Savski gaj-rotor on the
-          // picture and left Trg bana Jelačića, Glavni kolodvor and Savski
-          // most off it. Nearer in (a quarter, the wall's frame) the rank
-          // names a stop, and an interchange is always worth its name.
-          prozor.stopLabelTramInterchanges ? ['get', 'tramInterchange'] : ['any', ['get', 'tramInterchange'], ['>=', ['get', 'rank'], prozor.stopLabelMinRank]],
-          ['!=', ['get', 'id'], screenStopId ?? '']]
-        : stopLabelFilter(stops),
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': [MAP_FONTS.medium],
-        'text-size': prozor ? 11 * s : zoomInterpolate(STOP_LABEL_ZOOM, 11 * s, 16, 13 * s),
-        ...nameAnchor(blocks, 0.7),
-        'text-max-width': 9,
-        'text-padding': 3,
-        // Lower sorts first. Route count alone decided this, which is the
-        // scale Ruling 30 threw out: below the line an interchange is placed
-        // before anything else and the rank is only the tiebreak among them.
-        'symbol-sort-key': prozor?.stopLabelTramInterchanges
-          ? ['-', ['case', ['get', 'tramInterchange'], 0, 100], ['get', 'rank']]
-          : ['-', 100, ['get', 'rank']],
-      },
-      paint: { ...labelInk, 'text-halo-width': 1.4 },
+      minzoom: stopLabelMinzoom,
+      filter: prozor ? ['all', stopLabelBase, ['!', ['in', ['get', 'id'], ['literal', held]]]] : stopLabelBase,
+      layout: stopLabelLayout,
+      paint: stopLabelPaint,
+    },
+    // Decision 19: the stop names that just came back, held for a moment
+    // (city-map.ts nameHysteresis). Placed before the other stop names, and
+    // cooperative: over a pill's box, never over another name.
+    {
+      id: LAYERS.stopLabelsHeld,
+      type: 'symbol',
+      source: SOURCES.stops,
+      minzoom: stopLabelMinzoom,
+      filter: prozor ? ['all', stopLabelBase, ['in', ['get', 'id'], ['literal', held]]] : NEVER,
+      layout: { ...stopLabelLayout, ...(prozor ? { 'text-overlap': 'cooperative' } : {}) },
+      paint: stopLabelPaint,
     },
     placeMark({ id: LAYERS.placeWorks, kind: 'event', image: PLACE_SQUARE_IMAGE, color: p.work, sort: 30 }),
     placeMark({ id: LAYERS.placeEvents, kind: 'event', image: PLACE_SQUARE_IMAGE, color: p.event, sort: 20, rotate: PLACE_EVENT_ROTATE_DEG }),
@@ -930,17 +964,17 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { 'text-color': p.place, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
     },
     // The screen's stop's name: on the public screen the biggest name on the
-    // map (15 x s = 30 px at the screen's scale), placed before every other
-    // name and never under one, and like them yielding only to the vehicle
-    // marks (decision 17), after trying its other anchors; elsewhere always
-    // placed.
+    // map (15 x s = 30 px at the screen's scale). Decision 19: always drawn,
+    // in its one place, under the pills (a pill may cross it); on the public
+    // screen placed before every other name, which yields to it; elsewhere
+    // it ignores placement, as it always has.
     {
       id: LAYERS.screenStopLabel,
       type: 'symbol',
       source: SOURCES.screenStop,
       layout: {
-        'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, ...nameAnchor(blocks, 0.9), 'text-max-width': 9,
-        'text-allow-overlap': !blocks, 'text-ignore-placement': !blocks,
+        'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, ...nameAnchor(false, 0.9), 'text-max-width': 9,
+        'text-allow-overlap': true, 'text-ignore-placement': !blocks,
       },
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },

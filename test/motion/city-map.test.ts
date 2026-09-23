@@ -9,7 +9,7 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, evaluateExpression, markerCensus, nameCandidates, nameKey, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, createNameHysteresis, evaluateExpression, markerCensus, nameCandidates, nameKey, NAME_FADE_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS, NAME_SWAP_GRACE_MS, NAME_TICK_MS, pillBox, PROBE_SETTLE_MS, UNKNOWN_EXPRESSION, type RenderedFeature, type SourcePoint } from '../../app/src/map/city-map';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
@@ -1418,5 +1418,110 @@ describe('the names a layer would draw, from its own filter and text', () => {
     const hidden = { ...layers[0]!, layout: { ...layers[0]!.layout, visibility: 'none' } };
     const strange = { ...layers[0]!, filter: ['within', {}] };
     expect(nameCandidates([hidden, strange], (id) => sources[id] ?? [], 13.2, project, view).size).toBe(0);
+  });
+});
+
+// Decision 19: the public screen's stop names come back held and stay out of
+// sight for at least a second, so no name blinks for less than one.
+describe('the stop names\u2019 hysteresis (decision 19)', () => {
+  const S = (...ids: string[]) => new Set(ids);
+  const NONE = S();
+
+  it('holds nothing on the picture as it opens', () => {
+    const h = createNameHysteresis();
+    expect(h.tick(0, S('a', 'b'), NONE)).toEqual({ held: null, opacity: new Map() });
+    expect(h.held()).toEqual([]);
+  });
+
+  it('holds a name that comes back after a second or more out of sight for NAME_HOLD_MS, and lets it go then', () => {
+    const h = createNameHysteresis();
+    h.tick(0, S('a'), NONE);
+    expect(h.tick(1000, NONE, NONE).held).toBeNull(); // hidden: nothing held yet
+    const back = h.tick(2500, S('a'), NONE);
+    expect(back.held).toEqual(['a']);
+    expect(back.opacity.size).toBe(0); // out of sight long enough: MapLibre's own fade brings it in
+    expect(h.tick(2500 + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
+    expect(h.tick(2500 + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
+  });
+
+  it('lets a pill that covers a held name end the hold at once', () => {
+    const h = createNameHysteresis();
+    h.tick(0, S('a'), NONE);
+    h.tick(100, NONE, NONE);
+    h.tick(1500, S('a'), NONE);
+    expect(h.held()).toEqual(['a']);
+    expect(h.tick(1700, S('a'), S('a')).held).toEqual([]);
+  });
+
+  it('keeps a name hidden for a moment out of sight until its second is up, then fades it in over NAME_FADE_MS, and holds it from then', () => {
+    const h = createNameHysteresis();
+    h.tick(0, S('a'), NONE);
+    h.tick(1000, NONE, NONE); // hidden at 1000
+    const back = h.tick(1300, S('a'), NONE);
+    expect(back.opacity.get('a')).toBe(0); // placed again after 300 ms: not shown
+    expect(back.held).toEqual(['a']);
+    expect(h.tick(1900, S('a'), NONE).opacity.get('a')).toBeUndefined(); // still waiting, nothing new to write
+    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS, S('a'), NONE).opacity.get('a')).toBe(0);
+    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_FADE_MS / 2, S('a'), NONE).opacity.get('a')).toBeCloseTo(0.5, 5);
+    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_FADE_MS, S('a'), NONE).opacity.get('a')).toBeNull(); // the state removed: full ink
+    // Held from the moment it shows, not from the moment MapLibre placed it unseen.
+    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_HOLD_MS - 1, S('a'), NONE).held).toBeNull();
+    expect(h.tick(1000 + NAME_MIN_HIDDEN_MS + NAME_HOLD_MS, S('a'), NONE).held).toEqual([]);
+  });
+
+  it('reads a name missing just after it moved between the two layers as the reload, and a name hidden while waiting starts over', () => {
+    const h = createNameHysteresis();
+    h.tick(0, S('a'), NONE);
+    h.tick(100, NONE, NONE);
+    h.tick(1500, S('a'), NONE); // held: moves to the twin
+    expect(h.tick(1500 + NAME_SWAP_GRACE_MS - 1, NONE, NONE).held).toBeNull(); // the reload, not a hide
+    expect(h.held()).toEqual(['a']);
+    // Missing past the grace: hidden, the hold gone.
+    expect(h.tick(1500 + NAME_SWAP_GRACE_MS, NONE, NONE).held).toEqual([]);
+    const g = createNameHysteresis();
+    g.tick(0, S('b'), NONE);
+    g.tick(100, NONE, NONE);
+    g.tick(300, S('b'), NONE); // back unseen, waiting to 1100
+    const lost = g.tick(300 + NAME_SWAP_GRACE_MS, NONE, NONE); // hidden again while it waited
+    expect(lost.opacity.get('b')).toBeNull();
+    expect(lost.held).toEqual([]);
+    expect([NAME_TICK_MS, NAME_HOLD_MS, NAME_MIN_HIDDEN_MS]).toEqual([100, 2000, 1000]);
+  });
+});
+
+describe('the public screen runs the stop names\u2019 hysteresis and times the own name\u2019s crossings (decision 19)', () => {
+  it('moves a stop name that came back into the held layer, writes its fade by feature state, and counts the seconds a pill crosses the screen\u2019s own name', async () => {
+    const prozor: overlays.ProzorOptions = { networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: 4, overlapZoom: 12, stopRadius: false, labelPadding: 30 };
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9705, lat: 45.8101, routes: ['6'] } as never;
+    const { map, container, frame } = await harness({ lib: cityLib, extra: { prozor, basemapProfile: 'prozor', interactive: false, symbolScale: 2, stop } });
+    const states: [string, unknown][] = [];
+    (map as unknown as { setFeatureState: unknown }).setFeatureState = (f: { id: string }, st: unknown) => { states.push([f.id, st]); };
+    (map as unknown as { removeFeatureState: unknown }).removeFeatureState = (f: { id: string }) => { states.push([f.id, null]); };
+    const at = (lon: number, lat: number) => ({ type: 'Point', coordinates: [lon, lat] });
+    const name = { layer: { id: 'stop-labels' }, properties: { id: '1_1', name: 'Zrinjevac' }, geometry: at(15.95, 45.85) };
+    const own = { layer: { id: 'screen-stop-label' }, properties: { id: '106_1', name: 'Trg bana J. Jelačića' }, geometry: at(15.9705, 45.8101) };
+    const pill = { layer: { id: 'vehicles' }, properties: { id: 'v', short: '6' }, geometry: at(15.9705, 45.8101) };
+    const look = (rendered: unknown[], dt: number) => { frame(dt); map.rendered = rendered as typeof map.rendered; map.fire('render'); };
+    look([name, own], NAME_TICK_MS);
+    look([own], 200); // the pass hid it
+    expect(map.filters['stop-labels-held']).toBeUndefined();
+    look([name, own], 1500); // back after a second and a half: held, no wait
+    expect(JSON.stringify(map.filters['stop-labels-held'])).toContain('"1_1"');
+    expect(JSON.stringify(map.filters['stop-labels'])).toContain('"1_1"'); // and left out of the plain layer
+    // Hidden again and back within the second: out of sight until its second is up, by feature state.
+    look([own], NAME_HOLD_MS + 100);
+    look([own], NAME_SWAP_GRACE_MS);
+    look([name, own], 200);
+    expect(states.at(-1)).toEqual(['1_1', { o: 0 }]);
+    // A pill over the own name: the seconds add up while it stays.
+    const before = Number(container.dataset.ownNameCrossed ?? '0');
+    look([own, pill], 500);
+    look([own, pill], 500);
+    expect(Number(container.dataset.ownNameCrossed) - before).toBeCloseTo(1, 1);
+    // The census counts every other name a pill crosses, never the own one, and says the own name is drawn.
+    map.rendered = [own, pill] as typeof map.rendered;
+    map.fire('idle');
+    expect(container.dataset.overlaps).toBe('discs:0;names:0');
+    expect(container.dataset.ownName).toBe('Trg bana J. Jelačića');
   });
 });
