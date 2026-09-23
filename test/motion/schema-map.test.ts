@@ -263,11 +263,25 @@ it('shares the accessible scene contract while drawing only placeable plan motio
   kiosk.handle.setView!({ center: [15, 45], zoom: 2, selectedStop: 'T0' });
   kiosk.frame();
   expect(kiosk.frames.at(-1)!.viewport).toEqual(crop);
+  // A wall's schema is the whole network without zoom [O-72], and it still names that network (review W, P2):
+  // the artwork's own names at the wall's walk-up tier, the ones the collision pass has room for.
+  const beforeStop = kiosk.staticCalls().length;
   kiosk.handle.setStop!(null);
-  const afterStop = kiosk.staticCalls().length;
   kiosk.frame();
-  expect(kiosk.frames.at(-1)!.labels).toBe(false);
-  expect(kiosk.staticCalls().slice(afterStop).some((c) => c.op === 'fillText')).toBe(false);
+  expect(kiosk.frames.at(-1)!.labels).toBe(true);
+  expect(kiosk.container.querySelector<HTMLElement>('[data-testid=schema-map]')!.dataset.labels).toBe('true');
+  const names = kiosk.staticCalls().slice(beforeStop).filter((c) => c.op === 'fillText');
+  expect(names.map((c) => c.args[0])).toEqual(expect.arrayContaining(['T0', 'C1200']));
+  expect(names.every((c) => Number(c.font?.match(/([\d.]+)px/)?.[1]) / DENSITY >= 28)).toBe(true);
+  // A handheld still frames its stop and names it; without one it draws the clean network.
+  const phone = harness({ interactive: false, presentationProfile: 'handheld', stop: { id: 'T600', name: 'T600', lon: 0, lat: 0, routes: [] } });
+  await flush();
+  phone.resize(390, 800);
+  phone.frame();
+  expect(phone.frames.at(-1)!.labels).toBe(true);
+  phone.handle.setStop!(null);
+  phone.frame();
+  expect(phone.frames.at(-1)!.labels).toBe(false);
 
   let resolve!: (raw: unknown) => void;
   const late = harness({}, new Promise((r) => { resolve = r; }));
@@ -417,4 +431,27 @@ it('names a surface\u2019s priority stop first when it has no stop to crop round
   expect(ranked.first).toBe('Two');
   // Live, the same.
   expect((await firstName({}, (h) => h.handle.setPriorityStop!('T600'))).first).toBe('Two');
+});
+
+it('keeps the wall’s own place among the whole-network schema’s names at the walk-up tier, and the name it meets yields (W-fix2’s names, WP2-A2’s place)', async () => {
+  // T600's name moved up against the terminal T0: the two boxes meet, and the rank decides who stays.
+  const CLOSE = { ...ART, stops: ART.stops.map((s) => s.name === 'T600' ? { ...s, x: 130, label: { ...s.label!, text: 'T600', rows: 1, x: 130 } } : s) };
+  const wallNames = async (extra: Partial<CityMapOptions>) => {
+    const h = harness({ interactive: false, stop: null, ...extra }, Promise.resolve(CLOSE));
+    await flush();
+    h.resize(1920, 1080);
+    h.frame();
+    const before = h.staticCalls().length;
+    h.handle.setTheme!('light');
+    const drawn = h.staticCalls().slice(before).filter((c) => c.op === 'fillText');
+    return { names: drawn.map((c) => String(c.args[0])), px: drawn.filter((c) => c.args[0] === 'T600').map((c) => Number(c.font?.match(/([\d.]+)px/)?.[1]) / DENSITY) };
+  };
+  const plain = await wallNames({});
+  expect(plain.names).toContain('T0');
+  expect(plain.names).not.toContain('T600');
+  const own = await wallNames({ priorityStopId: 'T600' });
+  expect(own.names).toContain('T600');
+  expect(own.names).not.toContain('T0');
+  expect(own.names).toContain('C1200'); // only the name it meets yields
+  expect(own.px.every((px) => px >= 28)).toBe(true);
 });

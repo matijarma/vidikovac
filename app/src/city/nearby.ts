@@ -20,9 +20,16 @@
 //
 // The circle is measured per place [O-68]: the caller passes `radiusM` from
 // shared/city/frame.ts frameRadiusM(place, stops, frame), never a Kadar.
+//
+// Every third-party text a row shows (register names and descriptions, event
+// titles and venues, closure titles and summaries, place names) passes the one
+// validator shared with the header sentence, shared/kiosk/external-text.ts; a
+// row whose text fails is not built, the next candidate stands in, and the
+// reason goes to `onSkip` (the wall's data-skipped-text census, decision 18).
 import { arrivalsAt, type ArrivalRow, type LiveVehicleRef } from '../../../shared/city/arrivals';
 import { locatedEvents } from '../../../shared/city/events';
 import { pillText } from '../../../shared/city/frame';
+import { externalText, EXTERNAL_TEXT_REJECTIONS, type ExternalTextKind, type ExternalTextRejection } from '../../../shared/kiosk/external-text';
 import { distanceM, inPolygons, located, matchStreet, normalName } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState, DepartureBoard, Place, StreetStory } from '../../../shared/city/types';
@@ -101,6 +108,8 @@ export interface NearbyInput {
   i18n: I18n;
   /** The stop table, when the caller holds it: names the tram to an event's venue. */
   stops?: readonly ScreenStop[];
+  /** Told once per row left out because a third-party text failed externalText(), with the reason. */
+  onSkip?: (reason: ExternalTextRejection) => void;
 }
 
 /** §12 bounds and the ladder's clock (§4). */
@@ -255,7 +264,6 @@ function closureRows(input: NearbyInput): NearbyRow[] {
     .map((c) => ({ item: c.item, until: c.item.until ? Date.parse(c.item.until) : NaN }))
     // A closure without a published end is not a timed row.
     .filter((c) => Number.isFinite(c.until) && c.until > now)
-    .slice(0, MAX_CLOSURES)
     .map(({ item, until }) => {
       const map = itemMap(item);
       const sub = oneLine(item.brief ?? '');
@@ -274,7 +282,10 @@ function closureRows(input: NearbyInput): NearbyRow[] {
         selection: { kind: 'item' as const, id: publicItemKey('prometnice', item.id), module: 'prometnice' as const },
         ...(map ? { map } : {}),
       };
-    });
+    })
+    // Before the bound, so the next closure stands in for one whose text is refused.
+    .filter((row) => vetted(input, [['name', row.title], ['summary', row.sub], ['summary', row.subShort]]))
+    .slice(0, MAX_CLOSURES);
 }
 
 // --- (c) events by their start, with the venue and the tram to it ---------------
@@ -297,8 +308,10 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
     const title = oneLine(item.brief ?? item.title);
-    // The source's own title where a machine brief stands in for it, else the event's name without its subtitle.
-    const titleShort = shorterLabel(title, [item.brief ? item.title : undefined, mainTitle(title)]);
+    // The source's own title where a machine brief stands in for it; nothing else. The words before a colon
+    // or a dash are not a name the source gave ("Javno predavanje: Povijest Zagreba" is not "Javno
+    // predavanje"), so without one the wall wraps the whole title (app/src/kiosk/timeline.ts).
+    const titleShort = shorterLabel(title, [item.brief ? item.title : undefined]);
     out.push({
       id: `event:${item.id}`,
       kind: 'event',
@@ -315,7 +328,9 @@ function eventRows(input: NearbyInput): NearbyRow[] {
       map: { id: venue?.id ?? item.id, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
     });
   }
-  return out.sort(byTime).slice(0, MAX_EVENTS);
+  // The title, its shorter twin and the venue alone (the tram line after " · " is the wall's own words).
+  return out.filter((row) => vetted(input, [['title', row.title], ['title', row.titleShort], ['name', row.subShort ?? row.sub]]))
+    .sort(byTime).slice(0, MAX_EVENTS);
 }
 
 /** The tram lines that serve the place: its platforms in the stop table, its stop file, its boards. */
@@ -466,7 +481,7 @@ function openingRows(input: NearbyInput, events: readonly NearbyRow[]): NearbyRo
     const minutes = openingTimes(p.hours)?.get(weekday);
     if (minutes === undefined || minutes === null) continue;
     const at = localInstant(morning, Math.floor(minutes / 60), minutes % 60);
-    if (at > now) found.push({ place: p, at, d });
+    if (at > now && vetted(input, [['name', p.name]])) found.push({ place: p, at, d });
   }
   return found
     .sort((a, b) => a.d - b.d || a.at - b.at || a.place.id.localeCompare(b.place.id))
@@ -584,8 +599,8 @@ function pharmacyRow(input: NearbyInput): NearbyRow {
 
 function storyRow(input: NearbyInput): NearbyRow | null {
   const story = placeStory(input.place, input.city);
-  const text = story ? firstSentence(story.description) : '';
-  if (!story || !text) return null;
+  const text = story ? firstSentence(csvField(story.description)) : '';
+  if (!story || !text || !vetted(input, [['name', story.name], ['register-text', text]])) return null;
   // The register's full name ("Trg bana Josipa Jelačića") and, where the stop's own name abbreviates it, that
   // name ("Trg bana J. Jelačića", the one in the header): the same place, whole, only shorter.
   const own = oneLine(input.place.name);
@@ -646,13 +661,20 @@ export function firstSentence(text: string): string {
 
 function heritageRow(input: NearbyInput): NearbyRow | null {
   const { place, radiusM } = input;
+  // The nearest protected building whose name and address pass externalText(); a refused one gives way to the next.
+  const refused = new Set<string>();
   let best: { p: Place & { lon: number; lat: number }; d: number } | null = null;
-  for (const p of input.city.places) {
-    if (p.category !== 'heritage' || !located(p)) continue;
-    const d = distanceM(place, p);
-    if (d <= radiusM && (!best || d < best.d || (d === best.d && p.id < best.p.id))) best = { p, d };
+  for (;;) {
+    best = null;
+    for (const p of input.city.places) {
+      if (p.category !== 'heritage' || !located(p) || refused.has(p.id)) continue;
+      const d = distanceM(place, p);
+      if (d <= radiusM && (!best || d < best.d || (d === best.d && p.id < best.p.id))) best = { p, d };
+    }
+    if (!best) return null;
+    if (vetted(input, [['name', heritageName(best.p.name)], ['address', best.p.address ? firstStreet(best.p.address) : '']])) break;
+    refused.add(best.p.id);
   }
-  if (!best) return null;
   const p = best.p;
   return {
     id: `always:heritage:${p.id}`,
@@ -690,6 +712,47 @@ function firstStreet(address: string): string {
   return (first ?? '').replace(/\b0+(\d)/g, '$1');
 }
 
+/**
+ * A register field still in its CSV quoting, as 201 street descriptions of the
+ * committed catalogue are: '"slikar, jedan od utemeljitelja Udruženja umjetnika
+ * ""Zemlja""; 1901 - 1975"' reads 'slikar, jedan od utemeljitelja Udruženja
+ * umjetnika "Zemlja"; 1901 - 1975' (RFC 4180: the outer pair goes, a doubled
+ * quote is one). Quotes that are the text's own ('"mala" Sava/rukavac rijeke
+ * Save', a lone quote inside) are left as they are.
+ */
+export function csvField(text: string): string {
+  const field = text.trim();
+  if (field.length < 2 || !field.startsWith('"') || !field.endsWith('"')) return text;
+  const inner = field.slice(1, -1);
+  // Inside a quoted field every quote is doubled.
+  return inner.replace(/""/g, '').includes('"') ? text : inner.replace(/""/g, '"');
+}
+
+// --- third-party text -------------------------------------------------------------
+
+/** Every given text passes externalText() (absent and empty ones are not shown); else the row is told to onSkip and left out. */
+function vetted(input: NearbyInput, texts: readonly (readonly [ExternalTextKind, string | undefined])[]): boolean {
+  for (const [kind, value] of texts) {
+    if (!value) continue;
+    const verdict = externalText(kind, value);
+    if (!verdict.ok) { input.onSkip?.(verdict.reason); return false; }
+  }
+  return true;
+}
+
+/**
+ * The wall's `data-skipped-text` census: "count:0", or "count:3;instruction:2;charset:1",
+ * the rows the last selection left out and why, reasons in EXTERNAL_TEXT_REJECTIONS order.
+ */
+export function skippedTextCensus(reasons: readonly ExternalTextRejection[]): string {
+  const parts = [`count:${reasons.length}`];
+  for (const reason of EXTERNAL_TEXT_REJECTIONS) {
+    const n = reasons.filter((r) => r === reason).length;
+    if (n > 0) parts.push(`${reason}:${n}`);
+  }
+  return parts.join(';');
+}
+
 // --- shorter complete labels ------------------------------------------------------
 
 const ELLIPSIS = /…|\.\.\./;
@@ -707,32 +770,6 @@ export function shorterLabel(full: string, candidates: readonly (string | undefi
     if (text && text.length < whole.length && !ELLIPSIS.test(text)) return text;
   }
   return undefined;
-}
-
-/** "Name: subtitle" (never a clock's colon), "Name – subtitle" (a spaced dash, never "Erdödy-Keglević"), "Name (subtitle)". */
-const SUBTITLE: readonly RegExp[] = [/^(.*?\D):\s+\S/u, /^(.*?\S)\s+[-–—]\s+\S/u, /^(.*?\S)\s*\([^()]*\)$/u];
-
-/**
- * An event's own name without its subtitle, as the source writes it: "Večer u
- * Kvaterniku: razgovor o gradu i kulturnoj baštini" is "Večer u Kvaterniku",
- * "S druge strane zrcala – psihoanaliza i film" is "S druge strane zrcala".
- * Only a name of two words or more with its quotes closed: "Predavanje:
- * Povijest Zagreba" says what the event is only in its second half, so it has
- * no shorter name. Undefined when the title has no such part.
- */
-export function mainTitle(title: string): string | undefined {
-  const text = oneLine(title);
-  for (const pattern of SUBTITLE) {
-    const head = pattern.exec(text)?.[1]?.replace(/[\s,;:–—-]+$/u, '').trim();
-    if (head && head.split(' ').length >= 2 && quotesClosed(head)) return head;
-  }
-  return undefined;
-}
-
-/** Every quote the head opens it also closes („…“, “…”, "…"). */
-function quotesClosed(text: string): boolean {
-  const count = (re: RegExp): number => (text.match(re) ?? []).length;
-  return count(/"/g) % 2 === 0 && count(/[„“”]/g) % 2 === 0;
 }
 
 // --- helpers ----------------------------------------------------------------------

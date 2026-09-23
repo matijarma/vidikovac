@@ -5,7 +5,7 @@ import { distanceM, located } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState } from '../../../shared/city/types';
 import {
-  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, writeSentence,
+  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, writeSentence,
   type SentenceFact, type SentenceKicker, type WrittenSentence,
 } from '../../../shared/kiosk/sentence';
 import { zagrebIso } from '../../../worker/feed/time';
@@ -30,6 +30,26 @@ export const SENTENCE_REFRESH_MS = 600_000;
 export const SENTENCE_HOLD_MS = 20_000;
 export const MAX_FACTS = 16;
 export const SENTENCE_BUDGET = { wide: 80, compact: 64, portrait: 64, handheld: 64 } as const;
+/** Below this many distinct facts the ten-minute rule falls back to the wording alone. */
+export const SENTENCE_MIN_FACTS = 3;
+
+/** A fact as this client holds it. `factKey` names the fact's template family and subject
+ * where its id is narrower: a departure's id is its trip, its fact is the line and direction
+ * at this place. Client-side only (the S4/S6 signatures stay the wire types); modelSentenceFacts
+ * never sends it. */
+export interface CitySentenceFact extends SentenceFact {
+  factKey?: string;
+}
+/** A written sentence as the rotation reads it, with its fact's `factKey`. */
+export interface RotatingSentence extends WrittenSentence {
+  factKey?: string;
+}
+
+/** The facts a sentence says: every wording of one fact has the same keys. */
+export function sentenceFactKeys(sentence: WrittenSentence): string[] {
+  const { factKey } = sentence as RotatingSentence;
+  return factKey ? [factKey] : [...new Set(sentence.refs)];
+}
 
 // WP1-D owns the catalogues. These defaults keep this pure seam usable before
 // that merge; an installed kiosk.sentence.* value always takes precedence.
@@ -145,15 +165,19 @@ function timedLabel(at: number, input: SentenceFactsInput): string {
 export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const { now, i18n, locale } = input;
   if (!Number.isFinite(now)) return [];
-  const facts: SentenceFact[] = [];
-  const add = (id: string, kind: SentenceKicker, text: string, validUntil: number) => {
+  const facts: CitySentenceFact[] = [];
+  const add = (id: string, kind: SentenceKicker, text: string, validUntil: number, factKey?: string) => {
     text = sentenceWithPeriod(text);
     validUntil = sentenceDeadline(text, validUntil, now);
     if (!text || validUntil <= now || !Number.isFinite(validUntil) || text.length > 160 || facts.some(fact => fact.id === id)) return;
-    const fact: SentenceFact = { id, kind, text, validUntil };
-    // A long weather fact can still supply one complete shorter claim to AI.
-    if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now }).ok) return;
-    facts.push(fact);
+    const fact: CitySentenceFact = { id, kind, text, validUntil };
+    // Long facts also cross the typed-slot boundary before any shorter projection;
+    // a long weather fact can then still supply one complete shorter claim to AI.
+    const typed = typedSentenceFact(fact);
+    if (!typed.ok) { console.debug('sentence-rejected', typed.reason); return; }
+    if (text.length <= 80 && !acceptSentence(text, { facts: [fact], now,
+      onReject: reason => console.debug('sentence-rejected', reason) }).ok) return;
+    facts.push(factKey ? { ...fact, factKey } : fact);
   };
   const solar = nextSolar(now);
   const solarRow = input.rows.find(row => row.kind === 'solar' && row.atMs !== null && row.atMs > now);
@@ -211,9 +235,11 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       const live = row.live && !input.outage && arrival.minutes !== null && minutes > 0;
       // The exact minute boundary, not "now + a minute", invalidates a countdown.
       const expires = live ? Math.min(at, at - (minutes - 0.5) * 60_000) : at;
+      // One fact per line and direction at this place: the next trip, or the next minute of a
+      // countdown, is that fact again in other words.
       add(row.id, 'promet', copy(i18n, mode === 'bus' ? (live ? 'busIn' : 'busAt') : (live ? 'departureIn' : 'departureAt'), {
         route: arrival.routeName, to: arrival.headsign, n: minutes, time: clock(at),
-      }), expires);
+      }), expires, `departure:${arrival.routeId}:${arrival.headsign}@${input.place.stopId ?? input.place.name}`);
     } else if (row.kind === 'closure' && row.atMs !== null) {
       add(row.id, 'radovi', copy(i18n, 'closureUntil', {
         // The template owns the final full stop, including after a Croatian ordinal date.
@@ -248,7 +274,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
 
 /** Only stable facts go to AI; countdowns must never enter a twenty-minute cache. */
 export function modelSentenceFacts(facts: readonly SentenceFact[], now?: number): SentenceFact[] {
-  return stableSentenceFacts(facts, now);
+  // The wire shape only: a client-side factKey is the rotation's, not the request's.
+  return stableSentenceFacts(facts, now).map(({ id, kind, text, validUntil }) => ({ id, kind, text, validUntil }));
 }
 
 /** Three solar phrasings keep the cold/offline path useful without inventing facts. */
@@ -256,7 +283,8 @@ export function templateSentences(facts: readonly SentenceFact[], i18n: I18n, bu
   const sentences: WrittenSentence[] = [];
   const add = (text: string, fact: SentenceFact) => {
     const s = writeSentence(text, { facts: [fact], budget, now, refs: [fact.id] }, 'template');
-    if (s && !sentences.some(other => other.text === s.text)) sentences.push(s);
+    const { factKey } = fact as CitySentenceFact;
+    if (s && !sentences.some(other => other.text === s.text)) sentences.push(factKey ? { ...s, factKey } as RotatingSentence : s);
   };
   for (const fact of facts) add(fact.text, fact);
   for (const fact of facts) {
@@ -278,22 +306,34 @@ export interface SentenceSequence {
   read(sentences: readonly WrittenSentence[], now: number, suspended?: boolean, overflowed?: (s: WrittenSentence) => boolean): WrittenSentence | null;
 }
 
-/** Cadence is a chance to change, not permission to repeat or to show expired data. */
+/** Cadence is a chance to change, not permission to repeat or to show expired data.
+ * A fact (its template family and subject, sentenceFactKeys) is on screen once per noRepeat
+ * window whatever its wording; with fewer than SENTENCE_MIN_FACTS distinct facts at hand the
+ * window binds the wording alone, so the three solar phrasings still rotate on a cold screen. */
 export function createSentenceSequence(options: SentenceSequenceOptions): SentenceSequence {
   const rhythm = Number.isFinite(options.rhythmMs) && options.rhythmMs > 0 ? options.rhythmMs : SENTENCE_HOLD_MS;
   const noRepeat = Number.isFinite(options.noRepeatMs)
     ? Math.max(SENTENCE_NO_REPEAT_MS, options.noRepeatMs!) : SENTENCE_NO_REPEAT_MS;
   const lastSeen = new Map<string, number>();
+  /** Per fact: when it was last on screen, and until when it holds. */
+  const factSeen = new Map<string, { at: number; until: number }>();
   const kickers = new Map<SentenceKicker, number>();
   let current: WrittenSentence | null = null;
   let heldSince = -Infinity;
   let previousNow = -Infinity;
+  const remember = (s: WrittenSentence, now: number, until: number | null) => {
+    lastSeen.set(s.text, now);
+    for (const key of sentenceFactKeys(s)) {
+      factSeen.set(key, { at: now, until: Math.max(factSeen.get(key)?.until ?? -Infinity, until ?? -Infinity) });
+    }
+  };
   return {
     read(sentences, now, suspended = false, overflowed = () => false) {
       if (!Number.isFinite(now)) return null;
-      // A backward clock jump cannot make a recently displayed line eligible.
+      // A backward clock jump cannot make a recently displayed line or fact eligible.
       if (now < previousNow) {
         for (const text of lastSeen.keys()) lastSeen.set(text, now);
+        for (const seen of factSeen.values()) seen.at = now;
         heldSince = now;
       }
       previousNow = now;
@@ -308,18 +348,32 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
         current = held.validUntil! <= current.validUntil! ? held
           : { ...held, validUntil: current.validUntil };
       }
+      const onScreen = current ? sentenceFactKeys(current) : [];
+      for (const [key, seen] of factSeen) if (now - seen.at >= noRepeat && !onScreen.includes(key)) factSeen.delete(key);
       if (suspended) {
-        if (held && current) { lastSeen.set(current.text, now); return current; }
-        if (current) lastSeen.set(current.text, now);
+        if (held && current) { remember(current, now, held.validUntil); return current; }
+        if (current) remember(current, now, current.validUntil);
         current = null;
         return null;
       }
-      if (held && current && now - heldSince < rhythm) { lastSeen.set(current.text, now); return current; }
-      const choices = sentences.filter(s => s.text !== current?.text && valid(s) && !lastSeen.has(s.text));
-      choices.sort((a, b) => (kickers.get(a.kicker) ?? -Infinity) - (kickers.get(b.kicker) ?? -Infinity));
-      const next = choices[0] ?? (held ? current : null);
+      if (held && current && now - heldSince < rhythm) { remember(current, now, held.validUntil); return current; }
+      const usable = sentences.filter(valid);
+      const fresh = usable.filter(s => s.text !== current?.text && !lastSeen.has(s.text));
+      // Facts at hand: the usable pool plus facts shown recently that still hold (a caller may
+      // already have dropped their shown wordings from the pool).
+      const facts = new Set(usable.flatMap(sentenceFactKeys));
+      for (const [key, seen] of factSeen) if (seen.until > now) facts.add(key);
+      const byFact = facts.size >= SENTENCE_MIN_FACTS;
+      const choices = byFact ? fresh.filter(s => sentenceFactKeys(s).every(key => !factSeen.has(key))) : fresh;
+      const factAge = (s: WrittenSentence) => Math.max(...sentenceFactKeys(s).map(key => factSeen.get(key)?.at ?? -Infinity));
+      const kickerAge = (s: WrittenSentence) => kickers.get(s.kicker) ?? -Infinity;
+      choices.sort((a, b) => (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
+      // The fact on screen in fresh words (a countdown's next minute, its next trip) continues
+      // it rather than blanking the header; it never brings back a fact that has left.
+      const restated = byFact && current && !held ? fresh.find(s => sentenceFactKeys(s).every(key => onScreen.includes(key))) : undefined;
+      const next = choices[0] ?? (held ? current : restated ?? null);
       if (next !== current) {
-        if (current) lastSeen.set(current.text, now);
+        if (current) remember(current, now, current.validUntil);
         // Timeless source descriptions are only leased for this display rhythm.
         // Their fact deadline still bounds the 20-minute source selection turn.
         current = next && next.refs.some(ref => ref.startsWith('always:')) && next.kicker === 'kultura'
@@ -327,7 +381,7 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
         heldSince = now;
         if (current) kickers.set(current.kicker, now);
       }
-      if (current) lastSeen.set(current.text, now);
+      if (current) remember(current, now, next === current && held ? held.validUntil : next!.validUntil);
       return current;
     },
   };

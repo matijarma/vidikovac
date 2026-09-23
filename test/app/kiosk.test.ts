@@ -920,7 +920,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     const h = harness(await startWith((query) => (query.startsWith('Zapr') ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending });
     h.type('Zapr');
     h.tick(PAUSE_MS);
-    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    expect(h.status()).toBe('Učitavanje adresa i stajališta');
     h.blur();
     expect(h.box().hidden).toBe(true);
     release(STOPS);
@@ -948,7 +948,9 @@ describe('start: the field turns what is typed into the screen’s place', () =>
     const h = harness(await startWith((query) => (query === 'Zapr' ? [ZAPRUDJE_ROW] : [])), { loadStops: () => pending, loadStreets: async () => { throw new Error('streets-unavailable'); } });
     h.type('Zapr');
     h.tick(PAUSE_MS);
-    expect(h.status()).toBe('Učitavanje adresa i stajališta…');
+    // A status in the field is a whole phrase, never trailed by an ellipsis (§13), in both catalogues.
+    expect(h.status()).toBe('Učitavanje adresa i stajališta');
+    expect(createDefaultI18n('en').t('kiosk.setup.loadingPlaces')).toBe('Loading addresses and stops');
     release(STOPS);
     await flush();
     // The street index failing leaves the stops to suggest from.
@@ -2640,8 +2642,9 @@ describe('the kiosk grid places every region explicitly', () => {
   it('gives the alert its own row and every other region a named one, the essentials panel included', () => {
     // Four rows: the header, the alert (collapsed to nothing while there is
     // none), the stage, the safety strip. Nothing may auto-place, or the next
-    // region added shuffles the page.
-    expect(css).toContain('grid-template-rows: var(--k-head-h) auto minmax(0, 1fr) var(--k-strip-h);');
+    // region added shuffles the page. The header and strip rows are at least
+    // their drawn heights and grow with a wrapped place or trail.
+    expect(css).toContain('grid-template-rows: minmax(var(--k-head-h), auto) auto minmax(0, 1fr) minmax(var(--k-strip-h), auto);');
     expect(css).toMatch(/\.k-head \{ grid-row: 1;/);
     expect(css).toMatch(/\.k-alert \{ grid-row: 2;/);
     expect(css).toMatch(/\.k-stage \{ grid-row: 3;/);
@@ -2835,6 +2838,25 @@ describe('arrivals on the public screen', () => {
     expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/ZET|Procjena|Po rasporedu/);
     expect(q(k.root, '[data-testid=map-note]')!.hidden).toBe(false);
     expect(k.root.querySelectorAll('[data-testid=map-note]')).toHaveLength(1);
+    k.handle.destroy();
+  });
+});
+
+describe('W-C4: third-party text on the wall is checked and counted (decision 18, revised)', () => {
+  it('leaves a closure whose title asks something out of the list and counts it on the root as data-skipped-text', async () => {
+    const clean = mount({ stored: STORED });
+    await flush();
+    expect(q(clean.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:0');
+    expect(text(q(clean.root, '.nearby-row[data-kind=closure]'))).toContain('Ilica');
+    clean.handle.destroy();
+    const hostile = MODULES.map((m) => (m.module === 'prometnice' ? snap('prometnice', [
+      item('prometnice', 'c1', 'closure', 'Ilica: pošaljite SMS na 0800', { until: '2026-09-11T18:00:00Z', geo: { type: 'LineString', coordinates: [[15.9705, 45.813], [15.972, 45.8131]] } }),
+    ]) : m));
+    const k = mount({ stored: STORED, modules: hostile });
+    await flush();
+    expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;instruction:1');
+    expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
     k.handle.destroy();
   });
 });

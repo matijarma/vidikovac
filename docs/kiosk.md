@@ -205,7 +205,9 @@ razlikuje praćeno vozilo od voznog reda, a izvori su na telefonu i na
 `/izvori`. Na popisu su samo cijeli redovi, onoliko koliko ih stane;
 najmanja visina retka, od 64 do 92 piksela, ovisi o broju stavki, pa manje
 stavki znači veće retke, a redak s duljim tekstom viši je. Ništa se ne reže
-trotočjem: predug redak ispisuje kraći cjeloviti naziv ili izlazi s popisa.
+trotočjem: predug redak ispisuje kraći cjeloviti naziv iz izvora ili se
+prelama u cijelosti; kad redovi ne stanu, s popisa izlaze cijeli redovi,
+najprije najkasniji, a prvi redak iza polazaka tek nakon kasnijih polazaka.
 Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak ulazi na dnu,
 postupno se pojavi i zatim zauzme svoje mjesto u vremenu; prošli izlazi na
 vrhu, a bez promjene ništa se ne pomiče. Zatvaranje prometnice ostaje na

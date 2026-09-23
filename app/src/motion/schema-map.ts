@@ -18,7 +18,7 @@ import { PILL_INKS } from './pills';
 import { hitVehicle, type VehicleMark } from './schematic';
 import { mountSceneAccessibility, sceneMarkup, type Scene, type SceneAccessibility } from './schematic-view';
 import {
-  clusterSchemaMarks, KIOSK_LABEL_SCALE, KIOSK_LABEL_MIN_PX, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema,
+  clusterSchemaMarks, KIOSK_LABEL_SCALE, KIOSK_LABEL_MIN_PX, LABEL_MIN_PX_PER_UNIT, paintPills, paintSchema, WALL_LABEL_MIN_PX,
   schemaInFrame, schemaVehicleMarks,
   type PillInkSet, type SchemaLayout, type SchemaMarkViewport, type SchemaTones,
 } from './schema-paint';
@@ -67,6 +67,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   const container = options.container, doc = deps.documentRef ?? container.ownerDocument;
   const now = deps.now ?? Date.now, interactive = options.interactive !== false;
   const publicDisplay=!interactive||options.basemapProfile==='prozor';
+  /** A public display that is not a phone: a wall, whose schema is the whole network without zoom [O-72]. */
+  const wall = publicDisplay && options.presentationProfile !== 'handheld';
   const i18n = createDefaultI18n(options.locale ?? 'hr');
   const abort = new AbortController();
   const element = doc.createElement('div');
@@ -139,7 +141,9 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   const screenStop = (): SchemaStop | null => stopForId(stop?.id);
   /** The name the collision pass never drops when there is no stop to crop round (CityMapOptions.priorityStopId). */
   let priorityStopId: string | null = options.priorityStopId ?? null;
-  const labels = (): boolean => publicDisplay ? screenStop() !== null : (pan?.snapshot().scale ?? 0) >= LABEL_MIN_PX_PER_UNIT;
+  // A phone names its stop's crop, and draws the clean network without one; a wall always names its
+  // network, as many names as the collision pass has room for at the walk-up tier (review W, P2).
+  const labels = (): boolean => wall || (publicDisplay ? screenStop() !== null : (pan?.snapshot().scale ?? 0) >= LABEL_MIN_PX_PER_UNIT);
   const tones = (): SchemaTones => ({
     ink: tone(container, '--tone-text-primary', 'CanvasText'),
     halo: tone(container, '--tone-surface-canvas', 'Canvas'),
@@ -187,7 +191,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       trams: trams(), lineFocus, focusedRoute: lineFocus ? focusedRoute() : null,
       selectedRoute: selection?.kind === 'route' ? selection.id : null,
       selectedStop: selection?.kind === 'stop' ? stopForId(selection.id)?.name : null,
-      screenStop: screenStop()?.name, labelMinPx: publicDisplay ? KIOSK_LABEL_MIN_PX : undefined,
+      screenStop: screenStop()?.name, labelMinPx: wall ? WALL_LABEL_MIN_PX : publicDisplay ? KIOSK_LABEL_MIN_PX : undefined,
       // The same stop the highlight ring marks, handed in a second time for
       // a second job: the name the collision pass may never drop. A surface
       // with no stop of its own hands in nothing and ranks by terminal as
