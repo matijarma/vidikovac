@@ -35,7 +35,8 @@ export const SENTENCE_MIN_FACTS = 3;
 
 /** A fact as this client holds it. `factKey` names the fact's template family and subject
  * where its id is narrower: a departure's id is its trip, its fact is the line and direction
- * at this place. Client-side only; modelSentenceFacts never sends it. */
+ * at this place. Client-side only (the S4/S6 signatures stay the wire types); modelSentenceFacts
+ * never sends it. */
 export interface CitySentenceFact extends SentenceFact {
   factKey?: string;
 }
@@ -45,8 +46,9 @@ export interface RotatingSentence extends WrittenSentence {
 }
 
 /** The facts a sentence says: every wording of one fact has the same keys. */
-export function sentenceFactKeys(sentence: RotatingSentence): string[] {
-  return sentence.factKey ? [sentence.factKey] : [...new Set(sentence.refs)];
+export function sentenceFactKeys(sentence: WrittenSentence): string[] {
+  const { factKey } = sentence as RotatingSentence;
+  return factKey ? [factKey] : [...new Set(sentence.refs)];
 }
 
 // WP1-D owns the catalogues. These defaults keep this pure seam usable before
@@ -160,7 +162,7 @@ function timedLabel(at: number, input: SentenceFactsInput): string {
 }
 
 /** At most sixteen fact records; solar is reserved even with a full timeline. */
-export function sentenceFacts(input: SentenceFactsInput): CitySentenceFact[] {
+export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const { now, i18n, locale } = input;
   if (!Number.isFinite(now)) return [];
   const facts: CitySentenceFact[] = [];
@@ -273,11 +275,12 @@ export function modelSentenceFacts(facts: readonly SentenceFact[], now?: number)
 }
 
 /** Three solar phrasings keep the cold/offline path useful without inventing facts. */
-export function templateSentences(facts: readonly CitySentenceFact[], i18n: I18n, budget = 80, now?: number): RotatingSentence[] {
-  const sentences: RotatingSentence[] = [];
-  const add = (text: string, fact: CitySentenceFact) => {
+export function templateSentences(facts: readonly SentenceFact[], i18n: I18n, budget = 80, now?: number): WrittenSentence[] {
+  const sentences: WrittenSentence[] = [];
+  const add = (text: string, fact: SentenceFact) => {
     const s = writeSentence(text, { facts: [fact], budget, now, refs: [fact.id] }, 'template');
-    if (s && !sentences.some(other => other.text === s.text)) sentences.push(fact.factKey ? { ...s, factKey: fact.factKey } : s);
+    const { factKey } = fact as CitySentenceFact;
+    if (s && !sentences.some(other => other.text === s.text)) sentences.push(factKey ? { ...s, factKey } as RotatingSentence : s);
   };
   for (const fact of facts) add(fact.text, fact);
   for (const fact of facts) {
@@ -296,7 +299,7 @@ export interface SentenceSequenceOptions {
   noRepeatMs?: number;
 }
 export interface SentenceSequence {
-  read(sentences: readonly RotatingSentence[], now: number, suspended?: boolean, overflowed?: (s: RotatingSentence) => boolean): RotatingSentence | null;
+  read(sentences: readonly WrittenSentence[], now: number, suspended?: boolean, overflowed?: (s: WrittenSentence) => boolean): WrittenSentence | null;
 }
 
 /** Cadence is a chance to change, not permission to repeat or to show expired data.
@@ -311,10 +314,10 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
   /** Per fact: when it was last on screen, and until when it holds. */
   const factSeen = new Map<string, { at: number; until: number }>();
   const kickers = new Map<SentenceKicker, number>();
-  let current: RotatingSentence | null = null;
+  let current: WrittenSentence | null = null;
   let heldSince = -Infinity;
   let previousNow = -Infinity;
-  const remember = (s: RotatingSentence, now: number, until: number | null) => {
+  const remember = (s: WrittenSentence, now: number, until: number | null) => {
     lastSeen.set(s.text, now);
     for (const key of sentenceFactKeys(s)) {
       factSeen.set(key, { at: now, until: Math.max(factSeen.get(key)?.until ?? -Infinity, until ?? -Infinity) });
@@ -331,7 +334,7 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       }
       previousNow = now;
       for (const [text, at] of lastSeen) if (now - at >= noRepeat && text !== current?.text) lastSeen.delete(text);
-      const valid = (s: RotatingSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
+      const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
       const held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
@@ -358,8 +361,8 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       for (const [key, seen] of factSeen) if (seen.until > now) facts.add(key);
       const byFact = facts.size >= SENTENCE_MIN_FACTS;
       const choices = byFact ? fresh.filter(s => sentenceFactKeys(s).every(key => !factSeen.has(key))) : fresh;
-      const factAge = (s: RotatingSentence) => Math.max(...sentenceFactKeys(s).map(key => factSeen.get(key)?.at ?? -Infinity));
-      const kickerAge = (s: RotatingSentence) => kickers.get(s.kicker) ?? -Infinity;
+      const factAge = (s: WrittenSentence) => Math.max(...sentenceFactKeys(s).map(key => factSeen.get(key)?.at ?? -Infinity));
+      const kickerAge = (s: WrittenSentence) => kickers.get(s.kicker) ?? -Infinity;
       choices.sort((a, b) => (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
       // The fact on screen in fresh words (a countdown's next minute, its next trip) continues
       // it rather than blanking the header; it never brings back a fact that has left.
