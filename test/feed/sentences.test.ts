@@ -293,7 +293,7 @@ describe('Workers AI sentences, without a real AI binding', () => {
       ['Muzej: sinkronizirano u 12:30.', 'Muzej: sinkronizirano u 12:30.'],
       ['Muzej: možda nije otvoren.', 'Muzej: možda nije otvoren.'],
       ['21 °C, vedro.', '21°C, vedro.'],
-      ['U 13:00 počinje događanje „Dani kazališta“ (Kino Europa).', 'U 13:00 počinje događanje „Dani“ (Kino Europa).'],
+      ['U 13:00 počinje događanje „Dani kazališta” (Kino Europa).', 'U 13:00 počinje događanje „Dani” (Kino Europa).'],
     ].map(([text, candidate]) => ({
       facts: [{ id: 'fact:1', kind: 'kultura' as const, text: text!, validUntil: NOW + 60_000 }], candidate: candidate!,
     })),
@@ -324,7 +324,7 @@ describe('Workers AI sentences, without a real AI binding', () => {
   it.each(['Back to the 90s', 'Zagreb, 3 bicikla'])(
     'retains the title %s in fallback, model output, KV and the client', async title => {
       const fact: SentenceFact = { id: 'event:opaque', kind: 'kultura',
-        text: `U 12:31 počinje događanje „${title}“ (Kino).`, validUntil: NOW + 60_000 };
+        text: `U 12:31 počinje događanje „${title}” (Kino).`, validUntil: NOW + 60_000 };
       const input = { ...request, facts: [fact] };
       expect(await writeSentences(env(), input)).toEqual([{
         text: fact.text, refs: [fact.id], kicker: fact.kind, validUntil: fact.validUntil, origin: 'template',
@@ -448,8 +448,8 @@ describe('W-C2 constrained inference contract', () => {
   ];
   it.each(hostile)('excludes strict-header %j in titles, venues and streets from inference, KV and HTTP', async value => {
     const facts: SentenceFact[] = [
-      { id: 'event:title', kind: 'kultura', text: `U 13:00 počinje događanje „${value}“ (Kino).`, validUntil: NOW + 60_000 },
-      { id: 'event:venue', kind: 'kultura', text: `U 13:00 počinje događanje „Film“ (${value}).`, validUntil: NOW + 60_000 },
+      { id: 'event:title', kind: 'kultura', text: `U 13:00 počinje događanje „${value}” (Kino).`, validUntil: NOW + 60_000 },
+      { id: 'event:venue', kind: 'kultura', text: `U 13:00 počinje događanje „Film” (${value}).`, validUntil: NOW + 60_000 },
       { id: 'closure:street', kind: 'radovi', text: `${value}: zatvoreno za promet do 18:00.`, validUntil: NOW + 60_000 },
       { id: 'always:review', kind: 'kultura', text: `Muzej: ${value}.`, validUntil: NOW + 60_000 },
       { id: 'closure:summary', kind: 'radovi', text: `Ilica: zatvoreno za promet do 18:00; ${value}.`, validUntil: NOW + 60_000 },

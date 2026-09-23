@@ -4,6 +4,8 @@ import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import { createDefaultI18n, DEFAULT_LOCALE, LOCALE_STORAGE_KEY, resolveInitialLocale, SUPPORTED_LOCALES } from '../../app/src/i18n/create-default-i18n';
 import { createLanguageToggle } from '../../app/src/i18n/toggle';
+import { SENTENCE_FAMILIES } from '../../shared/kiosk/sentence';
+import { SENTENCE_COPY_HR } from '../../app/src/city/sentence';
 
 function leafKeys(node: unknown, prefix = ''): string[] {
   if (typeof node === 'string') return [prefix];
@@ -123,5 +125,16 @@ describe('createLanguageToggle', () => {
     expect(document.documentElement.lang).toBe('en');
     expect(document.querySelector('h1')?.textContent).toBe(en.scan.title);
     expect(seen).toEqual(['en']);
+  });
+});
+
+// D2 read-through (quotation marks): the event title closes with ” (U+201D) like every other
+// Croatian quote in the catalogue and the docs; the wall's three copies of the template agree.
+describe('the header event sentence quotes its title „like this”', () => {
+  it('closes with U+201D in the catalogue, the typed family and the fallback copy', () => {
+    expect(hr.kiosk.sentence.event).toBe('{time} počinje događanje „{title}” ({venue}).');
+    expect(SENTENCE_FAMILIES.event.hr).toBe(hr.kiosk.sentence.event);
+    expect(SENTENCE_COPY_HR.event).toBe(hr.kiosk.sentence.event);
+    expect(hr.kiosk.sentence.event).not.toContain('“');
   });
 });

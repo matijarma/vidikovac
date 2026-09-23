@@ -101,7 +101,7 @@ export const SENTENCE_COPY_HR = {
   sunriseTime: 'U {time} izlazi sunce.',
   lastTram: 'Zadnji tramvaj {route} polazi {time}.',
   firstTram: 'Prvi tramvaj {route} polazi {time}.',
-  event: '{time} počinje događanje „{title}“ ({venue}).',
+  event: '{time} počinje događanje „{title}” ({venue}).',
   opening: '{name}: rad počinje {time}.',
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
