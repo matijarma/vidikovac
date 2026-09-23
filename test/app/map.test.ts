@@ -388,6 +388,9 @@ describe('the city places’ marks', () => {
     expect(all.minzoom).toBe(13);
     const venues = labels('venues');
     expect(venues.layout!.visibility).toBe('visible');
+    // The framed wall names its venues at every zoom: Trg at Kadar 8 on 1920 frames at about 12.86,
+    // and a cutoff at 13 left Gavella an anonymous programme count (review-w, P2).
+    expect(venues.minzoom).toBeUndefined();
     // On the framed wall a venue's name tries its other anchors before it
     // yields to a passing pill (decision 17), starting where the fixed one stood.
     expect(venues.layout!['text-variable-anchor-offset']).toEqual(overlays.nameAnchorOffsets(1.5));

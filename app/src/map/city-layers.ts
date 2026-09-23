@@ -48,7 +48,11 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
       'text-field':['case',far,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
       'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.otherText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
-    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,minzoom:13,
+    // The framed wall names its curated venues at every zoom its Kadar can
+    // frame (Trg at Kadar 8 on 1920 is about 12.86): a venue without its
+    // name is a programme count nobody can place. Everywhere else the names
+    // come in from 13, where the phone's places stop being a crowd.
+    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,...(mode==='venues'?{}:{minzoom:13}),
       ...(mode==='venues'?{filter:['!',['in',['get','category'],['literal',['bikes','air']]]]}:{}),layout:{
       visibility:mode==='none'?'none':'visible',
       'text-field':['get','title'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,

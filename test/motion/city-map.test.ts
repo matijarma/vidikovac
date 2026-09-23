@@ -855,6 +855,25 @@ describe('the marker census of the city layers', () => {
     expect(container.dataset.unlabelled).toBe('0');
   });
 
+  it('counts the framed wall\u2019s venue as named at Kadar 8\u2019s zoom below 13: its name is drawn, or held back by a pill, never cut off by the zoom', async () => {
+    const venue: MapPoint = { id: 'culture-1', lon: 15.972, lat: 45.814, title: 'Gavella', place: 'city', props: { category: 'culture', badge: '1', eventCount: 1, priority: 0 } };
+    const { map, container, frame, handle } = await harness({ lib: cityLib, points: [A, venue], extra: { symbolScale: 2, cityLabels: 'venues' } });
+    map.zoom = 12.86;
+    frame();
+    // The name did not draw (a pill over it): a hidden name, never a mark without one.
+    map.rendered = [dot('culture-1', { category: 'culture', badge: '1', eventCount: 1, priority: 0 }, 15.972, 45.814), badge('culture-1', '1')] as typeof map.rendered;
+    handle.update([A, venue], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.markers).toBe('1');
+    expect(container.dataset.hiddenNames).toBe('1');
+    expect(container.dataset.unlabelled).toBe('0');
+    // The paired or exploring map ('all') keeps its own floor at 13: there a bare count below it is unlabelled.
+    handle.setCityLabels!('all');
+    handle.update([A, venue], [CLOSURE]);
+    map.fire('idle');
+    expect(container.dataset.unlabelled).toBe('1');
+  });
+
   it('re-takes the census at the next idle after update(), never on an idle with nothing new', async () => {
     const { map, container, handle, frame } = await harness({ lib: cityLib });
     frame();
