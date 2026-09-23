@@ -481,8 +481,9 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
 }
 
 /**
- * One departure, the same row on Sada and in the stop's sheet: the line badge,
- * the destination, the time (arrivalTime). `data-live` says whether a tracked
+ * One departure, the same row on Sada, in the stop's sheet and on the wall's
+ * stop board: the line badge, the destination, the time (arrivalTime). It names
+ * its kind for the probe (§15.6, `[data-kind=departure]`). `data-live` says whether a tracked
  * vehicle carries the trip right now; it reads "false" once the view is frozen,
  * like the time's own marker. `kindOf` gives the badge its mode's shape. The
  * line and the headsign are ZET's text: a row that fails the row-surface check
@@ -491,7 +492,7 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
 export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
-  return `<li class="sada-departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
+  return `<li class="sada-departure" data-kind="departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as

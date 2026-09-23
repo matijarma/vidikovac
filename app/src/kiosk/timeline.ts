@@ -598,11 +598,6 @@ export interface StopBoardModel {
 
 const tripKey = (row: ArrivalRow): string => row.tripId || `${row.routeId}|${row.atMs}`;
 
-/** Sada's own row (transport/view.ts departureRow), marked as a departure for the probe (§15.6, `[data-kind=departure]`). */
-function boardRow(view: TransportView, i18n: I18n, row: ArrivalRow): string {
-  return view.departureRow(i18n, row, kindOfRoute).replace(/^<li /u, '<li data-kind="departure" ');
-}
-
 /** "Vozni red · 6 14:40 · 11 14:44": the next trips off the timetable alone, a grey clock each, never an estimate. */
 function timetableLine(i18n: I18n, trips: readonly ArrivalRow[]): string {
   const items = trips.map((trip) => {
@@ -618,7 +613,7 @@ function timetableLine(i18n: I18n, trips: readonly ArrivalRow[]): string {
  * name, its next three departures as Sada's rows, then the timetable line; a
  * box that does not hold them all loses trips off the timetable line, then the
  * line, then departures from the last. Probe: `[data-testid=stop-board]`, rows
- * `[data-kind=departure]`. A departure whose line or headsign fails the text
+ * `[data-kind=departure]`, which Sada's row carries itself. A departure whose line or headsign fails the text
  * check is not drawn (departureRow); a stop name that fails gives way to
  * "Sljedeći polasci".
  */
@@ -635,7 +630,7 @@ export function stopBoardVariants(i18n: I18n, board: StopBoardModel): string[] {
     : board.rows.length > 0 || board.status === 'down' ? i18n.t('arrivals.down') : board.status === 'none' ? i18n.t('status.loading') : i18n.t('arrivals.none');
   const variant = (rows: number, trips: number): string => `<div class="k-touch-body" data-testid="stop-board">`
     + `<h2 class="k-touch-title">${e(title)}</h2>`
-    + (view && lead.length > 0 ? `<ul class="k-touch-rows">${lead.slice(0, rows).map((row) => boardRow(view, i18n, row)).join('')}</ul>` : `<p class="k-touch-line">${e(empty)}</p>`)
+    + (view && lead.length > 0 ? `<ul class="k-touch-rows">${lead.slice(0, rows).map((row) => view.departureRow(i18n, row, kindOfRoute)).join('')}</ul>` : `<p class="k-touch-line">${e(empty)}</p>`)
     + (trips > 0 ? timetableLine(i18n, later.slice(0, trips)) : '')
     + '</div>';
   return [...new Set([variant(STOP_BOARD_ROWS, TIMETABLE_LINE_TRIPS), variant(STOP_BOARD_ROWS, 2), variant(STOP_BOARD_ROWS, 0), variant(2, 0), variant(1, 0)])];
