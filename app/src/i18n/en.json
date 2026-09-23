@@ -210,7 +210,8 @@
     "quakesNone": "No earthquakes recorded in the last 7 days.",
     "onFigure": "{shown} of {total} on the figure",
     "magnitude": "M {mag}",
-    "depth": "depth {depth} km"
+    "depth": "depth {depth} km",
+    "reference": "Measurements, sun, air and the Sava bulletin"
   },
   "safety": {
     "hitnoSame": "The same page without a scan: Safety",
@@ -353,7 +354,8 @@
       "venue": "Venue",
       "when": "When"
     },
-    "legalNote": "The title comes from the gazette; the content and legal effect are at the original."
+    "legalNote": "The title comes from the gazette; the content and legal effect are at the original.",
+    "consultations": "National consultations"
   },
   "transit": {
     "fromStop": "From {stop}",
@@ -1158,5 +1160,19 @@
       "W": "west",
       "NW": "north-west"
     }
+  },
+  "city": {
+    "bikeCount_one": "{count} bike",
+    "bikeCount_other": "{count} bikes",
+    "bikeCountUnknown": "– bikes",
+    "airIndex-1": "Good",
+    "airIndex-2": "Fair",
+    "airIndex-3": "Moderate",
+    "airIndex-4": "Poor",
+    "airIndex-5": "Very poor",
+    "airIndex-6": "Extremely poor",
+    "airNote": "Preliminary station index, not a citywide assessment.",
+    "airMethod": "Station observations are preliminary, not a citywide assessment. Particulate indices use rolling averages.",
+    "consultationsNote": "National sources, not City of Zagreb consultations."
   }
 }

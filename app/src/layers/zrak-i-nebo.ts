@@ -259,7 +259,7 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
 <div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}</div>
-<details class="wx-reference"><summary>${i18n.getLocale().startsWith('en')?'Measurements, sun, air and river bulletin':'Mjerenja, sunce, zrak i bilten Save'}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
+<details class="wx-reference"><summary>${escapeHtml(i18n.t('weather.reference'))}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
 ${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
 </section>`);
 }
