@@ -15,6 +15,10 @@ export const LOCALE_STORAGE_KEY = 'vidikovac-locale';
 export function isSupportedLocale(code: string): code is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(code);
 }
+/** The catalogue a locale tag reads: English for any `en` tag, Croatian for everything else. */
+export function catalogueLocale(locale: string): SupportedLocale {
+  return locale.toLowerCase().startsWith('en') ? 'en' : 'hr';
+}
 export function localeLabel(code: string): string {
   return isSupportedLocale(code) ? LOCALE_LABELS[code] : code.toUpperCase();
 }

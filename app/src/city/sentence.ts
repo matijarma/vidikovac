@@ -152,13 +152,12 @@ function nextSolar(now: number): { kind: 'sunrise' | 'sunset'; at: number } {
   return { kind: 'sunrise', at: sunTimes(new Date(today.getTime() + 86_400_000)).sunrise.getTime() };
 }
 
+/** "u 18:40", "sutra u 06:12", "25. 9. u 20:00": in the language the sentence's template is read in (copy() reads input.i18n). */
 function timedLabel(at: number, input: SentenceFactsInput): string {
-  const english = input.locale.startsWith('en');
-  if (sameZagrebDay(at, input.now)) return `${english ? 'at' : 'u'} ${clock(at)}`;
-  if (dayKey(at) === dayKey(nextMidnight(input.now) + 12 * 3_600_000)) {
-    return `${english ? 'tomorrow at' : 'sutra u'} ${clock(at)}`;
-  }
-  return `${dayMonth(at)} ${english ? 'at' : 'u'} ${clock(at)}`;
+  const time = clock(at);
+  if (sameZagrebDay(at, input.now)) return input.i18n.t('time.at', { time });
+  if (dayKey(at) === dayKey(nextMidnight(input.now) + 12 * 3_600_000)) return input.i18n.t('time.tomorrowAt', { time });
+  return input.i18n.t('time.dateAt', { date: dayMonth(at), time });
 }
 
 /** At most sixteen fact records; solar is reserved even with a full timeline. */

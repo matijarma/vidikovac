@@ -29,7 +29,7 @@ import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { tickTimebandClock } from './experience/timeband';
-import { storeLocale } from './i18n/create-default-i18n';
+import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import type { ExportKind, LayerContext } from './layers/types';
@@ -497,7 +497,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const at = now();
     const stable = feed.modelSentenceFacts(feed.sadaSentenceFacts(input, feed.selectNearby(input)), at);
     if (!stable.length) return;
-    const locale: SentenceRequest['locale'] = i18n.getLocale().startsWith('en') ? 'en' : 'hr';
+    const locale: SentenceRequest['locale'] = catalogueLocale(i18n.getLocale());
     const key = JSON.stringify([locale, stable.map((fact) => [fact.id, fact.kind, fact.text])]);
     if (at - sentenceAskedAt < (key === sentenceFetchKey ? feed.SENTENCE_REFRESH_MS : SENTENCE_FETCH_MS)) return;
     sentenceFetchKey = key;

@@ -94,6 +94,13 @@ describe('one name per concept: the transport surface (slop #11, [O-51])', () =>
     const synonyms = leafKeys(HR).filter((key) => ['Kretanje', 'Prijevoz i raspored'].includes(leaf(HR, key)!.trim()));
     expect(synonyms).toEqual([]);
   });
+  it('app/src/city/strings.ts is the adapter over city.*: no movement or network word, no own copy', () => {
+    expect(Object.keys(hr.city)).not.toContain('movement');
+    expect(Object.keys(hr.city)).not.toContain('network');
+    const adapter = read('app/src/city/strings.ts');
+    expect(adapter).not.toMatch(/Kretanje|Prijevoz i raspored|Getting around|Transport and timetable/);
+    expect(adapter).not.toMatch(/[čćžšđ]/iu);
+  });
   it('the tab, the map region and the landing line say "Karta"; the sheet says "Detalji"', () => {
     expect(hr.layers['u-pokretu']).toBe(TRANSPORT_TAB_WORD);
     expect(hr.transport.mapRegion).toBe(TRANSPORT_TAB_WORD);
@@ -103,6 +110,24 @@ describe('one name per concept: the transport surface (slop #11, [O-51])', () =>
     expect(read('app/index.html')).toContain(`>${hr.landing.evidence.domains}<`);
     expect(read('app/src/izvori-render.ts')).toContain('<a href="#izvor-zet-rt">Promet</a>');
     expect(JSON.stringify(hr)).not.toMatch(/Karta prometa|Detalji prometa|Promet oko/);
+  });
+});
+
+describe('one catalogue: no inline Croatian/English pair outside app/src/i18n (WP5 step 2)', () => {
+  // A word picked by `en ? 'English' : 'Hrvatski'` is copy the catalogue cannot see: the parity
+  // test, the orphan test and the owner's read-through all miss it. Locale-dependent formatting goes
+  // through intlLocale() or catalogueLocale(), copy through i18n.t / tr / ct.
+  const PAIR = [/(?:\ben|english|isEn)\s*\?\s*['"`]/, /getLocale\(\)\.startsWith\('en'\)\s*\?\s*['"`]/];
+  it('no .ts under app/src outside app/src/i18n chooses a string by locale inline', () => {
+    const hits = walk('app/src').filter((file) => !file.startsWith('app/src/i18n/')).flatMap((file) =>
+      read(file).split('\n').flatMap((line, i) => (PAIR.some((re) => re.test(line)) ? [`${file}:${i + 1}`] : [])));
+    expect(hits).toEqual([]);
+  });
+  it('the guard sees the forms it bans', () => {
+    for (const line of ["x = en ? 'Map' : 'Karta';", 'y = english ? `at` : `u`;', "z = i18n.getLocale().startsWith('en') ? 'en-GB' : 'hr-HR';"]) {
+      expect(PAIR.some((re) => re.test(line)), line).toBe(true);
+    }
+    expect(PAIR.some((re) => re.test("const code = catalogueLocale(i18n.getLocale());"))).toBe(false);
   });
 });
 

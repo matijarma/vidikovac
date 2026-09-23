@@ -15,7 +15,8 @@
 //   - app/src/kiosk/strings.ts `group('name', ['a', …])` (kiosk.name.a), `forms('name', 'base')`
 //     (a plural base) and `record([...], (k) => \`prefix${k}\`)`;
 //   - `tr(i18n, 'k')` (transport.k), `trPlural(i18n, 'base', n)` (a plural base under
-//     transport.) and `ct(i18n, 'k')` (a word of app/src/city/strings.ts, not a catalogue key);
+//     transport.) and `ct(i18n, 'k')` (city.k: app/src/city/strings.ts is the thin adapter over
+//     the catalogue's city.* group, WP5 A1; the short word is kept in `cityWords` as well);
 //   - `data-i18n`, `data-i18n-placeholder` and `data-i18n-aria-label` attributes in any string
 //     of app/src and in the static HTML entries (app/*.html, app/<dir>/index.html);
 //   - every string of a ternary (or `??` / `||`) in any of those argument positions.
@@ -41,7 +42,7 @@ export interface I18nScan {
   keys: Map<string, I18nRef[]>;
   /** Plural bases: the catalogue holds `${base}_one`, `${base}_few` (where the locale has one) and `${base}_other`. */
   plurals: Map<string, I18nRef[]>;
-  /** Words of app/src/city/strings.ts read through ct(); they are not catalogue keys. */
+  /** The ct() references by their short word: each is also in `keys` as the catalogue key city.<word>. */
   cityWords: Map<string, I18nRef[]>;
   /** Template-literal keys by their static prefix. */
   dynamic: Map<string, I18nRef[]>;
@@ -53,6 +54,7 @@ export interface I18nScan {
 
 /** The key prefixes app/src reads through a template literal (a grep for `.t(\`` and record()). */
 export const DYNAMIC_PREFIXES: readonly string[] = Object.freeze([
+  'city.fact-',
   'common.theme.',
   'events.category.',
   'events.sources.',
@@ -83,6 +85,9 @@ const STRINGS_HELPERS = new Set(['group', 'forms', 'record']);
 /** app/src/transport/strings.ts implements tr()/trPlural() over `.t(\`transport.${key}\`)`. */
 const TRANSPORT_FILE = 'app/src/transport/strings.ts';
 const TRANSPORT_HELPERS = new Set(['tr', 'trPlural']);
+/** app/src/city/strings.ts implements ct() and bikeCount() over `.t(\`city.${key}\`)` and city.bikeCount. */
+const CITY_FILE = 'app/src/city/strings.ts';
+const CITY_HELPERS = new Set(['ct']);
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -208,7 +213,8 @@ export function scanI18nSource(file: string, source: string, into: I18nScan = em
       const callee = node.expression;
       const args = node.arguments;
       const insideHelper = ancestorNamed(node, wrapperNames) || (stringsFile && ancestorNamed(node, STRINGS_HELPERS))
-        || (file === TRANSPORT_FILE && ancestorNamed(node, TRANSPORT_HELPERS));
+        || (file === TRANSPORT_FILE && ancestorNamed(node, TRANSPORT_HELPERS))
+        || (file === CITY_FILE && ancestorNamed(node, CITY_HELPERS));
       if (ts.isPropertyAccessExpression(callee) && callee.name.text === 't') {
         if (!insideHelper) readKey(args[0], sinkFor(node, 'i18n.t', '', 'keys'));
       } else if (ts.isIdentifier(callee)) {
@@ -216,7 +222,10 @@ export function scanI18nSource(file: string, source: string, into: I18nScan = em
         if (wrappers.has(name) && !insideHelper) readKey(args[0], sinkFor(node, 'wrapper', wrappers.get(name)!, 'keys'));
         else if (name === 'tr' && !insideHelper) readKey(args[1], sinkFor(node, 'tr', 'transport.', 'keys'));
         else if (name === 'trPlural' && !insideHelper) readKey(args[1], sinkFor(node, 'trPlural', 'transport.', 'plurals'));
-        else if (name === 'ct') readKey(args[1], sinkFor(node, 'ct', '', 'cityWords'));
+        else if (name === 'ct' && !insideHelper) {
+          readKey(args[1], sinkFor(node, 'ct', 'city.', 'keys'));
+          readKey(args[1], { ...sinkFor(node, 'ct', '', 'cityWords'), dynamic: () => {}, unresolved: () => {} });
+        }
         else if (stringsFile && (name === 'group' || name === 'forms') && args[0] && ts.isStringLiteral(args[0])) {
           const prefix = `kiosk.${args[0].text}.`;
           if (name === 'group' && args[1] && ts.isArrayLiteralExpression(args[1])) {
