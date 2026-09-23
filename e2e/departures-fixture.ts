@@ -25,12 +25,9 @@
 // its trip starts are exact departures. Tram times follow the committed pattern
 // timings, in whole minutes like lastrun; the old cadence only samples those
 // trips, never creates missing departures. Both kinds expire normally.
-import east from '../app/public/data/lastrun/106_1.json';
-import west from '../app/public/data/lastrun/106_2.json';
-import busDeparture from '../app/public/data/lastrun/1849_23.json';
-import busArrival from '../app/public/data/lastrun/1849_24.json';
-import network from '../app/public/data/zet-network.json';
-import trips from '../app/public/data/zet-trips.json';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { decodeTripIndex } from '../shared/motion/trips';
 import type { DepartureBoard, ScheduledDeparture } from '../shared/city/types';
 import type { FeedItem } from '../worker/feed/schema';
@@ -39,6 +36,19 @@ import { FIXTURE_STOP } from './experience-fixtures';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
+
+// Committed data read as files, the way the other e2e modules do: Playwright runs the specs through
+// Node's own module loader, which refuses a bare JSON import ("needs an import attribute"), while
+// vitest accepts it, so a JSON import here passes the unit gate and fails the accept tier. Resolved
+// through node:path, not a `URL` object: under happy-dom the global URL is the DOM's and fs cannot read it.
+const DATA_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../app/public/data');
+const committed = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA_DIR, path), 'utf8')) as T;
+const east = committed<LastRunFile>('lastrun/106_1.json');
+const west = committed<LastRunFile>('lastrun/106_2.json');
+const busDeparture = committed<LastRunFile>('lastrun/1849_23.json');
+const busArrival = committed<LastRunFile>('lastrun/1849_24.json');
+const network = committed<{ stops: { id: string[]; name: string[] } }>('zet-network.json');
+const trips = committed<unknown>('zet-trips.json');
 
 const PLATFORM_IDS = ['106_1', '106_2', '1849_23', '1849_24'] as const;
 const TIMETABLES: Readonly<Record<string, LastRunFile>> = {
