@@ -150,26 +150,36 @@ export const CONNECTOR_SNAP_METRES = 2.5;
 // adoptions on Sunday 20 Sep had an empty own-route pool, 351 of them within
 // 150 m of a terminal). For every tram route and every pair (L, F) of a
 // path's last served platform L and another path's first served platform F,
-// L != F, no more than LOOP_PAIR_MAX_METRES apart (59 such pairs on feed
-// 000395, 0 to 354 m apart), the build routes over the directed graph from
-// the end of the arriving path's last edge to the start of the departing
-// path's first edge; what it finds becomes a path `loop:<route>:<hash>` with
-// direction LOOP_DIRECTION, stops [L, F] and those of the two platforms that
-// lie on it as its served list. Its first edge is the arriving path's last
-// edge and its last edge the departing path's first, so a tram on the loop
-// stays on its own line's rails from one trip to the next. The loop has to be
-// DRAWN: at most termini of feed 000395 (Borongaj, Žitnjak, Savišće,
-// Črnomerec, Ljubljanica, Prečko, Savski most, Park Maksimir, Sopot,
-// Gračansko dolje) the arriving shape ends and the departing one starts 40 to
-// 255 m apart with no track between, and the pair is skipped by name ("no
-// directed route"). A route longer than LOOP_MAX_METRES is a detour through
-// the network, not the loop (Zapruđe: 9.3 km round), and is skipped as well;
-// the cap admits Ravnice, 1,370 m, where route 4's short workings turn round
-// the Dubrava loop.
+// L != F, no more than LOOP_PAIR_MAX_METRES apart (88 such pairs on feed
+// 000395), the build routes over the directed graph from the end of the
+// arriving path's last edge to the start of the departing path's first edge;
+// what it finds becomes a path `loop:<route>:<hash>` with direction
+// LOOP_DIRECTION, stops [L, F] and those of the two platforms that lie on it
+// as its served list. Its first edge is the arriving path's last edge and its
+// last edge the departing path's first, so a tram on the loop stays on its
+// own line's rails from one trip to the next. The loop has to be DRAWN: at
+// most termini of feed 000395 (Borongaj, Žitnjak, Savišće, Črnomerec,
+// Ljubljanica, Prečko, Savski most, Park Maksimir, Sopot, Gračansko dolje)
+// the arriving shape ends and the departing one starts 40 to 255 m apart with
+// no track between, and the pair is skipped by name ("no directed route"). A
+// route longer than LOOP_MAX_METRES is a detour through the network, not the
+// loop (Zapruđe: 9.3 km round), and is skipped as well. The pair radius is
+// the cap itself: a loop runs past both of its platforms, so a pair further
+// apart than LOOP_MAX_METRES can have no loop within it, and a smaller radius
+// only hides loops the rails do draw. At 400 m it hid the Dubrava loop's
+// fourteen: nine lines end at Mandlova 1787_4 and start their next trip at
+// Ravnice 264_2, 598 m back along the other track (1,232 m round the loop),
+// and routes 4, 7 and 11 join Ravnice and Dubrava platforms 721 to 1,019 m
+// apart. Without them a tram running back to Ravnice along the westbound
+// track had only its line's eastbound paths beside it and was read backwards
+// along one: all 9 and 12 backward runs of 500 m or more on 20 and 21 Sep
+// ended at Ravnice, and with them there are none.
+// Route 4's Ravnice 264_1 -> 264_2 stays out: its arriving path runs 385 m
+// past the platform before the turn, 1,895 m in all.
 export const LOOP_DIRECTION = -1;
 export const LOOP_ID_PREFIX = 'loop:';
-export const LOOP_PAIR_MAX_METRES = 400;
 export const LOOP_MAX_METRES = 1500;
+export const LOOP_PAIR_MAX_METRES = LOOP_MAX_METRES;
 // How much of the two boundary edges a loop keeps: from this far before the
 // arriving platform to this far past the departing one (along the rails, from
 // where the platform projects). The rest of a long boundary edge (3.3 km into

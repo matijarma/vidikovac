@@ -80,8 +80,10 @@ križanjima, sintetička staza za svaki tramvajski uzorak, posluženi popis
 stajališta i `graphHash`), `npm run build:trips`, zatim `npm run build:schema`
 (shema i, uz nju, tablica boja `app/src/data/zet-line-colours.json`).
 Verzije mreže, indeksa i sheme moraju se slagati; provjera artefakta i njegove
-152 staze dio je testova (146 ih se smješta na nacrt). Uz njih artefakt nosi 17 okretišnih petlji
-(staze `loop:`); vozilo koje vozi petljom shema crta na kolutu okretišta. Shema se poslužuje statički pod `/data/`, ne kroz
+152 staze dio je testova (146 ih se smješta na nacrt). Uz njih artefakt nosi 30 okretišnih petlji
+(staze `loop:`); vozilo koje vozi petljom shema crta na kolutu okretišta. Iznimka su petlje od Mandlove do
+Ravnica na sedam linija kojima ZET-ov nacrt ne prikazuje ni Mandlovu ni Ravnice: vozilo na takvoj petlji
+shema ne crta, a na karti ostaje. Shema se poslužuje statički pod `/data/`, ne kroz
 Worker i ne kao novi skup pod `/open`.
 
 ### Ručne i građevne dopune uz ZET-ove artefakte
