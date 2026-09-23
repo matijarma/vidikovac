@@ -67,7 +67,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await page.goto(FIXTURE_DASHBOARD);
       await expect(page.getByTestId('sada-place')).toHaveText(/\S/);
       await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
-      await expect(page.getByTestId('nearby')).toBeVisible();
+      // Sada's own list: the desk pair shows Karta's beside it (chunk E), so the probe is scoped to the feed.
+      await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
       const order = await page.locator('#layer-grad-sada').evaluate((sada) => {
         const parts = ['sada-place', 'sada-sentence', 'day-departures', 'nearby'];
         const nodes = parts.map((id) => sada.querySelector(`[data-testid="${id}"]`));
@@ -143,7 +144,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
       await page.goto(FIXTURE_DASHBOARD);
       await openLayer(page, 'u-pokretu');
       const map = page.getByTestId('map-canvas');
-      await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
+      // Drawing: ready, or tiles-failed where the local server has no basemap tiles (the overlays still draw).
+      await expect(map).toHaveAttribute('data-map-status', /^(ready|tiles-failed)$/, { timeout: 30_000 });
       const canvas = await map.locator('canvas').elementHandle();
       if (phone) {
         await page.locator('.t-sheet-toggle').click();
@@ -208,12 +210,20 @@ test('text zoom keeps the place, the departures and U blizini without horizontal
     await page.addStyleTag({ content: `html { font-size: ${zoom}% !important; }` });
     await expect(page.getByTestId('sada-place')).toBeVisible();
     await expect(page.locator(SADA_DEPARTURES).first()).toBeVisible();
-    await expect(page.getByTestId('nearby')).toBeVisible();
+    await expect(page.locator('#layer-grad-sada [data-testid=nearby]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
   }
 });
 
 test('without WebGL the transport search still opens a real stop and its routes', async ({ page }) => {
+  // An exception in the page is the failure itself, not a silent no-op: the Sada band's half-built MapLibre v6 map
+  // (no WebGL2) once threw from its teardown inside every render after Karta opened, so Enter on a stop did nothing.
+  // Console errors ride along in the messages (a local server answers some city sources 503), never as the verdict.
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', (error) => { pageErrors.push(error.stack ?? String(error)); });
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  const uncaught = (step: string): string => `no uncaught error ${step}; console errors: ${consoleErrors.join(' | ') || 'none'}`;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
@@ -229,13 +239,21 @@ test('without WebGL the transport search still opens a real stop and its routes'
   await openLayer(page, 'u-pokretu');
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'unavailable', { timeout: 30_000 });
   await expect(page.getByTestId('map-status')).toContainText('Pretraga, linije i stanice rade i bez nje.');
+  expect(pageErrors, uncaught('opening Karta without WebGL')).toEqual([]);
   await page.getByTestId('transport-search').fill('Jela');
-  await expect(page.getByTestId('transport-results').getByRole('option').first()).toBeVisible();
-  await page.getByTestId('transport-search').press('ArrowDown');
+  const options = page.getByTestId('transport-results').getByRole('option');
+  await expect(options.first()).toBeVisible();
+  // One field over routes, stops, places and streets (WP4): the street stories of the Jelačić streets rank before the
+  // stops here, so the keyboard walks down to the first stop and takes it, the way a person would.
+  const stopIndex = await options.evaluateAll((els) => els.findIndex((el) => el.getAttribute('data-action') === 'select-stop'));
+  expect(stopIndex, 'a stop is among the results').toBeGreaterThanOrEqual(0);
+  for (let i = 0; i <= stopIndex; i++) await page.getByTestId('transport-search').press('ArrowDown');
   await page.getByTestId('transport-search').press('Enter');
+  expect(pageErrors, uncaught('from the search to the stop')).toEqual([]);
   await expect(page.getByTestId('stop-title')).toContainText('Jela');
   await expect(page.getByTestId('stop-routes').locator('button').first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  expect(pageErrors, uncaught('on the stop')).toEqual([]);
 });
 
 test('printing selected civic metadata retains provenance even when its disclosure was closed', async ({ page }) => {

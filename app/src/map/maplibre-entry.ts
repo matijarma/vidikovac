@@ -11,6 +11,26 @@ import '../../../shared/kiosk/external-text';
 // here, so the lightweight graph never carries either file.
 import '../core/map-worker';
 export { AttributionControl, GeolocateControl, LngLatBounds, Map, NavigationControl, ScaleControl } from 'maplibre-gl';
+
+let webgl2: boolean | undefined;
+/**
+ * Whether this browser gives a canvas a WebGL2 context, the one MapLibre v6 draws with. Without it v6's Map
+ * constructor no longer throws: it reports a GPUInitializationError on the map's error event and returns a map
+ * with no painter, whose resize() and remove() then throw (a still map on Sada, torn down when Karta opened,
+ * broke the page's render). city-map.ts asks this before it builds a map and takes its no-map path instead.
+ * One probe per page; its context is released at once.
+ */
+export function webgl2Available(): boolean {
+  if (webgl2 !== undefined) return webgl2;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    webgl2 = gl !== null;
+  } catch {
+    webgl2 = false;
+  }
+  return webgl2;
+}
 export * from './basemap';
 export * from './overlays';
 export * from './city-layers';

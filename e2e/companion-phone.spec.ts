@@ -248,7 +248,8 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
       message: `at least one vehicle pill (data-pills) within ${KARTA_PILLS_WITHIN_MS} ms, with no tap`,
     }).toBeGreaterThanOrEqual(1);
     await expect(map, 'every mark on Karta carries a count or a name (data-unlabelled 0)').toHaveAttribute('data-unlabelled', '0', { timeout: PAINT_MS });
-    await expect(page.locator(`${PHONE_PROBES.desktopKarta} details`), 'Karta has no disclosure').toHaveCount(0);
+    // MapLibre's own attribution control is a collapsed <details> (the map's licence credit, kept); no other disclosure stands.
+    await expect(page.locator(`${PHONE_PROBES.desktopKarta} details:not(.maplibregl-ctrl-attrib)`), 'Karta has no disclosure').toHaveCount(0);
     await expect(page.locator(PHONE_PROBES.kartaDisclosures), 'no map menu, filter disclosure or group taxonomy').toHaveCount(0);
     for (const word of KARTA_RETIRED_WORDS) {
       await expect(page.getByText(word), `no "${word}" on Karta`).toHaveCount(0);

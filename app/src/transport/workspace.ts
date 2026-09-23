@@ -58,7 +58,7 @@ import { routeType } from '../kiosk/stops';
 import { frameView } from '../map/frame';
 import { reconcile } from '../ui/dom/reconcile';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
-import { feedLive } from '../city/feed';
+import { externalTextReady, feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
@@ -455,7 +455,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     ctx().navigate?.('u-pokretu', pub);
   }
 
-  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
+  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content.
+   *  A selection lifts the sheet to half, never leaves it at peek; a stop opens it, so its three departures and "Vozni red"
+   *  are in the viewport at once (§11, §16.4): the board is the answer, the map is one chevron away. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
     if(ctx().session?.frozen)return;
     if (next && query) {
@@ -474,10 +476,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       following = null;
       handle?.follow?.(null);
     }
-    // The sheet settles at half before the map moves, so the fit is padded for the detent the person will see;
-    // padded for an open sheet, MapLibre has no room left and refuses the fit.
-    if (next) sheet?.set('half');
-    handle?.select?.(next, { fit: opts.fit });
+    // The sheet settles at its detent before the map moves, so the fit is padded for the detent the person will see;
+    // padded for an open sheet MapLibre has no room left and refuses the fit, so a stop's board opens without one
+    // ("Prikaži na karti" in the board brings the map to the stop when the person wants it).
+    const opens = next?.kind === 'stop' && mode === 'phone';
+    if (next) sheet?.set(opens ? 'open' : 'half');
+    handle?.select?.(next, { fit: opens ? false : opts.fit });
     if (opts.relay !== false) relay(next);
     if (query) {
       query = '';
@@ -673,10 +677,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       const total = results.length;
       if (activeOption && !results.some(({ r }) => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
       const label = (r: CitySearchResult) => r.kind === 'place' ? placeCategory(i18n,r.record) : r.kind === 'street' ? ct(i18n,'streets') : tr(i18n,r.kind === 'stop' ? 'stop' : 'route');
-      html = `<div id="${ids.results}" role="listbox" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(({ r, texts }) =>
+      html = `<div id="${ids.results}" role="listbox" data-testid="transport-results" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(({ r, texts }) =>
         `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(texts.name)}</strong><span class="city-meta">${esc(texts.detail)}</span></span></div>`).join('')}</div>`;
       if(total>cityLimit)html+=`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')} (${total-cityLimit})</button>`;
-      if(!total)html+=`<p role="status">${ct(i18n,cityState().loading?'loading':'noResults')}</p>`;
+      // Until the text policy is in hand (the feed chunk, requested at mount) every name is refused: the list is loading, not empty.
+      if(!total)html+=`<p role="status">${ct(i18n,cityState().loading||!externalTextReady()?'loading':'noResults')}</p>`;
       else if(cityState().loading)html+=`<p class="city-meta" role="status">${ct(i18n,'partial')} ${ct(i18n,'loading')}</p>`;
       peekText = trPlural(i18n, 'resultsCount', total);
       peekHtml = esc(peekText);

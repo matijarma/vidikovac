@@ -314,7 +314,7 @@ test('the Promet sheet cycles search-visible peek, 38% detail and open; handle a
 test('one finger does one thing: a swipe over the Promet map pans the camera and leaves the page put, a swipe over the open sheet body scrolls the body and not the camera, a swipe over Sada scrolls the page', async ({ page }) => {
   await openDashboard(page, PHONE);
   await openLayer(page, 'u-pokretu');
-  await waitForMap(page, /^ready$/);
+  await waitForMap(page, /^(ready|tiles-failed)$/); // drawing, with or without basemap tiles (the local server has none)
   const cdp = await page.context().newCDPSession(page);
 
   await cycleTo(page, 'peek');

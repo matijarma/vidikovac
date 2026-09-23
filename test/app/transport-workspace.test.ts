@@ -412,7 +412,7 @@ describe('search and selection', () => {
     const stopOption = q<HTMLElement>('[role=option][data-action=select-stop]');
     expect(text(stopOption)).toContain('Črnomerec');
     stopOption.click();
-    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: true });
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: false }); // a stop opens the sheet, so no fit (§16.4);
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
     expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
@@ -798,6 +798,8 @@ describe('third-party text on the Karta sheet (WP4 review)', () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     expect(all('[role=option][data-action=select-place]')).toHaveLength(1);
     expect(text(q('[role=option] strong'))).toBe('Gavella');
+    // The results listbox keeps its probe (e2e/experience.spec.ts reads it without WebGL too).
+    expect(q('[data-testid=transport-results][role=listbox]')).not.toBeNull();
   });
 
   it('a closure whose summary fails the row rule prints no prose; one whose title fails prints no title and no peek', () => {
@@ -833,6 +835,28 @@ describe('third-party text on the Karta sheet (WP4 review)', () => {
     expect(text(q('[data-testid=route-vehicles]'))).not.toContain('lozinku');
     expect(peek()).toContain('6');
     expect(document.body.textContent).not.toContain('lozinku');
+  });
+});
+
+describe('a stop opens the sheet (WP4 §11, §16.4)', () => {
+  it('a stop chosen from the search opens the sheet with no map fit, so its three departures and "Vozni red" are in view; a route lifts it to half with a fit', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    render(context);
+    const ws = q<HTMLElement>('[data-testid=transport-workspace]');
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-stop]').click();
+    expect(ws.dataset.sheet).toBe('open');
+    expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop' }), { fit: false });
+    expect(q('[data-testid=stop-board]')).not.toBeNull();
+    // A route is read beside the map: half, fitted.
+    input.value = '6';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    q<HTMLElement>('[role=option][data-action=select-route][data-id="6"]').click();
+    expect(ws.dataset.sheet).toBe('half');
+    expect(last().select).toHaveBeenLastCalledWith({ kind: 'route', id: '6' }, { fit: true });
   });
 });
 
