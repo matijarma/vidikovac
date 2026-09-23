@@ -8,7 +8,9 @@
 //   1. the camera's zoom is frameView's for the measured radius and the map
 //      host's own laid-out box, within 0.05;
 //   2. the buses stay on the picture [O-71]: a bus route is among the pills;
-//   3. the pills list whole line numbers, never a "+N" fold;
+//   3. the pills list whole line numbers, never a "+N" fold, and no pill's
+//      label runs past the two-row budget (decision 23: at most
+//      PILL_MAX_LINES rows of PILL_MAX_CHARS_CLUSTER characters);
 //   4. every BAJS station is a disc that says something: its number, the grey
 //      "0", or the grey disc without a number for a station that is not
 //      renting -- and no drawn mark is left without a count or a name
@@ -42,6 +44,7 @@ import { APP_URL, E2E_STOP_ID, provisionKiosk } from './helpers';
 import { installKioskFeedFixture, installWallFixture } from './experience-fixtures';
 import { installCityFixture, WALL_BIKES } from './city-fixtures';
 import { frameView } from '../app/src/map/frame';
+import { PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, pillRows } from '../app/src/motion/pills';
 import { DEFAULT_FRAME_STOPS, frameLinesOf, frameRadiusM, frameStopsFrom } from '../shared/city/frame';
 import { placeFromStop } from '../shared/city/place';
 import { decodeNetwork } from '../shared/motion/network';
@@ -70,9 +73,17 @@ function measuredFrame(): { place: { lon: number; lat: number }; radiusM: number
   return { place, radiusM: frameRadiusM(place, frameStopsFrom(stops, isTram, frameLinesOf(network)), DEFAULT_FRAME_STOPS) };
 }
 
-/** Every line number the pill census carries, a merged pill's ("6·11") split into its lines. */
+/** Every line number the pill census carries, a merged pill's ("6·11", or a
+ *  wrapped hub's two rows) split into its lines. */
 function numbersIn(pills: string | null): string[] {
-  return (pills ?? '').split('|').filter(Boolean).flatMap((label) => label.split('·'));
+  return (pills ?? '').split('|').filter(Boolean).flatMap((label) => label.split(/[·\n]/));
+}
+
+/** The pill labels in the census that run past the two-row budget: more rows
+ *  than PILL_MAX_LINES, or a row longer than PILL_MAX_CHARS_CLUSTER. */
+function overBudget(pills: string | null): string[] {
+  return (pills ?? '').split('|').filter(Boolean)
+    .filter((label) => pillRows(label).length > PILL_MAX_LINES || pillRows(label).some((row) => row.length > PILL_MAX_CHARS_CLUSTER));
 }
 
 /** The census string `name:N;name:N` as numbers. */
@@ -119,6 +130,7 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
   const pills = (await map.getAttribute('data-pills')) ?? '';
   expect(pills).not.toBe('');
   expect(pills).not.toMatch(/\+\d/);
+  expect(overBudget(pills), 'pill labels past two rows of forty characters').toEqual([]);
 
   // 4. The marks: the three stations of WALL_BIKES, each saying what it is, and nothing drawn mute.
   await expect.poll(() => map.getAttribute('data-bajs'), { timeout: 30_000, message: 'data-bajs' }).toBe('counted:1;zero:1;blank:1;far:0');
@@ -143,6 +155,7 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
   const census = {
     radiusM: Math.round(radiusM), expectedZoom: Number(expected.toFixed(2)), zoom: await map.getAttribute('data-zoom'),
     host: await hostBox(host), pills: pills.split('|').length, markers: await map.getAttribute('data-markers'),
+    longestPill: pills.split('|').reduce((a, b) => (b.length > a.length ? b : a), ''), pillRowsMax: Math.max(...pills.split('|').map((l) => pillRows(l).length)),
     unlabelled: await map.getAttribute('data-unlabelled'), bajs: await map.getAttribute('data-bajs'), overlaps, discPills, hiddenNames,
     ownNameCrossed: await map.getAttribute('data-own-name-crossed'),
   };
@@ -194,4 +207,5 @@ test('the whole-city window: the BAJS stations are far dots, deliberately withou
   await expect(map).toHaveAttribute('data-markers', String(WALL_BIKES.length));
   await expect(map).toHaveAttribute('data-unlabelled', '0');
   expect((await map.getAttribute('data-pills')) ?? '').not.toMatch(/\+\d/);
+  expect(overBudget(await map.getAttribute('data-pills')), 'pill labels past two rows of forty characters').toEqual([]);
 });
