@@ -49,11 +49,11 @@ function badgeLabel(routeId: string, routeName: string, s: KioskStrings): string
  *  plate and the destination, with the time floated at their right. One line,
  *  like every other board row on this screen.
  *
- *  What is NOT here is the per-row "po redu vožnje": a second line under every
- *  untracked row doubled the height of a card read from four metres away. The
- *  distinction survives whole -- a tracked estimate carries the live dot, a
- *  timetable time carries nothing -- and the note under the list says in one
- *  sentence what that means. */
+ *  What is NOT here is a per-row word for the timetable: a second line under
+ *  every untracked row doubled the height of a card read from four metres away.
+ *  The distinction survives whole -- a tracked estimate carries the live dot, a
+ *  timetable time carries nothing -- and the wall prints no note about it
+ *  (companion brief §12); the phone's stop detail says it once. */
 export function arrivalCells(row: ArrivalRow, s: KioskStrings): { main: string; aside: string } {
   if (!vettedArrival(row)) return { main: '', aside: '' };
   return {

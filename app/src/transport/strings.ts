@@ -1,7 +1,7 @@
 // The transport workspace's words live in the one catalogue (i18n/hr.json,
 // en.json) under `transport.*`; this is the thin typed adapter over it. The
 // workspace reuses shared keys wherever one already says the right thing
-// (panels.map, panels.closures, motion.note, motion.direction...) through
+// (motion.note, motion.direction, panels.vehiclesCount...) through
 // i18n.t at the call site and addresses its own by their short name here,
 // picked by the page's locale, so a locale switch re-renders the workspace
 // in the other language like everything else.

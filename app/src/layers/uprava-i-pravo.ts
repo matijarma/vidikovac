@@ -38,7 +38,7 @@ const SOURCE_NAME: Record<CityWorkSource, string> = {
   skupstina: 'Skupština Grada Zagreba',
   komunalne: 'Plan komunalnih aktivnosti',
 };
-/** The kiosk card (grad-teaser.ts) reuses both strings. */
+/** Per-source attribution naming the licence, as a civic item's detail prints it. */
 export const CITY_WORK_SOURCE_ATTRIBUTION: Record<CityWorkSource, string> = {
   skupstina: 'Skupština Grada Zagreba (Otvorena dozvola)',
   komunalne: 'Plan komunalnih aktivnosti, Grad Zagreb (Otvorena dozvola)',
