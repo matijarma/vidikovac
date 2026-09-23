@@ -41,7 +41,9 @@ const PLAN_SPAN_S = 5;
 // artefact (which the browser really does fetch, R-L4), so every scenario
 // exercises the model's free-plane branch, not a live geometry match whose
 // exact stop spacing this test cannot see and does not need to.
-const ROUTE_ID = 'E2E6';
+// A real tram line, so the search Karta offers finds it and the fixture's vehicle rides its shape: the one UI path
+// into a line's detail now that Karta opens on the place's list (WP4).
+const ROUTE_ID = '6';
 
 /**
  * One vehicle as the twin publishes it: its estimate at the source time and
@@ -57,7 +59,7 @@ function vehicleItem(vehicleId: string, routeType?: number) {
     module: 'zet-rt',
     kind: 'vehicle',
     tier: 'open',
-    title: 'Tramvaj E2E6',
+    title: `Tramvaj ${ROUTE_ID}`,
     at: new Date().toISOString(),
     geo: { type: 'Point', coordinates: [CENTRE_LON, CENTRE_LAT] },
     data: {
@@ -285,16 +287,13 @@ test.describe('the motion model, mounted end to end (T11)', () => {
       // The tap card: select the one drawn vehicle with the keyboard rather
       // than clicking a computed pixel, so the assertion does not depend on
       // the crop's own scale. Karta opens on the place's list, not on a list
-      // of running lines (WP4), and this fixture's line is in no catalogue a
-      // search reads: the line's detail opens by the address, the way history
-      // or a paired screen opens it, and its vehicle row is taken by keyboard.
-      await phone.evaluate((id) => {
-        const params = new URLSearchParams(location.hash.slice(1));
-        params.set('layer', 'u-pokretu');
-        params.set('kind', 'route');
-        params.set('id', id);
-        location.hash = params.toString();
-      }, ROUTE_ID);
+      // of running lines (WP4): the line's detail is reached the way a person
+      // reaches it, through the one search field, and its vehicle row is
+      // taken by keyboard.
+      const search = phone.getByTestId('transport-search');
+      await search.focus();
+      await search.fill(ROUTE_ID);
+      await phone.locator(`[data-action=select-route][data-id="${ROUTE_ID}"]`).first().click();
       const vehicle = phone.locator('[data-testid=route-vehicles] button').first();
       await vehicle.focus();
       await phone.keyboard.press('Enter');

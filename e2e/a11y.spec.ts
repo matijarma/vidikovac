@@ -77,6 +77,7 @@ for (const { path, viewport } of PAGES) {
 // whole-network crop alike (motion/schematic.ts's DEFAULT_CROP centre).
 const CENTRE_LON = 15.9769;
 const CENTRE_LAT = 45.813;
+const ROUTE_ID = '6';
 
 /** A `zet-rt` snapshot with one vehicle in the crop, reported twice five
  *  seconds apart so the model has fix-to-fix evidence from a single poll. */
@@ -87,10 +88,11 @@ function zetSnapshot(vehicleId: string, routeType: number) {
     module: 'zet-rt',
     kind: 'vehicle',
     tier: 'open',
-    title: 'Tramvaj E2E6',
+    // A real tram line, so the search Karta offers finds it: the one UI path into a line's detail (WP4).
+    title: `Tramvaj ${ROUTE_ID}`,
     at: new Date(at).toISOString(),
     geo: { type: 'Point', coordinates: [CENTRE_LON, lat] },
-    data: { routeId: 'E2E6', routeType },
+    data: { routeId: ROUTE_ID, routeType },
   });
   return {
     module: 'zet-rt',
@@ -285,16 +287,12 @@ test.describe('the moving map has a text path (R-F5)', () => {
       await unlockOnPhone(phone, scanUrl, '10 minuta');
       await phone.locator('[data-action=nav][data-layer="u-pokretu"]:visible').first().click();
       await waitForFrames(phone, '[data-testid=map-canvas]');
-      await phone.getByTestId('transport-search').focus();
-      // Karta opens on the place's list, not on a list of running lines (WP4), and this fixture's line is not in the
-      // catalogue a search reads: its detail opens the way history or a paired screen opens one, by the address.
-      await phone.evaluate(() => {
-        const params = new URLSearchParams(location.hash.slice(1));
-        params.set('layer', 'u-pokretu');
-        params.set('kind', 'route');
-        params.set('id', 'E2E6');
-        location.hash = params.toString();
-      });
+      // Karta opens on the place's list, not on a list of running lines (WP4): the line's detail is reached the way
+      // a person reaches it, through the one search field and its result.
+      const search = phone.getByTestId('transport-search');
+      await search.focus();
+      await search.fill(ROUTE_ID);
+      await phone.locator(`[data-action=select-route][data-id="${ROUTE_ID}"]`).first().click();
       await expect(phone.locator('[data-testid=route-vehicles] button').first()).toBeVisible();
 
       // The full map (T10) is a named region whose controls and licence
