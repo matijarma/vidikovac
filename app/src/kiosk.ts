@@ -506,9 +506,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     motionMetadata = new Map((snapshots['zet-rt']?.items ?? []).filter(i => i.motion).map(i => [
       i.id, { network: i.motion!.network, generatedAt: i.motion!.generatedAt, builtAt: i.motion!.builtAt },
     ]));
-    if (credentials && [...motionMetadata.values()].some(m => m.builtAt && m.builtAt !== BUILT_AT)) {
-      mapAdapter.handle()?.pause();
-      reloadingBundle = reloadBeacon(credentials, storage);
+    const staleNetwork = [...motionMetadata.values()].find(m => m.builtAt && m.builtAt !== BUILT_AT);
+    if (host) {
+      if (staleNetwork) host.dataset.networkStale = 'true';
+      else delete host.dataset.networkStale;
+    }
+    if (credentials && staleNetwork) {
+      reloadingBundle = reloadBeacon(credentials, storage, () => {
+        mapAdapter.handle()?.pause();
+        globalThis.location.reload();
+      }, [BUILT_AT, staleNetwork.network ?? staleNetwork.builtAt!]);
       if (reloadingBundle) return;
     }
     // A phase without a map keeps the container parked, and the feed state

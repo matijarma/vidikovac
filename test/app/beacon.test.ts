@@ -63,6 +63,28 @@ it('reloads only after the existing credential restore path can recover the scre
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+it('persists a reload per identity pair and refuses an unrecordable latch', () => {
+  const credentials = { beaconId: 'BEACON01', secret: 'test-only-secret' };
+  const raw: Record<string, string> = {};
+  const storage = {
+    getItem: (key: string) => raw[key] ?? null,
+    setItem: (key: string, value: string) => { raw[key] = value; },
+    removeItem: (key: string) => { delete raw[key]; },
+  };
+  const reload = vi.fn();
+  const pair = ['bundled-network', 'published-network'] as const;
+  for (let mount = 0; mount < 3; mount++) {
+    expect(reloadBeacon(credentials, storage, reload, pair)).toBe(mount === 0);
+  }
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(reloadBeacon(credentials, storage, reload, ['bundled-network', 'next-network'])).toBe(true);
+  expect(reloadBeacon(credentials, storage, reload, ['updated-bundle', 'next-network'])).toBe(true);
+  const readOnly = { ...storage, setItem: () => {} };
+  expect(reloadBeacon(credentials, readOnly, reload, ['bundled-network', 'unrecordable'])).toBe(false);
+  expect(reload).toHaveBeenCalledTimes(3);
+  expect(readBeacon(storage)).toEqual(credentials);
+});
+
 describe('provisioning', () => {
   it('reads beaconId.secret from the fragment and rejects anything else', () => {
     expect(parseProvisionHash('#BEACON01.s3cr3t-value')).toEqual({ beaconId: 'BEACON01', secret: 's3cr3t-value' });
