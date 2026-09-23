@@ -337,15 +337,21 @@ const REGISTER_STREETS = [...CODE_WORD_STREETS].sort((a, b) => b.length - a.leng
 const BARE_STREET_ADDRESS = new RegExp(`^(?:${REGISTER_STREETS}) \\d{1,3}[a-z]?$`, 'u');
 const STREET_IN_FIELD = new RegExp(`(?<![\\p{L}\\p{N}])(?:${REGISTER_STREETS})(?= \\d)`, 'gu');
 const REGISTER_FIELDS = new Set(CODE_WORD_FIELDS);
-function maskRegisterStreet(value: string): string {
-  if (!REGISTER_FIELDS.has(value) && !BARE_STREET_ADDRESS.test(value)) return value;
-  return value.replace(STREET_IN_FIELD, street => street.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word));
+/** Decided on the ORIGINAL string, before NFC or NBSP normalization: byte-exact equality with a
+ *  pinned field, or the bare grammar on the raw text. A canonical equivalent (NFD, a Kelvin sign,
+ *  an NBSP) is not the pinned field and gets no exception (review-w-fix6d). */
+function registerStreetEligible(raw: string): boolean {
+  return REGISTER_FIELDS.has(raw) || BARE_STREET_ADDRESS.test(raw);
+}
+function maskRegisterStreet(text: string): string {
+  return text.replace(STREET_IN_FIELD, street => street.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word));
 }
 
-/** Structural evidence for corpus audits; production callers log codes only. */
-export function externalTextVector(value: string, kind?: ExternalTextKind, surface?: ExternalTextSurface): { reason: ExternalTextRejection; value: string } | null {
+/** Structural evidence for corpus audits; production callers log codes only. `raw` is the text as
+ *  it arrived, before normalization: the register-street exception is decided on it alone. */
+export function externalTextVector(value: string, kind?: ExternalTextKind, surface?: ExternalTextSurface, raw = value): { reason: ExternalTextRejection; value: string } | null {
   const text = foldText(value);
-  const named = surface === 'row' && isNameKind(kind) ? foldText(maskRegisterStreet(value.normalize('NFC'))) : text;
+  const named = surface === 'row' && isNameKind(kind) && registerStreetEligible(raw) ? foldText(maskRegisterStreet(value.normalize('NFC'))) : text;
   for (const entry of EXTERNAL_VECTOR_PATTERNS) {
     const match = entry.source.exec('currency' in entry ? named : text);
     if (match) return { reason: entry.reason, value: match[0] };
@@ -411,7 +417,7 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  const vector = externalTextVector(text, kind, surface);
+  const vector = externalTextVector(text, kind, surface, value);
   if (vector) return { ok: false, reason: vector.reason };
   for (const ch of text) {
     if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };

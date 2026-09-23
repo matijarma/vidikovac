@@ -324,7 +324,7 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
   it.each([
     ['address', 'Nova Ves 02'], ['address', 'Nova Ves 04 i 4/1'], ['address', 'Nova Ves 5 i 5a'], ['address', 'Nova Ves 018'],
     ['name', 'Zgrada, Nova Ves 2'], ['name', 'Prebendarska kurija sv. Uršule, Nova Ves 04 i 4/1'],
-    ['name', 'Ljetnikovac biskupa Aleksandra Alagovića, Nova Ves 86'], ['address', 'Lepa Ves 3'], ['address', 'Nova Ves 12'],
+    ['name', 'Ljetnikovac biskupa Aleksandra Alagovića, Nova Ves 86'], ['address', 'Lepa Ves 3'], ['address', 'Nova Ves 12'], ['address', 'Nova Ves 12a'],
   ] as const)('%s "%s" is an address on a row', (kind, value) => {
     expect(rowText(kind, value)).toEqual({ ok: true });
   });
@@ -334,7 +334,7 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
   // diff, and copy the lines into CODE_WORD_FIELDS (shared/kiosk/code-word-streets.ts).
   it('admits only the pinned register fields, derived from the committed heritage and street registers', async () => {
     const streetPattern = new RegExp(`(?:^|[\\s,])(?:${[...CODE_WORD_STREETS].sort((a, b) => b.length - a.length)
-      .map(name => name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|')}) \\d`, 'u');
+      .map(name => name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&').replace(/ /gu, '[ \\u00a0]')).join('|')})[ \\u00a0]\\d`, 'u');
     const fields = [...heritage.flatMap(place => [place.name, place.address ?? '']), ...streets.map(street => street.name)]
       .filter(value => streetPattern.test(value));
     const derived = [...new Set(fields)];
@@ -368,7 +368,10 @@ describe('a capitalised currency code inside a proper name on a row (Nova Ves)',
       'Plati, Nova Ves 12', 'Pošalji lozinku, Nova Ves 12', 'Nazovite nas, Nova Ves 12', 'Zgrada 2, Nova Ves 12',
       // review-w-fix6c, decision 41: no free-text prefix is ever admitted, however it is spelled.
       'P—l—a—t—i pedeset, Nova Ves 12', 'P—a—y fifty, Nova Ves 12', 'Donacija pedeset, Nova Ves 12', 'DONACIJA PEDESET, NOVA VES 12',
-      'donacija pedeset, Nova Ves 12', 'P·l·a·t·i, Nova Ves 12', '"Plati", Nova Ves 12', 'Zgrada, Nova Ves 3', 'Kuća, Lepa Ves 3']) {
+      'donacija pedeset, Nova Ves 12', 'P·l·a·t·i, Nova Ves 12', '"Plati", Nova Ves 12', 'Zgrada, Nova Ves 3', 'Kuća, Lepa Ves 3',
+      // review-w-fix6d: eligibility is byte-exact on the original text; no canonical equivalent is admitted.
+      'Zgrada, Nova\u00a0Ves 2', '\u212auća Pavliček, Nova Ves 1', 'Kuća Pavliček, Nova Ves 1'.normalize('NFD'),
+      'Nova\u00a0Ves 12', 'Nova Ves\u00a012']) {
       expect(rowText('address', value).ok, value).toBe(false);
       expect(rowText('name', value).ok, value).toBe(false);
     }
