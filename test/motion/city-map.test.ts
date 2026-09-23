@@ -9,7 +9,7 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, type RenderedFeature } from '../../app/src/map/city-map';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/city-map';
 import { pillWidthPx } from '../../app/src/motion/pills';
 import { resolve } from 'node:path';
 
@@ -32,6 +32,8 @@ class FakeMap {
   readonly cameraCalls: { kind: string; options: Record<string, unknown> }[] = [];
   center = { lng: 15.98, lat: 45.815 };
   zoom = 12.6;
+  /** What isMoving() answers: the census fallback takes nothing while the camera moves. */
+  moving = false;
   sprite: string | null = null;
   removed = false;
   rendered: { layer: { id: string }; properties: Record<string, unknown> }[] = [];
@@ -61,6 +63,7 @@ class FakeMap {
   fire(type: string, event: Record<string, unknown> = {}): void { for (const cb of [...(this.handlers[type] ?? [])]) cb(event); }
   addControl(control: unknown): void { this.controls.push(control); }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
+  isMoving(): boolean { return this.moving; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
   hasImage(id: string): boolean { return this.images.has(id); }
   readonly removedImages: string[] = [];
@@ -794,6 +797,45 @@ describe('the marker census of the city layers', () => {
     expect(container.dataset.markers).toBe('1');
     handle.update([A], [CLOSURE]);
     map.fire('idle');
+    expect(container.dataset.markers).toBe('2');
+    expect(container.dataset.unlabelled).toBe('1');
+  });
+
+  // A live wall never idles (the 12 Hz pushes keep MapLibre painting), so a
+  // render on a still camera takes the census once its key has settled.
+  it('takes the census on a still frame that has settled when no idle comes, and never while the camera moves', async () => {
+    const { map, container, handle, frame } = await harness({ lib: cityLib });
+    frame();
+    map.rendered = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4')] as typeof map.rendered;
+    // The first frame with an untaken key only starts the clock.
+    map.fire('render');
+    expect(container.dataset.markers).toBeUndefined();
+    frame(PROBE_SETTLE_MS / 2);
+    map.fire('render');
+    expect(container.dataset.markers).toBeUndefined();
+    frame(PROBE_SETTLE_MS / 2);
+    map.fire('render');
+    expect(container.dataset.markers).toBe('1');
+    // Taken: frames after it ask MapLibre nothing, however long they run.
+    const queried = map.queries.length;
+    frame(PROBE_SETTLE_MS * 3);
+    map.fire('render');
+    expect(map.queries.length).toBe(queried);
+    // New evidence while the camera moves waits for the camera.
+    handle.update([A], [CLOSURE]);
+    map.rendered = [dot('bajs-a', bike('4', false)), badge('bajs-a', '4'), dot('bajs-b', bike('', false))] as typeof map.rendered;
+    map.moving = true;
+    map.fire('render');
+    frame(PROBE_SETTLE_MS * 2);
+    map.fire('render');
+    expect(container.dataset.markers).toBe('1');
+    expect(map.queries.length).toBe(queried);
+    // Still again: the key settles and the census follows the evidence.
+    map.moving = false;
+    map.fire('render');
+    expect(container.dataset.markers).toBe('1');
+    frame(PROBE_SETTLE_MS);
+    map.fire('render');
     expect(container.dataset.markers).toBe('2');
     expect(container.dataset.unlabelled).toBe('1');
   });

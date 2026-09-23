@@ -875,6 +875,11 @@ export const CENSUS_LAYERS = Object.freeze({ dots: 'city-place-dots', badges: 'c
  *  symbol scale: half of city-layers.ts BIKE_COUNT_PX (12). A pill lying over
  *  that square hides the number, whatever the disc's own radius. */
 export const CENSUS_COUNT_HALF_PX = 6;
+/** How long a new census key must have waited, on a still camera, before a
+ *  plain `render` takes the census that no `idle` came to take (the live
+ *  wall's fallback; writeRenderProbe's comment). Long enough for the push
+ *  after an update() to be placed, short enough that every poll beat is read. */
+export const PROBE_SETTLE_MS = 1000;
 
 /** A feature as queryRenderedFeatures answers it; the geometry is there on a
  *  real map and may be missing on a stand-in. */
@@ -1008,6 +1013,10 @@ interface MapApi {
   fitBounds(bounds: [[number, number], [number, number]], options?: Record<string, unknown>): void;
   getCenter(): { lng: number; lat: number };
   getZoom(): number;
+  /** Whether the camera is being moved (a pan, a zoom, an ease). Read only
+   *  by the census's still-frame fallback (writeSettledProbe), so a stand-in
+   *  without it counts as still. */
+  isMoving?(): boolean;
   /** [lon, lat] to CSS px on the current camera; how the pills are clustered
    *  and how a tap on a cluster finds the member nearest to it. Optional so a
    *  stand-in without a camera still satisfies this slice. */
@@ -1275,7 +1284,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   // All of these come from ONE queryRenderedFeatures over those layers --
   // the call placedNames() already makes, scoped to the vehicles source -- on
   // MapLibre's `idle`, the one moment it has finished painting what it was
-  // given. It is taken only when the answer can have changed: the camera's
+  // given. A live wall never reaches it: the pushes at 12 Hz keep MapLibre
+  // painting, and a browser round on 23 September counted one `idle` in a
+  // minute (the cold map's, before the fleet) against some 500 frames. So a
+  // `render` on a still camera takes the census too, once the key it would be
+  // taken for has waited PROBE_SETTLE_MS (writeSettledProbe) -- the same
+  // passes as below, whichever of the two events comes first.
+  //
+  // It is taken only when the answer can have changed: the camera's
   // zoom (which layer draws, and which pills merge), the selection (which
   // layer the selected mark is in), whether the source has any marks at
   // all (the first snapshot landing on a cold map), and new evidence (below).
@@ -1312,7 +1328,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let renderProbeKey = '';
   /** Whether the last pushed collection had any mark at all; see the key above. */
   let probeHasMarks = false;
-  /** Bumped by update() and applyCityOverlays(): the census is re-taken at the next idle. */
+  /** Bumped by update() and applyCityOverlays(): the census is re-taken at the next idle, or the next settled still frame. */
   let probeVersion = 0;
 
   function writeMarkProbe(m: MapApi, pushed: VehicleFeatureCollection | null): void {
@@ -1320,11 +1336,36 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (pushed) probeHasMarks = pushed.features.length > 0;
   }
 
+  /** The census key for the map as it stands: zoom, selection, "has any marks" and the evidence version. */
+  function probeKeyOf(m: MapApi): string {
+    return `${m.getZoom().toFixed(2)}|${selection ? `${selection.kind}:${selection.id}` : ''}|${probeHasMarks ? 1 : 0}|${probeVersion}`;
+  }
+  /** The key a still frame first saw untaken, and when: writeSettledProbe's clock. */
+  let settlingKey = '';
+  let settlingSince = 0;
+
+  /** The fallback for a map that never idles (the probe comment above): on a
+   *  `render` with the camera still, a key not yet taken is timed, and taken
+   *  once it has stood for PROBE_SETTLE_MS. A key already taken costs one
+   *  string per frame and nothing else. */
+  function writeSettledProbe(): void {
+    const m = map;
+    if (!m || !styled || m.isMoving?.()) return;
+    const key = probeKeyOf(m);
+    if (key === renderProbeKey) return;
+    if (key !== settlingKey) {
+      settlingKey = key;
+      settlingSince = now();
+      return;
+    }
+    if (now() - settlingSince >= PROBE_SETTLE_MS) writeRenderProbe();
+  }
+
   function writeRenderProbe(): void {
     const m = map;
     const l = lib;
     if (!m || !styled || !l) return;
-    const key = `${m.getZoom().toFixed(2)}|${selection ? `${selection.kind}:${selection.id}` : ''}|${probeHasMarks ? 1 : 0}|${probeVersion}`;
+    const key = probeKeyOf(m);
     if (key === renderProbeKey) return;
     renderProbeKey = key;
     // Asking MapLibre about a layer the style does not carry fires an error
@@ -1634,8 +1675,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('moveend', onMoveEnd);
     if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
-    // honest place to ask it what it drew (see the probe comment above).
+    // honest place to ask it what it drew (see the probe comment above), and,
+    // for the live wall that never gets there, a still frame that has settled.
     created.on('idle', writeRenderProbe);
+    created.on('render', writeSettledProbe);
     if (interactive) bindPointer(created);
     created.once('load', () => onLoad(l, created));
     watchTheme();
