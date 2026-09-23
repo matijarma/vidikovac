@@ -56,10 +56,10 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
       }
       await phone.getByTestId('stop-presentation').click();
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
-      await kiosk.getByTestId('kiosk-essentials-open').click();
-      await expect(kiosk.getByTestId('kiosk-essentials')).toBeVisible();
-      await kiosk.keyboard.press('Escape');
-      await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
+      // The public wall offers no control but the brand and the QR ([O-43], principle 8, trust row
+      // d-controls-invitation): its safety verdict is text, and the basics stay on the handheld.
+      await expect(kiosk.getByTestId('kiosk-essentials-open')).toHaveCount(0);
+      await expect(kiosk.getByTestId('strip-verdict')).toBeVisible();
     } finally { await Promise.all([kctx.close(), pctx.close()]); }
   });
 }
@@ -85,9 +85,11 @@ test('stale transit keeps its timetable rows through basics and never captions t
     for (const region of ['nearby', 'kiosk-invite']) await expect(page.getByTestId(region)).not.toContainText(CAPTION_RE);
   };
   await assertRows();
-  await page.getByTestId('kiosk-essentials-open').click();
-  await expect(page.getByTestId('kiosk-essentials')).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The public wall has no basics control any more ([O-43], principle 8): the verdict is text, so the rows are
+  // read again after one more teaser poll (REFRESH_MS 20 s) of the stale feed instead of after a basics round trip.
+  await expect(page.getByTestId('kiosk-essentials-open')).toHaveCount(0);
+  await expect(page.getByTestId('strip-verdict')).toBeVisible();
+  await page.waitForTimeout(25_000);
   await expect(page.getByTestId('kiosk-invitation')).toBeVisible();
   await assertRows();
 });
