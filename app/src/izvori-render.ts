@@ -93,7 +93,7 @@ export function renderIzvoriHtml(sources: readonly IzvorEntry[] = IZVORI): strin
     )
     .join('\n')+renderObrada()+renderCitySources()+renderStaticSources();
 }
-/** The ticker's lines are machine-condensed; the page says so, beside the sources they come from. */
+/** The one machine step on shown text: Workers AI picks the header sentence among filled templates; the page says so, beside the sources. */
 function renderObrada(): string {
   return `<section class="izvor-obrada" aria-labelledby="izvor-obrada-naslov">
   <h2 id="izvor-obrada-naslov">${escapeHtml(OBRADA.naslov)}</h2>
