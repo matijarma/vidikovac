@@ -178,7 +178,9 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     // (e2e/departures-fixture.ts), and the first stop for the query can be another one (Bana Josipa Jelačića).
     await page.locator(`${PHONE_PROBES.selectStop} >> visible=true`).filter({ hasText: FIXTURE_STOP.name }).first().click({ timeout: PAINT_MS });
     taps++; // the result
-    await expect(page.locator(PHONE_PROBES.stopBoard), `${label}: the stop's board (${PHONE_PROBES.stopBoard}) opens from the search result`).toBeInViewport({ timeout: PAINT_MS });
+    // The probe wrapper is display: contents (app/src/ui/map.css), so it has no box of its own and a viewport read
+    // of it is 0 by construction: the board is in the viewport when its first rendered child is.
+    await expect(page.locator(`${PHONE_PROBES.stopBoard} > * >> visible=true`).first(), `${label}: the stop's board (${PHONE_PROBES.stopBoard}) opens from the search result, its first rendered child in the viewport`).toBeInViewport({ timeout: PAINT_MS });
     expect(taps, `${label}: tab, field and result, at most ${SEARCH_TAPS_MAX} taps`).toBeLessThanOrEqual(SEARCH_TAPS_MAX);
     const rows = phoneDepartures(await visibleOf(page, `${PHONE_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`), PHONE_VIEWPORT);
     expect(phoneDepartureFailures(rows, 'the stop board'), `${label}: the board's ${PHONE_DEPARTURES} departures lie inside the viewport`).toEqual([]);
