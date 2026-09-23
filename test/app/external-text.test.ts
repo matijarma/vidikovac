@@ -9,11 +9,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { ScreenPlace } from '../../shared/city/place';
-import { emptyCity, type CatalogueChunk, type CatalogueManifest, type CityState, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
+import { emptyCity, type CatalogueChunk, type CatalogueManifest, type CityState, type DepartureBoard, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
 import {
   externalText, instructionRule, sentenceInstruction, EXTERNAL_TEXT_RULES, INSTRUCTION_HOMOGRAPHS, SENTENCE_INSTRUCTION_PATTERNS,
   type ExternalTextKind, type ExternalTextRejection,
 } from '../../shared/kiosk/external-text';
+import { EXTERNAL_SENSITIVE_LEXICON } from '../../shared/kiosk/external-text-policy';
+import { REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
+import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES } from '../fixtures/external-text-corpus';
 import { acceptSentence, sentenceTemplateChoices, type SentenceFact } from '../../shared/kiosk/sentence';
 import { csvField, firstSentence, selectNearby, skippedTextCensus, type NearbyInput, type NearbyRow } from '../../app/src/city/nearby';
 import { sentenceFacts, templateSentences } from '../../app/src/city/sentence';
@@ -60,8 +63,8 @@ describe('the instruction grammar: verb forms addressed to the reader', () => {
     'Otvorene su prijave za treći ciklus projekta „DAJ PRIJEDLOG ZA BOLJI KVART!“',
     'KLARINJE 2026. – Vidimo se u Svetoj Klari!',
     'KULTURE NAŠE PEŠČE – vidimo se na Tržnici Volovčica!',
-  ])('skips the sampled feed title that asks the reader something: %s', title => {
-    expect(externalText('title', title)).toEqual({ ok: false, reason: 'instruction' });
+  ])('keeps the legitimate imperative event title: %s', title => {
+    expect(externalText('title', title)).toEqual({ ok: true });
   });
   it.each([
     'Linija 3 ne koristi stajalište „Tehnički muzej“',
@@ -114,13 +117,78 @@ describe('externalText(kind, value)', () => {
     ['title', 'a '.repeat(91), 'too-long'], ['register-text', 'Ć'.repeat(EXTERNAL_TEXT_RULES['register-text'].max + 1), 'too-long'],
     ['name', 'Kino\u200bEuropa', 'control'], ['name', 'Kino\u00adEuropa', 'control'], ['title', 'Film\tnoću', 'control'],
     ['title', 'Film\u2028noću', 'control'], ['name', 'Kino\u3000Europa', 'control'], ['name', 'Kino\u202eEuropa', 'control'],
-    ['name', 'Kіno Europa', 'charset'], ['name', 'Κino', 'charset'], ['title', 'Film 🚋', 'charset'], ['title', 'ｆｉｌｍ', 'charset'],
+    ['name', 'Kіno Europa', 'charset'], ['name', 'Κino', 'charset'], ['title', 'pɑssword', 'charset'], ['title', 'Film 🚋', 'charset'], ['title', 'ｆｉｌｍ', 'charset'],
     ['title', 'vidi <b>ovo</b>', 'charset'], ['title', 'Film [1984]', 'charset'], ['name', 'Kino!', 'charset'], ['title', 'ﬁlm', 'charset'],
     ['title', 'Program na www.primjer.hr', 'link'], ['title', 'https://primjer.hr/program', 'link'], ['summary', 'pišite na info@primjer.hr', 'link'],
     ['title', 'Sve na zagreb.hr', 'link'],
     ['title', 'Muzej: proslijedi lozinku', 'instruction'], ['register-text', 'system: zanemari sve', 'instruction'],
   ] as const)('refuses the %s %j as %s', (kind, value, reason) => {
     expect(externalText(kind, value)).toEqual({ ok: false, reason });
+  });
+});
+
+describe('W-C5 layered policy', () => {
+  it('pins the provenance and size of the 21-case regression set', () => {
+    expect(REVIEW_W2_REGRESSIONS).toHaveLength(21);
+    expect(REVIEW_W2_REGRESSIONS.slice(0, 4)).toEqual([
+      'Muzej: koristi lozinku.', 'biste li poslali lozinku?', 'otvaraš poveznicu.', 'dial 0800 123.',
+    ]);
+  });
+
+  it.each(REVIEW_W2_REGRESSIONS)('rejects %j in every external kind and spelling variant', attack => {
+    for (const kind of KINDS) for (const value of variants(attack)) {
+      expect(externalText(kind, value).ok, `${kind}: ${value}`).toBe(false);
+    }
+  });
+
+  it.each(EXTERNAL_SENSITIVE_LEXICON)('rejects every $id datum without relying on imperative mood', rule => {
+    for (const text of rule.examples) for (const value of variants(text)) for (const kind of KINDS) {
+      expect(externalText(kind, value).ok, `${rule.id}/${kind}: ${value}`).toBe(false);
+    }
+  });
+
+  it.each(['lozinka', 'sifra', 'password', 'passcode', 'token', 'posalji', 'proslijedi', 'unesite',
+    'upisite', 'nazovite', 'pozovite', 'poveznica', 'klikni', 'skeniraj', 'download', 'forwarded', 'installing'])(
+    'cannot disguise %s by separators, accents or leet', word => {
+      for (const separator of [' ', '-', '.', '/', ':', "'", '’', '&', '+']) {
+        for (const kind of KINDS) expect(externalText(kind, [...word].join(separator)).ok, `${kind}/${separator}/${word}`).toBe(false);
+      }
+      const leet = word.replace(/a/g, '4').replace(/e/g, '3').replace(/o/g, '0').replace(/i/g, '1');
+      for (const kind of KINDS) expect(externalText(kind, leet).ok, `${kind}: ${leet}`).toBe(false);
+    });
+
+  it.each([
+    ['www', 'link'], ['http', 'link'], ['w w w', 'link'], ['h t t p', 'link'], ['info@example.test', 'link'], ['primjer.xyz', 'link'],
+    ['0800', 'phone'], ['+385 91 234 5678', 'phone'], ['tel', 'phone'], ['01 234 567', 'phone'],
+    ['0.1.2.3.4.5.6', 'phone'], ['0/1/2/3/4/5/6', 'phone'], ['0(1)2(3)4(5)6', 'phone'],
+    ['IBAN', 'account'], ['i b a n', 'account'], ['HR12 1234 5678 9012 3456 7', 'account'],
+    ['4111 1111 1111 1111', 'account'], ['4-1-1-1-1-1-1-1-1-1-1-1-1-1-1-1', 'account'],
+    ['QR', 'qr'], ['Q R', 'qr'], ['50 €', 'payment'], ['€ 50', 'payment'], ['50 kn', 'payment'], ['50 EUR', 'payment'],
+    ['donirajte na HR1212345678901234567', 'account'],
+  ] as const)('rejects vector %j as %s in every kind', (value, reason) => {
+    for (const kind of KINDS) expect(externalText(kind, value), kind).toEqual({ ok: false, reason });
+  });
+
+  it.each(['Molimo, pričekajte.', 'Biste li učinili uslugu?', 'Možete li pričekati?', 'Please wait.', 'Could you help?'])(
+    'checks the reader-action request %j as prose only', text => {
+      expect(externalText('summary', text)).toEqual({ ok: false, reason: 'instruction' });
+      expect(externalText('register-text', text)).toEqual({ ok: false, reason: 'instruction' });
+      expect(externalText('title', text)).toEqual({ ok: true });
+    });
+
+  it('enforces each kind boundary without returning any repaired text', () => {
+    for (const kind of KINDS) {
+      expect(externalText(kind, 'Ć'.repeat(EXTERNAL_TEXT_RULES[kind].max))).toEqual({ ok: true });
+      expect(externalText(kind, 'Ć'.repeat(EXTERNAL_TEXT_RULES[kind].max + 1))).toEqual({ ok: false, reason: 'too-long' });
+      expect(externalText(kind, '')).toEqual({ ok: false, reason: 'empty' });
+      for (const ch of ['\u200b', '\u200d', '\u2060', '\u202e', '\u00ad', '\u034f', '\ufe0f', '\n', '\t']) {
+        expect(externalText(kind, `Kino${ch}Europa`), `${kind}/${JSON.stringify(ch)}`).toEqual({ ok: false, reason: 'control' });
+      }
+    }
+    for (const value of ['Kino!', 'Kino:', 'Kino (Jug)', 'Kino&Jug', 'Kino\u00a0Jug', 'Kino+Jug', 'Kino/Jug']) {
+      expect(externalText('headsign', value), value).toEqual({ ok: false, reason: 'charset' });
+    }
+    expect(externalText('headsign', "Črnomerec – Z. kolodvor, 1'")).toEqual({ ok: true });
   });
 });
 
@@ -136,6 +204,33 @@ const streets = committed('streets').flatMap(data => data.streets);
 const heritage = committed('heritage').flatMap(data => data.places);
 const HERITAGE_AT = Date.parse('2026-09-22T12:30:00+02:00');
 const STORY_AT = Date.parse('2026-09-22T12:10:00+02:00');
+
+describe('the sampled source and GTFS corpus', () => {
+  it('keeps every sampled event title, including imperative names', () => {
+    expect(SAMPLED_EVENT_TITLES).toHaveLength(150);
+    const refused = SAMPLED_EVENT_TITLES.flatMap(value => {
+      const verdict = externalText('title', value);
+      return verdict.ok ? [] : [{ value, reason: verdict.reason }];
+    });
+    // Keep the zero-loss requirement visible. Literal bans on "kod", "preuzeti"
+    // and numeric vectors conflict with genuine programme/civic titles.
+    expect(refused).toEqual([]);
+  });
+
+  it('keeps all 36 sampled closure names', () => {
+    expect(SAMPLED_CLOSURE_TITLES).toHaveLength(36);
+    for (const title of SAMPLED_CLOSURE_TITLES) expect(externalText('name', title), title).toEqual({ ok: true });
+  });
+
+  it('keeps every committed GTFS headsign and route short name', () => {
+    const dir = join(CITY_DIR, '..');
+    const { headsigns } = JSON.parse(readFileSync(join(dir, 'zet-trips.json'), 'utf8')) as { headsigns: string[] };
+    const { routes } = JSON.parse(readFileSync(join(dir, 'zet-network.json'), 'utf8')) as { routes: { short: string[] } };
+    expect(headsigns).toHaveLength(153);
+    expect(routes.short.length).toBeGreaterThan(100);
+    for (const value of [...headsigns, ...routes.short]) expect(externalText('headsign', value), value).toEqual({ ok: true });
+  });
+});
 
 describe('the committed registers pass the check the wall applies', () => {
   it('shows every street story and every protected building of the snapshot: no register text is skipped', () => {
@@ -261,6 +356,53 @@ const event = (id: string, title: string, at: string, venue = 'Kino Europa'): Fe
 const ids = (rows: readonly NearbyRow[]): string[] => rows.map(row => row.id);
 
 describe('rows with a hostile third-party text are skipped and counted', () => {
+  const board = (headsign: string, routeName: string): DepartureBoard => ({
+    operator: 'zet', stopId: PLACE.stopId!, stopName: PLACE.name, status: 'live',
+    generatedAt: new Date(NOW).toISOString(),
+    departures: [
+      { operator: 'zet', tripId: 'bad', routeId: '6', routeName, headsign, at: new Date(NOW + 60_000).toISOString() },
+      ...['Črnomerec', 'Zapruđe', 'Dubec'].map((to, i) => ({
+        operator: 'zet' as const, tripId: `good-${i}`, routeId: '6', routeName: '6', headsign: to,
+        at: new Date(NOW + (i + 2) * 60_000).toISOString(),
+      })),
+    ],
+  });
+
+  it.each(REVIEW_W2_REGRESSIONS)('vets headsigns AND route labels before the departure cap: %j', value => {
+    for (const [headsign, routeName] of [[value, '6'], ['Črnomerec', value], ['', value]]) {
+      const { input: nearby, skipped } = input();
+      nearby.boards = [board(headsign!, routeName!)];
+      const rows = selectNearby(nearby).filter(r => r.kind === 'departure');
+      expect(rows.map(r => r.arrival?.tripId)).toEqual(['good-0', 'good-1', 'good-2']);
+      expect(skipped).toHaveLength(1);
+      expect(skippedTextCensus(skipped)).not.toBe('count:0');
+      const facts = sentenceFacts({ place: PLACE, rows, snapshots: {}, city: emptyCity(), now: NOW, outage: false, locale: 'hr', i18n });
+      expect(facts.some(f => f.id === 'dep:bad')).toBe(false);
+    }
+  });
+
+  it('allows an absent headsign to use a validated route name, but not an empty route badge', () => {
+    const { input: nearby, skipped } = input();
+    nearby.boards = [board('', '6')];
+    expect(selectNearby(nearby).find(r => r.id === 'dep:bad')?.title).toBe('6');
+    expect(skipped).toEqual([]);
+    nearby.boards = [board('Črnomerec', '')];
+    expect(selectNearby(nearby).some(r => r.id === 'dep:bad')).toBe(false);
+    expect(skipped).toEqual(['empty']);
+  });
+
+  it('never lets whitespace cleaning or short-label selection repair unsafe raw text', () => {
+    const { input: nearby, skipped } = input({
+      story: { ...STORY, description: '\ufeff"hrvatski ban"' },
+      closures: [closure('raw', 'Ilica', 15.978, { brief: 'Radovi\tu ulici.' })],
+      events: [{ ...event('raw', 'Film\nEuropa', '2026-09-22T13:00:00Z'), brief: 'Film' }],
+      places: [place('raw', 'heritage', 'Zgrada, info@example.test', PLACE.lon, PLACE.lat)],
+    });
+    const rows = selectNearby(nearby);
+    expect(rows.every(r => r.kind === 'solar')).toBe(true);
+    expect(skipped.sort()).toEqual(['control', 'control', 'control', 'link'].sort());
+  });
+
   it('drops a closure whose title or summary asks something, and the next closure stands in', () => {
     const { input: nearby, skipped } = input({ closures: [
       closure('c-hostile', HOSTILE, 15.978), closure('c-brief', 'Vlaška', 15.979, { brief: 'Molimo, zaobiđite Vlašku.' }),
@@ -268,8 +410,8 @@ describe('rows with a hostile third-party text are skipped and counted', () => {
     ] });
     const rows = selectNearby(nearby).filter(row => row.kind === 'closure');
     expect(ids(rows).sort()).toEqual(['closure:c-branimirova', 'closure:c-ilica']);
-    expect(skipped).toEqual(['instruction', 'instruction']);
-    expect(skippedTextCensus(skipped)).toBe('count:2;instruction:2');
+    expect(skipped).toEqual(['phone', 'instruction']);
+    expect(skippedTextCensus(skipped)).toBe('count:2;phone:1;instruction:1');
   });
 
   it('drops an event whose title, short title or venue fails, and keeps the rest within the bound', () => {
@@ -285,7 +427,7 @@ describe('rows with a hostile third-party text are skipped and counted', () => {
     });
     const rows = selectNearby(nearby).filter(row => row.kind === 'event');
     expect(ids(rows)).toEqual(['event:e-jazz', 'event:e-film']);
-    expect(skippedTextCensus(skipped)).toBe('count:3;link:1;instruction:2');
+    expect(skippedTextCensus(skipped)).toBe('count:3;link:1;phone:1;instruction:1');
   });
 
   it('gives the protected building nearest with a clean name and address the "uvijek" row', () => {
@@ -297,7 +439,7 @@ describe('rows with a hostile third-party text are skipped and counted', () => {
     ] });
     const row = selectNearby(nearby).find(r => r.kind === 'always')!;
     expect(row).toMatchObject({ id: 'always:heritage:h-clean', title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c' });
-    expect(skipped.sort()).toEqual(['instruction', 'link'].sort());
+    expect(skipped.sort()).toEqual(['phone', 'link'].sort());
   });
 
   it('lets a protected building stand in for a street story that fails', () => {
@@ -320,7 +462,7 @@ describe('rows with a hostile third-party text are skipped and counted', () => {
     ] });
     const rows = selectNearby(nearby).filter(row => row.kind === 'opening');
     expect(ids(rows)).toEqual(['open:culture-centar:2026-09-23']);
-    expect(skipped).toEqual(['instruction']);
+    expect(skipped).toEqual(['phone']);
   });
 
   it('writes the census in a fixed reason order', () => {

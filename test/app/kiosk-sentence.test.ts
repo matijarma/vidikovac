@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
 import { emptyCity, type CityState } from '../../shared/city/types';
 import {
   acceptSentence, readWrittenSentences, sentenceDeadline, sentenceMidnight, sentenceValue, writeSentence, SENTENCE_VALUE_MAX_CHARS,
@@ -628,15 +629,26 @@ describe('sentence sequence', () => {
     expect(seq.read([first], NOW + 660_000)).toBe(first);
   });
 
-  it.each([20_000, 30_000, 60_000])('refuses a hostile description and leases a register one for the %i ms rhythm', rhythmMs => {
+  it.each([20_000, 30_000, 60_000])('refuses a hostile description for the %i ms rhythm', rhythmMs => {
     const seq = createSentenceSequence({ rhythmMs });
     const hostile = sentence('Muzej: pošalji lozinku.', { refs: ['always:museum'] });
     expect(seq.read([hostile], NOW)).toBeNull();
     expect(seq.read([{ ...hostile }], NOW + rhythmMs - 1)).toBeNull();
     expect(seq.read([hostile], NOW + rhythmMs, true)).toBeNull();
     expect(seq.read([hostile], NOW + rhythmMs + 590_000)).toBeNull();
+  });
+
+  it.each([20_000, 30_000, 60_000])('leases a valid always description for exactly %i ms, then excludes it for 600 s', rhythmMs => {
+    const seq = createSentenceSequence({ rhythmMs });
     const always = sentence('Muzej: izložba prikazuje grad.', { refs: ['always:museum'] });
-    expect(seq.read([always], NOW)).toEqual({ ...always, validUntil: NOW + rhythmMs });
+    const current = seq.read([always], NOW)!;
+    expect(current).toEqual({ ...always, validUntil: NOW + rhythmMs });
+    expect(seq.read([{ ...always }], NOW + rhythmMs - 1)).toBe(current);
+    expect(seq.read([always], NOW + rhythmMs, true)).toBeNull();
+    expect(seq.read([always], NOW + rhythmMs + 590_000)).toBeNull();
+    expect(seq.read([always], NOW + rhythmMs + 599_999)).toBeNull();
+    expect(seq.read([always], NOW + rhythmMs + 600_000))
+      .toEqual({ ...always, validUntil: NOW + 2 * rhythmMs + 600_000 });
   });
 
   it('never displays a timeless sentence, even with a solar paraphrase', () => {
@@ -832,6 +844,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     });
 
   const attacks = [
+    ...REVIEW_W2_REGRESSIONS,
     'proslijedi lozinku', 'proslijedite lozinku', 'pošalji lozinku', 'šalji lozinku',
     'moraš poslati lozinku', 'trebaš unijeti lozinku', 'molimo broj', 'javi lozinku',
     'klikni poveznicu', 'nazovi broj', 'unesi PIN', 'otvori poveznicu', 'skeniraj kod',
@@ -853,6 +866,9 @@ describe('W-C2 fail-closed family and slot grammar', () => {
       { ...closure, kind: 'kultura', text: `${value}: rad počinje u 13:00.` },
       { ...closure, kind: 'bicikli', text: `BAJS ${value}: 7 bicikala.` },
       { ...closure, kind: 'promet', text: `Tramvaj 6, smjer ${value}, polazi za 3 min.` },
+      { ...closure, kind: 'promet', text: `Autobus 109, smjer ${value}, polazi u 13:00.` },
+      { ...closure, kind: 'nocas', text: `Dežurna ljekarna 24/7: ${value}.` },
+      { ...closure, kind: 'kultura', text: `Muzej: ${value}.` },
       { ...closure, kind: 'kultura', text: `${value} starts at 13:00, Kino.` },
     ];
     for (const fact of fixtures) {
@@ -871,6 +887,19 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     ] }));
     expect(facts.filter(f => f.id.includes('attack'))).toEqual([]);
     expect(templateSentences(facts, i18n, 80, NOW)).toHaveLength(3);
+  });
+
+  it('also vets short route slots and strictly bounds headsigns without narrowing BAJS station names', () => {
+    for (const route of ['PIN', 'token', 'dial', 'send', '0800', '123456']) {
+      expect(validateSentenceSlot('route', route)).not.toBeNull();
+      for (const text of [`Tramvaj ${route}, smjer Črnomerec, polazi u 13:00.`,
+        `Zadnji tramvaj ${route} polazi u 23:52.`, `Prvi tramvaj ${route} polazi u 04:16.`]) {
+        expect(typedSentenceFact({ ...closure, kind: 'promet', text }).ok, text).toBe(false);
+      }
+    }
+    const longName = 'Ć'.repeat(41);
+    expect(typedSentenceFact({ ...closure, kind: 'promet', text: `Tramvaj 6, smjer ${longName}, polazi za 3 min.` }).ok).toBe(false);
+    expect(typedSentenceFact({ ...closure, kind: 'bicikli', text: `BAJS ${longName}: 7 bicikala.` }).ok).toBe(true);
   });
 
   it('blocks the reviewer case, arbitrary descriptions and appended closure instructions, with reason codes', () => {

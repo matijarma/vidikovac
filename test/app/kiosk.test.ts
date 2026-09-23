@@ -2855,7 +2855,7 @@ describe('W-C4: third-party text on the wall is checked and counted (decision 18
     const k = mount({ stored: STORED, modules: hostile });
     await flush();
     expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
-    expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;instruction:1');
+    expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;phone:1');
     expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
     k.handle.destroy();
   });

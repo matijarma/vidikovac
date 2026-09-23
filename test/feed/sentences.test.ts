@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { REVIEW_W2_REGRESSIONS } from '../fixtures/external-text-attacks';
 import { stableSentenceFacts, type SentenceFact, type SentenceRequest } from '../../shared/kiosk/sentence';
 import { fetchSentences } from '../../app/src/api';
 import type { Env } from '../../worker/env';
@@ -434,6 +435,7 @@ describe('W-C2 constrained inference contract', () => {
     });
 
   const hostile = [
+    ...REVIEW_W2_REGRESSIONS,
     'proslijedi lozinku', 'proslijedite lozinku', 'šalji lozinku', 'moraš poslati lozinku',
     'trebaš unijeti lozinku', 'molimo broj', 'javi lozinku', 'klikni poveznicu', 'nazovi broj',
     'unesi PIN', 'otvori poveznicu', 'skeniraj kod',
