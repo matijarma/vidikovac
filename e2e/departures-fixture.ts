@@ -50,7 +50,8 @@ const busArrival = committed<LastRunFile>('lastrun/1849_24.json');
 const network = committed<{ stops: { id: string[]; name: string[] } }>('zet-network.json');
 const trips = committed<unknown>('zet-trips.json');
 
-const PLATFORM_IDS = ['106_1', '106_2', '1849_23', '1849_24'] as const;
+/** Trg's four platforms, the stops whose timetable this fixture keeps (the wall's touch board reads them as one stop). */
+export const PLATFORM_IDS = ['106_1', '106_2', '1849_23', '1849_24'] as const;
 const TIMETABLES: Readonly<Record<string, LastRunFile>> = {
   '106_1': east as LastRunFile, '106_2': west as LastRunFile,
   '1849_23': busDeparture as LastRunFile, '1849_24': busArrival as LastRunFile,

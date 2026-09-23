@@ -25,7 +25,7 @@ import { resolve } from 'node:path';
 import { APP_URL, E2E_STOP_ID, isolateLocalNetwork, localContext, provisionKiosk } from '../helpers';
 import { installKioskFeedFixture } from '../experience-fixtures';
 import { installCityFixture } from '../city-fixtures';
-import { departuresBoard, lastRunSnapshot, serviceDays } from '../departures-fixture';
+import { departuresBoard, lastRunSnapshot, PLATFORM_IDS, serviceDays } from '../departures-fixture';
 import { firstViewport, firstViewportFailures, PHONE_PROBES } from '../inventory';
 import { legibilityReport, WALL_1920 } from '../legibility';
 import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
@@ -54,6 +54,8 @@ const SETTLE_MS = 30_000;
 const VEHICLES_MS = 10_000;
 /** The proxy page settles on a shorter leash: it is an artefact, never a verdict. */
 const PROXY_SETTLE_MS = 15_000;
+/** How long a touched stop's board may say it is loading: its rows are Sada's own row, whose module loads on the first touch (kiosk/timeline.ts loadStopBoardRows; lane-w-WP2T's handoff: "allow the spec's 5 s"). */
+const TOUCH_ROWS_MS = 5_000;
 
 const softly = expect.configure({ soft: true });
 
@@ -247,15 +249,26 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       await page.mouse.click(map!.x + map!.width / 2, map!.y + map!.height / 2);
       const board = page.locator(WALL_PROBES.stopBoard);
       await expect(board, `${label}: a touch on the place's stop ring opens ${WALL_PROBES.stopBoard}`).toBeVisible({ timeout: 5_000 });
-      const departures = await visibleOf(page, `${WALL_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`);
-      expect(departures.length, `${label}: the stop board lists 1–3 departures (principle 3), read ${departures.length}`).toBeGreaterThanOrEqual(1);
+      // What the fixture's timetable holds for the place's platforms at the scene's clock: a scene with no departure
+      // there reads 0 rows (lane-w-WP2T), and is never asserted 1–3. The board says it is loading until its rows'
+      // module is in (TOUCH_ROWS_MS).
+      const scheduled = PLATFORM_IDS.reduce((n, stopId) => n + departuresBoard({ now: scene.now, stopId }).departures.length, 0);
+      const rowsOnBoard = `${WALL_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`;
+      if (scheduled > 0) {
+        await expect.poll(async () => (await visibleOf(page, rowsOnBoard)).length, { timeout: TOUCH_ROWS_MS, message: `${label}: the stop board's departures (${rowsOnBoard}) paint within ${TOUCH_ROWS_MS / 1000} s of the touch` }).toBeGreaterThanOrEqual(1);
+      }
+      const departures = await visibleOf(page, rowsOnBoard);
+      if (scheduled > 0) expect(departures.length, `${label}: the stop board lists 1–3 departures (principle 3), read ${departures.length}`).toBeGreaterThanOrEqual(1);
+      else expect(departures.length, `${label}: no departure at the scene's clock in the fixture, so the board lists none, read ${departures.length}`).toBe(0);
       expect(departures.length, `${label}: the stop board lists at most 3 departures, read ${departures.length}`).toBeLessThanOrEqual(3);
       for (let t = 0; t <= TOUCH_BOARD_MS; t += ROTATION_STEP_MS) {
         await page.clock.runFor(ROTATION_STEP_MS);
         await page.waitForTimeout(ROTATION_SETTLE_MS);
       }
       await expect(board, `${label}: the stop board closes by itself within ${TOUCH_BOARD_MS / 1000} s`).toBeHidden({ timeout: 5_000 });
-      expect(await attrOf(page, WALL_PROBES.map, 'data-zoom'), `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
+      const zoomAfter = await attrOf(page, WALL_PROBES.map, 'data-zoom');
+      writeArtefact(`touch-${label}.json`, { scheduled, departures: departures.map((d) => d.text), zoom, zoomAfter });
+      expect(zoomAfter, `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
     });
   }
 });
