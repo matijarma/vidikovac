@@ -693,6 +693,8 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
     host.container.dataset.discPills = String(census.discPills);
     host.container.dataset.pillOverlaps = String(pillOverlaps(pillBoxes));
     host.container.dataset.pillClipped = String(pillsClipped(pillBoxes, view));
+    // Round 2 F6: the drawn pills that stepped aside for a disc's number or another mark (vehicle-features.ts `moved`).
+    host.container.dataset.pillMoved = String(pillFeatures.filter((f) => Number(f.properties.moved ?? 0) > 0).length);
     host.container.dataset.hiddenNames = String(hidden.length);
     host.container.dataset.ownName = ownName;
   }

@@ -432,3 +432,101 @@ export function createLineColours(
 ): (routeId: string | undefined, fallback: string) => string {
   return (routeId, fallback) => (routeId !== undefined && Object.hasOwn(table, routeId) ? table[routeId]! : fallback);
 }
+
+// --- A mark steps aside for a disc's number (round 2, F6) ------------------
+//
+// At the frame zoom the wall's pills and its BAJS discs share the main
+// streets: half the discs lay under a pill at 22:32 (26 of 53), and a tram
+// standing at a stop covered the station's count for a minute at a time; on
+// the phone's Karta at z12.7 the same (21 of 41). Both marks must stay (every
+// vehicle is drawn, every station says its count), so the vehicle mark, the
+// one that moves anyway, steps aside: perpendicular to its heading, to the
+// side of the disc it is already on, by exactly what clears the number plus
+// DEFLECT_MARGIN_PX, and never by a jump -- the push grows with the true
+// overlap (DEFLECT_GAIN pixels per pixel) so a mark meeting a disc slides
+// off it and slides back once past. A bus pill steps aside for a tram plate
+// the same way (trams are placed first, then buses, then the rest), and every
+// mark placed is an obstacle for the ones after it. Never further than
+// DEFLECT_MAX_PX: a hub label wider than that keeps what it covers rather than
+// wandering off its street. Pure, in the CSS px the pill geometry is stated
+// in (vehicle-features.ts divides the projected positions by the symbol
+// scale first, as it does for the clustering).
+
+/** A round obstacle a mark must not cover: a disc's number square, as its drawn radius (city-layers.ts). */
+export interface DiscObstacle { x: number; y: number; r: number }
+/** A mark to place: its centre, the label its capsule is fitted to, its kind and its heading (null: none known). */
+export interface DeflectableMark { id: string; x: number; y: number; label: string; kind: string; bearing: number | null }
+/** Where a mark was placed and how far it moved (0: where the model put it). */
+export interface PlacedMark { x: number; y: number; moved: number }
+
+/** How far a mark is pushed per pixel of true overlap: two, so it is clear of a disc it meets head-on well before its centre. */
+export const DEFLECT_GAIN = 2;
+/** The clearance left between a placed mark and what it stepped aside for. */
+export const DEFLECT_MARGIN_PX = 1;
+/** The furthest a mark is ever moved from where the model put it. */
+export const DEFLECT_MAX_PX = 2 * PILL_HEIGHT_PX;
+
+/** A capsule's spine (a horizontal segment) and its radius, as drawn. */
+interface Capsule { x: number; y: number; spine: number; radius: number }
+function capsuleOf(m: { x: number; y: number; label: string }): Capsule {
+  const { halfWidth, halfHeight } = capsuleHalfPx(m.label);
+  return { x: m.x, y: m.y, spine: Math.max(0, halfWidth - halfHeight), radius: halfHeight };
+}
+/** The distance from a point to a capsule's spine. */
+function spineDistance(c: Capsule, x: number, y: number): number {
+  return Math.hypot(Math.max(0, Math.abs(x - c.x) - c.spine), y - c.y);
+}
+/** The distance between two capsules' spines (both horizontal). */
+function spinesDistance(a: Capsule, b: Capsule): number {
+  const gap = Math.max(0, Math.abs(a.x - b.x) - a.spine - b.spine);
+  return Math.hypot(gap, a.y - b.y);
+}
+/** A capsule's half extent along a unit direction. */
+function capsuleSupport(c: Capsule, nx: number): number {
+  return c.spine * Math.abs(nx) + c.radius;
+}
+/** Draw order among the kinds: a tram's plate is placed first, a bus pill steps aside for it. */
+const DEFLECT_RANK: Readonly<Record<string, number>> = { tram: 0, bus: 1 };
+
+/**
+ * The marks placed: each in `marks` (singles and clusters alike, in the CSS px
+ * of the pill geometry) moved off the `discs` and off the marks placed before
+ * it, as described above. Every mark comes back, moved or not.
+ */
+export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly DiscObstacle[]): Map<string, PlacedMark> {
+  const placed = new Map<string, PlacedMark>();
+  const obstacles: Capsule[] = [];
+  const order = [...marks].sort((a, b) => (DEFLECT_RANK[a.kind] ?? 2) - (DEFLECT_RANK[b.kind] ?? 2) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const mark of order) {
+    const own = capsuleOf(mark);
+    // The push runs perpendicular to the heading, to the right of it on the screen (y down): north-bound
+    // marks step east, east-bound south; a mark with no heading steps up. Exact zeros on the compass
+    // points, so a mark on a straight street is never a hair off its column.
+    const snap = (v: number): number => (Math.abs(v) < 1e-9 ? 0 : v);
+    const rad = ((mark.bearing ?? 270) * Math.PI) / 180;
+    const nx = mark.bearing === null ? 0 : snap(Math.cos(rad));
+    const ny = mark.bearing === null ? -1 : snap(Math.sin(rad));
+    let push = 0;
+    let side = 1;
+    const consider = (ox: number, oy: number, support: number, overlap: number): void => {
+      if (overlap <= 0) return;
+      const s = (mark.x - ox) * nx + (mark.y - oy) * ny;
+      const dir = s >= 0 ? 1 : -1;
+      const needed = capsuleSupport(own, nx) + support - Math.abs(s);
+      const m = Math.min(needed, DEFLECT_GAIN * overlap, DEFLECT_MAX_PX);
+      if (m > push) { push = m; side = dir; }
+    };
+    for (const disc of discs) {
+      const r = disc.r + DEFLECT_MARGIN_PX;
+      consider(disc.x, disc.y, r, own.radius + r - spineDistance(own, disc.x, disc.y));
+    }
+    for (const other of obstacles) {
+      const r = other.radius + DEFLECT_MARGIN_PX;
+      consider(other.x, other.y, other.spine * Math.abs(nx) + r, own.radius + r - spinesDistance(own, other));
+    }
+    const at = push > 0 ? { x: mark.x + side * push * nx, y: mark.y + side * push * ny, moved: push } : { x: mark.x, y: mark.y, moved: 0 };
+    placed.set(mark.id, at);
+    obstacles.push({ ...own, x: at.x, y: at.y });
+  }
+  return placed;
+}

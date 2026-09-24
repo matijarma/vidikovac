@@ -19,6 +19,19 @@ export const BIKE_COUNT_PX = 12;
  *  city/curated.ts) keeps each station a small dot without its number: a
  *  hundred counted discs over the whole town would bury the trams. */
 export const BIKE_FAR_RADIUS_PX = 3;
+/** The radius city-place-dots draws a point with, in CSS px before the symbol scale, when the point carries a
+ *  number a reader must be able to see (the badge layer's own rule: no text for a far or an empty station,
+ *  none for a blank disc); null for a mark with nothing written on it. The `radius` expression in cityLayers
+ *  says the same in MapLibre's words; a vehicle mark steps aside for these (round 2 F6, motion/pills.ts). */
+export function discRadiusPx(props: Readonly<Record<string, unknown>>): number | null {
+  const badge = String(props.badge ?? '');
+  const bike = props.category === 'bikes';
+  if (bike && (props.far === true || badge === '0')) return null;
+  if (!badge) return null;
+  if (bike) return BIKE_DISC_RADIUS_PX;
+  const events = Number(props.eventCount ?? 0);
+  return events > 0 ? Math.min(18, 11 + Math.sqrt(events)) : 8;
+}
 /* Decision 60 (owner, 24 Sep): a station with no bike now is the same teal at
  * the same small size and without its "0" -- a station is there, and nothing
  * to rent. Its disc as big as a counted one, in a grey of its own, read as a

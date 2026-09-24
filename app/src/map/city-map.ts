@@ -190,6 +190,11 @@ export interface VehicleFeatureCollection {
        *  mark is never half-hidden under one of the marks it stands for. */
       sort: number;
       held: boolean;
+      /** How far the mark was stepped aside from where the model put it, in
+       *  CSS px before the symbol scale: off a disc's number or off a mark
+       *  placed before it (round 2 F6, motion/pills.ts deflectMarks); 0 where
+       *  it stands on its own position. Written on every feature. */
+      moved: number;
       /** True on a merged mark. Written on every feature, never left off a
        *  single: the pill layer's cluster ring is a `case` on this property,
        *  and a MapLibre `case` on a missing property is a runtime error. */
@@ -584,6 +589,8 @@ export function withTimers(factory: MapFactory | undefined, setTimer: (fn: () =>
 
 /** The slice of MapLibre and the style builder this wrapper drives; maplibre-entry.ts exports it. */
 type MaplibreModule = typeof import('./maplibre-entry');
+/** The push options a mark's step-aside adds (vehicle-features.ts; a type alone, off the lightweight graph). */
+type VehicleGeoJsonOptions = import('./vehicle-features').VehicleGeoJsonOptions;
 
 /** Injectable internals: the library import (never loaded under test), the
  *  loop's own clock and frame primitive (motion/loop.ts's LoopDeps), the
@@ -1049,6 +1056,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     ].join(' ');
   }
 
+  /** Round 2 F6: what the marks step aside for on this push, where the pills are drawn (vehicle-features.ts
+   *  discObstacles): the city discs with a number, projected on this frame's camera, and the way back from the
+   *  screen for a mark that moved. Nothing without a camera, and nothing on a map that cannot unproject. */
+  function stepAside(m: MapApi, l: MaplibreModule, project: ((lonLat: [number, number]) => { x: number; y: number }) | undefined): Pick<VehicleGeoJsonOptions, 'discs' | 'unproject'> {
+    if (!project || !m.unproject) return {};
+    const back = m.unproject;
+    return { discs: l.discObstacles(points, project, scale), unproject: (p) => { const ll = back.call(m, p); return [ll.lng, ll.lat]; } };
+  }
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
   function draw(t: number): boolean {
     // Detached (the dashboard swapped layers and took the workspace along):
@@ -1080,7 +1095,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
       const project = m.project && m.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
-      fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+      fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, ...stepAside(m, l, project) });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
       lastPushedSignature = signature;
@@ -1513,7 +1528,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (drawn.length === 0) return null;
     const kept = keptVehicleId();
     const project = created.project && created.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
-    const fc = l.vehiclesToGeoJson(drawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+    const fc = l.vehiclesToGeoJson(drawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, ...stepAside(created, l, project) });
     if (fc.features.length > 0) probeHasMarks = true;
     return fc;
   }
