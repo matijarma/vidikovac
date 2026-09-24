@@ -399,6 +399,42 @@ describe('the branch grader, fault injection on the corridor', () => {
     });
   });
 
+  describe('the next stop on the wire (rail round 3)', () => {
+    // The kept victim's item is re-published three times with its nextStopId
+    // rewritten T600, T900, T600 (all served platforms of 1_0 in that order):
+    // one forward move, one backward move that returns to a platform the wire
+    // had left. A rewrite T600, T900, T1200 is two forward moves and no
+    // backward one; a rewrite onto another path's platform counts nothing.
+    function observeNext(ids: readonly string[]): BranchReport {
+      expect(kept).not.toBeNull();
+      const { state, headerSec, payload, victimId } = structuredClone(kept!);
+      const grader = createBranchGrader(engine, { stops });
+      for (let k = 0; k < ids.length; k++) {
+        const copy = structuredClone(payload);
+        const item = copy.items.find((i) => i.id === `vehicle:${victimId}`)!;
+        (item.data as Record<string, unknown>)['nextStopId'] = ids[k];
+        grader.observe(state, headerSec + 10 * k, copy);
+      }
+      return grader.report();
+    }
+
+    it('counts a next stop that moves past a platform and comes back as one backward move and one return', () => {
+      const r = observeNext(['T600', 'T900', 'T600']);
+      expect(r.nextStop.backwardMoves).toBe(1);
+      expect(r.nextStop.returns).toBe(1);
+      expect(r.nextStop.forwardMoves).toBe(1);
+      expect(r.nextStop.samples[0]).toMatchObject({ id: kept!.victimId, from: 'T900', to: 'T600', fromArcM: 900, toArcM: 600, returns: true });
+      expect(Object.values(r.nextStop.bySource).reduce((a, b) => a + b, 0)).toBe(1);
+    });
+
+    it('counts forward moves only, and nothing for a platform off the path', () => {
+      const r = observeNext(['T600', 'T900', 'T1200']);
+      expect(r.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 2 });
+      const off = observeNext(['T600', 'D300', 'T600']);
+      expect(off.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 0 });
+    });
+  });
+
   it('refuses an observation after the report', () => {
     const grader = createBranchGrader(engine, { stops });
     grader.observe(kept!.state, kept!.headerSec, kept!.payload);
