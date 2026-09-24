@@ -33,7 +33,9 @@ export interface InvitationDeps {
  *  rest of the departures, then more map. Three arrangements, by the map they leave:
  *  'map'    decision 50: card and legend under the map, the list the whole aside;
  *  'aside'  the card under the list, the map the whole left column over its legend (by day);
- *  'legend' the card under the map and the legend under the list (at night at 1366 x 768 the card under the
+ *  'legend' the card under the map and the legend straight under the list, no gap between (lane w-labels3:
+ *           the gap was the four pixels lastTrams2240's second departure lacked);
+ *           at night at 1366 x 768 the card under the
  *           list leaves it 154 px for 236 to 322 px of promises, and the map under card and legend is 159 px).
  *  The card goes under the list whenever the list keeps its promises there (the map is then the largest it
  *  can be; lane w-labels, as D5.9 ships by day); else the legend goes under the list if the map is legible
@@ -55,7 +57,7 @@ export function compactArrangement(b: CompactBox): { placement: CompactPlacement
   const map = { placement: 'map' as const, mapPx: b.windowPx - b.gapPx - b.cardPx - b.legendPx, listPx: b.windowPx - b.listOverheadPx };
   if (!(b.windowPx > 0)) return map;
   const aside = { placement: 'aside' as const, mapPx: b.windowPx - b.legendPx, listPx: b.windowPx - b.gapPx - b.cardPx - b.listOverheadPx };
-  const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.gapPx - b.legendPx };
+  const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.legendPx };
   const byMap = [aside, legend, map];
   for (const need of [Math.max(b.floorPx, b.fullPx ?? 0), b.floorPx]) {
     const pick = byMap.find((a) => a.mapPx >= b.minMapPx && a.listPx >= need);

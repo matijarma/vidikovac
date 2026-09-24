@@ -46,7 +46,7 @@ describe('the map pane’s legible minimum', () => {
     // night0430: the first tram, the pharmacy and a departure; lastTrams2240: the last and first trams too.
     for (const floorPx of [86 + 86 + 64, 86 + 86 + 86 + 64]) {
       const night = compactArrangement({ ...NIGHT_1366, floorPx });
-      expect(night, String(floorPx)).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 14 - 95 });
+      expect(night, String(floorPx)).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 95 });
       expect(night.mapPx).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
       expect(night.listPx).toBeGreaterThanOrEqual(floorPx);
     }
@@ -54,7 +54,7 @@ describe('the map pane’s legible minimum', () => {
   // Lane w-labels3: by day three departures on offer come before map height past its minimum.
   it('gives the second and third departures the room before more map, and holds to one only when nothing else fits', () => {
     const three = compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64, fullPx: 64 * 3 + 64 });
-    expect(three).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 14 - 95 });
+    expect(three).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 95 });
     expect(compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64, fullPx: 64 + 64 })).toMatchObject({ placement: 'aside' });
     expect(compactArrangement({ ...NIGHT_1366, floorPx: 86 * 3 + 64, fullPx: 86 * 3 + 64 * 3 })).toMatchObject({ placement: 'legend' });
   });
