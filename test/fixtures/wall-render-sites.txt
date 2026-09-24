@@ -129,10 +129,10 @@ app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.tram)
 app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.bikes)
 app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.culture)
 app/src/kiosk/invitation.ts:63 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:1006 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:1006 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:1007 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:1008 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/mapview.ts:1024 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:1024 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:1025 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:1026 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
@@ -317,28 +317,28 @@ app/src/layers/grad-sada.ts:62 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'
 app/src/layers/grad-sada.ts:81 #mapBand → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:130 #renderGradSada → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:132 #renderGradSada → e(name)
-app/src/map/city-layers.ts:57 #cityLayers → 'text-field':['case',small,'',['get','badge']]
-app/src/map/city-layers.ts:66 #cityLayers → 'text-field':['get','title']
+app/src/map/city-layers.ts:63 #cityLayers → 'text-field':['case',small,'',['get','badge']]
+app/src/map/city-layers.ts:77 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']]
 app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:817 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:817 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1719 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1720 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1721 #relabelControls → el.title = controlLabel
-app/src/map/external-features.ts:24 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
-app/src/map/external-features.ts:33 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
-app/src/map/external-features.ts:40 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
-app/src/map/external-features.ts:53 #linesToGeoJson → vetExternalMap('name', l.title, publicDisplay)
-app/src/map/external-features.ts:67 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
-app/src/map/external-features.ts:98 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/city-map.ts:828 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:828 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1780 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1781 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1782 #relabelControls → el.title = controlLabel
+app/src/map/external-features.ts:25 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/external-features.ts:34 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
+app/src/map/external-features.ts:44 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
+app/src/map/external-features.ts:57 #linesToGeoJson → vetExternalMap('name', l.title, publicDisplay)
+app/src/map/external-features.ts:71 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
+app/src/map/external-features.ts:102 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:616 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:822 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:862 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1019 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1038 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:634 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:843 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:883 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1040 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1059 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:84 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:86 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
 app/src/motion/schema-map.ts:187 #refreshWords → legend.textContent = text
@@ -393,22 +393,22 @@ app/src/transport/view.ts:366 #routeDetailMarkup → vetExternal('headsign', rou
 app/src/transport/view.ts:500 #stopDetailMarkup → vetExternal('name', d.stop.name, 'row')
 app/src/transport/view.ts:539 #closureDescription → vetExternal('summary', summary, 'row')
 app/src/transport/view.ts:549 #closureDetailMarkup → vetExternal('name', item.title, 'row')
-app/src/transport/workspace.ts:488 #setSelection → searchInput.value = ''
-app/src/transport/workspace.ts:495 #setSelection → searchInput.value = query
-app/src/transport/workspace.ts:608 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
-app/src/transport/workspace.ts:621 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
-app/src/transport/workspace.ts:623 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
-app/src/transport/workspace.ts:624 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
-app/src/transport/workspace.ts:632 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
-app/src/transport/workspace.ts:633 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
-app/src/transport/workspace.ts:640 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
-app/src/transport/workspace.ts:648 #renderStatus → statusEl.textContent = line ?? ''
-app/src/transport/workspace.ts:705 #renderSheet → vetExternal(peekKind, peekText, 'row')
-app/src/transport/workspace.ts:746 #nearbySheet → vetExternal('name', placeNow().name, 'row')
-app/src/transport/workspace.ts:755 #resultTexts → vetExternal(kind, value ?? '', 'row')
-app/src/transport/workspace.ts:864 #clearSearch → searchInput.value = ''
-app/src/transport/workspace.ts:1105 #render → searchInput.value=query
-app/src/transport/workspace.ts:1146 #render → searchInput.value=query
+app/src/transport/workspace.ts:505 #setSelection → searchInput.value = ''
+app/src/transport/workspace.ts:512 #setSelection → searchInput.value = query
+app/src/transport/workspace.ts:642 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
+app/src/transport/workspace.ts:655 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
+app/src/transport/workspace.ts:657 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
+app/src/transport/workspace.ts:658 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
+app/src/transport/workspace.ts:666 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
+app/src/transport/workspace.ts:667 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
+app/src/transport/workspace.ts:674 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
+app/src/transport/workspace.ts:682 #renderStatus → statusEl.textContent = line ?? ''
+app/src/transport/workspace.ts:739 #renderSheet → vetExternal(peekKind, peekText, 'row')
+app/src/transport/workspace.ts:780 #nearbySheet → vetExternal('name', placeNow().name, 'row')
+app/src/transport/workspace.ts:789 #resultTexts → vetExternal(kind, value ?? '', 'row')
+app/src/transport/workspace.ts:898 #clearSearch → searchInput.value = ''
+app/src/transport/workspace.ts:1140 #render → searchInput.value=query
+app/src/transport/workspace.ts:1181 #render → searchInput.value=query
 shared/kiosk/sentence.ts:122 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
 shared/kiosk/sentence.ts:224 #decodeTyped → externalText('headsign', value, { surface: 'header' })
 shared/kiosk/sentence.ts:249 #decodeRegister → externalText(type, value, { surface: 'header' })

@@ -47,6 +47,8 @@ class FakeMap {
   /** What isMoving() answers: the census fallback takes nothing while the camera moves. */
   moving = false;
   citySourceLoaded = true;
+  /** Whether the basemap's tiles in view have loaded (MapLibre's isSourceLoaded('basemap')). */
+  basemapLoaded = true;
   sprite: string | null = null;
   removed = false;
   rendered: { layer: { id: string }; properties: Record<string, unknown> }[] = [];
@@ -78,7 +80,7 @@ class FakeMap {
   removeControl(control: unknown): void { this.controls.splice(this.controls.indexOf(control), 1); }
   getCanvas(): HTMLCanvasElement { return this.canvas; }
   isMoving(): boolean { return this.moving; }
-  isSourceLoaded(id: string): boolean { return id !== cityPlaces.CITY_POINTS || this.citySourceLoaded; }
+  isSourceLoaded(id: string): boolean { return id === basemap.BASEMAP_SOURCE ? this.basemapLoaded : id !== cityPlaces.CITY_POINTS || this.citySourceLoaded; }
   addImage(id: string, image: FakeImage, options: Record<string, unknown>): void { this.images.set(id, { image, options }); }
   hasImage(id: string): boolean { return this.images.has(id); }
   readonly removedImages: string[] = [];
@@ -1089,11 +1091,13 @@ describe('the marker census of the city layers', () => {
     expect(container.dataset.markers).toBe('1');
     expect(container.dataset.hiddenNames).toBe('1');
     expect(container.dataset.unlabelled).toBe('0');
-    // The paired or exploring map ('all') keeps its own floor at 13: there a bare count below it is unlabelled.
+    // The phone's Karta and every other map naming all city places ('all') name a venue below 13 too
+    // (lane p-map, karta-unlabelled on production): its name is a candidate there, held back here, never cut off.
     handle.setCityLabels!('all');
     handle.update([A, venue], [CLOSURE]);
     map.fire('idle');
-    expect(container.dataset.unlabelled).toBe('1');
+    expect(container.dataset.hiddenNames).toBe('1');
+    expect(container.dataset.unlabelled).toBe('0');
   });
 
   it('re-takes the census at the next idle after update(), never on an idle with nothing new', async () => {
@@ -1153,6 +1157,69 @@ describe('the marker census of the city layers', () => {
   });
 });
 
+// Lane p-map (first production observation, karta-pills 4,442 ms): what the
+// phone's Karta waited for before its first pill. The overlays went on at
+// MapLibre's 'load', which waits for every basemap tile in view, and the
+// census that says a pill is drawn waited for every city source and a
+// further second. The pills depend on the vehicle data alone now.
+describe('the first pills depend on the vehicle data alone', () => {
+  const pill = { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1', short: '6' } };
+
+  it('puts the overlays and the first vehicles on with the style, before the basemap tiles; ready once they are in', async () => {
+    const { map, container, handle, statuses } = await harness({ load: false });
+    map.basemapLoaded = false;
+    map.fire('style.load');
+    // The vehicles source carries the payload the map was made with from its first message to the worker.
+    const first = map.getSource('vehicles')!.data as FC;
+    expect(first.features.map((f) => f.properties.id)).toEqual(['vehicle:1']);
+    expect(map.layers.some((l) => l.id === 'vehicles')).toBe(true);
+    // The basemap is still streaming: the map is not ready yet, and nothing else waits for it.
+    map.fire('render');
+    expect(container.dataset.mapStatus).toBe('loading');
+    map.basemapLoaded = true;
+    map.fire('render');
+    expect(container.dataset.mapStatus).toBe('ready');
+    expect(statuses).toEqual(['ready']);
+    // MapLibre's own 'load' after that changes nothing and adds nothing twice.
+    const layers = map.layers.length;
+    map.fire('load');
+    expect(map.layers).toHaveLength(layers);
+    expect(statuses).toEqual(['ready']);
+    handle.destroy();
+  });
+
+  it('writes data-pills on the first frame that draws a pill, while the city sources still load and before the settle', async () => {
+    const { map, container, frame } = await harness({ lib: cityLib });
+    map.citySourceLoaded = false;
+    frame();
+    map.rendered = [pill];
+    map.fire('render');
+    expect(container.dataset.pills).toBe('6');
+    // The marker census still waits for the city layers and the settle.
+    expect(container.dataset.markers).toBeUndefined();
+  });
+
+  it('looks for the first pills at most every NAME_TICK_MS and stops once the census has read the key', async () => {
+    const { map, container, frame } = await harness({ lib: cityLib });
+    frame();
+    map.rendered = [];
+    map.fire('render');
+    const looked = map.queries.length;
+    map.fire('render');
+    expect(map.queries.length).toBe(looked);
+    frame(NAME_TICK_MS);
+    map.fire('render');
+    expect(map.queries.length).toBeGreaterThan(looked);
+    // A map that draws no pill (vehicle dots below the pill zoom, say): the census answers '' and the looks end with it.
+    frame(PROBE_SETTLE_MS);
+    map.fire('render');
+    expect(container.dataset.pills).toBe('');
+    const settled = map.queries.length;
+    for (let i = 0; i < 5; i++) { frame(NAME_TICK_MS); map.fire('render'); }
+    expect(map.queries.length).toBe(settled);
+  });
+});
+
 describe('selection and status', () => {
   it('select() lights exactly the selected thing through filters and fits the camera; a tap picks a vehicle over a stop, a stop over nothing, and reports each', async () => {
     const { map, handle, selections } = await harness({ loadNetwork: async () => NET });
@@ -1207,6 +1274,24 @@ describe('selection and status', () => {
     expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'jumpTo', options: { center: [16.02, 45.82], zoom: 14 } });
     expect(handle.status!()).toBe('ready');
     handle.destroy();
+  });
+  // Lane p-map: a refit after a resize, a fullscreen change or a turn of the
+  // screen moves the wall's camera in one step (calm motion); a person's map
+  // still eases.
+  it('moves the wall\u2019s camera in one step and eases every other surface\u2019s', async () => {
+    for (const profile of ['public-display', 'handheld'] as const) {
+      const { map, handle } = await harness({ extra: { presentationProfile: profile } });
+      map.cameraCalls.length = 0;
+      handle.setView!({ center: [15.96, 45.79], zoom: 13 });
+      const call = map.cameraCalls.at(-1)!;
+      if (profile === 'public-display') expect(call.kind === 'jumpTo' || call.options.duration === 0, `${profile}: ${JSON.stringify(call)}`).toBe(true);
+      else expect(call).toMatchObject({ kind: 'easeTo', options: { duration: expect.any(Number) } });
+      if (profile !== 'public-display') expect(call.options.duration).toBeGreaterThan(0);
+      // data-center: where the camera came to rest, for a browser proof that projects the frame onto the canvas.
+      map.fire('moveend', {});
+      expect((map.options.container as HTMLElement).dataset.center).toBe('15.96000,45.79000');
+      handle.destroy();
+    }
   });
   it('a selection requested before initialization is fitted once its geometry exists', async () => {
     const container = document.createElement('div');

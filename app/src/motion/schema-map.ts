@@ -542,7 +542,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     },
     setFeedState(state) {
       if (destroyed) return;
-      const wasDown = down; down = state === 'down';
+      const wasDown = down; down = state === 'down' || state === 'loading';
       if (down) loop.stop();
       else if (wasDown) { fold(); if (active()) loop.start(); }
       else if (active()) loop.nudge();

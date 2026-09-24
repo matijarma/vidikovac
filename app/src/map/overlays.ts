@@ -109,6 +109,13 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
+
+/** The zoom the pills (and the two-way arrows with them) draw from on this
+ *  surface: PILL_ZOOM, or the wall's lower markZoom where its field fits
+ *  below it. city-map.ts merges the pills from the same zoom. */
+export function pillZoomOf(marks: { markZoom?: number | null } | null | undefined): number {
+  return marks?.markZoom === undefined || marks.markZoom === null ? PILL_ZOOM : Math.min(PILL_ZOOM, marks.markZoom);
+}
 /** The lower end of the public screen's own stop ramp (ProzorOptions
  *  stopRadius): the floor of the whole-city window (kiosk/mapview.ts
  *  FIELD_MIN_ZOOM), a fifth above STOP_ZOOM, so the smallest ring the ramp
@@ -270,6 +277,12 @@ export interface ProzorOptions {
    *  (the field's own zoom, R-KP2; NOSE_MIN_ZOOM elsewhere). Its name is
    *  older than the rule: pills place unconditionally at every zoom now. */
   overlapZoom: number;
+  /** The zoom from which the wall's numbered plates and its stop marks draw,
+   *  when the field fits what it presents below their own PILL_ZOOM and
+   *  STOP_ZOOM (lane p-map: a small browser window keeps the frame and the
+   *  whole-city window whole, kiosk/mapview.ts WALL_FIT_MIN_ZOOM). Absent,
+   *  the marks keep their own thresholds; it never raises them. */
+  markZoom?: number;
   /** The stops of the screen's routes as rings that grow with the camera
    *  rather than one fixed dot: on the whole-city window (kiosk/mapview.ts
    *  CITY_WINDOW, z12.7) a dot sized for street level is a bead every few
@@ -550,6 +563,11 @@ export interface OverlayOptions {
   emphasis?: readonly PlaceKind[] | null;
   /** The public screen's overlay set; null or absent draws every surface as before. */
   prozor?: ProzorOptions | null;
+  /** The zoom the pills, their arrows and the stop rings draw from on a view
+   *  fitted below their own thresholds (map/frame.ts markZoomFor: the desk's
+   *  Karta in a narrow window, lane p-map); the public screen's own is
+   *  ProzorOptions.markZoom. Never raises a threshold. */
+  markZoom?: number | null;
   /** The screen's own stop id: under prozor the hub-label tier never names it,
    *  because the 30 px anchor label already does and the two stacked at
    *  Jelačić (R-KP25). */
@@ -728,6 +746,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const modes = options.modes ?? null;
   const sel = options.selection ?? null;
   const prozor = options.prozor ?? null;
+  /** The surface's own mark zoom, else the public screen's (pillZoomOf). */
+  const marks = { markZoom: options.markZoom ?? prozor?.markZoom ?? null };
+  const stopZoom = marks.markZoom === null ? STOP_ZOOM : Math.min(STOP_ZOOM, marks.markZoom);
   const screenStopId = options.screenStopId ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
@@ -941,7 +962,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
             'circle-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
             'circle-stroke-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
           },
-      { minzoom: STOP_ZOOM, filter: stops },
+      { minzoom: stopZoom, filter: stops },
     ),
     circle(LAYERS.stopsSelected, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 6 * s, 16, 11 * s), 'circle-color': p.selection, 'circle-opacity': 0, 'circle-stroke-color': p.selection, 'circle-stroke-width': 3 }, { filter: filters[LAYERS.stopsSelected] }),
     // The screen's own stop: on the public screen the largest ring on the map
@@ -1049,9 +1070,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // closes at 16.5 because the rail under a tram says which way it faces,
     // but no rail can say which way a pair going both ways is heading, so the
     // arrows stay for as long as the two marks stay merged.
-    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE, s, alpha, blocks),
-    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks),
     // The selected vehicle's nose keeps the general nose's band (design D):
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing

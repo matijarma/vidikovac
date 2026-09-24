@@ -42,6 +42,8 @@ export const SESSION_LENGTH_MS: number;
 export const EXPIRY_MARGIN_MS: number;
 export const AFTER_EXPIRY_MS: number;
 export const OUTAGE_FEEDS: readonly string[];
+/** The wall's data-feed before its first poll has answered: no outage, and no vehicle to draw yet. */
+export const LOADING_FEED: string;
 export const CODE_TESTIDS: readonly string[];
 export const PAIRING_PROBES: Readonly<{ codeA: string; codeB: string; link: string; progress: string }>;
 export const SESSION_LIVE: string;

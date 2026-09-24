@@ -120,6 +120,8 @@ export const EXPIRY_MARGIN_MS = 90_000;
 export const AFTER_EXPIRY_MS = 31_000;
 /** A data-feed that says the vehicles are not live: during it the wall need draw no pill (§16.3 outage0800). */
 export const OUTAGE_FEEDS = Object.freeze(['stale', 'down']);
+/** The wall's data-feed before its first poll has answered (app/src/kiosk/mapview.ts feedStateOf): no outage, and no vehicle to draw yet. */
+export const LOADING_FEED = 'loading';
 /** Elements whose text is a pairing or share code: masked in every file. */
 export const CODE_TESTIDS = Object.freeze(['code-a', 'code-b', 'pair-code', 'kiosk-code', 'pair-url', 'share-code']);
 /** The pairing elements read for a redemption; the same names e2e/helpers.ts readPairing reads. */
@@ -547,6 +549,8 @@ const phoneSpec = (inventory) => {
   return { place: P.sadaPlace, sentence: P.sadaSentence, departures: inventory.PHONE_DEPARTURE_ROWS, tab: P.tab, shareCity: P.shareCity, slop: shipped(inventory.PHONE_SLOP_RE) };
 };
 const errText = (e) => String(e && e.message ? e.message : e).split(/\r?\n/)[0].slice(0, 300);
+/** An error's first line and the call log Playwright appends (what it was waiting for), on one line. */
+const errDetail = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 6).join(' ').slice(0, 600);
 const zagreb = (ms) => new Date(ms).toLocaleString('hr-HR', { timeZone: 'Europe/Zagreb', hour12: false });
 
 /** One census value: "count:N;reason:n…" (the kiosk root) or a bare "N" (the timeline); anything else keeps its raw text and no count. */
@@ -881,7 +885,16 @@ export async function stopBoardBySearch(page, ctx) {
     await page.click(`${P.transportSearch}:visible`, { timeout: 10_000 });
     out.taps++;
     await page.fill(`${P.transportSearch}:visible`, inventory.STOP_SEARCH_QUERY, { timeout: 5_000 });
-    await page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS });
+    try {
+      await page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS });
+    } catch (e) {
+      // 24 Sep 03:40: the click reported its timeout on a page whose frames were slow (Karta's first pill 8.2 s), yet
+      // the board stood open with three departures in the viewport, and nothing but that tap opens it. The tap is
+      // made when the board is there; only a board that is not fails the path. The click's own words go in the notes.
+      const opened = await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: 1_000 }).then(() => true, () => false);
+      if (!opened) throw e;
+      ctx.note(`phone: the stop search's result click reported "${errDetail(e)}", and the board opened: the tap counts`);
+    }
     out.taps++;
     await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: STOP_BOARD_TIMEOUT_MS })
       .catch(() => ctx.note(`phone: no ${P.stopBoard} within ${STOP_BOARD_TIMEOUT_MS / 1000} s of the search result`));
@@ -1023,6 +1036,15 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
       if (ctx.now() - readyAt > KARTA_POLL_MS) break;
       await ctx.sleep(POLL_MS);
       read = await page.evaluate(KARTA_READ_IN_PAGE, spec);
+    }
+    // The pills are written the moment one is drawn; the marker census (data-unlabelled, data-markers) waits for
+    // every city source and a settled second (app/src/map/name-census.ts). Read that once it is there, as the
+    // wall's settle does; waits, never gates: a census that never comes still fails karta-unlabelled.
+    if (read.unlabelled === null) {
+      const censusAt = await page.waitForFunction(MAP_CENSUS_IN_PAGE, { map: P.mapCanvas }, { timeout: CENSUS_TIMEOUT_MS }).then(() => ctx.now() - readyAt, () => null);
+      ctx.note(`phone Karta: the map census ${censusAt === null ? `not written within ${CENSUS_TIMEOUT_MS / 1000} s` : `${censusAt} ms`} after ready`);
+      const census = await page.evaluate(KARTA_READ_IN_PAGE, spec);
+      read = { ...read, unlabelled: census.unlabelled, markers: census.markers };
     }
   }
   // Whether the twin had any vehicle for the phone by the end of the window: without one no pill is owed.
@@ -1237,13 +1259,14 @@ function outageHeadlineIssues(s, k) {
   return out;
 }
 /**
- * Whether a wall reading owes vehicle pills (§16.3, [O-71]): its data-feed live (an outage, stale or down, owes none),
+ * Whether a wall reading owes vehicle pills (§16.3, [O-71]): its data-feed live (an outage, stale or down, owes none,
+ * and so does the boot state, loading, before the first poll has answered),
  * and the twin reporting vehicles to the page for at least PILLS_DRAW_GRACE_MS. A live feed whose last zet-rt snapshot
  * carried no vehicle owes none: the night between two runs, a timetable without service. A reading without a recorded
  * snapshot owes them: the row stays strict wherever the observer cannot tell.
  */
 export function pillsOwed(s) {
-  if (OUTAGE_FEEDS.includes(s.feed)) return false;
+  if (OUTAGE_FEEDS.includes(s.feed) || s.feed === LOADING_FEED) return false;
   const f = s.fleet;
   if (!f) return true;
   if (f.pins === 0) return false;

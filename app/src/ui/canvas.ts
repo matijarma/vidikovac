@@ -36,21 +36,56 @@ export function tone(el: Element, name: string, fallback: string): string {
 
 /** Subscribes a paint callback to theme changes (fired once immediately by
  *  `theme.onChange`, so the first paint needs no separate call) and to
- *  window resize, coalesced onto one animation frame. Returns an
- *  unsubscribe that tears down both. */
+ *  window resize, coalesced onto one animation frame -- or, with `refit`, to
+ *  resize, orientationchange and fullscreenchange, once per change after it
+ *  has settled. Returns an unsubscribe that tears everything down. */
 export function repaintOn(
   theme: { onChange(listener: () => void): () => void },
   view: Pick<Window, 'addEventListener' | 'removeEventListener' | 'requestAnimationFrame'> = globalThis as unknown as Window,
+  refit?: RefitOptions,
 ): (listener: () => void) => () => void {
   return (listener: () => void) => {
     let queued = false;
-    const run = (): void => { queued = false; listener(); };
-    const schedule = (): void => { if (queued) return; queued = true; view.requestAnimationFrame(run); };
+    let timer: unknown = null;
+    const run = (): void => { queued = false; timer = null; listener(); };
+    // With a refit, a change to the box (a resize, a fullscreen change, a turn
+    // of the screen) runs once, settleMs after its last event: a fullscreen
+    // toggle sends a burst, and each run would be a camera move.
+    const schedule = refit
+      ? (): void => { if (timer !== null) refit.clearTimeout(timer); timer = refit.setTimeout(run, refit.settleMs); }
+      : (): void => { if (queued) return; queued = true; view.requestAnimationFrame(run); };
     const offTheme = theme.onChange(listener); // fires once immediately: first paint
     view.addEventListener('resize', schedule);
-    return () => { offTheme(); view.removeEventListener('resize', schedule); };
+    if (refit) {
+      view.addEventListener('orientationchange', schedule);
+      refit.doc.addEventListener('fullscreenchange', schedule);
+    }
+    return () => {
+      offTheme();
+      view.removeEventListener('resize', schedule);
+      if (refit) {
+        view.removeEventListener('orientationchange', schedule);
+        refit.doc.removeEventListener('fullscreenchange', schedule);
+        if (timer !== null) refit.clearTimeout(timer);
+        timer = null;
+      }
+    };
   };
 }
+
+/** repaintOn's refit mode (the wall, lane p-map): the document whose
+ *  fullscreenchange counts, how long a change must stand before the one run,
+ *  and the timer pair. */
+export interface RefitOptions {
+  doc: Pick<Document, 'addEventListener' | 'removeEventListener'>;
+  settleMs: number;
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
+}
+
+/** How long a change to the wall's box must stand before it refits: a
+ *  fullscreen toggle's burst of resize events is over well inside it. */
+export const REFIT_SETTLE_MS = 250;
 
 /** R-L3: one number in JS instead of container queries, so a 2016 browser
  *  lays the kiosk out exactly like a 2026 one. */
