@@ -26,7 +26,9 @@ export interface BoardCacheOptions {
 
 export interface BoardCache {
   /** The board in hand for one platform, whatever its age; undefined before
-   *  the first answer for it has landed. */
+   *  the first answer for it has landed. A board whose rows are still due
+   *  outlives a later failure or an answer with nothing due (boardUseful),
+   *  and reads `stale` from then until a useful answer replaces it. */
   get(operator: BoardOperator, stopId: string): DepartureBoard | undefined;
   /** Fetch every platform whose copy is missing or past the TTL. `onChange`
    *  fires once per platform that settled, so a surface can re-render. Every
@@ -41,6 +43,19 @@ const TIMEOUT_MS = 12_000;
 /** A platform whose fetch failed is asked again this soon, not after the whole TTL: a timed-out first answer on a cold
  *  open left "Vozni red trenutacno nije dostupan." standing for over a minute while the trams ran (round 1, desktop F2). */
 export const DOWN_RETRY_MS = 5_000;
+/** A board still says something about the future while one of its departures is at most this long past (the
+ *  grace shared/city/arrivals.ts and city/nearby.ts keep a departure listed after its time). */
+export const BOARD_KEEP_GRACE_MS = 60_000;
+
+/** Whether a board says anything about what leaves next: not a failure, and at least one departure that is
+ *  still due (or inside the grace). An empty board, and one whose every row has passed, say nothing. */
+export function boardUseful(board: DepartureBoard, atMs: number): boolean {
+  if (board.status === 'down') return false;
+  return board.departures.some((d) => {
+    const at = Date.parse(d.at);
+    return Number.isFinite(at) && at >= atMs - BOARD_KEEP_GRACE_MS;
+  });
+}
 
 /** A platform whose fetch failed: the surface says "down" for that platform
  *  rather than showing nothing and asking again on every render. */
@@ -104,9 +119,23 @@ export function createBoardCache(options: BoardCacheOptions = {}): BoardCache {
         // down placeholder, firing twice on the way; nothing a listener does
         // can reach the store from here. One surface's render fault is its
         // own to fix, and must not starve the next surface's callback.
-        boards.set(key, board);
-        // A down answer counts as current only for DOWN_RETRY_MS; a good one for the TTL.
-        times.set(key, board.status === 'down' ? now() - ttlMs + Math.min(DOWN_RETRY_MS, ttlMs) : now());
+        //
+        // An answer that says nothing about what leaves next (a failure, an
+        // empty board, a board whose every row has passed) never replaces a
+        // board whose rows are still due: the D5.21 wall listed no departure
+        // for 25 to 46 s at 22:23 when a failed fetch became the board in hand
+        // and the rows it had shown ran out of their grace while the trams
+        // still ran (observe-d521b, item 2). The board in hand stays, marked
+        // stale (a copy nobody has confirmed), until its own rows pass or a
+        // useful answer lands; the platform is asked again on the retry beat.
+        const at = now();
+        const held = boards.get(key);
+        const useful = boardUseful(board, at);
+        const kept = !useful && held !== undefined && boardUseful(held, at);
+        if (kept) boards.set(key, held.status === 'stale' ? held : { ...held, status: 'stale' });
+        else boards.set(key, board);
+        // A down or refused answer counts as current only for DOWN_RETRY_MS; a stored one for the TTL.
+        times.set(key, kept || board.status === 'down' ? at - ttlMs + Math.min(DOWN_RETRY_MS, ttlMs) : at);
         for (const listener of heard) { try { listener(); } catch { /* the surface's fault, not the cache's */ } }
       });
   }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBoardCache, DOWN_RETRY_MS } from '../../app/src/city/boards';
+import { BOARD_KEEP_GRACE_MS, boardUseful, createBoardCache, DOWN_RETRY_MS } from '../../app/src/city/boards';
 import type { DepartureBoard } from '../../shared/city/types';
 
 const NOW = Date.parse('2026-09-19T10:00:00Z');
@@ -55,6 +55,102 @@ describe('a failed platform is asked again soon (round 1, desktop F2)', () => {
     clock += DOWN_RETRY_MS + 1_000;
     cache.ensure('zet', ['1']);
     expect(f.calls).toHaveLength(2); // a good board keeps the TTL
+  });
+});
+
+// The D5.21 wall (observe-d521b, item 2): at 22:22 a failed fetch became the board in hand, the rows it had shown
+// ran out of their grace and for 25 to 46 s the wall listed no departure while trams still ran. A board whose rows
+// are still due now outlives any answer that says nothing about what leaves next.
+describe('an answer with nothing due never replaces a board with rows still due (observe-d521b, item 2)', () => {
+  const rows = (stopId: string, minutes: readonly number[], status: DepartureBoard['status'] = 'live'): DepartureBoard => ({
+    operator: 'zet', stopId, stopName: `Stop ${stopId}`, status, generatedAt: new Date(NOW).toISOString(),
+    departures: minutes.map((m, i) => ({ operator: 'zet', tripId: `T-${stopId}-${i}`, routeId: '6', routeName: '6', headsign: 'Sopot', at: new Date(NOW + m * 60_000).toISOString() })),
+  });
+
+  it('boardUseful: a failure, an empty board and a board whose every row has passed say nothing; one row inside the grace still does', () => {
+    expect(boardUseful(rows('1', [3, 8]), NOW)).toBe(true);
+    expect(boardUseful(rows('1', [-0.5]), NOW)).toBe(true); // 30 s past: inside the grace the surfaces keep it listed
+    expect(boardUseful(rows('1', [-2]), NOW)).toBe(false);
+    expect(boardUseful(rows('1', []), NOW)).toBe(false);
+    expect(boardUseful(rows('1', [3], 'down'), NOW)).toBe(false);
+    expect(boardUseful(rows('1', [3], 'stale'), NOW)).toBe(true);
+    expect(boardUseful(rows('1', [-BOARD_KEEP_GRACE_MS / 60_000 + 0.01]), NOW)).toBe(true);
+  });
+
+  it('keeps the good board through a failed refresh, marked stale, asks again after DOWN_RETRY_MS, and lets a useful answer replace it', async () => {
+    const f = fakeFetch();
+    let clock = NOW;
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => clock });
+    const changed = vi.fn();
+    cache.ensure('zet', ['1'], changed);
+    await f.settle(url('1'), { ok: true, body: rows('1', [3, 8]) });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'live' });
+    // A minute on, the refresh fails: the rows stay, the copy is one nobody has confirmed.
+    clock = NOW + 61_000;
+    cache.ensure('zet', ['1'], changed);
+    await f.settle(url('1'), { ok: false });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'stale', departures: [expect.objectContaining({ tripId: 'T-1-0' }), expect.objectContaining({ tripId: 'T-1-1' })] });
+    expect(changed).toHaveBeenCalledTimes(2);
+    // The platform is asked again on the retry beat, not after the whole TTL; a timeout or a network failure keeps the same rows.
+    clock += DOWN_RETRY_MS - 1;
+    cache.ensure('zet', ['1'], changed);
+    expect(f.calls).toHaveLength(2);
+    clock += 2;
+    cache.ensure('zet', ['1'], changed);
+    expect(f.calls).toHaveLength(3);
+    await f.settle(url('1'), { ok: true, fail: true });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'stale', generatedAt: new Date(NOW).toISOString() });
+    expect(cache.get('zet', '1')!.departures).toHaveLength(2);
+    // A useful answer replaces it and counts for the whole TTL again.
+    clock += DOWN_RETRY_MS + 1;
+    cache.ensure('zet', ['1'], changed);
+    await f.settle(url('1'), { ok: true, body: rows('1', [1, 5, 9]) });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'live' });
+    expect(cache.get('zet', '1')!.departures).toHaveLength(3);
+    clock += DOWN_RETRY_MS + 1_000;
+    cache.ensure('zet', ['1'], changed);
+    expect(f.calls).toHaveLength(4);
+  });
+
+  it('refuses an empty answer, a down answer the Worker itself sent, and one whose rows have all passed, while rows are still due', async () => {
+    const f = fakeFetch();
+    let clock = NOW;
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => clock });
+    cache.ensure('zet', ['1']);
+    await f.settle(url('1'), { ok: true, body: rows('1', [3, 8]) });
+    for (const answer of [rows('1', []), rows('1', [3], 'down'), rows('1', [-2, -5]), rows('1', [], 'stale')]) {
+      clock += 61_000 > DOWN_RETRY_MS ? DOWN_RETRY_MS + 1 : 61_000;
+      // Past the first refusal the retry beat is enough; the first refresh waits the TTL.
+      if (f.calls.length === 1) clock = NOW + 61_000;
+      cache.ensure('zet', ['1']);
+      await f.settle(url('1'), { ok: true, body: answer });
+      expect(cache.get('zet', '1'), JSON.stringify(answer.status) + answer.departures.length).toMatchObject({ status: 'stale' });
+      expect(cache.get('zet', '1')!.departures.map((d) => d.tripId)).toEqual(['T-1-0', 'T-1-1']);
+    }
+  });
+
+  it('lets a failure land once the kept rows have all passed, and before any good answer', async () => {
+    const f = fakeFetch();
+    let clock = NOW;
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => clock });
+    cache.ensure('zet', ['1', '2']);
+    await f.settle(url('1'), { ok: true, body: rows('1', [3]) });
+    // Platform 2 has never answered: its failure is the down placeholder, as always.
+    await f.settle(url('2'), { ok: false });
+    expect(cache.get('zet', '2')).toMatchObject({ status: 'down', departures: [] });
+    // Platform 1's one row is four minutes past: nothing to keep, the failure is what is known.
+    clock = NOW + 4 * 60_000 + BOARD_KEEP_GRACE_MS;
+    cache.ensure('zet', ['1']);
+    await f.settle(url('1'), { ok: false });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'down', departures: [] });
+    // An empty answer with nothing to keep counts for the whole TTL (a stop with nothing due is not asked twelve times a minute).
+    clock += DOWN_RETRY_MS + 1;
+    cache.ensure('zet', ['1']);
+    await f.settle(url('1'), { ok: true, body: rows('1', []) });
+    expect(cache.get('zet', '1')).toMatchObject({ status: 'live', departures: [] });
+    clock += DOWN_RETRY_MS + 1_000;
+    cache.ensure('zet', ['1']);
+    expect(f.calls.filter((u) => u === url('1'))).toHaveLength(3);
   });
 });
 

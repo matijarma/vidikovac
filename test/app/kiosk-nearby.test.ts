@@ -438,6 +438,44 @@ describe('the departures on the wall through a board gap and a live estimate cro
     expect(deps(outage)).toEqual(['dep:t31', 'dep:t32']);
   });
 
+  // observe-d521b, item 2 (D5.21, 22:23 Zagreb): the wall listed no departure for 25 to 46 s while trams ran, after a
+  // failed fetch became the board in hand. The cache now keeps the good board (city/boards.ts); the wall itself
+  // carries its shown departures through a moment with no board at all, and never leaves the block empty while a
+  // departure is due on a board in hand.
+  it('carries the shown departures through a moment with no board in hand, on their grace, and never lists a departure it was not shown', () => {
+    const first = selectNearby(input(night, { boards: [board(night, FULL)], fixes: [] }));
+    expect(deps(first)).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+    let rows = held(first);
+    for (let t = 10_000; t <= HELD_DEPARTURE_GRACE_MS; t += 10_000) {
+      const shown = selectNearby(input(night + t, { boards: [], fixes: [], heldDepartures: rows }));
+      expect(deps(shown), `${t / 1000} s without a board`).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+      rows = held(shown);
+    }
+    // The board is back: the stamps are fresh and the rows unchanged.
+    const back = selectNearby(input(night + HELD_DEPARTURE_GRACE_MS + 5_000, { boards: [board(night, FULL)], fixes: [], heldDepartures: rows }));
+    expect(deps(back)).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+    for (const r of held(back)) expect(r.confirmedAt).toBe(night + HELD_DEPARTURE_GRACE_MS + 5_000);
+    // Past the grace with still no board, the carried rows go: nothing is invented, and no board means no row.
+    const gone = selectNearby(input(night + HELD_DEPARTURE_GRACE_MS + 10_000, { boards: [], fixes: [], heldDepartures: rows }));
+    expect(deps(gone)).toEqual([]);
+    expect(deps(selectNearby(input(night, { boards: [], fixes: [] })))).toEqual([]);
+  });
+
+  it('never leaves the block empty while a departure is due on a board in hand: the departed hold yields to the next due trip', () => {
+    // The 12 left the wall a moment ago (its estimate flapped past now); the board still names it, due now, and nothing else.
+    const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 0]])], fixes: [] })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t12']);
+    const flapped = selectNearby(input(night + 5_000, {
+      boards: [board(night, [['12', 0]])], fixes: [], heldDepartures: [], departedDepartures: [{ id: 'dep:t12', leftAt: night + 4_000 }],
+    }));
+    expect(deps(flapped)).toEqual(['dep:t12']);
+    // With another due trip on the board the hold stands: the 31 is listed, the 12 waits out its minute.
+    const others = selectNearby(input(night + 5_000, {
+      boards: [board(night, [['12', 0], ['31', 10]])], fixes: [], heldDepartures: [], departedDepartures: [{ id: 'dep:t12', leftAt: night + 4_000 }],
+    }));
+    expect(deps(others)).toEqual(['dep:t31']);
+  });
+
   it('lets a newcomer take the last slot only when it reads two displayed minutes earlier than the shown tram there', () => {
     // Shown: 12 za 4, 31 za 5, 6 za 10. The 32 comes in at 9 (observer readings 162 to 168: the two then swapped twice in a minute).
     const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 4], ['31', 5], ['6', 10]])], fixes: [] })));

@@ -236,7 +236,10 @@ export function rowBudget(availablePx: number, count: number): { rowPx: number; 
 // --- (a) departures -----------------------------------------------------------
 
 function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
-  if (input.boards.length === 0) return [];
+  // No board in hand is a moment, not a verdict: the shown departures ride through it on their grace below
+  // (observe-d521b, item 2: the wall listed no departure for 25 to 46 s while the trams ran). Without held rows
+  // there is nothing to carry, and nothing is invented.
+  if (input.boards.length === 0 && !(input.heldDepartures ?? []).some((row) => row.kind === 'departure')) return [];
   const stopIds = [...new Set([...input.boards.map((b) => b.stopId), ...(input.place.stopId ? [input.place.stopId] : [])])];
   const { now } = input;
   // With ZET sending no positions every departure is a timetable time, whatever vehicles the caller still holds (§4.8).
@@ -302,7 +305,13 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       && stopIds.includes(vehicleOf.get(row.arrival.tripId)?.nextStopId ?? ''))
     .map((row) => ({ ...row.arrival, minutes: 0 }));
   const dwellingIds = new Set(dwelling.map(departureId));
-  const shown = arrangeDepartures([...fresh, ...carried, ...dwelling], held, displayedMinute(now));
+  // The block never stands empty while a departure is due on a board in hand: the departed hold above keeps a
+  // trip that just left from flapping back, but with nothing else to list the next due trip is the wall's first
+  // answer, hold or no hold (the wall-side guard of observe-d521b, item 2).
+  const pool = fresh.length === 0 && carried.length === 0 && dwelling.length === 0 && steadied.length > 0
+    ? [steadyMinute(steadied[0]!, heldById.get(departureId(steadied[0]!)), now)]
+    : [...fresh, ...carried, ...dwelling];
+  const shown = arrangeDepartures(pool, held, displayedMinute(now));
   return shown.map((arrival) => {
     const live = arrival.live;
     const id = departureId(arrival);
