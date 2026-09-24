@@ -27,6 +27,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fillAttribution } from '../../app/src/attribution';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import { createBoardCache } from '../../app/src/city/boards';
+import { placeDetail } from '../../app/src/city/markup';
 import { ct, type CityWord } from '../../app/src/city/strings';
 import izvori from '../../app/src/data/izvori.json';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -37,6 +38,7 @@ import * as frame from '../../app/src/kiosk/frame';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 import { clusterLabel, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, pillChars, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import type { ThemeController, ThemePreference } from '../../app/src/ui/theme';
+import { emptyCity, type Place as CityPlace } from '../../shared/city/types';
 import { ATTRIBUTION } from '../../worker/feed/registry';
 import type { Attribution, ModuleSnapshot } from '../../worker/feed/schema';
 import { fillAttribution as fillAttributionServer } from '../../worker/open/attribution';
@@ -161,11 +163,38 @@ function wallScan(): I18nScan {
 const HR_I18N = { getLocale: () => 'hr' as const };
 const HR_FILE = 'app/src/i18n/hr.json';
 
+/**
+ * The wall's place detail as the wall renders it: kiosk/paired.ts calls the shared city/markup.ts placeDetail
+ * with publicDisplay, and the shared renderer is not wall code, so a source scan of the wall alone cannot see
+ * what that call prints. A heritage place takes the site note's branch, both places the register sentence's
+ * (§13 #12, #13: out on the wall; the phone's copy of the same detail keeps both).
+ */
+const WALL_DETAIL_PLACES: ReadonlyArray<readonly [label: string, place: CityPlace]> = [
+  ['heritage', { id: 'trust-heritage', category: 'heritage', name: 'Kamenita vrata', address: 'Kamenita ulica', sourceId: 'heritage', sourceRecord: 'Z-1', lon: 15.975, lat: 45.815, updatedAt: '2026-09-10T11:22:12.000Z' }],
+  ['culture', { id: 'trust-culture', category: 'culture', name: 'Muzej grada Zagreba', address: 'Opatička ulica 20', sourceId: 'culture', sourceRecord: 'C-1', lon: 15.975, lat: 45.816, updatedAt: '2026-09-10T11:22:12.000Z' }],
+];
+const placeDetailOf = (place: CityPlace, publicDisplay: boolean): string => placeDetail(createDefaultI18n('hr'), place, emptyCity(), [], false, publicDisplay);
+/** Every placeDetail call in the wall's code, with its publicDisplay argument as written (the sixth). */
+function wallPlaceDetailCalls(): Array<{ file: string; publicDisplay: string }> {
+  const calls: Array<{ file: string; publicDisplay: string }> = [];
+  for (const file of WALL_TS) {
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'placeDetail') {
+        calls.push({ file, publicDisplay: node.arguments[5]?.getText() ?? '(missing)' });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS));
+  }
+  return calls;
+}
+
 let wallStringsMemo: Place[] | undefined;
 /**
  * Every Croatian string the wall can print, as far as a source scan can tell: the string literals
  * of its code, the hr value of every key and city word its code reads (a dynamic prefix brings every
- * key under it), and every kiosk.* leaf of hr.json, read or not.
+ * key under it), every kiosk.* leaf of hr.json, read or not, and the text of the shared place detail
+ * as the wall renders it (WALL_DETAIL_PLACES).
  */
 function wallStrings(): Place[] {
   if (wallStringsMemo) return wallStringsMemo;
@@ -187,6 +216,9 @@ function wallStrings(): Place[] {
     out.push({ file: 'app/src/city/strings.ts', where: `app/src/city/strings.ts ${word} (read at ${where(refs)})`, text: ct(HR_I18N, word as CityWord) });
   }
   for (const [key, value] of HR_LEAVES) if (key.startsWith('kiosk.')) out.push({ file: HR_FILE, where: `hr.json ${key}`, text: value });
+  for (const [label, place] of WALL_DETAIL_PLACES) {
+    for (const text of htmlStrings(placeDetailOf(place, true))) out.push({ file: 'app/src/city/markup.ts', where: `app/src/city/markup.ts placeDetail(${label}, publicDisplay), as kiosk/paired.ts renders it`, text });
+  }
   wallStringsMemo = out;
   return out;
 }
@@ -586,9 +618,12 @@ describe('(e) the §13 "out" strings are absent outside their allowed files', ()
     { id: 'e-odaberi', text: 'Odaberi i spremi stajalište', match: 'includes', allowedIn: [], scope: 'app', due: 'WP4', slop: 2 },
     { id: 'e-referentna', text: 'Gradska referentna točka', match: 'includes', allowedIn: [], scope: 'app', due: 'WP4', slop: 1 },
     { id: 'e-upoznaj', text: 'Upoznaj ovo mjesto', match: 'includes', allowedIn: [], scope: 'app', due: 'WP5', slop: 12 },
-    { id: 'e-obuhvat', text: 'Obuhvat zaštite, ne ulaz', match: 'includes', allowedIn: [], scope: 'app', due: 'WP5', slop: 12 },
+    // §13 #12 and #13 are "out (wall)": the phone's place detail keeps the heritage site note and the
+    // register sentence (§11; review of lane/c-A1, P2), so both rows judge the wall, its shared place
+    // detail as rendered included (WALL_DETAIL_PLACES, pinned by e-wall-detail).
+    { id: 'e-obuhvat', text: 'Obuhvat zaštite, ne ulaz', match: 'includes', allowedIn: [], scope: 'wall', due: 'WP5', slop: 12 },
     // Once on /izvori, never on the wall [O-27]; WP5 moves it into the page's static HTML (its step 9).
-    { id: 'e-registra', text: 'Podatak iz registra, nije provjera uživo.', match: 'includes', allowedIn: ['app/izvori/index.html'], scope: 'app', due: 'WP5', slop: 13 },
+    { id: 'e-registra', text: 'Podatak iz registra, nije provjera uživo.', match: 'includes', allowedIn: ['app/izvori/index.html'], scope: 'wall', due: 'WP5', slop: 13 },
     { id: 'e-nepotvrdeno', text: '? nepotvrđeno', match: 'includes', allowedIn: [], scope: 'app', due: 'WP2', slop: 14 },
     { id: 'e-zaustavi', text: 'Zaustavi', match: 'includes', allowedIn: [], scope: 'wall', due: 'WP1', slop: 16 },
     { id: 'e-sto-trazis', text: 'Što tražiš?', match: 'includes', allowedIn: [], scope: 'app', due: 'WP5', slop: 9 },
@@ -620,7 +655,7 @@ describe('(e) the §13 "out" strings are absent outside their allowed files', ()
   });
 
   for (const slop of SLOP_OUT) {
-    const scopeWords = slop.scope === 'wall' ? 'on the wall (its code, the keys and city words it reads, every kiosk.* key)' : 'in app/src and the static HTML';
+    const scopeWords = slop.scope === 'wall' ? 'on the wall (its code, the keys and city words it reads, every kiosk.* key, its place detail as rendered)' : 'in app/src and the static HTML';
     const allowed = slop.allowedIn.length ? ` outside ${slop.allowedIn.join(', ')}` : '';
     const shown = slop.match === 'exact' ? `'${slop.text}' as a whole string` : `'${slop.text}'`;
     row(slop.id, slop.due, `#${slop.slop} ${shown} is absent ${scopeWords}${allowed}`, () => {
@@ -629,6 +664,19 @@ describe('(e) the §13 "out" strings are absent outside their allowed files', ()
       expect([...new Set(outside)].sort()).toEqual([]);
     });
   }
+
+  row('e-wall-detail', 'now', 'the wall scan reads the shared place detail as the wall renders it: every wall call passes publicDisplay, the wall copy names the place, the phone copy prints both notes', () => {
+    const calls = wallPlaceDetailCalls();
+    expect(calls.length, 'the wall renders a place detail').toBeGreaterThan(0);
+    expect(calls.filter((call) => call.publicDisplay !== 'true'), 'a wall call without publicDisplay').toEqual([]);
+    for (const [label, place] of WALL_DETAIL_PLACES) {
+      // A refused boundary would render the wall copy empty and every row above vacuous.
+      expect(placeDetailOf(place, true), `${label}: the wall copy names the place`).toContain(place.name);
+      expect(placeDetailOf(place, false), `${label}: the phone copy keeps the register sentence`).toContain(leaf(HR, 'city.reference')!);
+    }
+    expect(placeDetailOf(WALL_DETAIL_PLACES[0][1], false), 'heritage: the phone copy keeps the site note').toContain(leaf(HR, 'city.siteNote')!);
+    expect(wallStrings().some((place) => place.file === 'app/src/city/markup.ts')).toBe(true);
+  });
 
   // Key-level (WP6 verdict 9): the two catalogue strings the verdict names (hr.json:553 and :723 at
   // b300af3) belong to the phone and the landing page; neither key, nor a kiosk twin of its words,
@@ -708,7 +756,7 @@ describe('(e) the pharmacy is a green cross, 24/7 and an address, not the label 
 });
 
 describe('(e) one word for the transport destination (slop #11, [O-51])', () => {
-  /** The destination's one word. "Promet" survives only as the subject word (the kicker keys kiosk.say.transit, kiosk.ticker.transit), which this row leaves alone. */
+  /** The destination's one word. "Promet" survives only as the subject word (the kicker keys kiosk.sentence.kicker.promet, kiosk.say.transit), which this row leaves alone. */
   const TRANSPORT_TAB_WORD = 'Karta';
 
   row('e-tab-word', 'WP4', `the transport tab (layers.u-pokretu) reads '${TRANSPORT_TAB_WORD}'`, () => {
