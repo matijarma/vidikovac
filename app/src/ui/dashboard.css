@@ -190,7 +190,12 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-head > [data-key='session'] { grid-column: 5; }
   .ki-head > [data-key='more'] { grid-column: 6; }
   .ki-head > [data-key='safety'] { grid-column: 7; }
-  .present { padding: var(--sp-5) var(--sp-8); }
+  /* The Zaslon panel in one band (round 2, desktop F6: 228 of 900 px pushed Sada down): the two views and the action
+     share a row under the head, the privacy line closes it. */
+  .present { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--sp-2) var(--sp-6); padding: var(--sp-3) var(--sp-8); }
+  .present > :not(.present-views):not(.present-actions) { grid-column: 1 / -1; }
+  .present-views { gap: var(--sp-6); }
+  .present-actions { justify-content: end; }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }

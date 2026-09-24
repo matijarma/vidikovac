@@ -137,7 +137,7 @@ export interface DashboardDeps {
   /** Static flags the shell reads (D7): `waste` shows the fourth alert switch. */
   flags?: { waste?: boolean };
   location?: Pick<Location, 'pathname' | 'search' | 'hash'>;
-  history?: Pick<History, 'pushState' | 'replaceState'>;
+  history?: Pick<History, 'pushState' | 'replaceState'> & Partial<Pick<History, 'back'>>;
   matchMedia?: (query: string) => MediaLike;
   onLocaleChange?: (locale: LocaleCode) => void;
   scanUrl?: string;
@@ -249,6 +249,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let paused = false;
   let countdownHidden = false;
   let directory = false;
+  /** Whether this page pushed the Jos entry the browser is on (so closing Jos can step back off it). */
+  let josPushed = false;
   const agendaScroll=new Map<LayerId,{top:number;focus:string}>();
   let presentationOpen = false;
   let presentationState: PresentationState | undefined = session.snapshot().presentation;
@@ -669,6 +671,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       agendaScroll.set(layer,{top:globalThis.scrollY??0,focus:doc.activeElement instanceof HTMLElement?doc.activeElement.id:''});
     }
     directory = false;
+    // A layer chosen from Jos stands on its own entry above Jos's: closing Jos is no longer a step back.
+    josPushed = false;
     if (layer !== 'u-pokretu' && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
     // One history entry per distinct place: repeating the same selection replaces instead of pushing.
     const same = layer === previous && JSON.stringify(selection) === JSON.stringify(view.snapshot().selection);
@@ -701,9 +705,18 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (frozen) return;
     const was = directory;
     directory = open;
-    // Jos is one history entry (round 1, desktop F5): opening it pushes, closing it replaces the mark away, so the
-    // browser's Back from Jos returns to the layer under it and never to the scan page.
-    if (!fromHistory && deps.history && deps.location && open !== was) deps.history[open ? 'pushState' : 'replaceState'](null, '', directoryHash(open));
+    // Jos is another page: the Zaslon panel, which offers the view under it, closes (round 2, desktop F6).
+    if (open !== was) closePresentation();
+    // Jos is one history entry (round 1, desktop F5): opening it pushes, so the browser's Back from Jos returns to the
+    // layer under it and never to the scan page. Closing it in the page (its tab, Escape) steps back off the entry this
+    // page pushed, so no second copy of the layer's entry is left behind for the next Back to land on unchanged; an
+    // entry the page did not push (a reload on Jos) loses its mark by a replace.
+    if (!fromHistory && deps.history && deps.location && open !== was) {
+      const marked = new URLSearchParams(deps.location.hash.replace(/^#/, '')).get('jos') === '1';
+      if (open) { deps.history.pushState(null, '', directoryHash(true)); josPushed = true; }
+      else if (marked && josPushed && deps.history.back) { josPushed = false; deps.history.back(); }
+      else deps.history.replaceState(null, '', directoryHash(false));
+    }
     updateTitle();
     paintShell();
     render();
@@ -711,6 +724,17 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       focusWorkspace('directory');
       continuePoll(refresh(), rearmPoll, 'dashboard directory refresh');
     }
+  }
+
+  /** Closes the Zaslon panel (its x, Escape, a move to another layer or to Jos: round 2, desktop F6); `focus` returns
+   *  the keyboard to the Zaslon control that opened it. */
+  function closePresentation(focus = false): void {
+    if (!presentationOpen) return;
+    presentationOpen = false;
+    presentationConfirmRevision = null;
+    paintPresentation();
+    paintShell();
+    if (focus) doc.querySelector<HTMLElement>('[data-testid=screen-control]')?.focus();
   }
 
   /** Explicit casting (D5): the one place a view frame leaves this device, for the current layer and selection. */
@@ -1157,7 +1181,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
       case 'directory': toggleDirectory(); return;
       case 'presentation': cast(); return;
-      case 'presentation-close': presentationOpen = false; presentationConfirmRevision = null; paintPresentation(); paintShell(); return;
+      case 'presentation-close': closePresentation(true); return;
       case 'present-request': present('present'); return;
       case 'present-confirm': present('present', true); return;
       case 'present-cancel': presentationConfirmRevision = null; paintPresentation(); return;
@@ -1206,7 +1230,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   });
   element.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    // Escape leaves the full map, and Jos (round 1, desktop F5).
+    // Escape closes the Zaslon panel first (round 2, desktop F6), then leaves the full map, and Jos (round 1, desktop F5).
+    if (presentationOpen) { event.preventDefault(); closePresentation(true); return; }
     if (mapFull) { event.preventDefault(); setMapView(false); return; }
     if (directory) { event.preventDefault(); toggleDirectory(false); focusWorkspace(view.snapshot().layer); }
   });
@@ -1219,7 +1244,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }, true);
 
   // --- subscriptions and start ---------------------------------------------
-  const stopView = view.subscribe(() => { render(); paintShell(); });
+  // A move to another layer closes the Zaslon panel (round 2, desktop F6); a selection inside the layer keeps it, since
+  // choosing what to show is what the panel is open for.
+  let viewLayer = view.snapshot().layer;
+  const stopView = view.subscribe(() => {
+    const layer = view.snapshot().layer;
+    if (layer !== viewLayer) { viewLayer = layer; closePresentation(); }
+    render(); paintShell();
+  });
   const stopCity = cityStore.subscribe(() => { if(!disposed&&!frozen){render();paintShell();} });
   // A batch can finish several modules in the same turn. Render the latest
   // combined state once, without delaying independent slow-source responses.
@@ -1253,6 +1285,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const previous = view.snapshot().layer;
     // The entry Jos pushed carries its mark; every other entry closes Jos.
     directory = new URLSearchParams(hash.replace(/^#/, '')).get('jos') === '1';
+    // A Back or Forward onto Jos's entry: the entry under it is the layer, so closing Jos can step back to it.
+    josPushed = directory;
     view.restore(hash);
     const restored = view.snapshot();
     if (restored.layer !== 'u-pokretu' && mapFull) setMapView(false);
