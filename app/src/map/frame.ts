@@ -87,7 +87,7 @@ export function inFrame(point: { lon: number; lat: number }, frame: FrameCircle)
 
 /** The ids of the point features inside the frame, in source order: the
  *  stops a placed wall draws (map/city-map.ts hands them to the overlays). */
-export function idsInFrame(features: readonly { geometry: { coordinates: unknown }; properties: Record<string, unknown> }[], frame: FrameCircle): string[] {
+export function idsInFrame(features: readonly { geometry: { type?: string; coordinates: unknown }; properties: Record<string, unknown> }[], frame: FrameCircle): string[] {
   const out: string[] = [];
   for (const feature of features) {
     const c = feature.geometry.coordinates;
