@@ -74,7 +74,8 @@ async function present(page: Page, selector: string, message: string, timeout = 
 }
 
 /**
- * The recorders empty. With `teardownSince` (the moment the page tears down on purpose, the end of the session),
+ * The recorders empty. With `teardownSince` (the moment the page tears down on purpose: the end of the session, or
+ * a tab leaving Sada and its map band),
  * the static assets the browser cancelled from then on (sprites, images, fonts) are listed in
  * recorders-<label>-teardown.json instead of counted; every /api/ request and everything else stays a finding.
  */
@@ -151,6 +152,9 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
   test(`Karta cold open: vehicles drawn within ${KARTA_PILLS_WITHIN_MS} ms of the map being ready with no tap, no disclosures, every marker labelled`, async ({ page }) => {
     const label = 'phone-karta';
     const { recorder } = await openPhone(page, label);
+    // Leaving Sada tears its map band down on purpose; a band sprite still in flight is cancelled with it
+    // (release smoke run 2). Those static-asset aborts are listed, never counted; anything else stays a finding.
+    const leftSada = new Date().toISOString();
     if (await openKarta(page, label)) {
       // Read every 100 ms for the whole window (as companion-phone.spec.ts does): with expect.poll's default back-off
       // (100, 250, 500, then 1,000 ms) the last read fell 1.3 to 1.7 s into the window and the poll stopped there,
@@ -166,7 +170,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
       softly(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-unlabelled'), `${label}: every marker carries a label or a count (data-unlabelled "0")`).toBe('0');
       softly(Number(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-markers')), `${label}: curated markers are drawn (data-markers ≥ 1)`).toBeGreaterThanOrEqual(1);
     }
-    recordersClean(recorder, label);
+    recordersClean(recorder, label, leftSada);
   });
 
   // The two stop-board rows landed with the read-only board of D3.
@@ -206,6 +210,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
   test('Još: "Događanja ovaj tjedan" with its count line, and the agenda keeps its count', async ({ page }) => {
     const label = 'phone-jos';
     const { recorder } = await openPhone(page, label);
+    const leftSada = new Date().toISOString(); // the tab tears Sada's band down (see the cold open)
     if (await present(page, PHONE_PROBES.tabMore, `${label}: the Još tab (${PHONE_PROBES.tabMore}) is in the tab bar`)) {
       await page.locator(`${PHONE_PROBES.tabMore} >> visible=true`).first().click({ timeout: 5_000 });
       if (await present(page, PHONE_PROBES.dirKultura, `${label}: Još lists the agenda row (${PHONE_PROBES.dirKultura})`)) {
@@ -217,7 +222,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
         await present(page, PHONE_PROBES.eventCount, `${label}: the week's agenda keeps its count line (${PHONE_PROBES.eventCount})`);
       }
     }
-    recordersClean(recorder, label);
+    recordersClean(recorder, label, leftSada);
   });
 
   test('end of the ten minutes: the content clears to the scan invitation and /hitno, no exports, no further data requests', async ({ page }) => {

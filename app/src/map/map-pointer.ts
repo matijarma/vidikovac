@@ -41,6 +41,8 @@ export interface PointerHost {
   selection(): MapSelection | null;
   /** The reader chose (or, with null, cleared): selected on the map and reported. */
   choose(next: MapSelection | null): void;
+  /** The place's own stop (LAYERS.screenStop's one feature), null without one. */
+  ownStop?(): { id: string; name: string; lon: number; lat: number } | null;
 }
 
 /** What a tap landed on: one of the map's selectable things, or a cluster of
@@ -119,6 +121,13 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
     const own = first([l.LAYERS.screenStop]);
     if (own) return { kind: 'stop', id: String(own.properties.id), ids: host.siblingPlatforms(String(own.properties.name)) };
+    // Its ring may not be laid out yet (lane p-map3): the map is ready once the basemap is in, and a tap straight
+    // after it found no rendered ring. The stop is where the map says it is, so its reach is measured from there.
+    const stop = host.ownStop?.() ?? null;
+    if (stop && m.project && Number.isFinite(stop.lon) && Number.isFinite(stop.lat)) {
+      const at = m.project([stop.lon, stop.lat]);
+      if (Math.hypot(at.x - point.x, at.y - point.y) <= tolerance) return { kind: 'stop', id: stop.id, ids: host.siblingPlatforms(stop.name) };
+    }
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
     if (vehicle) {
       const members = clusterMembers(vehicle.properties);

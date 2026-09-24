@@ -366,7 +366,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     frameMarks = desk ? markZoomFor(camera.zoom) ?? null : null;
     if (mapMode === 'map') {
       handle?.setMarkZoom?.(frameMarks);
-      handle?.setView?.({ center: camera.center, zoom: camera.zoom });
+      handle?.setView?.({ center: camera.center, zoom: camera.zoom, frame: true });
     }
   }
   /** The box the map is drawn in: the map region (on the desk the sheet is a column beside it, never over it), else
