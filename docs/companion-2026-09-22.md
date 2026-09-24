@@ -1,6 +1,6 @@
 # Kaj ima? — companion brief (research, interviews and the implementation plan, 21–22 September 2026)
 
-Status: **approved by the owner on 22 September 2026 (evening) for execution.** The owner read the whole brief and made no further amendments; the coding session starts from §15. §15 is the master implementation plan; its seven execution files live in `docs/companion-2026-09-22-plan/`. Evidence folder: `review.local/companion/` (ledger, code-reality maps, walkthrough captures, path-monitor logs, wrong-turn dossier, replay baselines, planner notes, references, the mock). File name to be dated by the owner at completion; brief and plan folder are committed together on their own branch, not pushed [O-57].
+Status: **approved by the owner on 22 September 2026 (evening) for execution.** The owner read the whole brief and made no further amendments; the coding session starts from §15. §15 is the master implementation plan; its execution files live in `docs/history/companion-2026-09-plan/` (moved there from `docs/companion-2026-09-22-plan/` once executed, WP7). Evidence folder: `review.local/companion/` (ledger, code-reality maps, walkthrough captures, path-monitor logs, wrong-turn dossier, replay baselines, planner notes, references, the mock). File name to be dated by the owner at completion; brief and plan folder are committed together on their own branch, not pushed [O-57].
 
 ## 0. How to read this brief
 
@@ -12,7 +12,7 @@ The interview is not a survey. Rounds R0–R3 happen before any screen is shown;
 
 | Decision | Source |
 |---|---|
-| Deliverable: this Markdown brief in `docs/` plus the execution files `docs/companion-2026-09-22-plan/WP0…WP6.md`, committed together on their own branch when final, not pushed. §15–16 and the plan files are an execution-grade plan: the coding session starts by executing, not planning. | [O] planning, 21 Sep; [O-55], [O-57] |
+| Deliverable: this Markdown brief in `docs/` plus the execution files `docs/history/companion-2026-09-plan/WP0…WP6.md`, committed together on their own branch when final, not pushed. §15–16 and the plan files are an execution-grade plan: the coding session starts by executing, not planning. | [O] planning, 21 Sep; [O-55], [O-57] |
 | The presence gate stays exactly: ten minutes via a screen's code or a friend's phone; five minutes one hop; `/hitno` the only always-open layer. "Daily driver" means: whenever I am near a screen or with people, this is the thing I reach for. | [O] planning, 21 Sep |
 | No accounts, no tracking, no push, no route planning, no invented arrival estimates beyond the labelled ZET estimate; the submitted application text stays byte-identical (WP7 may add an optional, default-off notes layer beside it). | `PRODUCT.md`, `docs/prijava/`; [O-75] |
 | Observation on production: at most one temporary screen per day; never another's screen; scans under six per minute. | ground rules |
@@ -282,7 +282,7 @@ Renderer file:line and i18n key for every item: `review.local/companion/code-rea
 
 ## 15. Implementation plan (execution-grade)
 
-This section is the master plan the coding session executes without re-planning [O-55]. The file-level steps, the tests each step breaks, the executable acceptance and the agent briefs live in one file per work package under `docs/companion-2026-09-22-plan/` (`WP0.md` … `WP6.md`, index in `README.md`). Each file was written by a planner against the tree at build `b300af3`, refuted and corrected by an adversarial verifier, then reconciled across packages by a consistency critic; the reconciliation (§0 of each file) is binding and wins over the planner text, the verdict over the planner text. Line numbers are as of `b300af3`: re-anchor with `grep` before editing.
+This section is the master plan the coding session executes without re-planning [O-55]. The file-level steps, the tests each step breaks, the executable acceptance and the agent briefs live in one file per work package under `docs/history/companion-2026-09-plan/` (`WP0.md` … `WP6.md`, index in `README.md`). Each file was written by a planner against the tree at build `b300af3`, refuted and corrected by an adversarial verifier, then reconciled across packages by a consistency critic; the reconciliation (§0 of each file) is binding and wins over the planner text, the verdict over the planner text. Line numbers are as of `b300af3`: re-anchor with `grep` before editing.
 
 ### 15.1 Canonical ids and the owner's order
 
@@ -474,7 +474,7 @@ A package that must touch another's range writes one line in `review.local/compa
 
 ## 16. Verification plan for the coding session
 
-Every number below is a command and a threshold; the instruments are WP6's ports of this session's research scripts, so a production observation after deploy and a local acceptance run share one source. Full detail in `docs/companion-2026-09-22-plan/WP6.md`.
+Every number below is a command and a threshold; the instruments are WP6's ports of this session's research scripts, so a production observation after deploy and a local acceptance run share one source. Full detail in `docs/history/companion-2026-09-plan/WP6.md`.
 
 **16.1 Merge gate for every lane.** `npm run typecheck && npm run typecheck:tests && npm test` (unit + workers). The `accept` tier (`npm run accept`, `npm run accept:e2e`) is red by design until its package lands and is never skipped; at D4 it folds into `npm test` and `npm run e2e`.
 
@@ -498,7 +498,7 @@ Every number below is a command and a threshold; the instruments are WP6's ports
 
 ## 17. Open questions, answered 22 September (evening)
 
-The owner answered every row in `docs/companion-2026-09-answerssection17.md` (verbatim in the ledger, [O-62]–[O-74]). The question stays for the record; the ruling is binding and is already applied to §1, §9–§16 and to §0 of every plan file. Three items the answers raised are new rows (Q24–Q26).
+The owner answered every row in writing (verbatim in the ledger, [O-62]–[O-74]). The question stays for the record; the ruling is binding and is already applied to §1, §9–§16 and to §0 of every plan file. Three items the answers raised are new rows (Q24–Q26).
 
 | # | Question | Ruling | Applied in |
 |---|---|---|---|
@@ -535,6 +535,6 @@ The owner answered every row in `docs/companion-2026-09-answerssection17.md` (ve
 - C. Replay tables — `review.local/companion/replay/branches-0920.{md,json}`, `branches-0921.{md,json}`, `README.md` (method, metrics A–H, baselines), `tram4/result.md`.
 - D. Evidence ledger — `review.local/companion/ledger.md`.
 - E. Outside references — `review.local/companion/references.md` (20 patterns, six 3-metre typographic rules).
-- F. Execution files — `docs/companion-2026-09-22-plan/README.md`, `WP0.md` … `WP6.md` (planner text, verifier verdict, binding reconciliation); planner notes and scratch measurements in `review.local/companion/plan/WP*/`.
+- F. Execution files — `docs/history/companion-2026-09-plan/README.md`, `WP0.md` … `WP6.md` (planner text, verifier verdict, binding reconciliation); planner notes and scratch measurements in `review.local/companion/plan/WP*/`.
 - G. The approved mock — `review.local/companion/mock/` (`index.html`, production map captures, screenshots of the four scenes, README).
 - H. Thin-spot matrix — `review.local/companion/data-calendar/matrix.md`; path-monitor logs `review.local/companion/path-monitor/`.

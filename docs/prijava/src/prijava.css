@@ -168,6 +168,21 @@ strong { font-weight: var(--weight-bold); }
 .doc-foot { padding: var(--sp-6) var(--sp-4) var(--sp-8); border-block-start: 1px solid var(--tone-stroke); font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .doc-foot p { max-inline-size: 80rem; margin: 0 auto; }
 
+/* --- Development notes since submission (hosted page only) ------------------- */
+/* An optional layer above the submitted document: off by default, a distinct tinted
+   panel when on, never mixed into the submitted text. */
+.notes-bar { display: flex; margin: 0 0 var(--sp-3); }
+.notes-toggle[aria-pressed='true'] { background: var(--tone-action-brand); border-color: var(--tone-action-brand); color: var(--tone-action-brand-fg); }
+.notes-layer { display: grid; gap: var(--sp-4); margin: 0 0 var(--sp-6); padding: var(--sp-5); border: 1px solid var(--tone-stroke-strong); border-radius: var(--r-lg); background: var(--tone-tint-action); }
+.notes-layer[hidden] { display: none; }
+.notes-title { margin: 0; font-size: var(--type-head); letter-spacing: -0.01em; max-inline-size: none; }
+.notes-layer p { margin: 0; }
+.note { display: grid; gap: var(--sp-2); padding-block-start: var(--sp-4); border-block-start: 1px solid var(--tone-stroke); }
+.note h3 { margin: 0; font-size: var(--type-body); letter-spacing: 0; max-inline-size: none; }
+.note time { font-variant-numeric: tabular-nums; }
+.notes-layer a { color: var(--tone-text-brand-on-tint); }
+@media print { .notes-bar { display: none; } }
+
 /* --- Print: A4, light palette, every figure whole ----------------------------- */
 @media print {
   @page { size: A4; margin: 18mm 16mm 20mm; }

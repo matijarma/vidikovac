@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { moduleIdsFromSchema } from '../../scripts/lib/module-ids.mjs';
 
 const NL = String.fromCharCode(10);
@@ -108,13 +108,34 @@ describe('docs/arhitektura.md and README.md', () => {
     const readme = read('README.md');
     expect(readme).toContain('newdesignsystem.md');
     expect(readme).toContain('DESIGN.md');
-    expect(readme).toContain('docs/redesign-2026-09-17.md');
+    expect(readme).toContain('docs/history/redesign-2026-09-17.md');
   });
 });
 
-describe('docs/implementation-kaj-ima.md', () => {
+// WP7 ([O-76]): a public repository holds only documents someone meant to publish. Every
+// Markdown file directly under docs/ is linked from the README, and every record moved to
+// docs/history/ has its line in docs/history/README.md.
+describe('docs/: every document is indexed', () => {
+  const readme = read('README.md');
+  it('links every Markdown file directly under docs/ from the README', () => {
+    const top = readdirSync(new URL('../../docs/', import.meta.url), { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => `docs/${e.name}`);
+    expect(top.length).toBeGreaterThan(0);
+    expect(top.filter((path) => !readme.includes(`](${path})`))).toEqual([]);
+  });
+  it('lists every record of docs/history/ in its README', () => {
+    const index = read('docs/history/README.md');
+    const entries = readdirSync(new URL('../../docs/history/', import.meta.url), { withFileTypes: true })
+      .filter((e) => e.name !== 'README.md').map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.filter((name) => !index.includes(`](${name}`))).toEqual([]);
+    expect(readme).toContain('](docs/history/README.md)');
+  });
+});
+
+describe('docs/history/implementation-kaj-ima.md', () => {
   it('names the Dan grada system and its plan path', () => {
-    const doc = read('docs/implementation-kaj-ima.md');
+    const doc = read('docs/history/implementation-kaj-ima.md');
     expect(doc).toContain('Dan grada');
     expect(doc).toContain('implement-vidikovac-newdesignsystem-md-agile-locket.md');
   });

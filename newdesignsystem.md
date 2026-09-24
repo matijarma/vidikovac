@@ -1,7 +1,7 @@
 # Kaj ima? — the "Dan grada" system
 > Historical implementation guide. Superseded by the owner-approved redesign
 > of 17 September 2026 in `PRODUCT.md`, `DESIGN.md` and
-> `docs/redesign-2026-09-17.md`. Do not restore its screen layout rules.
+> `docs/history/redesign-2026-09-17.md`. Do not restore its screen layout rules.
 
 Design system & implementation guide · v1 · 14. 9. 2026
 
