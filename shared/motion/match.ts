@@ -288,18 +288,35 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       || a - b;
   }
 
-  /** Only own-route, running paths can be adopted. No foreign-path fallback. */
-  function adoptPath(edge: number, sOnEdge: number, track: Track, prior: Prior, dir: XY | null, ctx?: MatchContext): number | null {
+  /** Only own-route, running paths can be adopted. No foreign-path fallback.
+   *  A path of the OTHER direction id than the trip's, other than the trip's
+   *  own, is adopted only on the evidence D4 asks for before it turns a tram:
+   *  FOLD_MOVE_M of forward movement along the edge over the last interval.
+   *  Without it a tram standing 57 to 65 m off its path was read onto the
+   *  opposite-direction variant a few metres away and flipped 350 to 460 m
+   *  from every terminal (102259 at Frankopanska, 102408 at Branimirova
+   *  tržnica, 20 Sep; 102270 at Frankopanska, 21 Sep). Standing off the rails
+   *  is unplaced; the trip's own path and an unknown trip's direction are
+   *  not judged by this. */
+  function adoptPath(edge: number, sOnEdge: number, track: Track, prior: Prior, motion: Motion, ctx?: MatchContext): number | null {
+    const dir = motion.dir;
     const wanted = wantedDirection(edge, sOnEdge, dir, prior);
+    const e = net.edges[edge];
+    const alongM = prior.direction === null ? Number.POSITIVE_INFINITY : dot(tangent(e.pts, e.cum, sOnEdge), motion.delta);
     let best: number | null = null;
     for (const pathIdx of pathsByEdge.get(edge) ?? []) {
       if (!pathEligible(pathIdx, prior.routeId, ctx)) continue;
+      const direction = net.paths[pathIdx].direction;
+      const opposite = pathIdx !== prior.pathIdx && direction !== -1 && prior.direction !== null && direction !== prior.direction;
+      if (opposite && alongM < FOLD_MOVE_M) continue;
       if (best === null || comparePaths(pathIdx, best, edge, wanted, track, prior) < 0) best = pathIdx;
     }
     return best;
   }
 
-  function candidatesFor(track: TramTrack, p: XY, dir: XY | null, dtSec: number, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
+  function candidatesFor(track: TramTrack, p: XY, motion: Motion, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
+    const dir = motion.dir;
+    const dtSec = motion.dtSec;
     const hits = net.edgesNear(p, NEAR_M);
     const routeEdges = new Set<number>();
     for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
@@ -309,7 +326,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     for (const hit of hits) {
       if (!routeEdges.has(hit.edge)) continue;
       if (track.unplacedDirection && !edgeTangentAgrees(hit.edge, hit.s, dir ?? track.unplacedDirection)) continue;
-      const pathIdx = adoptPath(hit.edge, hit.s, track, prior, dir, ctx);
+      const pathIdx = adoptPath(hit.edge, hit.s, track, prior, motion, ctx);
       if (pathIdx === null) continue;
       const path = net.paths[pathIdx];
       // A path that runs this edge twice (a circuit, a balloon) offers two
@@ -485,6 +502,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const motion = motionOf(track, fix, prev);
     const dir = motion.dir;
     let candidateDir = dir;
+    let candidateDelta = motion.delta;
     if (candidateDir === null) {
       // The second off-path fix often arrives after the tram has stopped
       // at the diverted platform. At Frankopanska the nearest rail then
@@ -497,11 +515,16 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         // This is candidate selection only, never D4/return movement.
         if (fix.atSec - before.atSec > EVICT_S) break;
         if (dist(before, p) >= DEAD_ZONE_M) {
-          candidateDir = normalise({ x: p.x - before.x, y: p.y - before.y });
+          candidateDelta = { x: p.x - before.x, y: p.y - before.y };
+          candidateDir = normalise(candidateDelta);
           break;
         }
       }
     }
+    /** The movement candidate selection reads: the last interval, or the
+     *  approach the standing tram made before it (the same evidence as
+     *  candidateDir), for adoptPath's forward-metres rule. */
+    const candidateMotion: Motion = { ...motion, dir: candidateDir, delta: candidateDelta };
     const dtSec = motion.dtSec;
     const previousReturn = track.priorReturn;
     // Every early exit or off-path fix breaks the run unless the eligible
@@ -547,9 +570,19 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         const arrivalDone = current.residual <= NEAR_M && current.s >= net.paths[track.match.pathIdx].len - STOP_ZONE_M;
         // A terminus loop from the arrival's last edge to the departure's
         // first is the track between them (decision 25): a tram that has
-        // arrived goes onto it, and reaches the departure round it.
-        const loop = arrivalDone ? loopBetween(track.match.pathIdx, prior.pathIdx) : null;
-        if (loop !== null) viaLoop = loopPlacement(track, loop, p, motion, nextStopId, current.residual);
+        // arrived goes onto it, and reaches the departure round it. So does a
+        // tram already on the loop's own edges beyond the arrival's last one,
+        // however far the arrival now reads: ZET named 102301's next trip
+        // (Mihaljevac, 20 Sep 07:04:48) only 55 m past the end of 15_2, the
+        // arrival no longer fitted, and the re-derivation took 15_7, another
+        // variant over the loop's rails, for a 108 m re-seed at the far
+        // platform. On the arrival's own edge the loop is still not offered
+        // until the arrival is done (Park Maksimir, decision 11).
+        const loop = loopBetween(track.match.pathIdx, prior.pathIdx);
+        if (loop !== null) {
+          const onLoop = loopPlacement(track, loop, p, motion, nextStopId, current.residual);
+          if (onLoop && (arrivalDone || onLoop.s > net.paths[loop].offsets[1] + PRIOR_RETURN_NOISE_M)) viaLoop = onLoop;
+        }
         keepArrival = own.s <= 0.5 && own.residual <= NEAR_M
           && current.residual <= NEAR_M && current.residual < own.residual
           && !(own.residual <= STOP_ZONE_M && arrivalDone);
@@ -683,7 +716,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     const rederive = (): Match => {
       delete track.endpointHold;
       delete track.priorReturn;
-      const best = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)[0];
+      const best = candidatesFor(track, p, candidateMotion, prior, nextStopId, ctx)[0];
       if (!best || best.pathIdx !== track.match.pathIdx) resetOrder(track);
       track.offPathCount = 0;
       track.againstCount = 0;
@@ -756,7 +789,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         const end = onPath.s <= 0.5 ? geo.pts[0] : geo.pts[geo.pts.length - 1];
         const tan = tangent(geo.pts, geo.cum, onPath.s);
         const lateralM = Math.abs((p.x - end.x) * tan.y - (p.y - end.y) * tan.x);
-        const continuation = candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx)
+        const continuation = candidatesFor(track, p, candidateMotion, prior, nextStopId, ctx)
           .some(candidate => net.paths[candidate.pathIdx].direction === -1
             || (candidateDir !== null && pathTangentAgrees(candidate.pathIdx, candidate.s, candidateDir)));
         if (!track.endpointHold || track.endpointHold.pathIdx !== working) {
@@ -784,7 +817,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         && dir !== null && pathForwardM(working, onPath.s, motion.delta) >= PRIOR_RETURN_NOISE_M
         && net.projectOntoPath(working, prev).d > onPath.residual;
       if (track.match.pathIdx === null && (onPath.residual > OFF_GRAPH_M
-        || (!approachingStart && candidatesFor(track, p, candidateDir, dtSec, prior, nextStopId, ctx).length > 0))) return rederive();
+        || (!approachingStart && candidatesFor(track, p, candidateMotion, prior, nextStopId, ctx).length > 0))) return rederive();
       track.offPathCount++;
       if (track.offPathCount < OFF_PATH_FIXES) {
         // One stray fix: noise. The vehicle stays on its path, at the projection.
