@@ -409,6 +409,46 @@ describe('the integrated companion sentence', () => {
     k.handle.destroy();
   });
 
+  it('writes the header\'s data-valid-until at a sentence turn, not while a tracked estimate moves by seconds under the same words', async () => {
+    // D5.3 production observer: eight "verbatim repeats" that were the deadline attribute shortening by 2 to 15 s under
+    // an unchanged countdown sentence (a new data-valid-until under the same text is a turn to the harness, §12).
+    let now = NOW;
+    let delay = 120;
+    const vehicle = () => item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: delay } });
+    const modules = () => MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }), vehicle()])));
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules: modules() }), createBoards: b.create, fetchSentences: async () => [] });
+    await flush();
+    const el = () => q(k.root, '[data-testid=kiosk-sentence]')!;
+    let shownAt = -1;
+    for (let s = 1; s <= 400 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (/^Tramvaj 6, .*polazi za 3 min\.$/.test(painted(k.root))) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    const text = painted(k.root);
+    const deadline = el().dataset.validUntil;
+    // The vehicle's estimate moves five seconds earlier: the same words, the same deadline attribute.
+    delay = 115;
+    now = shownAt + 2_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toBe(text);
+    expect(el().dataset.validUntil).toBe(deadline);
+    // It moves nearly a minute earlier: the sentence is restated ("za 2 min"), a turn, and the deadline follows.
+    delay = 65;
+    now = shownAt + 4_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toMatch(/polazi za 2 min\.$/);
+    expect(painted(k.root)).not.toBe(text);
+    expect(el().dataset.validUntil).not.toBe(deadline);
+    k.handle.destroy();
+  });
+
   it('lets a model sentence go at once when its fact changes, answer or no answer', async () => {
     let now = NOW;
     let modules = MODULES;
@@ -816,7 +856,7 @@ describe('start: one field, one line, Pokreni', () => {
     expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(true);
     submit(k.root);
     await flush();
-    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je broj privremenih zaslona za ovaj sat.');
+    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je najveći broj privremenih zaslona za ovaj sat.');
     const retry = q(k.root, '[data-testid=setup-retry]') as HTMLButtonElement;
     expect(retry.hidden).toBe(false);
     expect(retry.disabled).toBe(true);
@@ -1215,6 +1255,79 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)).toBeNull();
     brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     expect(panel(k)!.hidden).toBe(false);
+  });
+
+  // lane/w-settings (24 Sep): on the production wall a mouse held down, then Enter, then Space opened
+  // nothing. The opener was reachable only through the 110 x 44 px brand, and only once that brand
+  // held the focus: a press that missed it focused nothing, and the keys went to the body. The wall
+  // itself now holds the focus (tabindex -1: not a tab stop, not a control to the census), from the
+  // moment the invitation mounts and again after any press that lands on nothing focusable.
+  it('holds the focus on the wall from load; Enter or Space on the wall open Postavke', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    expect(wall.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(wall);
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    wall.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    // Escape closes the panel and the brand takes the focus back, as before.
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(brand(k));
+    // The operator's mouse misses the brand and lands on the stage with nothing focused: the wall takes
+    // the focus again, and Space opens. A held key repeats nothing.
+    brand(k).blur();
+    expect(document.activeElement).not.toBe(wall);
+    q(k.root, '[data-testid=kiosk-invitation]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(document.activeElement).toBe(wall);
+    const repeat = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true, repeat: true });
+    wall.dispatchEvent(repeat);
+    expect(repeat.defaultPrevented).toBe(true);
+    expect(panel(k)!.hidden).toBe(true);
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    wall.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(true);
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
+  });
+
+  it('Enter that has fallen back to the body still reaches Postavke while the wall is on the page, and never after destroy', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    wall.blur();
+    expect(document.activeElement).toBe(document.body);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
+    const next = mount({ stored: STORED });
+    await flush();
+    next.root.querySelector<HTMLElement>('.kiosk')!.blur();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    // Only the wall on the page answered: one panel, on the second kiosk.
+    expect(document.querySelectorAll('[data-testid=kiosk-settings-panel]')).toHaveLength(1);
+    expect(panel(next)!.hidden).toBe(false);
+    next.handle.destroy();
+  });
+
+  it('a handheld is a page in a hand: it takes no focus on load and Enter on it opens nothing, while the brand keeps its long press', async () => {
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 } });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    expect(wall.dataset.size).toBe('handheld');
+    expect(document.activeElement).not.toBe(wall);
+    wall.focus();
+    wall.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(panel(k)).toBeNull();
+    open(k);
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
   });
 
   // A temporary screen is good for 24 hours, so its end is almost always
@@ -1982,6 +2095,30 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(text(q(k.root, '.nearby-row[data-kind=closure]'))).toContain('Ilica');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
+  // Lane p-map (first production observation, 02:30): before the first
+  // /api/teaser answer the wall printed "ZET trenutačno ne šalje položaje
+  // vozila; polasci su po voznom redu." and its map read data-feed "down":
+  // an outage stated, not observed. Until the first poll has answered or
+  // failed, the wall is loading, and says nothing about ZET.
+  it('claims no outage before the first poll has answered: the map note hidden, no outage sentence, the map loading; the first answer or failure decides', async () => {
+    for (const outcome of ['live', 'fail'] as const) {
+      let answer!: (value: { modules: ModuleSnapshot[] }) => void;
+      let refuse!: (reason: unknown) => void;
+      const calls: string[] = [];
+      const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState: (state: string) => { calls.push(state); } };
+      const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: () => new Promise((resolve, reject) => { answer = resolve; refuse = reject; }) });
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(true);
+      expect(sentenceText(k.root), outcome).not.toMatch(/ne šalje položaje/);
+      expect(calls, outcome).not.toContain('down');
+      expect(calls.at(-1), outcome).toBe('loading');
+      if (outcome === 'live') answer({ modules: MODULES }); else refuse(new TypeError('Failed to fetch'));
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(outcome === 'live');
+      expect(calls.at(-1), outcome).toBe(outcome === 'live' ? 'live' : 'down');
+      k.handle.destroy();
+    }
+  });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
@@ -2152,7 +2289,8 @@ describe('alerts, polling, the first tap and disposal', () => {
     const map = fakeMap();
     const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
     // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
-    expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
+    // Held as loading, not as an outage: nothing has answered yet (lane p-map).
+    expect(map.calls.slice(0, 5)).toEqual(['feed:loading', 'feed:loading', 'resize', 'resume', 'feed:loading']);
     await flush();
     expect(map.calls.at(-1)).toBe('feed:stale');
     expect(q(k.root, '[data-testid=kiosk-map]')).not.toBeNull();

@@ -460,6 +460,10 @@ export interface CityMapOptions {
   basemapProfile?: BasemapProfile;
   /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. Changed live with setProzor. */
   prozor?: ProzorOptions;
+  /** The zoom the pills and the stop rings draw from when the surface fits its
+   *  frame below their thresholds (map/frame.ts markZoomFor; the desk's Karta
+   *  in a narrow window, lane p-map). Changed live with setMarkZoom. */
+  markZoom?: number | null;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -518,7 +522,7 @@ export interface CityMapHandle {
   setLineFocus?(on: boolean): void;
   setClosuresVisible?(visible: boolean): void;
   /** The feed's own state: 'down' stops the motion and takes the vehicles off the map (an outage is no evidence of where a tram is) until the feed is live again; 'stale' keeps the motion. */
-  setFeedState?(state: 'live' | 'stale' | 'down'): void;
+  setFeedState?(state: 'loading' | 'live' | 'stale' | 'down'): void;
   setStop?(stop: ScreenStop | null): void;
   /** CityMapOptions.priorityStopId, live. */
   setPriorityStop?(id: string | null): void;
@@ -541,6 +545,8 @@ export interface CityMapHandle {
    *  stop changes, the field's zoom when it is re-measured (one map lives for
    *  the screen's life, R-54). null draws every surface as before. */
   setProzor?(prozor: ProzorOptions | null): void;
+  /** CityMapOptions.markZoom, changed live: null keeps the marks' own thresholds. */
+  setMarkZoom?(zoom: number | null): void;
   /** Unique `name` values of the symbols MapLibre actually placed for a layer
    *  (the e2e's proof that the prozor profile places few street names);
    *  [] before the style loads or for a layer the style does not carry. */
@@ -779,6 +785,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
+  let markZoom: number | null = options.markZoom ?? null;
+  /** The zoom the pills draw and merge from here (overlays.ts pillZoomOf): the surface's markZoom, else the public screen's. */
+  const pillZoomNow = (l: MaplibreModule): number => l.pillZoomOf({ markZoom: markZoom ?? prozor?.markZoom ?? null });
   let cityLabels: CityLabels = cityLabelsOf(options.cityLabels);
   let hitTolerance = options.hitTolerancePx ?? profile.hitTolerancePx;
   let closuresVisible = options.closures !== false;
@@ -791,6 +800,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** A basemap asset has failed since the last tile that loaded. Before a
    *  usable style exists, the route/stop alternative must replace loading. */
   let basemapFailing = false;
+  /** The basemap's first tiles in view are in (onBasemap): the status has left `loading` for good. */
+  let basemapIn = false;
   /** The feed is stale or down: the loop holds, separately from pause(), so old evidence is never reckoned forward as if live. */
   let held = false;
   /** The basemap and overlay layer lists as the live style carries them: what the next change is diffed against. */
@@ -862,7 +873,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const focus = routeId === null
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
       // Decision 58: a placed wall's frame draws the stops inside it alone.
       ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) } : {}) };
   }
@@ -973,7 +984,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
 
   function writeMarkProbe(m: MapApi, pushed: VehicleFeatureCollection | null): void {
     container.dataset.zoom = m.getZoom().toFixed(2);
+    writeCenterProbe(m);
     if (pushed) probeHasMarks = pushed.features.length > 0;
+  }
+
+  /** `data-center`: the camera's centre as "lon,lat" (5 decimals), beside
+   *  data-zoom, so a browser proof can project a place onto the canvas (lane
+   *  p-map: the frame's stops stay inside it after a refit). Written when it
+   *  changes, on each drawn frame and at the end of every camera move. */
+  function writeCenterProbe(m: MapApi): void {
+    const c = m.getCenter();
+    const value = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
+    if (container.dataset.center !== value) container.dataset.center = value;
   }
 
   /** The census key for the map as it stands: zoom, selection, "has any marks" and the evidence version. */
@@ -1041,7 +1063,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
-      const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+      const project = m.project && m.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
       fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
@@ -1323,6 +1345,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    created.on('moveend', () => { if (map === created) writeCenterProbe(created); });
     created.on('moveend', refreshTileLabels);
     if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
@@ -1335,6 +1358,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       clearTimer: options.clearTimer,
       styled: () => styled && map === created,
       key: () => probeKeyOf(created),
+      hasMarks: () => probeHasMarks,
       scale: () => scale,
       overlays: () => overlays,
       cityOverlays: () => cityOverlays,
@@ -1365,7 +1389,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         },
       });
     }
-    created.once('load', () => onLoad(l, created));
+    // The overlays go on with the style, not at MapLibre's 'load': 'load'
+    // waits for every basemap tile in view, and the vehicles, the stops and
+    // the city's marks waited with it (the phone's Karta on production, lane
+    // p-map). 'load' still attaches them where no 'style.load' came first,
+    // and says the basemap is in.
+    created.once('style.load', () => onLoad(l, created));
+    created.once('load', () => { onLoad(l, created); onBasemap(created, true); });
+    created.on('render', () => onBasemap(created, false));
     watchTheme();
   }
 
@@ -1377,12 +1408,29 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addControl(attribution, 'bottom-right');
   }
 
-  /** The style is up: images, sources and overlay layers go on, then the loop starts. */
+  /** The status once the basemap's tiles in view are in (or have failed):
+   *  `ready` or `tiles-failed`, the moment MapLibre's 'load' used to mark
+   *  before the overlays went on with the style. `loaded` is 'load' itself,
+   *  which only fires once every source has loaded. */
+  function onBasemap(created: MapApi, loaded: boolean): void {
+    if (basemapIn || disposed || map !== created || !styled || !lib) return;
+    if (!loaded && created.isSourceLoaded && !created.isSourceLoaded(lib.BASEMAP_SOURCE)) return;
+    basemapIn = true;
+    setStatus(basemapFailing ? 'tiles-failed' : 'ready');
+  }
+
+  /** The style is up (MapLibre's 'style.load', or 'load' where none came
+   *  first): images, sources and overlay layers go on, then the loop starts.
+   *  The vehicles source goes first and carries the payload the map already
+   *  holds, so the worker lays out the pills before the stops, the network
+   *  and the city's marks (lane p-map). The status waits for the basemap
+   *  (onBasemap); nothing drawn here does. */
   function onLoad(l: MaplibreModule, created: MapApi): void {
-    if (disposed || map !== created) return;
+    if (disposed || map !== created || styled) return;
     putOverlayImages(created, l, false);
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
+    created.addSource(l.SOURCES.vehicles, geojson(firstVehicles(created, l) ?? empty));
     created.addSource(l.SOURCES.network, geojson(net ? l.networkToGeoJson(net) : empty));
     const stops = net ? l.stopsToGeoJson(net) : empty;
     stopsData = stops;
@@ -1395,7 +1443,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       created.addSource(l.CITY_POINTS, geojson(l.pointsToGeoJson(points.filter(p=>p.place==='city'), wallLabels)));
       created.addSource(l.CITY_PATHS, geojson(l.linesToGeoJson(cityPaths, wallLabels)));
     }
-    created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.bodies, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(l.screenStopGeoJson(stop)));
     created.addSource(l.SOURCES.outline, geojson(l.outlineToGeoJson(outline)));
@@ -1433,8 +1480,22 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     } else if (!cameraMovedByUser && !options.center && !stop && placesOnly()) fitPlaces();
     else if (!cameraMovedByUser && !options.center && selection) fitSelection();
     if (typeof following === 'string') centreOn(following);
-    setStatus(basemapFailing ? 'tiles-failed' : 'ready');
     if (!paused && !held) loop.start();
+  }
+
+  /** The vehicles as the first frame will draw them, for the vehicles
+   *  source's first message; null with nothing to draw or while the feed is
+   *  held. The loop's first frame pushes the same marks again, so nothing
+   *  else about the pushes changes. */
+  function firstVehicles(created: MapApi, l: MaplibreModule): VehicleFeatureCollection | null {
+    if (!model || held) return null;
+    const drawn = model.step(now());
+    if (drawn.length === 0) return null;
+    const kept = keptVehicleId();
+    const project = created.project && created.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
+    const fc = l.vehiclesToGeoJson(drawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+    if (fc.features.length > 0) probeHasMarks = true;
+    return fc;
   }
 
   function fitPlaces(): void {
@@ -1777,10 +1838,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyOverlays();
   }
 
+  /** The public screen's camera moves in one step (calm motion, lane p-map:
+   *  a refit after a resize, a fullscreen change or a turn of the screen is
+   *  a new frame, not a flight); every other surface eases. */
   const move = (center: [number, number], zoom: number): void => {
     pendingSelectionFit = null;
     if (!styled) pendingCamera = { center: [...center], zoom };
-    map?.easeTo({ center, zoom, offset: offsetFor(), duration: reduced ? 0 : CAMERA_MS });
+    const still = reduced || profile === MAP_PRESENTATIONS['public-display'];
+    map?.easeTo({ center, zoom, offset: offsetFor(), duration: still ? 0 : CAMERA_MS });
   };
 
   return {
@@ -1887,7 +1952,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // the map (review-w, P1): an outage is no evidence of where a tram is,
       // and a mark held where it last was said so for as long as the outage
       // lasted. Live again, a vehicle is drawn from a fresh report only.
-      const next = state === 'down';
+      // `loading` (no snapshot yet: the wall before its first poll) holds the
+      // same way: no evidence of motion, though no outage either.
+      const next = state === 'down' || state === 'loading';
       container.dataset.feed = state;
       if (next === held) return;
       held = next;
@@ -1918,6 +1985,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     status: () => status,
     network: () => net,
     vehicles,
+    setMarkZoom(next) {
+      if (next === markZoom) return;
+      markZoom = next;
+      // The pills merge from the new zoom on the next push, and the layers draw from it.
+      lastPushedSignature = '';
+      applyOverlays();
+    },
     setProzor(next) {
       if (JSON.stringify(next) === JSON.stringify(prozor)) return;
       prozor = next;

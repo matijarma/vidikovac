@@ -539,6 +539,16 @@ export interface CalmMotionReading {
   after: number;
   /** childList records that add or remove an element. */
   mutations: number;
+  /**
+   * Departures that entered or left between the two readings (a `departure` row whose key is on one reading only),
+   * each excusing at most one record that adds it and one that removes it: max(entering, leaving) of those so excused.
+   */
+  turnovers: number;
+  /**
+   * `mutations` less the records the turnovers account for: a staying row re-created, a node moved, a row that came
+   * and went inside the minute, any other element added or removed. The production observer's budget.
+   */
+  churn: number;
   /** childList records that only swap text nodes (a countdown's digits): content, not structure. */
   textSwaps: number;
   /** Rows whose `kind|id` was on the list before and after, on the same node. */
@@ -557,19 +567,25 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
   const root = document.querySelector(spec.root);
   const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
   const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
+  // A record's element nodes by their row key (null: not a keyed row), so a turnover can be told from churn.
+  const nodeKey = (n: Node): string | null => ((n as HTMLElement).dataset ? keyOf(n as HTMLElement) : null);
   rows.forEach((el, i) => { (el as unknown as Record<string, unknown>)[spec.key] = i; });
   const state = {
     rootFound: Boolean(root),
     before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
     mutations: 0,
     textSwaps: 0,
+    records: [] as { adds: (string | null)[]; removes: (string | null)[] }[],
     observer: null as MutationObserver | null,
     count(records: MutationRecord[]): void {
       for (const m of records) {
         if (m.type !== 'childList') continue;
-        const nodes = [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)];
-        if (nodes.some((n) => n.nodeType === 1)) state.mutations++;
-        else if (nodes.length) state.textSwaps++;
+        const adds = Array.from(m.addedNodes).filter((n) => n.nodeType === 1);
+        const removes = Array.from(m.removedNodes).filter((n) => n.nodeType === 1);
+        if (adds.length || removes.length) {
+          state.mutations++;
+          state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey) });
+        } else if (m.addedNodes.length || m.removedNodes.length) state.textSwaps++;
       }
     },
   };
@@ -586,9 +602,10 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   const w = window as unknown as Record<string, unknown>;
   const state = w[spec.key] as {
     rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
+    records: { adds: (string | null)[]; removes: (string | null)[] }[];
     observer: MutationObserver | null; count: (r: MutationRecord[]) => void;
   } | undefined;
-  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
+  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
   if (state.observer) {
     state.count(state.observer.takeRecords());
     state.observer.disconnect();
@@ -610,16 +627,57 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
     else rebuilt.push(key);
   }
   const left = [...beforeByKey.keys()].filter((k) => !afterKeys.has(k));
+  // A record is a turnover's when every element it adds is a departure that entered and every element it removes a
+  // departure that left, each departure excusing one add and one remove at most; every other record is churn.
+  const entering = new Set(entered.filter((k) => k.startsWith('departure|')));
+  const leaving = new Set(left.filter((k) => k.startsWith('departure|')));
+  const addsTaken = new Set<string>();
+  const removesTaken = new Set<string>();
+  const free = (keys: (string | null)[], pool: Set<string>, taken: Set<string>): boolean =>
+    keys.every((k) => k !== null && pool.has(k) && !taken.has(k)) && new Set(keys).size === keys.length;
+  let excused = 0;
+  for (const r of state.records ?? []) {
+    if (!free(r.adds, entering, addsTaken) || !free(r.removes, leaving, removesTaken)) continue;
+    for (const k of r.adds) addsTaken.add(k as string);
+    for (const k of r.removes) removesTaken.add(k as string);
+    excused++;
+  }
   delete w[spec.key];
-  return { rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations, textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked };
+  return {
+    rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations,
+    turnovers: Math.max(addsTaken.size, removesTaken.size), churn: state.mutations - excused,
+    textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked,
+  };
 };
 
+/** What makes a calm-motion reading unmeasurable, or a staying row that lost its node: shared by both rules below. */
+function calmMotionBasics(r: CalmMotionReading): { unmeasurable: string | null; rebuilt: string | null } {
+  if (!r.rootFound) return { unmeasurable: `the timeline (${CALM_MOTION_SPEC.root}) is missing, so calm motion cannot be measured`, rebuilt: null };
+  if (r.before === 0) return { unmeasurable: `the timeline had no rows (${CALM_MOTION_SPEC.row}) to follow through the idle minute`, rebuilt: null };
+  return { unmeasurable: null, rebuilt: r.rebuilt.length ? `${r.rebuilt.length} row(s) stayed on the list but were re-created: ${r.rebuilt.join(', ')} (target 0, a row keeps its node)` : null };
+}
+
+/** The accept spec's idle minute (fake clock, no service change): every structural record counts. */
 export function calmMotionFailures(r: CalmMotionReading): string[] {
-  if (!r.rootFound) return [`the timeline (${CALM_MOTION_SPEC.root}) is missing, so calm motion cannot be measured`];
-  if (r.before === 0) return [`the timeline had no rows (${CALM_MOTION_SPEC.row}) to follow through the idle minute`];
+  const b = calmMotionBasics(r);
+  if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
   if (r.mutations > IDLE_MUTATIONS_MAX) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
-  if (r.rebuilt.length) out.push(`${r.rebuilt.length} row(s) stayed on the list but were re-created: ${r.rebuilt.join(', ')} (target 0, a row keeps its node)`);
+  if (b.rebuilt) out.push(b.rebuilt);
+  return out;
+}
+
+/**
+ * The production observer's real minute: departures entering and leaving are the service itself (three first trams
+ * within 70 s at the start of service are six records, lane-w-fix9), so they are counted apart as `turnovers` and the
+ * budget reads `churn`, the records nothing entering or leaving accounts for. A staying row keeps its node, strictly.
+ */
+export function calmChurnFailures(r: CalmMotionReading): string[] {
+  const b = calmMotionBasics(r);
+  if (b.unmeasurable) return [b.unmeasurable];
+  const out: string[] = [];
+  if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} departure turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
+  if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
 

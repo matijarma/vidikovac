@@ -94,7 +94,7 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
     // The ones under the threshold are not counted for the meta either.
     expect(more).toBe(0);
     expect(prometPanel(input(modules, { prometMode: 'exceptions', composition: 'compact' })).meta).toBe('');
-    expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po redu');
+    expect(prometPanel(input([snap('zet-rt', [route('6', 120)])], { prometMode: 'exceptions' })).note).toBe('Linije voze po voznom redu');
   });
 
   it("becomes a stop's board when a caller supplies its arrivals, with no note under it on the wall", () => {
@@ -209,7 +209,7 @@ describe('prometPanel exceptions: what a rider would notice, and nothing else', 
   it('says the network runs to plan when nothing plausible is left', () => {
     const panel = prometPanel(input([snap('zet-rt', [route('281', -4_440), route('6', 10)])], { prometMode: 'exceptions' }));
     expect(panel.rows).toEqual([]);
-    expect(panel.note).toBe('Linije voze po redu');
+    expect(panel.note).toBe('Linije voze po voznom redu');
   });
 });
 

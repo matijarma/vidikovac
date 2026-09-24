@@ -20,9 +20,11 @@ import {
   PILL_LINE_HEIGHT_EM,
   PILL_STRETCH_ROWS,
   PILL_ZOOM,
+  pillZoomOf,
   PLACE_FILTERS,
   PLATE_IMAGE,
   SOURCES,
+  STOP_ZOOM,
   WORKS_ONGOING_PHASE,
   firstSymbolLayer,
   kindFilter,
@@ -291,6 +293,25 @@ describe('the overlay layer list', () => {
 // above.)
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
+
+  // Lane p-map: a wall fitted below the marks' own floor (a small browser
+  // window, kiosk/mapview.ts WALL_FIT_MIN_ZOOM) draws its plates, their
+  // two-way arrows and its stop marks from the fit's markZoom; the threshold
+  // is never raised, and without markZoom nothing changes.
+  it('draws the wall\u2019s plates, two-way arrows and stop marks from markZoom when the fit is below their floor', () => {
+    const minzoomOf = (prozor: ProzorOptions, id: string) => overlayLayers(OVERLAY_DARK, { prozor }).find((l) => l.id === id)!.minzoom;
+    for (const id of [LAYERS.vehicles, LAYERS.vehicleTwoWayFore, LAYERS.vehicleTwoWayAft]) {
+      expect(minzoomOf({ ...PROZOR, markZoom: 11.3 }, id), id).toBe(11.3);
+      expect(minzoomOf({ ...PROZOR, markZoom: 13.1 }, id), id).toBe(PILL_ZOOM);
+      expect(minzoomOf(PROZOR, id), id).toBe(PILL_ZOOM);
+    }
+    expect(minzoomOf({ ...PROZOR, markZoom: 11.3 }, LAYERS.stops)).toBe(11.3);
+    expect(minzoomOf(PROZOR, LAYERS.stops)).toBe(STOP_ZOOM);
+    expect([pillZoomOf(null), pillZoomOf({}), pillZoomOf({ markZoom: 11.3 }), pillZoomOf({ markZoom: 14 })]).toEqual([PILL_ZOOM, PILL_ZOOM, 11.3, PILL_ZOOM]);
+    // Nothing else about the layers moves.
+    const strip = (prozor: ProzorOptions) => JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor }).map(({ minzoom: _m, ...rest }) => rest));
+    expect(strip({ ...PROZOR, markZoom: 11.3 })).toBe(strip(PROZOR));
+  });
 
   // Owner, 24 Sep: the whole-city window draws the place's own ring and name
   // (decision 19) and the pills; no stop bead and no other stop name. The

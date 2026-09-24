@@ -27,7 +27,7 @@ import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
 // WP2 step 4: the framed wall (mapview.ts kioskCityLabels, map/frame.ts frameView).
-import { kioskCityLabels } from '../../app/src/kiosk/mapview';
+import { CITY_WINDOW as CITY_WINDOW_BOX, kioskCityLabels, WALL_FIT_MIN_ZOOM } from '../../app/src/kiosk/mapview';
 import { frameView } from '../../app/src/map/frame';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -757,7 +757,7 @@ describe('the one map, through the additive adapter', () => {
     requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': { ...zet, status: 'stale' } } }, adapter);
     expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
     requestKioskMap(maps, { ...base, snapshots: {} }, adapter);
-    expect(setFeedState).toHaveBeenLastCalledWith('down'); // no snapshot is no evidence of motion
+    expect(setFeedState).toHaveBeenLastCalledWith('loading'); // no snapshot is no evidence of motion, nor of an outage (lane p-map)
     requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': zet } }, adapter);
     expect(setFeedState).toHaveBeenLastCalledWith('live');
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
@@ -819,7 +819,10 @@ describe('the kiosk\u2019s whole-city window', () => {
     requestKioskMap(maps, base, adapter);
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
     expect(options.center).toEqual(cityWindowView(1300, 880).center);
-    expect(options.zoom).toBe(FIELD_MIN_ZOOM);
+    // Fitted whole (lane p-map), below the marks' own floor: they draw from the fit.
+    expect(options.zoom).toBe(cityWindowView(1300, 880).zoom);
+    expect(options.zoom).toBeLessThan(FIELD_MIN_ZOOM);
+    expect((options.prozor as { markZoom?: number }).markZoom).toBeCloseTo((options.zoom as number) - 0.2, 10);
     expect(options.hitTolerancePx).toBe(KIOSK_HIT_TOLERANCE_PX);
     expect(options.outline).toBeNull();
     // The gate that used to empty the map whenever the default 'living' group was
@@ -1063,6 +1066,47 @@ describe('the kiosk\u2019s framed wall', () => {
     expect((first(w).points as { id: string; place?: string }[]).filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near', 'bajs-far']);
   });
 
+  // Lane p-map (owner, 24 Sep: fullscreen off, and part of Zagreb was off the
+  // map): a 1280 x 800 browser window lays the wall's field out at 669 x 167
+  // (the compact wall, decision 50: the card under the map; 669 x 405 before
+  // it), 1920 x 1080 at 1170 x 803. The wall
+  // refits to each box it is given, and what it presents stays whole in it:
+  // the frame's square of side 2R, and the whole-city window. Its marks keep
+  // drawing on a fit below their usual floor (ProzorOptions.markZoom).
+  it('refits the frame and the whole-city window whole to each box a resize gives it, and back', () => {
+    const R = 2191;
+    const fits = (zoom: number, lat: number, spanM: number, px: number) => spanM / metresPerPixel(zoom, lat) <= px - 2 * 24 + 0.5;
+    for (const place of ['frame', 'city'] as const) {
+      const s = stub();
+      const input = place === 'frame' ? { ...base, frame: 6 as const, radiusM: R } : { ...base, stop: null, placeSet: undefined };
+      const views: Record<string, unknown>[] = [];
+      for (const [w, h] of [[669, 167], [1170, 803], [669, 167]] as const) {
+        requestKioskMap(s.maps, { ...input, widthPx: w, heightPx: h }, s.adapter);
+        const view = views.length === 0 ? first(s) : s.calls.setView.mock.calls.at(-1)![0] as Record<string, unknown>;
+        views.push(view);
+        const zoom = view.zoom as number;
+        if (place === 'frame') {
+          expect(view.center, `${place} ${w}x${h}`).toEqual([STOP.lon, STOP.lat]);
+          expect(fits(zoom, STOP.lat, 2 * R, Math.min(w, h)), `${place} ${w}x${h}: 2R inside at z${zoom.toFixed(2)}`).toBe(true);
+        } else {
+          // The whole window inside the box: within its clearance where the map's own floor allows, else at
+          // that floor inside the box itself (669 x 167 needs z9.85).
+          const mid = (CITY_WINDOW_BOX.south + CITY_WINDOW_BOX.north) / 2;
+          const tall = ((CITY_WINDOW_BOX.north - CITY_WINDOW_BOX.south) / 360) * 40_075_016.686;
+          const wide = ((CITY_WINDOW_BOX.east - CITY_WINDOW_BOX.west) / 360) * 40_075_016.686 * Math.cos((mid * Math.PI) / 180);
+          const whole = zoom > WALL_FIT_MIN_ZOOM ? fits(zoom, mid, tall, h) && fits(zoom, mid, wide, w) : tall / metresPerPixel(zoom, mid) <= h && wide / metresPerPixel(zoom, mid) <= w;
+          expect(whole, `${place} ${w}x${h}: the whole window inside at z${zoom.toFixed(2)}`).toBe(true);
+        }
+        // The plates and the stop rings still draw at the fitted zoom.
+        const prozor = s.calls.setProzor.mock.calls.at(-1)![0] as { markZoom?: number };
+        expect(prozor.markZoom ?? 12.5, `${place} ${w}x${h}: marks from z${prozor.markZoom}`).toBeLessThanOrEqual(zoom);
+      }
+      // Back at the first box, the first view again: nothing left over from the larger one.
+      expect(views[2]).toEqual(expect.objectContaining({ center: views[0]!.center, zoom: views[0]!.zoom }));
+      expect(views[1]!.zoom).toBeGreaterThan(views[0]!.zoom as number);
+    }
+  });
+
   it('frames Kadar 4 and 8 closer and wider, and a measured radius wins over the Kadar\u2019s fallback', () => {
     const at = (extra: Record<string, unknown>) => {
       const s = stub();
@@ -1079,7 +1123,9 @@ describe('the kiosk\u2019s framed wall', () => {
   it('keeps its buses on the frame at every camera, not only from the detail zoom', () => {
     const s = stub();
     requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610 }, s.adapter);
-    expect(first(s).zoom).toBe(FIELD_MIN_ZOOM); // the compact wall's Kadar 8 sits on the floor
+    // The compact wall's Kadar 8 is fitted whole below the marks' own floor (lane p-map), its marks drawn from the fit.
+    expect(first(s).zoom).toBe(frameView(STOP, 2700, 794, 610, 24, WALL_FIT_MIN_ZOOM).zoom);
+    expect(first(s).zoom).toBeLessThan(FIELD_MIN_ZOOM);
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
     requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610, cameraZoom: 12.9 }, s.adapter);
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
@@ -1096,7 +1142,7 @@ describe('the kiosk\u2019s framed wall', () => {
     requestKioskMap(d.maps, { ...base, place: { kind: 'tram', name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id }, placeSet: false }, d.adapter);
     const window = first(d);
     expect(window.center).toEqual(cityWindowView(1300, 880).center);
-    expect(window.zoom).toBe(FIELD_MIN_ZOOM);
+    expect(window.zoom).toBe(cityWindowView(1300, 880).zoom);
     expect(window.prozor).toMatchObject({ networkKinds: ['tram'], stopRoutes: null, stopRadius: true, stopLabelTramInterchanges: true });
     expect(labelsOf(window.cityLabels)).toBe('none'); // as the whole-city window has always carried it
     expect(kioskCityLabels(false, true)).toBe('none');

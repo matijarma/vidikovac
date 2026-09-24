@@ -85,6 +85,8 @@ export interface NearbyRow {
   map?: MapHighlight;
   /** A departure row's own arrival (route, headsign, countdown minutes), for the badge and the sentence. */
   arrival?: ArrivalRow;
+  /** A departure row: when the boards last named its trip (epoch ms). A row carried through a momentary gap keeps its earlier stamp. */
+  confirmedAt?: number;
   /** A last-trams or first-tram row's lines, soonest first; a line drops out once it has left. */
   services?: readonly NearbyService[];
 }
@@ -111,11 +113,17 @@ export interface NearbyInput {
   /** Told once per row left out because a third-party text failed externalText(), with the reason. */
   onSkip?: (reason: ExternalTextRejection) => void;
   /**
-   * The departure rows on the wall now, in their order (row ids). A tram that is shown keeps its place
-   * while it reads the same minute as a newcomer; only a tram a whole displayed minute earlier, or its own
-   * departure, moves it (the D2 live block: one slot changed trips 37 times in ten minutes on ETA jitter).
+   * The departure rows on the wall now, in their order (kiosk.ts passes its previous selection). They hold
+   * their slots on ETA jitter: a shown tram keeps its place while it reads the same minute as a newcomer, and
+   * a newcomer takes the last slot only when it reads DISPLACE_MINUTES whole displayed minutes earlier (the D2
+   * live block: one slot changed trips 37 times in ten minutes; the D5.3 observer: a live estimate crossing
+   * the third row's minute swapped two trams twice in a minute). A shown departure whose trip the boards do
+   * not name this instant is carried on its last estimate, with its own countdown, until they name it again,
+   * HELD_DEPARTURE_GRACE_MS have passed since they last did (confirmedAt), or its time has passed (the twin
+   * drops a vehicle for a snapshot, a platform board refetches without a trip: rows removed and re-created
+   * within a minute in the D5.3 observation).
    */
-  heldDepartures?: readonly string[];
+  heldDepartures?: readonly NearbyRow[];
 }
 
 /** §12 bounds and the ladder's clock (§4). */
@@ -124,6 +132,12 @@ export const MAX_DEPARTURES = 3;
 export const COUNTDOWN_HORIZON_MIN = 10;
 /** A departure stays listed this long after its time, as arrivalsAt keeps it. */
 const DEPARTURE_GRACE_MS = 60_000;
+/** How long a shown departure is carried while the boards do not name its trip: one board TTL (city/boards.ts), the data's own staleness. */
+export const HELD_DEPARTURE_GRACE_MS = 60_000;
+/** A tram not on the wall displaces the shown last departure only when it reads this many displayed minutes earlier (hysteresis at the cap). */
+export const DISPLACE_MINUTES = 2;
+/** A shown tram's displayed minute changes only when its live estimate crosses the minute's boundary by this much (hysteresis on the countdown). */
+export const MINUTE_MARGIN_MS = 15_000;
 /** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
 const MORNING_FROM_MIN = 3 * 60;
 const MORNING_UNTIL_MIN = 12 * 60;
@@ -229,7 +243,7 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   // Blue is a tracked vehicle inside the countdown horizon. Past it the row is grey, and a grey row is the
   // timetable: its scheduled instant and an arrival without the vehicle, before the rows are ordered and cut,
   // so a delayed tram never reads as a timetable time it does not have (17:57 ten minutes late is 17:57, not 18:07).
-  const shown = rows
+  const steadied = rows
     .map((arrival): ArrivalRow | null => {
       if (!arrival.live || arrival.minutes !== null) return arrival;
       const scheduled = scheduledOf.get(arrival.tripId);
@@ -243,13 +257,29 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
     .filter((arrival): arrival is ArrivalRow => arrival !== null && arrival.atMs >= now - DEPARTURE_GRACE_MS)
     // GTFS is external text too. Vet both fields before the cap, so a refused
     // headsign cannot hide in the route fallback or displace a safe departure.
-    .filter(arrival => vetted(input, [['headsign', arrival.headsign || undefined], ['headsign', arrival.routeName]]))
-    .sort(byDisplayedMinute(now, input.heldDepartures ?? []))
-    .slice(0, MAX_DEPARTURES);
+    .filter(arrival => vetted(input, [['headsign', arrival.headsign || undefined], ['headsign', arrival.routeName]]));
+  const held = (input.heldDepartures ?? []).filter((row) => row.kind === 'departure');
+  const rank = new Map(held.map((row, index) => [row.id, index] as const));
+  const heldById = new Map(held.map((row) => [row.id, row] as const));
+  const fresh = steadied.map((arrival) => steadyMinute(arrival, heldById.get(departureId(arrival)), now));
+  const freshIds = new Set(fresh.map(departureId));
+  // A shown departure the boards do not name this instant is carried on its last estimate: the twin drops a
+  // vehicle for a snapshot, a platform board refetches without a trip (D5.3 observer: rows 34 and 32 removed and
+  // re-created within a minute). It goes when the boards have not named it for HELD_DEPARTURE_GRACE_MS, when its
+  // time has passed, or, in an outage, when it is a live row (§4.8: every departure is then the timetable).
+  const carried = held
+    .filter((row): row is NearbyRow & { arrival: ArrivalRow; confirmedAt: number } => row.arrival !== undefined && row.confirmedAt !== undefined
+      && !freshIds.has(row.id) && !(outage && row.live)
+      && now - row.confirmedAt <= HELD_DEPARTURE_GRACE_MS && row.arrival.atMs >= now - DEPARTURE_GRACE_MS)
+    .map((row) => ({ ...row.arrival, minutes: countdownMinutes(row.arrival.atMs, now) }));
+  const carriedIds = new Set(carried.map(departureId));
+  const order = byDisplayedMinute(now, rank);
+  const shown = capDepartures([...fresh, ...carried].sort(order), displayedMinute(now), (arrival) => rank.has(departureId(arrival)), order);
   return shown.map((arrival) => {
     const live = arrival.live;
+    const id = departureId(arrival);
     return {
-      id: `dep:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`,
+      id,
       kind: 'departure',
       atMs: arrival.atMs,
       always: false,
@@ -260,25 +290,69 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       ...placeSelection(input.place),
       map: placePoint(input.place),
       arrival,
+      confirmedAt: carriedIds.has(id) ? held[rank.get(id)!]!.confirmedAt! : now,
     };
   });
 }
 
+const departureId = (arrival: ArrivalRow): string => `dep:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`;
+
 /**
- * The order the wall prints: by the minute a passer-by reads (a countdown's rounded minutes, a clock
- * time's minute), then the wall's current order for trams that read the same minute, then line and trip.
- * Live estimates move by seconds on every poll; two trams both "sada" must never swap, a dead heat must
- * come out the same way every time, and a shown tram leaves its slot only to a tram a whole displayed
- * minute earlier or by departing (D2 live block, principle 7).
+ * Hysteresis on a shown tram's countdown. A live estimate hovering on a rounding boundary read "za 2 min" and
+ * "za 3 min" five times in thirty seconds (fix9 live block, 05:15), and the header's countdown sentence bounced
+ * with it, which the harness reads as a verbatim repeat. While the fresh estimate stays inside the displayed
+ * minute's band widened by MINUTE_MARGIN_MS, the row keeps the estimate it shows; a move past the margin, a
+ * whole-minute jump, time passing, or the vehicle leaving the twin (a timetable row) all follow the data.
  */
-function byDisplayedMinute(now: number, held: readonly string[]): (a: ArrivalRow, b: ArrivalRow) => number {
-  const rank = new Map(held.map((id, index) => [id, index] as const));
-  const minute = (row: ArrivalRow): number => (row.live && row.minutes !== null
-    ? row.minutes
-    : Math.floor(row.atMs / MINUTE_MS) - Math.floor(now / MINUTE_MS));
-  const shown = (row: ArrivalRow): number => rank.get(`dep:${row.tripId || `${row.routeId}:${row.atMs}`}`) ?? Number.MAX_SAFE_INTEGER;
+function steadyMinute(arrival: ArrivalRow, shown: NearbyRow | undefined, now: number): ArrivalRow {
+  if (!shown?.live || shown.atMs === null || !arrival.live || arrival.minutes === null) return arrival;
+  const heldMinutes = countdownMinutes(shown.atMs, now);
+  if (heldMinutes === null || heldMinutes === arrival.minutes) return arrival;
+  const ahead = arrival.atMs - now;
+  const low = (heldMinutes - 0.5) * MINUTE_MS - MINUTE_MARGIN_MS;
+  const high = (heldMinutes + 0.5) * MINUTE_MS + MINUTE_MARGIN_MS;
+  if (ahead < low || ahead > high) return arrival;
+  return { ...arrival, atMs: shown.atMs, minutes: heldMinutes };
+}
+
+/** The countdown a row shows: rounded minutes inside the horizon, none (a clock time) beyond it; shared/city/arrivals.ts's rule. */
+function countdownMinutes(atMs: number, now: number): number | null {
+  const ahead = atMs - now;
+  return ahead <= COUNTDOWN_HORIZON_MIN * MINUTE_MS ? Math.max(0, Math.round(ahead / MINUTE_MS)) : null;
+}
+
+/** The minute a passer-by reads: a countdown's rounded minutes, a clock time's minute from now's. */
+function displayedMinute(now: number): (row: ArrivalRow) => number {
+  return (row) => (row.live && row.minutes !== null ? row.minutes : Math.floor(row.atMs / MINUTE_MS) - Math.floor(now / MINUTE_MS));
+}
+
+/**
+ * The order the wall prints: by the minute a passer-by reads, then the wall's current order for trams that
+ * read the same minute, then line and trip. Live estimates move by seconds on every poll; two trams both
+ * "sada" must never swap, a dead heat must come out the same way every time, and a shown tram leaves its slot
+ * only to a tram a whole displayed minute earlier or by departing (D2 live block, principle 7).
+ */
+function byDisplayedMinute(now: number, rank: ReadonlyMap<string, number>): (a: ArrivalRow, b: ArrivalRow) => number {
+  const minute = displayedMinute(now);
+  const shown = (row: ArrivalRow): number => rank.get(departureId(row)) ?? Number.MAX_SAFE_INTEGER;
   return (a, b) => minute(a) - minute(b) || shown(a) - shown(b)
     || a.routeName.localeCompare(b.routeName) || a.tripId.localeCompare(b.tripId);
+}
+
+/**
+ * The first MAX_DEPARTURES of the time order, with hysteresis at the cap: a tram not on the wall displaces the
+ * last shown one only when it reads DISPLACE_MINUTES whole displayed minutes earlier. A live estimate crossing
+ * a shown tram's minute by one (nine against ten) would otherwise swap the two on every poll that moves it back
+ * (D5.3 observer, rows 32 and 6, four records in a minute). The shown rows keep their time order among themselves.
+ */
+function capDepartures(sorted: readonly ArrivalRow[], minute: (row: ArrivalRow) => number, isShown: (row: ArrivalRow) => boolean, order: (a: ArrivalRow, b: ArrivalRow) => number): ArrivalRow[] {
+  let chosen = sorted.slice(0, MAX_DEPARTURES);
+  for (const held of sorted.slice(MAX_DEPARTURES).filter(isShown)) {
+    const newcomer = [...chosen].reverse().find((row) => !isShown(row));
+    if (!newcomer || minute(newcomer) <= minute(held) - DISPLACE_MINUTES) continue;
+    chosen = [...chosen.filter((row) => row !== newcomer), held];
+  }
+  return chosen.sort(order);
 }
 
 // --- (b) closures by their end --------------------------------------------------

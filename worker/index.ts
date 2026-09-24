@@ -11,6 +11,7 @@ import { handleScreens } from './routes/screens';
 import { handleKiosk } from './routes/kiosk';
 import { handleMaps } from './routes/maps';
 import { handleCity } from './routes/city';
+import { handleLanding } from './routes/landing';
 import { catalogueStub } from './do/catalogue-do';
 import { warmFeeds } from './feed/cache';
 import { twinStub } from './do/twin-do';
@@ -37,7 +38,7 @@ export type RouteHandler = (
 
 // Order matters only for overlapping prefixes; each handler returns null when
 // the path is not its own. Static assets answer everything the Worker declines.
-const ROUTES: RouteHandler[] = [handleCity, handleFeed, handlePairing, handleAdmin, handleScreens, handleKiosk, handleMaps, handleOpen, handleStats];
+const ROUTES: RouteHandler[] = [handleCity, handleFeed, handlePairing, handleAdmin, handleScreens, handleKiosk, handleMaps, handleOpen, handleStats, handleLanding];
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

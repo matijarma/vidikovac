@@ -11,7 +11,7 @@ import { createMapModeStore } from '../core/map-mode-store';
 import { mountKiosk } from '../kiosk';
 import { parseKioskMapMode } from '../core/map-mode-store';
 import { createMapRenderer } from '../map/renderers';
-import { repaintOn } from '../ui/canvas';
+import { REFIT_SETTLE_MS, repaintOn } from '../ui/canvas';
 import { detectLagano, markLagano } from '../ui/lagano';
 import { THEME_STORAGE_KEY, type ThemePreference } from '../ui/theme';
 import '../ui/tokens.css';
@@ -82,7 +82,8 @@ mountKiosk(root, {
   reducedMotion,
   lightweight,
   mapMode,
-  onRepaint: repaintOn(theme),
+  // A resize, a fullscreen change or a turn of the screen refits the wall's frame once it has settled (lane p-map).
+  onRepaint: repaintOn(theme, window, { doc: document, settleMs: REFIT_SETTLE_MS, setTimeout: (fn, ms) => window.setTimeout(fn, ms), clearTimeout: (t) => window.clearTimeout(t as number) }),
   mapFactory: createMapRenderer,
 });
 // The secret is in localStorage now, and ?tema= only ever needed to land

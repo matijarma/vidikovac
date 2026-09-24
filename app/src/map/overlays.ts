@@ -80,6 +80,7 @@ export const LAYERS = Object.freeze({
   placeSeat: 'place-seat',
   placeQuakeLabels: 'place-quake-labels',
   screenStopLabel: 'screen-stop-label',
+  screenStopGuard: 'screen-stop-guard',
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
   selectionRing: 'selection-ring',
@@ -109,6 +110,13 @@ export const NOSE_MIN_ZOOM = 14.5;
 export const NOSE_MAX_ZOOM = 16.5;
 /** Stop circles appear. */
 export const STOP_ZOOM = 12.5;
+
+/** The zoom the pills (and the two-way arrows with them) draw from on this
+ *  surface: PILL_ZOOM, or the wall's lower markZoom where its field fits
+ *  below it. city-map.ts merges the pills from the same zoom. */
+export function pillZoomOf(marks: { markZoom?: number | null } | null | undefined): number {
+  return marks?.markZoom === undefined || marks.markZoom === null ? PILL_ZOOM : Math.min(PILL_ZOOM, marks.markZoom);
+}
 /** The lower end of the public screen's own stop ramp (ProzorOptions
  *  stopRadius): the floor of the whole-city window (kiosk/mapview.ts
  *  FIELD_MIN_ZOOM), a fifth above STOP_ZOOM, so the smallest ring the ramp
@@ -270,6 +278,12 @@ export interface ProzorOptions {
    *  (the field's own zoom, R-KP2; NOSE_MIN_ZOOM elsewhere). Its name is
    *  older than the rule: pills place unconditionally at every zoom now. */
   overlapZoom: number;
+  /** The zoom from which the wall's numbered plates and its stop marks draw,
+   *  when the field fits what it presents below their own PILL_ZOOM and
+   *  STOP_ZOOM (lane p-map: a small browser window keeps the frame and the
+   *  whole-city window whole, kiosk/mapview.ts WALL_FIT_MIN_ZOOM). Absent,
+   *  the marks keep their own thresholds; it never raises them. */
+  markZoom?: number;
   /** The stops of the screen's routes as rings that grow with the camera
    *  rather than one fixed dot: on the whole-city window (kiosk/mapview.ts
    *  CITY_WINDOW, z12.7) a dot sized for street level is a bead every few
@@ -314,6 +328,12 @@ export interface ProzorOptions {
    *  reads off the stops source), so nothing outside the frame is a ring, a
    *  dot or a name; the own place's ring and name are the screen-stop layers. */
   frame?: FrameCircle;
+  /** Lane w-labels (24 Sep): true on a map pane below its legible minimum
+   *  (map/frame.ts MAP_MIN_HEIGHT_PX). The pills stop overlapping one another:
+   *  each keeps its box and one that would land on another yields, in the
+   *  pills' own sort order; the noses and the two-way arrows go with them, so
+   *  no triangle is left without its pill. Default false. */
+  pillsYield?: boolean;
 }
 
 /** The image rows across the middle of the pill and the plate that stretch
@@ -550,6 +570,11 @@ export interface OverlayOptions {
   emphasis?: readonly PlaceKind[] | null;
   /** The public screen's overlay set; null or absent draws every surface as before. */
   prozor?: ProzorOptions | null;
+  /** The zoom the pills, their arrows and the stop rings draw from on a view
+   *  fitted below their own thresholds (map/frame.ts markZoomFor: the desk's
+   *  Karta in a narrow window, lane p-map); the public screen's own is
+   *  ProzorOptions.markZoom. Never raises a threshold. */
+  markZoom?: number | null;
   /** The screen's own stop id: under prozor the hub-label tier never names it,
    *  because the 30 px anchor label already does and the two stacked at
    *  Jelačić (R-KP25). */
@@ -590,7 +615,7 @@ export interface OverlayOptions {
  *  ring: the selection ink at twice a pill's own halo width. Every vehicle
  *  feature carries `cluster` (city-map.ts writes false on a single), so the
  *  case never meets a missing property. */
-function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr, blocks: boolean): StyleLayerLike {
+function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr, blocks: boolean, yieldToPills = false): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -607,7 +632,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'icon-text-fit': 'both',
       'icon-text-fit-padding': [PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s, PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s],
       'icon-rotation-alignment': 'viewport',
-      'icon-allow-overlap': true,
+      'icon-allow-overlap': !yieldToPills,
       // Decision 17: on the public screen the capsule keeps its box for the
       // names placed after it, which then move or yield; elsewhere it never
       // pushes a stop name off the map.
@@ -627,7 +652,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       // The default, stated: pills.ts measures each further row as one line
       // of it (PILL_LINE_HEIGHT_PX), for the census and the nose.
       'text-line-height': PILL_LINE_HEIGHT_EM,
-      'text-allow-overlap': true,
+      'text-allow-overlap': !yieldToPills,
       'text-ignore-placement': !blocks,
       'text-rotation-alignment': 'viewport',
       'text-optional': false,
@@ -728,6 +753,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const modes = options.modes ?? null;
   const sel = options.selection ?? null;
   const prozor = options.prozor ?? null;
+  /** The surface's own mark zoom, else the public screen's (pillZoomOf). */
+  const marks = { markZoom: options.markZoom ?? prozor?.markZoom ?? null };
+  const stopZoom = marks.markZoom === null ? STOP_ZOOM : Math.min(STOP_ZOOM, marks.markZoom);
   const screenStopId = options.screenStopId ?? null;
   const selectedVehicle = sel?.kind === 'vehicle' ? sel.id : null;
   const selectedClosure = sel?.kind === 'closure' ? sel.id : null;
@@ -800,6 +828,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const placeTitles = prozor === null || prozor.placeTitles !== false;
   /** Decision 17: on the public screen the vehicle marks keep their boxes and the names move or yield. */
   const blocks = prozor !== null;
+  /** A short pane's pills yield to one another (ProzorOptions.pillsYield). */
+  const pillsYield = prozor?.pillsYield === true;
   const held = prozor ? [...(options.heldNames ?? [])] : [];
   // Stop names: on the public screen the hubs alone (rank from the option
   // set), from the field's zoom and never below it -- as the layer's own
@@ -941,7 +971,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
             'circle-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
             'circle-stroke-opacity': zoomInterpolate(STOP_ZOOM, 0.5, 14, 1),
           },
-      { minzoom: STOP_ZOOM, filter: stops },
+      { minzoom: stopZoom, filter: stops },
     ),
     circle(LAYERS.stopsSelected, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 6 * s, 16, 11 * s), 'circle-color': p.selection, 'circle-opacity': 0, 'circle-stroke-color': p.selection, 'circle-stroke-width': 3 }, { filter: filters[LAYERS.stopsSelected] }),
     // The screen's own stop: on the public screen the largest ring on the map
@@ -1041,7 +1071,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
     // The nose band's upper edge is the same on every surface: past it the rails say the direction themselves.
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleNoses, pillsYield ? NEVER : vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
     // An opposed merge (city-map.ts `twoWay`: two members facing more than its
     // TWO_WAY_MIN_DEG apart, two trams of one line passing at a stop) keeps
     // its one pill and gets the triangle fore and aft along the first member's
@@ -1049,9 +1079,23 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // closes at 16.5 because the rail under a tram says which way it faces,
     // but no rail can say which way a pair going both ways is heading, so the
     // arrows stay for as long as the two marks stay merged.
-    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE, s, alpha, blocks),
-    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, PILL_ZOOM, undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), PILL_ZOOM, s, p, inks, mark, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks, pillsYield),
+    // On a strip (pillsYield) the own name must not lie under a hub pill standing on the place: an unseen
+    // copy of it, above the pills, is placed before them, and a pill that would cover it yields. Everywhere
+    // else it places nothing, and decision 19's name under the pills is the only one.
+    {
+      id: LAYERS.screenStopGuard,
+      type: 'symbol',
+      source: SOURCES.screenStop,
+      filter: pillsYield ? ['has', 'name'] : NEVER,
+      layout: {
+        'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, ...nameAnchor(false, 0.9), 'text-max-width': 9,
+        'text-allow-overlap': true, 'text-ignore-placement': false,
+      },
+      paint: { 'text-opacity': 0 },
+    },
     // The selected vehicle's nose keeps the general nose's band (design D):
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing

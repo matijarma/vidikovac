@@ -58,7 +58,15 @@ export interface NearbySectionOptions {
   cap: number;
   /** The section's id prefix, so two lists on one page (the desk's Sada and Karta) never share an id. */
   id: string;
+  /**
+   * Draw this many reserved rows instead of `rows`, the section busy (city/feed.ts nearbyHeld): the head stands as
+   * it will, and the rows arrive into the room they take rather than one source at a time.
+   */
+  reserve?: number;
 }
+
+/** One reserved row: the height of a row, nothing to read. */
+export const RESERVED_NEARBY_ROW = '<li class="nearby-row-empty" aria-hidden="true"><span class="skeleton"></span></li>';
 
 /**
  * The list with its head, "U blizini · 2 km · ~15 min" (nearbyHead, the
@@ -72,9 +80,10 @@ export function nearbySectionMarkup(i18n: I18n, rows: readonly NearbyRow[], radi
     ? `<span class="nearby-head-title">${e(head)}</span>`
     : `<span class="nearby-head-title">${e(head.slice(0, cut))}</span><span class="visually-hidden"> · </span><span class="nearby-pill">${e(head.slice(cut + 3))}</span>`;
   const headId = `${o.id}-nearby-head`;
-  return `<section class="nearby" data-testid="nearby" data-key="nearby" aria-labelledby="${a(headId)}">`
+  const held = o.reserve !== undefined;
+  return `<section class="nearby" data-testid="nearby" data-key="nearby" aria-labelledby="${a(headId)}"${held ? ' aria-busy="true"' : ''}>`
     + `<h3 class="nearby-head" id="${a(headId)}" data-testid="nearby-head">${headHtml}</h3>`
-    + `<ol class="nearby-rows" data-testid="nearby-rows">${nearbyRowsMarkup(i18n, rows, o.cap, now)}</ol></section>`;
+    + `<ol class="nearby-rows" data-testid="nearby-rows">${held ? RESERVED_NEARBY_ROW.repeat(o.reserve!) : nearbyRowsMarkup(i18n, rows, o.cap, now)}</ol></section>`;
 }
 
 /**

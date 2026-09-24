@@ -54,34 +54,34 @@ app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(s.appName)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(title)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(body)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(s.notice.setupAgain)
-app/src/kiosk.ts:355 #renderAlert → alertBox.textContent = text ?? ''
-app/src/kiosk.ts:365 #paintClock → dateEl.textContent = date
-app/src/kiosk.ts:368 #paintClock → clockEl.textContent = time
-app/src/kiosk.ts:381 #clearPairingNotice → pairingNote.textContent = ''
-app/src/kiosk.ts:392 #setText → node.textContent = value
-app/src/kiosk.ts:398 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
-app/src/kiosk.ts:399 #sentenceOverflows → setText(probeText, sentence.text)
-app/src/kiosk.ts:417 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
-app/src/kiosk.ts:418 #paintSentence → setText(sentenceText, next.text)
-app/src/kiosk.ts:542 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
-app/src/kiosk.ts:542 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
-app/src/kiosk.ts:566 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
-app/src/kiosk.ts:567 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
-app/src/kiosk.ts:571 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
-app/src/kiosk.ts:732 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:1033 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1034 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1035 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1037 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1047 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1048 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1052 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1070 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1071 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1071 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1156 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1163 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1313 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:358 #renderAlert → alertBox.textContent = text ?? ''
+app/src/kiosk.ts:368 #paintClock → dateEl.textContent = date
+app/src/kiosk.ts:371 #paintClock → clockEl.textContent = time
+app/src/kiosk.ts:384 #clearPairingNotice → pairingNote.textContent = ''
+app/src/kiosk.ts:395 #setText → node.textContent = value
+app/src/kiosk.ts:401 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
+app/src/kiosk.ts:402 #sentenceOverflows → setText(probeText, sentence.text)
+app/src/kiosk.ts:426 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
+app/src/kiosk.ts:427 #paintSentence → setText(sentenceText, next.text)
+app/src/kiosk.ts:551 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
+app/src/kiosk.ts:551 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
+app/src/kiosk.ts:575 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
+app/src/kiosk.ts:576 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
+app/src/kiosk.ts:580 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
+app/src/kiosk.ts:741 #paintMap → vetExternal('name', stop.name, 'row')
+app/src/kiosk.ts:1057 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1058 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1059 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1061 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1071 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1072 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1076 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1094 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1184 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1191 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1365 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -122,17 +122,17 @@ app/src/kiosk/front.ts:538 #panelMarkup → escapeHtml(panel.kicker)
 app/src/kiosk/front.ts:538 #panelMarkup → externalHtml('summary', panel.meta)
 app/src/kiosk/front.ts:541 #panelMarkup → escapeHtml(panel.note)
 app/src/kiosk/front.ts:542 #panelMarkup → escapeHtml(panel.credit)
-app/src/kiosk/invitation.ts:39 #cardMarkup → e(s.invitation.lead)
-app/src/kiosk/invitation.ts:40 #cardMarkup → e(s.invitation.qrWaiting)
-app/src/kiosk/invitation.ts:47 #mountInvitation → e(s.handheld.info)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.tram)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.bikes)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.culture)
-app/src/kiosk/invitation.ts:63 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:1006 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:1006 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:1007 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:1008 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/invitation.ts:55 #cardMarkup → e(s.invitation.lead)
+app/src/kiosk/invitation.ts:56 #cardMarkup → e(s.invitation.qrWaiting)
+app/src/kiosk/invitation.ts:63 #mountInvitation → e(s.handheld.info)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.tram)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.bikes)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.culture)
+app/src/kiosk/invitation.ts:79 #mountInvitation → note.textContent=s.nearby.outageNote
+app/src/kiosk/mapview.ts:1031 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:1031 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:1032 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:1033 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
@@ -244,26 +244,26 @@ app/src/kiosk/place-field.ts:161 #rowMarkup → externalHtml('summary', meta)
 app/src/kiosk/place-field.ts:179 #render → vetExternal(row.kind === 'stop' ? 'name' : 'address', rowLabel(s, row), 'row')
 app/src/kiosk/place-field.ts:248 #choose → vetExternal(next.kind === 'address' || next.address ? 'address' : 'name', label, 'row')
 app/src/kiosk/place-field.ts:251 #choose → input.value = chosenText
-app/src/kiosk/settings.ts:340 #settingsMarkup → escapeHtml(label)
-app/src/kiosk/settings.ts:343 #settingsMarkup → escapeHtml(s.settings.title)
-app/src/kiosk/settings.ts:344 #settingsMarkup → escapeHtml(s.settings.hint)
-app/src/kiosk/settings.ts:346 #settingsMarkup → escapeHtml(s.settings.close)
-app/src/kiosk/settings.ts:350 #settingsMarkup → escapeHtml(s.settings.placeChange)
-app/src/kiosk/settings.ts:353 #settingsMarkup → escapeHtml(s.settings.areaWhole)
-app/src/kiosk/settings.ts:360 #settingsMarkup → escapeHtml(s.settings.forget)
-app/src/kiosk/settings.ts:362 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
-app/src/kiosk/settings.ts:363 #settingsMarkup → escapeHtml(s.settings.forgetYes)
-app/src/kiosk/settings.ts:364 #settingsMarkup → escapeHtml(s.settings.forgetNo)
-app/src/kiosk/settings.ts:406 #showError → errorEl.textContent = text
-app/src/kiosk/settings.ts:407 #clearError → errorEl.textContent = ''
-app/src/kiosk/settings.ts:423 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
-app/src/kiosk/settings.ts:428 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
-app/src/kiosk/settings.ts:428 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
-app/src/kiosk/settings.ts:432 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
-app/src/kiosk/settings.ts:435 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
-app/src/kiosk/settings.ts:438 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
-app/src/kiosk/settings.ts:447 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
-app/src/kiosk/settings.ts:450 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
+app/src/kiosk/settings.ts:347 #settingsMarkup → escapeHtml(label)
+app/src/kiosk/settings.ts:350 #settingsMarkup → escapeHtml(s.settings.title)
+app/src/kiosk/settings.ts:351 #settingsMarkup → escapeHtml(s.settings.hint)
+app/src/kiosk/settings.ts:353 #settingsMarkup → escapeHtml(s.settings.close)
+app/src/kiosk/settings.ts:357 #settingsMarkup → escapeHtml(s.settings.placeChange)
+app/src/kiosk/settings.ts:360 #settingsMarkup → escapeHtml(s.settings.areaWhole)
+app/src/kiosk/settings.ts:367 #settingsMarkup → escapeHtml(s.settings.forget)
+app/src/kiosk/settings.ts:369 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
+app/src/kiosk/settings.ts:370 #settingsMarkup → escapeHtml(s.settings.forgetYes)
+app/src/kiosk/settings.ts:371 #settingsMarkup → escapeHtml(s.settings.forgetNo)
+app/src/kiosk/settings.ts:413 #showError → errorEl.textContent = text
+app/src/kiosk/settings.ts:414 #clearError → errorEl.textContent = ''
+app/src/kiosk/settings.ts:430 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
+app/src/kiosk/settings.ts:435 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
+app/src/kiosk/settings.ts:435 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
+app/src/kiosk/settings.ts:439 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
+app/src/kiosk/settings.ts:442 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
+app/src/kiosk/settings.ts:445 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
+app/src/kiosk/settings.ts:454 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
+app/src/kiosk/settings.ts:457 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
 app/src/kiosk/start.ts:67 #setupErrorText → vetExternal('name', c.field, 'row')
 app/src/kiosk/start.ts:77 #previewText → vetExternal('name', place.name, 'row')
 app/src/kiosk/start.ts:91 #startMarkup → escapeHtml(s.appName)
@@ -313,32 +313,33 @@ app/src/kiosk/timeline.ts:695 #pharmacyDetailVariants → e(name)
 app/src/kiosk/timeline.ts:696 #pharmacyDetailVariants → e(call)
 app/src/layers/grad-sada.ts:57 #sentenceMarkup → e(kickerWord(ctx, sentence.kicker))
 app/src/layers/grad-sada.ts:57 #sentenceMarkup → e(sentence.text)
-app/src/layers/grad-sada.ts:62 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'))
-app/src/layers/grad-sada.ts:81 #mapBand → vetExternal('name', place.name, 'row')
-app/src/layers/grad-sada.ts:130 #renderGradSada → vetExternal('name', place.name, 'row')
-app/src/layers/grad-sada.ts:132 #renderGradSada → e(name)
-app/src/map/city-layers.ts:57 #cityLayers → 'text-field':['case',small,'',['get','badge']]
-app/src/map/city-layers.ts:66 #cityLayers → 'text-field':['get','title']
+app/src/layers/grad-sada.ts:63 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'))
+app/src/layers/grad-sada.ts:85 #mapBand → vetExternal('name', place.name, 'row')
+app/src/layers/grad-sada.ts:142 #renderGradSada → vetExternal('name', place.name, 'row')
+app/src/layers/grad-sada.ts:144 #renderGradSada → e(name)
+app/src/map/city-layers.ts:63 #cityLayers → 'text-field':['case',small,'',['get','badge']]
+app/src/map/city-layers.ts:77 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']]
 app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:817 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:817 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1719 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1720 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1721 #relabelControls → el.title = controlLabel
-app/src/map/external-features.ts:24 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
-app/src/map/external-features.ts:33 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
-app/src/map/external-features.ts:40 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
-app/src/map/external-features.ts:53 #linesToGeoJson → vetExternalMap('name', l.title, publicDisplay)
-app/src/map/external-features.ts:67 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
-app/src/map/external-features.ts:98 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/city-map.ts:828 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:828 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1780 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1781 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1782 #relabelControls → el.title = controlLabel
+app/src/map/external-features.ts:25 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
+app/src/map/external-features.ts:34 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
+app/src/map/external-features.ts:44 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
+app/src/map/external-features.ts:57 #linesToGeoJson → vetExternalMap('name', l.title, publicDisplay)
+app/src/map/external-features.ts:71 #networkToGeoJson → vetExternal('headsign', route?.short ?? shape.route, 'row')
+app/src/map/external-features.ts:102 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:616 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:822 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:862 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1019 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1038 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:641 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:852 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:892 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1049 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1068 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:1094 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:84 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:86 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
 app/src/motion/schema-map.ts:187 #refreshWords → legend.textContent = text
@@ -393,22 +394,22 @@ app/src/transport/view.ts:366 #routeDetailMarkup → vetExternal('headsign', rou
 app/src/transport/view.ts:500 #stopDetailMarkup → vetExternal('name', d.stop.name, 'row')
 app/src/transport/view.ts:539 #closureDescription → vetExternal('summary', summary, 'row')
 app/src/transport/view.ts:549 #closureDetailMarkup → vetExternal('name', item.title, 'row')
-app/src/transport/workspace.ts:488 #setSelection → searchInput.value = ''
-app/src/transport/workspace.ts:495 #setSelection → searchInput.value = query
-app/src/transport/workspace.ts:608 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
-app/src/transport/workspace.ts:621 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
-app/src/transport/workspace.ts:623 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
-app/src/transport/workspace.ts:624 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
-app/src/transport/workspace.ts:632 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
-app/src/transport/workspace.ts:633 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
-app/src/transport/workspace.ts:640 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
-app/src/transport/workspace.ts:648 #renderStatus → statusEl.textContent = line ?? ''
-app/src/transport/workspace.ts:705 #renderSheet → vetExternal(peekKind, peekText, 'row')
-app/src/transport/workspace.ts:746 #nearbySheet → vetExternal('name', placeNow().name, 'row')
-app/src/transport/workspace.ts:755 #resultTexts → vetExternal(kind, value ?? '', 'row')
-app/src/transport/workspace.ts:864 #clearSearch → searchInput.value = ''
-app/src/transport/workspace.ts:1105 #render → searchInput.value=query
-app/src/transport/workspace.ts:1146 #render → searchInput.value=query
+app/src/transport/workspace.ts:505 #setSelection → searchInput.value = ''
+app/src/transport/workspace.ts:512 #setSelection → searchInput.value = query
+app/src/transport/workspace.ts:642 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
+app/src/transport/workspace.ts:655 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
+app/src/transport/workspace.ts:657 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
+app/src/transport/workspace.ts:658 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
+app/src/transport/workspace.ts:666 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
+app/src/transport/workspace.ts:667 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
+app/src/transport/workspace.ts:674 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
+app/src/transport/workspace.ts:682 #renderStatus → statusEl.textContent = line ?? ''
+app/src/transport/workspace.ts:739 #renderSheet → vetExternal(peekKind, peekText, 'row')
+app/src/transport/workspace.ts:780 #nearbySheet → vetExternal('name', placeNow().name, 'row')
+app/src/transport/workspace.ts:789 #resultTexts → vetExternal(kind, value ?? '', 'row')
+app/src/transport/workspace.ts:898 #clearSearch → searchInput.value = ''
+app/src/transport/workspace.ts:1140 #render → searchInput.value=query
+app/src/transport/workspace.ts:1181 #render → searchInput.value=query
 shared/kiosk/sentence.ts:122 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
 shared/kiosk/sentence.ts:224 #decodeTyped → externalText('headsign', value, { surface: 'header' })
 shared/kiosk/sentence.ts:249 #decodeRegister → externalText(type, value, { surface: 'header' })

@@ -31,7 +31,7 @@ describe('statusLine', () => {
   it('uses the source’s own time when it has one and says fetched otherwise', () => {
     expect(statusLine(hr, snap({ sourceUpdatedAt: '2026-09-11T12:30:00Z' }))).toBe('podaci od 14:30');
     expect(statusLine(hr, snap())).toBe('dohvaćeno 14:31');
-    expect(statusLine(hr, snap({ status: 'stale', sourceUpdatedAt: '2026-09-11T12:30:00Z', sources: { 'HRT vijesti': { status: 'down', itemCount: 0 } } }))).toBe('podaci od 14:30 · izvor trenutačno ne odgovara · Ne odgovara: HRT vijesti');
+    expect(statusLine(hr, snap({ status: 'stale', sourceUpdatedAt: '2026-09-11T12:30:00Z', sources: { 'HRT vijesti': { status: 'down', itemCount: 0 } } }))).toBe('podaci od 14:30 · izvor trenutačno ne odgovara · Bez odgovora: HRT vijesti');
   });
 });
 

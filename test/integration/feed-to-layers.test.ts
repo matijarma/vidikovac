@@ -148,7 +148,7 @@ describe('every layer renders the real feed output', () => {
     const rows = [...body.querySelectorAll('[data-testid=assembly-point]')];
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(clean(row.querySelector('.row-title'))).not.toBe('');
-    expect(clean(body)).toMatch(/Na popisu je \d+ mjesta/);
+    expect(clean(body)).toMatch(/Broj mjesta na popisu: \d+\./);
   });
 
   it('renders every layer without a single unavailable field', () => {

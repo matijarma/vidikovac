@@ -310,7 +310,7 @@ Sada), `064b42b` (ljuska), `90fec50` (kiosk), `6a390a1` (e2e), `53bf21f` i
   na 1920 (3 × 2) i četiri na 1366 (2 × 2), svaka veličine svog sadržaja (oznaka
   na visini kontrole, krajevi linije u dva retka, riječ stanja u boji uloge, glif
   s brojem vozila), složene od vrha stupca uz kartu; traka radova s nulom nestaje
-  i kad je kopija zastarjela; Večeras su redovi s tankim crtama, sljedeći s
+  i kad je kopija zastarjela; Večeras su retci s tankim crtama, sljedeći s
   ljubičastom crtom; točke prizora 10 px; kod na kartici s prigušenom srednjom
   točkom („ABCD·EFG0”) i trakom vremena papir na naglasku; sigurnosna traka u
   jednom redu: štit i „Sigurnost”, presuda s glifom kao gumb koji otvara
@@ -456,7 +456,7 @@ Kako se kapija vozi u radnom stablu: vlastita dva `wrangler dev` poslužitelja n
 Spojeno u `main` 16. rujna 2026. u 04:27 UTC (`6f73559`, spojno stablo `merge-twin` iz `origin/main`, glava grane `a19b49c`); Workers Builds je objavio inačicu `225e2715` u 04:28 UTC. Prije spajanja je na spremnik `vidikovac-feed` postavljeno pravilo isteka `expire-zet-rt-7d` (prefiks `zet-rt/`, sedam dana), jer objava pada na nepoznatom spremniku. Od poznatog preklapanja s uklanjanjem HRT-a, Sljemena i vijesti na `main` u sukob su doista otišla samo dva mjesta: `app/src/map/city-map.ts` (`MapPoint` zadržava `place`/`props` s `main` povrh grananog `extends Omit<Fix, 'at'>`) i `docs/izvori.md` (tekst s `main`, predmemorija teasera 5 s s grane); `worker/feed/schema.ts`, `registry.ts`, `test/docs/docs.test.ts` i `test/feed/cache.workers.test.ts` spojili su se sami i pročitani su redom da to potvrde.
 
 Nakon objave, provjera u proizvodnji. Prvi stupac rezultata upisan je 16. rujna oko 04:40 UTC,
-dvanaest minuta nakon objave; to je prvi pogled, a ne mjerenje od 24 h koje redci traže.
+dvanaest minuta nakon objave; to je prvi pogled, a ne mjerenje od 24 h koje retci traže.
 
 | Provjera | Kako | Rezultat |
 |---|---|---|
@@ -563,7 +563,7 @@ sintetičkim hodnikom (isti simulator kao `test/motion/engine-envelope.test.ts`)
 jezgra (`scripts/replay-core.ts`) čita okvire ispravno, drži red na dijeljenom kolosijeku, ne
 vraća plan unatrag i pogađa 30 s unaprijed unutar 60 m pri p95.
 
-### Redci ocjenjivača i simulacija klijenta (F7)
+### Retci ocjenjivača i simulacija klijenta (F7)
 
 Krug F dodaje istoj tablici pet mjera. Sve se mjere nad istim snimljenim danom prije ijedne
 promjene pogona i mjere ponovno nakon svake, pa je napredak broj, a ne dojam. Definicije:
@@ -866,7 +866,7 @@ Isti okviri, prije (F8) i poslije (F8b):
   što je upravo pitanje koje usmjerivač postavlja. Geometrijskih 40 m ostaje netaknuto: ono
   odgovara na „pokraj kojih perona prolazi ova tračnica" i mora ostati usko.
 - **Cijena je mala i posvuda jednaka.** Sedam novih putanja znači sedam uzoraka koje motor sada
-  planira po vlastitoj geometriji umjesto po tuđoj, pa se svi redci pomiču za pola postotka do
+  planira po vlastitoj geometriji umjesto po tuđoj, pa se svi retci pomiču za pola postotka do
   nekoliko postotaka; vidljiva križanja +6,3 % najveći su pomak. Ono što je moralo ostati --
   poznati smjer 100 % i nepoznata vožnja 0 % -- ostalo je.
 - **Ostao je jedan pravi nedostatak grafa, i sada je izmjeren.** Devet skokova između dva
@@ -1004,7 +1004,7 @@ Isti okviri, prije (F8b) i poslije (F8c), uz stupac F8 za mjeru cijelog kruga:
 - **Svaki redak kvalitete se popravio, i F8c poništava cijenu koju je F8b platio.** Regresije
   među planovima vratile su se na razinu F8 (58.944 prema 58.919), slike unatrag i preticanja
   pale su *ispod* F8, vidljiva križanja vratila su se na +0,6 % od F8 umjesto +6,3 %. Razlog je
-  isti u svim redcima: sedam planova koji su vozili 1,5 do 2,7 km oko ugla koji tramvaj ne vozi
+  isti u svim retcima: sedam planova koji su vozili 1,5 do 2,7 km oko ugla koji tramvaj ne vozi
   više to ne rade, pa ne ostavljaju fantomske tramvaje na bridovima koje dijele druge linije,
   gdje zakon redoslijeda onda steže prave.
 - **Sedam od devet skokova je popravljeno, dva nisu i to je zapisano.** Linija 13 sada skreće iz
@@ -1039,7 +1039,7 @@ stupca iz istoga sata i s istoga diska. Polazni prolaz vratio je F8c-ove brojke 
 je mjera opterećenja stroja, a ne koda.
 
 Blizanac u ovoj cjelini nije mijenjan: `laws.ts` samo uvozi `edgeAt` i `mapArc` iz nove
-datoteke `shared/motion/order.ts`. Svi redci koji mjere blizanca zato moraju biti — i jesu —
+datoteke `shared/motion/order.ts`. Svi retci koji mjere blizanca zato moraju biti, i jesu,
 identični do znamenke: ocjena unatrag sva tri horizonta, regresije među planovima (58.944),
 prekršaji redoslijeda prema očitanjima (2.784), fantomska stajališta (0 od 11.004), preticanja
 (3.304), vožnje unatrag u planu (0), ustupci (659), poznati smjer i nepoznata vožnja. Promijenio
@@ -1124,7 +1124,7 @@ Isti okviri, prije (`9e91716`, ponovno izmjereno) i poslije (F9):
 - **Držanja je nešto više i kraća su.** 8,9 % naspram 8,1 % slika, prosječno 5,0 s umjesto 5,4 s:
   oznaka koja bi prije krenula unatrag sada pričeka, a kako pričeka odmah, čeka kraće.
 - **Otkucaj blizanca nije se usporio zbog blizanca.** Njegov kod nije mijenjan, a svi njegovi
-  redci su identični do znamenke; p50 raste jer u istom procesu, između otkucaja, sada radi skuplja
+  retci su identični do znamenke; p50 raste jer u istom procesu, između otkucaja, sada radi skuplja
   simulacija klijenta (cijeli prolaz 8 min 26 s naspram 5 min 42 s), pa čišćenje smeća pada i
   unutar mjerenog otkucaja. Prva inačica stezaljke radila je po jednu mapu, dva skupa i niz
   ključeva po slici i dala je 10 min 26 s uz p50 44,66 ms; radni skup je nakon toga premješten na
@@ -1802,14 +1802,14 @@ na kandidatu D2.
 | S | tramvaj koji šuti dulje od 60 s: najveći pomak objavljenog položaja preko mjesta zadržavanja na idućem posluženom stajalištu; uz redak se bez praga ispisuje put prijeđen tijekom tišine do mjesta zadržavanja | `ghostAdvance.beyondHoldM.max` (put do mjesta zadržavanja `ghostAdvance.glideM.max`) | nije mjereno | nije mjereno na cijelom danu; uzorak od 17:15 do 17:44: 989,7 m | nije mjereno | nije mjereno na cijelom danu; uzorak od 17:15 do 17:44: 0 m | ≤ 50 m |
 | I | preuzimanja staze druge linije ili druge inačice iste linije, a stazom ne vozi nijedna usluga viđena u snimci toga dana | `serviceFilter.adoptionsWithoutService` | nije mjereno | nije mjereno na cijelom danu; uzorak od 17:15 do 17:44: 15 | nije mjereno | nije mjereno na cijelom danu; uzorak od 17:15 do 17:44: 0 | 0 |
 
-Uz ocjenjivač vrijede reci kapije kruga F na 20. rujna (`node scripts/replay-twin.mjs
+Uz ocjenjivač vrijede retci kapije kruga F na 20. rujna (`node scripts/replay-twin.mjs
 <direktorij-okvira>`): slike unatrag 0, obrati 0, preticanja 0 (polazište 5), vidljiva križanja
 najviše 2.478 (pola polaznih 4.956; stalni cilj ostaje 0) i otkucaj p50 ispod 60 ms; na isporuci
 D1 redom 0, 0, 0, 1.552 i 26,79 ms. Rezultati vrijede samo ako se snimljene vožnje razrješuju
 prema isporučenom indeksu vožnji: nepoznatih vožnji (`servicesSeen['?'] / tramTrips`) smije biti
 najviše 1 % na svakom danu, a na D1 ih je 0,049 % i 0,145 %. Uzorak od 162 okvira
 (`npm run accept -- test/accept/wrong-turn.test.ts`) ima vlastiti preduvjet: `unknownTripShare`,
-udio tramvajskih otkucaja s oznakom vožnje izvan isporučenog indeksa, ispod 0,02 (na D1 0,0007). Reci tog uzorka i vrijednosti na isporukama nalaze se u odjeljku „Prihvaćanje, companion
+udio tramvajskih otkucaja s oznakom vožnje izvan isporučenog indeksa, ispod 0,02 (na D1 0,0007). Retci tog uzorka i vrijednosti na isporukama nalaze se u odjeljku „Prihvaćanje, companion
 2026-09”.
 
 `EVICT_S` je 180 s, a ne 120 s: u ponedjeljak 21. rujna 3.505 tišina iste vožnje trajalo je od 120
@@ -1825,7 +1825,7 @@ radna stabla `kiosk-prozor` / `kp-P1`…`kp-P4`, odluke i tumačenja u
 četiri usporedna radna stabla; ovaj odjeljak opisuje protokol provjere koji vlasnik čita nakon
 spajanja (val B) -- brojke i snimke iz vala A same po sebi nisu dovoljne jer ni jedno radno
 stablo samo ne vidi cijeli sastavljen zaslon. Rezultati ispod izmjereni su u valu B (16. 9. 2026.,
-grana `kiosk-prozor`, izvještaj `task-WB-report.md`); redci označeni „proizvodnja” popunjavaju se
+grana `kiosk-prozor`, izvještaj `task-WB-report.md`); retci označeni „proizvodnja” popunjavaju se
 nakon spajanja na `main`.
 
 ### Matrica snimanja
@@ -1847,7 +1847,7 @@ sam ga ne preokreće:
 | 3840 × 2160 | 4K: znak mora prestati rasti |
 | 2560 × 1080 | ultra široki: zoom ostaje 1, višak ide polju |
 | 1920 × 1200 | viši od nacrta: višak ide polju |
-| 390 × 844 | telefon, koji je nekad dobivao zid |
+| 390 × 844 | telefon, koji je nekad dobivao raspored javnog zaslona |
 
 Za nacrtanu veličinu (1920 × 1080) alatka dodatno snima par „3m” (ista slika pri
 `deviceScaleFactor 0.25`, svjetlo i tamno) i, na istoj stranici bez ponovnog učitavanja, jedan
@@ -1880,7 +1880,7 @@ pločica vozila (najveću brojku); kadar nakon 20 h čita 2 / 2 / 0 / 5 / 10 / 4
 Nijedna vrijednost ne prelazi dva retka ni dno svoje izjave; nijedan stupac se ne prelijeva. Živa
 prometna vrijednost u trenutku snimanja bila je dvoredna („13 rani 4 min · 6 rani 3 min”, prijelom
 samo na razdjelniku), pa 1920 × 1080 drži dvije izjave (R-KP22, donja granica); kadar nakon 20 h
-nudi zadnji polazak kao treću, koju na 1080p zidu ta dvoredna vrijednost skriva, dok je
+nudi zadnji polazak kao treću, koju na zaslonu 1080p ta dvoredna vrijednost skriva, dok je
 1920 × 1200 i telefon pokazuju. Zamrznuti sat (`page.clock`) ostavlja vozila bez svježih
 očitanja, pa ih kadar nakon 20 h ne crta -- artefakt alata, ne zaslona. Iznad nacrtanih veličina
 imena ulica prelaze osam (9 na 2560, 15 na 4K): razmak imena (R-KP17) izmjeren je na nacrtanom
@@ -1902,7 +1902,7 @@ karte, nema imena ulica ispod praga `roads_labels_major`).
 četvrti (KAPTOL, MARTIĆEVA, GORNJI GRAD, VOĆARSKO NASELJE) i u stupcu vrijednost prometne izjave u
 boji stanja („13 rani 4 min · 6 rani 3 min”) te „Amruševa”; QR i kod („MXQS · X1QJ”) čitaju se
 kao blok. Brojevi na pločama vozila raspoznaju se kao plave točke s brojem na granici čitljivosti;
-naslovi izjava (PROMET, ZATVORENO), kontekstni redci, imena ulica i atribucija ne natječu se s
+naslovi izjava (PROMET, ZATVORENO), kontekstni retci, imena ulica i atribucija ne natječu se s
 gornjim. Ništa drugo na slici nije čitljivo, što je i cilj.
 
 ### Pravila slaganja
@@ -1921,20 +1921,20 @@ najmanje dvije na 1920 × 1080 (tri kad je svaka vrijednost u jednom retku), naj
 1366 × 768 (dvije kad je prometna vrijednost u jednom retku), tri u portretu; imena ulica
 najviše 8 na svakoj veličini (R-KP17). Totem, čije polje nosi dvostruko tla sjever--jug, sam bi
 postavio 7--9 imena: kiosk zato širi razmak sudara imena (`text-padding`) u koraku s tlom koje polje
-pokazuje preko zidnog (`labelPadding` u `kiosk/mapview.ts`, 48 umjesto 24 pločastih piksela na
-totemu, 24 na zidu), čime je vlastito slaganje profila prije pločica vozila palo na 3 imena uz
-zidnih 6--8 (mjereno 16. 9. 2026.). Razmak sidara (`symbol-spacing`) nije poluga za taj broj: MapLibre
+pokazuje više nego vodoravni zaslon (`labelPadding` u `kiosk/mapview.ts`, 48 umjesto 24 pločastih piksela na
+totemu, 24 na vodoravnom zaslonu), čime je vlastito slaganje profila prije pločica vozila palo na 3 imena uz
+6--8 na vodoravnom zaslonu (mjereno 16. 9. 2026.). Razmak sidara (`symbol-spacing`) nije poluga za taj broj: MapLibre
 sidri svaku cestu jednom po pločici bez obzira na razmak (360, 473, 745 i 1100 dali su isto 7--8
 imena na totemu).
 
 **Rezultat (val B):** `gate.sh unit` -- `UNIT STAGES PASSED` (`gate-logs/gate-20260916-171723.log`:
 typecheck, vitest 179 datoteka / 2534 testova u oba projekta, build). `e2e/kiosk-layout.spec.ts`
 16 testova: okvir na 1920 × 1080 drži 2 cijele izjave uz dvorednu prometnu vrijednost i 3 uz
-jednoredne, na 1366 × 768 po 2 (granice 1 / 2), na 1080 × 1920 3 i 3; redci oznaka prometa 2 / 1 /
+jednoredne, na 1366 × 768 po 2 (granice 1 / 2), na 1080 × 1920 3 i 3; retci oznaka prometa 2 / 1 /
 2; `data-major-labels` (prvi otisak pri `ready`, tj. slaganje profila prije pločica vozila / nakon
 jednog ciklusa dohvata, popravak 1, 19:05): 4--7 / 2 na 1920 × 1080, 4 / 0 na 1366 × 768, 3 / 0 na
 1080 × 1920 -- brojka pada kad pločice vozila zauzmu sidra, ne raste (nula je stvarno brojanje);
-prije proširenja razmaka sudara totem je sam postavljao 7--9 (jedanput 9 preko granice), zid 6--8.
+prije proširenja razmaka sudara totem je sam postavljao 7--9 (jedanput 9 preko granice), vodoravni zaslon 6--8.
 Jedinični stupanj ponovljen je na konačnom HEAD-u popravka 1 (naziv dnevnika u
 `task-WB-report.md`). Preglednički stupanj (`gate.sh browser`,
 `gate-logs/gate-20260916-174346.log`): Playwright 91 testova u oba projekta -- 86 zelenih i pet
@@ -1959,7 +1959,7 @@ Osam mogućih izjava u stupcu (`app/src/kiosk/say.ts`, P2): prometna presuda, po
 zadnji polazak (od 20 sati), ZET-ova prometna obavijest, najava sjednice Skupštine, radovi i
 kvartovske novosti -- najviše tri istovremeno, poredane po važnosti sada. Workerov teaser
 (`/api/teaser`, ova radna cjelina): kutija vozila 3,8 km oko stajališta (`TEASER_BOX_HALF_M`
-1900 m), otvoreni redci `dogadanja` poredani (sjednice, ZET promet, pa ostatak) i ograničeni
+1900 m), otvoreni retci `dogadanja` poredani (sjednice, ZET promet, pa ostatak) i ograničeni
 na 20.
 
 **Rezultat (proizvodnja): popunjava kontrolor nakon spajanja na `main`** -- živi `kiosk.css` nosi
@@ -1988,7 +1988,7 @@ Uzorak okvira za redak U1
 opisan je u
 [`test/fixtures/frames/2026-09-21-1715-1744/README.md`](../test/fixtures/frames/2026-09-21-1715-1744/README.md):
 162 okvira ZET-ova GTFS-RT-a samo s tramvajima, od 21. rujna 2026., od 17:15 do 17:44, isključivo
-testni podatak repozitorija. Reci A1 do A12 čitaju ključeve iz tablice „Kapija paketa WP0” iznad,
+testni podatak repozitorija. Retci A1 do A12 čitaju ključeve iz tablice „Kapija paketa WP0” iznad,
 gdje su i polazišta prije WP0.
 
 README uzorka generira `scripts/frames-sample.mjs`: `npm run frames:sample -- --readme-only
@@ -2027,14 +2027,14 @@ uzorku A na 1,33 i A′ na 0, a E, G i H ostaju crveni (`d52cc47b`).
 | A17 | WP0 | svaki doslovni ključ i18n postoji u oba kataloga; QR u dijalogu dijeljenja ima hrvatski opis | `npm test -- test/app/dashboard.test.ts test/app/i18n-keys.test.ts` | nedostaje 0 ključeva | §16.5 | 80 od 80 / – | `92950b17`: cijeli `npm test` zelen; `d52cc47b`: `a-keys` zelen | prolazi |
 | A18 | WP0 | atribucija zatvaranja prometnica bez sata i bez „posljednja izmjena” | `npm test -- test/app/attribution.test.ts test/open/attribution.test.ts test/app/izvori.test.ts` | 0 | §16.5 | 114 od 114 / – | `92950b17`: cijeli `npm test` zelen; `d52cc47b`: `b-templates` i `b-rendered` zeleni | prolazi |
 | A19 | WP0 | na zaslonu nema kontrole za završetak prikaza | `npm test -- test/app/kiosk.test.ts test/app/kiosk-css.test.ts`, `npm run e2e -- e2e/pairing.spec.ts` | 0 | §16.5 | 120 od 120, uparivanje 3 od 3 / – | `725991c`: `kiosk-layout` 7 od 7 (uz `de1c232a`); `48cb09f`: uparivanje 3 od 3; `d-presentation` i `d-presentation-source` zeleni | prolazi |
-| U1 | WP0, WP6 | uzorak od 162 okvira, prvi stupanj | `npm run accept -- test/accept/wrong-turn.test.ts` | preduvjeti: 162 okvira, nepoznate vožnje < 0,02; A i A′ ≤ 5; B, C, D, E, F, I 0; G 0 uz p95 < 50 m; H < 60 m; U ≤ 3 %; S ≤ 50 m | §16.2 | kao kandidat D2 (isti motor) | `725991c` (D2): nepoznate 0,0007; A 10,67; A′ 18,8; E 1; G 34 uz p95 385 m; H 173 m; ostali reci 0; `d52cc47b` (izdanje, graphHash `c7e6e555d9845ffd`): 162 okvira, nepoznate 0,0007; A 1,33; A′ 0; B, C, D, F, I 0; U 1,96 %; S 0 m; E 1; G 6 uz p95 85,8 m; H 611 m | ne prolazi (4 retka: E, G, p95 od G, H) |
+| U1 | WP0, WP6 | uzorak od 162 okvira, prvi stupanj | `npm run accept -- test/accept/wrong-turn.test.ts` | preduvjeti: 162 okvira, nepoznate vožnje < 0,02; A i A′ ≤ 5; B, C, D, E, F, I 0; G 0 uz p95 < 50 m; H < 60 m; U ≤ 3 %; S ≤ 50 m | §16.2 | kao kandidat D2 (isti motor) | `725991c` (D2): nepoznate 0,0007; A 10,67; A′ 18,8; E 1; G 34 uz p95 385 m; H 173 m; ostali retci 0; `d52cc47b` (izdanje, graphHash `c7e6e555d9845ffd`): 162 okvira, nepoznate 0,0007; A 1,33; A′ 0; B, C, D, F, I 0; U 1,96 %; S 0 m; E 1; G 6 uz p95 85,8 m; H 611 m | ne prolazi (4 retka: E, G, p95 od G, H) |
 | Z1 | WP1 | prvi pogled zaslona u osam prizora, a za `peak1745` i uspravno | `npm run accept:e2e -- e2e/accept/wall.spec.ts` | `INSTRUCTION` 0, `COUNT` 0, `UNCLASSIFIED` 0; `EMPTY` i `DISCLAIMER` 0 u bočnom stupcu | §16.3 | – | `725991c`: 0/0/0 u svih 9 prizora (8 vodoravno i `peak1745` uspravno); specifikacija zaslona 9 od 9 | prolazi |
-| Z2 | WP1 | polasci u 300 očitanja kroz deset minuta | kao Z1 | 1 do 3 u svakom očitanju, i na zaslonu za cijeli grad | §16.3, [O-65] | – | `725991c`: 1 do 3 u svakom od 300 očitanja u svih 8 prizora (`lastTrams2240` 1, `afterLast0045` 2); na 1366 × 768 u četiri noćna prizora rezervirani reci istisnu sve polaske i sami se režu (`data-fit-overflow` 1, `readable-city` :161 i `redesign` :59 crveni); uživo 24. 9. od 00:03 do 00:15 bez polaska u 6 od 300 očitanja | ne prolazi: prizori na 1920 × 1080 prolaze; dvije izmjerene greške proizvoda (noćni raspored na 1366 × 768 i jedno noćno mjesto za polazak uživo) isporučene su kao ostatak, popravak je na grani `lane/w-fix8` |
+| Z2 | WP1 | polasci u 300 očitanja kroz deset minuta | kao Z1 | 1 do 3 u svakom očitanju, i na zaslonu za cijeli grad | §16.3, [O-65] | – | `725991c`: 1 do 3 u svakom od 300 očitanja u svih 8 prizora (`lastTrams2240` 1, `afterLast0045` 2); na 1366 × 768 u četiri noćna prizora rezervirani retci istisnu sve polaske i sami se režu (`data-fit-overflow` 1, `readable-city` :161 i `redesign` :59 crveni); uživo 24. 9. od 00:03 do 00:15 bez polaska u 6 od 300 očitanja | ne prolazi: prizori na 1920 × 1080 prolaze; dvije izmjerene greške proizvoda (noćni raspored na 1366 × 768 i jedno noćno mjesto za polazak uživo) isporučene su kao ostatak, popravak je na grani `lane/w-fix8` |
 | Z3 | WP1 | rečenica u zaglavlju | kao Z1 | 1 do 80 znakova, bez prelijevanja i trotočja; najmanje 3 različite i nijedna uzastopno ponovljena (lokalni predložak); u produkciji nijedna doslovno ponovljena unutar deset minuta | §16.3, §12 | – | `725991c`: najmanje 8 različitih, 0 uzastopnih ponavljanja, najdulja 51 znak, bez prelijevanja i trotočja; uživo nijedno doslovno ponavljanje unutar 600 s; izmjene kraće od 20 s: `lastTrams2240` 8,2 s, uživo 4,0 s, 5,9 s i 10,5 s | prag retka prolazi; kratke izmjene (ritam od 20 s) crvene su i isporučene kao ostatak, popravak je na grani `lane/w-fix8` |
 | Z4 | WP1 | „U blizini” i kartica s QR-om | kao Z1 | zaglavlje odgovara `/^U blizini · \d+(,\d)? km · ~\d+ min$/`; najviše jedan redak sunca; svaki redak nosi `data-when` ili `data-always`; uvod točno „Skeniraj za 10 minuta grada.”; QR ≥ 240 px | §16.3, [O-68] | – | `725991c`: zaglavlje, uvod i mjesto u redu u svih 9 prizora; najviše 1 redak sunca; QR 240 px | prolazi |
 | Z5 | WP1, WP3 | na zaslonu nema upravljanja | kao Z1, `npm run accept -- test/accept/trust.test.ts -t d-controls` | 0 kontrola osim marke i QR-a; Postavke samo držanjem marke 900 ms; podnožje bez HH:MM | §16.3, §16.5 | – | `725991c`: 0 kontrola u prvom očitanju i u svih 300 u svakom prizoru; Postavke samo držanjem od 900 ms u 8 prizora; podnožje bez HH:MM; `d-controls-invitation` i `d-controls-presentation` zeleni (`10ed458`) | prolazi |
-| Z6 | WP1 | mirno kretanje | kao Z1 | najviše 2 promjene DOM-a u minuti mirovanja; reci zadržavaju svoje čvorove | §16.3 | – | `725991c`: 0 u svakoj minuti mirovanja u svih 8 prizora; uživo 4, 0, 4, 2, 4, 7, 4, 10, 14 i 4 u minuti (jedno noćno mjesto za polazak mijenja vožnje) | prizori prolaze; uživo crveno, isporučeno kao ostatak, popravak je na grani `lane/w-fix8` |
-| Z7 | WP1 | prizori zadnjeg i prvog polaska, noći, jutra i prekida ZET-a | kao Z1 | `lastTrams2240`: reci `last` i `first`; `afterLast0045`: nijedan `last` s prošlim vremenom i nijedno /zadnji/ kad su svi zadnji tramvaji otišli; `night0430`: tamna tema, `first` i `pharmacy`; `morning0745`: najmanje 1 živo odbrojavanje; `outage0800`: `data-feed` nije `live`, bez oznaka vozila, 0 živih redaka, `map-note` jednom, `data-markers` > 0, nijedan naslov /nedostup/ | §16.3, [O-41] | – | `725991c`: `lastTrams2240` `first` i `last`; `afterLast0045` `first` i 0 prošlih `last`; `night0430` `first` i `pharmacy`; `outage0800` markeri 1 i zum 13,17 od prvog očitanja, izvor nedostupan, 0 oznaka i 0 živih redaka, `map-note` jednom, bez /nedostup/; specifikacija prolazi i `morning0745` i `midday1230` | prolazi |
+| Z6 | WP1 | mirno kretanje | kao Z1 | najviše 2 promjene DOM-a u minuti mirovanja; retci zadržavaju svoje čvorove | §16.3 | – | `725991c`: 0 u svakoj minuti mirovanja u svih 8 prizora; uživo 4, 0, 4, 2, 4, 7, 4, 10, 14 i 4 u minuti (jedno noćno mjesto za polazak mijenja vožnje) | prizori prolaze; uživo crveno, isporučeno kao ostatak, popravak je na grani `lane/w-fix8` |
+| Z7 | WP1 | prizori zadnjeg i prvog polaska, noći, jutra i prekida ZET-a | kao Z1 | `lastTrams2240`: retci `last` i `first`; `afterLast0045`: nijedan `last` s prošlim vremenom i nijedno /zadnji/ kad su svi zadnji tramvaji otišli; `night0430`: tamna tema, `first` i `pharmacy`; `morning0745`: najmanje 1 živo odbrojavanje; `outage0800`: `data-feed` nije `live`, bez oznaka vozila, 0 živih redaka, `map-note` jednom, `data-markers` > 0, nijedan naslov /nedostup/ | §16.3, [O-41] | – | `725991c`: `lastTrams2240` `first` i `last`; `afterLast0045` `first` i 0 prošlih `last`; `night0430` `first` i `pharmacy`; `outage0800` markeri 1 i zum 13,17 od prvog očitanja, izvor nedostupan, 0 oznaka i 0 živih redaka, `map-note` jednom, bez /nedostup/; specifikacija prolazi i `morning0745` i `midday1230` | prolazi |
 | Z8 | WP2 | karta zaslona | kao Z1, `npm run e2e -- e2e/wall-map.spec.ts` | `data-unlabelled` 0; zum okvira unutar ±0,05 od `frameView`; autobusi u okviru; brojani krugovi BAJS, uz sivu nulu i prazan krug | §16.3, [O-71] | – | `725991c`: `data-unlabelled` 0 u svim prizorima; `wall-map` 3 od 3 na ponovljenom prolazu (u prvom prolazu pod opterećenjem 7 jednom crven, sam zelen) | prolazi |
 | Z9 | WP3 | postavljanje zaslona i mjesto | `npm run e2e -- e2e/screen-creation.spec.ts`, kao Z1 | `setup-preview` odgovara `/Na zaslonu: .* i [468] stajališta uokolo/`; `kiosk-context` nije prazan ni u jednom prizoru | §16.3, [O-65], [O-66] | – | `725991c`: `screen-creation` 1 od 1; `kiosk-context` nije prazan ni u jednom prizoru | prolazi |
 | Z10 | WP6 | čitljivost s 3 m na ploči 43″ 1080p | kao Z1, blok (G) | `legibilityViolations(page, WALL_1920)` prazan u svakom prizoru; pragovi u tablici „Tri metra” niže | §16.3 | – | `725991c`: `[]` u svih 9 prizora; oznaka polaska 40 px u svijetloj i 44 px u tamnoj temi | prolazi |
@@ -2042,10 +2042,10 @@ uzorku A na 1,33 i A′ na 0, a E, G i H ostaju crveni (`d52cc47b`).
 | Z12 | WP1 do WP4 | oznake `data-testid` iz ugovora §15.6 | `npm run accept -- test/accept/probes.test.ts` | 0 crvenih | §15.6 | – | `725991c`: zelenih 54, crvenih 13 (`stop-board` i 12 redaka paketa WP4, D3); `4848e36` i `d52cc47b`: 67 od 67 | prolazi |
 | Z13 | WP2 | dodir na zaslonu, samo čitanje | kao Z1, blok (F) | ploča polazaka unutar 5 s s 1 do 3 retka, sama se zatvara unutar 60 s, kamera se ne pomiče | §16.3 | – | `48cb09f`: 8 od 8 prizora, 3 retka u svakom, zatvara se sama, `data-zoom` od 13,17 do 13,21 bez promjene | prolazi |
 | M1 | WP4 | Sada na Pixelu 7 | `npm run accept:e2e -- e2e/accept/phone.spec.ts` | `INSTRUCTION` 0, `COUNT` 0; točno 3 polaska unutar 390 × 844; `sada-place` i `sada-sentence`; kartice „Sada · Karta · Još”; „Podijeli grad” vidljivo, jedan dodir otvara `share-code` | §16.4 | – | `48cb09f` i `4848e36`: 0/0/0 od 34 jedinice; točno 3 polaska unutar 390 × 844; mjesto „Trg bana J. Jelačića”, rečenica s natpisom; kartice „Sada · Karta · Još”; „Podijeli grad” vidljivo, kod nakon jednog dodira | prolazi |
-| M2 | WP4 | Karta i Još | kao M1 | najmanje 1 oznaka vozila unutar 2.000 ms bez dodira; 0 sklopivih izbornika; `data-unlabelled` 0; dodir na platno otvara `stop-board` s 3 retka u prozoru; pretraga najviše 3 dodira; Još vodi na „Događanja ovaj tjedan” | §16.4 | – | `4848e36`: prve oznake 1,20 do 1,80 s nakon `ready` u 17 hladnih otvaranja (opterećenje 0,5 do 1,4); red specifikacije bio je crven jer je njegovo čitanje s odgodom stalo nakon 1,3 do 1,7 s, što ispravlja `c63bdbe` (čitanje svakih 100 ms); 0 sklopivih izbornika, `data-unlabelled` 0, markeri najmanje 1 (`48cb09f`); dodir na platno i pretraga u 3 dodira otvaraju ploču s tri cijela vodeća retka (`companion-phone` 10 od 10), ali proba je brojila 12 redaka jer su i reci voznog reda nosili `data-kind=departure`, što ispravlja `d1bccc71` (reci voznog reda nose `data-kind=timetable`); Još vodi na „Događanja ovaj tjedan” s brojem | proizvod prolazi (izmjereno na `4848e36`); reci specifikacije za hladno otvaranje, dodir i pretragu nakon ispravaka još nisu ponovno izmjereni |
+| M2 | WP4 | Karta i Još | kao M1 | najmanje 1 oznaka vozila unutar 2.000 ms bez dodira; 0 sklopivih izbornika; `data-unlabelled` 0; dodir na platno otvara `stop-board` s 3 retka u prozoru; pretraga najviše 3 dodira; Još vodi na „Događanja ovaj tjedan” | §16.4 | – | `4848e36`: prve oznake 1,20 do 1,80 s nakon `ready` u 17 hladnih otvaranja (opterećenje 0,5 do 1,4); red specifikacije bio je crven jer je njegovo čitanje s odgodom stalo nakon 1,3 do 1,7 s, što ispravlja `c63bdbe` (čitanje svakih 100 ms); 0 sklopivih izbornika, `data-unlabelled` 0, markeri najmanje 1 (`48cb09f`); dodir na platno i pretraga u 3 dodira otvaraju ploču s tri cijela vodeća retka (`companion-phone` 10 od 10), ali proba je brojila 12 redaka jer su i retci voznog reda nosili `data-kind=departure`, što ispravlja `d1bccc71` (retci voznog reda nose `data-kind=timetable`); Još vodi na „Događanja ovaj tjedan” s brojem | proizvod prolazi (izmjereno na `4848e36`); retci specifikacije za hladno otvaranje, dodir i pretragu nakon ispravaka još nisu ponovno izmjereni |
 | M3 | WP4 | kraj sesije i stolno računalo | kao M1 | `session-ended` s poveznicama `/s/` i `/hitno`, 0 redaka, 0 izvoza, nijedan daljnji zahtjev `/api/data`; na 1440 × 900 Sada i Karta u prozoru; axe, ozbiljni i kritični nalazi 0 | §16.4, [O-62] | – | `4848e36`: `session-ended` s poveznicama `/s/` i `/hitno`, 0 redaka, 0 izvoza, nijedan zahtjev `/api/data` nakon kraja; zapis zahtjeva bio je crven samo na dva dohvata slika simbola karte (`/maps/sprites/light@2x.json` i `.png`, `net::ERR_ABORTED`) prekinuta u trenutku kraja, što ispravlja `e2d4724` (statične datoteke prekinute pri rušenju navode se, svaki zahtjev `/api/` ostaje nalaz); 1440 × 900: Sada i Karta u prozoru, `scrollWidth` najviše 1441 na 100, 125 i 200 %; axe: 0 ozbiljnih i kritičnih (`48cb09f`) | proizvod prolazi; red zapisa nakon ispravka još nije ponovno izmjeren |
-| J1 | WP5 | jezik, katalozi i dokumenti | `npm test`, `npm run accept -- test/accept/trust.test.ts` | popis nekorištenih ključeva prazan; hr i en isti ključevi; bez hrvatskih literala u `app/src/city/strings.ts`; pojmovnik iz §16.6 | §16.6, [O-66] | – | `92950b17`: cijeli `npm test` zelen, čuvari dokumenata 38 od 38; `d52cc47b`: svi reci paketa WP5 u `trust.test.ts` zeleni | prolazi |
-| V1 | WP6 | čuvari povjerenja i suvišnog teksta | `npm run accept -- test/accept/trust.test.ts` | 0 crvenih | §16.5 | – | `d52cc47b`: zelenih 36, crvenih 0; `4848e36`: zelenih 26, crvenih 9 (reci paketa WP5, prije spajanja paketa WP5) | prolazi |
+| J1 | WP5 | jezik, katalozi i dokumenti | `npm test`, `npm run accept -- test/accept/trust.test.ts` | popis nekorištenih ključeva prazan; hr i en isti ključevi; bez hrvatskih literala u `app/src/city/strings.ts`; pojmovnik iz §16.6 | §16.6, [O-66] | – | `92950b17`: cijeli `npm test` zelen, čuvari dokumenata 38 od 38; `d52cc47b`: svi retci paketa WP5 u `trust.test.ts` zeleni | prolazi |
+| V1 | WP6 | čuvari povjerenja i suvišnog teksta | `npm run accept -- test/accept/trust.test.ts` | 0 crvenih | §16.5 | – | `d52cc47b`: zelenih 36, crvenih 0; `4848e36`: zelenih 26, crvenih 9 (retci paketa WP5, prije spajanja paketa WP5) | prolazi |
 | V2 | WP6 | alati provjere mjere sami sebe | `npm test -- test/e2e test/scripts/grade-branches.test.ts test/app/font-metrics.test.ts` | zeleno | §16.1 | – | `92950b17`: zeleno (dio punog `npm test`) | prolazi |
 | V3 | WP6 | nijedna skripta ne stvara zaslon u produkciji | `AUDIT_KIOSK_URL= node scripts/audit-production.mjs`; `E2E_KIOSK_URL= node scripts/observe-production.mjs` | izlazni kod 2 i rečenica odbijanja prije ijednog zahtjeva; u promatraču nema `setup-create` ni `/api/screens` | §16.7 | odbijanje s izlaznim kodom 2, bez preglednika / – | čuvar nepromijenjen od D1; `test/scripts/observe-production.test.ts` zelen (`92950b17`) | prolazi |
 | V4 | WP6 | promatranje produkcije nakon isporuke, samo čitanjem | `E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10` | izlazni kod 0; najviše 1 iskorišten kod po površini, najmanje 12 s razmaka | §16.7 | još nije pokrenuto: za dan isporuke nije zabilježena adresa zaslona / – | produkcija, izdanje `d52cc47b`, 24. 9. od 02:30 do 02:43: izlazni kod 1, ne prolazi 6 od 56 primijenjenih pragova (`unlabelled`: jedno očitanje bez probe; `pills-drawn`: 2 očitanja bez oznaka vozila uz živi izvor; `legibility`: karta u uspravnom položaju bez popisa oznaka; `karta-pills`: prva oznaka 4.442 ms nakon `ready`; `karta-unlabelled`: 1 od 58 markera; `phone-stop-board`: ploča nakon pretrage nije u prozoru, a 3 od 3 polaska jesu); otisak: 0 stvorenih zaslona, po jedan iskorišten kod na telefonu i na stolnom računalu, najmanje 12 s razmaka; zapisi zahtjeva prazni | ne prolazi (6 pragova); otisak prolazi |
@@ -2060,10 +2060,10 @@ kao poruka čitatelju, svaki put nov) i popis teksta koji zaslon preskoči (`dat
 
 | Brojka | Gdje se mjeri | D1 | Poslije D1 |
 |---|---|---|---|
-| propuštene svježe probe, zaglavlje i reci | pregled svake runde, 30 ili 50 novih proba po površini | – (granica stiže s D2) | 19/50 i 30/50 (`d08cb9b`), 7/30 i 7/30 (`cd71e53`), 1/30 i 1/30 (`3f18896`), 1/30 i 4/30 (`10ed458`) |
+| propuštene svježe probe, zaglavlje i retci | pregled svake runde, 30 ili 50 novih proba po površini | – (granica stiže s D2) | 19/50 i 30/50 (`d08cb9b`), 7/30 i 7/30 (`cd71e53`), 1/30 i 1/30 (`3f18896`), 1/30 i 4/30 (`10ed458`) |
 | `data-skipped-text` na zaslonu | `npm run observe:production`: zbroj, najveća vrijednost u jednom očitanju i razlozi u `report.md` | nema popisa: isporuka D1 još ne piše atribut | `count:0` u svih 300 očitanja lokalnog promatranja od deset minuta (`08ce4bf`, 23. 9. od 15:41 do 15:53, živi ZET-ov feed) i u 300 očitanja uživo na `725991c` (24. 9. od 00:03 do 00:15); produkcija, izdanje `d52cc47b` (24. 9. od 02:30 do 02:43): 0 u svih 300 očitanja |
 
-Reci `e-obuhvat` i `e-registra` od grane `lane/v-F3` provjeravaju samo zaslon, kako §13 kaže za napomene
+Retci `e-obuhvat` i `e-registra` od grane `lane/v-F3` provjeravaju samo zaslon, kako §13 kaže za napomene
 #12 i #13: telefon zadržava napomenu o obuhvatu zaštite i rečenicu o registru, a provjera zaslona
 čita i zajednički opis mjesta onako kako ga zaslon iscrtava.
 
@@ -2105,7 +2105,7 @@ preglednikom i datumom; prazna ćelija znači da provjera još nije provedena.
 | R6 | zaslon na dodir: dugi pritisak na „Kaj ima?” u zaglavlju otvara Postavke, a ništa drugo ne reagira | | | | |
 | R7 | Safari i VoiceOver na Sada: mjesto, rečenica i tri polaska čitaju se tim redom; „Podijeli grad” ima naziv | | | | |
 | R8 | Chrome na Androidu i TalkBack na Sada: isto kao R7 | | | | |
-| R9 | smanjeno kretanje na zaslonu: reci i dalje ulaze i izlaze, bez animacije | | | | |
+| R9 | smanjeno kretanje na zaslonu: retci i dalje ulaze i izlaze, bez animacije | | | | |
 | R10 | tekst 200 % na telefonu: tri polaska i dalje u prvom pogledu | | | | |
 | R11 | promatranje produkcije: jedan termin na dan, samo vlasnikov zaslon (`E2E_KIOSK_URL`), najviše 5 iskorištenih kodova u minuti, nikad tuđi zaslon | | | | |
 | R12 | vlasnik čita svaki novi ili promijenjeni hrvatski tekst (razlika skenera i18n za svaku isporuku) [O-66] | | | | |

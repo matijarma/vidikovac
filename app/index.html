@@ -6,6 +6,7 @@
 <title>Kaj ima? · Manje zaslona. Više grada.</title>
 <meta name="description" content="Kaj ima? pretvara otvorene podatke Zagreba u javni zaslon i deset minuta grada na tvom uređaju. Bez računa, instalacije i oglasa.">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#f1f4f7">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="hr_HR">
@@ -53,13 +54,13 @@
       <div class="ld-hero-visual">
         <div class="ld-device ld-device-screen ld-hero-screen">
           <picture data-capture="kiosk">
-            <source media="(prefers-color-scheme: dark)" srcset="/landing/kiosk-hr-dark-720.webp 720w, /landing/kiosk-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 76vw, 94vw">
+            <source media="(prefers-color-scheme: dark)" srcset="/landing/kiosk-hr-dark-720.webp 720w, /landing/kiosk-hr-dark-1280.webp 1280w" sizes="(min-width: 960px) 76vw, 94vw" width="1920" height="1080">
             <img src="/landing/kiosk-hr-light-1280.webp" srcset="/landing/kiosk-hr-light-720.webp 720w, /landing/kiosk-hr-light-1280.webp 1280w" sizes="(min-width: 960px) 76vw, 94vw" width="1920" height="1080" fetchpriority="high" alt="Javni zaslon: mjesta na karti Zagreba, kultura, vrijeme i informacije o kvartu. Kod je skriven u ovom primjeru." data-capture-alt="kiosk">
           </picture>
         </div>
         <div class="ld-device ld-device-phone ld-hero-phone">
           <picture data-capture="phone">
-            <source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp 390w, /landing/phone-hr-dark-780.webp 780w" sizes="(min-width: 960px) 19vw, 29vw">
+            <source media="(prefers-color-scheme: dark)" srcset="/landing/phone-hr-dark-390.webp 390w, /landing/phone-hr-dark-780.webp 780w" sizes="(min-width: 960px) 19vw, 29vw" width="390" height="844">
             <img src="/landing/phone-hr-light-390.webp" srcset="/landing/phone-hr-light-390.webp 390w, /landing/phone-hr-light-780.webp 780w" sizes="(min-width: 960px) 19vw, 29vw" width="390" height="844" alt="Telefon nakon skeniranja: linije, događanja i gradske informacije poredani kroz dan." data-capture-alt="phone">
           </picture>
         </div>
@@ -90,7 +91,7 @@
           <article class="ld-chapter" data-chapter="0" aria-labelledby="ld-approach">
             <div class="ld-chapter-copy">
               <h3 id="ld-approach" data-i18n="landing.story.approachTitle">Priđi.</h3>
-              <p data-i18n="landing.story.approachBody">U kafiću, knjižnici ili uredu četvrti: zamišljen je kao prozor u ono što se događa oko tebe. Zaslon govori i kad nemaš telefon.</p>
+              <p data-i18n="landing.story.approachBody">U kafiću, knjižnici ili uredu četvrti: prozor u ono što se događa oko tebe. Zaslon govori i kad nemaš telefon.</p>
               <p class="ld-chapter-note" data-i18n="landing.story.approachNote">Javni zaslon. Koristan sam po sebi.</p>
             </div>
             <figure class="ld-chapter-figure">
@@ -140,7 +141,7 @@
   <section class="ld-evidence ld-bound" aria-labelledby="ld-evidence-title">
     <header class="ld-section-head">
       <p class="ld-eyebrow" data-i18n="landing.evidence.label">Jedan grad, više pogleda</p>
-      <h2 id="ld-evidence-title" data-i18n="landing.evidence.title">Što ti grad ima za reći?</h2>
+      <h2 id="ld-evidence-title" data-i18n="landing.evidence.title">Što ti grad ima reći?</h2>
       <p data-i18n="landing.evidence.intro">Ne moraš tražiti podatke po gradskim stranicama. Svaki pogled počinje onim što ti je korisno.</p>
     </header>
     <div class="ld-evidence-grid">
@@ -182,7 +183,7 @@
     <div class="ld-bound ld-trial-inner">
       <header class="ld-section-head">
         <p class="ld-eyebrow" data-i18n="landing.trial.label">Isprobaj stvarni prototip</p>
-        <h2 id="ld-trial-title" data-i18n="landing.trial.title">Sad je red na tebe.</h2>
+        <h2 id="ld-trial-title" data-i18n="landing.trial.title">Sad je red na tebi.</h2>
         <p data-i18n="landing.trial.intro">Ne treba ti javni zaslon u blizini. Za probu postavi zaslon u pregledniku.</p>
         <p class="ld-trial-existing"><span data-i18n="landing.trial.haveCode">Već imaš kod?</span> <a class="ld-text-link" href="/s/" data-testid="cta-scan" data-i18n="landing.actions.scan">Skeniraj ili upiši kod</a></p>
       </header>
@@ -233,7 +234,7 @@
     <div class="ld-foot-bottom">
       <div><a class="ki-wordmark" href="/" aria-label="Kaj ima?, početna stranica" data-i18n-aria-label="shell.wordmarkLabel">Kaj ima<span class="ki-wordmark-mark">?</span></a><p class="ld-caption" data-i18n="landing.footerLicence">AGPL-3.0-or-later · Aning Film · Zagreb, 2026.</p></div>
       <nav class="ld-pages" aria-label="Stranice" data-i18n-aria-label="landing.pagesNav">
-        <a href="/hitno" data-i18n="landing.pages.hitno">Sigurnost, otvoreno svima</a>
+        <a href="/hitno" data-i18n="landing.pages.hitno">Sigurnost, otvorena svima</a>
         <a href="/izvori/" data-i18n="landing.pages.izvori">Izvori podataka i licence</a>
         <a href="/open/" data-i18n="landing.pages.open">Otvoreni podaci za preuzimanje</a>
         <a href="/privatnost/" data-i18n="common.links.privatnost">Privatnost</a>
