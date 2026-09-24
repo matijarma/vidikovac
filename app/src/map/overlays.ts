@@ -29,6 +29,7 @@
 // (shared/motion/vehicle.ts, built by motion/bodies.ts) lies under each pill,
 // metres wide, so the map shows how long a tram is where the street is wide
 // enough to show it.
+import type { FrameCircle } from './frame';
 import { PROJECTION_LAT_DEG } from '../../../shared/motion/geo';
 import { VEHICLE_WIDTH_M } from '../../../shared/motion/vehicle';
 import { createLineColours, NOSE_LENGTH_PX, NOSE_WIDTH_PX, noseCentrePx, PILL_FIT_PAD_X, PILL_FIT_PAD_Y, PILL_HEIGHT_PX, PILL_IMAGE, PILL_MAX_CHARS_CLUSTER, PLATE_IMAGE, PLATE_RADIUS_PX, pillWidthPx } from '../motion/pills';
@@ -308,6 +309,11 @@ export interface ProzorOptions {
    *  reads the rendered stop layer (map-pointer.ts), which `visibility: none`
    *  would empty. Default true. */
   stopMarks?: boolean;
+  /** Decision 58 (24 Sep): a placed wall's frame. The stop beads and names are
+   *  those inside it alone (OverlayOptions.frameStopIds, which city-map.ts
+   *  reads off the stops source), so nothing outside the frame is a ring, a
+   *  dot or a name; the own place's ring and name are the screen-stop layers. */
+  frame?: FrameCircle;
 }
 
 /** The image rows across the middle of the pill and the plate that stretch
@@ -548,6 +554,10 @@ export interface OverlayOptions {
    *  because the 30 px anchor label already does and the two stacked at
    *  Jelačić (R-KP25). */
   screenStopId?: string | null;
+  /** The ids of the stops inside ProzorOptions.frame (map/frame.ts
+   *  idsInFrame over the stops source). Read only with a frame; null there
+   *  (the stops not loaded yet) draws none of them, never all of them. */
+  frameStopIds?: readonly string[] | null;
   /** The line the map is about and the colour ZET prints it in (F5 section C):
    *  the selected route, or the route of the selected/followed vehicle, which
    *  city-map.ts resolves from what the model is drawing. Its colour comes
@@ -778,7 +788,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
    *  nor line under it is the same clutter by another means. Focus off, every
    *  stop the modes admit, exactly as before. */
   const stopRoutes = focus ? [focus.routeId] : prozor ? prozor.stopRoutes : null;
-  const stops = routeStopsFilter(modes, stopRoutes);
+  const stops: Expr = prozor?.frame
+    ? ['all', routeStopsFilter(modes, stopRoutes), ['in', ['get', 'id'], ['literal', [...(options.frameStopIds ?? [])]]]]
+    : routeStopsFilter(modes, stopRoutes);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.

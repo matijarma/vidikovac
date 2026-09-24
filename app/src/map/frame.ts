@@ -66,3 +66,33 @@ export function frameView(
   const { zoom } = boundsView(frameBounds(center, radiusM), widthPx, heightPx, paddingPx, minZoom, maxZoom);
   return { center: [center.lon, center.lat], zoom };
 }
+
+/** The ground a placed wall presents (decision 58, 24 Sep): the circle of
+ *  radius R round its place, R the "N stops around it" radius the camera,
+ *  the "U blizini" circle and its pill read (shared/city/frame.ts). Nothing
+ *  outside it is drawn as a stop, a BAJS disc, a venue or a name. */
+export interface FrameCircle {
+  lon: number;
+  lat: number;
+  radiusM: number;
+}
+
+/** Whether a point lies within the frame's radius, in the same metres per
+ *  degree frameBounds lays the radius out with. */
+export function inFrame(point: { lon: number; lat: number }, frame: FrameCircle): boolean {
+  const dy = (point.lat - frame.lat) * METRES_PER_DEGREE;
+  const dx = (point.lon - frame.lon) * METRES_PER_DEGREE * Math.cos((frame.lat * Math.PI) / 180);
+  return dx * dx + dy * dy <= frame.radiusM * frame.radiusM;
+}
+
+/** The ids of the point features inside the frame, in source order: the
+ *  stops a placed wall draws (map/city-map.ts hands them to the overlays). */
+export function idsInFrame(features: readonly { geometry: { coordinates: unknown }; properties: Record<string, unknown> }[], frame: FrameCircle): string[] {
+  const out: string[] = [];
+  for (const feature of features) {
+    const c = feature.geometry.coordinates;
+    if (!Array.isArray(c) || !Number.isFinite(c[0]) || !Number.isFinite(c[1])) continue;
+    if (inFrame({ lon: c[0] as number, lat: c[1] as number }, frame)) out.push(String(feature.properties.id ?? ''));
+  }
+  return out;
+}

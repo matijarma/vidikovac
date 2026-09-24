@@ -24,7 +24,7 @@ import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 // WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
 import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView } from '../../app/src/map/frame';
+import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
 import { distanceM } from '../../shared/city/geo';
 
 describe('open raster basemap', () => {
@@ -534,6 +534,18 @@ describe('the field camera and the paired camera', () => {
     expect(fieldView({ stop: null, district: 'zagreb', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual(cityWindowView(1300, 880).center);
     // A stop outranks both.
     expect(fieldView({ stop: STOP, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual([STOP.lon, STOP.lat]);
+  });
+
+  // Decision 58 (24 Sep): a placed wall presents the ground within R of its
+  // place, and nothing outside it is drawn as a stop, a disc or a name.
+  it('inFrame keeps a point within R of the place, and idsInFrame the stop features inside', () => {
+    const frame = { lon: STOP.lon, lat: STOP.lat, radiusM: 2000 };
+    const north = (m: number) => ({ lon: STOP.lon, lat: STOP.lat + m / 111_320 });
+    const east = (m: number) => ({ lon: STOP.lon + m / (111_320 * Math.cos((STOP.lat * Math.PI) / 180)), lat: STOP.lat });
+    expect([inFrame(north(1999), frame), inFrame(north(2001), frame), inFrame(east(1999), frame), inFrame(east(2001), frame)]).toEqual([true, false, true, false]);
+    expect(inFrame(STOP, frame)).toBe(true);
+    const feature = (id: string, p: { lon: number; lat: number }) => ({ geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { id } });
+    expect(idsInFrame([feature('a', north(500)), feature('b', east(2500)), feature('c', STOP), { geometry: { type: 'Point', coordinates: null }, properties: { id: 'd' } }], frame)).toEqual(['a', 'c']);
   });
 
   // The frame (WP2 step 4): the square of side 2R around the place on the

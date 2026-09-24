@@ -314,6 +314,25 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(loud.find((l) => l.id === LAYERS.stopLabels)!.filter).not.toEqual(NEVER);
   });
 
+  // Decision 58 (24 Sep): a placed wall draws the beads and names of the stops
+  // inside its frame alone (the ids city-map.ts reads off the stops source),
+  // and of those names the tram hubs only; the own place's ring and name are
+  // the screen-stop layers.
+  it('draws only the stops inside the frame, and names only its hubs, when the option set carries a frame', () => {
+    const frame = { lon: 15.977, lat: 45.813, radiusM: 2000 };
+    const framed = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRoutes: null, stopLabelTramInterchanges: true, frame }, frameStopIds: ['a', 'b'], screenStopId: '106_1' });
+    const by = (id: string) => framed.find((l) => l.id === id)!;
+    const inside = ['in', ['get', 'id'], ['literal', ['a', 'b']]];
+    for (const id of [LAYERS.stops, LAYERS.stopLabels, LAYERS.stopLabelsHeld]) expect(JSON.stringify(by(id).filter), id).toContain(JSON.stringify(inside));
+    expect(JSON.stringify(by(LAYERS.stopLabels).filter)).toContain('["get","tramInterchange"]');
+    expect(JSON.stringify(by(LAYERS.stopLabels).filter)).not.toContain('"rank"');
+    // A frame whose stops are not loaded yet draws none of them, never all of them.
+    const empty = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, frame }, frameStopIds: null });
+    expect(JSON.stringify(empty.find((l) => l.id === LAYERS.stops)!.filter)).toContain(JSON.stringify(['in', ['get', 'id'], ['literal', []]]));
+    // Without a frame the ids change nothing.
+    expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR, frameStopIds: ['a'] }))).toBe(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR })));
+  });
+
   // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
   // rank stops being the question; from the line up nothing changed.
   it('names interchanges and not ranks when the field holds the whole city', () => {
