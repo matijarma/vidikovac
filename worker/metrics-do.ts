@@ -56,11 +56,43 @@ const COUNT_MAX = 1_000_000;
 
 /** Longest event/dimension string ever stored; a defensive clamp, not a real limit. */
 const STRING_MAX_CHARS = 64;
-/** More rows than a year of every event x dimension combination could plausibly
- *  produce — the cap exists so a query can never build an unbounded response. */
-const QUERY_MAX_ROWS = 50_000;
+/** The cap exists so a query can never build an unbounded response. The
+ *  engine and source counters alone fill about 50 cells an hour, so a long
+ *  window can reach it: when it does, the OLDEST rows are the ones left out
+ *  (the newest day is the one an operator came to see). */
+export const QUERY_MAX_ROWS = 50_000;
+
+/** How long an hourly cell is kept: 24 months, the promise of /privatnost/
+ *  point 6. Enforced on write, at most once per Zagreb day. */
+export const RETENTION_DAYS = 730;
+
+/** One aggregated cell of {@link MetricsDO.totals}: `day` is '' when the
+ *  window was summed across days. */
+export type MetricsTotalRow = {
+  day: string;
+  event: string;
+  dim1: string;
+  dim2: string;
+  count: number;
+};
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The first Zagreb day still kept on `today`: RETENTION_DAYS back, calendar days. */
+export function retentionCutoff(today: string): string {
+  const t = Date.parse(`${today}T00:00:00Z`) - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** The events a caller asks for, cleaned: only vocabulary words, each once. */
+function eventList(events: readonly string[]): string[] {
+  return [...new Set(events.filter((e) => isMetricEvent(e)))];
+}
 
 export class MetricsDO extends DurableObject<Env> {
+  /** The Zagreb day the retention sweep last ran on, in this instance's life. */
+  private prunedDay = '';
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
@@ -98,6 +130,7 @@ export class MetricsDO extends DurableObject<Env> {
    */
   async recordMany(entries: readonly MetricsEntry[]): Promise<void> {
     const { day, hour } = zagrebDayHour(new Date());
+    this.prune(day);
     for (const entry of entries) {
       if (!isMetricEvent(entry.event)) continue;
       const count = Math.max(1, Math.min(COUNT_MAX, Math.floor(entry.count ?? 1)));
@@ -121,15 +154,69 @@ export class MetricsDO extends DurableObject<Env> {
    * as an empty deployment.
    */
   async query(sinceDay: string): Promise<MetricsDailyRow[]> {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(sinceDay)) throw new Error('invalid-since-day');
+    if (!DAY_RE.test(sinceDay)) throw new Error('invalid-since-day');
+    return this.newestFirstCapped(
+      `SELECT day, hour, event, dim1, dim2, count FROM metrics_hourly
+        WHERE day >= ?
+        ORDER BY day DESC, hour DESC, event DESC, dim1 DESC, dim2 DESC
+        LIMIT ${QUERY_MAX_ROWS}`,
+      [sinceDay],
+    );
+  }
+
+  /**
+   * The hourly rows of the named events only, on or after sinceDay, in the
+   * same order and under the same cap as {@link query}. The City export and
+   * the public report read their few events here, so the engine's thousands
+   * of cells never crowd a person-event out of a long window. Words outside
+   * the vocabulary are ignored; none left is an empty answer.
+   */
+  async queryEvents(sinceDay: string, events: readonly string[]): Promise<MetricsDailyRow[]> {
+    if (!DAY_RE.test(sinceDay)) throw new Error('invalid-since-day');
+    const wanted = eventList(events);
+    if (wanted.length === 0) return [];
+    return this.newestFirstCapped(
+      `SELECT day, hour, event, dim1, dim2, count FROM metrics_hourly
+        WHERE day >= ? AND event IN (${wanted.map(() => '?').join(', ')})
+        ORDER BY day DESC, hour DESC, event DESC, dim1 DESC, dim2 DESC
+        LIMIT ${QUERY_MAX_ROWS}`,
+      [sinceDay, ...wanted],
+    );
+  }
+
+  /**
+   * The named events summed over hours: per Zagreb day when `byDay`, else
+   * over the whole window (day ''). Ordered by day, event, dim1, dim2. Only
+   * for counters with no person in them (the engine, the sources): the public
+   * page shows those exactly, and a sum over hours is all it draws.
+   */
+  async totals(sinceDay: string, events: readonly string[], byDay: boolean): Promise<MetricsTotalRow[]> {
+    if (!DAY_RE.test(sinceDay)) throw new Error('invalid-since-day');
+    const wanted = eventList(events);
+    if (wanted.length === 0) return [];
+    const day = byDay ? 'day' : "''";
     return this.ctx.storage.sql
-      .exec<MetricsDailyRow>(
-        `SELECT day, hour, event, dim1, dim2, count FROM metrics_hourly
-          WHERE day >= ?
-          ORDER BY day, hour, event, dim1, dim2
+      .exec<MetricsTotalRow>(
+        `SELECT ${day} AS day, event, dim1, dim2, SUM(count) AS count FROM metrics_hourly
+          WHERE day >= ? AND event IN (${wanted.map(() => '?').join(', ')})
+          GROUP BY ${byDay ? 'day, ' : ''}event, dim1, dim2
+          ORDER BY ${byDay ? 'day, ' : ''}event, dim1, dim2
           LIMIT ${QUERY_MAX_ROWS}`,
         sinceDay,
+        ...wanted,
       )
       .toArray();
+  }
+
+  /** Runs a newest-first capped select and hands the rows back oldest first. */
+  private newestFirstCapped(sql: string, bindings: unknown[]): MetricsDailyRow[] {
+    return this.ctx.storage.sql.exec<MetricsDailyRow>(sql, ...bindings).toArray().reverse();
+  }
+
+  /** Deletes the cells older than RETENTION_DAYS, once per Zagreb day. */
+  private prune(today: string): void {
+    if (this.prunedDay === today) return;
+    this.prunedDay = today;
+    this.ctx.storage.sql.exec(`DELETE FROM metrics_hourly WHERE day < ?`, retentionCutoff(today));
   }
 }

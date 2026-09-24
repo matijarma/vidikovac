@@ -66,6 +66,13 @@ describe('City variant (grad.csv)', () => {
     expect(out.some((r) => r.event === 'source_fetch')).toBe(false);
   });
 
+  it('leaves the engine and timetable counters out: the City set is about demand', () => {
+    const engine = ['twin_tick', 'twin_hindsight', 'twin_hindsight_sign', 'twin_order', 'twin_plan', 'static_watch'].map((event) =>
+      row(12, event, 'ok', 'warm', 500),
+    );
+    expect(cityRows(engine)).toEqual([]);
+  });
+
   it('keeps days apart when folding', () => {
     const out = cityRows([
       row(9, 'export', 'sigurnost', 'ics', 7, '2026-09-10'),
