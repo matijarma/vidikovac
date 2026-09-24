@@ -1168,7 +1168,7 @@ export const THRESHOLDS = Object.freeze([
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
   T('sentence-repeat', 'd2', 'kiosk', 'kiosk.sentenceRepeats', NONE, 'no sentence repeated verbatim within ten minutes', '§12'),
-  T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired, within one reading ({ROTATION_STEP_MS} ms)', 'decision 29'),
+  T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired; short only when even the upper bound (the dwell plus the actual gaps to the readings either side) is under it', 'decision 29'),
   T('sentence-distinct', 'd2', 'kiosk', 'kiosk.sentencesTooFew', NONE, 'at least {DISTINCT_SENTENCES_MIN} distinct sentences in every ten minutes of the rotation (a shorter run in proportion, at least 1)', '§16.3, §12'),
   T('solar', 'd2', 'kiosk', 'kiosk.solarOverMax', NONE, 'at most {SOLAR_ROWS_MAX} solar row per reading', '§16.3, §12'),
   T('rows-timed', 'd2', 'kiosk', 'kiosk.untimedReadings', NONE, 'every row carries data-when or data-always', '§16.3'),
@@ -1411,7 +1411,7 @@ export const METRICS = Object.freeze({
     const r = repeatsWithin(rot, REPEAT_WINDOW_MS, k.wall);
     const judged = r.dwells.filter((d) => !d.truncated && d.dwellMs !== null).map((d) => d.dwellMs);
     const range = judged.length ? `dwells ${(Math.min(...judged) / 1000).toFixed(1)} to ${(Math.max(...judged) / 1000).toFixed(1)} s` : 'no judged dwell';
-    return { value: r.short.length, detail: [`${r.turns} turns per fact (${r.factSource}), ${r.refreshes} refreshes, ${range}`, ...r.short.slice(0, 3).map((d) => `${d.at} ${(d.dwellMs / 1000).toFixed(1)} s (${d.refreshes} refreshes): ${quote(d.sentence, 90)}`)] };
+    return { value: r.short.length, detail: [`${r.turns} turns per fact (${r.factSource}), ${r.refreshes} refreshes, ${range}`, ...r.short.slice(0, 3).map((d) => `${d.at} ${sec(d.dwellMs)} s, ${sec(d.dwellMinMs)} to ${sec(d.dwellMaxMs)} s between readings (gaps ${sec(d.gapBeforeMs)} / ${sec(d.gapAfterMs)} s, ${d.refreshes} refreshes): ${quote(d.sentence, 90)}`)] };
   },
   'kiosk.sentencesTooFew': (obs, k) => {
     if (!obs.kiosk || !(obs.kiosk.rotation ?? []).length) return { value: null, detail: ['no rotation reading'] };
@@ -1556,16 +1556,21 @@ export const METRICS = Object.freeze({
   },
 });
 
+const sec = (ms) => (ms === null || ms === undefined ? '—' : (ms / 1000).toFixed(1));
+
 /**
  * §12 and decision 29 over the rotation, per fact (e2e/wall.ts sentenceTurns): a turn ends only when the
  * sentence's fact changes (data-fact; before the attribute, its words with the numbers masked), a rewording of
  * the same fact is a refresh inside the turn, and a wording shown again by a later turn less than `windowMs`
- * after its earlier showing is a repeat. `short` are the judged turns under 20 s whose own fact had not expired.
+ * after its earlier showing is a repeat. Each dwell is bounded by the actual reading clocks (the gap before the
+ * turn's first reading and after its last, 2 s planned and 3.1 s seen under load): `short` are the judged turns
+ * whose upper bound is under 20 s and whose own fact had not expired.
  */
 export function repeatsWithin(readings, windowMs, wall) {
-  const r = wall.sentenceTurns(readings, { windowMs, stepMs: wall.ROTATION_STEP_MS });
+  const r = wall.sentenceTurns(readings, { windowMs });
   const at = (ms) => new Date(ms).toISOString().slice(11, 19);
-  const dwells = r.turns.map((t) => ({ at: at(t.at), sentence: t.texts[0], fact: t.fact, dwellMs: t.dwellMs, refreshes: t.refreshes, expired: t.expired, truncated: t.truncated }));
+  const dwells = r.turns.map((t) => ({ at: at(t.at), sentence: t.texts[0], fact: t.fact, dwellMs: t.dwellMs,
+    dwellMinMs: t.dwellMinMs, dwellMaxMs: t.dwellMaxMs, gapBeforeMs: t.gapBeforeMs, gapAfterMs: t.gapAfterMs, refreshes: t.refreshes, expired: t.expired, truncated: t.truncated }));
   return {
     turns: r.turns.length,
     refreshes: r.refreshes,
@@ -1668,6 +1673,15 @@ export function renderReport(observation, verdict, instruments) {
     lines.push(`## Wall rotation (${rot.length} readings, ${instruments.wall.ROTATION_STEP_MS / 1000} s apart, rotation.jsonl)`, '');
     lines.push('| Readings | Failed | Turns (per fact) | Refreshes | Short turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.refreshes} | ${rep.short.length} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
+    if (rep.dwells.length) {
+      lines.push('Sentence turns per fact: the point dwell (first reading to the next fact\'s), its bounds from the actual reading gaps either side, and the verdict (decision 29).', '');
+      lines.push('| At (UTC) | Dwell s | Bounds s | Gap before / after s | Refreshes | Verdict | Sentence |', '|---|---:|---|---|---:|---|---|');
+      for (const d of rep.dwells) {
+        const verdict = d.truncated ? 'not judged' : d.expired ? 'fact expired' : rep.short.includes(d) ? '**short**' : 'ok';
+        lines.push(`| ${d.at} | ${sec(d.dwellMs)} | ${sec(d.dwellMinMs)}–${sec(d.dwellMaxMs)} | ${sec(d.gapBeforeMs)} / ${sec(d.gapAfterMs)} | ${d.refreshes} | ${verdict} | ${cell(quote(d.sentence, 70))} |`);
+      }
+      lines.push('');
+    }
     if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, ${twinWords(k.first.fleet)}, theme ${k.first.theme ?? '?'}.`, '');
     const wallReadings = readingsOf(observation) ?? [];
     if (wallReadings.length) lines.push(pillsCensus(wallReadings, instruments), '');
