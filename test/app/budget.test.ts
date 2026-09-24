@@ -166,11 +166,17 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       expect(html).not.toContain(NETWORK_ARTEFACT);
       expect(html).not.toContain(SCHEMA_ARTEFACT);
       expect(html).not.toContain('.woff2');
-      // Nor may any stylesheet on the wire carry an @font-face: the system
-      // stack is the lightweight typography (R-F3).
+      // Nor may any stylesheet on the wire carry a webfont: the system stack
+      // is the lightweight typography (R-F3). The one @font-face allowed is a
+      // local() alias of a system font (tokens.css 'Manrope Fallback', the
+      // metric-matched stand-in the modern path shows while Manrope loads):
+      // it names no file, so nothing is downloaded.
       for (const file of wireFiles(entry).filter((f) => f.endsWith('.css'))) {
         const css = readFileSync(join(outDir, file), 'utf8');
-        expect(css, `${file} declares a webfont`).not.toContain('@font-face');
+        for (const face of css.match(/@font-face\s*\{[^}]*\}/g) ?? []) {
+          expect(face, `${file} declares a webfont`).not.toMatch(/url\(/);
+          expect(face, `${file} declares a face that is not a local system font`).toMatch(/src:\s*local\(/);
+        }
         expect(css, `${file} references a font file`).not.toContain('.woff2');
       }
       // And the artefact is never a build-time asset of any chunk on the graph.

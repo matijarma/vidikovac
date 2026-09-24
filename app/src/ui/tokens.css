@@ -19,9 +19,53 @@
    first-paint fallback; without JavaScript the page follows the OS. */
 
 /* Layer 0 */
+
+/* Manrope arrives after the first paint (fonts.css is a dynamic import, never on
+   the lightweight path), so the text is laid out twice. 'Manrope Fallback' is the
+   system's Arial, or a metric twin of it, sized to Manrope's advance widths and
+   given Manrope's own ascent and descent (hhea 2132 / -600 of 2000), one face per
+   shipped weight so none is synthesised: the second layout then moves nothing
+   (the landing's actions moved 59 px at 1440 px, CLS 0.113). size-adjust is
+   Manrope's width over Arial's (400 and 500 over Arial, 700 over Arial Bold) on
+   mixed Croatian and English running text, measured in Chrome; the overrides are
+   Manrope's metrics divided by it (test/app/font-fallback.test.ts). local() only:
+   nothing is downloaded. */
+@font-face {
+  font-family: 'Manrope Fallback';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('Arimo');
+  size-adjust: 100.65%;
+  ascent-override: 105.91%;
+  descent-override: 29.81%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Manrope Fallback';
+  font-style: normal;
+  font-weight: 500;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('Arimo');
+  size-adjust: 102.63%;
+  ascent-override: 103.87%;
+  descent-override: 29.23%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Manrope Fallback';
+  font-style: normal;
+  font-weight: 700;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('Arimo Bold');
+  size-adjust: 99.27%;
+  ascent-override: 107.38%;
+  descent-override: 30.22%;
+  line-gap-override: 0%;
+}
+
 :root {
-  /* One family. The system stack is what the lightweight path renders. */
-  --font-sans: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* One family, with its metric-matched stand-in while it loads. */
+  --font-sans: 'Manrope', 'Manrope Fallback', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-body: var(--font-sans);
   --font-display: var(--font-sans);
   /* Monospace is for pairing codes only, never for running text or labels. */
@@ -152,6 +196,12 @@
   --palette-dark-shadow-md: 0 12px 32px rgba(12, 19, 28, 0.4);
   --palette-dark-shadow-heavy: 0 24px 64px rgba(12, 19, 28, 0.6);
 }
+
+/* The lightweight path renders the system stack alone (budget.test.ts: no webfont on its wire). */
+:root[data-lagano='1'] {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
 /* The same palette in OKLCH where the engine renders it: even tints, even
    hover steps. The hex values above stay the measured fallback. */
 @supports (color: oklch(50% 0.1 180)) {
