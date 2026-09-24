@@ -2446,17 +2446,16 @@ describe('the invitation composition: the timeline, sentence and strip', () => {
     expect(phone.root.innerHTML).not.toContain('zagreb.aningfilm.hr');
     expect(text(q(phone.root, '.k-hint'))).toBe('ili upiši kod na example.test/s');
   });
-  it('the strip label carries the shield and the passive pill reads Sigurnost', async () => {
+  it('the strip label carries the shield and the passive wall prints no /hitno pill', async () => {
     const k = mount({ stored: STORED });
     await flush();
     const label = q(k.root, '.k-strip-label')!;
     expect(q(label, 'svg use')!.getAttribute('href')).toBe('#icon-shield');
     expect(text(label)).toBe('Sigurnost');
-    const pill = q(k.root, '.k-strip-hitno')!;
-    expect(text(pill)).toBe('Sigurnost');
-    expect(pill.tagName).toBe('SPAN');
-    expect(pill.hasAttribute('href')).toBe(false);
+    // Round 1 (24 Sep): the passive strip ends with the pharmacy; a pill on a screen with no controls read as a button.
+    expect(q(k.root, '.k-strip-hitno')).toBeNull();
     expect(k.root.innerHTML).not.toContain('>/hitno<');
+    expect(k.root.querySelectorAll('[data-testid=safety-strip] a, [data-testid=safety-strip] button')).toHaveLength(0);
   });
   it('paired: the header centre names the mirrored domain and follows every layer change', async () => {
     const k = await pairedKiosk();
