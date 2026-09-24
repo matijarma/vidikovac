@@ -21,7 +21,7 @@ import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { fetchSentences as fetchSentencesImpl } from './api';
-import { askBoards, loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
+import { askBoards, loadSadaFeed, NEARBY_HOLD_MS, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
 import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
@@ -283,6 +283,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let lastWorkspaceKey: string = view.snapshot().layer;
   /** The 200 ms fallback that clears data-enter for an engine that never fires animationend. */
   let enterTimer: unknown = null;
+  /** One draw after the list's hold limit once the room refused the ticket (round 1 finding F16). */
+  let holdTimer: unknown = null;
 
   // --- stable shell --------------------------------------------------------
   // The two live regions are visually hidden, never display: none, so readers hear them.
@@ -688,9 +690,19 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     }
   }
 
-  function toggleDirectory(open = !directory): void {
+  /** The fragment with or without Jos's own mark (`jos=1`), so Back and Escape leave Jos instead of the session. */
+  function directoryHash(open: boolean): string {
+    const p = new URLSearchParams((deps.location?.hash ?? '').replace(/^#/, ''));
+    if (open) p.set('jos', '1'); else p.delete('jos');
+    return `${deps.location?.pathname ?? ''}${deps.location?.search ?? ''}#${p}`;
+  }
+  function toggleDirectory(open = !directory, fromHistory = false): void {
     if (frozen) return;
+    const was = directory;
     directory = open;
+    // Jos is one history entry (round 1, desktop F5): opening it pushes, closing it replaces the mark away, so the
+    // browser's Back from Jos returns to the layer under it and never to the scan page.
+    if (!fromHistory && deps.history && deps.location && open !== was) deps.history[open ? 'pushState' : 'replaceState'](null, '', directoryHash(open));
     updateTitle();
     paintShell();
     render();
@@ -1055,6 +1067,15 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       closeShare();
       stopPolls();
       paintShell();
+      // A page that never joined holds its list and its band for the sources a session would bring (city/feed.ts
+      // nearbyHeld), and without a token nothing arrives and nothing redraws, so the reserved rows stood for good
+      // under the banner (round 1 finding F16). One draw after the hold's own limit lets the list and the band
+      // settle on what is public.
+      if (holdTimer !== null) { clearTimer(holdTimer); holdTimer = null; }
+      holdTimer = setTimer(() => {
+        if (holdTimer !== null) { clearTimer(holdTimer); holdTimer = null; }
+        if (!disposed && error === 'no-ticket') render();
+      }, NEARBY_HOLD_MS + 100);
     }
   });
   session.onCodes((batch, serverNow) => openShare(batch, serverNow));
@@ -1183,9 +1204,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (select instanceof HTMLSelectElement && select.dataset.filterKey) view.setFilter(select.dataset.filterKey, select.value);
   });
   element.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || !mapFull) return;
-    event.preventDefault();
-    setMapView(false);
+    if (event.key !== 'Escape') return;
+    // Escape leaves the full map, and Jos (round 1, desktop F5).
+    if (mapFull) { event.preventDefault(); setMapView(false); return; }
+    if (directory) { event.preventDefault(); toggleDirectory(false); focusWorkspace(view.snapshot().layer); }
   });
   // Input modality: a pointer tap never paints a keyboard focus ring around
   // the heading focus moves to; keyboard users keep every ring, and readers
@@ -1228,13 +1250,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function restoreView(hash: string): void {
     if (frozen || disposed) return;
     const previous = view.snapshot().layer;
-    directory = false;
+    // The entry Jos pushed carries its mark; every other entry closes Jos.
+    directory = new URLSearchParams(hash.replace(/^#/, '')).get('jos') === '1';
     view.restore(hash);
     const restored = view.snapshot();
     if (restored.layer !== 'u-pokretu' && mapFull) setMapView(false);
     updateTitle();
     paintShell();
-    if (restored.layer !== previous) continuePoll(refresh(), rearmPoll, 'dashboard history refresh');
+    if (restored.layer !== previous || directory) continuePoll(refresh(), rearmPoll, 'dashboard history refresh');
   }
   const onPopState = (): void => { if (deps.location) restoreView(deps.location.hash); };
   const win = globalThis as unknown as { addEventListener?: Window['addEventListener']; removeEventListener?: Window['removeEventListener'] };
@@ -1275,6 +1298,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       disposed = true;
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
+      if (holdTimer !== null) { clearTimer(holdTimer); holdTimer = null; }
         stopView();
       stopCity();
       stopStore();

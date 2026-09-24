@@ -48,6 +48,11 @@ export const CODE_TESTIDS: readonly string[];
 export const PAIRING_PROBES: Readonly<{ codeA: string; codeB: string; link: string; progress: string }>;
 export const SESSION_LIVE: string;
 export const ABORTED: string;
+/** A reading gap this many times the planned step counts as a stall in report.md (information, never a gate). */
+export const GAP_STALL_FACTOR: number;
+export const BOARDS_PATH: string;
+export const EVIDENCE_FILES: Readonly<{ boards: string; calm: string; actions: string }>;
+export const EVIDENCE_POINTERS: Readonly<Record<string, string>>;
 export const USAGE: string;
 
 export class ObserverRefusal extends Error {
@@ -113,6 +118,24 @@ export function fleetAt(records: readonly FleetRecord[], at: number): FleetState
 export function watchFleet(page: Pick<ObserverPage, 'on'>, ctx: { instruments: Pick<Instruments, 'recorders'>; now(): number }): FleetRecord[];
 /** A wall reading as the observer keeps it: the twin's report at its moment beside it. */
 export type ObservedSample = Wall.WallSample & { fleet?: FleetState | null };
+/** One departures board answer the wall received (boards.jsonl). */
+export interface BoardAnswer {
+  at: string; t: number; ms: number | null; afterReading: number | null; operator: string | null; stop: string | null;
+  http: number | null; status: string | null; rows: number; stored: 'board' | 'down'; reason?: string; generatedAt?: string | null;
+  replaced: boolean; previous: { at: string; status: string | null; rows: number; stored: 'board' | 'down' } | null; emptied: boolean;
+}
+export function watchBoards(page: Pick<ObserverPage, 'on'>, ctx: { instruments: Pick<Instruments, 'recorders'>; now(): number; rotationReading?: number | null }, write?: (entry: BoardAnswer) => void): BoardAnswer[];
+export interface HitTest { found: boolean; rect: { x: number; y: number; w: number; h: number } | null; inView?: boolean; atPoint: { tag: string; testid: string | null; id: string | null; classes: string } | null; covered: boolean | null; active?: HitTest['atPoint'] }
+export const HIT_TEST_IN_PAGE: InPage<{ selector: string }, HitTest>;
+/** One step of the phone's path (phone-actions.jsonl). */
+export interface ActionRecord { step: string; action: 'click' | 'fill' | 'wait'; selector: string | null; value: string | null; at: string; ms: number | null; ok: boolean; error?: string[]; hit?: HitTest | { error: string } }
+export function act<T>(page: Pick<ObserverPage, 'evaluate'>, ctx: { now(): number; actions?: ActionRecord[]; appendAction?: (entry: ActionRecord) => void }, step: { step: string; action: ActionRecord['action']; selector?: string; value?: string }, fn: () => Promise<T>): Promise<T>;
+export interface ReadingGaps {
+  stepMs: number; count: number; medianMs: number | null; p95Ms: number | null; maxMs: number | null; stalls: number;
+  worst: { from: number; to: number; ms: number }[]; windows: { from: number; to: number; spanMs: number | null; maxGapMs: number | null }[];
+}
+export function readingGaps(rotation: readonly { n: number; at: number }[], stepMs: number, calm?: readonly CalmWindow[]): ReadingGaps;
+export function evidenceFor(row: Pick<VerdictRow, 'id' | 'metric' | 'surface'>): string;
 export function pillsOwed(sample: ObservedSample): boolean;
 export interface DesktopRead { sadaInViewport: boolean; kartaInViewport: boolean; domains: number; shareCityVisible: boolean }
 export const PHONE_READ_IN_PAGE: InPage<Record<string, unknown>, PhoneRead>;
@@ -194,13 +217,15 @@ export interface PhoneObservation {
 export interface DesktopObservation { landingMs: number | null; read: DesktopRead | null; viewports: ViewportEntry[]; failed?: string }
 /** A rotation reading as the observer records it: the wall's reading and the validator's census beside it. */
 export type ObservedRotationRow = Wall.RotationRow & { skippedText?: SkippedTextReading; fleet?: FleetState | null };
-export interface CalmWindow { from: number; to: number; reading?: Wall.CalmMotionReading; error?: string }
+export interface CalmWindow { from: number; to: number; fromAt?: number | null; toAt?: number | null; reading?: Wall.CalmMotionReading; error?: string }
 export interface KioskObservation {
   first: ObservedSample | null;
   portrait: ObservedSample | null;
   rotation: ObservedRotationRow[];
   /** Calm motion over each minute of the rotation. */
   calm: CalmWindow[];
+  /** Every departures board answer the landscape wall received (boards.jsonl). */
+  boards?: BoardAnswer[];
   viewports: ViewportEntry[];
   legibility: Record<string, Legibility.LegibilityReport | null>;
   proxy: string | null;
@@ -216,6 +241,8 @@ export interface Observation {
   captures: string[];
   errors: { phase: string; error: string }[];
   notes: string[];
+  /** The phone's Karta and stop-board steps (phone-actions.jsonl). */
+  actions: ActionRecord[];
   /** Confirmed redemptions (their /api/scan answers) and failed ones (no answer, the scan cancelled). */
   redemptions: { confirmed: { surface: Surface; at: number }[]; failed: { surface: Surface; at: number; cancelError?: string }[]; late: { surface: Surface; at: number }[] };
 }
