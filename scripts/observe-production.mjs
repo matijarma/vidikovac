@@ -716,7 +716,8 @@ export const plannedRotationSteps = (minutes, stepMs) => Math.max(1, Math.round(
  * The rotation in real time, every reading appended to rotation.jsonl as it is made. Meanwhile calm motion
  * (principle 7, e2e/wall.ts, the accept spec's own watcher and verdict) is measured over every minute of it: a
  * window opens at reading 0, 30, 60 … and closes at the next, the last one at the end of the rotation; each goes
- * to `calm` as { from, to, reading } or { from, to, error }.
+ * to `calm` as { from, to, reading } or { from, to, error }. Each reading inside a window marks the row keys, so
+ * a row entering or leaving between two consecutive readings is a turnover (a missed mark only coarsens the pairs).
  */
 export async function rotate(page, ctx, calm = []) {
   const { wall } = ctx.instruments;
@@ -744,6 +745,8 @@ export async function rotate(page, ctx, calm = []) {
       row.skippedText = await readSkippedText(page);
       ctx.appendRotation(row);
       last = row.n;
+      // Every reading bounds a pair for the turnover credit (D5.20: trips entering and leaving inside the minute).
+      if (open !== null && row.n % per !== 0) await page.evaluate(wall.CALM_MOTION_MARK_IN_PAGE, wall.CALM_MOTION_SPEC).catch(() => {});
       if (row.n % per === 0) { await close(row.n); await start(row.n); }
     },
   });
@@ -1163,7 +1166,7 @@ export const THRESHOLDS = Object.freeze([
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
   T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
-  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond row turnovers (a row entering or leaving, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
+  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond row turnovers (a row entering or leaving between two consecutive readings, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
   T('sentence-length', 'd2', 'kiosk', 'kiosk.sentenceOutOfRange', NONE, 'the sentence has 1–{SENTENCE_MAX_CHARS} characters in every reading', '§16.3, §12'),
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),

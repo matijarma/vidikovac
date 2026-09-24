@@ -666,7 +666,7 @@ function fakeRuntime(options: FakeOptions = {}) {
   const log = {
     contexts: [] as { kind: Kind; options: Record<string, unknown> }[], gotos: [] as { kind: Kind; url: string; at: number }[], clicks: [] as { kind: Kind; selector: string }[],
     keys: [] as { kind: Kind; key: string }[], fills: [] as { kind: Kind; selector: string; value: string }[], scans: [] as { kind: Kind; at: number }[], readings: 0,
-    cancelled: [] as Kind[], watches: [] as Kind[],
+    cancelled: [] as Kind[], watches: [] as Kind[], calmMarks: 0,
   };
   const codeNow = (): string => CODES[Math.floor((t - T0) / (options.codeWindowMs ?? 30_000)) % CODES.length];
   const kindOf = (o: Record<string, unknown>): Kind => {
@@ -801,6 +801,7 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === EXPIRY_STAMP_IN_PAGE) return endedAt !== null ? (endedAt <= t ? endedAt : null) : t;
         if (fn === wall.CALM_MOTION_START_IN_PAGE) return 3;
         if (fn === wall.CALM_MOTION_READ_IN_PAGE) return (options.calm ?? (() => GOOD_CALM))(calmReads++);
+        if (fn === wall.CALM_MOTION_MARK_IN_PAGE) { log.calmMarks++; return true; }
         if (fn === SKIPPED_TEXT_IN_PAGE) {
           if (options.skippedTextThrows) throw new Error('page.evaluate: Execution context was destroyed');
           return (options.skippedText ?? (() => QUIET_CENSUS))(censusReads++);
@@ -1166,6 +1167,8 @@ describe('a run over a fake browser', () => {
   it('calm motion: a minute with three structural mutations or a rebuilt row fails d2; every minute is measured', async () => {
     const calm = await observe(['--minutes', '10', '--stage', 'd2']);
     expect(calm.code, calm.lines.join('\n')).toBe(0);
+    // Every rotation reading inside a window marks a pair for the turnover credit (D5.20): 300 readings less the 10 that open a window.
+    expect(calm.log.calmMarks).toBe(290);
     expect(read(calm.out, 'report.md')).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
     const busy = await observe(['--minutes', '10', '--stage', 'd2'], { calm: (i) => (i === 4 ? { ...GOOD_CALM, mutations: 5, churn: 3 } : i === 7 ? { ...GOOD_CALM, rebuilt: ['departure|trip-2'] } : GOOD_CALM) });
     expect(busy.lines.join('\n')).toContain('FAIL calm-motion');

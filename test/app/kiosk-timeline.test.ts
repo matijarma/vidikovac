@@ -19,7 +19,7 @@ import { selectNearby, type NearbyRow } from '../../app/src/city/nearby';
 import type { LastRunLive } from '../../app/src/core/lastrun';
 import { emptyCity } from '../../shared/city/types';
 import { departuresBoard } from '../../e2e/departures-fixture';
-import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
+import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
@@ -915,6 +915,51 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
     expect(reading.rebuilt).toEqual(['solar|solar:sunset:2026-09-24']);
     // Two records are inside the churn budget; the re-created row fails the minute on its own.
     expect(calmChurnFailures(reading)).toEqual([expect.stringContaining('re-created: solar|solar:sunset:2026-09-24')]);
+  });
+});
+
+describe('calm motion credited per reading pair (D5.20 observer, readings 90 to 120)', () => {
+  const li = (id: string): HTMLElement => {
+    const el = document.createElement('li');
+    el.className = 'nearby-row';
+    el.dataset.id = id;
+    el.dataset.kind = 'departure';
+    el.textContent = id;
+    return el;
+  };
+  it('three in-slot replacements inside one minute are three turnovers and no churn; a staying row still keeps its node', () => {
+    document.body.innerHTML = '<section data-testid="nearby"><ol></ol></section>';
+    const list = document.querySelector('ol')!;
+    const first = li('6_12990');
+    list.append(first, li('6_13004'), li('11_13100'));
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(3);
+    // The second departure slot: 6_13004 → 6_13037 → 12_12084 → 14_12602, one reading apart each (an add and a remove).
+    for (const [out, next] of [['6_13004', '6_13037'], ['6_13037', '12_12084'], ['12_12084', '14_12602']] as const) {
+      const old = list.querySelector<HTMLElement>(`[data-id="${out}"]`)!;
+      list.insertBefore(li(next), old);
+      old.remove();
+      CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
+    }
+    const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    expect(reading).toMatchObject({ mutations: 6, turnovers: 3, churn: 0, kept: 2, rebuilt: [] });
+    expect(calmChurnFailures(reading)).toEqual([]);
+    expect(list.firstElementChild).toBe(first);
+  });
+
+  it('a move and a staying row re-created between readings stay churn, and the re-created row fails the minute', () => {
+    document.body.innerHTML = '<section data-testid="nearby"><ol></ol></section>';
+    const list = document.querySelector('ol')!;
+    list.append(li('a'), li('b'), li('c'));
+    CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC);
+    list.append(list.querySelector('[data-id="a"]')!); // a move: remove + add of a staying row
+    CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
+    list.querySelector('[data-id="b"]')!.replaceWith(li('b')); // re-created
+    CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
+    const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    expect(reading).toMatchObject({ turnovers: 0, rebuilt: ['departure|b'] });
+    expect(reading.churn).toBe(reading.mutations);
+    expect(reading.churn).toBeGreaterThan(2);
+    expect(calmChurnFailures(reading)).toEqual([expect.stringContaining('structural mutations under the timeline beyond 0 row turnover(s)'), expect.stringContaining('re-created: departure|b')]);
   });
 });
 
