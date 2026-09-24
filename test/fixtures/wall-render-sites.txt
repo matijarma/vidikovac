@@ -69,19 +69,19 @@ app/src/kiosk.ts:575 #paintSessionLabel → until.textContent = presentation?.ta
 app/src/kiosk.ts:576 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
 app/src/kiosk.ts:580 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
 app/src/kiosk.ts:741 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:1057 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1058 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1059 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1061 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1071 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1072 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1076 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1094 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1184 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1191 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1365 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:1059 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1060 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1061 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1063 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1073 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1074 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1078 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1096 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1097 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1097 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1186 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1193 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1367 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -122,17 +122,17 @@ app/src/kiosk/front.ts:538 #panelMarkup → escapeHtml(panel.kicker)
 app/src/kiosk/front.ts:538 #panelMarkup → externalHtml('summary', panel.meta)
 app/src/kiosk/front.ts:541 #panelMarkup → escapeHtml(panel.note)
 app/src/kiosk/front.ts:542 #panelMarkup → escapeHtml(panel.credit)
-app/src/kiosk/invitation.ts:55 #cardMarkup → e(s.invitation.lead)
-app/src/kiosk/invitation.ts:56 #cardMarkup → e(s.invitation.qrWaiting)
-app/src/kiosk/invitation.ts:63 #mountInvitation → e(s.handheld.info)
-app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.tram)
-app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.bikes)
-app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.culture)
-app/src/kiosk/invitation.ts:79 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:1031 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:1031 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:1032 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:1033 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/invitation.ts:70 #cardMarkup → e(s.invitation.lead)
+app/src/kiosk/invitation.ts:71 #cardMarkup → e(s.invitation.qrWaiting)
+app/src/kiosk/invitation.ts:78 #mountInvitation → e(s.handheld.info)
+app/src/kiosk/invitation.ts:88 #mountInvitation → e(s.legend.tram)
+app/src/kiosk/invitation.ts:88 #mountInvitation → e(s.legend.bikes)
+app/src/kiosk/invitation.ts:88 #mountInvitation → e(s.legend.culture)
+app/src/kiosk/invitation.ts:95 #mountInvitation → note.textContent=s.nearby.outageNote
+app/src/kiosk/mapview.ts:1045 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:1045 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:1046 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:1047 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
