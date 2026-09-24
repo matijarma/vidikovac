@@ -189,7 +189,8 @@ describe('passive public city',()=>{
     expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('A');
     viewport.width = 1920; viewport.height = 1080; k.repaint();
     expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe('SPAN');
-    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
+    // The passive wall prints no /hitno word at all (round 1, 24 Sep): a pill on a screen with no controls read as a button.
+    expect(q(k.root, '.k-strip-hitno')).toBeNull();
     k.handle.destroy();
   });
   it('offers plain safety and payload text on the wall, keeping the handheld links and basics button', async () => {
@@ -200,7 +201,7 @@ describe('passive public city',()=>{
       const wall = viewport.width === 1920;
       expect(q(k.root, '[data-testid=pair-url]')?.tagName).toBe(wall ? 'SPAN' : 'A');
       expect(q(k.root, '[data-testid=pair-url]')?.hasAttribute('href')).toBe(!wall);
-      expect(q(k.root, '.k-strip-hitno')?.tagName).toBe(wall ? 'SPAN' : 'A');
+      expect(q(k.root, '.k-strip-hitno')?.tagName ?? null).toBe(wall ? null : 'A');
       expect(q(k.root, '[data-testid=kiosk-essentials-open]') !== null).toBe(!wall);
       expect(text(q(k.root, '[data-testid=strip-verdict]'))).not.toBe('');
       k.handle.destroy();
@@ -1877,9 +1878,7 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.size).toBe('compact');
     expect(text(q(k.root, '.k-rail-summary'))).toContain('Ilica');
     expect(text(q(k.root, '[data-testid=safety-strip]'))).toContain('Grmljavina');
-    expect(q(k.root, '.k-strip-hitno')?.tagName).toBe('SPAN');
-    expect(q(k.root, '.k-strip-hitno')?.hasAttribute('href')).toBe(false);
-    expect(text(q(k.root, '.k-strip-hitno'))).toBe('Sigurnost');
+    expect(q(k.root, '.k-strip-hitno')).toBeNull();
     expect(q(k.root, '[data-testid=k-closures]')).toBeNull();
     expect(q(k.root, '[data-testid=strip-closures]')).toBeNull();
   });

@@ -35,8 +35,8 @@ upute o pretraživanju dodirom. Ukratko:
   na zbijenoj traci Sigurnosti u prezentaciji: „Grad Zagreb · provjereno” uz
   datum provjere samog popisa (odluka 47). To je navod izvora, a ne vrijeme
   dohvata. Nema ni gumba za posjetitelja: ni za pauzu, ni za kopiranje
-  koda, ni za temu ili postavke, a riječ stanja i `/hitno` u sigurnosnoj
-  traci samo su tekst. Pozivnica nudi samo jednu radnju: skeniranje.
+  koda, ni za temu ili postavke, a riječ stanja u sigurnosnoj traci samo
+  je tekst. Pozivnica nudi samo jednu radnju: skeniranje.
 - Sigurnosna traka uvijek je vidljiva i nosi stanje, izvore bez vremena i
   dežurnu ljekarnu kao zeleni križ, „24/7” i adresu.
 - Zadana tema zaslona prati sunce, pa zaslon noću prelazi na tamnu paletu.
@@ -299,9 +299,10 @@ upozorenje kada postoji; kad upozorenja nema, imenuje izvore („DHMZ · EMSC”
 bez vremena dohvata. Dežurnu ljekarnu traka pokazuje kao zeleni križ, „24/7”
 i kratku adresu; čitač zaslona zeleni križ najavljuje nazivom i adresom
 dežurne ljekarne, a kad adresu nije moguće prikazati, samo kao „24/7”. Na
-javnom zaslonu traka je samo tekst: riječ stanja i riječ `/hitno` nisu ni
-gumbi ni poveznice, a ni navod izvora karte nije poveznica. Telefon ili
-tablet koji je otvorio `/kiosk/` zadržava poveznicu i gumb za „Osnovno”.
+javnom zaslonu traka je samo tekst: riječ stanja nije ni gumb ni poveznica,
+oznake `/hitno` na njoj nema, a ni navod izvora karte nije poveznica. Telefon
+ili tablet koji je otvorio `/kiosk/` zadržava poveznicu na `/hitno` i gumb za
+„Osnovno”.
 Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
 
 Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena

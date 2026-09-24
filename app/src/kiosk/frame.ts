@@ -45,8 +45,12 @@ export function frameStrip(modules: readonly ModuleSnapshot[], stop: ScreenStop 
  * DHMZ's words, or the sources, "DHMZ · EMSC", without a time); the on-duty
  * pharmacy as the green cross, "24/7" and its short address (the cross carries
  * the pharmacy's name for a screen reader; the map drops its address label
- * when it sits on the screen's own stop, R-KP18); the /hitno pill. Closures
- * are said once, in the column's statement, never here.
+ * when it sits on the screen's own stop, R-KP18); then, on a handheld alone,
+ * the /hitno link. The passive wall prints no /hitno word (round 1, 24 Sep):
+ * styled as a pill on a screen that carries no control it read as a button
+ * and was a dead end under a finger, and it repeated the strip's own label;
+ * §11's footer names none. Closures are said once, in the column's
+ * statement, never here.
  */
 export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { noBasics: boolean; passive?: boolean }): string {
   const w = strip.parts.warning;
@@ -63,9 +67,7 @@ export function stripMarkup(strip: FrameStrip, strings: KioskStrings, opts: { no
     ${trail}
     ${pharmacyMarkup(strip, strings)}
     </div>
-    ${opts.passive
-      ? `<span class="k-strip-hitno">${escapeHtml(strings.safety.hitno)}</span>`
-      : `<a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`}`;
+    ${opts.passive ? '' : `<a class="k-strip-hitno" href="/hitno">${escapeHtml(strings.safety.hitno)}</a>`}`;
 }
 
 /** Green cross · 24/7 · the short address: `[data-symbol=pharmacy]` is the cross itself (the probe contract, §15.6). */
