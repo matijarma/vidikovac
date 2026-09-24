@@ -699,6 +699,39 @@ interface GkEntry {
 /** Row S's watch over one track: the tick of its newest fresh fix, and what
  *  the published anchor did once that fix was more than GHOST_SILENCE_S old,
  *  against the hold of each such tick (holdOf). */
+/** The next stop a vehicle item carried on the wire at one tick (rail round 3). */
+interface NextWatch {
+  gen: number;
+  trip: string | null;
+  path: number | null;
+  stopId: string;
+  /** The stop's arc on the path the tram was on, or null when it is not a served platform of that path. */
+  arc: number | null;
+  h: number;
+  /** The published stops of this trip so far, in order, for the return test. */
+  seen: string[];
+}
+
+interface NextMove {
+  clock: string;
+  id: string;
+  route: string;
+  trip: string | null;
+  from: string;
+  to: string;
+  fromArcM: number;
+  toArcM: number;
+  /** The tram's own arc on the path at the move. */
+  atM: number;
+  /** Whose word the new stop was: ZET's TripUpdate ('zet'), the twin's plan ('twin'), both ('both'), neither ('other'). */
+  source: string;
+  /** The stop was published before on this trip and left for a later one: the wall's row leaving and returning. */
+  returns: boolean;
+  /** From and to carry one stop name: the wall's one place (kiosk/arrivals.ts platformIds). */
+  samePlace: boolean;
+  nearestStop: string | null;
+}
+
 interface GhostWatch {
   gen: number;
   fixAt: number;
@@ -771,6 +804,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   const log = options.log ?? (() => {});
   const clientHz = options.clientHz ?? 4;
   const nearestStop = stopFinder(options.stops);
+  const placeOf = new Map(options.stops.map((s) => [s.id, (s.name ?? '').trim()] as const));
   const paths = net.paths;
   const pathIdToIdx = new Map(paths.map((p, i) => [p.id, i] as const));
   const pathsByEdge = new Map<number, number[]>();
@@ -901,6 +935,25 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   };
   // Row S: per track, the anchor at its newest fresh fix and what the anchor did once silent.
   const ghostWatch = new Map<string, GhostWatch>();
+  // The next stop on the wire (rail round 3): per vehicle, the last published
+  // next stop and the trip's published sequence, for the moves that go BACK
+  // along the path within a trip (a platform the wire said was passed and
+  // then names again: the wall's "sada" row vanishing and returning).
+  const nextWatch = new Map<string, NextWatch>();
+  const nextMoves: NextMove[] = [];
+  let nextTicks = 0;
+  let nextForwardMoves = 0;
+  const stopArcCache = new Map<string, number | null>();
+  const stopArcOn = (pathIdx: number, stopId: string): number | null => {
+    const key = `${pathIdx}|${stopId}`;
+    let arc = stopArcCache.get(key);
+    if (arc === undefined) {
+      const entry = net.stopsOnPath(pathIdx).find((e) => e.stop.id === stopId);
+      arc = entry ? entry.s : null;
+      stopArcCache.set(key, arc);
+    }
+    return arc;
+  };
   const ghostEpisodes: GhostEpisode[] = [];
 
   // --- the client: the real integrator over the very payloads the twin publishes.
@@ -1160,11 +1213,15 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     const hour = localHour(headerSec);
     const windowTick = inWindow(headerSec);
 
-    // `held` as published this tick, per vehicle.
+    // `held` and `nextStopId` as published this tick, per vehicle.
     const heldById = new Map<string, boolean>();
+    const nextById = new Map<string, string>();
     for (const item of items) {
       if (!item.id.startsWith('vehicle:')) continue;
-      heldById.set(item.id.slice('vehicle:'.length), item.data?.['held'] === true);
+      const vid = item.id.slice('vehicle:'.length);
+      heldById.set(vid, item.data?.['held'] === true);
+      const nextStopId = item.data?.['nextStopId'];
+      if (typeof nextStopId === 'string' && nextStopId !== '') nextById.set(vid, nextStopId);
     }
 
     // --- silence (WP0 step 7c), read from the published payload: a vehicle
@@ -1287,6 +1344,58 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       const fresh = prev === null || prev.fixAt !== rec.fixAt || prev.gen !== rec.gen;
       rec.fresh = fresh;
       if (fresh) tramFreshFixes++;
+
+      // The next stop on the wire (rail round 3): a move to an EARLIER served
+      // platform of the same path within one trip is a backward move; one onto
+      // a platform this trip's wire already named and left is a return.
+      if (payload !== null) {
+        const published = nextById.get(track.id);
+        let watch = nextWatch.get(track.id);
+        if (watch && (watch.gen !== gen || watch.trip !== track.tripId)) watch = undefined;
+        if (published !== undefined) {
+          nextTicks++;
+          const arc = rec.path !== null ? stopArcOn(rec.path, published) : null;
+          if (watch && watch.stopId !== published) {
+            if (watch.path === rec.path && watch.arc !== null && arc !== null) {
+              if (arc < watch.arc) {
+                const zetSaid = track.tripId !== null && state.tripUpdates[track.tripId]?.stopId === published;
+                const twinSaid = track.next?.stopId === published;
+                const near = nearestStop(rec.p);
+                nextMoves.push({
+                  clock: localClock(headerSec),
+                  id: track.id,
+                  route: track.routeId,
+                  trip: track.tripId,
+                  from: watch.stopId,
+                  to: published,
+                  fromArcM: Math.round(watch.arc),
+                  toArcM: Math.round(arc),
+                  atM: Math.round(rec.s),
+                  source: zetSaid && twinSaid ? 'both' : zetSaid ? 'zet' : twinSaid ? 'twin' : 'other',
+                  returns: watch.seen.includes(published),
+                  samePlace: (placeOf.get(watch.stopId) ?? '') !== '' && placeOf.get(watch.stopId) === placeOf.get(published),
+                  nearestStop: near ? near.stop.name : null,
+                });
+              } else nextForwardMoves++;
+            }
+            watch.seen.push(watch.stopId);
+            if (watch.seen.length > 12) watch.seen.splice(0, watch.seen.length - 12);
+            watch.stopId = published;
+            watch.arc = arc;
+            watch.path = rec.path;
+            watch.h = headerSec;
+          } else if (!watch) {
+            watch = { gen, trip: track.tripId, path: rec.path, stopId: published, arc, h: headerSec, seen: [] };
+            nextWatch.set(track.id, watch);
+          } else {
+            watch.path = rec.path;
+            if (rec.path !== null) watch.arc = stopArcOn(rec.path, published);
+          }
+        }
+        // A tick without a next stop on the wire (a tram past the last platform
+        // of its path) keeps the watch: the next name is read against the last
+        // one of the trip, not as a fresh start.
+      }
 
       // Unplaced (WP0 step 7b): on no path, yet not off the graph.
       if (track.offGraph) unplaced.offGraphSec += dt;
@@ -1971,6 +2080,24 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       longest: [...eps].sort((a, b) => b.durationS - a.durationS).slice(0, 12),
     };
 
+    // ---- the next stop on the wire (rail round 3) ----------------------------------
+    const nextReturns = nextMoves.filter((m) => m.returns);
+    const nextStopReport = {
+      definition: 'per tram vehicle item with a nextStopId, within one trip and one matched path: a change of the published next stop to a served platform EARLIER on the path is a backward move; one onto a platform the trip\'s wire already named and left is a return (the wall\'s "sada" row vanishing and coming back); a move between two platforms of one stop name, the wall\'s one place (kiosk/arrivals.ts platformIds), is counted apart as samePlace',
+      ticks: nextTicks,
+      forwardMoves: nextForwardMoves,
+      backwardMoves: nextMoves.length,
+      returns: nextReturns.length,
+      samePlaceMoves: nextMoves.filter((m) => m.samePlace).length,
+      samePlaceReturns: nextReturns.filter((m) => m.samePlace).length,
+      bySource: Object.fromEntries(countBy(nextMoves, (m) => m.source)),
+      returnsBySource: Object.fromEntries(countBy(nextReturns, (m) => m.source)),
+      byRoute: Object.fromEntries(countBy(nextMoves, (m) => m.route)),
+      byStop: countBy(nextReturns, (m) => m.nearestStop ?? '?', 15),
+      backM: { p50: percentile(nextMoves.map((m) => m.fromArcM - m.toArcM), 0.5), p95: percentile(nextMoves.map((m) => m.fromArcM - m.toArcM), 0.95), max: maxOf(nextMoves.map((m) => m.fromArcM - m.toArcM)) },
+      samples: nextMoves.slice(0, 40),
+    };
+
     const past = silence.past;
     const pastOver = past.map((x) => x.overM);
     const silenceBand = (lo: number, hi: number): number => past.filter((x) => x.silenceS > lo && x.silenceS <= hi).length;
@@ -2132,6 +2259,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       unplaced: unplacedReport,
       silence: silenceReport,
       ghostAdvance: ghostReport,
+      nextStop: nextStopReport,
       serviceFilter: serviceReport,
       glavniKolodvor: gkReport,
       tripsByPriorPath: Object.fromEntries([...tripsByPriorPath.entries()].map(([k, v]) => [k, v.size] as const).sort((a, b) => b[1] - a[1])),
@@ -2446,6 +2574,8 @@ function acceptanceLines(r: BranchReport): string[] {
   L.push(`  S  silent > ${gh.silenceS} s: ${gh.episodes} episodes (${gh.measured} on a path plan); published anchor beyond its hold at the next stop max ${fmt(gh.beyondHoldM.max)} m, p95 ${fmt(gh.beyondHoldM.p95)} m, in ${gh.beyondHold} episodes, > 50 m ${gh.over50m}  [max <= 50 m]; S-glide, silent up to the hold: max ${fmt(gh.glideM.max)} m, p95 ${fmt(gh.glideM.p95)} m; past the stop ZET's TripUpdate named next ${gh.pastNextStop} (context)`);
   const sf = r.serviceFilter;
   L.push(`  I  adoptions onto a path no service of the day runs: ${sf.adoptionsWithoutService} of ${sf.adoptions} onto/variant adoptions (services seen ${sf.servicesSeen.join(', ') || 'none'})  [0]`);
+  const ns = r.nextStop;
+  if (ns) L.push(`  next stop on the wire: ${ns.backwardMoves} backward moves within a trip over ${ns.ticks} tram items (${ns.forwardMoves} forward), ${ns.returns} of them returns to a platform the wire had left (by source ${Object.entries(ns.returnsBySource).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}, ${ns.samePlaceReturns} of those between two platforms of one place); back p50 ${fmt(ns.backM.p50)} m p95 ${fmt(ns.backM.p95)} m  (context, the wall's "sada" row)`);
   return L;
 }
 
@@ -2623,6 +2753,17 @@ export function formatMarkdown(r: BranchReport): string {
   L.push(mdTable(['past the ZET next stop', ...ghostHeader], gh.pastNextStopSamples.map(ghostRow)));
   L.push('');
   const sf = r.serviceFilter;
+  const ns = r.nextStop;
+  L.push('## The next stop on the wire (rail round 3): backward moves within a trip');
+  L.push('');
+  L.push(`Definition: ${ns.definition}. Tram items with a next stop: ${ns.ticks}; forward moves ${ns.forwardMoves}; backward moves **${ns.backwardMoves}**, of which returns **${ns.returns}** (${ns.samePlaceReturns} of them, and ${ns.samePlaceMoves} of the backward moves, between two platforms of one place); by source ${JSON.stringify(ns.bySource)} (returns ${JSON.stringify(ns.returnsBySource)}); metres back p50 ${fmt(ns.backM.p50)}, p95 ${fmt(ns.backM.p95)}, max ${fmt(ns.backM.max)}.`);
+  L.push('');
+  L.push(mdTable(['returns, nearest stop', 'events'], pairRows(ns.byStop)));
+  L.push('');
+  L.push(mdTable(['route', 'backward moves'], Object.entries(ns.byRoute).map(([k, v]) => [k, v])));
+  L.push('');
+  L.push(mdTable(['backward move', 'route', 'trip', 'from -> to', 'arcs m', 'tram at m', 'source', 'returns', 'stop'], ns.samples.slice(0, 30).map((m) => [`${m.clock} ${m.id}`, m.route, m.trip, `${m.from} -> ${m.to}`, `${m.fromArcM} -> ${m.toArcM}`, m.atM, m.source, m.returns ? 'y' : 'n', m.nearestStop])));
+  L.push('');
   L.push('## Row I: adoptions onto a path no service of the day runs');
   L.push('');
   L.push(`Definition: ${sf.definition}. Services seen: ${sf.servicesSeen.join(', ') || 'none'}. Adoptions (onto another route, same-route variant): ${sf.adoptions}; onto a path without a seen service: **${sf.adoptionsWithoutService}** (by class ${JSON.stringify(sf.byClass)}).`);

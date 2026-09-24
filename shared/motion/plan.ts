@@ -19,7 +19,14 @@
 //   - a diverted tram (match.ts TramTrack.diverted, running its line's rails
 //     off its own path) is planned no further than the next branch of those
 //     rails (branches.ts): beyond it the way it takes is a guess, so the plan
-//     holds at the branch until a fix says which way it went (rail round 2).
+//     holds at the branch until a fix says which way it went (rail round 2);
+//   - the next stop (Track.next) is the platform whose zone the anchor lies
+//     in, standing or read moving past the stop point, else the first served
+//     platform ahead, and within a trip it never moves back along the path
+//     unless the anchor itself moved back beyond a stop zone: the wall
+//     carries a tram as "sada" while the wire names its platform, and a next
+//     stop that moved past the platform and came back made that row vanish
+//     and return (rail round 3).
 
 import type { BranchTable } from './branches';
 import type { DwellPlanner } from './dwell';
@@ -76,6 +83,11 @@ export const ETA_SLACK_S = 10;
  *  its next stop, never past it, and silenceDecay fades it linearly to 0 at
  *  EVICT_S. */
 export const SILENCE_HOLD_S = 30;
+/** How far past its path's first platform a tram whose TripUpdate still names
+ *  that platform is read as at the terminus stand, not yet served (rail round
+ *  3): the stands project 97 to 272 m along the departure rails past the
+ *  platform at Zapruđe (route 8) and Dubrava (route 7). */
+export const STAND_PAST_FIRST_M = 300;
 /** @deprecated Unused since T8 made the fade linear; still exported only
  *  because a local replay investigation imports it. */
 export const SILENCE_HALFLIFE_S = 60;
@@ -249,6 +261,8 @@ interface ArcGeometry {
   stopAt(s: number): { stopId: string; s: number } | null;
   /** The key the TimesProvider knows this geometry by, or null (a bus shape). */
   timesPath: number | null;
+  /** The first platform the path serves (the trip starts there), or null on a shape. */
+  first: { stopId: string; s: number } | null;
 }
 
 function pathGeometryOf(net: GraphNetwork, pathIdx: number): ArcGeometry {
@@ -262,6 +276,7 @@ function pathGeometryOf(net: GraphNetwork, pathIdx: number): ArcGeometry {
       return best;
     },
     timesPath: pathIdx,
+    first: stops.length > 0 ? { stopId: stops[0].stop.id, s: stops[0].s } : null,
   };
 }
 
@@ -285,6 +300,7 @@ function shapeGeometryOf(net: GraphNetwork, shapeIdx: number): ArcGeometry {
       return before && Math.abs(before.s - s) <= STOP_ZONE_M ? { stopId: before.stop.id, s: before.s } : null;
     },
     timesPath: null,
+    first: null,
   };
 }
 
@@ -372,6 +388,9 @@ export function buildPlan(
     track.confidence = 0;
     return;
   }
+  // What the previous tick named, for the one-next-stop-per-visit rule below.
+  const prevNext = track.next;
+  const prevPlan = track.plan;
   const silenceSec = nowSec - last.atSec;
   const decay = silenceDecay(silenceSec);
   // T8: past SILENCE_HOLD_S the evidence is too old to move on. The plan
@@ -453,7 +472,11 @@ export function buildPlan(
   // stop beyond says when it must leave to make it; and a TripUpdate that
   // already names the stop beyond says it has left by the header at the
   // latest (the update is current, the fix may be 30 s old).
-  const here = geometry.stopAt(s);
+  // The platform the anchor stands at: the zone the floored anchor lies in,
+  // else the zone the observed fix lies in (the published floor lifts the
+  // anchor by up to ANCHOR_NOISE_M, which can carry it out of the zone the
+  // tram was read in; the tram is still at that platform, rail round 3).
+  const here = geometry.stopAt(s) ?? geometry.stopAt(round1(track.match.s));
   // T8's platform is read off the evidence: the zone the observed fix lies
   // in, before the published floor raised the anchor (a fix 30 m past a stop
   // point, floored 20 m further, is still a tram at that stop, not one on its
@@ -498,6 +521,10 @@ export function buildPlan(
     const beyond = next && next.stopId !== here.stopId ? aheadOfHere.find((ahead) => ahead.stopId === next.stopId) ?? null : null;
     const approachSpeed = approachSpeedTo(here.s);
     const remaining = dwellRemaining(track, here, dwellHere, approachSpeed, counts);
+    // Read moving past the stop point but still in the platform's zone: the
+    // platform is still the next stop, reached now (rail round 3); the run
+    // below plans on from the anchor.
+    if (remaining === null) nextStop = { stopId: here.stopId, s: round1(here.s), etaSec: Math.round(t) };
     if (remaining !== null) {
       // The dwell that is left; a stand already past it ends a tick from now (R-TE48).
       let departure = t + (remaining > 0 ? remaining : STAND_EXTEND_S);
@@ -577,6 +604,8 @@ export function buildPlan(
   /** Nothing ahead has been reached yet: ZET's ETA is about the first
    *  PLATFORM ahead, which a junction wait in front of it must not displace. */
   let firstPlatformAhead = true;
+  /** The plan ended at the next branch of a diverted tram's rails: no platform beyond it is named. */
+  let heldAtBranch = false;
 
   while (t < horizonEnd) {
     const stop = stopIdx < halts.length ? halts[stopIdx] : null;
@@ -608,6 +637,7 @@ export function buildPlan(
     if (own !== null && !viaEta && ownLeg > 0.5 && ownLeg < target - s - 0.5) knots.push([rel(t + ownLeg / own), round1(s + ownLeg)]);
     knots.push([rel(arrive), round1(target)]);
     if (!stop || stop.branch) {
+      if (stop?.branch) heldAtBranch = true;
       // The end of the path is a terminus: hold until the trip changes. The
       // next branch of a diverted tram's rails is held the same way, until a
       // fix says which way it went.
@@ -640,6 +670,49 @@ export function buildPlan(
     }
   }
   if (knots[knots.length - 1][0] < rel(horizonEnd)) knots.push([rel(horizonEnd), knots[knots.length - 1][1]]);
+  // The first platform ahead is the next stop whether or not the plan
+  // reaches it within its horizon (rail round 3): a 40 s stand and a
+  // junction wait ahead can eat the 90 s (101007 standing 112 m short of
+  // Šubićeva, 21 Sep 08:43:54, named nothing for a tick and ZET's stop
+  // behind went on the wire). Without the plan's arrival there is no time.
+  // A diverted tram held at a branch names nothing beyond it: which way it
+  // goes is not known.
+  if (!nextStop && !heldAtBranch) {
+    const ahead = geometry.stopsAhead(knots[0][1])[0];
+    if (ahead) nextStop = { stopId: ahead.stopId, s: round1(ahead.s), etaSec: null };
+  }
+  // A terminus stand that projects onto the departure rails past the trip's
+  // first platform (rail round 3): the tram has not served the platform ZET
+  // still names, the plan reads it as passed and would name the stop
+  // beyond. Within STAND_PAST_FIRST_M of the platform, off every zone, ZET's
+  // word is the evidence, and there is no time: the plan cannot say when the
+  // tram leaves the stand. Neither the plan's shape nor the speed estimate
+  // can say whether it stands there (the order law pushes a standing tram's
+  // plan ahead of a follower, 10314 at 17:43:56, 150 to 239 m in 8 s; the
+  // stand's scatter 20 to 47 m off the rails reads as 2.5 m/s, 17:36:23),
+  // so the fix's own arc is read, not the plan's. The one-next-stop rule
+  // below keeps a later platform once named (ZET's truncated update names
+  // the first platform again for a tick: 102412 at 250 m past Borongaj).
+  const firstPlatform = geometry.first;
+  if (firstPlatform && next?.stopId === firstPlatform.stopId && !here && !silentHere && track.match.s > firstPlatform.s + STOP_ZONE_M && track.match.s - firstPlatform.s <= STAND_PAST_FIRST_M) {
+    nextStop = { stopId: firstPlatform.stopId, s: round1(firstPlatform.s), etaSec: null };
+  }
+
+  // One next stop per visit (rail round 3): a platform the wire has named
+  // and moved on from is not named again on this path unless the anchor
+  // itself came back by more than a stop zone (a reversal, or another
+  // vehicle's fix under this id). The anchor scattering around the edge of
+  // a zone it has left keeps the later stop, with the plan's own arrival
+  // there; a silent tram held by T8 at a fix inside the zone it had left
+  // keeps it too (the hold stays where it is, the name does not go back:
+  // 467 at the Mihaljevac loop stand, 20 Sep 02:07:44, named the arrival
+  // platform again after 33 s of silence 37 m past its point).
+  const samePath = prevPlan !== null && prevPlan.on !== 'free' && prevPlan.on === (track.match.pathIdx !== null ? 'path' : 'shape')
+    && (prevPlan.on === 'path' ? prevPlan.pathIdx === track.match.pathIdx : prevPlan.shapeIdx === track.match.shapeIdx);
+  if (nextStop && prevNext && samePath && prevNext.s > nextStop.s && track.match.s >= prevPlan.knots[0][1] - STOP_ZONE_M) {
+    const reached = knots.find(([, ks]) => ks >= prevNext.s - 0.5);
+    nextStop = { stopId: prevNext.stopId, s: prevNext.s, etaSec: reached ? Math.round(headerSec + reached[0]) : null };
+  }
 
   track.plan = track.match.pathIdx !== null ? { on: 'path', pathIdx: track.match.pathIdx, knots } : { on: 'shape', shapeIdx: track.match.shapeIdx!, knots };
   track.next = nextStop;

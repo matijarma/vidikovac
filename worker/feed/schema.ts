@@ -155,9 +155,13 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // either; the Worker never forwards a field the feed does not populate.
   // 'routeType' is the GTFS route_type on the pin (R-P1: a locked kiosk keeps
   // to trams before, or without, the network artefact). 'direction',
-  // 'headsign', 'shapeId', 'nextStopId' and 'delaySeconds' are the twin's
-  // static-GTFS join of the vehicle's trip and its TripUpdate (R-TE2, phase
-  // A). 'nextStopEtaSec' is the twin's OWN planned arrival at that stop in
+  // 'headsign' and 'shapeId' are the twin's static-GTFS join of the vehicle's
+  // trip and 'delaySeconds' its TripUpdate's (R-TE2, phase A). 'nextStopId' is
+  // the platform the twin's own plan names on a rail path (the zone its
+  // anchor lies in, else the first served platform ahead, one per visit,
+  // nothing past the last platform; rail round 3), ZET's TripUpdate's stop
+  // off the rails and at a terminus stand that projects past the trip's
+  // first platform. 'nextStopEtaSec' is the twin's OWN planned arrival at that stop in
   // epoch seconds, and rides whenever the 'nextStopId' beside it is the stop
   // the twin planned for, whichever source named that stop; it is withheld
   // only where the twin and ZET disagree about which stop is next (WP5),

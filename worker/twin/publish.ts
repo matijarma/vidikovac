@@ -84,31 +84,37 @@ interface Placed {
   lat: number;
   motion?: VehicleMotion;
   held: boolean;
+  /** The anchor (the fix's arc, not the plan's arc at the header, which the order law may have pushed ahead) lies
+   *  beyond the zone of the last platform its path serves: the terminus loop's run-out. */
+  pastLast: boolean;
 }
 
 /** The pin's position and the wire form of the plan, at the header. */
 function place(track: Track, net: GraphNetwork | null): Placed {
   const last = lastFix(track)!;
   const plan = track.plan;
-  if (!plan) return { lon: last.lon, lat: last.lat, held: false };
+  if (!plan) return { lon: last.lon, lat: last.lat, held: false, pastLast: false };
   if (plan.on === 'free') {
     const [lon, lat] = evalFreePlan(plan.knots, 0);
-    return { lon, lat, motion: { plan: wireFreeKnots(plan.knots) }, held: false };
+    return { lon, lat, motion: { plan: wireFreeKnots(plan.knots) }, held: false, pastLast: false };
   }
-  if (!net) return { lon: last.lon, lat: last.lat, held: false };
+  if (!net) return { lon: last.lon, lat: last.lat, held: false, pastLast: false };
   const s = evalPathPlan(plan.knots, 0);
   // Standing: the plan is flat over the next second and a stop is within its zone.
   const flat = Math.abs(evalPathPlan(plan.knots, 1) - s) < 0.05;
   if (plan.on === 'path') {
     const [lon, lat] = toLonLat(net.toPathPoint(plan.pathIdx, s));
-    const atStop = net.stopsOnPath(plan.pathIdx).some((entry) => Math.abs(entry.s - s) <= STOP_ZONE_M);
-    return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: wirePathKnots(plan.knots) }, held: flat && atStop };
+    const served = net.stopsOnPath(plan.pathIdx);
+    const atStop = served.some((entry) => Math.abs(entry.s - s) <= STOP_ZONE_M);
+    const last = served[served.length - 1];
+    const anchor = plan.knots[0][1];
+    return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: wirePathKnots(plan.knots) }, held: flat && atStop, pastLast: last !== undefined && anchor > last.s + STOP_ZONE_M };
   }
   const shape = net.shapes[plan.shapeIdx];
   const [lon, lat] = toLonLat(at(shape.pts, shape.cum, s));
   const before = net.nextStop(plan.shapeIdx, s - STOP_ZONE_M - 0.5);
   const atStop = before !== null && Math.abs(before.s - s) <= STOP_ZONE_M;
-  return { lon, lat, motion: { path: shape.id, plan: wirePathKnots(plan.knots) }, held: flat && atStop };
+  return { lon, lat, motion: { path: shape.id, plan: wirePathKnots(plan.knots) }, held: flat && atStop, pastLast: false };
 }
 
 export function buildPayload(
@@ -129,12 +135,27 @@ export function buildPayload(
     const join = track.tripId !== null ? joins.get(track.tripId) : undefined;
     const next = track.tripId !== null ? state.tripUpdates[track.tripId] : undefined;
     const placed = place(track, net);
-    // ZET's TripUpdate names the next stop where it has one; the twin's plan
-    // names it otherwise. The twin's ETA rides whenever the id that goes on
-    // the wire is the id it planned for -- whichever source named it -- and
-    // is withheld where the two disagree, because an arrival time belongs to
-    // the stop it was computed for.
-    const nextStopId = next?.stopId ?? track.next?.stopId ?? undefined;
+    // On a rail path the twin's own next stop goes on the wire: the platform
+    // whose zone its anchor lies in, else the first served platform ahead,
+    // one per visit (plan.ts, rail round 3). ZET's TripUpdate names a stop by
+    // the first time it still has ahead, and at a platform that time passes
+    // and returns with every re-estimate while the tram stands there, so the
+    // wall's "sada" row vanished and came back (305 of 334 backward moves in
+    // one Monday hour were ZET's). Off every path ZET's stop names it where
+    // it has one, the twin's shape plan otherwise. The twin's ETA rides
+    // whenever the id that goes on the wire is the id it planned for --
+    // whichever source named it -- and is withheld where the two disagree,
+    // because an arrival time belongs to the stop it was computed for.
+    // Past the last platform of its path (the terminus loop's run-out) the
+    // trip has no next stop, and ZET's TripUpdate for a finished trip names
+    // a passed stop's re-estimate or the trip's first platform (22134 at the
+    // Dubrava loop, 21 Sep 17:16:57 to 17:22: Ravnice, Dubrava again,
+    // Ljubljanica), so nothing goes on the wire until the trip changes. A tram
+    // at a terminus stand that projects past the trip's first platform is the
+    // planner's to name (STAND_PAST_FIRST_M, plan.ts).
+    const nextStopId = placed.pastLast
+      ? undefined
+      : (track.plan?.on === 'path' ? track.next?.stopId : undefined) ?? next?.stopId ?? track.next?.stopId ?? undefined;
     const nextStopEtaSec = nextStopId !== undefined && track.next?.stopId === nextStopId ? track.next.etaSec ?? undefined : undefined;
     items.push({
       id: `vehicle:${track.id}`,

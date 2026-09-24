@@ -6,6 +6,7 @@ import { emptyState, type TripNext, type TwinState } from '../../worker/twin/sta
 import { decodeNetwork } from '../../shared/motion/network';
 import graphBefore from '../fixtures/graph-migration/before.json';
 import graphAfter from '../fixtures/graph-migration/after.json';
+import { corridorSpec, syntheticNetwork } from '../motion/synthetic-network';
 
 const HEADER_S = 1_800_000_000;
 const NOW_MS = (HEADER_S + 2) * 1000;
@@ -103,5 +104,63 @@ describe('buildPayload and the next-stop ETA', () => {
     const item = pin([track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })]);
     expect(DATA_KEYS.vehicle).toContain('nextStopEtaSec');
     for (const key of Object.keys(item.data ?? {})) expect(DATA_KEYS.vehicle).toContain(key);
+  });
+});
+
+// Rail round 3: on a rail path the twin's own next stop goes on the wire; ZET's
+// TripUpdate names a stop by the first time it still has ahead, and at a
+// platform that time passes and returns with every re-estimate while the tram
+// stands there, so the wall's "sada" row vanished and came back (305 of 334
+// backward moves in one Monday hour were ZET's). ZET's stop still names the
+// next stop where the twin has no path plan.
+describe('buildPayload prefers the twin\'s next stop on a rail path', () => {
+  const onPath = (over: Partial<Track> & { id: string }): Track => track({ ...over, plan: { on: 'path', pathIdx: 0, knots: [[0, 100], [60, 600]] } });
+  const net = decodeNetwork(graphAfter);
+  const pinOn = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
+    buildPayload(state(tracks, tripUpdates), joins, routes, NOW_MS, NOW_MS + 10_000, net).items.find((i) => i.id.startsWith('vehicle:'))!;
+
+  it('names the twin\'s stop and its ETA where ZET names another stop', () => {
+    const item = pinOn(
+      [onPath({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })],
+      { T1: update({ stopId: '244_1', delaySec: 120 }) },
+    );
+    expect(item.data?.nextStopId).toBe('231_2');
+    expect(item.data?.nextStopEtaSec).toBe(HEADER_S + 95);
+    expect(item.data?.delaySeconds).toBe(120);
+  });
+
+  it('falls back to ZET\'s stop where the twin\'s plan on a path reaches no stop, and off every path', () => {
+    const noNext = pinOn([onPath({ id: '1', next: null })], { T1: update({ stopId: '244_1', delaySec: 30 }) });
+    expect(noNext.data?.nextStopId).toBe('244_1');
+    const free = pin([track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })], { T1: update({ stopId: '244_1', delaySec: 120 }) });
+    expect(free.data?.nextStopId).toBe('244_1');
+  });
+});
+
+describe('buildPayload names no next stop past the last platform of a path (rail round 3)', () => {
+  const net = syntheticNetwork(corridorSpec());
+  const pinOn = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
+    buildPayload(state(tracks, tripUpdates), joins, routes, NOW_MS, NOW_MS + 10_000, net).items.find((i) => i.id.startsWith('vehicle:'))!;
+  // 2_0's last platform D900 lies at 2,400 m of 2,725 m: the rails beyond it are the terminus loop's run-out.
+  const at = (s: number, next: Track['next'] = null) => track({ id: '1', next, plan: { on: 'path', pathIdx: 2, knots: [[0, s], [60, s]] } });
+
+  it('names nothing beyond the last platform\'s zone, whatever ZET names', () => {
+    // 22134 at the Dubrava loop past its last platform, 21 Sep 17:16:57 to 17:22: ZET named Ravnice (passed), Dubrava again and the trip's first platform.
+    expect(pinOn([at(2500)], { T1: update({ stopId: 'T300' }) }).data?.nextStopId).toBeUndefined();
+    expect(pinOn([at(2441)], { T1: update({ stopId: 'D900' }) }).data?.nextStopId).toBeUndefined();
+    expect(pinOn([at(2500)], { T1: update({ stopId: 'D900' }) }).data?.nextStopEtaSec).toBeUndefined();
+  });
+
+  it('still takes ZET\'s stop before the last platform, the trip\'s first platform included', () => {
+    expect(pinOn([at(2439)], { T1: update({ stopId: 'D900' }) }).data?.nextStopId).toBe('D900');
+    expect(pinOn([at(2300)], { T1: update({ stopId: 'D900' }) }).data?.nextStopId).toBe('D900');
+    // A stand projected past the first platform (route 8 at Zapruđe, 10318 at 17:19:55): the trip has not run yet, ZET's first platform stands.
+    expect(pinOn([at(150)], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
+  });
+
+  it('reads the anchor, not a plan the order law pushed past the last platform', () => {
+    // 10314 at the Zapruđe stand, 17:43:56: the plan pushed 150 to 239 m in 8 s ahead of a follower; the fix's arc is the evidence.
+    const pushed = track({ id: '1', next: null, plan: { on: 'path', pathIdx: 2, knots: [[0, 2380], [2, 2500], [20, 2600]] } });
+    expect(pinOn([pushed], { T1: update({ stopId: 'D900' }) }).data?.nextStopId).toBe('D900');
   });
 });

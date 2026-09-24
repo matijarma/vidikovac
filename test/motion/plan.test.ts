@@ -353,3 +353,119 @@ describe('buildPlan holds a diverted tram at the next branch of its line (rail r
     expect(Math.max(...knotsOf(t).map(([, s]) => s))).toBeGreaterThan(1800);
   });
 });
+
+describe('buildPlan names one next stop per visit (rail round 3)', () => {
+  // The wall carries a tracked tram as "sada" while the wire names the
+  // place's platform as its next stop; a next stop that moves past the
+  // platform and comes back makes the row vanish and return (lane W fix10's
+  // residual). The tram's own next stop is the platform whose zone its anchor
+  // lies in, whether it stands there or is read moving past the stop point,
+  // and it never moves back along the path within a trip unless the anchor
+  // itself moved back beyond a stop zone.
+  it('keeps the platform as the next stop while the anchor is in its zone, moving or not', () => {
+    // 35 m past T600's point, moving at 8 m/s (the dwell history says it has left).
+    const moving = tramOn1('past-the-point', [[520, 1000], [600, 1010], [635, 1015]]);
+    buildPlan(moving, net, eightMs, null, 1017, 1017, BANDS);
+    expect(moving.next?.stopId).toBe('T600');
+    expect(moving.next?.etaSec).toBe(1015);
+    expect(at(moving, 1040, 1017)).toBeGreaterThan(700); // the plan itself runs on
+    // 45 m past the point: beyond the zone, the next stop is T900.
+    const beyond = tramOn1('beyond-the-zone', [[530, 1000], [610, 1010], [645, 1015]]);
+    buildPlan(beyond, net, eightMs, null, 1017, 1017, BANDS);
+    expect(beyond.next?.stopId).toBe('T900');
+  });
+
+  it('does not move the next stop back to a platform the anchor scattered around the edge of', () => {
+    const tram = tramOn1('scatter', [[560, 1000], [645, 1010]]);
+    buildPlan(tram, net, eightMs, null, 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    // The next fix reads 8 m back, inside T600's zone again: the wire keeps T900.
+    matcher.matchFix(tram, fix(637, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    // A fix a whole zone further back is a real reversal (or another tram's fix under this id): the platform is named again.
+    matcher.matchFix(tram, fix(590, 0, 1030), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1032, 1032, BANDS);
+    expect(tram.next?.stopId).toBe('T600');
+  });
+});
+
+describe('buildPlan keeps the later next stop through a T8 hold inside a zone the tram had left (rail round 3)', () => {
+  it('holds the silent tram where it stood and still names the platform ahead', () => {
+    // 467 at the Mihaljevac loop stand, 20 Sep 02:07: named the departure
+    // platform with the anchor past the arrival platform's zone, then a fix
+    // 8 m back inside the zone and 33 s of silence named the arrival platform
+    // again. The hold stays at the fix; the name does not go back.
+    const tram = tramOn1('silent-in-zone', [[560, 1000], [645, 1010]]);
+    buildPlan(tram, net, eightMs, null, 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    matcher.matchFix(tram, fix(637, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    buildPlan(tram, net, eightMs, null, 1060, 1060, BANDS); // 40 s silent: held at 637, in T600's zone
+    for (const [, s] of knotsOf(tram)) expect(s).toBeLessThanOrEqual(637.05);
+    expect(tram.next?.stopId).toBe('T900');
+  });
+});
+
+describe('buildPlan names the first platform ahead when the horizon does not reach it (rail round 3)', () => {
+  // 101007 standing 112 m short of Šubićeva, 21 Sep 08:43:54: a 40 s stand
+  // hold and a learned junction wait ahead ate the 90 s horizon, the plan
+  // named no platform for a tick and ZET's stop behind went on the wire.
+  const junction = (waitSec: number) => ({ aheadOf: (_pathIdx: number, s: number) => (s < 150 ? [{ s: 150, waitSec }] : []) });
+
+  it('names it without a time, and with the plan\'s arrival when the plan reaches it', () => {
+    const tram = tramOn1('short-horizon', [[100, 1000], [100, 1045]]);
+    buildPlan(tram, net, eightMs, null, 1045, 1045, BANDS, { junctions: junction(60) });
+    for (const [, s] of knotsOf(tram)) expect(s).toBeLessThanOrEqual(150.05);
+    expect(tram.next).toEqual({ stopId: 'T300', s: 300, etaSec: null });
+    const reached = tramOn1('reaches', [[100, 1000], [100, 1045]]);
+    buildPlan(reached, net, eightMs, null, 1045, 1045, BANDS, { junctions: junction(10) });
+    expect(reached.next?.stopId).toBe('T300');
+    expect(typeof reached.next?.etaSec).toBe('number');
+  });
+
+  it('names nothing for a diverted tram held at a branch short of the platform', () => {
+    const tram = tramOn1('branch', [[100, 1000], [100, 1045]]);
+    (tram as { diverted?: true }).diverted = true;
+    buildPlan(tram, net, eightMs, null, 1045, 1045, BANDS, { branches: { aheadOf: () => 150 } });
+    expect(tram.next).toBeNull();
+  });
+});
+
+describe('buildPlan keeps ZET\'s first platform at a terminus stand projected past it (rail round 3)', () => {
+  // The stand at Zapruđe projects 111 to 272 m along route 8's departure
+  // path past its first platform (10318 at 17:19:55, 10317 at 08:53:47),
+  // Dubrava's 97 m along route 7's (102203 at 03:59:45): the tram has not
+  // served the platform ZET still names, and the plan read it as passed.
+  const zet = (stopId: string) => ({ stopId, timeSec: null, delaySec: null, atSec: null });
+  const standAt = (id: string, x: number, moving = false) => tramOn1(id, moving ? [[x - 40, 1000], [x, 1010]] : [[x, 1000], [x, 1045]]);
+
+  it('names the first platform without a time within 300 m past it, standing or moving, and the platform ahead beyond', () => {
+    const standing = standAt('stand', 150);
+    buildPlan(standing, net, eightMs, zet('T0'), 1046, 1046, BANDS);
+    expect(standing.next).toEqual({ stopId: 'T0', s: 0, etaSec: null });
+    const moving = standAt('leaving', 250, true);
+    buildPlan(moving, net, eightMs, zet('T0'), 1012, 1012, BANDS);
+    expect(moving.next?.stopId).toBe('T0');
+    const far = standAt('far', 400);
+    buildPlan(far, net, eightMs, zet('T0'), 1046, 1046, BANDS);
+    expect(far.next?.stopId).toBe('T600');
+    const other = standAt('other', 150);
+    buildPlan(other, net, eightMs, zet('T300'), 1046, 1046, BANDS);
+    expect(other.next?.stopId).toBe('T300');
+  });
+
+  it('does not go back to the first platform once a later one is named (ZET\'s truncated update, 102412 at 250 m past Borongaj)', () => {
+    const tram = standAt('flicker', 250, true);
+    buildPlan(tram, net, eightMs, zet('T300'), 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T300');
+    matcher.matchFix(tram, fix(255, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, zet('T0'), 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T300');
+  });
+});
