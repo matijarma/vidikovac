@@ -2,7 +2,7 @@
 // Each has its own region and lifetime; a feed refresh never remounts them.
 import type { FrameStops } from '../../../shared/city/frame';
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
-import type { NearbyRow } from '../city/nearby';
+import { ROW_MIN_PX, type NearbyRow } from '../city/nearby';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { escapeHtml as e } from '../ui/dom/escape';
@@ -25,17 +25,29 @@ export interface InvitationDeps {
   onMapBox?: () => void;
 }
 
-/** Where the compact landscape wall's QR card stands (lane w-labels, 24 Sep). Decision 50 put it under
- *  the map so the "U blizini" list has the whole aside; on a short window that left the map a strip
- *  (669 x 162 at 1280 x 800). The order is decision 50's with the map's floor in it: the list's promises
- *  (the first and last trams, the timeless row, the lead departure: the rows its fit never drops) first,
- *  then the map's legible minimum (map/frame.ts MAP_MIN_HEIGHT_PX), then the rest of the departures, then
- *  more map. So the card stays under the map while the map is legible there ('map'), moves under the list
- *  when the list keeps its promises in the smaller box ('aside'), and otherwise stays, the map a strip.
- *  All px are the display's; 0 means not measured, and nothing moves. */
-export function cardPlacement(m: { mapUnderPx: number; listAsidePx: number; floorPx: number; minMapPx: number }): 'map' | 'aside' {
-  if (!(m.mapUnderPx > 0) || m.mapUnderPx >= m.minMapPx) return 'map';
-  return m.listAsidePx > 0 && m.listAsidePx >= m.floorPx ? 'aside' : 'map';
+/** Where the compact landscape wall puts its QR card and its legend (lanes w-labels and w-labels2, 24 Sep).
+ *  Decision 50 put the card under the map so the "U blizini" list has the whole aside; on a short window that
+ *  left the map a strip (669 x 162 at 1280 x 800, 714 x 116 at 1366 x 768). The order is decision 50's with the
+ *  map's floor in it: the list's promises (the first and last trams, the timeless row, the lead departure: the
+ *  rows its fit never drops) first, then the map's legible minimum (map/frame.ts MAP_MIN_HEIGHT_PX), then the
+ *  rest of the departures, then more map. Three arrangements, by the map they leave:
+ *  'map'    decision 50: card and legend under the map, the list the whole aside;
+ *  'aside'  the card under the list, the map the whole left column over its legend (by day);
+ *  'legend' the card under the map and the legend under the list (at night at 1366 x 768 the card under the
+ *           list leaves it 154 px for 236 to 322 px of promises, and the map under card and legend is 159 px).
+ *  Decision 50's is kept while its map is legible; else 'aside' if the list holds its promises there; else
+ *  'legend' if both hold there; else decision 50's (the promises win). All px are the display's; nothing
+ *  measured (0) moves nothing. */
+export type CompactPlacement = 'map' | 'aside' | 'legend';
+export interface CompactBox { windowPx: number; gapPx: number; cardPx: number; legendPx: number; listOverheadPx: number; floorPx: number; minMapPx: number }
+export function compactArrangement(b: CompactBox): { placement: CompactPlacement; mapPx: number; listPx: number } {
+  const map = { placement: 'map' as const, mapPx: b.windowPx - b.gapPx - b.cardPx - b.legendPx, listPx: b.windowPx - b.listOverheadPx };
+  if (!(b.windowPx > 0) || map.mapPx >= b.minMapPx) return map;
+  const aside = { placement: 'aside' as const, mapPx: b.windowPx - b.legendPx, listPx: b.windowPx - b.gapPx - b.cardPx - b.listOverheadPx };
+  if (aside.listPx >= b.floorPx) return aside;
+  const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.gapPx - b.legendPx };
+  if (legend.mapPx >= b.minMapPx && legend.listPx >= b.floorPx) return legend;
+  return map;
 }
 export interface InvitationModel {
   items: readonly NearbyRow[]; radiusM: number; frame: FrameStops; outage: boolean;
@@ -68,8 +80,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   const geography=element.querySelector<HTMLElement>('.k-geography')!;
   const field=mountField(geography,{lightweight});
   // The legend explains the map, so it stands only where there is one (not under lagano's board).
+  let legend:HTMLElement|null=null;
   if(!lightweight){
-    const legend=document.createElement('p');
+    legend=document.createElement('p');
     legend.className='k-map-legend';
     legend.innerHTML=`<span data-legend="tram"><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span data-legend="bikes"><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
     geography.appendChild(legend);
@@ -88,10 +101,10 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   });
   const setFrame=(frame:FrameStops):void=>field.setFrame(frame);
   const card=element.querySelector<HTMLElement>('.k-panel--card')!;
-  /** The map pane's height with the card under it, measured while it stood there, per window box. */
-  let mapUnder:{key:string;px:number}|null=null;
   /** A window box and promise set for which the card was tried under the list and the promises did not fit. */
   let refused:string|null=null;
+  /** The height the rows the fit never drops need in a smaller box: each at its content, never under the
+   *  smallest row (ROW_MIN_PX), whatever the larger box's budget grew it to. */
   function promisesPx(rows:HTMLElement):number{
     const lis=[...rows.children] as HTMLElement[];
     const kept=new Set<HTMLElement>(lis.filter(li=>li.dataset.kind==='first'||li.dataset.kind==='last'));
@@ -99,38 +112,48 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     const departure=lis.find(li=>li.dataset.kind==='departure');if(departure)kept.add(departure);
     if(kept.size===0)return 0;
     const gap=Number.parseFloat(getComputedStyle(rows).rowGap)||0;
-    return [...kept].reduce((sum,li)=>sum+li.offsetHeight,0)+gap*(kept.size-1);
+    const zoom=Number.parseFloat(getComputedStyle(element).getPropertyValue('--k-zoom'))||1;
+    const content=(li:HTMLElement):number=>{
+      const style=getComputedStyle(li);
+      const pad=(Number.parseFloat(style.paddingTop)||0)+(Number.parseFloat(style.paddingBottom)||0);
+      const inner=Math.max(...[...li.children].map(child=>(child as HTMLElement).offsetHeight||0),0);
+      return Math.max(ROW_MIN_PX*zoom,inner+pad);
+    };
+    return [...kept].reduce((sum,li)=>sum+content(li),0)+gap*(kept.size-1);
   }
   /** The window box and the promise rows (not the departures, which come and go by the minute). */
   function promiseKey(rows:HTMLElement|null):string{
     const ids=[...(rows?.children??[])].filter(li=>{const d=(li as HTMLElement).dataset;return d.kind==='first'||d.kind==='last'||d.always==='1';}).map(li=>li.getAttribute('data-key'));
     return `${element.clientWidth}x${element.clientHeight}|${ids.join(',')}`;
   }
-  /** cardPlacement over the laid-out wall; true when the card moved. */
+  const nearbyHost=element.querySelector<HTMLElement>('.k-nearby-host')!;
+  /** compactArrangement over the laid-out wall; true when the card or the legend moved. */
   function placeCard():boolean{
     const kiosk=element.closest<HTMLElement>('.kiosk');
     const compact=!lightweight&&kiosk?.dataset.size==='compact'&&kiosk.dataset.portrait!=='1';
-    const current=element.dataset.card==='aside'?'aside':'map';
-    const set=(next:'map'|'aside'):boolean=>{
+    const current:CompactPlacement=element.dataset.card==='aside'?'aside':element.dataset.card==='legend'?'legend':'map';
+    const set=(next:CompactPlacement):boolean=>{
       if(next===current)return false;
-      if(next==='aside')element.dataset.card='aside';else delete element.dataset.card;
+      if(next==='map')delete element.dataset.card;else element.dataset.card=next;
+      // The legend stands under the list only in 'legend'; everywhere else it is the map's own footer.
+      if(legend){
+        if(next==='legend'&&legend.parentElement!==nearbyHost)nearbyHost.appendChild(legend);
+        if(next!=='legend'&&legend.parentElement!==geography)geography.insertBefore(legend,note);
+      }
       return true;
     };
     if(!compact)return set('map');
     const rows=element.querySelector<HTMLElement>('.k-nearby-rows');
     const windowH=element.clientHeight;
     if(!rows||!(windowH>0))return false;
-    const gap=Number.parseFloat(getComputedStyle(element).rowGap)||0;
-    const cardH=card.offsetHeight;
-    const key=`${element.clientWidth}x${windowH}`;
-    const mapNow=field.measureHeight();
-    if(current==='map')mapUnder={key,px:mapNow};
-    const under=mapUnder?.key===key?mapUnder.px:mapNow-cardH-gap;
-    const listAside=current==='aside'?rows.clientHeight:rows.clientHeight-cardH-gap;
-    const floor=promisesPx(rows);
     const zoom=Number.parseFloat(getComputedStyle(element).getPropertyValue('--k-zoom'))||1;
-    const next=refused===promiseKey(rows)?'map':cardPlacement({mapUnderPx:under,listAsidePx:listAside,floorPx:floor,minMapPx:MAP_MIN_HEIGHT_PX*zoom});
-    element.dataset.mapFloor=String(Math.round(MAP_MIN_HEIGHT_PX*zoom));
+    const box={
+      windowPx:windowH,gapPx:Number.parseFloat(getComputedStyle(element).rowGap)||0,cardPx:card.offsetHeight,
+      legendPx:legend?.offsetHeight??0,listOverheadPx:Math.max(0,timeline.element.offsetHeight-rows.clientHeight),
+      floorPx:promisesPx(rows),minMapPx:MAP_MIN_HEIGHT_PX*zoom,
+    };
+    const next=refused===promiseKey(rows)?'map':compactArrangement(box).placement;
+    element.dataset.mapFloor=String(Math.round(box.minMapPx));
     return set(next);
   }
   function fit():void {
@@ -138,10 +161,11 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     timeline.update(model.items,model.radiusM,model.now);
     if(!placeCard())return;
     timeline.update(model.items,model.radiusM,model.now);
-    // The fit is the proof: the promises did not fit under the card after all, so the card goes back.
-    if(element.dataset.card==='aside'&&timeline.element.dataset.fitOverflow==='1'){
+    // The fit is the proof: the promises did not fit the smaller list after all, so decision 50's arrangement returns.
+    if(element.dataset.card&&timeline.element.dataset.fitOverflow==='1'){
       refused=promiseKey(element.querySelector<HTMLElement>('.k-nearby-rows'));
       delete element.dataset.card;
+      if(legend&&legend.parentElement!==geography)geography.insertBefore(legend,note);
       timeline.update(model.items,model.radiusM,model.now);
     }
     deps.onMapBox?.();
@@ -159,7 +183,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),
     setFrame,setMajorLabels:count=>field.setMajorLabels(count),fit,
     setLegend(kinds){
-      for(const span of geography.querySelectorAll<HTMLElement>('.k-map-legend > span[data-legend]')){
+      for(const span of legend?.querySelectorAll<HTMLElement>(':scope > span[data-legend]')??[]){
         const hidden=!kinds.includes(span.dataset.legend??'');
         if(span.hidden!==hidden)span.hidden=hidden;
       }

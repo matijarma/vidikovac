@@ -8,6 +8,8 @@
 // happy-dom lays nothing out, so the fit reads a simulated layout
 // (TimelineMeasure) and the computed sizes are evaluated from the real sheets.
 import { readFileSync } from 'node:fs';
+import { compactArrangement } from '../../app/src/kiosk/invitation';
+import { MAP_MIN_HEIGHT_PX } from '../../app/src/map/frame';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '../../app/src/i18n/en.json';
@@ -714,14 +716,23 @@ function nightRows(): TimelineRow[] {
 /** Decision 50: the compact list takes the whole 513 px aside less its heading and padding, 451 px measured. */
 const COMPACT_1366_D50: Layout = { boxPx: 451, titleChars: 16, subChars: 25 };
 
+/**
+ * The compact wall's column as the accept night scenes measured it at 1366 x 768 (dark; lane w-labels2): the
+ * window 513 px, the gap 14, the QR card 284, the list's head and padding 61, and the legend 56: Trg's frame
+ * fits 1366 x 768 below the marks' floor in every arrangement (z12.3 at most), so the map draws its rings and
+ * pills and the legend lists the tram line alone (one line; mapview.ts legendKinds).
+ */
+const COMPACT_1366_WINDOW = { windowPx: 513, gapPx: 14, cardPx: 284, legendPx: 56, listOverheadPx: 61, minMapPx: MAP_MIN_HEIGHT_PX };
+
 describe('every hour of the real Trg timetable fits both wall sizes (decision 50)', () => {
   const file = JSON.parse(readFileSync(join(import.meta.dirname, '../../app/public/data/lastrun/106_1.json'), 'utf8'));
   const place = { kind: 'tram' as const, stopId: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286 };
   const platforms = ['106_1', '106_2', '1849_23', '1849_24'];
   for (const [name, layout] of [['1920 x 1080', WALL_1920], ['1366 x 768', COMPACT_1366_D50]] as const) {
-    it(`${name}: the promises and at least one departure fit whole in every hour, data-fit-overflow 0`, () => {
-      for (let hour = 0; hour < 24; hour++) {
-        const now = at(`2026-09-22T${String(hour).padStart(2, '0')}:20:00+02:00`);
+    it(`${name}: the promises and at least one departure fit whole in every hour of two days, data-fit-overflow 0${layout === COMPACT_1366_D50 ? ', and the map is never below its legible minimum' : ''}`, () => {
+      for (let hour = 0; hour < 48; hour++) {
+        const day = hour < 24 ? '21' : '22';
+        const now = at(`2026-09-${day}T${String(hour % 24).padStart(2, '0')}:20:00+02:00`);
         const lastRun: LastRunLive = { ...file, status: 'live', fetchedAt: new Date(now).toISOString(), sourceUpdatedAt: file.generatedAt };
         const boards = platforms.map((stopId) => departuresBoard({ now, stopId }));
         const rows = selectNearby({ place, radiusM: 2182, now, locale: 'hr', i18n, lastRun, snapshots: {}, city: emptyCity(), fixes: [], boards });
@@ -729,11 +740,22 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
         const t = mount({ measure, designHeightPx: layout.boxPx });
         t.update(rows, 2182, now);
         const shown = ids();
-        const label = `${name} at ${String(hour).padStart(2, '0')}:20: ${shown.join(', ')}`;
+        const label = `${name} on the ${day}th at ${String(hour % 24).padStart(2, '0')}:20: ${shown.join(', ')}`;
         expect(section().dataset.fitOverflow, label).toBe('0');
         if (rows.some((r) => r.kind === 'departure')) expect(shown.some((id) => id.startsWith('dep:')), label).toBe(true);
         for (const promise of rows.filter((r) => r.kind === 'first' || r.kind === 'last' || r.always)) expect(shown, label).toContain(promise.id);
         for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!), label).toBeLessThanOrEqual(SUB_MAX_LINES);
+        if (layout === COMPACT_1366_D50) {
+          // Lane w-labels2: the rows the fit never drops, as tall as this layout draws them, and the arrangement
+          // the wall picks for them (invitation.ts compactArrangement): the list holds them and the map is legible.
+          const lead = items().find((li) => li.dataset.kind === 'departure');
+          const kept = items().filter((li) => li.dataset.kind === 'first' || li.dataset.kind === 'last' || li.dataset.always === '1' || li === lead);
+          // Each at its content, never under the smallest row: the height it keeps in a smaller box.
+          const floorPx = kept.reduce((sum, li) => sum + Math.max(64, 44 * measure.lines(li.querySelector('.nearby-title')!) + 32 * measure.lines(li.querySelector('.nearby-sub')!) + 8), 0);
+          const box = compactArrangement({ ...COMPACT_1366_WINDOW, floorPx });
+          expect(box.mapPx, `${label}: the map (${box.placement})`).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
+          expect(box.listPx, `${label}: the list holds its promises (${box.placement})`).toBeGreaterThanOrEqual(floorPx);
+        }
         t.destroy();
         handle = null;
         host.innerHTML = '';

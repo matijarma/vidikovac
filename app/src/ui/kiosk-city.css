@@ -72,6 +72,10 @@
    promises in the smaller box, the card stands under the list and the map takes the whole left column
    (kiosk/invitation.ts cardPlacement). */
 .kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window[data-card=aside]{grid-template-areas:'map list' 'map card'}
+/* Lane w-labels2: at night at 1366 x 768 the list cannot spare the card's room, so the card stays under the map
+   and the legend stands under the list instead, which gives the map the height the legend took. */
+.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window[data-card=legend] .k-nearby-host{grid-template-rows:minmax(0,1fr) auto;row-gap:var(--k-gap)}
+.kiosk .k-nearby-host>.k-map-legend{grid-row:2;border-radius:var(--k-radius-s)}
 .kiosk:not([data-size=handheld]){--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))}
 .kiosk[data-portrait='1'] .k-city-window{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
 .kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}

@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cardPlacement, mountInvitation } from '../../app/src/kiosk/invitation';
+import { compactArrangement, mountInvitation } from '../../app/src/kiosk/invitation';
 import { createKioskMapAdapter, FIELD_SPAN_M, legendKinds, requestKioskMap } from '../../app/src/kiosk/mapview';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { kioskStrings } from '../../app/src/kiosk/strings';
@@ -26,21 +26,37 @@ const NOW = Date.parse('2026-09-24T10:00:00Z');
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '13'] };
 
 describe('the map pane’s legible minimum', () => {
-  it('is two read-tier rows plus the own place’s ring and name and the frame’s clearance', () => {
-    // 2 x 40 px x 1.2 (the read tier's line), the own ring at the wall's scale 2 (9 px radius, 2 px halo: 44 px across),
-    // its 30 px name at 1.2, and 24 px of frame padding on either side.
-    expect(MAP_MIN_HEIGHT_PX).toBe(2 * 40 * 1.2 + 44 + 30 * 1.2 + 2 * 24);
+  it('is two read-tier rows plus the own place’s ring and name', () => {
+    // 2 x 40 px x 1.2 (the read tier's line), the own ring at the wall's scale 2 (9 px radius, 2 px halo: 44 px
+    // across) and its 30 px name at 1.2. The frame's own 24 px camera clearance is the fit's, inside the pane
+    // (lane w-labels2: counting it too asked 224 px, which no arrangement of 1366 x 768 at night can give).
+    expect(MAP_MIN_HEIGHT_PX).toBe(2 * 40 * 1.2 + 44 + 30 * 1.2);
   });
 
-  it('keeps the card under the map when the map is legible there, moves it under the list when the list still holds its promises, and lets the promises win otherwise', () => {
-    const min = MAP_MIN_HEIGHT_PX;
-    expect(cardPlacement({ mapUnderPx: min, listAsidePx: 0, floorPx: 999, minMapPx: min })).toBe('map');
-    expect(cardPlacement({ mapUnderPx: 162, listAsidePx: 216, floorPx: 180, minMapPx: min })).toBe('aside');
-    expect(cardPlacement({ mapUnderPx: 162, listAsidePx: 216, floorPx: 216, minMapPx: min })).toBe('aside');
-    // At night the first tram, the pharmacy and one departure need more than the list would keep: decision 50 stands.
-    expect(cardPlacement({ mapUnderPx: 116, listAsidePx: 173, floorPx: 300, minMapPx: min })).toBe('map');
-    // Nothing measured yet: the arrangement stays as it is laid out.
-    expect(cardPlacement({ mapUnderPx: 0, listAsidePx: 0, floorPx: 0, minMapPx: min })).toBe('map');
+  // Lane w-labels2, measured in the accept night scenes at 1366 x 768 (dark): the window 513 px, the gap
+  // 14, the card 284 (the QR at its 240 px floor on a 12 px plate), the legend 56 (one entry) to 95 (three,
+  // two lines), the list's head and padding 61; the promises at night are 86 px a row (first, last, the
+  // pharmacy) and 64 a departure.
+  const NIGHT_1366 = { windowPx: 513, gapPx: 14, cardPx: 284, legendPx: 95, listOverheadPx: 61, minMapPx: MAP_MIN_HEIGHT_PX };
+  it('keeps decision 50’s card under the map while that map is legible', () => {
+    expect(compactArrangement({ ...NIGHT_1366, windowPx: 800, floorPx: 236 })).toMatchObject({ placement: 'map' });
+  });
+  it('moves the card under the list by day, when the list keeps its promises in the smaller box', () => {
+    const day = compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64 });
+    expect(day).toEqual({ placement: 'aside', mapPx: 513 - 95, listPx: 513 - 14 - 284 - 61 });
+  });
+  it('at night keeps the card under the map and moves the legend under the list, so the map is never a strip', () => {
+    // night0430: the first tram, the pharmacy and a departure; lastTrams2240: the last and first trams too.
+    for (const floorPx of [86 + 86 + 64, 86 + 86 + 86 + 64]) {
+      const night = compactArrangement({ ...NIGHT_1366, floorPx });
+      expect(night, String(floorPx)).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 14 - 95 });
+      expect(night.mapPx).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
+      expect(night.listPx).toBeGreaterThanOrEqual(floorPx);
+    }
+  });
+  it('lets the promises win where nothing else fits, and moves nothing before it is measured', () => {
+    expect(compactArrangement({ ...NIGHT_1366, windowPx: 420, floorPx: 400 })).toMatchObject({ placement: 'map' });
+    expect(compactArrangement({ windowPx: 0, gapPx: 0, cardPx: 0, legendPx: 0, listOverheadPx: 0, floorPx: 0, minMapPx: MAP_MIN_HEIGHT_PX })).toMatchObject({ placement: 'map' });
   });
 });
 
