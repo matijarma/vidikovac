@@ -483,16 +483,18 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
 /**
  * One departure, the same row on Sada, in the stop's sheet and on the wall's
  * stop board: the line badge, the destination, the time (arrivalTime). It names
- * its kind for the probe (§15.6, `[data-kind=departure]`). `data-live` says whether a tracked
+ * its kind for the probe: `departure` for the rows that lead (§15.6, §16.4
+ * `[data-kind=departure]`, at most three), `timetable` for the "Vozni red" rows
+ * under them, so a board's probe counts its lead alone. `data-live` says whether a tracked
  * vehicle carries the trip right now; it reads "false" once the view is frozen,
  * like the time's own marker. `kindOf` gives the badge its mode's shape. The
  * line and the headsign are ZET's text: a row that fails the row-surface check
  * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
  */
-export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number): string {
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure'): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
-  return `<li class="sada-departure" data-kind="departure" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
+  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as
@@ -503,6 +505,7 @@ export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: stri
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
   const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt);
+  const timetableRow = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'timetable');
   const key = (r: ArrivalRow): string => r.tripId || `${r.routeId}|${r.atMs}`;
   // Every row's line and headsign are ZET's text: a row that fails the check is left out (departureRow draws none).
   const vetted = d.arrivals.filter(vettedArrival);
@@ -524,7 +527,7 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
       ? (d.frozenAt === undefined ? i18n.t('status.loading') : i18n.t('arrivals.frozen'))
       : i18n.t(d.arrivalsStatus === 'down' ? 'arrivals.down' : 'arrivals.none');
   const timetable = tail.length
-    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(row).join('')}</ul>`
+    ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(timetableRow).join('')}</ul>`
     : '';
   const body = lead.length > 0
     ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
