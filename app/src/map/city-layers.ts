@@ -21,7 +21,8 @@ export const BIKE_COUNT_PX = 12;
 export const BIKE_FAR_RADIUS_PX = 3;
 /** What shared/city/bikes.ts bikeAvailability writes for a station with
  *  nothing to give (no bike, not renting, a source gone quiet). A point from
- *  city/curated.ts says so with `spent` instead; both read grey. */
+ *  city/curated.ts says so with `spent` instead; both read in the station's
+ *  own grey (OverlayPalette.bikeSpent), which recedes behind the teal. */
 const SPENT_BADGES: readonly string[] = ['0', '—', '?'];
 /** Which of the city places' own names the map draws: 'all'; 'venues', the
  *  framed wall's, where a venue with a programme tonight is named and a BAJS
@@ -37,7 +38,7 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
   const spent=['all',isBike,['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
   // Every city place is drawn at full strength at every zoom: a station with
   // nothing to give is grey, never faded, and no mark is a merged cluster.
-  const color=['case',spent,p.other,['match',['get','category'],'bikes',p.bike,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
+  const color=['case',spent,p.bikeSpent,['match',['get','category'],'bikes',p.bike,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
   const radius=['*',scale,['case',far,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
@@ -47,7 +48,7 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
       'text-field':['case',far,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
-      'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.otherText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
+      'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.bikeSpentText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
     // The framed wall names its curated venues at every zoom its Kadar can
     // frame (Trg at Kadar 8 on 1920 is about 12.86): a venue without its
     // name is a programme count nobody can place. Everywhere else the names

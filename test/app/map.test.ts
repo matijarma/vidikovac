@@ -24,7 +24,7 @@ import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 // WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
 import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView } from '../../app/src/map/frame';
+import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
 import { distanceM } from '../../shared/city/geo';
 
 describe('open raster basemap', () => {
@@ -355,12 +355,18 @@ describe('the city places’ marks', () => {
     const color = byId('city-place-dots').paint!['circle-color'], ink = byId('city-place-badges').paint!['text-color'];
     expect(evaluate(color, bike('7'), 14)).toBe(palette.bike);
     expect(evaluate(ink, bike('7'), 14)).toBe(palette.bikeText);
-    for (const spent of [bike('0', true), bike('', true)]) {
-      expect(evaluate(color, spent, 14), JSON.stringify(spent)).toBe(palette.other);
-      expect(evaluate(ink, spent, 14), JSON.stringify(spent)).toBe(palette.otherText);
+    // The station's own grey, not the pill's "other" ink: in the dark face that ink is near-white,
+    // and a frame of empty stations at night read as white "0" discs (owner, 24 Sep; contrast.test.ts).
+    for (const face of ['light', 'dark'] as const) {
+      const p = basemap.overlayPalette(face), faced = cityLayers(p, null, 2);
+      for (const spent of [bike('0', true), bike('', true)]) {
+        expect(evaluate(byId('city-place-dots', faced).paint!['circle-color'], spent, 14), `${face} ${JSON.stringify(spent)}`).toBe(p.bikeSpent);
+        expect(evaluate(byId('city-place-badges', faced).paint!['text-color'], spent, 14), `${face} ${JSON.stringify(spent)}`).toBe(p.bikeSpentText);
+      }
     }
+    expect(basemap.overlayPalette('dark').bikeSpent).not.toBe(basemap.overlayPalette('dark').other);
     // discover()'s points carry bikeAvailability's words and no `spent`: the same grey.
-    for (const badge of ['0', '—', '?']) expect(evaluate(color, { category: 'bikes', badge, eventCount: 0 }, 14), badge).toBe(palette.other);
+    for (const badge of ['0', '—', '?']) expect(evaluate(color, { category: 'bikes', badge, eventCount: 0 }, 14), badge).toBe(palette.bikeSpent);
     // A "0" that is not a station's count is not a spent station: only the bikes read this.
     expect(evaluate(color, { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(palette.event);
     expect(evaluate(color, venue, 14)).toBe(palette.event);
@@ -374,7 +380,7 @@ describe('the city places’ marks', () => {
     expect(BIKE_FAR_RADIUS_PX).toBe(3);
     expect(evaluate(byId('city-place-dots').paint!['circle-radius'], far, 12.7)).toBe(6);
     expect(evaluate(byId('city-place-badges').layout!['text-field'], far, 12.7)).toBe('');
-    expect(evaluate(byId('city-place-dots').paint!['circle-color'], bike('0', true, { far: true }), 12.7)).toBe(palette.other);
+    expect(evaluate(byId('city-place-dots').paint!['circle-color'], bike('0', true, { far: true }), 12.7)).toBe(palette.bikeSpent);
     // `far` on anything but a station changes nothing.
     expect(evaluate(byId('city-place-dots').paint!['circle-radius'], { ...venue, far: true }, 12.7)).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
     expect(evaluate(byId('city-place-badges').layout!['text-field'], { ...venue, far: true }, 12.7)).toBe('3');
@@ -528,6 +534,18 @@ describe('the field camera and the paired camera', () => {
     expect(fieldView({ stop: null, district: 'zagreb', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual(cityWindowView(1300, 880).center);
     // A stop outranks both.
     expect(fieldView({ stop: STOP, district: 'maksimir', widthPx: 1300, heightPx: 880, spanM: FIELD_SPAN_M }).center).toEqual([STOP.lon, STOP.lat]);
+  });
+
+  // Decision 58 (24 Sep): a placed wall presents the ground within R of its
+  // place, and nothing outside it is drawn as a stop, a disc or a name.
+  it('inFrame keeps a point within R of the place, and idsInFrame the stop features inside', () => {
+    const frame = { lon: STOP.lon, lat: STOP.lat, radiusM: 2000 };
+    const north = (m: number) => ({ lon: STOP.lon, lat: STOP.lat + m / 111_320 });
+    const east = (m: number) => ({ lon: STOP.lon + m / (111_320 * Math.cos((STOP.lat * Math.PI) / 180)), lat: STOP.lat });
+    expect([inFrame(north(1999), frame), inFrame(north(2001), frame), inFrame(east(1999), frame), inFrame(east(2001), frame)]).toEqual([true, false, true, false]);
+    expect(inFrame(STOP, frame)).toBe(true);
+    const feature = (id: string, p: { lon: number; lat: number }) => ({ geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { id } });
+    expect(idsInFrame([feature('a', north(500)), feature('b', east(2500)), feature('c', STOP), { geometry: { type: 'Point', coordinates: null }, properties: { id: 'd' } }], frame)).toEqual(['a', 'c']);
   });
 
   // The frame (WP2 step 4): the square of side 2R around the place on the

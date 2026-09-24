@@ -174,8 +174,9 @@ grad (polje „Adresa ili stajalište” ostavljeno prazno) otvara kartu na
 prozoru cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja;
 zaslon s izabranim mjestom otvara kadar oko tog mjesta, opisan u sljedećem
 odlomku. Na prozoru cijeloga grada su tramvajska mreža u neutralnom sivom,
-ispod svega ostaloga, pločice tramvaja u brendiranoj plavoj, sve BAJS
-stanice kao male tirkizne točke bez broja, zatvorene prometnice, prsten
+ispod svega ostaloga, pločice tramvaja u brendiranoj plavoj, prsten i ime
+mjesta zaslona bez ijednoga drugog stajališta, BAJS stanice s barem jednim
+biciklom kao male tirkizne točke bez broja, zatvorene prometnice, prsten
 dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
 mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
@@ -183,7 +184,8 @@ imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
 jer u izvanrednom stanju oznaka je ta koja govori, a ne ime -- a od
 stajališta imenuje samo tramvajska čvorišta: ona na kojima staje tramvaj i
 na kojima neka vožnja počinje ili završava (`terminal` iz mrežnog
-artefakta), njih 29 u gradu i dvanaest na zadnjoj snimci. Broj linija nije
+artefakta), njih 29 u gradu i dvanaest na zadnjoj snimci; prozor cijeloga
+grada na zaslonu ne imenuje nijedno stajalište osim mjesta zaslona. Broj linija nije
 mjerilo: 111 od 114 tramvajskih stajališta vidi dvije ili više tramvajskih
 linija, pa bi "dva tramvaja" imenovalo gotovo sve. Od 13,5 naviše sva se
 imena vraćaju onakva kakva su izvedena za kadar od 2,8 km.
@@ -206,8 +208,10 @@ Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
 dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, siv s nulom
 kad bicikala nema, a siv i bez broja kad broj nije poznat ili stanica ne
 iznajmljuje, nikad s upitnikom; kulturna mjesta pojavljuju se samo s
-programom večeras, i to s imenom; imenuju se važnija stajališta (po rangu iz
-mrežnog artefakta), sva tramvajska čvorišta i glavne ulice. Imena slijede
+programom večeras, i to s imenom; od stajališta imenuju se samo mjesto
+zaslona i tramvajska čvorišta unutar polumjera kadra, a ulice se ne imenuju.
+Izvan polumjera kadra ne crta se nijedno stajalište, disk, kulturno mjesto ni
+ime. Imena slijede
 kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
 nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
 ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika

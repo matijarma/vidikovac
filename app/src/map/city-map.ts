@@ -30,6 +30,7 @@ import { tr } from '../transport/strings';
 import type { CityLabels } from './city-layers';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
+import { idsInFrame } from './frame';
 import type { RenderedFeature, SourcePoint } from './name-census';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { TileLabelFeature } from './external-labels';
@@ -861,7 +862,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const focus = routeId === null
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames };
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
+      // Decision 58: a placed wall's frame draws the stops inside it alone.
+      ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) } : {}) };
   }
 
   /** The vehicle the clustering must leave standing: the selected one, or the

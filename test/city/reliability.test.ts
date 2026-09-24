@@ -69,6 +69,38 @@ describe('live source safety',()=>{
     const calls=fetcher.mock.calls.length;expect(calls).toBe(5);
     await loadCityLive(env,NOW+10_000,fetcher as typeof fetch);expect(fetcher).toHaveBeenCalledTimes(calls);
   });
+  // 24 Sep, 03:00: the owner's wall showed a frame full of "0" discs. The feed was real (42 of 200
+  // stations empty, the centre emptied overnight), but nothing stopped a feed that says NO station has
+  // a bike from reaching the map as two hundred zeros. Such a feed is the feed's fault, not the city's:
+  // it is read like one that is too old -- the last good counts served stale, else down -- so every
+  // surface (discovery.ts dynamicPlaces) shows the stations as unknown, never as empty.
+  it('reads a BAJS feed in which no station has a bike as unknown, never as a city of zeros',async()=>{
+    const {env}=environment();
+    const info={data:{stations:Array.from({length:40},(_,i)=>({station_id:String(i),name:`Stanica ${i}`,lon:15.97,lat:45.81,capacity:10}))}};
+    let bikes=(_i:number)=>0;
+    const status=()=>({last_updated:NOW/1000-30,data:{stations:info.data.stations.map((s,i)=>({station_id:s.station_id,num_bikes_available:bikes(i),num_docks_available:10,is_installed:true,is_renting:true,is_returning:true,last_reported:NOW/1000-30}))}});
+    const fetcher=vi.fn(async(url:RequestInfo|URL)=>{
+      const path=String(url);
+      if(path.endsWith('station_information.json'))return Response.json(info);
+      if(path.endsWith('station_status.json'))return Response.json(status());
+      throw new Error('offline');
+    });
+    const bajs=(r:Awaited<ReturnType<typeof loadCityLive>>)=>r.sources.find(s=>s.id==='bajs')!;
+    // Nothing good to fall back on: down, and no station on the map.
+    const first=await loadCityLive(env,NOW,fetcher as typeof fetch);
+    expect(bajs(first).status).toBe('down');
+    expect(first.bikes).toEqual([]);
+    // A real night: a third of the stations empty, the rest with bikes -- live, zeros and all.
+    bikes=i=>i%3===0?0:i%5+1;
+    const good=await loadCityLive(env,NOW+61_000,fetcher as typeof fetch);
+    expect(bajs(good).status).toBe('live');
+    expect(good.bikes.filter(b=>b.bikes===0)).toHaveLength(14);
+    // The feed then says every station is empty: the last good counts, marked stale.
+    bikes=()=>0;
+    const bad=await loadCityLive(env,NOW+122_000,fetcher as typeof fetch);
+    expect(bajs(bad).status).toBe('stale');
+    expect(bad.bikes.some(b=>(b.bikes??0)>0)).toBe(true);
+  });
   it('filters expired consultations even while the catalogue cache is fresh',async()=>{
     const {env,values}=environment();
     values.set('city-live:v1:consultations',JSON.stringify({expires:NOW+600000,source:{id:'consultations',status:'live'},data:[{id:'old',start:'2026-09-01',end:'2026-09-17'},{id:'open',start:'2026-09-01',end:'2026-09-19'}]}));

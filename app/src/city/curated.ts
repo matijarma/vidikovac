@@ -23,7 +23,11 @@ export interface CuratedOptions {
   /** The unframed window onto the whole city (a screen with no place of its
    *  own): each BAJS station stays a small dot without its number, because a
    *  hundred counted discs over the whole town bury the trams. The points
-   *  carry `far: true` and map/city-layers.ts draws them so. Default false. */
+   *  carry `far: true` and map/city-layers.ts draws them so. A dot has no
+   *  number to say "0" or "not known" with, so only a station with a bike is
+   *  on it: an empty, closed or unknown station is left to the frame, whose
+   *  disc can say so (owner, 24 Sep: the grey dots read as empty white
+   *  circles). Default false. */
   far?: boolean;
 }
 
@@ -62,6 +66,7 @@ export function curatedCityPoints(city: CityState, dogadanja: readonly FeedItem[
   for (const place of dynamic) {
     if (place.sourceId !== 'bajs' || !located(place)) continue;
     const disc = bikeDisc(place);
+    if (o.far && disc.spent) continue;
     out.push({ id: place.id, title: place.name, lon: place.lon, lat: place.lat, place: 'city',
       props: { category: 'bikes', badge: disc.badge, spent: disc.spent, eventCount: 0, priority: 2, ...(o.far ? { far: true } : {}) } });
   }

@@ -193,7 +193,10 @@ test('the framed wall in an outage: the vehicles leave the map, the BAJS station
 // bana Jelačića with placeSet false [O-52, O-65]) keeps the whole-city window:
 // each station is the small dot without its number (city/curated.ts `far`),
 // which the census counts apart and never as unlabelled.
-test('the whole-city window: the BAJS stations are far dots, deliberately without a number, and nothing is unlabelled', async ({ page, request }) => {
+// Owner, 24 Sep: on the whole city only a station with a bike is a far dot (the
+// empty and the closed one of WALL_BIKES are left to the frame), and of the
+// stops only the place's own ring and name are drawn.
+test('the whole-city window: the BAJS stations with a bike are far dots, deliberately without a number, the own name is drawn, and nothing is unlabelled', async ({ page, request }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await installKioskFeedFixture(page, 'ready');
   await installCityFixture(page, Date.now(), WALL_BIKES);
@@ -203,8 +206,10 @@ test('the whole-city window: the BAJS stations are far dots, deliberately withou
   await page.goto(kioskUrl);
   const map = page.getByTestId('kiosk-map');
   await expect(map).toHaveAttribute('data-map-status', 'ready', { timeout: 30_000 });
-  await expect.poll(() => map.getAttribute('data-bajs'), { timeout: 30_000, message: 'data-bajs' }).toBe(`counted:0;zero:0;blank:0;far:${WALL_BIKES.length}`);
-  await expect(map).toHaveAttribute('data-markers', String(WALL_BIKES.length));
+  const withBikes = WALL_BIKES.filter((b) => (b.bikes ?? 0) > 0 && b.renting && b.installed).length;
+  await expect.poll(() => map.getAttribute('data-bajs'), { timeout: 30_000, message: 'data-bajs' }).toBe(`counted:0;zero:0;blank:0;far:${withBikes}`);
+  await expect(map).toHaveAttribute('data-markers', String(withBikes));
+  await expect(map).toHaveAttribute('data-own-name', 'Trg bana J. Jelačića');
   await expect(map).toHaveAttribute('data-unlabelled', '0');
   expect((await map.getAttribute('data-pills')) ?? '').not.toMatch(/\+\d/);
   expect(overBudget(await map.getAttribute('data-pills')), 'pill labels past three rows of forty characters').toEqual([]);

@@ -52,7 +52,7 @@ import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
-import { boundsView, frameView } from '../map/frame';
+import { boundsView, frameView, inFrame, type FrameCircle } from '../map/frame';
 import type { ProzorOptions } from '../map/overlays';
 import { EARTH_CIRCUMFERENCE_M, metresPerPixel } from '../map/scale';
 import { vehicleFixes } from '../motion/fixes';
@@ -777,7 +777,18 @@ export function labelPadding(widthPx: number, heightPx: number, spanM: number): 
  *  (map/overlays.ts); the place marks titled; the major street names on. */
 export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, labelPaddingPx: number, buses: boolean, framed = false): ProzorOptions {
   const options: ProzorOptions = { networkKinds: buses ? ['tram', 'bus'] : ['tram'], stopRoutes: stop?.routes ?? null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: stopLabelTramInterchanges(fieldZoomNow), placeTitles: placeTitles(fieldZoomNow), stopRadius: true, overlapZoom: fieldZoomNow - OVERLAP_ZOOM_MARGIN, labelPadding: labelPaddingPx, majorStreetNames: majorStreetNames(fieldZoomNow) };
-  return framed ? { ...options, stopRoutes: null, stopLabelTramInterchanges: false, placeTitles: true, stopRadius: false, majorStreetNames: true } : options;
+  // Decision 58 (24 Sep, "too many dots and names"): of the frame's stops only
+  // the tram hubs are named (Ruling 30's interchanges), the squares lose their
+  // titles and the street names go; requestKioskMap adds the frame itself.
+  return framed ? { ...options, stopRoutes: null, stopLabelTramInterchanges: true, placeTitles: false, stopRadius: false, majorStreetNames: false } : options;
+}
+
+/** The own ring and name on the whole-city window (decision 19), which has no stop of its own:
+ *  the read-path place's stop from the table, else the place itself as a ring; null without a
+ *  place. The one stop mark that window draws (owner, 24 Sep: ProzorOptions.stopMarks false). */
+export function wholeCityStop(place: ScreenPlace | null | undefined, stops: readonly ScreenStop[] | undefined): ScreenStop | null {
+  if (!place) return null;
+  return stops?.find((stop) => stop.id === place.stopId) ?? { id: place.stopId ?? `place:${place.name}`, name: place.name, lon: place.lon, lat: place.lat, routes: [] };
 }
 
 /** What the city's own places say on the kiosk map (ruling of 22 Sep; Section B's city-layers
@@ -893,13 +904,21 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
    *  read-path default keeps the whole-city window. A phone's band, a person
    *  exploring and a paired presentation are not the frame. */
   const framed = framedPlace(input) !== null && input.handheld !== true && cityWindow;
+  /** The wall's whole-city window (fieldView's own branch: no place of its own,
+   *  no quarter): owner, 24 Sep, the place's own ring and name (decision 19)
+   *  and the pills, and no other stop's bead or name (wholeCityStop). */
+  const wholeCity = cityWindow && input.handheld !== true && fieldAnchor(input) === null && !districtBySlug(input.district);
   const radiusM = frameRadiusOf(input);
   /** The frame is a neighbourhood, not the whole city: the details that only
    *  make sense close up (the pharmacy's street address) are worth their room. */
   const closeUp = !cityWindow || framed || field.zoom >= CITY_DETAIL_ZOOM;
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp));
+  /** Decision 58: the ground a placed wall presents; nothing outside it is a stop, a disc, a venue or an event square. */
+  const anchor = framed ? framedPlace(input) : null;
+  const frame: FrameCircle | null = anchor ? { lon: anchor.lon, lat: anchor.lat, radiusM } : null;
+  const inside = (p: MapPoint): boolean => frame === null || inFrame(p, frame);
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || inside(p)));
   if(input.city){
-    if(cityWindow)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR));
+    if(cityWindow)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));
     else{
       const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
         center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
@@ -952,7 +971,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const buses = framed || busesVisible(input.cameraZoom ?? view.zoom);
   const extras: KioskMapExtras = {
     renderer: input.renderer ?? 'map',
-    stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop,
+    stop: wholeNetwork && input.renderer === 'schema' ? null : input.stop ?? (wholeCity ? wholeCityStop(input.place, input.stops) : null),
     // The whole network has no stop to crop round, but the wall still names
     // its own place (Trg bana J. Jelačića by default [O-65], or the chosen
     // one): the schema's collision pass places that name first, at the same
@@ -972,7 +991,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     // The frame's street-name padding is for the ground it shows: 2R across,
     // not the field's span. The read-path default place's window draws every
     // stop, as the whole-city window always has: its stop is the list's.
-    prozor: prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed),
+    prozor: { ...prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed), ...(wholeCity ? { stopMarks: false } : {}), ...(frame ? { frame } : {}) },
   };
   // The invitation IS the transit picture: the network, the stops and the
   // vehicles are always on it. Only a paired presentation of something that

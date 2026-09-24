@@ -894,14 +894,14 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect(((two.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).some((p) => p.id.startsWith('vehicle:'))).toBe(false);
   });
 
-  it('carries every BAJS station and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
+  it('carries every BAJS station with a bike and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
     const { calls, factory, adapter, maps } = stub();
     requestKioskMap(maps, base, adapter);
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
     const city = (options.points as { id: string; title: string; place?: string; props?: Record<string, unknown> }[]).filter((p) => p.place === 'city');
-    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
-    expect(city.find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
-    expect(city.find((p) => p.id === 'bajs-b2')!.props!.badge).toBe('0');
+    // Owner, 24 Sep: the empty Jarun station (b2) is a far dot with no number to say so, and is left to the frame.
+    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'culture-1']);
+    expect(city.find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ category: 'bikes', badge: '7', eventCount: 0, priority: 2, far: true });
     expect(city.find((p) => p.id === 'culture-1')!.props).toEqual({ category: 'culture', badge: '1', eventCount: 1, priority: 0 });
     // The names are the layer's to leave off (CityLabels 'none'), not the points'.
     expect(cityLabelsOf(options.cityLabels as never)).toBe('none');
@@ -1008,17 +1008,18 @@ describe('the kiosk\u2019s framed wall', () => {
   /** CityMapOptions.cityLabels as one of Section B's three answers (true / false are the older switch for 'all' / 'none'). */
   const labelsOf = (on: unknown) => (on === undefined || on === true ? 'all' : on === false ? 'none' : on);
 
-  it('frames Kadar 6 on the place with buses, every stop, ranked names with the interchanges, the street names, the pharmacy named and the venues alone named', () => {
+  it('frames Kadar 6 on the place with buses, the frame\u2019s stops, its tram hubs named, the venues alone named and no square\u2019s title or street name', () => {
     const s = stub();
     requestKioskMap(s.maps, { ...base, frame: 6 }, s.adapter);
     const options = first(s);
     const zoom = frameView(STOP, 2000, 1300, 880).zoom;
     expect(options.center).toEqual([STOP.lon, STOP.lat]);
     expect(options.zoom).toBe(zoom);
-    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: false, placeTitles: true, stopRadius: false, overlapZoom: zoom - 0.1, labelPadding: labelPadding(1300, 880, 4000), majorStreetNames: true });
+    // Decision 58: the frame's stops alone, its tram hubs named, no square's title and no street name.
+    expect(options.prozor).toEqual({ networkKinds: ['tram', 'bus'], stopRoutes: null, stopLabelMinRank: STOP_LABEL_MIN_RANK, stopLabelTramInterchanges: true, placeTitles: false, stopRadius: false, overlapZoom: zoom - 0.1, labelPadding: labelPadding(1300, 880, 4000), majorStreetNames: false, frame: { lon: STOP.lon, lat: STOP.lat, radiusM: 2000 } });
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
-    // The pharmacy's name is worth its room on a neighbourhood's picture, below the detail zoom too: a stop 400 m
-    // south of Trg bana J. Jelačića 3 (outside its own frontage) frames at z13.4 and names it.
+    // The pharmacy point carries its name on a neighbourhood's picture, below the detail zoom too (a stop 400 m
+    // south of Trg bana J. Jelačića 3 frames at z13.4); decision 58's placeTitles false keeps the layer from drawing it.
     const south = { ...STOP, lon: 15.9776, lat: 45.8131 - 400 / 111_320 };
     const near = stub();
     requestKioskMap(near.maps, { ...base, stop: south }, near.adapter);
@@ -1045,6 +1046,23 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(first(legacy).prozor).toMatchObject({ stopRoutes: STOP.routes, stopRadius: true });
   });
 
+  // Decision 58: nothing outside the frame is a disc or a square on a placed wall; the pharmacy's ring stays wherever it is.
+  it('draws the BAJS discs, the venues and the event squares inside the frame alone', () => {
+    const iso = new Date(NOW - 60_000).toISOString();
+    const bike = (id: string, lat: number) => ({ id, name: id, lon: STOP.lon, lat, bikes: 3, docks: 5, capacity: 8, installed: true, renting: true, returning: true, observedAt: iso });
+    const city: CityState = { ...emptyCity(), live: { schema: 1 as never, generatedAt: iso, sources: [{ id: 'bajs', name: 'BAJS', url: 'https://example.test/', licence: 'x', status: 'live', count: 2 }],
+      bikes: [bike('near', STOP.lat + 1500 / 111_320), bike('far', STOP.lat + 2500 / 111_320)], air: [], consultations: [] } };
+    const s = stub();
+    requestKioskMap(s.maps, { ...base, frame: 6, city }, s.adapter);
+    const points = first(s).points as { id: string; place?: string }[];
+    expect(points.filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near']);
+    expect(points.some((p) => p.place === 'pharmacy')).toBe(true);
+    // The whole-city window keeps its own rule (far dots across the city).
+    const w = stub();
+    requestKioskMap(w.maps, { ...base, frame: 6, city, placeSet: false }, w.adapter);
+    expect((first(w).points as { id: string; place?: string }[]).filter((p) => p.place === 'city').map((p) => p.id)).toEqual(['bajs-near', 'bajs-far']);
+  });
+
   it('frames Kadar 4 and 8 closer and wider, and a measured radius wins over the Kadar\u2019s fallback', () => {
     const at = (extra: Record<string, unknown>) => {
       const s = stub();
@@ -1065,7 +1083,7 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
     requestKioskMap(s.maps, { ...base, frame: 8, widthPx: 794, heightPx: 610, cameraZoom: 12.9 }, s.adapter);
     expect(s.calls.setModes).toHaveBeenLastCalledWith(null);
-    expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'], stopLabelTramInterchanges: false }));
+    expect(s.calls.setProzor).toHaveBeenLastCalledWith(expect.objectContaining({ networkKinds: ['tram', 'bus'], stopLabelTramInterchanges: true }));
   });
 
   it('frames a chosen address place on the address, and keeps the whole-city window for the read-path default place', () => {
@@ -1083,6 +1101,36 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(labelsOf(window.cityLabels)).toBe('none'); // as the whole-city window has always carried it
     expect(kioskCityLabels(false, true)).toBe('none');
     expect(d.calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+  });
+
+  // Owner, 24 Sep ("too many names, tiny empty white circles"): the whole-city
+  // window carries the place's own ring and name (decision 19) and the pills,
+  // and no other stop mark -- no bead and no interchange name (Ruling 30's
+  // interchange names are withdrawn here). The frame keeps its own rule.
+  it('draws on the whole-city window only the own place\u2019s ring and name and the pills, never another stop\u2019s bead or name', () => {
+    const trg = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
+    const d = stub();
+    requestKioskMap(d.maps, { ...base, stop: null, place: trg, placeSet: false, stops: [STOP] }, d.adapter);
+    const window = first(d);
+    expect(window.center).toEqual(cityWindowView(1300, 880).center);
+    expect(window.prozor).toMatchObject({ stopMarks: false, stopRoutes: null });
+    // The own ring and name: the place's stop from the table, else the place itself.
+    expect(window.stop).toEqual(STOP);
+    const bare = stub();
+    requestKioskMap(bare.maps, { ...base, stop: null, place: trg, placeSet: false }, bare.adapter);
+    expect(first(bare).stop).toEqual({ id: STOP.id, name: STOP.name, lon: STOP.lon, lat: STOP.lat, routes: [] });
+    // A screen with neither place nor stop has no own ring to draw, and still no other stop mark.
+    const none = stub();
+    requestKioskMap(none.maps, { ...base, stop: null }, none.adapter);
+    expect(first(none).stop).toBeNull();
+    expect(first(none).prozor).toMatchObject({ stopMarks: false });
+    // The frame and a phone's band keep their stops and names.
+    const framed = stub();
+    requestKioskMap(framed.maps, { ...base, frame: 6 }, framed.adapter);
+    expect(first(framed).prozor).not.toHaveProperty('stopMarks');
+    const phone = stub();
+    requestKioskMap(phone.maps, { ...base, stop: null, place: trg, placeSet: false, handheld: true, spanM: HANDHELD_SPAN_M, widthPx: 356, heightPx: 420 }, phone.adapter);
+    expect(first(phone).prozor).not.toHaveProperty('stopMarks');
   });
 
   it('is the wall\u2019s own: a phone\u2019s band, a person exploring and a paired presentation are not framed', () => {
