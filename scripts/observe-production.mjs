@@ -1168,6 +1168,7 @@ export const THRESHOLDS = Object.freeze([
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
   T('sentence-repeat', 'd2', 'kiosk', 'kiosk.sentenceRepeats', NONE, 'no sentence repeated verbatim within ten minutes', '§12'),
+  T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired, within one reading ({ROTATION_STEP_MS} ms)', 'decision 29'),
   T('sentence-distinct', 'd2', 'kiosk', 'kiosk.sentencesTooFew', NONE, 'at least {DISTINCT_SENTENCES_MIN} distinct sentences in every ten minutes of the rotation (a shorter run in proportion, at least 1)', '§16.3, §12'),
   T('solar', 'd2', 'kiosk', 'kiosk.solarOverMax', NONE, 'at most {SOLAR_ROWS_MAX} solar row per reading', '§16.3, §12'),
   T('rows-timed', 'd2', 'kiosk', 'kiosk.untimedReadings', NONE, 'every row carries data-when or data-always', '§16.3'),
@@ -1398,11 +1399,19 @@ export const METRICS = Object.freeze({
   'kiosk.sentenceOutOfRange': (obs, k) => countReadings(obs, (s) => s.sentenceChars < 1 || s.sentenceChars > k.wall.SENTENCE_MAX_CHARS, (s) => `${s.sentenceChars} characters ${quote(s.sentence, 90)}`),
   'kiosk.sentenceEllipses': (obs) => countReadings(obs, (s) => s.sentenceEllipsis, (s) => quote(s.sentence, 90)),
   'kiosk.sentenceOverflows': (obs) => countReadings(obs, (s) => s.sentenceOverflow, (s) => quote(s.sentence, 90)),
-  'kiosk.sentenceRepeats': (obs) => {
+  'kiosk.sentenceRepeats': (obs, k) => {
     const rot = valid(obs.kiosk?.rotation ?? []);
     if (!rot.length) return { value: null, detail: ['no rotation reading'] };
-    const r = repeatsWithin(rot, REPEAT_WINDOW_MS);
-    return { value: r.repeats.length, detail: [`${r.turns} sentence turns, ${r.distinct} distinct`, ...r.repeats.slice(0, 3).map((x) => `${x.at} again after ${Math.round(x.afterMs / 1000)} s: ${quote(x.sentence, 90)}`)] };
+    const r = repeatsWithin(rot, REPEAT_WINDOW_MS, k.wall);
+    return { value: r.repeats.length, detail: [`${r.turns} sentence turns (per fact, ${r.factSource}), ${r.refreshes} refreshes, ${r.distinct} distinct`, ...r.repeats.slice(0, 3).map((x) => `${x.at} again after ${Math.round(x.afterMs / 1000)} s: ${quote(x.sentence, 90)}`)] };
+  },
+  'kiosk.sentenceShortTurns': (obs, k) => {
+    const rot = valid(obs.kiosk?.rotation ?? []);
+    if (!rot.length) return { value: null, detail: ['no rotation reading'] };
+    const r = repeatsWithin(rot, REPEAT_WINDOW_MS, k.wall);
+    const judged = r.dwells.filter((d) => !d.truncated && d.dwellMs !== null).map((d) => d.dwellMs);
+    const range = judged.length ? `dwells ${(Math.min(...judged) / 1000).toFixed(1)} to ${(Math.max(...judged) / 1000).toFixed(1)} s` : 'no judged dwell';
+    return { value: r.short.length, detail: [`${r.turns} turns per fact (${r.factSource}), ${r.refreshes} refreshes, ${range}`, ...r.short.slice(0, 3).map((d) => `${d.at} ${(d.dwellMs / 1000).toFixed(1)} s (${d.refreshes} refreshes): ${quote(d.sentence, 90)}`)] };
   },
   'kiosk.sentencesTooFew': (obs, k) => {
     if (!obs.kiosk || !(obs.kiosk.rotation ?? []).length) return { value: null, detail: ['no rotation reading'] };
@@ -1548,28 +1557,24 @@ export const METRICS = Object.freeze({
 });
 
 /**
- * §12 over the rotation: sentence turns (a new data-valid-until or a new text, e2e/wall.ts's rule) whose
- * text was already shown by a turn that began less than `windowMs` earlier.
+ * §12 and decision 29 over the rotation, per fact (e2e/wall.ts sentenceTurns): a turn ends only when the
+ * sentence's fact changes (data-fact; before the attribute, its words with the numbers masked), a rewording of
+ * the same fact is a refresh inside the turn, and a wording shown again by a later turn less than `windowMs`
+ * after its earlier showing is a repeat. `short` are the judged turns under 20 s whose own fact had not expired.
  */
-export function repeatsWithin(readings, windowMs) {
-  const turns = [];
-  let prevKey = null;
-  let prevText = null;
-  for (const s of readings) {
-    if (!s.sentence) continue;
-    const key = s.validUntil ?? s.sentence;
-    if (key !== prevKey || s.sentence !== prevText) {
-      turns.push({ at: s.at, sentence: s.sentence });
-      prevKey = key;
-      prevText = s.sentence;
-    }
-  }
-  const repeats = [];
-  turns.forEach((t, i) => {
-    const earlier = turns.slice(0, i).reverse().find((u) => u.sentence === t.sentence);
-    if (earlier && t.at - earlier.at < windowMs) repeats.push({ at: new Date(t.at).toISOString().slice(11, 19), afterMs: t.at - earlier.at, sentence: t.sentence });
-  });
-  return { turns: turns.length, distinct: new Set(turns.map((t) => t.sentence)).size, repeats };
+export function repeatsWithin(readings, windowMs, wall) {
+  const r = wall.sentenceTurns(readings, { windowMs, stepMs: wall.ROTATION_STEP_MS });
+  const at = (ms) => new Date(ms).toISOString().slice(11, 19);
+  const dwells = r.turns.map((t) => ({ at: at(t.at), sentence: t.texts[0], fact: t.fact, dwellMs: t.dwellMs, refreshes: t.refreshes, expired: t.expired, truncated: t.truncated }));
+  return {
+    turns: r.turns.length,
+    refreshes: r.refreshes,
+    distinct: new Set(r.turns.map((t) => t.fact)).size,
+    repeats: r.verbatimRepeats,
+    short: dwells.filter((d, i) => r.turns[i].short),
+    dwells,
+    factSource: r.factSource,
+  };
 }
 
 /**
@@ -1584,7 +1589,8 @@ export function distinctPerWindow(rotation, planned, stepMs, windowMs, min) {
     const to = Math.min(planned, from + per) - 1;
     const size = to - from + 1;
     const required = Math.max(1, Math.ceil((min * size) / per));
-    const distinct = new Set(rotation.filter((r) => !('error' in r) && r.n >= from && r.n <= to && r.sentence).map((r) => r.sentence)).size;
+    // Per fact (decision 29): a countdown's next minute is the same sentence, not a second distinct one.
+    const distinct = new Set(rotation.filter((r) => !('error' in r) && r.n >= from && r.n <= to && r.sentence).map((r) => r.fact || r.sentence)).size;
     windows.push({ from, to, required, distinct });
   }
   return { windows, short: windows.reduce((n, w) => n + Math.max(0, w.required - w.distinct), 0) };
@@ -1658,10 +1664,10 @@ export function renderReport(observation, verdict, instruments) {
   if (k) {
     const rot = k.rotation ?? [];
     const s = instruments.wall.summariseRotation(rot);
-    const rep = repeatsWithin(valid(rot), REPEAT_WINDOW_MS);
+    const rep = repeatsWithin(valid(rot), REPEAT_WINDOW_MS, instruments.wall);
     lines.push(`## Wall rotation (${rot.length} readings, ${instruments.wall.ROTATION_STEP_MS / 1000} s apart, rotation.jsonl)`, '');
-    lines.push('| Readings | Failed | Turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
-    lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
+    lines.push('| Readings | Failed | Turns (per fact) | Refreshes | Short turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
+    lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.refreshes} | ${rep.short.length} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
     if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, ${twinWords(k.first.fleet)}, theme ${k.first.theme ?? '?'}.`, '');
     const wallReadings = readingsOf(observation) ?? [];
     if (wallReadings.length) lines.push(pillsCensus(wallReadings, instruments), '');

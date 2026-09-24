@@ -20,7 +20,7 @@ import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { dynamicPlaces } from './city/discovery';
 import { selectNearby, skippedTextCensus, type NearbyRow } from './city/nearby';
-import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS, isSameSentence, sentencePool } from './city/sentence';
+import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS, isSameSentence, sentenceFactKeys, sentencePool, type RotatingSentence } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
 import { vetExternal, type ExternalTextRejection } from '../../shared/kiosk/external-text';
@@ -423,6 +423,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       const deadline = String(next.validUntil);
       if (sentenceEl.dataset.validUntil !== deadline) sentenceEl.dataset.validUntil = deadline;
     }
+    // data-fact names the fact the sentence says, in its template family (isSameSentence): the same sentence in
+    // refreshed words keeps it, so the harness measures a dwell per fact and counts a rewording as a refresh
+    // (lane v-observe3: "za 2 min" 15.6 s, then "za 1 min" 4.4 s, is one 20.0 s turn). A model sentence is its words.
+    const { wording } = next as RotatingSentence;
+    const fact = next.origin === 'template' && wording !== undefined ? `${wording}|${[...sentenceFactKeys(next)].sort().join(',')}` : `text|${next.text}`;
+    if (sentenceEl.dataset.fact !== fact) sentenceEl.dataset.fact = fact;
     setText(sentenceKicker, s.sentence.kicker[next.kicker]);
     setText(sentenceText, next.text);
     paintedSentence = next;

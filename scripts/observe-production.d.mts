@@ -235,7 +235,12 @@ export function readingsOf(obs: Observation): ObservedSample[] | null;
 export function plannedRotationSteps(minutes: number, stepMs: number): number;
 export interface DistinctWindow { from: number; to: number; required: number; distinct: number }
 export function distinctPerWindow(rotation: readonly (Wall.WallSample | Wall.WallSampleError | Wall.RotationRow)[], planned: number, stepMs: number, windowMs: number, min: number): { windows: DistinctWindow[]; short: number };
-export function repeatsWithin(readings: readonly Wall.WallSample[], windowMs: number): { turns: number; distinct: number; repeats: { at: string; afterMs: number; sentence: string }[] };
+/** A sentence turn per fact (e2e/wall.ts sentenceTurns) as report.md reads it. */
+export interface SentenceDwell { at: string; sentence: string; fact: string; dwellMs: number | null; refreshes: number; expired: boolean; truncated: boolean }
+export function repeatsWithin(readings: readonly Wall.WallSample[], windowMs: number, wall: Pick<typeof Wall, 'sentenceTurns' | 'ROTATION_STEP_MS'>): {
+  turns: number; refreshes: number; distinct: number; repeats: { at: string; afterMs: number; sentence: string }[];
+  short: SentenceDwell[]; dwells: SentenceDwell[]; factSource: Wall.SentenceTurns['factSource'];
+};
 export type RowStatus = 'pass' | 'fail' | 'info' | 'not observed';
 export interface VerdictRow extends Omit<Threshold, 'target'> { target: string; value: number | null; holds: boolean; detail: string[]; status: RowStatus }
 export interface Verdict { stage: StageChoice; rows: VerdictRow[]; failures: VerdictRow[]; applied: number; ok: boolean }
