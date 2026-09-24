@@ -65,7 +65,8 @@ Upute za redizajnirani prototip od 17. rujna 2026. Zamjenjuju prethodne
 rasporede i automatsko preuzimanje prikaza pri skeniranju.
 Tehničko ime `vidikovac`, domena i ključevi pohrane ostaju nepromijenjeni.
 Adresa je javna od 14. rujna 2026.; Cloudflare Access štiti samo operaterske
-rute `/api/admin/*` i `/stats`.
+rute `/api/admin/*` i `/stats`. Brojači su javno prikazani na `/statistika/`,
+zaokruženi i sažeti kao u skupu za Grad.
 
 ## Postavljanje stvarnog zaslona
 
