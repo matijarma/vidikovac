@@ -8,6 +8,7 @@
 .k-map-note{position:absolute;left:var(--k-gap);right:var(--k-gap);top:var(--k-gap);padding:calc(var(--k-gap) * .6);border-radius:var(--k-radius-s);background:var(--k-surface);color:var(--k-ink-2);font-size:var(--k-sub-size);line-height:1.25;pointer-events:none}
 .k-map-note[hidden]{display:none}
 .k-map-legend span{display:inline-flex;align-items:center;gap:.4em}
+.k-map-legend span[hidden]{display:none}
 .k-legend-tram{padding:.05em .3em;border-radius:3px;color:var(--k-action-ink);background:var(--k-action)}
 .k-legend-bike{color:var(--tone-bike)}.k-legend-culture{color:var(--k-violet)}
 /* "U blizini" (kiosk/timeline.ts): the aside's list over the QR card. Whole rows, whole words: nothing here is cut

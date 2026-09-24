@@ -47,6 +47,8 @@ export interface InvitationHandle {
   update(model: InvitationModel): void;
   setFrame(frame: FrameStops): void;
   measureWidth(): number; measureHeight(): number; setMajorLabels(count: number): void;
+  /** The legend's entries follow what the map draws (kiosk/mapview.ts legendKinds): the others are hidden. */
+  setLegend(kinds: readonly string[]): void;
   fit(): void; destroy(): void;
 }
 /** Shared with presented content: scanning remains possible in every phase. */
@@ -69,7 +71,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   if(!lightweight){
     const legend=document.createElement('p');
     legend.className='k-map-legend';
-    legend.innerHTML=`<span><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
+    legend.innerHTML=`<span data-legend="tram"><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span data-legend="bikes"><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
     geography.appendChild(legend);
   }
   const note=document.createElement('p');
@@ -156,6 +158,12 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     },
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),
     setFrame,setMajorLabels:count=>field.setMajorLabels(count),fit,
+    setLegend(kinds){
+      for(const span of geography.querySelectorAll<HTMLElement>('.k-map-legend > span[data-legend]')){
+        const hidden=!kinds.includes(span.dataset.legend??'');
+        if(span.hidden!==hidden)span.hidden=hidden;
+      }
+    },
     destroy(){timeline.destroy();field.destroy();element.remove();},
   };
 }
