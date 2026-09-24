@@ -10,7 +10,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
-import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
+import { LAST_POLL_GUARD_MS, LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
@@ -941,6 +941,29 @@ describe('the full map view (transport)', () => {
     expect(location.hash).not.toContain('jos');
     const live = stack.slice(0, at + 1);
     expect(new Set(live).size, `the entries a Back walks through: ${live.join(' | ')}`).toBe(live.length);
+  });
+
+  it('sends no data poll inside the session\'s last 2 s by its clock, so a client behind the server\'s clock never polls past the end (observe-d521b)', async () => {
+    let clock = NOW;
+    const { root, session, fetchData, tick } = mount({ now: () => clock });
+    session.join();
+    await flush();
+    clock = EXPIRES - LAST_POLL_GUARD_MS - 3_000;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData, 'a poll with time to spare goes out').toHaveBeenCalled();
+    fetchData.mockClear();
+    clock = EXPIRES - LAST_POLL_GUARD_MS + 500;
+    tick();
+    await flush();
+    expect(fetchData, 'no poll in the last 2 s').not.toHaveBeenCalled();
+    expect(root.querySelector('[data-testid=session-ended]')).toBeNull();
+    clock = EXPIRES + 100;
+    tick();
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
   });
 
   it('writes one history entry per place, none per poll, and Back through the fragment closes the detail', async () => {

@@ -54,6 +54,9 @@ import { ct } from './city/strings';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
+/** No data poll goes out inside the session's last 2 s by the client's clock (observe-d521b: a client behind the
+ *  server's clock by a late `joined` sent four polls that reached the Worker past the end and came back 401). */
+export const LAST_POLL_GUARD_MS = 2_000;
 /** How many times a session asks for the stop catalogue before it leaves it down (one per draw after a failure). */
 const STOPS_ATTEMPTS = 3;
 
@@ -837,6 +840,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   async function refresh(lane: Lane = 'all'): Promise<void> {
     if (frozen || paused || disposed || !session.snapshot().dataToken) return;
+    // A poll that would land in the session's last seconds is skipped: the client's clock rests on the one `joined`
+    // offset, so a late `joined` puts it behind the server's, and such a poll reached the Worker just past the end
+    // and came back 401 (observe-d521b, four 401s 601.8 s after the redeem). The clock's own freeze follows.
+    if (inLastSeconds()) return;
     const active = activeModules();
     store.setModules(active);
     const ids = lane === 'all' ? active : active.filter((id) => (id === 'zet-rt') === (lane === 'transit'));
@@ -851,6 +858,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (messages.some((m) => / 401\b/.test(m))) { freeze(); return; }
     error = messages.some((m) => / 403\b/.test(m)) ? 'access' : error === 'access' ? null : error;
     paintShell();
+  }
+
+  /** Whether the session ends within LAST_POLL_GUARD_MS by the client's clock (no data poll goes out then). */
+  function inLastSeconds(): boolean {
+    const expiresAt = session.snapshot().expiresAt;
+    return expiresAt !== null && expiresAt - session.serverNow() <= LAST_POLL_GUARD_MS;
   }
 
   /** The clock decides, not the socket: a phone whose socket died still freezes on time. */
