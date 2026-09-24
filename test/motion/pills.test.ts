@@ -453,16 +453,17 @@ describe('deflectMarks: a mark steps aside for a disc\u2019s number and for a ma
     expect(clearance(tram('s', 100, 100, 0), standing, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
   });
 
-  it('hops past a pile of discs in its way, not into the next one, and stops at the cap', () => {
-    // Hub stations twelve pixels apart under a north-bound plate: the hop clears the whole pile.
-    const pile = [disc, { x: 100, y: 88, r: 11 }, { x: 100, y: 76, r: 11 }];
+  it('hops past a pile of discs in its way, not into the next one, and no further than the cap', () => {
+    // Two hub stations twelve pixels apart under a north-bound plate: one hop clears both.
+    const pile = [disc, { x: 100, y: 88, r: 11 }];
     const placed = deflectMarks([tram('a', 100, 100, 0)], pile).get('a')!;
     for (const d of pile) expect(clearance(tram('a', 100, 100, 0), placed, d), `disc at ${d.y}`).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
-    expect(placed.moved).toBeCloseTo(24 + clear, 6);
-    // A pile too deep to hop: the mark stays where it is and keeps what it covers, rather than land on another disc.
+    expect(placed.moved).toBeCloseTo(12 + clear, 6);
+    expect(placed.moved).toBeLessThanOrEqual(DEFLECT_MAX_PX);
+    // A pile too deep to hop within the cap: the mark goes as far as the cap and keeps what it still covers.
     const deep = Array.from({ length: 8 }, (_, i) => ({ x: 100, y: 100 - 12 * i, r: 11 }));
-    expect(deflectMarks([tram('b', 100, 100, 0)], deep).get('b')).toEqual({ x: 100, y: 100, moved: 0 });
-    expect(DEFLECT_MAX_PX).toBe(54);
+    expect(deflectMarks([tram('b', 100, 100, 0)], deep).get('b')!.moved).toBe(DEFLECT_MAX_PX);
+    expect(DEFLECT_MAX_PX).toBe(36);
   });
 
   it('a bus pill on a tram plate steps off it; the plate, placed first, stays; a plate pushed onto a neighbour pushes the neighbour on', () => {

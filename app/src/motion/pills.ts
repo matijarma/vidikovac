@@ -454,8 +454,8 @@ export function createLineColours(
 // back once past. A bus pill steps aside for a tram plate the same way (trams
 // are placed first, then buses, then the rest), and every mark placed is in
 // the way of the ones after it. Never further than DEFLECT_MAX_PX: a mark in
-// a pile too deep to hop stays where it is and keeps what it covers, rather
-// than land on another disc. Pure, in the CSS px
+// a pile too deep to hop goes as far as that and keeps what it still covers.
+// Pure, in the CSS px
 // the pill geometry is stated in (vehicle-features.ts divides the projected
 // positions by the symbol scale first, as it does for the clustering).
 
@@ -476,8 +476,10 @@ export const DEFLECT_MARGIN_PX = 1;
  *  the first try, left 8 of 16 covered discs covered on a replay of Trg: the hops stopped part-way through
  *  the pile, on the next disc.) */
 export const DEFLECT_GAIN = 8;
-/** The furthest a mark is ever moved from where the model put it: three capsule heights. */
-export const DEFLECT_MAX_PX = 3 * PILL_HEIGHT_PX;
+/** The furthest a mark is ever moved from where the model put it: two capsule heights, one disc's hop and a
+ *  little more. In ground that is 450 m at the wall's z13 (where the disc itself claims 500 m of street) and
+ *  66 m at street level; a mark whose pile needs more stays where it is. */
+export const DEFLECT_MAX_PX = 2 * PILL_HEIGHT_PX;
 
 /** A capsule's spine (a horizontal segment) and its radius, as drawn. */
 interface Capsule { x: number; y: number; spine: number; radius: number }
@@ -499,8 +501,9 @@ const DEFLECT_RANK: Readonly<Record<string, number>> = { tram: 0, bus: 1 };
 /**
  * The smallest hop `p` (0 or more) along the screen's vertical, in direction `side` (+1 down, -1 up), that
  * leaves the capsule `own` clear of every obstacle it would meet on the way: each obstacle it reaches across
- * forbids an interval of `p`, and the hop walks past the chain of them the mark stands in. A chain that runs
- * past DEFLECT_MAX_PX cannot be hopped: 0, the mark stays where it is rather than land on another disc.
+ * forbids an interval of `p`, and the hop walks past the chain of them the mark stands in. Never past
+ * DEFLECT_MAX_PX: a chain that runs further is not hopped whole, the mark goes as far as the cap (a hop
+ * that switched to nothing as the chain shortened under the cap would be the jump the gain avoids).
  */
 function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): number {
   const forbidden: [number, number][] = [];
@@ -521,7 +524,7 @@ function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): nu
     if (from >= p) break;
     p = to;
   }
-  return p > DEFLECT_MAX_PX ? 0 : p;
+  return Math.min(p, DEFLECT_MAX_PX);
 }
 
 /**
