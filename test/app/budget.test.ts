@@ -166,11 +166,17 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
       expect(html).not.toContain(NETWORK_ARTEFACT);
       expect(html).not.toContain(SCHEMA_ARTEFACT);
       expect(html).not.toContain('.woff2');
-      // Nor may any stylesheet on the wire carry an @font-face: the system
-      // stack is the lightweight typography (R-F3).
+      // Nor may any stylesheet on the wire carry a webfont: the system stack
+      // is the lightweight typography (R-F3). The one @font-face allowed is a
+      // local() alias of a system font (tokens.css 'Manrope Fallback', the
+      // metric-matched stand-in the modern path shows while Manrope loads):
+      // it names no file, so nothing is downloaded.
       for (const file of wireFiles(entry).filter((f) => f.endsWith('.css'))) {
         const css = readFileSync(join(outDir, file), 'utf8');
-        expect(css, `${file} declares a webfont`).not.toContain('@font-face');
+        for (const face of css.match(/@font-face\s*\{[^}]*\}/g) ?? []) {
+          expect(face, `${file} declares a webfont`).not.toMatch(/url\(/);
+          expect(face, `${file} declares a face that is not a local system font`).toMatch(/src:\s*local\(/);
+        }
         expect(css, `${file} references a font file`).not.toContain('.woff2');
       }
       // And the artefact is never a build-time asset of any chunk on the graph.
@@ -200,6 +206,22 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
       const total = rows.reduce((sum, row) => sum + row.gzip, 0);
       console.log(`[budget] /${entry.replace('index.html', '')} full-map JS + worker: ${total} gzip bytes`);
       expect(total, 'page, map library, shared chunks and worker together').toBeLessThan(600_000);
+    });
+  }
+});
+
+// ui/print.css is nothing but `@media print`: the build links it with media="print" (vite.config.ts,
+// app/src/print-media.ts), so it is still on the wire (and counted above) but never blocks the first render.
+describe('the print sheet never blocks rendering', () => {
+  for (const entry of ['d/index.html', 'izvori/index.html'] as const) {
+    it(`/${entry.replace('index.html', '')} links its print-only stylesheet with media="print", every other stylesheet without`, () => {
+      const html = readFileSync(join(outDir, entry), 'utf8');
+      const links = html.match(/<link rel="stylesheet"[^>]*>/g) ?? [];
+      const print = links.filter((tag) => tag.includes('media="print"'));
+      expect(print, `${entry} links one print-only sheet`).toHaveLength(1);
+      const href = /href="\/([^"]+)"/.exec(print[0]!)![1]!;
+      expect(readFileSync(join(outDir, href), 'utf8').trim()).toMatch(/^@media print\s*\{[\s\S]*\}$/);
+      expect(links.length - print.length, `${entry} keeps its screen stylesheets`).toBeGreaterThan(0);
     });
   }
 });

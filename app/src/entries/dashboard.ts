@@ -188,12 +188,20 @@ if (!params) {
       session.event('export', exportDim(kind));
     },
   });
-  // Warm Promet's geographic renderer only while that is the device's choice;
-  // this guard avoids an unnecessary transit prefetch, not every page's map load.
-  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
-  const prefetch = () => { if (mapMode.snapshot() === 'map') void import('../map/maplibre-entry'); };
-  if (!lightweight && mapMode.snapshot() === 'map') {
-    if (idle) idle(prefetch, { timeout: 4000 }); else setTimeout(prefetch, 2500);
+  // Karta's map library (278 kB gzipped, seconds of script on a slow phone) only when Karta is likely: a pointer
+  // over or down on anything that opens it (its tab, Sada's map band, a row that opens on the map), or one of them
+  // focused, and only while the geographic renderer is the device's choice. Sada's band loads it itself once Sada
+  // has settled (layers/grad-sada.ts), and the desk's Karta, beside Sada, at once; nothing fetches it on the first
+  // idle moment, in front of the first answer.
+  if (!lightweight) {
+    const INTENT = ['pointerover', 'pointerdown', 'focusin'] as const;
+    const onIntent = (event: Event): void => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-layer="u-pokretu"]')) return;
+      if (mapMode.snapshot() !== 'map') return;
+      for (const type of INTENT) root.removeEventListener(type, onIntent, true);
+      void import('../map/maplibre-entry');
+    };
+    for (const type of INTENT) root.addEventListener(type, onIntent, { capture: true, passive: true });
   }
   session.connect();
 }

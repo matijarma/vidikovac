@@ -3,7 +3,9 @@
    "U blizini", the wall's own list continuing after them; the sources last.
    The Događanja page's time chips (.day-time) live in layers.css. */
 .ws-sada { gap: var(--sp-4); }
-.sada-place { font-size: var(--type-display); line-height: var(--lh-title); letter-spacing: -0.03em; }
+/* The title keeps its line while the place's name is being checked (the boundary refuses every name until the
+   policy chunk is in hand), so the name arriving moves nothing below it. */
+.sada-place { font-size: var(--type-display); line-height: var(--lh-title); letter-spacing: -0.03em; min-block-size: calc(var(--type-display) * var(--lh-title)); }
 
 /* One written sentence (seam S6), its kicker coloured by data-kicker. BAJS teal
    fails 4.5:1 as text (city.css .city-bike-count), so the word keeps its ink
@@ -47,6 +49,9 @@
 .sada-departure .t-eta:not([data-live]) time { color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
 .sada-departure-empty { display: flex; align-items: center; color: var(--tone-text-muted); font-size: var(--type-control); }
 .sada-departure-empty .skeleton { min-block-size: 2rem; }
+/* A block on its way holds the three rows its board will fill (city/next-departures.ts DEPARTURE_ROWS), so the
+   departures landing move nothing below them; a source that cannot answer says so in one ordinary row. */
+.sada-departure-list[aria-busy='true'] > .sada-departure-empty { min-block-size: calc(3 * 3.5rem); }
 /* "U blizini · 2 km · ~15 min" (city/nearby-markup.ts): the wall's rows
    (kiosk/timeline.ts rowMarkup) in the phone's type, time in the first
    column; the pill a chip whose words stay the head's. A blue time is a
