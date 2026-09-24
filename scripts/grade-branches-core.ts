@@ -727,6 +727,8 @@ interface NextMove {
   source: string;
   /** The stop was published before on this trip and left for a later one: the wall's row leaving and returning. */
   returns: boolean;
+  /** From and to carry one stop name: the wall's one place (kiosk/arrivals.ts platformIds). */
+  samePlace: boolean;
   nearestStop: string | null;
 }
 
@@ -802,6 +804,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   const log = options.log ?? (() => {});
   const clientHz = options.clientHz ?? 4;
   const nearestStop = stopFinder(options.stops);
+  const placeOf = new Map(options.stops.map((s) => [s.id, (s.name ?? '').trim()] as const));
   const paths = net.paths;
   const pathIdToIdx = new Map(paths.map((p, i) => [p.id, i] as const));
   const pathsByEdge = new Map<number, number[]>();
@@ -1370,6 +1373,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
                   atM: Math.round(rec.s),
                   source: zetSaid && twinSaid ? 'both' : zetSaid ? 'zet' : twinSaid ? 'twin' : 'other',
                   returns: watch.seen.includes(published),
+                  samePlace: (placeOf.get(watch.stopId) ?? '') !== '' && placeOf.get(watch.stopId) === placeOf.get(published),
                   nearestStop: near ? near.stop.name : null,
                 });
               } else nextForwardMoves++;
@@ -2079,11 +2083,13 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     // ---- the next stop on the wire (rail round 3) ----------------------------------
     const nextReturns = nextMoves.filter((m) => m.returns);
     const nextStopReport = {
-      definition: 'per tram vehicle item with a nextStopId, within one trip and one matched path: a change of the published next stop to a served platform EARLIER on the path is a backward move; one onto a platform the trip\'s wire already named and left is a return (the wall\'s "sada" row vanishing and coming back)',
+      definition: 'per tram vehicle item with a nextStopId, within one trip and one matched path: a change of the published next stop to a served platform EARLIER on the path is a backward move; one onto a platform the trip\'s wire already named and left is a return (the wall\'s "sada" row vanishing and coming back); a move between two platforms of one stop name, the wall\'s one place (kiosk/arrivals.ts platformIds), is counted apart as samePlace',
       ticks: nextTicks,
       forwardMoves: nextForwardMoves,
       backwardMoves: nextMoves.length,
       returns: nextReturns.length,
+      samePlaceMoves: nextMoves.filter((m) => m.samePlace).length,
+      samePlaceReturns: nextReturns.filter((m) => m.samePlace).length,
       bySource: Object.fromEntries(countBy(nextMoves, (m) => m.source)),
       returnsBySource: Object.fromEntries(countBy(nextReturns, (m) => m.source)),
       byRoute: Object.fromEntries(countBy(nextMoves, (m) => m.route)),
@@ -2569,7 +2575,7 @@ function acceptanceLines(r: BranchReport): string[] {
   const sf = r.serviceFilter;
   L.push(`  I  adoptions onto a path no service of the day runs: ${sf.adoptionsWithoutService} of ${sf.adoptions} onto/variant adoptions (services seen ${sf.servicesSeen.join(', ') || 'none'})  [0]`);
   const ns = r.nextStop;
-  if (ns) L.push(`  next stop on the wire: ${ns.backwardMoves} backward moves within a trip over ${ns.ticks} tram items (${ns.forwardMoves} forward), ${ns.returns} of them returns to a platform the wire had left (by source ${Object.entries(ns.returnsBySource).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}); back p50 ${fmt(ns.backM.p50)} m p95 ${fmt(ns.backM.p95)} m  (context, the wall's "sada" row)`);
+  if (ns) L.push(`  next stop on the wire: ${ns.backwardMoves} backward moves within a trip over ${ns.ticks} tram items (${ns.forwardMoves} forward), ${ns.returns} of them returns to a platform the wire had left (by source ${Object.entries(ns.returnsBySource).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}, ${ns.samePlaceReturns} of those between two platforms of one place); back p50 ${fmt(ns.backM.p50)} m p95 ${fmt(ns.backM.p95)} m  (context, the wall's "sada" row)`);
   return L;
 }
 
@@ -2750,7 +2756,7 @@ export function formatMarkdown(r: BranchReport): string {
   const ns = r.nextStop;
   L.push('## The next stop on the wire (rail round 3): backward moves within a trip');
   L.push('');
-  L.push(`Definition: ${ns.definition}. Tram items with a next stop: ${ns.ticks}; forward moves ${ns.forwardMoves}; backward moves **${ns.backwardMoves}**, of which returns **${ns.returns}**; by source ${JSON.stringify(ns.bySource)} (returns ${JSON.stringify(ns.returnsBySource)}); metres back p50 ${fmt(ns.backM.p50)}, p95 ${fmt(ns.backM.p95)}, max ${fmt(ns.backM.max)}.`);
+  L.push(`Definition: ${ns.definition}. Tram items with a next stop: ${ns.ticks}; forward moves ${ns.forwardMoves}; backward moves **${ns.backwardMoves}**, of which returns **${ns.returns}** (${ns.samePlaceReturns} of them, and ${ns.samePlaceMoves} of the backward moves, between two platforms of one place); by source ${JSON.stringify(ns.bySource)} (returns ${JSON.stringify(ns.returnsBySource)}); metres back p50 ${fmt(ns.backM.p50)}, p95 ${fmt(ns.backM.p95)}, max ${fmt(ns.backM.max)}.`);
   L.push('');
   L.push(mdTable(['returns, nearest stop', 'events'], pairRows(ns.byStop)));
   L.push('');

@@ -405,10 +405,10 @@ describe('the branch grader, fault injection on the corridor', () => {
     // one forward move, one backward move that returns to a platform the wire
     // had left. A rewrite T600, T900, T1200 is two forward moves and no
     // backward one; a rewrite onto another path's platform counts nothing.
-    function observeNext(ids: readonly (string | null)[]): BranchReport {
+    function observeNext(ids: readonly (string | null)[], catalogue: readonly GradeStop[] = stops): BranchReport {
       expect(kept).not.toBeNull();
       const { state, headerSec, payload, victimId } = structuredClone(kept!);
-      const grader = createBranchGrader(engine, { stops });
+      const grader = createBranchGrader(engine, { stops: catalogue });
       for (let k = 0; k < ids.length; k++) {
         const copy = structuredClone(payload);
         const item = copy.items.find((i) => i.id === `vehicle:${victimId}`)!;
@@ -443,6 +443,12 @@ describe('the branch grader, fault injection on the corridor', () => {
       expect(back.nextStop).toMatchObject({ backwardMoves: 1, returns: 1, forwardMoves: 1 });
       const on = observeNext(['T600', null, 'T900']);
       expect(on.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 1 });
+    });
+
+    it('counts a move between two platforms of one name apart, the wall\'s one place', () => {
+      const onePlace = stops.map((s) => (s.id === 'T600' || s.id === 'T900' ? { ...s, name: 'Jedno mjesto' } : s));
+      expect(observeNext(['T600', 'T900', 'T600'], onePlace).nextStop).toMatchObject({ backwardMoves: 1, returns: 1, samePlaceMoves: 1, samePlaceReturns: 1 });
+      expect(observeNext(['T600', 'T900', 'T600']).nextStop).toMatchObject({ samePlaceMoves: 0, samePlaceReturns: 0 });
     });
   });
 
