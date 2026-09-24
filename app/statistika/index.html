@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaj ima? · Statistika</title>
+<meta name="description" content="Što Kaj ima? broji, kako i zašto: korištenje zaslona bez ijednog osobnog podatka, pouzdanost javnih izvora i točnost praćenja tramvaja.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/src/ui/tokens.css">
+<link rel="stylesheet" href="/src/ui/base.css">
+<script type="module" src="/src/entries/theme-init.ts"></script>
+</head>
+<body class="st-body">
+<a class="skip-link" href="#sadrzaj">Prijeđi na sadržaj</a>
+<header class="st-top" data-st-chrome>
+  <div class="st-bound st-top-row">
+    <a class="st-brand" href="/">Kaj ima<span class="mark">?</span></a>
+    <span class="st-top-name">Statistika</span>
+  </div>
+</header>
+<nav class="st-nav" aria-label="Na ovoj stranici">
+  <div class="st-bound st-nav-row">
+    <div class="st-sections" data-st="sections">
+      <a href="#ukratko">Ukratko</a>
+      <a href="#kako-brojimo">Kako brojimo</a>
+      <a href="#koristenje">Korištenje</a>
+      <a href="#za-grad">Za Grad</a>
+      <a href="#izvori">Izvori</a>
+      <a href="#tramvaji">Tramvaji</a>
+      <a href="#otvoreno">Provjeri</a>
+    </div>
+    <div class="st-range segmented" role="group" aria-label="Razdoblje" data-st="range">
+      <a class="segment" href="?dani=7" data-days="7"><span class="visually-hidden">Zadnjih </span>7<span aria-hidden="true">&nbsp;d</span><span class="visually-hidden"> dana</span></a>
+      <a class="segment" href="?dani=30" data-days="30"><span class="visually-hidden">Zadnjih </span>30<span aria-hidden="true">&nbsp;d</span><span class="visually-hidden"> dana</span></a>
+      <a class="segment" href="?dani=90" data-days="90"><span class="visually-hidden">Zadnjih </span>90<span aria-hidden="true">&nbsp;d</span><span class="visually-hidden"> dana</span></a>
+      <a class="segment" href="?dani=365" data-days="365"><span class="visually-hidden">Zadnjih </span>365<span aria-hidden="true">&nbsp;d</span><span class="visually-hidden"> dana</span></a>
+    </div>
+    <label class="st-range-pick"><span class="visually-hidden">Razdoblje</span><select data-st="range-select">
+      <option value="7">7 dana</option>
+      <option value="30">30 dana</option>
+      <option value="90">90 dana</option>
+      <option value="365">365 dana</option>
+    </select></label>
+  </div>
+</nav>
+
+<main id="sadrzaj" class="st-main">
+  <section id="ukratko" class="st-hero st-bound" aria-labelledby="ukratko-h">
+    <p class="st-eyebrow">Statistika, javno</p>
+    <div class="st-hero-top">
+      <h1 id="ukratko-h"><span>Brojimo događaje,</span> <span class="st-accent">ne ljude.</span></h1>
+      <div class="st-hero-copy">
+        <p class="st-lead">Ovdje je sve što Kaj ima? broji: koliko se koriste zasloni, što ljudi na njima otvaraju, koliko pouzdano stižu javni podaci i koliko točno aplikacija prati tramvaje.</p>
+        <p class="st-intro">Nijedan broj na ovoj stranici ne zna tko si. Ispod svakog grafikona piše kako je nastao.</p>
+        <p class="st-window" data-st="window" aria-live="polite">Učitavam brojeve…</p>
+      </div>
+    </div>
+    <div class="st-kpis" data-st="kpis" aria-busy="true">
+      <div class="st-kpi"><span class="skeleton"></span></div>
+      <div class="st-kpi"><span class="skeleton"></span></div>
+      <div class="st-kpi"><span class="skeleton"></span></div>
+      <div class="st-kpi"><span class="skeleton"></span></div>
+    </div>
+    <noscript><p class="state">Grafikoni trebaju JavaScript. Isti brojevi dostupni su kao <a href="/api/statistika">JSON</a>, a opis načina brojanja nalazi se ispod.</p></noscript>
+  </section>
+
+  <section id="kako-brojimo" class="st-section" aria-labelledby="kako-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Kako brojimo</p>
+        <h2 id="kako-h">Brojač ne zna tko si.</h2>
+        <p>Uobičajena analitika prati posjetitelja: dodijeli mu oznaku, zapamti uređaj i slijedi ga od stranice do stranice. Kaj ima? bilježi samo da se nešto dogodilo. Zapis ima šest polja i ni u jedno ne stane osoba.</p>
+      </div>
+
+      <div class="st-compare">
+        <article class="st-compare-card st-compare-usual" aria-labelledby="usual-h">
+          <p class="st-kicker">Uobičajena analitika</p>
+          <h3 id="usual-h">Jedan posjet bilježi</h3>
+          <ul class="st-strike">
+            <li>trajnu oznaku u kolačiću</li>
+            <li>IP adresu</li>
+            <li>uređaj, preglednik i jezik</li>
+            <li>stranicu s koje dolaziš</li>
+            <li>svaku stranicu i svaki klik</li>
+            <li>koliko se dugo zadržiš</li>
+            <li>oznaku za oglašivače</li>
+          </ul>
+          <p class="st-compare-foot">Iz toga se može složiti tvoj trag kroz vrijeme, i na drugim stranicama.</p>
+        </article>
+        <article class="st-compare-card st-compare-ours" aria-labelledby="ours-h">
+          <p class="st-kicker">Kaj ima?</p>
+          <h3 id="ours-h">Jedan događaj bilježi</h3>
+          <dl class="st-record">
+            <div><dt>dan</dt><dd>24. 9. 2026.</dd></div>
+            <div><dt>sat</dt><dd>17 h</dd></div>
+            <div><dt>događaj</dt><dd>sesija je počela</dd></div>
+            <div><dt>dimenzija 1</dt><dd>knjižnica</dd></div>
+            <div><dt>dimenzija 2</dt><dd>Trešnjevka – sjever</dd></div>
+            <div class="st-record-count"><dt>broj</dt><dd>+1</dd></div>
+          </dl>
+          <p class="st-compare-foot">Isti događaj u istom satu samo povećava broj. Ništa drugo se ne zapisuje.</p>
+        </article>
+      </div>
+
+      <ul class="st-promises">
+        <li><strong>Bez kolačića i bez oznake posjetitelja.</strong> IP adresa služi samo za ograničenje prometa i ne ulazi u brojače.</li>
+        <li><strong>Zatvoren rječnik.</strong> Postoji 16 događaja, svi su popisani na stranici <a href="/privatnost/#tocka-4">Privatnost</a>. Sve ostalo brojač odbacuje.</li>
+        <li><strong>Sesija se briše.</strong> Traje deset minuta, a nakon nje ne ostaje ništa osim zbroja.</li>
+        <li><strong>Rok čuvanja.</strong> Zbrojevi po satu čuvaju se najviše 24 mjeseca, a zatim se brišu.</li>
+      </ul>
+
+      <div class="st-rule" aria-labelledby="prag-h">
+        <h3 id="prag-h">Pravilo praga: nijedan broj manji od 10</h3>
+        <p>Mali broj u tihom satu mogao bi otkriti nečiji posjet. Zato prije objave svaka ćelija prolazi isto pravilo, a svaki se broj zaokružuje na 5.</p>
+        <ol class="st-steps">
+          <li>
+            <p class="st-step-in"><span class="st-cell">23</span> sesije u knjižnici u 10 h</p>
+            <p class="st-step-out">Ostaje sa svim poljima, zaokruženo: <span class="st-cell st-cell-kept">25</span></p>
+          </li>
+          <li>
+            <p class="st-step-in"><span class="st-cell">4</span> u kafiću u 10 h i <span class="st-cell">7</span> podijeljenih u 15 h</p>
+            <p class="st-step-out">Ispod 10: spajaju se u „ostalo” za sat, pa za cijeli dan (11): <span class="st-cell st-cell-folded">10</span></p>
+          </li>
+          <li>
+            <p class="st-step-in"><span class="st-cell">3</span> izvoza u cijelom danu</p>
+            <p class="st-step-out">Ni tako ne dosegne 10: <span class="st-cell st-cell-dropped">izostavljeno</span></p>
+          </li>
+        </ol>
+        <p>Isto pravilo vrijedi za skup koji bi dobio Grad. Na grafikonima se spojeni dio vidi šrafirano, a dan bez objavljenog broja nije nula nego polje s oznakom „ispod praga”. Mjerenja izvora i tramvaja ne dotiču nijednu osobu, pa su prikazana točno.</p>
+        <p class="st-note">Za održavanje operater iza prijave vidi i nezaokružene zbrojeve. I oni imaju samo ovih šest polja.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="koristenje" class="st-section" aria-labelledby="koristenje-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Korištenje</p>
+        <h2 id="koristenje-h">Kada i gdje se zasloni koriste</h2>
+        <p>Sesija počinje kad netko telefonom skenira kod sa zaslona. Traje deset minuta i jednom se može podijeliti s drugim telefonom, koji dobiva svojih pet minuta.</p>
+      </div>
+      <div class="st-scope" data-st="scope"></div>
+      <div class="st-grid" data-st="usage" aria-busy="true"><span class="skeleton st-skeleton-tall"></span></div>
+      <div class="st-hitno" data-st="hitno"></div>
+    </div>
+  </section>
+
+  <section id="za-grad" class="st-section st-section-tint" aria-labelledby="grad-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Za Grad Zagreb</p>
+        <h2 id="grad-h">Što od ovoga ima grad</h2>
+        <p>Isti brojevi, bez ijednog osobnog podatka, odgovaraju na pitanja za koja Grad inače plaća ankete i brojanje na terenu. Od toga imaju i građani: usluge se mogu smjestiti tamo i onda kad ih ljudi zaista trebaju.</p>
+      </div>
+      <ol class="st-values">
+        <li class="st-value">
+          <h3>Gdje zasloni imaju smisla</h3>
+          <p>Korištenje po četvrtima i vrstama prostora pokazuje gdje zaslon ljudima pomaže, a gdje ga treba premjestiti.</p>
+          <p class="st-value-live" data-st="value-where"></p>
+          <a class="st-link" href="#graf-cetvrti">Grafikon četvrti<span aria-hidden="true">↓</span></a>
+        </li>
+        <li class="st-value">
+          <h3>Kada ljudi traže informacije</h3>
+          <p>Doba dana u kojem se zasloni koriste može uskladiti radno vrijeme i dežurstva knjižnica, domova i ureda četvrti.</p>
+          <p class="st-value-live" data-st="value-when"></p>
+          <a class="st-link" href="#graf-sati">Grafikon doba dana<span aria-hidden="true">↓</span></a>
+        </li>
+        <li class="st-value">
+          <h3>Za čim postoji potražnja</h3>
+          <p>Koji se dio grada najviše otvara, promet, vrijeme, sigurnost, gradska uprava ili događanja, govori što građanima treba bliže.</p>
+          <p class="st-value-live" data-st="value-what"></p>
+          <a class="st-link" href="#graf-slojevi">Grafikon otvaranja<span aria-hidden="true">↓</span></a>
+        </li>
+        <li class="st-value">
+          <h3>Koji izvori zapinju</h3>
+          <p>Svaki neuspjeli dohvat javnog izvora je zapisan. To je popis skupova koje treba popraviti, uključujući one na data.zagreb.hr.</p>
+          <p class="st-value-live" data-st="value-sources"></p>
+          <a class="st-link" href="#izvori">Pouzdanost izvora<span aria-hidden="true">↓</span></a>
+        </li>
+        <li class="st-value">
+          <h3>Gdje tramvaji gube vrijeme</h3>
+          <p>Iz javnog ZET-ova feeda aplikacija mjeri gdje tramvaji čekaju na križanjima i koliko stoje na stajalištima. To su kandidati za prednost na semaforima.</p>
+          <p class="st-value-live" data-st="value-trams"></p>
+          <a class="st-link" href="#graf-krizanja">Karta čekanja<span aria-hidden="true">↓</span></a>
+        </li>
+        <li class="st-deal">
+          <h3>Što Grad dobiva</h3>
+          <p>U financiranom projektu Grad svaki mjesec dobiva skup oblika (mjesec, dan, sat, događaj, dvije dimenzije, broj) s istim pravilom praga, pod trajnom, besplatnom i neisključivom licencom s pravom objave.</p>
+          <p>Hoće li ga objaviti na data.zagreb.hr, odlučuje Grad. Ova stranica prikazuje zbrojeve izvedene iz istih brojeva.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="izvori" class="st-section" aria-labelledby="izvori-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Izvori</p>
+        <h2 id="izvori-h">Koliko pouzdano stižu javni podaci</h2>
+        <p>Poslužitelj redovito dohvaća svaki izvor. Kad izvor zakaže, zaslon pokazuje zadnju dobru kopiju i kaže koliko je stara, umjesto da se pretvara da je svježa.</p>
+      </div>
+      <div data-st="sources" aria-busy="true"><span class="skeleton st-skeleton-tall"></span></div>
+    </div>
+  </section>
+
+  <section id="tramvaji" class="st-section" aria-labelledby="tramvaji-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Tramvaji</p>
+        <h2 id="tramvaji-h">Koliko točno aplikacija prati tramvaje</h2>
+        <p>ZET objavljuje položaje vozila svakih nekoliko desetaka sekundi. Između dva očitanja aplikacija procjenjuje gdje je tramvaj, a svako novo očitanje ocjenjuje procjene od prije 10, 30 i 60 sekundi.</p>
+      </div>
+      <div class="st-grid" data-st="trams" aria-busy="true"><span class="skeleton st-skeleton-tall"></span></div>
+      <p class="st-note">Izvedeno iz ZET-ova javnog feeda vozila u stvarnom vremenu. Izvor i uvjeti uporabe navedeni su na stranici <a href="/izvori/">Izvori</a>.</p>
+    </div>
+  </section>
+
+  <section id="otvoreno" class="st-section" aria-labelledby="otvoreno-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow">Provjeri</p>
+        <h2 id="otvoreno-h">Ne moraš nam vjerovati na riječ</h2>
+        <p>Kod aplikacije je otvoren. Ovo su mjesta na kojima se vidi da ništa od gore navedenoga nije samo obećanje.</p>
+      </div>
+      <ul class="st-open">
+        <li><a class="st-link" href="https://github.com/matijarma/vidikovac/blob/main/worker/metrics-do.ts" rel="noopener noreferrer" target="_blank"><span>Brojač: tablica sa šest stupaca</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="https://github.com/matijarma/vidikovac/blob/main/worker/stats/export.ts" rel="noopener noreferrer" target="_blank"><span>Pravilo praga u kodu</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="https://github.com/matijarma/vidikovac/blob/main/worker/stats/public.ts" rel="noopener noreferrer" target="_blank"><span>Kako nastaju brojevi ove stranice</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/api/statistika" data-st="json-link"><span>Brojevi ove stranice kao JSON</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/privatnost/#tocka-4"><span>Što brojimo i koliko dugo čuvamo</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/izvori/"><span>Izvori i licence</span><span aria-hidden="true">↗</span></a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="st-foot" data-st-chrome>
+  <div class="st-bound">
+    <nav class="page-nav" aria-label="Stranice"><a href="/hitno">Sigurnost</a> <a href="/s/">Upiši kod</a> <a href="/izvori/">Izvori</a> <a href="/open/">Otvoreni podaci</a> <a href="/privatnost/">Privatnost</a> <a href="/pristupacnost/">Pristupačnost</a></nav>
+  </div>
+</footer>
+<div class="st-tip" data-st="tip" hidden></div>
+<script type="module" src="/src/entries/statistika.ts"></script>
+</body>
+</html>
