@@ -63,8 +63,8 @@
 .kiosk .k-present-board .city-detail h3{font-size:var(--k-main-size)}
 .kiosk .k-present-board .city-actions,.kiosk .k-present-board .city-detail>button{display:none}
 .kiosk .k-present-board .city-meta{font-size:var(--k-credit-size)}
-.kiosk[data-size=wide]{--k-side-w:calc(680px * var(--k-zoom))}
-.kiosk[data-size=compact]{--k-side-w:calc(600px * var(--k-zoom))}
+.kiosk[data-size=wide]{--k-side-w:calc(680px * var(--k-zoom));--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))}
+.kiosk[data-size=compact]{--k-side-w:calc(600px * var(--k-zoom));--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))}
 /* Decision 50 (D2): at the compact landscape wall the "U blizini" list takes the whole aside height for its
    promises and departures at the read tier, and the QR card stands under the map, which gives the height:
    768 px minus the header and footer at their tiers leaves 513, the card is 284, the list needs up to 384. */
@@ -81,7 +81,6 @@
    and the legend stands under the list instead, which gives the map the height the legend took. */
 .kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window[data-card=legend] .k-nearby-host{grid-template-rows:minmax(0,1fr) auto;row-gap:0}
 .kiosk .k-nearby-host>.k-map-legend{grid-row:2;border-radius:var(--k-radius-s)}
-.kiosk:not([data-size=handheld]){--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))}
 .kiosk[data-portrait='1'] .k-city-window{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
 .kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}
 .kiosk[data-portrait='1'] .k-invite-code{margin-top:0}

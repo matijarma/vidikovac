@@ -276,10 +276,13 @@ describe('public-screen design invariants', () => {
     expect(rule(".kiosk[data-portrait='1'] .k-paired .k-side")).toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(rule(".kiosk[data-size='handheld']")).toContain('--k-paired-side-w: 100%');
   });
-  it('keeps the QR on a 288px plate whose quiet zone is drawn inside the SVG (four modules, round 2 F7), with no padding of its own', () => {
+  it('keeps the QR on a plate whose quiet zone is drawn inside the SVG (four modules, round 2 F7), with no padding of its own: 288px wide, 264px compact', () => {
     expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(288px * var(--k-sign-zoom))');
-    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(288px * var(--k-sign-zoom))');
-    expect(windowRule('.kiosk:not([data-size=handheld])')).toContain('--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))');
+    // The compact wall keeps its 264 px plate: 24 px more took the paired rail's summary past its box at 1366 x 768
+    // (kiosk-layout.spec, grad-sada: 134/110); its code is 207 px, larger on a 43 inch panel at 1366 than the wide wall's.
+    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
+    expect(windowRule('.kiosk[data-size=wide]')).toContain('--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))');
+    expect(windowRule('.kiosk[data-size=compact]')).toContain('--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))');
     expect(rule('.k-qr')).toContain('width: var(--k-qr)');
     expect(windowRule('.kiosk .k-city-window .k-invite')).toContain('var(--k-qr)');
     expect(rule('.k-qr .qr')).toContain('var(--k-qr-plate)');

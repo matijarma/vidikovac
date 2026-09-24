@@ -156,7 +156,8 @@
   --k-gap: calc(14px * var(--k-zoom));
   --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(448px * var(--k-sign-zoom));
-  --k-qr: calc(288px * var(--k-sign-zoom));
+  /* The compact wall keeps its 264 px plate (round 2 F7): 24 px more took the paired rail's summary past its box at 1366 x 768. */
+  --k-qr: calc(264px * var(--k-sign-zoom));
   --k-code-size: calc(32px * var(--k-sign-zoom));
   --k-sentence-size: calc(40px * var(--k-zoom));
   --k-card-gap: calc(14px * var(--k-sign-zoom));

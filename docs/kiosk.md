@@ -28,7 +28,7 @@ upute o pretraživanju dodirom. Ukratko:
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
   ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, s
   praznim rubom od četiri modula na svakoj strani unutar bijele podloge od
-  288 piksela. Telefon na `/kiosk/` dobiva upute za postavljanje,
+  288 piksela (264 na zaslonu 1366 × 768). Telefon na `/kiosk/` dobiva upute za postavljanje,
   kod i mali pregled.
 - Na zaslonu nema vremena dohvata ni opažanja, napomena o izvoru, svježini
   ili pouzdanosti ni brojeva bez imena, ni na pregledu grada ni u
