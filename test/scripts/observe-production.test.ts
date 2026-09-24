@@ -32,7 +32,7 @@ import {
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
   EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
-  USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
+  MAX_HOST_LOAD, USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
   plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObservedRotationRow, type SkippedTextEntry, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
 } from '../../scripts/observe-production.mjs';
@@ -54,11 +54,13 @@ const refusal = (fn: () => unknown): ObserverRefusal => {
 // --- arguments and environment -------------------------------------------------------------
 describe('arguments', () => {
   it('defaults to ten minutes, all three surfaces, every stage and the review.local folder', () => {
-    expect(parseArgs([])).toEqual({ minutes: 10, surfaces: ['kiosk', 'phone', 'desktop'], stage: 'full', out: null, help: false });
+    expect(parseArgs([])).toEqual({ minutes: 10, surfaces: ['kiosk', 'phone', 'desktop'], stage: 'full', out: null, maxLoad: MAX_HOST_LOAD, help: false });
+    expect(MAX_HOST_LOAD).toBe(8);
   });
 
   it('takes --name value and --name=value, and keeps the surfaces in their fixed order', () => {
-    expect(parseArgs(['--minutes', '3', '--surfaces=phone,kiosk', '--stage', 'd1', '--out=review.local/x'])).toEqual({ minutes: 3, surfaces: ['kiosk', 'phone'], stage: 'd1', out: 'review.local/x', help: false });
+    expect(parseArgs(['--minutes', '3', '--surfaces=phone,kiosk', '--stage', 'd1', '--out=review.local/x', '--max-load', '20'])).toEqual({ minutes: 3, surfaces: ['kiosk', 'phone'], stage: 'd1', out: 'review.local/x', maxLoad: 20, help: false });
+    expect(parseArgs(['--max-load=off']).maxLoad).toBeNull();
     expect(parseArgs(['--help']).help).toBe(true);
   });
 
@@ -71,6 +73,8 @@ describe('arguments', () => {
     [['--surfaces', 'phone,desktop'], /must include kiosk/],
     [['--stage', 'd4'], /--stage must be one of d1, d2, d3, full/],
     [['--present'], /unknown option --present/],
+    [['--max-load', '0'], /--max-load must be a number above 0 or "off"/],
+    [['--max-load', 'high'], /not "high"/],
     [['kiosk'], /unexpected argument "kiosk"/],
   ])('refuses %j with exit code 2', (argv, message) => {
     const e = refusal(() => parseArgs(argv));
@@ -137,7 +141,7 @@ describe('refusals happen before anything is loaded', () => {
 
   it('a loader that cannot start is exit 2', async () => {
     const errors: string[] = [];
-    expect(await main({ argv: [], env: ENV, root, error: (l) => errors.push(l), log: () => {}, load: async () => { throw new Error('no vite'); } })).toBe(2);
+    expect(await main({ argv: [], env: ENV, root, error: (l) => errors.push(l), log: () => {}, hostLoad: () => 0.5, load: async () => { throw new Error('no vite'); } })).toBe(2);
     expect(errors.join('\n')).toContain('the instrument loader could not start: no vite');
   });
 
@@ -160,6 +164,27 @@ describe('refusals happen before anything is loaded', () => {
     expect(child.stderr).toMatch(message);
     expect(child.stderr).not.toContain('NETWORK ATTEMPT');
     expect(child.stdout).toBe('');
+  });
+
+  // 24 Sep 06:55: an observation at host load 127 (other agents' gates) took 5 to 12 s a reading instead of 2 s, and
+  // its table read as the product's. Above 1-minute load 8 the observer refuses before it loads anything.
+  it('refuses above 1-minute host load 8 before anything is loaded, unless --max-load raises or switches off the bound', async () => {
+    const attempt = async (argv: string[], load: number) => {
+      const errors: string[] = [];
+      let loaded = false;
+      const code = await main({ argv, env: ENV, root, error: (l) => errors.push(l), log: () => {}, hostLoad: () => load, load: async () => { loaded = true; throw new Error('stop here'); } });
+      return { code, loaded, errors: errors.join('\n') };
+    };
+    const busy = await attempt([], 12.5);
+    expect(busy).toMatchObject({ code: 2, loaded: false });
+    expect(busy.errors).toContain('the host\'s 1-minute load is 12.5, above 8');
+    expect(busy.errors).toContain('--max-load');
+    // At the bound it runs (here: to the loader, which this test stops).
+    expect(await attempt([], 8)).toMatchObject({ code: 2, loaded: true });
+    expect(await attempt(['--max-load', '20'], 12.5)).toMatchObject({ code: 2, loaded: true });
+    expect(await attempt(['--max-load', 'off'], 127)).toMatchObject({ code: 2, loaded: true });
+    // A host that cannot say its load (os.loadavg() is [0, 0, 0] on Windows) is not refused.
+    expect(await attempt([], Number.NaN)).toMatchObject({ code: 2, loaded: true });
   });
 
   it('holds no code path to the setup button or the screens route (the acceptance grep)', () => {
@@ -519,7 +544,7 @@ const GOOD_BOARD: StopBoardRead = { open: true, total: 3, inViewport: 3, texts: 
 const GOOD_EXPIRY: ExpiryReading = { ended: true, scanLinks: 1, hitnoLinks: 1, rows: 0, rowTexts: [], exportControls: 0 };
 /** The wall's validator census when nothing was left out: the kiosk root and the timeline both write 0. */
 const QUIET_CENSUS: SkippedTextEntry[] = [{ surface: 'kiosk', value: 'count:0' }, { surface: 'nearby', value: '0' }];
-const GOOD_CALM: CalmMotionReading = { rootFound: true, before: 3, after: 3, mutations: 2, textSwaps: 5, kept: 2, rebuilt: [], left: ['departure|trip-0'], entered: ['departure|trip-9'], untracked: 0 };
+const GOOD_CALM: CalmMotionReading = { rootFound: true, before: 3, after: 3, mutations: 2, turnovers: 1, churn: 0, textSwaps: 5, kept: 2, rebuilt: [], left: ['departure|trip-0'], entered: ['departure|trip-9'], untracked: 0 };
 
 type Kind = 'kiosk' | 'portrait' | 'proxy' | 'phone' | 'desktop';
 /** What e2e/legibility.ts reports for the canvas map before its census is written (the 24 Sep portrait). */
@@ -1069,11 +1094,11 @@ describe('a run over a fake browser', () => {
     const calm = await observe(['--minutes', '10', '--stage', 'd2']);
     expect(calm.code, calm.lines.join('\n')).toBe(0);
     expect(read(calm.out, 'report.md')).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
-    const busy = await observe(['--minutes', '10', '--stage', 'd2'], { calm: (i) => (i === 4 ? { ...GOOD_CALM, mutations: 3 } : i === 7 ? { ...GOOD_CALM, rebuilt: ['departure|trip-2'] } : GOOD_CALM) });
+    const busy = await observe(['--minutes', '10', '--stage', 'd2'], { calm: (i) => (i === 4 ? { ...GOOD_CALM, mutations: 5, churn: 3 } : i === 7 ? { ...GOOD_CALM, rebuilt: ['departure|trip-2'] } : GOOD_CALM) });
     expect(busy.lines.join('\n')).toContain('FAIL calm-motion');
     const report = read(busy.out, 'report.md');
     expect(report).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 2 \| \*\*fail\*\* \|/);
-    expect(report).toContain('readings 120–150: 3 structural mutations under the timeline in an idle minute');
+    expect(report).toContain('readings 120–150: 3 structural mutations under the timeline beyond 1 departure turnover(s) in a minute (target ≤ 2');
     expect(report).toContain('readings 210–240: 1 row(s) stayed on the list but were re-created: departure\\|trip-2');
     const gone = await observe(['--stage', 'd2'], { calm: () => ({ ...GOOD_CALM, rootFound: false }) });
     expect(gone.lines.join('\n')).toContain('FAIL calm-motion');
@@ -1232,5 +1257,88 @@ describe('the first production observation after the release (24 Sep, 02:30 Zagr
     expect(failed).toContain('FAIL karta-pills');
     expect(read(day.out, 'report.md')).toContain('data-pills empty (feed live, map ready, the twin reporting 3 vehicle(s))');
     expect(read(day.out, 'report.md')).toContain('Vehicle pills: drawn in 0 of 5 readings, owed in 5; the twin reported no vehicle in 0, the feed was stale or down in 0.');
+  });
+});
+
+// --- calm motion by turnovers (lane-w-fix9.md: three first trams entered within 70 s, six legitimate records) ----------
+describe('calm motion counts departure turnovers apart from churn', () => {
+  const start = shipped(wall.CALM_MOTION_START_IN_PAGE);
+  const readCalm = shipped(wall.CALM_MOTION_READ_IN_PAGE);
+  const spec = wall.CALM_MOTION_SPEC;
+  const rowHtml = (id: string, kind = 'departure'): string => `<li class="nearby-row" data-id="${id}" data-kind="${kind}"><span class="nearby-title">${id}</span><time>2 min</time></li>`;
+  const list = (ids: string[]): string => `<section data-testid="nearby"><ol>${ids.map((id) => rowHtml(id)).join('')}</ol></section>`;
+  const li = (id: string, kind = 'departure'): HTMLElement => {
+    const t = document.createElement('template');
+    t.innerHTML = rowHtml(id, kind);
+    return t.content.firstElementChild as HTMLElement;
+  };
+  const minute = async (ids: string[], act: (ol: HTMLOListElement) => void): Promise<CalmMotionReading> => {
+    document.body.innerHTML = list(ids);
+    start(spec);
+    act(document.querySelector('ol')!);
+    await Promise.resolve();
+    return readCalm(spec);
+  };
+  const byId = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('three turnovers in a minute: six records, churn 0, turnovers 3; the minute holds', async () => {
+    const r = await minute(['a', 'b', 'c', 'x'], (ol) => {
+      for (const id of ['a', 'b', 'c']) byId(id).remove();
+      for (const id of ['d', 'e', 'f']) ol.appendChild(li(id));
+    });
+    expect(r).toMatchObject({ mutations: 6, turnovers: 3, churn: 0, kept: 1, rebuilt: [], left: ['departure|a', 'departure|b', 'departure|c'], entered: ['departure|d', 'departure|e', 'departure|f'] });
+    expect(wall.calmChurnFailures(r)).toEqual([]);
+    // The accept spec's idle-minute rule is unchanged: six records are over its budget of two.
+    expect(wall.calmMotionFailures(r)).not.toEqual([]);
+  });
+
+  it('one re-created staying row: churn 2, and the node assertion stays strict', async () => {
+    // replaceChild is one record in Chromium and two in happy-dom: either way every record is churn.
+    const r = await minute(['a', 'b', 'c'], (ol) => { ol.replaceChild(li('b'), byId('b')); });
+    expect(r).toMatchObject({ turnovers: 0, churn: r.mutations, kept: 2, rebuilt: ['departure|b'] });
+    expect(r.mutations).toBeGreaterThanOrEqual(1);
+    const twice = await minute(['a', 'b', 'c'], (ol) => { const next = byId('c'); byId('b').remove(); ol.insertBefore(li('b'), next); });
+    expect(twice).toMatchObject({ mutations: 2, turnovers: 0, churn: 2, kept: 2, rebuilt: ['departure|b'] });
+    expect(wall.calmChurnFailures(twice)).toEqual(['1 row(s) stayed on the list but were re-created: departure|b (target 0, a row keeps its node)']);
+  });
+
+  it('a move, a flicker, a re-key, a non-departure row and a record beyond one per departure all stay churn', async () => {
+    // A staying node moved: two records, the node kept.
+    expect(await minute(['a', 'b', 'c'], (ol) => { ol.appendChild(byId('a')); })).toMatchObject({ mutations: 2, turnovers: 0, churn: 2, kept: 3, rebuilt: [] });
+    // A departure that entered and left inside the minute is on neither reading: churn.
+    expect(await minute(['a', 'b'], (ol) => { const f = ol.appendChild(li('f')); f.remove(); })).toMatchObject({ mutations: 2, turnovers: 0, churn: 2 });
+    // A staying row re-keyed in place is an attribute change, no record; its old key left and the new one entered with no record behind them.
+    expect(await minute(['a', 'b'], () => { byId('b').dataset.id = 'b2'; })).toMatchObject({ mutations: 0, turnovers: 0, churn: 0, left: ['departure|b'], entered: ['departure|b2'] });
+    // A solar row entering is a row, not a departure turnover.
+    expect(await minute(['a', 'b'], (ol) => { ol.appendChild(li('solar:sunrise', 'solar')); })).toMatchObject({ mutations: 1, turnovers: 0, churn: 1 });
+    // A departure leaving, then something else under the timeline: the leave is a turnover, the rest churn.
+    const mixed = await minute(['a', 'b', 'c'], (ol) => { byId('a').remove(); ol.appendChild(document.createElement('hr')); byId('b').querySelector('time')!.appendChild(document.createElement('b')); });
+    expect(mixed).toMatchObject({ mutations: 3, turnovers: 1, churn: 2 });
+    // One record per departure: a leaving row removed from two places (its copy and itself) excuses one record only.
+    const copy = await minute(['a', 'b'], (ol) => { const a = byId('a'); const clone = a.cloneNode(true); ol.appendChild(clone); a.remove(); (clone as HTMLElement).remove(); });
+    expect(copy).toMatchObject({ mutations: 3, left: ['departure|a'], turnovers: 1, churn: 2 });
+  });
+
+  it('three leaving and one entering are three turnovers (one enter and one leave each at most)', async () => {
+    const r = await minute(['a', 'b', 'c', 'x'], (ol) => { for (const id of ['a', 'b', 'c']) byId(id).remove(); ol.appendChild(li('d')); });
+    expect(r).toMatchObject({ mutations: 4, turnovers: 3, churn: 0 });
+  });
+
+  it('the observer judges churn, reports turnovers and churn per minute, and a re-created row still fails', async () => {
+    const turnovers: CalmMotionReading = { ...GOOD_CALM, before: 4, after: 4, mutations: 6, turnovers: 3, churn: 0, kept: 1, left: ['departure|a', 'departure|b', 'departure|c'], entered: ['departure|d', 'departure|e', 'departure|f'] };
+    const start = await observe(['--minutes', '3', '--stage', 'd2'], { calm: (i) => (i === 1 ? turnovers : GOOD_CALM) });
+    expect(start.code, start.lines.join('\n')).toBe(0);
+    const report = read(start.out, 'report.md');
+    expect(report).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    expect(report).toContain('### Calm motion per minute (principle 7)');
+    expect(report).toContain('| 30–60 | 6 | 3 | 0 | 1 | — | 3 / 3 | pass |');
+    expect(report).toContain('| 0–30 | 2 | 1 | 0 | 2 | — | 1 / 1 | pass |');
+    const recreated: CalmMotionReading = { ...GOOD_CALM, mutations: 2, turnovers: 0, churn: 2, kept: 2, rebuilt: ['departure|trip-1'], left: [], entered: [] };
+    const bad = await observe(['--minutes', '3', '--stage', 'd2'], { calm: (i) => (i === 1 ? recreated : GOOD_CALM) });
+    expect(bad.lines.join('\n')).toContain('FAIL calm-motion');
+    const badReport = read(bad.out, 'report.md');
+    expect(badReport).toContain('| 30–60 | 2 | 0 | 2 | 2 | departure\\|trip-1 | 0 / 0 | **fail** |');
+    expect(badReport).toContain('readings 30–60: 1 row(s) stayed on the list but were re-created: departure\\|trip-1');
   });
 });
