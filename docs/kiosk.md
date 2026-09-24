@@ -184,7 +184,9 @@ mjesta zaslona bez ijednoga drugog stajališta, BAJS stanice s barem jednim
 biciklom kao male tirkizne točke bez broja, zatvorene prometnice, prsten
 dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
-mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
+mjesta. Kvadrate događanja i komunalnih radova prozor cijeloga grada ne
+crta: oznaka bez imena ne govori ništa, a kadar oko izabranog mjesta ih
+zadržava. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
 imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
 jer u izvanrednom stanju oznaka je ta koja govori, a ne ime -- a od
 stajališta imenuje samo tramvajska čvorišta, odnosno stajališta na kojima staje tramvaj i

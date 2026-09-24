@@ -955,7 +955,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
    *  below which the 40 px discs and the pills of a 2R frame pile on each other: 669 x 457 frames Trg at
    *  z12.3). The whole-city window's small dots are drawn for its low zoom and keep it. */
   const strip = cityWindow && input.handheld !== true && ((input.heightPx > 0 && input.heightPx < MAP_MIN_HEIGHT_PX * (input.displayScale ?? 1)) || (framed && field.zoom < FIELD_MIN_ZOOM));
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && inside(p))));
+  // Round 2 F8 (owner, 24 Sep): no marker without a name on the whole-city window. An event's or a work's square
+  // is titled only from THIN_NAMES_ZOOM (ruling 31, placeTitles), so an unframed window below it is handed none;
+  // a framed place keeps its squares (decision 58 drops their titles there: the square is the claim).
+  const squares = !cityWindow || framed || placeTitles(field.zoom);
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && squares && inside(p))));
   if(input.city){
     if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}
     else{
