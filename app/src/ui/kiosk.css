@@ -188,7 +188,10 @@
   --k-code-size: calc(max(40px, 40px * var(--k-sign-zoom)) * var(--k-read-scale));
   --k-card-lead: max(28px, calc(28px * var(--k-sign-zoom)));
   --k-card-hint: max(28px, calc(28px * var(--k-sign-zoom)));
-  --k-clock-size: var(--k-sub-size);
+  /* The clock is read from 3 m like the place and the row times (round 1, 24 Sep): the list prints clock times
+     ("17:46", "do 21:45") a passer-by can only use against the current one, and at the walk-up 28 px the clock's
+     x-height was 7.6 mm. The date beside it stays on the walk-up tier. */
+  --k-clock-size: var(--k-main-size);
   --k-strip-h: auto;
 }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-context { font-size: var(--k-main-size); }
