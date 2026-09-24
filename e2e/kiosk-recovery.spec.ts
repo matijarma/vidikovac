@@ -24,6 +24,10 @@ test('a failed teaser request marks the last copy stale, holds the map, and reco
     }));
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ modules }) });
   });
+  // The basemap's vector tiles answer 503 under wrangler dev (the R2 bucket is empty), which the map reads as
+  // tiles-failed and this spec as a red; a developer machine answers "no tile" at the browser instead, as
+  // e2e/wall-map.spec.ts does, so the status the spec watches is the feed's, never the bucket's.
+  await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
   const { kioskUrl } = await provisionKiosk(request, APP_URL);
   // One fixed window (R-KP1): nothing rotates, so the clock can run through two polls with the map in place.
   await page.goto(kioskUrl);
