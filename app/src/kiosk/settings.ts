@@ -521,6 +521,10 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
       onChange: (place) => {
         if (!place) return;
         closePlaceEdit();
+        // The field that had the focus is gone: the focus returns to the disclosure that opened it, as it
+        // does for any disclosure, so the panel's Escape still reaches the panel (round 1, 24 Sep: with the
+        // focus fallen to the body a pick with the mouse left Escape doing nothing until the idle close).
+        placeToggle.focus();
         choose({ place, frame: queue.shown().frame });
       },
     });
@@ -549,7 +553,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
   }
 
   placeToggle.addEventListener('click', () => { if (field) closePlaceEdit(); else openPlaceEdit(); armIdle(); });
-  placeCity.addEventListener('click', () => { closePlaceEdit(); choose({ place: null, frame: queue.shown().frame }); });
+  placeCity.addEventListener('click', () => { closePlaceEdit(); placeToggle.focus(); choose({ place: null, frame: queue.shown().frame }); });
   frameBtn.addEventListener('click', () => {
     const shown = queue.shown();
     choose({ place: shown.place, frame: nextInCycle(FRAME_STOPS, shown.frame) });

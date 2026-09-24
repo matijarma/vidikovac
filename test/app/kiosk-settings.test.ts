@@ -393,6 +393,11 @@ describe('Postavke: Mjesto through the shared field', () => {
     expect(field!.destroyed).toBe(true);
     expect(p.q('[data-testid=settings-place-edit]').hidden).toBe(true);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // The focus returns to Promijeni with the field gone, so Escape still closes the panel (round 1, 24 Sep).
+    expect(document.activeElement).toBe(toggle);
+    p.handle.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(p.handle.isOpen()).toBe(false);
+    p.handle.open();
     expect(text(p.q('[data-testid=settings-place]'))).toBe('Zapruđe · Zapruđe 12');
     p.time.advance(SETTINGS_SEND_DELAY_MS);
     expect(p.sent).toEqual([{ place: { kind: 'stop', stopId: '200_1', address: 'Zapruđe 12' }, frame: 6 }]);
