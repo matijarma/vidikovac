@@ -346,6 +346,59 @@ describe('the branch grader, fault injection on the corridor', () => {
     });
   });
 
+  describe('a diversion, hop by hop (rail round 2)', () => {
+    // The kept victim runs 1_0 on the trunk; the corridor's 1_1 is the other
+    // direction's track 60 m north, both far from every terminal once the
+    // fix is set 600 m east of T0 (C1200 is 2,100 m further). Observation k
+    // = 1 moves the victim onto 1_1, k = 2 back onto 1_0: two same-trip path
+    // changes. With the matcher's `diverted` flag set at k = 1 and cleared
+    // at k = 2 they are the two hops of one diversion, out of rows A and E,
+    // in the diversions block; without the flag the same two observations
+    // are two mid-network direction flips, in both rows.
+    const t0 = net.stops.find((s) => s.id === 'T0')!;
+    function observeHops(flag: boolean): BranchReport {
+      return observeThrice((k, victim) => {
+        const fix0 = victim.fixes[victim.fixes.length - 1];
+        victim.fixes = [...victim.fixes.slice(0, -1), { ...fix0, x: t0.p.x + 600, y: t0.p.y + (k === 1 ? 60 : 0) }];
+        const marked = victim as unknown as { diverted?: true };
+        if (k === 1) {
+          victim.match = { ...victim.match, pathIdx: pathIdx('1_1'), edge: 5, s: 900 };
+          if (flag) marked.diverted = true;
+        } else delete marked.diverted;
+      });
+    }
+
+    it('counts the two hops of a flagged tram as diversion hops that rows A and E leave out, in one episode ended by the return', () => {
+      const r = observeHops(true);
+      expect(r.totals.pathChangesSameTrip).toBe(2);
+      expect(r.totals.byClass).toEqual({ 'diversion-hop': 2 });
+      expect(metricA(r).n).toBe(0);
+      expect(acceptanceRows(r).E).toBe(0);
+      expect(r.flips.total).toBe(0);
+      expect(r.diversions.events).toBe(2);
+      expect(r.diversions.startHops).toBe(1);
+      expect(r.diversions.returnHops).toBe(1);
+      expect(r.diversions.episodes).toBe(1);
+      expect(r.diversions.all).toHaveLength(1);
+      expect(r.diversions.all[0]).toMatchObject({ route: '1', hops: 2, endedBy: 'return', prior: '1_0', durationS: 10, ticks: 1 });
+      expect(r.diversions.shareOfTramVehicleHours).toBeGreaterThan(0);
+      expect(r.events.map((e) => [e.from, e.to, e.cls, e.divertedBefore, e.divertedAfter])).toEqual([
+        ['1_0', '1_1', 'diversion-hop', false, true],
+        ['1_1', '1_0', 'diversion-hop', true, false],
+      ]);
+    });
+
+    it('counts the same two hops without the flag as two direction flips in rows A and E', () => {
+      const r = observeHops(false);
+      expect(r.totals.pathChangesSameTrip).toBe(2);
+      expect(r.totals.byClass).toEqual({ 'direction-flip': 2 });
+      expect(metricA(r).n).toBe(2);
+      expect(acceptanceRows(r).E).toBe(2);
+      expect(r.diversions.events).toBe(0);
+      expect(r.diversions.episodes).toBe(0);
+    });
+  });
+
   it('refuses an observation after the report', () => {
     const grader = createBranchGrader(engine, { stops });
     grader.observe(kept!.state, kept!.headerSec, kept!.payload);
@@ -386,7 +439,27 @@ describe('event classes and what rows A and A-prime count', () => {
     expect(classifyEvent({ ...base, newDirection: 0 })).toBe('direction-flip');
   });
 
-  it('counts in A, and so in A-prime, everything but a terminus flip and a loop transition', () => {
+  it('classes a hop of a diverted tram as a diversion hop, unless it is a D4 reversal or touches a loop or another route', () => {
+    // Rail round 2: the matcher names a tram running its line's rails off its own
+    // path mid-line (TramTrack.diverted); every own-route hop while that state
+    // holds, or that starts or ends it, is a diversion hop and out of rows A
+    // and E. A D4 turnaround (the tram moving against the rail it stood on) is
+    // still a direction flip whatever the flag says; loop hand-overs keep the
+    // loop rule and another route's path stays in row B.
+    const diverted = { ...base, diverted: true, turnaround: false };
+    expect(classifyEvent(diverted)).toBe('diversion-hop');
+    expect(classifyEvent({ ...diverted, newDirection: 0 })).toBe('diversion-hop');
+    expect(classifyEvent({ ...diverted, newDirection: 0, turnaround: true })).toBe('direction-flip');
+    expect(classifyEvent({ ...diverted, newId: 'loop:13:5c4b96ae', newDirection: -1, terminalM: 40 })).toBe('loop-transition');
+    expect(classifyEvent({ ...diverted, newId: 'loop:13:5c4b96ae', newDirection: -1, terminalM: 500 })).toBe('direction-flip');
+    expect(classifyEvent({ ...diverted, newId: '4_3', newRoute: '4' })).toBe('onto-other-route');
+    expect(classifyEvent({ ...diverted, oldId: '4_3', oldRoute: '4' })).toBe('back-to-own-route');
+    expect(classifyEvent({ ...base, diverted: false, turnaround: false })).toBe('same-route-variant');
+  });
+
+  it('counts in A, and so in A-prime, everything but a terminus flip, a loop transition and a diversion hop', () => {
+    expect(countsInA({ cls: 'diversion-hop', atTerminus: false })).toBe(false);
+    expect(countsInA({ cls: 'diversion-hop', atTerminus: true })).toBe(false);
     expect(countsInA({ cls: 'loop-transition', atTerminus: true })).toBe(false);
     expect(countsInA({ cls: 'loop-transition', atTerminus: false })).toBe(false);
     expect(countsInA({ cls: 'direction-flip', atTerminus: true })).toBe(false);

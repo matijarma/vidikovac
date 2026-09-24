@@ -15,8 +15,13 @@
 //     never planned past it, while its confidence falls linearly to nothing
 //     at EVICT_S, when the twin and every client drop it;
 //   - off every geometry, the free plane: a straight line from the previous
-//     fix to the latest over their own interval, then a hold.
+//     fix to the latest over their own interval, then a hold;
+//   - a diverted tram (match.ts TramTrack.diverted, running its line's rails
+//     off its own path) is planned no further than the next branch of those
+//     rails (branches.ts): beyond it the way it takes is a guess, so the plan
+//     holds at the branch until a fix says which way it went (rail round 2).
 
+import type { BranchTable } from './branches';
 import type { DwellPlanner } from './dwell';
 import { dist } from './geo';
 import type { GraphNetwork } from './network';
@@ -170,6 +175,9 @@ export interface PlanContext {
    *  the planner falls back to the TimesProvider and DWELL_DEFAULT_S. */
   dwell?: DwellPlanner;
   junctions?: JunctionWaits;
+  /** Where the line's rails branch (branches.ts), read for a diverted tram
+   *  only: its plan runs to the next branch ahead and holds there. */
+  branches?: Pick<BranchTable, 'aheadOf'>;
   /** The arc the previously published plan puts this vehicle at, at THIS
    *  header, or null when there is none on the same geometry. */
   publishedArcS?: number | null;
@@ -225,10 +233,12 @@ export function evalFreePlan(knots: readonly FreeKnot[], tRel: number): [lon: nu
  *  junction node (with its wait). The loop treats both the same way -- run
  *  to the arc, hold, run on -- and only a platform becomes `track.next`. */
 interface Halt {
-  /** The platform's id, or null for a junction wait. */
+  /** The platform's id, or null for a junction wait or a branch. */
   stopId: string | null;
   s: number;
   holdSec: number;
+  /** A branch of a diverted tram's rails: the plan ends here and holds. */
+  branch?: true;
 }
 
 interface ArcGeometry {
@@ -553,7 +563,16 @@ export function buildPlan(
     t += hold;
   }
 
-  const halts = haltsAfter(s);
+  let halts = haltsAfter(s);
+  // A diverted tram is planned no further than the next branch of its
+  // line's rails (rail round 2): the platforms before it are still booked,
+  // the plan holds at the branch to the horizon.
+  const diverted = (track as { diverted?: true }).diverted === true;
+  const branchS = diverted && context.branches && track.match.pathIdx !== null ? context.branches.aheadOf(track.match.pathIdx, s) : null;
+  if (branchS !== null) {
+    halts = halts.filter((halt) => halt.s < branchS - 0.5);
+    halts.push({ stopId: null, s: branchS, holdSec: 0, branch: true });
+  }
   let stopIdx = 0;
   /** Nothing ahead has been reached yet: ZET's ETA is about the first
    *  PLATFORM ahead, which a junction wait in front of it must not displace. */
@@ -588,8 +607,10 @@ export function buildPlan(
     }
     if (own !== null && !viaEta && ownLeg > 0.5 && ownLeg < target - s - 0.5) knots.push([rel(t + ownLeg / own), round1(s + ownLeg)]);
     knots.push([rel(arrive), round1(target)]);
-    if (!stop) {
-      // The end of the path is a terminus: hold until the trip changes.
+    if (!stop || stop.branch) {
+      // The end of the path is a terminus: hold until the trip changes. The
+      // next branch of a diverted tram's rails is held the same way, until a
+      // fix says which way it went.
       knots.push([rel(Math.max(horizonEnd, arrive)), round1(target)]);
       t = horizonEnd;
       break;
