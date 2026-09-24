@@ -3,7 +3,7 @@
 @media print {
   .ki-head, .ki-tabbar, .ki-banners, .ki-alert,
   .ws-toolbar, .actions, .ws-back, .panel-actions, .skip-link, .lang-toggle, .toast-stack, .dialog, .ws-detail-hint,
-  .page-nav { display: none !important; }
+  .page-nav, .page-head, .page-foot { display: none !important; }
   .ki { display: block; min-height: 0; }
   .ki-main, .page { padding: 0; }
   body { min-height: 0; }
