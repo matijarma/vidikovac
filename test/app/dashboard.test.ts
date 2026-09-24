@@ -488,7 +488,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
     const body = text(sheet.querySelector('.dialog-body'));
     expect(body).toContain('Sa zaslona Kavana Velebit, stajalište Trg bana J. Jelačića.');
-    expect(body).toContain('Na ovom pogledu su 2 uređaja.');
+    expect(body).toContain('Ovaj je pogled otvoren na 2 uređaja.');
     expect(body).not.toMatch(/stanje sesije/i);
     expect(body).not.toContain('skenirano sa zaslona');
     expect(body).not.toContain('Sesija i postavke');
@@ -552,7 +552,7 @@ describe('session states', () => {
     expect(sheet.querySelector('[data-testid=toggle-countdown]')).toBeNull();
     body = text(sheet.querySelector('.dialog-body'));
     expect(body).toContain(hr.session.expiredHint);
-    expect(body).not.toContain('Na ovom pogledu');
+    expect(body).not.toContain('Ovaj je pogled otvoren na');
     expect(sheet.querySelector('[data-sheet-action=lang][data-value=en]')).not.toBeNull();
     temp.handle.destroy();
   });

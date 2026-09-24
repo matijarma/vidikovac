@@ -199,7 +199,7 @@ describe('canonical sentences', () => {
   });
   it('the /hitno link says one label everywhere it stands (common.links.hitno is canonical)', () => {
     // shared.safetyOpen had no reader and is gone (WP5 A1); the labels it pinned still agree.
-    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
+    // landing.pages.hitno ("Sigurnost, otvorena svima") is a page description in a list of them, not this label.
     expect(hr.common.links.hitno).toBe('Sigurnost, bez skeniranja');
     for (const twin of ['landing.actions.safety', 'scan.errors.actions.safety']) {
       expect(leaf(HR, twin), `${twin} (hr)`).toBe(hr.common.links.hitno);

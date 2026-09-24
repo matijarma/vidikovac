@@ -98,6 +98,11 @@ export interface LongPressDeps {
   open: () => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (handle: unknown) => void;
+  /** Whether this press arms at all (kiosk.ts: the wall-wide press skips the touch's own targets, the brand and the
+   *  panel). Omitted, every primary press arms. The same answer decides whether the context menu is suppressed. */
+  accept?: (event: MouseEvent) => boolean;
+  /** `false` binds no keyboard: a target whose keys belong to what is inside it (the kiosk root). Default true. */
+  keys?: boolean;
 }
 
 /**
@@ -118,6 +123,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
     disarm();
+    if (deps.accept && !deps.accept(event)) return;
     origin = { x: event.clientX, y: event.clientY };
     timer = deps.setTimeout(() => { timer = null; origin = null; deps.open(); }, LONG_PRESS_MS);
   };
@@ -132,19 +138,20 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     deps.open();
   };
   // A held finger on a touch screen otherwise asks for the context menu or a text selection.
-  const menu = (event: Event): void => { event.preventDefault(); };
+  const menu = (event: MouseEvent): void => { if (!deps.accept || deps.accept(event)) event.preventDefault(); };
+  const keys = deps.keys !== false;
   const ends = ['pointerup', 'pointercancel', 'pointerleave'] as const;
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
   for (const type of ends) target.addEventListener(type, disarm);
-  target.addEventListener('keydown', key);
+  if (keys) target.addEventListener('keydown', key);
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     for (const type of ends) target.removeEventListener(type, disarm);
-    target.removeEventListener('keydown', key);
+    if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
   };
 }

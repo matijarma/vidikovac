@@ -856,7 +856,7 @@ describe('start: one field, one line, Pokreni', () => {
     expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(true);
     submit(k.root);
     await flush();
-    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je broj privremenih zaslona za ovaj sat.');
+    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je najveći broj privremenih zaslona za ovaj sat.');
     const retry = q(k.root, '[data-testid=setup-retry]') as HTMLButtonElement;
     expect(retry.hidden).toBe(false);
     expect(retry.disabled).toBe(true);
@@ -1255,6 +1255,79 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)).toBeNull();
     brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     expect(panel(k)!.hidden).toBe(false);
+  });
+
+  // lane/w-settings (24 Sep): on the production wall a mouse held down, then Enter, then Space opened
+  // nothing. The opener was reachable only through the 110 x 44 px brand, and only once that brand
+  // held the focus: a press that missed it focused nothing, and the keys went to the body. The wall
+  // itself now holds the focus (tabindex -1: not a tab stop, not a control to the census), from the
+  // moment the invitation mounts and again after any press that lands on nothing focusable.
+  it('holds the focus on the wall from load; Enter or Space on the wall open Postavke', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    expect(wall.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(wall);
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    wall.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    // Escape closes the panel and the brand takes the focus back, as before.
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(brand(k));
+    // The operator's mouse misses the brand and lands on the stage with nothing focused: the wall takes
+    // the focus again, and Space opens. A held key repeats nothing.
+    brand(k).blur();
+    expect(document.activeElement).not.toBe(wall);
+    q(k.root, '[data-testid=kiosk-invitation]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(document.activeElement).toBe(wall);
+    const repeat = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true, repeat: true });
+    wall.dispatchEvent(repeat);
+    expect(repeat.defaultPrevented).toBe(true);
+    expect(panel(k)!.hidden).toBe(true);
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+    wall.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(true);
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
+  });
+
+  it('Enter that has fallen back to the body still reaches Postavke while the wall is on the page, and never after destroy', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    wall.blur();
+    expect(document.activeElement).toBe(document.body);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
+    const next = mount({ stored: STORED });
+    await flush();
+    next.root.querySelector<HTMLElement>('.kiosk')!.blur();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    // Only the wall on the page answered: one panel, on the second kiosk.
+    expect(document.querySelectorAll('[data-testid=kiosk-settings-panel]')).toHaveLength(1);
+    expect(panel(next)!.hidden).toBe(false);
+    next.handle.destroy();
+  });
+
+  it('a handheld is a page in a hand: it takes no focus on load and Enter on it opens nothing, while the brand keeps its long press', async () => {
+    const k = mount({ stored: STORED, viewport: { width: 390, height: 844 } });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    expect(wall.dataset.size).toBe('handheld');
+    expect(document.activeElement).not.toBe(wall);
+    wall.focus();
+    wall.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(panel(k)).toBeNull();
+    open(k);
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    k.handle.destroy();
   });
 
   // A temporary screen is good for 24 hours, so its end is almost always

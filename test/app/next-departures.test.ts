@@ -107,7 +107,7 @@ describe('departuresBlock', () => {
       const cache = boards([]);
       const frozen = empty(departuresBlock(ctx({ boards: cache, frozenAt: NOW, session: { expiresAt: NOW, frozen: true } }), place(STOP)));
       expect(cache.ensure).not.toHaveBeenCalled();
-      expect(text(frozen.row)).toBe('Sesija je završila prije nego što je red vožnje stigao.');
+      expect(text(frozen.row)).toBe('Sesija je završila prije nego što je stigao vozni red.');
       expect(frozen.list.hasAttribute('aria-busy')).toBe(false);
     });
 
