@@ -38,6 +38,9 @@ export interface BoardCache {
 
 const TTL_MS = 60_000;
 const TIMEOUT_MS = 12_000;
+/** A platform whose fetch failed is asked again this soon, not after the whole TTL: a timed-out first answer on a cold
+ *  open left "Vozni red trenutacno nije dostupan." standing for over a minute while the trams ran (round 1, desktop F2). */
+export const DOWN_RETRY_MS = 5_000;
 
 /** A platform whose fetch failed: the surface says "down" for that platform
  *  rather than showing nothing and asking again on every render. */
@@ -102,7 +105,8 @@ export function createBoardCache(options: BoardCacheOptions = {}): BoardCache {
         // can reach the store from here. One surface's render fault is its
         // own to fix, and must not starve the next surface's callback.
         boards.set(key, board);
-        times.set(key, now());
+        // A down answer counts as current only for DOWN_RETRY_MS; a good one for the TTL.
+        times.set(key, board.status === 'down' ? now() - ttlMs + Math.min(DOWN_RETRY_MS, ttlMs) : now());
         for (const listener of heard) { try { listener(); } catch { /* the surface's fault, not the cache's */ } }
       });
   }

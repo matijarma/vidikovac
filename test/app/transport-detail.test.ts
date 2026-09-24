@@ -115,6 +115,40 @@ describe('the stop sheet says what comes next, first', () => {
     expect(html).toContain('3 perona');
   });
 
+  it('draws each row\'s badge in the mode the route table knows even when the stop\'s own route list lacks the route: line 1 at Trg (the stop catalogue predates it) is a tram, never the plain badge a person reads as a bus (round 1 finding F4)', () => {
+    const html = stop([
+      row({ tripId: 't1', routeId: '1', routeName: '1', headsign: 'Borongaj' }),
+      row({ tripId: 't150', routeId: '150', routeName: '150', headsign: 'G. Tuškanac' }),
+      row({ tripId: 't999', routeId: '999', routeName: '999', headsign: 'Nigdje' }),
+    ]);
+    expect(rowOf(html, 't1')).toContain('data-kind="tram"');
+    expect(rowOf(html, 't150')).toContain('data-kind="bus"');
+    expect(rowOf(html, 't999')).toContain('data-kind="other"');
+  });
+
+  it('a timetable row on the next Zagreb day says "sutra" under its clock, so 04:31 read at 19:00 is not today\'s (round 1 finding F12); a row today carries no day word, and a board without a clock of its own prints none', () => {
+    const kindOf = (): 'tram' => 'tram';
+    const tomorrow = row({ tripId: 'tm', atMs: Date.parse('2026-09-20T02:31:00Z'), live: false, minutes: null });
+    const today = row({ tripId: 'td', atMs: Date.parse('2026-09-19T21:24:00Z'), live: false, minutes: null });
+    const withNow = departureRow(i18n, tomorrow, kindOf, undefined, 'timetable', NOW);
+    expect(withNow).toContain('04:31');
+    expect(withNow).toContain('<span class="t-eta-day">sutra</span>');
+    expect(departureRow(i18n, today, kindOf, undefined, 'timetable', NOW)).not.toContain('t-eta-day');
+    expect(departureRow(i18n, tomorrow, kindOf, undefined, 'timetable')).not.toContain('t-eta-day');
+    // The stop sheet passes the page's clock through StopDetailData.now: its "Vozni red" tail says the day too.
+    const html = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row(), tomorrow], arrivalsStatus: 'live', now: NOW });
+    expect(rowOf(html, 'tm')).toContain('t-eta-day');
+    expect(rowOf(html, 't1')).not.toContain('t-eta-day');
+  });
+
+  it('never says no vehicle is moving above a live row: a line the stop\'s own route list lacks still has its tram (round 1, desktop F10)', () => {
+    const html = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row({ routeId: '1', routeName: '1', headsign: 'Borongaj', live: true, minutes: 4 })], arrivalsStatus: 'live' });
+    expect(html).not.toContain('nije u pokretu');
+    expect(html).not.toContain('data-testid="stop-moving"');
+    const quiet = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row({ live: false, minutes: null })], arrivalsStatus: 'live' });
+    expect(quiet).toContain('nije u pokretu');
+  });
+
   it('counts down for every row inside the horizon, whatever stands behind it, and keeps the clock for the rest', () => {
     const html = stop([
       row({ tripId: 'near', headsign: 'Črnomerec', atMs: NOW + 4 * 60_000, live: false, minutes: 4 }),

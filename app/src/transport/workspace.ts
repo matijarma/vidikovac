@@ -841,7 +841,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const timetable = arrivalsAt(held, [], c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS }).rows;
         // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
         const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt, now: c.now });
         return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {
