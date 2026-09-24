@@ -24,6 +24,11 @@ export const USER_AGENT_SUFFIX: string;
 export const REPEAT_WINDOW_MS: number;
 export const AXE_TAGS: readonly string[];
 export const INVITATION_TIMEOUT_MS: number;
+/** The wall's settle waits (the accept spec's): the map census, then the first vehicle pill. Waits, never gates. */
+export const CENSUS_TIMEOUT_MS: number;
+export const VEHICLES_TIMEOUT_MS: number;
+/** How long after the twin first reports vehicles a reading may still show no pill. */
+export const PILLS_DRAW_GRACE_MS: number;
 export const SESSION_TIMEOUT_MS: number;
 export const CODE_TIMEOUT_MS: number;
 export const CODE_MIN_PROGRESS: number;
@@ -79,6 +84,8 @@ export function redemptionBudget(options?: { perSurface?: number; spacingMs?: nu
 type InPage<A, R> = (spec: A) => R;
 export const INVITATION_READY_IN_PAGE: InPage<{ invitation: string; code: string; shown: { source: string; flags: string } }, boolean>;
 export const MAP_SETTLED_IN_PAGE: InPage<{ map: string; pending: string[] }, boolean>;
+export const MAP_CENSUS_IN_PAGE: InPage<{ map: string }, boolean>;
+export const PILLS_DRAWN_IN_PAGE: InPage<{ map: string }, boolean>;
 export const ANY_PRESENT_IN_PAGE: InPage<{ selectors: string[] }, boolean>;
 export const PAIRING_IN_PAGE: InPage<typeof PAIRING_PROBES, { code: string; href: string; progress: number }>;
 export interface PhoneRead {
@@ -90,7 +97,19 @@ export interface PhoneRead {
   tabs: string[];
   shareCity: { present: boolean; visible: boolean; text: string };
 }
-export interface KartaRead { status: string | null; pills: string | null; bodies: number | null; unlabelled: number | null; markers: number | null; disclosures: number; pillsAfterMs?: number | null }
+export interface KartaRead { status: string | null; pills: string | null; bodies: number | null; unlabelled: number | null; markers: number | null; disclosures: number; pillsAfterMs?: number | null; fleet?: FleetState | null }
+/** One zet-rt snapshot as a data response carried it: its status, the moving vehicles (`vehicle:` ids) and the teaser's fleet count. */
+export interface Fleet { status: string | null; pins: number; fleet: number | null }
+/** A snapshot a page received, stamped on the observer's clock. */
+export interface FleetRecord extends Fleet { at: number }
+/** What a page held at a moment: its latest snapshot, and since when the run of snapshots with vehicles it belongs to began. */
+export interface FleetState extends FleetRecord { since: number }
+export function fleetOf(path: string, body: unknown): Fleet | null;
+export function fleetAt(records: readonly FleetRecord[], at: number): FleetState | null;
+export function watchFleet(page: Pick<ObserverPage, 'on'>, ctx: { instruments: Pick<Instruments, 'recorders'>; now(): number }): FleetRecord[];
+/** A wall reading as the observer keeps it: the twin's report at its moment beside it. */
+export type ObservedSample = Wall.WallSample & { fleet?: FleetState | null };
+export function pillsOwed(sample: ObservedSample): boolean;
 export interface DesktopRead { sadaInViewport: boolean; kartaInViewport: boolean; domains: number; shareCityVisible: boolean }
 export const PHONE_READ_IN_PAGE: InPage<Record<string, unknown>, PhoneRead>;
 export const KARTA_READ_IN_PAGE: InPage<{ map: string; disclosures: string }, KartaRead>;
@@ -161,7 +180,7 @@ export interface PhoneObservation {
   landingMs: number | null;
   sada: PhoneRead | null;
   share: ShareObservation | null;
-  karta: (KartaRead & { pillsAfterMs: number | null }) | null;
+  karta: (KartaRead & { pillsAfterMs: number | null; fleet: FleetState | null }) | null;
   stopBoard: StopBoardObservation | null;
   expiry: ExpiryObservation | null;
   axe: { sada: AxeResult | null; karta: AxeResult | null };
@@ -170,11 +189,11 @@ export interface PhoneObservation {
 }
 export interface DesktopObservation { landingMs: number | null; read: DesktopRead | null; viewports: ViewportEntry[]; failed?: string }
 /** A rotation reading as the observer records it: the wall's reading and the validator's census beside it. */
-export type ObservedRotationRow = Wall.RotationRow & { skippedText?: SkippedTextReading };
+export type ObservedRotationRow = Wall.RotationRow & { skippedText?: SkippedTextReading; fleet?: FleetState | null };
 export interface CalmWindow { from: number; to: number; reading?: Wall.CalmMotionReading; error?: string }
 export interface KioskObservation {
-  first: Wall.WallSample | null;
-  portrait: Wall.WallSample | null;
+  first: ObservedSample | null;
+  portrait: ObservedSample | null;
   rotation: ObservedRotationRow[];
   /** Calm motion over each minute of the rotation. */
   calm: CalmWindow[];
@@ -207,7 +226,7 @@ export function thresholdsFor(stage: StageChoice): Threshold[];
 export function fillTarget(text: string, instruments: Pick<Instruments, 'wall' | 'inventory' | 'legibility' | 'scenes'>): string;
 export interface Measure { value: number | null; detail: string[] }
 export const METRICS: Readonly<Record<string, (obs: Observation, instruments: Instruments) => Measure>>;
-export function readingsOf(obs: Observation): Wall.WallSample[] | null;
+export function readingsOf(obs: Observation): ObservedSample[] | null;
 /** The rotation's planned readings for `minutes`, one every `stepMs`. */
 export function plannedRotationSteps(minutes: number, stepMs: number): number;
 export interface DistinctWindow { from: number; to: number; required: number; distinct: number }

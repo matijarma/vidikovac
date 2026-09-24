@@ -27,7 +27,8 @@ import type { ExpiryReading } from '../../e2e/inventory';
 import type { CalmMotionReading } from '../../e2e/wall';
 import { skippedTextCensus } from '../../app/src/city/nearby';
 import {
-  ANY_PRESENT_IN_PAGE, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
+  ANY_PRESENT_IN_PAGE, CENSUS_TIMEOUT_MS, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_CENSUS_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
+  PILLS_DRAWN_IN_PAGE, PILLS_DRAW_GRACE_MS, VEHICLES_TIMEOUT_MS, fleetAt, fleetOf, pillsOwed, type FleetRecord, type ObservedSample,
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
   EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
@@ -308,6 +309,26 @@ describe('the page-side readings reference only their argument and the DOM', () 
     expect(settled({ map: '[data-testid=kiosk-map]', pending: ['loading'] })).toBe(true);
   });
 
+  // Production 24 Sep 02:43: the portrait was read 2.5 s after the map left `loading` and carried no data-unlabelled,
+  // data-markers or data-pills, so unlabelled, pills-drawn and legibility failed on a census not yet taken. The accept
+  // spec's settle waits for the census, then for pills where there are vehicles; the observer's settle does the same.
+  it('the wall settles as the accept spec does: the census written (data-unlabelled), then vehicle pills (data-pills)', () => {
+    document.body.innerHTML = '<div data-testid="kiosk-map" data-map-status="ready"></div>';
+    const spec = { map: '[data-testid=kiosk-map]' };
+    const map = document.querySelector('div')!;
+    expect(shipped(MAP_CENSUS_IN_PAGE)(spec)).toBe(false);
+    expect(shipped(PILLS_DRAWN_IN_PAGE)(spec)).toBe(false);
+    map.setAttribute('data-unlabelled', '0');
+    map.setAttribute('data-pills', ' ');
+    expect(shipped(MAP_CENSUS_IN_PAGE)(spec)).toBe(true);
+    expect(shipped(PILLS_DRAWN_IN_PAGE)(spec)).toBe(false);
+    map.setAttribute('data-pills', '13·33|31|32');
+    expect(shipped(PILLS_DRAWN_IN_PAGE)(spec)).toBe(true);
+    document.body.innerHTML = '';
+    expect(shipped(MAP_CENSUS_IN_PAGE)(spec)).toBe(false);
+    expect(shipped(PILLS_DRAWN_IN_PAGE)(spec)).toBe(false);
+  });
+
   it('phone Sada: place, sentence, departures inside the viewport, slop, visible tabs and the share button', () => {
     const P = inventory.PHONE_PROBES;
     document.body.innerHTML = `
@@ -391,6 +412,37 @@ describe('the page-side readings reference only their argument and the DOM', () 
     expect(shipped(STOP_BOARD_READ_IN_PAGE)({ board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` })).toMatchObject({ open: false, total: 0 });
   });
 
+  // Production 24 Sep 02:31: the search opened "Bana Josipa Jelačića" with its three departures on screen and the
+  // observer read "not open". The probe wrapper is display: contents (app/src/ui/map.css .t-stop-board), a 0 × 0 box
+  // by construction; the accept spec reads the board's first rendered child (e2e/accept/phone.spec.ts), and so does this.
+  it('a stop board whose wrapper is display: contents is open when its first rendered child is in the viewport', () => {
+    const P = inventory.PHONE_PROBES;
+    const spec = { board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` };
+    const lay = (headTop: number, headHidden = false): void => {
+      document.body.innerHTML = '<div class="t-stop-board" data-testid="stop-board" style="display: contents"><div class="t-head"><h3>Bana Josipa Jelačića</h3></div>'
+        + '<section data-testid="stop-arrivals"><ul><li data-kind="departure">177 G. Bistra 04:31</li><li data-kind="departure">177 Črnomerec 05:01</li><li data-kind="departure">177 G. Bistra 05:21</li></ul></section></div>';
+      const board = document.querySelector<HTMLElement>('[data-testid=stop-board]')!;
+      box(board, 0, 0, 0);
+      const [head, arrivals] = [...board.children] as HTMLElement[];
+      box(head, headTop, 60, 390);
+      if (headHidden) head.style.display = 'none';
+      box(arrivals, 200, 240, 390);
+      document.querySelectorAll('li').forEach((el, i) => box(el, 210 + i * 70, 60, 358, 16));
+    };
+    lay(100);
+    expect(shipped(STOP_BOARD_READ_IN_PAGE)(spec)).toEqual({ open: true, total: 3, inViewport: 3, texts: ['177 G. Bistra 04:31', '177 Črnomerec 05:01', '177 G. Bistra 05:21'] });
+    // The first rendered child is the one that counts: a hidden head gives way to the arrivals.
+    lay(100, true);
+    expect(shipped(STOP_BOARD_READ_IN_PAGE)(spec)).toMatchObject({ open: true, total: 3 });
+    // Its first rendered child below the viewport: the board is not open.
+    lay(innerHeight + 20);
+    expect(shipped(STOP_BOARD_READ_IN_PAGE)(spec)).toMatchObject({ open: false });
+    // A hidden wrapper hides everything in it, display: contents or not.
+    lay(100);
+    document.querySelector<HTMLElement>('[data-testid=stop-board]')!.hidden = true;
+    expect(shipped(STOP_BOARD_READ_IN_PAGE)(spec)).toMatchObject({ open: false, total: 0 });
+  });
+
   it('Karta and the desktop: the map probes, disclosures, and whether Sada and Karta both sit in the viewport', () => {
     document.body.innerHTML = '<div data-testid="map-canvas" data-map-status="ready" data-pills="6|11" data-unlabelled="0" data-markers="12" data-bodies="40"></div><details class="city-filter-disclosure"></details><section id="layer-grad-sada"></section><section data-testid="transport-workspace"></section>';
     expect(shipped(KARTA_READ_IN_PAGE)({ map: '[data-testid=map-canvas]', disclosures: inventory.PHONE_PROBES.kartaDisclosures })).toEqual({ status: 'ready', pills: '6|11', bodies: 40, unlabelled: 0, markers: 12, disclosures: 1 });
@@ -470,6 +522,23 @@ const QUIET_CENSUS: SkippedTextEntry[] = [{ surface: 'kiosk', value: 'count:0' }
 const GOOD_CALM: CalmMotionReading = { rootFound: true, before: 3, after: 3, mutations: 2, textSwaps: 5, kept: 2, rebuilt: [], left: ['departure|trip-0'], entered: ['departure|trip-9'], untracked: 0 };
 
 type Kind = 'kiosk' | 'portrait' | 'proxy' | 'phone' | 'desktop';
+/** What e2e/legibility.ts reports for the canvas map before its census is written (the 24 Sep portrait). */
+const CENSUS_MISSING = {
+  violations: [{ tier: 'symbol', selector: '[data-testid=kiosk-map]', element: 'div.k-map-canvas.maplibregl-map[data-testid=kiosk-map]', text: '', px: 0, mm: 0, floorMm: 40, detail: 'the map [data-testid=kiosk-map] draws on one canvas with no [data-symbol] mark and no data-markers, data-unlabelled, data-bajs, data-overlaps, data-pills: its BAJS discs and vehicle pills would go unmeasured' }],
+  warnings: [], symbols: [], otherSmall: [], dark: false,
+  map: { ...CANVAS_MAP, markers: null, unlabelled: null, bajs: null, overlaps: null, pills: null, missing: ['markers', 'unlabelled', 'bajs', 'overlaps', 'pills'] },
+};
+/** A zet-rt snapshot as the worker sends it: the teaser's fleet count (`vozila`), `pins` moving vehicles, one route summary. */
+function zetSnapshot(pins: number, teaser: boolean, status = 'live') {
+  const vehicles = Array.from({ length: pins }, (_, i) => ({ id: `vehicle:${1000 + i}`, module: 'zet-rt', kind: 'vehicle', title: `${31 + i}`, geo: { type: 'Point', coordinates: [15.97, 45.81] } }));
+  const route = { id: 'route:0_31', module: 'zet-rt', kind: 'vehicle', title: '31', data: { routeId: '0_31', vehicles: pins } };
+  return { module: 'zet-rt', status, fetchedAt: new Date(T0).toISOString(), items: [...(teaser ? [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', title: `${pins} vozila u pokretu`, data: { vehicles: pins + 40 } }] : []), ...vehicles, route] };
+}
+/** A data response on the fake page: the recorder and the observer's own watcher both read it. */
+const zetResponse = (path: string, pins: number, teaser: boolean) => {
+  const body = teaser ? { generatedAt: new Date(T0).toISOString(), modules: [zetSnapshot(pins, true)] } : zetSnapshot(pins, false);
+  return { url: () => `https://zagreb.example${path}`, status: () => 200, request: () => ({ method: () => 'GET' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => body, body: async () => Buffer.from(JSON.stringify(body)) };
+};
 interface FakeOptions {
   reading?: (n: number, at: number, code: string) => WallSample;
   inventories?: Partial<Record<'kiosk' | 'portrait' | 'phone-sada' | 'phone-karta' | 'desktop', PageInventory>>;
@@ -510,6 +579,15 @@ interface FakeOptions {
   expiryWatch?: 'rejects' | 'no-stamp';
   /** The observer comes to look at the ended session this long after the phone's scan answered. */
   expirySeenAfterScanMs?: number;
+  /** The wall map writes its census this long after the page opened: before it a reading has no data-unlabelled,
+   *  data-markers or data-pills, and the legibility pass finds a canvas map without its census (production, 24 Sep). */
+  censusAfterMs?: Partial<Record<Kind, number>>;
+  /** Vehicle pills are drawn this long after the page opened (Infinity: never); before it data-pills is empty. */
+  pillsAfterMs?: Partial<Record<Kind, number>>;
+  /** Each wall page reads one /api/teaser whose zet-rt snapshot carries this many vehicle pins (none read without it). */
+  teaserPins?: number;
+  /** The phone reads one /api/data/zet-rt with this many vehicle pins right after its scan answers. */
+  phonePins?: number;
 }
 interface Handler { (arg: unknown): unknown }
 
@@ -553,6 +631,8 @@ function fakeRuntime(options: FakeOptions = {}) {
     let calmReads = 0;
     let censusReads = 0;
     let endedAt: number | null = null;
+    let openedAt: number | null = null;
+    const dueOf = (after: Partial<Record<Kind, number>> | undefined): number => (openedAt ?? t) + (after?.[kind] ?? 0);
     const inv = (key: keyof NonNullable<FakeOptions['inventories']>, vw: number, vh: number): PageInventory => options.inventories?.[key] ?? EMPTY_INVENTORY(vw, vh);
     return {
       on(event: string, fn: Handler) { handlers.set(event, [...(handlers.get(event) ?? []), fn]); return this; },
@@ -565,6 +645,8 @@ function fakeRuntime(options: FakeOptions = {}) {
           for (const e of due.filter((x) => x.kind === kind)) { due.splice(due.indexOf(e), 1); log.cancelled.push(kind); }
           return;
         }
+        openedAt ??= t;
+        if (options.teaserPins !== undefined && (kind === 'kiosk' || kind === 'portrait' || kind === 'proxy')) emit('response', zetResponse('/api/teaser?stop=106_1', options.teaserPins, true));
         if (kind === 'kiosk' && options.kioskConsoleError) emit('console', { type: () => 'error', text: () => options.kioskConsoleError, location: () => ({ url: 'https://zagreb.example/assets/kiosk.js' }) });
         if (url.includes('/s/#')) {
           const answer = (): void => {
@@ -575,6 +657,7 @@ function fakeRuntime(options: FakeOptions = {}) {
               due.push({ at: t + r.afterScanMs, kind, fire: () => emit('request', { url: () => `https://zagreb.example${r.path}`, method: () => 'GET' }) });
             }
             if (kind === 'phone' && options.endsAfterScanMs !== undefined) endedAt = t + options.endsAfterScanMs;
+            if (kind === 'phone' && options.phonePins !== undefined) emit('response', zetResponse('/api/data/zet-rt', options.phonePins, false));
           };
           if (kind === 'phone' && options.phoneAnswersAfterDesktopMs !== undefined) { due.push({ at: Infinity, kind, fire: answer }); return; }
           // The phone's late answer, still in flight, lands just after the desktop's own.
@@ -592,6 +675,13 @@ function fakeRuntime(options: FakeOptions = {}) {
         }
         if (kind === 'phone' && fn === EXPIRY_STAMP_IN_PAGE && options.expiryWatch === 'no-stamp') throw new Error('Timeout 690000ms exceeded.');
         if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
+        // The wall's census and its first pills come when they come; a wait that outlasts its timeout throws, as Playwright's does.
+        for (const [waited, after, timeout] of [[MAP_CENSUS_IN_PAGE, options.censusAfterMs, CENSUS_TIMEOUT_MS], [PILLS_DRAWN_IN_PAGE, options.pillsAfterMs, VEHICLES_TIMEOUT_MS]] as const) {
+          if (fn !== waited) continue;
+          const wait = dueOf(after) - t;
+          if (wait > timeout) { advance(timeout); throw new Error(`Timeout ${timeout}ms exceeded.`); }
+          advance(Math.max(0, wait));
+        }
         // The session goes live only once the scan has answered; the observer waits SESSION_TIMEOUT_MS for it.
         if (fn === ANY_PRESENT_IN_PAGE && (arg as { selectors: string[] }).selectors.includes(SESSION_LIVE) && !answered) {
           advance(SESSION_TIMEOUT_MS);
@@ -609,14 +699,16 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === wall.WALL_SAMPLE_IN_PAGE) {
           const n = log.readings++;
           if (options.failReading?.(n)) throw new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation');
-          return (options.reading ?? wallReading)(n, t, codeNow().replace('-', '·'));
+          const reading = (options.reading ?? wallReading)(n, t, codeNow().replace('-', '·'));
+          if (t < dueOf(options.censusAfterMs)) return { ...reading, unlabelled: null, markers: null, pills: '' };
+          return t < dueOf(options.pillsAfterMs) ? { ...reading, pills: '' } : reading;
         }
         if (fn === inventory.COLLECT_IN_PAGE) {
           if (kind === 'phone') return onKarta ? inv('phone-karta', 412, 839) : inv('phone-sada', 412, 839);
           if (kind === 'desktop') return inv('desktop', 1440, 900);
           return kind === 'portrait' ? inv('portrait', 1080, 1920) : inv('kiosk', 1920, 1080);
         }
-        if (fn === legibility.LEGIBILITY_IN_PAGE) return { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false, map: CANVAS_MAP };
+        if (fn === legibility.LEGIBILITY_IN_PAGE) return t < dueOf(options.censusAfterMs) ? CENSUS_MISSING : { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false, map: CANVAS_MAP };
         if (fn === PAIRING_IN_PAGE) return { code: codeNow(), href: `https://zagreb.example/s/#${codeNow()}`, progress: 80 };
         if (fn === PHONE_READ_IN_PAGE) return options.phone ?? GOOD_PHONE;
         if (fn === KARTA_READ_IN_PAGE) return options.karta ?? GOOD_KARTA;
@@ -1056,5 +1148,89 @@ describe('a run over a fake browser', () => {
     expect(read(gone.out, 'report.md')).toContain('No reading carried a `data-skipped-text` count (3 readings, 3 could not be read)');
     const rows = read(gone.out, 'rotation.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ObservedRotationRow);
     expect(rows.every((r) => r.skippedText?.total === null && /context was destroyed/.test(r.skippedText.error ?? ''))).toBe(true);
+  });
+});
+
+// --- the first production observation after the release: 24 Sep 2026, 02:30-02:43 Zagreb ------------------------
+// review.local/observe-2026-09-24-d5 failed six rows. Four were the observer's: the portrait read before its census
+// (unlabelled, pills-drawn, legibility), the rotation's first reading 2 s before the first pill (pills-drawn), and the
+// stop board's display: contents wrapper read as "not open" (phone-stop-board, above). At night the twin can report
+// no vehicle at all; the pill rows then owe none, and stay strict whenever it reports any.
+describe('the first production observation after the release (24 Sep, 02:30 Zagreb)', () => {
+  it('the twin\'s vehicles as a data response carries them: pins are moving vehicles, never route summaries or the fleet count', () => {
+    const teaser = { generatedAt: 'g', modules: [{ module: 'emsc', status: 'live', items: [{ id: 'vehicle:x' }] }, zetSnapshot(3, true)] };
+    expect(fleetOf('/api/teaser?stop=106_1', teaser)).toEqual({ status: 'live', pins: 3, fleet: 43 });
+    expect(fleetOf('/api/data/zet-rt', zetSnapshot(0, false))).toEqual({ status: 'live', pins: 0, fleet: null });
+    expect(fleetOf('/api/data', { modules: [zetSnapshot(2, false, 'stale')] })).toEqual({ status: 'stale', pins: 2, fleet: null });
+    expect(fleetOf('/api/data', { 'zet-rt': zetSnapshot(1, false) })).toEqual({ status: 'live', pins: 1, fleet: null });
+    expect(fleetOf('/api/data/emsc', { module: 'emsc', status: 'live', items: [] })).toBeNull();
+    expect(fleetOf('/api/scan', { ticket: 't' })).toBeNull();
+    expect(fleetOf('/api/teaser', { modules: [] })).toBeNull();
+    expect(fleetOf('/api/teaser', null)).toBeNull();
+  });
+
+  it('what a page held at a moment: the latest snapshot by then, and since when its vehicles have been reported', () => {
+    const r = (at: number, pins: number): FleetRecord => ({ at, status: 'live', pins, fleet: null });
+    const records = [r(3_000, 2), r(1_000, 0), r(5_000, 3), r(9_000, 0), r(12_000, 1)];
+    expect(fleetAt(records, 500)).toBeNull();
+    expect(fleetAt(records, 1_500)).toEqual({ at: 1_000, status: 'live', pins: 0, fleet: null, since: 1_000 });
+    expect(fleetAt(records, 6_000)).toMatchObject({ at: 5_000, pins: 3, since: 3_000 });
+    expect(fleetAt(records, 9_000)).toMatchObject({ at: 9_000, pins: 0 });
+    expect(fleetAt(records, 20_000)).toMatchObject({ at: 12_000, pins: 1, since: 12_000 });
+    expect(fleetAt([], 1)).toBeNull();
+  });
+
+  it('a reading owes pills while the feed is live and the twin has reported vehicles for the grace; a live feed without a vehicle owes none', () => {
+    const at = T0 + 60_000;
+    const s = (over: Partial<ObservedSample>): ObservedSample => ({ ...wallReading(0, at), pills: '', ...over });
+    const fleet = (pins: number, since = at - 60_000) => ({ at: since, status: 'live', pins, fleet: null, since });
+    // No snapshot recorded (a build or a path the watcher does not know): strict, as before.
+    expect(pillsOwed(s({}))).toBe(true);
+    expect(pillsOwed(s({ fleet: null }))).toBe(true);
+    expect(pillsOwed(s({ fleet: fleet(3) }))).toBe(true);
+    // The night: the twin reports no vehicle in the wall's box.
+    expect(pillsOwed(s({ fleet: fleet(0) }))).toBe(false);
+    // Vehicles just reported: the census is retaken once the frame has settled (name-census.ts PROBE_SETTLE_MS).
+    expect(pillsOwed(s({ fleet: fleet(3, at - PILLS_DRAW_GRACE_MS + 1) }))).toBe(false);
+    expect(pillsOwed(s({ fleet: fleet(3, at - PILLS_DRAW_GRACE_MS) }))).toBe(true);
+    // An outage (stale, down) owes none, whatever the twin said before it.
+    expect(pillsOwed(s({ feed: 'down', fleet: fleet(3) }))).toBe(false);
+    expect(pillsOwed(s({ feed: 'stale', fleet: fleet(3) }))).toBe(false);
+  });
+
+  it('the wall is read once its census is written and its pills drawn: the 24 Sep portrait and first rotation reading pass', async () => {
+    const late = await observe([], { censusAfterMs: { portrait: 6_000 }, pillsAfterMs: { kiosk: 4_000, portrait: 7_000 }, teaserPins: 3 });
+    expect(late.code, late.lines.join('\n')).toBe(0);
+    const report = read(late.out, 'report.md');
+    for (const id of ['unlabelled', 'pills-drawn', 'legibility']) expect(report).toMatch(new RegExp(`\\| ${id} \\| d2 \\| kiosk \\| .* \\| ≤ 0 \\| 0 \\| pass \\|`));
+    expect(report).toContain('kiosk-1920x1080: the map census 0 ms and the first vehicle pill 4000 ms after the map left loading');
+    expect(report).toContain('kiosk-1080x1920: the map census 6000 ms and the first vehicle pill 7000 ms after the map left loading');
+    // A census that never comes is still judged: the reading as it stands fails every row that needs it.
+    const never = await observe([], { censusAfterMs: { portrait: Infinity }, teaserPins: 3 });
+    const failed = never.lines.join('\n');
+    for (const id of ['unlabelled', 'pills-drawn', 'legibility']) expect(failed).toContain(`FAIL ${id}`);
+    expect(read(never.out, 'report.md')).toContain(`kiosk-1080x1920: the map census not written within ${CENSUS_TIMEOUT_MS / 1000} s`);
+  });
+
+  it('a live feed whose twin reports no vehicle owes no pill on the wall or on Karta; with vehicles both rows stay strict', async () => {
+    const never = { kiosk: Infinity, portrait: Infinity, proxy: Infinity };
+    const noPills = (n: number, at: number, code: string): WallSample => ({ ...wallReading(n, at, code), pills: '', bodies: 0 });
+    const night = await observe([], { reading: noPills, pillsAfterMs: never, teaserPins: 0, phonePins: 0, karta: { ...GOOD_KARTA, pills: '' } });
+    expect(night.code, night.lines.join('\n')).toBe(0);
+    const report = read(night.out, 'report.md');
+    expect(report).toMatch(/\| pills-drawn \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    expect(report).toMatch(/\| karta-pills \| d3 \| phone \| .* \| ≤ 0 \| 0 \| pass \|/);
+    expect(report).toContain('Vehicle pills: drawn in 0 of 5 readings, owed in 0; the twin reported no vehicle in 5, the feed was stale or down in 0.');
+    expect(report).toContain(`kiosk-1920x1080: the map census 0 ms and no vehicle pill within ${VEHICLES_TIMEOUT_MS / 1000} s after the map left loading`);
+    expect(report).toContain('Karta cold open: status ready, first pill none after ready (the twin: 0 vehicle(s), live)');
+    const rows = read(night.out, 'rotation.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ObservedRotationRow & { fleet?: { pins: number } | null });
+    expect(rows.map((r) => r.fleet?.pins)).toEqual([0, 0, 0]);
+    // The same wall and Karta with vehicles in the twin's report: both rows fail.
+    const day = await observe([], { reading: noPills, pillsAfterMs: never, teaserPins: 3, phonePins: 2, karta: { ...GOOD_KARTA, pills: '' } });
+    const failed = day.lines.join('\n');
+    expect(failed).toContain('FAIL pills-drawn');
+    expect(failed).toContain('FAIL karta-pills');
+    expect(read(day.out, 'report.md')).toContain('data-pills empty (feed live, map ready, the twin reporting 3 vehicle(s))');
+    expect(read(day.out, 'report.md')).toContain('Vehicle pills: drawn in 0 of 5 readings, owed in 5; the twin reported no vehicle in 0, the feed was stale or down in 0.');
   });
 });
