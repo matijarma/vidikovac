@@ -791,6 +791,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** A basemap asset has failed since the last tile that loaded. Before a
    *  usable style exists, the route/stop alternative must replace loading. */
   let basemapFailing = false;
+  /** The basemap's first tiles in view are in (onBasemap): the status has left `loading` for good. */
+  let basemapIn = false;
   /** The feed is stale or down: the loop holds, separately from pause(), so old evidence is never reckoned forward as if live. */
   let held = false;
   /** The basemap and overlay layer lists as the live style carries them: what the next change is diffed against. */
@@ -1335,6 +1337,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       clearTimer: options.clearTimer,
       styled: () => styled && map === created,
       key: () => probeKeyOf(created),
+      hasMarks: () => probeHasMarks,
       scale: () => scale,
       overlays: () => overlays,
       cityOverlays: () => cityOverlays,
@@ -1365,7 +1368,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         },
       });
     }
-    created.once('load', () => onLoad(l, created));
+    // The overlays go on with the style, not at MapLibre's 'load': 'load'
+    // waits for every basemap tile in view, and the vehicles, the stops and
+    // the city's marks waited with it (the phone's Karta on production, lane
+    // p-map). 'load' still attaches them where no 'style.load' came first,
+    // and says the basemap is in.
+    created.once('style.load', () => onLoad(l, created));
+    created.once('load', () => { onLoad(l, created); onBasemap(created, true); });
+    created.on('render', () => onBasemap(created, false));
     watchTheme();
   }
 
@@ -1377,12 +1387,29 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addControl(attribution, 'bottom-right');
   }
 
-  /** The style is up: images, sources and overlay layers go on, then the loop starts. */
+  /** The status once the basemap's tiles in view are in (or have failed):
+   *  `ready` or `tiles-failed`, the moment MapLibre's 'load' used to mark
+   *  before the overlays went on with the style. `loaded` is 'load' itself,
+   *  which only fires once every source has loaded. */
+  function onBasemap(created: MapApi, loaded: boolean): void {
+    if (basemapIn || disposed || map !== created || !styled || !lib) return;
+    if (!loaded && created.isSourceLoaded && !created.isSourceLoaded(lib.BASEMAP_SOURCE)) return;
+    basemapIn = true;
+    setStatus(basemapFailing ? 'tiles-failed' : 'ready');
+  }
+
+  /** The style is up (MapLibre's 'style.load', or 'load' where none came
+   *  first): images, sources and overlay layers go on, then the loop starts.
+   *  The vehicles source goes first and carries the payload the map already
+   *  holds, so the worker lays out the pills before the stops, the network
+   *  and the city's marks (lane p-map). The status waits for the basemap
+   *  (onBasemap); nothing drawn here does. */
   function onLoad(l: MaplibreModule, created: MapApi): void {
-    if (disposed || map !== created) return;
+    if (disposed || map !== created || styled) return;
     putOverlayImages(created, l, false);
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
+    created.addSource(l.SOURCES.vehicles, geojson(firstVehicles(created, l) ?? empty));
     created.addSource(l.SOURCES.network, geojson(net ? l.networkToGeoJson(net) : empty));
     const stops = net ? l.stopsToGeoJson(net) : empty;
     stopsData = stops;
@@ -1395,7 +1422,6 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       created.addSource(l.CITY_POINTS, geojson(l.pointsToGeoJson(points.filter(p=>p.place==='city'), wallLabels)));
       created.addSource(l.CITY_PATHS, geojson(l.linesToGeoJson(cityPaths, wallLabels)));
     }
-    created.addSource(l.SOURCES.vehicles, geojson(empty));
     created.addSource(l.SOURCES.bodies, geojson(empty));
     created.addSource(l.SOURCES.screenStop, geojson(l.screenStopGeoJson(stop)));
     created.addSource(l.SOURCES.outline, geojson(l.outlineToGeoJson(outline)));
@@ -1433,8 +1459,22 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     } else if (!cameraMovedByUser && !options.center && !stop && placesOnly()) fitPlaces();
     else if (!cameraMovedByUser && !options.center && selection) fitSelection();
     if (typeof following === 'string') centreOn(following);
-    setStatus(basemapFailing ? 'tiles-failed' : 'ready');
     if (!paused && !held) loop.start();
+  }
+
+  /** The vehicles as the first frame will draw them, for the vehicles
+   *  source's first message; null with nothing to draw or while the feed is
+   *  held. The loop's first frame pushes the same marks again, so nothing
+   *  else about the pushes changes. */
+  function firstVehicles(created: MapApi, l: MaplibreModule): VehicleFeatureCollection | null {
+    if (!model || held) return null;
+    const drawn = model.step(now());
+    if (drawn.length === 0) return null;
+    const kept = keptVehicleId();
+    const project = created.project && created.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
+    const fc = l.vehiclesToGeoJson(drawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
+    if (fc.features.length > 0) probeHasMarks = true;
+    return fc;
   }
 
   function fitPlaces(): void {
