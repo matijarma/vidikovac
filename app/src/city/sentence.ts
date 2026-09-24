@@ -443,11 +443,24 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const kickerAge = (s: WrittenSentence) => kickers.get(s.kicker) ?? -Infinity;
       // A sentence that can be said in its words for a whole rhythm comes first: "za 1 min" ten
       // seconds before its minute rounds to 0 would stand ten seconds (decision 29).
-      const lasts = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm ? 0 : 1;
-      choices.sort((a, b) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
+      const lasting = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm;
+      const lasts = (s: WrittenSentence) => lasting(s) ? 0 : 1;
+      const order = (a: WrittenSentence, b: WrittenSentence) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b));
+      choices.sort(order);
       // No restatement in another wording: with three facts at hand the header waits for a fact it has
       // not shown rather than say the one that just left in other words.
-      const next = choices[0] ?? (held ? current : null);
+      //
+      // observe-d522 (D5.22, 22:55 and 23:18 Zagreb): "polazi za 1 min" chosen with 19 s of its minute left
+      // stood 10.5 s, "polazi u 23:18" chosen two seconds before the tram left, 8 s; both were the only
+      // fresh wording of an unshown fact. A sentence that cannot stand a whole rhythm is never the next
+      // one while the one on screen can still be said in its words (the header waits), nor while a fresh
+      // wording of a fact shown lately lasts (the fact rule yields to the dwell); only with nothing else
+      // is it taken, rather than a blank header.
+      const first = choices[0];
+      const restated = byFact && first && !lasting(first) ? fresh.filter(s => lasting(s) && !choices.includes(s)).sort(order) : [];
+      const next = first && lasting(first) ? first
+        : held && current ? current
+        : restated[0] ?? first ?? null;
       if (next !== current) {
         if (current) remember(current, now, current.validUntil);
         // Timeless source descriptions are only leased for this display rhythm.
