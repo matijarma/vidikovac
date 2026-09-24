@@ -361,7 +361,7 @@ describe('an arrival time is never bare (WP5)', () => {
       // No word per row [O-27]: the form carries it and the note says it once. Read the row's text, not its
       // markup: the rows name their kind for the probe in an attribute (data-kind="timetable", lane/d3-copy2),
       // and the English catalogue word for the form is "timetable" too.
-      const text = row.replace(/<[^>]*>/g, ' ');
+      const text = `<li ${row}`.replace(/<[^>]*>/g, ' ');
       expect(text, row).not.toContain(leaf(catalogue, 'arrivals.scheduled')!);
       expect(text, row).not.toMatch(/Procjena|Estimate/);
     });
