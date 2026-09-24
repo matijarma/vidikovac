@@ -54,34 +54,34 @@ app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(s.appName)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(title)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(body)
 app/src/kiosk.ts:185 #noticeMarkup → escapeHtml(s.notice.setupAgain)
-app/src/kiosk.ts:358 #renderAlert → alertBox.textContent = text ?? ''
-app/src/kiosk.ts:368 #paintClock → dateEl.textContent = date
-app/src/kiosk.ts:371 #paintClock → clockEl.textContent = time
-app/src/kiosk.ts:384 #clearPairingNotice → pairingNote.textContent = ''
-app/src/kiosk.ts:395 #setText → node.textContent = value
-app/src/kiosk.ts:401 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
-app/src/kiosk.ts:402 #sentenceOverflows → setText(probeText, sentence.text)
-app/src/kiosk.ts:432 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
-app/src/kiosk.ts:433 #paintSentence → setText(sentenceText, next.text)
-app/src/kiosk.ts:558 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
-app/src/kiosk.ts:558 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
-app/src/kiosk.ts:582 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
-app/src/kiosk.ts:583 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
-app/src/kiosk.ts:587 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
-app/src/kiosk.ts:748 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:1066 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1067 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1068 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1070 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1080 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1081 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1085 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1103 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1104 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1104 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1193 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1200 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1374 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:360 #renderAlert → alertBox.textContent = text ?? ''
+app/src/kiosk.ts:370 #paintClock → dateEl.textContent = date
+app/src/kiosk.ts:373 #paintClock → clockEl.textContent = time
+app/src/kiosk.ts:386 #clearPairingNotice → pairingNote.textContent = ''
+app/src/kiosk.ts:397 #setText → node.textContent = value
+app/src/kiosk.ts:403 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
+app/src/kiosk.ts:404 #sentenceOverflows → setText(probeText, sentence.text)
+app/src/kiosk.ts:434 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
+app/src/kiosk.ts:435 #paintSentence → setText(sentenceText, next.text)
+app/src/kiosk.ts:564 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
+app/src/kiosk.ts:564 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
+app/src/kiosk.ts:588 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
+app/src/kiosk.ts:589 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
+app/src/kiosk.ts:593 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
+app/src/kiosk.ts:754 #paintMap → vetExternal('name', stop.name, 'row')
+app/src/kiosk.ts:1072 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1073 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1074 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1076 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1086 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1087 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1091 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1109 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1110 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1110 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1199 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1206 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1380 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)

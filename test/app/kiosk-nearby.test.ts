@@ -24,7 +24,7 @@ import {
   type NearbyInput,
   type NearbyKind,
   type NearbyRow,
-  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS,
+  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS, DEPARTED_HOLD_MS,
 } from '../../app/src/city/nearby';
 import type { FeedSnapshots, ScreenStop } from '../../app/src/core/contracts';
 import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun';
@@ -594,6 +594,37 @@ describe('the daytime wall (D5.8 production observer, 13:37 to 13:50 Zagreb): st
     // The bound: a vehicle still "headed here" three minutes past its time is not a departure to wait for.
     const late = selectNearby(input(base + 20_000 + HELD_AT_STOP_MS + 1_000, { boards: [board], fixes: here, heldDepartures: held(stays) }));
     expect(deps(late)).not.toContain('dep:t17');
+  });
+});
+
+describe('a tram that left the wall does not flap back (D5.16 production observer: the 1 and the 17 left and returned on consecutive readings)', () => {
+  const held = (rows: readonly NearbyRow[]): NearbyRow[] => rows.filter((r) => r.kind === 'departure');
+  const deps = (rows: readonly NearbyRow[]): string[] => held(rows).map((r) => r.id);
+  const base = at('2026-09-24T13:20:00Z');
+  const secs = (b: number, rows: readonly [route: string, seconds: number][]): DepartureBoard => ({
+    operator: 'zet', stopId: '106_1', stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(b - MIN).toISOString(),
+    departures: rows.map(([route, s]) => ({ operator: 'zet', tripId: `t${route}`, routeId: route, routeName: route, headsign: HEADSIGN[route]!, at: new Date(b + s * 1000).toISOString() })),
+  });
+  const live = (...routes: string[]): LiveVehicleRef[] => routes.map((r) => ({ id: `v${r}`, tripId: `t${r}`, routeId: r, delaySeconds: 0 }));
+
+  it('keeps a departed trip off the list for a minute when its estimate flaps back to now, shows it at once when re-estimated two minutes ahead, and again after the minute', () => {
+    const board = secs(base, [['1', 10], ['12', 240], ['13', 300], ['17', 420]]);
+    const shown = held(selectNearby(input(base, { boards: [board], fixes: live('1', '12', '13', '17') })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t1', 'dep:t12', 'dep:t13']);
+    // 75 s later the 1's estimate is past the grace and its vehicle's next stop is elsewhere: it leaves.
+    const gone = selectNearby(input(base + 75_000, { boards: [board], fixes: [{ id: 'v1', tripId: 't1', routeId: '1', delaySeconds: 0, nextStopId: '999_1' }, ...live('12', '13', '17')], heldDepartures: shown }));
+    expect(deps(gone)).toEqual(['dep:t12', 'dep:t13', 'dep:t17']);
+    const departed = [{ id: 'dep:t1', leftAt: base + 75_000 }];
+    // Five seconds on, the twin re-estimates the 1 at "sada" (its next stop this platform again): it stays off the list.
+    const flap = selectNearby(input(base + 80_000, { boards: [board], fixes: [{ id: 'v1', tripId: 't1', routeId: '1', delaySeconds: 75, nextStopId: '106_1' }, ...live('12', '13', '17')], heldDepartures: held(gone), departedDepartures: departed }));
+    expect(deps(flap)).toEqual(['dep:t12', 'dep:t13', 'dep:t17']);
+    // Re-estimated two whole minutes ahead it is a departure to wait for again.
+    const later = selectNearby(input(base + 80_000, { boards: [board], fixes: [{ id: 'v1', tripId: 't1', routeId: '1', delaySeconds: 200, nextStopId: '106_1' }, ...live('12', '13', '17')], heldDepartures: held(gone), departedDepartures: departed }));
+    expect(deps(later)).toContain('dep:t1');
+    // After the hold the flap is no longer suppressed.
+    const afterHold = selectNearby(input(base + 75_000 + DEPARTED_HOLD_MS + 1_000, { boards: [board], fixes: [{ id: 'v1', tripId: 't1', routeId: '1', delaySeconds: 140, nextStopId: '106_1' }, ...live('12', '13', '17')], heldDepartures: held(gone), departedDepartures: departed }));
+    expect(deps(afterHold)).toContain('dep:t1');
+    expect(DEPARTED_HOLD_MS).toBe(60_000);
   });
 });
 

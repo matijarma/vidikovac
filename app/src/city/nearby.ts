@@ -124,6 +124,13 @@ export interface NearbyInput {
    * within a minute in the D5.3 observation).
    */
   heldDepartures?: readonly NearbyRow[];
+  /**
+   * Departure rows that left the wall recently (row id, the moment they left; kiosk.ts keeps the list). A trip that
+   * left does not come back within DEPARTED_HOLD_MS on an estimate that flapped back to now; re-estimated
+   * DISPLACE_MINUTES ahead it is a departure to wait for again (D5.16 observer: the 1 and the 17 left and returned
+   * on consecutive readings as the twin's estimate and next stop oscillated).
+   */
+  departedDepartures?: readonly { id: string; leftAt: number }[];
 }
 
 /** §12 bounds and the ladder's clock (§4). */
@@ -140,6 +147,8 @@ export const DISPLACE_MINUTES = 2;
 export const MINUTE_MARGIN_MS = 15_000;
 /** A tracked tram past its time is carried as "sada" this long while the twin still names one of the place's platforms as its vehicle's next stop. */
 export const HELD_AT_STOP_MS = 3 * 60_000;
+/** A departure that left the wall is not shown again this long on an estimate that flapped back, unless re-estimated DISPLACE_MINUTES ahead. */
+export const DEPARTED_HOLD_MS = 60_000;
 /** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
 const MORNING_FROM_MIN = 3 * 60;
 const MORNING_UNTIL_MIN = 12 * 60;
@@ -263,7 +272,13 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   const held = (input.heldDepartures ?? []).filter((row) => row.kind === 'departure');
   const rank = new Map(held.map((row, index) => [row.id, index] as const));
   const heldById = new Map(held.map((row) => [row.id, row] as const));
-  const fresh = steadied.map((arrival) => steadyMinute(arrival, heldById.get(departureId(arrival)), now));
+  const departed = new Map((input.departedDepartures ?? []).map((d) => [d.id, d.leftAt] as const));
+  const fresh = steadied
+    .filter((arrival) => {
+      const leftAt = departed.get(departureId(arrival));
+      return leftAt === undefined || now - leftAt > DEPARTED_HOLD_MS || arrival.atMs - now >= DISPLACE_MINUTES * MINUTE_MS;
+    })
+    .map((arrival) => steadyMinute(arrival, heldById.get(departureId(arrival)), now));
   const freshIds = new Set(fresh.map(departureId));
   // A shown departure the boards do not name this instant is carried on its last estimate: the twin drops a
   // vehicle for a snapshot, a platform board refetches without a trip (D5.3 observer: rows 34 and 32 removed and

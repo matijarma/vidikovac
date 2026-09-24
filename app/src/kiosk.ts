@@ -19,7 +19,7 @@ import { arrivalsAt } from '../../shared/city/arrivals';
 import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { dynamicPlaces } from './city/discovery';
-import { selectNearby, skippedTextCensus, type NearbyRow } from './city/nearby';
+import { selectNearby, skippedTextCensus, type NearbyRow, DEPARTED_HOLD_MS } from './city/nearby';
 import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS, isSameSentence, sentenceFactKeys, sentencePool, type RotatingSentence } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
@@ -280,6 +280,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let invitation: InvitationHandle | null = null;
   const sentenceSequence = createSentenceSequence({ rhythmMs: rhythm * 1000, noRepeatMs: SENTENCE_NO_REPEAT_MS });
   let wallItems: NearbyRow[] = [];
+  /** Departure rows that left the wall, by row id, and when (selectNearby's departedDepartures). */
+  const departedAt = new Map<string, number>();
   let facts: SentenceFact[] = [];
   let modelSentences: WrittenSentence[] = [];
   /** A model answer waiting for the rhythm's end (decision 29): never swapped in mid-dwell. */
@@ -475,10 +477,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       const skipped: ExternalTextRejection[] = [];
       // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
       const heldDepartures = wallItems.filter(row => row.kind === 'departure');
+      const departedDepartures = [...departedAt].map(([id, leftAt]) => ({ id, leftAt }));
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
-        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures,
+        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
       });
+      // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
+      for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
+      for (const [id, leftAt] of departedAt) if (at - leftAt > DEPARTED_HOLD_MS) departedAt.delete(id);
       paintSkippedText(skipped);
       // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
       facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
