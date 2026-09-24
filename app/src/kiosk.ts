@@ -749,6 +749,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       void loadNetworkOnce().then((net) => { if (net && !disposed) { frameNetwork = net; paintLocal(); } });
     }
     container.inert=true;
+    // The legend explains what the map draws, and nothing it does not (mapview.ts legendKinds).
+    invitation?.setLegend((container.dataset.legend ?? 'tram bikes culture').split(' '));
     mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
     mapContainer = container;
     if (container.parentElement !== host) {

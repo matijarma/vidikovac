@@ -801,6 +801,20 @@ export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, lab
   return framed ? { ...options, stopRoutes: null, stopLabelTramInterchanges: true, placeTitles: false, stopRadius: false, majorStreetNames: false } : options;
 }
 
+/** The wall legend's entries (kiosk.legend.*), in its order. */
+export type LegendKind = 'tram' | 'bikes' | 'culture';
+/** What the legend may explain, from the marks the map is handed (lane w-labels2, 24 Sep: a strip drew no
+ *  station and no venue, and its legend still listed both). The tram line is always on the map; BAJS
+ *  while a station is; culture while a venue with a programme is, or an event's own mark (the events ink,
+ *  map/overlays.ts placeEvents; a communal work is the works ink and is not culture). */
+export function legendKinds(points: readonly MapPoint[]): LegendKind[] {
+  const kinds: LegendKind[] = ['tram'];
+  if (points.some((p) => p.place === 'city' && p.props?.category === 'bikes')) kinds.push('bikes');
+  if (points.some((p) => (p.place === 'city' && p.props?.category !== 'bikes' && p.props?.category !== 'air' && Number(p.props?.eventCount ?? 0) > 0)
+    || (p.place === 'event' && p.props?.source !== 'komunalne'))) kinds.push('culture');
+  return kinds;
+}
+
 /** The own ring and name on the whole-city window (decision 19), which has no stop of its own:
  *  the read-path place's stop from the table, else the place itself as a ring; null without a
  *  place. The one stop mark that window draws (owner, 24 Sep: ProzorOptions.stopMarks false). */
@@ -1048,6 +1062,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   adapter?.setExtras(extras);
   if(!input.exploring)adapter?.setView(viewOf(request));
   const container = maps.slot(request);
+  // What the legend beside the map may list (legendKinds; kiosk.ts hands it to the invitation). The schema draws the network alone.
+  if (container) {
+    const legend = (request.renderer === 'schema' ? ['tram'] : legendKinds(request.points)).join(' ');
+    if (container.dataset.legend !== legend) container.dataset.legend = legend;
+  }
   // An outage is no evidence of motion: the map holds until the feed is live again.
   adapter?.setFeedState(feedStateOf(input.snapshots['zet-rt']));
   // The geographic field draws the quarter (R-KP9); the schema has no outline.
