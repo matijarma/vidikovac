@@ -459,9 +459,10 @@ describe('deflectMarks: a mark steps aside for a disc\u2019s number and for a ma
     const placed = deflectMarks([tram('a', 100, 100, 0)], pile).get('a')!;
     for (const d of pile) expect(clearance(tram('a', 100, 100, 0), placed, d), `disc at ${d.y}`).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
     expect(placed.moved).toBeCloseTo(24 + clear, 6);
-    // A pile too deep to hop: the mark goes as far as the cap and keeps what it covers.
+    // A pile too deep to hop: the mark stays where it is and keeps what it covers, rather than land on another disc.
     const deep = Array.from({ length: 8 }, (_, i) => ({ x: 100, y: 100 - 12 * i, r: 11 }));
-    expect(deflectMarks([tram('b', 100, 100, 0)], deep).get('b')!.moved).toBe(DEFLECT_MAX_PX);
+    expect(deflectMarks([tram('b', 100, 100, 0)], deep).get('b')).toEqual({ x: 100, y: 100, moved: 0 });
+    expect(DEFLECT_MAX_PX).toBe(54);
   });
 
   it('a bus pill on a tram plate steps off it; the plate, placed first, stays; a plate pushed onto a neighbour pushes the neighbour on', () => {

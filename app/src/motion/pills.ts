@@ -450,11 +450,12 @@ export function createLineColours(
 // straight pass. By the smallest hop past every disc in its way (hub stations
 // stand twelve pixels apart at z13, each forty wide, a pile no single hop
 // clears) plus DEFLECT_MARGIN_PX, and never by a jump: the hop is ramped with
-// the true overlap, so a mark meeting a disc slides off it and back once
-// past. A bus pill steps aside for a tram plate the same way (trams are
-// placed first, then buses, then the rest), and every mark placed is in the
-// way of the ones after it. Never further than DEFLECT_MAX_PX: a mark that
-// would have to leave its street keeps what it covers. Pure, in the CSS px
+// the true overlap (DEFLECT_GAIN), so a mark meeting a disc slides off it and
+// back once past. A bus pill steps aside for a tram plate the same way (trams
+// are placed first, then buses, then the rest), and every mark placed is in
+// the way of the ones after it. Never further than DEFLECT_MAX_PX: a mark in
+// a pile too deep to hop stays where it is and keeps what it covers, rather
+// than land on another disc. Pure, in the CSS px
 // the pill geometry is stated in (vehicle-features.ts divides the projected
 // positions by the symbol scale first, as it does for the clustering).
 
@@ -468,9 +469,13 @@ export interface PlacedMark { x: number; y: number; moved: number }
 /** The clearance left between a placed mark and what it stepped aside for. */
 export const DEFLECT_MARGIN_PX = 1;
 /** How far a mark may be moved per pixel of true overlap: the hop a mark stepping ahead of a disc needs is
- *  two radii at the first touch, which unramped would be a jump; three per pixel lets it clear the number
- *  within a few pixels of travel and never touches a mark that stands still on a disc (its overlap is full). */
-export const DEFLECT_GAIN = 3;
+ *  two radii at the first touch, which unramped would be a jump. Eight per pixel completes a single disc's
+ *  hop within three pixels of travel and a hub pile's within six, so a tram standing on a station with a
+ *  partial overlap (its dwell at the stop) is clear and not half over the count; the slide is fast but has
+ *  no step, and the plate then waits ahead of the disc while the tram passes under it. (Three per pixel,
+ *  the first try, left 8 of 16 covered discs covered on a replay of Trg: the hops stopped part-way through
+ *  the pile, on the next disc.) */
+export const DEFLECT_GAIN = 8;
 /** The furthest a mark is ever moved from where the model put it: three capsule heights. */
 export const DEFLECT_MAX_PX = 3 * PILL_HEIGHT_PX;
 
@@ -494,7 +499,8 @@ const DEFLECT_RANK: Readonly<Record<string, number>> = { tram: 0, bus: 1 };
 /**
  * The smallest hop `p` (0 or more) along the screen's vertical, in direction `side` (+1 down, -1 up), that
  * leaves the capsule `own` clear of every obstacle it would meet on the way: each obstacle it reaches across
- * forbids an interval of `p`, and the hop walks past them in order.
+ * forbids an interval of `p`, and the hop walks past the chain of them the mark stands in. A chain that runs
+ * past DEFLECT_MAX_PX cannot be hopped: 0, the mark stays where it is rather than land on another disc.
  */
 function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): number {
   const forbidden: [number, number][] = [];
@@ -515,7 +521,7 @@ function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): nu
     if (from >= p) break;
     p = to;
   }
-  return p;
+  return p > DEFLECT_MAX_PX ? 0 : p;
 }
 
 /**
@@ -550,7 +556,7 @@ export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly 
     const uy = -Math.cos(rad);
     const vertical = mark.bearing !== null && Math.abs(uy) > Math.abs(ux);
     const side: 1 | -1 = vertical ? (uy < 0 ? -1 : 1) : (own.y - nearest.y < 0 ? -1 : 1);
-    const hop = Math.min(hopPast(own, inWay, side), DEFLECT_MAX_PX);
+    const hop = hopPast(own, inWay, side);
     // Never a jump: at most DEFLECT_GAIN per pixel of true overlap, nothing at a touch.
     const m = Math.min(hop, DEFLECT_GAIN * overlap);
     const at = { x: mark.x, y: mark.y + side * m, moved: m };
