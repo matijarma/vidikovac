@@ -414,9 +414,15 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       return;
     }
     const next = currentSentence;
-    const deadline = String(next.validUntil);
     if (sentenceEl.dataset.kicker !== next.kicker) sentenceEl.dataset.kicker = next.kicker;
-    if (sentenceEl.dataset.validUntil !== deadline) sentenceEl.dataset.validUntil = deadline;
+    // The deadline attribute names the sentence turn's own deadline. A tracked estimate moving by seconds under
+    // unchanged words is the same sentence (decision 29) and no turn: the harness reads a new data-valid-until
+    // under the same text as a repeat (D5.3 observer: eight "repeats" that were deadline jitter of 2 to 15 s). The
+    // sequence still ends the dwell on its own, shortened deadline; the attribute follows at the next turn.
+    if (!previous || previous.text !== next.text || !sentenceEl.dataset.validUntil) {
+      const deadline = String(next.validUntil);
+      if (sentenceEl.dataset.validUntil !== deadline) sentenceEl.dataset.validUntil = deadline;
+    }
     setText(sentenceKicker, s.sentence.kicker[next.kicker]);
     setText(sentenceText, next.text);
     paintedSentence = next;
@@ -461,8 +467,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         .map(id => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
       // Third-party text that fails the shared check leaves its row out; the census says how many and why.
       const skipped: ExternalTextRejection[] = [];
-      // The departures on the wall keep their slots on ETA jitter (selectNearby's heldDepartures).
-      const heldDepartures = wallItems.filter(row => row.kind === 'departure').map(row => row.id);
+      // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
+      const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures,
