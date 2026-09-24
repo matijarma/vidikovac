@@ -35,7 +35,7 @@ import {
   summariseRotation, WALL_PROBES, wallSample, type WallSample,
 } from '../wall';
 import {
-  ACCEPT_ARTEFACTS, attrOf, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, HEADINGS, HEADINGS_IN_PAGE,
+  ACCEPT_ARTEFACTS, attrOf, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, HEADINGS, HEADINGS_IN_PAGE,
   IDLE_MINUTE_MS, nearbyHeadFailures, pageNow, rotationSceneFailures, routeSceneTeaser, routeTiles, sceneClock, sceneReadingFailures,
   textOf, TOUCH_BOARD_MS, visibleOf, writeArtefact, type SceneClock,
 } from './support';
@@ -197,6 +197,8 @@ test.describe('wall at 1920×1080: eight scenes', () => {
         for (let t = 0; t < IDLE_MINUTE_MS; t += ROTATION_STEP_MS) {
           await page.clock.runFor(ROTATION_STEP_MS);
           await page.waitForTimeout(ROTATION_SETTLE_MS);
+          // Each step is a reading pair for the turnover credit, as in the observer (D5.20).
+          await page.evaluate(CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_SPEC);
         }
         clock.sync(await pageNow(page));
         const calm = await page.evaluate(CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC);

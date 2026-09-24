@@ -30,7 +30,7 @@ import {
 export { PHONE_DEPARTURE_ROWS, phoneDepartureFailures, phoneDepartures, type PhoneDepartures } from '../inventory';
 export { PHARMACY_HOURS } from '../wall';
 export {
-  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, IDLE_MINUTE_MS, IDLE_MUTATIONS_MAX,
+  CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, IDLE_MINUTE_MS, IDLE_MUTATIONS_MAX,
   type CalmMotionReading, type CalmMotionSpec,
 } from '../wall';
 

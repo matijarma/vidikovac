@@ -686,11 +686,16 @@ export interface CalmMotionReading {
   /** childList records that add or remove an element. */
   mutations: number;
   /**
-   * Rows that entered or left between the two readings (a keyed row on one reading only: a departure, the sunset
-   * row at its hour, the "uvijek" row alternating every twenty minutes, a closure ending), each excusing at most one
-   * record that adds it and one that removes it: max(entering, leaving) of those so excused.
+   * Rows that entered or left between two consecutive readings (a keyed row on one of the pair only: a departure,
+   * the sunset row at its hour, the "uvijek" row alternating every twenty minutes, a closure ending), each excusing
+   * at most one record that adds it and one that removes it within that pair: the sum over the pairs of
+   * max(entering, leaving) so excused. The pairs are the window's first and last readings and every
+   * CALM_MOTION_MARK_IN_PAGE between them (the observer marks at each rotation reading, D5.20: three trips
+   * through one slot inside a minute are three turnovers, not churn).
    */
   turnovers: number;
+  /** Readings that bounded the pairs, the first and last included (absent in a reading recorded before the marks). */
+  marks?: number;
   /**
    * `mutations` less the records the turnovers account for: a staying row re-created, a node moved, a row that came
    * and went inside the minute, any other element added or removed. The production observer's budget.
@@ -722,8 +727,14 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
     before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
     mutations: 0,
     textSwaps: 0,
-    records: [] as { adds: (string | null)[]; removes: (string | null)[] }[],
+    records: [] as { adds: (string | null)[]; removes: (string | null)[]; seg: number }[],
+    /** The row keys at each reading: the window's start, every mark, and the read. */
+    marks: [rows.map(keyOf).filter((k): k is string => k !== null)] as string[][],
     observer: null as MutationObserver | null,
+    mark(): void {
+      if (state.observer) state.count(state.observer.takeRecords());
+      state.marks.push(Array.from(document.querySelectorAll<HTMLElement>(spec.row)).map(keyOf).filter((k): k is string => k !== null));
+    },
     count(records: MutationRecord[]): void {
       for (const m of records) {
         if (m.type !== 'childList') continue;
@@ -731,7 +742,7 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
         const removes = Array.from(m.removedNodes).filter((n) => n.nodeType === 1);
         if (adds.length || removes.length) {
           state.mutations++;
-          state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey) });
+          state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey), seg: state.marks.length - 1 });
         } else if (m.addedNodes.length || m.removedNodes.length) state.textSwaps++;
       }
     },
@@ -744,19 +755,26 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
   return rows.length;
 };
 
+/** A reading inside an open calm-motion window: the row keys now, so turnovers are credited per reading pair. */
+export const CALM_MOTION_MARK_IN_PAGE = (spec: CalmMotionSpec): boolean => {
+  const state = (window as unknown as Record<string, unknown>)[spec.key] as { mark?: () => void } | undefined;
+  if (!state?.mark) return false;
+  state.mark();
+  return true;
+};
+
 /** Stop counting and compare the rows with the tagged ones. */
 export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReading => {
   const w = window as unknown as Record<string, unknown>;
   const state = w[spec.key] as {
     rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
-    records: { adds: (string | null)[]; removes: (string | null)[] }[];
-    observer: MutationObserver | null; count: (r: MutationRecord[]) => void;
+    records: { adds: (string | null)[]; removes: (string | null)[]; seg?: number }[]; marks?: string[][];
+    observer: MutationObserver | null; count: (r: MutationRecord[]) => void; mark?: () => void;
   } | undefined;
-  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
-  if (state.observer) {
-    state.count(state.observer.takeRecords());
-    state.observer.disconnect();
-  }
+  if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, marks: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
+  if (state.mark) state.mark();
+  else if (state.observer) state.count(state.observer.takeRecords());
+  if (state.observer) state.observer.disconnect();
   const rows = Array.from(document.querySelectorAll<HTMLElement>(spec.row));
   const keyOf = (el: HTMLElement): string | null => (el.dataset.id ? `${el.dataset.kind ?? ''}|${el.dataset.id}` : null);
   const beforeByKey = new Map(state.before.filter((b) => b.key !== null).map((b) => [b.key as string, b.tag]));
@@ -775,27 +793,37 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   }
   const left = [...beforeByKey.keys()].filter((k) => !afterKeys.has(k));
   // A record is a turnover's when every element it adds is a row that entered and every element it removes a row
-  // that left, each row excusing one add and one remove at most; every other record is churn: a node moved, a
-  // staying row re-created, a row that came and went inside the minute (D5.8 observer: the story row alternating
-  // and the sunset row entering were three records of content, not churn; the sunset row leaving and returning
-  // within a poll was churn and a re-created row).
-  const entering = new Set(entered);
-  const leaving = new Set(left);
-  const addsTaken = new Set<string>();
-  const removesTaken = new Set<string>();
+  // that left between the two readings around it, each row excusing one add and one remove at most in that pair;
+  // every other record is churn: a node moved, a staying row re-created, a row that came and went between two
+  // readings (D5.8 observer: the story row alternating and the sunset row entering were three records of content,
+  // not churn; the sunset row leaving and returning within a poll was churn and a re-created row). Per pair, not
+  // per window (D5.20: 6_13004 → 6_13037 → 12_12084 → 14_12602 in one slot inside a minute, six records, was
+  // "churn 4" when only the window's ends were compared).
+  const marks = state.marks ?? [state.before.map((b) => b.key).filter((k): k is string => k !== null), rows.map(keyOf).filter((k): k is string => k !== null)];
   const free = (keys: (string | null)[], pool: Set<string>, taken: Set<string>): boolean =>
     keys.every((k) => k !== null && pool.has(k) && !taken.has(k)) && new Set(keys).size === keys.length;
   let excused = 0;
-  for (const r of state.records ?? []) {
-    if (!free(r.adds, entering, addsTaken) || !free(r.removes, leaving, removesTaken)) continue;
-    for (const k of r.adds) addsTaken.add(k as string);
-    for (const k of r.removes) removesTaken.add(k as string);
-    excused++;
+  let turnovers = 0;
+  for (let seg = 0; seg + 1 < marks.length; seg++) {
+    const a = new Set(marks[seg]);
+    const b = new Set(marks[seg + 1]);
+    const entering = new Set([...b].filter((k) => !a.has(k)));
+    const leaving = new Set([...a].filter((k) => !b.has(k)));
+    const addsTaken = new Set<string>();
+    const removesTaken = new Set<string>();
+    for (const r of state.records ?? []) {
+      if ((r.seg ?? 0) !== seg) continue;
+      if (!free(r.adds, entering, addsTaken) || !free(r.removes, leaving, removesTaken)) continue;
+      for (const k of r.adds) addsTaken.add(k as string);
+      for (const k of r.removes) removesTaken.add(k as string);
+      excused++;
+    }
+    turnovers += Math.max(addsTaken.size, removesTaken.size);
   }
   delete w[spec.key];
   return {
     rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations,
-    turnovers: Math.max(addsTaken.size, removesTaken.size), churn: state.mutations - excused,
+    turnovers, marks: marks.length, churn: state.mutations - excused,
     textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked,
   };
 };
