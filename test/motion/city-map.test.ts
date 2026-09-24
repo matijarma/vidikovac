@@ -1091,11 +1091,13 @@ describe('the marker census of the city layers', () => {
     expect(container.dataset.markers).toBe('1');
     expect(container.dataset.hiddenNames).toBe('1');
     expect(container.dataset.unlabelled).toBe('0');
-    // The paired or exploring map ('all') keeps its own floor at 13: there a bare count below it is unlabelled.
+    // The phone's Karta and every other map naming all city places ('all') name a venue below 13 too
+    // (lane p-map, karta-unlabelled on production): its name is a candidate there, held back here, never cut off.
     handle.setCityLabels!('all');
     handle.update([A, venue], [CLOSURE]);
     map.fire('idle');
-    expect(container.dataset.unlabelled).toBe('1');
+    expect(container.dataset.hiddenNames).toBe('1');
+    expect(container.dataset.unlabelled).toBe('0');
   });
 
   it('re-takes the census at the next idle after update(), never on an idle with nothing new', async () => {

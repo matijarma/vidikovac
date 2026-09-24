@@ -7,6 +7,7 @@ import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { vehicleKind } from './vehicle-mark';
 import type { MapPoint, MapLine, MapOutline, PointProperties, PointFeatureCollection, LineFeatureCollection, LineStringFeatureCollection, NetworkFeatureCollection, StopFeatureCollection } from './city-map';
 import type { ScreenStop } from '../core/contracts';
+import { NOT_VENUES } from './city-layers';
 
 const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'routeId', 'place']);
 
@@ -32,6 +33,9 @@ export function pointsToGeoJson(points: readonly MapPoint[], publicDisplay = tru
       .flatMap(p => {
         const title = p.title === '' ? '' : vetExternalMap('name', p.title, publicDisplay);
         if (title === null) return [];
+        // A city venue is named or not drawn (city-layers.ts names every venue at every zoom): a disc
+        // whose name is empty or was refused would be a programme count nobody can place.
+        if (title.trim() === '' && p.place === 'city' && !NOT_VENUES.includes(String(p.props?.category ?? ''))) return [];
         const properties: PointProperties = p.routeId === undefined ? { id: p.id, title } : { id: p.id, title, routeId: p.routeId };
         if (p.place !== undefined) properties.place = p.place;
         for (const [key, value] of Object.entries(p.props ?? {})) {

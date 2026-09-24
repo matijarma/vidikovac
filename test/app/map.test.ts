@@ -412,19 +412,22 @@ describe('the city places’ marks', () => {
     const all = labels('all');
     expect(all.layout!.visibility).toBe('visible');
     expect(all.filter).toBeUndefined();
-    expect(all.layout!['text-field']).toEqual(['get', 'title']);
-    expect(all.minzoom).toBe(13);
+    // Every surface that names city places names a venue at every zoom (lane p-map); a station from 13.
+    expect(all.layout!['text-field']).toEqual(['step', ['zoom'], ['case', ['in', ['get', 'category'], ['literal', ['bikes', 'air']]], '', ['get', 'title']], 13, ['get', 'title']]);
+    expect(all.minzoom).toBeUndefined();
     const venues = labels('venues');
     expect(venues.layout!.visibility).toBe('visible');
     // The framed wall names its venues at every zoom: Trg at Kadar 8 on 1920 frames at about 12.86,
     // and a cutoff at 13 left Gavella an anonymous programme count (review-w, P2).
     expect(venues.minzoom).toBeUndefined();
-    // On the framed wall a venue's name tries its other anchors before it
-    // yields to a passing pill (decision 17), starting where the fixed one stood.
-    expect(venues.layout!['text-variable-anchor-offset']).toEqual(overlays.nameAnchorOffsets(1.5));
-    expect(venues.layout!['text-justify']).toBe('auto');
-    expect([venues.layout!['text-anchor'], venues.layout!['text-offset']]).toEqual([undefined, undefined]);
-    expect([all.layout!['text-anchor'], all.layout!['text-offset'], all.layout!['text-variable-anchor-offset']]).toEqual(['top', [0, 1.5], undefined]);
+    // A venue's name tries its other anchors before it yields to a passing
+    // pill (decision 17), starting where the fixed one stood: on the framed
+    // wall and, since lane p-map, on every surface that names city places.
+    for (const layer of [venues, all]) {
+      expect(layer.layout!['text-variable-anchor-offset']).toEqual(overlays.nameAnchorOffsets(1.5));
+      expect(layer.layout!['text-justify']).toBe('auto');
+      expect([layer.layout!['text-anchor'], layer.layout!['text-offset']]).toEqual([undefined, undefined]);
+    }
     // A count never moves and is never dropped: the badges keep allow-overlap on every surface.
     expect(byId('city-place-badges', cityLayers(palette, null, 2, 'venues')).layout!['text-allow-overlap']).toBe(true);
     expect(evaluate(venues.filter, venue, 14)).toBe(true);
@@ -438,6 +441,32 @@ describe('the city places’ marks', () => {
     expect(cityLayers(palette, null, 2, false)).toEqual(cityLayers(palette, null, 2, 'none'));
     expect(cityLayers(palette, null, 2)).toEqual(cityLayers(palette, null, 2, 'all'));
     expect([cityLabelsOf(undefined), cityLabelsOf(true), cityLabelsOf(false), cityLabelsOf('venues')]).toEqual(['all', 'all', 'none', 'venues']);
+  });
+
+  // Lane p-map (production, 24 Sep: karta-unlabelled 1 of 58): the phone's
+  // Karta frames its "U blizini" circle at about 12.7 and the names of every
+  // city place came in from 13, so tonight's venue beside Trg was a purple
+  // "4" nobody could place. A venue is named at every zoom on every surface
+  // that names city places; a station (its count says it) and an air
+  // station keep the floor at 13; a venue whose name did not pass the text
+  // check is not drawn at all.
+  it('names a venue at the Karta\u2019s cold-open zoom, a station from 13 as before, and moves a venue\u2019s name before it yields', () => {
+    const all = byId('city-place-labels', cityLayers(palette, null, 1));
+    const point = (props: Record<string, unknown>) => ({ geometry: { type: 'Point', coordinates: [15.97, 45.81] }, properties: props });
+    const culture = { id: 'culture-1', title: 'Gavella', ...venue };
+    const station = { id: 'bajs-1', title: 'Trg bana J. Jelačića', ...bike('7') };
+    const air = { id: 'air-1', title: 'Zagreb-1', category: 'air', badge: '', eventCount: 0 };
+    const named = (zoom: number) => [...nameCensus.nameCandidates([all], () => [point(culture), point(station), point(air)], zoom, () => ({ x: 50, y: 50 }), { width: 100, height: 100 }).values()].map((n) => n.id);
+    expect(named(12.7)).toEqual(['culture-1']);
+    expect(named(11)).toEqual(['culture-1']);
+    expect(named(13.2)).toEqual(['culture-1', 'bajs-1', 'air-1']);
+    expect(all.layout!['text-variable-anchor-offset']).toEqual(overlays.nameAnchorOffsets(1.5));
+  });
+
+  it('draws no venue whose name is empty or refused: a disc on a map that names places is never a bare count', () => {
+    const place = (id: string, title: string, props: Record<string, unknown>) => ({ id, lon: 15.97, lat: 45.81, title, place: 'city' as const, props });
+    const fc = pointsToGeoJson([place('culture-1', '', { category: 'culture', badge: '4', eventCount: 4 }), place('culture-2', 'Gavella', { category: 'culture', badge: '1', eventCount: 1 }), place('bajs-1', '', { category: 'bikes', badge: '7' }), place('air-1', '', { category: 'air', badge: '' })], false);
+    expect(fc.features.map((f) => f.properties.id)).toEqual(['culture-2', 'bajs-1', 'air-1']);
   });
 
   it('has no cluster mark left on any layer', () => {
