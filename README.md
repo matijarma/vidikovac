@@ -60,7 +60,7 @@ These are different kinds of knowledge. ZET countdowns are **derived estimates**
 
 ## Try it
 
-1. Open the [city screen](https://zagreb.aningfilm.hr/kiosk/) on a computer or display. Type an address or a stop into its one field, **Adresa ili stajalište** (Address or stop), or leave it empty for Trg bana Jelačića, and press **Pokreni** (Start). Place, frame, view, theme and rhythm change later with a long press on “Kaj ima?”.
+1. Open the [city screen](https://zagreb.aningfilm.hr/kiosk/) on a computer or display. Type an address or a stop into its one field, **Adresa ili stajalište** (Address or stop), or leave it empty for Trg bana Jelačića, and press **Pokreni** (Start). Place, frame, view, theme and rhythm change later in **Postavke** (Settings): a press held about 0.8 s anywhere on the screen outside its touch targets (a stop ring, a list row, the pharmacy in the footer), or Enter or Space while the screen has focus.
 2. Keep it open. Scan the current QR code with your phone, or type the displayed code at [code entry](https://zagreb.aningfilm.hr/s/). The same Wi-Fi network works.
 3. Explore privately. Use **Screen** only when you want to show something publicly.
 4. Press **Share the city** in the header to give a second person their own five-minute session.
