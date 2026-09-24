@@ -98,7 +98,8 @@ stops around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
 measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
 disc carrying its count (grey at zero, grey and blank when the count is
-unknown, never "?"), venues only with a programme tonight and named, ranked
+unknown, never "?", in a grey that recedes behind the teal in both themes),
+venues only with a programme tonight and named, ranked
 stop names with every tram interchange, and the major street names. There is
 no "+N" mark on the wall map: no geographic clusters, and a merged vehicle
 pill lists every line number and wraps to a second and a third row as it
@@ -223,7 +224,8 @@ The normal `/kiosk/` surface is a live city window, not a locked dashboard and
 not an ambient decoration. Pairing acknowledges access without replacing it.
 The map takes the whole left column. A screen set to the whole city opens on
 the whole city, with the live transit picture on it: the tram network as a
-thin neutral ground, tram plates, bike-share stations as small dots without a
+thin neutral ground, tram plates, the place's own ring and name and no other
+stop mark, the bike-share stations that have a bike as small dots without a
 number, closures, the on-duty pharmacy and tonight's venues. On this surface
 transport is the default cartography; the earlier rule that it must not
 dominate applies to the phone and the desk. On the whole-city window place
@@ -242,7 +244,8 @@ four times the ground the wall's field was sized for, so below the thinning
 zoom it names less, not smaller: the basemap's promoted street names go, the
 assembly points keep their squares and lose their titles, and of the stops
 only the tram interchanges are named -- a tram calls there and some trip
-begins or ends there. Route count is not a measure of importance and is not
+begins or ends there; the wall's own whole-city window names no stop but its
+place. Route count is not a measure of importance and is not
 used for this. From the thinning zoom up every name is back, exactly as
 derived. A framed screen names by being framed, not by zoom: whatever its
 Kadar, it draws the ranked stop names with every tram interchange and the

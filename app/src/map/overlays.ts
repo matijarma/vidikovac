@@ -301,6 +301,13 @@ export interface ProzorOptions {
    *  names are the loudest thing on it and the route plates have to share
    *  their pixels. Default true -- only the kiosk's far window turns it off. */
   majorStreetNames?: boolean;
+  /** Owner, 24 Sep: false (the kiosk's whole-city window) draws no stop bead
+   *  and no stop name; the place's own ring and name are the screen-stop
+   *  layers and stay (decision 19). The beads are left on the map at opacity
+   *  0, not hidden, so a finger on a stop still opens its board: the pointer
+   *  reads the rendered stop layer (map-pointer.ts), which `visibility: none`
+   *  would empty. Default true. */
+  stopMarks?: boolean;
 }
 
 /** The image rows across the middle of the pill and the plate that stretch
@@ -789,7 +796,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   // integer zoom and arrive one whole level late. Elsewhere the ranked
   // steps as always.
   const stopLabelMinzoom = prozor ? prozor.overlapZoom : STOP_LABEL_ZOOM;
-  const stopLabelBase: Expr = prozor
+  const stopLabelBase: Expr = prozor?.stopMarks === false ? NEVER : prozor
     ? ['all', stops, ['get', 'label'],
       // Ruling 30: the far window names interchanges, not the busiest
       // corners -- route count put Elka and Savski gaj-rotor on the
@@ -911,8 +918,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
             'circle-color': p.figure,
             'circle-stroke-color': p.figure,
             'circle-stroke-width': prozor.stopRadius ? 1 : 0,
-            'circle-opacity': p.figureOpacity,
-            'circle-stroke-opacity': prozor.stopRadius ? p.figureOpacity : 0,
+            'circle-opacity': prozor.stopMarks === false ? 0 : p.figureOpacity,
+            'circle-stroke-opacity': prozor.stopRadius && prozor.stopMarks !== false ? p.figureOpacity : 0,
           }
         : {
             'circle-radius': zoomInterpolate(STOP_ZOOM, 1.5 * s, 14, 2.6 * s, 16, 4.5 * s),
@@ -962,7 +969,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       type: 'symbol',
       source: SOURCES.stops,
       minzoom: stopLabelMinzoom,
-      filter: prozor ? ['all', stopLabelBase, ['!', ['in', ['get', 'id'], ['literal', held]]]] : stopLabelBase,
+      filter: prozor?.stopMarks === false ? NEVER : prozor ? ['all', stopLabelBase, ['!', ['in', ['get', 'id'], ['literal', held]]]] : stopLabelBase,
       layout: stopLabelLayout,
       paint: stopLabelPaint,
     },
@@ -974,7 +981,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       type: 'symbol',
       source: SOURCES.stops,
       minzoom: stopLabelMinzoom,
-      filter: prozor ? ['all', stopLabelBase, ['in', ['get', 'id'], ['literal', held]]] : NEVER,
+      filter: prozor && prozor.stopMarks !== false ? ['all', stopLabelBase, ['in', ['get', 'id'], ['literal', held]]] : NEVER,
       layout: { ...stopLabelLayout, ...(prozor ? { 'text-overlap': 'cooperative' } : {}) },
       paint: stopLabelPaint,
     },

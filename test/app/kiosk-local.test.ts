@@ -894,14 +894,14 @@ describe('the kiosk\u2019s whole-city window', () => {
     expect(((two.factory.mock.calls[0]![0] as Record<string, unknown>).points as { id: string }[]).some((p) => p.id.startsWith('vehicle:'))).toBe(false);
   });
 
-  it('carries every BAJS station and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
+  it('carries every BAJS station with a bike and every venue with a programme as a badge with no name, and no station name while nobody is exploring', () => {
     const { calls, factory, adapter, maps } = stub();
     requestKioskMap(maps, base, adapter);
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;
     const city = (options.points as { id: string; title: string; place?: string; props?: Record<string, unknown> }[]).filter((p) => p.place === 'city');
-    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
-    expect(city.find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ category: 'bikes', badge: '7', eventCount: 0, priority: 2 });
-    expect(city.find((p) => p.id === 'bajs-b2')!.props!.badge).toBe('0');
+    // Owner, 24 Sep: the empty Jarun station (b2) is a far dot with no number to say so, and is left to the frame.
+    expect(city.map((p) => p.id).sort()).toEqual(['bajs-b1', 'culture-1']);
+    expect(city.find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ category: 'bikes', badge: '7', eventCount: 0, priority: 2, far: true });
     expect(city.find((p) => p.id === 'culture-1')!.props).toEqual({ category: 'culture', badge: '1', eventCount: 1, priority: 0 });
     // The names are the layer's to leave off (CityLabels 'none'), not the points'.
     expect(cityLabelsOf(options.cityLabels as never)).toBe('none');
@@ -1083,6 +1083,36 @@ describe('the kiosk\u2019s framed wall', () => {
     expect(labelsOf(window.cityLabels)).toBe('none'); // as the whole-city window has always carried it
     expect(kioskCityLabels(false, true)).toBe('none');
     expect(d.calls.setModes).toHaveBeenLastCalledWith(new Set([0]));
+  });
+
+  // Owner, 24 Sep ("too many names, tiny empty white circles"): the whole-city
+  // window carries the place's own ring and name (decision 19) and the pills,
+  // and no other stop mark -- no bead and no interchange name (Ruling 30's
+  // interchange names are withdrawn here). The frame keeps its own rule.
+  it('draws on the whole-city window only the own place\u2019s ring and name and the pills, never another stop\u2019s bead or name', () => {
+    const trg = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
+    const d = stub();
+    requestKioskMap(d.maps, { ...base, stop: null, place: trg, placeSet: false, stops: [STOP] }, d.adapter);
+    const window = first(d);
+    expect(window.center).toEqual(cityWindowView(1300, 880).center);
+    expect(window.prozor).toMatchObject({ stopMarks: false, stopRoutes: null });
+    // The own ring and name: the place's stop from the table, else the place itself.
+    expect(window.stop).toEqual(STOP);
+    const bare = stub();
+    requestKioskMap(bare.maps, { ...base, stop: null, place: trg, placeSet: false }, bare.adapter);
+    expect(first(bare).stop).toEqual({ id: STOP.id, name: STOP.name, lon: STOP.lon, lat: STOP.lat, routes: [] });
+    // A screen with neither place nor stop has no own ring to draw, and still no other stop mark.
+    const none = stub();
+    requestKioskMap(none.maps, { ...base, stop: null }, none.adapter);
+    expect(first(none).stop).toBeNull();
+    expect(first(none).prozor).toMatchObject({ stopMarks: false });
+    // The frame and a phone's band keep their stops and names.
+    const framed = stub();
+    requestKioskMap(framed.maps, { ...base, frame: 6 }, framed.adapter);
+    expect(first(framed).prozor).not.toHaveProperty('stopMarks');
+    const phone = stub();
+    requestKioskMap(phone.maps, { ...base, stop: null, place: trg, placeSet: false, handheld: true, spanM: HANDHELD_SPAN_M, widthPx: 356, heightPx: 420 }, phone.adapter);
+    expect(first(phone).prozor).not.toHaveProperty('stopMarks');
   });
 
   it('is the wall\u2019s own: a phone\u2019s band, a person exploring and a paired presentation are not framed', () => {

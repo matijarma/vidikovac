@@ -292,6 +292,28 @@ describe('the overlay layer list', () => {
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
 
+  // Owner, 24 Sep: the whole-city window draws the place's own ring and name
+  // (decision 19) and the pills; no stop bead and no other stop name. The
+  // stops stay on the map, unseen, so a finger on one still opens its board
+  // (map-pointer.ts reads the rendered stop layer, which opacity 0 keeps and
+  // `visibility: none` would not).
+  it('draws no stop bead and no stop name but the own place\u2019s when stopMarks is false, and keeps the stops touchable', () => {
+    const quiet = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRadius: true, stopMarks: false }, screenStopId: '106_1' });
+    const by = (id: string) => quiet.find((l) => l.id === id)!;
+    expect(by(LAYERS.stops).paint!['circle-opacity']).toBe(0);
+    expect(by(LAYERS.stops).paint!['circle-stroke-opacity']).toBe(0);
+    const loud = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRadius: true }, screenStopId: '106_1' });
+    expect(by(LAYERS.stops).filter).toEqual(loud.find((l) => l.id === LAYERS.stops)!.filter);
+    expect(by(LAYERS.stops).layout?.visibility).not.toBe('none');
+    expect(by(LAYERS.stopLabels).filter).toEqual(NEVER);
+    expect(by(LAYERS.stopLabelsHeld).filter).toEqual(NEVER);
+    // The own ring and its name are the screen-stop layers, untouched.
+    for (const id of [LAYERS.screenStop, LAYERS.screenStopLabel]) expect(by(id), id).toEqual(loud.find((l) => l.id === id));
+    // Left out, the option changes nothing: every other surface keeps its beads and names.
+    expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopMarks: true } }))).toBe(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR })));
+    expect(loud.find((l) => l.id === LAYERS.stopLabels)!.filter).not.toEqual(NEVER);
+  });
+
   // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
   // rank stops being the question; from the line up nothing changed.
   it('names interchanges and not ranks when the field holds the whole city', () => {
