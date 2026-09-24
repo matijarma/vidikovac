@@ -540,8 +540,9 @@ export interface CalmMotionReading {
   /** childList records that add or remove an element. */
   mutations: number;
   /**
-   * Departures that entered or left between the two readings (a `departure` row whose key is on one reading only),
-   * each excusing at most one record that adds it and one that removes it: max(entering, leaving) of those so excused.
+   * Rows that entered or left between the two readings (a keyed row on one reading only: a departure, the sunset
+   * row at its hour, the "uvijek" row alternating every twenty minutes, a closure ending), each excusing at most one
+   * record that adds it and one that removes it: max(entering, leaving) of those so excused.
    */
   turnovers: number;
   /**
@@ -627,10 +628,13 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
     else rebuilt.push(key);
   }
   const left = [...beforeByKey.keys()].filter((k) => !afterKeys.has(k));
-  // A record is a turnover's when every element it adds is a departure that entered and every element it removes a
-  // departure that left, each departure excusing one add and one remove at most; every other record is churn.
-  const entering = new Set(entered.filter((k) => k.startsWith('departure|')));
-  const leaving = new Set(left.filter((k) => k.startsWith('departure|')));
+  // A record is a turnover's when every element it adds is a row that entered and every element it removes a row
+  // that left, each row excusing one add and one remove at most; every other record is churn: a node moved, a
+  // staying row re-created, a row that came and went inside the minute (D5.8 observer: the story row alternating
+  // and the sunset row entering were three records of content, not churn; the sunset row leaving and returning
+  // within a poll was churn and a re-created row).
+  const entering = new Set(entered);
+  const leaving = new Set(left);
   const addsTaken = new Set<string>();
   const removesTaken = new Set<string>();
   const free = (keys: (string | null)[], pool: Set<string>, taken: Set<string>): boolean =>
@@ -668,15 +672,16 @@ export function calmMotionFailures(r: CalmMotionReading): string[] {
 }
 
 /**
- * The production observer's real minute: departures entering and leaving are the service itself (three first trams
- * within 70 s at the start of service are six records, lane-w-fix9), so they are counted apart as `turnovers` and the
- * budget reads `churn`, the records nothing entering or leaving accounts for. A staying row keeps its node, strictly.
+ * The production observer's real minute: rows entering and leaving are the content itself (three first trams within
+ * 70 s at the start of service are six records, lane-w-fix9; the story row alternating and the sunset row entering
+ * are three, lane-w-fix10), so they are counted apart as `turnovers` and the budget reads `churn`, the records
+ * nothing entering or leaving accounts for. A staying row keeps its node, strictly.
  */
 export function calmChurnFailures(r: CalmMotionReading): string[] {
   const b = calmMotionBasics(r);
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
-  if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} departure turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
+  if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
