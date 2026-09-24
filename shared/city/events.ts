@@ -60,8 +60,10 @@ export function resolveVenues(item: FeedItem, places: readonly Place[]): string[
   }
   return [...found];
 }
+/** One formatter for the module: building an Intl.DateTimeFormat per call was the wall's second-hottest function. */
+const ZAGREB_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zagreb', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function dayKey(value: number | string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zagreb', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
+  return ZAGREB_DAY.format(new Date(value));
 }
 /** The Zagreb hour from which a timed programme belongs to this evening. */
 export const TONIGHT_FROM_HOUR = 17;
