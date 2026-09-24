@@ -1163,7 +1163,7 @@ export const THRESHOLDS = Object.freeze([
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
   T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
-  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond departure turnovers (a departure entering or leaving, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
+  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond row turnovers (a row entering or leaving, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
   T('sentence-length', 'd2', 'kiosk', 'kiosk.sentenceOutOfRange', NONE, 'the sentence has 1–{SENTENCE_MAX_CHARS} characters in every reading', '§16.3, §12'),
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
@@ -1392,7 +1392,7 @@ export const METRICS = Object.freeze({
     // Departure turnovers are the service, not churn (e2e/wall.ts calmChurnFailures); the per-minute table is in report.md.
     const bad = windows.map((w) => ({ w, f: w.error ? [`not measured: ${w.error}`] : k.wall.calmChurnFailures(w.reading) })).filter((x) => x.f.length);
     const turnovers = windows.reduce((n, w) => n + (w.reading?.turnovers ?? 0), 0);
-    return { value: bad.length, detail: bad.length ? bad.slice(0, 5).map((x) => `readings ${x.w.from}–${x.w.to}: ${x.f.join('; ')}`) : [`${windows.length} minute(s) measured, each within ${k.wall.IDLE_MUTATIONS_MAX} structural mutations beyond ${turnovers} departure turnover(s) in all, every staying row on its node`] };
+    return { value: bad.length, detail: bad.length ? bad.slice(0, 5).map((x) => `readings ${x.w.from}–${x.w.to}: ${x.f.join('; ')}`) : [`${windows.length} minute(s) measured, each within ${k.wall.IDLE_MUTATIONS_MAX} structural mutations beyond ${turnovers} row turnover(s) in all, every staying row on its node`] };
   },
   'kiosk.outageDishonest': (obs, k) => countReadings(obs, (s) => s.feed === 'down' && outageIssues(s, k).length > 0, (s) => `data-feed down: ${outageIssues(s, k).join('; ')}`),
   'kiosk.sentenceOutOfRange': (obs, k) => countReadings(obs, (s) => s.sentenceChars < 1 || s.sentenceChars > k.wall.SENTENCE_MAX_CHARS, (s) => `${s.sentenceChars} characters ${quote(s.sentence, 90)}`),
@@ -1668,7 +1668,7 @@ export function renderReport(observation, verdict, instruments) {
     const calm = k.calm ?? [];
     if (calm.length) {
       lines.push('### Calm motion per minute (principle 7)', '');
-      lines.push(`Records: childList records that add or remove an element under the timeline. Turnovers: departures entering or leaving, each excusing one add and one remove. Churn: every other record, at most ${instruments.wall.IDLE_MUTATIONS_MAX} a minute; a staying row re-created fails the minute whatever the churn.`, '');
+      lines.push(`Records: childList records that add or remove an element under the timeline. Turnovers: rows entering or leaving (a departure, the sunset row, the "uvijek" row alternating), each excusing one add and one remove. Churn: every other record, at most ${instruments.wall.IDLE_MUTATIONS_MAX} a minute; a staying row re-created fails the minute whatever the churn.`, '');
       lines.push('| Readings | Records | Turnovers | Churn | Kept | Re-created | Left / entered | Result |', '|---|---:|---:|---:|---:|---|---|---|');
       for (const w of calm) {
         if (w.error || !w.reading) { lines.push(`| ${w.from}–${w.to} | — | — | — | — | not measured: ${cell(w.error ?? 'no reading')} | — | **fail** |`); continue; }

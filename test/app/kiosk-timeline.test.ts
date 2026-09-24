@@ -17,7 +17,7 @@ import { selectNearby, type NearbyRow } from '../../app/src/city/nearby';
 import type { LastRunLive } from '../../app/src/core/lastrun';
 import { emptyCity } from '../../shared/city/types';
 import { departuresBoard } from '../../e2e/departures-fixture';
-import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures } from '../../e2e/wall';
+import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
@@ -775,6 +775,107 @@ describe('the compact wall and the night promises (decision 27, D2 full run at 1
     for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
     expect(section().dataset.fitOverflow).toBe('0');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
+  });
+});
+
+describe('the daytime wall (D5.8 production observer): rows shrink before a row is dropped, and the recorder excuses any row that turns over', () => {
+  /** The 1920 x 1080 list as the observer saw it: seven rows in 483 px, the heritage row with an address line (84 px). */
+  const DAY: Layout = { boxPx: 483, titleChars: 17, subChars: 26 };
+  const day = (hhmm: string): number => at(`2026-09-24T${hhmm}:00+02:00`);
+  const timed = (): TimelineRow[] => [
+    row({ id: 'closure:amruseva', kind: 'closure', atMs: day('16:00'), title: 'Amruševa', source: 'prometnice' }),
+    row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+    row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:51'), title: 'Zalazak sunca', source: 'solar' }),
+    row({ id: 'always:heritage:zakladni', kind: 'always', atMs: null, always: true, title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c', source: 'heritage' }),
+  ];
+  const departures = (from: number): TimelineRow[] => [
+    dep(1, { atMs: from, title: 'Sopot', arrival: { routeId: '6', routeName: '6' } }),
+    dep(2, { atMs: from + 30_000, title: 'Borongaj', arrival: { routeId: '17', routeName: '17' } }),
+    dep(3, { atMs: from + 60_000, title: 'Dubec', arrival: { routeId: '11', routeName: '11' } }),
+    dep(4, { atMs: from + 4 * MIN, title: 'Žitnjak', arrival: { routeId: '13', routeName: '13' } }),
+  ];
+  function structure(): { records(): { added: string[]; removed: string[] }[]; stop(): void } {
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(section(), { subtree: true, childList: true });
+    const keyed = (nodes: NodeList): string[] => [...nodes].filter((n): n is Element => n.nodeType === 1).map((n) => `${n.tagName.toLowerCase()}[${n.getAttribute('data-key') ?? ''}]`);
+    return {
+      records: () => observer.takeRecords().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))
+        .map((r) => ({ added: keyed(r.addedNodes), removed: keyed(r.removedNodes) })),
+      stop: () => observer.disconnect(),
+    };
+  }
+
+  it('shrinks the rows to 64 px before dropping a discretionary row: seven rows with one 84 px row fit the 483 px box whole', () => {
+    const measure = simulated(DAY);
+    const t = mount({ measure, designHeightPx: DAY.boxPx });
+    const NOW0 = day('13:44');
+    const board = departures(NOW0 + 15_000);
+    t.update([...board.slice(0, 3), ...timed()], 2200, NOW0);
+    // Seven candidates: the budget says 69 px a row; six at 69 and the 84 px heritage row are 498 px, over the box. The
+    // fitter dropped the sunset row (the latest timed row) instead of giving the rows back their minimum height.
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    expect(section().style.getPropertyValue('--k-nearby-row')).toBe('64px');
+    expect(section().dataset.skippedFit).toBe('0');
+    expect(section().dataset.fitOverflow).toBe('0');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(DAY.boxPx);
+  });
+
+  it('spends two records on a departure turnover that passes through six candidates, and the sunset row keeps its node (readings 180 to 182, 266 to 268)', () => {
+    const measure = simulated(DAY);
+    const t = mount({ measure, designHeightPx: DAY.boxPx });
+    const NOW0 = day('13:44');
+    const board = departures(NOW0 + 15_000);
+    /** The board as the wall holds it: a departure leaves when its grace ends; the fourth trip lands with the next poll. */
+    const rows = (now: number, fourthLanded: boolean): TimelineRow[] =>
+      [...board.filter((d) => d.atMs! >= now - 60_000 && (fourthLanded || d !== board[3])).slice(0, 3), ...timed()];
+    t.update(rows(NOW0, false), 2200, NOW0);
+    const solar = byId('solar:sunset:2026-09-24');
+    const w = structure();
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+    // The first departure leaves at 13:45:16 (its grace over); for a poll's few seconds the list has six candidates
+    // (the budget says 80 px a row: five at 80 and the 84 px row are 484 px, one over the box); then the fourth enters.
+    for (let s = 1; s <= 80; s++) t.update(rows(NOW0 + s * 1000, false), 2200, NOW0 + s * 1000);
+    expect(ids()).toEqual(['dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    for (let s = 81; s <= 90; s++) t.update(rows(NOW0 + s * 1000, true), 2200, NOW0 + s * 1000);
+    const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    const records = w.records();
+    w.stop();
+    expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['li[dep:1]'] }, { added: ['li[dep:4]'], removed: [] }]);
+    expect(reading.turnovers).toBe(1);
+    expect(reading.churn).toBe(0);
+    expect(reading.rebuilt).toEqual([]);
+    expect(byId('solar:sunset:2026-09-24')).toBe(solar);
+    expect(calmChurnFailures(reading)).toEqual([]);
+  });
+
+  it('excuses any row entering or leaving as a turnover (the story row alternating, the sunset row entering) and still reads a row that leaves and returns as churn and re-created (reading 70)', () => {
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure });
+    const NOW0 = day('13:39');
+    const board = departures(NOW0 + 60_000).slice(0, 3);
+    const story = row({ id: 'always:story:721503305', kind: 'always', atMs: null, always: true, title: 'Jelačićev trg', sub: 'hrvatski ban', source: 'streets' });
+    const [amruseva, gunduliceva, solar, zakladni] = timed();
+    t.update([...board, amruseva!, gunduliceva!, story], 2200, NOW0);
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(6);
+    // 13:40:01: the twenty-minute alternation brings the heritage row for the story, and the sunset row enters.
+    t.update([...board, amruseva!, gunduliceva!, solar!, zakladni!], 2200, NOW0 + 61_000);
+    let reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    expect(reading.mutations).toBe(3);
+    expect(reading.left).toEqual(['always|always:story:721503305']);
+    expect(reading.entered).toEqual(['solar|solar:sunset:2026-09-24', 'always|always:heritage:zakladni']);
+    expect(reading.turnovers).toBe(2);
+    expect(reading.churn).toBe(0);
+    expect(calmChurnFailures(reading)).toEqual([]);
+    // A row that leaves and comes back inside the minute is churn, and a re-created row, whatever entered or left.
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+    t.update([...board, amruseva!, gunduliceva!, zakladni!], 2200, NOW0 + 62_000);
+    t.update([...board, amruseva!, gunduliceva!, solar!, zakladni!], 2200, NOW0 + 63_000);
+    reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    expect(reading.turnovers).toBe(0);
+    expect(reading.churn).toBe(2);
+    expect(reading.rebuilt).toEqual(['solar|solar:sunset:2026-09-24']);
+    // Two records are inside the churn budget; the re-created row fails the minute on its own.
+    expect(calmChurnFailures(reading)).toEqual([expect.stringContaining('re-created: solar|solar:sunset:2026-09-24')]);
   });
 });
 

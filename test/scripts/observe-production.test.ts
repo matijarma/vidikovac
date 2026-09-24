@@ -1149,7 +1149,7 @@ describe('a run over a fake browser', () => {
     expect(busy.lines.join('\n')).toContain('FAIL calm-motion');
     const report = read(busy.out, 'report.md');
     expect(report).toMatch(/\| calm-motion \| d2 \| kiosk \| .* \| ≤ 0 \| 2 \| \*\*fail\*\* \|/);
-    expect(report).toContain('readings 120–150: 3 structural mutations under the timeline beyond 1 departure turnover(s) in a minute (target ≤ 2');
+    expect(report).toContain('readings 120–150: 3 structural mutations under the timeline beyond 1 row turnover(s) in a minute (target ≤ 2');
     expect(report).toContain('readings 210–240: 1 row(s) stayed on the list but were re-created: departure\\|trip-2');
     const gone = await observe(['--stage', 'd2'], { calm: () => ({ ...GOOD_CALM, rootFound: false }) });
     expect(gone.lines.join('\n')).toContain('FAIL calm-motion');
@@ -1314,8 +1314,9 @@ describe('the first production observation after the release (24 Sep, 02:30 Zagr
   });
 });
 
-// --- calm motion by turnovers (lane-w-fix9.md: three first trams entered within 70 s, six legitimate records) ----------
-describe('calm motion counts departure turnovers apart from churn', () => {
+// --- calm motion by turnovers (lane-w-fix9.md: three first trams entered within 70 s, six legitimate records;
+// lane-w-fix10.md: the story row alternating and the sunset row entering are content too) ----------
+describe('calm motion counts row turnovers apart from churn', () => {
   const start = shipped(wall.CALM_MOTION_START_IN_PAGE);
   const readCalm = shipped(wall.CALM_MOTION_READ_IN_PAGE);
   const spec = wall.CALM_MOTION_SPEC;
@@ -1357,15 +1358,16 @@ describe('calm motion counts departure turnovers apart from churn', () => {
     expect(wall.calmChurnFailures(twice)).toEqual(['1 row(s) stayed on the list but were re-created: departure|b (target 0, a row keeps its node)']);
   });
 
-  it('a move, a flicker, a re-key, a non-departure row and a record beyond one per departure all stay churn', async () => {
+  it('a move, a flicker, a re-key and a record beyond one per row all stay churn; a solar row entering is a turnover', async () => {
     // A staying node moved: two records, the node kept.
     expect(await minute(['a', 'b', 'c'], (ol) => { ol.appendChild(byId('a')); })).toMatchObject({ mutations: 2, turnovers: 0, churn: 2, kept: 3, rebuilt: [] });
     // A departure that entered and left inside the minute is on neither reading: churn.
     expect(await minute(['a', 'b'], (ol) => { const f = ol.appendChild(li('f')); f.remove(); })).toMatchObject({ mutations: 2, turnovers: 0, churn: 2 });
     // A staying row re-keyed in place is an attribute change, no record; its old key left and the new one entered with no record behind them.
     expect(await minute(['a', 'b'], () => { byId('b').dataset.id = 'b2'; })).toMatchObject({ mutations: 0, turnovers: 0, churn: 0, left: ['departure|b'], entered: ['departure|b2'] });
-    // A solar row entering is a row, not a departure turnover.
-    expect(await minute(['a', 'b'], (ol) => { ol.appendChild(li('solar:sunrise', 'solar')); })).toMatchObject({ mutations: 1, turnovers: 0, churn: 1 });
+    // A solar row entering at its hour, or the "uvijek" row alternating, is content entering: a turnover (D5.8 observer, reading 70).
+    expect(await minute(['a', 'b'], (ol) => { ol.appendChild(li('solar:sunrise', 'solar')); })).toMatchObject({ mutations: 1, turnovers: 1, churn: 0, entered: ['solar|solar:sunrise'] });
+    expect(await minute(['a', 'b', 'always:story'], (ol) => { byId('always:story').remove(); ol.appendChild(li('always:heritage', 'always')); })).toMatchObject({ mutations: 2, turnovers: 1, churn: 0 });
     // A departure leaving, then something else under the timeline: the leave is a turnover, the rest churn.
     const mixed = await minute(['a', 'b', 'c'], (ol) => { byId('a').remove(); ol.appendChild(document.createElement('hr')); byId('b').querySelector('time')!.appendChild(document.createElement('b')); });
     expect(mixed).toMatchObject({ mutations: 3, turnovers: 1, churn: 2 });

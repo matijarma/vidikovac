@@ -44,7 +44,7 @@
 // .nearby-title and .nearby-sub (present, and empty when the row has none);
 // data-key duplicates data-id for reconcile.ts.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
-import { nearbyHead, rowBudget, type NearbyRow } from '../city/nearby';
+import { nearbyHead, rowBudget, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { reconcile } from '../ui/dom/reconcile';
@@ -330,7 +330,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let count = 0;
   let last: [readonly TimelineRow[], number, number] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
-  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels> } | null = null;
+  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
   const clearEnter = (li: Element): void => { if (li.hasAttribute('data-enter')) li.removeAttribute('data-enter'); };
@@ -470,8 +470,11 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
       const budget = rowBudget(available, rows.length);
       const candidates = fitRows(rows, budget.rows);
-      setVar('--k-nearby-row', `${budget.rowPx}px`);
-      setVar('--k-nearby-scale', unbounded ? '1' : String(Math.round(typeScale(budget.rowPx) * 1000) / 1000));
+      const rowVars = (rowPx: number): void => {
+        setVar('--k-nearby-row', `${rowPx}px`);
+        setVar('--k-nearby-scale', unbounded ? '1' : String(Math.round(typeScale(rowPx) * 1000) / 1000));
+      };
+      rowVars(budget.rowPx);
 
       const before = new Set<string>();
       for (const li of list.children) before.add(li.getAttribute('data-key') ?? '');
@@ -484,9 +487,21 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           .map(value => value.startsWith('--') ? style.getPropertyValue(value) : value).join(';');
         const sig = fitSignature(candidates, now, i18n, budget.rowPx, box, typography);
         if (!memo || memo.sig !== sig) {
-          const fitted = fit(candidates, now, box);
-          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short };
+          let fitted = fit(candidates, now, box);
+          let rowPx = budget.rowPx;
+          // Content before size: when whole rows would go at the budget's height, the rows give back their growth
+          // first, down to the minimum, and only then does a row go. Seven rows in a 483 px box are 69 px each, and
+          // one row with an address line is 84, so the box overflowed by fifteen pixels and the sunset row left and
+          // returned on every turnover that passed through six candidates (D5.8 observer, two records and a
+          // re-created row each time); at 64 px they all fit.
+          if (fitted.shown.length < candidates.length && budget.rowPx > ROW_MIN_PX) {
+            rowVars(ROW_MIN_PX);
+            const tighter = fit(candidates, now, box);
+            if (tighter.shown.length > fitted.shown.length) { fitted = tighter; rowPx = ROW_MIN_PX; }
+          }
+          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx };
         }
+        rowVars(memo.rowPx);
         shown = candidates.filter((row) => memo!.ids.has(row.id));
         // The only live-list commit. No rejected row ever enters this tree.
         paint(shown, memo.short, now);
