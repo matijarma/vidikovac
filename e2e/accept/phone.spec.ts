@@ -152,8 +152,11 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     const label = 'phone-karta';
     const { recorder } = await openPhone(page, label);
     if (await openKarta(page, label)) {
+      // Read every 100 ms for the whole window (as companion-phone.spec.ts does): with expect.poll's default back-off
+      // (100, 250, 500, then 1,000 ms) the last read fell 1.3 to 1.7 s into the window and the poll stopped there,
+      // so a census at 1.8 s, inside the contract's 2,000 ms, read as none (D3-e2e re-measure on 4848e36).
       await softly.poll(async () => pillLabels(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')).length, {
-        timeout: KARTA_PILLS_WITHIN_MS, message: `${label}: at least one vehicle pill (data-pills) within ${KARTA_PILLS_WITHIN_MS} ms of data-map-status=ready, with no further tap`,
+        timeout: KARTA_PILLS_WITHIN_MS, intervals: [100], message: `${label}: at least one vehicle pill (data-pills) within ${KARTA_PILLS_WITHIN_MS} ms of data-map-status=ready, with no further tap`,
       }).toBeGreaterThanOrEqual(1);
       softly(pillFailures(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')), `${label}: every vehicle pill drawn, none folded into "+N" (${String(PLUS_PILL_RE)} on every label of data-pills)`).toEqual([]);
       softly(await page.locator(PHONE_PROBES.kartaDisclosures).count(), `${label}: no map disclosure or group taxonomy (${PHONE_PROBES.kartaDisclosures})`).toBe(0);
