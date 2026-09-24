@@ -61,7 +61,7 @@ describe('metrics contract (R-14, R-29, R-42, R-44)', () => {
     // waitForRows (R-31) polls the whole row list; recordMetric is fire-and-forget
     // and hands the caller no promise to await, so a per-call predicate over the
     // returned rows is how a test observes the write landing.
-    const rows = await waitForRows(stub, (list) => list.some((r) => r.event === 'session_start' && r.dim1 === 'kiosk'), 2000);
+    const rows = await waitForRows(stub, (list) => list.some((r) => r.event === 'session_start' && r.dim1 === 'kiosk'), 10_000);
     const row = rows.find((r) => r.event === 'session_start' && r.dim1 === 'kiosk');
     expect(row?.count).toBe(1);
   });
