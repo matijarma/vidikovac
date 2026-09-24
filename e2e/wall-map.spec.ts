@@ -16,7 +16,7 @@
 //      not drawn), or the grey disc without a number for a station that is not
 //      renting -- and no drawn mark is left without a count or a name
 //      (`data-unlabelled` 0);
-//   5. the legend is three plain items, never a "?";
+//   5. the legend lists the entries the map draws, plain, never a "?";
 //   6. the map host carries the Kadar (`data-frame`) and the map the
 //      public-display profile.
 //
@@ -138,9 +138,11 @@ test('the framed wall: the measured Kadar, buses, whole numbers, counted BAJS di
   await expect(map).toHaveAttribute('data-markers', String(WALL_BIKES.length));
   await expect(map).toHaveAttribute('data-unlabelled', '0');
 
-  // 5. The legend.
+  // 5. The legend: the entries the map draws (round 2 F9: the three stations of WALL_BIKES are a counted disc, an
+  // empty station's dot and a blank disc, so the tram line, the counted disc and the empty station's dot show).
   const legend = page.locator('.k-map-legend');
-  await expect(legend.locator('span')).toHaveCount(3);
+  await expect(legend.locator('span:not([hidden])')).toHaveCount(3);
+  expect(await legend.locator('span:not([hidden])').evaluateAll((els) => els.map((el) => el.getAttribute('data-legend')))).toEqual(['tram', 'bikes', 'bikesEmpty']);
   expect(await legend.innerText()).not.toContain('?');
 
   // 7. The own name always drawn (decision 19); no other name over a pill; a covered BAJS number is a pill passing.
