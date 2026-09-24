@@ -20,7 +20,7 @@ import type { DwellRow } from '../../shared/motion/dwell';
 import type { JunctionRow } from '../../shared/motion/junction';
 import { toLonLat, type XY } from '../../shared/motion/geo';
 import {
-  OSTALO_KEY,
+  FOLDED_KEY,
   PEOPLE_EVENTS,
   type LiveTables,
   type PeopleEvent,
@@ -34,7 +34,7 @@ import {
 } from '../../shared/statistika';
 import type { MetricsDailyRow, MetricsTotalRow } from '../metrics-do';
 import { areaName, isAreaSlug } from '../pairing/areas';
-import { CITY_MIN_CELL, CITY_ROUND_TO, cityRows, foldCells, type CityRow, type FoldCell } from './export';
+import { CITY_MIN_CELL, CITY_ROUND_TO, OSTALO, cityRows, foldCells, type CityRow, type FoldCell } from './export';
 
 /** The hourly events the people part reads (over_cap is never public: overflow is not demand). */
 export const PUBLIC_USAGE_EVENTS = [...PEOPLE_EVENTS, 'hitno_view', 'evaluation'] as const;
@@ -110,12 +110,21 @@ export function unwrapEvaluation(r: MetricsDailyRow): FoldCell | null {
   }
 }
 
+/** The fold writes 'ostalo' into both dimensions; a venue of type 'ostalo'
+ *  still names its district, so the pair tells the two apart. */
+function isFolded(r: CityRow): boolean {
+  return r.dim1 === OSTALO && r.dim2 === OSTALO;
+}
+
 function shares(rows: readonly CityRow[], dim: 'dim1' | 'dim2'): Share[] {
   const sums = new Map<string, number>();
-  for (const r of rows) sums.set(r[dim], (sums.get(r[dim]) ?? 0) + r.count);
+  for (const r of rows) {
+    const key = isFolded(r) ? FOLDED_KEY : r[dim];
+    sums.set(key, (sums.get(key) ?? 0) + r.count);
+  }
   return [...sums.entries()]
     .map(([key, count]): Share => (isAreaSlug(key) ? { key, label: areaName(key), count } : { key, count }))
-    .sort((a, b) => Number(a.key === OSTALO_KEY) - Number(b.key === OSTALO_KEY) || b.count - a.count || a.key.localeCompare(b.key, 'hr'));
+    .sort((a, b) => Number(a.key === FOLDED_KEY) - Number(b.key === FOLDED_KEY) || b.count - a.count || a.key.localeCompare(b.key, 'hr'));
 }
 
 /** One person-event from folded cells. */

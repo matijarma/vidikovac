@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DwellRow } from '../../shared/motion/dwell';
 import { toPlane } from '../../shared/motion/geo';
 import type { JunctionRow } from '../../shared/motion/junction';
-import { OSTALO_KEY, PEOPLE_EVENTS, type PeopleEvent, type PublicStats } from '../../shared/statistika';
+import { FOLDED_KEY, PEOPLE_EVENTS, type PeopleEvent, type PublicStats } from '../../shared/statistika';
 import { statistikaWindow } from '../../shared/statistika';
 import type { MetricsDailyRow, MetricsTotalRow } from '../../worker/metrics-do';
 import { cityRows } from '../../worker/stats/export';
@@ -97,7 +97,7 @@ describe('the public report: people', () => {
     expect(stats.venue.session_start.total).toBe(35);
     expect(stats.venue.session_start.dim1).toEqual([
       { key: 'knjiznica', count: 25 },
-      { key: OSTALO_KEY, count: 10 },
+      { key: FOLDED_KEY, count: 10 },
     ]);
     expect(stats.venue.session_start.dim2[0]).toEqual({ key: 'donji-grad', label: 'Donji grad', count: 25 });
     expect(stats.venue.session_start.wholeDay).toBe(10);
@@ -129,10 +129,18 @@ describe('the public report: people', () => {
     expect(stats.hitno.daily).toEqual([null, null, null, 10, null, null, null]);
   });
 
+  it('tells a venue of type ostalo from the folded part', () => {
+    const own = buildPublicStats(input({ usageRows: [row('2026-09-20', 10, 'session_start', 'ostalo', 'trnje', 12), row('2026-09-20', 11, 'session_start', 'kafic', 'trnje', 6), row('2026-09-20', 12, 'session_start', 'kafic', 'maksimir', 5)] }));
+    expect(own.venue.session_start.dim1).toEqual([
+      { key: 'ostalo', count: 10 },
+      { key: FOLDED_KEY, count: 10 },
+    ]);
+  });
+
   it('puts the folded part last in every breakdown', () => {
     for (const [name, ev] of peopleEvents(stats)) {
       for (const list of [ev.dim1, ev.dim2]) {
-        const i = list.findIndex((s) => s.key === OSTALO_KEY);
+        const i = list.findIndex((s) => s.key === FOLDED_KEY);
         if (i >= 0) expect(i, name).toBe(list.length - 1);
       }
     }

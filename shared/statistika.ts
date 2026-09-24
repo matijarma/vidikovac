@@ -20,8 +20,11 @@ export function statistikaWindow(raw: string | null | undefined): StatistikaWind
   return (STATISTIKA_WINDOWS as readonly number[]).includes(n) ? (n as StatistikaWindow) : STATISTIKA_DEFAULT_WINDOW;
 }
 
-/** The key the fold gives every folded part. */
-export const OSTALO_KEY = 'ostalo';
+/** The key of every folded part in a breakdown. Not the fold's own word:
+ *  'ostalo' is also a venue type (a screen in some other kind of place), so
+ *  the wire marks the folded part in a way no dimension value can take. A
+ *  folded cell is the one whose two dimensions are both 'ostalo'. */
+export const FOLDED_KEY = '(ostalo)';
 
 /** One bar of a breakdown: a dimension value and its sum over the window. */
 export interface Share {
@@ -43,7 +46,7 @@ export interface PeopleEvent {
   /** The cells folded to a whole day: counted, but without an hour. */
   wholeDay: number;
   /** Sums by the first and the second dimension, largest first, the folded
-   *  part (OSTALO_KEY) last. Empty strings are the dimension a row lacks. */
+   *  part (FOLDED_KEY) last. Empty strings are the dimension a row lacks. */
   dim1: Share[];
   dim2: Share[];
 }
