@@ -1,8 +1,18 @@
 import type { Place, Settlement, StreetStory } from './types';
 
+/** normalName is pure and called for every event against every venue on each paint, so its answers are kept.
+ *  Bounded: room for every street name of the city and its descriptions (a street search folds them all), and
+ *  a full memory is dropped whole, so a long-running screen's churn of event titles can never outgrow it. */
+const NORMAL_NAMES = new Map<string, string>();
+const NORMAL_NAMES_MAX = 16_384;
 export function normalName(value: string): string {
-  return value.toLocaleLowerCase('hr').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
+  const known = NORMAL_NAMES.get(value);
+  if (known !== undefined) return known;
+  const folded = value.toLocaleLowerCase('hr').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
     .replace(/[“”"'„]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  if (NORMAL_NAMES.size >= NORMAL_NAMES_MAX) NORMAL_NAMES.clear();
+  NORMAL_NAMES.set(value, folded);
+  return folded;
 }
 export function distanceM(a: { lon: number; lat: number }, b: { lon: number; lat: number }): number {
   const rad = Math.PI / 180;
