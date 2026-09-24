@@ -592,7 +592,7 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     expect(shorterLabel('Gavella', ['Gradsko dramsko kazalište Gavella', 'Gavella'])).toBeUndefined();
     expect(shorterLabel('Trg bana Josipa Jelačića', ['  Trg bana   J. Jelačića ', 'Trg'])).toBe('Trg bana J. Jelačića');
   });
-  it('offers none for the rows with no shorter whole label: departures, heritage, the last and first trams, openings, the pharmacy', () => {
+  it('offers none for the rows with no shorter whole label: departures, heritage, openings, the pharmacy; the last and first trams shorten only their line list', () => {
     const rows = [
       ...selectNearby(input(at('2026-09-22T19:30:00Z'))),
       ...selectNearby(input(at('2026-09-22T20:40:00Z'))),
@@ -601,7 +601,9 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     ];
     for (const r of rows.filter((x) => ['departure', 'always', 'last', 'first', 'opening', 'pharmacy', 'solar'].includes(x.kind) && !x.id.startsWith('always:story:'))) {
       expect(r.titleShort, r.id).toBeUndefined();
-      expect(r.subShort, r.id).toBeUndefined();
+      // A promise row's twin is the next two lines of its own list (lane-w-fix8), nothing else has one.
+      if (r.kind === 'last' || r.kind === 'first') expect(r.subShort === undefined || r.sub.startsWith(r.subShort), r.id).toBe(true);
+      else expect(r.subShort, r.id).toBeUndefined();
     }
     expect(rows.some((r) => r.kind === 'last')).toBe(true);
     expect(rows.some((r) => r.id.startsWith('always:heritage:'))).toBe(true);

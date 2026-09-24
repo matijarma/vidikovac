@@ -426,6 +426,8 @@ function lastTramRows(input: NearbyInput): NearbyRow[] {
     always: false,
     title: i18n.t('kiosk.nearby.lastTrams'),
     sub: servicesLine(services),
+    // The shorter complete label (timeline.ts): the next two lines, one line at every wall width.
+    ...(services.length > 2 ? { subShort: servicesLine(services.slice(0, 2)) } : {}),
     live: false,
     source: 'zet-gtfs',
     ...placeSelection(place),
@@ -464,6 +466,8 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
     always: false,
     title: i18n.t('kiosk.nearby.firstTram'),
     sub: servicesLine(services),
+    // The shorter complete label (timeline.ts): the next two lines, one line at every wall width.
+    ...(services.length > 2 ? { subShort: servicesLine(services.slice(0, 2)) } : {}),
     live: false,
     source: 'zet-gtfs',
     ...placeSelection(place),
