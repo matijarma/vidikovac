@@ -284,7 +284,7 @@ describe('the stop sheet says what comes next, first', () => {
     expect(html).not.toContain('data-live="true"');
     // A stop first opened after the freeze has no board and will never get one.
     const nothing = stop([], 'none', frozenAt);
-    expect(nothing).toContain('Sesija je završila prije nego što je red vožnje stigao.');
+    expect(nothing).toContain('Sesija je završila prije nego što je stigao vozni red.');
     expect(nothing).not.toContain(i18n.t('status.loading'));
     // Live, with nothing in hand yet, still says it is loading.
     expect(stop([], 'none')).toContain(i18n.t('status.loading'));

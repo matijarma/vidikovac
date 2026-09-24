@@ -791,7 +791,7 @@ describe('Sigurnost: verdict, numbers, pharmacies, assembly points (T3.2)', () =
     expect(text(rows[0]!.querySelector('.row-title'))).toBe('Ulica 1');
     expect(text(rows[0]!.querySelector('.row-sub'))).toBe('radovi · jedan smjer · do 30. 9. 02:00');
     const all = section.querySelector('[data-action=nav][data-layer=u-pokretu]')!;
-    expect(text(all)).toBe('sve zatvaranja (20)');
+    expect(text(all)).toBe('sva zatvaranja (20)');
     expect(section.querySelector('[data-action=filter][data-filter-key=closures]')).toBeNull();
     // A closure without an announced end says so instead of inventing one.
     const open = base('prometnice', [{ ...MANY_CLOSURES.items[0]!, until: undefined }]);
@@ -847,7 +847,7 @@ describe('Sigurnost: verdict, numbers, pharmacies, assembly points (T3.2)', () =
 
   it('groups assembly points under one <details> per gradska četvrt in the table\u2019s order, counted, paged inside, never all rendered', () => {
     const section = safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': DISTRICT_POINTS } }).querySelector('#sf-assembly')!;
-    expect(text(section)).toContain('Na popisu je 40 mjesta');
+    expect(text(section)).toContain('Broj mjesta na popisu: 40.');
     expect(section.querySelector('#assembly-search')).not.toBeNull();
     const groups = [...section.querySelectorAll('details.sf-district')];
     expect(groups.map((g) => text(g.querySelector('summary')))).toEqual([
@@ -891,9 +891,9 @@ describe('Sigurnost: verdict, numbers, pharmacies, assembly points (T3.2)', () =
       sources: { 'zborna-mjesta': { status: 'live', itemCount: 40, totalItems: 512 }, 'gradske-cetvrti': { status: 'live', itemCount: 17 } },
       coverage: { shown: 57, total: 529, limited: true },
     };
-    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': capped } }).querySelector('#sf-assembly'))).toContain('Na popisu je 512 mjesta');
+    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': capped } }).querySelector('#sf-assembly'))).toContain('Broj mjesta na popisu: 512.');
     const uncapped: ModuleSnapshot = { ...DISTRICT_POINTS, sources: { 'zborna-mjesta': { status: 'live', itemCount: 40 }, 'gradske-cetvrti': { status: 'live', itemCount: 17 } }, coverage: { shown: 57, limited: false } };
-    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': uncapped } }).querySelector('#sf-assembly'))).toContain('Na popisu je 40 mjesta');
+    expect(text(safety({ snapshots: { ...SNAPSHOTS, 'ckan-geo': uncapped } }).querySelector('#sf-assembly'))).toContain('Broj mjesta na popisu: 40.');
   });
 
   it('keeps the section ids and grid the gates pin, and lays every section flat: no card but the tiles', () => {
@@ -939,7 +939,7 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     expect(more.getAttribute('data-filter-value')).toBe('36');
     expect(more.classList.contains('sf-more')).toBe(true);
     // The count sentence always names the true total, unaffected by paging (R-K4).
-    expect(text(section.querySelector('#sf-assembly'))).toContain('Na popisu je 40 mjesta');
+    expect(text(section.querySelector('#sf-assembly'))).toContain('Broj mjesta na popisu: 40.');
 
     const searched = renderLayer('sigurnost', ctx({ snapshots: withPoints, view: { layer: 'sigurnost', selection: null, filters: { zborna: 'mjesto' } } }));
     expect(searched.querySelectorAll('[data-testid=assembly-point]')).toHaveLength(40);
@@ -951,7 +951,7 @@ describe('bounded lists, one-row chips and venue only when known (T1.4)', () => 
     expect(section.querySelectorAll('[data-testid=closure-row]')).toHaveLength(5);
     expect(section.querySelector('[data-action=filter][data-filter-key=closures]')).toBeNull();
     const all = section.querySelector('#sf-closures [data-action=nav][data-layer=u-pokretu]')!;
-    expect(text(all)).toBe('sve zatvaranja (20)');
+    expect(text(all)).toBe('sva zatvaranja (20)');
     // A filter value from an earlier fold cannot widen the list past five any more.
     const stale = renderLayer('sigurnost', ctx({ snapshots: withClosures, view: { layer: 'sigurnost', selection: null, filters: { closures: '15' } } }));
     expect(stale.querySelectorAll('[data-testid=closure-row]')).toHaveLength(5);
