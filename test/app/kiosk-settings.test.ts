@@ -555,6 +555,65 @@ describe('the long press on the brand', () => {
     b.pointer('pointerdown');
     expect(heard).toHaveBeenCalledTimes(1);
   });
+
+  // The release smoke of D5.21 (24 Sep, screen-creation :7 red 4 of 4 at host load 20 to 65): a real 0.9 to
+  // 1.2 s press on the brand opened nothing, because the 800 ms timer ran 600 to 3000 ms late behind the
+  // map's long tasks and the release had already cleared it. The press is judged by the pointer events'
+  // own timestamps on release, so a late timer never loses a press that was held long enough.
+  describe('a timer that runs late behind a busy main thread', () => {
+    /** A pointer event stamped at `at` ms on the events' own clock (Event.timeStamp is read-only; the instance shadows it). */
+    const stamped = (button: HTMLElement, type: string, at: number, init: PointerEventInit = {}): void => {
+      const event = new PointerEvent(type, { bubbles: true, cancelable: true, ...init });
+      Object.defineProperty(event, 'timeStamp', { value: at, configurable: true });
+      button.dispatchEvent(event);
+    };
+
+    it('opens once on release when the events say the press was held LONG_PRESS_MS, though the timer never fired', () => {
+      const b = brand();
+      stamped(b.button, 'pointerdown', 1_000);
+      // The fake clock never reaches the timer: the main thread was busy.
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.time.advance(LONG_PRESS_MS * 2);
+      expect(b.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('a release one millisecond short of LONG_PRESS_MS opens nothing', () => {
+      const b = brand();
+      stamped(b.button, 'pointerdown', 1_000);
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS - 1);
+      b.time.advance(LONG_PRESS_MS * 2);
+      expect(b.open).not.toHaveBeenCalled();
+    });
+
+    it('the timer that did fire in time and the release together open once', () => {
+      const b = brand();
+      stamped(b.button, 'pointerdown', 1_000);
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS + 500);
+      expect(b.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('a press the binding did not accept, a swipe past the slop and a pointer that left never open on release', () => {
+      const button = document.createElement('button');
+      document.body.replaceChildren(button);
+      const time = fakeClock();
+      const open = vi.fn();
+      bindLongPress(button, { open, setTimeout: time.setTimeout, clearTimeout: time.clearTimeout, accept: () => false });
+      stamped(button, 'pointerdown', 1_000);
+      stamped(button, 'pointerup', 1_000 + LONG_PRESS_MS * 2);
+      expect(open).not.toHaveBeenCalled();
+      const b = brand();
+      stamped(b.button, 'pointerdown', 1_000, { clientX: 100, clientY: 100 });
+      b.pointer('pointermove', { clientX: 130, clientY: 100 });
+      stamped(b.button, 'pointerup', 1_000 + LONG_PRESS_MS * 2);
+      stamped(b.button, 'pointerdown', 5_000);
+      b.pointer('pointerleave');
+      stamped(b.button, 'pointerup', 5_000 + LONG_PRESS_MS * 2);
+      expect(b.open).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('what the wall reads from the screen record', () => {

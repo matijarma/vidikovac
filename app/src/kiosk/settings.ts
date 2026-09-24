@@ -112,23 +112,44 @@ export interface LongPressDeps {
  * the injected pair, so the kiosk's clock -- and a test's -- drives it. The press is never
  * stopped: the kiosk's first-tap fullscreen and wake-lock listener hears it too. Returns the
  * unbinding.
+ *
+ * The press is judged twice, and the timer is only the early answer. While the finger stays
+ * down the timer opens the panel at LONG_PRESS_MS; but a timer runs only when the main thread
+ * is free, and a wall drawing its map (software WebGL, a tile decode, the first paint) holds it
+ * for whole seconds: on the release smoke of D5.21 an 800 ms timer fired 600 to 3000 ms late
+ * under load, after a real 0.9 to 1.2 s press had already let go, so nothing ever opened. The
+ * release therefore judges the press by its own duration: the pointer events carry the input's
+ * own timestamps, which are right however late their handlers run, and a pointerup stamped
+ * LONG_PRESS_MS or more after its pointerdown opens the panel then, once, whether or not the
+ * timer got its turn. A clock the tests fake never reaches these stamps, which is why the
+ * unit tests set them on the events themselves.
  */
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
   let origin: { x: number; y: number } | null = null;
+  /** The pointerdown's own timestamp while a press is armed and the timer has not opened yet. */
+  let downAt: number | null = null;
   const disarm = (): void => {
     if (timer !== null) { deps.clearTimeout(timer); timer = null; }
     origin = null;
+    downAt = null;
   };
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
     disarm();
     if (deps.accept && !deps.accept(event)) return;
     origin = { x: event.clientX, y: event.clientY };
-    timer = deps.setTimeout(() => { timer = null; origin = null; deps.open(); }, LONG_PRESS_MS);
+    downAt = event.timeStamp;
+    timer = deps.setTimeout(() => { timer = null; origin = null; downAt = null; deps.open(); }, LONG_PRESS_MS);
   };
   const move = (event: PointerEvent): void => {
     if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > LONG_PRESS_SLOP_PX) disarm();
+  };
+  /** The release: a press the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
+  const up = (event: PointerEvent): void => {
+    const held = downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS;
+    disarm();
+    if (held) deps.open();
   };
   const key = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -140,9 +161,10 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   // A held finger on a touch screen otherwise asks for the context menu or a text selection.
   const menu = (event: MouseEvent): void => { if (!deps.accept || deps.accept(event)) event.preventDefault(); };
   const keys = deps.keys !== false;
-  const ends = ['pointerup', 'pointercancel', 'pointerleave'] as const;
+  const ends = ['pointercancel', 'pointerleave'] as const;
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
+  target.addEventListener('pointerup', up);
   for (const type of ends) target.addEventListener(type, disarm);
   if (keys) target.addEventListener('keydown', key);
   target.addEventListener('contextmenu', menu);
@@ -150,6 +172,7 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     disarm();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
+    target.removeEventListener('pointerup', up);
     for (const type of ends) target.removeEventListener(type, disarm);
     if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
