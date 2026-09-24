@@ -39,7 +39,15 @@
 //
 // Output: review.local/observe-<stamp>/ with inventory.json, rotation.jsonl, legibility.json, report.md,
 // plus recorders.json and captures/*.png (all gitignored through *.local; --out must stay in such a folder
-// or outside the repository). Exit codes: 0 every applied threshold holds; 1 a threshold fails; 2 the run
+// or outside the repository). Evidence for a failing row, kept as the run goes (lane v-observe6, the rows the
+// d521b analysis could not settle): boards.jsonl, every /api/city/departures answer the landscape wall received
+// (time, stop, HTTP status, board status, row count, and what it replaced in the page's board cache, read off the
+// network: app/src/city/boards.ts stores every settled answer, a failed one as an empty "down" board); calm.jsonl,
+// each calm-motion minute with its row keys per reading and every structural record by node and kind (add, remove,
+// move, re-create); phone-actions.jsonl, each step of the phone's Karta and stop-board path (what was clicked or
+// typed, when, how long it took, and Playwright's own call log plus a hit test at the target when it failed).
+// report.md adds the real time between consecutive wall readings, so a run slowed by its host shows as such,
+// and a pointer to the evidence file under each failing row. Exit codes: 0 every applied threshold holds; 1 a threshold fails; 2 the run
 // could not observe (no E2E_KIOSK_URL, a bad argument, the host's 1-minute load above --max-load, 8 by default,
 // the loader or the browser did not start, the screen never showed its invitation).
 //
@@ -102,6 +110,12 @@ export const KARTA_READY_TIMEOUT_MS = 30_000;
 /** How long the Karta pill poll keeps going after the 2 s threshold, so the report can say when pills came. */
 export const KARTA_POLL_MS = 10_000;
 export const POLL_MS = 100;
+/** A reading gap this many times the planned step is a stall in report.md's gap table (information, never a gate). */
+export const GAP_STALL_FACTOR = 2;
+/** The departures board route the wall's board cache asks (app/src/city/boards.ts). */
+export const BOARDS_PATH = '/api/city/departures';
+/** The evidence files a run writes beside report.md, line by line as it goes. */
+export const EVIDENCE_FILES = Object.freeze({ boards: 'boards.jsonl', calm: 'calm.jsonl', actions: 'phone-actions.jsonl' });
 export const PROXY_SETTLE_MS = 3_000;
 /** A share code must follow the tap on "Podijeli grad" within this long. */
 export const SHARE_TIMEOUT_MS = 15_000;
@@ -551,6 +565,8 @@ const phoneSpec = (inventory) => {
 const errText = (e) => String(e && e.message ? e.message : e).split(/\r?\n/)[0].slice(0, 300);
 /** An error's first line and the call log Playwright appends (what it was waiting for), on one line. */
 const errDetail = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 6).join(' ').slice(0, 600);
+/** Playwright's whole message, the call log included, line by line (at most 40 lines). */
+const callLog = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim()).slice(0, 40);
 const zagreb = (ms) => new Date(ms).toLocaleString('hr-HR', { timeZone: 'Europe/Zagreb', hour12: false });
 
 /** One census value: "count:N;reason:n…" (the kiosk root) or a bare "N" (the timeline); anything else keeps its raw text and no count. */
@@ -724,15 +740,24 @@ export async function rotate(page, ctx, calm = []) {
   const steps = plannedRotationSteps(ctx.minutes, wall.ROTATION_STEP_MS);
   const per = Math.max(1, Math.round(wall.IDLE_MINUTE_MS / wall.ROTATION_STEP_MS));
   let open = null;
-  const close = async (to) => {
+  let openAt = null;
+  // Each window as it closes, with its evidence (the row keys per reading, every record by node and kind), to
+  // calm.jsonl: the same object calm keeps, plus the real times it spans and the verdict's own words for it.
+  const keep = (w) => {
+    calm.push(w);
+    try { ctx.appendCalm?.({ ...w, failures: w.error ? [`not measured: ${w.error}`] : wall.calmChurnFailures(w.reading) }); } catch { /* calm keeps it */ }
+  };
+  const close = async (to, toAt) => {
     if (open === null) return;
     const from = open;
+    const fromAt = openAt;
     open = null;
-    try { calm.push({ from, to, reading: await page.evaluate(wall.CALM_MOTION_READ_IN_PAGE, wall.CALM_MOTION_SPEC) }); } catch (e) { calm.push({ from, to, error: errText(e) }); }
+    try { keep({ from, to, fromAt, toAt, reading: await page.evaluate(wall.CALM_MOTION_READ_IN_PAGE, wall.CALM_MOTION_SPEC) }); } catch (e) { keep({ from, to, fromAt, toAt, error: errText(e) }); }
   };
-  const start = async (n) => {
-    try { await page.evaluate(wall.CALM_MOTION_START_IN_PAGE, wall.CALM_MOTION_SPEC); open = n; } catch (e) { calm.push({ from: n, to: n, error: errText(e) }); }
+  const start = async (n, at) => {
+    try { await page.evaluate(wall.CALM_MOTION_START_IN_PAGE, wall.CALM_MOTION_SPEC); open = n; openAt = at; } catch (e) { keep({ from: n, to: n, fromAt: at, toAt: at, error: errText(e) }); }
   };
+  let lastAt = null;
   let last = -1;
   const rows = await wall.sampleRotation(page, {
     steps, stepMs: wall.ROTATION_STEP_MS, clock: 'real',
@@ -745,12 +770,14 @@ export async function rotate(page, ctx, calm = []) {
       row.skippedText = await readSkippedText(page);
       ctx.appendRotation(row);
       last = row.n;
+      lastAt = row.at ?? null;
+      ctx.rotationReading = row.n;
       // Every reading bounds a pair for the turnover credit (D5.20: trips entering and leaving inside the minute).
       if (open !== null && row.n % per !== 0) await page.evaluate(wall.CALM_MOTION_MARK_IN_PAGE, wall.CALM_MOTION_SPEC).catch(() => {});
-      if (row.n % per === 0) { await close(row.n); await start(row.n); }
+      if (row.n % per === 0) { await close(row.n, row.at ?? null); await start(row.n, row.at ?? null); }
     },
   });
-  if (open !== null && open < last) await close(last);
+  if (open !== null && open < last) await close(last, lastAt);
   else if (open !== null) await page.evaluate(wall.CALM_MOTION_READ_IN_PAGE, wall.CALM_MOTION_SPEC).catch(() => {});
   return rows;
 }
@@ -885,11 +912,11 @@ export async function stopBoardBySearch(page, ctx) {
   const P = inventory.PHONE_PROBES;
   const out = { taps: 1, query: inventory.STOP_SEARCH_QUERY, open: false, total: 0, inViewport: 0, texts: [], error: null };
   try {
-    await page.click(`${P.transportSearch}:visible`, { timeout: 10_000 });
+    await act(page, ctx, { step: 'the stop search field', action: 'click', selector: `${P.transportSearch}:visible` }, () => page.click(`${P.transportSearch}:visible`, { timeout: 10_000 }));
     out.taps++;
-    await page.fill(`${P.transportSearch}:visible`, inventory.STOP_SEARCH_QUERY, { timeout: 5_000 });
+    await act(page, ctx, { step: 'the stop search query', action: 'fill', selector: `${P.transportSearch}:visible`, value: inventory.STOP_SEARCH_QUERY }, () => page.fill(`${P.transportSearch}:visible`, inventory.STOP_SEARCH_QUERY, { timeout: 5_000 }));
     try {
-      await page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS });
+      await act(page, ctx, { step: 'the first search result', action: 'click', selector: `${P.selectStop}:visible` }, () => page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS }));
     } catch (e) {
       // 24 Sep 03:40: the click reported its timeout on a page whose frames were slow (Karta's first pill 8.2 s), yet
       // the board stood open with three departures in the viewport, and nothing but that tap opens it. The tap is
@@ -899,7 +926,7 @@ export async function stopBoardBySearch(page, ctx) {
       ctx.note(`phone: the stop search's result click reported "${errDetail(e)}", and the board opened: the tap counts`);
     }
     out.taps++;
-    await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: STOP_BOARD_TIMEOUT_MS })
+    await act(page, ctx, { step: 'the stop board', action: 'wait', selector: P.stopBoard }, () => page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: STOP_BOARD_TIMEOUT_MS }))
       .catch(() => ctx.note(`phone: no ${P.stopBoard} within ${STOP_BOARD_TIMEOUT_MS / 1000} s of the search result`));
     await ctx.sleep(SETTLE_MS);
     Object.assign(out, await page.evaluate(STOP_BOARD_READ_IN_PAGE, { board: P.stopBoard, rows: `${P.stopBoard} ${P.departureRows}` }));
@@ -921,6 +948,124 @@ export function watchDataRequests(page, ctx) {
     } catch { /* a request without a URL is not a data request */ }
   });
   return list;
+}
+
+/**
+ * Every departures board answer `page` receives from now on (the wall's board cache, app/src/city/boards.ts), one
+ * record per settled request to BOARDS_PATH, handed to `write` as it comes: when it was asked and answered on the
+ * observer's clock, the rotation reading it followed (`afterReading`), the stop, the HTTP status, the board's own
+ * status and row count, and what it did to the page's cache. The cache stores every settled answer: a board as it
+ * came, anything else (an HTTP error, a body that is not a board, a request that failed or was aborted by the
+ * cache's 12 s timeout) as an empty "down" board, so `replaced` is always true and `stored` says which;
+ * `emptied` marks an answer that put an empty board where the stop's previous answer had rows. Read off the network
+ * only: nothing is asked of the page, nothing in the page is changed.
+ */
+export function watchBoards(page, ctx, write = () => {}) {
+  const { pathOf } = ctx.instruments.recorders;
+  const list = [];
+  const sent = new WeakMap();
+  const last = new Map();
+  const boardPath = (url) => {
+    try { const path = pathOf(url); return path.startsWith(BOARDS_PATH) ? path : null; } catch { return null; }
+  };
+  const stopOf = (url) => {
+    try { const u = new URL(url); return { operator: u.searchParams.get('operator'), stop: u.searchParams.get('stop') }; } catch { return { operator: null, stop: null }; }
+  };
+  const settle = (req, url, fields) => {
+    const at = ctx.now();
+    const askedAt = sent.get(req) ?? null;
+    const { operator, stop } = stopOf(url);
+    const key = `${operator}:${stop}`;
+    const prev = last.get(key) ?? null;
+    const rows = fields.stored === 'board' ? fields.rows : 0;
+    const entry = {
+      at: new Date(at).toISOString(), t: at, ms: askedAt === null ? null : at - askedAt, afterReading: ctx.rotationReading ?? null,
+      operator, stop, ...fields, rows, replaced: true,
+      previous: prev ? { at: prev.at, status: prev.status, rows: prev.rows, stored: prev.stored } : null,
+      emptied: Boolean(prev && prev.rows > 0 && rows === 0),
+    };
+    last.set(key, entry);
+    list.push(entry);
+    try { write(entry); } catch { /* a record that cannot be written is still in the list */ }
+  };
+  page.on('request', (req) => {
+    try { if (boardPath(req.url())) sent.set(req, ctx.now()); } catch { /* not a board request */ }
+  });
+  page.on('response', async (res) => {
+    let url;
+    try { url = res.url(); } catch { return; }
+    if (!boardPath(url)) return;
+    const req = (() => { try { return res.request(); } catch { return null; } })();
+    const http = (() => { try { return res.status(); } catch { return null; } })();
+    let body = null;
+    try { body = await res.json(); } catch { /* not JSON: the cache stores a down board */ }
+    const isBoard = body !== null && typeof body === 'object' && Array.isArray(body.departures);
+    const ok = typeof http === 'number' && http >= 200 && http < 300;
+    settle(req, url, ok && isBoard
+      ? { http, status: typeof body.status === 'string' ? body.status : null, rows: body.departures.length, stored: 'board', generatedAt: body.generatedAt ?? null }
+      : { http, status: isBoard && typeof body.status === 'string' ? body.status : null, rows: 0, stored: 'down', reason: ok ? 'not a board' : `HTTP ${http}` });
+  });
+  page.on('requestfailed', (req) => {
+    let url;
+    try { url = req.url(); } catch { return; }
+    if (!boardPath(url)) return;
+    const failure = (() => { try { return req.failure()?.errorText ?? null; } catch { return null; } })();
+    settle(req, url, { http: null, status: null, rows: 0, stored: 'down', reason: failure ?? 'request failed' });
+  });
+  return list;
+}
+
+/**
+ * The target of a failed click as the page sees it: the first element the selector matches (Playwright's own
+ * `:visible` suffix dropped), its box, and what document.elementFromPoint returns at its centre, so a stalled click
+ * can be told from a covered field. Reads only.
+ */
+export const HIT_TEST_IN_PAGE = (spec) => {
+  const el = document.querySelector(spec.selector);
+  const describe = (n) => (n ? { tag: n.tagName.toLowerCase(), testid: n.getAttribute('data-testid'), id: n.id || null, classes: String(n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className || '').slice(0, 80) } : null);
+  if (!el) return { found: false, rect: null, atPoint: null, covered: null };
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width / 2;
+  const y = r.top + r.height / 2;
+  const inView = x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+  const hit = inView ? document.elementFromPoint(x, y) : null;
+  return {
+    found: true,
+    rect: { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
+    inView,
+    atPoint: describe(hit),
+    covered: hit ? !(hit === el || el.contains(hit)) : null,
+    active: describe(document.activeElement),
+  };
+};
+
+/**
+ * One step of the phone's path, run and recorded: what it did (click, fill, wait), on which selector, with what
+ * value, when it started and how long it took, and, when it failed, Playwright's whole message (the call log says
+ * what it was waiting for) and a hit test at the target. The record goes to ctx.actions and phone-actions.jsonl as it
+ * is made; the step's own result or error is passed on unchanged, so the path behaves exactly as without it.
+ */
+export async function act(page, ctx, step, fn) {
+  const t0 = ctx.now();
+  const entry = { step: step.step, action: step.action, selector: step.selector ?? null, value: step.value ?? null, at: new Date(t0).toISOString(), ms: null, ok: false };
+  const done = () => {
+    entry.ms = ctx.now() - t0;
+    ctx.actions?.push(entry);
+    try { ctx.appendAction?.(entry); } catch { /* the step's record is still in ctx.actions */ }
+  };
+  try {
+    const out = await fn();
+    entry.ok = true;
+    done();
+    return out;
+  } catch (e) {
+    entry.error = callLog(e);
+    if (step.selector) {
+      entry.hit = await page.evaluate(HIT_TEST_IN_PAGE, { selector: step.selector.replace(/:visible$/, '') }).catch((x) => ({ error: errText(x) }));
+    }
+    done();
+    throw e;
+  }
 }
 
 /**
@@ -1026,7 +1171,7 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
   out.share = await shareOnce(page, ctx, out.sada);
 
   // Karta cold open: the one tap is the tab; pills must follow within KARTA_PILLS_WITHIN_MS of the map being ready.
-  await page.click(`${P.kartaTab}:visible`, { timeout: 10_000 });
+  await act(page, ctx, { step: 'the Karta tab', action: 'click', selector: `${P.kartaTab}:visible` }, () => page.click(`${P.kartaTab}:visible`, { timeout: 10_000 }));
   await page.waitForFunction(MAP_SETTLED_IN_PAGE, { map: P.mapCanvas, pending: ['loading'] }, { timeout: KARTA_READY_TIMEOUT_MS })
     .catch(() => ctx.note(`phone Karta: the map did not settle within ${KARTA_READY_TIMEOUT_MS / 1000} s`));
   const spec = { map: P.mapCanvas, disclosures: P.kartaDisclosures };
@@ -1078,10 +1223,12 @@ export async function observeAll(browser, ctx, observation) {
   const { scenes } = ctx.instruments;
   const surfaces = observation.meta.surfaces;
   const desktopUa = `${ctx.devices['Desktop Chrome'].userAgent}${USER_AGENT_SUFFIX}`;
-  const kiosk = { first: null, portrait: null, rotation: [], calm: [], viewports: [], legibility: {}, proxy: null };
+  const kiosk = { first: null, portrait: null, rotation: [], calm: [], boards: [], viewports: [], legibility: {}, proxy: null };
   observation.kiosk = kiosk;
 
   const landscape = await openPage(browser, ctx, 'kiosk-1920x1080', 'kiosk', { viewport: { ...scenes.WALL_LANDSCAPE }, deviceScaleFactor: 1, userAgent: desktopUa });
+  // Every departures board answer the wall receives from its first load through the rotation (boards.jsonl).
+  kiosk.boards = watchBoards(landscape.page, ctx, (entry) => ctx.appendBoard?.(entry));
   await openKiosk(landscape.page, ctx, 'kiosk-1920x1080');
   const first = await readKiosk(landscape.page, 'kiosk-1920x1080', 'kiosk', ctx);
   kiosk.first = first.sample;
@@ -1620,6 +1767,62 @@ export function judge(observation, instruments, stage = observation.meta.stage) 
   return { stage, rows, failures, applied: rows.filter((r) => r.status === 'pass' || r.status === 'fail').length, ok: failures.length === 0 };
 }
 
+/**
+ * The real time between consecutive wall readings of the rotation (their `at`, failed readings included), against
+ * the planned step: the median, the 95th percentile and the largest, how many exceed GAP_STALL_FACTOR steps, and the
+ * five largest with the readings they separate. Per calm-motion window, the real time it spanned and its largest gap.
+ * Information for report.md, never a gate: a run whose gaps run long was slowed by its host and says so.
+ */
+export function readingGaps(rotation, stepMs, calm = []) {
+  const rows = rotation.filter((r) => Number.isFinite(r.at)).sort((a, b) => a.n - b.n);
+  const gaps = rows.slice(1).map((r, i) => ({ from: rows[i].n, to: r.n, ms: r.at - rows[i].at }));
+  const sorted = gaps.map((g) => g.ms).sort((a, b) => a - b);
+  const q = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
+  const windows = calm.map((w) => {
+    const inside = gaps.filter((g) => g.from >= w.from && g.to <= w.to);
+    return { from: w.from, to: w.to, spanMs: Number.isFinite(w.toAt) && Number.isFinite(w.fromAt) ? w.toAt - w.fromAt : null, maxGapMs: inside.length ? Math.max(...inside.map((g) => g.ms)) : null };
+  });
+  return {
+    stepMs, count: gaps.length, medianMs: q(0.5), p95Ms: q(0.95), maxMs: sorted.length ? sorted[sorted.length - 1] : null,
+    stalls: gaps.filter((g) => g.ms > GAP_STALL_FACTOR * stepMs).length,
+    worst: [...gaps].sort((a, b) => b.ms - a.ms).slice(0, 5),
+    windows,
+  };
+}
+
+/** Where a failing row's evidence is, one line under it in report.md; every row not named here has its readings in rotation.jsonl. */
+export const EVIDENCE_POINTERS = Object.freeze({
+  departures: `${EVIDENCE_FILES.boards} (every departures board answer the wall received, by the reading it followed) and rotation.jsonl (the rows of each reading)`,
+  'calm-motion': `${EVIDENCE_FILES.calm} (per minute: the row keys at every reading and each record by node and kind) and the reading gaps below`,
+  'phone-stop-board': `${EVIDENCE_FILES.actions} (each click and fill with its timing, Playwright's call log and a hit test when it failed) and captures/phone-stop-board.png`,
+  'karta-pills': `the reading gaps and host load in this report, ${EVIDENCE_FILES.actions} (the Karta tab's click) and captures/phone-karta-cold.png`,
+  'karta-disclosures': 'captures/phone-karta-cold.png and inventory.json (phone-karta-cold)',
+  'karta-unlabelled': 'captures/phone-karta-cold.png and inventory.json (phone-karta-cold)',
+  'karta-pills-plus': 'captures/phone-karta-cold.png',
+  'recorders-kiosk': 'recorders.json (the kiosk pages: every failed request, HTTP error and console message, with times)',
+  'recorders-phone': 'recorders.json (the phone page: every failed request, HTTP error and console message, with times)',
+  'recorders-desktop': 'recorders.json (the desktop page: every failed request, HTTP error and console message, with times)',
+  'no-screen': 'recorders.json (screenCreations per page)',
+  redemptions: 'recorders.json (scanTimes per page) and the run log below',
+  'pills-drawn': 'rotation.jsonl (data-pills, data-feed and the twin\'s fleet per reading)',
+  'wall-read': 'rotation.jsonl (each failed reading keeps its error) and the run log below',
+  legibility: 'legibility.json and captures/kiosk-1920x1080.png, captures/kiosk-1080x1920.png',
+  proxy: 'the run log below',
+  'phone-expiry': 'captures/phone-expired.png and recorders.json (the phone page)',
+  'phone-share-code': `${EVIDENCE_FILES.actions} and captures/phone-sada.png`,
+  'phone-axe': 'the axe rules in the finding above',
+  'desktop-side-by-side': 'captures/desktop-1440.png and inventory.json (desktop-1440)',
+  'desktop-domains': 'captures/desktop-1440.png',
+});
+/** The pointer for a row: its own, else the first viewports (inventory.json) for a first-viewport row, else rotation.jsonl for the wall and the captures for the rest. */
+export function evidenceFor(row) {
+  if (EVIDENCE_POINTERS[row.id]) return EVIDENCE_POINTERS[row.id];
+  if (/\.fv\./.test(row.metric)) return `inventory.json (${row.surface === 'phone' ? 'phone-sada' : 'kiosk-1920x1080, kiosk-1080x1920'})`;
+  if (row.surface === 'kiosk') return 'rotation.jsonl (every reading, by its n)';
+  if (row.surface === 'phone') return 'captures/phone-sada.png and inventory.json (phone-sada)';
+  return 'recorders.json';
+}
+
 // --- writing --------------------------------------------------------------------------------------------
 const pct = (x) => `${Math.round((x ?? 0) * 100)} %`;
 const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
@@ -1643,6 +1846,10 @@ export function renderReport(observation, verdict, instruments) {
   const loadWords = hl && (hl.start !== null || hl.end !== null) ? ` · host load (1 min) ${hl.start ?? '?'} at the start, ${hl.end ?? '?'} at the end (refused above ${hl.max ?? 'no bound'})` : '';
   lines.push(`Origin ${meta.origin}, build ${meta.health?.version ?? 'unknown'} · ${meta.minutes} min · stage \`${meta.stage}\` · surfaces ${meta.surfaces.join(', ')} · ended ${meta.endedAt ? zagreb(Date.parse(meta.endedAt)) : '?'} Zagreb${loadWords}.`, '');
   lines.push(`Verdict: ${verdictWord}.`, '');
+  if (k && (k.rotation ?? []).length > 1) {
+    const g = readingGaps(k.rotation, instruments.wall.ROTATION_STEP_MS);
+    lines.push(`Wall reading gaps: median ${sec(g.medianMs)} s, largest ${sec(g.maxMs)} s against ${sec(g.stepMs)} s planned; ${g.stalls} of ${g.count} over ${GAP_STALL_FACTOR} × the step${g.stalls ? ' (load-tainted: read the timings with the host load above)' : ''}.`, '');
+  }
   const recs = observation.recorders ?? [];
   const red = recs.reduce((m, r) => ({ ...m, [r.surface]: (m[r.surface] ?? 0) + r.redemptions }), {});
   lines.push('## Footprint', '');
@@ -1662,10 +1869,14 @@ export function renderReport(observation, verdict, instruments) {
   for (const r of verdict.rows) lines.push(`| ${r.id} | ${r.stage} | ${r.surface} | ${cell(r.target)} | ${bound(r)} | ${r.value === null ? '—' : r.value} | ${r.status === 'fail' ? '**fail**' : r.status} |`);
   lines.push('');
   // Failed rows, and rows above the stage that would fail once applied.
-  const noted = verdict.rows.filter((r) => (r.status === 'fail' || (r.status === 'info' && !r.holds)) && r.detail.length);
+  // Each failing row carries a pointer to the file that holds its evidence.
+  const noted = verdict.rows.filter((r) => r.status === 'fail' || (r.status === 'info' && !r.holds && r.detail.length));
   if (noted.length) {
     lines.push('### Findings', '');
-    for (const r of noted) lines.push(`- **${r.id}** (${r.status}): ${r.detail.map(cell).join('; ')}`);
+    for (const r of noted) {
+      lines.push(`- **${r.id}** (${r.status}): ${r.detail.map(cell).join('; ') || 'no detail'}`);
+      if (r.status === 'fail') lines.push(`  - Evidence: ${evidenceFor(r)}.`);
+    }
     lines.push('');
   }
 
@@ -1684,6 +1895,23 @@ export function renderReport(observation, verdict, instruments) {
         lines.push(`| ${d.at} | ${sec(d.dwellMs)} | ${sec(d.dwellMinMs)}–${sec(d.dwellMaxMs)} | ${sec(d.gapBeforeMs)} / ${sec(d.gapAfterMs)} | ${d.refreshes} | ${verdict} | ${cell(quote(d.sentence, 70))} |`);
       }
       lines.push('');
+    }
+    const g = readingGaps(rot, instruments.wall.ROTATION_STEP_MS, k.calm ?? []);
+    if (g.count) {
+      lines.push(`### Reading gaps (real time between consecutive wall readings, planned ${sec(g.stepMs)} s)`, '');
+      lines.push(`Median ${sec(g.medianMs)} s, 95th percentile ${sec(g.p95Ms)} s, largest ${sec(g.maxMs)} s; ${g.stalls} of ${g.count} gaps over ${GAP_STALL_FACTOR} × the step${g.stalls ? ': a run slowed by its host, whose timings describe the host as much as the product' : ''}. Largest: ${g.worst.map((x) => `#${x.from}→#${x.to} ${sec(x.ms)} s`).join(', ')}.`, '');
+      if (g.windows.length) {
+        lines.push('| Calm window | Real span s | Largest gap s |', '|---|---:|---:|');
+        for (const w of g.windows) lines.push(`| ${w.from}–${w.to} | ${sec(w.spanMs)} | ${sec(w.maxGapMs)} |`);
+        lines.push('');
+      }
+    }
+    const boards = k.boards ?? [];
+    if (boards.length) {
+      const down = boards.filter((b) => b.stored === 'down').length;
+      const emptied = boards.filter((b) => b.emptied);
+      const slow = boards.filter((b) => b.ms !== null && b.ms > 10_000).length;
+      lines.push(`Departures boards (${EVIDENCE_FILES.boards}): ${boards.length} answer(s) for ${new Set(boards.map((b) => `${b.operator}:${b.stop}`)).size} stop(s), ${down} stored as an empty "down" board, ${slow} slower than 10 s, ${emptied.length} put an empty board where the stop had rows${emptied.length ? ` (${emptied.slice(0, 5).map((b) => `${b.at.slice(11, 19)} ${b.stop} after reading ${b.afterReading ?? '—'}${b.reason ? `, ${b.reason}` : ''}`).join('; ')})` : ''}.`, '');
     }
     if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, ${twinWords(k.first.fleet)}, theme ${k.first.theme ?? '?'}.`, '');
     const wallReadings = readingsOf(observation) ?? [];
@@ -1736,6 +1964,8 @@ export function renderReport(observation, verdict, instruments) {
     if (p.sada) lines.push(`- Sada: place ${quote(p.sada.place ?? '—')}, sentence ${quote(p.sada.sentence ?? '—', 90)}, departures ${p.sada.departures.inViewport} in the viewport of ${p.sada.departures.total}; landed ${p.landingMs ?? '?'} ms after the scan URL.`);
     if (p.share) lines.push(`- Share: ${p.share.code ? `a code ${p.share.afterMs} ms after the tap` : cell(p.share.detail ?? 'no code')}.`);
     if (p.karta) lines.push(`- Karta cold open: status ${p.karta.status ?? '—'}, first pill ${p.karta.pillsAfterMs === null ? 'none' : `${p.karta.pillsAfterMs} ms`} after ready (${p.karta.fleet ? `the twin: ${p.karta.fleet.pins} vehicle(s), ${p.karta.fleet.status ?? '?'}` : 'no zet-rt snapshot read'}), unlabelled ${p.karta.unlabelled ?? '—'}, markers ${p.karta.markers ?? '—'}, disclosures ${p.karta.disclosures}.`);
+    const acts = observation.actions ?? [];
+    if (acts.length) lines.push(`- Phone actions (${EVIDENCE_FILES.actions}): ${acts.map((a) => `${a.step} ${a.action} ${a.ok ? 'ok' : '**failed**'} ${sec(a.ms)} s`).join(' · ')}.`);
     if (p.stopBoard) lines.push(`- Stop board by search ("${p.stopBoard.query}"): ${p.stopBoard.error ? `stopped, ${cell(p.stopBoard.error)}` : `${p.stopBoard.open ? 'open' : 'not open'} after ${p.stopBoard.taps} taps, ${p.stopBoard.inViewport} of ${p.stopBoard.total} departures inside the viewport`}.`);
     if (p.expiry) lines.push(`- End of the session: ${p.expiry.seen ? `session-ended ${Math.round(p.expiry.afterRedemptionMs / 1000)} s after the redemption` : 'no session-ended'}, ${p.expiry.later.rows} content row(s), ${p.expiry.requestsAfter.length} /api/data request(s) after it.`);
     if (observation.desktop?.read) lines.push(`- Desktop 1440×900: Sada ${observation.desktop.read.sadaInViewport ? 'in' : 'out of'} the viewport, Karta ${observation.desktop.read.kartaInViewport ? 'in' : 'out of'} it, .ki-domains ${observation.desktop.read.domains}.`);
@@ -1757,7 +1987,7 @@ export function renderReport(observation, verdict, instruments) {
     for (const n of observation.notes) lines.push(`- ${cell(n)}`);
     lines.push('');
   }
-  lines.push('## Files', '', `inventory.json · rotation.jsonl · legibility.json · recorders.json · ${(observation.captures ?? []).join(' · ') || 'no captures'}`, '');
+  lines.push('## Files', '', `inventory.json · rotation.jsonl · legibility.json · recorders.json · ${Object.values(EVIDENCE_FILES).join(' · ')} · ${(observation.captures ?? []).join(' · ') || 'no captures'}`, '');
   return lines.join('\n');
 }
 
@@ -1788,7 +2018,7 @@ export function newObservation(config, health) {
       origin: config.origin, startedAt: config.startedAt, endedAt: null, minutes: config.minutes, stage: config.stage, surfaces: config.surfaces, health, userAgentSuffix: USER_AGENT_SUFFIX.trim(),
       hostLoad: { start: config.hostLoad ?? null, end: null, max: config.maxLoad ?? null },
     },
-    kiosk: null, phone: null, desktop: null, recorders: [], inventories: [], captures: [], errors: [], notes: [],
+    kiosk: null, phone: null, desktop: null, recorders: [], inventories: [], captures: [], errors: [], notes: [], actions: [],
     redemptions: { confirmed: [], failed: [], late: [] },
   };
 }
@@ -1806,6 +2036,10 @@ export async function run(config, runtime, { log = console.log, error = console.
   const scrub = makeScrubber(config.secrets);
   const rotationFile = join(config.outDir, 'rotation.jsonl');
   writeFileSync(rotationFile, '');
+  // The evidence files, written line by line as the run goes, so a run cut short still keeps what it saw.
+  const evidence = Object.fromEntries(Object.values(EVIDENCE_FILES).map((name) => [name, join(config.outDir, name)]));
+  for (const file of Object.values(evidence)) writeFileSync(file, '');
+  const appendTo = (name) => (entry) => appendFileSync(evidence[name], `${scrub(JSON.stringify(entry))}\n`);
 
   let health = null;
   try {
@@ -1825,6 +2059,8 @@ export async function run(config, runtime, { log = console.log, error = console.
       return { seriousCritical: bad.length, rules: bad.map((v) => `${v.impact} ${v.id} (${v.nodes.length})`) };
     } : null,
     appendRotation: (row) => appendFileSync(rotationFile, `${scrub(JSON.stringify(row))}\n`),
+    appendBoard: appendTo(EVIDENCE_FILES.boards), appendCalm: appendTo(EVIDENCE_FILES.calm), appendAction: appendTo(EVIDENCE_FILES.actions),
+    actions: observation.actions, rotationReading: null,
     note: (text) => { observation.notes.push(text); log(`observe-production: ${scrub(text)}`); },
     error: (phase, e) => { observation.errors.push({ phase, error: scrub(errText(e)) }); error(`observe-production: ${phase}: ${scrub(errText(e))}`); },
   };

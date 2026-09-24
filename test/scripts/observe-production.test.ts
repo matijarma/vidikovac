@@ -32,6 +32,7 @@ import {
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, STOP_BOARD_TIMEOUT_MS, SURFACES, THRESHOLDS,
   EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
+  EVIDENCE_FILES, HIT_TEST_IN_PAGE, act, evidenceFor, readingGaps, watchBoards, type ActionRecord, type BoardAnswer,
   MAX_HOST_LOAD, USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
   plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObservedRotationRow, type SkippedTextEntry, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
@@ -642,6 +643,8 @@ interface FakeOptions {
   /** The Karta's marker census (data-unlabelled, data-markers) lands this long after the Karta's first read;
    *  before it the Karta read carries its pills and no census (lane p-map: the pills no longer wait for it). */
   kartaCensusAfterMs?: number;
+  /** Departures board answers the landscape wall receives right after it opens: HTTP status and rows, or a failed request. */
+  boards?: ({ stop: string; http: number; rows: number } | { stop: string; failed: string })[];
 }
 interface Handler { (arg: unknown): unknown }
 
@@ -703,6 +706,18 @@ function fakeRuntime(options: FakeOptions = {}) {
         }
         openedAt ??= t;
         if (options.teaserPins !== undefined && (kind === 'kiosk' || kind === 'portrait' || kind === 'proxy')) emit('response', zetResponse('/api/teaser?stop=106_1', options.teaserPins, true));
+        if (kind === 'kiosk' && options.boards && log.gotos.filter((g) => g.kind === 'kiosk').length === 1) {
+          for (const b of options.boards) {
+            const url = `https://zagreb.example/api/city/departures?operator=zet&stop=${b.stop}`;
+            const req = { url: () => url, method: () => 'GET', resourceType: () => 'fetch', failure: () => ('failed' in b ? { errorText: b.failed } : null) };
+            emit('request', req);
+            t += 500;
+            if ('failed' in b) { emit('requestfailed', req); continue; }
+            const body = { operator: 'zet', stopId: b.stop, stopName: b.stop, status: 'live', generatedAt: new Date(t).toISOString(), departures: Array.from({ length: b.rows }, (_, i) => ({ route: '6', at: i })) };
+            // Awaited, so each answer is recorded before the next is asked, as seconds apart on a real wall.
+            for (const fn of handlers.get('response') ?? []) await fn({ url: () => url, status: () => b.http, request: () => req, headers: () => ({ 'content-type': 'application/json' }), json: async () => (b.http === 200 ? body : { error: 'down' }), body: async () => Buffer.from('') });
+          }
+        }
         if (kind === 'kiosk' && options.kioskConsoleError) emit('console', { type: () => 'error', text: () => options.kioskConsoleError, location: () => ({ url: 'https://zagreb.example/assets/kiosk.js' }) });
         if (url.includes('/s/#')) {
           const answer = (): void => {
@@ -799,6 +814,7 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === EXPIRY_STAMP_IN_PAGE && options.expiryWatch === 'no-stamp') return null;
         // The page's own stamp of the moment session-ended showed; by default the session has just ended.
         if (fn === EXPIRY_STAMP_IN_PAGE) return endedAt !== null ? (endedAt <= t ? endedAt : null) : t;
+        if (fn === HIT_TEST_IN_PAGE) return { found: true, rect: { x: 16, y: 120, w: 380, h: 48 }, inView: true, atPoint: { tag: 'canvas', testid: null, id: null, classes: 'maplibregl-canvas' }, covered: true, active: null };
         if (fn === wall.CALM_MOTION_START_IN_PAGE) return 3;
         if (fn === wall.CALM_MOTION_READ_IN_PAGE) return (options.calm ?? (() => GOOD_CALM))(calmReads++);
         if (fn === wall.CALM_MOTION_MARK_IN_PAGE) { log.calmMarks++; return true; }
@@ -851,8 +867,14 @@ describe('a run over a fake browser', () => {
   it('a wall, phone and desktop that hold every row: exit 0, the four files and the extras written', async () => {
     const r = await observe([]);
     expect(r.code, r.lines.join('\n')).toBe(0);
-    expect(files(r.out).sort()).toEqual(['captures/desktop-1440.png', 'captures/kiosk-1080x1920.png', 'captures/kiosk-1920x1080-dpr025-3m.png', 'captures/kiosk-1920x1080.png', 'captures/phone-expired.png', 'captures/phone-karta-cold.png', 'captures/phone-sada.png', 'captures/phone-stop-board.png', 'inventory.json', 'legibility.json', 'recorders.json', 'report.md', 'rotation.jsonl']);
+    expect(files(r.out).sort()).toEqual(['boards.jsonl', 'calm.jsonl', 'captures/desktop-1440.png', 'captures/kiosk-1080x1920.png', 'captures/kiosk-1920x1080-dpr025-3m.png', 'captures/kiosk-1920x1080.png', 'captures/phone-expired.png', 'captures/phone-karta-cold.png', 'captures/phone-sada.png', 'captures/phone-stop-board.png', 'inventory.json', 'legibility.json', 'phone-actions.jsonl', 'recorders.json', 'report.md', 'rotation.jsonl']);
     expect(read(r.out, 'rotation.jsonl').trim().split('\n')).toHaveLength(3);
+    // The evidence files: one calm window (readings 0–2), the phone's five steps, one board answer per wall load.
+    expect(read(r.out, 'calm.jsonl').trim().split('\n').map((l) => JSON.parse(l) as { from: number; to: number; failures: string[] })).toMatchObject([{ from: 0, to: 2, failures: [] }]);
+    expect((read(r.out, 'phone-actions.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ActionRecord)).map((a) => [a.step, a.action, a.ok])).toEqual([
+      ['the Karta tab', 'click', true], ['the stop search field', 'click', true], ['the stop search query', 'fill', true], ['the first search result', 'click', true], ['the stop board', 'wait', true],
+    ]);
+    expect(read(r.out, 'boards.jsonl')).toBe('');
     expect((JSON.parse(read(r.out, 'inventory.json')) as { label: string }[]).map((v) => v.label)).toEqual(['kiosk-1920x1080', 'phone-sada', 'phone-karta-cold', 'desktop-1440', 'kiosk-1080x1920']);
     expect(Object.keys((JSON.parse(read(r.out, 'legibility.json')) as { captures: object }).captures)).toEqual(['kiosk-1920x1080', 'kiosk-1080x1920']);
     const report = read(r.out, 'report.md');
@@ -1072,8 +1094,15 @@ describe('a run over a fake browser', () => {
     expect(report).toMatch(/\| phone-stop-board \| d3 \| phone \| .* \| ≤ 0 \| 0 \| pass \|/);
     expect(report).toContain('Timeout 15000ms exceeded');
     expect(report).toContain('waiting for element to be visible, enabled and stable');
+    // The action log keeps the click's whole call log and what stood at the target's centre.
+    const result = (read(slow.out, EVIDENCE_FILES.actions).trim().split('\n').map((l) => JSON.parse(l) as ActionRecord)).find((a) => a.step === 'the first search result')!;
+    expect(result).toMatchObject({ action: 'click', selector: select, ok: false, ms: STOP_BOARD_TIMEOUT_MS, hit: { found: true, covered: true, atPoint: { tag: 'canvas' } } });
+    expect(result.error).toEqual(['page.click: Timeout 15000ms exceeded.', 'Call log:', '  - waiting for element to be visible, enabled and stable']);
     const none = await observe([], { clickTimesOut: select, noStopBoard: true });
     expect(none.lines.join('\n')).toContain('FAIL phone-stop-board');
+    const noneReport = read(none.out, 'report.md');
+    expect(noneReport).toContain(`  - Evidence: ${EVIDENCE_FILES.actions} (each click and fill`);
+    expect(noneReport).toContain('the first search result click **failed** 15.0 s');
   });
 
   it('a phone that never landed in its session fails its recorder row: an empty recorder proves nothing', () => {
@@ -1421,5 +1450,135 @@ describe('calm motion counts row turnovers apart from churn', () => {
     const badReport = read(bad.out, 'report.md');
     expect(badReport).toContain('| 30–60 | 2 | 0 | 2 | 2 | departure\\|trip-1 | 0 / 0 | **fail** |');
     expect(badReport).toContain('readings 30–60: 1 row(s) stayed on the list but were re-created: departure\\|trip-1');
+  });
+});
+
+describe('the evidence a failing row points to (lane v-observe6)', () => {
+  const fakePage = () => {
+    const handlers = new Map<string, ((arg: unknown) => unknown)[]>();
+    return {
+      on(event: string, fn: (arg: unknown) => unknown) { handlers.set(event, [...(handlers.get(event) ?? []), fn]); },
+      async emit(event: string, arg: unknown) { for (const fn of handlers.get(event) ?? []) await fn(arg); },
+    };
+  };
+  const boardUrl = (stop: string) => `https://zagreb.example/api/city/departures?operator=zet&stop=${stop}`;
+  const request = (stop: string, errorText: string | null = null) => ({ url: () => boardUrl(stop), method: () => 'GET', failure: () => (errorText ? { errorText } : null) });
+  const response = (req: ReturnType<typeof request>, http: number, body: unknown) => ({ url: req.url, status: () => http, request: () => req, json: async () => body });
+  const board = (rows: number, status = 'live') => ({ operator: 'zet', stopId: '106_1', stopName: 'Trg', status, generatedAt: new Date(T0).toISOString(), departures: Array.from({ length: rows }, () => ({})) });
+
+  it('boards.jsonl: every answer with its stop, HTTP status, rows and duration; an error, a bad body or a failed request is stored as an empty down board, and one that empties a board with rows says so', async () => {
+    let t = T0;
+    const written: BoardAnswer[] = [];
+    const page = fakePage();
+    const ctx = { instruments, now: () => t, rotationReading: 93 as number | null };
+    const list = watchBoards(page as never, ctx, (e) => written.push(e));
+    const a = request('106_1');
+    await page.emit('request', a);
+    t += 800;
+    await page.emit('response', response(a, 200, board(2)));
+    ctx.rotationReading = 94;
+    const b = request('106_1');
+    await page.emit('request', b);
+    t += 12_000;
+    await page.emit('requestfailed', request('106_1', 'net::ERR_ABORTED'));
+    const c = request('106_1');
+    await page.emit('request', c);
+    t += 300;
+    await page.emit('response', response(c, 503, { error: 'down' }));
+    const d = request('106_2');
+    await page.emit('request', d);
+    await page.emit('response', response(d, 200, { nope: true }));
+    // Not a board request: ignored.
+    await page.emit('response', { url: () => 'https://zagreb.example/api/teaser', status: () => 200, request: () => null, json: async () => ({}) });
+    expect(written).toEqual(list);
+    expect(list.map((x) => [x.stop, x.http, x.status, x.rows, x.stored, x.reason ?? null, x.emptied, x.afterReading])).toEqual([
+      ['106_1', 200, 'live', 2, 'board', null, false, 93],
+      ['106_1', null, null, 0, 'down', 'net::ERR_ABORTED', true, 94],
+      ['106_1', 503, null, 0, 'down', 'HTTP 503', false, 94],
+      ['106_2', 200, null, 0, 'down', 'not a board', false, 94],
+    ]);
+    expect(list[0]).toMatchObject({ ms: 800, operator: 'zet', replaced: true, previous: null });
+    expect(list[1].previous).toMatchObject({ rows: 2, stored: 'board' });
+    // A failed request's own object is not the one its request event carried: its duration is unknown, not invented.
+    expect(list[1].ms).toBeNull();
+    expect(list[2].ms).toBe(300);
+  });
+
+  it('a run writes the wall\'s board answers to boards.jsonl and counts the emptied boards in report.md', async () => {
+    const r = await observe([], { boards: [{ stop: '106_1', http: 200, rows: 3 }, { stop: '106_1', failed: 'net::ERR_ABORTED' }, { stop: '106_2', http: 503, rows: 0 }] });
+    const lines = read(r.out, EVIDENCE_FILES.boards).trim().split('\n').map((l) => JSON.parse(l) as BoardAnswer);
+    expect(lines.map((x) => [x.stop, x.stored, x.rows, x.emptied])).toEqual([['106_1', 'board', 3, false], ['106_1', 'down', 0, true], ['106_2', 'down', 0, false]]);
+    expect(read(r.out, 'report.md')).toContain('Departures boards (boards.jsonl): 3 answer(s) for 2 stop(s), 2 stored as an empty "down" board, 0 slower than 10 s, 1 put an empty board where the stop had rows');
+  });
+
+  it('calm.jsonl: the row keys at every reading and each record by node and kind (add, remove, move, re-create)', async () => {
+    const start = shipped(wall.CALM_MOTION_START_IN_PAGE);
+    const mark = shipped(wall.CALM_MOTION_MARK_IN_PAGE);
+    const readCalm = shipped(wall.CALM_MOTION_READ_IN_PAGE);
+    const spec = wall.CALM_MOTION_SPEC;
+    const row = (id: string): string => `<li class="nearby-row" data-id="${id}" data-kind="departure"><span class="nearby-title">${id}</span></li>`;
+    const li = (id: string): HTMLElement => { const t = document.createElement('template'); t.innerHTML = row(id); return t.content.firstElementChild as HTMLElement; };
+    document.body.innerHTML = `<section data-testid="nearby"><ol>${['a', 'b', 'c'].map(row).join('')}</ol></section>`;
+    const ol = document.querySelector('ol')!;
+    const byId = (id: string): HTMLElement => document.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+    start(spec);
+    byId('a').remove();
+    await Promise.resolve();
+    mark(spec);
+    ol.appendChild(li('d'));
+    ol.appendChild(byId('b'));
+    await Promise.resolve();
+    ol.replaceChild(li('c'), byId('c'));
+    await Promise.resolve();
+    const r = readCalm(spec);
+    const kinds = r.detail!.records.flatMap((x) => [...x.adds.map((n) => `${x.seg}+${n.key}:${n.kind}`), ...x.removes.map((n) => `${x.seg}-${n.key}:${n.kind}`)]);
+    expect(kinds).toContain('0-departure|a:remove');
+    expect(kinds).toContain('1+departure|d:add');
+    expect(kinds).toContain('1+departure|b:move');
+    expect(kinds).toContain('1+departure|c:re-create');
+    expect(kinds).toContain('1-departure|c:re-create');
+    expect(r.detail!.marks.map((m) => m.keys)).toEqual([['departure|a', 'departure|b', 'departure|c'], ['departure|b', 'departure|c'], ['departure|c', 'departure|d', 'departure|b']]);
+    expect(r.detail!.marks.every((m) => Number.isFinite(m.at))).toBe(true);
+    expect(r.detail!.dropped).toBe(0);
+    // The counts and the verdict are those of the same reading without the detail.
+    expect(r).toMatchObject({ kept: 1, rebuilt: ['departure|c'], left: ['departure|a'], entered: ['departure|d'] });
+    document.body.innerHTML = '';
+  });
+
+  it('reading gaps: median, 95th percentile, largest, stalls over twice the step and the span of each calm window', () => {
+    const at = [0, 2000, 4000, 17_600, 19_600, 44_600, 46_600].map((ms) => T0 + ms);
+    const rot = at.map((t, n) => ({ n, at: t }));
+    const g = readingGaps(rot, 2000, [{ from: 0, to: 3, fromAt: at[0], toAt: at[3] }, { from: 3, to: 6, fromAt: at[3], toAt: at[6] }]);
+    expect(g).toMatchObject({ count: 6, medianMs: 2000, maxMs: 25_000, stalls: 2 });
+    expect(g.worst.slice(0, 2)).toEqual([{ from: 4, to: 5, ms: 25_000 }, { from: 2, to: 3, ms: 13_600 }]);
+    expect(g.windows).toEqual([{ from: 0, to: 3, spanMs: 17_600, maxGapMs: 13_600 }, { from: 3, to: 6, spanMs: 29_000, maxGapMs: 25_000 }]);
+  });
+
+  it('report.md states the reading gaps and puts one evidence line under each failing row', async () => {
+    const r = await observe(['--minutes', '3', '--stage', 'd2'], { calm: (i) => (i === 1 ? { ...GOOD_CALM, churn: 5, mutations: 6 } : GOOD_CALM) });
+    const report = read(r.out, 'report.md');
+    // The fake clock is shared with the phone's steps, so a few gaps run long: the numbers are the run's own.
+    expect(report).toMatch(/Wall reading gaps: median 2\.0 s, largest \d+\.\d s against 2\.0 s planned; \d+ of 89 over 2 × the step/);
+    expect(report).toContain('### Reading gaps (real time between consecutive wall readings, planned 2.0 s)');
+    expect(report).toMatch(/\| 30–60 \| \d+\.\d \| \d+\.\d \|/);
+    expect(report).toContain('- **calm-motion** (fail): readings 30–60: 5 structural mutations');
+    expect(report).toContain('  - Evidence: calm.jsonl (per minute: the row keys at every reading and each record by node and kind) and the reading gaps below.');
+    const calm = read(r.out, EVIDENCE_FILES.calm).trim().split('\n').map((l) => JSON.parse(l) as { from: number; to: number; fromAt: number; toAt: number; failures: string[] });
+    expect(calm.map((w) => [w.from, w.to, w.failures.length])).toEqual([[0, 30, 0], [30, 60, 1], [60, 89, 0]]);
+    expect(calm[1].toAt - calm[1].fromAt).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('every threshold row has an evidence pointer', () => {
+    for (const t of THRESHOLDS) expect(evidenceFor(t), t.id).toMatch(/\.(json|jsonl|png)|this report|the run log|the finding above/);
+  });
+
+  it('act passes the step\'s result and error through unchanged', async () => {
+    const actions: ActionRecord[] = [];
+    const ctx = { now: () => T0, actions };
+    const page = { evaluate: async () => ({ found: false, rect: null, atPoint: null, covered: null }) };
+    await expect(act(page as never, ctx, { step: 's', action: 'click', selector: 'x:visible' }, async () => 7)).resolves.toBe(7);
+    const boom = new Error('page.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for locator');
+    await expect(act(page as never, ctx, { step: 't', action: 'click', selector: 'x:visible' }, async () => { throw boom; })).rejects.toBe(boom);
+    expect(actions.map((a) => [a.step, a.ok, a.hit])).toEqual([['s', true, undefined], ['t', false, { found: false, rect: null, atPoint: null, covered: null }]]);
   });
 });
