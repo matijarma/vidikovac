@@ -102,7 +102,7 @@ export function button(spec: ButtonSpec): string {
 /** The ids of the lists a fold opens, so the fold button can say which one. */
 const listId = (fold: Fold): string => `t-list-${fold}`;
 
-/** The one button under a bounded list: "još 3 linije" / "sve zatvaranja (6)" closed, "Skupi" open. A disclosure, so it says whether the list is open. */
+/** The one button under a bounded list: "još 3 linije" / "sva zatvaranja (6)" closed, "Skupi" open. A disclosure, so it says whether the list is open. */
 function foldButton(i18n: I18n, fold: Fold, open: boolean, moreLabel: string): string {
   // The stops fold is the one a test names on its own; the workspace hears every fold through toggle-fold and data-fold.
   const data: Record<string, string> = fold === 'stops' ? { fold, testid: 'toggle-stops' } : { fold };

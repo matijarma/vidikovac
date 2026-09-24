@@ -154,6 +154,6 @@ describe('the HŽ board shows only trains still to come',()=>{
     expect(html).toContain('Sljedeći polasci');
   });
   it('says the board is empty rather than printing a page of departed trains',()=>{
-    expect(departuresMarkup(i18n,board([run(-20,'Otisao')]),now)).toContain('Nema potvrđenog rasporeda za ovo razdoblje.');
+    expect(departuresMarkup(i18n,board([run(-20,'Otisao')]),now)).toContain('Nema potvrđenog voznog reda za ovo razdoblje.');
   });
 });

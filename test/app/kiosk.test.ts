@@ -816,7 +816,7 @@ describe('start: one field, one line, Pokreni', () => {
     expect(q(k.root, '[data-testid=setup-retry]')!.hidden).toBe(true);
     submit(k.root);
     await flush();
-    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je broj privremenih zaslona za ovaj sat.');
+    expect(text(q(k.root, '[data-testid=setup-error]'))).toBe('Dosegnut je najveći broj privremenih zaslona za ovaj sat.');
     const retry = q(k.root, '[data-testid=setup-retry]') as HTMLButtonElement;
     expect(retry.hidden).toBe(false);
     expect(retry.disabled).toBe(true);
