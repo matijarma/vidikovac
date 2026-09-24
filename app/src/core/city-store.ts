@@ -11,18 +11,34 @@ export interface CityStore {
 }
 /** One store per surface. Static chunks are never polled with vehicle ticks.
  * Search and device geography never leave the browser. */
+/** A failed chunk is retried on its own: Retry-After when the server gives one,
+ * otherwise 15 s doubling to 10 min; the last good places stay on screen. */
+const CHUNK_RETRY_BASE_MS = 15_000, CHUNK_RETRY_MAX_MS = 600_000;
+class CityHttpError extends Error {
+  constructor(readonly retryAfterMs: number | null) { super('city-unavailable'); }
+}
+function retryAfterMs(response: Response): number | null {
+  const value = response.headers.get('retry-after');
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
 export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
   let state = emptyCity(), stopped = false, paused = false, started = false, refreshing = false;
   const listeners = new Set<() => void>(), pending = new Map<string, Promise<void>>();
   const chunks = new Map<string, CatalogueChunk>();
-  const retryAt = new Map<string, number>();
+  const retryAt = new Map<string, number>(), failures = new Map<string, number>();
+  const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const clearRetries = () => { retryTimers.forEach(t => clearTimeout(t)); retryTimers.clear(); };
   const wanted = new Set<string>(['culture', 'water']);
   let timer: ReturnType<typeof setInterval> | undefined;
   let manifestTime = 0;
   const emit = () => { if (!stopped) listeners.forEach(fn => fn()); };
   async function request<T>(url: string): Promise<T> {
     const response = await fetcher(url, { signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) throw new Error('city-unavailable');
+    if (!response.ok) throw new CityHttpError(retryAfterMs(response));
     return response.json() as Promise<T>;
   }
   const rebuild = () => {
@@ -51,11 +67,20 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
           if (stopped || paused) return;
           for (const [key, c] of chunks) if (c.source.id === id) chunks.delete(key);
           fetched.forEach((c,i) => chunks.set(`${id}:${i}`, c));
+          failures.delete(id); retryAt.delete(id);
           state = { ...state, loaded: [...new Set([...state.loaded, id])], errors: state.errors.filter(e => e !== id) };
           rebuild();
-        } catch {
-          retryAt.set(id, Date.now() + 60_000);
-          if (!stopped && !paused) state = { ...state, errors: [...new Set([...state.errors, id])] };
+        } catch (error) {
+          const attempt = (failures.get(id) ?? 0) + 1;
+          failures.set(id, attempt);
+          const hinted = error instanceof CityHttpError ? error.retryAfterMs : null;
+          const delay = Math.min(CHUNK_RETRY_MAX_MS, hinted ?? CHUNK_RETRY_BASE_MS * 2 ** (attempt - 1));
+          retryAt.set(id, Date.now() + delay);
+          if (!stopped && !paused) {
+            state = { ...state, errors: [...new Set([...state.errors, id])] };
+            clearTimeout(retryTimers.get(id));
+            retryTimers.set(id, setTimeout(() => { retryTimers.delete(id); void ensure([id]); }, delay));
+          }
         } finally {
           pending.delete(id);
           if(!stopped&&!paused){state={...state,loading:pending.size>0};emit();}
@@ -100,7 +125,7 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
       if (!stopped && !paused) timer = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) void refresh(); }, 60_000);
     },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    pause() { paused = true; if (timer) clearInterval(timer); },
-    destroy() { stopped = true; if (timer) clearInterval(timer); listeners.clear(); },
+    pause() { paused = true; if (timer) clearInterval(timer); clearRetries(); },
+    destroy() { stopped = true; if (timer) clearInterval(timer); clearRetries(); listeners.clear(); },
   };
 }
