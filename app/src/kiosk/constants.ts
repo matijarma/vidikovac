@@ -8,3 +8,6 @@
  * 900 ms, so the test clears the threshold with room to spare.
  */
 export const LONG_PRESS_MS = 800;
+/** The beat after the press timer on which Postavke opens (review N2, kiosk/settings.ts bindLongPress): one task
+ *  of the same clock, so a pointermove the queue holds ends the press first. The tests fire it by this delay. */
+export const LONG_PRESS_BEAT_MS = 0;

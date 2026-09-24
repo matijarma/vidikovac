@@ -29,7 +29,7 @@ import { escapeHtml } from '../ui/dom/escape';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { iconMarkup, type IconName } from '../ui/icons';
 import type { ThemePreference } from '../ui/theme';
-import { LONG_PRESS_MS } from './constants';
+import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from './constants';
 import { clock, sameZagrebDay, weekdayDayMonth } from './format';
 import { FIELD_SPAN_M, HANDHELD_SPAN_M } from './mapview';
 import { placeInputOf } from './places';
@@ -128,31 +128,48 @@ export interface LongPressDeps {
  */
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
+  /** The beat after the timer (review N2): the open waits one task of the same clock, so a pointermove the
+   *  queue holds (a swipe whose events ran late behind the map's work) still ends the press first. */
+  let beat: unknown = null;
   let origin: { x: number; y: number } | null = null;
   /** The pointerdown's own timestamp while a press is armed and the timer has not opened yet. */
   let downAt: number | null = null;
+  /** The pointers down on the target right now (review N3): a press is one finger. */
+  const pointers = new Set<number>();
   const disarm = (): void => {
     if (timer !== null) { deps.clearTimeout(timer); timer = null; }
+    if (beat !== null) { deps.clearTimeout(beat); beat = null; }
     origin = null;
     downAt = null;
   };
+  const near = (event: PointerEvent): boolean => origin !== null && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= LONG_PRESS_SLOP_PX;
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
+    pointers.add(event.pointerId);
     disarm();
+    // Two fingers resting on the wall are not a press (N3): nothing arms while more than one is down.
+    if (pointers.size > 1) return;
     if (deps.accept && !deps.accept(event)) return;
     origin = { x: event.clientX, y: event.clientY };
     downAt = event.timeStamp;
-    timer = deps.setTimeout(() => { timer = null; origin = null; downAt = null; deps.open('pointer'); }, LONG_PRESS_MS);
+    timer = deps.setTimeout(() => {
+      timer = null;
+      beat = deps.setTimeout(() => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); }, LONG_PRESS_BEAT_MS);
+    }, LONG_PRESS_MS);
   };
   const move = (event: PointerEvent): void => {
-    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > LONG_PRESS_SLOP_PX) disarm();
+    if (origin && !near(event)) disarm();
   };
-  /** The release: a press the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
+  /** The release: a press the timer has answered but the beat has not (opens now, within the slop of the press),
+   *  or one the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
   const up = (event: PointerEvent): void => {
-    const held = downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS;
+    pointers.delete(event.pointerId);
+    const long = beat !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
+    const opens = long && near(event);
     disarm();
-    if (held) deps.open('pointer');
+    if (opens) deps.open('pointer');
   };
+  const gone = (event: PointerEvent): void => { pointers.delete(event.pointerId); disarm(); };
   const key = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -167,15 +184,16 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerup', up);
-  for (const type of ends) target.addEventListener(type, disarm);
+  for (const type of ends) target.addEventListener(type, gone);
   if (keys) target.addEventListener('keydown', key);
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
+    pointers.clear();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
-    for (const type of ends) target.removeEventListener(type, disarm);
+    for (const type of ends) target.removeEventListener(type, gone);
     if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
   };
