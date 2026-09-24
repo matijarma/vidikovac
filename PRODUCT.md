@@ -77,7 +77,7 @@ to take content along.
 
 Setup is one optional field, "Adresa ili stajalište", a line under it saying
 what the screen will show, and "Pokreni". Settings are click-toggles behind a
-long press on the brand: Mjesto, Kadar, Prikaz (karta or shema), Tema and
+long press anywhere on the wall (or Enter or Space): Mjesto, Kadar, Prikaz (karta or shema), Tema and
 Ritam. The phone opens on the place as its title, one sentence, a map band and
 three departures, then the same "U blizini" rows, with the phone asking for a
 new sentence at most once a minute; its tabs are Sada · Karta · Još, the

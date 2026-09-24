@@ -89,7 +89,9 @@ date and a small clock. The information column holds the "U blizini" list over
 the QR card, in independent grid regions, and the footer carries safety.
 Nothing on the wall is an operator control for the passer-by: no pause, copy,
 theme or gear button, no kiosk discovery, search or filter list and no idle
-map-navigation controls; settings open only by a long press on the brand.
+map-navigation controls; settings open only by a press held about 0.8 s anywhere on the wall outside
+its touch targets (a stop ring, a list row, the footer's pharmacy), or by Enter
+or Space while the wall has focus.
 
 The map has a legend of three plain items (tram route, BAJS bike count,
 culture tonight), never a caveat, and no legend stands where no map is drawn
@@ -203,7 +205,7 @@ only way to take content along.
 Starting a screen is one optional field, "Adresa ili stajalište", a line under
 it saying what the screen will show, and "Pokreni"; place, frame, view, theme,
 rhythm and expiry belong to an on-screen settings panel opened by a long press
-on the brand, not a setup wizard, not a gear or theme glyph in the header and
+anywhere on the wall, not a setup wizard, not a gear or theme glyph in the header and
 not a screen full of large district pills. The settings panel is a column of
 click-toggles (Mjesto, Kadar, Prikaz, Tema, Ritam and the screen's expiry),
 each naming its current state and changing it at once; there is no draft and

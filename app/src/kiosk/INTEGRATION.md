@@ -226,13 +226,22 @@ presentation suspends it. The map highlights what the current sentence names
 (`setHighlight`), never moving the camera.
 
 The brand at the header's left end ("Kaj ima?") is a button,
-`[data-testid=kiosk-brand]` named "Kaj ima? · Postavke zaslona", and the one
-way into **Postavke**: a press held on it for `LONG_PRESS_MS` (800 ms,
-`kiosk/constants.ts`) opens the panel, a shorter press or a finger that moves
-more than 12 px opens nothing, and Enter or Space on the focused brand opens it
-at once (`bindLongPress` in `kiosk/settings.ts`, timed through the kiosk's own
-timer seam so a test's `tick()` drives it; the press is never stopped, so the
-first-tap fullscreen and wake-lock listener still hears it). The header
+`[data-testid=kiosk-brand]` named "Kaj ima? · Postavke zaslona". **Postavke**
+open by a press held for `LONG_PRESS_MS` (800 ms, `kiosk/constants.ts`) on the
+brand or anywhere else on a screen-sized wall; a shorter press or a finger that
+moves more than 12 px opens nothing (`bindLongPress` in `kiosk/settings.ts`,
+bound once on the brand and once on the kiosk root with `accept: wallPressable`
+and `keys: false`, both timed through the kiosk's own timer seam so a test's
+`tick()` drives them; the press is never stopped, so the first-tap fullscreen
+and wake-lock listener still hears it). While the touch answers, the touch's
+own targets (a stop or pharmacy ring on the map, a row of
+`[data-testid=nearby-rows]`, the footer's `strip-pharmacy`) keep their tap and
+a press held on them opens no settings. Enter or Space open the panel at once,
+on the focused brand or whenever the wall has focus (`onWallKey` on
+`document`): the kiosk root carries `tabindex="-1"` (focusable, never a tab
+stop) and `focusWall()` gives it the focus when a phase mounts and on any
+press that lands on nothing focusable. A handheld keeps only the brand's press
+and takes no focus. The header
 carries no gear and no theme glyph. Postavke is the only setup surface after
 the start screen; there is no wizard and no provisioning aside, on a wall or
 on a phone. Its rows are click-toggles that name their current state: Mjesto
