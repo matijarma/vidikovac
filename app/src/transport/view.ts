@@ -404,9 +404,6 @@ export interface StopDetailData {
   timetable?: readonly ArrivalRow[];
 }
 
-/** The GTFS type behind an arrival row, read off the stop's own lines: the
- *  badge is then a tram plate or a bus capsule. A route the catalogue does not
- *  list here keeps the neutral shape rather than being guessed from its number. */
 /** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
  *  catalogue predates (line 1 at Trg, round 1 finding F4) still wears its tram badge; -1 only for a route nobody knows. */
 function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
@@ -438,7 +435,8 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
   const time = (clock
     ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
     : esc(row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes ?? 0 })))
-    + (day ? `<span class="t-eta-day">${esc(day)}</span>` : '');
+    // A space before the day word, so the cell reads "04:31 sutra" in the text a reader or a copy takes, not "04:31sutra".
+    + (day ? ` <span class="t-eta-day">${esc(day)}</span>` : '');
   if (!row.live) return `<span class="t-eta">${time}</span>`;
   const label = frozenAt === undefined ? i18n.t('arrivals.live') : snapshotLine(i18n, frozenAt);
   return `<span class="t-eta"${frozenAt === undefined ? ' data-live="true"' : ''}><span class="t-live" role="img" aria-label="${attr(label)}"></span>${time}</span>`;
