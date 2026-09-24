@@ -13,8 +13,9 @@
 .k-legend-bike{color:var(--tone-bike)}.k-legend-culture{color:var(--k-violet)}
 /* Round 2 F9: the BAJS chips are the marks' own shapes: a disc with a number (the free bikes), a small dot (an empty
    station on the frame, any station on the whole-city window). */
-.k-legend-disc{display:inline-flex;align-items:center;justify-content:center;min-width:1.3em;height:1.3em;padding:0 .15em;border-radius:999px;background:var(--tone-bike);color:var(--k-surface);font-size:.8em;font-weight:700;line-height:1}
-.k-legend-dot{font-size:.55em;line-height:1}
+/* The number is walk-up tier text (28 px, e2e/legibility.ts); the dot carries no text at all, it is drawn. */
+.k-legend-disc{display:inline-flex;align-items:center;justify-content:center;min-width:1.4em;height:1.4em;padding:0 .2em;border-radius:999px;background:var(--tone-bike);color:var(--k-surface);font-size:1em;font-weight:700;line-height:1}
+.k-legend-dot{display:inline-block;width:.45em;height:.45em;border-radius:50%;background:var(--tone-bike)}
 /* "U blizini" (kiosk/timeline.ts): the aside's list over the QR card. Whole rows, whole words: nothing here is cut
    with an ellipsis or clipped. Titles and subs wrap and a row takes the height its words need, never less than
    --k-nearby-row (64-92 px at the design size, times the zoom; the row's min-height, while the track is min-content

@@ -147,10 +147,11 @@ describe('one word per concept: "Sada" is now and "vozni red" the timetable (WP5
 describe('one word per concept: a tram or bus stop is "stajalište" (WP5 step 6)', () => {
   // "Stanica" is BAJS's word for a bike station and "postaja" DHMZ's for a measuring station.
   // A leaf may say "stanica" only when its key is on this list, and the list takes BAJS keys
-  // under city.* only. None needs the word today: city.* says "BAJS" and the counts.
-  const BAJS_STANICA_KEYS: readonly string[] = [];
+  // under city.* and the wall legend's BAJS entries (kiosk.legend.*, round 2 F9: the legend names
+  // what a dot on the map is, a BAJS station). city.* needs no such word: it says "BAJS" and the counts.
+  const BAJS_STANICA_KEYS: readonly string[] = ['kiosk.legend.bikesEmpty', 'kiosk.legend.bikesFar'];
   it('no hr.json leaf outside the BAJS allowlist says "stanica"', () => {
-    for (const key of BAJS_STANICA_KEYS) expect(key, 'BAJS keys live under city.*').toMatch(/^city\./);
+    for (const key of BAJS_STANICA_KEYS) expect(key, 'BAJS keys live under city.* or the wall legend').toMatch(/^(?:city|kiosk\.legend)\./);
     const stanica = leafKeys(HR).filter((key) => /(?<![\p{L}\p{N}_])[Ss]tanic/u.test(leaf(HR, key)!));
     expect(stanica.filter((key) => !BAJS_STANICA_KEYS.includes(key))).toEqual([]);
   });

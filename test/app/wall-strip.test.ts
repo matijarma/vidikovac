@@ -206,16 +206,16 @@ describe('the legend follows what the map draws', () => {
     document.body.appendChild(host);
     const inv = mountInvitation(host, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: false, reducedMotion: true });
     const shown = () => [...host.querySelectorAll<HTMLElement>('.k-map-legend > span')].filter((el) => !el.hidden).map((el) => el.textContent?.trim());
-    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', '● BAJS: prazna stanica', '● BAJS stanica', '● Kultura večeras']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', 'BAJS: prazna stanica', 'BAJS stanica', '● Kultura večeras']);
     inv.setLegend(['tram']);
     expect(shown()).toEqual(['6 Tramvajska linija']);
     inv.setLegend(['tram', 'bikes']);
     expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli']);
     // The whole-city window: a dot is a station; the frame at night: counted discs and the empty stations' dots.
     inv.setLegend(['tram', 'bikesFar']);
-    expect(shown()).toEqual(['6 Tramvajska linija', '● BAJS stanica']);
+    expect(shown()).toEqual(['6 Tramvajska linija', 'BAJS stanica']);
     inv.setLegend(['tram', 'bikes', 'bikesEmpty', 'culture']);
-    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', '● BAJS: prazna stanica', '● Kultura večeras']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', 'BAJS: prazna stanica', '● Kultura večeras']);
     inv.destroy();
     host.remove();
     // The entries are inline-flex, which would outrank the hidden attribute: the stylesheet says hidden is gone.
