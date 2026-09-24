@@ -396,7 +396,12 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
-      let held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
+      // The same text of the sentence's own origin first (observe-d523, 22:45: the model wrote the template's
+      // words, the pool listed it first, and its refs and origin took over the sentence on screen: the fact
+      // attribute flipped without the words changing, and a count change six seconds later ended the turn,
+      // since only a template's turn survives its fact leaving the pool).
+      let held = current && valid(current) && (sentences.find(s => s.text === current!.text && s.origin === current!.origin && valid(s))
+        ?? sentences.find(s => s.text === current!.text && valid(s)));
       // Decision 29: the sentence on screen in its refreshed words (a restated end, a moved estimate,
       // a countdown's next minute) is the same sentence. It keeps its dwell and its wording; only a
       // fact that can no longer be said in that wording ends the dwell early.
@@ -416,8 +421,11 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       // template sentence in place (the refresh above); a model sentence leaves the pool only when it no
       // longer grounds against the current facts (kiosk.ts readWrittenSentences), which is that exception.
       if (!held && current && current.origin === 'template' && valid(current) && now - heldSince < rhythm) held = current;
-      // Retain object identity on ordinary refreshes, but update a shortened deadline.
-      if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
+      // Retain object identity on ordinary refreshes, but update a shortened deadline. An equal text of
+      // another origin lends its deadline only: the sentence on screen keeps its own refs and origin.
+      if (held && current && held.origin !== current.origin) {
+        if (held.validUntil! < current.validUntil!) current = { ...current, validUntil: held.validUntil };
+      } else if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
         || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {
         current = held.validUntil! <= current.validUntil! ? held
           : { ...held, validUntil: current.validUntil };

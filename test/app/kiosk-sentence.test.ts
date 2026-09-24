@@ -612,6 +612,32 @@ describe('sentence sequence', () => {
     expect(seq3.read([soon3, short2], NOW + 31_000)?.text).toBe(short2.text);
   });
 
+  // observe-d523 (D5.23, 00:45 Zagreb): "BAJS VLAŠKA UL.: 2 bicikla." stood 6.2 s with its fact attribute, then
+  // the same words with none (the model had written the template's words and its entry took the sentence over),
+  // then a tram sentence 5 s later: two short turns and a verbatim return to the observer, while nothing on the
+  // wall had changed but the count behind it.
+  it('keeps its own refs and origin when the model writes the same words, and restates a changed count in place through the rhythm', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const template = (n: number): RotatingSentence => ({ ...sentence(`BAJS VLAŠKA UL.: ${n} bicikla.`, { kicker: 'bicikli', refs: ['bikes:bajs-556701511'] }), factKey: 'bikes|bajs-556701511', wording: 'bikes' });
+    const model: WrittenSentence = { text: 'BAJS VLAŠKA UL.: 2 bicikla.', kicker: 'bicikli', refs: ['bajs-556701511'], validUntil: NOW + 3_600_000, origin: 'model' };
+    const first = seq.read([template(2)], NOW)!;
+    expect(first.origin).toBe('template');
+    // Six seconds on, the model's equal words are in the pool, listed first: the sentence keeps its own identity.
+    const six = seq.read([model, template(2)], NOW + 6_000)!;
+    expect(six.origin).toBe('template');
+    expect(sentenceFactKeys(six)).toEqual(['bikes|bajs-556701511']);
+    expect(six.text).toBe(first.text);
+    // Eleven seconds on, the count is three: the template restates it in place, the model's words are gone, the turn goes on.
+    const eleven = seq.read([template(3)], NOW + 11_000)!;
+    expect(eleven.text).toBe('BAJS VLAŠKA UL.: 3 bicikla.');
+    expect(eleven.origin).toBe('template');
+    expect(seq.read([template(3)], NOW + 19_000)?.text).toBe('BAJS VLAŠKA UL.: 3 bicikla.');
+    // The rhythm up, another fact takes its turn; the bikes never return verbatim inside ten minutes.
+    const other = sentence('Ilica: zatvoreno za promet do 18:00.', { kicker: 'radovi', refs: ['closure:ilica'] });
+    expect(seq.read([template(3), other], NOW + 20_000)?.text).toBe(other.text);
+    expect(seq.read([template(2), other], NOW + 40_000)?.text).not.toBe('BAJS VLAŠKA UL.: 2 bicikla.');
+  });
+
   it('never repeats in thirty turns, and prefers a different least-recent kicker', () => {
     const seq = createSentenceSequence({ rhythmMs: 20_000 });
     const seen = Array.from({ length: 30 }, (_, n) => seq.read(choices, NOW + n * 20_000));
