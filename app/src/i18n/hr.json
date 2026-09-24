@@ -557,6 +557,7 @@
       "try": "Isprobaj",
       "scanShort": "Upiši kod",
       "proposal": "Pročitaj prijedlog projekta",
+      "stats": "Pogledaj statistiku",
       "newTab": "Otvara se u novoj kartici"
     },
     "captureCaption": "Primjeri stvarnih prikaza. Podaci na snimkama nisu trenutačno stanje.",
@@ -655,6 +656,8 @@
       "screensBody": "Kafić. Knjižnica. Ured četvrti. Vizija je mreža korisnih zaslona na uređajima koje prostori već imaju.",
       "openTitle": "Izvori na vidjelu.",
       "openBody": "Svaki prikaz nosi izvor. Kod je otvoren, a izvedeni skupovi dostupni za preuzimanje uz svoje uvjete uporabe.",
+      "countTitle": "Brojimo događaje, ne ljude.",
+      "countBody": "Što aplikacija broji i što od toga ima Zagreb, javno je i uživo, bez ijednog osobnog podatka.",
       "proposal": "Radni prototip za prijavu Gradu Zagrebu. Pilot u gradskim prostorima predlaže se kroz financiranje i partnerstvo s Gradom."
     },
     "pagesNav": "Stranice",

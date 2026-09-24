@@ -2,8 +2,9 @@
    document says is in the HTML; this adds the Zagreb clock, the theme control
    (same preference key as the app), the rotating demo code, a compressed
    session-expiry demo, the contents scrollspy, the switch for the hosted page's
-   development-notes layer and, on the app's own origin, a refresh of the
-   "Sada u Zagrebu" tiles from the open teaser endpoint.
+   development-notes layer, the hosted page's dialog onto the live statistics
+   and, on the app's own origin, a refresh of the "Sada u Zagrebu" tiles from
+   the open teaser endpoint.
    Plain script, no imports, no dependencies: it runs inline from a file on
    disk and as a module under the app's CSP (script-src 'self'). */
 (function () {
@@ -305,6 +306,46 @@
       .catch(function () { /* the snapshot stays */ });
   }
 
+  // --- Live statistics: /statistika/ in a dialog, on the hosted page only ------
+  // The link works as a link without the script, and a modified click (new tab,
+  // new window) is left to the browser. The frame loads only when the dialog
+  // first opens; /statistika/ is the one page of the site that may be framed.
+  function bindStats() {
+    var link = $('[data-prijava-stats]');
+    if (!link || typeof doc.createElement('dialog').showModal !== 'function') return;
+    var dialog = null;
+    var frame = null;
+    function build() {
+      dialog = doc.createElement('dialog');
+      dialog.className = 'stats-dialog';
+      dialog.setAttribute('aria-labelledby', 'stats-dialog-h');
+      dialog.setAttribute('data-testid', 'prijava-stats-dialog');
+      dialog.innerHTML =
+        '<div class="stats-dialog-head">' +
+          '<div class="stats-dialog-title"><h2 id="stats-dialog-h">Statistika uživo</h2>' +
+          '<p>Ista javna stranica kao na adresi /statistika/: što aplikacija broji, kako i čemu to služi gradu.</p></div>' +
+          '<a class="btn-ghost" href="/statistika/" target="_blank" rel="noopener" data-testid="prijava-stats-tab">Otvori u novoj kartici <span aria-hidden="true">↗</span></a>' +
+          '<button class="btn-ghost stats-dialog-close" type="button" data-testid="prijava-stats-close">Zatvori</button>' +
+        '</div>' +
+        '<iframe class="stats-dialog-frame" title="Statistika aplikacije Kaj ima?" data-testid="prijava-stats-frame"></iframe>';
+      doc.body.appendChild(dialog);
+      frame = $('iframe', dialog);
+      $('.stats-dialog-close', dialog).addEventListener('click', function () { dialog.close(); });
+      // A press on the backdrop (the dialog box itself, outside its content) closes it.
+      dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
+      dialog.addEventListener('close', function () { root.classList.remove('stats-open'); link.focus(); });
+    }
+    link.addEventListener('click', function (e) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      if (!dialog) build();
+      if (!frame.getAttribute('src')) frame.setAttribute('src', '/statistika/?ugradeno=1');
+      root.classList.add('stats-open');
+      dialog.showModal();
+      $('.stats-dialog-close', dialog).focus();
+    });
+  }
+
   // --- Wiring -----------------------------------------------------------------
   function init() {
     applyTheme(readPref());
@@ -317,6 +358,7 @@
     $$('[data-action="demo-session"]').forEach(function (b) { b.addEventListener('click', function () { startDemo(b); }); });
     bindScrollspy();
     bindNotes();
+    bindStats();
     refreshLive();
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init); else init();

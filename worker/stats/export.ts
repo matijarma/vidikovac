@@ -5,19 +5,34 @@
 //               event, dim1, dim2, count), counts rounded to 5, cells under 10
 //               folded into "ostalo", over_cap excluded (design: overflow is not
 //               part of the City dataset), source_fetch excluded (it is an
-//               operations signal reported separately in the reliability report).
+//               operations signal reported separately in the reliability report),
+//               and the engine's own measurements (twin_*, static_watch) excluded:
+//               the City's set is about demand, and no person is in them. They
+//               are shown exactly on the public page (worker/stats/public.ts).
 //
 // Folding is done in three passes so that no cell under CITY_MIN_CELL can ever
 // appear: (1) sub-threshold cells lose their dimensions and merge into the
 // hour's "ostalo" cell; (2) an "ostalo" cell still under threshold merges into
 // the day's "ostalo" cell (hour left empty); (3) whatever is still under
-// threshold is dropped. Days are never merged with each other.
-import type { MetricsDailyRow } from '../metrics-do';
+// threshold is dropped. Days are never merged with each other. The public
+// report (/statistika/) folds with the very same foldCells, so every number it
+// shows about people is a sum of cells this file would publish.
+import type { MetricsDailyRow } from '../metrics-rows';
 
 export const RAW_COLUMNS = ['day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;
 export const CITY_COLUMNS = ['month', 'day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;
 
-export const CITY_EXCLUDED_EVENTS: ReadonlySet<string> = new Set(['over_cap', 'source_fetch', 'evaluation']);
+export const CITY_EXCLUDED_EVENTS: ReadonlySet<string> = new Set([
+  'over_cap',
+  'source_fetch',
+  'evaluation',
+  'twin_tick',
+  'twin_hindsight',
+  'twin_hindsight_sign',
+  'twin_order',
+  'twin_plan',
+  'static_watch',
+]);
 export const CITY_MIN_CELL = 10;
 export const CITY_ROUND_TO = 5;
 export const OSTALO = 'ostalo';
@@ -77,15 +92,20 @@ function hourSortKey(hour: string): number {
   return hour === '' ? 24 : Number(hour);
 }
 
-export function cityRows(rows: readonly MetricsDailyRow[]): CityRow[] {
-  // Pass 0: aggregate the eligible rows into cells.
+/** One counter cell before the fold: a row with the hour as text, the shape
+ *  foldCells works in. */
+export type FoldCell = Omit<CityRow, 'month'>;
+
+/**
+ * The three folding passes over already-aggregated cells: sub-threshold cells
+ * lose their dimensions into the hour's "ostalo", what is still under the
+ * threshold folds into the day's "ostalo" (hour ''), and what even that cannot
+ * protect is dropped; the rest is rounded to CITY_ROUND_TO. An event keeps its
+ * name through every pass, and days never merge.
+ */
+export function foldCells(input: Iterable<FoldCell>): CityRow[] {
   const cells = new Map<CellKey, Cell>();
-  for (const r of rows) {
-    if (CITY_EXCLUDED_EVENTS.has(r.event)) continue;
-    // Without a resolved screen, a failed scan cannot be attributed to a venue.
-    if (r.event === 'scan_fail' && r.dim2 === 'unattributed') continue;
-    add(cells, { day: r.day, hour: String(r.hour), event: r.event, dim1: r.dim1, dim2: r.dim2, count: r.count });
-  }
+  for (const c of input) add(cells, c);
 
   // Pass 1: sub-threshold cells fold into the hour's ostalo cell.
   const pass1 = new Map<CellKey, Cell>();
@@ -124,6 +144,22 @@ export function cityRows(rows: readonly MetricsDailyRow[]): CityRow[] {
       a.dim2.localeCompare(b.dim2),
   );
   return out;
+}
+
+/** True for a row the City dataset may carry at all (before folding). */
+export function isCityEligible(r: MetricsDailyRow): boolean {
+  if (CITY_EXCLUDED_EVENTS.has(r.event)) return false;
+  // Without a resolved screen, a failed scan cannot be attributed to a venue.
+  return !(r.event === 'scan_fail' && r.dim2 === 'unattributed');
+}
+
+export function cityRows(rows: readonly MetricsDailyRow[]): CityRow[] {
+  const cells: FoldCell[] = [];
+  for (const r of rows) {
+    if (!isCityEligible(r)) continue;
+    cells.push({ day: r.day, hour: String(r.hour), event: r.event, dim1: r.dim1, dim2: r.dim2, count: r.count });
+  }
+  return foldCells(cells);
 }
 
 export function cityCsv(rows: readonly MetricsDailyRow[]): string {

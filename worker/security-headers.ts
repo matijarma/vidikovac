@@ -31,6 +31,10 @@
 // THE PAGE POLICY (/hitno, /open/): server-rendered, zero JS, one inline
 // <style>, no fetch of any kind, so `default-src 'none'` holds.
 // THE STATS POLICY adds noindex and no-store: the page sits behind Access.
+// THE ONE FRAMEABLE PAGE: /statistika/, the public report, is served with the
+// app policy above except `frame-ancestors 'self'` and X-Frame-Options
+// SAMEORIGIN (worker/routes/statistika.ts allowSameOriginFrame), so /prijava/
+// can open it in a dialog. Every other page stays 'none' / DENY.
 // THE DATA POLICY (/open/*.json, .geojson): nothing executes, nothing frames.
 
 export const TILE_HOST = 'https://tile.openstreetmap.org';

@@ -60,6 +60,7 @@ export default defineConfig({
         privatnost: page('app/privatnost/index.html'),
         pristupacnost: page('app/pristupacnost/index.html'),
         prijava: page('app/prijava/index.html'),
+        statistika: page('app/statistika/index.html'),
       },
     },
   },

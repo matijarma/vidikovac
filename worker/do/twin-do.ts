@@ -34,6 +34,8 @@ import { metricsStub, recordMetric } from '../metrics';
 import type { MetricsEntry } from '../metrics-do';
 import { TICK_MIN_DELAY_MS, nextTickAt } from '../twin/clock';
 import { createEngine, type Engine } from '../twin/engine';
+import { shapeLive } from '../stats/public';
+import type { LiveTables } from '../../shared/statistika';
 import { patternPathResolver, zagrebBands, type PatternPathResolver } from '../../shared/motion/times';
 import { decodeFeed } from '../twin/feed-decode';
 import { BUCKETS, horizonKey, type HindsightCounts, type HindsightSignCounts, HORIZONS_S, SIGN_BUCKETS } from '../../shared/motion/hindsight';
@@ -657,6 +659,16 @@ export class TwinDO extends DurableObject<Env> {
       overridesError: this.dwellOverridesError,
       unmatched: this.engine.dwell.unmatchedOverrides.map((entry) => ({ stop: entry.stop, route: entry.route ?? null })),
     };
+  }
+
+  /**
+   * The live tables as the public report shows them (/statistika/): the
+   * stops with the most measured stands and the costliest crossings, placed
+   * on the map. Read-only, and without the owner's override text: that and
+   * the unmatched entries stay on /stats.
+   */
+  async publicLive(nowSec?: number): Promise<LiveTables> {
+    return shapeLive(await this.tables(nowSec), this.engine?.net ?? null);
   }
 
   // ---- test seams ------------------------------------------------------------

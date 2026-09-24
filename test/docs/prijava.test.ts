@@ -164,6 +164,19 @@ describe('/prijava/: the submitted text and the development-notes layer', () => 
     expect(hosted).toContain('<meta name="robots" content="noindex">');
   });
 
+  it('links the live statistics from the status line of the hosted page only, outside the document', () => {
+    const link = /<a [^>]*data-testid="prijava-stats"[^>]*>/.exec(hosted)?.[0] ?? '';
+    expect(link).toContain('href="/statistika/"');
+    expect(link).toContain('data-prijava-stats');
+    const header = /<header class="ds" id="statusna-linija">([\s\S]*?)<\/header>/.exec(hosted)?.[1] ?? '';
+    expect(header).toContain('data-testid="prijava-stats"');
+    expect(article(hosted)).not.toContain('prijava-stats');
+    expect(submitted).not.toContain('prijava-stats');
+    expect(render().file).not.toContain('data-testid="prijava-stats"');
+    // The dialog is built by the script on first use; the frame asks for the chrome-less view.
+    expect(read('src/prijava.js')).toContain("frame.setAttribute('src', '/statistika/?ugradeno=1')");
+  });
+
   it('dates every entry of razvojne-biljeske.md and links it to the record in the repository', () => {
     const md = read('razvojne-biljeske.md');
     const { intro, entries } = parseNotes(md);

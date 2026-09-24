@@ -543,6 +543,7 @@
       "try": "Try it",
       "scanShort": "Enter a code",
       "proposal": "Read the project proposal",
+      "stats": "See the statistics",
       "newTab": "Opens in a new tab"
     },
     "captureCaption": "Actual application captures. Data in these images is not the current state.",
@@ -641,6 +642,8 @@
       "screensBody": "A café. A library. A district office. The vision is a network of useful screens on devices these places already have.",
       "openTitle": "Sources in plain sight.",
       "openBody": "Every view names its source. The code is open, and derived datasets are available to download under their respective terms.",
+      "countTitle": "We count events, not people.",
+      "countBody": "What the app counts, and what Zagreb gets from it, is public and live, without a single piece of personal data.",
       "proposal": "A working prototype for an application to the City of Zagreb. A pilot in city venues is proposed through funding and partnership with the City."
     },
     "pagesNav": "Pages",

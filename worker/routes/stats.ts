@@ -11,7 +11,8 @@ import { METRICS_DO_NAME, type MetricsDO, type MetricsDailyRow } from '../metric
 import { zagrebDay } from '../open/time';
 import { verifyAccess } from '../pairing/access';
 import { STATS_SECURITY_HEADERS, withSecurityHeaders } from '../security-headers';
-import { cityCsv, rawCsv } from '../stats/export';
+import { CITY_EXCLUDED_EVENTS, cityCsv, rawCsv } from '../stats/export';
+import { METRIC_EVENTS } from '../metrics';
 import { DAY_MS, DEFAULT_DAYS, MAX_DAYS, renderStatsPage } from '../stats/page';
 
 export const STATS_PATHS = ['/stats', '/stats/data.json', '/stats/export.csv', '/stats/grad.csv'] as const;
@@ -22,6 +23,9 @@ export interface StatsDeps {
   verify?: (env: Env, request: Request) => Promise<boolean>;
   /** Test seam; production queries the MetricsDO singleton. */
   loadRows?: (env: Env, sinceDay: string) => Promise<MetricsDailyRow[]>;
+  /** Test seam; production asks the MetricsDO singleton for the City's events
+   *  only, so the engine's cells never crowd them out of a long window. */
+  loadCityRows?: (env: Env, sinceDay: string) => Promise<MetricsDailyRow[]>;
   /** Test seam; production asks the twin for its live dwell and junction
    *  tables (F11). A twin that cannot answer leaves the tables empty rather
    *  than failing the page: /stats is where an operator goes when something
@@ -29,6 +33,9 @@ export interface StatsDeps {
   loadTwin?: (env: Env) => Promise<TwinTables | null>;
   now?: () => Date;
 }
+
+/** The events grad.csv can carry at all (the fold still drops unattributed scans). */
+const CITY_EVENTS: readonly string[] = METRIC_EVENTS.filter((e) => !CITY_EXCLUDED_EVENTS.has(e));
 
 const NO_STORE = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } as const;
 
@@ -54,10 +61,17 @@ async function defaultLoadTwin(env: Env): Promise<TwinTables | null> {
   }
 }
 
-async function defaultLoadRows(env: Env, sinceDay: string): Promise<MetricsDailyRow[]> {
+function metrics(env: Env): DurableObjectStub<MetricsDO> {
   const namespace = env.METRICS_DO as unknown as DurableObjectNamespace<MetricsDO>;
-  const stub = namespace.get(namespace.idFromName(METRICS_DO_NAME));
-  return await stub.query(sinceDay);
+  return namespace.get(namespace.idFromName(METRICS_DO_NAME));
+}
+
+async function defaultLoadRows(env: Env, sinceDay: string): Promise<MetricsDailyRow[]> {
+  return await metrics(env).query(sinceDay);
+}
+
+async function defaultLoadCityRows(env: Env, sinceDay: string): Promise<MetricsDailyRow[]> {
+  return await metrics(env).queryEvents(sinceDay, CITY_EVENTS);
 }
 
 function isStatsPath(path: string): path is StatsPath {
@@ -95,6 +109,10 @@ async function handleStatsInner(
   const since = zagrebDay(new Date(now.getTime() - (days - 1) * DAY_MS));
 
   try {
+    if (url.pathname === '/stats/grad.csv') {
+      const cityRowsIn = await (deps.loadCityRows ?? deps.loadRows ?? defaultLoadCityRows)(env, since);
+      return csv(cityCsv(cityRowsIn), `vidikovac-grad-${since}-${today}.csv`);
+    }
     const rows = await (deps.loadRows ?? defaultLoadRows)(env, since);
     // Only the HTML page renders the twin's live tables; the CSV and JSON
     // exports stay exactly what they were, a dump of the counter rows.
@@ -112,8 +130,6 @@ async function handleStatsInner(
         });
       case '/stats/export.csv':
         return csv(rawCsv(rows), `vidikovac-brojaci-${since}-${today}.csv`);
-      case '/stats/grad.csv':
-        return csv(cityCsv(rows), `vidikovac-grad-${since}-${today}.csv`);
     }
   } catch (error) {
     console.error(

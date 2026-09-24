@@ -103,6 +103,8 @@ Worker + static application
 
 Signed data tokens avoid waking session objects for ordinary feed polling. Search text and private coordinates are not broadcast to the wall; saved choices stay in the browser. Temporary-screen evaluation metrics are separated from venue-pilot usage.
 
+The counters are public at [`/statistika/`](https://zagreb.aningfilm.hr/statistika/) (data at `/api/statistika`): every number about people is a sum of the cells the City's dataset would carry (rounded to 5, no cell under 10, the folded part shown as such), while source fetches and the tram model's own measurements, which involve no one, are exact. The page explains how counting works and what the City gets from it.
+
 ### Designed to remain accessible
 
 The application includes Croatian and English interfaces, keyboard access, visible focus, reduced motion and light/dark themes. MapLibre renders a regional Protomaps/PMTiles basemap, with tiles, glyphs and sprites served from the application's own origin.
@@ -180,7 +182,7 @@ Run build and browser work sequentially: browser tests manage local servers shar
 
 The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`; `--readme-only <fixture-dir>` regenerates only the fixture's README) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings.
 
-Deployment uses **`git push` to `main` → Cloudflare Workers Builds**, not `wrangler deploy`. A production `SESSION_SECRET` is required. Unset `APP_ENV` means production; `E2E_ADMIN_BYPASS` works only with `APP_ENV=test`. The retired `NETWORK_CHECK` cannot enable test mode. Operator routes `/api/admin/*` and `/stats` require Cloudflare Access; unauthorised requests receive 404. Workers.dev and preview URLs are disabled.
+Deployment uses **`git push` to `main` → Cloudflare Workers Builds**, not `wrangler deploy`. A production `SESSION_SECRET` is required. Unset `APP_ENV` means production; `E2E_ADMIN_BYPASS` works only with `APP_ENV=test`. The retired `NETWORK_CHECK` cannot enable test mode. Operator routes `/api/admin/*` and `/stats` (the raw counters and the tram model's live tables) require Cloudflare Access; unauthorised requests receive 404. The public report `/statistika/` needs no access. Workers.dev and preview URLs are disabled.
 
 The repository, Worker and existing storage names retain the original technical name **`vidikovac`**. The product is **Kaj ima?**
 

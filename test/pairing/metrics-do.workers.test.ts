@@ -2,7 +2,7 @@ import { env, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../../worker/env';
 import { metricsStub, recordMetric, zagrebDayHour } from '../../worker/metrics';
-import { METRICS_DO_NAME, MetricsDO, type MetricsDailyRow } from '../../worker/metrics-do';
+import { METRICS_DO_NAME, MetricsDO, RETENTION_DAYS, retentionCutoff, type MetricsDailyRow } from '../../worker/metrics-do';
 import { waitForRows } from './helpers';
 
 const testEnv = env as unknown as Env;
@@ -85,5 +85,83 @@ describe('MetricsDO', () => {
     const list = await waitForRows(stub(), (list) => total(list, 'kiosk_online', 'sesvete') > 0);
     expect(total(list, 'kiosk_online', 'sesvete')).toBe(1);
     expect(list.filter((r) => r.event === 'not_an_event')).toHaveLength(0);
+  });
+
+  it('queryEvents reads only the named events, ignores words outside the vocabulary, oldest first', async () => {
+    const s = stub();
+    await s.recordMany([
+      { event: 'session_start', dim1: 'knjiznica', dim2: 'trnje', count: 4 },
+      { event: 'twin_tick', dim1: 'ok', dim2: 'warm', count: 90 },
+      { event: 'hitno_view', dim1: 'page', count: 2 },
+    ]);
+    const list = await s.queryEvents('2020-01-01', ['session_start', 'hitno_view', 'no_such_event']);
+    expect(new Set(list.map((r) => r.event))).toEqual(new Set(['session_start', 'hitno_view']));
+    expect(total(list, 'session_start', 'knjiznica', 'trnje')).toBe(4);
+    const keys = list.map((r) => `${r.day}|${r.hour}|${r.event}|${r.dim1}|${r.dim2}`);
+    expect(keys).toEqual([...keys].sort());
+    expect(await s.queryEvents('2020-01-01', ['no_such_event'])).toEqual([]);
+  });
+
+  it('totals sums the named events over hours, per day or over the window', async () => {
+    const s = stub();
+    await runInDurableObject(s, (_instance: MetricsDO, state) => {
+      for (const [day, hour, count] of [['2026-09-20', 1, 5], ['2026-09-20', 2, 7], ['2026-09-21', 3, 11]] as const) {
+        state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, ?, 'source_fetch', 'zet-rt', 'ok', ?)`, day, hour, count);
+      }
+    });
+    expect(await s.totals('2026-09-20', ['source_fetch'], true)).toEqual([
+      { day: '2026-09-20', event: 'source_fetch', dim1: 'zet-rt', dim2: 'ok', count: 12 },
+      { day: '2026-09-21', event: 'source_fetch', dim1: 'zet-rt', dim2: 'ok', count: 11 },
+    ]);
+    expect(await s.totals('2026-09-21', ['source_fetch'], false)).toEqual([{ day: '', event: 'source_fetch', dim1: 'zet-rt', dim2: 'ok', count: 11 }]);
+  });
+
+  it('keeps the newest rows when a window runs past the cap', async () => {
+    const s = stub();
+    await runInDurableObject(s, async (instance: MetricsDO, state) => {
+      state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES ('2026-01-01', 0, 'hitno_view', 'page', '', 1)`);
+      state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES ('2026-09-01', 0, 'hitno_view', 'page', '', 1)`);
+      // The same select the cap guards, at a cap of one: the newest day must win.
+      const newest = (instance as unknown as { newestFirstCapped(sql: string, b: unknown[]): MetricsDailyRow[] }).newestFirstCapped(
+        `SELECT day, hour, event, dim1, dim2, count FROM metrics_hourly WHERE day >= ? AND day <= '2026-09-01' ORDER BY day DESC, hour DESC, event DESC, dim1 DESC, dim2 DESC LIMIT 1`,
+        ['2020-01-01'],
+      );
+      expect(newest.map((r) => r.day)).toEqual(['2026-09-01']);
+    });
+  });
+
+  it('drops cells older than 24 months on the first write of a Zagreb day', async () => {
+    const s = stub();
+    const today = zagrebDayHour(new Date()).day;
+    const old = retentionCutoff(today);
+    const tooOld = new Date(Date.parse(`${old}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    await runInDurableObject(s, (instance: MetricsDO, state) => {
+      (instance as unknown as { prunedDay: string }).prunedDay = '';
+      for (const day of [tooOld, old]) {
+        state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, 0, 'hitno_view', 'page', '', 1)`, day);
+      }
+    });
+    await s.record('hitno_view', 'page');
+    const days = (await s.query('2000-01-01')).map((r) => r.day);
+    expect(days).not.toContain(tooOld);
+    expect(days).toContain(old);
+    expect(RETENTION_DAYS).toBe(730);
+    expect(retentionCutoff('2028-09-24')).toBe('2026-09-25');
+  });
+
+  it('publicCells folds every hourly row of the window where it lives, city and evaluation apart', async () => {
+    const s = stub();
+    await runInDurableObject(s, (_instance: MetricsDO, state) => {
+      const put = (day: string, hour: number, event: string, dim1: string, dim2: string, count: number) =>
+        state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, ?, ?, ?, ?, ?)`, day, hour, event, dim1, dim2, count);
+      put('2026-03-01', 10, 'session_start', 'knjiznica', 'trnje', 23);
+      put('2026-03-01', 11, 'session_start', 'kafic', 'trnje', 4);
+      put('2026-03-01', 12, 'evaluation', 'session_start', 'maksimir', 12);
+      put('2026-03-01', 12, 'twin_tick', 'ok', 'warm', 360);
+    });
+    const cells = await s.publicCells('2026-03-01');
+    const march = (list: { day: string }[]) => list.filter((c) => c.day === '2026-03-01');
+    expect(march(cells.city)).toEqual([{ month: '2026-03', day: '2026-03-01', hour: '10', event: 'session_start', dim1: 'knjiznica', dim2: 'trnje', count: 25 }]);
+    expect(march(cells.evaluation)).toEqual([{ month: '2026-03', day: '2026-03-01', hour: '12', event: 'session_start', dim1: 'privremeni', dim2: 'maksimir', count: 10 }]);
   });
 });

@@ -26,7 +26,9 @@
 // the document and an aside, hidden until the button is pressed, rendered from
 // docs/prijava/razvojne-biljeske.md into the fragment docs/prijava/src/biljeske.html.
 // The submitted text around the layer is the same markup, byte for byte, as without
-// it (test/docs/prijava.test.ts).
+// it (test/docs/prijava.test.ts). The hosted page's status line also carries a link
+// to the live public statistics (docs/prijava/src/statistika.html), which the script
+// opens in a dialog; it sits outside the document and the file never has it.
 //
 // The Markdown is the master text: nothing in this script writes prose. Run with
 // `node scripts/build-prijava.mjs` after editing any master; commit the outputs.
@@ -363,6 +365,7 @@ export function render({ notes = true } = {}) {
       .replace('<!--@TOC-->', () => toc)
       // The layer sits on the hosted page only; in the file the marker leaves no trace.
       .replace('<!--@NOTES-->', () => (variant === 'hosted' && notesHtml ? `${notesHtml}\n  ` : ''))
+      .replace('<!--@STATS-->', () => (variant === 'hosted' ? `${read(`${SRC}/statistika.html`).trim()}\n      ` : ''))
       .replace('<!--@COVER_META-->', () => coverMetaHtml)
       .replace('<!--@BODY-->', () => bodyHtml)
       .replace('<!--@QR-->', () => qr)

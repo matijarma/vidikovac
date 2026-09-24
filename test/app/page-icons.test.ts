@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 const APP = join(import.meta.dirname, '..', '..', 'app');
 const read = (...parts: string[]): string => readFileSync(join(APP, ...parts), 'utf8');
-const PAGES = ['index.html', 'd/index.html', 's/index.html', 'kiosk/index.html', 'izvori/index.html', 'privatnost/index.html', 'pristupacnost/index.html'];
+const PAGES = ['index.html', 'd/index.html', 's/index.html', 'kiosk/index.html', 'izvori/index.html', 'privatnost/index.html', 'pristupacnost/index.html', 'statistika/index.html'];
 
 describe('the page icon', () => {
   const svg = read('public', 'favicon.svg');
