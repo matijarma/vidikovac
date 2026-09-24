@@ -1564,13 +1564,15 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(true);
   });
 
-  it('closes on Escape, on the close button and after 90 seconds untouched, and gives the focus back to the brand', async () => {
+  it('closes on Escape, on the close button and after 90 seconds untouched, and after a pointer open hands the focus to the wall itself', async () => {
     const k = mount({ stored: STORED });
     await flush();
     open(k); await flush();
     panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(panel(k)!.hidden).toBe(true);
-    expect(document.activeElement).toBe(brand(k));
+    // Round 2, F18: a press (pointer) opened it, so no element that draws a focus ring takes the focus back; the wall
+    // root does (its ring is suppressed), and Enter or Space on it open the panel again.
+    expect(document.activeElement).toBe(k.root.querySelector('.kiosk'));
     open(k);
     q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
     expect(panel(k)!.hidden).toBe(true);
@@ -1578,6 +1580,39 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(false);
     k.tick(SETTINGS_IDLE_MS);
     expect(panel(k)!.hidden).toBe(true);
+  });
+
+  it('after a pointer open, Escape, the close button and the idle close leave no ring: the wall holds the focus; after a keyboard open the brand keeps the focus and its ring (round 2, F18)', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    open(k); await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
+    // Enter on the wall reopens it (the keyboard path is intact), and Escape then gives the brand the focus, ring and all.
+    wall.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(brand(k));
+    // Enter on the brand (a keyboard open) as well.
+    brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
+    expect(document.activeElement).toBe(brand(k));
+    // A pointer open closed by the close button, and one closed by the idle timer: the wall.
+    open(k); await flush();
+    q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
+    open(k); await flush();
+    k.tick(SETTINGS_IDLE_MS);
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
   });
 
   it('forgets the screen only after an inline confirmation, and never opens over a granted session', async () => {
