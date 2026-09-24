@@ -821,7 +821,9 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
         handle = null;
         host.innerHTML = '';
       }
-    });
+    // Two days of the real timetable, a mount and a fit per hour (two at 1366): 5 to 8 s on a host at load 20 to 40,
+    // the same with the module of 03232c88 (round 1, 24 Sep: timed out at the 5 s default inside the four-worker gate).
+    }, 30_000);
   }
 });
 
