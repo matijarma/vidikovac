@@ -409,16 +409,19 @@ export function markerCensus(
     // A count is a whole number: "?", "—" or a "+3" is a mark without one.
     const counted = count !== undefined && /^\d+$/.test(count);
     const far = bike && p.far === true;
+    // Decision 60: an empty station is a small teal dot whose "0" is not drawn; it still says its zero.
+    const empty = bike && !far && String(p.badge ?? '') === '0' && count === undefined;
     const blank = bike && !far && count === undefined && p.spent === true && String(p.badge ?? '') === '';
     if (far) census.bajs.far++;
-    else if (bike && counted) census.bajs[count === '0' ? 'zero' : 'counted']++;
+    else if (empty || (bike && counted && count === '0')) census.bajs.zero++;
+    else if (bike && counted) census.bajs.counted++;
     else if (blank) census.bajs.blank++;
     // A venue is named or it is a number on a disc: its count says how many
     // happenings, not where. Only a surface that names no city place at all
     // lets the count stand for it.
     const venue = !bike && p.category !== 'air';
     const saysIt = named.has(id) || names.suppressed.has(id) || (counted && (!venue || !names.shown));
-    if (!saysIt && !far && !blank) census.unlabelled++;
+    if (!saysIt && !far && !blank && !empty) census.unlabelled++;
     if (at) {
       const number: ScreenBox = { left: at.x - half, top: at.y - half, right: at.x + half, bottom: at.y + half };
       const over = pills.filter((box) => boxesMeet(box, number)).length;

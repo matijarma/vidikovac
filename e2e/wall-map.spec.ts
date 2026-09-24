@@ -11,8 +11,9 @@
 //   3. the pills list whole line numbers, never a "+N" fold, and no pill's
 //      label runs past the three-row budget (decision 23: at most
 //      PILL_MAX_LINES rows of PILL_MAX_CHARS_CLUSTER characters);
-//   4. every BAJS station is a disc that says something: its number, the grey
-//      "0", or the grey disc without a number for a station that is not
+//   4. every BAJS station is a disc that says something: its number, the small
+//      teal dot of an empty station (decision 60: counted as the zero, its "0"
+//      not drawn), or the grey disc without a number for a station that is not
 //      renting -- and no drawn mark is left without a count or a name
 //      (`data-unlabelled` 0);
 //   5. the legend is three plain items, never a "?";

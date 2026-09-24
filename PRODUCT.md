@@ -151,8 +151,9 @@ once the camera is in a neighbourhood. A screen with a place opens on N stops
 around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
 measured per place along the tram lines that serve it, the same number the
 "U blizini" pill prints ("2 km · ~15 min" at 2 km). On the frame buses stay at
-every hour, every BAJS station is a disc with its count (grey at zero, grey
-and blank when the count is unknown, never "?"), venues appear only with a
+every hour, every BAJS station is a disc with its count (a small teal dot
+without a number when it has no bike, grey and blank when the count is
+unknown, never "?"), venues appear only with a
 programme tonight and are named, and a merged vehicle pill lists every line
 number. A stop's departures say first which vehicles come next and in how many
 minutes: trips with a tracked vehicle show a countdown derived from the
