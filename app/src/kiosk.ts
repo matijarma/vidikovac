@@ -41,6 +41,9 @@ import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { createQr } from './ui/qr';
+/** Round 2 F7 (owner, 24 Sep): the standard quiet zone, four modules, drawn inside the SVG on the white plate,
+ *  so a phone camera finds the 120 mm code from 3 m; the code's own module stays its size (kiosk.css --k-qr). */
+const QR_QUIET_ZONE_MODULES = 4;
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
@@ -1088,7 +1091,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const label = fill(s.invitation.qrLabel, { code: speakableCode(slot.code) });
     // A slot change (a live code giving way to a different one) crossfades; the first code, a re-sent batch and a fresh mount paint at once.
     const previous = codeEl?.dataset.state === 'live' ? (codeEl.textContent ?? '').trim() : null;
-    if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
+    if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display, quietZoneModules: QR_QUIET_ZONE_MODULES }).element);
     if (codeA) codeA.textContent = display.slice(0, 4);
     if (codeB) codeB.textContent = display.slice(5);
     if (codeEl) codeEl.dataset.state = 'live';

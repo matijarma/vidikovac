@@ -121,10 +121,11 @@
   --k-strip-h: calc(72px * var(--k-zoom));
   --k-pad: calc(24px * var(--k-zoom));
   --k-gap: calc(20px * var(--k-zoom));
-  /* The front page's aside: the QR's 240 px plus the column of words beside it (ui/kiosk-city.css). */
+  /* The front page's aside: the QR plate (288 px: the code's 29 modules of 7.8 px inside the standard quiet zone of
+     four, round 2 F7) plus the column of words beside it (ui/kiosk-city.css). */
   --k-side-w: calc(600px * var(--k-sign-zoom));
   --k-paired-side-w: calc(448px * var(--k-sign-zoom));
-  --k-qr: calc(264px * var(--k-sign-zoom));
+  --k-qr: calc(288px * var(--k-sign-zoom));
   --k-code-size: calc(36px * var(--k-sign-zoom));
   --k-sentence-size: calc(40px * var(--k-zoom));
   /* The card's own measures on the sign scale: its gap, its lead (the supporting tier) and its hint (the hint tier).
@@ -155,7 +156,7 @@
   --k-gap: calc(14px * var(--k-zoom));
   --k-side-w: calc(520px * var(--k-sign-zoom));
   --k-paired-side-w: calc(448px * var(--k-sign-zoom));
-  --k-qr: calc(264px * var(--k-sign-zoom));
+  --k-qr: calc(288px * var(--k-sign-zoom));
   --k-code-size: calc(32px * var(--k-sign-zoom));
   --k-sentence-size: calc(40px * var(--k-zoom));
   --k-card-gap: calc(14px * var(--k-sign-zoom));
@@ -462,7 +463,9 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
    264 px plate the wide wall's card leaves the lead 368 px, two short of its 370 (round 1, 24 Sep). */
 .k-lead { font-size: var(--k-card-lead); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
-.k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: 12px; border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
+/* The quiet zone is drawn inside the SVG (ui/qr.ts quietZoneModules: four empty modules, round 2 F7), so the white
+   plate needs no padding of its own and the code keeps its module size on the 288 px plate. */
+.k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: 0; border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
 .k-qr-waiting { display: flex; align-items: center; justify-content: center; box-sizing: border-box; height: 100%; padding: var(--k-card-gap); border-radius: var(--k-radius-s); background: transparent; border: 2px dashed var(--k-action-ink); text-align: center; font-size: var(--k-hint-size); color: inherit; }
 .k-hint { min-width: 0; font-size: var(--k-card-hint); line-height: 1.3; }

@@ -268,14 +268,14 @@ describe('public-screen design invariants', () => {
     expect(rule(".kiosk[data-portrait='1'] .k-paired .k-side")).toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(rule(".kiosk[data-size='handheld']")).toContain('--k-paired-side-w: 100%');
   });
-  it('keeps the QR SVG at 240px inside a 264px plate with 12px padding', () => {
-    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
-    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
-    expect(windowRule('.kiosk:not([data-size=handheld])')).toContain('--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))');
+  it('keeps the QR on a 288px plate whose quiet zone is drawn inside the SVG (four modules, round 2 F7), with no padding of its own', () => {
+    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(288px * var(--k-sign-zoom))');
+    expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(288px * var(--k-sign-zoom))');
+    expect(windowRule('.kiosk:not([data-size=handheld])')).toContain('--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))');
     expect(rule('.k-qr')).toContain('width: var(--k-qr)');
     expect(windowRule('.kiosk .k-city-window .k-invite')).toContain('var(--k-qr)');
     expect(rule('.k-qr .qr')).toContain('var(--k-qr-plate)');
-    expect(rule('.k-qr .qr')).toContain('padding: 12px');
+    expect(rule('.k-qr .qr')).toContain('padding: 0');
     expect(rule(".kiosk[data-size='handheld']")).toContain('--k-qr: 240px');
   });
   it('uses the walk-up floor for the head, map note and card, with a 1.1 dark read multiplier', () => {
