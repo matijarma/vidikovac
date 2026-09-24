@@ -157,14 +157,32 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
 }
 
 /**
- * The row to drop when the rows do not fit, or null: the latest departure while more than one is left (the
- * wall promises one to three, and a third tram is worth less than a closure or the sunset that would otherwise
+ * A timed row whose moment lies on a later Zagreb day than `now`: an opening or an event tomorrow, tomorrow's
+ * sunrise. A closure is never later (its moment is its end, and the street is closed now), the first and last
+ * trams are promises (decision 27), and a departure is the wall's first answer.
+ */
+export function onLaterDay(row: NearbyRow, now: number): boolean {
+  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'closure' || row.kind === 'first' || row.kind === 'last') return false;
+  return daysAhead(row.atMs!, now) >= 1;
+}
+
+/**
+ * The row to drop when the rows do not fit, or null. Tomorrow before today (round 1, 24 Sep): the latest row
+ * for a later day (onLaterDay) goes first, because at 20:35 the live wall showed one tram and two museums
+ * opening at 08:00 tomorrow, its second and third trams dropped for them, while §11 lists the departures
+ * first and tomorrow's openings last. Then the latest departure while more than one is left (the wall
+ * promises one to three, and a third tram is worth less than a closure or the sunset that would otherwise
  * leave and return with the trams, D5.16 and D5.19 observers); then the latest timed row that is not a
  * departure; then a second timeless row. First/last trams and one timeless row never enter the drop order
  * (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while the list
- * can hold it, and returns under a new identity only when its fact changed.
+ * can hold it, and returns under a new identity only when its fact changed. Without `now` (older callers)
+ * the later-day step is skipped.
  */
-export function dropCandidate<T extends NearbyRow>(rows: readonly T[]): T | null {
+export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: number): T | null {
+  if (now !== undefined) {
+    const later = rows.filter((row) => onLaterDay(row, now));
+    if (later.length > 0) return later[later.length - 1]!;
+  }
   const departures = rows.filter((row) => row.kind === 'departure');
   if (departures.length > 1) return departures[departures.length - 1]!;
   const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
@@ -450,7 +468,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         // than an empty departures block (D2 full run, 1366 x 768 at night).
         const departure = shown.find(row => row.kind === 'departure');
         if (departure) reserved.add(departure);
-        const drop = dropCandidate(shown) ?? [...shown].reverse().find(row => !reserved.has(row));
+        const drop = dropCandidate(shown, now) ?? [...shown].reverse().find(row => !reserved.has(row));
         // No more discretionary content: never silently remove a reserved row.
         if (!drop) break;
         shown = shown.filter((row) => row !== drop);

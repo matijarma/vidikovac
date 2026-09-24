@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -639,11 +639,50 @@ describe('whole rows from the row budget', () => {
     expect(dropCandidate([dep(1), always()])).toBeNull();
     expect(dropCandidate([dep(1), dep(2)])?.id).toBe('dep:2');
     expect(dropCandidate([dep(1)])).toBeNull();
+    // Round 1 (24 Sep, the live evening list): a row for a later day goes before the second and third departures,
+    // the latest first; a closure ending tomorrow is closed now and keeps the fix11 order; today's rows keep it too.
+    const DAY = 24 * 60 * MIN;
+    const openingTomorrow = row({ id: 'opening:muzej', kind: 'opening', atMs: NOW + DAY });
+    const sunriseTomorrow = row({ id: 'solar:sunrise', kind: 'solar', atMs: NOW + 13 * 60 * MIN });
+    const closureTomorrow = row({ id: 'closure:tomorrow', kind: 'closure', atMs: NOW + DAY });
+    expect(dropCandidate([dep(1), dep(2), dep(3), openingTomorrow, always()], NOW)?.id).toBe('opening:muzej');
+    expect(dropCandidate([dep(1), dep(2), sunriseTomorrow, openingTomorrow, always()], NOW)?.id).toBe('opening:muzej');
+    expect(dropCandidate([dep(1), dep(2), sunriseTomorrow, always()], NOW)?.id).toBe('solar:sunrise');
+    expect(dropCandidate([dep(1), openingTomorrow, always()], NOW)?.id).toBe('opening:muzej');
+    expect(dropCandidate([dep(1), dep(2), closureTomorrow, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()], NOW)?.id).toBe('dep:2');
+    const first = row({ id: 'first:morning', kind: 'first', atMs: NOW + DAY });
+    expect(dropCandidate([dep(1), first, always()], NOW)).toBeNull();
+    expect([openingTomorrow, sunriseTomorrow].map((r) => onLaterDay(r, NOW))).toEqual([true, true]);
+    expect([closureTomorrow, first, dep(1), always(), closure, solar].map((r) => onLaterDay(r, NOW))).toEqual([false, false, false, false, false, false]);
     expect(typeScale(64)).toBe(1);
     expect(typeScale(GROW_FROM_PX)).toBe(1);
     expect(typeScale(92)).toBeCloseTo(1.1);
     // A two-line row at the floors (44 + 32 px of line boxes, scaled) fits its budget from GROW_FROM_PX on.
     for (let px = GROW_FROM_PX; px <= 92; px += 1) expect((40 * 1.1 + 28 * 1.15) * typeScale(px)).toBeLessThanOrEqual(px - 1);
+  });
+
+  it('keeps three departures over tomorrow\u2019s openings when the box holds five rows (round 1, 24 Sep)', () => {
+    const DAY = 24 * 60 * MIN;
+    const rows = [dep(1), dep(2), dep(3), row({ id: 'opening:a', kind: 'opening', atMs: NOW + DAY, title: 'Galerija Harmica' }),
+      row({ id: 'opening:b', kind: 'opening', atMs: NOW + DAY, title: 'Hrvatski športski muzej' }), always()];
+    const measure: TimelineMeasure = {
+      box: list => ({ height: 400, width: 472, overflow: list.children.length > 5 }),
+      lines: () => 1,
+    };
+    const t = mount({ measure });
+    t.update(rows, 2000, NOW);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'opening:a', 'always:story:trg']);
+    // The evening of 24 Sep on the live wall: eleven candidates in a box for eight, the last, sunrise and two openings tomorrow.
+    const evening = [dep(1), dep(2), dep(3), row({ id: 'last:tonight', kind: 'last', atMs: NOW + 3 * 60 * MIN, title: 'Zadnji tramvaji' }),
+      row({ id: 'solar:sunrise', kind: 'solar', atMs: NOW + 13 * 60 * MIN, title: 'Izlazak sunca' }),
+      row({ id: 'opening:a', kind: 'opening', atMs: NOW + DAY, title: 'Galerija Harmica' }),
+      row({ id: 'opening:b', kind: 'opening', atMs: NOW + DAY, title: 'Hrvatski športski muzej' }), always()];
+    t.destroy();
+    host.innerHTML = '';
+    const tight = mount({ measure: { box: list => ({ height: 400, width: 472, overflow: list.children.length > 6 }), lines: () => 1 } });
+    tight.update(evening, 2000, NOW);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'last:tonight', 'solar:sunrise', 'always:story:trg']);
   });
 });
 
@@ -768,9 +807,14 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
           const t2 = mount({ measure: inBox, designHeightPx: box.listPx });
           t2.update(rows, 2182, now);
           const departures = ids().filter((id) => id.startsWith('dep:')).length;
-          // At least two wherever decision 50's whole-aside list (ea5439e) showed two or more.
+          // At least two wherever decision 50's whole-aside list (ea5439e) showed two or more and the arrangement's box
+          // has the room for a second departure at the smallest row beside the promises. Round 1 (24 Sep): with tomorrow's
+          // sunrise no longer outliving the second tram, the whole-aside list at 22:20 shows two departures where it showed
+          // one, while the legend arrangement's 396 px hold the two-line lead ("13 Kvaternikov trg", 96 px) and the three
+          // promises (348 px) but not a second 64 px row, and the map's legible minimum outranks it (decision 50 refined).
           const d50 = shown.filter((id) => id.startsWith('dep:')).length;
-          expect(departures, `${label}: departures in the ${box.placement} arrangement (${box.listPx} px list; decision 50's showed ${d50})`).toBeGreaterThanOrEqual(Math.min(2, d50));
+          const roomForTwo = box.listPx >= floorPx + 64;
+          expect(departures, `${label}: departures in the ${box.placement} arrangement (${box.listPx} px list, room for two: ${roomForTwo}; decision 50's showed ${d50})`).toBeGreaterThanOrEqual(Math.min(2, d50, roomForTwo ? 2 : 1));
           expect(section().dataset.fitOverflow, label).toBe('0');
         }
         handle?.destroy();
@@ -1381,3 +1425,4 @@ describe('lifecycle', () => {
     expect(t.shown()).toBe(1);
   });
 });
+
