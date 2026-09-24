@@ -16,6 +16,7 @@ import { createI18n, type I18n, type MessageCatalog } from '../../app/src/i18n/i
 import { selectNearby, type NearbyRow } from '../../app/src/city/nearby';
 import type { LastRunLive } from '../../app/src/core/lastrun';
 import { emptyCity } from '../../shared/city/types';
+import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
@@ -690,6 +691,93 @@ function longRows(): TimelineRow[] {
   ];
 }
 
+/**
+ * The compact wall as the D2 full run measured it at 1366 x 768 (dark): a 154 px list, a 397 px text column
+ * (16 read-tier title characters, 25 walk-up sub characters a line); a row is 44 px a title line, 32 px a sub
+ * line, 8 px of padding, never below the row budget. The night promises are the rows of lastTrams2240.
+ */
+const COMPACT_1366: Layout = { boxPx: 154, titleChars: 16, subChars: 25 };
+function nightRows(): TimelineRow[] {
+  const night = (hhmm: string, day = '22'): number => at(`2026-09-${day}T${hhmm}:00+02:00`);
+  return [
+    dep(1, { atMs: night('22:41', '21'), title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+    dep(2, { atMs: night('22:48', '21'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '17', routeName: '17' } }),
+    dep(3, { atMs: night('22:48', '21'), live: false, title: 'Črnomerec', source: 'zet-gtfs', arrival: { routeId: '6', routeName: '6' } }),
+    row({ id: 'last:2026-09-21', kind: 'last', atMs: night('23:31', '21'), title: 'Zadnji tramvaji',
+      sub: '1 23:31 · 12 23:45 · 17 00:01 · 11 00:09 · 6 00:27 · 13 00:30 · 14 00:31', subShort: '1 23:31 · 12 23:45', source: 'zet-gtfs' }),
+    row({ id: 'first:2026-09-22', kind: 'first', atMs: night('04:13'), title: 'Prvi tramvaj',
+      sub: '12 04:13 · 17 04:24 · 1 04:33 · 11 04:51 · 6 04:57 · 14 05:11 · 13 05:27', subShort: '12 04:13 · 17 04:24', source: 'zet-gtfs' }),
+    row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
+  ];
+}
+
+/** Decision 50: the compact list takes the whole 513 px aside less its heading and padding, 451 px measured. */
+const COMPACT_1366_D50: Layout = { boxPx: 451, titleChars: 16, subChars: 25 };
+
+describe('every hour of the real Trg timetable fits both wall sizes (decision 50)', () => {
+  const file = JSON.parse(readFileSync(join(import.meta.dirname, '../../app/public/data/lastrun/106_1.json'), 'utf8'));
+  const place = { kind: 'tram' as const, stopId: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286 };
+  const platforms = ['106_1', '106_2', '1849_23', '1849_24'];
+  for (const [name, layout] of [['1920 x 1080', WALL_1920], ['1366 x 768', COMPACT_1366_D50]] as const) {
+    it(`${name}: the promises and at least one departure fit whole in every hour, data-fit-overflow 0`, () => {
+      for (let hour = 0; hour < 24; hour++) {
+        const now = at(`2026-09-22T${String(hour).padStart(2, '0')}:20:00+02:00`);
+        const lastRun: LastRunLive = { ...file, status: 'live', fetchedAt: new Date(now).toISOString(), sourceUpdatedAt: file.generatedAt };
+        const boards = platforms.map((stopId) => departuresBoard({ now, stopId }));
+        const rows = selectNearby({ place, radiusM: 2182, now, locale: 'hr', i18n, lastRun, snapshots: {}, city: emptyCity(), fixes: [], boards });
+        const measure = simulated(layout);
+        const t = mount({ measure, designHeightPx: layout.boxPx });
+        t.update(rows, 2182, now);
+        const shown = ids();
+        const label = `${name} at ${String(hour).padStart(2, '0')}:20: ${shown.join(', ')}`;
+        expect(section().dataset.fitOverflow, label).toBe('0');
+        if (rows.some((r) => r.kind === 'departure')) expect(shown.some((id) => id.startsWith('dep:')), label).toBe(true);
+        for (const promise of rows.filter((r) => r.kind === 'first' || r.kind === 'last' || r.always)) expect(shown, label).toContain(promise.id);
+        for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!), label).toBeLessThanOrEqual(SUB_MAX_LINES);
+        t.destroy();
+        handle = null;
+        host.innerHTML = '';
+      }
+    });
+  }
+});
+
+describe('the compact wall and the night promises (decision 27, D2 full run at 1366 x 768)', () => {
+  const NIGHT = at('2026-09-21T22:40:00+02:00');
+
+  it('keeps a departure beside the three promises in a box that cannot hold them, and says so, instead of showing none', () => {
+    const measure = simulated(COMPACT_1366);
+    const t = mount({ measure, designHeightPx: COMPACT_1366.boxPx });
+    t.update(nightRows(), 2182, NIGHT);
+    const kinds = items().map((li) => li.dataset.kind);
+    // The promises stay (decision 27) and the wall never shows zero departures (1 to 3 in every reading).
+    expect(kinds.filter((k) => k === 'departure')).toHaveLength(1);
+    expect(kinds).toEqual(['departure', 'last', 'first', 'pharmacy']);
+    expect(ids()[0]).toBe('dep:1');
+    // Every shown sub is its shorter complete twin, never a wrapped three-line list.
+    for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
+    expect(text(byId('last:2026-09-21').querySelector('.nearby-sub'))).toBe('1 23:31 · 12 23:45');
+    expect(text(byId('first:2026-09-22').querySelector('.nearby-sub'))).toBe('12 04:13 · 17 04:24');
+    // An impossible box is reported, not hidden by deleting a row: 64 + 3 x 84 = 316 px in 154.
+    expect(section().dataset.fitOverflow).toBe('1');
+    expect(section().dataset.skippedFit).toBe('2');
+    expect(measure.sum(host.querySelector('ol')!)).toBe(316);
+  });
+
+  it('at 1920 x 1080 shows the three promises with two-line subs at most and all three departures', () => {
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure });
+    t.update(nightRows(), 2182, NIGHT);
+    const kinds = items().map((li) => li.dataset.kind);
+    // The row budget (81 px rows for six) lets five whole rows in: two departures beside the three promises.
+    expect(kinds.filter((k) => k === 'departure').length).toBeGreaterThanOrEqual(2);
+    expect(kinds.slice(-3)).toEqual(['last', 'first', 'pharmacy']);
+    for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
+    expect(section().dataset.fitOverflow).toBe('0');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
+  });
+});
+
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
   it.each(['22:40', '04:30'])('%s keeps the real Trg first-tram and pharmacy rows within the 1920 budget', time => {
     const now = at(`2026-09-${time === '22:40' ? '22' : '23'}T${time}:00+02:00`);
@@ -717,7 +805,7 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     expect(section().dataset.fitOverflow).toBe('0');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
   });
-  it.each(['departure', 'always', 'event'] as const)('fits an oversized %s without sacrificing a reserved row, and restores discretionary rows when room returns', kind => {
+  it.each(['departure', 'always', 'event'] as const)('keeps an oversized %s when it is a promise (a departure, the uvijek row), reports the box, and restores a discretionary row when room returns', kind => {
     let room = 80;
     const measure: TimelineMeasure = {
       box: list => ({ height: room, width: 400, overflow: list.children.length * 240 > room }),
@@ -726,7 +814,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const t = mount({ designHeightPx: 80, measure });
     const candidate = row({ id: 'oversized', kind, title: 'Črnomerec', always: kind === 'always' });
     t.update([candidate], 2000, NOW);
-    const reserved = kind === 'always';
+    // The first departure and the timeless row are promises; an event yields to the box.
+    const reserved = kind !== 'event';
     expect(ids()).toEqual(reserved ? ['oversized'] : []);
     expect(t.shown()).toBe(reserved ? 1 : 0);
     expect(section().dataset.skippedFit).toBe(reserved ? '0' : '1');
@@ -742,14 +831,14 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
   });
 
-  it('reports an impossible box instead of deleting the reserved row to claim a fit', () => {
+  it('reports an impossible box instead of deleting the reserved rows or the departure to claim a fit', () => {
     const measure: TimelineMeasure = {
       box: list => ({ height: 64, width: 1, overflow: list.children.length > 0 }),
       lines: () => 100,
     };
     const t = mount({ measure, designHeightPx: 64 });
-    t.update([dep(1), always()], 2000, NOW);
-    expect(ids()).toEqual([always().id]);
+    t.update([dep(1), dep(2), always()], 2000, NOW);
+    expect(ids()).toEqual(['dep:1', always().id]);
     expect(section().dataset.skippedFit).toBe('1');
     expect(section().dataset.fitOverflow).toBe('1');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(true);

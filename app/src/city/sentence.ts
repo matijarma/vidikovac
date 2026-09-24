@@ -28,7 +28,14 @@ export { acceptSentence } from '../../../shared/kiosk/sentence';
 export const SENTENCE_NO_REPEAT_MS = 600_000;
 export const SENTENCE_REFRESH_MS = 600_000;
 export const SENTENCE_HOLD_MS = 20_000;
-export const MAX_FACTS = 16;
+/**
+ * The header's fact list. Sixteen starved the night: the last and first rows carry seven lines each and
+ * come after the departures and closures, so "Prvi tramvaj" and the pharmacy reached the header one slot
+ * at a time as other facts expired, and the sequence held one sentence for minutes in between (D2 full
+ * run, lastTrams2240 and the live block). Thirty-two holds a whole night list; the wire cap for the model
+ * stays sixteen (shared/kiosk/sentence.ts stableSentenceFacts).
+ */
+export const MAX_FACTS = 32;
 export const SENTENCE_BUDGET = { wide: 80, compact: 64, portrait: 64, handheld: 64 } as const;
 /** Below this many distinct facts the ten-minute rule falls back to the wording alone. */
 export const SENTENCE_MIN_FACTS = 3;
@@ -160,6 +167,8 @@ export interface SentenceFactsInput {
   i18n: I18n;
   /** The very same measured circle as selectNearby. Absent: no bike claim. */
   radiusM?: number;
+  /** The facts of the sentence on screen: never cut by the cap while the rows still produce them, so its dwell and refreshes hold. */
+  pinned?: readonly string[];
 }
 
 function nextMidnight(now: number): number {
@@ -189,7 +198,7 @@ function timedLabel(at: number, input: SentenceFactsInput): string {
   return input.i18n.t('time.dateAt', { date: dayMonth(at), time });
 }
 
-/** At most sixteen fact records; solar is reserved even with a full timeline. */
+/** At most MAX_FACTS fact records, plus the pinned facts of the sentence on screen; solar is reserved even with a full timeline. */
 export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const { now, i18n, locale } = input;
   if (!Number.isFinite(now)) return [];
@@ -305,7 +314,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
         { wording: 'always' });
     }
   }
-  return facts.slice(0, MAX_FACTS);
+  const pinned = new Set(input.pinned ?? []);
+  return [...facts.slice(0, MAX_FACTS), ...facts.slice(MAX_FACTS).filter(fact => pinned.has(fact.id))];
 }
 
 /** Only stable facts go to AI; countdowns must never enter a twenty-minute cache. */
@@ -398,6 +408,12 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
           held = refreshed;
         }
       }
+      // D2 ruling on decision 29: a re-selection never ends a dwell. A poll that re-ranks the rows, a tram
+      // that fell to fourth, a fact past the cap: a template sentence stays to its boundary, and only its
+      // own fact expiring (or a hostile or overflowing line) ends it early. A changed fact restates a
+      // template sentence in place (the refresh above); a model sentence leaves the pool only when it no
+      // longer grounds against the current facts (kiosk.ts readWrittenSentences), which is that exception.
+      if (!held && current && current.origin === 'template' && valid(current) && now - heldSince < rhythm) held = current;
       // Retain object identity on ordinary refreshes, but update a shortened deadline.
       if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
         || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {

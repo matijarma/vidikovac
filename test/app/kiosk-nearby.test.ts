@@ -324,6 +324,74 @@ describe('departures', () => {
   });
 });
 
+describe('the night feed: few departures, estimates that jitter, one leaving every few minutes (D2 live block, 00:03 to 00:15)', () => {
+  const night = at('2026-09-23T22:11:00Z'); // 00:11 Zagreb
+  const deps = (rows: readonly NearbyRow[]): string[] => rows.filter((r) => r.kind === 'departure').map((r) => r.id);
+  /** Lines 11 and 6 both due now, 13 in four minutes, 14 in nine; the two tracked estimates jitter by seconds around each other. */
+  const nightBoards = (now: number): DepartureBoard[] => [board(now, [['11', 0], ['6', 0], ['13', 4], ['14', 9]])];
+  const jitter = (s11: number, s6: number): LiveVehicleRef[] => [
+    { id: 'v11', tripId: 't11', routeId: '11', delaySeconds: s11 },
+    { id: 'v6', tripId: 't6', routeId: '6', delaySeconds: s6 },
+  ];
+
+  it('keeps the shown order while two trams read the same minute, however their estimates jitter, and breaks a dead heat the same way every poll', () => {
+    let held: string[] = [];
+    const orders = new Set<string>();
+    for (let poll = 0; poll < 24; poll++) {
+      const now = night + poll * 10_000;
+      const [s11, s6] = poll % 2 ? [8, -6] : [-7, 9];
+      const rows = selectNearby(input(now, { boards: nightBoards(now), fixes: jitter(s11, s6), heldDepartures: held }));
+      checkBounds(rows);
+      held = deps(rows);
+      orders.add(held.join(','));
+    }
+    expect([...orders]).toEqual(['dep:t11,dep:t6,dep:t13']);
+    // A dead heat with nothing held yet: the same answer on every poll (line, then trip), never the boards' order.
+    const tie = (order: readonly [string, number][]) => deps(selectNearby(input(night, { boards: [board(night, order)], fixes: [] })));
+    expect(tie([['6', 2], ['11', 2], ['13', 4]])).toEqual(tie([['11', 2], ['6', 2], ['13', 4]]));
+  });
+
+  it('lets a tram a whole displayed minute earlier take its place, keeps a tram until it departs, and never shows an empty list while one is due', () => {
+    // Shown: 11 (za 3 min), 6 (za 5 min), 13 (za 8 min).
+    const first = selectNearby(input(night, { boards: [board(night, [['11', 3], ['6', 5], ['13', 8], ['14', 12]])], fixes: [] }));
+    expect(deps(first)).toEqual(['dep:t11', 'dep:t6', 'dep:t13']);
+    const held = deps(first);
+    // 14's estimate now says za 2 min: a minute earlier than the shown 11, so it leads; the held order survives behind it.
+    const earlier = selectNearby(input(night, {
+      boards: [board(night, [['11', 3], ['6', 5], ['13', 8], ['14', 12]])],
+      fixes: [{ id: 'v14', tripId: 't14', routeId: '14', delaySeconds: -600 }], heldDepartures: held,
+    }));
+    expect(deps(earlier)).toEqual(['dep:t14', 'dep:t11', 'dep:t6']);
+    // A tram within the same displayed minute as the shown third row does not push it out.
+    const sameMinute = selectNearby(input(night, {
+      boards: [board(night, [['11', 3], ['6', 5], ['13', 8], ['14', 8]])], fixes: [], heldDepartures: held,
+    }));
+    expect(deps(sameMinute)).toEqual(['dep:t11', 'dep:t6', 'dep:t13']);
+    // The 11 departs (a minute past its time): the list never empties while 6, 13 and 14 are due.
+    const later = selectNearby(input(night + 5 * MIN, {
+      boards: [board(night, [['11', 3], ['6', 5], ['13', 8], ['14', 12]])], fixes: [], heldDepartures: held,
+    }));
+    expect(deps(later)).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+  });
+
+  it('gives the last-trams and first-tram rows a one-line twin: the next two lines, so the wall never wraps a promise over three lines', () => {
+    const rows = selectNearby(input(at('2026-09-22T20:40:00Z')));
+    const last = one(rows, 'last');
+    const first = one(rows, 'first');
+    expect(last.sub).toBe('1 23:31 · 12 23:45 · 17 00:01 · 11 00:09 · 6 00:27 · 13 00:30 · 14 00:31');
+    expect(last.subShort).toBe('1 23:31 · 12 23:45');
+    expect(first.sub).toBe('12 04:13 · 17 04:24 · 1 04:33 · 11 04:51 · 6 04:57 · 14 05:11 · 13 05:27');
+    expect(first.subShort).toBe('12 04:13 · 17 04:24');
+    // Three lines still get the twin; two need none.
+    const three = selectNearby(input(at('2026-09-22T22:20:00Z')));
+    expect(one(three, 'last').sub).toBe('6 00:27 · 13 00:30 · 14 00:31');
+    expect(one(three, 'last').subShort).toBe('6 00:27 · 13 00:30');
+    const two = selectNearby(input(at('2026-09-22T22:29:00Z')));
+    expect(one(two, 'last').sub).toBe('13 00:30 · 14 00:31');
+    expect(one(two, 'last').subShort).toBeUndefined();
+  });
+});
+
 describe('closures', () => {
   const now = at('2026-09-22T10:30:00Z');
   const only = (closure: FeedItem, radiusM: number, status: ModuleSnapshot['status'] = 'live') =>
@@ -592,7 +660,7 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     expect(shorterLabel('Gavella', ['Gradsko dramsko kazalište Gavella', 'Gavella'])).toBeUndefined();
     expect(shorterLabel('Trg bana Josipa Jelačića', ['  Trg bana   J. Jelačića ', 'Trg'])).toBe('Trg bana J. Jelačića');
   });
-  it('offers none for the rows with no shorter whole label: departures, heritage, the last and first trams, openings, the pharmacy', () => {
+  it('offers none for the rows with no shorter whole label: departures, heritage, openings, the pharmacy; the last and first trams shorten only their line list', () => {
     const rows = [
       ...selectNearby(input(at('2026-09-22T19:30:00Z'))),
       ...selectNearby(input(at('2026-09-22T20:40:00Z'))),
@@ -601,7 +669,9 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     ];
     for (const r of rows.filter((x) => ['departure', 'always', 'last', 'first', 'opening', 'pharmacy', 'solar'].includes(x.kind) && !x.id.startsWith('always:story:'))) {
       expect(r.titleShort, r.id).toBeUndefined();
-      expect(r.subShort, r.id).toBeUndefined();
+      // A promise row's twin is the next two lines of its own list (lane-w-fix8), nothing else has one.
+      if (r.kind === 'last' || r.kind === 'first') expect(r.subShort === undefined || r.sub.startsWith(r.subShort), r.id).toBe(true);
+      else expect(r.subShort, r.id).toBeUndefined();
     }
     expect(rows.some((r) => r.kind === 'last')).toBe(true);
     expect(rows.some((r) => r.id.startsWith('always:heritage:'))).toBe(true);
