@@ -73,7 +73,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    its width to the map first (round 2, desktop F1: at 960 CSS px, 1920×1080 at 200 %, a greedy 32rem feed left the
    map 6 px). */
 .ki[data-stage='desk'] .ki-desk { display: grid; grid-template-columns: minmax(22rem, min(32rem, 36%)) minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
-.ki[data-stage='desk'] .ki-main { padding-block-end: var(--sp-6); }
+.ki[data-stage='desk'] .ki-main { padding-block-end: var(--sp-3); }   /* round 2, desktop F15: the sticky Karta column plus a 24 px foot scrolled the page 12 px */
 /* .ki-alert is the assertive live region: .visually-hidden hides it while readers
    still hear it. It is never display: none, which would silence it. */
 

@@ -303,7 +303,7 @@ describe('createScanPage', () => {
     expect(root.querySelector('.scan-error')!.previousElementSibling).toBe(root.querySelector('[data-testid=code-input]'));
     expect(root.querySelector('.scan')!.lastElementChild).toBe(root.querySelector('.scan-no-code'));
     expect(root.querySelector('[data-testid=scan-no-code]')?.getAttribute('href')).toBe('/#isprobaj');
-    expect(text(root.querySelector('.scan-intro'))).toBe('Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.');
+    expect(text(root.querySelector('.scan-intro'))).toBe('Skeniraj QR kod ili upiši kod sa zaslona. Deset minuta sa zaslona, pet s telefona druge osobe.');
     expect(text(root.querySelector('.scan-label'))).toBe('Kod sa zaslona');
     expect(root.querySelector<HTMLLabelElement>('.scan-label')!.htmlFor).toBe('scan-code');
   });

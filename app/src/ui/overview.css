@@ -109,3 +109,6 @@
 }
 /* The desk pair (dashboard.css .ki-desk): the feed keeps the phone's reading measure beside the map. */
 .ki[data-stage='desk'] .ws-sada { max-inline-size: 32rem; }
+/* Read at arm's length or more, the desk's secondary lines (a day under a clock, a row's detail, the sentence's kicker)
+   take the control size, 14 px (round 2, desktop F20: 12 to 13 px beside a 16 px feed). */
+.ki[data-stage='desk'] .ws-sada { --type-secondary: var(--type-control); }

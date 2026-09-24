@@ -399,7 +399,7 @@
     "notifyOn_one": "{count} uključena",
     "notifyOn_few": "{count} uključene",
     "notifyOn_other": "{count} uključenih",
-    "notifyOff": "isključene"
+    "notifyOff": "isključeno"
   },
   "cast": {
     "target": "Zaslon: {label}",
@@ -416,7 +416,7 @@
     "waste": "Odvoz sutra",
     "dhmz": "Upozorenja DHMZ-a",
     "note": "Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.",
-    "bellLabel": "Isticanje u aplikaciji, {state}"
+    "bellLabel": "Isticanje u aplikaciji: {state}"
   },
   "directory": {
     "domains": "Domene",
@@ -677,7 +677,7 @@
     "pasteInvalid": "Međuspremnik ne sadrži potpuni kod. Kopiraj kod sa zaslona.",
     "title": "Otključaj pogled na Zagreb",
     "noCode": "Nemaš kod? Pogledaj kako isprobati.",
-    "intro": "Skeniraj QR kod sa zaslona ili upiši kod ispod. Deset minuta sa zaslona, pet s telefona druge osobe.",
+    "intro": "Skeniraj QR kod ili upiši kod sa zaslona. Deset minuta sa zaslona, pet s telefona druge osobe.",
     "scanButton": "Skeniraj kamerom",
     "or": "ili",
     "codeLabel": "Kod sa zaslona",
