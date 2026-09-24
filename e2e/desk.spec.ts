@@ -52,6 +52,15 @@ for (const window of WINDOWS) for (const zoom of ZOOMS) {
       expect(map.width, 'the board never takes the map\'s width').toBeGreaterThanOrEqual(karta.width - 4);
       expect(map.height / karta.height, 'the idle board is a bar under the map').toBeGreaterThanOrEqual(MAP_MIN_SHARE_OF_COLUMN);
       expect(map.x, 'the map stands beside Sada').toBeGreaterThanOrEqual(sada.x + sada.width);
+      // The idle bar never squeezes the place's name onto several lines.
+      const strong = page.locator('[data-testid=transport-peek] strong');
+      await expect(strong).toHaveText(/\S/);
+      // Measured in one turn: the peek is re-set on every render, so a handle may meet a replaced node.
+      const lines = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid=transport-peek] strong')!;
+        return el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize);
+      });
+      expect(lines, 'the place\'s name on one line in the idle bar').toBeLessThan(2.2);
       // One "U blizini" on the page: Sada's (F3).
       await expect(page.locator('[data-testid=nearby]')).toHaveCount(1);
       await expect(page.locator('[data-testid=transport-workspace] [data-kind=departure]')).toHaveCount(0);

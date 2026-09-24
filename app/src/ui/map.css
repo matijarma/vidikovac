@@ -317,10 +317,10 @@
 
 /* The idle board of the pair (round 2, desktop F3): nothing typed or selected, Sada beside it already lists the
    departures and "U blizini", so the board is one bar under the map, the place with its circle and the search; in a
-   column of 40rem and more the two share one row. */
+   column of 48rem and more the two share one row, half each (narrower, the place's name would break mid-word). */
 .ki[data-stage='desk'] .transport[data-idle='true'] .t-sheet-body { display: none; }
-@container desk-karta (min-width: 40rem) {
-  .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .transport-sheet { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem); align-items: center; }
+@container desk-karta (min-width: 48rem) {
+  .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .transport-sheet { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
   .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .t-sheet-head { padding-block: var(--sp-2); }
   .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .transport-toolbar { padding-block: var(--sp-2); padding-inline-start: 0; }
 }
