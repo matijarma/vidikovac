@@ -146,6 +146,18 @@ interface TramTrack extends Track {
   unplacedDirection?: XY;
   /** Set while unplaced (see UnplacedReason), absent once placed. */
   unplacedReason?: UnplacedReason;
+  /** Set while the tram runs off its own path mid-line: placed on another
+   *  path of its line (not a terminus loop), or on no rails at all with the
+   *  reason 'diversion', beyond TERMINUS_NEAR_M of every terminal platform
+   *  and beside the interior of its own path (not before its clipped start,
+   *  not past its end). Cleared when the tram is back on its path, on a
+   *  terminus loop, off the graph, or on another trip. Line 11 on Sunday
+   *  20 September ran Republike Austrije, Savska and Frankopanska round
+   *  works on Ilica, rails only its depot variants draw: six path changes a
+   *  round trip. The grader reads this to count the hops of a diversion
+   *  apart from a wrong turn (rail round 2); placement and publication do
+   *  not read it. */
+  diverted?: true;
   priorReturn?: {
     pathIdx: number;
     fromPathIdx: number;
@@ -203,6 +215,24 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     }
     if (track.unplacedReason) return;
     track.unplacedReason = prior.pathIdx === null ? 'no-path' : nearTerminal(p) ? 'terminus' : 'diversion';
+  }
+
+  /** The diverted state follows the match (TramTrack.diverted). */
+  function noteDiverted(track: TramTrack, p: XY, prior: Prior): void {
+    const m = track.match;
+    const onLoop = m.pathIdx !== null && net.paths[m.pathIdx].direction === -1;
+    if (prior.pathIdx === null || track.offGraph || m.pathIdx === prior.pathIdx || onLoop) {
+      delete track.diverted;
+      return;
+    }
+    if (track.diverted) return;
+    if (m.pathIdx === null && track.unplacedReason !== 'diversion') return;
+    if (nearTerminal(p)) return;
+    const own = net.projectOntoPath(prior.pathIdx, p);
+    // Before the path's clipped start (a trip named before it begins, on
+    // shared rails: Dubrava) or past its end is not beside it.
+    if (own.s <= 0.5 || own.s >= net.paths[prior.pathIdx].len - 0.5) return;
+    track.diverted = true;
   }
 
   function stopArc(pathIdx: number, stopId: string): number | null {
@@ -540,6 +570,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (invalidMatch) {
       delete track.endpointHold;
       delete track.unplacedDirection;
+      delete track.diverted;
       track.match = noMatch();
       track.offPathCount = 0;
       track.againstCount = 0;
@@ -561,6 +592,7 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     if (prior.pathIdx !== track.priorPath) {
       delete track.endpointHold;
       delete track.unplacedDirection;
+      delete track.diverted;
       let keepArrival = false;
       let viaLoop: Match | null = null;
       if (prior.pathIdx !== null && track.match.pathIdx !== null) {
@@ -911,11 +943,15 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         // route/service evidence can invalidate the match or restore a prior.
         const match = matchTram(track, prev, prior, nextStopId, null, ctx);
         noteUnplaced(track, prev, prior);
+        noteDiverted(track, prev, prior);
         annotate(prev, match);
         return match;
       }
       const match = track.kind === 'bus' ? matchBus(track, fix, prior, prev) : matchTram(track, fix, prior, nextStopId, prev, ctx);
-      if (track.kind === 'tram') noteUnplaced(track, fix, prior);
+      if (track.kind === 'tram') {
+        noteUnplaced(track, fix, prior);
+        noteDiverted(track, fix, prior);
+      }
       annotate(fix, match);
       return match;
     },
