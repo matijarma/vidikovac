@@ -24,6 +24,7 @@ import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../.
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
+  FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
 
 // kiosk.nearby.* is WP1-D's key group (WP1-A adds it too); until it lands the
@@ -901,6 +902,73 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
   });
 });
 
+describe('a list at the edge of its box (D5.16 production observer, 15:14 to 15:32): a dropped row returns only after a minute of room', () => {
+  /** The 1920 x 1080 list of that afternoon: seven candidates in 483 px, the heritage row with an address line (84 px); a bus with a long destination wraps its title to two lines (96 px), and then only six rows fit. */
+  const DAY: Layout = { boxPx: 483, titleChars: 17, subChars: 26 };
+  const day = (hhmm: string): number => at(`2026-09-24T${hhmm}:00+02:00`);
+  const timed = (): TimelineRow[] => [
+    row({ id: 'closure:amruseva', kind: 'closure', atMs: day('16:00'), title: 'Amruševa', source: 'prometnice' }),
+    row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+    row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:51'), title: 'Zalazak sunca', source: 'solar' }),
+    row({ id: 'always:heritage:zakladni', kind: 'always', atMs: null, always: true, title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c', source: 'heritage' }),
+  ];
+  const NOW0 = day('15:14');
+  const short = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } });
+  const long = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Gornji Tuškanac okretište', arrival: { routeId: '150', routeName: '150' } });
+  function structure(): { records(): { added: string[]; removed: string[] }[]; stop(): void } {
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(section(), { subtree: true, childList: true });
+    const keyed = (nodes: NodeList): string[] => [...nodes].filter((n): n is Element => n.nodeType === 1).map((n) => `${n.tagName.toLowerCase()}[${n.getAttribute('data-key') ?? ''}]`);
+    return {
+      records: () => observer.takeRecords().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))
+        .map((r) => ({ added: keyed(r.addedNodes), removed: keyed(r.removedNodes) })),
+      stop: () => observer.disconnect(),
+    };
+  }
+
+  it('drops the sunset row at once when a two-line bus makes seven rows too tall, keeps it out while the third slot keeps changing, and brings it back after a minute of steady room', () => {
+    const measure = simulated(DAY);
+    const t = mount({ measure, designHeightPx: DAY.boxPx });
+    t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0);
+    expect(ids()).toContain('solar:sunset:2026-09-24');
+    const w = structure();
+    // The third slot flaps between the bus (two-line title) and a tram every five seconds for a minute and a half.
+    let s = 1;
+    for (; s <= 90; s++) {
+      const third = Math.floor(s / 5) % 2 === 0 ? long(3) : short(3);
+      t.update([short(1), short(2), third, ...timed()], 2200, NOW0 + s * 1000);
+      expect(ids(), `${s} s`).not.toContain('solar:sunset:2026-09-24');
+      expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
+    }
+    // The tram stays: room for the seventh row returns, and holds. The sunset row is back after FIT_RESTORE_HOLD_MS of it.
+    const steadyFrom = s;
+    for (; s <= steadyFrom + 70; s++) {
+      t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0 + s * 1000);
+      const back = ids().includes('solar:sunset:2026-09-24');
+      expect(back, `${s - steadyFrom} s of room`).toBe((s - steadyFrom) * 1000 >= FIT_RESTORE_HOLD_MS);
+    }
+    const records = w.records();
+    w.stop();
+    // One remove when the bus first arrived, one add after the minute of room; the flapping third slot is the only other traffic.
+    const solarRecords = records.filter((r) => [...r.added, ...r.removed].some((k) => k.includes('solar:sunset')));
+    expect(solarRecords).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }, { added: ['li[solar:sunset:2026-09-24]'], removed: [] }]);
+    expect(FIT_RESTORE_HOLD_MS).toBe(60_000);
+  });
+
+  it('never holds a reserved row or a departure out, and a held-out row is not counted as fitting', () => {
+    const measure = simulated(DAY);
+    const t = mount({ measure, designHeightPx: DAY.boxPx });
+    t.update([short(1), short(2), long(3), ...timed()], 2200, NOW0);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
+    expect(section().dataset.skippedFit).toBe('1');
+    // A second later the bus is gone and the box has room, but the sunset row waits its minute; nothing else is held.
+    t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0 + 1000);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
+    expect(section().dataset.skippedFit).toBe('1');
+    expect(t.shown()).toBe(6);
+  });
+});
+
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
   it.each(['22:40', '04:30'])('%s keeps the real Trg first-tram and pharmacy rows within the 1920 budget', time => {
     const now = at(`2026-09-${time === '22:40' ? '22' : '23'}T${time}:00+02:00`);
@@ -948,6 +1016,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     expect(ids()).toEqual(reserved ? ['oversized'] : []);
     room = 300;
     t.update([candidate], 2000, NOW + 2000);
+    // Room returns: a promise was never out; a dropped discretionary row waits FIT_RESTORE_HOLD_MS of steady room.
+    expect(ids()).toEqual(reserved ? ['oversized'] : []);
+    expect(section().dataset.skippedFit).toBe(reserved ? '0' : '1');
+    t.update([candidate], 2000, NOW + 2000 + FIT_RESTORE_HOLD_MS);
     expect(ids()).toEqual(['oversized']);
     expect(section().dataset.skippedFit).toBe('0');
     expect(section().dataset.fitOverflow).toBe('0');

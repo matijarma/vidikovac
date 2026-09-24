@@ -116,6 +116,13 @@ export const SUB_MAX_LINES = 2;
 /** The entrance fade (kiosk-city.css k-nearby-in) and the moment data-enter is cleared if no animationend came. */
 export const ENTER_MS = 220;
 export const ENTER_CLEAR_MS = 260;
+/**
+ * A discretionary row the measured fit dropped comes back only after the list has fitted with it for this long
+ * without a break. A list at the edge of its box (D5.16 observer: seven candidates in 483 px, the seventh fitting
+ * only while the third departure had a one-line title) otherwise drops and restores the same row on every change
+ * of the departures, two records and a re-created node each time. Drops stay immediate: nothing is ever cut.
+ */
+export const FIT_RESTORE_HOLD_MS = 60_000;
 
 const ROW_MAX = 92;
 
@@ -331,6 +338,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let last: [readonly TimelineRow[], number, number] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
   let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
+  /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
+  const heldOut = new Map<string, number | null>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
   const clearEnter = (li: Element): void => { if (li.hasAttribute('data-enter')) li.removeAttribute('data-enter'); };
@@ -503,6 +512,21 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         }
         rowVars(memo.rowPx);
         shown = candidates.filter((row) => memo!.ids.has(row.id));
+        // Restore hysteresis (FIT_RESTORE_HOLD_MS): a row the fit dropped stays out until it has fitted for a whole
+        // minute; reserved rows and departures are never held out, and a row gone from the candidates is forgotten.
+        const fits = new Set(shown.map((row) => row.id));
+        const holdable = (row: TimelineRow): boolean => row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last' && !isTimeless(row);
+        for (const row of candidates) {
+          if (!holdable(row)) continue;
+          if (!fits.has(row.id)) { heldOut.set(row.id, null); continue; }
+          if (!heldOut.has(row.id)) continue;
+          const since = heldOut.get(row.id) ?? now;
+          if (heldOut.get(row.id) === null) heldOut.set(row.id, now);
+          if (now - since >= FIT_RESTORE_HOLD_MS) heldOut.delete(row.id);
+        }
+        const present = new Set(candidates.map((row) => row.id));
+        for (const id of [...heldOut.keys()]) if (!present.has(id)) heldOut.delete(id);
+        shown = shown.filter((row) => !heldOut.has(row.id));
         // The only live-list commit. No rejected row ever enters this tree.
         paint(shown, memo.short, now);
       }
