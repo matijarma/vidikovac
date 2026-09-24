@@ -1033,3 +1033,119 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     expect(acceptSentence(event.text, { facts: [{ ...event, validUntil: Infinity }], now: NOW }).ok).toBe(false);
   });
 });
+
+// D2 full run (lane-w-fix8): the header cut dwells short without its fact expiring. Live at night, "Tramvaj 17 …
+// za 4 min" stood 2 s when the 17 fell out of the three-trip selection; "Hrvatski športski muzej: rad počinje u
+// 08:00." 6 s when a new departure fact pushed the opening past the fact cap; "Amruševa: zatvoreno …" 10 s when a
+// poll re-ranked the two nearest closures. In lastTrams2240 the cap evicted "Prvi tramvaj 1" the moment the anchored
+// board dropped two passed departures. Decision 29, as ruled for D2: only the sentence's own fact expiring ends its
+// dwell early; every other re-selection waits for the rhythm boundary.
+describe('sentence sequence: a dwell ends early only when its own fact expires', () => {
+  const NIGHT = Date.parse('2026-09-24T00:11:00+02:00');
+  const rotating = (text: string, over: Partial<RotatingSentence>): RotatingSentence =>
+    ({ ...sentence(text, { validUntil: NIGHT + 3_600_000 }), ...over } as RotatingSentence);
+  const tram17 = rotating('Tramvaj 17, smjer Prečko, polazi za 4 min.', {
+    refs: ['dep:t17'], kicker: 'promet', validUntil: NIGHT + 60_000, factKey: 'departure:17:Prečko@106_1', wording: 'departureIn', formUntil: NIGHT + 210_000,
+  });
+  const others = [
+    rotating('Zadnji tramvaj 13 polazi u 00:30.', { refs: ['last:2026-09-23:13'], kicker: 'nocas', wording: 'lastTram' }),
+    rotating('Amruševa: zatvoreno za promet do 16:00.', { refs: ['closure:amruseva'], kicker: 'radovi', wording: 'closureUntil' }),
+    rotating('Sunce izlazi u 06:45.', { refs: ['solar:sunrise:2026-09-24'], kicker: 'vrijeme', wording: 'sunrise' }),
+  ];
+
+  it('holds a sentence whose fact left the selection until the boundary, then moves on', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    expect(seq.read([tram17, ...others], NIGHT)).toBe(tram17);
+    // The 17 falls to fourth on the next poll: its fact is gone from the pool, but it has not departed.
+    for (let t = 1_000; t < 20_000; t += 1_000) expect(seq.read(others, NIGHT + t)?.text, `${t} ms`).toBe(tram17.text);
+    expect(seq.read(others, NIGHT + 20_000)?.text).not.toBe(tram17.text);
+  });
+
+  it('still ends a dwell when the fact itself expires, and never says an expired sentence', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const soon = { ...tram17, validUntil: NIGHT + 5_000 };
+    expect(seq.read([soon, ...others], NIGHT)?.text).toBe(soon.text);
+    expect(seq.read(others, NIGHT + 4_000)?.text).toBe(soon.text);
+    expect(seq.read(others, NIGHT + 5_000)?.text).not.toBe(soon.text);
+  });
+
+  it('prefers the refreshed words of the same fact over holding stale ones', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    expect(seq.read([tram17, ...others], NIGHT)).toBe(tram17);
+    const refreshed = { ...tram17, text: 'Tramvaj 17, smjer Prečko, polazi za 3 min.', validUntil: NIGHT + 120_000 };
+    expect(seq.read([refreshed, ...others], NIGHT + 5_000)?.text).toBe(refreshed.text);
+  });
+});
+
+describe('the fact list at night: every promise and the pharmacy reach the header, and the sentence on screen keeps its fact', () => {
+  const NIGHT = Date.parse('2026-09-21T22:48:10+02:00');
+  const svc = (routeId: string, hhmm: string, day: string) => ({ routeId, routeName: routeId, atMs: Date.parse(`2026-09-${day}T${hhmm}:00+02:00`) });
+  const departure = (trip: string, route: string, headsign: string, atMs: number) => row({
+    id: `dep:${trip}`, kind: 'departure', title: headsign, atMs, live: false, source: 'zet-gtfs',
+    arrival: { tripId: trip, routeId: route, routeName: route, headsign, atMs, live: false, minutes: null },
+  });
+  const promises: SentenceNearbyRow[] = [
+    row({ id: 'closure:gunduliceva', kind: 'closure', title: 'Gundulićeva', atMs: Date.parse('2026-09-22T05:00:00+02:00') }),
+    row({ id: 'closure:palmoticeva', kind: 'closure', title: 'Palmotićeva', atMs: Date.parse('2026-09-22T05:00:00+02:00') }),
+    row({ id: 'last:2026-09-21', kind: 'last', title: 'Zadnji tramvaji', atMs: Date.parse('2026-09-21T23:31:00+02:00'), source: 'zet-gtfs',
+      services: [svc('1', '23:31', '21'), svc('12', '23:45', '21'), svc('17', '00:01', '22'), svc('11', '00:09', '22'), svc('6', '00:27', '22'), svc('13', '00:30', '22'), svc('14', '00:31', '22')] }),
+    row({ id: 'first:2026-09-22', kind: 'first', title: 'Prvi tramvaj', atMs: Date.parse('2026-09-22T04:13:00+02:00'), source: 'zet-gtfs',
+      services: [svc('12', '04:13', '22'), svc('17', '04:24', '22'), svc('1', '04:33', '22'), svc('11', '04:51', '22'), svc('6', '04:57', '22'), svc('14', '05:11', '22'), svc('13', '05:27', '22')] }),
+    row({ id: 'always:pharmacy', kind: 'pharmacy', title: '24/7', sub: 'Trg bana J. Jelačića 3', atMs: null, always: true, source: 'ljekarne' }),
+  ];
+  const events = (n: number): SentenceNearbyRow[] => Array.from({ length: n }, (_, i) => row({
+    id: `event:e${i}`, kind: 'event', title: `Koncert ${i + 1}`, sub: 'Gavella · tramvaj 6', atMs: NIGHT + (60 + i) * 60_000, source: 'dogadanja',
+  }));
+  const before = [departure('t11', '11', 'Črnomerec', Date.parse('2026-09-21T22:50:00+02:00')), ...promises];
+  const after = [
+    departure('t11', '11', 'Črnomerec', Date.parse('2026-09-21T22:50:00+02:00')),
+    departure('t1', '1', 'Borongaj', Date.parse('2026-09-21T22:54:00+02:00')),
+    departure('t13', '13', 'Žitnjak', Date.parse('2026-09-21T22:57:00+02:00')),
+    ...promises,
+  ];
+  const ids = (rows: SentenceNearbyRow[], pinned?: readonly string[]) => sentenceFacts(input({ now: NIGHT, rows, ...(pinned ? { pinned } : {}) })).map((f) => f.id);
+
+  it('carries every last and first tram and the pharmacy of the 22:48 list, not a capped prefix', () => {
+    const facts = ids(after);
+    for (const route of ['1', '12', '17', '11', '6', '13', '14']) expect(facts, route).toContain(`last:2026-09-21:${route}`);
+    for (const route of ['12', '17', '1', '11', '6', '14', '13']) expect(facts, route).toContain(`first:2026-09-22:${route}`);
+    expect(facts).toContain('always:pharmacy');
+  });
+
+  it('keeps a pinned fact (the sentence on screen) beyond the cap when a crowd of events would push it out', () => {
+    const crowded = [...events(30), ...after];
+    expect(ids(crowded)).not.toContain('first:2026-09-22:1');
+    const pinned = ids(crowded, ['first:2026-09-22:1']);
+    expect(pinned).toContain('first:2026-09-22:1');
+    expect(pinned.length).toBeLessThanOrEqual(ids(crowded).length + 1);
+  });
+
+  it('runs the 22:40 wall for twelve minutes at one read a second, a board refresh included: no dwell shorter than its rhythm', () => {
+    const START = Date.parse('2026-09-21T22:40:00+02:00');
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const shown = new Map<string, number>();
+    let current: WrittenSentence | null = null;
+    const dwells: { text: string; from: number; validUntil: number | null }[] = [];
+    for (let at = START; at <= START + 720_000; at += 1_000) {
+      // The anchored board drops the two 22:48 departures at once when it refreshes at 22:48:18.
+      const rows = at < START + 498_000 ? before : after;
+      for (const [text, seen] of shown) if (at - seen >= SENTENCE_NO_REPEAT_MS && text !== current?.text) shown.delete(text);
+      const facts = sentenceFacts(input({ now: at, rows, ...(current ? { pinned: current.refs } : {}) }));
+      const pool = sentencePool(templateSentences(facts, i18n, 80, at), current, shown);
+      const next = seq.read(pool, at);
+      expect(next, new Date(at).toISOString()).not.toBeNull();
+      if (current && next!.text !== current.text) shown.set(current.text, at);
+      if (!current || !isSameSentence(next, current) && next!.text !== current.text) dwells.push({ text: next!.text, from: at, validUntil: next!.validUntil });
+      current = next;
+      shown.set(next!.text, at);
+    }
+    for (const [index, dwell] of dwells.entries()) {
+      const end = dwells[index + 1]?.from;
+      if (end === undefined) continue;
+      if (end - dwell.from < 20_000) expect(dwell.validUntil, `"${dwell.text}" held ${(end - dwell.from) / 1000} s`).toBeLessThanOrEqual(end);
+    }
+    // Every fact of the night list is said once before the ten-minute no-repeat window lets one return.
+    expect(dwells.length).toBeGreaterThanOrEqual(24);
+    for (const route of ['12', '17', '1', '11', '6', '14', '13']) expect(dwells.some((d) => d.text.startsWith(`Prvi tramvaj ${route} `)), route).toBe(true);
+  }, 30_000); // 720 reads of the whole selection and template layer: 3 s alone, 8 s under a full gate.
+});

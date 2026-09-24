@@ -459,7 +459,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures,
       });
       paintSkippedText(skipped);
-      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n });
+      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
+      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
+        ...(currentSentence ? { pinned: currentSentence.refs } : {}) });
       invitation?.update(invitationModel());
     } else {
       wallItems = [];
