@@ -1030,7 +1030,10 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     // The frame's street-name padding is for the ground it shows: 2R across,
     // not the field's span. The read-path default place's window draws every
     // stop, as the whole-city window always has: its stop is the list's.
-    prozor: { ...prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed), ...(wholeCity ? { stopMarks: false } : {}), ...(frame ? { frame } : {}), ...(strip ? { pillsYield: true } : {}) },
+    // A strip draws no stop bead either (round 1, 24 Sep): at its zoom (12.3 on the 714 x 218 pane of a
+    // 1366 x 768 wall) the frame's sixty rings piled into one blob round the place; the own place is the
+    // stop point and keeps its ring and name, and the stops stay touchable (overlays.test.ts).
+    prozor: { ...prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed), ...(wholeCity || strip ? { stopMarks: false } : {}), ...(frame ? { frame } : {}), ...(strip ? { pillsYield: true } : {}) },
   };
   // The invitation IS the transit picture: the network, the stops and the
   // vehicles are always on it. Only a paired presentation of something that
