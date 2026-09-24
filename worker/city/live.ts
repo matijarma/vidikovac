@@ -24,6 +24,19 @@ export function parseBikes(info: any, status: any): BikeStation[] {
       observedAt: isoSeconds(state?.last_reported), rentalUrl: urlOf(s.rental_uris?.web)??LIVE_SOURCES.bikes.url } satisfies BikeStation];
   });
 }
+/** A BAJS feed at least this long in which not one station has a bike is the
+ *  feed's fault, not the city's: Zagreb's two hundred stations hold some 1,800
+ *  bikes, and even at 03:00, with the centre emptied overnight, three in four
+ *  stations have one (24 Sep: 158 of 200). Below it, a few empty stations may
+ *  be the truth. */
+export const BIKES_DEGENERATE_MIN_STATIONS = 10;
+/** True when `stations` says nothing about the city: long enough to be the
+ *  network, and no station with a bike. loadCityLive reads such a feed like
+ *  one that is too old (the last good counts served stale, else down), so the
+ *  map shows unknown stations, never two hundred zeros. */
+export function bikesDegenerate(stations: readonly BikeStation[]): boolean {
+  return stations.length >= BIKES_DEGENERATE_MIN_STATIONS && !stations.some(s => (s.bikes ?? 0) > 0);
+}
 export function parseAir(rows: any): AirStation[] {
   if (!Array.isArray(rows)) throw new Error('air-schema');
   return rows.filter(s => /^GZ/.test(String(s.kod)) || /^RH010[123]$|^RH0133$/.test(String(s.kod))).flatMap(s => {
@@ -61,6 +74,7 @@ export async function loadCityLive(env: Env, now = Date.now(), fetcher: typeof f
         const [info,status] = await Promise.all([json(GBFS + 'station_information.json', timed),json(GBFS + 'station_status.json', timed)]);
         if (!Number.isFinite(status.last_updated) || status.last_updated*1000>now+30_000 || now - status.last_updated * 1000 > MAX_AGE.bikes * 1000) throw new Error('bajs-old');
         data = parseBikes(info, status);
+        if (bikesDegenerate(data as BikeStation[])) throw new Error('bajs-degenerate');
       } else if (key === 'air') {
         const rows = await json('https://iszz.azo.hr/iskzl/rs/eaqi/indeks?h=3', timed);
         const stations = parseAir(rows);

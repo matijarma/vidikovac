@@ -112,6 +112,10 @@ describe('the wall’s curated city points', () => {
   it('marks the stations of the unframed whole-city window `far`, and nothing else', () => {
     const far = curatedCityPoints(CITY, EVENTS, NOW, { ...CURATED_WALL, far: true });
     expect(far.filter((p) => p.props!.category === 'bikes').every((p) => p.props!.far === true)).toBe(true);
+    // Owner, 24 Sep: a far dot has no number to say "0" or "not known" with, so on the whole city
+    // only a station with a bike is drawn; the empty (b2), the closed (b3) and the unknown (b4) are
+    // left to the frame, where the disc can say so.
+    expect(far.filter((p) => p.props!.category === 'bikes').map((p) => p.id)).toEqual(['bajs-b1']);
     expect(far.find((p) => p.id === 'culture-1')!.props!.far).toBeUndefined();
     // The count stays in the data; only the layer leaves it off the small dot.
     expect(far.find((p) => p.id === 'bajs-b1')!.props!.badge).toBe('7');

@@ -292,6 +292,47 @@ describe('the overlay layer list', () => {
 describe('the kiosk overlay set (prozor)', () => {
   const PROZOR: ProzorOptions = { networkKinds: ['tram'], stopRoutes: ['6', '11'], stopLabelMinRank: 4, stopRadius: false, overlapZoom: 14.6, labelPadding: 24 };
 
+  // Owner, 24 Sep: the whole-city window draws the place's own ring and name
+  // (decision 19) and the pills; no stop bead and no other stop name. The
+  // stops stay on the map, unseen, so a finger on one still opens its board
+  // (map-pointer.ts reads the rendered stop layer, which opacity 0 keeps and
+  // `visibility: none` would not).
+  it('draws no stop bead and no stop name but the own place\u2019s when stopMarks is false, and keeps the stops touchable', () => {
+    const quiet = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRadius: true, stopMarks: false }, screenStopId: '106_1' });
+    const by = (id: string) => quiet.find((l) => l.id === id)!;
+    expect(by(LAYERS.stops).paint!['circle-opacity']).toBe(0);
+    expect(by(LAYERS.stops).paint!['circle-stroke-opacity']).toBe(0);
+    const loud = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRadius: true }, screenStopId: '106_1' });
+    expect(by(LAYERS.stops).filter).toEqual(loud.find((l) => l.id === LAYERS.stops)!.filter);
+    expect(by(LAYERS.stops).layout?.visibility).not.toBe('none');
+    expect(by(LAYERS.stopLabels).filter).toEqual(NEVER);
+    expect(by(LAYERS.stopLabelsHeld).filter).toEqual(NEVER);
+    // The own ring and its name are the screen-stop layers, untouched.
+    for (const id of [LAYERS.screenStop, LAYERS.screenStopLabel]) expect(by(id), id).toEqual(loud.find((l) => l.id === id));
+    // Left out, the option changes nothing: every other surface keeps its beads and names.
+    expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopMarks: true } }))).toBe(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR })));
+    expect(loud.find((l) => l.id === LAYERS.stopLabels)!.filter).not.toEqual(NEVER);
+  });
+
+  // Decision 58 (24 Sep): a placed wall draws the beads and names of the stops
+  // inside its frame alone (the ids city-map.ts reads off the stops source),
+  // and of those names the tram hubs only; the own place's ring and name are
+  // the screen-stop layers.
+  it('draws only the stops inside the frame, and names only its hubs, when the option set carries a frame', () => {
+    const frame = { lon: 15.977, lat: 45.813, radiusM: 2000 };
+    const framed = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, stopRoutes: null, stopLabelTramInterchanges: true, frame }, frameStopIds: ['a', 'b'], screenStopId: '106_1' });
+    const by = (id: string) => framed.find((l) => l.id === id)!;
+    const inside = ['in', ['get', 'id'], ['literal', ['a', 'b']]];
+    for (const id of [LAYERS.stops, LAYERS.stopLabels, LAYERS.stopLabelsHeld]) expect(JSON.stringify(by(id).filter), id).toContain(JSON.stringify(inside));
+    expect(JSON.stringify(by(LAYERS.stopLabels).filter)).toContain('["get","tramInterchange"]');
+    expect(JSON.stringify(by(LAYERS.stopLabels).filter)).not.toContain('"rank"');
+    // A frame whose stops are not loaded yet draws none of them, never all of them.
+    const empty = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, frame }, frameStopIds: null });
+    expect(JSON.stringify(empty.find((l) => l.id === LAYERS.stops)!.filter)).toContain(JSON.stringify(['in', ['get', 'id'], ['literal', []]]));
+    // Without a frame the ids change nothing.
+    expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR, frameStopIds: ['a'] }))).toBe(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR })));
+  });
+
   // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
   // rank stops being the question; from the line up nothing changed.
   it('names interchanges and not ranks when the field holds the whole city', () => {

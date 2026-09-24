@@ -129,10 +129,10 @@ app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.tram)
 app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.bikes)
 app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.culture)
 app/src/kiosk/invitation.ts:63 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:987 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:987 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:988 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:989 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/mapview.ts:1006 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:1006 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:1007 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:1008 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
@@ -317,15 +317,15 @@ app/src/layers/grad-sada.ts:62 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'
 app/src/layers/grad-sada.ts:81 #mapBand → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:130 #renderGradSada → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:132 #renderGradSada → e(name)
-app/src/map/city-layers.ts:49 #cityLayers → 'text-field':['case',far,'',['get','badge']]
-app/src/map/city-layers.ts:58 #cityLayers → 'text-field':['get','title']
-app/src/map/city-map.ts:232 #vehicleLabel → vetExternal('headsign', v.short, 'row')
-app/src/map/city-map.ts:235 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:816 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:816 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1716 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1717 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1718 #relabelControls → el.title = controlLabel
+app/src/map/city-layers.ts:50 #cityLayers → 'text-field':['case',far,'',['get','badge']]
+app/src/map/city-layers.ts:59 #cityLayers → 'text-field':['get','title']
+app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
+app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
+app/src/map/city-map.ts:817 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:817 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1719 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1720 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1721 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:24 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:33 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:40 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
@@ -334,11 +334,11 @@ app/src/map/external-features.ts:67 #networkToGeoJson → vetExternal('headsign'
 app/src/map/external-features.ts:98 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:599 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:803 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:843 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1000 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1019 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:616 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:822 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:862 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1019 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1038 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:84 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:86 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
 app/src/motion/schema-map.ts:187 #refreshWords → legend.textContent = text

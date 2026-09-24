@@ -406,6 +406,16 @@ export interface OverlayPalette {
   /** The count badge's ink over a bike dot (city-layers.ts's badges layer);
    *  dark enough to read against `bike` in both faces. */
   bikeText: string;
+  /** A station with nothing to give: its "0", or its disc without a number
+   *  when the count is not known (city/curated.ts). It recedes behind the
+   *  teal, nearer the canvas in both faces; it used to borrow `other`, the
+   *  pill ink, which by night is near-white and made the emptied centre at
+   *  03:00 a field of white "0" discs (owner, 24 Sep). The transit tones,
+   *  swapped: the light face's on the night canvas and the dark face's on the
+   *  day canvas (test/app/contrast.test.ts). */
+  bikeSpent: string;
+  /** The "0" on a spent disc, at 4.5:1 on `bikeSpent`. */
+  bikeSpentText: string;
   /** The public screen's own figure (plan D4): the ink itself by day, the
    *  muted paper tier by night, at `figureOpacity`; drawn only under a
    *  ProzorOptions set, now just the screen's own stop dots (the tram
@@ -449,6 +459,8 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   rail: '#8d99a8',
   bike: '#178f7f',
   bikeText: '#08131f',
+  bikeSpent: '#b8c9dc', // --palette-dark-transit
+  bikeSpentText: '#34465c', // --palette-light-transit
   figure: '#142334', // --palette-light-text-primary, the ink
   figureOpacity: 0.9,
   stopFill: '#f1f4f7',
@@ -471,6 +483,8 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   rail: '#5b6a7c',
   bike: '#178f7f',
   bikeText: '#08131f',
+  bikeSpent: '#34465c', // --palette-light-transit
+  bikeSpentText: '#b8c5d5', // --palette-dark-text-muted
   figure: '#b8c5d5', // --palette-dark-text-muted: the screen's own stop dots, a step under the paper the plates are cut from
   figureOpacity: 0.7,
   stopFill: '#111922',

@@ -79,6 +79,22 @@ it('the count badge ink reads at 4.5:1 on the bike teal, in both faces', () => {
     expect(contrastRatio(p.bikeText, p.bike)).toBeGreaterThanOrEqual(AA_TEXT);
   }
 });
+// A station with nothing to give (a real "0", or a disc without a number when
+// the count is not known) recedes behind the teal ones that can be used
+// (city/curated.ts). It took the pill's "other" ink, which in the dark face is
+// the near-white #b8c5d5: 10:1 on the night canvas against the teal's 4.5:1,
+// so at 03:00, with the centre's stations emptied overnight, the frame was a
+// field of white "0" discs, the loudest marks on it (owner, 24 Sep). Its own
+// grey stands nearer the canvas than the teal in both faces, and its "0" is
+// still text at 4.5:1.
+it('greys a spent BAJS disc below the teal on the canvas, in both faces, with its "0" at 4.5:1', () => {
+  for (const [face, p] of [['light', OVERLAY_LIGHT], ['dark', OVERLAY_DARK]] as const) {
+    const canvas = palette(face, 'canvas');
+    expect(contrastRatio(p.bikeSpent, canvas), `${face} spent disc on canvas`).toBeLessThan(contrastRatio(p.bike, canvas));
+    expect(contrastRatio(p.bikeSpent, canvas), `${face} spent disc still a disc`).toBeGreaterThanOrEqual(1.5);
+    expect(contrastRatio(p.bikeSpentText, p.bikeSpent), `${face} "0" on the spent disc`).toBeGreaterThanOrEqual(AA_TEXT);
+  }
+});
 
 describe('tokens.css structure', () => {
   it('maps one on-tint brand tone per theme, the deeper peacock in light and the accent in dark, and carries it on the no-JS dark path too', () => {

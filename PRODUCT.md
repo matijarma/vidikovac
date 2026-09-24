@@ -143,7 +143,8 @@ rhythm and expiry sit in an on-screen settings panel opened by a long press on
 the brand; the header names the place and carries no operator control. The map
 takes the whole left column. A screen set to the whole city opens on the city
 a passer-by means by Zagreb, Črnomerec to Maksimir and the Sava to Mirogoj,
-with trams, the tram network in neutral grey, BAJS stations as small teal dots
+with trams, the tram network in neutral grey, the place's own ring and name
+and no other stop mark, the BAJS stations that have a bike as small teal dots
 without a number, closures, the on-duty pharmacy and tonight's venues,
 unnamed; neighbourhood names leave the basemap and buses join the picture only
 once the camera is in a neighbourhood. A screen with a place opens on N stops
