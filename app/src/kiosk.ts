@@ -1153,7 +1153,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else removeSessionLabel();
     if (next === 'setup') mountStartPhase();
     else if (next === 'invitation') {
-      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, reducedMotion, codeBase: deps.codeBase });
+      invitation = mountInvitation(stage, { strings: s, i18n, locale, lightweight, reducedMotion, codeBase: deps.codeBase,
+        // The QR card moved (invitation.ts cardPlacement): the canvas takes its new box, then the frame is fitted to it.
+        onMapBox: () => { if (disposed) return; mapAdapter.handle()?.resize?.(); paintMap(); } });
     }
     else if (next === 'paired') mountPairedPhase();
     else mountNotice(next);

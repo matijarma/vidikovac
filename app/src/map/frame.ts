@@ -118,3 +118,13 @@ export function idsInFrame(features: readonly { geometry: { type?: string; coord
   }
   return out;
 }
+
+/** The map pane's legible minimum on a wall, in design px (times the kiosk's
+ *  zoom; lane w-labels, 24 Sep): two rows of names at the read tier (40 px at
+ *  a 1.2 line), plus the frame's own stop as the wall draws it, its ring at
+ *  the symbol scale 2 (9 px radius and a 2 px halo: 44 px across) and its
+ *  30 px name at the same line, plus the frame's 24 px clearance on either
+ *  side. Below it the pane is a strip: kiosk/invitation.ts moves the QR card
+ *  under the list when the list can spare the room, and kiosk/mapview.ts
+ *  draws a strip as the frame's rings and the pills alone, pills yielding. */
+export const MAP_MIN_HEIGHT_PX = 2 * 40 * 1.2 + 44 + 30 * 1.2 + 2 * FRAME_PADDING_PX;

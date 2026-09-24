@@ -327,6 +327,12 @@ export interface ProzorOptions {
    *  reads off the stops source), so nothing outside the frame is a ring, a
    *  dot or a name; the own place's ring and name are the screen-stop layers. */
   frame?: FrameCircle;
+  /** Lane w-labels (24 Sep): true on a map pane below its legible minimum
+   *  (map/frame.ts MAP_MIN_HEIGHT_PX). The pills stop overlapping one another:
+   *  each keeps its box and one that would land on another yields, in the
+   *  pills' own sort order; the noses and the two-way arrows go with them, so
+   *  no triangle is left without its pill. Default false. */
+  pillsYield?: boolean;
 }
 
 /** The image rows across the middle of the pill and the plate that stretch
@@ -608,7 +614,7 @@ export interface OverlayOptions {
  *  ring: the selection ink at twice a pill's own halo width. Every vehicle
  *  feature carries `cluster` (city-map.ts writes false on a single), so the
  *  case never meets a missing property. */
-function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr, blocks: boolean): StyleLayerLike {
+function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: OverlayPalette, inks: PillInks, image: Expr, blocks: boolean, yieldToPills = false): StyleLayerLike {
   return {
     id,
     type: 'symbol',
@@ -625,7 +631,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       'icon-text-fit': 'both',
       'icon-text-fit-padding': [PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s, PILL_FIT_PAD_Y * s, PILL_FIT_PAD_X * s],
       'icon-rotation-alignment': 'viewport',
-      'icon-allow-overlap': true,
+      'icon-allow-overlap': !yieldToPills,
       // Decision 17: on the public screen the capsule keeps its box for the
       // names placed after it, which then move or yield; elsewhere it never
       // pushes a stop name off the map.
@@ -645,7 +651,7 @@ function pillLayer(id: string, filter: Expr, minzoom: number, s: number, p: Over
       // The default, stated: pills.ts measures each further row as one line
       // of it (PILL_LINE_HEIGHT_PX), for the census and the nose.
       'text-line-height': PILL_LINE_HEIGHT_EM,
-      'text-allow-overlap': true,
+      'text-allow-overlap': !yieldToPills,
       'text-ignore-placement': !blocks,
       'text-rotation-alignment': 'viewport',
       'text-optional': false,
@@ -821,6 +827,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const placeTitles = prozor === null || prozor.placeTitles !== false;
   /** Decision 17: on the public screen the vehicle marks keep their boxes and the names move or yield. */
   const blocks = prozor !== null;
+  /** A short pane's pills yield to one another (ProzorOptions.pillsYield). */
+  const pillsYield = prozor?.pillsYield === true;
   const held = prozor ? [...(options.heldNames ?? [])] : [];
   // Stop names: on the public screen the hubs alone (rank from the option
   // set), from the field's zoom and never below it -- as the layer's own
@@ -1062,7 +1070,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       paint: { ...labelInk, 'text-halo-width': 1.6 },
     },
     // The nose band's upper edge is the same on every surface: past it the rails say the direction themselves.
-    noseLayer(p, LAYERS.vehicleNoses, vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleNoses, pillsYield ? NEVER : vehicleFilter(modes, selectedVehicle, true), noseZoom, NOSE_MAX_ZOOM, NOSE_ROTATE, s, alpha, blocks),
     // An opposed merge (city-map.ts `twoWay`: two members facing more than its
     // TWO_WAY_MIN_DEG apart, two trams of one line passing at a stop) keeps
     // its one pill and gets the triangle fore and aft along the first member's
@@ -1070,9 +1078,9 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     // closes at 16.5 because the rail under a tram says which way it faces,
     // but no rail can say which way a pair going both ways is heading, so the
     // arrows stay for as long as the two marks stay merged.
-    noseLayer(p, LAYERS.vehicleTwoWayFore, twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
-    noseLayer(p, LAYERS.vehicleTwoWayAft, twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
-    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
+    noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
+    pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks, pillsYield),
     // The selected vehicle's nose keeps the general nose's band (design D):
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing

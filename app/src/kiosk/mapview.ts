@@ -52,7 +52,7 @@ import { safetyState } from '../experience/safety-state';
 import type { BasemapProfile } from '../map/basemap';
 import type { CityMapHandle, CityMapOptions, MapFactory, MapLine, MapOutline, MapPoint, PlaceKind } from '../map/city-map';
 import type { MapSlotOptions, MapSlots } from '../map/map-slots';
-import { boundsView, FIT_MIN_ZOOM, frameView, inFrame, MARK_ZOOM_MARGIN, markZoomFor, type FrameCircle } from '../map/frame';
+import { boundsView, FIT_MIN_ZOOM, frameView, inFrame, MAP_MIN_HEIGHT_PX, MARK_ZOOM_MARGIN, markZoomFor, type FrameCircle } from '../map/frame';
 import type { ProzorOptions } from '../map/overlays';
 import { EARTH_CIRCUMFERENCE_M, metresPerPixel } from '../map/scale';
 import { vehicleFixes } from '../motion/fixes';
@@ -934,9 +934,13 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const anchor = framed ? framedPlace(input) : null;
   const frame: FrameCircle | null = anchor ? { lon: anchor.lon, lat: anchor.lat, radiusM } : null;
   const inside = (p: MapPoint): boolean => frame === null || inFrame(p, frame);
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || inside(p)));
+  /** Lane w-labels: a wall's map pane below its legible minimum (map/frame.ts MAP_MIN_HEIGHT_PX, in the
+   *  display's px) is a strip -- the frame's stop rings, the own place's name and the pills alone, the
+   *  pills yielding to one another; no BAJS disc, venue, event square or city name to crowd it. */
+  const strip = cityWindow && input.handheld !== true && input.heightPx > 0 && input.heightPx < MAP_MIN_HEIGHT_PX * (input.displayScale ?? 1);
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && inside(p))));
   if(input.city){
-    if(cityWindow)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));
+    if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}
     else{
       const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
         center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
@@ -1005,11 +1009,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     // off on the whole-city window, the venues alone on the frame, all of them
     // the moment somebody explores and on every paired presentation, whose one
     // subject has to be named on the wall (kioskCityLabels).
-    cityLabels: kioskCityLabels(framed, cityWindow),
+    cityLabels: strip ? 'none' : kioskCityLabels(framed, cityWindow),
     // The frame's street-name padding is for the ground it shows: 2R across,
     // not the field's span. The read-path default place's window draws every
     // stop, as the whole-city window always has: its stop is the list's.
-    prozor: { ...prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed), ...(wholeCity ? { stopMarks: false } : {}), ...(frame ? { frame } : {}) },
+    prozor: { ...prozorOptions(route ? { ...input.stop, routes: [route] } as ScreenStop : selectedStop ?? (cityWindow && input.placeSet === false ? null : input.stop), field.zoom, labelPadding(input.widthPx, input.heightPx, framed ? frameSpanM(radiusM) : input.spanM), buses, framed), ...(wholeCity ? { stopMarks: false } : {}), ...(frame ? { frame } : {}), ...(strip ? { pillsYield: true } : {}) },
   };
   // The invitation IS the transit picture: the network, the stops and the
   // vehicles are always on it. Only a paired presentation of something that

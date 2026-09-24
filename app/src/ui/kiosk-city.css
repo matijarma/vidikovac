@@ -67,6 +67,10 @@
 .kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-geography{grid-area:map}
 .kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-nearby-host{grid-area:list}
 .kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window .k-panel--card{grid-area:card;align-self:end}
+/* Lane w-labels (24 Sep): when the map under the card would be below its legible minimum and the list keeps its
+   promises in the smaller box, the card stands under the list and the map takes the whole left column
+   (kiosk/invitation.ts cardPlacement). */
+.kiosk[data-size=compact]:not([data-portrait='1']) .k-city-window[data-card=aside]{grid-template-areas:'map list' 'map card'}
 .kiosk:not([data-size=handheld]){--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))}
 .kiosk[data-portrait='1'] .k-city-window{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
 .kiosk[data-portrait='1'] .k-overview{grid-template-columns:minmax(0,1fr);grid-template-rows:calc(560px * var(--k-zoom)) auto}

@@ -11,6 +11,7 @@ import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
 import { mountTimeline } from './timeline';
+import { MAP_MIN_HEIGHT_PX } from '../map/frame';
 
 /** The ol's design-height fallback only; its measured box wins after layout. Compact: the whole aside
  *  (decision 50: the QR card stands under the map), 513 px minus the list's heading and padding. */
@@ -20,6 +21,21 @@ export const NEARBY_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = {
 export interface InvitationDeps {
   strings: KioskStrings; i18n: I18n; locale: string; lightweight: boolean;
   reducedMotion: boolean; codeBase?: string;
+  /** The map pane changed size because the QR card moved (cardPlacement): the kiosk re-measures and re-frames the map. */
+  onMapBox?: () => void;
+}
+
+/** Where the compact landscape wall's QR card stands (lane w-labels, 24 Sep). Decision 50 put it under
+ *  the map so the "U blizini" list has the whole aside; on a short window that left the map a strip
+ *  (669 x 162 at 1280 x 800). The order is decision 50's with the map's floor in it: the list's promises
+ *  (the first and last trams, the timeless row, the lead departure: the rows its fit never drops) first,
+ *  then the map's legible minimum (map/frame.ts MAP_MIN_HEIGHT_PX), then the rest of the departures, then
+ *  more map. So the card stays under the map while the map is legible there ('map'), moves under the list
+ *  when the list keeps its promises in the smaller box ('aside'), and otherwise stays, the map a strip.
+ *  All px are the display's; 0 means not measured, and nothing moves. */
+export function cardPlacement(m: { mapUnderPx: number; listAsidePx: number; floorPx: number; minMapPx: number }): 'map' | 'aside' {
+  if (!(m.mapUnderPx > 0) || m.mapUnderPx >= m.minMapPx) return 'map';
+  return m.listAsidePx > 0 && m.listAsidePx >= m.floorPx ? 'aside' : 'map';
 }
 export interface InvitationModel {
   items: readonly NearbyRow[]; radiusM: number; frame: FrameStops; outage: boolean;
@@ -69,8 +85,64 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     designHeightPx:()=>NEARBY_DESIGN_HEIGHT[model?.composition??'wide'],
   });
   const setFrame=(frame:FrameStops):void=>field.setFrame(frame);
+  const card=element.querySelector<HTMLElement>('.k-panel--card')!;
+  /** The map pane's height with the card under it, measured while it stood there, per window box. */
+  let mapUnder:{key:string;px:number}|null=null;
+  /** A window box and promise set for which the card was tried under the list and the promises did not fit. */
+  let refused:string|null=null;
+  function promisesPx(rows:HTMLElement):number{
+    const lis=[...rows.children] as HTMLElement[];
+    const kept=new Set<HTMLElement>(lis.filter(li=>li.dataset.kind==='first'||li.dataset.kind==='last'));
+    const always=lis.find(li=>li.dataset.always==='1');if(always)kept.add(always);
+    const departure=lis.find(li=>li.dataset.kind==='departure');if(departure)kept.add(departure);
+    if(kept.size===0)return 0;
+    const gap=Number.parseFloat(getComputedStyle(rows).rowGap)||0;
+    return [...kept].reduce((sum,li)=>sum+li.offsetHeight,0)+gap*(kept.size-1);
+  }
+  /** The window box and the promise rows (not the departures, which come and go by the minute). */
+  function promiseKey(rows:HTMLElement|null):string{
+    const ids=[...(rows?.children??[])].filter(li=>{const d=(li as HTMLElement).dataset;return d.kind==='first'||d.kind==='last'||d.always==='1';}).map(li=>li.getAttribute('data-key'));
+    return `${element.clientWidth}x${element.clientHeight}|${ids.join(',')}`;
+  }
+  /** cardPlacement over the laid-out wall; true when the card moved. */
+  function placeCard():boolean{
+    const kiosk=element.closest<HTMLElement>('.kiosk');
+    const compact=!lightweight&&kiosk?.dataset.size==='compact'&&kiosk.dataset.portrait!=='1';
+    const current=element.dataset.card==='aside'?'aside':'map';
+    const set=(next:'map'|'aside'):boolean=>{
+      if(next===current)return false;
+      if(next==='aside')element.dataset.card='aside';else delete element.dataset.card;
+      return true;
+    };
+    if(!compact)return set('map');
+    const rows=element.querySelector<HTMLElement>('.k-nearby-rows');
+    const windowH=element.clientHeight;
+    if(!rows||!(windowH>0))return false;
+    const gap=Number.parseFloat(getComputedStyle(element).rowGap)||0;
+    const cardH=card.offsetHeight;
+    const key=`${element.clientWidth}x${windowH}`;
+    const mapNow=field.measureHeight();
+    if(current==='map')mapUnder={key,px:mapNow};
+    const under=mapUnder?.key===key?mapUnder.px:mapNow-cardH-gap;
+    const listAside=current==='aside'?rows.clientHeight:rows.clientHeight-cardH-gap;
+    const floor=promisesPx(rows);
+    const zoom=Number.parseFloat(getComputedStyle(element).getPropertyValue('--k-zoom'))||1;
+    const next=refused===promiseKey(rows)?'map':cardPlacement({mapUnderPx:under,listAsidePx:listAside,floorPx:floor,minMapPx:MAP_MIN_HEIGHT_PX*zoom});
+    element.dataset.mapFloor=String(Math.round(MAP_MIN_HEIGHT_PX*zoom));
+    return set(next);
+  }
   function fit():void {
-    if(model)timeline.update(model.items,model.radiusM,model.now);
+    if(!model)return;
+    timeline.update(model.items,model.radiusM,model.now);
+    if(!placeCard())return;
+    timeline.update(model.items,model.radiusM,model.now);
+    // The fit is the proof: the promises did not fit under the card after all, so the card goes back.
+    if(element.dataset.card==='aside'&&timeline.element.dataset.fitOverflow==='1'){
+      refused=promiseKey(element.querySelector<HTMLElement>('.k-nearby-rows'));
+      delete element.dataset.card;
+      timeline.update(model.items,model.radiusM,model.now);
+    }
+    deps.onMapBox?.();
   }
   return {
     element,mapHost:field.mapHost,

@@ -79,9 +79,9 @@ app/src/kiosk.ts:1076 #paintCode → link.textContent = payload
 app/src/kiosk.ts:1094 #swapCode → escapeHtml(previous)
 app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(0, dash))
 app/src/kiosk.ts:1095 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1182 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1189 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1363 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:1184 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1191 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1365 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -122,17 +122,17 @@ app/src/kiosk/front.ts:538 #panelMarkup → escapeHtml(panel.kicker)
 app/src/kiosk/front.ts:538 #panelMarkup → externalHtml('summary', panel.meta)
 app/src/kiosk/front.ts:541 #panelMarkup → escapeHtml(panel.note)
 app/src/kiosk/front.ts:542 #panelMarkup → escapeHtml(panel.credit)
-app/src/kiosk/invitation.ts:39 #cardMarkup → e(s.invitation.lead)
-app/src/kiosk/invitation.ts:40 #cardMarkup → e(s.invitation.qrWaiting)
-app/src/kiosk/invitation.ts:47 #mountInvitation → e(s.handheld.info)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.tram)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.bikes)
-app/src/kiosk/invitation.ts:56 #mountInvitation → e(s.legend.culture)
-app/src/kiosk/invitation.ts:63 #mountInvitation → note.textContent=s.nearby.outageNote
-app/src/kiosk/mapview.ts:1024 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
-app/src/kiosk/mapview.ts:1024 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
-app/src/kiosk/mapview.ts:1025 #requestKioskMap → vetExternal('name', point.title, 'row')
-app/src/kiosk/mapview.ts:1026 #requestKioskMap → vetExternal('name', line.title, 'row')
+app/src/kiosk/invitation.ts:55 #cardMarkup → e(s.invitation.lead)
+app/src/kiosk/invitation.ts:56 #cardMarkup → e(s.invitation.qrWaiting)
+app/src/kiosk/invitation.ts:63 #mountInvitation → e(s.handheld.info)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.tram)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.bikes)
+app/src/kiosk/invitation.ts:72 #mountInvitation → e(s.legend.culture)
+app/src/kiosk/invitation.ts:79 #mountInvitation → note.textContent=s.nearby.outageNote
+app/src/kiosk/mapview.ts:1028 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
+app/src/kiosk/mapview.ts:1028 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
+app/src/kiosk/mapview.ts:1029 #requestKioskMap → vetExternal('name', point.title, 'row')
+app/src/kiosk/mapview.ts:1030 #requestKioskMap → vetExternal('name', line.title, 'row')
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(text)
 app/src/kiosk/markup.ts:23 #kicker → escapeHtml(meta)
 app/src/kiosk/markup.ts:28 #kBadge → vetExternal('headsign', label, 'row')
@@ -334,11 +334,11 @@ app/src/map/external-features.ts:71 #networkToGeoJson → vetExternal('headsign'
 app/src/map/external-features.ts:102 #stopsToGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-labels.ts:23 #wallLabelLayers → 'text-field': ['get', 'wallText']
 app/src/map/external-labels.ts:36 #vettedTileLabels → vetExternal('name', value, 'row')
-app/src/map/overlays.ts:634 #pillLayer → 'text-field': PILL_TEXT
-app/src/map/overlays.ts:843 #overlayLayers → 'text-field': ['get', 'name']
-app/src/map/overlays.ts:883 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1040 #overlayLayers → 'text-field': ['get', 'title']
-app/src/map/overlays.ts:1059 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:640 #pillLayer → 'text-field': PILL_TEXT
+app/src/map/overlays.ts:851 #overlayLayers → 'text-field': ['get', 'name']
+app/src/map/overlays.ts:891 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1048 #overlayLayers → 'text-field': ['get', 'title']
+app/src/map/overlays.ts:1067 #overlayLayers → 'text-field': ['get', 'name']
 app/src/motion/schema-map.ts:84 #createSchemaMap → escapeHtml(i18n.t('motion.note'))
 app/src/motion/schema-map.ts:86 #createSchemaMap → container.setAttribute('aria-label', options.ariaLabel)
 app/src/motion/schema-map.ts:187 #refreshWords → legend.textContent = text

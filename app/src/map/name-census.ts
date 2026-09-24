@@ -440,6 +440,19 @@ export function markerCensus(
  *  placed clear of a pill is never counted as crossed by it -- where the
  *  clustering's table width, a few pixels wider for a merged label's narrow
  *  "·", would have counted names that sit beside the capsule. */
+/** How many pairs of drawn pills lie over each other (data-pill-overlaps; 0 on a strip, where they yield). */
+export function pillOverlaps(boxes: readonly ScreenBox[]): number {
+  let n = 0;
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (boxesMeet(boxes[i]!, boxes[j]!)) n++;
+  return n;
+}
+
+/** How many drawn pills run past the map's edge (data-pill-clipped); 0 before layout. */
+export function pillsClipped(boxes: readonly ScreenBox[], view: { width: number; height: number }): number {
+  if (!(view.width > 0 && view.height > 0)) return 0;
+  return boxes.filter((b) => b.left < 0 || b.top < 0 || b.right > view.width || b.bottom > view.height).length;
+}
+
 export function pillBox(at: { x: number; y: number }, label: string, scale: number): ScreenBox {
   const { halfWidth, halfHeight } = capsuleHalfPx(label);
   const halfW = halfWidth * scale;
@@ -678,6 +691,8 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
     host.container.dataset.bajs = `counted:${census.bajs.counted};zero:${census.bajs.zero};blank:${census.bajs.blank};far:${census.bajs.far}`;
     host.container.dataset.overlaps = `discs:${census.covered};names:${crossed.size}`;
     host.container.dataset.discPills = String(census.discPills);
+    host.container.dataset.pillOverlaps = String(pillOverlaps(pillBoxes));
+    host.container.dataset.pillClipped = String(pillsClipped(pillBoxes, view));
     host.container.dataset.hiddenNames = String(hidden.length);
     host.container.dataset.ownName = ownName;
   }
