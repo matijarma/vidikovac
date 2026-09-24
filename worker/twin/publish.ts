@@ -129,12 +129,18 @@ export function buildPayload(
     const join = track.tripId !== null ? joins.get(track.tripId) : undefined;
     const next = track.tripId !== null ? state.tripUpdates[track.tripId] : undefined;
     const placed = place(track, net);
-    // ZET's TripUpdate names the next stop where it has one; the twin's plan
-    // names it otherwise. The twin's ETA rides whenever the id that goes on
-    // the wire is the id it planned for -- whichever source named it -- and
-    // is withheld where the two disagree, because an arrival time belongs to
-    // the stop it was computed for.
-    const nextStopId = next?.stopId ?? track.next?.stopId ?? undefined;
+    // On a rail path the twin's own next stop goes on the wire: the platform
+    // whose zone its anchor lies in, else the first served platform ahead,
+    // one per visit (plan.ts, rail round 3). ZET's TripUpdate names a stop by
+    // the first time it still has ahead, and at a platform that time passes
+    // and returns with every re-estimate while the tram stands there, so the
+    // wall's "sada" row vanished and came back (305 of 334 backward moves in
+    // one Monday hour were ZET's). Off every path ZET's stop names it where
+    // it has one, the twin's shape plan otherwise. The twin's ETA rides
+    // whenever the id that goes on the wire is the id it planned for --
+    // whichever source named it -- and is withheld where the two disagree,
+    // because an arrival time belongs to the stop it was computed for.
+    const nextStopId = (track.plan?.on === 'path' ? track.next?.stopId : undefined) ?? next?.stopId ?? track.next?.stopId ?? undefined;
     const nextStopEtaSec = nextStopId !== undefined && track.next?.stopId === nextStopId ? track.next.etaSec ?? undefined : undefined;
     items.push({
       id: `vehicle:${track.id}`,

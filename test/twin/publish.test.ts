@@ -105,3 +105,33 @@ describe('buildPayload and the next-stop ETA', () => {
     for (const key of Object.keys(item.data ?? {})) expect(DATA_KEYS.vehicle).toContain(key);
   });
 });
+
+// Rail round 3: on a rail path the twin's own next stop goes on the wire; ZET's
+// TripUpdate names a stop by the first time it still has ahead, and at a
+// platform that time passes and returns with every re-estimate while the tram
+// stands there, so the wall's "sada" row vanished and came back (305 of 334
+// backward moves in one Monday hour were ZET's). ZET's stop still names the
+// next stop where the twin has no path plan.
+describe('buildPayload prefers the twin\'s next stop on a rail path', () => {
+  const onPath = (over: Partial<Track> & { id: string }): Track => track({ ...over, plan: { on: 'path', pathIdx: 0, knots: [[0, 100], [60, 600]] } });
+  const net = decodeNetwork(graphAfter);
+  const pinOn = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
+    buildPayload(state(tracks, tripUpdates), joins, routes, NOW_MS, NOW_MS + 10_000, net).items.find((i) => i.id.startsWith('vehicle:'))!;
+
+  it('names the twin\'s stop and its ETA where ZET names another stop', () => {
+    const item = pinOn(
+      [onPath({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })],
+      { T1: update({ stopId: '244_1', delaySec: 120 }) },
+    );
+    expect(item.data?.nextStopId).toBe('231_2');
+    expect(item.data?.nextStopEtaSec).toBe(HEADER_S + 95);
+    expect(item.data?.delaySeconds).toBe(120);
+  });
+
+  it('falls back to ZET\'s stop where the twin\'s plan on a path reaches no stop, and off every path', () => {
+    const noNext = pinOn([onPath({ id: '1', next: null })], { T1: update({ stopId: '244_1', delaySec: 30 }) });
+    expect(noNext.data?.nextStopId).toBe('244_1');
+    const free = pin([track({ id: '1', next: { stopId: '231_2', s: 1400, etaSec: HEADER_S + 95 } })], { T1: update({ stopId: '244_1', delaySec: 120 }) });
+    expect(free.data?.nextStopId).toBe('244_1');
+  });
+});

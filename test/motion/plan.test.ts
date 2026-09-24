@@ -353,3 +353,41 @@ describe('buildPlan holds a diverted tram at the next branch of its line (rail r
     expect(Math.max(...knotsOf(t).map(([, s]) => s))).toBeGreaterThan(1800);
   });
 });
+
+describe('buildPlan names one next stop per visit (rail round 3)', () => {
+  // The wall carries a tracked tram as "sada" while the wire names the
+  // place's platform as its next stop; a next stop that moves past the
+  // platform and comes back makes the row vanish and return (lane W fix10's
+  // residual). The tram's own next stop is the platform whose zone its anchor
+  // lies in, whether it stands there or is read moving past the stop point,
+  // and it never moves back along the path within a trip unless the anchor
+  // itself moved back beyond a stop zone.
+  it('keeps the platform as the next stop while the anchor is in its zone, moving or not', () => {
+    // 35 m past T600's point, moving at 8 m/s (the dwell history says it has left).
+    const moving = tramOn1('past-the-point', [[520, 1000], [600, 1010], [635, 1015]]);
+    buildPlan(moving, net, eightMs, null, 1017, 1017, BANDS);
+    expect(moving.next?.stopId).toBe('T600');
+    expect(moving.next?.etaSec).toBe(1015);
+    expect(at(moving, 1040, 1017)).toBeGreaterThan(700); // the plan itself runs on
+    // 45 m past the point: beyond the zone, the next stop is T900.
+    const beyond = tramOn1('beyond-the-zone', [[530, 1000], [610, 1010], [645, 1015]]);
+    buildPlan(beyond, net, eightMs, null, 1017, 1017, BANDS);
+    expect(beyond.next?.stopId).toBe('T900');
+  });
+
+  it('does not move the next stop back to a platform the anchor scattered around the edge of', () => {
+    const tram = tramOn1('scatter', [[560, 1000], [645, 1010]]);
+    buildPlan(tram, net, eightMs, null, 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    // The next fix reads 8 m back, inside T600's zone again: the wire keeps T900.
+    matcher.matchFix(tram, fix(637, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    // A fix a whole zone further back is a real reversal (or another tram's fix under this id): the platform is named again.
+    matcher.matchFix(tram, fix(590, 0, 1030), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1032, 1032, BANDS);
+    expect(tram.next?.stopId).toBe('T600');
+  });
+});

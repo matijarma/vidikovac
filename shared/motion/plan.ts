@@ -19,7 +19,14 @@
 //   - a diverted tram (match.ts TramTrack.diverted, running its line's rails
 //     off its own path) is planned no further than the next branch of those
 //     rails (branches.ts): beyond it the way it takes is a guess, so the plan
-//     holds at the branch until a fix says which way it went (rail round 2).
+//     holds at the branch until a fix says which way it went (rail round 2);
+//   - the next stop (Track.next) is the platform whose zone the anchor lies
+//     in, standing or read moving past the stop point, else the first served
+//     platform ahead, and within a trip it never moves back along the path
+//     unless the anchor itself moved back beyond a stop zone: the wall
+//     carries a tram as "sada" while the wire names its platform, and a next
+//     stop that moved past the platform and came back made that row vanish
+//     and return (rail round 3).
 
 import type { BranchTable } from './branches';
 import type { DwellPlanner } from './dwell';
@@ -372,6 +379,9 @@ export function buildPlan(
     track.confidence = 0;
     return;
   }
+  // What the previous tick named, for the one-next-stop-per-visit rule below.
+  const prevNext = track.next;
+  const prevPlan = track.plan;
   const silenceSec = nowSec - last.atSec;
   const decay = silenceDecay(silenceSec);
   // T8: past SILENCE_HOLD_S the evidence is too old to move on. The plan
@@ -453,7 +463,11 @@ export function buildPlan(
   // stop beyond says when it must leave to make it; and a TripUpdate that
   // already names the stop beyond says it has left by the header at the
   // latest (the update is current, the fix may be 30 s old).
-  const here = geometry.stopAt(s);
+  // The platform the anchor stands at: the zone the floored anchor lies in,
+  // else the zone the observed fix lies in (the published floor lifts the
+  // anchor by up to ANCHOR_NOISE_M, which can carry it out of the zone the
+  // tram was read in; the tram is still at that platform, rail round 3).
+  const here = geometry.stopAt(s) ?? geometry.stopAt(round1(track.match.s));
   // T8's platform is read off the evidence: the zone the observed fix lies
   // in, before the published floor raised the anchor (a fix 30 m past a stop
   // point, floored 20 m further, is still a tram at that stop, not one on its
@@ -498,6 +512,10 @@ export function buildPlan(
     const beyond = next && next.stopId !== here.stopId ? aheadOfHere.find((ahead) => ahead.stopId === next.stopId) ?? null : null;
     const approachSpeed = approachSpeedTo(here.s);
     const remaining = dwellRemaining(track, here, dwellHere, approachSpeed, counts);
+    // Read moving past the stop point but still in the platform's zone: the
+    // platform is still the next stop, reached now (rail round 3); the run
+    // below plans on from the anchor.
+    if (remaining === null) nextStop = { stopId: here.stopId, s: round1(here.s), etaSec: Math.round(t) };
     if (remaining !== null) {
       // The dwell that is left; a stand already past it ends a tick from now (R-TE48).
       let departure = t + (remaining > 0 ? remaining : STAND_EXTEND_S);
@@ -640,6 +658,18 @@ export function buildPlan(
     }
   }
   if (knots[knots.length - 1][0] < rel(horizonEnd)) knots.push([rel(horizonEnd), knots[knots.length - 1][1]]);
+
+  // One next stop per visit (rail round 3): a platform the wire has named
+  // and moved on from is not named again on this path unless the anchor
+  // itself came back by more than a stop zone (a reversal, or another
+  // vehicle's fix under this id). The anchor scattering around the edge of
+  // a zone it has left keeps the later stop, with the plan's own arrival there.
+  const samePath = prevPlan !== null && prevPlan.on !== 'free' && prevPlan.on === (track.match.pathIdx !== null ? 'path' : 'shape')
+    && (prevPlan.on === 'path' ? prevPlan.pathIdx === track.match.pathIdx : prevPlan.shapeIdx === track.match.shapeIdx);
+  if (nextStop && prevNext && samePath && !silentHere && prevNext.s > nextStop.s && track.match.s >= prevPlan.knots[0][1] - STOP_ZONE_M) {
+    const reached = knots.find(([, ks]) => ks >= prevNext.s - 0.5);
+    nextStop = { stopId: prevNext.stopId, s: prevNext.s, etaSec: reached ? Math.round(headerSec + reached[0]) : null };
+  }
 
   track.plan = track.match.pathIdx !== null ? { on: 'path', pathIdx: track.match.pathIdx, knots } : { on: 'shape', shapeIdx: track.match.shapeIdx!, knots };
   track.next = nextStop;
