@@ -36,7 +36,7 @@ import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from
 import type { ModuleSnapshot } from '../worker/feed/schema';
 import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
 import { pillRows } from '../app/src/motion/pills';
-import { FRAME_MAX_ZOOM, FRAME_MIN_ZOOM } from '../app/src/map/frame';
+import { FIT_MIN_ZOOM, FRAME_MAX_ZOOM } from '../app/src/map/frame';
 
 const root = resolve(import.meta.dirname, '..');
 /** The table scripts/zet-schema.mjs writes beside the artefact (F5): what ZET
@@ -133,9 +133,12 @@ const MAP_CEILING = 18;
 /**
  * From the camera Karta opens on to an exact integer zoom `to`. Karta opens on
  * the WP4 frame (workspace.ts frameCamera: the place at the centre and its
- * 6-7 stops across the stage's shorter side, map/frame.ts frameView), whose
- * zoom is fractional and follows the stage's box (12.85 at the desk's
- * 1280x720), not the old fixed 14 on the stop. MapLibre's keyboard step is +1
+ * 6-7 stops across the shorter side of the map's own box, map/frame.ts
+ * frameView), whose zoom is fractional and follows that box, not the old fixed
+ * 14 on the stop. On the desk the box is the 326 px column beside the sheet
+ * and the frame is fitted whole down to FIT_MIN_ZOOM (lane p-map 7b30820f:
+ * 11.76 at 1280x720, where it was 12.85 while the stage's box was framed), so
+ * the rest band is FIT_MIN_ZOOM..FRAME_MAX_ZOOM. MapLibre's keyboard step is +1
  * from the zoom it is at, with no rounding (zoomSnap 0), so the walk climbs to
  * the map's ceiling, where the last step clamps to exactly 18, and steps down
  * from there. The frame centres the place, which is the screen's stop where
@@ -149,8 +152,8 @@ async function fromFrameTo(page: Page, to: number): Promise<void> {
     await page.waitForTimeout(400);
     const after = await probe(page, 'zoom');
     zoom = Number(after);
-    return before !== null && before === after && zoom >= FRAME_MIN_ZOOM && zoom <= FRAME_MAX_ZOOM;
-  }, { timeout: 20_000, message: `Karta opens on the WP4 frame: a camera at rest between zoom ${FRAME_MIN_ZOOM} and ${FRAME_MAX_ZOOM}` }).toBe(true);
+    return before !== null && before === after && zoom >= FIT_MIN_ZOOM && zoom <= FRAME_MAX_ZOOM;
+  }, { timeout: 20_000, message: `Karta opens on the WP4 frame: a camera at rest between zoom ${FIT_MIN_ZOOM} (the desk's whole-fit floor) and ${FRAME_MAX_ZOOM}` }).toBe(true);
   test.info().annotations.push({ type: 'frame zoom', description: zoom.toFixed(2) });
   while (zoom < MAP_CEILING) {
     const next = Math.min(MAP_CEILING, zoom + 1);
