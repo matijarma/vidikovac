@@ -61,6 +61,62 @@ describe('catalogue delivery',()=>{
     expect(store.snapshot()).toBe(before);store.destroy();
   });
 });
+describe('chunk backoff',()=>{
+  function scripted(statuses:number[],retryAfter?:string){
+    const chunkCalls:number[]=[];
+    const fetcher=vi.fn(async(url:RequestInfo|URL)=>{
+      const path=String(url);
+      if(path.endsWith('/manifest'))return Response.json(manifest);
+      if(path.endsWith('/live'))return Response.json(live);
+      chunkCalls.push(Date.now());
+      const status=statuses.shift()??200;
+      if(status===200)return Response.json(chunk);
+      return new Response('{"error":"rate-limited"}',{status,headers:retryAfter?{'retry-after':retryAfter}:{}});
+    });
+    return {fetcher,chunkCalls};
+  }
+  it('retries a rate-limited chunk by itself when Retry-After says, then loads it',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,chunkCalls}=scripted([429],'30');
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();
+    expect(store.snapshot().places).toHaveLength(0);expect(chunkCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(29_000);expect(chunkCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_500);expect(chunkCalls).toHaveLength(2);
+    expect(store.snapshot().places).toHaveLength(1);expect(store.snapshot().errors).not.toContain('culture');
+    store.destroy();
+  });
+  it('doubles the wait after each failure and never retries after destroy',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,chunkCalls}=scripted([503,503,503,503]);
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();
+    await vi.advanceTimersByTimeAsync(15_000);expect(chunkCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(29_000);expect(chunkCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_000);expect(chunkCalls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(60_000);expect(chunkCalls).toHaveLength(4);
+    store.destroy();
+    await vi.advanceTimersByTimeAsync(600_000);expect(chunkCalls).toHaveLength(4);
+  });
+  it('keeps the last good places while a revised chunk is rate-limited',async()=>{
+    vi.useFakeTimers({now:NOW});
+    let revision=false,limited=false;
+    const fetcher=vi.fn(async(url:RequestInfo|URL)=>{
+      const path=String(url);
+      if(path.endsWith('/manifest'))return Response.json(revision?{...manifest,sources:[{...source,chunks:[{hash:'b'.repeat(64),bytes:10}]}]}:manifest);
+      if(path.endsWith('/live'))return Response.json(live);
+      return limited?new Response('{}',{status:429,headers:{'retry-after':'60'}}):Response.json(chunk);
+    });
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();expect(store.snapshot().places).toHaveLength(1);
+    revision=true;limited=true;vi.setSystemTime(NOW+301_000);await store.refresh();
+    expect(store.snapshot().places).toHaveLength(1);
+    limited=false;await vi.advanceTimersByTimeAsync(61_000);
+    expect(fetcher.mock.calls.filter(([u])=>String(u).includes('b'.repeat(64)))).toHaveLength(2);
+    expect(store.snapshot().places).toHaveLength(1);expect(store.snapshot().errors).not.toContain('culture');
+    store.destroy();
+  });
+});
 describe('live source safety',()=>{
   it('coalesces simultaneous source requests and negatively caches outages',async()=>{
     const {env}=environment(),fetcher=vi.fn(async()=>{throw new Error('offline');});

@@ -385,7 +385,7 @@ verziju protokola ili ulogu sudionika potrebnu za tu kratkotrajnu vezu.
 
 ## Granice i ograničenja
 
-`RL_SCAN` 10/60 s po IP-u, `RL_DATA` 240/60 s po tokenu, `RL_OPEN` 120/60 s po IP-u; `BeaconDO` usporava 60 s nakon 20 neuspjelih pokušaja; brojane sesije najviše 30 na sat i 200 na dan po zaslonu (višak se bilježi kao `over_cap` i ne ulazi u skup za Grad). Tijela zahtjeva su ograničena, `run_worker_first` drži statiku izvan Workera.
+`RL_SCAN` 10/60 s po IP-u, `RL_DATA` 240/60 s po tokenu, `RL_OPEN` 120/60 s po IP-u (dijelovi kataloga `/api/city/chunks/<sažetak>.json` ne troše taj proračun kad je sažetak poznat: nepromjenjivi su, šalju se s `immutable` i iz predmemorije ruba, a proračun troši samo nepoznat sažetak; neuspio dio preglednik ponovno traži sam, nakon `Retry-After` ili nakon 15 s koje se udvostručuju do 10 min); `BeaconDO` usporava 60 s nakon 20 neuspjelih pokušaja; brojane sesije najviše 30 na sat i 200 na dan po zaslonu (višak se bilježi kao `over_cap` i ne ulazi u skup za Grad). Tijela zahtjeva su ograničena, `run_worker_first` drži statiku izvan Workera.
 
 ## Kasnije
 
