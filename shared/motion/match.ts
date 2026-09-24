@@ -32,7 +32,7 @@
 import { dist, type XY } from './geo';
 import type { GraphNetwork } from './network';
 import { arcOnPath } from './order';
-import { EVICT_S, SILENCE_HOLD_S } from './plan';
+import { EVICT_S, SILENCE_HOLD_S, STAND_SCATTER_M } from './plan';
 import { project, projectionsWithin, tangent } from './polyline';
 import { DEAD_ZONE_M, MAX_SPEED_MS, STOP_ZONE_M } from './speed';
 import { lastFix, noMatch, pushFix, resetOrder, type Match, type PlaneFix, type Track } from './track';
@@ -318,32 +318,42 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       || a - b;
   }
 
-  /** Only own-route, running paths can be adopted. No foreign-path fallback.
-   *  A path of the OTHER direction id than the trip's, other than the trip's
-   *  own, is adopted only on the evidence D4 asks for before it turns a tram:
-   *  FOLD_MOVE_M of forward movement along the edge over the last interval.
-   *  Without it a tram standing 57 to 65 m off its path was read onto the
-   *  opposite-direction variant a few metres away and flipped 350 to 460 m
-   *  from every terminal (102259 at Frankopanska, 102408 at Branimirova
-   *  tržnica, 20 Sep; 102270 at Frankopanska, 21 Sep). Standing off the rails
-   *  is unplaced; the trip's own path and an unknown trip's direction are
-   *  not judged by this. */
-  function adoptPath(edge: number, sOnEdge: number, track: Track, prior: Prior, motion: Motion, ctx?: MatchContext): number | null {
-    const dir = motion.dir;
+  /** Only own-route, running paths can be adopted. No foreign-path fallback. */
+  function adoptPath(edge: number, sOnEdge: number, track: Track, prior: Prior, dir: XY | null, ctx?: MatchContext): number | null {
     const wanted = wantedDirection(edge, sOnEdge, dir, prior);
-    const e = net.edges[edge];
-    const alongM = prior.direction === null ? Number.POSITIVE_INFINITY : dot(tangent(e.pts, e.cum, sOnEdge), motion.delta);
     let best: number | null = null;
     for (const pathIdx of pathsByEdge.get(edge) ?? []) {
       if (!pathEligible(pathIdx, prior.routeId, ctx)) continue;
-      const direction = net.paths[pathIdx].direction;
-      const opposite = pathIdx !== prior.pathIdx && direction !== -1 && prior.direction !== null && direction !== prior.direction;
-      if (opposite && alongM < FOLD_MOVE_M) continue;
       if (best === null || comparePaths(pathIdx, best, edge, wanted, track, prior) < 0) best = pathIdx;
     }
     return best;
   }
 
+  /**
+   * The own-route rails a fix may be placed on, best first. The movement
+   * evidence (`motion.delta`: the last interval, or a standing tram's
+   * approach) is read against each rail's own direction, in metres along it
+   * (rail round 2; the D4 rule already read a turn this way):
+   *   - a rail the tram moved against by more than DEAD_ZONE_M is not the rail
+   *     it is on (R-TE45), whatever variant runs it;
+   *   - a rail running against the trip's own path where that path passes
+   *     nearest, within OFF_GRAPH_M (the other direction's track; farther
+   *     off, the own path says nothing about the local rails), takes
+   *     FOLD_MOVE_M of forward movement along it, the metres D4 asks for
+   *     before it turns a tram;
+   *   - two rails within a platform's GPS scatter of each other running
+   *     against each other, with no movement beyond the dead zone along the
+   *     better one, leave the direction unknown: nothing is adopted, and the
+   *     tram stays unplaced until it moves.
+   * Recorded 20 and 21 Sep: standing 57 to 65 m off its path a tram was read
+   * onto the other direction's track a few metres away and flipped 350 to
+   * 460 m from every terminal (102259 6_2 -> 6_25 at Frankopanska, 102408
+   * 5_37 at Branimirova tržnica, 102270 path:17:1 -> path:17:0 at
+   * Frankopanska); evicted mid-diversion, 102232 was placed at Vodnikova on
+   * the northbound depot variant by ZET's stale next stop while the two
+   * Savska rails 7 m apart said nothing, and turned twice. The trip's own
+   * path is judged by its own return rule, never here.
+   */
   function candidatesFor(track: TramTrack, p: XY, motion: Motion, prior: Prior, nextStopId: string | null, ctx?: MatchContext): Candidate[] {
     const dir = motion.dir;
     const dtSec = motion.dtSec;
@@ -352,12 +362,27 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
     for (const pathIdx of pathsByRoute.get(prior.routeId) ?? []) {
       if (pathEligible(pathIdx, prior.routeId, ctx)) for (const e of net.paths[pathIdx].edges) routeEdges.add(e);
     }
+    let priorTan: XY | null = null;
+    if (prior.pathIdx !== null) {
+      const geo = net.pathGeometry(prior.pathIdx);
+      const own = project(geo.pts, geo.cum, p);
+      if (own.d <= OFF_GRAPH_M) priorTan = tangent(geo.pts, geo.cum, own.s);
+    }
     const out: Candidate[] = [];
+    const tangents: XY[] = [];
+    const alongs: number[] = [];
     for (const hit of hits) {
       if (!routeEdges.has(hit.edge)) continue;
       if (track.unplacedDirection && !edgeTangentAgrees(hit.edge, hit.s, dir ?? track.unplacedDirection)) continue;
-      const pathIdx = adoptPath(hit.edge, hit.s, track, prior, motion, ctx);
+      const e = net.edges[hit.edge];
+      const tan = tangent(e.pts, e.cum, hit.s);
+      const alongM = dot(tan, motion.delta);
+      if (alongM <= -DEAD_ZONE_M) continue;
+      if (priorTan !== null && dot(tan, priorTan) < 0 && alongM < FOLD_MOVE_M) continue;
+      const pathIdx = adoptPath(hit.edge, hit.s, track, prior, dir, ctx);
       if (pathIdx === null) continue;
+      tangents.push(tan);
+      alongs.push(alongM);
       const path = net.paths[pathIdx];
       // A path that runs this edge twice (a circuit, a balloon) offers two
       // arcs a lap apart: the one nearest where the vehicle already was is
@@ -372,6 +397,12 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
         if (sNext !== null && s > sNext + PAST_NEXT_STOP_PENALTY_M) score += PAST_NEXT_STOP_PENALTY_M;
       }
       out.push({ edge: hit.edge, pathIdx, s, d: hit.d, score });
+    }
+    if (out.length > 1) {
+      let best = 0;
+      for (let i = 1; i < out.length; i++) if (out[i].score < out[best].score || (out[i].score === out[best].score && out[i].d < out[best].d)) best = i;
+      const opposed = tangents.some((tan, i) => dot(tan, tangents[best]) < 0 && out[i].d <= out[best].d + STAND_SCATTER_M);
+      if (opposed && Math.abs(alongs[best]) < DEAD_ZONE_M && out[best].pathIdx !== prior.pathIdx) return [];
     }
     out.sort((a, b) => a.score - b.score || a.d - b.d);
     return out;
@@ -766,7 +797,13 @@ export function createMatcher(net: GraphNetwork, { pathRanks }: { pathRanks?: re
       const onPath = onPathMatch(track, working, p, motion, nextStopId);
       const unplaced = track.match.pathIdx === null && track.match.edge !== null;
       if (unplaced) {
-        if (onPath.residual <= NEAR_M && pathTangentAgrees(working, onPath.s, dir ?? track.unplacedDirection ?? null)) {
+        // The trip's own path within the near band is the placement unless
+        // the movement runs against it beyond the dead zone (rail round 2:
+        // 102408 approached its rails from a side street at 76 degrees, and
+        // the sign of the unit tangent read that as against).
+        const againstOwn = pathForwardM(working, onPath.s, candidateDelta) <= -DEAD_ZONE_M
+          || (track.unplacedDirection !== undefined && !pathTangentAgrees(working, onPath.s, track.unplacedDirection));
+        if (onPath.residual <= NEAR_M && !againstOwn) {
           delete track.unplacedDirection;
           resetOrder(track);
           track.match = onPath;

@@ -392,10 +392,7 @@ describe('own-path return and service eligibility', () => {
     const prior = m.priorFor('1_0', '1', 0);
     const track = newTrack('prior-resumes', '1', 'trip', 'tram');
     m.matchFix(track, fix(600, 55, 1000), prior, null, { runningServices: new Set(['sat']) });
-    // The one running rail is the other direction's, and the tram stands:
-    // unplaced on it, not turned round (rail round 2).
-    expect(track.match.pathIdx).toBeNull();
-    expect(track.match.edge).not.toBeNull();
+    expect(serviceNet.paths[track.match.pathIdx!].id).toBe('1_1');
     expect(track.priorPath).toBeNull();
     m.matchFix(track, fix(600, 55, 1000 + interval), prior, null, { runningServices: new Set(['wd']) });
     expect(track.match.pathIdx).toBe(prior.pathIdx);
@@ -409,8 +406,7 @@ describe('own-path return and service eligibility', () => {
     const prior = m.priorFor('1_0', '1', 0);
     const track = newTrack('prior-now-eligible', '1', 'trip', 'tram');
     m.matchFix(track, fix(600, 55, 1000), prior, null, { runningServices: new Set(['sat']) });
-    expect(track.match.pathIdx).toBeNull(); // standing beside the other direction's track (rail round 2)
-    expect(track.match.edge).not.toBeNull();
+    expect(track.match.pathIdx).toBe(pathIdx('1_1'));
     m.matchFix(track, fix(600, 55, 1000 + interval), prior, null, { runningServices: new Set(['sat', 'wd']) });
     expect(track.match.pathIdx).toBe(prior.pathIdx);
     expect(track.priorPath).toBe(prior.pathIdx);
@@ -627,11 +623,15 @@ describe('terminal placement continuity', () => {
     m.matchFix(t, fix(1000, 58, 1000), p, null);
     m.matchFix(t, fix(1000, 90, 1010), p, null);
     m.matchFix(t, fix(1006, 90, 1000 + age), p, null);
-    // Past the report lifetime the approach is forgotten; the standing tram
-    // is then still not turned onto the other direction's rail without
-    // movement along it (rail round 2), so the same-direction variant it
-    // stands 6 m from is the placement either way.
-    expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+    // Past the report lifetime the approach is forgotten, and two rails 6 m
+    // apart running against each other with no movement along either leave
+    // the direction unknown: the tram stays unplaced until it moves (rail
+    // round 2), instead of the nearer rail winning by centimetres.
+    if (age <= EVICT_S) expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+    else {
+      expect(t.match.pathIdx).toBeNull();
+      expect(t.offGraph).toBe(false);
+    }
   });
 
   it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {
