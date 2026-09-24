@@ -32,7 +32,9 @@
 // happened fails its row, it never drops out of the verdict.
 //
 // Every rotation reading also carries the wall validator's `data-skipped-text` census (`skippedText` in
-// rotation.jsonl, totals in report.md): a monitored figure (RUN decision 24), read by no threshold.
+// rotation.jsonl, totals in report.md): a monitored figure (RUN decision 24), read by no threshold, and `fleet`,
+// what the twin had reported to the page by then (the zet-rt snapshots the page itself received; the observer makes
+// no request for them), so a reading without a vehicle pill is judged against whether there was a vehicle to draw.
 //
 // Output: review.local/observe-<stamp>/ with inventory.json, rotation.jsonl, legibility.json, report.md,
 // plus recorders.json and captures/*.png (all gitignored through *.local; --out must stay in such a folder
@@ -69,6 +71,18 @@ export const REPEAT_WINDOW_MS = 10 * 60_000;
 export const AXE_TAGS = Object.freeze(['wcag2a', 'wcag2aa', 'wcag21aa']);
 export const INVITATION_TIMEOUT_MS = 90_000;
 export const MAP_SETTLE_TIMEOUT_MS = 45_000;
+/**
+ * The wall's settle waits, as the accept spec's (e2e/accept/wall.spec.ts settle): the map census (data-unlabelled
+ * written, map/name-census.ts), then the first vehicle pill (the spec's VEHICLES_MS). Waits, never gates: a census or
+ * a pill that does not come in time leaves the reading to be judged as it stands, and the run log says how long each took.
+ */
+export const CENSUS_TIMEOUT_MS = 20_000;
+export const VEHICLES_TIMEOUT_MS = 10_000;
+/**
+ * How long a reading may show no pill after the twin first reported vehicles to the page: the push, the frame, and the
+ * census retaken once the frame has stood PROBE_SETTLE_MS (1 s, map/name-census.ts), with a rotation step of margin.
+ */
+export const PILLS_DRAW_GRACE_MS = 5_000;
 export const SETTLE_MS = 2_500;
 export const SESSION_TIMEOUT_MS = 60_000;
 /** Codes rotate every 30 s; three rotations is enough to find one this run has not spent. */
@@ -342,6 +356,17 @@ export const MAP_SETTLED_IN_PAGE = (spec) => {
   const status = m ? m.getAttribute('data-map-status') : null;
   return Boolean(status) && !spec.pending.includes(status);
 };
+/** The map has written its census (map/name-census.ts): data-unlabelled carries a value, as the accept spec waits for. */
+export const MAP_CENSUS_IN_PAGE = (spec) => {
+  const m = document.querySelector(spec.map);
+  const v = m ? m.getAttribute('data-unlabelled') : null;
+  return typeof v === 'string' && v !== '';
+};
+/** The map draws at least one vehicle pill (data-pills non-empty). */
+export const PILLS_DRAWN_IN_PAGE = (spec) => {
+  const m = document.querySelector(spec.map);
+  return Boolean(m && (m.getAttribute('data-pills') || '').trim());
+};
 export const ANY_PRESENT_IN_PAGE = (spec) => spec.selectors.some((s) => Boolean(document.querySelector(s)));
 export const PAIRING_IN_PAGE = (p) => {
   const text = (s) => ((document.querySelector(s) || {}).textContent || '').trim();
@@ -463,9 +488,14 @@ export const STOP_BOARD_READ_IN_PAGE = (spec) => {
     }
     return true;
   };
+  const inView = (el) => { const b = el.getBoundingClientRect(); return b.bottom > 0 && b.right > 0 && b.top < innerHeight && b.left < innerWidth; };
   const board = document.querySelector(spec.board);
-  const b = board ? board.getBoundingClientRect() : null;
-  const open = shown(board) && b.bottom > 0 && b.right > 0 && b.top < innerHeight && b.left < innerWidth;
+  // The probe wrapper is display: contents (app/src/ui/map.css .t-stop-board): no box of its own, 0 × 0 by
+  // construction, so the board is open when its first rendered child is shown and in the viewport, the accept
+  // spec's reading (e2e/accept/phone.spec.ts). Production, 24 Sep: the board and its three rows were on screen.
+  const boxless = Boolean(board) && !board.hidden && !board.closest('[hidden]') && getComputedStyle(board).display === 'contents';
+  const face = boxless ? Array.from(board.children).find(shown) : null;
+  const open = boxless ? Boolean(face) && inView(face) : shown(board) && inView(board);
   const rows = Array.from(document.querySelectorAll(spec.rows)).filter(shown);
   const inside = rows.filter((el) => { const r = el.getBoundingClientRect(); return r.top >= -1 && r.bottom <= innerHeight + 1 && r.left >= -1 && r.right <= innerWidth + 1; });
   return { open, total: rows.length, inViewport: inside.length, texts: rows.slice(0, 6).map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60)) };
@@ -571,6 +601,8 @@ async function openPage(browser, ctx, name, surface, options) {
   // The recorder shares the observer's clock, so the redemption spacing is read on one time line.
   const entry = { surface, recorder: ctx.instruments.recorders.attachRecorders(page, name, { now: () => new Date(ctx.now()) }), snapshot: null };
   ctx.recorders.push(entry);
+  // The zet-rt snapshots the page reads: whether the twin had any vehicle to draw when a reading found no pill.
+  ctx.fleets?.set(page, watchFleet(page, ctx));
   return { context, page, entry };
 }
 
@@ -606,7 +638,7 @@ async function shot(page, name, ctx) {
 }
 
 /** The screen from its provisioning URL; throws KioskUnavailable when the invitation never shows a code. */
-export async function openKiosk(page, ctx) {
+export async function openKiosk(page, ctx, label = 'kiosk') {
   const { wall, lib } = ctx.instruments;
   try {
     await page.goto(ctx.kioskUrl, { waitUntil: 'domcontentloaded' });
@@ -616,6 +648,16 @@ export async function openKiosk(page, ctx) {
   }
   await page.waitForFunction(MAP_SETTLED_IN_PAGE, { map: wall.WALL_PROBES.map, pending: ['loading'] }, { timeout: MAP_SETTLE_TIMEOUT_MS })
     .catch(() => ctx.note(`kiosk: the map did not settle within ${MAP_SETTLE_TIMEOUT_MS / 1000} s`));
+  // The accept spec's settle: the census is taken once the map has settled (MapLibre's idle, or a still frame after
+  // PROBE_SETTLE_MS), so a reading before it measures a map that has not drawn. Production, 24 Sep: the portrait,
+  // read 2.5 s after `ready`, had no data-unlabelled, data-markers or data-pills and failed unlabelled, pills-drawn
+  // and legibility on it; the rotation's first reading came 2 s before the first pill. Then the vehicles, where the
+  // twin has any. Neither wait is a gate.
+  const map = { map: wall.WALL_PROBES.map };
+  const t0 = ctx.now();
+  const census = await page.waitForFunction(MAP_CENSUS_IN_PAGE, map, { timeout: CENSUS_TIMEOUT_MS }).then(() => ctx.now() - t0, () => null);
+  const pills = await page.waitForFunction(PILLS_DRAWN_IN_PAGE, map, { timeout: VEHICLES_TIMEOUT_MS }).then(() => ctx.now() - t0, () => null);
+  ctx.note(`${label}: the map census ${census === null ? `not written within ${CENSUS_TIMEOUT_MS / 1000} s` : `${census} ms`} and ${pills === null ? `no vehicle pill within ${VEHICLES_TIMEOUT_MS / 1000} s` : `the first vehicle pill ${pills} ms`} after the map left loading`);
   await ctx.sleep(SETTLE_MS);
 }
 
@@ -638,6 +680,7 @@ export async function viewportOf(page, label, extra, ctx, { wall = false } = {})
 export async function readKiosk(page, label, surface, ctx) {
   const { wall, legibility } = ctx.instruments;
   const sample = await wall.wallSample(page);
+  sample.fleet = fleetNow(ctx, page, sample.at);
   ctx.scrub.noteCode(sample.code);
   const viewport = await viewportOf(page, label, { surface, scenario: 'the passive wall' }, ctx, { wall: true });
   let legible = null;
@@ -673,7 +716,10 @@ export async function rotate(page, ctx, calm = []) {
   const rows = await wall.sampleRotation(page, {
     steps, stepMs: wall.ROTATION_STEP_MS, clock: 'real',
     onSample: async (row) => {
-      if (!('error' in row)) ctx.scrub.noteCode(row.code);
+      if (!('error' in row)) {
+        ctx.scrub.noteCode(row.code);
+        row.fleet = fleetNow(ctx, page, row.at);
+      }
       // The validator's census rides on the reading it belongs to (monitored, never judged).
       row.skippedText = await readSkippedText(page);
       ctx.appendRotation(row);
@@ -846,6 +892,60 @@ export function watchDataRequests(page, ctx) {
 }
 
 /**
+ * What the twin told a page about the vehicles in one data response: the zet-rt snapshot of /api/teaser (the wall's:
+ * the pins inside the teaser's box, worker/feed/registry.ts), of /api/data/zet-rt (the phone's: the whole fleet) or of
+ * an aggregate /api/data; null for any other answer. `pins` counts the moving vehicles (ids `vehicle:`), never the
+ * route summaries (`route:`) nor the teaser's fleet count (`vozila`, given as `fleet`).
+ */
+export function fleetOf(path, body) {
+  const isObj = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+  let snapshots;
+  if (/^\/api\/teaser(\?|$)/.test(path)) snapshots = isObj(body) && Array.isArray(body.modules) ? body.modules : [];
+  else if (/^\/api\/data\/zet-rt(\?|$)/.test(path)) snapshots = [body];
+  else if (/^\/api\/data(\?|$)/.test(path)) snapshots = isObj(body) ? (Array.isArray(body.modules) ? body.modules : Object.values(body)) : [];
+  else return null;
+  const zet = snapshots.find((m) => isObj(m) && m.module === 'zet-rt');
+  if (!zet) return null;
+  const items = (Array.isArray(zet.items) ? zet.items : []).filter(isObj);
+  const count = items.find((i) => i.id === 'vozila');
+  const fleet = count && isObj(count.data) && Number.isFinite(Number(count.data.vehicles)) ? Number(count.data.vehicles) : null;
+  return { status: typeof zet.status === 'string' ? zet.status : null, pins: items.filter((i) => String(i.id ?? '').startsWith('vehicle:')).length, fleet };
+}
+
+/**
+ * What a page held at `at`: the latest zet-rt snapshot it had received by then, and `since`, when the run of snapshots
+ * with vehicles that one belongs to began (its own time when it has none). null before the first snapshot.
+ */
+export function fleetAt(records, at) {
+  const seen = records.filter((r) => r.at <= at).sort((a, b) => a.at - b.at);
+  if (!seen.length) return null;
+  const last = seen[seen.length - 1];
+  let since = last.at;
+  for (let i = seen.length - 1; last.pins > 0 && i >= 0 && seen[i].pins > 0; i--) since = seen[i].at;
+  return { at: last.at, status: last.status, pins: last.pins, fleet: last.fleet, since };
+}
+
+/** Every zet-rt snapshot `page` receives from now on, stamped on the observer's clock when its answer came. */
+export function watchFleet(page, ctx) {
+  const { pathOf } = ctx.instruments.recorders;
+  const list = [];
+  page.on('response', async (res) => {
+    let path;
+    try { path = pathOf(res.url()); } catch { return; }
+    if (!/^\/api\/(teaser|data)(\/zet-rt)?(\?|$)/.test(path)) return;
+    const at = ctx.now();
+    try {
+      if (res.status() >= 400) return;
+      const fleet = fleetOf(path, await res.json());
+      if (fleet) list.push({ at, ...fleet });
+    } catch { /* an answer without a JSON body tells nothing about the vehicles */ }
+  });
+  return list;
+}
+/** The twin's report as `page` held it at `at` (null when the page read no zet-rt snapshot by then). */
+const fleetNow = (ctx, page, at) => fleetAt(ctx.fleets?.get(page) ?? [], at);
+
+/**
  * The phone once its ten minutes are over: session-ended with /s/ and /hitno, no content row, no export control,
  * and no /api/data request from the page's own stamp of the end through AFTER_EXPIRY_MS after it (e2e/inventory.ts
  * expiryFailures, the phone spec's own). The request watcher has run since the redemption.
@@ -909,7 +1009,8 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
       read = await page.evaluate(KARTA_READ_IN_PAGE, spec);
     }
   }
-  out.karta = { ...read, pillsAfterMs };
+  // Whether the twin had any vehicle for the phone by the end of the window: without one no pill is owed.
+  out.karta = { ...read, pillsAfterMs, fleet: fleetNow(ctx, page, readyAt + inventory.KARTA_PILLS_WITHIN_MS) };
   out.viewports.push(await viewportOf(page, 'phone-karta-cold', { surface: 'phone', scenario: 'Karta cold open (one tap: the tab)' }, ctx));
   out.axe.karta = await axeOf(page, ctx, 'phone Karta');
   await shot(page, 'phone-karta-cold', ctx);
@@ -940,7 +1041,7 @@ export async function observeAll(browser, ctx, observation) {
   observation.kiosk = kiosk;
 
   const landscape = await openPage(browser, ctx, 'kiosk-1920x1080', 'kiosk', { viewport: { ...scenes.WALL_LANDSCAPE }, deviceScaleFactor: 1, userAgent: desktopUa });
-  await openKiosk(landscape.page, ctx);
+  await openKiosk(landscape.page, ctx, 'kiosk-1920x1080');
   const first = await readKiosk(landscape.page, 'kiosk-1920x1080', 'kiosk', ctx);
   kiosk.first = first.sample;
   kiosk.viewports.push(first.viewport);
@@ -973,7 +1074,7 @@ export async function observeAll(browser, ctx, observation) {
 
   try {
     const portrait = await openPage(browser, ctx, 'kiosk-1080x1920', 'kiosk', { viewport: { ...scenes.WALL_PORTRAIT }, deviceScaleFactor: 1, userAgent: desktopUa });
-    await openKiosk(portrait.page, ctx);
+    await openKiosk(portrait.page, ctx, 'kiosk-1080x1920');
     const read = await readKiosk(portrait.page, 'kiosk-1080x1920', 'kiosk-portrait', ctx);
     kiosk.portrait = read.sample;
     kiosk.viewports.push(read.viewport);
@@ -983,7 +1084,7 @@ export async function observeAll(browser, ctx, observation) {
 
   try {
     const proxy = await openPage(browser, ctx, 'kiosk-3m-proxy', 'kiosk', { viewport: { ...scenes.WALL_LANDSCAPE }, deviceScaleFactor: scenes.PROXY_DEVICE_SCALE_FACTOR, userAgent: desktopUa });
-    await openKiosk(proxy.page, ctx);
+    await openKiosk(proxy.page, ctx, 'kiosk-3m-proxy');
     await ctx.sleep(PROXY_SETTLE_MS);
     const name = `kiosk-1920x1080-dpr${String(scenes.PROXY_DEVICE_SCALE_FACTOR).replace('.', '')}-3m`;
     await shot(proxy.page, name, ctx);
@@ -1021,7 +1122,7 @@ export const THRESHOLDS = Object.freeze([
   T('place', 'd2', 'kiosk', 'kiosk.emptyPlaceReadings', NONE, 'kiosk-context non-empty in every reading', '§16.3, D2'),
   T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departure rows in every reading', '§16.3, [O-65]'),
   T('unlabelled', 'd2', 'kiosk', 'kiosk.unlabelledReadings', NONE, 'data-unlabelled = 0 in every reading (a missing probe counts)', '§16.3, D2'),
-  T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live; an outage (stale, down) needs none', '[O-71], §16.3'),
+  T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
   T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
   T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline, and every row that stays keeps its node', '§16.3, principle 7'),
@@ -1059,7 +1160,7 @@ export const THRESHOLDS = Object.freeze([
   T('phone-tabs', 'd3', 'phone', 'phone.tabsMismatch', NONE, 'the tabs read {TAB_LABELS}', '§16.4'),
   T('phone-share', 'd3', 'phone', 'phone.shareCityMissing', NONE, 'share-city visible at rest, reading "{SHARE_CITY_LABEL}"', '§16.4, [O-61]'),
   T('phone-share-code', 'd3', 'phone', 'phone.shareCodeMissing', NONE, 'one tap on "{SHARE_CITY_LABEL}" shows share-code as a code (ABCD-EFGH)', '§16.4'),
-  T('karta-pills', 'd3', 'phone', 'phone.kartaPillsLate', NONE, 'Karta cold open: a vehicle pill within {KARTA_PILLS_WITHIN_MS} ms of data-map-status=ready, no tap', '§16.4'),
+  T('karta-pills', 'd3', 'phone', 'phone.kartaPillsLate', NONE, 'Karta cold open: a vehicle pill within {KARTA_PILLS_WITHIN_MS} ms of data-map-status=ready, no tap (none owed while the twin reports no vehicle)', '§16.4'),
   T('karta-disclosures', 'd3', 'phone', 'phone.kartaDisclosures', NONE, 'Karta: no filter disclosure or group taxonomy', '§16.4'),
   T('karta-unlabelled', 'd3', 'phone', 'phone.kartaUnlabelled', NONE, 'Karta: data-unlabelled = 0 (a missing probe counts)', '§16.4'),
   T('phone-stop-board', 'd3', 'phone', 'phone.stopBoardFailures', NONE, 'Karta: the search reaches a stop board in at most {SEARCH_TAPS_MAX} taps, {PHONE_DEPARTURES} departures fully inside the viewport', '§16.4, D3'),
@@ -1073,9 +1174,11 @@ export const stageIndex = (stage) => (stage === STAGE_ALL ? STAGES.length - 1 : 
 /** The rows a stage applies. */
 export const thresholdsFor = (stage) => THRESHOLDS.filter((t) => stageIndex(t.stage) <= stageIndex(stage));
 
-/** `{NAME}` in a target, from the instruments' exported constants. */
+/** `{NAME}` in a target, from the instruments' exported constants (PILLS_DRAW_GRACE_S is the observer's own). */
 export function fillTarget(text, instruments) {
+  const own = { PILLS_DRAW_GRACE_S: PILLS_DRAW_GRACE_MS / 1000 };
   return text.replace(/\{([A-Z0-9_]+)\}/g, (_, name) => {
+    if (name in own) return String(own[name]);
     for (const mod of [instruments.wall, instruments.inventory, instruments.legibility, instruments.scenes]) {
       if (mod && name in mod) {
         const v = mod[name];
@@ -1116,6 +1219,28 @@ function outageHeadlineIssues(s, k) {
   if (hits.length) out.push(`a headline matches ${String(rule)}: ${hits.map((t) => quote(t, 60)).join(', ')}`);
   if (s.mapNotes !== 1) out.push(`${s.mapNotes} map note(s), not 1`);
   return out;
+}
+/**
+ * Whether a wall reading owes vehicle pills (§16.3, [O-71]): its data-feed live (an outage, stale or down, owes none),
+ * and the twin reporting vehicles to the page for at least PILLS_DRAW_GRACE_MS. A live feed whose last zet-rt snapshot
+ * carried no vehicle owes none: the night between two runs, a timetable without service. A reading without a recorded
+ * snapshot owes them: the row stays strict wherever the observer cannot tell.
+ */
+export function pillsOwed(s) {
+  if (OUTAGE_FEEDS.includes(s.feed)) return false;
+  const f = s.fleet;
+  if (!f) return true;
+  if (f.pins === 0) return false;
+  return s.at - f.since >= PILLS_DRAW_GRACE_MS;
+}
+const twinWords = (f) => (!f ? 'no zet-rt snapshot read' : f.pins === 0 ? `the twin reporting no vehicle${f.status && f.status !== 'live' ? ` (${f.status})` : ''}` : `the twin reporting ${f.pins} vehicle(s)`);
+/** The rotation's pills in one line of report.md: drawn, owed, and why the rest owed none. */
+function pillsCensus(readings, k) {
+  const drawn = readings.filter((s) => k.wall.pillLabels(s.pills).length).length;
+  const outage = readings.filter((s) => OUTAGE_FEEDS.includes(s.feed)).length;
+  const quiet = readings.filter((s) => !OUTAGE_FEEDS.includes(s.feed) && s.fleet && s.fleet.pins === 0).length;
+  const owed = readings.filter(pillsOwed).length;
+  return `Vehicle pills: drawn in ${drawn} of ${readings.length} readings, owed in ${owed}; the twin reported no vehicle in ${quiet}, the feed was stale or down in ${outage}.`;
 }
 const recordersOf = (obs, surface) => (obs.recorders ?? []).filter((r) => surface === 'all' || r.surface === surface);
 function recorderProblems(obs, surface) {
@@ -1209,11 +1334,16 @@ export const METRICS = Object.freeze({
   // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
   'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => s.departures < k.wall.DEPARTURES_MIN || s.departures > k.wall.DEPARTURES_MAX, (s) => `${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}`),
   'kiosk.unlabelledReadings': (obs) => countReadings(obs, (s) => s.unlabelled !== 0, (s) => (s.unlabelled === null ? 'no data-unlabelled probe' : `${s.unlabelled} unlabelled marker(s)`)),
-  // Pills are owed while the wall's own data-feed is live (or says nothing); during an outage the wall draws none.
+  // Pills are owed while the wall's own data-feed is live (or says nothing) and the twin reports vehicles (pillsOwed).
   'kiosk.pillsEmptyReadings': (obs, k) => {
-    const m = countReadings(obs, (s) => !OUTAGE_FEEDS.includes(s.feed) && !k.wall.pillLabels(s.pills).length, (s) => `data-pills empty (feed ${s.feed ?? '?'}, map ${s.mapStatus ?? '?'})`);
-    const outage = (readingsOf(obs) ?? []).filter((s) => OUTAGE_FEEDS.includes(s.feed)).length;
+    const m = countReadings(obs, (s) => pillsOwed(s) && !k.wall.pillLabels(s.pills).length, (s) => `data-pills empty (feed ${s.feed ?? '?'}, map ${s.mapStatus ?? '?'}, ${twinWords(s.fleet)})`);
+    const readings = readingsOf(obs) ?? [];
+    const outage = readings.filter((s) => OUTAGE_FEEDS.includes(s.feed)).length;
+    const quiet = readings.filter((s) => !OUTAGE_FEEDS.includes(s.feed) && s.fleet && s.fleet.pins === 0).length;
+    const fresh = readings.filter((s) => !OUTAGE_FEEDS.includes(s.feed) && s.fleet && s.fleet.pins > 0 && !pillsOwed(s)).length;
     if (outage) m.detail.push(`${outage} reading(s) during an outage (data-feed ${OUTAGE_FEEDS.join(' or ')}) owe no pill`);
+    if (quiet) m.detail.push(`${quiet} reading(s) with a live feed whose last zet-rt snapshot carried no vehicle owe no pill`);
+    if (fresh) m.detail.push(`${fresh} reading(s) within ${PILLS_DRAW_GRACE_MS / 1000} s of the twin first reporting vehicles owe none yet`);
     return m;
   },
   'kiosk.outageHeadline': (obs, k) => countReadings(obs, (s) => s.feed === 'down' && outageHeadlineIssues(s, k).length > 0, (s) => `data-feed down: ${outageHeadlineIssues(s, k).join('; ')}`),
@@ -1339,11 +1469,15 @@ export const METRICS = Object.freeze({
     if (!x.stamped) f.push(`the page kept no stamp of its session's end (a defect): requests counted from the observer's estimate, the redemption + ${SESSION_MINUTES} min`);
     return { value: f.length, detail: f.length ? f : [`session-ended ${Math.round(x.afterRedemptionMs / 1000)} s after the redemption; cleared, and no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after`] };
   },
+  // Strict whenever the twin reported vehicles to the phone (or the observer read no snapshot); none owed when it reported none.
   'phone.kartaPillsLate': (obs, k) => {
     const r = karta(obs);
     if (!r) return notMeasured('the Karta cold open');
     const late = r.pillsAfterMs === null || r.pillsAfterMs > k.inventory.KARTA_PILLS_WITHIN_MS;
-    return { value: late ? 1 : 0, detail: [r.status !== 'ready' ? `map status ${r.status ?? 'missing'}` : r.pillsAfterMs === null ? `no pill within ${KARTA_POLL_MS / 1000} s of ready` : `first pill ${r.pillsAfterMs} ms after ready`] };
+    const quiet = late && r.status === 'ready' && r.fleet && r.fleet.pins === 0;
+    const seen = r.status !== 'ready' ? `map status ${r.status ?? 'missing'}` : r.pillsAfterMs === null ? `no pill within ${KARTA_POLL_MS / 1000} s of ready` : `first pill ${r.pillsAfterMs} ms after ready`;
+    if (quiet) return { value: 0, detail: [`${seen}; the phone's last zet-rt snapshot by ${k.inventory.KARTA_PILLS_WITHIN_MS} ms carried no vehicle, so none was owed`] };
+    return { value: late ? 1 : 0, detail: [`${seen}${r.fleet !== undefined ? ` (${twinWords(r.fleet)})` : ''}`] };
   },
   'phone.kartaDisclosures': (obs) => {
     const r = karta(obs);
@@ -1485,7 +1619,9 @@ export function renderReport(observation, verdict, instruments) {
     lines.push(`## Wall rotation (${rot.length} readings, ${instruments.wall.ROTATION_STEP_MS / 1000} s apart, rotation.jsonl)`, '');
     lines.push('| Readings | Failed | Turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
-    if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, theme ${k.first.theme ?? '?'}.`, '');
+    if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, ${twinWords(k.first.fleet)}, theme ${k.first.theme ?? '?'}.`, '');
+    const wallReadings = readingsOf(observation) ?? [];
+    if (wallReadings.length) lines.push(pillsCensus(wallReadings, instruments), '');
     const skip = summariseSkippedText(rot);
     lines.push('### Skipped third-party text (data-skipped-text, monitored, never a gate)', '');
     if (skip.withCensus === 0) {
@@ -1520,7 +1656,7 @@ export function renderReport(observation, verdict, instruments) {
     lines.push('## Phone and desktop', '');
     if (p.sada) lines.push(`- Sada: place ${quote(p.sada.place ?? '—')}, sentence ${quote(p.sada.sentence ?? '—', 90)}, departures ${p.sada.departures.inViewport} in the viewport of ${p.sada.departures.total}; landed ${p.landingMs ?? '?'} ms after the scan URL.`);
     if (p.share) lines.push(`- Share: ${p.share.code ? `a code ${p.share.afterMs} ms after the tap` : cell(p.share.detail ?? 'no code')}.`);
-    if (p.karta) lines.push(`- Karta cold open: status ${p.karta.status ?? '—'}, first pill ${p.karta.pillsAfterMs === null ? 'none' : `${p.karta.pillsAfterMs} ms`} after ready, unlabelled ${p.karta.unlabelled ?? '—'}, disclosures ${p.karta.disclosures}.`);
+    if (p.karta) lines.push(`- Karta cold open: status ${p.karta.status ?? '—'}, first pill ${p.karta.pillsAfterMs === null ? 'none' : `${p.karta.pillsAfterMs} ms`} after ready (${p.karta.fleet ? `the twin: ${p.karta.fleet.pins} vehicle(s), ${p.karta.fleet.status ?? '?'}` : 'no zet-rt snapshot read'}), unlabelled ${p.karta.unlabelled ?? '—'}, markers ${p.karta.markers ?? '—'}, disclosures ${p.karta.disclosures}.`);
     if (p.stopBoard) lines.push(`- Stop board by search ("${p.stopBoard.query}"): ${p.stopBoard.error ? `stopped, ${cell(p.stopBoard.error)}` : `${p.stopBoard.open ? 'open' : 'not open'} after ${p.stopBoard.taps} taps, ${p.stopBoard.inViewport} of ${p.stopBoard.total} departures inside the viewport`}.`);
     if (p.expiry) lines.push(`- End of the session: ${p.expiry.seen ? `session-ended ${Math.round(p.expiry.afterRedemptionMs / 1000)} s after the redemption` : 'no session-ended'}, ${p.expiry.later.rows} content row(s), ${p.expiry.requestsAfter.length} /api/data request(s) after it.`);
     if (observation.desktop?.read) lines.push(`- Desktop 1440×900: Sada ${observation.desktop.read.sadaInViewport ? 'in' : 'out of'} the viewport, Karta ${observation.desktop.read.kartaInViewport ? 'in' : 'out of'} it, .ki-domains ${observation.desktop.read.domains}.`);
@@ -1599,7 +1735,7 @@ export async function run(config, runtime, { log = console.log, error = console.
   const observation = newObservation(config, health);
   const ctx = {
     instruments, devices: runtime.devices, kioskUrl: config.kioskUrl, origin: config.origin, minutes: config.minutes,
-    capturesDir, captures: observation.captures, inventories: observation.inventories, recorders: [], usedCodes: new Set(),
+    capturesDir, captures: observation.captures, inventories: observation.inventories, recorders: [], fleets: new Map(), usedCodes: new Set(),
     budget: redemptionBudget({ spacingMs: REDEMPTION_SPACING_MS + REDEMPTION_MARGIN_MS }), scrub, now, sleep,
     axe: runtime.AxeBuilder ? async (page) => {
       const res = await new runtime.AxeBuilder({ page }).withTags([...AXE_TAGS]).analyze();
