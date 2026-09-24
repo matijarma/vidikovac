@@ -220,6 +220,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
 
   const element = document.createElement('div');
   element.className = 'kiosk';
+  // The wall holds the keyboard's focus (focusWall below): focusable, never a tab stop (tabindex -1 is
+  // not a control to the census), so Enter and Space reach Postavke without a pointer finding the brand.
+  element.tabIndex = -1;
   element.dataset.testid = 'kiosk';
   element.innerHTML = shellMarkup(s);
   root.appendChild(element);
@@ -967,6 +970,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         : target.closest('[data-testid=kiosk-map-host]') ? touchOnMap(event) : null;
     if (next) openTouch(next);
   }
+  /** Whether a press at this point arms the wall-wide long press to Postavke (lane/w-settings, second step: the
+   *  operator was told "press and hold anywhere on the wall for about a second"). On a screen-sized wall in the
+   *  invitation, anywhere but the brand (its own binding), the open panel and the basics, and never on one of the
+   *  touch's own targets while the touch answers: a stop or pharmacy ring under the finger, a row of the list, the
+   *  footer's pharmacy. Those keep their tap, and a press held on them opens no settings. A handheld keeps the
+   *  browser's own gestures and only the brand's press. */
+  function wallPressable(event: MouseEvent): boolean {
+    if (disposed || layout.size === 'handheld' || phase !== 'invitation') return false;
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials]')) return false;
+    if (!touchable()) return true;
+    if (target.closest('[data-testid=nearby-rows] > .nearby-row, [data-testid=strip-pharmacy]')) return false;
+    return !(target.closest('[data-testid=kiosk-map-host]') && touchOnMap(event));
+  }
 
   function invitationModel(): InvitationModel {
     // The field is the map's side of the invitation (its name, and lagano's
@@ -1136,6 +1154,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     paintContext();
     paintLocal();
     paintCode();
+    // What opened the previous phase (Pokreni, a notice's button) is gone with it: the wall takes the focus.
+    focusWall();
   }
   /** A public overview does not load the six presented-view compositions.
    * Loading keeps scanning and safety available; stale loads cannot remount a
@@ -1218,6 +1238,30 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       setTimeout: oneShot,
       clearTimeout: clearTimer,
     });
+  }
+  /** The wall itself holds the keyboard's focus (lane/w-settings, 24 Sep). A screen carries no visible
+   *  control, so the operator's Enter or Space must open Postavke without a pointer first finding the
+   *  110 x 44 px brand: a press that missed it focused nothing, the keys went to the body, and nothing
+   *  opened on the production wall. The root takes the focus when a phase mounts and on every press
+   *  that lands on nothing focusable, and never takes it from something inside the kiosk that holds it
+   *  (the panel, the start screen's field, the brand after the panel closes). A handheld is a page in a
+   *  hand and keeps the browser's own focus. */
+  function focusWall(): void {
+    if (disposed || layout.size === 'handheld') return;
+    const active = document.activeElement;
+    if (active === element) return;
+    if (active && active !== document.body && element.contains(active)) return;
+    element.focus({ preventScroll: true });
+  }
+  /** Enter or Space with the focus on the wall itself, or fallen back to the body, opens Postavke as it
+   *  does on the brand (settings.ts bindLongPress). Keys inside the panel, the basics or a field are theirs. */
+  function onWallKey(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.target !== element && event.target !== document.body) return;
+    if (disposed || !element.isConnected || layout.size === 'handheld') return;
+    event.preventDefault();
+    if (event.repeat) return;
+    openSettings();
   }
   /** Postavke, built on the first long press of the brand and kept for the
    *  screen's life. Mjesto and Kadar go to the DO as screen-set version 2
@@ -1586,6 +1630,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // Postavke open on a press held on the brand (or Enter/Space on it), never on
   // a tap: the header carries no operator control a passer-by could meet.
   const unbindBrand = bindLongPress(brand, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer });
+  // ... and on a press held anywhere else on a screen-sized wall (wallPressable: not on the touch's own targets,
+  // which keep their tap). Same timer, same slop; the keys stay with onWallKey below.
+  const unbindWall = bindLongPress(element, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer, accept: wallPressable, keys: false });
+  // The wall keeps the keyboard's focus: a press anywhere on it that lands on nothing focusable hands the
+  // focus back to the root (a browser that does not focus on a click included), and Enter or Space on the
+  // root, or fallen back to the body, open Postavke exactly as they do on the brand.
+  element.addEventListener('pointerdown', () => focusWall());
+  document.addEventListener('keydown', onWallKey);
   // The panel's Tema toggle repaints on every change: its own clicks, ?tema=
   // landing after this mount, another tab, or the OS answer for auto.
   const stopTheme = deps.theme.onChange(() => settings?.paint());
@@ -1670,6 +1722,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stopRepaint?.();
       stopTheme();
       unbindBrand();
+      unbindWall();
+      document.removeEventListener('keydown', onWallKey);
       beacon?.close(); beacon = null;
       session?.close(); session = null;
       settings?.destroy(); settings = null;
