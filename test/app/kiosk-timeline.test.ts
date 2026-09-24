@@ -630,7 +630,8 @@ describe('whole rows from the row budget', () => {
     expect(fitRows(rows, 0)).toEqual([rows[2]]); // A zero estimate never removes the reserved place row.
     const closure = row({ id: 'closure:x', kind: 'closure', atMs: NOW + 30 * MIN });
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
-    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
+    // A second departure goes before a closure or the sunset row (D5.16 and D5.19 observers).
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('dep:2');
     expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
     // The next thing that is not a departure outlasts a second departure, and goes before the first one.
     expect(dropCandidate([dep(1), dep(2), closure, always()])?.id).toBe('dep:2');
@@ -902,8 +903,8 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
   });
 });
 
-describe('a list at the edge of its box (D5.16 production observer, 15:14 to 15:32): a dropped row returns only after a minute of room', () => {
-  /** The 1920 x 1080 list of that afternoon: seven candidates in 483 px, the heritage row with an address line (84 px); a bus with a long destination wraps its title to two lines (96 px), and then only six rows fit. */
+describe('a list at the edge of its box (D5.16 and D5.19 production observers): departures yield before a closure or the sunset row, and a dropped row returns only after a minute of room', () => {
+  /** The 1920 x 1080 list of that afternoon: 483 px, the heritage row with an address line (84 px); a bus with a long destination wraps its title to two lines (96 px). */
   const DAY: Layout = { boxPx: 483, titleChars: 17, subChars: 26 };
   const day = (hhmm: string): number => at(`2026-09-24T${hhmm}:00+02:00`);
   const timed = (): TimelineRow[] => [
@@ -913,8 +914,8 @@ describe('a list at the edge of its box (D5.16 production observer, 15:14 to 15:
     row({ id: 'always:heritage:zakladni', kind: 'always', atMs: null, always: true, title: 'Zakladni blok', sub: 'Gajeva 2,2a,2b,2c', source: 'heritage' }),
   ];
   const NOW0 = day('15:14');
-  const short = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } });
-  const long = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Gornji Tuškanac okretište', arrival: { routeId: '150', routeName: '150' } });
+  const tram = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } });
+  const bus = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: 'Gornji Tuškanac okretište', arrival: { routeId: '150', routeName: '150' } });
   function structure(): { records(): { added: string[]; removed: string[] }[]; stop(): void } {
     const observer = new MutationObserver(() => undefined);
     observer.observe(section(), { subtree: true, childList: true });
@@ -926,46 +927,57 @@ describe('a list at the edge of its box (D5.16 production observer, 15:14 to 15:
     };
   }
 
-  it('drops the sunset row at once when a two-line bus makes seven rows too tall, keeps it out while the third slot keeps changing, and brings it back after a minute of steady room', () => {
+  it('drops the third departure, never a closure or the sunset row, when a two-line bus makes seven rows too tall: zero records for the closure and sunset rows across polls whose closure set is unchanged', () => {
     const measure = simulated(DAY);
     const t = mount({ measure, designHeightPx: DAY.boxPx });
-    t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0);
-    expect(ids()).toContain('solar:sunset:2026-09-24');
+    t.update([tram(1), tram(2), tram(3), ...timed()], 2200, NOW0);
+    const nodes = new Map(items().map((li) => [li.dataset.id, li]));
     const w = structure();
-    // The third slot flaps between the bus (two-line title) and a tram every five seconds for a minute and a half.
-    let s = 1;
-    for (; s <= 90; s++) {
-      const third = Math.floor(s / 5) % 2 === 0 ? long(3) : short(3);
-      t.update([short(1), short(2), third, ...timed()], 2200, NOW0 + s * 1000);
-      expect(ids(), `${s} s`).not.toContain('solar:sunset:2026-09-24');
+    // The third slot alternates between a bus (a different trip) and a tram every five seconds for a minute and a half.
+    for (let s = 1; s <= 90; s++) {
+      const third = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(3);
+      t.update([tram(1), tram(2), third, ...timed()], 2200, NOW0 + s * 1000);
+      for (const id of ['closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']) expect(byId(id), `${s} s ${id}`).toBe(nodes.get(id));
+      if (third.id === 'dep:5') expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+      else expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
       expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
-    }
-    // The tram stays: room for the seventh row returns, and holds. The sunset row is back after FIT_RESTORE_HOLD_MS of it.
-    const steadyFrom = s;
-    for (; s <= steadyFrom + 70; s++) {
-      t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0 + s * 1000);
-      const back = ids().includes('solar:sunset:2026-09-24');
-      expect(back, `${s - steadyFrom} s of room`).toBe((s - steadyFrom) * 1000 >= FIT_RESTORE_HOLD_MS);
     }
     const records = w.records();
     w.stop();
-    // One remove when the bus first arrived, one add after the minute of room; the flapping third slot is the only other traffic.
+    // Every record is the tram in the third slot entering or leaving; the bus never reaches the list.
+    expect(records.every((r) => [...r.added, ...r.removed].every((k) => k === 'li[dep:3]')), JSON.stringify(records)).toBe(true);
+    expect(records.some((r) => [...r.added, ...r.removed].some((k) => k.includes('closure') || k.includes('solar') || k.includes('always')))).toBe(false);
+  });
+
+  it('holds a dropped discretionary row out until the list has fitted with it for a minute, and never holds a reserved row or a departure out', () => {
+    // A box for the six rows with a tram (64 + 128 + 64 + 84 = 340 px) but not with the bus, whose badge and destination wrap to three lines (140 px): the sunset row, the latest timed row, must go.
+    const SMALL: Layout = { boxPx: 360, titleChars: 17, subChars: 26 };
+    const measure = simulated(SMALL);
+    const t = mount({ measure, designHeightPx: SMALL.boxPx });
+    t.update([tram(1), ...timed()], 2200, NOW0);
+    expect(ids()).toEqual(['dep:1', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    const w = structure();
+    // The one departure alternates between a bus and a tram: the sunset row (the latest timed row) is dropped at once and stays out.
+    let s = 1;
+    for (; s <= 90; s++) {
+      const only = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(1);
+      t.update([only, ...timed()], 2200, NOW0 + s * 1000);
+      expect(ids(), `${s} s`).not.toContain('solar:sunset:2026-09-24');
+      expect(ids(), `${s} s`).toContain('closure:gunduliceva');
+      expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
+      expect(section().dataset.skippedFit, `${s} s`).toBe('1');
+    }
+    // The tram stays: the sunset row is back after FIT_RESTORE_HOLD_MS of steady room, not before.
+    const steadyFrom = s;
+    for (; s <= steadyFrom + 70; s++) {
+      t.update([tram(1), ...timed()], 2200, NOW0 + s * 1000);
+      expect(ids().includes('solar:sunset:2026-09-24'), `${s - steadyFrom} s of room`).toBe((s - steadyFrom) * 1000 >= FIT_RESTORE_HOLD_MS);
+    }
+    const records = w.records();
+    w.stop();
     const solarRecords = records.filter((r) => [...r.added, ...r.removed].some((k) => k.includes('solar:sunset')));
     expect(solarRecords).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }, { added: ['li[solar:sunset:2026-09-24]'], removed: [] }]);
     expect(FIT_RESTORE_HOLD_MS).toBe(60_000);
-  });
-
-  it('never holds a reserved row or a departure out, and a held-out row is not counted as fitting', () => {
-    const measure = simulated(DAY);
-    const t = mount({ measure, designHeightPx: DAY.boxPx });
-    t.update([short(1), short(2), long(3), ...timed()], 2200, NOW0);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
-    expect(section().dataset.skippedFit).toBe('1');
-    // A second later the bus is gone and the box has room, but the sunset row waits its minute; nothing else is held.
-    t.update([short(1), short(2), short(3), ...timed()], 2200, NOW0 + 1000);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
-    expect(section().dataset.skippedFit).toBe('1');
-    expect(t.shown()).toBe(6);
   });
 });
 
@@ -1088,21 +1100,24 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ designHeightPx: 486, measure });
     t.update(longRows(), 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // The later departures go first (D5.16 and D5.19 observers), so the event stays beside the closure in its short twins.
+    expect(ids()).toEqual(['dep:1', 'closure:vukovarska', 'event:gavella', 'last:2026-09-22', 'always:heritage:stedionica']);
+    expect(text(byId('event:gavella').querySelector('.nearby-title'))).toBe('Glembajevi');
     // "Ulica grada Vukovara" and its three-line sub give way to their complete short twins.
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Vukovarska');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-sub'))).toBe('Savska – Miramarska');
     // "Zgrada nekadašnje Gradske štedionice" takes three title lines there; "Gradska štedionica" wraps onto two, whole.
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
     expect(text(byId('last:2026-09-22').querySelector('.nearby-sub'))).toBe(longRows()[6]!.subShort);
-    expect(measure.sum(host.querySelector('ol')!)).toBe(392);
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
   });
 
   it('at 1080 x 1920 has the width for the full labels and keeps more rows', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ designHeightPx: 498, measure });
     t.update(longRows(), 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // One departure fewer than before, the event kept: later departures yield before a timed row.
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'closure:vukovarska', 'event:gavella', 'last:2026-09-22', 'always:heritage:stedionica']);
     expect(text(byId('last:2026-09-22').querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');

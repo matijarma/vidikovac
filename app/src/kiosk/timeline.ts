@@ -157,18 +157,18 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
 }
 
 /**
- * The row to drop when the rows do not fit, or null: the latest timed row
- * that is not a departure, but not the first of them (the next thing on the
- * list after its departures); then the latest departure while more than one
- * is left; then that next thing. First/last trams and one timeless row never
- * enter the drop order (owner decisions 10 and 27).
+ * The row to drop when the rows do not fit, or null: the latest departure while more than one is left (the
+ * wall promises one to three, and a third tram is worth less than a closure or the sunset that would otherwise
+ * leave and return with the trams, D5.16 and D5.19 observers); then the latest timed row that is not a
+ * departure; then a second timeless row. First/last trams and one timeless row never enter the drop order
+ * (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while the list
+ * can hold it, and returns under a new identity only when its fact changed.
  */
 export function dropCandidate<T extends NearbyRow>(rows: readonly T[]): T | null {
-  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
-  if (others.length > 1) return others[others.length - 1]!;
   const departures = rows.filter((row) => row.kind === 'departure');
   if (departures.length > 1) return departures[departures.length - 1]!;
-  if (others.length === 1) return others[0]!;
+  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
+  if (others.length > 0) return others[others.length - 1]!;
   const timeless = rows.filter(isTimeless);
   return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
 }
