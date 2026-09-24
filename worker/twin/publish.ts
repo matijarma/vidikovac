@@ -9,7 +9,7 @@
 
 import { toLonLat } from '../../shared/motion/geo';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { evalFreePlan, evalPathPlan, MIN_OWN_SPEED_MS } from '../../shared/motion/plan';
+import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { STOP_ZONE_M } from '../../shared/motion/speed';
 import { lastFix, type FreeKnot, type PathKnot, type Track } from '../../shared/motion/track';
@@ -86,10 +86,11 @@ interface Placed {
   held: boolean;
   /** The plan stands beyond the zone of the last platform its path serves: the terminus loop's run-out. */
   pastLast: boolean;
-  /** The first platform of the path when the tram's fixes show it standing (speed below MIN_OWN_SPEED_MS) short of
-   *  STAND_PAST_FIRST_M beyond its zone: a terminus stand whose projection onto the departure rails lies past the
-   *  platform the trip starts at. The plan's own flatness is no evidence: the order law pushes a standing tram's
-   *  plan ahead of a follower, and a plan whose first knot lies after the header reads flat by clamping. */
+  /** The first platform of the path when the plan stands short of STAND_PAST_FIRST_M beyond its zone: a terminus
+   *  stand whose projection onto the departure rails lies past the platform the trip starts at. Neither the plan's
+   *  flatness nor the speed estimate says whether the tram stands there (the order law pushes a standing tram's
+   *  plan ahead of a follower; the stand's scatter 20 to 47 m off the rails reads as 2.5 m/s), so the publisher
+   *  reads ZET's word instead: a TripUpdate still naming the platform. */
   standShortOf: string | null;
 }
 
@@ -116,7 +117,7 @@ function place(track: Track, net: GraphNetwork | null): Placed {
     const atStop = served.some((entry) => Math.abs(entry.s - s) <= STOP_ZONE_M);
     const first = served[0];
     const last = served[served.length - 1];
-    const standShortOf = track.speed < MIN_OWN_SPEED_MS && !atStop && first !== undefined && s > first.s + STOP_ZONE_M && s - first.s <= STAND_PAST_FIRST_M ? first.stop.id : null;
+    const standShortOf = !atStop && first !== undefined && s > first.s + STOP_ZONE_M && s - first.s <= STAND_PAST_FIRST_M ? first.stop.id : null;
     return { lon, lat, motion: { path: net.paths[plan.pathIdx].id, plan: wirePathKnots(plan.knots) }, held: flat && atStop, pastLast: last !== undefined && s > last.s + STOP_ZONE_M, standShortOf };
   }
   const shape = net.shapes[plan.shapeIdx];
@@ -160,13 +161,16 @@ export function buildPayload(
     // a passed stop's re-estimate or the trip's first platform (22134 at the
     // Dubrava loop, 21 Sep 17:16:57 to 17:22: Ravnice, Dubrava again,
     // Ljubljanica), so nothing goes on the wire until the trip changes. A tram
-    // standing at a terminus stand that projects onto the departure rails past
-    // the trip's first platform has not served it yet: ZET's TripUpdate still
-    // names it, and the wire keeps it (the twin's plan reads the platform as
-    // passed and names the stop beyond; the stands project 97 to 272 m past
-    // the platform at Zapruđe and Dubrava). Standing is read off the fixes, not
-    // the plan: the order law pushes a standing tram's plan ahead of a
-    // follower (10314 at 17:43:56, 150 to 239 m in 8 s at speed 0).
+    // at a terminus stand that projects onto the departure rails past the
+    // trip's first platform has not served it yet: ZET's TripUpdate still
+    // names it, and the wire keeps it up to STAND_PAST_FIRST_M past the
+    // platform (the twin's plan reads the platform as passed and names the
+    // stop beyond; the stands project 97 to 272 m past the platform at
+    // Zapruđe and Dubrava). Whether the tram stands there is read off neither
+    // the plan nor the speed estimate: the order law pushes a standing tram's
+    // plan ahead of a follower (10314 at 17:43:56, 150 to 239 m in 8 s at
+    // speed 0) and the stand's scatter off the rails reads as motion (10314
+    // at 17:36:23, 2.5 m/s); ZET's word within that distance is the evidence.
     const nextStopId = placed.pastLast
       ? undefined
       : placed.standShortOf !== null && next?.stopId === placed.standShortOf

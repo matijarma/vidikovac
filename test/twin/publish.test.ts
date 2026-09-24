@@ -158,10 +158,13 @@ describe('buildPayload names no next stop past the last platform of a path (rail
     expect(pinOn([at(150)], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
   });
 
-  it('keeps ZET\'s first platform for a tram standing short of 300 m past it, off its zone', () => {
+  it('keeps ZET\'s first platform for a tram short of 300 m past it, off its zone, standing or not', () => {
     // The stand at Zapruđe projects 111 to 272 m along route 8's departure path past its first platform (10318 at
     // 17:19:55, 10317 at 08:53:47), Dubrava's 97 m along route 7's (102203 at 03:59:45): the tram has not served
-    // the platform ZET still names, the twin's plan reads it as passed and names the stop beyond.
+    // the platform ZET still names, the twin's plan reads it as passed and names the stop beyond. Neither the
+    // plan's flatness nor the speed estimate says the tram stands: the order law pushes a standing tram's plan
+    // ahead of a follower (10314, 17:43:56), and the stand's scatter 20 to 47 m off the rails reads as 2.5 m/s
+    // (10314, 17:36:23). ZET's word within 300 m of the platform is the evidence.
     const twin = { stopId: 'T300', s: 300, etaSec: HEADER_S + 60 };
     const standing = pinOn([at(150, twin)], { T1: update({ stopId: 'T0' }) });
     expect(standing.data?.nextStopId).toBe('T0');
@@ -171,9 +174,10 @@ describe('buildPayload names no next stop past the last platform of a path (rail
     // 8 s at speed 0): still ZET's.
     const pushed = track({ id: '1', next: twin, speed: 0, plan: { on: 'path', pathIdx: 2, knots: [[0, 150], [2, 240], [20, 320]] } });
     expect(pinOn([pushed], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
-    // Moving by its fixes, or too far past it, or ZET naming another stop: the twin's.
+    // Moving by its fixes with ZET still naming the platform: ZET's, up to 300 m (10314 at 271 m, 17:44:40).
     const moving = track({ id: '1', next: twin, speed: 4, plan: { on: 'path', pathIdx: 2, knots: [[0, 150], [60, 600]] } });
-    expect(pinOn([moving], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T300');
+    expect(pinOn([moving], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
+    // Too far past it, or ZET naming another stop: the twin's.
     expect(pinOn([at(400, { stopId: 'T600', s: 600, etaSec: null })], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T600');
     expect(pinOn([at(150, twin)], { T1: update({ stopId: 'T300' }) }).data?.nextStopId).toBe('T300');
   });
