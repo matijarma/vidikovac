@@ -36,9 +36,15 @@ const SPENT_BADGES: readonly string[] = ['0', '—', '?'];
  *  the tram network is a list, not a map. A boolean is the older switch:
  *  true is 'all', false is 'none'. */
 export type CityLabels = 'all' | 'venues' | 'none';
+/** The city places whose own name is not what says them: a station's count does, an air station's mark does. */
+export const NOT_VENUES: readonly string[] = ['bikes', 'air'];
+/** From this zoom a surface that names every city place names the stations too ('all'). */
+export const PLACE_NAMES_ZOOM = 13;
 export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels:CityLabels|boolean='all'):StyleLayerLike[] {
   const mode:CityLabels=labels===true?'all':labels===false?'none':labels;
   const isBike=['==',['get','category'],'bikes'];
+  /** A station or an air station: its count or its mark says it; every other city place is a venue, named. */
+  const notVenue=['in',['get','category'],['literal',NOT_VENUES]];
   const far=['all',isBike,['==',['get','far'],true]];
   const empty=['all',isBike,['==',['get','badge'],'0']];
   const small=['any',far,empty];
@@ -56,17 +62,21 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
       'text-field':['case',small,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
       'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.bikeSpentText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
-    // The framed wall names its curated venues at every zoom its Kadar can
-    // frame (Trg at Kadar 8 on 1920 is about 12.86): a venue without its
-    // name is a programme count nobody can place. Everywhere else the names
-    // come in from 13, where the phone's places stop being a crowd.
-    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,...(mode==='venues'?{}:{minzoom:13}),
-      ...(mode==='venues'?{filter:['!',['in',['get','category'],['literal',['bikes','air']]]]}:{}),layout:{
+    // A venue is named at every zoom a surface draws it (the framed wall's
+    // Kadar 8 on 1920 is about 12.86, the phone's Karta frames its "U
+    // blizini" circle at about 12.7): a venue without its name is a
+    // programme count nobody can place (review-w P2; lane p-map, production
+    // 24 Sep). The framed wall names nothing else; everywhere else a
+    // station's and an air station's names come in from PLACE_NAMES_ZOOM,
+    // where the stations stop being a crowd -- their count or their mark
+    // says them below it. Every venue name moves before it yields to a
+    // passing pill (overlays.ts decision 17).
+    {id:'city-place-labels',type:'symbol',source:CITY_POINTS,
+      ...(mode==='venues'?{filter:['!',notVenue]}:{}),layout:{
       visibility:mode==='none'?'none':'visible',
-      'text-field':['get','title'],'text-font':[MAP_FONTS.medium],'text-size':12*scale,
-      // The framed wall's venue names move before they yield to a passing
-      // pill (overlays.ts decision 17); every other surface keeps the one place.
-      ...(mode==='venues'?{'text-variable-anchor-offset':nameAnchorOffsets(1.5),'text-justify':'auto'}:{'text-anchor':'top','text-offset':[0,1.5]}),
+      'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']],
+      'text-font':[MAP_FONTS.medium],'text-size':12*scale,
+      'text-variable-anchor-offset':nameAnchorOffsets(1.5),'text-justify':'auto',
       'text-max-width':12,'text-optional':true,'symbol-sort-key':['get','priority']},
       paint:{'text-color':p.label,'text-halo-color':p.halo,'text-halo-width':2}},
     {id:'city-place-selection',type:'circle',source:CITY_POINTS,filter:['==',['get','id'],selected??''],

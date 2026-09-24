@@ -10,7 +10,7 @@ import { publicItemKey, type CastState, type PublicSelection } from '../../app/s
 import { emptyCity } from '../../shared/city/types';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
-import { frameView } from '../../app/src/map/frame';
+import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, frameView, markZoomFor } from '../../app/src/map/frame';
 import type { SavedRef } from '../../app/src/core/saved-store';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
@@ -19,6 +19,7 @@ import type { CityMapHandle, CityMapOptions, MapSelection, MapStatus, VehicleInf
 import { createMapSlots, type MapSlots } from '../../app/src/map/map-slots';
 import { decodeNetwork, type Network } from '../../shared/motion/network';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
+import { REFIT_SETTLE_MS } from '../../app/src/ui/canvas';
 import { text } from './helpers';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z');
@@ -76,7 +77,7 @@ function fakeMaps(initial: FakeState = {}) {
     const handle: FakeHandle = {
       options,
       update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(),
-      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(), setLineFocus: vi.fn(),
+      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(), setLineFocus: vi.fn(), setMarkZoom: vi.fn(),
       status: () => status, network: () => net, vehicles: () => vehicles, selection: () => null, following: () => null, camera: () => null,
       set(state) {
         if (state.status) status = state.status;
@@ -1036,6 +1037,73 @@ describe('the frame: Karta opens on the place', () => {
     context.place = KVATERNIKOV;
     render(context);
     expect(last().setView).not.toHaveBeenCalled();
+  });
+
+  // Lane p-map (owner, 24 Sep: fullscreen on and off left part of the frame
+  // off the map): the stage's first real layout frames at once; a later change
+  // to its box -- a resize, a fullscreen change, a turn of the phone -- refits
+  // once it has settled, the canvas resized to its new box first.
+  it('refits the frame once a change to the stage box has settled, the canvas resized first', () => {
+    vi.useFakeTimers();
+    try {
+      const observers: ResizeObserverCallback[] = [];
+      vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+      const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+      const { context } = ctx({ maps, place: KVATERNIKOV });
+      render(context);
+      const stage = q<HTMLElement>('.transport-body');
+      const box = (width: number, height: number): void => {
+        Object.defineProperty(stage, 'clientWidth', { value: width, configurable: true });
+        Object.defineProperty(stage, 'clientHeight', { value: height, configurable: true });
+      };
+      const observe = (): void => { for (const o of observers) o([], {} as ResizeObserver); };
+      box(412, 700);
+      observe();
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom });
+      spy(last().setView).mockClear();
+      spy(last().resize).mockClear();
+      box(915, 412);
+      observe();
+      observe();
+      expect(last().setView).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(REFIT_SETTLE_MS);
+      expect(last().setView).toHaveBeenCalledTimes(1);
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 915, 412).zoom });
+      expect(spy(last().resize).mock.invocationCallOrder[0]).toBeLessThan(spy(last().setView).mock.invocationCallOrder[0]!);
+      // And back: the first frame again, nothing left of the larger box.
+      box(412, 700);
+      observe();
+      vi.advanceTimersByTime(REFIT_SETTLE_MS);
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom });
+    } finally { vi.useRealTimers(); }
+  });
+
+  // Lane p-map: the desk's Karta is a column of its own beside the sheet (at 1280 x 800, a 326 x 718 canvas in a
+  // 694 px stage): the circle is fitted to the canvas, whole, below the marks' own floor, and the map is told to
+  // draw its pills and rings from that zoom. A wider desk fits above the floor and asks for nothing.
+  it('fits the desk\u2019s circle to its own canvas, not the stage, whole below the marks\u2019 floor with the marks drawn from the fit', () => {
+    fakeMedia({ wide: true });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, place: KVATERNIKOV });
+    const size = (selector: string, width: number, height: number): void => {
+      const el = q<HTMLElement>(selector);
+      Object.defineProperty(el, 'clientWidth', { value: width, configurable: true });
+      Object.defineProperty(el, 'clientHeight', { value: height, configurable: true });
+    };
+    render(context);
+    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).toBe('open');
+    size('.transport-body', 694, 718);
+    size('.transport-map', 326, 718);
+    render(context);
+    const narrow = frameView(KVATERNIKOV, 2000, 326, 718, 24, FIT_MIN_ZOOM);
+    expect(narrow.zoom).toBeLessThan(FRAME_MIN_ZOOM);
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: narrow.zoom });
+    expect(last().setMarkZoom).toHaveBeenLastCalledWith(markZoomFor(narrow.zoom));
+    size('.transport-body', 1318, 998);
+    size('.transport-map', 950, 998);
+    render(context);
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 950, 998).zoom });
+    expect(last().setMarkZoom).toHaveBeenLastCalledWith(null);
   });
 
   it('rings the place\'s departures stop as the map\'s own stop when the session has no screen stop, so the place carries a ring to tap; a screen stop keeps its own', () => {

@@ -484,6 +484,8 @@ export interface RenderCensusHost {
   styled(): boolean;
   /** The key a census is taken once for: zoom, selection, "has any marks", evidence version. */
   key(): string;
+  /** Whether the vehicles source was last handed any mark: only then is there a first pill to look for. */
+  hasMarks?(): boolean;
   /** The map's symbol scale (CityMapOptions.symbolScale). */
   scale(): number;
   /** The overlay and city-place layer lists as the live style carries them. */
@@ -502,7 +504,7 @@ export interface RenderCensusHost {
 export interface RenderCensus {
   /** MapLibre's `idle`: the census, once per key. */
   idle(): void;
-  /** A `render` on a still camera: the census once its key has settled (PROBE_SETTLE_MS). */
+  /** A `render` on a still camera: the first pills as soon as they are drawn, and the census once its key has settled (PROBE_SETTLE_MS). */
   settled(): void;
   /** A `render`: one look at the public screen's names, at most every NAME_TICK_MS. */
   nameTick(): void;
@@ -530,11 +532,32 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
   const cityReady = (): boolean => !m.isSourceLoaded || host.cityOverlays().every(layer =>
     typeof layer.source !== 'string' || m.isSourceLoaded!(layer.source));
 
+  /** When a render last looked for the first pills (firstPills). */
+  let pillLookAt = -Infinity;
+  /** The first pills (lane p-map, karta-pills 4,442 ms on production): a
+   *  pill depends on the vehicle data alone, so while the map has marks,
+   *  data-pills is still empty and the census has not read this key, a
+   *  render looks at the vehicle layers at most every NAME_TICK_MS and
+   *  writes the vehicle attributes the moment MapLibre draws a pill -- not
+   *  after every city source has loaded and the key has stood a second,
+   *  which is the marker census's wait, not the pills'. Once the census has
+   *  read the key (idle, or the settled frame below) the looks end, so a map
+   *  that draws no pill at all (a zoom of vehicle dots) asks nothing more. */
+  function firstPills(): void {
+    if (!host.styled() || m.isMoving?.() || host.hasMarks?.() === false) return;
+    if ((host.container.dataset.pills ?? '') !== '') return;
+    const at = host.now();
+    if (at - pillLookAt < NAME_TICK_MS || host.key() === renderProbeKey) return;
+    pillLookAt = at;
+    vehicleCensus(true);
+  }
+
   /** The fallback for a map that never idles (city-map.ts's probe comment):
    *  on a `render` with the camera still, a key not yet taken is timed, and
    *  taken once it has stood for PROBE_SETTLE_MS. A key already taken costs
    *  one string per frame and nothing else. */
   function settled(): void {
+    firstPills();
     if (!host.styled() || m.isMoving?.() || !cityReady()) {
       settlingKey = '';
       cancelSettle();
@@ -562,6 +585,13 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
     cancelSettle();
     renderProbeKey = key;
     host.container.dataset.zoom = m.getZoom().toFixed(2);
+    writeMarkerCensus(vehicleCensus(false));
+  }
+
+  /** The vehicle attributes off what MapLibre renders now, and the pills'
+   *  features for the marker census. `onlyDrawn` (firstPills) writes nothing
+   *  unless a pill is drawn, so a look never publishes a provisional ''. */
+  function vehicleCensus(onlyDrawn: boolean): RenderedFeature[] {
     // Asking MapLibre about a layer the style does not carry fires an error
     // event, which city-map.ts onMapError logs as a bug; its placedNames()
     // guards the same way.
@@ -584,11 +614,13 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
         pillFeatures.set(String(feature.properties.id), feature);
       }
     }
+    const features = [...pillFeatures.values()];
+    if (onlyDrawn && pills.size === 0) return features;
     host.container.dataset.pills = [...pills.keys()].sort().map((id) => pills.get(id)!).join('|');
     host.container.dataset.noses = String(noses);
     host.container.dataset.bodies = String(bodies.size);
     host.container.dataset.twoway = String(twoWay.size);
-    writeMarkerCensus([...pillFeatures.values()]);
+    return features;
   }
 
   /** The marker census and the overlaps (city-map.ts's probe comment), from

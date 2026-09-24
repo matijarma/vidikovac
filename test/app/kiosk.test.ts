@@ -409,6 +409,46 @@ describe('the integrated companion sentence', () => {
     k.handle.destroy();
   });
 
+  it('writes the header\'s data-valid-until at a sentence turn, not while a tracked estimate moves by seconds under the same words', async () => {
+    // D5.3 production observer: eight "verbatim repeats" that were the deadline attribute shortening by 2 to 15 s under
+    // an unchanged countdown sentence (a new data-valid-until under the same text is a turn to the harness, §12).
+    let now = NOW;
+    let delay = 120;
+    const vehicle = () => item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: delay } });
+    const modules = () => MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }), vehicle()])));
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules: modules() }), createBoards: b.create, fetchSentences: async () => [] });
+    await flush();
+    const el = () => q(k.root, '[data-testid=kiosk-sentence]')!;
+    let shownAt = -1;
+    for (let s = 1; s <= 400 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (/^Tramvaj 6, .*polazi za 3 min\.$/.test(painted(k.root))) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    const text = painted(k.root);
+    const deadline = el().dataset.validUntil;
+    // The vehicle's estimate moves five seconds earlier: the same words, the same deadline attribute.
+    delay = 115;
+    now = shownAt + 2_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toBe(text);
+    expect(el().dataset.validUntil).toBe(deadline);
+    // It moves nearly a minute earlier: the sentence is restated ("za 2 min"), a turn, and the deadline follows.
+    delay = 65;
+    now = shownAt + 4_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toMatch(/polazi za 2 min\.$/);
+    expect(painted(k.root)).not.toBe(text);
+    expect(el().dataset.validUntil).not.toBe(deadline);
+    k.handle.destroy();
+  });
+
   it('lets a model sentence go at once when its fact changes, answer or no answer', async () => {
     let now = NOW;
     let modules = MODULES;
@@ -2055,6 +2095,30 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(text(q(k.root, '.nearby-row[data-kind=closure]'))).toContain('Ilica');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
+  // Lane p-map (first production observation, 02:30): before the first
+  // /api/teaser answer the wall printed "ZET trenutačno ne šalje položaje
+  // vozila; polasci su po voznom redu." and its map read data-feed "down":
+  // an outage stated, not observed. Until the first poll has answered or
+  // failed, the wall is loading, and says nothing about ZET.
+  it('claims no outage before the first poll has answered: the map note hidden, no outage sentence, the map loading; the first answer or failure decides', async () => {
+    for (const outcome of ['live', 'fail'] as const) {
+      let answer!: (value: { modules: ModuleSnapshot[] }) => void;
+      let refuse!: (reason: unknown) => void;
+      const calls: string[] = [];
+      const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState: (state: string) => { calls.push(state); } };
+      const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: () => new Promise((resolve, reject) => { answer = resolve; refuse = reject; }) });
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(true);
+      expect(sentenceText(k.root), outcome).not.toMatch(/ne šalje položaje/);
+      expect(calls, outcome).not.toContain('down');
+      expect(calls.at(-1), outcome).toBe('loading');
+      if (outcome === 'live') answer({ modules: MODULES }); else refuse(new TypeError('Failed to fetch'));
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(outcome === 'live');
+      expect(calls.at(-1), outcome).toBe(outcome === 'live' ? 'live' : 'down');
+      k.handle.destroy();
+    }
+  });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
@@ -2225,7 +2289,8 @@ describe('alerts, polling, the first tap and disposal', () => {
     const map = fakeMap();
     const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
     // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
-    expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
+    // Held as loading, not as an outage: nothing has answered yet (lane p-map).
+    expect(map.calls.slice(0, 5)).toEqual(['feed:loading', 'feed:loading', 'resize', 'resume', 'feed:loading']);
     await flush();
     expect(map.calls.at(-1)).toBe('feed:stale');
     expect(q(k.root, '[data-testid=kiosk-map]')).not.toBeNull();
