@@ -458,7 +458,9 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 .k-invite { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'qr' 'side'; justify-items: center; gap: var(--k-card-gap); box-sizing: border-box; min-height: 0; padding: calc(var(--k-card-gap) * 0.7); border-radius: var(--k-radius-s); background: var(--k-action); color: var(--k-action-ink); }
 .k-invite > .k-qr { grid-area: qr; align-self: start; }
 .k-invite-side { grid-area: side; display: flex; flex-direction: column; gap: calc(var(--k-card-gap) * 0.45); min-width: 0; width: 100%; }
-.k-lead { font-size: var(--k-card-lead); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+/* Two balanced lines where the lead wraps ("Skeniraj za 10 / minuta grada."), never a one-word widow: beside the
+   264 px plate the wide wall's card leaves the lead 368 px, two short of its 370 (round 1, 24 Sep). */
+.k-lead { font-size: var(--k-card-lead); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; }
 .k-qr { flex: none; width: var(--k-qr); height: var(--k-qr); }
 .k-qr .qr { box-sizing: border-box; width: 100%; max-width: none; height: 100%; padding: 12px; border: 0; border-radius: var(--k-radius-s); background: var(--k-qr-plate); color: var(--k-qr-ink); }
 .k-qr .qr svg { width: 100%; height: 100%; }
