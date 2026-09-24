@@ -663,10 +663,14 @@ export function buildPlan(
   // and moved on from is not named again on this path unless the anchor
   // itself came back by more than a stop zone (a reversal, or another
   // vehicle's fix under this id). The anchor scattering around the edge of
-  // a zone it has left keeps the later stop, with the plan's own arrival there.
+  // a zone it has left keeps the later stop, with the plan's own arrival
+  // there; a silent tram held by T8 at a fix inside the zone it had left
+  // keeps it too (the hold stays where it is, the name does not go back:
+  // 467 at the Mihaljevac loop stand, 20 Sep 02:07:44, named the arrival
+  // platform again after 33 s of silence 37 m past its point).
   const samePath = prevPlan !== null && prevPlan.on !== 'free' && prevPlan.on === (track.match.pathIdx !== null ? 'path' : 'shape')
     && (prevPlan.on === 'path' ? prevPlan.pathIdx === track.match.pathIdx : prevPlan.shapeIdx === track.match.shapeIdx);
-  if (nextStop && prevNext && samePath && !silentHere && prevNext.s > nextStop.s && track.match.s >= prevPlan.knots[0][1] - STOP_ZONE_M) {
+  if (nextStop && prevNext && samePath && prevNext.s > nextStop.s && track.match.s >= prevPlan.knots[0][1] - STOP_ZONE_M) {
     const reached = knots.find(([, ks]) => ks >= prevNext.s - 0.5);
     nextStop = { stopId: prevNext.stopId, s: prevNext.s, etaSec: reached ? Math.round(headerSec + reached[0]) : null };
   }

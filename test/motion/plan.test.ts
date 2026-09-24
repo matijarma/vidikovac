@@ -391,3 +391,22 @@ describe('buildPlan names one next stop per visit (rail round 3)', () => {
     expect(tram.next?.stopId).toBe('T600');
   });
 });
+
+describe('buildPlan keeps the later next stop through a T8 hold inside a zone the tram had left (rail round 3)', () => {
+  it('holds the silent tram where it stood and still names the platform ahead', () => {
+    // 467 at the Mihaljevac loop stand, 20 Sep 02:07: named the departure
+    // platform with the anchor past the arrival platform's zone, then a fix
+    // 8 m back inside the zone and 33 s of silence named the arrival platform
+    // again. The hold stays at the fix; the name does not go back.
+    const tram = tramOn1('silent-in-zone', [[560, 1000], [645, 1010]]);
+    buildPlan(tram, net, eightMs, null, 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    matcher.matchFix(tram, fix(637, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, null, 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T900');
+    buildPlan(tram, net, eightMs, null, 1060, 1060, BANDS); // 40 s silent: held at 637, in T600's zone
+    for (const [, s] of knotsOf(tram)) expect(s).toBeLessThanOrEqual(637.05);
+    expect(tram.next?.stopId).toBe('T900');
+  });
+});
