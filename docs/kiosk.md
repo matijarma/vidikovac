@@ -261,8 +261,10 @@ stavki znači veće retke, a redak s duljim tekstom viši je. Oznaka linije u
 retku polaska velika je koliko i naslov retka: najmanje 40 piksela, a u
 tamnoj temi 44. Ništa se ne reže trotočjem: predug redak ispisuje kraći
 cjeloviti naziv iz izvora ili se prelama u cijelosti; kad retci ne stanu, s
-popisa izlaze cijeli retci, najprije najkasniji, a prvi redak iza polazaka
-tek nakon kasnijih polazaka. Redak zadnjih polazaka, redak prvog jutarnjeg
+popisa izlaze cijeli retci: najprije retci za sutra (sutrašnje otvaranje ili
+događanje, sutrašnji izlazak sunca), najkasniji prvi, zatim drugi i treći
+polazak, pa današnji retci s vremenom, najkasniji prvi; zatvaranje prometnice
+nije redak za sutra, jer je ulica zatvorena sada. Redak zadnjih polazaka, redak prvog jutarnjeg
 polaska i jedan redak „uvijek” zbog prostora nikad ne izlaze. Retci se
 mjere u skrivenom popisu iste širine, a na vidljivi popis stiže samo konačni
 izbor. Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak umeće
