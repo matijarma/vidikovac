@@ -120,7 +120,8 @@ async function wallState(page:Page){
       spilledRows:rows.filter(row=>row.scrollHeight>row.clientHeight+1).length,
       rowPx:rows.map(row=>Math.round(Number.parseFloat(getComputedStyle(row).minHeight)/zoom)),
       departures:rows.filter(row=>row.dataset.kind==='departure').length,
-      order:{listOverCard:nearbyBox.bottom-cardBox.top,cardOverFooter:cardBox.bottom-footer.top},
+      // The list stands over the card only where the card is under it (decision 50 puts the compact wall's card under the map).
+      order:{listOverCard:nearbyBox.right>cardBox.left&&cardBox.right>nearbyBox.left?nearbyBox.bottom-cardBox.top:0,cardOverFooter:cardBox.bottom-footer.top},
       qr:qr?Math.floor(Math.min(qr.width,qr.height)):0,
       sentence:words,
       sentenceChars:[...words].length,

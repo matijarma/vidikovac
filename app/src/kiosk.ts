@@ -458,12 +458,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         .map(id => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
       // Third-party text that fails the shared check leaves its row out; the census says how many and why.
       const skipped: ExternalTextRejection[] = [];
+      // The departures on the wall keep their slots on ETA jitter (selectNearby's heldDepartures).
+      const heldDepartures = wallItems.filter(row => row.kind === 'departure').map(row => row.id);
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
-        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason),
+        snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures,
       });
       paintSkippedText(skipped);
-      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n });
+      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
+      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
+        ...(currentSentence ? { pinned: currentSentence.refs } : {}) });
       invitation?.update(invitationModel());
     } else {
       wallItems = [];

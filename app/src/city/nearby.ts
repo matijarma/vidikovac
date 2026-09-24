@@ -110,6 +110,12 @@ export interface NearbyInput {
   stops?: readonly ScreenStop[];
   /** Told once per row left out because a third-party text failed externalText(), with the reason. */
   onSkip?: (reason: ExternalTextRejection) => void;
+  /**
+   * The departure rows on the wall now, in their order (row ids). A tram that is shown keeps its place
+   * while it reads the same minute as a newcomer; only a tram a whole displayed minute earlier, or its own
+   * departure, moves it (the D2 live block: one slot changed trips 37 times in ten minutes on ETA jitter).
+   */
+  heldDepartures?: readonly string[];
 }
 
 /** §12 bounds and the ladder's clock (§4). */
@@ -238,7 +244,7 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
     // GTFS is external text too. Vet both fields before the cap, so a refused
     // headsign cannot hide in the route fallback or displace a safe departure.
     .filter(arrival => vetted(input, [['headsign', arrival.headsign || undefined], ['headsign', arrival.routeName]]))
-    .sort((a, b) => a.atMs - b.atMs || a.routeName.localeCompare(b.routeName))
+    .sort(byDisplayedMinute(now, input.heldDepartures ?? []))
     .slice(0, MAX_DEPARTURES);
   return shown.map((arrival) => {
     const live = arrival.live;
@@ -256,6 +262,23 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       arrival,
     };
   });
+}
+
+/**
+ * The order the wall prints: by the minute a passer-by reads (a countdown's rounded minutes, a clock
+ * time's minute), then the wall's current order for trams that read the same minute, then line and trip.
+ * Live estimates move by seconds on every poll; two trams both "sada" must never swap, a dead heat must
+ * come out the same way every time, and a shown tram leaves its slot only to a tram a whole displayed
+ * minute earlier or by departing (D2 live block, principle 7).
+ */
+function byDisplayedMinute(now: number, held: readonly string[]): (a: ArrivalRow, b: ArrivalRow) => number {
+  const rank = new Map(held.map((id, index) => [id, index] as const));
+  const minute = (row: ArrivalRow): number => (row.live && row.minutes !== null
+    ? row.minutes
+    : Math.floor(row.atMs / MINUTE_MS) - Math.floor(now / MINUTE_MS));
+  const shown = (row: ArrivalRow): number => rank.get(`dep:${row.tripId || `${row.routeId}:${row.atMs}`}`) ?? Number.MAX_SAFE_INTEGER;
+  return (a, b) => minute(a) - minute(b) || shown(a) - shown(b)
+    || a.routeName.localeCompare(b.routeName) || a.tripId.localeCompare(b.tripId);
 }
 
 // --- (b) closures by their end --------------------------------------------------
@@ -426,6 +449,8 @@ function lastTramRows(input: NearbyInput): NearbyRow[] {
     always: false,
     title: i18n.t('kiosk.nearby.lastTrams'),
     sub: servicesLine(services),
+    // The shorter complete label (timeline.ts): the next two lines, one line at every wall width.
+    ...(services.length > 2 ? { subShort: servicesLine(services.slice(0, 2)) } : {}),
     live: false,
     source: 'zet-gtfs',
     ...placeSelection(place),
@@ -464,6 +489,8 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
     always: false,
     title: i18n.t('kiosk.nearby.firstTram'),
     sub: servicesLine(services),
+    // The shorter complete label (timeline.ts): the next two lines, one line at every wall width.
+    ...(services.length > 2 ? { subShort: servicesLine(services.slice(0, 2)) } : {}),
     live: false,
     source: 'zet-gtfs',
     ...placeSelection(place),

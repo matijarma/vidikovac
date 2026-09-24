@@ -436,6 +436,11 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       }
       while (shown.length > 0 && measure.box(list).overflow) {
         const reserved = reservedRows(shown);
+        // The wall shows one to three departures in every reading: the first one is a promise too, so a
+        // box too small for the promises reports data-fit-overflow=1 with the departure on the list rather
+        // than an empty departures block (D2 full run, 1366 x 768 at night).
+        const departure = shown.find(row => row.kind === 'departure');
+        if (departure) reserved.add(departure);
         const drop = dropCandidate(shown) ?? [...shown].reverse().find(row => !reserved.has(row));
         // No more discretionary content: never silently remove a reserved row.
         if (!drop) break;

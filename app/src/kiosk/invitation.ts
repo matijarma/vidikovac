@@ -12,9 +12,10 @@ import { codeBlockMarkup, hintMarkup } from './markup';
 import type { KioskStrings } from './strings';
 import { mountTimeline } from './timeline';
 
-/** The ol's design-height fallback only; its measured box wins after layout. */
+/** The ol's design-height fallback only; its measured box wins after layout. Compact: the whole aside
+ *  (decision 50: the QR card stands under the map), 513 px minus the list's heading and padding. */
 export const NEARBY_DESIGN_HEIGHT: Readonly<Record<Composition, number>> = {
-  wide: 480, compact: 250, portrait: 490, handheld: Number.POSITIVE_INFINITY,
+  wide: 480, compact: 450, portrait: 490, handheld: Number.POSITIVE_INFINITY,
 };
 export interface InvitationDeps {
   strings: KioskStrings; i18n: I18n; locale: string; lightweight: boolean;
