@@ -18,11 +18,11 @@ import { twinStub } from '../do/twin-do';
 import { json } from '../http';
 import { logError } from '../log';
 import { metricsStub } from '../metrics';
-import type { MetricsDailyRow, MetricsTotalRow } from '../metrics-do';
+import type { MetricsTotalRow } from '../metrics-rows';
 import { cacheControl, edgeCached, openRateLimited } from '../open/http';
 import { zagrebDay } from '../open/time';
 import { DATA_SECURITY_HEADERS, withSecurityHeaders } from '../security-headers';
-import { PUBLIC_SYSTEM_EVENTS, PUBLIC_USAGE_EVENTS, buildPublicStats } from '../stats/public';
+import { PUBLIC_SYSTEM_EVENTS, buildPublicStats, type PublicCells } from '../stats/public';
 
 export const STATISTIKA_API = '/api/statistika';
 export const STATISTIKA_TTL_SECONDS = 300;
@@ -32,14 +32,14 @@ const CORS = { 'access-control-allow-origin': '*' } as const;
 
 export interface StatistikaDeps {
   /** Test seams; production reads the MetricsDO singleton and the twin. */
-  loadUsage?: (env: Env, sinceDay: string) => Promise<MetricsDailyRow[]>;
+  loadCells?: (env: Env, sinceDay: string) => Promise<PublicCells>;
   loadSystem?: (env: Env, sinceDay: string) => Promise<{ totals: MetricsTotalRow[]; tickDaily: MetricsTotalRow[] }>;
   loadLive?: (env: Env) => Promise<LiveTables | null>;
   now?: () => Date;
 }
 
-async function defaultLoadUsage(env: Env, sinceDay: string): Promise<MetricsDailyRow[]> {
-  return await metricsStub(env).queryEvents(sinceDay, PUBLIC_USAGE_EVENTS);
+async function defaultLoadCells(env: Env, sinceDay: string): Promise<PublicCells> {
+  return await metricsStub(env).publicCells(sinceDay);
 }
 
 async function defaultLoadSystem(env: Env, sinceDay: string): Promise<{ totals: MetricsTotalRow[]; tickDaily: MetricsTotalRow[] }> {
@@ -79,12 +79,12 @@ async function produce(env: Env, url: URL, deps: StatistikaDeps): Promise<Respon
   const today = zagrebDay(now);
   const since = zagrebDay(new Date(now.getTime() - (days - 1) * DAY_MS));
   try {
-    const [usageRows, system, live] = await Promise.all([
-      (deps.loadUsage ?? defaultLoadUsage)(env, since),
+    const [cells, system, live] = await Promise.all([
+      (deps.loadCells ?? defaultLoadCells)(env, since),
       (deps.loadSystem ?? defaultLoadSystem)(env, since),
       (deps.loadLive ?? defaultLoadLive)(env),
     ]);
-    const body = buildPublicStats({ days, since, today, now, usageRows, systemTotals: system.totals, tickDaily: system.tickDaily, live });
+    const body = buildPublicStats({ days, since, today, now, cells, systemTotals: system.totals, tickDaily: system.tickDaily, live });
     return json(body, 200, { 'cache-control': cacheControl(STATISTIKA_TTL_SECONDS), ...CORS });
   } catch (error) {
     logError('statistika-failed', error);

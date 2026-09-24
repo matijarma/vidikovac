@@ -6,7 +6,7 @@
 // swallows) and empty (a fresh deployment).
 import type { LiveTables, PublicStats, StatistikaWindow } from '../shared/statistika';
 import type { MetricsDailyRow, MetricsTotalRow } from '../worker/metrics-rows';
-import { buildPublicStats } from '../worker/stats/public';
+import { buildPublicStats, foldPublic } from '../worker/stats/public';
 
 export type FixtureShape = 'busy' | 'sparse' | 'empty';
 
@@ -153,9 +153,9 @@ export function statistikaFixture(shape: FixtureShape, days: StatistikaWindow = 
   const list = daysBack(today, days);
   const now = new Date(`${today}T15:45:00Z`);
   if (shape === 'empty') {
-    return buildPublicStats({ days, since: list[0], today, now, usageRows: [], systemTotals: [], tickDaily: [], live: null });
+    return buildPublicStats({ days, since: list[0], today, now, cells: foldPublic([]), systemTotals: [], tickDaily: [], live: null });
   }
   const r = rng(shape === 'busy' ? 20260924 : 7);
   const { usage, totals, tickDaily } = busyRows(list, r, shape === 'busy' ? 420 : 16);
-  return buildPublicStats({ days, since: list[0], today, now, usageRows: usage, systemTotals: totals, tickDaily, live: shape === 'busy' ? LIVE : { ...LIVE, stops: LIVE.stops.slice(0, 3), junctions: [] } });
+  return buildPublicStats({ days, since: list[0], today, now, cells: foldPublic(usage), systemTotals: totals, tickDaily, live: shape === 'busy' ? LIVE : { ...LIVE, stops: LIVE.stops.slice(0, 3), junctions: [] } });
 }

@@ -148,4 +148,20 @@ describe('MetricsDO', () => {
     expect(RETENTION_DAYS).toBe(730);
     expect(retentionCutoff('2028-09-24')).toBe('2026-09-25');
   });
+
+  it('publicCells folds every hourly row of the window where it lives, city and evaluation apart', async () => {
+    const s = stub();
+    await runInDurableObject(s, (_instance: MetricsDO, state) => {
+      const put = (day: string, hour: number, event: string, dim1: string, dim2: string, count: number) =>
+        state.storage.sql.exec(`INSERT INTO metrics_hourly (day, hour, event, dim1, dim2, count) VALUES (?, ?, ?, ?, ?, ?)`, day, hour, event, dim1, dim2, count);
+      put('2026-03-01', 10, 'session_start', 'knjiznica', 'trnje', 23);
+      put('2026-03-01', 11, 'session_start', 'kafic', 'trnje', 4);
+      put('2026-03-01', 12, 'evaluation', 'session_start', 'maksimir', 12);
+      put('2026-03-01', 12, 'twin_tick', 'ok', 'warm', 360);
+    });
+    const cells = await s.publicCells('2026-03-01');
+    const march = (list: { day: string }[]) => list.filter((c) => c.day === '2026-03-01');
+    expect(march(cells.city)).toEqual([{ month: '2026-03', day: '2026-03-01', hour: '10', event: 'session_start', dim1: 'knjiznica', dim2: 'trnje', count: 25 }]);
+    expect(march(cells.evaluation)).toEqual([{ month: '2026-03', day: '2026-03-01', hour: '12', event: 'session_start', dim1: 'privremeni', dim2: 'maksimir', count: 10 }]);
+  });
 });

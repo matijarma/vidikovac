@@ -6,7 +6,7 @@ import { FOLDED_KEY, PEOPLE_EVENTS, type PeopleEvent, type PublicStats } from '.
 import { statistikaWindow } from '../../shared/statistika';
 import type { MetricsDailyRow, MetricsTotalRow } from '../../worker/metrics-do';
 import { cityRows } from '../../worker/stats/export';
-import { LIVE_ROWS, buildPublicStats, dayList, shapeLive, unwrapEvaluation, type PublicStatsInput } from '../../worker/stats/public';
+import { LIVE_ROWS, buildPublicStats, dayList, foldPublic, shapeLive, unwrapEvaluation, type PublicStatsInput } from '../../worker/stats/public';
 
 const row = (day: string, hour: number, event: string, dim1: string, dim2: string, count: number): MetricsDailyRow => ({ day, hour, event, dim1, dim2, count });
 const total = (event: string, dim1: string, dim2: string, count: number, day = ''): MetricsTotalRow => ({ day, event, dim1, dim2, count });
@@ -54,17 +54,18 @@ const TICK_DAILY: MetricsTotalRow[] = [
   total('twin_tick', 'overrides_unreadable', 'warm', 9, '2026-09-21'),
 ];
 
-function input(over: Partial<PublicStatsInput> = {}): PublicStatsInput {
+function input(over: Partial<PublicStatsInput> & { usageRows?: MetricsDailyRow[] } = {}): PublicStatsInput {
+  const { usageRows = USAGE, ...rest } = over;
   return {
     days: 7,
     since: '2026-09-18',
     today: '2026-09-24',
     now: new Date('2026-09-24T12:00:00Z'),
-    usageRows: USAGE,
+    cells: foldPublic(usageRows),
     systemTotals: SYSTEM,
     tickDaily: TICK_DAILY,
     live: null,
-    ...over,
+    ...rest,
   };
 }
 

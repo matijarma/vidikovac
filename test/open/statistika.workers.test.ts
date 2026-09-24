@@ -5,6 +5,7 @@ import type { Env } from '../../worker/env';
 import type { MetricsDailyRow, MetricsTotalRow } from '../../worker/metrics-do';
 import { STATISTIKA_TTL_SECONDS, allowSameOriginFrame, handleStatistika, type StatistikaDeps } from '../../worker/routes/statistika';
 import { APP_SECURITY_HEADERS, DATA_SECURITY_HEADERS } from '../../worker/security-headers';
+import { foldPublic } from '../../worker/stats/public';
 
 const allowAll = { limit: async () => ({ success: true }) };
 const NOW = () => new Date('2026-09-24T10:00:00Z');
@@ -19,9 +20,9 @@ function deps(over: Partial<StatistikaDeps> = {}): StatistikaDeps & { calls: { u
   return {
     calls,
     now: NOW,
-    loadUsage: async (_env, since) => {
+    loadCells: async (_env, since) => {
       calls.usage += 1;
-      return USAGE.filter((r) => r.day >= since);
+      return foldPublic(USAGE.filter((r) => r.day >= since));
     },
     loadSystem: async () => ({ totals: [] as MetricsTotalRow[], tickDaily: [] as MetricsTotalRow[] }),
     loadLive: async () => null,
@@ -81,9 +82,9 @@ describe('/api/statistika', () => {
   it('says 503 and caches nothing when the counters cannot be read', async () => {
     let fail = true;
     const d = deps({
-      loadUsage: async () => {
+      loadCells: async () => {
         if (fail) throw new Error('storage down');
-        return [];
+        return foldPublic([]);
       },
     });
     const down = (await call('st-e.test', '/api/statistika', d))!;

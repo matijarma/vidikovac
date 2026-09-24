@@ -8,12 +8,33 @@
   --st-bar-h: 3.75rem;
   --st-hatch: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1.5px, transparent 1.5px 5px);
   --st-hatch-brand: repeating-linear-gradient(135deg, color-mix(in oklab, var(--tone-action-brand) 70%, transparent) 0 2px, color-mix(in oklab, var(--tone-action-brand) 18%, transparent) 2px 6px);
+  /* One hue, light to dark, validated per mode (dataviz validate_palette --ordinal):
+     adjacent steps at least 0.06 apart in OKLCH L, the faintest step 2:1 against the card. */
   --st-ramp-0: var(--tone-action-brand);
-  --st-ramp-1: color-mix(in oklab, var(--tone-action-brand) 76%, var(--tone-surface-1));
-  --st-ramp-2: color-mix(in oklab, var(--tone-action-brand) 55%, var(--tone-surface-1));
-  --st-ramp-3: color-mix(in oklab, var(--tone-action-brand) 36%, var(--tone-surface-1));
-  --st-ramp-4: color-mix(in oklab, var(--tone-action-brand) 20%, var(--tone-surface-1));
+  --st-ramp-1: color-mix(in oklab, var(--tone-action-brand) 85.5%, var(--tone-surface-1));
+  --st-ramp-2: color-mix(in oklab, var(--tone-action-brand) 71%, var(--tone-surface-1));
+  --st-ramp-3: color-mix(in oklab, var(--tone-action-brand) 56.5%, var(--tone-surface-1));
+  --st-ramp-4: color-mix(in oklab, var(--tone-action-brand) 42%, var(--tone-surface-1));
+  /* Source outcomes: the status roles, with "last good copy" lifted off the danger red
+     (normal-vision separation 17.8 light, 21.2 dark) and "partial" drawn as a hatch. */
+  --st-stale: color-mix(in oklab, var(--tone-state-warning) 70%, var(--tone-surface-1));
   overflow-x: clip;
+}
+:root[data-theme-resolved='dark'] .st-body {
+  --st-ramp-1: color-mix(in oklab, var(--tone-action-brand) 82%, var(--tone-surface-1));
+  --st-ramp-2: color-mix(in oklab, var(--tone-action-brand) 66%, var(--tone-surface-1));
+  --st-ramp-3: color-mix(in oklab, var(--tone-action-brand) 52%, var(--tone-surface-1));
+  --st-ramp-4: color-mix(in oklab, var(--tone-action-brand) 40%, var(--tone-surface-1));
+  --st-stale: color-mix(in oklab, var(--tone-state-warning) 62%, var(--tone-surface-1));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme-resolved]) .st-body {
+    --st-ramp-1: color-mix(in oklab, var(--tone-action-brand) 82%, var(--tone-surface-1));
+    --st-ramp-2: color-mix(in oklab, var(--tone-action-brand) 66%, var(--tone-surface-1));
+    --st-ramp-3: color-mix(in oklab, var(--tone-action-brand) 52%, var(--tone-surface-1));
+    --st-ramp-4: color-mix(in oklab, var(--tone-action-brand) 40%, var(--tone-surface-1));
+    --st-stale: color-mix(in oklab, var(--tone-state-warning) 62%, var(--tone-surface-1));
+  }
 }
 .st-body h1, .st-body h2, .st-body h3 { text-wrap: balance; }
 /* Hidden labels sit at the start of their own box: at the end of a nowrap
@@ -169,7 +190,11 @@
 /* Bars: a breakdown over the window, direct-labelled. */
 .st-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); counter-reset: rank; }
 .st-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'label value' 'track track'; gap: var(--sp-1) var(--sp-3); align-items: center; padding: var(--sp-1) var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border-radius: var(--r-sm); }
-@container st-card (min-width: 30rem) { .st-bar { grid-template-columns: minmax(0, 14rem) minmax(4rem, 1fr) auto; grid-template-areas: 'label track value'; } }
+/* Wide: every row shares one set of columns (subgrid), so bars start and end together. */
+@container st-card (min-width: 30rem) {
+  .st-bars { grid-template-columns: minmax(0, 14rem) minmax(4rem, 1fr) auto; column-gap: var(--sp-3); }
+  .st-bar { grid-column: 1 / -1; grid-template-columns: subgrid; grid-template-areas: 'label track value'; }
+}
 .st-bar.is-lit { background: var(--tone-tint-action); }
 .st-bar-label { grid-area: label; display: grid; font-size: var(--type-control); line-height: 1.35; min-inline-size: 0; }
 .st-bars-ranked .st-bar { counter-increment: rank; }
@@ -191,7 +216,10 @@
 .st-swatch { inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; }
 .st-stack-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
 .st-stack { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'label summary' 'track track'; gap: var(--sp-1) var(--sp-3); align-items: center; }
-@container st-card (min-width: 36rem) { .st-stack { grid-template-columns: minmax(0, 13rem) minmax(4rem, 1fr) auto; grid-template-areas: 'label track summary'; } }
+@container st-card (min-width: 36rem) {
+  .st-stack-rows { grid-template-columns: minmax(0, 13rem) minmax(4rem, 1fr) auto; column-gap: var(--sp-3); }
+  .st-stack { grid-column: 1 / -1; grid-template-columns: subgrid; grid-template-areas: 'label track summary'; }
+}
 .st-stack-label { grid-area: label; font-size: var(--type-control); line-height: 1.35; }
 .st-stack-track { grid-area: track; position: relative; display: flex; gap: 2px; block-size: 1.125rem; }
 .st-part { display: block; flex-basis: 0; min-inline-size: 3px; block-size: 100%; }
@@ -204,8 +232,8 @@
 .st-marker-note { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--type-meta); color: var(--tone-text-muted); }
 .st-marker-key { inline-size: 2px; block-size: 1rem; background: var(--tone-text-primary); }
 .st-tone-ok { background: var(--tone-state-success); }
-.st-tone-partial { background: color-mix(in oklab, var(--tone-state-warning) 45%, var(--tone-surface-1)); }
-.st-tone-stale { background: var(--tone-state-warning); }
+.st-tone-partial { background: repeating-linear-gradient(135deg, var(--tone-state-warning) 0 2px, var(--tone-surface-1) 2px 5px); box-shadow: inset 0 0 0 1px var(--tone-state-warning); }
+.st-tone-stale { background: var(--st-stale); }
 .st-tone-error { background: var(--tone-state-danger); }
 .st-ramp-0 { background: var(--st-ramp-0); } .st-ramp-1 { background: var(--st-ramp-1); } .st-ramp-2 { background: var(--st-ramp-2); } .st-ramp-3 { background: var(--st-ramp-3); } .st-ramp-4 { background: var(--st-ramp-4); }
 .st-sign-ahead { background: var(--tone-state-danger); }

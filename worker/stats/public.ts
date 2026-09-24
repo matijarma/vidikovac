@@ -62,13 +62,19 @@ export const LIVE_ROWS = 12;
 /** A crossing is named after the nearest stop this close to it, metres. */
 export const JUNCTION_NAME_RADIUS_M = 250;
 
+/** The person-events after the fold: the City's cells and the evaluation's, apart. */
+export interface PublicCells {
+  city: CityRow[];
+  evaluation: CityRow[];
+}
+
 export interface PublicStatsInput {
   days: StatistikaWindow;
   since: string;
   today: string;
   now: Date;
-  /** Hourly rows of PUBLIC_USAGE_EVENTS on or after `since`. */
-  usageRows: readonly MetricsDailyRow[];
+  /** PUBLIC_USAGE_EVENTS folded by foldPublic (MetricsDO.publicCells does it where the rows live). */
+  cells: PublicCells;
   /** PUBLIC_SYSTEM_EVENTS summed over the window (day ''). */
   systemTotals: readonly MetricsTotalRow[];
   /** twin_tick summed per day. */
@@ -224,19 +230,27 @@ function system(input: PublicStatsInput, days: readonly string[]): SystemStats {
   };
 }
 
+/**
+ * The fold the public report stands on, over hourly rows of PUBLIC_USAGE_EVENTS:
+ * the venue cells exactly as grad.csv carries them (cityRows), and the
+ * evaluation rows unwrapped and folded apart by the same foldCells.
+ */
+export function foldPublic(rows: readonly MetricsDailyRow[]): PublicCells {
+  const evaluation: FoldCell[] = [];
+  for (const r of rows) {
+    if (r.event !== 'evaluation') continue;
+    const cell = unwrapEvaluation(r);
+    if (cell) evaluation.push(cell);
+  }
+  return { city: cityRows(rows), evaluation: foldCells(evaluation) };
+}
+
 export function buildPublicStats(input: PublicStatsInput): PublicStats {
   const days = dayList(input.since, input.today);
 
-  const cityCells = cityRows(input.usageRows);
-  const venueCells = cityCells.filter((c) => c.event !== 'hitno_view');
-  const hitnoCells = cityCells.filter((c) => c.event === 'hitno_view');
-
-  const evaluationCells = foldCells(
-    input.usageRows
-      .filter((r) => r.event === 'evaluation')
-      .map(unwrapEvaluation)
-      .filter((c): c is FoldCell => c !== null),
-  );
+  const venueCells = input.cells.city.filter((c) => c.event !== 'hitno_view');
+  const hitnoCells = input.cells.city.filter((c) => c.event === 'hitno_view');
+  const evaluationCells = input.cells.evaluation;
 
   return {
     version: 1,

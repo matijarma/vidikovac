@@ -16,6 +16,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from './env';
 import { isMetricEvent, zagrebDayHour } from './metrics';
+import { PUBLIC_USAGE_EVENTS, foldPublic, type PublicCells } from './stats/public';
 
 // METRICS_DO_NAME lives in the dependency-free worker/metrics-do-name.ts
 // (fix round 1, R-42 finding), not declared directly here: this file imports
@@ -189,6 +190,26 @@ export class MetricsDO extends DurableObject<Env> {
         ...wanted,
       )
       .toArray();
+  }
+
+  /**
+   * The public report's person-events, folded here where the rows live
+   * (worker/stats/public.ts foldPublic): every hourly row of the window is
+   * read, with no cap, and only the folded cells cross the RPC, so a year of
+   * busy screens can neither be cut short nor sent as megabytes of rows.
+   */
+  async publicCells(sinceDay: string): Promise<PublicCells> {
+    if (!DAY_RE.test(sinceDay)) throw new Error('invalid-since-day');
+    const wanted = eventList(PUBLIC_USAGE_EVENTS);
+    const rows = this.ctx.storage.sql
+      .exec<MetricsDailyRow>(
+        `SELECT day, hour, event, dim1, dim2, count FROM metrics_hourly
+          WHERE day >= ? AND event IN (${wanted.map(() => '?').join(', ')})`,
+        sinceDay,
+        ...wanted,
+      )
+      .toArray();
+    return foldPublic(rows);
   }
 
   /** Runs a newest-first capped select and hands the rows back oldest first. */
