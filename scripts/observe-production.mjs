@@ -6,6 +6,7 @@
 //   E2E_KIOSK_URL=<the day's screen> npm run observe:production -- --minutes 10
 //   node scripts/observe-production.mjs [--minutes 10] [--surfaces kiosk,phone,desktop]
 //                                       [--stage d1|d2|d3|full] [--out review.local/observe-<stamp>]
+//                                       [--max-load 8|N|off]
 //
 // E2E_KIOSK_URL is the provisioning URL of a screen that already exists (…/kiosk/#<beacon>.<secret>): the
 // day's temporary screen, made by hand through /kiosk/ (one per verification day, Q15). It is required;
@@ -39,14 +40,15 @@
 // Output: review.local/observe-<stamp>/ with inventory.json, rotation.jsonl, legibility.json, report.md,
 // plus recorders.json and captures/*.png (all gitignored through *.local; --out must stay in such a folder
 // or outside the repository). Exit codes: 0 every applied threshold holds; 1 a threshold fails; 2 the run
-// could not observe (no E2E_KIOSK_URL, a bad argument, the loader or the browser did not start, the screen
-// never showed its invitation).
+// could not observe (no E2E_KIOSK_URL, a bad argument, the host's 1-minute load above --max-load, 8 by default,
+// the loader or the browser did not start, the screen never showed its invitation).
 //
 // Thresholds (THRESHOLDS below) are one table, each row tagged with the deploy it belongs to: `--stage d1`
 // applies the pills and recorder rows only (before the wall lands), d2 adds the wall (§16.3), d3 the phone and
 // desktop (§16.4), `full` (the default) applies every row. Rows above the chosen stage are still measured and
 // reported, as information.
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -54,6 +56,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const DEFAULT_MINUTES = 10;
 /** A longer run is a mistake, not an observation: ten minutes is the design. */
 export const MAX_MINUTES = 60;
+/**
+ * The 1-minute host load above which the observer refuses to start (exit 2). 24 Sep 06:55: a run at load 127
+ * (other agents' gates on the same host) took 5 to 12 s a reading instead of 2 s, and its table read as the
+ * product's. `--max-load N` moves the bound, `--max-load off` drops it.
+ */
+export const MAX_HOST_LOAD = 8;
 export const SURFACES = Object.freeze(['kiosk', 'phone', 'desktop']);
 /** Deploys in order (brief §15.3): D1 trust (pills), D2 wall, D3 phone. `full` applies all of them. */
 export const STAGES = Object.freeze(['d1', 'd2', 'd3']);
@@ -137,6 +145,8 @@ Options:
   --surfaces LIST     kiosk,phone,desktop (default all three; kiosk is required: codes come from its page)
   --stage S           ${STAGES.join(' | ')} | ${STAGE_ALL} (default ${STAGE_ALL}); d1 = pills and recorders only
   --out DIR           output folder (default review.local/observe-<stamp>); inside the repo it must be a *.local folder
+  --max-load N|off    refuse to start above this 1-minute host load (default ${MAX_HOST_LOAD}): a loaded host slows every
+                      reading and the table stops describing the product; "off" runs whatever the load
   --help              this text
 
 Never creates a screen, never presents, never opens settings, presses nothing on the screen.
@@ -161,12 +171,12 @@ export class KioskUnavailable extends Error {
 // --- arguments and environment ----------------------------------------------------------------------
 /** `--name value` or `--name=value`; unknown flags and bad values are refused (exit 2). */
 export function parseArgs(argv) {
-  const args = { minutes: DEFAULT_MINUTES, surfaces: [...SURFACES], stage: STAGE_ALL, out: null, help: false };
+  const args = { minutes: DEFAULT_MINUTES, surfaces: [...SURFACES], stage: STAGE_ALL, out: null, maxLoad: MAX_HOST_LOAD, help: false };
   const list = [...argv];
   while (list.length) {
     const raw = list.shift();
     if (raw === '--help' || raw === '-h') { args.help = true; continue; }
-    const m = /^--([a-z]+)(?:=(.*))?$/.exec(raw);
+    const m = /^--([a-z]+(?:-[a-z]+)*)(?:=(.*))?$/.exec(raw);
     if (!m) throw new ObserverRefusal(`observe-production: unexpected argument "${raw}"\n\n${USAGE}`);
     const [, name, inline] = m;
     const value = () => {
@@ -191,6 +201,12 @@ export function parseArgs(argv) {
       args.stage = stage;
     } else if (name === 'out') {
       args.out = value();
+    } else if (name === 'max-load') {
+      const text = value();
+      const n = Number(text);
+      if (text === 'off') args.maxLoad = null;
+      else if (!Number.isFinite(n) || n <= 0) throw new ObserverRefusal(`observe-production: --max-load must be a number above 0 or "off", not "${text}"`);
+      else args.maxLoad = n;
     } else {
       throw new ObserverRefusal(`observe-production: unknown option --${name}\n\n${USAGE}`);
     }
@@ -1125,7 +1141,7 @@ export const THRESHOLDS = Object.freeze([
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
   T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
-  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline, and every row that stays keeps its node', '§16.3, principle 7'),
+  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond departure turnovers (a departure entering or leaving, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
   T('sentence-length', 'd2', 'kiosk', 'kiosk.sentenceOutOfRange', NONE, 'the sentence has 1–{SENTENCE_MAX_CHARS} characters in every reading', '§16.3, §12'),
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
@@ -1350,8 +1366,10 @@ export const METRICS = Object.freeze({
   'kiosk.calmMotion': (obs, k) => {
     const windows = obs.kiosk?.calm ?? [];
     if (!windows.length) return { value: null, detail: ['calm motion was not measured (no minute of the rotation)'] };
-    const bad = windows.map((w) => ({ w, f: w.error ? [`not measured: ${w.error}`] : k.wall.calmMotionFailures(w.reading) })).filter((x) => x.f.length);
-    return { value: bad.length, detail: bad.length ? bad.slice(0, 5).map((x) => `readings ${x.w.from}–${x.w.to}: ${x.f.join('; ')}`) : [`${windows.length} minute(s) measured, each within ${k.wall.IDLE_MUTATIONS_MAX} structural mutations, every staying row on its node`] };
+    // Departure turnovers are the service, not churn (e2e/wall.ts calmChurnFailures); the per-minute table is in report.md.
+    const bad = windows.map((w) => ({ w, f: w.error ? [`not measured: ${w.error}`] : k.wall.calmChurnFailures(w.reading) })).filter((x) => x.f.length);
+    const turnovers = windows.reduce((n, w) => n + (w.reading?.turnovers ?? 0), 0);
+    return { value: bad.length, detail: bad.length ? bad.slice(0, 5).map((x) => `readings ${x.w.from}–${x.w.to}: ${x.f.join('; ')}`) : [`${windows.length} minute(s) measured, each within ${k.wall.IDLE_MUTATIONS_MAX} structural mutations beyond ${turnovers} departure turnover(s) in all, every staying row on its node`] };
   },
   'kiosk.outageDishonest': (obs, k) => countReadings(obs, (s) => s.feed === 'down' && outageIssues(s, k).length > 0, (s) => `data-feed down: ${outageIssues(s, k).join('; ')}`),
   'kiosk.sentenceOutOfRange': (obs, k) => countReadings(obs, (s) => s.sentenceChars < 1 || s.sentenceChars > k.wall.SENTENCE_MAX_CHARS, (s) => `${s.sentenceChars} characters ${quote(s.sentence, 90)}`),
@@ -1584,7 +1602,9 @@ export function renderReport(observation, verdict, instruments) {
   const lines = [];
   const verdictWord = verdict.ok ? '**PASS**' : `**FAIL** (${verdict.failures.length} of ${verdict.applied} applied thresholds)`;
   lines.push(`# Production observation, ${zagreb(Date.parse(meta.startedAt))} Zagreb (read-only)`, '');
-  lines.push(`Origin ${meta.origin}, build ${meta.health?.version ?? 'unknown'} · ${meta.minutes} min · stage \`${meta.stage}\` · surfaces ${meta.surfaces.join(', ')} · ended ${meta.endedAt ? zagreb(Date.parse(meta.endedAt)) : '?'} Zagreb.`, '');
+  const hl = meta.hostLoad;
+  const loadWords = hl && (hl.start !== null || hl.end !== null) ? ` · host load (1 min) ${hl.start ?? '?'} at the start, ${hl.end ?? '?'} at the end (refused above ${hl.max ?? 'no bound'})` : '';
+  lines.push(`Origin ${meta.origin}, build ${meta.health?.version ?? 'unknown'} · ${meta.minutes} min · stage \`${meta.stage}\` · surfaces ${meta.surfaces.join(', ')} · ended ${meta.endedAt ? zagreb(Date.parse(meta.endedAt)) : '?'} Zagreb${loadWords}.`, '');
   lines.push(`Verdict: ${verdictWord}.`, '');
   const recs = observation.recorders ?? [];
   const red = recs.reduce((m, r) => ({ ...m, [r.surface]: (m[r.surface] ?? 0) + r.redemptions }), {});
@@ -1622,6 +1642,19 @@ export function renderReport(observation, verdict, instruments) {
     if (k.first) lines.push(`First reading: place ${quote(k.first.place)}, sentence ${quote(k.first.sentence, 90)} (${k.first.kicker ?? 'no kicker'}), head ${quote(k.first.head)}, ${k.first.departures} visible departures (${k.first.hiddenRows} rows not on the wall), feed ${k.first.feed ?? '?'}, ${twinWords(k.first.fleet)}, theme ${k.first.theme ?? '?'}.`, '');
     const wallReadings = readingsOf(observation) ?? [];
     if (wallReadings.length) lines.push(pillsCensus(wallReadings, instruments), '');
+    const calm = k.calm ?? [];
+    if (calm.length) {
+      lines.push('### Calm motion per minute (principle 7)', '');
+      lines.push(`Records: childList records that add or remove an element under the timeline. Turnovers: departures entering or leaving, each excusing one add and one remove. Churn: every other record, at most ${instruments.wall.IDLE_MUTATIONS_MAX} a minute; a staying row re-created fails the minute whatever the churn.`, '');
+      lines.push('| Readings | Records | Turnovers | Churn | Kept | Re-created | Left / entered | Result |', '|---|---:|---:|---:|---:|---|---|---|');
+      for (const w of calm) {
+        if (w.error || !w.reading) { lines.push(`| ${w.from}–${w.to} | — | — | — | — | not measured: ${cell(w.error ?? 'no reading')} | — | **fail** |`); continue; }
+        const r = w.reading;
+        const ok = instruments.wall.calmChurnFailures(r).length === 0;
+        lines.push(`| ${w.from}–${w.to} | ${r.mutations} | ${r.turnovers ?? '—'} | ${r.churn ?? '—'} | ${r.kept} | ${cell(r.rebuilt.join(', ')) || '—'} | ${r.left.length} / ${r.entered.length} | ${ok ? 'pass' : '**fail**'} |`);
+      }
+      lines.push('');
+    }
     const skip = summariseSkippedText(rot);
     lines.push('### Skipped third-party text (data-skipped-text, monitored, never a gate)', '');
     if (skip.withCensus === 0) {
@@ -1705,7 +1738,10 @@ export function writeOutputs(outDir, observation, verdict, instruments, scrub) {
 /** A fresh observation record; the phases fill it. */
 export function newObservation(config, health) {
   return {
-    meta: { origin: config.origin, startedAt: config.startedAt, endedAt: null, minutes: config.minutes, stage: config.stage, surfaces: config.surfaces, health, userAgentSuffix: USER_AGENT_SUFFIX.trim() },
+    meta: {
+      origin: config.origin, startedAt: config.startedAt, endedAt: null, minutes: config.minutes, stage: config.stage, surfaces: config.surfaces, health, userAgentSuffix: USER_AGENT_SUFFIX.trim(),
+      hostLoad: { start: config.hostLoad ?? null, end: null, max: config.maxLoad ?? null },
+    },
     kiosk: null, phone: null, desktop: null, recorders: [], inventories: [], captures: [], errors: [], notes: [],
     redemptions: { confirmed: [], failed: [], late: [] },
   };
@@ -1715,7 +1751,7 @@ export function newObservation(config, health) {
  * The observation itself, from an already loaded runtime (`load()` in main, fakes in the unit tier):
  * { instruments, chromium, devices, AxeBuilder?, fetch? }. Returns the exit code.
  */
-export async function run(config, runtime, { log = console.log, error = console.error, clock } = {}) {
+export async function run(config, runtime, { log = console.log, error = console.error, clock, hostLoad = null } = {}) {
   const now = clock?.now ?? (() => Date.now());
   const sleep = clock?.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const { instruments } = runtime;
@@ -1768,6 +1804,10 @@ export async function run(config, runtime, { log = console.log, error = console.
     await browser.close().catch(() => {});
   }
   observation.meta.endedAt = new Date(now()).toISOString();
+  if (hostLoad) {
+    const end = Number(hostLoad());
+    observation.meta.hostLoad = { ...observation.meta.hostLoad, end: Number.isFinite(end) ? Math.round(end * 10) / 10 : null };
+  }
   const verdict = judge(observation, instruments, config.stage);
   writeOutputs(config.outDir, observation, verdict, instruments, scrub);
   for (const r of verdict.failures) log(`observe-production: FAIL ${r.id}: ${scrub(r.target)} (observed ${r.value ?? 'nothing'})`);
@@ -1797,7 +1837,7 @@ export async function loadRuntime(root = ROOT) {
 }
 
 /** The command line. Refusals (no E2E_KIOSK_URL, bad arguments) return 2 before anything is loaded. */
-export async function main({ argv = process.argv.slice(2), env = process.env, root = ROOT, log = console.log, error = console.error, load = loadRuntime } = {}) {
+export async function main({ argv = process.argv.slice(2), env = process.env, root = ROOT, log = console.log, error = console.error, load = loadRuntime, hostLoad = () => loadavg()[0] } = {}) {
   let config;
   try {
     config = configFrom({ argv, env, root });
@@ -1806,6 +1846,14 @@ export async function main({ argv = process.argv.slice(2), env = process.env, ro
     throw e;
   }
   if (config.help) { log(USAGE); return 0; }
+  // A host that cannot say its load (NaN) is not refused; os.loadavg() reads 0 where it has none.
+  const load1 = Number(hostLoad());
+  const shown = Number.isFinite(load1) ? Math.round(load1 * 10) / 10 : null;
+  if (config.maxLoad !== null && shown !== null && load1 > config.maxLoad) {
+    error(`observe-production: the host's 1-minute load is ${shown}, above ${config.maxLoad}: every reading would run late and the table would describe the host, not the product. Wait for the load to fall, or pass --max-load N (or --max-load off) to observe anyway.`);
+    return 2;
+  }
+  config = { ...config, hostLoad: shown };
   let runtime;
   try {
     runtime = await load(root);
@@ -1813,7 +1861,7 @@ export async function main({ argv = process.argv.slice(2), env = process.env, ro
     error(`observe-production: the instrument loader could not start: ${errText(e)}`);
     return 2;
   }
-  return run(config, runtime, { log, error });
+  return run(config, runtime, { log, error, hostLoad });
 }
 
 const invokedDirectly = typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;

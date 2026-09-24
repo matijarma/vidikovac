@@ -14,6 +14,8 @@ export type StageChoice = Stage | 'full';
 
 export const DEFAULT_MINUTES: number;
 export const MAX_MINUTES: number;
+/** The 1-minute host load above which the observer refuses to start (exit 2); `--max-load N|off` moves or drops it. */
+export const MAX_HOST_LOAD: number;
 export const SURFACES: readonly Surface[];
 export const STAGES: readonly Stage[];
 export const STAGE_ALL: 'full';
@@ -52,13 +54,13 @@ export class ObserverRefusal extends Error {
 }
 export class KioskUnavailable extends Error {}
 
-export interface ObserverArgs { minutes: number; surfaces: Surface[]; stage: StageChoice; out: string | null; help: boolean }
+export interface ObserverArgs { minutes: number; surfaces: Surface[]; stage: StageChoice; out: string | null; maxLoad: number | null; help: boolean }
 export function parseArgs(argv: readonly string[]): ObserverArgs;
 export interface KioskTarget { kioskUrl: string; origin: string; beaconId: string; secrets: string[] }
 export function kioskFromEnv(env: Record<string, string | undefined>): KioskTarget;
 export function outDirFor(out: string | null, root: string, stamp: string): string;
 export function stampOf(date: Date): string;
-export interface ObserverConfig extends ObserverArgs, KioskTarget { root: string; startedAt: string; outDir: string }
+export interface ObserverConfig extends ObserverArgs, KioskTarget { root: string; startedAt: string; outDir: string; hostLoad?: number | null }
 export function configFrom(input: { argv: readonly string[]; env: Record<string, string | undefined>; root?: string; now?: Date }): ObserverConfig;
 
 export interface Scrubber { (text: unknown): string; noteCode(code: unknown): void }
@@ -203,7 +205,7 @@ export interface KioskObservation {
 }
 export interface RecorderSnapshot extends Recorders.RecorderReport { surface: Surface; problems: string[]; aborted: number; scanTimes: string[] }
 export interface Observation {
-  meta: { origin: string; startedAt: string; endedAt: string | null; minutes: number; stage: StageChoice; surfaces: Surface[]; health: unknown; userAgentSuffix: string };
+  meta: { origin: string; startedAt: string; endedAt: string | null; minutes: number; stage: StageChoice; surfaces: Surface[]; health: unknown; userAgentSuffix: string; hostLoad: { start: number | null; end: number | null; max: number | null } };
   kiosk: KioskObservation | null;
   phone: PhoneObservation | null;
   desktop: DesktopObservation | null;
@@ -252,7 +254,7 @@ export interface Runtime {
   AxeBuilder?: new (options: { page: ObserverPage }) => { withTags(tags: string[]): { analyze(): Promise<{ violations: { id: string; impact?: string | null; nodes: unknown[] }[] }> } };
   fetch?: (url: string, init?: Record<string, unknown>) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 }
-export interface RunOptions { log?: (line: string) => void; error?: (line: string) => void; clock?: { now(): number; sleep(ms: number): Promise<void> } }
+export interface RunOptions { log?: (line: string) => void; error?: (line: string) => void; clock?: { now(): number; sleep(ms: number): Promise<void> }; hostLoad?: (() => number) | null }
 export function run(config: ObserverConfig, runtime: Runtime, options?: RunOptions): Promise<number>;
 export function loadRuntime(root?: string): Promise<Runtime>;
-export function main(options?: { argv?: readonly string[]; env?: Record<string, string | undefined>; root?: string; log?: (line: string) => void; error?: (line: string) => void; load?: (root: string) => Promise<Runtime> }): Promise<number>;
+export function main(options?: { argv?: readonly string[]; env?: Record<string, string | undefined>; root?: string; log?: (line: string) => void; error?: (line: string) => void; load?: (root: string) => Promise<Runtime>; hostLoad?: () => number }): Promise<number>;
