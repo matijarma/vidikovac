@@ -38,9 +38,6 @@ describe('the map pane’s legible minimum', () => {
   // two lines), the list's head and padding 61; the promises at night are 86 px a row (first, last, the
   // pharmacy) and 64 a departure.
   const NIGHT_1366 = { windowPx: 513, gapPx: 14, cardPx: 284, legendPx: 95, listOverheadPx: 61, minMapPx: MAP_MIN_HEIGHT_PX };
-  it('keeps decision 50’s card under the map while that map is legible', () => {
-    expect(compactArrangement({ ...NIGHT_1366, windowPx: 800, floorPx: 236 })).toMatchObject({ placement: 'map' });
-  });
   it('moves the card under the list by day, when the list keeps its promises in the smaller box', () => {
     const day = compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64 });
     expect(day).toEqual({ placement: 'aside', mapPx: 513 - 95, listPx: 513 - 14 - 284 - 61 });
@@ -54,8 +51,10 @@ describe('the map pane’s legible minimum', () => {
       expect(night.listPx).toBeGreaterThanOrEqual(floorPx);
     }
   });
-  it('lets the promises win where nothing else fits, and moves nothing before it is measured', () => {
+  it('keeps decision 50’s arrangement only where neither move keeps the promises, and moves nothing before it is measured', () => {
     expect(compactArrangement({ ...NIGHT_1366, windowPx: 420, floorPx: 400 })).toMatchObject({ placement: 'map' });
+    // A legend under the list that would leave the map below its minimum is no answer either.
+    expect(compactArrangement({ ...NIGHT_1366, windowPx: 470, floorPx: 300 })).toMatchObject({ placement: 'map' });
     expect(compactArrangement({ windowPx: 0, gapPx: 0, cardPx: 0, legendPx: 0, listOverheadPx: 0, floorPx: 0, minMapPx: MAP_MIN_HEIGHT_PX })).toMatchObject({ placement: 'map' });
   });
 });

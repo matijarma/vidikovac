@@ -35,14 +35,15 @@ export interface InvitationDeps {
  *  'aside'  the card under the list, the map the whole left column over its legend (by day);
  *  'legend' the card under the map and the legend under the list (at night at 1366 x 768 the card under the
  *           list leaves it 154 px for 236 to 322 px of promises, and the map under card and legend is 159 px).
- *  Decision 50's is kept while its map is legible; else 'aside' if the list holds its promises there; else
- *  'legend' if both hold there; else decision 50's (the promises win). All px are the display's; nothing
- *  measured (0) moves nothing. */
+ *  The card goes under the list whenever the list keeps its promises there (the map is then the largest it
+ *  can be; lane w-labels, as D5.9 ships by day); else the legend goes under the list if the map is legible
+ *  and the list keeps its promises there (at night); else decision 50's stands (the promises win). All px
+ *  are the display's; nothing measured (0) moves nothing. */
 export type CompactPlacement = 'map' | 'aside' | 'legend';
 export interface CompactBox { windowPx: number; gapPx: number; cardPx: number; legendPx: number; listOverheadPx: number; floorPx: number; minMapPx: number }
 export function compactArrangement(b: CompactBox): { placement: CompactPlacement; mapPx: number; listPx: number } {
   const map = { placement: 'map' as const, mapPx: b.windowPx - b.gapPx - b.cardPx - b.legendPx, listPx: b.windowPx - b.listOverheadPx };
-  if (!(b.windowPx > 0) || map.mapPx >= b.minMapPx) return map;
+  if (!(b.windowPx > 0)) return map;
   const aside = { placement: 'aside' as const, mapPx: b.windowPx - b.legendPx, listPx: b.windowPx - b.gapPx - b.cardPx - b.listOverheadPx };
   if (aside.listPx >= b.floorPx) return aside;
   const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.gapPx - b.legendPx };
