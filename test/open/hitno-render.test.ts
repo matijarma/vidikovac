@@ -144,6 +144,8 @@ describe('renderHitnoPage', () => {
     expect(html).toContain('href="tel:+38513750321"');
     expect(html).toContain('Ljekarna ZEUS');
     expect(html).toContain('<span class="check">provjeriti</span>');
+    // D-F19: the badge sits beside the heading, so the h2 and its section are named "Dežurne ljekarne" alone.
+    expect(html).toContain('<div class="sec-head"><h2 id="h-ljekarne">Dežurne ljekarne</h2> <span class="check">provjeriti</span></div>');
     expect(html).toContain('https://www.zagreb.hr/dezurne-ljekarne/497');
   });
 

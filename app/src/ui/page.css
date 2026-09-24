@@ -22,8 +22,15 @@
 /* .page-nav .page-brand outweighs base.css's a:hover, so the wordmark keeps its ink without !important. */
 .page-nav .page-brand { font-weight: var(--weight-bold); font-size: var(--type-head); letter-spacing: -0.02em; color: var(--tone-text-primary); text-decoration: none; }
 .page-brand .mark { color: var(--tone-action-brand); }
-.page > .page-nav:first-child { border-bottom: 1px solid var(--tone-stroke); padding-bottom: var(--sp-4); }
 .page > h1 + p { color: var(--tone-text-muted); font-size: 1.125rem; line-height: 1.6; }
 .page > ol > li { padding-bottom: var(--sp-4); }
 .page > ol > li::marker { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
-.page > nav.page-nav:last-child { border-top: 1px solid var(--tone-stroke); padding-top: var(--sp-4); }
+/* The chrome sits outside main, as on / and /statistika: the wordmark is the banner, the six-link
+   list the contentinfo. Same measure and gutter as the prose column; main keeps the old grid gap
+   to each of them as its own block padding, so the page reads exactly as before. */
+.page-head, .page-foot { max-width: 52rem; margin: 0 auto; padding-inline: var(--sp-5); min-inline-size: 0; }
+.page-head { padding-block-start: var(--sp-6); }
+.page-foot { padding-block-end: var(--sp-12); }
+.page-head + .page { padding-block: var(--sp-6); }
+.page-head > .page-nav { border-bottom: 1px solid var(--tone-stroke); padding-bottom: var(--sp-4); }
+.page-foot > .page-nav { border-top: 1px solid var(--tone-stroke); padding-top: var(--sp-4); }

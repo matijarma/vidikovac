@@ -99,6 +99,14 @@ describe('static pages', () => {
       expect(html, path).toContain(`href="${current}" aria-current="page"`);
       expect(html, path).not.toContain('data-testid="lang-slot"');
       expect(html, path).toContain('<html lang="hr">');
+      // D-F19: the chrome sits outside main, as on / and /statistika: the wordmark in the banner, the six links in the contentinfo.
+      const [head, rest] = html.split('<main class="page">');
+      expect(rest, path).toBeDefined();
+      expect(head, path).toMatch(/<header class="page-head">\s*<p class="page-nav"><a class="page-brand" href="\/">/);
+      const [inMain, after] = rest!.split('</main>');
+      expect(inMain, path).not.toContain('aria-label="Stranice"');
+      expect(inMain, path).toMatch(/<h1\b/);
+      expect(after, path).toMatch(/^\s*<footer class="page-foot">\s*<nav class="page-nav" aria-label="Stranice">/);
     }
   });
   it('/statistika is a prose-family page: skip link, wordmark, one h1, the six-link footer, prose that stands without JS', () => {
