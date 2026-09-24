@@ -138,6 +138,8 @@ export const HELD_DEPARTURE_GRACE_MS = 60_000;
 export const DISPLACE_MINUTES = 2;
 /** A shown tram's displayed minute changes only when its live estimate crosses the minute's boundary by this much (hysteresis on the countdown). */
 export const MINUTE_MARGIN_MS = 15_000;
+/** A tracked tram past its time is carried as "sada" this long while the twin still names one of the place's platforms as its vehicle's next stop. */
+export const HELD_AT_STOP_MS = 3 * 60_000;
 /** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
 const MORNING_FROM_MIN = 3 * 60;
 const MORNING_UNTIL_MIN = 12 * 60;
@@ -273,8 +275,19 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       && now - row.confirmedAt <= HELD_DEPARTURE_GRACE_MS && row.arrival.atMs >= now - DEPARTURE_GRACE_MS)
     .map((row) => ({ ...row.arrival, minutes: countdownMinutes(row.arrival.atMs, now) }));
   const carriedIds = new Set(carried.map(departureId));
-  const order = byDisplayedMinute(now, rank);
-  const shown = capDepartures([...fresh, ...carried].sort(order), displayedMinute(now), (arrival) => rank.has(departureId(arrival)), order);
+  // A tracked tram whose estimate has passed but whose vehicle the twin still reports with one of these platforms as
+  // its next stop is at or before the stop: it reads "sada" until the vehicle moves on, HELD_AT_STOP_MS after its
+  // time at most (D5.8 observer: the 17 left 61 s past its estimate and came back re-estimated 50 s later, a row
+  // removed and re-created). In an outage no live row is carried (§4.8).
+  const vehicleOf = new Map(input.fixes.filter((v) => v.tripId).map((v) => [v.tripId!, v] as const));
+  const dwelling = outage ? [] : held
+    .filter((row): row is NearbyRow & { arrival: ArrivalRow } => row.arrival !== undefined && row.live
+      && !freshIds.has(row.id) && !carriedIds.has(row.id)
+      && now - row.arrival.atMs > DEPARTURE_GRACE_MS && now - row.arrival.atMs <= HELD_AT_STOP_MS
+      && stopIds.includes(vehicleOf.get(row.arrival.tripId)?.nextStopId ?? ''))
+    .map((row) => ({ ...row.arrival, minutes: 0 }));
+  const dwellingIds = new Set(dwelling.map(departureId));
+  const shown = arrangeDepartures([...fresh, ...carried, ...dwelling], held, displayedMinute(now));
   return shown.map((arrival) => {
     const live = arrival.live;
     const id = departureId(arrival);
@@ -290,7 +303,7 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       ...placeSelection(input.place),
       map: placePoint(input.place),
       arrival,
-      confirmedAt: carriedIds.has(id) ? held[rank.get(id)!]!.confirmedAt! : now,
+      confirmedAt: carriedIds.has(id) || dwellingIds.has(id) ? held[rank.get(id)!]!.confirmedAt ?? now : now,
     };
   });
 }
@@ -321,38 +334,51 @@ function countdownMinutes(atMs: number, now: number): number | null {
   return ahead <= COUNTDOWN_HORIZON_MIN * MINUTE_MS ? Math.max(0, Math.round(ahead / MINUTE_MS)) : null;
 }
 
-/** The minute a passer-by reads: a countdown's rounded minutes, a clock time's minute from now's. */
+/**
+ * The minute a passer-by reads: a countdown's rounded minutes, a clock time's minute from now's, never below
+ * zero: a timetable time inside its grace is due now, like "sada" (D5.8 observer, reading 26: the clock crossed
+ * the minute and a timetable row climbed above two "sada" trams, a move of two records).
+ */
 function displayedMinute(now: number): (row: ArrivalRow) => number {
-  return (row) => (row.live && row.minutes !== null ? row.minutes : Math.floor(row.atMs / MINUTE_MS) - Math.floor(now / MINUTE_MS));
+  return (row) => (row.live && row.minutes !== null ? row.minutes : Math.max(0, Math.floor(row.atMs / MINUTE_MS) - Math.floor(now / MINUTE_MS)));
 }
 
 /**
- * The order the wall prints: by the minute a passer-by reads, then the wall's current order for trams that
- * read the same minute, then line and trip. Live estimates move by seconds on every poll; two trams both
- * "sada" must never swap, a dead heat must come out the same way every time, and a shown tram leaves its slot
- * only to a tram a whole displayed minute earlier or by departing (D2 live block, principle 7).
+ * The order the wall prints, built from the wall's current order rather than sorted afresh, so that staying rows
+ * never move for a minute of difference (principle 7; a node moved is two records to the recorder):
+ * - the shown trams keep their order; one climbs above the tram before it only when it reads DISPLACE_MINUTES
+ *   whole displayed minutes earlier (a one-minute difference is inside two estimates' jitter);
+ * - a newcomer, by its minute then line and trip, enters before the first shown tram it is a whole minute
+ *   earlier than, after the ones it is not (the D2 rule: a shown tram yields only to a tram a minute earlier);
+ * - at the cap a newcomer displaces the last shown tram only when it reads DISPLACE_MINUTES earlier (fix9).
+ * A tram due now or a whole minute earlier still enters at once; a departed one has already left the pool.
  */
-function byDisplayedMinute(now: number, rank: ReadonlyMap<string, number>): (a: ArrivalRow, b: ArrivalRow) => number {
-  const minute = displayedMinute(now);
-  const shown = (row: ArrivalRow): number => rank.get(departureId(row)) ?? Number.MAX_SAFE_INTEGER;
-  return (a, b) => minute(a) - minute(b) || shown(a) - shown(b)
-    || a.routeName.localeCompare(b.routeName) || a.tripId.localeCompare(b.tripId);
-}
-
-/**
- * The first MAX_DEPARTURES of the time order, with hysteresis at the cap: a tram not on the wall displaces the
- * last shown one only when it reads DISPLACE_MINUTES whole displayed minutes earlier. A live estimate crossing
- * a shown tram's minute by one (nine against ten) would otherwise swap the two on every poll that moves it back
- * (D5.3 observer, rows 32 and 6, four records in a minute). The shown rows keep their time order among themselves.
- */
-function capDepartures(sorted: readonly ArrivalRow[], minute: (row: ArrivalRow) => number, isShown: (row: ArrivalRow) => boolean, order: (a: ArrivalRow, b: ArrivalRow) => number): ArrivalRow[] {
-  let chosen = sorted.slice(0, MAX_DEPARTURES);
-  for (const held of sorted.slice(MAX_DEPARTURES).filter(isShown)) {
-    const newcomer = [...chosen].reverse().find((row) => !isShown(row));
-    if (!newcomer || minute(newcomer) <= minute(held) - DISPLACE_MINUTES) continue;
-    chosen = [...chosen.filter((row) => row !== newcomer), held];
+function arrangeDepartures(pool: readonly ArrivalRow[], held: readonly NearbyRow[], minute: (row: ArrivalRow) => number): ArrivalRow[] {
+  const byId = new Map(pool.map((a) => [departureId(a), a] as const));
+  const shownIds = new Set(held.map((row) => row.id));
+  const shown: ArrivalRow[] = [];
+  for (const row of held) { const a = byId.get(row.id); if (a) shown.push(a); }
+  for (let i = 1; i < shown.length; i++) {
+    for (let j = i; j > 0 && minute(shown[j]!) <= minute(shown[j - 1]!) - DISPLACE_MINUTES; j--) {
+      [shown[j - 1], shown[j]] = [shown[j]!, shown[j - 1]!];
+    }
   }
-  return chosen.sort(order);
+  const newcomers = pool.filter((a) => !shownIds.has(departureId(a)))
+    .sort((a, b) => minute(a) - minute(b) || a.routeName.localeCompare(b.routeName) || a.tripId.localeCompare(b.tripId));
+  const ordered = [...shown];
+  for (const newcomer of newcomers) {
+    const at = ordered.findIndex((a) => minute(a) > minute(newcomer));
+    ordered.splice(at === -1 ? ordered.length : at, 0, newcomer);
+  }
+  let chosen = ordered.slice(0, MAX_DEPARTURES);
+  for (const heldOut of ordered.slice(MAX_DEPARTURES).filter((a) => shownIds.has(departureId(a)))) {
+    const newcomer = [...chosen].reverse().find((a) => !shownIds.has(departureId(a)));
+    if (!newcomer || minute(newcomer) <= minute(heldOut) - DISPLACE_MINUTES) continue;
+    const keep = new Set(chosen.filter((a) => a !== newcomer));
+    keep.add(heldOut);
+    chosen = ordered.filter((a) => keep.has(a));
+  }
+  return chosen;
 }
 
 // --- (b) closures by their end --------------------------------------------------
