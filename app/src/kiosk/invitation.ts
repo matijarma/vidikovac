@@ -33,21 +33,36 @@ export interface InvitationDeps {
  *  rest of the departures, then more map. Three arrangements, by the map they leave:
  *  'map'    decision 50: card and legend under the map, the list the whole aside;
  *  'aside'  the card under the list, the map the whole left column over its legend (by day);
- *  'legend' the card under the map and the legend under the list (at night at 1366 x 768 the card under the
+ *  'legend' the card under the map and the legend straight under the list, no gap between (lane w-labels3:
+ *           the gap was the four pixels lastTrams2240's second departure lacked);
+ *           at night at 1366 x 768 the card under the
  *           list leaves it 154 px for 236 to 322 px of promises, and the map under card and legend is 159 px).
  *  The card goes under the list whenever the list keeps its promises there (the map is then the largest it
  *  can be; lane w-labels, as D5.9 ships by day); else the legend goes under the list if the map is legible
  *  and the list keeps its promises there (at night); else decision 50's stands (the promises win). All px
  *  are the display's; nothing measured (0) moves nothing. */
 export type CompactPlacement = 'map' | 'aside' | 'legend';
-export interface CompactBox { windowPx: number; gapPx: number; cardPx: number; legendPx: number; listOverheadPx: number; floorPx: number; minMapPx: number }
+export interface CompactBox {
+  windowPx: number; gapPx: number; cardPx: number; legendPx: number; listOverheadPx: number; minMapPx: number;
+  /** The rows the fit never drops: first/last trams, the timeless row, the lead departure. */
+  floorPx: number;
+  /** Those plus the second and third departures the timetable offers, at the smallest row (lane w-labels3). */
+  fullPx?: number;
+}
+/** Decision 50 refined (lane w-labels3): the promises first, then departures up to three, then map height -- but
+ *  the map never below its legible minimum. So the largest map is taken among the arrangements whose map is
+ *  legible and whose list holds the promises AND the departures on offer (fullPx); only when none does is the
+ *  list held to its promises alone (floorPx, one departure); decision 50's is the last word. */
 export function compactArrangement(b: CompactBox): { placement: CompactPlacement; mapPx: number; listPx: number } {
   const map = { placement: 'map' as const, mapPx: b.windowPx - b.gapPx - b.cardPx - b.legendPx, listPx: b.windowPx - b.listOverheadPx };
   if (!(b.windowPx > 0)) return map;
   const aside = { placement: 'aside' as const, mapPx: b.windowPx - b.legendPx, listPx: b.windowPx - b.gapPx - b.cardPx - b.listOverheadPx };
-  if (aside.listPx >= b.floorPx) return aside;
-  const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.gapPx - b.legendPx };
-  if (legend.mapPx >= b.minMapPx && legend.listPx >= b.floorPx) return legend;
+  const legend = { placement: 'legend' as const, mapPx: b.windowPx - b.gapPx - b.cardPx, listPx: b.windowPx - b.listOverheadPx - b.legendPx };
+  const byMap = [aside, legend, map];
+  for (const need of [Math.max(b.floorPx, b.fullPx ?? 0), b.floorPx]) {
+    const pick = byMap.find((a) => a.mapPx >= b.minMapPx && a.listPx >= need);
+    if (pick) return pick;
+  }
   return map;
 }
 export interface InvitationModel {
@@ -153,7 +168,10 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       legendPx:legend?.offsetHeight??0,listOverheadPx:Math.max(0,timeline.element.offsetHeight-rows.clientHeight),
       floorPx:promisesPx(rows),minMapPx:MAP_MIN_HEIGHT_PX*zoom,
     };
-    const next=refused===promiseKey(rows)?'map':compactArrangement(box).placement;
+    // The second and third departures on offer (the model's, not the ones this box happened to show), at the smallest row.
+    const offered=Math.min(3,model?.items.filter(row=>row.kind==='departure').length??0);
+    const fullPx=box.floorPx+Math.max(0,offered-1)*ROW_MIN_PX*zoom;
+    const next=refused===promiseKey(rows)?'map':compactArrangement({...box,fullPx}).placement;
     element.dataset.mapFloor=String(Math.round(box.minMapPx));
     return set(next);
   }
