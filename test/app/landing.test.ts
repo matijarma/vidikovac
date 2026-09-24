@@ -230,6 +230,10 @@ describe('static story and localized captures', () => {
     expect(doc.querySelector('.ld-nav a[href="/s/"]')).not.toBeNull();
     expect(doc.querySelector('.ld-nav a[href="/hitno"]')).not.toBeNull();
     expect(doc.querySelector('a[href="/prijava/"]')).not.toBeNull();
+    // The one landing link to the public statistics, beside the privacy principle it proves.
+    const stats = doc.querySelector('.ld-principles a[href="/statistika/"]');
+    expect(stats).not.toBeNull();
+    expect(stats!.closest('dd')!.querySelector('[data-i18n="landing.purpose.countBody"]')).not.toBeNull();
   });
   it('reserves image geometry and keeps the largest first-viewport variant under 200 kB', () => {
     for (const image of doc.querySelectorAll('img')) {

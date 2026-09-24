@@ -155,6 +155,7 @@ picture[data-failed='1'] img { display: none; }
 .ld-principles > div { display: grid; gap: .5rem; padding-block-end: 1.75rem; border-block-end: 1px solid var(--tone-stroke); }
 .ld-principles dt { font-size: 1.125rem; font-weight: 700; }
 .ld-principles dd { margin: 0; max-inline-size: 53ch; color: var(--tone-text-muted); font-size: 1rem; line-height: 1.65; }
+.ld-principles dd .ld-principle-link { display: flex; inline-size: fit-content; margin-block-start: .25rem; color: var(--tone-text-primary); }
 .ld-proposal { display: grid; justify-items: start; gap: .75rem; margin-block-start: 2rem; }
 .ld-proposal p { max-inline-size: 55ch; font-size: .875rem; line-height: 1.65; color: var(--tone-text-muted); }
 .ld-proposal a { font-size: .875rem; }

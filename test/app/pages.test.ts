@@ -9,7 +9,7 @@ const DEVIATION =
 describe('vite multi-page inputs', () => {
   it('builds every page of the product', () => {
     const input = (config as { build?: { rollupOptions?: { input?: Record<string, string> } } }).build!.rollupOptions!.input!;
-    expect(Object.keys(input).sort()).toEqual(['d', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's'].sort());
+    expect(Object.keys(input).sort()).toEqual(['d', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's', 'statistika'].sort());
     for (const path of Object.values(input)) expect(path.endsWith('index.html')).toBe(true);
   });
   it('injects the source list into /izvori at build time', () => {
@@ -32,7 +32,7 @@ describe('static pages', () => {
     expect(html).not.toContain('Plaća se pažnjom');
     expect(html).toContain('Nitko ništa ne plaća, ni novcem ni pažnjom');
     expect(html).toContain('bez koda i bez ograničenja trajanja');
-    for (const href of ['/hitno', '/s/', '/kiosk/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/', '/prijava/']) {
+    for (const href of ['/hitno', '/s/', '/kiosk/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/', '/prijava/', '/statistika/']) {
       expect(html, href).toContain(`href="${href}"`);
     }
     expect(html).toContain('href="/src/ui/tokens.css"');
@@ -100,6 +100,30 @@ describe('static pages', () => {
       expect(html, path).not.toContain('data-testid="lang-slot"');
       expect(html, path).toContain('<html lang="hr">');
     }
+  });
+  it('/statistika is a prose-family page: skip link, wordmark, one h1, the six-link footer, prose that stands without JS', () => {
+    const html = read('app/statistika/index.html');
+    expect(html).toContain('<html lang="hr">');
+    expect(html).not.toContain('<style>');
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
+    expect((html.match(/<h1\b/g) ?? []).length).toBe(1);
+    expect(html).toContain('<a class="skip-link" href="#sadrzaj">');
+    expect(html).toContain('id="sadrzaj"');
+    expect(html).toContain('Kaj ima<span class="mark">?</span>');
+    expect(html).toContain('<link rel="stylesheet" href="/src/ui/tokens.css">');
+    expect(html).toContain('src="/src/entries/statistika.ts"');
+    for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/']) expect(html, href).toContain(`href="${href}"`);
+    // The explanation is static: the threshold rule, the six fields and the City's terms read without the numbers.
+    expect(html).toContain('Pravilo praga: nijedan broj manji od 10');
+    expect(html).toContain('<dt>dimenzija 2</dt>');
+    expect(html).toContain('pod trajnom, besplatnom i neisključivom licencom s pravom objave');
+    expect(html).toContain('<noscript>');
+    for (const id of ['ukratko', 'kako-brojimo', 'koristenje', 'za-grad', 'izvori', 'tramvaji', 'otvoreno']) {
+      expect(html, id).toContain(`id="${id}"`);
+      expect(html, id).toContain(`href="#${id}"`);
+    }
+    // Counting what is shown here would be a counter the privacy page does not list: the page makes no beacon call.
+    expect(read('app/src/entries/statistika.ts')).not.toMatch(/sendBeacon|\/api\/(?!statistika)/);
   });
   it('/privatnost lists the ten privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');
