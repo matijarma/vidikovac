@@ -20,6 +20,8 @@ import hr from '../i18n/hr.json';
 import type { I18n } from '../i18n/i18n';
 import { escapeHtml } from '../ui/dom/escape';
 import { loadNetwork, type Network } from '../../../shared/motion/network';
+import type { Fix } from './integrator';
+import { createReloadBudget } from './network-reload';
 import { DEFAULT_CROP, ROUTE_TYPE_TRAM, wholeNetworkCrop, type Crop } from './schematic';
 import { mountSchematicView, type SchematicUpdate, type SchematicViewHandle } from './schematic-view';
 
@@ -55,6 +57,10 @@ export interface SchematicHostDeps {
    *  with two hosts (the kiosk: the locked stage and the unlocked layer)
    *  passes one memoised loader so the artefact is fetched once. */
   loadNetwork?: () => Promise<Network | null>;
+  /** The artefact fetched past the HTTP cache once the motion names another
+   *  graph than the one drawn on (city-map.ts's option of the same name);
+   *  defaults to loadNetwork over fetch with cache: 'reload'. */
+  reloadNetwork?: () => Promise<Network | null>;
   /** See SchematicViewDeps: closes an open tap card on an idle public screen. */
   cardIdleMs?: number;
   setTimer?: (fn: () => void, ms: number) => unknown;
@@ -95,14 +101,24 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
   let paused = false;
   let view: SchematicViewHandle | null = null;
   let pending: { data: SchematicUpdate; at: number | undefined } | null = null;
+  /** The network the view was mounted on, and the graph the motion names (city-map.ts acceptNetwork). */
+  let net: Network | null = null;
+  let expectedNetwork: string | undefined;
+  let networkBlocked = false;
+  let networkRequest: Promise<void> | null = null;
+  // update() runs on every render and repaint: one reload attempt per poll interval (network-reload.ts), on the update's own clock.
+  const reloadBudget = createReloadBudget();
+  const clock = (): number => deps.now?.() ?? Date.now();
+  const loadingLine = `<p class="schematic-legend" data-testid="schematic-loading">${escapeHtml(i18n.t('status.loading'))}</p>`;
 
   function cropFor(net: Network | null): Crop {
     if (scope.kind === 'crop') return scope.crop ?? DEFAULT_CROP;
     return net ? wholeNetworkCrop(net, types) : DEFAULT_CROP;
   }
 
-  function mountView(net: Network | null): void {
+  function mountView(loaded: Network | null): void {
     if (destroyed || view) return;
+    net = loaded;
     slot.replaceChildren();
     view = mountSchematicView(slot, {
       i18n,
@@ -119,11 +135,53 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
       raf: deps.raf,
       cancel: deps.cancel,
     });
-    if (pending) {
+    if (paused) view.pause();
+    // Evidence that landed meanwhile may already name a newer graph than the
+    // cached artefact: reconciled before the first arc, as the map does.
+    if (pending && acceptNetwork(pending.data.fixes, pending.at ?? clock())) {
       view.update(pending.data, pending.at);
       pending = null;
     }
-    if (paused) view.pause();
+  }
+
+  /** Never evaluate a new arc on old rails, the city map's acceptNetwork on
+   *  this surface (review of D3, finding 3): a fix naming another graph than
+   *  the view was mounted on takes the view down to the loading line, marks
+   *  the host stale and reloads the artefact with cache: 'reload'; the view is
+   *  remounted on the graph when its hash is the one named, and the evidence
+   *  kept meanwhile replayed into it. A failed or wrong-graph load is asked
+   *  again at the next poll interval, at most once per interval however often
+   *  update() runs. A lightweight host never fetches (R-L4). */
+  function acceptNetwork(fixes: readonly Fix[], at: number): boolean {
+    if (lightweight) return true;
+    expectedNetwork = fixes.find((f) => f.network)?.network ?? expectedNetwork;
+    const drawnOn = net && 'graphHash' in net ? net.graphHash : undefined;
+    if (!expectedNetwork || (drawnOn === expectedNetwork && !networkBlocked)) return true;
+    if (!networkBlocked) {
+      networkBlocked = true;
+      element.dataset.networkStale = 'true';
+      view?.destroy();
+      view = null;
+      slot.innerHTML = loadingLine;
+    }
+    if (!networkRequest && reloadBudget.take(at)) {
+      const requested = expectedNetwork;
+      const reload = deps.reloadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' })));
+      networkRequest = (async () => {
+        const loaded = await reload();
+        if (destroyed || requested !== expectedNetwork || !loaded || !('graphHash' in loaded) || loaded.graphHash !== expectedNetwork) return;
+        reloadBudget.reset();
+        networkBlocked = false;
+        delete element.dataset.networkStale;
+        mountView(loaded);
+      })().catch(() => {
+        // Last-good geometry is not usable for this payload. Retry next poll interval.
+      }).finally(() => {
+        networkRequest = null;
+        if (!destroyed && requested !== expectedNetwork && pending) acceptNetwork(pending.data.fixes, pending.at ?? clock());
+      });
+    }
+    return false;
   }
 
   return {
@@ -136,7 +194,7 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
         // of stops it cannot know, honest about the vehicles it can count.
         mountView(null);
       } else {
-        slot.innerHTML = `<p class="schematic-legend" data-testid="schematic-loading">${escapeHtml(i18n.t('status.loading'))}</p>`;
+        slot.innerHTML = loadingLine;
         // loadNetwork() resolves null on every failure, so this only ever
         // rejects if the injected loader itself throws synchronously-late;
         // even then the honest state is a view with no geometry, not a
@@ -146,8 +204,14 @@ export function createSchematicHost(deps: SchematicHostDeps): SchematicHost {
       return element;
     },
     update(data, now) {
-      if (view) view.update(data, now);
-      else pending = { data, at: now };
+      // Before the artefact has settled the evidence waits for the view; once
+      // it has, or while a replacement graph is on its way, the graph the
+      // evidence names is checked first (and a failed reload retried).
+      if ((view || networkBlocked) && acceptNetwork(data.fixes, now ?? clock()) && view) {
+        view.update(data, now);
+        return;
+      }
+      pending = { data, at: now };
     },
     pause() {
       paused = true;

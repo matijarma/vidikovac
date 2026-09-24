@@ -212,12 +212,23 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let sentenceFetchKey = '';
   let sentenceAskedAt = -Infinity;
   let sentenceFetchSeq = 0;
+  let networkRefresh: Promise<Network | null> | null = null;
   const loadNetworkOnce = (refresh = false): Promise<Network | null> => {
     // Karta replaces this shared cache after a deploy, so later map mounts
-    // cannot reinstall the graph the current map just rejected.
-    if (!networkPromise || refresh) networkPromise = (deps.loadNetwork ?? (() => loadNetwork(
-      refresh ? (input, init) => fetch(input, { ...init, cache: 'reload' }) : fetch, lightweight,
-    )))();
+    // cannot reinstall the graph the current map just rejected. The map and
+    // the schematic host both ask past the cache after one deploy: a forced
+    // request still pending is the answer to the second asker too.
+    if (refresh) {
+      if (!networkRefresh) {
+        const request = (deps.loadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' }), lightweight)))();
+        networkRefresh = request;
+        networkPromise = request;
+        const settled = (): void => { if (networkRefresh === request) networkRefresh = null; };
+        request.then(settled, settled);
+      }
+      return networkRefresh;
+    }
+    if (!networkPromise) networkPromise = (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
     return networkPromise;
   };
   const maps = createMapSlots(

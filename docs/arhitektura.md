@@ -223,7 +223,11 @@ Preferencija `kajima:map-mode:v1` vrijedi samo na uređaju (`map` ili `schema`,
 zadano `map`). Na zaslonu `?prikaz=shema|karta` ima prednost i preživljava
 čišćenje jednokratnog fragmenta. Promet mijenja map-slot, oslobađa stari
 renderer i pamti zadnju geografsku kameru. Shema i njezina imovina učitavaju
-se dinamički; lagano ih nikada ne dohvaća. Kvart se otvara kao zasebni pogled,
+se dinamički; lagano ih nikada ne dohvaća. Kad kretanje na žici nazove drugi
+graf (`graphHash`) od onoga na kojem se crta, karta i shema jednako postupaju:
+brišu oznake, ponovno dohvaćaju mrežni artefakt mimo predmemorije i nove lukove
+crtaju tek na novom grafu; neuspjeli dohvat ostaje prazan i ponavlja se sa
+sljedećom anketom. Kvart se otvara kao zasebni pogled,
 bez stalne druge karte uz radni prostor. `stale` nastavlja plan, samo `down` zaustavlja
 slike; pauza sesije i uništavanje čiste petlju, događaje i zakašnjele dohvate.
 
