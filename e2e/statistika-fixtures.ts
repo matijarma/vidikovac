@@ -5,7 +5,7 @@
 // venue use, every system table), sparse (a trickle that the threshold mostly
 // swallows) and empty (a fresh deployment).
 import type { LiveTables, PublicStats, StatistikaWindow } from '../shared/statistika';
-import type { MetricsDailyRow, MetricsTotalRow } from '../worker/metrics-do';
+import type { MetricsDailyRow, MetricsTotalRow } from '../worker/metrics-rows';
 import { buildPublicStats } from '../worker/stats/public';
 
 export type FixtureShape = 'busy' | 'sparse' | 'empty';

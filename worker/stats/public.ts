@@ -32,7 +32,7 @@ import {
   type SystemStats,
   type UsageScope,
 } from '../../shared/statistika';
-import type { MetricsDailyRow, MetricsTotalRow } from '../metrics-do';
+import type { MetricsDailyRow, MetricsTotalRow } from '../metrics-rows';
 import { areaName, isAreaSlug } from '../pairing/areas';
 import { CITY_MIN_CELL, CITY_ROUND_TO, OSTALO, cityRows, foldCells, type CityRow, type FoldCell } from './export';
 

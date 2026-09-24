@@ -96,8 +96,11 @@ async function show(): Promise<void> {
   markRange();
   try {
     const stats = await load(days);
+    const first = current === null;
     current = stats;
     renderAll(stats, scope ?? defaultScope(stats), onScope);
+    // A link to a chart (#graf-cetvrti) names an element the numbers just drew.
+    if (first && location.hash.length > 1) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
   } catch {
     renderError(() => void show());
   } finally {

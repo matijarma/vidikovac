@@ -17,7 +17,7 @@
 // threshold is dropped. Days are never merged with each other. The public
 // report (/statistika/) folds with the very same foldCells, so every number it
 // shows about people is a sum of cells this file would publish.
-import type { MetricsDailyRow } from '../metrics-do';
+import type { MetricsDailyRow } from '../metrics-rows';
 
 export const RAW_COLUMNS = ['day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;
 export const CITY_COLUMNS = ['month', 'day', 'hour', 'event', 'dim1', 'dim2', 'count'] as const;

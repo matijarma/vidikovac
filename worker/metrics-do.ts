@@ -25,18 +25,11 @@ import { isMetricEvent, zagrebDayHour } from './metrics';
 // header comment for the full reconciliation.
 export { METRICS_DO_NAME } from './metrics-do-name';
 
-/** One row of the aggregate counter table. `day` is YYYY-MM-DD and `hour` is
- *  0-23, both Europe/Zagreb. A type alias, not an interface: SqlStorage#exec's
- *  row constraint is satisfied through the implicit index signature only
- *  aliases get. */
-export type MetricsDailyRow = {
-  day: string;
-  hour: number;
-  event: string;
-  dim1: string;
-  dim2: string;
-  count: number;
-};
+// The row shapes live in the dependency-free worker/metrics-rows.ts, so code
+// that only reads rows (the exports, the public report, the e2e fixtures)
+// never has to resolve 'cloudflare:workers' to type-check.
+import type { MetricsDailyRow, MetricsTotalRow } from './metrics-rows';
+export type { MetricsDailyRow, MetricsTotalRow } from './metrics-rows';
 
 /** One entry of a batched write via {@link MetricsDO.recordMany}; same shape
  *  {@link MetricsDO.record}'s parameters take. */
@@ -65,16 +58,6 @@ export const QUERY_MAX_ROWS = 50_000;
 /** How long an hourly cell is kept: 24 months, the promise of /privatnost/
  *  point 6. Enforced on write, at most once per Zagreb day. */
 export const RETENTION_DAYS = 730;
-
-/** One aggregated cell of {@link MetricsDO.totals}: `day` is '' when the
- *  window was summed across days. */
-export type MetricsTotalRow = {
-  day: string;
-  event: string;
-  dim1: string;
-  dim2: string;
-  count: number;
-};
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 

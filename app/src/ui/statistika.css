@@ -16,6 +16,10 @@
   overflow-x: clip;
 }
 .st-body h1, .st-body h2, .st-body h3 { text-wrap: balance; }
+/* Hidden labels sit at the start of their own box: at the end of a nowrap
+   line they would push the page sideways at 200 % text. */
+.st-body .visually-hidden { inset-block-start: 0; inset-inline-start: 0; }
+.st-stack-summary, .st-bar-value, .st-body .segment, .st-kpi { position: relative; }
 /* The skip link waits above the page; its shadow must not wait in view. */
 .st-body .skip-link:not(:focus) { box-shadow: none; }
 .st-body p { text-wrap: pretty; }
@@ -129,7 +133,8 @@
 .st-grid { display: grid; gap: var(--sp-4); }
 @media (min-width: 60rem) { .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .st-card-wide { grid-column: 1 / -1; } }
 .st-skeleton-tall { min-block-size: 18rem; grid-column: 1 / -1; }
-.st-card { display: grid; align-content: start; gap: var(--sp-3); padding: clamp(1rem, 2.5vw, 1.5rem); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); min-inline-size: 0; }
+/* Layouts inside a card follow the card's own width (a container query, whose rem is the reader's text size), not the viewport's. */
+.st-card { container: st-card / inline-size; display: grid; align-content: start; gap: var(--sp-3); padding: clamp(1rem, 2.5vw, 1.5rem); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); min-inline-size: 0; }
 .st-card h3 { font-size: var(--type-head); letter-spacing: -0.01em; }
 .st-card-lede { color: var(--tone-text-muted); font-size: var(--type-control); line-height: 1.5; max-inline-size: 70ch; }
 .st-card-text { font-size: var(--type-control); line-height: 1.5; }
@@ -164,7 +169,7 @@
 /* Bars: a breakdown over the window, direct-labelled. */
 .st-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); counter-reset: rank; }
 .st-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'label value' 'track track'; gap: var(--sp-1) var(--sp-3); align-items: center; padding: var(--sp-1) var(--sp-2); margin-inline: calc(-1 * var(--sp-2)); border-radius: var(--r-sm); }
-@media (min-width: 36rem) { .st-bar { grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) auto; grid-template-areas: 'label track value'; } }
+@container st-card (min-width: 30rem) { .st-bar { grid-template-columns: minmax(0, 14rem) minmax(4rem, 1fr) auto; grid-template-areas: 'label track value'; } }
 .st-bar.is-lit { background: var(--tone-tint-action); }
 .st-bar-label { grid-area: label; display: grid; font-size: var(--type-control); line-height: 1.35; min-inline-size: 0; }
 .st-bars-ranked .st-bar { counter-increment: rank; }
@@ -186,7 +191,7 @@
 .st-swatch { inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; }
 .st-stack-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
 .st-stack { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'label summary' 'track track'; gap: var(--sp-1) var(--sp-3); align-items: center; }
-@media (min-width: 40rem) { .st-stack { grid-template-columns: minmax(8rem, 13rem) minmax(0, 1fr) minmax(7rem, auto); grid-template-areas: 'label track summary'; } }
+@container st-card (min-width: 36rem) { .st-stack { grid-template-columns: minmax(0, 13rem) minmax(4rem, 1fr) auto; grid-template-areas: 'label track summary'; } }
 .st-stack-label { grid-area: label; font-size: var(--type-control); line-height: 1.35; }
 .st-stack-track { grid-area: track; position: relative; display: flex; gap: 2px; block-size: 1.125rem; }
 .st-part { display: block; flex-basis: 0; min-inline-size: 3px; block-size: 100%; }
@@ -221,7 +226,7 @@
 
 /* The map: districts shaded by value, or quiet outlines under numbered dots. */
 .st-map-layout { display: grid; gap: var(--sp-5); align-items: start; }
-@media (min-width: 52rem) { .st-map-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@container st-card (min-width: 44rem) { .st-map-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .st-map-slot { min-inline-size: 0; }
 .st-map-slot .skeleton { min-block-size: 16rem; }
 .st-map { display: block; inline-size: 100%; block-size: auto; max-block-size: 26rem; overflow: visible; }
