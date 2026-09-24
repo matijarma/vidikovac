@@ -1577,8 +1577,9 @@ describe('the evidence a failing row points to (lane v-observe6)', () => {
     const ctx = { now: () => T0, actions };
     const page = { evaluate: async () => ({ found: false, rect: null, atPoint: null, covered: null }) };
     await expect(act(page as never, ctx, { step: 's', action: 'click', selector: 'x:visible' }, async () => 7)).resolves.toBe(7);
-    const boom = new Error('page.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for locator');
+    const boom = new Error('page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator\u001b[22m');
     await expect(act(page as never, ctx, { step: 't', action: 'click', selector: 'x:visible' }, async () => { throw boom; })).rejects.toBe(boom);
+    expect(actions[1].error).toEqual(['page.click: Timeout 10000ms exceeded.', 'Call log:', '  - waiting for locator']);
     expect(actions.map((a) => [a.step, a.ok, a.hit])).toEqual([['s', true, undefined], ['t', false, { found: false, rect: null, atPoint: null, covered: null }]]);
   });
 });

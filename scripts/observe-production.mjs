@@ -565,8 +565,8 @@ const phoneSpec = (inventory) => {
 const errText = (e) => String(e && e.message ? e.message : e).split(/\r?\n/)[0].slice(0, 300);
 /** An error's first line and the call log Playwright appends (what it was waiting for), on one line. */
 const errDetail = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 6).join(' ').slice(0, 600);
-/** Playwright's whole message, the call log included, line by line (at most 40 lines). */
-const callLog = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim()).slice(0, 40);
+/** Playwright's whole message, the call log included, line by line (at most 40 lines), without its terminal colour codes. */
+const callLog = (e) => String(e && e.message ? e.message : e).replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim()).slice(0, 40);
 const zagreb = (ms) => new Date(ms).toLocaleString('hr-HR', { timeZone: 'Europe/Zagreb', hour12: false });
 
 /** One census value: "count:N;reason:n…" (the kiosk root) or a bare "N" (the timeline); anything else keeps its raw text and no count. */
