@@ -138,6 +138,43 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
   };
 }
 
+// --- the list's first draw ---------------------------------------------------------
+
+/** The feeds "U blizini" takes rows from besides the city catalogue (Sada's own modules, layers/index.ts). */
+export const NEARBY_SOURCE_MODULES = ['zet-rt', 'prometnice', 'dogadanja'] as const;
+
+/** The longest Sada's list keeps its reserved rows for a source still on its way, from the first draw that held. */
+export const NEARBY_HOLD_MS = 4_000;
+
+/** Per page (its repaint hook, the same function on every draw): when its list began to hold, or true once drawn. */
+const holds = new WeakMap<object, number | true>();
+
+/**
+ * Whether Sada's list should still hold its reserved rows: the city catalogue is loading, or one of
+ * NEARBY_SOURCE_MODULES has neither a snapshot nor an error yet. Each source arriving on its own inserted rows
+ * between rows already on screen (a first tram at the top, closures and openings in the middle) and moved the rest
+ * under the reader's eyes (lane/v-perf: layout shifts on /d/ Sada); holding until they have all answered draws the
+ * rows once. The hold ends for good at the first draw that finds nothing pending or NEARBY_HOLD_MS after it began,
+ * so a later catalogue load (Karta asking for streets) never takes drawn rows back and a slow source never hides
+ * the list for long. A context with no page behind it (no onLocalData: a unit context) and an ended session
+ * never hold.
+ */
+export function nearbyHeld(ctx: LayerContext): boolean {
+  const page = ctx.onLocalData;
+  if (!page || ctx.frozenAt !== undefined || ctx.session?.frozen) return false;
+  const state = holds.get(page);
+  if (state === true) return false;
+  const pending = Boolean(ctx.city?.loading)
+    || NEARBY_SOURCE_MODULES.some((module) => ctx.snapshots[module] === undefined && ctx.errors?.[module] === undefined);
+  const since = state ?? ctx.now;
+  if (!pending || ctx.now - since >= NEARBY_HOLD_MS) {
+    holds.set(page, true);
+    return false;
+  }
+  holds.set(page, since);
+  return true;
+}
+
 // --- the feed module, loaded once ------------------------------------------------
 
 export type SadaFeedModule = typeof import('./nearby-markup');
