@@ -53,6 +53,25 @@ describe('pills on a short map', () => {
     expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, pillsYield: false }, scale: 2 }))).toBe(JSON.stringify(full));
   });
 
+  // The own name is drawn under the pills (decision 19), so on a strip a hub pill standing on the place
+  // covered it (Trg at 714 x 413: the fourteen tram lines' pill lay on "Trg bana J. Jelačića"). An unseen
+  // copy of the name above the pills is placed first, and a pill that would cover the name yields.
+  it('keeps the own name clear of the pills on a strip with an unseen copy placed before them', () => {
+    const ids = (layers: ReturnType<typeof overlayLayers>) => layers.map((l) => l.id);
+    const strip = overlayLayers(OVERLAY_DARK, { prozor: { ...PROZOR, pillsYield: true }, scale: 2 });
+    const guard = strip.find((l) => l.id === LAYERS.screenStopGuard)!;
+    const own = strip.find((l) => l.id === LAYERS.screenStopLabel)!;
+    expect(ids(strip).indexOf(LAYERS.screenStopGuard)).toBeGreaterThan(ids(strip).indexOf(LAYERS.vehicles));
+    expect(guard.source).toBe(own.source);
+    for (const key of ['text-field', 'text-font', 'text-size', 'text-anchor', 'text-offset', 'text-max-width']) expect(guard.layout![key], key).toEqual(own.layout![key]);
+    expect(guard.layout!['text-allow-overlap']).toBe(true);
+    expect(guard.layout!['text-ignore-placement']).toBe(false);
+    expect(guard.paint!['text-opacity']).toBe(0);
+    expect(guard.filter).not.toEqual(NEVER);
+    // Off the strip the copy places nothing, so every other map keeps decision 19 exactly.
+    expect(overlayLayers(OVERLAY_DARK, { prozor: PROZOR, scale: 2 }).find((l) => l.id === LAYERS.screenStopGuard)!.filter).toEqual(NEVER);
+  });
+
   it('counts pills over pills and pills past the map’s edge, for the census', () => {
     const box = (left: number, top: number, w = 40, h = 20) => ({ left, top, right: left + w, bottom: top + h });
     expect(pillOverlaps([box(0, 0), box(30, 10), box(100, 100)])).toBe(1);
@@ -85,15 +104,25 @@ describe('the wall’s map below its legible minimum', () => {
     const zoomed = stub();
     requestKioskMap(zoomed.maps, { ...base, widthPx: 1338, heightPx: 324, displayScale: 2 }, zoomed.adapter);
     expect(first(zoomed).prozor.pillsYield).toBe(true);
+    // Tall enough but framed below the marks' floor (Trg at 669 x 457 fits at z12.3): the discs would pile, so a strip too.
+    const low = stub();
+    requestKioskMap(low.maps, { ...base, widthPx: 669, heightPx: 457 }, low.adapter);
+    expect((low.factory.mock.calls[0]![0] as { zoom: number }).zoom).toBeLessThan(12.7);
+    expect(first(low).prozor.pillsYield).toBe(true);
+    // The wall's own field frames Trg at z13.2 and keeps its discs and names.
     const tall = stub();
-    requestKioskMap(tall.maps, { ...base, widthPx: 669, heightPx: MAP_MIN_HEIGHT_PX }, tall.adapter);
+    requestKioskMap(tall.maps, { ...base, widthPx: 1170, heightPx: 803 }, tall.adapter);
     expect(first(tall).prozor.pillsYield).toBeUndefined();
     expect(first(tall).points.some((p) => p.place === 'city')).toBe(true);
     expect(first(tall).cityLabels).toBe('venues');
-    // The whole-city window follows the same rule; a phone's band never does.
+    // The whole-city window follows the height rule, not the zoom one (its small dots are drawn for z12.5);
+    // a phone's band never does.
     const city2 = stub();
     requestKioskMap(city2.maps, { ...base, placeSet: false, widthPx: 669, heightPx: 162 }, city2.adapter);
     expect(first(city2).prozor.pillsYield).toBe(true);
+    const city3 = stub();
+    requestKioskMap(city3.maps, { ...base, placeSet: false, widthPx: 669, heightPx: MAP_MIN_HEIGHT_PX }, city3.adapter);
+    expect(first(city3).prozor.pillsYield).toBeUndefined();
     const phone = stub();
     requestKioskMap(phone.maps, { ...base, handheld: true, widthPx: 356, heightPx: 160 }, phone.adapter);
     expect(first(phone).prozor.pillsYield).toBeUndefined();

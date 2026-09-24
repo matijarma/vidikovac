@@ -934,10 +934,13 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const anchor = framed ? framedPlace(input) : null;
   const frame: FrameCircle | null = anchor ? { lon: anchor.lon, lat: anchor.lat, radiusM } : null;
   const inside = (p: MapPoint): boolean => frame === null || inFrame(p, frame);
-  /** Lane w-labels: a wall's map pane below its legible minimum (map/frame.ts MAP_MIN_HEIGHT_PX, in the
-   *  display's px) is a strip -- the frame's stop rings, the own place's name and the pills alone, the
-   *  pills yielding to one another; no BAJS disc, venue, event square or city name to crowd it. */
-  const strip = cityWindow && input.handheld !== true && input.heightPx > 0 && input.heightPx < MAP_MIN_HEIGHT_PX * (input.displayScale ?? 1);
+  /** Lane w-labels: a wall's map below its legible minimum is a strip -- the frame's stop rings, the own
+   *  place's name and the pills alone, the pills yielding to one another; no BAJS disc, venue, event square
+   *  or city name to crowd it. The minimum has two faces: the pane's height (map/frame.ts MAP_MIN_HEIGHT_PX,
+   *  in the display's px), and, for a frame, its fitted zoom against the marks' own floor (FIELD_MIN_ZOOM,
+   *  below which the 40 px discs and the pills of a 2R frame pile on each other: 669 x 457 frames Trg at
+   *  z12.3). The whole-city window's small dots are drawn for its low zoom and keep it. */
+  const strip = cityWindow && input.handheld !== true && ((input.heightPx > 0 && input.heightPx < MAP_MIN_HEIGHT_PX * (input.displayScale ?? 1)) || (framed && field.zoom < FIELD_MIN_ZOOM));
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && inside(p))));
   if(input.city){
     if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}

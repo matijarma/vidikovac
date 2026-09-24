@@ -80,6 +80,7 @@ export const LAYERS = Object.freeze({
   placeSeat: 'place-seat',
   placeQuakeLabels: 'place-quake-labels',
   screenStopLabel: 'screen-stop-label',
+  screenStopGuard: 'screen-stop-guard',
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
   selectionRing: 'selection-ring',
@@ -1081,6 +1082,20 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     noseLayer(p, LAYERS.vehicleTwoWayFore, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE, s, alpha, blocks),
     noseLayer(p, LAYERS.vehicleTwoWayAft, pillsYield ? NEVER : twoWayFilter, pillZoomOf(marks), undefined, NOSE_ROTATE_AFT, s, alpha, blocks),
     pillLayer(LAYERS.vehicles, vehicleFilter(modes, selectedVehicle), pillZoomOf(marks), s, p, inks, mark, blocks, pillsYield),
+    // On a strip (pillsYield) the own name must not lie under a hub pill standing on the place: an unseen
+    // copy of it, above the pills, is placed before them, and a pill that would cover it yields. Everywhere
+    // else it places nothing, and decision 19's name under the pills is the only one.
+    {
+      id: LAYERS.screenStopGuard,
+      type: 'symbol',
+      source: SOURCES.screenStop,
+      filter: pillsYield ? ['has', 'name'] : NEVER,
+      layout: {
+        'text-field': ['get', 'name'], 'text-font': [MAP_FONTS.medium], 'text-size': (prozor ? 15 : 13) * s, ...nameAnchor(false, 0.9), 'text-max-width': 9,
+        'text-allow-overlap': true, 'text-ignore-placement': false,
+      },
+      paint: { 'text-opacity': 0 },
+    },
     // The selected vehicle's nose keeps the general nose's band (design D):
     // the triangle says the direction only between 14.5 and 16.5, and a
     // selection is no reason to draw one over a city-wide view where nothing
