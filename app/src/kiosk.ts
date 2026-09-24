@@ -464,8 +464,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         .map(id => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
       // Third-party text that fails the shared check leaves its row out; the census says how many and why.
       const skipped: ExternalTextRejection[] = [];
-      // The departures on the wall keep their slots on ETA jitter (selectNearby's heldDepartures).
-      const heldDepartures = wallItems.filter(row => row.kind === 'departure').map(row => row.id);
+      // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
+      const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures,
