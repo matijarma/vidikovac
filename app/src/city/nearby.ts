@@ -136,6 +136,8 @@ const DEPARTURE_GRACE_MS = 60_000;
 export const HELD_DEPARTURE_GRACE_MS = 60_000;
 /** A tram not on the wall displaces the shown last departure only when it reads this many displayed minutes earlier (hysteresis at the cap). */
 export const DISPLACE_MINUTES = 2;
+/** A shown tram's displayed minute changes only when its live estimate crosses the minute's boundary by this much (hysteresis on the countdown). */
+export const MINUTE_MARGIN_MS = 15_000;
 /** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
 const MORNING_FROM_MIN = 3 * 60;
 const MORNING_UNTIL_MIN = 12 * 60;
@@ -241,7 +243,7 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   // Blue is a tracked vehicle inside the countdown horizon. Past it the row is grey, and a grey row is the
   // timetable: its scheduled instant and an arrival without the vehicle, before the rows are ordered and cut,
   // so a delayed tram never reads as a timetable time it does not have (17:57 ten minutes late is 17:57, not 18:07).
-  const fresh = rows
+  const steadied = rows
     .map((arrival): ArrivalRow | null => {
       if (!arrival.live || arrival.minutes !== null) return arrival;
       const scheduled = scheduledOf.get(arrival.tripId);
@@ -258,6 +260,8 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
     .filter(arrival => vetted(input, [['headsign', arrival.headsign || undefined], ['headsign', arrival.routeName]]));
   const held = (input.heldDepartures ?? []).filter((row) => row.kind === 'departure');
   const rank = new Map(held.map((row, index) => [row.id, index] as const));
+  const heldById = new Map(held.map((row) => [row.id, row] as const));
+  const fresh = steadied.map((arrival) => steadyMinute(arrival, heldById.get(departureId(arrival)), now));
   const freshIds = new Set(fresh.map(departureId));
   // A shown departure the boards do not name this instant is carried on its last estimate: the twin drops a
   // vehicle for a snapshot, a platform board refetches without a trip (D5.3 observer: rows 34 and 32 removed and
@@ -292,6 +296,24 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
 }
 
 const departureId = (arrival: ArrivalRow): string => `dep:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`;
+
+/**
+ * Hysteresis on a shown tram's countdown. A live estimate hovering on a rounding boundary read "za 2 min" and
+ * "za 3 min" five times in thirty seconds (fix9 live block, 05:15), and the header's countdown sentence bounced
+ * with it, which the harness reads as a verbatim repeat. While the fresh estimate stays inside the displayed
+ * minute's band widened by MINUTE_MARGIN_MS, the row keeps the estimate it shows; a move past the margin, a
+ * whole-minute jump, time passing, or the vehicle leaving the twin (a timetable row) all follow the data.
+ */
+function steadyMinute(arrival: ArrivalRow, shown: NearbyRow | undefined, now: number): ArrivalRow {
+  if (!shown?.live || shown.atMs === null || !arrival.live || arrival.minutes === null) return arrival;
+  const heldMinutes = countdownMinutes(shown.atMs, now);
+  if (heldMinutes === null || heldMinutes === arrival.minutes) return arrival;
+  const ahead = arrival.atMs - now;
+  const low = (heldMinutes - 0.5) * MINUTE_MS - MINUTE_MARGIN_MS;
+  const high = (heldMinutes + 0.5) * MINUTE_MS + MINUTE_MARGIN_MS;
+  if (ahead < low || ahead > high) return arrival;
+  return { ...arrival, atMs: shown.atMs, minutes: heldMinutes };
+}
 
 /** The countdown a row shows: rounded minutes inside the horizon, none (a clock time) beyond it; shared/city/arrivals.ts's rule. */
 function countdownMinutes(atMs: number, now: number): number | null {

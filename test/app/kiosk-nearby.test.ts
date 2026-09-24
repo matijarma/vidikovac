@@ -24,7 +24,7 @@ import {
   type NearbyInput,
   type NearbyKind,
   type NearbyRow,
-  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES,
+  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS,
 } from '../../app/src/city/nearby';
 import type { FeedSnapshots, ScreenStop } from '../../app/src/core/contracts';
 import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun';
@@ -454,6 +454,44 @@ describe('the departures on the wall through a board gap and a live estimate cro
     expect(deps(pair)).toEqual(['dep:t34', 'dep:t12', 'dep:t31']);
     // With nothing held the time order alone decides.
     expect(deps(selectNearby(input(night, { boards: [board(night, [['12', 4], ['31', 5], ['6', 10], ['32', 9]])], fixes: [] })))).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+  });
+
+  it('holds a shown tram\'s displayed minute while its live estimate hovers on the rounding boundary, and follows a real move', () => {
+    // fix9 live block, 05:15: the 14's estimate hovered around two and a half minutes and the row read
+    // "za 2 min" and "za 3 min" five times in thirty seconds; the header's countdown sentence bounced with it.
+    const secs = (s: number): LiveVehicleRef[] => [{ id: 'v14', tripId: 't14', routeId: '14', delaySeconds: s }];
+    const boards = [board(night, [['14', 2], ['31', 9], ['32', 12]])]; // the 14 is scheduled two minutes out
+    const label = (rows: readonly NearbyRow[]) => Math.round((rows.find((r) => r.id === 'dep:t14')!.atMs! - night) / 1000);
+    // First seen at +2:40: "za 3 min".
+    let shown = held(selectNearby(input(night, { boards, fixes: secs(40) })));
+    expect(shown[0]!.arrival?.minutes).toBe(3);
+    // The estimate falls to +2:20 (rounds to 2, but only ten seconds past the boundary): still "za 3 min", the estimate kept.
+    let rows = selectNearby(input(night, { boards, fixes: secs(20), heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(3);
+    expect(label(rows)).toBe(160);
+    shown = held(rows);
+    // Back to +2:40, then +2:20 again: no flicker either way.
+    for (const s of [40, 20, 40, 20]) {
+      rows = selectNearby(input(night, { boards, fixes: secs(s), heldDepartures: shown }));
+      expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes, `${s} s`).toBe(3);
+      shown = held(rows);
+    }
+    // Twenty seconds past the boundary (+2:10) is a move: "za 2 min".
+    rows = selectNearby(input(night, { boards, fixes: secs(10), heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(2);
+    expect(label(rows)).toBe(130);
+    shown = held(rows);
+    // Time passing is never held: the same estimate 85 s ahead reads "za 1 min" at its natural boundary.
+    rows = selectNearby(input(night + 45_000, { boards, fixes: secs(10), heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(1);
+    expect(label(rows)).toBe(130);
+    // A whole-minute jump moves at once, and a timetable row (no vehicle) is never held to an old estimate.
+    rows = selectNearby(input(night, { boards, fixes: secs(120), heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(4);
+    rows = selectNearby(input(night, { boards, fixes: [], heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.live).toBe(false);
+    expect(label(rows)).toBe(120);
+    expect(MINUTE_MARGIN_MS).toBe(15_000);
   });
 
   it('replays the observer\'s readings 118 to 168: a board gap costs no change and a live estimate crossing the cap by a minute costs none', () => {
