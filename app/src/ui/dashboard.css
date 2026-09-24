@@ -50,7 +50,7 @@
 .present-confirm { display: grid; gap: var(--sp-3); }
 .present-confirm p, .present-feedback { font-size: var(--type-control); }
 .present-feedback { color: var(--tone-action-brand); }
-.present-private { font-size: var(--type-meta); color: var(--tone-text-muted); max-width: var(--measure-prose); }
+.present-private { font-size: var(--type-secondary); color: var(--tone-text-muted); max-width: var(--measure-prose); }
 /* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
 .ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
 .ki[data-loading='true'] .ki-head::after { opacity: 1; }

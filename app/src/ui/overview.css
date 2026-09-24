@@ -17,14 +17,16 @@
 .sada-sentence[data-kicker='bicikli'] .sada-kicker { color: var(--tone-text-primary); }
 .sada-sentence[data-kicker='bicikli'] .sada-kicker::before { content: ''; display: inline-block; inline-size: 0.5rem; block-size: 0.5rem; margin-inline-end: 0.4rem; border-radius: 50%; background: var(--tone-bike); vertical-align: 0.1em; }
 .sada-sentence[data-kicker='nocas'] .sada-kicker { color: var(--tone-text-secondary); }
-.sada-sentence-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-medium); }
+/* Two lines reserved: the phone's 80-character sentence runs to two at 390 px, and a card that changed height at every
+   20 s turn moved the band, the departures and the list under it by a line (round 1 finding F15). */
+.sada-sentence-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-medium); min-block-size: calc(2 * var(--type-body) * var(--lh-body)); }
 .sada-sentence[aria-busy='true'] .skeleton { min-block-size: 2.75rem; }
 
 /* The phone's 112 px map band around the place (mock v2, [O-31]): a still
    map, and over it one link that opens Karta. The map's credit stays above
    the link so it can be opened. */
 .sada-map { position: relative; display: block; block-size: 112px; overflow: hidden; border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-2); }
-.sada-map-canvas { position: absolute; inset: 0; }
+.sada-map-canvas { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
 .sada-map-open { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .sada-map-open:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: -3px; }
 .sada-map-canvas .maplibregl-ctrl-bottom-left, .sada-map-canvas .maplibregl-ctrl-bottom-right { z-index: 2; }
@@ -47,6 +49,7 @@
 .sada-dest { min-width: 0; font-size: var(--type-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
 .sada-departure .t-eta[data-live] { color: var(--tone-action-brand); font-weight: var(--weight-bold); }
 .sada-departure .t-eta:not([data-live]) time { color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sada-departure .t-eta-day { display: block; font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); text-align: end; }
 .sada-departure-empty { display: flex; align-items: center; color: var(--tone-text-muted); font-size: var(--type-control); }
 .sada-departure-empty .skeleton { min-block-size: 2rem; }
 /* A block on its way holds the three rows its board will fill (city/next-departures.ts DEPARTURE_ROWS), so the
@@ -66,23 +69,35 @@
 .nearby-link:active { background: var(--tone-surface-2); }
 .nearby-link:focus-visible { outline: 2px solid var(--tone-focus-ring); outline-offset: -2px; border-radius: var(--r-sm); }
 .nearby-row .k-nearby-mark { display: none; }
+/* The wall draws a row's line badge at its own size (kiosk/timeline.ts kBadge, data-size k: 46 x 60 px); on the phone the
+   badge takes the phone's m geometry (signage.css .line[data-size='m']) so a departure row in Karta's sheet is one row tall
+   (round 1 finding F14). */
+.nearby-row .k-line-badge[data-size='k'] { block-size: 2rem; min-inline-size: 2.75rem; font-size: var(--type-head); margin-inline-end: var(--sp-2); vertical-align: middle; }
 .nearby-row .k-nearby-at { display: grid; gap: 2px; min-inline-size: 0; }
 .nearby-when { font-size: var(--type-control); font-weight: var(--weight-bold); line-height: var(--lh-body); font-variant-numeric: tabular-nums; }
 .nearby-row[data-live='1'] .nearby-when { color: var(--tone-action-brand); }
 .nearby-row[data-kind='event'] .nearby-when { color: var(--tone-events); }
 .nearby-row[data-always='1'] .nearby-when { color: var(--tone-text-muted); font-weight: var(--weight-medium); font-variant-caps: all-small-caps; letter-spacing: 0.02em; }
-.nearby-row .k-nearby-day { font-size: var(--type-meta); line-height: var(--lh-body); color: var(--tone-text-muted); }
+.nearby-row .k-nearby-day { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .nearby-row .k-nearby-text { display: grid; gap: var(--sp-1); min-inline-size: 0; }
 .nearby-title { font-size: var(--type-body); line-height: var(--lh-body); font-weight: var(--weight-medium); }
 .nearby-sub { font-size: var(--type-secondary); line-height: var(--lh-body); color: var(--tone-text-muted); }
 .nearby-sub:empty { display: none; }
 .nearby-row-empty { padding-block: var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
+/* A list that settled on no row at all (a page the room refused a ticket to, round 1 finding F16) shows no bare head. */
+.nearby:not([aria-busy='true']):has(> .nearby-rows:empty) { display: none; }
 .nearby-row-empty .skeleton { min-block-size: 2.5rem; }
 @media (hover: hover) {
   .nearby-link:hover .nearby-title { color: var(--tone-action-brand); }
 }
 @container ws (max-width: 18rem) {
   .nearby-row, .nearby-link { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
+}
+/* A phone held sideways (round 1 finding F13): the sentence card and the band share one row, so the first departures
+   stand above the tab bar instead of a whole screen below it. */
+@media (max-height: 30rem) and (orientation: landscape) {
+  .ki[data-surface='phone'] .ws-sada { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .ki[data-surface='phone'] .ws-sada > :not(.sada-sentence):not(.sada-map) { grid-column: 1 / -1; }
 }
 /* The desk pair (dashboard.css .ki-desk): the feed keeps the phone's reading measure beside the map. */
 .ki[data-stage='desk'] .ws-sada { max-inline-size: 32rem; }

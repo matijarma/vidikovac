@@ -135,3 +135,46 @@ describe('the boxes that fill late hold the height of their answer (overview.css
     expect(rule('.sada-place')).toContain('min-block-size: calc(var(--type-display) * var(--lh-title))');
   });
 });
+
+describe('the band\'s map fills its 112 px box (overview.css; round 1 finding F1)', () => {
+  const ui = (name: string): string => readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', name), 'utf8');
+  const ruleOf = (css: string, selector: string): string => {
+    const at = css.indexOf(`${selector} {`);
+    expect(at, `a rule for ${selector}`).toBeGreaterThanOrEqual(0);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  it('the slot container takes the band\'s height itself: layers.css gives every .map-canvas an explicit 42vh clamp, and an absolutely placed box with an explicit height ignores its inset, so the band showed the top third of a 354 px map (the ground north of the place, never the place)', () => {
+    expect(ruleOf(ui('layers.css'), '.map-canvas')).toMatch(/block-size: clamp\(/);
+    const band = ruleOf(ui('overview.css'), '.sada-map');
+    expect(band).toContain('block-size: 112px');
+    expect(band).toContain('overflow: hidden');
+    const canvas = ruleOf(ui('overview.css'), '.sada-map-canvas');
+    expect(canvas).toContain('position: absolute');
+    expect(canvas).toContain('inset: 0');
+    expect(canvas).toMatch(/block-size: 100%/);
+    expect(canvas).toMatch(/inline-size: 100%/);
+  });
+});
+
+describe('Sada stays calm and fits a phone held sideways (overview.css; round 1 findings F13, F14, F15)', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', '..', 'app', 'src', 'ui', 'overview.css'), 'utf8');
+  const ruleOf = (selector: string, scope = css): string => {
+    const at = scope.indexOf(`${selector} {`);
+    expect(at, `a rule for ${selector}`).toBeGreaterThanOrEqual(0);
+    return scope.slice(at, scope.indexOf('}', at));
+  };
+  it('F15: the sentence card reserves two lines, so a one-line turn after a two-line one moves nothing below it', () => {
+    expect(ruleOf('.sada-sentence-text')).toContain('min-block-size: calc(2 * var(--type-body) * var(--lh-body))');
+  });
+  it('F14: a row\'s wall-size line badge takes the phone\'s m geometry inside a U blizini row', () => {
+    const badge = ruleOf(".nearby-row .k-line-badge[data-size='k']");
+    expect(badge).toContain('block-size: 2rem');
+    expect(badge).toContain('min-inline-size: 2.75rem');
+    expect(badge).toContain('font-size: var(--type-head)');
+  });
+  it('F13: in a short landscape viewport the sentence card and the band share one row and everything else spans both columns', () => {
+    const block = /@media \(max-height: 30rem\) and \(orientation: landscape\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+    expect(block).toContain(".ki[data-surface='phone'] .ws-sada { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);");
+    expect(block).toContain(".ki[data-surface='phone'] .ws-sada > :not(.sada-sentence):not(.sada-map) { grid-column: 1 / -1; }");
+  });
+});
