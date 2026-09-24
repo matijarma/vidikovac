@@ -37,7 +37,7 @@ export interface RawSchemaLine {
   stops: SchemaLineStop[];
 }
 
-/** The exact version-1 wire format from docs/plan-shema-linija.md. */
+/** The exact version-1 wire format from docs/history/plan-shema-linija.md. */
 export interface RawSchema {
   version: 1;
   source: string;

@@ -2,7 +2,6 @@ import { XMLValidator } from 'fast-xml-parser';
 import type { FetchContext, SourceAvailability } from '../../schema';
 import { parseXml, xmlArray, xmlText } from '../../xml';
 import { isoOrUndefined } from '../../time';
-import { briefRows } from '../../payload';
 import type { Precision } from '../../hr-date';
 
 // ZET (zet.hr) publishes two RSS 2.0 feeds under the Otvorena dozvola:
@@ -47,9 +46,6 @@ const ZET_FEEDS = [
 
 export type ZetRssSource = (typeof ZET_FEEDS)[number]['source'];
 
-/** How many of each feed's newest notices the kiosk ticker can show, and so how many are condensed (WP6). */
-export const ZET_RSS_BRIEF_COUNT = 3;
-
 export interface ZetRssEvent {
   id: string;
   title: string;
@@ -57,8 +53,6 @@ export interface ZetRssEvent {
   /** From <pubDate> (R-E1); absent when it's missing or doesn't parse. */
   at?: string;
   dateBasis: 'published' | 'unknown';
-  /** One-line machine-condensed reading of the headline (worker/feed/brief.ts, WP6). */
-  brief?: string;
   data: {
     source: ZetRssSource;
     precision: Precision;
@@ -138,9 +132,5 @@ export async function fetchZetRss(ctx: FetchContext): Promise<ZetRssResult> {
       ? { status: 'live', itemCount: result.value.length, totalItems: result.value.length, fetchedAt }
       : { status: 'down', itemCount: 0 };
   });
-  // Both feeds list newest first, so the ticker's candidates are the head of
-  // each; a notice with no brief still shows its own headline (WP6). After
-  // fetchedAt, which stamps the fetch and not the condensing that follows it.
-  await briefRows(ctx, ok.flatMap((items) => items.slice(0, ZET_RSS_BRIEF_COUNT)), (item) => item.title, 'obavijest');
   return { items: ok.flat(), sources };
 }

@@ -86,7 +86,7 @@ Matija, 12. rujna: oslanjamo se na rijetke podatke u stvarnom vremenu i pretpost
 
 *`graphHash`.* Ime samog grafa: sažetak nad uređenim bridovima onako kako ih nosi žica. Indeks brida znači nešto samo unutar jednog grafa, pa blizanac pri podizanju uspoređuje hash s onim u SQLite-u i, kad se razlikuje, **izbacuje sve naučeno po bridu i po čvoru** -- a od popravka I1 i nezapisanu minutu koja još stoji u retku stanja i prsten objavljenih planova, koji nosi stare indekse staza. Prazan hash je artefakt prije kruga F i računa se kao drugi graf.
 
-*Imenovane iznimke gradnje* stoje u `scripts/gtfs-shapes-overrides.json`, svaka s razlogom i mjerom: `unreachableStops`, `servedGaps` i `longLegs` na feedu 000395 su prazni, a `connectors` dodaju tri skretanja koja nijedan oblik ne crta. Na Glavnom kolodvoru istočni kolosijek Mihanovićeve završava, a sjeverni Trga kralja Tomislava počinje 6,79 m dalje, pa se dvije polilinije nikad ne sijeku; uz spoj hop Botanički vrt → Zrinjevac linija 6 i 9 ide kroz skretanje, a ne oko bloka. Druga dva spoja zatvaraju okretišne petlje na Mihaljevcu (14,66 m) i u Dubravi (1,36 m). Bez unosa gradnja **pada**: predugi obilazak je u pravilu nedostajući čvor, ne ruta.
+*Imenovane iznimke gradnje* stoje u `scripts/gtfs-shapes-overrides.json`, svaka s razlogom i mjerom: `unreachableStops`, `servedGaps` i `longLegs` na feedu 000395 su prazni, a `connectors` dodaju sedamnaest skretanja i okretišnih spojeva koje nijedan oblik ne crta. Na Glavnom kolodvoru istočni kolosijek Mihanovićeve završava, a sjeverni Trga kralja Tomislava počinje 6,79 m dalje, pa se dvije polilinije nikad ne sijeku; uz spoj hop Botanički vrt → Zrinjevac linija 6 i 9 ide kroz skretanje, a ne oko bloka. Dva spoja zatvaraju okretišne petlje na Mihaljevcu (14,66 m) i u Dubravi (1,36 m). Odlukom 25 (23. rujna 2026.) dodano je skretanje sa zapadnog kolosijeka Ilice na Republike Austrije na Trgu dr. F. Tuđmana za liniju 1 (36 m), bez kojeg se sintetičke staze linije 1 nisu mogle provesti do Zapadnog kolodvora, i trinaest okretišnih spojeva od kraja dolaznog oblika do početka odlaznog, ravnih ili s jednom međutočkom i najviše 300 m dugih, ondje gdje oblici stanu prije okretišne petlje koju tramvaj stvarno vozi; mjera je snimljeno kretanje tramvaja 21. rujna 2026. Petlja smije voziti spoj samo unutar 300 m od jednog od svoja dva perona, a sintetička staza čiji završni peron leži dalje od tračnica reže se, kao i petlja, 70 m iza završnog perona. Bez unosa gradnja **pada**: predugi obilazak je u pravilu nedostajući čvor, ne ruta.
 
 `app/public/data/zet-trips.json` (R-TE16) je indeks vožnji: obrasci s redoslijedom stajališta i medijanom rasporednih sekundi između susjednih stajališta po satu, vožnje kodirane sažeto, blokovi. Oba artefakta dekodira `shared/motion/` (bez DOM-a), pa ih čitaju i Worker i klijent.
 
@@ -209,8 +209,8 @@ vozila su na odvojenim platnima; statika se ne crta ponovno za svaku sliku.
 fokusa između geografskog i novog koordinatnog sustava. Izbor na shemi
 otvara postojeći list prijevoza, ne dijalog. Nazivi koriste Manrope i postaju
 vidljivi od 1,4 CSS px po jedinici izvornika (oko 11px za izvornih 7,92).
-Javni zaslon s prikazom sheme pokazuje cijelu mrežu u jednom kadru i imenuje
-je nazivima iz nacrta od najmanje 28px, onoliko koliko ih stane bez
+Javni zaslon s prikazom sheme pokazuje cijelu mrežu u jednom kadru, s
+nazivima iz nacrta od najmanje 28px, onoliko koliko ih stane bez
 preklapanja: najprije okretišta, zatim stajališta na kojima staje najviše
 linija. Telefon kadrira svoje stajalište na čitljivoj skali, s podom naziva
 24px; bez prepoznatog stajališta pokazuje cijelu mrežu bez naziva. Početni kadar
@@ -223,7 +223,11 @@ Preferencija `kajima:map-mode:v1` vrijedi samo na uređaju (`map` ili `schema`,
 zadano `map`). Na zaslonu `?prikaz=shema|karta` ima prednost i preživljava
 čišćenje jednokratnog fragmenta. Promet mijenja map-slot, oslobađa stari
 renderer i pamti zadnju geografsku kameru. Shema i njezina imovina učitavaju
-se dinamički; lagano ih nikada ne dohvaća. Kvart se otvara kao zasebni pogled,
+se dinamički; lagano ih nikada ne dohvaća. Kad kretanje na žici nazove drugi
+graf (`graphHash`) od onoga na kojem se crta, karta i shema jednako postupaju:
+brišu oznake, ponovno dohvaćaju mrežni artefakt mimo predmemorije i nove lukove
+crtaju tek na novom grafu; neuspjeli dohvat ostaje prazan i ponavlja se sa
+sljedećom anketom. Kvart se otvara kao zasebni pogled,
 bez stalne druge karte uz radni prostor. `stale` nastavlja plan, samo `down` zaustavlja
 slike; pauza sesije i uništavanje čiste petlju, događaje i zakašnjele dohvate.
 
@@ -235,9 +239,9 @@ uključen na svakom zumiranju, pa MapLibreov sudarni prolaz nijednu oznaku ne od
 ispod oznaka vozila. Na telefonu i računalu uključen je i `icon-ignore-placement`, pa nijedna oznaka ne gura
 naziv stajališta s karte. Na javnom zaslonu (odluka 17) oznake vozila zadržavaju svoje mjesto: naziv
 stajališta ili mjesta najprije se premjesti na drugu stranu točke, a ako ni ondje nema mjesta, skloni se dok
-vozilo ne prođe. Naziv koji se vrati ostaje na karti najmanje dvije sekunde, osim ako ga vozilo prekrije, a
+vozilo ne prođe. Naziv koji se vrati ostaje na karti najmanje dvije sekunde, osim ako vozilo prekrije taj naziv, a
 naziv koji se skloni ne vraća se prije isteka jedne sekunde (odluka 19). Naziv mjesta samog zaslona uvijek je
-na karti, ispod oznaka vozila, i drugi mu nazivi ustupaju mjesto. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
+na karti, ispod oznaka vozila, a ostali nazivi ustupaju mjesto tom nazivu. Broj u krugu stanice BAJS ostaje na svojem mjestu, a oznaka vozila koja prolazi preko
 kruga na trenutak prekrije taj broj. Ono što gužvu drži čitljivom je **skupina**:
 prije nego što se izvor gurne u kartu, oznake čije se kutije na zaslonu preklapaju (`app/src/motion/pills.ts`,
 unija-nalaz uz `CLUSTER_PADDING_PX` = 2 px oko svake kutije) spajaju se u jedno obilježje s natpisom

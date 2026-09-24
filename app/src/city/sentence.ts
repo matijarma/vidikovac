@@ -108,7 +108,7 @@ export const SENTENCE_COPY_HR = {
   sunriseTime: 'U {time} izlazi sunce.',
   lastTram: 'Zadnji tramvaj {route} polazi {time}.',
   firstTram: 'Prvi tramvaj {route} polazi {time}.',
-  event: '{time} počinje događanje „{title}“ ({venue}).',
+  event: '{time} počinje događanje „{title}” ({venue}).',
   opening: '{name}: rad počinje {time}.',
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
@@ -190,13 +190,12 @@ function nextSolar(now: number): { kind: 'sunrise' | 'sunset'; at: number } {
   return { kind: 'sunrise', at: sunTimes(new Date(today.getTime() + 86_400_000)).sunrise.getTime() };
 }
 
+/** "u 18:40", "sutra u 06:12", "25. 9. u 20:00": in the language the sentence's template is read in (copy() reads input.i18n). */
 function timedLabel(at: number, input: SentenceFactsInput): string {
-  const english = input.locale.startsWith('en');
-  if (sameZagrebDay(at, input.now)) return `${english ? 'at' : 'u'} ${clock(at)}`;
-  if (dayKey(at) === dayKey(nextMidnight(input.now) + 12 * 3_600_000)) {
-    return `${english ? 'tomorrow at' : 'sutra u'} ${clock(at)}`;
-  }
-  return `${dayMonth(at)} ${english ? 'at' : 'u'} ${clock(at)}`;
+  const time = clock(at);
+  if (sameZagrebDay(at, input.now)) return input.i18n.t('time.at', { time });
+  if (dayKey(at) === dayKey(nextMidnight(input.now) + 12 * 3_600_000)) return input.i18n.t('time.tomorrowAt', { time });
+  return input.i18n.t('time.dateAt', { date: dayMonth(at), time });
 }
 
 /** At most MAX_FACTS fact records, plus the pinned facts of the sentence on screen; solar is reserved even with a full timeline. */
@@ -354,6 +353,9 @@ export interface SentenceSequenceOptions {
 }
 export interface SentenceSequence {
   read(sentences: readonly WrittenSentence[], now: number, suspended?: boolean, overflowed?: (s: WrittenSentence) => boolean): WrittenSentence | null;
+  /** A new cadence for the same rotation: the sentence on screen, its dwell start and the ten-minute
+   *  memory of shown wordings and facts stay (decision 29); only the next boundary moves. */
+  setRhythm(rhythmMs: number): void;
 }
 
 /** Cadence is a chance to change, not permission to repeat or to show expired data.
@@ -361,7 +363,8 @@ export interface SentenceSequence {
  * window whatever its wording; with fewer than SENTENCE_MIN_FACTS distinct facts at hand the
  * window binds the wording alone, so the three solar phrasings still rotate on a cold screen. */
 export function createSentenceSequence(options: SentenceSequenceOptions): SentenceSequence {
-  const rhythm = Number.isFinite(options.rhythmMs) && options.rhythmMs > 0 ? options.rhythmMs : SENTENCE_HOLD_MS;
+  const cadence = (ms: number) => Number.isFinite(ms) && ms > 0 ? ms : SENTENCE_HOLD_MS;
+  let rhythm = cadence(options.rhythmMs);
   const noRepeat = Number.isFinite(options.noRepeatMs)
     ? Math.max(SENTENCE_NO_REPEAT_MS, options.noRepeatMs!) : SENTENCE_NO_REPEAT_MS;
   const lastSeen = new Map<string, number>();
@@ -406,9 +409,11 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
         }
       }
       // D2 ruling on decision 29: a re-selection never ends a dwell. A poll that re-ranks the rows, a tram
-      // that fell to fourth, a fact past the cap: the sentence stays to its boundary, and only its own
-      // fact expiring (or a hostile or overflowing line) ends it early.
-      if (!held && current && valid(current) && now - heldSince < rhythm) held = current;
+      // that fell to fourth, a fact past the cap: a template sentence stays to its boundary, and only its
+      // own fact expiring (or a hostile or overflowing line) ends it early. A changed fact restates a
+      // template sentence in place (the refresh above); a model sentence leaves the pool only when it no
+      // longer grounds against the current facts (kiosk.ts readWrittenSentences), which is that exception.
+      if (!held && current && current.origin === 'template' && valid(current) && now - heldSince < rhythm) held = current;
       // Retain object identity on ordinary refreshes, but update a shortened deadline.
       if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
         || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {
@@ -453,5 +458,6 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       if (current) remember(current, now, next === current && held ? held.validUntil : next!.validUntil);
       return current;
     },
+    setRhythm(rhythmMs) { rhythm = cadence(rhythmMs); },
   };
 }

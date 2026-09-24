@@ -95,15 +95,18 @@ describe('renderIzvoriHtml', () => {
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');
   });
-  // WP6: the kiosk ticker shows a machine-condensed line, not the source's
-  // own sentence. The page that names every source has to say so, and say
-  // that the original title and link are still there.
-  it('says the ticker lines are machine-condensed and the original stays', () => {
+  // The one machine step left is the header sentence (worker/feed/sentences.ts):
+  // Workers AI picks among filled templates and writes no text of its own. The
+  // per-item summaries the ticker read (FeedItem.brief) are retired (WP5 B1), so
+  // the page that names every source says what the model does now, and no more.
+  it('says the model only picks the header sentence among filled templates, and condenses nothing', () => {
     const html = renderIzvoriHtml();
     expect(html).toContain('izvor-obrada');
     expect(html).toContain(OBRADA.naslov);
-    expect(OBRADA.tekst).toMatch(/strojno saže/i);
-    expect(OBRADA.tekst).toMatch(/poveznica/i);
+    expect(OBRADA.tekst).toMatch(/Workers AI/);
+    expect(OBRADA.tekst).toMatch(/predložak|predložaka|predloške/);
+    expect(OBRADA.tekst).toMatch(/ne piše slobodan tekst/);
+    expect(`${OBRADA.naslov} ${OBRADA.tekst}`).not.toMatch(/saže|sažim|sažet|traku|traka/i);
     // Still nine source articles: the note is a section, not a tenth source.
     expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
   });

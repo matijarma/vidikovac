@@ -102,6 +102,14 @@ describe('stripMarkup', () => {
     expect(english).toContain('<span class="k-247">24/7</span>');
     expect(english).toContain('<span class="k-strip-item" data-testid="strip-sources">DHMZ · EMSC</span>');
   });
+  // Review D2b finding 4: an address the shared check refuses left the cross named "Dežurna ljekarna 24/7: .".
+  it('names the cross by its 24/7 alone when the pharmacy address is refused, never with an empty slot', () => {
+    const refused = { ...strip, parts: { ...strip.parts, pharmacy: { ...strip.parts.pharmacy, label: 'kino.xyz' } } };
+    const cell = /<span class="k-strip-item k-strip-pharmacy" data-testid="strip-pharmacy">(.*?)<\/span>\s*<\/div>/s.exec(stripMarkup(refused, s, { noBasics: false }))?.[1] ?? '';
+    expect(cell).toMatch(/^<svg data-symbol="pharmacy" class="icon k-icon k-cross" role="img" aria-label="24\/7">/);
+    expect(cell).not.toContain(': .');
+    expect(cell).not.toContain('kino.xyz');
+  });
   it('names an active warning as the trail in DHMZ\'s words, with its glyph and the level word, instead of the sources', () => {
     const modules = CALM_MODULES.map((m) => (m.module === 'dhmz-cap' ? { ...m, items: [item('dhmz-cap', 'w1', 'warning', 'Grmljavina', { severity: 'severe' })] } : m));
     const markup = stripMarkup(frameStrip(modules, STOP, i18n, s, NOW), s, { noBasics: false });

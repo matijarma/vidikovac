@@ -21,6 +21,8 @@ import {
 } from './external-text-policy';
 import { installExternalTextBoundary } from './external-text-boundary';
 import { TOP_LEVEL_DOMAINS } from './tlds';
+import { CODE_WORD_FIELDS, CODE_WORD_STREETS } from './code-word-streets';
+import { ISO_4217_CODES } from './iso-4217';
 
 export type ExternalTextKind = 'name' | 'address' | 'title' | 'summary' | 'register-text' | 'headsign';
 export type ExternalTextSurface = 'header' | 'row';
@@ -322,12 +324,37 @@ export function sentenceInstruction(text: string): boolean {
   return headerInstructionRule(text) !== null;
 }
 
-/** Structural evidence for corpus audits; production callers log codes only. */
-export function externalTextVector(value: string, kind?: ExternalTextKind): { reason: ExternalTextRejection; value: string } | null {
+// A word of a committed street's own name that is spelled like an ISO 4217 code ("Nova Ves":
+// VES) is that street, not a currency, in exactly two cases (decision 41): the bare address
+// "<register street> <house number>" (1-3 digits and an optional letter, nothing else), and the
+// committed register fields pinned byte-exact in CODE_WORD_FIELDS. Any other text, a free-text
+// prefix above all, is judged by the normal rules with no exception. Only the currency-amount
+// vector is affected, only on a row's name or address; the header surface keeps the code a
+// currency (review-w-fix6, -6b, -6c).
+const CURRENCY_CODES = new Set(ISO_4217_CODES.map(code => code.toLowerCase()));
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const REGISTER_STREETS = [...CODE_WORD_STREETS].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+const BARE_STREET_ADDRESS = new RegExp(`^(?:${REGISTER_STREETS}) \\d{1,3}[a-z]?$`, 'u');
+const STREET_IN_FIELD = new RegExp(`(?<![\\p{L}\\p{N}])(?:${REGISTER_STREETS})(?= \\d)`, 'gu');
+const REGISTER_FIELDS = new Set(CODE_WORD_FIELDS);
+/** Decided on the ORIGINAL string, before NFC or NBSP normalization: byte-exact equality with a
+ *  pinned field, or the bare grammar on the raw text. A canonical equivalent (NFD, a Kelvin sign,
+ *  an NBSP) is not the pinned field and gets no exception (review-w-fix6d). */
+function registerStreetEligible(raw: string): boolean {
+  return REGISTER_FIELDS.has(raw) || BARE_STREET_ADDRESS.test(raw);
+}
+function maskRegisterStreet(text: string): string {
+  return text.replace(STREET_IN_FIELD, street => street.replace(/\p{L}+/gu, word => CURRENCY_CODES.has(word.toLowerCase()) ? '___' : word));
+}
+
+/** Structural evidence for corpus audits; production callers log codes only. `raw` is the text as
+ *  it arrived, before normalization: the register-street exception is decided on it alone. */
+export function externalTextVector(value: string, kind?: ExternalTextKind, surface?: ExternalTextSurface, raw = value): { reason: ExternalTextRejection; value: string } | null {
   const text = foldText(value);
-  for (const { reason, source } of EXTERNAL_VECTOR_PATTERNS) {
-    const match = source.exec(text);
-    if (match) return { reason, value: match[0] };
+  const named = surface === 'row' && isNameKind(kind) && registerStreetEligible(raw) ? foldText(maskRegisterStreet(value.normalize('NFC'))) : text;
+  for (const entry of EXTERNAL_VECTOR_PATTERNS) {
+    const match = entry.source.exec('currency' in entry ? named : text);
+    if (match) return { reason: entry.reason, value: match[0] };
   }
   // Names and addresses write register shorthand without a space: "Muzej
   // suv.umjetnosti", "Inst. R.Bošković", "N.S.knjižnica", "Stud.dom S.Radić",
@@ -390,7 +417,7 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
   // Compatibility forms (fullwidth letters, ligatures, superscripts) are not register writing.
   if (text.replace(/…/gu, '').normalize('NFKC') !== text.replace(/…/gu, '')) return { ok: false, reason: 'charset' };
   const folded = foldText(text);
-  const vector = externalTextVector(text, kind);
+  const vector = externalTextVector(text, kind, surface, value);
   if (vector) return { ok: false, reason: vector.reason };
   for (const ch of text) {
     if (!/[\p{Script=Latin}0-9 ]/u.test(ch) && !rule.punctuation.includes(ch)) return { ok: false, reason: 'charset' };

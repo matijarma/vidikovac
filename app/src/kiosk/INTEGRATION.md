@@ -29,12 +29,13 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
 - `cityLabels` -- false on the city window, so the city's own places draw as
   dots and badges with no names; `'venues'` on the framed wall, where tonight's
   venues are named and the BAJS discs carry their counts without names; true
-  the moment somebody explores and on every paired presentation, whose one
-  subject has to be named on the wall. Changed live through the handle's
-  `setCityLabels`.
+  on every paired presentation, whose one subject has to be named on the wall.
+  Changed live through the handle's `setCityLabels`.
 - `hitTolerancePx` -- 28 on the kiosk (`KIOSK_HIT_TOLERANCE_PX`), against the
   map's 8 px default: a finger on a wall is not a mouse on a desk, and on the
-  city window the stop rings it aims at are three pixels across.
+  city window the stop rings it aims at are three pixels across. The wall's
+  read-only touch measures its rings against the same tolerance itself
+  (`touchAt`, below), because the map stays `interactive: false`.
 - The names, all on one line: `THIN_NAMES_ZOOM` (13.5). Below it the window
   reads differently in three ways, and above it nothing changes at all.
   `majorStreetNames` false drops the basemap's promoted `roads_labels_major`
@@ -94,18 +95,30 @@ twice for one screen and never reaches into MapLibre itself.
 Contract testids across this hand-off (global constraints, contract 8; the
 whole probe list is `docs/companion-2026-09-22.md` §15.6): `kiosk-live` names
 the field's section; `kiosk-map-host` and `kiosk-map` name the map container
-inside it, and `kiosk-map-host` carries `data-major-labels="<count>"` once the
-style idles; `map-note` is the outage note over the map. The front page carries
-no panel: beside the field it has the "U blizini" list (`nearby` >
-`nearby-head` + `nearby-rows` > `li.nearby-row`, drawn by `kiosk/timeline.ts`
-from `city/nearby.ts` `selectNearby`) over the pairing card (`kiosk-invite`,
-`kiosk-qr`). `kiosk-panel-<id>` names each panel of the paired compositions,
-which keep weather, promet, tonight, `city` and `around` with their producers.
-`kiosk-sentence` (with `kiosk-sentence-kicker` and `kiosk-sentence-text`) names
-the header's one sentence; `kiosk-lines` the lines panel's list (also the
-lagano board's, unchanged); `kiosk-lastrun` the paired promet panel's
-last-departures line from 20:00, while that panel is a configured stop's board.
-On the front page the evening's last departures are one row of the list.
+inside it, and `kiosk-map-host` carries `data-frame="4|6|8"` and, once the
+style idles, `data-major-labels="<count>"`; `map-note` is the outage
+note over the map, and `.k-map-legend` holds the three legend items of
+`kiosk.legend.*`. The front page carries no panel: beside the field it has the
+"U blizini" list (`nearby` > `nearby-head` + `nearby-rows` > `li.nearby-row`
+with `data-id`, `data-kind`, `data-when` or `data-always`, `data-live` and
+`data-source`, drawn by `kiosk/timeline.ts` from `city/nearby.ts`
+`selectNearby`) over the pairing card (`kiosk-invite`, `kiosk-qr`,
+`kiosk-code`). The list's fitter measures candidate rows in a hidden, inert
+sibling of the same width inside `.k-nearby-host`, outside the `nearby`
+section, and reconciles only the final selection into the live list, where
+an entering row is inserted once at its time position. The footer is
+`safety-strip` with `strip-verdict`, `strip-sources` (no clock time) and
+`strip-pharmacy`; on the wall (`passive`, every size but handheld) the
+verdict, the `/hitno` word and the map's attribution are plain text, and
+only a handheld keeps `kiosk-essentials-open` and the `/hitno` link.
+`kiosk-sentence` (with `kiosk-sentence-kicker` and `kiosk-sentence-text`)
+names the header's one sentence and `kiosk-brand` the brand button. The touch
+panel is `[data-testid=stop-board]` (a stop's board), mounted in
+`.k-nearby-host` only while open, which then carries `data-touch`.
+`kiosk-panel-<id>` names each panel of the paired compositions, which keep
+weather, promet, tonight, `city` and `around` with their producers;
+`kiosk-lines` names the lines panel's list (also the lagano board's,
+unchanged). The evening's last departures are one row of the list.
 
 The kiosk points are the same shapes as the dashboard's: dated vehicle points
 (evidence for the motion model), undated places (the screen's stop, drawn
@@ -132,10 +145,17 @@ dynamically imports `createSchemaMap` only for a schema request. Pending
 updates are buffered; destroying the handle before import prevents a late
 mount. Lightweight mode creates neither renderer and loads no schema code.
 
-The schema ignores geographic cameras, emphasis and outlines. It keeps the
-legible crop around the screen's stop; without a stop it fits the network
-without labels. Prozor's statements do not overlay the field, so no rail
-padding is needed and `setView` is a no-op. No district outline is fetched
+The schema ignores geographic cameras, emphasis and outlines, and it names by
+surface. On the wall's city overview (Prikaz: shema) it shows the whole
+network without zoom and always names it: `requestKioskMap` hands it no stop
+to crop round and passes the screen's own stop as `priorityStopId`, so the
+collision pass places the screen's place first and then as many names as fit
+at `WALL_LABEL_MIN_PX` (28 px), terminals first. A wall presentation that
+carries a stop keeps the legible crop around that stop, still named at 28 px.
+A handheld (`presentationProfile: 'handheld'`) keeps its own contract: a crop
+around its stop named at `KIOSK_LABEL_MIN_PX` (24 px), and without a stop the
+whole network without names. Prozor's statements do not overlay the field, so
+no rail padding is needed and `setView` is a no-op. No district outline is fetched
 for a schema field. The schema renderer itself does not load MapLibre.
 
 ## UI workstream (tokens, i18n)
@@ -144,13 +164,23 @@ for a schema field. The schema renderer itself does not load MapLibre.
   light / deep-neutral dark, peacock action). When the shared `--tone-*` set
   lands, alias `--k-canvas`, `--k-surface`, `--k-ink`, `--k-action` to it in
   one place at the top of `kiosk.css`; nothing else has to change.
-- Kiosk copy lives in `kiosk/strings-hr.ts` / `strings-en.ts` typed by
-  `KioskStrings`. Shared vocabulary (severity words, delay words, closure
-  types and plurals, `panels.temperature`, `status.loading`) is read through
-  `i18n.t` so the two surfaces agree. `common.appName` becoming "Kaj ima?"
-  needs no kiosk change (`strings.appName` already says it).
-- The old `kiosk.*` keys in `i18n/hr.json` / `en.json` (panorama, meander,
-  catalogue legends) are no longer read by any kiosk file and can be retired.
+- Kiosk copy lives in the one catalogue, `i18n/hr.json` / `en.json`, under
+  `kiosk.*`, and is read through `kiosk/strings.ts`: a thin typed adapter
+  that builds the `KioskStrings` tree once per locale and checks every key it
+  names against the Croatian catalogue at compile time (hr/en parity is
+  `test/app/i18n.test.ts`'s). Shared vocabulary is read where it lives, so
+  the two surfaces agree: the app name (`common.appName`), the domain names
+  (`layers.*`), the compass words and the canonical sentences; severity
+  words, delay words, closure types and plurals, `panels.temperature` and
+  `status.loading` go through `i18n.t` at the call site.
+- The header of `kiosk/strings.ts` names who owns which key group (the
+  wall's `kiosk.nearby.*`, `kiosk.sentence.*`, `kiosk.handheld.*`,
+  `kiosk.legend.*`, `kiosk.setup.*` and `kiosk.settings.*`); a package adds
+  keys only inside its own group, and a key nothing reads any more is
+  deleted with its last reader, except owner copy kept on purpose
+  (`OWNER_COPY`, decision 42: `kiosk.invitation` stays in both catalogues and
+  must stay unread). `test/app/i18n-orphans.test.ts` (over the shared scanner
+  `test/app/i18n-scan.ts`) fails on any other leaf nothing reads.
 
 ## Header
 
@@ -163,14 +193,27 @@ crossfade, instant under reduced motion and in lagano. The pure
 `city/sentence.ts` turns the list's own rows plus weather, closures and bikes
 into facts (`sentenceFacts`), writes the template sentences from them
 (`templateSentences`, the fallback that always exists) and sequences the pool
-(`createSentenceSequence`: a sentence past its `validUntil` is skipped, none
-repeats verbatim within ten minutes). `fetchSentences` (`api.ts`) asks
+(`createSentenceSequence`: a sentence past its `validUntil` is skipped; a
+sentence stays at least one rhythm unless its fact expires; the same fact in
+the same approved wording (`isSameSentence`) is refreshed in place, without a
+fade, and never swaps "za N min" for a clock time; `setRhythm` re-times the
+same rotation; while at least `SENTENCE_MIN_FACTS` (3) facts are at hand one
+fact is on screen at most once in ten minutes, in one wording, and below that
+no sentence repeats verbatim within ten minutes). `fetchSentences` (`api.ts`) asks
 `POST /api/kiosk/sentences` for model sentences when the facts change and at
-the latest every `SENTENCE_REFRESH_MS`, never in lagano; the Worker writes them
-with Workers AI, checks each against the facts with `shared/kiosk/sentence.ts`
-`acceptSentence`, keeps them in KV for 20 minutes and answers an empty list
-under `APP_ENV=test`, and the client checks them again against the current
-facts before they join the templates. A sentence that would overflow the cell
+the latest every `SENTENCE_REFRESH_MS`, never in lagano. The Worker offers
+Workers AI only validated template choices (`{ factId, family, slots }`,
+`shared/kiosk/sentence.ts` `sentenceTemplateChoices`); the model may only
+select among them, the chosen ones are filled from the approved templates and
+checked with `acceptSentence`, kept in KV for 20 minutes, and under
+`APP_ENV=test` the answer is an empty list. The client stages the answer
+(`stagedModelSentences`) and decodes it against the facts of the paint that
+adopts it: at once when no model sentence is on screen, otherwise at the end
+of that sentence's rhythm, or as soon as the model sentence on screen no
+longer holds. Third-party text in
+a fact or a row passes `shared/kiosk/external-text.ts` first (the header on the
+strict rule, the list's rows on the row rule); a value that fails is skipped,
+never repaired. A sentence that would overflow the cell
 is measured on a permanently laid-out, visually hidden probe and skipped,
 never cut. The session pill and the pairing notice still take that cell when
 they are present, and the notice's `role="status"` is cleared when it
@@ -200,6 +243,30 @@ controller; none of the three reaches the server. The shell paints the screen
 the DO last applied as `.kiosk[data-frame]` and `[data-place-kind]`
 (`tram`, `bus` or `address`; `city` without a chosen place) and this
 browser's choices as `[data-rhythm]` and `[data-view]`.
+
+## Read-only touch (wall)
+
+Touch on the wall never makes the map interactive. `kiosk/mapview.ts`
+`touchAt` projects the drawn stop rings (`drawnStops`, the same filter as the
+overlays) and the pharmacy's ring with `fieldPixel` from the camera the map
+reports, and returns the nearest within `KIOSK_HIT_TOLERANCE_PX`; a delegated
+`click` on the kiosk root reaches it (`touchOnMap`), and nothing moves the
+camera. The same click on a row of `nearby-rows` or on `strip-pharmacy` opens
+a panel without the map: a departure, last or first row opens the place's own
+board, the pharmacy row and the footer item the pharmacy's detail. A stop
+opens `kiosk/timeline.ts` `mountTouchPanel` with `stopBoardVariants`: the
+next `STOP_BOARD_ROWS` (3) departures in the phone's `departureRow` (loaded
+as its own chunk on the first touch, `loadStopBoardRows`), then one "Vozni
+red" line of `TIMETABLE_LINE_TRIPS` (4) later trips; a row of the list opens
+`rowDetailVariants`, the pharmacy `pharmacyDetailVariants` (the vetted
+caption, the name and the curated phone). The panel shows the first variant
+its box holds whole and closes after `TOUCH_MS` (60 s, by its timer and by
+the deadline checked on every tick and poll), when an outage starts under an
+open board, on a phase change, on a presentation and on destroy; a second
+touch replaces it. Touch does nothing on a handheld, in a paired composition
+or presentation, in Postavke and while Osnovno is open. On the schema only the
+map's ring hit test is off (`touchOnMap` returns null), so the list's rows and
+the footer's pharmacy item still open their panels.
 
 ## Backend (already in place)
 

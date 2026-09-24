@@ -11,8 +11,8 @@
 // Anything narrower than KIOSK_HANDHELD_MAX_PX (core/breakpoints.ts) is a
 // `handheld`: a phone that opened /kiosk/, the hand that sets a screen up
 // rather than the screen. It is never a compact drawing cropped at 0.8: zoom
-// stays 1, the page scrolls (kiosk.css) and, once a screen exists, the stage
-// shows the provisioning link and the code card alone (kiosk.ts).
+// stays 1, the page scrolls (kiosk.css) and the stage stacks the handheld line,
+// the code card and a 240 px map preview, in that order (kiosk-city.css).
 //
 // A portrait screen (taller than wide, at least the handheld bound across) is
 // one more drawing, not a landscape one on its side: the compact tokens with

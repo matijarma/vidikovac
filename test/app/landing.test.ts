@@ -151,7 +151,7 @@ describe('visibility-scoped polling', () => {
     h.handle.destroy();
     resolve({ modules });
     await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector('[data-live=weather]')?.textContent).toBe('Dohvat podataka…');
+    expect(document.querySelector('[data-live=weather]')?.textContent).toBe('Učitavanje podataka');
     expect(vi.getTimerCount()).toBe(0);
   });
   it('retains stale data on failure and translates it immediately without a request', async () => {

@@ -15,6 +15,7 @@ import type { VehicleInfo } from '../map/city-map';
 import type { Network } from '../../../shared/motion/network';
 import { compassKey } from '../motion/vehicle-card';
 import type { StopGroup } from './search';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 
 /** The vehicles whose GTFS type `modes` admits; null admits all. */
 export function vehiclesOfModes(vehicles: readonly VehicleInfo[], modes: ReadonlySet<number> | null): VehicleInfo[] {
@@ -78,10 +79,13 @@ export function headingFromBearing(bearing: number): { x: number; y: number } {
  * the shape it is on, else the compass point; "smjer nepoznat" whenever the
  * model has no heading (decision 5), never a guess.
  */
+/** "smjer {headsign}" from the twin's join; failing that a terminus the network names, else the compass. The headsign
+ *  and the terminus are GTFS text, vetted on the row surface: one that fails falls through to the next source. */
 export function vehicleDirection(i18n: I18n, net: Network | null, v: VehicleInfo): string {
-  if (v.headsign) return i18n.t('motion.direction', { towards: v.headsign });
+  const headsign = v.headsign ? vetExternal('headsign', v.headsign, 'row') : null;
+  if (headsign) return i18n.t('motion.direction', { towards: headsign });
   if (v.bearing === null) return i18n.t('motion.directionUnknown');
-  const terminus = net && v.onShape !== null ? terminusName(net, v.onShape) : null;
+  const terminus = net && v.onShape !== null ? vetExternal('name', terminusName(net, v.onShape) ?? '', 'row') : null;
   const towards = terminus ?? i18n.t(`motion.compass.${compassKey(headingFromBearing(v.bearing))}`);
   return i18n.t('motion.direction', { towards });
 }
@@ -89,7 +93,8 @@ export function vehicleDirection(i18n: I18n, net: Network | null, v: VehicleInfo
 /** "sljedeće stajalište X" when the twin names a next stop the network knows, else null. */
 export function vehicleNextStop(i18n: I18n, net: Network | null, v: VehicleInfo): string | null {
   if (!net || v.nextStopId === undefined) return null;
-  const name = net.stops.find((s) => s.id === v.nextStopId)?.name;
+  // The network's stop names are GTFS text: vetted on the row surface before the sentence names one.
+  const name = vetExternal('name', net.stops.find((s) => s.id === v.nextStopId)?.name ?? '', 'row');
   return name ? i18n.t('motion.nextStop', { stop: name }) : null;
 }
 

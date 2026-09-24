@@ -1255,6 +1255,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (styled && map) updateTileLabels?.(map, locale ?? 'hr');
   }
   function buildMap(l: MaplibreModule): void {
+    // No WebGL2, no map: MapLibre v6 would hand back a half-built one instead of throwing (maplibre-entry.ts).
+    // The throw takes the caller's no-WebGL path, so the page gets 'unavailable' and its lists.
+    if (l.webgl2Available?.() === false) throw new Error('No WebGL2 context');
     // Personal pages load the boundary with the renderer, after the initial
     // fail-closed region write. Restore its safe name once that import settles.
     labelRegion();
@@ -1807,8 +1810,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       observer?.disconnect();
       observer = null;
       styled = false;
-      map?.remove();
+      const built = map;
       map = null;
+      // A map MapLibre could not finish (no GPU context) throws from remove(); a teardown never breaks the page's render.
+      try { built?.remove(); } catch { /* nothing left to release */ }
     },
     setTheme,
     setLocale,

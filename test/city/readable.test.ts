@@ -14,6 +14,14 @@ it('uses readable bike-count nouns in both languages',()=>{
   expect(bikeCount(en,1)).toBe('1 bike');
   expect(bikeCount(en,4)).toBe('4 bikes');
 });
+it('says an unknown bike count as a dash and the noun, never "?" (city.bikeCountUnknown)',()=>{
+  const hr=createDefaultI18n('hr'),en=createDefaultI18n('en');
+  for(const value of [undefined,null,Number.NaN,'5']){
+    expect(bikeCount(hr,value)).toBe('– bicikala');
+    expect(bikeCount(en,value)).toBe('– bikes');
+  }
+  expect(bikeCount({getLocale:()=>'en-GB'},3)).toBe('3 bikes');
+});
 describe('one ranked city search',()=>{
   it('puts the named stop before incidental address matches and groups only co-located Wi-Fi',()=>{
     const places=[wifi,{...wifi,id:'wifi-b',lon:15.9771},{...wifi,id:'wifi-c',lon:16.1},{...wifi,id:'heritage-a',category:'heritage' as const}];

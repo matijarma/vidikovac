@@ -155,7 +155,7 @@ export const SENTENCE_FAMILIES = {
   sunriseTime: { hr: 'U {time} izlazi sunce.', en: 'At {time} the sun rises.', slots: { time: 'clock' }, kinds: ['vrijeme'], group: 'sunrise' },
   lastTram: { hr: 'Zadnji tramvaj {route} polazi {time}.', en: 'The last tram {route} leaves {time}.', slots: { route: 'route', time: 'time' }, kinds: ['promet', 'nocas'] },
   firstTram: { hr: 'Prvi tramvaj {route} polazi {time}.', en: 'The first tram {route} leaves {time}.', slots: { route: 'route', time: 'time' }, kinds: ['promet', 'nocas'] },
-  event: { hr: '{time} počinje događanje „{title}“ ({venue}).', en: '{title} starts {time}, {venue}.', slots: { time: 'time', title: 'title', venue: 'venue' }, kinds: ['kultura'] },
+  event: { hr: '{time} počinje događanje „{title}” ({venue}).', en: '{title} starts {time}, {venue}.', slots: { time: 'time', title: 'title', venue: 'venue' }, kinds: ['kultura'] },
   opening: { hr: '{name}: rad počinje {time}.', en: '{name} opens {time}.', slots: { name: 'venue', time: 'time' }, kinds: ['kultura'] },
   pharmacy: { hr: 'Dežurna ljekarna 24/7: {address}.', en: '24/7 duty pharmacy: {address}.', slots: { address: 'street' }, kinds: ['nocas'] },
   outage: { hr: 'ZET ne šalje položaje vozila; polasci su po voznom redu.', en: 'ZET is not sending vehicle positions; departures follow the timetable.', slots: {}, kinds: ['promet'] },
@@ -175,9 +175,13 @@ const REGISTER_SLOTS = { name: 'name', text: 'register-text' } as const satisfie
 // slop register (docs/companion-2026-09-22.md §12 "Never", §13): no fetch or sync
 // times, no hedges or register caveats, no "zid", no unit glued to a number, no
 // count without a name. The row keeps showing the text as the register writes it.
+// A proper name keeps its own words: the street "Pod zidom", the one name in the
+// committed registers with the word in it, is data and never the screen [O-66].
+// It counts only as the registers write it; every other "zid" stays refused.
+const ZID_PROPER_NAMES = /(?<![\p{L}\p{N}_])Pod zidom(?![\p{L}\p{N}_])/gu;
 const REGISTER_SLOP = /(?:\bzid(?:a|u|om|ovi|ove)?\b|dohva[ćt]|ažuriran|osvježen|preuzeto|sinkroniz|sinhroniz|podat(?:ak|ci) od|zastarjel|nepotvrđen|neprovjeren|nedostupn|nije provjera|obuhvat zaštite|iz registra|nema podat|možda|vjerojatno|navodno|moguće je|fetched|updated at|synced|synchroni[sz]|unavailable|unconfirmed|not verified|out of date|perhaps|maybe|probably|possibly)/iu;
 function registerCopyIssue(text: string): SentenceRejection | null {
-  if (REGISTER_SLOP.test(text.normalize('NFC').toLocaleLowerCase('hr')) || /\d(?:°|\s+°\s+[CF]\b|(?:min|km|m|h|s)\b)/u.test(text)) return 'forbidden-copy';
+  if (REGISTER_SLOP.test(text.normalize('NFC').replace(ZID_PROPER_NAMES, ' ').toLocaleLowerCase('hr')) || /\d(?:°|\s+°\s+[CF]\b|(?:min|km|m|h|s)\b)/u.test(text)) return 'forbidden-copy';
   if (/(?:^|[;,]\s*|^(?:danas|sutra|večeras|ujutro|today|tomorrow|tonight)\s+)(?:\d+\s+(?:zatvaranja|radova|događanja|bicikl|closure|event|bike)|(?:radovi|događanja|zatvaranja)\s+(?:u gradu\s+)?\d)/iu.test(text)) {
     return 'unnamed-count';
   }

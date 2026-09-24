@@ -90,7 +90,7 @@ describe('createPanel', () => {
     const panel = createPanel({
       i18n, now: NOW, id: 'p4', title: 'Maksimir sada', snapshot: snap(), body: '',
       copyText: '21 °C, Maksimir', onCopy, shareUrl: 'https://zagreb.aningfilm.hr/', onShare,
-      extraActions: [{ id: 'print', label: i18n.t('common.print'), run: () => {} }],
+      extraActions: [{ id: 'print', label: 'Ispiši', run: () => {} }],
     });
     const buttons = [...panel.element.querySelectorAll<HTMLButtonElement>('[data-testid=panel-actions] button')];
     expect(buttons.map((b) => b.textContent)).toEqual(['Kopiraj', 'Podijeli', 'Ispiši']);

@@ -723,6 +723,97 @@ describe('terminal placement continuity', () => {
     expect(n.paths[t.match.pathIdx!].id).toBe('departure');
   });
 
+  it('places a tram at a departure start within its stop zone at a handover instead of keeping the arrival', () => {
+    // Zapruđe, 21 Sep: 14_25 ends at the node 14_24 starts from and the tram
+    // stands a metre off it when ZET names the next trip. Keeping the arrival
+    // there made the later step onto 14_24 a same-trip path change (16 on the
+    // day) for a tram that never moved between the two. A clipped start within
+    // STOP_ZONE_M is the platform the tram stands at, not a start it has yet
+    // to reach; one 55 to 60 m away (Kvaternikov trg, the test above) still is.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: straight(1030, 2030) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('at-the-platform', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBe(0);
+    expect(t.match.residual).toBeCloseTo(30);
+    for (let at = 1020; at <= 1080; at += 10) {
+      m.matchFix(t, fix(1000, 0, at), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    }
+    m.matchFix(t, fix(1090, 0, 1090), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(60);
+  });
+
+  it('keeps an arrival that still has its loop to run when the departure start is within the stop zone', () => {
+    // Kvaternikov trg: 13_11 passes the node the departure starts from 200 m
+    // before its own end at the terminus stand. ZET names the new trip there;
+    // a start 28 m away is not a platform the tram has reached until the
+    // arrival is done.
+    // The loop runs the arrival's last 1,200 m, a 20 m connector back west
+    // along the departure's own first edge: the same rails as at the square.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1200) },
+        { from: 2, to: 3, pts: [{ x: 1020, y: 20 }, { x: 2020, y: 20 }] },
+        { from: 1, to: 4, pts: [{ x: 1200, y: 0 }, { x: 1200, y: 20 }] },
+        { from: 4, to: 2, pts: [{ x: 1200, y: 20 }, { x: 1020, y: 20 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+        { id: 'loop', direction: -1, edges: [0, 2, 3, 1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('still-going', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1100, 0, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    expect(t.match.s).toBeCloseTo(1100);
+  });
+
+  it('switches to a departure that starts where the arrival ends', () => {
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: straight(1000, 2000) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('through', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(995, 3, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 3, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBe(0);
+  });
+
   it('does not return to a clipped departure endpoint while approaching it', () => {
     const n = syntheticNetwork({
       edges: [
@@ -775,6 +866,160 @@ describe('terminal placement continuity', () => {
     expect(n.paths[t.match.pathIdx!].id).toBe('departure'); // 35 + 25, at the real near endpoint
     expect(t.match.s).toBe(0);
     expect(t.match.residual).toBeLessThan(12);
+  });
+});
+
+describe('a terminus loop between the arrival and the departure', () => {
+  // Kvaternikov trg with the connector of decision 25: the arrival ends at
+  // the stand, the loop runs the arrival's last edge, the connector and the
+  // departure's first edge, and the departure starts on that shared edge.
+  // The tram comes round the loop; both transitions are loop transitions,
+  // never an arrival-to-departure change (39 and 41 a day before this).
+  const spec: SynthSpec = {
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1000) },
+      { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 40 }] },
+      { from: 2, to: 3, pts: [{ x: 1000, y: 40 }, { x: 1060, y: 40 }] },
+      { from: 3, to: 4, pts: [{ x: 1060, y: 40 }, { x: 2060, y: 40 }] },
+    ],
+    routes: [{ id: '1', type: 0, paths: [
+      { id: 'arrival', direction: 0, edges: [0] },
+      { id: 'loop', direction: -1, edges: [0, 1, 2] },
+      { id: 'departure', direction: 1, edges: [2, 3] },
+    ] }],
+    stops: [],
+  };
+
+  it('is where a tram standing at the arrival end goes when the next trip is named', () => {
+    const n = syntheticNetwork(spec);
+    const m = createMatcher(n);
+    const t = newTrack('at-the-stand', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(990, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 0, 1010), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    expect(t.match.s).toBeCloseTo(1000);
+    m.matchFix(t, fix(1000, 20, 1020), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    expect(t.match.s).toBeCloseTo(1020);
+    m.matchFix(t, fix(1030, 40, 1030), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop'); // still on the shared first edge of the departure
+    m.matchFix(t, fix(1120, 40, 1040), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(120);
+  });
+
+  it('is taken by a tram whose next fix already lies on the departure start', () => {
+    // Recorded: from the stand at the end of 13_11 to the start of the
+    // departure in one 11 s interval (102411 05:47:46, 102425 07:54:56).
+    const n = syntheticNetwork(spec);
+    const m = createMatcher(n);
+    const t = newTrack('round-in-one', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(700, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip'; // named 300 m before the stand
+    const p = m.priorFor('departure', '1', 1);
+    for (const [i, x] of [800, 900, 1000].entries()) {
+      m.matchFix(t, fix(x, 0, 1010 + i * 10), p, null);
+      expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    }
+    m.matchFix(t, fix(1010, 40, 1040), p, null); // came round: on the departure's first edge, 10 m in, 41 m from the arrival's end
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1060, 40, 1050), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(60);
+  });
+});
+
+describe('a terminus loop between the arrival and the departure, off the arrival first', () => {
+  it('is not taken on the departure\'s shared first edge once the arrival no longer fits: the departure itself is the placement', () => {
+    // Dubec, 20 Sep: 34_1 left by 63 m and the tram on 34_3's first edge, which
+    // the loop runs too. The loop there would read to the grader as another
+    // variant adopted with the prior in the pool (row D), and rightly.
+    const n = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 60 }] },
+        { from: 2, to: 3, pts: [{ x: 1000, y: 60 }, { x: 1060, y: 60 }] },
+        { from: 3, to: 4, pts: [{ x: 1060, y: 60 }, { x: 2060, y: 60 }] },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'loop', direction: -1, edges: [0, 1, 2] },
+        { id: 'departure', direction: 1, edges: [2, 3] },
+      ] }],
+      stops: [],
+    });
+    const m = createMatcher(n);
+    const t = newTrack('off-first', '1', 'old-trip', 'tram');
+    m.matchFix(t, fix(700, 0, 1000), m.priorFor('arrival', '1', 0), null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    for (const [i, x] of [800, 900, 1000].entries()) m.matchFix(t, fix(x, 0, 1010 + i * 10), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1015, 60, 1040), p, null); // one stray fix: still the arrival
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    m.matchFix(t, fix(1035, 60, 1050), p, null); // two: re-derived onto the departure, 69 m from the arrival's end
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(35);
+    m.matchFix(t, fix(1120, 60, 1060), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+  });
+});
+
+describe('why a tram is unplaced', () => {
+  // Decision 25 follow-up: an unplaced tram carries the reason it left the
+  // rails, decided when the episode starts and kept until it is placed again,
+  // so the grader can count terminus turns, diversions and pathless trips
+  // apart. The rails are one 1,000 m edge of route 1 with a terminal at x = 0.
+  const n = syntheticNetwork({
+    edges: [{ from: 0, to: 1, pts: straight(0, 1000) }],
+    routes: [
+      { id: '1', type: 0, paths: [{ id: 'own', direction: 0, edges: [0] }] },
+      { id: '2', type: 0, paths: [] },
+    ],
+    stops: [{ id: 'T', edge: 0, s: 0, terminal: true }],
+  });
+  const m = createMatcher(n);
+  const reasonOf = (t: ReturnType<typeof newTrack>) => (t as { unplacedReason?: string }).unplacedReason;
+
+  it('is a terminus turn within TERMINUS_NEAR_M of a terminal platform, and is cleared once placed', () => {
+    const t = newTrack('turning', '1', 'trip', 'tram');
+    const p = m.priorFor('own', '1', 0);
+    m.matchFix(t, fix(100, 0, 1000), p, null);
+    expect(reasonOf(t)).toBeUndefined();
+    m.matchFix(t, fix(60, 100, 1010), p, null);
+    m.matchFix(t, fix(30, 110, 1020), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    expect(t.offGraph).toBe(false);
+    expect(reasonOf(t)).toBe('terminus');
+    m.matchFix(t, fix(20, 0, 1030), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('own');
+    expect(reasonOf(t)).toBeUndefined();
+  });
+
+  it('is a diversion when the tram leaves its rails mid-line, whatever it passes later', () => {
+    const t = newTrack('diverted', '1', 'trip', 'tram');
+    const p = m.priorFor('own', '1', 0);
+    m.matchFix(t, fix(500, 0, 1000), p, null);
+    m.matchFix(t, fix(500, 100, 1010), p, null);
+    m.matchFix(t, fix(480, 110, 1020), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    expect(reasonOf(t)).toBe('diversion');
+    // Standing reports and a drift towards the terminal keep the reason.
+    m.matchFix(t, fix(480, 110, 1030), p, null);
+    m.matchFix(t, fix(100, 110, 1040), p, null);
+    expect(reasonOf(t)).toBe('diversion');
+  });
+
+  it('is no-path for a trip whose route has no rails of its own', () => {
+    const t = newTrack('pathless', '2', 'trip', 'tram');
+    const p = m.priorFor(null, '2', 0);
+    expect(p.pathIdx).toBeNull();
+    m.matchFix(t, fix(500, 10, 1000), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    expect(t.match.edge).toBe(0);
+    expect(reasonOf(t)).toBe('no-path');
   });
 });
 

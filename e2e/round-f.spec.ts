@@ -33,10 +33,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
-import { pickCityGroup } from './helpers';
 import type { ModuleSnapshot } from '../worker/feed/schema';
 import { opposedTramSnapshot, twoTramSnapshot, TWO_TRAM_PATH_ROUTE, TWO_TRAM_ROUTES } from './schema-fixtures';
 import { pillRows } from '../app/src/motion/pills';
+import { FRAME_MAX_ZOOM, FRAME_MIN_ZOOM } from '../app/src/map/frame';
 
 const root = resolve(import.meta.dirname, '..');
 /** The table scripts/zet-schema.mjs writes beside the artefact (F5): what ZET
@@ -93,15 +93,13 @@ async function openScene(page: Page, scene: (time: number) => ModuleSnapshot, nu
   await page.route('**/maps/zagreb-v1/**', (route) => route.fulfill({ status: 404, body: '' }));
   await page.clock.resume();
   await page.goto(FIXTURE_DASHBOARD);
-  await page.locator('[data-action=nav][data-layer=u-pokretu]:visible').first().click();
-  // The workspace now opens on the city's own group ("Zivi grad"), where the
-  // transport modes are switched off entirely (workspace.ts modesArg) and no
-  // vehicle is drawn. "Kretanje" is the transport group; picking it is what a
-  // reader looking for a tram does, and it is what the schema spec's own
-  // tests do since the city sources landed. The groups sit in the collapsed
-  // filter disclosure since b300af3; pickCityGroup opens and closes it.
-  await page.getByTestId('transport-search').focus();
-  await pickCityGroup(page, 'transport');
+  // The phone reaches Karta by its tab; the desk shows it beside Sada already (WP4 desk pair). Never the first
+  // data-action=nav on the page: a Sada U blizini row carries one with a selection (a closure), and taking it
+  // fitted the camera to that street, away from the scene.
+  const tab = page.locator('.ki-tab[data-layer=u-pokretu]:visible');
+  if (await tab.count()) await tab.first().click();
+  await expect(page.locator(MAP)).toBeVisible();
+  // Karta draws every vehicle at once (WP4): there is no group to pick first.
   // Both marks on the screen before anything is measured. This is also the
   // map's own readiness: `data-pills` is a census of rendered features, so it
   // says nothing until the style is up, the model has stepped and MapLibre
@@ -122,6 +120,48 @@ async function zoomIn(page: Page, to: string): Promise<void> {
   await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe(to);
 }
 
+/** One MapLibre keyboard step out (-1 zoom, no rounding), settled. */
+async function zoomOut(page: Page, to: string): Promise<void> {
+  await page.locator(CANVAS).focus();
+  await page.keyboard.press('-');
+  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe(to);
+}
+
+/** The map's ceiling (basemap.ts MAP_MAX_ZOOM): a keyboard step that would pass it stops on it exactly. */
+const MAP_CEILING = 18;
+
+/**
+ * From the camera Karta opens on to an exact integer zoom `to`. Karta opens on
+ * the WP4 frame (workspace.ts frameCamera: the place at the centre and its
+ * 6-7 stops across the stage's shorter side, map/frame.ts frameView), whose
+ * zoom is fractional and follows the stage's box (12.85 at the desk's
+ * 1280x720), not the old fixed 14 on the stop. MapLibre's keyboard step is +1
+ * from the zoom it is at, with no rounding (zoomSnap 0), so the walk climbs to
+ * the map's ceiling, where the last step clamps to exactly 18, and steps down
+ * from there. The frame centres the place, which is the screen's stop where
+ * the fixture parks the pair, and a keyboard step zooms about the centre, so
+ * the marks stay under the camera at every step.
+ */
+async function fromFrameTo(page: Page, to: number): Promise<void> {
+  let zoom = Number.NaN;
+  await expect.poll(async () => {
+    const before = await probe(page, 'zoom');
+    await page.waitForTimeout(400);
+    const after = await probe(page, 'zoom');
+    zoom = Number(after);
+    return before !== null && before === after && zoom >= FRAME_MIN_ZOOM && zoom <= FRAME_MAX_ZOOM;
+  }, { timeout: 20_000, message: `Karta opens on the WP4 frame: a camera at rest between zoom ${FRAME_MIN_ZOOM} and ${FRAME_MAX_ZOOM}` }).toBe(true);
+  test.info().annotations.push({ type: 'frame zoom', description: zoom.toFixed(2) });
+  while (zoom < MAP_CEILING) {
+    const next = Math.min(MAP_CEILING, zoom + 1);
+    await page.locator(CANVAS).focus();
+    await page.keyboard.press('=');
+    await expect.poll(async () => Math.abs(Number(await probe(page, 'zoom')) - next) < 0.011, { timeout: 20_000, message: `one keyboard step from ${zoom.toFixed(2)} lands on ${next.toFixed(2)}` }).toBe(true);
+    zoom = Number(await probe(page, 'zoom'));
+  }
+  for (let z = MAP_CEILING - 1; z >= to; z--) await zoomOut(page, `${z}.00`);
+}
+
 /** Selects the route through the sheet's own search result row, the way a
  *  reader does; `fit: true` on that action takes the camera to the line. */
 async function selectRoute(page: Page, routeId: string): Promise<void> {
@@ -135,13 +175,11 @@ test('two trams 20 m apart keep both numbers at zoom 17, and the nose keeps to i
   page.on('pageerror', (error) => errors.push(error.message));
   await openTwoTrams(page);
 
-  // The session's map opens on the screen's stop at zoom 14 (workspace.ts
-  // sets that camera once the city sources landed), which is where the
-  // fixture parks the pair, so three keyboard steps land on exactly 17 with
-  // both marks under the camera. MapLibre's keyboard step is +1 from the zoom
-  // it is at, with no rounding, so 14 -> 15 -> 16 -> 17.
-  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('14.00');
-  await zoomIn(page, '15.00');
+  // The session's map opens on the WP4 frame around the screen's stop, which
+  // is where the fixture parks the pair; the walk reaches exactly 15 from it
+  // (fromFrameTo), and from there two keyboard steps land on exactly 17 with
+  // both marks under the camera: 15 -> 16 -> 17.
+  await fromFrameTo(page, 15);
   // Below the body's floor (overlays.ts BODY_ZOOM 16) a 32 m tram is shorter
   // than the pill over it, so no body is drawn -- and none is pushed either.
   await expect.poll(() => probe(page, 'bodies'), { timeout: 20_000 }).toBe('0');
@@ -207,12 +245,12 @@ test('two trams of one number passing each other read as one pill with an arrow 
   // One number: the pair merges into a single "6" at every zoom here, so the
   // census lists the line once (pills.ts clusterLabel folds equal numbers).
   await openScene(page, opposedTramSnapshot, [TWO_TRAM_PATH_ROUTE]);
-  await expect.poll(() => probe(page, 'zoom'), { timeout: 20_000 }).toBe('14.00');
 
   // Nothing is selected, so neither tram is held out of the merge; the two
   // face opposite ways along the same street, so the one merged mark carries
-  // the fore arrow (`data-twoway` counts the fore layer alone).
-  await zoomIn(page, '15.00');
+  // the fore arrow (`data-twoway` counts the fore layer alone). From the
+  // frame to exactly 15 as in the first scene (fromFrameTo).
+  await fromFrameTo(page, 15);
   await expect.poll(() => probe(page, 'twoway'), { timeout: 20_000 }).toBe('1');
   await zoomIn(page, '16.00');
   await zoomIn(page, '17.00');
@@ -225,12 +263,11 @@ test('two trams of one number passing each other read as one pill with an arrow 
   // throws it. The two directions of one line share one artwork line with
   // opposite signs, so the merged mark's members head against each other
   // there too (schema-paint.ts clusterSchemaMarks).
-  await page.locator('.t-map-menu > summary').click();
+  // The switch sits in the sheet's head [O-72]; it says the renderer it shows in data-mode.
   const toggle = page.getByTestId('map-mode-toggle');
   await expect(toggle).toBeVisible();
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('.t-map-menu > summary').click();
+  await expect(toggle).toHaveAttribute('data-mode', 'schema');
   await expect(page.getByTestId('schema-vehicles')).toBeVisible();
   await expect(page.getByTestId('map-canvas')).toHaveAttribute('data-map-status', 'ready');
   await expect(page.locator('.schema-map [data-testid=vehicle-list] button')).toHaveCount(2);

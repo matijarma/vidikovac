@@ -232,7 +232,7 @@ describe('the time words', () => {
 
   it('never prints a caption, a freshness word, a source word or an ellipsis', () => {
     const markup = rowsMarkup(scene(), NOW, i18n) + rowsMarkup(scene().map((r) => ({ ...r, live: false })), NOW, i18n);
-    for (const word of [/uživo/i, /po redu vožnje/i, /procjen/i, /zastarjel/i, /nepotvrđen/i, /registra/i, /nije provjera/i, /Obuhvat/, /Dohvaćeno/, /nedostup/i, /…|\.\.\./]) {
+    for (const word of [/uživo/i, /vozni red/i, /procjen/i, /zastarjel/i, /nepotvrđen/i, /registra/i, /nije provjera/i, /Obuhvat/, /Dohvaćeno/, /nedostup/i, /…|\.\.\./]) {
       expect(markup).not.toMatch(word);
     }
   });

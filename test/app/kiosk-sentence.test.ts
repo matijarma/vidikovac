@@ -143,11 +143,11 @@ describe('one grounded, time-aware sentence', () => {
   });
 
   it('does not exchange closure and event times in a comma-joined sentence', () => {
-    const event = { ...closure, id: 'event:1', kind: 'kultura' as const, text: 'U 19:00 počinje događanje „Film“ (Kino).' };
+    const event = { ...closure, id: 'event:1', kind: 'kultura' as const, text: 'U 19:00 počinje događanje „Film” (Kino).' };
     const refs = [closure.id, event.id];
-    expect(acceptSentence('Ilica: zatvoreno za promet do 18:00, U 19:00 počinje događanje „Film“ (Kino).',
+    expect(acceptSentence('Ilica: zatvoreno za promet do 18:00, U 19:00 počinje događanje „Film” (Kino).',
       { facts: [closure, event], refs, now: NOW }).ok).toBe(false);
-    expect(acceptSentence('Ilica: zatvoreno za promet do 19:00, U 18:00 počinje događanje „Film“ (Kino).',
+    expect(acceptSentence('Ilica: zatvoreno za promet do 19:00, U 18:00 počinje događanje „Film” (Kino).',
       { facts: [closure, event], refs, now: NOW }).ok).toBe(false);
   });
 
@@ -186,11 +186,11 @@ describe('one grounded, time-aware sentence', () => {
   });
 
   it.each([
-    'U 12:31 počinje događanje „Back to the 90s“ (Kino).',
-    'U 12:31 počinje događanje „Zagreb, 3 bicikla“ (Kino).',
-    'U 12:31 počinje događanje „Film“ (Back to the 90s).',
-    'U 12:31 počinje događanje „Film“ (Zagreb, 3 bicikla).',
-    'U 12:31 počinje događanje „Možda“ (Kino).',
+    'U 12:31 počinje događanje „Back to the 90s” (Kino).',
+    'U 12:31 počinje događanje „Zagreb, 3 bicikla” (Kino).',
+    'U 12:31 počinje događanje „Film” (Back to the 90s).',
+    'U 12:31 počinje događanje „Film” (Zagreb, 3 bicikla).',
+    'U 12:31 počinje događanje „Možda” (Kino).',
     'Back to the 90s starts at 12:31, Kino.',
     'Zagreb, 3 bicikla starts at 12:31, Kino.',
     'Back to the 90s: rad počinje u 12:31.',
@@ -211,7 +211,7 @@ describe('one grounded, time-aware sentence', () => {
     ['Muzej: izložba traje 90s.', 'forbidden-copy'],
     ['Back to the 90s: izložba traje 90s.', 'forbidden-copy'],
     ['Zagreb, 3 bicikla: Zagreb, 3 bicikla.', 'unnamed-count'],
-    ['U 12:31 počinje događanje „Film“ (Kino), 3 bicikla.', 'unnamed-count'],
+    ['U 12:31 počinje događanje „Film” (Kino), 3 bicikla.', 'unnamed-count'],
   ])('still applies copy rules outside opaque name slots: %s', (text, reason) => {
     const fact = { ...closure, text };
     expect(acceptSentence(text, { facts: [fact], now: NOW }).ok, reason).toBe(false);
@@ -219,7 +219,7 @@ describe('one grounded, time-aware sentence', () => {
   });
 
   it('rejects joined claims even when their individual names are safe', () => {
-    const event = { ...closure, id: 'event:1', text: 'U 12:31 počinje događanje „90s“ (Kino).' };
+    const event = { ...closure, id: 'event:1', text: 'U 12:31 počinje događanje „90s” (Kino).' };
     const other = { ...closure, text: 'Ilica: zatvoreno za promet do 18:00.' };
     const text = `${event.text.slice(0, -1)}, ${other.text}`;
     expect(acceptSentence(text, { facts: [event, other], now: NOW }).ok).toBe(false);
@@ -227,16 +227,16 @@ describe('one grounded, time-aware sentence', () => {
   });
 
   it.each(['Šalata', 'Unešić', 'Šaljić', 'Nazović'])('does not match an instruction inside the venue %s', venue => {
-    const text = `U 12:31 počinje događanje „Film“ (${venue}).`;
+    const text = `U 12:31 počinje događanje „Film” (${venue}).`;
     expect(acceptSentence(text, { facts: [factFor(text)], now: NOW })).toEqual({ ok: true });
   });
 
   it('keeps opaque titles, venues, closures and descriptions whole and in their roles', () => {
     const sources = [
-      ['U 13:00 počinje događanje „Dani kazališta“ (Kino Europa).', [
-        'U 13:00 počinje događanje „Dani“ (Kino Europa).',
-        'U 13:00 počinje događanje „Kino Europa“ (Dani kazališta).',
-        'U 13:00 počinje događanje „Dani kazališta“ (Kino).',
+      ['U 13:00 počinje događanje „Dani kazališta” (Kino Europa).', [
+        'U 13:00 počinje događanje „Dani” (Kino Europa).',
+        'U 13:00 počinje događanje „Kino Europa” (Dani kazališta).',
+        'U 13:00 počinje događanje „Dani kazališta” (Kino).',
       ]],
       ['Prilaz Gjure Deželića: zatvoreno za promet do 18:00.', [
         'Prilaz: zatvoreno za promet do 18:00.',
@@ -327,7 +327,7 @@ describe('facts and standalone deterministic fallback', () => {
       const text = facts[index]!.text;
       expect(text).toContain(source.title);
       expect(text).toContain(source.sub);
-      if (locale === 'hr') expect(text).toBe(`U 12:31 počinje događanje „${source.title}“ (${source.sub}).`);
+      if (locale === 'hr') expect(text).toBe(`U 12:31 počinje događanje „${source.title}” (${source.sub}).`);
       expect(templates[index]!.text).toBe(text);
       const sequence = createSentenceSequence({ rhythmMs: 20_000 });
       expect(sequence.read([templates[index]!], NOW)?.text).toBe(text);
@@ -419,7 +419,7 @@ describe('facts and standalone deterministic fallback', () => {
       row({ id: 'always:long', kind: 'always', atMs: null, title: 'Muzej', sub: 'Opis '.repeat(25) }),
     ] }));
     expect(facts.find(f => f.id === 'closure:ilica')?.text).toBe('Ilica: zatvoreno za promet do 13:30.');
-    expect(facts.find(f => f.id === 'event:kino')?.text).toBe('Sutra u 12:30 počinje događanje „Intersonus“ (Kino Europa).');
+    expect(facts.find(f => f.id === 'event:kino')?.text).toBe('Sutra u 12:30 počinje događanje „Intersonus” (Kino Europa).');
     expect(templateSentences(facts, i18n).some(s => s.refs.includes('always:long'))).toBe(false);
   });
 
@@ -509,7 +509,7 @@ describe('facts and standalone deterministic fallback', () => {
       })),
     ] }));
     const texts = facts.map(f => f.text);
-    expect(texts).toContain('U 12:31 počinje događanje „Dani kazališta“ (Kino Europa).');
+    expect(texts).toContain('U 12:31 počinje događanje „Dani kazališta” (Kino Europa).');
     expect(texts).toContain('Klovićevi dvori: rad počinje u 12:31.');
     expect(texts).toContain('Trg bana J. Jelačića: zatvoreno za promet do 13:30.');
     expect(texts).toContain('Prilaz Gjure Deželića: zatvoreno za promet do 13:30.');
@@ -576,7 +576,7 @@ describe('facts and standalone deterministic fallback', () => {
 
 describe('sentence sequence', () => {
   const choices = Array.from({ length: 40 }, (_, n) => sentence(n % 2
-    ? `Temperatura u Zagrebu je ${n} °C.` : `U 13:00 počinje događanje „Izložba ${n}“ (Muzej).`,
+    ? `Temperatura u Zagrebu je ${n} °C.` : `U 13:00 počinje događanje „Izložba ${n}” (Muzej).`,
   { kicker: n % 2 ? 'vrijeme' : 'kultura' }));
   it.each([20_000, 30_000, 60_000])('honours the %i ms rhythm and keeps object identity', rhythmMs => {
     const seq = createSentenceSequence({ rhythmMs });
@@ -732,7 +732,7 @@ describe('sentence sequence: one fact, once in ten minutes', () => {
   it('refreshes the fact on screen in its own wording instead of blanking, never in the other, and never returns to a shown fact', () => {
     const at = (s: WrittenSentence, extra: Partial<RotatingSentence>): RotatingSentence => ({ ...s, ...extra });
     // Approved families only: W-C2's typed boundary refuses free prose in the sequence as well.
-    const y = sentence('U 13:00 počinje događanje „Film“ (Kino).', { refs: ['event:y'], kicker: 'kultura' });
+    const y = sentence('U 13:00 počinje događanje „Film” (Kino).', { refs: ['event:y'], kicker: 'kultura' });
     const z = sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['event:z'], kicker: 'vrijeme' });
     const line = { factKey: 'departure:6', formUntil: NOW + 150_000 };
     const x1 = at(sentence('Tramvaj 6, smjer Črnomerec, polazi za 3 min.', { refs: ['dep:a'], kicker: 'promet', validUntil: NOW + 50_000 }), { ...line, wording: 'departureIn' });
@@ -816,6 +816,20 @@ describe('decision 29: one sentence per dwell through polls and re-estimates', (
       ['Gundulićeva: zatvoreno za promet do 17:40.', 'Gundulićeva: zatvoreno za promet do 17:41.']);
     expect([...dwells.find(d => d.id.startsWith('departure:11'))!.texts]).toEqual(
       ['Tramvaj 11, smjer Črnomerec, polazi za 6 min.', 'Tramvaj 11, smjer Črnomerec, polazi za 5 min.']);
+  });
+
+  it('re-times the same rotation on a Ritam change: the sentence on screen keeps its dwell start and the memory stays', () => {
+    const a = sentence('Temperatura u Zagrebu je 21 °C.', { refs: ['weather:now'], kicker: 'vrijeme' });
+    const b = sentence('Ilica: zatvoreno za promet do 20:00.', { refs: ['closure:c'], kicker: 'radovi' });
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    expect(seq.read([a, b], NOW)).toBe(a);
+    seq.setRhythm(60_000);
+    expect(seq.read([a, b], NOW + 59_000)).toBe(a);
+    expect(seq.read([a, b], NOW + 60_000)).toBe(b);
+    // Shortened again: at the new boundary nothing unshown is left, so b holds; a stays shown for ten minutes.
+    seq.setRhythm(20_000);
+    expect(seq.read([a, b], NOW + 80_000)).toBe(b);
+    expect(seq.read([a, b], NOW + 81_000)).toBe(b);
   });
 
   it('never flips a departure between "za N min" and "u HH:MM" mid-dwell, and never picks a line that cannot last a rhythm', () => {
@@ -949,8 +963,8 @@ describe('W-C2 fail-closed family and slot grammar', () => {
   it.each(attacks)('blocks header source-backed %j in all exposed name slots and the display path', value => {
     const fixtures: SentenceFact[] = [
       { ...closure, text: `${value}: zatvoreno za promet do 18:00.` },
-      { ...closure, kind: 'kultura', text: `U 13:00 počinje događanje „${value}“ (Kino).` },
-      { ...closure, kind: 'kultura', text: `U 13:00 počinje događanje „Film“ (${value}).` },
+      { ...closure, kind: 'kultura', text: `U 13:00 počinje događanje „${value}” (Kino).` },
+      { ...closure, kind: 'kultura', text: `U 13:00 počinje događanje „Film” (${value}).` },
       { ...closure, kind: 'kultura', text: `${value}: rad počinje u 13:00.` },
       { ...closure, kind: 'bicikli', text: `BAJS ${value}: 7 bicikala.` },
       { ...closure, kind: 'promet', text: `Tramvaj 6, smjer ${value}, polazi za 3 min.` },
@@ -1021,10 +1035,10 @@ describe('W-C2 fail-closed family and slot grammar', () => {
   });
 
   it('binds slot roles, fact identity, locale and the finite deadline instead of borrowing values', () => {
-    const event = factFor('U 13:00 počinje događanje „Film“ (Kino).');
-    const other = { ...event, id: 'event:other', text: 'U 14:00 počinje događanje „Balet“ (Muzej).' };
-    for (const text of ['U 13:00 počinje događanje „Kino“ (Film).',
-      'U 14:00 počinje događanje „Film“ (Kino).', 'U 13:00 počinje događanje „Film“ (Muzej).']) {
+    const event = factFor('U 13:00 počinje događanje „Film” (Kino).');
+    const other = { ...event, id: 'event:other', text: 'U 14:00 počinje događanje „Balet” (Muzej).' };
+    for (const text of ['U 13:00 počinje događanje „Kino” (Film).',
+      'U 14:00 počinje događanje „Film” (Kino).', 'U 13:00 počinje događanje „Film” (Muzej).']) {
       expect(acceptSentence(text, { facts: [event, other], now: NOW }).ok).toBe(false);
     }
     expect(acceptSentence(event.text, { facts: [event, { ...event }], now: NOW }).ok).toBe(false);
@@ -1067,6 +1081,14 @@ describe('sentence sequence: a dwell ends early only when its own fact expires',
     expect(seq.read([soon, ...others], NIGHT)?.text).toBe(soon.text);
     expect(seq.read(others, NIGHT + 4_000)?.text).toBe(soon.text);
     expect(seq.read(others, NIGHT + 5_000)?.text).not.toBe(soon.text);
+  });
+
+  it('lets a model sentence go at once when it left the pool: it leaves only when it no longer grounds against the facts', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const model = rotating('Temperatura u Zagrebu je 21 °C.', { refs: ['weather:now'], kicker: 'vrijeme', origin: 'model' });
+    expect(seq.read([model, ...others], NIGHT)?.text).toBe(model.text);
+    // DHMZ now says 22 °C: kiosk.ts drops the sentence from the pool, and the header does not hold a false claim.
+    expect(seq.read(others, NIGHT + 4_000)?.text).not.toBe(model.text);
   });
 
   it('prefers the refreshed words of the same fact over holding stale ones', () => {

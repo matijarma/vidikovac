@@ -140,7 +140,7 @@ const SUN_23 = sunTimes(new Date('2026-09-23T10:00:00Z'), PLACE.lat, PLACE.lon);
 /** The "uvijek" row a scene expects on its 20-minute turn: the square's story on even turns, the building on odd. */
 const alwaysFor = (now: number): string => (Math.floor(now / ALWAYS_ALTERNATE_MS) % 2 === 0 ? 'always:story:721503305' : 'always:heritage:heritage-stedionica');
 
-const FORBIDDEN = /registra|nije provjera|Obuhvat|Dohvaćeno|zastarjelo|nepotvrđeno|uživo|po redu vožnje|Procjena|nedostupn|…/i;
+const FORBIDDEN = /registra|nije provjera|Obuhvat|Dohvaćeno|zastarjelo|nepotvrđeno|uživo|vozni red|Procjena|nedostupn|…/i;
 
 /** Bounds that hold in every scene (§12). */
 function checkBounds(rows: readonly NearbyRow[]): void {

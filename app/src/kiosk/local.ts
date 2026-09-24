@@ -6,13 +6,14 @@
 // yet" (loading), "the source is down" (unknown) and "the source answered
 // and there is nothing" (a true empty), because a public screen that prints
 // zero for an outage is lying (PRODUCT.md, principle 4).
-import type { FeedItem, ModuleId, ModuleSnapshot, SnapshotStatus } from '../../../worker/feed/schema';
+import type { Attribution, FeedItem, ModuleId, ModuleSnapshot, SnapshotStatus } from '../../../worker/feed/schema';
 import { fillAttribution } from '../attribution';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
-import { cityTeaserAttribution } from '../layers/grad-teaser';
+import { CULTURE_SOURCE_ATTRIBUTION } from '../layers/kultura';
 import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../layers/route-summary';
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
+import { CITY_WORK_SOURCE_ATTRIBUTION } from '../layers/uprava-i-pravo';
 import { dist, toPlane } from '../../../shared/motion/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
@@ -51,8 +52,7 @@ export interface WeatherNow {
   condition: string;
   station: string;
   details: string[];
-  observedAt: string;
-  /** The observation's own time, for a freshness check by the caller. */
+  /** The observation's own time, for a freshness check by the caller; the wall never prints it (§12). */
   observedMs: number | null;
   attribution: string;
 }
@@ -62,7 +62,7 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
   const observation = snapshot?.items.find((item) => item.kind === 'observation') ?? snapshot?.items[0];
   const state = sourceState(snapshot);
   if (!snapshot || !observation) {
-    return { state, temperature: null, condition: '', station: '', details: [], observedAt: '', observedMs: null, attribution: snapshot?.attribution.text ?? '' };
+    return { state, temperature: null, condition: '', station: '', details: [], observedMs: null, attribution: snapshot?.attribution.text ?? '' };
   }
   const temp = dataNumber(observation, 'temp');
   const humidity = dataNumber(observation, 'humidity');
@@ -86,7 +86,6 @@ export function weatherNow(modules: readonly ModuleSnapshot[], strings: KioskStr
     condition: cleanCondition(dataText(observation, 'weather')),
     station: observation.title,
     details,
-    observedAt: Number.isFinite(observedMs) ? fill(strings.weather.observed, { time: clock(observedMs) }) : '',
     observedMs: Number.isFinite(observedMs) ? observedMs : null,
     attribution: fillAttribution(snapshot.attribution, snapshot, observation),
   };
@@ -410,6 +409,35 @@ const CITY_SOURCE: Record<string, string> = {
   kvartovske: 'Grad Zagreb, kvartovske novosti',
   komunalne: 'Grad Zagreb, plan komunalnih aktivnosti',
 };
+
+// The same credits the Događanja and Grad panels print, so a reader who scans
+// after seeing a city row meets the same attribution on the session side.
+// ZET's two feeds are shown on no full panel (E7), so theirs lives only here.
+const SOURCE_ATTRIBUTION: Record<string, string> = {
+  ...CULTURE_SOURCE_ATTRIBUTION,
+  skupstina: CITY_WORK_SOURCE_ATTRIBUTION.skupstina,
+  komunalne: CITY_WORK_SOURCE_ATTRIBUTION.komunalne,
+  'zet-novosti': 'ZET (Otvorena dozvola)',
+  'zet-promet': 'ZET (Otvorena dozvola)',
+};
+
+/**
+ * Per-row attribution naming the row's own source and its licence, linking
+ * to the row itself when it has a link; with no row, the payload's own
+ * statement for the module (the reduced copy's Otvorena dozvola attribution);
+ * with no snapshot yet, nothing, like every other card while loading.
+ */
+export function cityTeaserAttribution(snapshot: ModuleSnapshot | undefined, item: FeedItem | undefined): Attribution | undefined {
+  if (!snapshot) return undefined;
+  if (!item) return snapshot.attribution;
+  const source = dataText(item, 'source');
+  const credit = SOURCE_ATTRIBUTION[source];
+  return {
+    text: credit ? `Izvor: ${credit}` : snapshot.attribution.text,
+    url: item.link ?? snapshot.attribution.url,
+    licence: snapshot.attribution.licence,
+  };
+}
 
 /** The kicker word for a city row's source: "Gradska skupština", "ZET obavijest"... */
 export function cityKicker(source: string, strings: KioskStrings): string {

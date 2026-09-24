@@ -2,6 +2,7 @@
 import '../../shared/kiosk/external-text';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSchemaMap, type SchemaFrame } from '../../app/src/motion/schema-map';
+import { NETWORK_RELOAD_RETRY_MS } from '../../app/src/motion/network-reload';
 import { clusterSchemaMarks, LABEL_MIN_PX_PER_UNIT, paintPills, PILL_EDGE_MARGIN_PX, SCHEMA_FOCUS_DIM_ALPHA, type SchemaContext } from '../../app/src/motion/schema-paint';
 import { clusterLabel, PILL_HEIGHT_PX, PILL_INKS, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import type { VehicleMark } from '../../app/src/motion/schematic';
@@ -552,4 +553,145 @@ it('wraps a hub past two rows onto a third on the canvas too: twenty-three bus l
   expect(ys[2]).toBeCloseTo(hub.y + PILL_LINE_HEIGHT_PX * size, 9);
   const radii = calls.filter((c) => c.op === 'arc').map((c) => c.args[2] as number);
   expect(radii).toEqual([...Array<number>(4).fill((PILL_HEIGHT_PX / 2) * size), ...Array<number>(4).fill((PILL_HEIGHT_PX / 2 + 3) * size)]);
+});
+
+it('the position note is the phone’s: a wall’s or handheld stage’s schema prints no caveat (companion brief §12)', async () => {
+  const phone = harness();
+  await flush();
+  expect(phone.container.querySelector('[data-testid=schema-note]')!.textContent).toBe('Položaj je izračunat iz vlastitih očitanja svakog vozila, geometrije pruge i voznog reda; ZET ne objavljuje smjer ni brzinu.');
+  for (const extra of [{ interactive: false }, { interactive: false, presentationProfile: 'handheld' as const }, { basemapProfile: 'prozor' as const }]) {
+    const wall = harness(extra);
+    await flush();
+    wall.frame();
+    expect(wall.container.querySelector('[data-testid=schema-note], .schema-note'), JSON.stringify(extra)).toBeNull();
+    expect(wall.container.textContent, JSON.stringify(extra)).not.toMatch(/Položaj je izračunat|ZET ne objavljuje/);
+  }
+});
+
+// A rebuilt rail graph under a new graphHash (decision 25's connectors at D3):
+// the city map migrates in place (city-map.test.ts, 'graph identity on an
+// already-open map'); the schema, which also derives every arc from the graph,
+// does the same rather than standing empty until a page reload (review of D3,
+// finding 3). The loops: one whose platform the artwork prints (T0) sits on
+// the terminus circle; one whose platform it does not (Zapad 750) is not drawn
+// on the schema and stays on the geographic map (decision 34). The two graphs
+// keep the loop ids and swap their geometry (review of lane/t-schema, finding
+// 3): on the old graph loop:1:aaa turns at T0 and loop:1:bbb at Zapad 750, on
+// the new one loop:1:aaa at Zapad 750 and loop:1:bbb at C1200, so a placer
+// kept from the old graph would put the wrong loop on the wrong circle.
+const loopSpec = (aaa: { edges: number[]; served: string[] }, bbb: { edges: number[]; served: string[] }) => {
+  const spec = corridorSpec();
+  spec.routes.find((r) => r.id === '1')!.paths!.push(
+    { id: 'loop:1:aaa', direction: -1, synthetic: true, ...aaa },
+    { id: 'loop:1:bbb', direction: -1, synthetic: true, ...bbb },
+  );
+  return spec;
+};
+const OLD_GRAPH = { ...syntheticNetwork(loopSpec({ edges: [0], served: ['T0'] }, { edges: [5], served: ['W750'] })), graphHash: 'aaaaaaaaaaaaaaaa' };
+const NEW_GRAPH = { ...syntheticNetwork(loopSpec({ edges: [5], served: ['W750'] }, { edges: [1], served: ['C1200'] })), graphHash: 'bbbbbbbbbbbbbbbb' };
+const onGraph = (network: string, id: string, path: string, s: number): MapPoint =>
+  ({ ...TRAM, id, path, network, plan: { on: 'path', knots: [[NOW, s], [NOW + 60_000, s]] } });
+
+it('adopts a rebuilt graph while the schema is shown, as the city map does: marks and list clear, the artefact reloads once, vehicles reappear on the new graph without a page reload, and an undrawn loop stays undrawn (decision 34)', async () => {
+  let finish!: (net: typeof OLD_GRAPH | null) => void;
+  const reloadNetwork = vi.fn(() => new Promise<typeof OLD_GRAPH | null>((resolve) => { finish = resolve; }));
+  const h = harness({ loadNetwork: async () => OLD_GRAPH, reloadNetwork, points: [onGraph(OLD_GRAPH.graphHash, 'tram', '1_0', 500)] });
+  await flush();
+  h.frame();
+  expect(h.handle.network!()).toBe(OLD_GRAPH);
+  expect(h.frames.at(-1)!.marks.map((m) => m.id)).toEqual(['tram']);
+  expect(h.buttons().map((b) => b.dataset.vehicle)).toEqual(['tram']);
+
+  const rebuilt = [
+    onGraph(NEW_GRAPH.graphHash, 'tram', '1_0', 500),
+    onGraph(NEW_GRAPH.graphHash, 'loop-aaa', 'loop:1:aaa', 5),
+    onGraph(NEW_GRAPH.graphHash, 'loop-bbb', 'loop:1:bbb', 5),
+  ];
+  h.handle.update(rebuilt, []);
+  // Never a new arc on old rails: nothing is drawn or listed until the replacement graph is in.
+  expect(h.handle.vehicles!()).toEqual([]);
+  expect(h.handle.network!()).toBeNull();
+  expect(h.onNetwork).toHaveBeenLastCalledWith(null);
+  expect(h.container.dataset.networkStale).toBe('true');
+  expect(reloadNetwork).toHaveBeenCalledTimes(1);
+  expect(h.buttons()).toEqual([]);
+  h.frame();
+  expect(h.handle.vehicles!()).toEqual([]);
+  h.handle.update(rebuilt, []);
+  expect(reloadNetwork).toHaveBeenCalledTimes(1); // one request in flight, not one per poll
+
+  finish(NEW_GRAPH);
+  await flush();
+  h.frame();
+  expect(h.handle.network!()).toBe(NEW_GRAPH);
+  expect(h.onNetwork).toHaveBeenLastCalledWith(NEW_GRAPH);
+  expect(h.container.dataset.networkStale).toBeUndefined();
+  expect(h.handle.vehicles!().map((v) => v.id).sort()).toEqual(['loop-aaa', 'loop-bbb', 'tram']);
+  // The placer was rebuilt on the new graph: the tram is back on its line;
+  // loop:1:bbb, which now turns at C1200, sits on that circle, east of the
+  // tram; loop:1:aaa, which now turns at Zapad 750, a platform the artwork does
+  // not print, is on the schema nowhere. The old placer would have put aaa on
+  // T0's circle, west of the tram, and bbb nowhere.
+  const marks = h.frames.at(-1)!.marks;
+  expect(marks.map((m) => m.id).sort()).toEqual(['loop-bbb', 'tram']);
+  expect(marks.find((m) => m.id === 'loop-bbb')!.x).toBeGreaterThan(marks.find((m) => m.id === 'tram')!.x);
+  expect(h.buttons().map((b) => b.dataset.vehicle).sort()).toEqual(['loop-bbb', 'tram']);
+  expect(h.loadSchema).toHaveBeenCalledTimes(1); // the artwork is the feed's, not the graph's
+  expect(h.handle.status!()).toBe('ready');
+});
+
+it('retries a failed or wrong-graph reload at the next poll interval, ignores a completion after destroy, and never reloads for a matching graph or for legacy motion without identity', async () => {
+  const reloadNetwork = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(OLD_GRAPH).mockResolvedValueOnce(NEW_GRAPH);
+  const h = harness({ loadNetwork: async () => OLD_GRAPH, reloadNetwork, points: [onGraph(OLD_GRAPH.graphHash, 'tram', '1_0', 500)] });
+  await flush();
+  h.frame();
+  h.handle.update([onGraph(OLD_GRAPH.graphHash, 'tram', '1_0', 520), { ...TRAM, id: 'legacy', plan: undefined, path: undefined }], []);
+  expect(reloadNetwork).not.toHaveBeenCalled();
+  expect(h.handle.vehicles!().map((v) => v.id).sort()).toEqual(['legacy', 'tram']);
+  // One poll interval apart: the budget (network-reload.ts) allows one attempt per interval.
+  for (let i = 0; i < 3; i++) {
+    h.frame(NETWORK_RELOAD_RETRY_MS);
+    h.handle.update([onGraph(NEW_GRAPH.graphHash, 'tram', '1_0', 500)], []);
+    if (i === 2) h.handle.destroy();
+    await flush();
+    expect(h.handle.vehicles!()).toEqual([]);
+  }
+  expect(reloadNetwork).toHaveBeenCalledTimes(3);
+  expect(h.handle.network!()).not.toBe(NEW_GRAPH);
+});
+
+// update() also runs on search input and on slot repaints, not only per poll
+// (review of lane/t-schema, finding 1): a failed reload may be asked again at
+// most once per poll interval, so twenty repaints on one clock are one fetch
+// past the cache, and the next poll interval one more.
+it('spends at most one artefact reload attempt per poll interval: twenty identical updates on an unchanged clock are one fetch, the next interval one more, and an installed graph frees the budget', async () => {
+  const reloadNetwork = vi.fn<() => Promise<typeof OLD_GRAPH | null>>().mockResolvedValue(null);
+  const h = harness({ loadNetwork: async () => OLD_GRAPH, reloadNetwork, points: [onGraph(OLD_GRAPH.graphHash, 'tram', '1_0', 500)] });
+  await flush();
+  h.frame();
+  const named = [onGraph(NEW_GRAPH.graphHash, 'tram', '1_0', 500)];
+  for (let i = 0; i < 20; i++) {
+    h.handle.update(named, []);
+    await flush();
+  }
+  expect(reloadNetwork).toHaveBeenCalledTimes(1);
+  expect(h.container.dataset.networkStale).toBe('true');
+  h.frame(NETWORK_RELOAD_RETRY_MS - 1);
+  h.handle.update(named, []);
+  await flush();
+  expect(reloadNetwork).toHaveBeenCalledTimes(1);
+  h.frame(1);
+  h.handle.update(named, []);
+  await flush();
+  expect(reloadNetwork).toHaveBeenCalledTimes(2);
+  reloadNetwork.mockResolvedValueOnce(NEW_GRAPH);
+  h.frame(NETWORK_RELOAD_RETRY_MS);
+  h.handle.update(named, []);
+  await flush();
+  expect(reloadNetwork).toHaveBeenCalledTimes(3);
+  expect(h.handle.network!()).toBe(NEW_GRAPH);
+  // A further graph right after an installed one is asked for at once: the budget counts attempts that failed.
+  h.handle.update([onGraph('cccccccccccccccc', 'tram', '1_0', 500)], []);
+  await flush();
+  expect(reloadNetwork).toHaveBeenCalledTimes(4);
 });

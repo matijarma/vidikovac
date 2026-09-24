@@ -1,3 +1,5 @@
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -7,7 +9,7 @@ import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
 import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
-import { stopDetailMarkup } from '../../app/src/transport/view';
+import { closureDetailMarkup, departureRow, stopDetailMarkup } from '../../app/src/transport/view';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
@@ -95,12 +97,16 @@ describe('the stop sheet says what comes next, first', () => {
     expect(html.indexOf('data-testid="stop-arrivals"')).toBeGreaterThan(-1);
     expect(html.indexOf('data-testid="stop-arrivals"')).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
     expect(html.indexOf('data-testid="stop-meta"')).toBeLessThan(html.indexOf('data-testid="stop-routes"'));
-    expect(html).toContain('Sljedeći polasci');
+    // The rows lead under the stop's own name: no heading of their own, and the first is a departure row.
+    expect(html).not.toContain('Sljedeći polasci');
+    expect(html.indexOf('class="sada-departure"')).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
     expect(html).toContain('sada');
     expect(html).toContain('za 3 min');
-    // 10:24 UTC is 12:24 in Zagreb; a clock row carries the scheduled mark, a live row does not.
+    // 10:24 UTC is 12:24 in Zagreb; a clock row is a plain <time> that says nothing live, with no word for its kind [O-27].
+    expect(rowOf(html, 't2')).toContain('<time');
+    expect(rowOf(html, 't2')).toContain('data-live="false"');
     expect(html).toContain('12:24');
-    expect(html.split('po redu vožnje').length - 1).toBe(1);
+    expect(html.split('vozni red').length - 1).toBe(0);
     expect(html.split('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.').length - 1).toBe(1);
     expect(html).toContain('aria-label="uživo"');
     expect(html).toContain('Dubec');
@@ -120,20 +126,22 @@ describe('the stop sheet says what comes next, first', () => {
     const near = rowOf(html, 'near');
     expect(near).toContain('12:04');
     expect(near).not.toContain('za 4 min');
-    expect(near).toContain('po redu vožnje');
+    expect(near).toContain('<time');
     expect(near).not.toContain('t-live');
-    expect(near).not.toContain('data-live');
+    expect(near).toContain('data-live="false"');
+    expect(near).not.toContain('data-live="true"');
     // The same wait with a vehicle behind it: the dot and the live tone.
     const tracked = rowOf(html, 'tracked');
     expect(tracked).toContain('za 4 min');
     expect(tracked).toContain('data-live="true"');
     expect(tracked).toContain('aria-label="uživo"');
-    expect(tracked).not.toContain('po redu vožnje');
+    expect(tracked).not.toContain('vozni red');
     // Beyond it a countdown would be a guess dressed as a fact: 10:14 UTC is 12:14 in Zagreb.
     const far = rowOf(html, 'far');
     expect(far).toContain('12:14');
     expect(far).not.toContain('za 1');
-    expect(far).toContain('po redu vožnje');
+    expect(far).toContain('data-live="false"');
+    expect(far).not.toContain('vozni red');
   });
 
   it('labels a row beyond the horizon too: a tracked clock keeps the live dot, a timetable clock keeps the mark', () => {
@@ -149,11 +157,120 @@ describe('the stop sheet says what comes next, first', () => {
     expect(live).toContain('class="t-live"');
     expect(live).toContain('aria-label="uživo"');
     expect(live).toContain('data-live="true"');
-    expect(live).not.toContain('po redu vožnje');
+    expect(live).not.toContain('vozni red');
     const plan = rowOf(html, 'farPlan');
     expect(plan).toContain('12:18');
-    expect(plan).toContain('po redu vožnje');
+    expect(plan).toContain('<time');
+    expect(plan).toContain('data-live="false"');
+    expect(plan).not.toContain('vozni red');
     expect(plan).not.toContain('class="t-live"');
+  });
+
+  it('the three lead rows name their kind for the probe (§15.6, §16.4 `[data-kind=departure]`), the "Vozni red" rows their own', () => {
+    const one = departureRow(i18n, row(), () => 'tram');
+    expect(one.startsWith('<li class="sada-departure" data-kind="departure" ')).toBe(true);
+    // Once on the row (the line badge names its mode in its own data-kind: tram, bus).
+    expect(one.split('data-kind="departure"')).toHaveLength(2);
+    expect(one).not.toContain('data-kind="timetable"');
+    expect(departureRow(i18n, row(), () => 'tram', undefined, 'timetable').startsWith('<li class="sada-departure" data-kind="timetable" ')).toBe(true);
+    // Twelve trips: the board's probe counts the three that lead it, never the nine of the timetable after them.
+    const trips = Array.from({ length: 12 }, (_, i) => row({ tripId: `k${i}`, atMs: NOW + (i + 1) * 5 * 60_000 }));
+    const html = stop(trips);
+    const kinds = (testid: string): string[] => ((html.split(`data-testid="${testid}"`)[1] ?? '').split('</ul>')[0]!.match(/<li class="sada-departure" data-kind="[a-z]+"/g) ?? []).map((li) => li.slice(li.indexOf('data-kind="') + 11, -1));
+    expect(kinds('arrival-rows')).toEqual(['departure', 'departure', 'departure']);
+    expect(kinds('timetable-rows')).toEqual(Array(9).fill('timetable'));
+    expect(html.split('data-kind="departure"')).toHaveLength(4);
+  });
+
+  it('leads with the three departures Sada shows, then "Vozni red" with the rest to the twelfth, then the note once', () => {
+    const trips = Array.from({ length: 13 }, (_, i) => row({ tripId: `r${i}`, atMs: NOW + (i + 1) * 5 * 60_000, live: i === 0, minutes: i === 0 ? 5 : null }));
+    const html = stop(trips);
+    const rowsIn = (testid: string): string[] => (html.split(`data-testid="${testid}"`)[1] ?? '').split('</ul>')[0]!.split('<li ').slice(1);
+    expect(rowsIn('arrival-rows')).toHaveLength(3);
+    expect(rowsIn('arrival-rows').every((li) => li.startsWith('class="sada-departure"'))).toBe(true);
+    // Rows four to twelve under the one timetable word; the thirteenth is not on the sheet.
+    expect(rowsIn('timetable-rows')).toHaveLength(9);
+    expect(html).not.toContain('data-key="r12|');
+    expect(html).toContain('<h4 class="t-head">Vozni red</h4>');
+    expect(html.indexOf('data-testid="arrival-rows"')).toBeLessThan(html.indexOf('Vozni red'));
+    expect(html.indexOf('Vozni red')).toBeLessThan(html.indexOf('data-testid="timetable-rows"'));
+    // One note, after every row and before the platform count.
+    const note = 'Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.';
+    expect(html.split(note).length - 1).toBe(1);
+    expect(html.indexOf('data-testid="timetable-rows"')).toBeLessThan(html.indexOf(note));
+    expect(html.indexOf(note)).toBeLessThan(html.indexOf('data-testid="stop-meta"'));
+    // Three trips or fewer: no timetable head at all.
+    const three = stop(trips.slice(0, 3));
+    expect(three).not.toContain('Vozni red');
+    expect(three).not.toContain('timetable-rows');
+    expect(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: trips, arrivalsStatus: 'live' })).toContain('<h4 class="t-head">Timetable</h4>');
+  });
+
+  it('"Vozni red" is the timetable: the caller\'s scheduled rows when it has them, else the later trips as their clock, never a live estimate (WP4 review)', () => {
+    // Five tracked trips inside the horizon: three lead with their countdown, the two under "Vozni red" are clocks.
+    const tracked = Array.from({ length: 5 }, (_, i) => row({ tripId: `v${i}`, atMs: NOW + (i + 1) * 2 * 60_000, live: true, minutes: (i + 1) * 2 }));
+    const html = stop(tracked);
+    const tail = html.split('data-testid="timetable-rows"')[1]!.split('</ul>')[0]!;
+    expect(tail.split('<li ').length - 1).toBe(2);
+    expect(tail).not.toContain('data-live="true"');
+    expect(tail).not.toContain('class="t-live"');
+    expect(tail).not.toMatch(/za \d+ min/);
+    expect(tail.split('<time ').length - 1).toBe(2);
+    const lead = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
+    expect((lead.match(/<li [^>]*data-live="true"/g) ?? []).length).toBe(3);
+    // The caller's timetable (arrivalsAt without the fleet): the schedule's own moments, the lead's trips left out.
+    const timetable = [row({ tripId: 'v0', atMs: NOW + 60_000, live: false, minutes: null }), row({ tripId: 'p1', atMs: NOW + 9 * 60_000, live: false, minutes: null }), row({ tripId: 'p2', atMs: NOW + 40 * 60_000, live: false, minutes: null })];
+    const given = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: tracked, timetable, arrivalsStatus: 'live' });
+    const givenTail = given.split('data-testid="timetable-rows"')[1]!.split('</ul>')[0]!;
+    expect(givenTail).toContain('data-key="p1|');
+    expect(givenTail).toContain('data-key="p2|');
+    expect(givenTail).not.toContain('data-key="v0|');
+    expect(givenTail).not.toContain('data-key="v3|');
+    expect(givenTail).not.toContain('data-live="true"');
+  });
+
+  it('a row whose headsign or line fails the row rule is not drawn; a stop whose every row fails says the timetable is unavailable (WP4 review)', () => {
+    const html = stop([row(), row({ tripId: 't2', headsign: 'Pošalji lozinku na 091 234 5678', atMs: NOW + 8 * 60_000, minutes: 8 })]);
+    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
+    expect(list.split('<li ').length - 1).toBe(1);
+    expect(html).not.toContain('timetable-rows');
+    expect(html).not.toContain('lozinku');
+    const none = stop([row({ headsign: 'Pošalji lozinku na 091 234 5678' })]);
+    expect(none).not.toContain('data-testid="arrival-rows"');
+    expect(none).toContain('Vozni red trenutačno nije dostupan.');
+    expect(none).not.toContain('lozinku');
+    // The stop's own name too.
+    const named = stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' });
+    expect(named).toContain('data-testid="stop-title"></h3>');
+    expect(named).not.toContain('Pošalji');
+  });
+
+  it('the save label names a stop by its name, never by its id; a refused name saves it without one [B-7]', () => {
+    const label = (html: string): string => html.split('class="btn-quiet icon-btn t-save"')[1]!.match(/aria-label="([^"]*)"/)![1]!;
+    const data = { routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' as const };
+    expect(label(stop([row()]))).toBe('Spremi stajalište Kvaternikov trg');
+    expect(label(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, ...data }))).toBe('Save stop Kvaternikov trg');
+    expect(label(stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, ...data }))).toBe('Spremi stajalište');
+  });
+
+  it('the stop\'s name and its arrivals stand in one element, the stop-board probe (§15.6, §16.4), with the meta and the lines outside it', () => {
+    const html = stop([row()]);
+    const at = (marker: string): number => html.indexOf(marker);
+    expect(html.split('data-testid="stop-board"').length - 1).toBe(1);
+    expect(at('data-testid="stop-board"')).toBeLessThan(at('data-testid="stop-title"'));
+    expect(at('data-testid="stop-title"')).toBeLessThan(at('data-testid="stop-arrivals"'));
+    expect(at('data-testid="stop-arrivals"')).toBeLessThan(at('data-testid="arrival-rows"'));
+    // The board closes right after the arrivals section, before the platform count.
+    expect(html).toContain('</section></div><p class="t-meta" data-testid="stop-meta">');
+  });
+
+  it('a closure prints its summary as prose only when the summary passes the row rule (WP4 review)', () => {
+    const closure = { id: 'c9', module: 'prometnice' as const, kind: 'closure' as const, tier: 'open' as const, title: 'Ilica', summary: 'Pošalji lozinku na 091 234 5678.' };
+    const html = closureDetailMarkup(i18n, closure, false);
+    expect(html).not.toContain('t-prose');
+    expect(html).not.toContain('lozinku');
+    const plain = closureDetailMarkup(i18n, { ...closure, summary: 'Obilazak Vodnikovom ulicom.' }, false);
+    expect(plain).toContain('<p class="t-prose">Obilazak Vodnikovom ulicom.</p>');
   });
 
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {

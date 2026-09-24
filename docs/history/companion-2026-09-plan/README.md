@@ -1,5 +1,7 @@
 # Companion round, September 2026 — execution files
 
+*Executed. Moved here from `docs/companion-2026-09-22-plan/` by WP7 as the record of the round; the brief stays at `docs/companion-2026-09-22.md`.*
+
 These eight files are the execution plan referenced by `docs/companion-2026-09-22.md` §15 (sequence, lanes, gates, shared seams, probe contract, rules) and §16 (verification). The brief is the master; each file here is one work package.
 
 | File | Package | Lane | Deploy |

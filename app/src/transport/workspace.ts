@@ -6,8 +6,18 @@
 // keeps the map itself) all survive a poll. Content re-renders set innerHTML
 // on two stable containers and restore focus by id; every interaction is one
 // delegated listener on the root, so no handler ever sits on a node the next
-// render discards. The chrome (chips on the map, the sheet head, the search)
-// is built once and updated in place.
+// render discards. The chrome (the sheet head with its map/schema switch, the
+// search) is built once and updated in place.
+//
+// Karta is the timeline's map [O-50]: it opens framed on the place (the same
+// place Sada is titled with, city/place.ts), with every vehicle drawn at once
+// and the city's curated marks (city/curated.ts: BAJS discs with their counts,
+// the venues with a programme tonight), and its sheet opens on the place's
+// "U blizini" rows (ctx.nearby, the page's). There is no group, no category and
+// no tools menu: one search field reaches routes, stops, places and streets,
+// and a category (a toilet, water, a market) is a search, drawn on the map
+// only while it is one. The one control over the map is the switch between
+// the city map and the schema in the sheet's head [O-72].
 //
 // On the phone the workspace is a stage: the map fills it and the sheet
 // floats over its lower part at one of three detents (transport/sheet.ts).
@@ -20,7 +30,6 @@
 // other trip keeps its timetable moment. Each row says which of the two it
 // is -- live or by the timetable -- and the arithmetic itself is
 // shared/city/arrivals.ts's, never this file's.
-import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/contracts';
 import type { MapMode } from '../core/map-mode-store';
 import { loadStops } from '../core/screens';
@@ -29,29 +38,35 @@ import type { CityMapHandle, FitPadding, MapCamera, MapLine, MapPoint, MapSelect
 import { routeDelayMap } from '../motion/fixes';
 import type { Network } from '../../../shared/motion/network';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
-import { statusText } from '../panels/panel';
 import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
-import { discover, dynamicPlaces, clusterPlaces, CATEGORY_SOURCE, GROUP_SOURCES, type CityGroup, type Discovery } from '../city/discovery';
-import { ct, type CityWord } from '../city/strings';
+import { discover, dynamicPlaces, type Discovery } from '../city/discovery';
+import { CURATED_WALL, curatedCityPoints } from '../city/curated';
+import { resolvePlace, type PlaceContext } from '../city/place';
+import { ct } from '../city/strings';
 import { searchCity, type CitySearchResult } from '../city/search';
 import { placeCategory } from '../city/markup';
-import { defaultLocation, locationLabel, type LocationContext } from '../city/location';
-import { placeDetail, placesMarkup, streetDetail, departuresMarkup } from '../city/markup';
+import { defaultLocation, type LocationContext } from '../city/location';
+import { placeDetail, streetDetail, departuresMarkup } from '../city/markup';
 import { createBoardCache, type BoardCache, type BoardOperator } from '../city/boards';
 import { arrivalsAt } from '../../../shared/city/arrivals';
 import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
 import { locatedEvents, type ActivityWindow } from '../../../shared/city/events';
+import { DEFAULT_FRAME_STOPS, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../../shared/city/frame';
 import { matchStreet } from '../../../shared/city/geo';
+import { routeType } from '../kiosk/stops';
+import { frameView } from '../map/frame';
 import { reconcile } from '../ui/dom/reconcile';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
-import { closureItems, countByRoute, plausibleDelays, runningRoutes, vehicleDirection, vehicleNextStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from './detail';
+import { externalTextReady, feedLive } from '../city/feed';
+import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
+import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
 import type { StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
 import { tr, trPlural } from './strings';
 import {
-  closureDetailMarkup, closuresMarkup, delaysMarkup, NOTICE_ROWS, overviewMarkup, PEEK_BADGES, peekMarkup, routeDetailMarkup, safeId, statusLine, stopDetailMarkup, vehicleDetailMarkup, vehicleTitle,
-  type DelayRow, type Fold,
+  closureDetailMarkup, routeDetailMarkup, safeId, statusLine, STOP_ARRIVAL_ROWS, stopDetailMarkup, vehicleDetailMarkup, vehicleTitle, type Fold,
 } from './view';
 
 /** Separate slots let the page sweep the old renderer and release its resources after a swap. */
@@ -59,6 +74,14 @@ export const MAP_SLOT_ID = 'u-pokretu-map';
 export const SCHEMA_MAP_SLOT_ID = 'u-pokretu-schema';
 /** Symbol size on a public screen read from across a room. */
 export const KIOSK_SYMBOL_SCALE = 1.35;
+/** "U blizini" rows the Karta sheet shows under the place, as many as Sada's phone list. */
+export const KARTA_NEARBY_ROWS = 8;
+/** The programme a place's detail lists: its week. */
+const PROGRAMME_WINDOW: ActivityWindow = 'week';
+/** The stage a first frame fits into before the page has laid the workspace out: a 390 x 600 phone stage. */
+const FRAME_FALLBACK_BOX = { width: 390, height: 600 } as const;
+/** A tram line is route type 0 (kiosk/stops.ts routeType), the frame's measure (shared/city/frame.ts). */
+const isTram = (routeId: string): boolean => routeType(routeId) === ROUTE_TYPE_TRAM;
 
 export interface WorkspaceInput {
   ctx: LayerContext;
@@ -137,7 +160,7 @@ export function toPublic(sel: MapSelection | null): PublicSelection | null {
   return { kind: 'item', id: publicItemKey(module, sel.id), module };
 }
 
-/** The selection a public form names on this page, or null when nothing here matches it: the domain overview then stands. */
+/** The selection a public form names on this page, or null when nothing here matches it: the sheet then shows the place and what is near it. */
 export function fromPublic(pub: PublicSelection | null, ids: { vehicles: readonly string[]; closures: readonly string[] }, groups: readonly StopGroup[] | null): MapSelection | null {
   if (!pub) return null;
   if (pub.kind !== 'item') return toMapSelection(pub, groups);
@@ -165,32 +188,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   element.dataset.sheet = 'peek';
   // Built once. The controls below are updated in place on every render; only
   // the sheet body's content is ever re-set, with its focus restored by id.
-  // The mode chips and the tools float over the map; the search sits in the
-  // sheet under its head; the honesty note is the body's stable foot.
+  // Nothing floats over the map but its own status line; the map/schema
+  // switch sits in the sheet's head beside the peek, where every detent keeps
+  // it in reach; the search sits under the head; the honesty note is the
+  // body's stable foot.
   element.innerHTML = `
     <div class="transport-body">
       <div class="transport-map" id="u-pokretu-map" data-testid="transport-map">
-        <details class="t-map-menu" data-testid="map-controls">
-        <summary class="t-map-menu-trigger">${iconMarkup('sliders-horizontal')}<span data-ref="tools-title"></span></summary>
-        <div class="t-map-menu-body">
-        <div class="t-map-chips" role="group" data-ref="modes">
-          <button type="button" class="t-toggle" id="${id}-mode-tram" data-action="toggle-mode" data-mode="${ROUTE_TYPE_TRAM}" aria-pressed="true"></button>
-          <button type="button" class="t-toggle" id="${id}-mode-bus" data-action="toggle-mode" data-mode="${ROUTE_TYPE_BUS}" aria-pressed="true"></button>
-          <button type="button" class="t-toggle" id="${id}-closures" data-action="toggle-closures" aria-pressed="true"></button>
-          <span class="t-schema-legend" data-testid="schema-mode-legend" hidden></span>
-        </div>
-        <div class="t-map-tools" role="group" data-ref="tools">
-          <button type="button" class="btn-ghost t-action" id="${id}-map-mode" data-testid="map-mode-toggle" data-action="toggle-map-mode" aria-pressed="false" hidden></button>
-          <button type="button" class="btn-ghost t-action" id="${id}-fit-city" data-action="fit-city"></button>
-          <button type="button" class="btn-ghost t-action" id="u-pokretu-map-full" data-testid="map-full-toggle" data-action="toggle-full" hidden></button>
-        </div>
-        </div></details>
         <p class="t-map-status" role="status" data-testid="map-status" hidden></p>
       </div>
       <aside class="transport-sheet" data-testid="transport-sheet">
         <div class="t-sheet-head" data-ref="sheet-head">
           <span class="t-sheet-handle" aria-hidden="true"></span>
           <div class="t-peek" data-testid="transport-peek"></div>
+          <button type="button" class="btn-ghost t-mode" id="${id}-map-mode" data-testid="map-mode-toggle" data-action="toggle-map-mode" hidden></button>
           <button type="button" class="btn-quiet icon-btn t-sheet-toggle" id="${id}-sheet" data-action="toggle-sheet" aria-expanded="false" aria-controls="${ids.body}">${iconMarkup('chevron-down')}</button>
         </div>
         <div class="transport-toolbar" data-testid="transport-toolbar">
@@ -200,11 +211,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
             <button type="button" class="t-search-clear" id="${id}-clear" data-action="clear-search" hidden>&#215;</button>
             <p class="visually-hidden" id="${id}-hint" data-ref="search-hint"></p>
           </div>
-          <details class="city-filter-disclosure">
-            <summary data-ref="filter-label"></summary>
-            <div class="city-groups" role="group" data-testid="city-groups"></div>
-            <div class="city-filters" data-testid="city-filters"></div>
-          </details>
         </div>
         <div class="t-sheet-body" id="${ids.body}" data-testid="transport-detail">
           <div class="t-sheet-content" data-ref="content"></div>
@@ -219,16 +225,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const searchLabel = q<HTMLElement>('[data-ref=search-label]');
   const searchHint = q<HTMLElement>('[data-ref=search-hint]');
   const clearButton = q<HTMLButtonElement>(`#${id}-clear`);
-  const modeButtons: Record<number, HTMLButtonElement> = { [ROUTE_TYPE_TRAM]: q(`#${id}-mode-tram`), [ROUTE_TYPE_BUS]: q(`#${id}-mode-bus`) };
-  const modesGroup = q<HTMLElement>('[data-ref=modes]');
-  const closuresButton = q<HTMLButtonElement>(`#${id}-closures`);
-  const schemaLegend = q<HTMLElement>('[data-testid=schema-mode-legend]');
   const mapRegion = q<HTMLElement>('.transport-map');
   const statusEl = q<HTMLElement>('[data-testid=map-status]');
-  const tools = q<HTMLElement>('[data-ref=tools]');
   const mapModeButton = q<HTMLButtonElement>('[data-testid=map-mode-toggle]');
-  const fitCityButton = q<HTMLButtonElement>(`#${id}-fit-city`);
-  const fullButton = q<HTMLButtonElement>('#u-pokretu-map-full');
   const sheetEl = q<HTMLElement>('.transport-sheet');
   const sheetHead = q<HTMLElement>('[data-ref=sheet-head]');
   const peek = q<HTMLElement>('[data-testid=transport-peek]');
@@ -236,27 +235,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   const body = q<HTMLElement>(`#${ids.body}`);
   const content = q<HTMLElement>('[data-ref=content]');
   const note = q<HTMLElement>('[data-testid=transport-note]');
-  const filtersDisclosure = q<HTMLDetailsElement>('.city-filter-disclosure');
-  filtersDisclosure.addEventListener('toggle', () => {
-    if (filtersDisclosure.open) sheet?.set('open', { animate: false });
-    stage.scrollTop = 0;
-  });
 
   // --- State that survives every poll -------------------------------------
   let input: WorkspaceInput | null = null;
   let query = '';
-  let browseReturn: { query: string; scroll: number; group: CityGroup; category: string } | null = null;
+  let browseReturn: { query: string; scroll: number } | null = null;
   let stateRestored = false;
   let restoreSearchSheet = false;
   let activeOption: string | null = null;
   let selection: MapSelection | null = null;
   let following: string | null = null;
-  // Trams and buses both on (the plan's opening focus on every surface but the
-  // kiosk board, which keeps trams first, R-P1); the first render settles it.
+  // Every mode is drawn at once on every personal surface [O-50]; only the
+  // kiosk board keeps trams first (R-P1), which the first render settles.
   const modes = new Set<number>(ALL_MODES);
   let modesSettled = false;
-  let closuresVisible = true;
-  let delaysOpen = false;
   const folds = new Set<Fold>();
   let camera: MapCamera | null = null;
   let mapMode: MapMode = 'map';
@@ -283,20 +275,20 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   let sheet: SheetController | null = null;
   let lastFull = false;
   let lastStageHeight = -1;
-  let cityGroup: CityGroup = 'living';
-  let cityCategory = '';
-  let activityWindow: ActivityWindow = 'week';
+  /** The centre of the map the person last moved to: the reference a search's distances are measured from. */
   let cityCenter: {lon:number;lat:number}|null = null;
-  let cityReferenceKind: 'area' | 'device' = 'area';
   const referenceLocation = (): LocationContext => cityCenter
-    ? {...cityCenter,kind:cityReferenceKind,name:''}
+    ? {...cityCenter,kind:'area',name:''}
     : ctx().location??defaultLocation(ctx().screen);
-  /** The screen's stop centres the camera once, the first render only. */
-  let stopCentered = false;
+  /** The frame the camera last took (the place, its circle and the stage's size), and whether the person has moved the map since. */
+  let framedKey: string | null = null;
+  let movedSinceFrame = false;
+  /** The stop table the circle is measured over, rebuilt only when the catalogue or the network changes. */
+  let frameTable: { stops: readonly ScreenStop[]; net: Network | null; table: FrameStop[] } | null = null;
+  /** The page's nearby list for this render, asked once however often the sheet paints before the next one. */
+  let nearbyMemo: { ctx: LayerContext; list: ReturnType<NonNullable<LayerContext['nearby']>> } | null = null;
   let cityLimit = 20;
   let cityData: Discovery|null = null;
-  let cityFilterKey = '';
-  let bikeMode:'rent'|'return'='rent';
   let streetRequested=false;
   let disposed=false;
   let disposalRegistered=false;
@@ -306,46 +298,85 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
    *  for it (city/boards.ts). This workspace's own, and destroyed with it. */
   const boards: BoardCache = (deps.createBoards ?? createBoardCache)();
   const cityState = () => ctx().city ?? emptyCity();
+  /** What the search finds among the city's places and streets; asked only while something is typed. Category
+   *  words ("wc", "voda", "tržnica") still reach their places (city/discovery.ts CATEGORY_TERMS): a category is a
+   *  search result, never a filter. */
   function discovery(): Discovery {
-    const c=ctx(),stop=c.screen?.stop;
+    const c=ctx();
     return discover(cityState(),c.snapshots.dogadanja?.items??[],{
-      group:cityGroup,category:cityCategory,query,window:activityWindow,
-      center:referenceLocation(),radius:5000,now:c.frozenAt??c.now,bikeMode});
+      group:'living',category:'',query,window:'today',
+      center:referenceLocation(),radius:5000,now:c.frozenAt??c.now});
   }
   function askCity():void {
     const c=ctx(); if(c.session?.frozen)return;
-    c.ensureCity?.(cityCategory?CATEGORY_SOURCE[cityCategory]??[]:GROUP_SOURCES[cityGroup]);
+    // The venues with a programme tonight are on the map from the first render; the BAJS stations come with the
+    // city's live file (core/city-store.ts start()).
+    c.ensureCity?.(['culture']);
     if(query)c.ensureCity?.(['culture','water','toilets','sport','dogs','markets','recycling','wifi','cycle-parking','garages','charging','heritage','streets','hz-schedule']);
   }
-  function paintCityFilters():void {
-    const i18n=ctx().i18n;
-    const groups: [CityGroup,CityWord][]=[['living','all'],['culture','culture'],['transport','movement'],['useful','useful'],['heritage','heritage']];
-    const g=q<HTMLElement>('[data-testid=city-groups]');
-    const groupHtml=groups.map(([key,label])=>`<button type="button" class="city-group" data-action="city-group" data-group="${key}" aria-pressed="${cityGroup===key}">${esc(ct(i18n,label))}</button>`).join('');
-    if(g.innerHTML!==groupHtml){const next=document.createElement('div');next.innerHTML=groupHtml;reconcile(g,next);}
-    const category:CityWord[]=cityGroup==='useful'?['water','toilet','sport','dogs','recycling','market','wifi','cycle-parking','garage','charging']:
-      cityGroup==='transport'?['network','bikes','rail','cycle-paths']:cityGroup==='heritage'?['heritage','streets']:cityGroup==='culture'?['activeVenues','allVenues']:[];
-    const windows=cityGroup==='culture'||cityGroup==='living'?`<div class="city-times" role="group" aria-label="${esc(ct(i18n,'program'))}">${(['today','tomorrow','week'] as ActivityWindow[]).map(w=>`<button type="button" class="city-filter" data-action="city-window" data-window="${w}" aria-pressed="${activityWindow===w}">${ct(i18n,w)}</button>`).join('')}</div>`:'';
-    const html=windows+category.map(k=>{const key=k==='network'||k==='activeVenues'?'':k==='allVenues'?'culture':k;return `<button type="button" class="city-filter" data-action="city-category" data-category="${key}" aria-pressed="${cityCategory===key}">${ct(i18n,k)}</button>`;}).join('')
-      +(cityCategory==='bikes'?`<button class="city-filter" data-action="bike-mode" data-mode="rent" aria-pressed="${bikeMode==='rent'}">${ct(i18n,'rentMode')}</button><button class="city-filter" data-action="bike-mode" data-mode="return" aria-pressed="${bikeMode==='return'}">${ct(i18n,'returnMode')}</button>`:'');
-    const f=q<HTMLElement>('[data-testid=city-filters]');if(f.innerHTML!==html){const next=document.createElement('div');next.innerHTML=html;reconcile(f,next);}
-    g.setAttribute('aria-label',ct(i18n,'layers'));
+  /** The place Karta is framed on and its sheet is titled with: the page's (city/place.ts, the one Sada is
+   *  titled with), else resolved here from what this context knows (a kiosk board, a unit context). */
+  function placeNow(): PlaceContext {
+    const c=ctx();
+    return c.place ?? resolvePlace({ screen: c.screen, saved: c.saved, stops: c.stops, location: c.location });
   }
-  function saveCityFilters():void {
-    const category=cityCategory,group=cityGroup,window=activityWindow;
-    ctx().setFilter?.('city-group',group);
-    ctx().setFilter?.('city-category',category);
-    ctx().setFilter?.('city-window',window);
-    cityGroup=group;cityCategory=category;activityWindow=window;
+  /** The page's "U blizini" list (ctx.nearby), asked once per render however often the sheet paints. */
+  function nearbyList(): ReturnType<NonNullable<LayerContext['nearby']>> {
+    const c=ctx();
+    if(nearbyMemo?.ctx!==c) nearbyMemo={ctx:c,list:c.nearby?.(KARTA_NEARBY_ROWS)??null};
+    return nearbyMemo.list;
   }
+  /** The circle the frame fits: the list's own when the page has one, else measured here the same way
+   *  (shared/city/frame.ts frameRadiusM over the stop table and, once the map has it, the network's tram lines),
+   *  else the six-stop fallback. */
+  function frameRadius(place: PlaceContext): number {
+    const listed = nearbyList();
+    if (listed) return listed.radiusM;
+    const stops = ctx().stops ?? [];
+    if (!frameTable || frameTable.stops !== stops || frameTable.net !== net) {
+      frameTable = { stops, net, table: frameStopsFrom(stops, isTram, net ? frameLinesOf(net) : []) };
+    }
+    return frameRadiusM(place, frameTable.table, DEFAULT_FRAME_STOPS);
+  }
+  /** The frame [O-50]: the place at the centre and its measured circle across the stage's shorter side
+   *  (map/frame.ts frameView, the wall's own arithmetic). Taken on the first render and again when the place or
+   *  its circle changes (a saved stop, the catalogue arriving), but never over a map the person has moved, an
+   *  open selection or a followed vehicle. */
+  function frameCamera(): void {
+    const place = placeNow();
+    const radiusM = frameRadius(place);
+    // Before the page lays the stage out (the first render happens off the document) a phone's stage stands in;
+    // the stage's own first layout frames again at its real size.
+    const laidOut = stage.clientWidth > 0 && stage.clientHeight > 0;
+    const width = laidOut ? stage.clientWidth : FRAME_FALLBACK_BOX.width;
+    const height = laidOut ? stage.clientHeight : FRAME_FALLBACK_BOX.height;
+    const key = `${place.lon.toFixed(5)},${place.lat.toFixed(5)}|${Math.round(radiusM / 10)}|${Math.round(width / 40)}x${Math.round(height / 40)}`;
+    if (key === framedKey) return;
+    if (framedKey !== null && (movedSinceFrame || selection || following || query)) return;
+    framedKey = key;
+    movedSinceFrame = false;
+    camera = frameView(place, radiusM, width, height);
+    if (mapMode === 'map') handle?.setView?.({ center: camera.center, zoom: camera.zoom });
+  }
+  /** The city's own marks: the curated set the wall draws (city/curated.ts, CURATED_WALL: every BAJS station as
+   *  a disc with its count, the venues with a programme tonight, never a "+N" bubble), the places a search finds
+   *  while it is typed, and the selected place, which stays on the map whatever the search says. */
   function cityMapPoints():MapPoint[] {
     if(!input||!ctx().city)return [];
-    cityData=discovery();
-    const selected=selection?.kind==='place'?[...cityState().places,...dynamicPlaces(cityState(),ctx().now)].find(p=>p.id===selection!.id):null;
-    // Keep the selected marker outside geographic clusters and outside filters.
-    const extra=selected&&Number.isFinite(selected.lon)&&Number.isFinite(selected.lat)
-      ?[cityData.points.find(p=>p.id===selected.id)??{id:selected.id,title:selected.name,lon:selected.lon!,lat:selected.lat!,place:'city' as const,props:{category:selected.category,eventCount:0,badge:'',priority:0}}]:[];
-    return [...clusterPlaces(cityData.points.filter(p=>p.id!==selected?.id),camera?.zoom??14),...extra];
+    const c=ctx(),now=c.frozenAt??c.now;
+    const curated=curatedCityPoints(cityState(),c.snapshots.dogadanja?.items??[],now,CURATED_WALL);
+    const searched=query?(cityData=discovery()).points:[];
+    const selected=selection?.kind==='place'?[...cityState().places,...dynamicPlaces(cityState(),now)].find(p=>p.id===selection!.id):null;
+    const seen=new Set<string>(),points:MapPoint[]=[];
+    for(const point of [...curated,...searched]){
+      if(point.id===selected?.id||seen.has(point.id))continue;
+      seen.add(point.id);points.push(point);
+    }
+    if(selected&&Number.isFinite(selected.lon)&&Number.isFinite(selected.lat)){
+      points.push(curated.find(p=>p.id===selected.id)??searched.find(p=>p.id===selected.id)
+        ??{id:selected.id,title:selected.name,lon:selected.lon!,lat:selected.lat!,place:'city' as const,props:{category:selected.category,eventCount:0,badge:'',priority:0}});
+    }
+    return points;
   }
   function updateCityMap():void {
     if(!input || !ctx().city)return;
@@ -353,8 +384,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     handle?.setModes?.(modesArg());
     const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
     handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
-    const paths=cityCategory==='cycle-paths'?cityState().paths.flatMap(p=>p.lines.map((coordinates,i)=>({id:`${p.id}-${i}`,title:p.name,coordinates}))):[];
-    handle?.setCityPaths?.(paths);
   }
   /** One function, not one per render: the cache keeps its waiting callers in a
    *  Set, and a fresh closure each time would make a stop with eight platforms
@@ -383,16 +412,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
    *  (the lightweight path, a unit context) -- the map-mode button's own rule.
    *  The map still focuses there; only the control is withheld. */
   const lineFocusRow = (): boolean | null => (ctx().lineFocus ? lineFocus : null);
-  /** null while every mode is on: the map then also draws vehicles of a type nobody knows. */
+  /** null, every mode, on every personal surface: the map then also draws vehicles of a type nobody knows. The
+   *  schema has trams alone, and the kiosk board keeps trams first (R-P1). */
   const modesArg = (): ReadonlySet<number> | null => (
-    ctx().city&&(cityGroup!=='transport'||cityCategory!=='') ? new Set() :
-    mapMode === 'schema' ? new Set([ROUTE_TYPE_TRAM]) : ALL_MODES.every((m) => modes.has(m)) ? null : new Set(modes)
+    kiosk() ? new Set(modes) : mapMode === 'schema' ? new Set([ROUTE_TYPE_TRAM]) : null
   );
   const delays = (): Map<string, number> => plausibleDelays(routeDelayMap(ctx().snapshots['zet-rt']));
 
   /** Every vehicle the model has placed, or, before that and without a map, the reports listed by route alone.
-   *  The mode toggle filters what the overview counts and the map draws; a route or stop someone asks about
-   *  answers for its own vehicles whatever the toggle says. */
+   *  A route or stop someone asks about answers for its own vehicles whatever the map draws. */
   function vehiclesNow(): VehicleInfo[] {
     const placed = handle?.vehicles?.();
     const usePlaced = placed !== undefined && (placed.length > 0 || status !== 'loading');
@@ -427,23 +455,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     ctx().navigate?.('u-pokretu', pub);
   }
 
-  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content. A selection lifts the sheet to half, never leaves it at peek. */
+  /** The one place the selection changes: state, the sheet's detent, the map, the paired screen, then the sheet's content.
+   *  A selection lifts the sheet to half, never leaves it at peek; a stop opens it, so its three departures and "Vozni red"
+   *  are in the viewport at once (§11, §16.4): the board is the answer, the map is one chevron away. */
   function setSelection(next: MapSelection | null, opts: { fit?: boolean; relay?: boolean } = {}): void {
     if(ctx().session?.frozen)return;
     if (next && query) {
-      browseReturn = { query, scroll: body.scrollTop, group: cityGroup, category: cityCategory };
+      browseReturn = { query, scroll: body.scrollTop };
       ctx().setFilter?.('city-scroll',String(body.scrollTop));
-    }
-    if(next?.kind==='place'&&next.id.startsWith('cluster-')){
-      const clusterId=next.id;
-      const point=clusterPlaces(discovery().points,camera?.zoom??14).find(p=>p.id===clusterId);
-      if(point){const zoom=Math.min((camera?.zoom??14)+1.5,18);camera={center:[point.lon,point.lat],zoom};handle?.setView?.({center:camera.center,zoom});updateCityMap();}return;
     }
     if(next?.kind==='place'||next?.kind==='street'){
       if(mapMode==='schema')ctx().mapMode?.set('map');
       askCity();
     }
-    if(next&&['route','stop','vehicle','closure'].includes(next.kind)){cityGroup='transport';cityCategory='';}
     if (next?.kind === 'stop' && !next.ids) next = { ...next, ids: groupFor(next.id)?.ids };
     selection = next;
     updateCityMap();
@@ -452,10 +476,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       following = null;
       handle?.follow?.(null);
     }
-    // The sheet settles at half before the map moves, so the fit is padded for the detent the person will see;
-    // padded for an open sheet, MapLibre has no room left and refuses the fit.
-    if (next) sheet?.set('half');
-    handle?.select?.(next, { fit: opts.fit });
+    // The sheet settles at its detent before the map moves, so the fit is padded for the detent the person will see;
+    // padded for an open sheet MapLibre has no room left and refuses the fit, so a stop's board opens without one
+    // ("Prikaži na karti" in the board brings the map to the stop when the person wants it).
+    const opens = next?.kind === 'stop' && mode === 'phone';
+    if (next) sheet?.set(opens ? 'open' : 'half');
+    handle?.select?.(next, { fit: opens ? false : opts.fit });
     if (opts.relay !== false) relay(next);
     if (query) {
       query = '';
@@ -467,7 +493,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       const back = browseReturn;
       browseReturn = null;
       query = back.query; searchInput.value = query;
-      cityGroup = back.group; cityCategory = back.category;
       sheet?.set('open', { animate: false });
       renderSheet(); body.scrollTop = back.scroll;
       searchInput.focus({ preventScroll: true });
@@ -550,11 +575,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   landscapeMedia?.addEventListener?.('change', onMedia);
 
   // The column modes measure the sheet's box, which the first render cannot (the workspace renders before the
-  // layer appends it, layers/u-pokretu.ts) and which follows the stage's width and the column's slide ("Proširi
-  // kartu"): the stage's own observer reports it at the first layout and on every resize, the column's transition
-  // at its end, and every render again. On the phone the detent controller owns it.
+  // layer appends it, layers/u-pokretu.ts) and which follows the stage's width and the column's slide (the page's
+  // map view): the stage's own observer reports it at the first layout and on every resize, the column's transition
+  // at its end, and every render again. On the phone the detent controller owns it. The same first layout frames
+  // the camera at the stage's real size (frameCamera).
   const onStageBox = (): void => {
     if (!sheet) syncFitPadding();
+    if (input && !disposed) frameCamera();
   };
   const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(onStageBox):null;
   if (resizeObserver) resizeObserver.observe(stage);
@@ -581,61 +608,37 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'));
   }
 
-  /** The controls' words and states, updated in place: the locale may have changed, the toggles may have. */
+  /** The controls' words and states, updated in place: the locale may have changed, the map mode may have. */
   function renderChrome(): void {
     const c = ctx();
     const i18n = c.i18n;
     const k = kiosk();
     const schema = mapMode === 'schema';
-    const cityOnly=Boolean(c.city&&(cityGroup!=='transport'||cityCategory!==''));
     element.dataset.kiosk = k ? 'true' : 'false';
     element.dataset.mapMode = mapMode;
-    element.dataset.cityGroup=cityGroup;
     toolbar.hidden = k;
-    searchLabel.textContent = tr(i18n, 'searchLabel');
+    // One name for the one field, and the same words as its placeholder: it finds places, streets, lines and stops.
+    searchLabel.textContent = ct(i18n, 'search');
     searchInput.placeholder = ct(i18n, 'search');
-    searchLabel.textContent = ct(i18n,'search');
-    paintCityFilters();
-    q<HTMLElement>('[data-ref=filter-label]').textContent = ct(i18n,'layers');
     searchHint.textContent = tr(i18n, 'searchHint');
     clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'));
     clearButton.hidden = query === '';
-    modesGroup.setAttribute('aria-label', tr(i18n, 'modesLabel'));
-    modesGroup.hidden = k;
-    modeButtons[ROUTE_TYPE_TRAM].textContent = tr(i18n, 'trams');
-    modeButtons[ROUTE_TYPE_BUS].textContent = tr(i18n, 'buses');
-    for (const mode of ALL_MODES) modeButtons[mode].setAttribute('aria-pressed', (schema ? mode === ROUTE_TYPE_TRAM : modes.has(mode)) ? 'true' : 'false');
-    modeButtons[ROUTE_TYPE_TRAM].hidden = cityOnly;
-    modeButtons[ROUTE_TYPE_BUS].hidden = schema||cityOnly;
-    closuresButton.textContent = tr(i18n, 'showClosures');
-    closuresButton.setAttribute('aria-pressed', closuresVisible ? 'true' : 'false');
-    closuresButton.hidden = schema;
-    schemaLegend.hidden = !schema;
-    schemaLegend.textContent = tr(i18n, 'schemaTramsOnly');
-    tools.setAttribute('aria-label', tr(i18n, 'toolsLabel'));
-    q<HTMLElement>('[data-ref=tools-title]').textContent = tr(i18n, 'toolsLabel');
-    q<HTMLElement>('.t-map-menu-trigger').setAttribute('aria-label', tr(i18n, 'toolsLabel'));
-    q<HTMLElement>('.t-map-menu').hidden = k;
-    tools.hidden = k;
-    mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps || cityOnly;
-    const modeLabel = tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema');
-    mapModeButton.innerHTML = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(modeLabel)}</span>`;
-    mapModeButton.setAttribute('aria-label', modeLabel);
-    mapModeButton.setAttribute('aria-pressed', schema ? 'true' : 'false');
-    const fitCity = tr(i18n, 'fitCity');
-    fitCityButton.innerHTML = `${iconMarkup('map')}<span>${esc(fitCity)}</span>`;
-    fitCityButton.setAttribute('aria-label', fitCity);
-    const mapView = c.mapView;
-    fullButton.hidden = !mapView || k;
-    if (mapView) fullButton.textContent = i18n.t(mapView.full ? 'panels.mapCollapse' : 'panels.mapExpand');
+    // The map/schema switch [O-72]: one small control that names where it goes ("Shema" on the map, "Karta" on the
+    // schema), its accessible name the longer form of the same words. Offered only where the device store can keep
+    // the answer and there is a map to switch: not on a public screen, not on the lightweight path.
+    mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps;
+    mapModeButton.dataset.mode = mapMode;
+    mapModeButton.innerHTML = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(i18n.t(schema ? 'sada.viewMap' : 'sada.viewSchema'))}</span>`;
+    mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'));
     sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'));
     sheetToggle.hidden = k;
     renderSheetToggle();
     if (!sheet) element.dataset.sheet = mode === 'landscape' ? 'half' : 'open';
-    note.textContent = i18n.t('motion.note');
-    // The schema owns this note beside its canvas. Keep the sheet's copy only
-    // for geography or a failed renderer, where that canvas note is absent.
-    note.hidden = schema && status !== 'unavailable';
+    // A public display prints no caveat (companion brief §12 "Never"). On the
+    // phone the schema owns this note beside its canvas; the sheet keeps its
+    // copy only for geography or a failed renderer, where that note is absent.
+    note.textContent = k ? '' : i18n.t('motion.note');
+    note.hidden = k || (schema && status !== 'unavailable');
   }
 
   function renderStatus(): void {
@@ -656,25 +659,30 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
   }
 
-  /** The sheet: search results while typing, the selection's detail, else the overview; and the peek line above it. */
+  /** The sheet: search results while typing, the selection's detail, else the place and what is near it; and the peek line above it. */
   function renderSheet(): void {
     if (!input||disposed) return;
     const i18n = ctx().i18n;
     const vehicles = vehiclesNow();
-    const shown = vehiclesOfModes(vehicles, modesArg());
     let html: string;
     let peekHtml: string;
     let peekText: string | null = null;
-    cityData=discovery();
+    /** The peek line's text kind: the detail's own (a name, or a title for a vehicle's composed line), fixed copy otherwise. */
+    let peekKind: ExternalTextKind = 'title';
     if (query) {
-      const results = searchCity(query, routeCatalogue(), groups ?? [], cityData.places, cityData.streets);
+      cityData=discovery();
+      // Every result's name and detail are third-party text (GTFS, the registers): vetted by kind before the row is drawn,
+      // and a result whose name fails the row rule is not offered at all.
+      const results = searchCity(query, routeCatalogue(), groups ?? [], cityData.places, cityData.streets)
+        .map((r) => ({ r, texts: resultTexts(r) })).filter(({ texts }) => texts.name !== '');
       const total = results.length;
-      if (activeOption && !results.some(r => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
+      if (activeOption && !results.some(({ r }) => ids.option(r.kind, r.id) === activeOption)) activeOption = null;
       const label = (r: CitySearchResult) => r.kind === 'place' ? placeCategory(i18n,r.record) : r.kind === 'street' ? ct(i18n,'streets') : tr(i18n,r.kind === 'stop' ? 'stop' : 'route');
-      html = `<div id="${ids.results}" role="listbox" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(r =>
-        `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(r.name)}</strong><span class="city-meta">${esc(r.detail)}</span></span></div>`).join('')}</div>`;
+      html = `<div id="${ids.results}" role="listbox" data-testid="transport-results" aria-label="${esc(ct(i18n,'search'))}">${results.slice(0,cityLimit).map(({ r, texts }) =>
+        `<div class="city-row t-search-result" role="option" tabindex="-1" aria-selected="${ids.option(r.kind,r.id)===activeOption}" id="${ids.option(r.kind,r.id)}" data-action="select-${r.kind}" data-id="${esc(r.id)}"><span class="city-row-main"><span class="city-kicker">${esc(label(r))}</span><strong>${esc(texts.name)}</strong><span class="city-meta">${esc(texts.detail)}</span></span></div>`).join('')}</div>`;
       if(total>cityLimit)html+=`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')} (${total-cityLimit})</button>`;
-      if(!total)html+=`<p role="status">${ct(i18n,cityState().loading?'loading':'noResults')}</p>`;
+      // Until the text policy is in hand (the feed chunk, requested at mount) every name is refused: the list is loading, not empty.
+      if(!total)html+=`<p role="status">${ct(i18n,cityState().loading||!externalTextReady()?'loading':'noResults')}</p>`;
       else if(cityState().loading)html+=`<p class="city-meta" role="status">${ct(i18n,'partial')} ${ct(i18n,'loading')}</p>`;
       peekText = trPlural(i18n, 'resultsCount', total);
       peekHtml = esc(peekText);
@@ -690,25 +698,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         relay(null);
       }
       if (detail) {
-        [html, peekText] = detail;
+        [html, peekText, peekKind] = detail;
+        // The peek repeats the detail's third-party text (a place's or street's name, a route's long name, a stop's
+        // name, a vehicle's headsign, a closure's street): vetted once here under the detail's kind, on the row surface,
+        // so a string the rule refuses leaves the peek empty rather than printed above the sheet.
+        peekText = vetExternal(peekKind, peekText, 'row') ?? '';
         peekHtml = esc(peekText);
       } else {
-        const transport=cityGroup==='transport'&&!cityCategory;
-        html = transport ? overview(shown) : `<section class="city-browse"><h3>${esc(ct(i18n,'list'))}</h3>
-          <p class="city-meta" data-testid="location-context">${esc(locationLabel(i18n,referenceLocation()))}</p>
-          <p class="city-meta">${esc(ct(i18n,'legend'))}</p>${cityState().loading?`<p role="status">${ct(i18n,'loading')}</p>`:''}
-          ${cityCategory==='streets'?`<p class="city-meta">${ct(i18n,'streetBrowse')}</p>${cityData.streets.slice(0,cityLimit).map(s=>`<button type="button" class="city-row" data-action="select-street" data-id="${esc(s.id)}"><span><strong>${esc(s.name)}</strong><span class="city-meta">${esc(s.settlement)}</span></span></button>`).join('')}${cityData.streets.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
-            cityCategory==='cycle-paths'?`<p>${cityState().paths.length} ${ct(i18n,'cycle-paths')}</p>${cityState().paths.slice(0,cityLimit).map(p=>`<p>${esc(p.name)}${p.surface?` · ${esc(p.surface)}`:''}</p>`).join('')}${cityState().paths.length>cityLimit?`<button class="btn-quiet" data-action="city-more">${ct(i18n,'more')}</button>`:''}`:
-            cityData.places.length?placesMarkup(i18n,cityData.places,cityData.events,cityLimit,bikeMode,referenceLocation()):`<p>${ct(i18n,'noResults')}</p>`}
-          ${cityState().errors.length?`<p class="city-meta" role="status">${ct(i18n,'unavailable')}</p>`:''}
-          <button type="button" class="btn-quiet" data-action="city-area">${ct(i18n,'here')}</button>
-          <button type="button" class="btn-quiet" data-action="city-locate">${ct(i18n,'locate')}</button></section>`;
-        peekHtml = transport ? overviewPeek(shown) : `<strong>${esc(ct(i18n,'city'))}</strong><span class="city-meta">${cityData.count} ${ct(i18n,'venues')}</span>`;
+        [html, peekHtml] = nearbySheet();
       }
     }
     if (query && activeOption) searchInput.setAttribute('aria-activedescendant', activeOption);
     else searchInput.removeAttribute('aria-activedescendant');
-    peek.innerHTML = following && selection?.kind === 'vehicle' && peekText !== null ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
+    peek.innerHTML = following && selection?.kind === 'vehicle' && peekText ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
     swapBody(html);
     if(activeOption)document.getElementById(activeOption)?.scrollIntoView?.({block:'nearest'});
     element.dataset.searching=String(Boolean(query));
@@ -733,74 +735,54 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     renderChrome();
   }
 
-  function sourceLine(snapshot: ModuleSnapshot | undefined): string | null {
+  /** Nothing typed and nothing selected: the place as the peek's title with the list's circle beside it, and the
+   *  place's "U blizini" rows as the body -- the page's list (ctx.nearby), the same rows Sada shows, so the sheet
+   *  answers what is near before it explains anything. No fleet count, no line-by-line delays, no notices: those
+   *  left the phone with the overview (WP4). */
+  function nearbySheet(): [string, string] {
     const c = ctx();
-    return snapshot && snapshot.status !== 'live' ? statusText(snapshot, c.i18n, c.now) : null;
+    const list = nearbyList();
+    // The place's name is the catalogue's or the operator's text: vetted before the peek says it.
+    const peekHtml = `<strong>${esc(vetExternal('name', placeNow().name, 'row') ?? '')}</strong>${list ? `<span class="t-peek-pill">${esc(list.pill)}</span>` : ''}`;
+    if (list) return [list.html, peekHtml];
+    // The page has a list but not its rows yet (the selection code loads with its own chunk): one quiet line.
+    return [c.nearby ? `<p class="t-empty" role="status" aria-busy="true" data-testid="nearby-pending">${esc(c.i18n.t('status.loading'))}</p>` : '', peekHtml];
   }
 
-  /** The screen's stop with the routes the artefact knows for it, else the session's own list. */
-  function screenStopRoutes(): { id: string; name: string; routes: readonly string[] } | null {
-    const screenStop = ctx().screen?.stop;
-    if (!screenStop) return null;
-    return { id: screenStop.id, name: screenStop.name, routes: groupFor(screenStop.id)?.routes ?? screenStop.routes };
+  /** A search result's name and detail as the row prints them: each field under its own kind (a route's number and
+   *  long name, a stop's name and its lines, a place's name and address, a street's name and settlement), '' when it fails. */
+  function resultTexts(r: CitySearchResult): { name: string; detail: string } {
+    const vet = (kind: ExternalTextKind, value: string | undefined): string => vetExternal(kind, value ?? '', 'row') ?? '';
+    switch (r.kind) {
+      case 'route': return { name: vet('headsign', r.record.short), detail: vet('name', r.record.long) };
+      case 'stop': return { name: vet('name', r.record.name), detail: r.record.routes.map((id) => vet('headsign', id)).filter(Boolean).join(', ') };
+      case 'place': return { name: vet('name', r.record.name), detail: vet('address', r.record.address) };
+      case 'street': return { name: vet('name', r.record.name), detail: vet('name', r.record.settlement) };
+    }
   }
 
-  function overview(vehicles: readonly VehicleInfo[]): string {
-    const c = ctx();
-    const zet = c.snapshots['zet-rt'];
-    const closures = c.snapshots.prometnice;
-    const main = overviewMarkup(c.i18n, {
-      routes: runningRoutes(vehicles, delays(), c.i18n),
-      total: vehicles.length,
-      loading: !zet,
-      sourceStatus: sourceLine(zet),
-      screenStop: screenStopRoutes(),
-      routeOf: routeEntry,
-      kiosk: kiosk(),
-      routesOpen: folds.has('routes'),
-    });
-    const worstFirst: DelayRow[] = [...delays()]
-      .map(([routeId, delay]) => ({ routeId, delay }))
-      .sort((a, b) => Math.abs(b.delay) - Math.abs(a.delay) || a.routeId.localeCompare(b.routeId, 'hr', { numeric: true }));
-    return main + delaysMarkup(c.i18n, worstFirst, routeEntry, delaysOpen) + closuresMarkup(c.i18n, closureItems(closures), zetNotices(c.snapshots.dogadanja, NOTICE_ROWS), sourceLine(closures), null, !kiosk(), folds.has('closures'));
-  }
-
-  /** The collapsed sheet's line: this stop's lines (else the four busiest), then the two counts. */
-  function overviewPeek(vehicles: readonly VehicleInfo[]): string {
-    const c = ctx();
-    if (!c.snapshots['zet-rt']) return esc(tr(c.i18n, 'peekLoading'));
-    const stop = screenStopRoutes();
-    const routeIds = stop ? [...stop.routes] : runningRoutes(vehicles, delays(), c.i18n).sort((a, b) => b.count - a.count).map((row) => row.routeId);
-    return peekMarkup(c.i18n, {
-      routes: routeIds.slice(0, PEEK_BADGES).map((routeId) => routeEntry(routeId)),
-      more: Math.max(0, routeIds.length - PEEK_BADGES),
-      vehicles: vehicles.length,
-      closures: closureItems(c.snapshots.prometnice).length,
-    });
-  }
-
-  /** The selection's detail and its one-line summary; null once the thing has gone. */
-  function detailMarkup(sel: MapSelection, vehicles: readonly VehicleInfo[]): [string, string] | null {
+  /** The selection's detail, its one-line summary and the summary's text kind (renderSheet vets it); null once the thing has gone. */
+  function detailMarkup(sel: MapSelection, vehicles: readonly VehicleInfo[]): [string, string, ExternalTextKind] | null {
     const c = ctx();
     const i18n = c.i18n;
     const k = kiosk();
     switch (sel.kind) {
       case 'place': {
         const p=[...cityState().places,...dynamicPlaces(cityState(),c.now)].find(p=>p.id===sel.id);
-        if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected')];}
-        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,activityWindow),c.saved?.has('place',p.id),false,referenceLocation()),p.name];
+        if(!p){c.ensureCity?.(['culture','heritage','water','toilets','sport','dogs','recycling','markets','wifi','cycle-parking','garages','charging','hz-schedule']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'selected'),'title'];}
+        return [placeDetail(i18n,p,cityState(),locatedEvents(c.snapshots.dogadanja?.items??[],cityState().places,c.now,PROGRAMME_WINDOW),c.saved?.has('place',p.id),false,referenceLocation()),p.name,'name'];
       }
       case 'street': {
         const s=cityState().streets.find(s=>s.id===sel.id);
-        if(!s){c.ensureCity?.(['streets','settlements']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'streets')];}
-        return [streetDetail(i18n,s),s.name];
+        if(!s){c.ensureCity?.(['streets','settlements']);return [`<article class="city-detail"><button class="btn-quiet" data-action="clear-selection">${ct(i18n,'back')}</button><p>${ct(i18n,cityState().loading?'loading':'notFound')}</p></article>`,ct(i18n,'streets'),'title'];}
+        return [streetDetail(i18n,s),s.name,'name'];
       }
       case 'route': {
         const route = routeEntry(sel.id);
         const onRoute = vehiclesOnRoute(vehicles, sel.id);
         const directions = new Map(onRoute.map((v): [string, string] => [v.id, vehicleDirection(i18n, net, v)]));
         const html = routeDetailMarkup(i18n, { route, vehicles: onRoute, directions, delay: delays().get(sel.id), stops: net ? routeStopSequence(net, sel.id) : [], hasNetwork: net !== null, kiosk: k, stopsOpen: folds.has('stops'), lineFocus: lineFocusRow(), saved: c.saved?.has('route', route.id) ?? false, cast: c.cast });
-        return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short })];
+        return [html, route.long ? `${route.short} · ${route.long}` : tr(i18n, 'routeTitle', { short: route.short }), 'name'];
       }
       case 'stop': {
         const screen = c.screen?.stop;
@@ -816,9 +798,17 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // the 6 leaves from one side and the 11 from the other, and the rider
         // waiting here wants both. The merge itself is arrivalsAt's.
         ensureBoards('zet', group.ids);
-        const next = arrivalsAt(boardsFor('zet', group.ids), vehicles, c.now, { stopIds: group.ids });
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, arrivalsStatus: next.status, frozenAt: c.frozenAt });
-        return [html, `${tr(i18n, 'stop')} ${group.name}`];
+        const held = boardsFor('zet', group.ids);
+        // Live only while the feed is (city/feed.ts feedLive, the wall's rule): no live time during an outage or once
+        // the feed's last word is older than the twin keeps a fix.
+        const live = feedLive(c.snapshots['zet-rt'], c.now) ? vehicles : [];
+        const next = arrivalsAt(held, live, c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS });
+        // "Vozni red" is the timetable: the same boards read without the fleet.
+        const timetable = arrivalsAt(held, [], c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS }).rows;
+        // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
+        const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt });
+        return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {
         const v = vehicles.find((x) => x.id === sel.id);
@@ -835,12 +825,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
           lineFocus: lineFocusRow(),
           cast: c.cast,
         });
-        return [html, `${vehicleTitle(i18n, v)} · ${direction}`];
+        return [html, `${vehicleTitle(i18n, v)} · ${direction}`, 'title'];
       }
       case 'closure': {
         const item = closureItems(c.snapshots.prometnice).find((x) => x.id === sel.id);
         if (!item) return null;
-        return [closureDetailMarkup(i18n, item, k, c.cast), item.title];
+        return [closureDetailMarkup(i18n, item, k, c.cast), item.title, 'name'];
       }
     }
   }
@@ -875,6 +865,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     activeOption = null;
     ctx().setFilter?.('city-query','');
     renderSheet();
+    // The places the search drew leave the map with it.
+    updateCityMap();
   }
 
   element.addEventListener('click', (event) => {
@@ -894,32 +886,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       return;
     }
     switch (action) {
-      case 'bike-mode':bikeMode=target.dataset.mode==='return'?'return':'rent';updateCityMap();renderSheet();break;
-      case 'city-group':
-        cityGroup=target.dataset.group as CityGroup;cityCategory='';cityLimit=20;selection=null;
-        if(mapMode==='schema'&&cityGroup!=='transport')ctx().mapMode?.set('map');
-        relay(null);saveCityFilters();askCity();updateCityMap();renderSheet();break;
-      case 'city-category':
-        cityCategory=target.dataset.category??'';cityLimit=20;selection=null;
-        if(cityCategory==='cycle-paths')ctx().ensureCity?.(['cycle-paths']);
-        saveCityFilters();askCity();updateCityMap();renderSheet();break;
-      case 'city-window':
-        activityWindow=target.dataset.window as ActivityWindow;saveCityFilters();updateCityMap();renderSheet();break;
       case 'city-more': cityLimit+=20;renderSheet();break;
-      case 'city-area':
-        if(camera){cityCenter={lon:camera.center[0],lat:camera.center[1]};cityReferenceKind='area';ctx().setLocation?.(referenceLocation());}
-        updateCityMap();renderSheet();break;
-      case 'city-locate':
-        navigator.geolocation?.getCurrentPosition(p=>{
-          if(disposed||ctx().session?.frozen)return;
-          cityCenter={lon:p.coords.longitude,lat:p.coords.latitude};
-          cityReferenceKind='device';
-          ctx().setLocation?.(referenceLocation());
-          handle?.setView?.({center:[cityCenter.lon,cityCenter.lat],zoom:15});
-          updateCityMap();renderSheet();
-        },
-          ()=>{statusEl.hidden=false;statusEl.textContent=ct(ctx().i18n,'locationDenied');},{timeout:10000,maximumAge:60000});
-        break;
       case 'clear-selection':
         setSelection(null);
         break;
@@ -934,9 +901,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         sheet?.set('half');
         handle?.fit?.('selection');
         break;
-      case 'fit-city':
-        handle?.fit?.('city');
-        break;
       case 'toggle-map-mode':
         if (!kiosk() && !ctx().lightweight) ctx().mapMode?.set(mapMode === 'schema' ? 'map' : 'schema');
         break;
@@ -948,30 +912,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         setLineFocus(next);
         break;
       }
-      case 'toggle-mode': {
-        // The schema has one visible mode. Keep the geographic filters for the return to the city map.
-        if (mapMode === 'schema') break;
-        const mode = Number(target.dataset.mode);
-        if (modes.has(mode)) {
-          if (modes.size > 1) modes.delete(mode); // one mode always stays on: an empty map answers nothing
-        } else modes.add(mode);
-        handle?.setModes?.(modesArg());
-        renderSheet();
-        break;
-      }
-      case 'toggle-closures':
-        closuresVisible = !closuresVisible;
-        handle?.setClosuresVisible?.(closuresVisible);
-        renderChrome();
-        break;
       case 'toggle-sheet':
         // The chevron: the next detent on the phone; on the desk the board column collapses or comes back.
         if (sheet) sheet.cycle();
         else ctx().mapView?.toggle();
-        break;
-      case 'toggle-delays':
-        delaysOpen = !delaysOpen;
-        renderSheet();
         break;
       case 'toggle-fold': {
         const fold = target.dataset.fold as Fold | undefined;
@@ -979,14 +923,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         if (folds.has(fold)) folds.delete(fold);
         else folds.add(fold);
         renderSheet();
-        break;
-      }
-      case 'toggle-full': {
-        // "Proširi kartu" collapses the sheet to its peek and asks the page for the map view; "Skupi kartu" returns to half.
-        const view = ctx().mapView;
-        if (!view) break;
-        sheet?.set(view.full ? 'half' : 'peek');
-        view.toggle();
         break;
       }
       case 'clear-search':
@@ -1000,7 +936,6 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // Keyboard focus must be visible immediately, not after the sheet's
     // transition. Its taller summary must never travel under the tab bar.
     sheet?.set('open', { animate: false });
-    q<HTMLDetailsElement>('.city-filter-disclosure').open = false;
   });
   searchInput.addEventListener('input', () => {
     query = searchInput.value;
@@ -1059,7 +994,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   // --- The map slot -----------------------------------------------------------------
   /** Asks the page's slots for the one map, moves its container in and binds the handle they hand back (a new one after a kiosk's destroy()). */
   function syncMap(c: LayerContext, points: MapPoint[], lines: MapLine[]): void {
-    const renderer = c.lightweight || (c.city&&(cityGroup!=='transport'||cityCategory!=='')) ? 'map' : c.mapMode?.snapshot() ?? 'map';
+    const renderer = c.lightweight ? 'map' : c.mapMode?.snapshot() ?? 'map';
     const slotId = renderer === 'schema' ? SCHEMA_MAP_SLOT_ID : MAP_SLOT_ID;
     if (slotId !== activeSlotId || (c.maps?.handle(slotId) ?? null) !== handle) {
       // Fits and following can move the camera without onUserMove. Read it while the old map still exists.
@@ -1090,11 +1025,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         reducedMotion: c.reducedMotion,
         theme: c.screen?.theme,
         locale: i18n.getLocale(),
-        stop: c.screen?.stop ?? null,
+        // The map's own stop, the ring it draws largest: the screen's, else the place's departures stop (Sada's band
+        // does the same), so a screenless session's place still carries its ring on Karta.
+        stop: c.screen?.stop ?? placeNow().departuresStop ?? null,
         selection,
         follow: following,
         modes: modesArg(),
-        closures: renderer === 'map' && closuresVisible,
+        closures: renderer === 'map',
         interactive: !kiosk(),
         // The public screen keeps its own contract: the whole network, always.
         lineFocus: kiosk() ? undefined : lineFocus,
@@ -1122,8 +1059,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         },
         onUserMove: (cam) => {
           if (epoch !== mapEpoch) return;
-          if (cam !== null && renderer === 'map') camera = cam;
-          if(cam){cityCenter={lon:cam.center[0],lat:cam.center[1]};cityReferenceKind='area';ctx().setLocation?.(referenceLocation());}
+          if (cam !== null && renderer === 'map') { camera = cam; movedSinceFrame = true; }
+          if(cam){cityCenter={lon:cam.center[0],lat:cam.center[1]};ctx().setLocation?.(referenceLocation());}
           updateCityMap();
           renderSheet();
           if (following) {
@@ -1158,30 +1095,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function render(next: WorkspaceInput): void {
     if(disposed)return;
     input = next;
+    // The page's list is asked for afresh on every render (the context may be the same object with new rows).
+    nearbyMemo = null;
     const c = next.ctx;
     if (!stateRestored) {
       stateRestored = true;
       const remembered = c.view?.filters['city-query'] ?? '';
-      if (c.view?.selection && remembered) browseReturn = {query:remembered,scroll:Number(c.view.filters['city-scroll'])||0,group:(c.view.filters['city-group'] as CityGroup)??'living',category:c.view.filters['city-category']??''};
+      if (c.view?.selection && remembered) browseReturn = {query:remembered,scroll:Number(c.view.filters['city-scroll'])||0};
       else { query=remembered; searchInput.value=query; restoreSearchSheet=Boolean(query); }
     }
     if(c.onDispose&&!disposalRegistered){
       disposalRegistered=true;c.onDispose(()=>{disposed=true;boards.destroy();sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
     }
-    if (!c.city) cityGroup = 'transport'; // legacy hosts retain their transport-only view
-    if(!stopCentered){
-      stopCentered=true;
-      if(c.screen?.stop){camera={center:[c.screen.stop.lon,c.screen.stop.lat],zoom:14};handle?.setView?.({center:camera.center,zoom:camera.zoom});}
-    }
     if(c.city&&!streetRequested&&!c.lightweight){streetRequested=true;c.ensureCity?.(['streets','settlements']);}
-    const filterKey=JSON.stringify(c.view?.filters??{});
-    if(filterKey!==cityFilterKey){
-      cityFilterKey=filterKey;
-      const group=c.view?.filters['city-group'];
-      if(group&&group in GROUP_SOURCES)cityGroup=group as CityGroup;
-      cityCategory=c.view?.filters['city-category']??cityCategory;
-      const window=c.view?.filters['city-window'];if(['week','today','tomorrow'].includes(window??''))activityWindow=window as ActivityWindow;
-    }
     askCity();
     if (!modesSettled) {
       modesSettled = true;
@@ -1213,13 +1139,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const closures = closureItems(c.snapshots.prometnice).map((item) => item.id);
         const incoming = fromPublic(pub, { vehicles, closures }, groups);
         if (incoming || selection) {
-          if(incoming?.kind==='route'||incoming?.kind==='stop'||incoming?.kind==='vehicle'||incoming?.kind==='closure'){cityGroup='transport';cityCategory='';}
           selection = incoming;
           following = null;
           changed = true;
           if(!incoming&&browseReturn){
             query=browseReturn.query;searchInput.value=query;
-            cityGroup=browseReturn.group;cityCategory=browseReturn.category;
             returnScroll=browseReturn.scroll;browseReturn=null;
             sheet?.set('open',{animate:false});
           }
@@ -1229,13 +1153,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     // A selection the page brought lifts the sheet to half like any other, before the map fits to it.
     if (changed && selection) sheet?.set('half');
+    // The frame first, so a map made on this render opens on it.
+    frameCamera();
     syncMap(c, next.points, next.lines);
     handle?.setModes?.(modesArg());
     if(c.city) {
       const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
       handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
-      const paths=cityCategory==='cycle-paths'?cityState().paths.flatMap(p=>p.lines.map((coordinates,i)=>({id:`${p.id}-${i}`,title:p.name,coordinates}))):[];
-      handle?.setCityPaths?.(paths);
     }
     // Reference chunks are loaded on explicit discovery, never all on map boot.
     // An outage is no evidence of motion: the map holds every vehicle where it is until the feed is live again.
