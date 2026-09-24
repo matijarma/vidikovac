@@ -270,8 +270,10 @@ describe('theme words', () => {
 // never needs to explain a question mark.
 describe('the wall legend kiosk.legend.* (WP2)', () => {
   it('names the three items in both languages', () => {
-    expect(hr.kiosk.legend).toEqual({ tram: 'Tramvajska linija', bikes: 'BAJS: broj bicikala', culture: 'Kultura večeras' });
-    expect(en.kiosk.legend).toEqual({ tram: 'Tram route', bikes: 'BAJS: bikes available', culture: 'Culture tonight' });
+    // Round 2, F9 (owner, 24 Sep): the legend describes what is drawn: a numbered disc is the free bikes, a dot an
+    // empty station, and on the whole-city window a dot is a station.
+    expect(hr.kiosk.legend).toEqual({ tram: 'Tramvajska linija', bikes: 'BAJS: slobodni bicikli', bikesEmpty: 'BAJS: prazna stanica', bikesFar: 'BAJS stanica', culture: 'Kultura večeras' });
+    expect(en.kiosk.legend).toEqual({ tram: 'Tram route', bikes: 'BAJS: bikes available', bikesEmpty: 'BAJS: empty station', bikesFar: 'BAJS station', culture: 'Culture tonight' });
   });
   it.each([['hr', hr], ['en', en]] as const)('%s: no question mark, no caveat, no ellipsis, never "zid"', (name, catalogue) => {
     for (const [key, value] of Object.entries(catalogue.kiosk.legend)) {

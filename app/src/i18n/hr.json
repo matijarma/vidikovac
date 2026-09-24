@@ -751,7 +751,9 @@
     },
     "legend": {
       "tram": "Tramvajska linija",
-      "bikes": "BAJS: broj bicikala",
+      "bikes": "BAJS: slobodni bicikli",
+      "bikesEmpty": "BAJS: prazna stanica",
+      "bikesFar": "BAJS stanica",
       "culture": "Kultura večeras"
     },
     "weather": {

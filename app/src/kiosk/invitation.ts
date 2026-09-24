@@ -100,7 +100,13 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   if(!lightweight){
     legend=document.createElement('p');
     legend.className='k-map-legend';
-    legend.innerHTML=`<span data-legend="tram"><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span><span data-legend="bikes"><b class="k-legend-bike">●</b> ${e(s.legend.bikes)}</span><span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
+    // Round 2 F9: the BAJS entries by what the map draws (kiosk/mapview.ts legendKinds): a numbered disc, an empty
+    // station's dot, the whole-city window's dot. The chips are the marks' own shapes, the number a sample.
+    legend.innerHTML=`<span data-legend="tram"><b class="k-legend-tram">6</b> ${e(s.legend.tram)}</span>`
+      +`<span data-legend="bikes"><b class="k-legend-bike k-legend-disc">7</b> ${e(s.legend.bikes)}</span>`
+      +`<span data-legend="bikesEmpty"><b class="k-legend-bike k-legend-dot">●</b> ${e(s.legend.bikesEmpty)}</span>`
+      +`<span data-legend="bikesFar"><b class="k-legend-bike k-legend-dot">●</b> ${e(s.legend.bikesFar)}</span>`
+      +`<span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
     geography.appendChild(legend);
   }
   const note=document.createElement('p');

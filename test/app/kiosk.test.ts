@@ -1699,8 +1699,9 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(Number(sentence.dataset.validUntil)).toBeGreaterThan(NOW);
     expect(sentenceText(k.root).length).toBeLessThanOrEqual(80);
     expect(q(k.root,'.k-map-legend')).not.toBeNull();
-    // Three plain items from kiosk.legend.* (WP2), never a caveat: a BAJS disc with no count is grey and blank, not "?".
-    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(3);
+    // Plain items from kiosk.legend.* (WP2; round 2 F9: BAJS in three entries, by what the map draws), never a caveat: a BAJS disc with no count is grey and blank, not "?".
+    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(5);
+    expect([...k.root.querySelectorAll<HTMLElement>('.k-map-legend span')].map((el) => el.dataset.legend)).toEqual(['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture']);
     expect(text(q(k.root, '.k-map-legend'))).not.toContain('?');
     expect(q(k.root, '[data-testid=kiosk-weather]')).toBeNull();
     expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(0);

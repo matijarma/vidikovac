@@ -171,9 +171,19 @@ describe('the legend follows what the map draws', () => {
   };
   const base = { stop: STOP, placeSet: true, frame: 6 as const, city, snapshots: {}, now: NOW, selection: null, phase: 'invitation' as const, spanM: FIELD_SPAN_M, ariaLabel: 'karta' };
 
-  it('names the kinds the points carry: trams always, BAJS for a station, culture for a venue or an event mark', () => {
+  it('names the kinds the points carry: trams always, BAJS by what its stations draw (a counted disc, an empty station\u2019s dot, the whole city\u2019s dot), culture for a venue or an event mark', () => {
     expect(legendKinds([])).toEqual(['tram']);
     expect(legendKinds([{ id: 'bajs-1', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '3' } }])).toEqual(['tram', 'bikes']);
+    // Round 2, F9 (owner, 24 Sep): the legend describes what is drawn. An empty station is a small dot without
+    // its "0" (decision 60); on the whole-city window every station is a small dot without its number (far).
+    expect(legendKinds([{ id: 'bajs-2', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '0' } }])).toEqual(['tram', 'bikesEmpty']);
+    expect(legendKinds([{ id: 'bajs-3', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '5', far: true } }])).toEqual(['tram', 'bikesFar']);
+    expect(legendKinds([
+      { id: 'bajs-1', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '3' } },
+      { id: 'bajs-2', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '0' } },
+    ])).toEqual(['tram', 'bikes', 'bikesEmpty']);
+    // A grey disc without a number (the count unknown, not renting) carries no legend entry of its own: the blank disc says so.
+    expect(legendKinds([{ id: 'bajs-4', title: '', lon: 0, lat: 0, place: 'city', props: { category: 'bikes', badge: '', spent: true } }])).toEqual(['tram']);
     expect(legendKinds([{ id: 'culture-1', title: 'Gavella', lon: 0, lat: 0, place: 'city', props: { category: 'culture', badge: '1', eventCount: 1 } }])).toEqual(['tram', 'culture']);
     expect(legendKinds([{ id: 'event:1', title: 'Koncert', lon: 0, lat: 0, place: 'event', props: { source: 'kvartovske' } }])).toEqual(['tram', 'culture']);
     // A communal work is a square in the works ink, not culture; the pharmacy and a vehicle are neither.
@@ -196,11 +206,16 @@ describe('the legend follows what the map draws', () => {
     document.body.appendChild(host);
     const inv = mountInvitation(host, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: false, reducedMotion: true });
     const shown = () => [...host.querySelectorAll<HTMLElement>('.k-map-legend > span')].filter((el) => !el.hidden).map((el) => el.textContent?.trim());
-    expect(shown()).toEqual(['6 Tramvajska linija', '● BAJS: broj bicikala', '● Kultura večeras']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', '● BAJS: prazna stanica', '● BAJS stanica', '● Kultura večeras']);
     inv.setLegend(['tram']);
     expect(shown()).toEqual(['6 Tramvajska linija']);
     inv.setLegend(['tram', 'bikes']);
-    expect(shown()).toEqual(['6 Tramvajska linija', '● BAJS: broj bicikala']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli']);
+    // The whole-city window: a dot is a station; the frame at night: counted discs and the empty stations' dots.
+    inv.setLegend(['tram', 'bikesFar']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '● BAJS stanica']);
+    inv.setLegend(['tram', 'bikes', 'bikesEmpty', 'culture']);
+    expect(shown()).toEqual(['6 Tramvajska linija', '7 BAJS: slobodni bicikli', '● BAJS: prazna stanica', '● Kultura večeras']);
     inv.destroy();
     host.remove();
     // The entries are inline-flex, which would outrank the hidden attribute: the stylesheet says hidden is gone.

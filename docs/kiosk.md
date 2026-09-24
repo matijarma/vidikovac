@@ -221,9 +221,11 @@ Izvan polumjera kadra ne crta se nijedno stajalište, disk, kulturno mjesto ni
 ime. Imena slijede
 kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
 nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
-ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika
-(„Tramvajska linija”, „BAJS: broj bicikala”, „Kultura večeras”), a pod
-`?lagano=1`, gdje karte nema, nema ni legende.
+ispisuje svaku liniju. Legenda uz kartu opisuje ono što karta crta, bez
+upitnika: „Tramvajska linija”, uz disk s brojem „BAJS: slobodni bicikli”, uz
+točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
+grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
+ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
