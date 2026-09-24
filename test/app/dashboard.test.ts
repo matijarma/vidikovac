@@ -1666,16 +1666,15 @@ describe('the desk pair (WP4 chunk E)', () => {
     handle.destroy();
   });
 
-  it('Karta\'s default sheet lists the place\'s U blizini rows through the page (ctx.nearby), with the circle in its peek', async () => {
+  it('the pair\'s Karta repeats nothing Sada lists beside it: an idle sheet with the place and the circle in its peek, one U blizini on the page (round 2, desktop F3)', async () => {
     const { root, session, handle } = mount({ wide: true });
     session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
     await flush();
     const workspace = root.querySelector<HTMLElement>('[data-testid=transport-workspace]')!;
-    const list = workspace.querySelector<HTMLElement>('[data-testid=nearby]')!;
-    expect(list, 'the sheet body is the shared nearby section').not.toBeNull();
-    expect(text(list.querySelector('[data-testid=nearby-head]'))).toMatch(/^U blizini · \d+(,\d)? km · ~\d+ min$/);
-    expect(list.querySelector('[data-testid=nearby-rows]')).not.toBeNull();
-    expect(workspace.querySelector('[data-testid=nearby-pending]')).toBeNull();
+    expect(workspace.querySelector('[data-testid=nearby], [data-testid=nearby-pending], [data-kind=departure]'), 'no rows of its own beside Sada').toBeNull();
+    expect(workspace.dataset.idle).toBe('true');
+    expect(root.querySelectorAll('[data-testid=nearby]')).toHaveLength(1);
+    expect(root.querySelector('#layer-grad-sada [data-testid=nearby]')).not.toBeNull();
     const peek = workspace.querySelector<HTMLElement>('[data-testid=transport-peek]')!;
     expect(text(peek.querySelector('strong'))).toBe(STOP.name);
     expect(text(peek.querySelector('.t-peek-pill'))).toMatch(/^\d+(,\d)? km · ~\d+ min$/);

@@ -104,6 +104,8 @@ interface CtxOptions {
   /** The page's nearby list; the fixed NEARBY by default, null for a page that has none. */
   nearby?: LayerContext['nearby'] | null;
   place?: PlaceContext;
+  /** The map half of the desk pair (LayerContext.pair). */
+  pair?: boolean;
 }
 
 function ctx(o: CtxOptions = {}) {
@@ -125,6 +127,7 @@ function ctx(o: CtxOptions = {}) {
     cast: o.cast,
     nearby: o.nearby === null ? undefined : o.nearby ?? NEARBY,
     place: o.place,
+    pair: o.pair,
   };
   return { context, navigate, toggle };
 }
@@ -359,6 +362,56 @@ describe('the sheet', () => {
     render(ctx({ maps, nearby: null }).context);
     expect(document.querySelector('[data-testid=nearby], [data-testid=nearby-pending]')).toBeNull();
     expect(text(q('[data-testid=transport-peek]'))).toBe('Trg bana J. Jelačića');
+  });
+});
+
+describe('the desk pair (round 2, desktop F3 and F7)', () => {
+  it('beside Sada the idle sheet lists nothing of its own, keeps the place and the circle in its peek, and grows for what the person picks', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const nearby = vi.fn(NEARBY);
+    const { context } = ctx({ maps, nearby, pair: true });
+    render(context);
+    const ws = q<HTMLElement>('[data-testid=transport-workspace]');
+    expect(q('[data-testid=transport-detail] [data-testid=nearby]')).toBeNull();
+    expect(ws.dataset.idle).toBe('true');
+    // The list is still asked for: its circle is the frame the map fits and the pill the peek prints.
+    expect(nearby).toHaveBeenCalled();
+    expect(text(q('[data-testid=transport-peek] .t-peek-pill'))).toBe('2 km · ~15 min');
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(ws.dataset.idle).toBe('false');
+    // Without the pair the phone's sheet keeps the list.
+    render(ctx({ maps, nearby }).context);
+  });
+
+  it('a stop chosen from the search with the keyboard leaves the focus on its heading through the next poll, and the scrolling body is a Tab stop', () => {
+    const { maps } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, pair: true });
+    // Reconciled in place, as dashboard.ts draws every poll: the workspace node never leaves the document.
+    const main = document.createElement('main');
+    document.body.replaceChildren(main);
+    const poll = (): void => {
+      const wrapper = document.createElement('div');
+      wrapper.appendChild(renderLayer('u-pokretu', context));
+      reconcile(main, wrapper);
+      maps.sweep();
+    };
+    poll();
+    expect(q('[data-testid=transport-detail]').getAttribute('tabindex')).toBe('0');
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.focus();
+    input.value = 'crnomerec';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    const option = document.getElementById(input.getAttribute('aria-activedescendant') ?? '')!;
+    expect(option.dataset.action).toBe('select-stop');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const title = q<HTMLElement>('[data-testid=stop-title]');
+    expect(document.activeElement).toBe(title);
+    poll();
+    expect(document.activeElement).toBe(q('[data-testid=stop-title]'));
+    expect(document.activeElement).not.toBe(document.body);
   });
 });
 

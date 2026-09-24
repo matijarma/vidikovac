@@ -451,6 +451,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
       frame: session.snapshot().screen?.frame, frameLines,
+      pair: deskPair(),
     };
     // The place's "U blizini" list for Karta's default sheet (city/feed.ts, the same rows Sada lists), at most `cap`
     // rows, with the head's circle and the radius the frame is fitted to. Null while the lazily loaded selection chunk

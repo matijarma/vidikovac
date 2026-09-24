@@ -273,9 +273,9 @@
    (dashboard.css) and writes data-stage='desk'. The page scrolls with the Sada
    column; the Karta column sticks under the status line at the height left
    below it, one bounded panel with the map filling it and the sheet as the
-   board column beside the map, as on the desk stage above: no detents, no
-   handle. The stage mode of workspace.ts already reads 'desk' at this width. */
+   board under the map: no detents, no handle. The stage mode of workspace.ts already reads 'desk' at this width. */
 .ki[data-stage='desk'] .ki-desk > .layer[data-layer='u-pokretu'] {
+  container: desk-karta / inline-size;
   position: sticky; inset-block-start: calc(var(--ki-top) + var(--sp-3));
   block-size: calc(100vh - var(--ki-top) - 2 * var(--sp-3)); block-size: calc(100dvh - var(--ki-top) - 2 * var(--sp-3));
   min-block-size: 0; gap: 0;
@@ -286,28 +286,44 @@
 }
 .ki[data-stage='desk'] .layer[data-layer='u-pokretu'] .layer-panels { display: block; block-size: 100%; min-block-size: 0; }
 .ki[data-stage='desk'] .transport { display: flex; flex-direction: column; gap: 0; block-size: 100%; min-block-size: 0; }
+/* The board sits under the map, never beside it (round 2, desktop F1): a board column beside the map left the map a
+   strip in a zoomed window (198 px at 1440×900 and 125 %, 6 px at 1920×1080 and 200 %), and a tall narrow map fits the
+   place's circle across its width only. The map keeps the column's full width at every zoom; the board is as tall as
+   its content, up to 55 % of the column. */
 .ki[data-stage='desk'] .transport-body {
-  position: relative; flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem); gap: 0; min-block-size: 0;
+  position: relative; flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 0; min-block-size: 0;
   overflow: hidden; border: 1px solid var(--tone-stroke); border-radius: var(--r-lg);
 }
 .ki[data-stage='desk'] .transport-map { position: relative; block-size: 100%; min-block-size: 0; }
 .ki[data-stage='desk'] .t-map-canvas { position: absolute; inset: 0; block-size: 100%; border-radius: 0; border: 0; }
 .ki[data-stage='desk'] .t-map-status { inset-block-start: auto; inset-inline-end: auto; max-inline-size: calc(100% - 2 * var(--sp-2)); inset-block-end: var(--sp-2); }
 .ki[data-stage='desk'] .transport-sheet {
-  position: static; transform: none; transition: none; block-size: 100%; min-block-size: 0; overflow: hidden;
-  border: 0; border-radius: 0; border-inline-start: 1px solid var(--tone-stroke); box-shadow: none;
+  position: static; transform: none; transition: none; block-size: auto; min-block-size: 0; overflow: hidden;
+  max-block-size: calc(0.55 * (100dvh - var(--ki-top) - 2 * var(--sp-3)));
+  border: 0; border-radius: 0; border-block-start: 1px solid var(--tone-stroke); box-shadow: none;
 }
 .ki[data-stage='desk'] .t-sheet-handle { display: none; }
 .ki[data-stage='desk'] .t-sheet-head { min-block-size: var(--target); padding-block-start: var(--sp-3); touch-action: auto; cursor: default; }
 /* The chevron stays in the pair's sheet head: it collapses the board into the page's map view (below) and brings it back. */
 .ki[data-stage='desk'] .t-sheet-toggle { display: inline-flex; }
-.ki[data-stage='desk'] .t-sheet-toggle .icon { transform: rotate(-90deg); }
+.ki[data-stage='desk'] .t-sheet-toggle .icon { transform: none; }
 /* The page's map view on the desk pair (the chevron, Escape brings it back): the board becomes a 3rem strip holding
    the chevron and the map takes the column's width; the feed beside it keeps its place. */
-.ki[data-stage='desk'][data-view='map'] .transport-body { grid-template-columns: minmax(0, 1fr) 3rem; }
+.ki[data-stage='desk'][data-view='map'] .transport-body { grid-template-columns: minmax(0, 1fr) 3rem; grid-template-rows: minmax(0, 1fr); }
+.ki[data-stage='desk'][data-view='map'] .transport-sheet { block-size: 100%; max-block-size: none; border-block-start: 0; border-inline-start: 1px solid var(--tone-stroke); }
 .ki[data-stage='desk'][data-view='map'] .t-peek, .ki[data-stage='desk'][data-view='map'] .t-mode, .ki[data-stage='desk'][data-view='map'] .transport-toolbar, .ki[data-stage='desk'][data-view='map'] .t-sheet-body { display: none; }
 .ki[data-stage='desk'][data-view='map'] .t-sheet-head { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: var(--sp-2) 0; }
 .ki[data-stage='desk'][data-view='map'] .t-sheet-toggle .icon { transform: rotate(90deg); }
+
+/* The idle board of the pair (round 2, desktop F3): nothing typed or selected, Sada beside it already lists the
+   departures and "U blizini", so the board is one bar under the map, the place with its circle and the search; in a
+   column of 40rem and more the two share one row. */
+.ki[data-stage='desk'] .transport[data-idle='true'] .t-sheet-body { display: none; }
+@container desk-karta (min-width: 40rem) {
+  .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .transport-sheet { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem); align-items: center; }
+  .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .t-sheet-head { padding-block: var(--sp-2); }
+  .ki[data-stage='desk']:not([data-view='map']) .transport[data-idle='true'] .transport-toolbar { padding-block: var(--sp-2); padding-inline-start: 0; }
+}
 
 /* The stop's board (probe stop-board) is one element for a canvas tap to land on; it draws no box of its own. */
 .t-stop-board { display: contents; }
