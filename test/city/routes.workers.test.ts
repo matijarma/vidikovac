@@ -5,9 +5,10 @@ import {handleCity} from '../../worker/routes/city';
 import {CITY_PREFIX,MANIFEST_KEY} from '../../worker/city/catalogue';
 import {stopShard} from '../../worker/city/schedules';
 const testEnv=env as unknown as Env;
+let limiterCalls=0;
 async function call(path:string,method='GET',allow=true){
   const url=new URL('https://city.test'+path),request=new Request(url,{method});
-  return handleCity(request,{...testEnv,RL_OPEN:{limit:async()=>({success:allow})}} as Env,createExecutionContext(),url);
+  return handleCity(request,{...testEnv,RL_OPEN:{limit:async()=>{limiterCalls++;return {success:allow};}}} as Env,createExecutionContext(),url);
 }
 describe('public UI catalogue routes',()=>{
   it('enforces read-only, bounded IDs and the public limiter',async()=>{
@@ -26,5 +27,29 @@ describe('public UI catalogue routes',()=>{
     const chunk=await call(`/api/city/chunks/${hash}.json`);expect(chunk?.headers.get('cache-control')).toContain('immutable');
     const board=await call('/api/city/departures?operator=hz&stop=a');
     expect(await board!.json()).toMatchObject({operator:'hz',stopName:'Zagreb',status:'stale',departures:[]});
+  });
+  it('serves a stored content-hashed chunk outside the per-IP budget, so a household of surfaces cannot trip it',async()=>{
+    const hash='b'.repeat(64);
+    await testEnv.MAPS!.put(`${CITY_PREFIX}chunks/${hash}.json`,JSON.stringify({schema:1,source:{id:'culture'},data:{places:[]}}));
+    limiterCalls=0;
+    for(let i=0;i<3;i++){
+      const chunk=await call(`/api/city/chunks/${hash}.json`,'GET',false);
+      expect(chunk?.status).toBe(200);
+      expect(chunk?.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+      await chunk!.arrayBuffer();
+    }
+    expect(limiterCalls).toBe(0);
+  });
+  it('charges an unknown chunk hash to the per-IP budget and answers 429 with Retry-After',async()=>{
+    const hash='c'.repeat(64);
+    limiterCalls=0;
+    expect((await call(`/api/city/chunks/${hash}.json`))?.status).toBe(404);
+    expect(limiterCalls).toBe(1);
+    const limited=await call(`/api/city/chunks/${hash}.json`,'GET',false);
+    expect(limited?.status).toBe(429);
+    expect(limited?.headers.get('retry-after')).toBe('60');
+    expect(limited?.headers.get('cache-control')).toBe('no-store');
+    const manifest=await call('/api/city/manifest','GET',false);
+    expect(manifest?.headers.get('retry-after')).toBe('60');
   });
 });

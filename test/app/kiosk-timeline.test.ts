@@ -754,11 +754,26 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
           const kept = items().filter((li) => li.dataset.kind === 'first' || li.dataset.kind === 'last' || li.dataset.always === '1' || li === lead);
           // Each at its content, never under the smallest row: the height it keeps in a smaller box.
           const floorPx = kept.reduce((sum, li) => sum + Math.max(64, 44 * measure.lines(li.querySelector('.nearby-title')!) + 32 * measure.lines(li.querySelector('.nearby-sub')!) + 8), 0);
-          const box = compactArrangement({ ...COMPACT_1366_WINDOW, floorPx });
+          // Lane w-labels3 (decision 50 refined): the second and third departures come before map height beyond
+          // its minimum, at the smallest row (64 px).
+          const offered = rows.filter((r) => r.kind === 'departure').length;
+          const fullPx = floorPx + Math.max(0, Math.min(3, offered) - 1) * 64;
+          const box = compactArrangement({ ...COMPACT_1366_WINDOW, floorPx, fullPx });
           expect(box.mapPx, `${label}: the map (${box.placement})`).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
           expect(box.listPx, `${label}: the list holds its promises (${box.placement})`).toBeGreaterThanOrEqual(floorPx);
+          // The list as the wall then fits it, in the box that arrangement leaves.
+          t.destroy();
+          host.innerHTML = '';
+          const inBox = simulated({ ...layout, boxPx: box.listPx });
+          const t2 = mount({ measure: inBox, designHeightPx: box.listPx });
+          t2.update(rows, 2182, now);
+          const departures = ids().filter((id) => id.startsWith('dep:')).length;
+          // At least two wherever decision 50's whole-aside list (ea5439e) showed two or more.
+          const d50 = shown.filter((id) => id.startsWith('dep:')).length;
+          expect(departures, `${label}: departures in the ${box.placement} arrangement (${box.listPx} px list; decision 50's showed ${d50})`).toBeGreaterThanOrEqual(Math.min(2, d50));
+          expect(section().dataset.fitOverflow, label).toBe('0');
         }
-        t.destroy();
+        handle?.destroy();
         handle = null;
         host.innerHTML = '';
       }

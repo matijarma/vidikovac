@@ -309,9 +309,17 @@ describe('the thresholds are one table with a stage per row', () => {
     expect(r.dwells.find((d) => d.sentence === a2)).toMatchObject({ dwellMs: 20_000, refreshes: 1 });
     const obs = { kiosk: { rotation: rot.map((x, n) => ({ ...x, n })) } } as unknown as Parameters<(typeof METRICS)[string]>[0];
     expect(METRICS['kiosk.sentenceShortTurns'](obs, instruments).value).toBe(0);
-    const cut = [s(-20_000, 'Z.', 'z'), s(0, a2, 'departureIn:11'), s(15_600, 'B.', 'b'), s(40_000, 'C.', 'c')];
-    const bad = { kiosk: { rotation: cut.map((x, n) => ({ ...x, n })) } } as unknown as typeof obs;
-    expect(METRICS['kiosk.sentenceShortTurns'](bad, instruments)).toMatchObject({ value: 1 });
+    // Under load the readings are 3.1 s apart: a 17.7 s point reading of a 20 s dwell is bounded 15.5 to 20.8 s and
+    // not short (release smoke run 2); a 12 s dwell's upper bound is 15.5 s and is.
+    const grid = (sentence: string, fact: string, from: number, n: number) => Array.from({ length: n }, (_, i) => s(from + i * 3_100, sentence, fact));
+    const loaded = [...grid('Z.', 'z', 1_200, 7), ...grid(a2, 'last:4', 22_900, 6), ...grid('B.', 'b', 40_600, 7), ...grid('C.', 'c', 62_300, 4), ...grid('D.', 'd', 74_700, 7), ...grid('E.', 'e', 96_400, 2)];
+    const r2 = repeatsWithin(loaded, 600_000, wall);
+    expect(r2.dwells.find((d) => d.fact === 'last:4')).toMatchObject({ dwellMs: 17_700, dwellMinMs: 15_500, dwellMaxMs: 20_800, gapBeforeMs: 3_100, gapAfterMs: 2_200 });
+    expect(r2.short.map((d) => d.fact)).toEqual(['c']);
+    const bad = { kiosk: { rotation: loaded.map((x, n) => ({ ...x, n })) } } as unknown as typeof obs;
+    const m = METRICS['kiosk.sentenceShortTurns'](bad, instruments);
+    expect(m.value).toBe(1);
+    expect(m.detail[1]).toContain('9.3 to 15.5 s between readings (gaps 3.1 / 3.1 s');
   });
 
   it('a row applied at its stage fails when it could not be measured; above the stage it is information', () => {

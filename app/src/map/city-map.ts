@@ -349,6 +349,9 @@ export interface MapView {
    *  (kiosk/INTEGRATION.md listed this as the one thing pending on the map
    *  side; kiosk/mapview.ts's boardCentre faked it by shifting latitude.) */
   padding?: FitPadding;
+  /** The camera is a frame (map/frame.ts frameView): the centre lands at the canvas centre, whatever covers the
+   *  map, in one step (lane p-map3). Without it a centre lands in the uncovered part and the camera eases. */
+  frame?: boolean;
   selectedRoute?: string;
   selectedStop?: string;
   selection?: MapSelection | null;
@@ -806,6 +809,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let outline: MapOutline | null = options.outline ?? null;
   let status: MapStatus = 'loading';
   let pendingCamera: MapCamera | null = null;
+  /** Whether pendingCamera is a frame (MapView.frame): centred, no offset. */
+  let pendingFrame = false;
   let pendingSelectionFit: { padding?: FitPadding } | null = null;
   let cameraMovedByUser = false;
   /** A basemap asset has failed since the last tile that loaded. Before a
@@ -1396,6 +1401,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         drawn: () => lastDrawn,
         fitCoordinates,
         selection: () => selection,
+        ownStop: () => stop,
         choose: (next) => {
           select(next);
           options.onSelect?.(next);
@@ -1485,7 +1491,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (pendingCamera) {
       const camera = pendingCamera;
       pendingCamera = null;
-      created.jumpTo({ ...camera, offset: offsetFor() });
+      created.jumpTo({ ...camera, offset: pendingFrame ? [0, 0] : offsetFor() });
     } else if (pendingSelectionFit) {
       const fit = pendingSelectionFit;
       pendingSelectionFit = null;
@@ -1855,11 +1861,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** The public screen's camera moves in one step (calm motion, lane p-map:
    *  a refit after a resize, a fullscreen change or a turn of the screen is
    *  a new frame, not a flight); every other surface eases. */
-  const move = (center: [number, number], zoom: number): void => {
+  /** A frame (MapView.frame) is the place at the canvas centre, in one step (lane p-map3: under the phone's
+   *  sheet the offset and the 600 ms ease moved the ring off the centre a tap aims at). The public screen's
+   *  camera moves in one step too (calm motion); a plain view centres in the uncovered part and eases. */
+  const move = (center: [number, number], zoom: number, frame = false): void => {
     pendingSelectionFit = null;
-    if (!styled) pendingCamera = { center: [...center], zoom };
-    const still = reduced || profile === MAP_PRESENTATIONS['public-display'];
-    map?.easeTo({ center, zoom, offset: offsetFor(), duration: still ? 0 : CAMERA_MS });
+    if (!styled) { pendingCamera = { center: [...center], zoom }; pendingFrame = frame; }
+    const jump = frame || reduced || profile === MAP_PRESENTATIONS['public-display'];
+    map?.easeTo({ center, zoom, offset: frame ? [0, 0] : offsetFor(), duration: jump ? 0 : CAMERA_MS });
   };
 
   return {
@@ -1921,7 +1930,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       }
       const changed = JSON.stringify(next) !== JSON.stringify(selection);
       if (changed) select(next);
-      if (view.center) move(view.center, view.zoom ?? (map ? map.getZoom() : FOCUS_ZOOM));
+      if (view.center) move(view.center, view.zoom ?? (map ? map.getZoom() : FOCUS_ZOOM), view.frame === true);
       else if (changed && next) fitSelection();
       follow(view.follow === true ? true : null);
     },
