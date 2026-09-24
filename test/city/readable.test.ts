@@ -35,6 +35,34 @@ describe('one ranked city search',()=>{
     expect(result[0]).toMatchObject({kind:'route',id:'6'});
     expect(searchCity('Gavella',[],[],[{...wifi,category:'culture',name:'Gavella'}],[{id:'street-a',name:'Other street',description:'Gavella',settlement:'Zagreb',settlementId:'1'}])[0]?.kind).toBe('place');
   });
+  it('ranks the stops whose word starts with the query above the streets whose name starts with it, the stop with most lines first: "Jela" at Trg finds Trg bana J. Jelačića before Jelašićka ulica (round 1 finding F2)',()=>{
+    const stops=[
+      {id:'791_23',ids:['791_23'],name:'Bana Josipa Jelačića',lon:15.98,lat:45.81,routes:['177']},
+      {id:'106_1',ids:['106_1','106_2'],name:'Trg bana J. Jelačića',lon:15.977,lat:45.813,routes:['6','11','12','13','14','17']},
+    ];
+    const streets=[
+      {id:'s1',name:'Jelašićka ulica',settlement:'Zagreb',settlementId:'1',description:''},
+      {id:'s2',name:'Jelašićka III.',settlement:'Zagreb',settlementId:'1',description:''},
+      {id:'s3',name:'Ulica Jelačićeva',settlement:'Zagreb',settlementId:'1',description:''},
+    ];
+    const result=searchCity('Jela',[],stops,[{...wifi,category:'culture' as const,name:'Galerija Remek djela'}],streets);
+    expect(result.slice(0,2).map(r=>[r.kind,r.id])).toEqual([['stop','106_1'],['stop','791_23']]);
+    expect(result.slice(2,5).every(r=>r.kind==='street')).toBe(true);
+    // A name that starts with the query still beats one that only contains it, and an exact street name beats a stop's word start.
+    expect(result.slice(2,4).map(r=>r.id).sort()).toEqual(['s1','s2']);
+    expect(result.at(-1)?.name).toBe('Galerija Remek djela');
+    expect(searchCity('Ilica',[],[{id:'x',ids:['x'],name:'Ilica Črnomerec',lon:15.9,lat:45.8,routes:['6']}],[],[{id:'ilica',name:'Ilica',settlement:'Zagreb',settlementId:'1',description:''}])[0]).toMatchObject({kind:'street',id:'ilica'});
+  });
+  it('merges the access points of one name across a square and lists no place a query does not name or address (round 1, desktop F8)',()=>{
+    const hotspots=[0,1,2,3,4].map(i=>({...wifi,id:`w${i}`,name:'Wi-Fi Trg Bana Josipa Jelačića',address:`Trg bana Josipa Jelačića ${i+1}`,lon:15.977+i*0.0006,lat:45.813}));
+    expect(groupWifi(hotspots)).toHaveLength(1);
+    const far={...wifi,id:'w-far',name:'Wi-Fi Trg Bana Josipa Jelačića',address:'Ilica 200',lon:15.95,lat:45.813};
+    expect(groupWifi([...hotspots,far])).toHaveLength(2);
+    const unrelated={...wifi,id:'u',name:'Knjižnica Bogdana Ogrizovića',address:'Preradovićeva 5',category:'culture' as const};
+    const result=searchCity('Trg bana',[],[],[...hotspots,unrelated],[]);
+    expect(result.filter(r=>r.kind==='place').map(r=>r.id)).toEqual(['w0']);
+    expect(searchCity('Jela',[],[],[unrelated],[{id:'s',name:'Ulica grada Vukovara',settlement:'Zagreb',settlementId:'1',description:'nema veze'}])).toEqual([]);
+  });
   it('finds useful categories without requiring the category term in the name',()=>{
     const state={...emptyCity(),places:[{...wifi,category:'toilet' as const,name:'Centar',address:'Ilica'}]};
     expect(discover(state,[],{group:'living',category:'',query:'javni wc',window:'week',center:{lon:15.977,lat:45.813},radius:5000,now}).places).toHaveLength(1);

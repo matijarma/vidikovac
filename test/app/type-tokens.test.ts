@@ -141,3 +141,11 @@ describe('the 13 px floor holds for the shared labels too (wave 1 merge gate: e2
     expect(LAYERS).toContain('.ws-toolbar > * { min-inline-size: 0; }');
   });
 });
+
+describe('overview.css: the 13 px floor on the phone\'s U blizini rows (round 1 finding F5)', () => {
+  const OVERVIEW = ui('overview.css');
+  it('sets the day word under a row\'s time ("sutra", "uto") at the secondary role, never the 12 px meta size', () => {
+    expect(OVERVIEW).toMatch(/\.nearby-row \.k-nearby-day \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(OVERVIEW).not.toMatch(/\.nearby-row \.k-nearby-day \{[^}]*var\(--type-meta\)/);
+  });
+});

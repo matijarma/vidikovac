@@ -23,7 +23,8 @@ import type { SavedRef } from '../core/saved-store';
 import { lineBadge } from '../experience/blocks';
 import { snapshotLine } from '../experience/chrome';
 import { delayTone, type DelayTone } from '../experience/delay';
-import { zagrebDateTime, zagrebTime } from '../format';
+import { zagrebDateTime, zagrebDayKey, zagrebTime } from '../format';
+import { dayLabel } from '../experience/text';
 import type { I18n } from '../i18n/i18n';
 import { vettedArrival } from '../kiosk/arrivals';
 import { delayWord } from '../layers/shared';
@@ -31,7 +32,7 @@ import { vehicleKind, type MapStatus, type VehicleInfo } from '../map/city-map';
 import { dataText } from '../panels/panel';
 import { escapeAttribute as attr, escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
-import type { RouteStop } from './catalogue';
+import { routeEntry, type RouteStop } from './catalogue';
 import type { RouteEntry, SearchResults, StopGroup } from './search';
 import { tr, trPlural, type TransportKey } from './strings';
 
@@ -390,6 +391,8 @@ export interface StopDetailData {
   /** How much of the answer is trustworthy: 'none' is "no board in hand yet",
    *  'down' is "every platform's board failed". */
   arrivalsStatus: ArrivalsStatus;
+  /** The page's clock, so a clock row on another Zagreb day says which day (round 1 finding F12); absent, no day word. */
+  now?: number;
   /** The moment the view froze (LayerContext.frozenAt), when it has. A frozen
    *  sheet never says "uživo" -- the live marker reads the shell's own snapshot
    *  sentence instead -- and never waits for a board that will not come. */
@@ -404,8 +407,10 @@ export interface StopDetailData {
 /** The GTFS type behind an arrival row, read off the stop's own lines: the
  *  badge is then a tram plate or a bus capsule. A route the catalogue does not
  *  list here keeps the neutral shape rather than being guessed from its number. */
+/** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
+ *  catalogue predates (line 1 at Trg, round 1 finding F4) still wears its tram badge; -1 only for a route nobody knows. */
 function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
-  return routes.find((r) => r.id === routeId)?.type ?? -1;
+  return routes.find((r) => r.id === routeId)?.type ?? routeEntry(routeId).type;
 }
 
 /** A row's time at the row's end. A tracked row inside the countdown horizon
@@ -425,10 +430,15 @@ function routeTypeAt(routes: readonly RouteEntry[], routeId: string): number {
  *  it says the shell's own snapshot sentence (chrome.ts snapshotLine, "podaci
  *  od 13:57") and loses the live tone with it: "uživo" is never said once the
  *  view has stopped. */
-export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined): string {
-  const time = !row.live || row.minutes === null
+export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | undefined, now?: number): string {
+  const clock = !row.live || row.minutes === null;
+  // A clock on another Zagreb day says which ("sutra" under 04:31 read at 19:00, round 1 finding F12); a countdown
+  // needs none, and a caller without a clock of its own (the wall's touch board) prints none.
+  const day = clock && now !== undefined && zagrebDayKey(row.atMs) !== zagrebDayKey(now) ? dayLabel(i18n, row.atMs, now) : '';
+  const time = (clock
     ? `<time datetime="${attr(new Date(row.atMs).toISOString())}">${esc(zagrebTime(row.atMs))}</time>`
-    : esc(row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes }));
+    : esc(row.minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: row.minutes ?? 0 })))
+    + (day ? `<span class="t-eta-day">${esc(day)}</span>` : '');
   if (!row.live) return `<span class="t-eta">${time}</span>`;
   const label = frozenAt === undefined ? i18n.t('arrivals.live') : snapshotLine(i18n, frozenAt);
   return `<span class="t-eta"${frozenAt === undefined ? ' data-live="true"' : ''}><span class="t-live" role="img" aria-label="${attr(label)}"></span>${time}</span>`;
@@ -445,10 +455,10 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
  * line and the headsign are ZET's text: a row that fails the row-surface check
  * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
  */
-export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure'): string {
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
-  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt)}</li>`;
+  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as
@@ -458,8 +468,8 @@ export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: stri
  *  the sheet under the stop's name with no heading of their own. */
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
-  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt);
-  const timetableRow = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'timetable');
+  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'departure', d.now);
+  const timetableRow = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'timetable', d.now);
   const key = (r: ArrivalRow): string => r.tripId || `${r.routeId}|${r.atMs}`;
   // Every row's line and headsign are ZET's text: a row that fails the check is left out (departureRow draws none).
   const vetted = d.arrivals.filter(vettedArrival);
@@ -494,7 +504,11 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   const meta = [trPlural(i18n, 'platforms', d.stop.ids.length), d.isScreenStop ? tr(i18n, 'screenStop') : ''].filter(Boolean).join(' · ');
   const rows = d.routes.map((r) => rowButton({ kind: 'route', id: r.id, action: 'select-route', inner: routeRowInner(i18n, r, d.counts.get(r.id) ?? 0, d.delays.get(r.id)) })).join('');
   const moving = d.routes.reduce((sum, r) => sum + (d.counts.get(r.id) ?? 0), 0);
-  const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
+  // "No vehicle of these lines is moving" is said only when no row above is live either: the rows read the boards
+  // joined with the fleet, the count reads the stop's own route list, and a line the list lacks made the two contradict
+  // each other on one board (round 1, desktop F10).
+  const liveRows = d.arrivals.filter((r) => r.live).length;
+  const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : liveRows > 0 ? '' : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   // The stop's board (probe §15.6 / §16.4 `stop-board`): its name and what comes next, one element a canvas tap
   // lands on; display: contents (map.css), so the sheet's own layout is untouched.
   const name = vetExternal('name', d.stop.name, 'row') ?? '';

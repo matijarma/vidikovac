@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBoardCache } from '../../app/src/city/boards';
+import { createBoardCache, DOWN_RETRY_MS } from '../../app/src/city/boards';
 import type { DepartureBoard } from '../../shared/city/types';
 
 const NOW = Date.parse('2026-09-19T10:00:00Z');
@@ -36,6 +36,28 @@ afterEach(() => { vi.useRealTimers(); });
 
 // The 60 s board memo, lifted out of the transport workspace so the phone
 // sheet, the desktop board and the kiosk share one cache instead of three.
+describe('a failed platform is asked again soon (round 1, desktop F2)', () => {
+  it('a timed-out or failed board counts as current for DOWN_RETRY_MS, a good one for the whole TTL', async () => {
+    const f = fakeFetch();
+    let clock = NOW;
+    const cache = createBoardCache({ fetchImpl: f.impl as unknown as typeof fetch, now: () => clock });
+    cache.ensure('zet', ['1']);
+    await f.settle(url('1'), { ok: false });
+    expect(cache.get('zet', '1')?.status).toBe('down');
+    clock += DOWN_RETRY_MS - 1;
+    cache.ensure('zet', ['1']);
+    expect(f.calls).toHaveLength(1);
+    clock += 2;
+    cache.ensure('zet', ['1']);
+    expect(f.calls).toHaveLength(2);
+    await f.settle(url('1'), { ok: true, body: board('1') });
+    expect(cache.get('zet', '1')?.status).toBe('live');
+    clock += DOWN_RETRY_MS + 1_000;
+    cache.ensure('zet', ['1']);
+    expect(f.calls).toHaveLength(2); // a good board keeps the TTL
+  });
+});
+
 describe('createBoardCache', () => {
   it('fetches each platform once, answers from memory inside the TTL and refetches after it', async () => {
     const f = fakeFetch();

@@ -61,7 +61,7 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
     // left out; until the policy is in hand the rows hold their place rather than say the timetable is missing.
     const rows = answer.rows.filter(vettedArrival);
     if (rows.length) {
-      body = rows.map((row) => departureRow(i18n, row, kindOfRoute, frozenAt)).join('');
+      body = rows.map((row) => departureRow(i18n, row, kindOfRoute, frozenAt, 'departure', ctx.now)).join('');
     } else if (answer.rows.length) {
       busy = !frozen && !externalTextReady();
       body = emptyRow(busy ? null : i18n.t(frozen ? 'arrivals.frozen' : 'arrivals.down'));
