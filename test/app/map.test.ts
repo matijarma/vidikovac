@@ -333,7 +333,7 @@ describe('the city places’ marks', () => {
     expect(JSON.stringify([dots, badges])).not.toContain('"zoom"');
     for (const zoom of [12.7, 13, 13.5, 14, 16]) {
       expect(evaluate(dots.paint!['circle-radius'], bike('7'), zoom), `bike @${zoom}`).toBe(20);
-      expect(evaluate(dots.paint!['circle-radius'], bike('0', true), zoom), `spent bike @${zoom}`).toBe(20);
+      expect(evaluate(dots.paint!['circle-radius'], bike('', true), zoom), `unknown bike @${zoom}`).toBe(20);
       expect(evaluate(badges.layout!['text-size'], bike('7'), zoom), `count @${zoom}`).toBe(24);
       expect(evaluate(badges.layout!['text-field'], bike('7'), zoom), `count text @${zoom}`).toBe('7');
       // Every other kind of place keeps exactly the mark it had.
@@ -359,14 +359,14 @@ describe('the city places’ marks', () => {
     // and a frame of empty stations at night read as white "0" discs (owner, 24 Sep; contrast.test.ts).
     for (const face of ['light', 'dark'] as const) {
       const p = basemap.overlayPalette(face), faced = cityLayers(p, null, 2);
-      for (const spent of [bike('0', true), bike('', true)]) {
+      for (const spent of [bike('', true)]) {
         expect(evaluate(byId('city-place-dots', faced).paint!['circle-color'], spent, 14), `${face} ${JSON.stringify(spent)}`).toBe(p.bikeSpent);
         expect(evaluate(byId('city-place-badges', faced).paint!['text-color'], spent, 14), `${face} ${JSON.stringify(spent)}`).toBe(p.bikeSpentText);
       }
     }
     expect(basemap.overlayPalette('dark').bikeSpent).not.toBe(basemap.overlayPalette('dark').other);
     // discover()'s points carry bikeAvailability's words and no `spent`: the same grey.
-    for (const badge of ['0', '—', '?']) expect(evaluate(color, { category: 'bikes', badge, eventCount: 0 }, 14), badge).toBe(palette.bikeSpent);
+    for (const badge of ['—', '?']) expect(evaluate(color, { category: 'bikes', badge, eventCount: 0 }, 14), badge).toBe(palette.bikeSpent);
     // A "0" that is not a station's count is not a spent station: only the bikes read this.
     expect(evaluate(color, { category: 'culture', badge: '0', eventCount: 0 }, 14)).toBe(palette.event);
     expect(evaluate(color, venue, 14)).toBe(palette.event);
@@ -375,12 +375,33 @@ describe('the city places’ marks', () => {
     expect(evaluate(color, plain, 14)).toBe(palette.place);
   });
 
+  // Owner, decision 60 (24 Sep, D5.1 in production): an empty station was a
+  // disc as big as a counted one in another colour, and read as something
+  // else. It is the same teal, a small dot and no "0": a station is there,
+  // with no bike now. A station with bikes keeps its counted disc.
+  it('draws a station with no bike as a small teal dot without its "0", in both themes, and a counted station unchanged', () => {
+    for (const face of ['light', 'dark'] as const) {
+      const p = basemap.overlayPalette(face), faced = cityLayers(p, null, 2);
+      const dots = byId('city-place-dots', faced), badges = byId('city-place-badges', faced);
+      for (const zero of [bike('0', true), { category: 'bikes', badge: '0', eventCount: 0 }]) {
+        for (const zoom of [12.7, 14, 16]) expect(evaluate(dots.paint!['circle-radius'], zero, zoom), `${face} zero @${zoom}`).toBe(2 * BIKE_FAR_RADIUS_PX);
+        expect(evaluate(dots.paint!['circle-color'], zero, 14), `${face} zero colour`).toBe(p.bike);
+        expect(evaluate(badges.layout!['text-field'], zero, 14), `${face} zero text`).toBe('');
+      }
+      expect(evaluate(dots.paint!['circle-radius'], bike('7'), 14)).toBe(20);
+      expect(evaluate(dots.paint!['circle-color'], bike('7'), 14)).toBe(p.bike);
+      expect(evaluate(badges.layout!['text-field'], bike('7'), 14)).toBe('7');
+      expect(evaluate(badges.paint!['text-color'], bike('7'), 14)).toBe(p.bikeText);
+      expect(evaluate(badges.layout!['text-size'], bike('7'), 14)).toBe(24);
+    }
+  });
+
   it('keeps a station of the unframed whole-city window a small dot without its number', () => {
     const far = bike('7', false, { far: true });
     expect(BIKE_FAR_RADIUS_PX).toBe(3);
     expect(evaluate(byId('city-place-dots').paint!['circle-radius'], far, 12.7)).toBe(6);
     expect(evaluate(byId('city-place-badges').layout!['text-field'], far, 12.7)).toBe('');
-    expect(evaluate(byId('city-place-dots').paint!['circle-color'], bike('0', true, { far: true }), 12.7)).toBe(palette.bikeSpent);
+    expect(evaluate(byId('city-place-dots').paint!['circle-color'], bike('0', true, { far: true }), 12.7)).toBe(palette.bike);
     // `far` on anything but a station changes nothing.
     expect(evaluate(byId('city-place-dots').paint!['circle-radius'], { ...venue, far: true }, 12.7)).toBe(2 * Math.min(18, 11 + Math.sqrt(3)));
     expect(evaluate(byId('city-place-badges').layout!['text-field'], { ...venue, far: true }, 12.7)).toBe('3');
