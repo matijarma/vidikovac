@@ -960,11 +960,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (!camera) return null;
     const box = container.getBoundingClientRect();
     const composition = compositionOf(layout);
+    const extras = mapAdapter.extras();
+    // A picture without stop beads (the whole-city window, a strip: prozor.stopMarks false) draws one ring, the
+    // own place's, and only that ring answers a finger. At its zoom the 28 px tolerance is 750 to 850 m of city,
+    // so with every stop a target a press held anywhere on the map met an unseen stop and opened no Postavke,
+    // and a tap opened the board of a stop nobody could see (round 1, 24 Sep).
+    const touchable = extras.prozor?.stopMarks === false ? (extras.stop ? [extras.stop] : []) : drawnStops(stops, extras.prozor, isTram);
     const hit = touchAt({
       x: event.clientX - box.left, y: event.clientY - box.top,
       widthPx: box.width || container.clientWidth || FIELD_DESIGN_WIDTH[composition],
       heightPx: box.height || container.clientHeight || FIELD_DESIGN_HEIGHT[composition],
-      camera, stops: drawnStops(stops, mapAdapter.extras().prozor, isTram), pharmacy: pharmacyRing(stop),
+      camera, stops: touchable, pharmacy: pharmacyRing(stop),
       tolerancePx: KIOSK_HIT_TOLERANCE_PX * Math.max(1, layout.zoom),
     });
     if (hit?.kind === 'stop') return { kind: 'stop', stop: hit.stop };

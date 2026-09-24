@@ -294,10 +294,10 @@ const theme: ThemeController = {
   onChange: (listener) => { listener({ preference: 'solar', resolved: 'light' }); return () => {}; }, destroy: () => {},
 };
 
-function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null } = {}) {
+function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
-  const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: SCREEN }) };
+  const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: opts.screen ?? SCREEN }) };
   const storage = { getItem: (k: string) => raw[k] ?? null, setItem: (k: string, v: string) => { raw[k] = v; }, removeItem: (k: string) => { delete raw[k]; } };
   const timers: Timer[] = [];
   let now = NOW;
@@ -528,6 +528,36 @@ describe('the wall answers a touch (kiosk.ts)', () => {
       pointer(map, 'pointerdown', zx, zy);
       k.tick(LONG_PRESS_MS);
       expect(panel(k)).toBeNull();
+      k.handle.destroy();
+    });
+
+    // Round 1 (24 Sep): the whole-city window (and a strip) draws one ring, the own place's, and no other stop bead
+    // (prozor.stopMarks false); at its zoom the 28 px tolerance is 750 m of city, so with every stop a target a
+    // press held anywhere on the map met an unseen stop and opened no Postavke, and a tap opened its board.
+    it('on the whole-city window only the own ring answers: a press beside an unseen stop opens Postavke, a tap there no board', async () => {
+      const place = { kind: 'tram' as const, name: STOP.name, lon: STOP.lon, lat: STOP.lat, stopId: STOP.id };
+      const k = mount({ screen: { ...SCREEN, stop: null, place, placeSet: false } as ScreenMetadata });
+      await flush();
+      const map = k.q('[data-testid=kiosk-map]')!;
+      expect((k.map.factory.mock.calls[0]![0] as { prozor?: { stopMarks?: boolean } }).prozor?.stopMarks).toBe(false);
+      const [zx, zy] = ring(k, ZRINJEVAC);
+      pointer(map, 'pointerdown', zx, zy);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).not.toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
+      pointer(map, 'pointerup', zx, zy);
+      panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(panel(k)!.hidden).toBe(true);
+      click(map, zx, zy);
+      expect(k.board()).toBeNull();
+      // The own ring still opens its board on a tap and no Postavke on a hold.
+      const [x, y] = ring(k, STOP);
+      pointer(map, 'pointerdown', x, y);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)!.hidden).toBe(true);
+      pointer(map, 'pointerup', x, y);
+      click(map, x, y);
+      expect(k.board()).not.toBeNull();
       k.handle.destroy();
     });
 
