@@ -26,7 +26,7 @@ import {
   PHONE_PROBES, PHONE_SLOP_RE, SEARCH_TAPS_MAX, SHARE_CITY_LABEL, STOP_SEARCH_QUERY, TAB_LABELS, WEEK_EVENTS_LABEL,
 } from '../inventory';
 import { pillFailures, pillLabels, PLUS_PILL_RE } from '../wall';
-import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
+import { attachRecorders, problemsAfterTeardown, TILE_REQUESTS, type Recorder } from '../recorders';
 import {
   attrOf, AXE_BLOCKING, AXE_TAGS, DESK_VIEWPORT, intersects, nearbyHeadFailures, PHONE_DEPARTURE_ROWS, PHONE_VIEWPORT, phoneDepartureFailures,
   phoneDepartures, phoneSentenceFailures, phoneSentenceText, routeTiles, sceneClock, textOf, visibleOf, writeArtefact,
@@ -73,9 +73,20 @@ async function present(page: Page, selector: string, message: string, timeout = 
   return target.isVisible();
 }
 
-function recordersClean(recorder: Recorder, label: string): void {
+/**
+ * The recorders empty. With `teardownSince` (the moment the page tears down on purpose, the end of the session),
+ * the static assets the browser cancelled from then on (sprites, images, fonts) are listed in
+ * recorders-<label>-teardown.json instead of counted; every /api/ request and everything else stays a finding.
+ */
+function recordersClean(recorder: Recorder, label: string, teardownSince?: string): void {
   writeArtefact(`recorders-${label}.json`, recorder.report());
-  softly(recorder.problems(), `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted)`).toEqual([]);
+  if (teardownSince === undefined) {
+    softly(recorder.problems(), `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted)`).toEqual([]);
+    return;
+  }
+  const { problems, tolerated } = problemsAfterTeardown(recorder, teardownSince);
+  writeArtefact(`recorders-${label}-teardown.json`, tolerated);
+  softly(problems, `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted; ${tolerated.length} static asset(s) the session's end cancelled are listed, never an /api/ request)`).toEqual([]);
 }
 
 async function axeBlocking(page: Page): Promise<string[]> {
@@ -211,6 +222,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     }).toBeGreaterThanOrEqual(1);
     // The expiry moment itself: every /api/data request from here on is one too many (none may slip in while the page is read).
     const requests = fixture.requests.length;
+    const expiredAt = new Date().toISOString();
     fixture.expire();
     await softly(page.locator(PHONE_PROBES.sessionEnded), `${label}: after expiry the page shows ${PHONE_PROBES.sessionEnded} ([O-59])`).toBeVisible({ timeout: PAINT_MS });
     // One verdict with the production observer (e2e/inventory.ts): the ended block with /s/ and /hitno, no content
@@ -219,7 +231,7 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     await page.clock.runFor(AFTER_EXPIRY_MS);
     await page.waitForTimeout(500);
     softly(expiryFailures(await page.evaluate(EXPIRY_READ_IN_PAGE, EXPIRY_SPEC), fixture.requests.slice(requests).map((id) => `/api/data/${id}`)), `${label}: still cleared, and no /api/data request in the ${AFTER_EXPIRY_MS / 1000} s after the session ended`).toEqual([]);
-    recordersClean(recorder, label);
+    recordersClean(recorder, label, expiredAt);
   });
 
   test('axe on Sada and Karta: no serious or critical WCAG 2.1 A/AA violation', async ({ page }) => {

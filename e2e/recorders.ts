@@ -39,6 +39,11 @@ export interface RecorderOptions {
 /** Map tiles answered 404 by the accept specs (e2e/round-f.spec.ts pattern): never a finding. */
 export const TILE_REQUESTS = /\/maps\/zagreb-v1\//;
 
+/** The browser's word for a fetch it cancelled itself: the page dropped what asked for it, no answer failed. */
+export const ABORTED = 'net::ERR_ABORTED';
+/** Static assets by path: MapLibre's sprite sheets and glyphs, images and fonts. Never an /api/ path (checked apart). */
+export const STATIC_ASSET_PATH = /\/maps\/(?:sprites|fonts|glyphs)\/|\.(?:png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|pbf)(?:\?|$)/i;
+
 export interface RecorderReport {
   page: string;
   dataResponses: number;
@@ -138,6 +143,33 @@ function moduleStatusesOf(records: readonly DataRecord[]): Record<string, string
   return out;
 }
 
+/** The findings, with the failed requests given (all of them for `problems()`). */
+function problemLines(rec: Recorder, failed: readonly FailedRecord[]): string[] {
+  return [
+    ...rec.consoleErrors.map((r) => `console error: ${r.text}`),
+    ...rec.pageErrors.map((r) => `page error: ${r.text}`),
+    ...failed.map((r) => `failed request: ${r.method} ${r.url} (${r.error ?? 'no reason'})`),
+    ...rec.httpErrors.map((r) => `HTTP ${r.status}: ${r.method} ${r.path}`),
+  ];
+}
+
+/** A static asset (sprite, image, font) the browser cancelled at or after `since` (an ISO time on the recorder's clock), outside /api/. */
+export function isTeardownAbort(record: FailedRecord, since: string): boolean {
+  const path = pathOf(record.url);
+  return record.error === ABORTED && record.t >= since && !path.startsWith('/api/') && STATIC_ASSET_PATH.test(path);
+}
+
+/**
+ * `problems()` across a teardown the page makes on purpose (the end of a session removes the Sada band, and the
+ * browser cancels the band's sprite fetches in the same millisecond): the static assets cancelled from `since` on
+ * are listed in `tolerated`, not counted. Every /api/ request, an abort before `since`, an asset that failed for
+ * another reason, an HTTP error, a console or page error stays a finding.
+ */
+export function problemsAfterTeardown(rec: Recorder, since: string): { problems: string[]; tolerated: FailedRecord[] } {
+  const tolerated = rec.failed.filter((r) => isTeardownAbort(r, since));
+  return { problems: problemLines(rec, rec.failed.filter((r) => !tolerated.includes(r))), tolerated };
+}
+
 /** Attach the recorders to a page before it navigates; read them with `problems()` or `report()`. */
 export function attachRecorders(page: RecorderPage, name: string, options: RecorderOptions = {}): Recorder {
   const ignore = options.ignore ?? [];
@@ -155,12 +187,7 @@ export function attachRecorders(page: RecorderPage, name: string, options: Recor
     pageErrors: [],
     lastTeaser: null,
     problems() {
-      return [
-        ...rec.consoleErrors.map((r) => `console error: ${r.text}`),
-        ...rec.pageErrors.map((r) => `page error: ${r.text}`),
-        ...rec.failed.map((r) => `failed request: ${r.method} ${r.url} (${r.error ?? 'no reason'})`),
-        ...rec.httpErrors.map((r) => `HTTP ${r.status}: ${r.method} ${r.path}`),
-      ];
+      return problemLines(rec, rec.failed);
     },
     report() {
       return {
