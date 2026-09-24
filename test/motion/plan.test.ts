@@ -435,3 +435,37 @@ describe('buildPlan names the first platform ahead when the horizon does not rea
     expect(tram.next).toBeNull();
   });
 });
+
+describe('buildPlan keeps ZET\'s first platform at a terminus stand projected past it (rail round 3)', () => {
+  // The stand at Zapruđe projects 111 to 272 m along route 8's departure
+  // path past its first platform (10318 at 17:19:55, 10317 at 08:53:47),
+  // Dubrava's 97 m along route 7's (102203 at 03:59:45): the tram has not
+  // served the platform ZET still names, and the plan read it as passed.
+  const zet = (stopId: string) => ({ stopId, timeSec: null, delaySec: null, atSec: null });
+  const standAt = (id: string, x: number, moving = false) => tramOn1(id, moving ? [[x - 40, 1000], [x, 1010]] : [[x, 1000], [x, 1045]]);
+
+  it('names the first platform without a time within 300 m past it, standing or moving, and the platform ahead beyond', () => {
+    const standing = standAt('stand', 150);
+    buildPlan(standing, net, eightMs, zet('T0'), 1046, 1046, BANDS);
+    expect(standing.next).toEqual({ stopId: 'T0', s: 0, etaSec: null });
+    const moving = standAt('leaving', 250, true);
+    buildPlan(moving, net, eightMs, zet('T0'), 1012, 1012, BANDS);
+    expect(moving.next?.stopId).toBe('T0');
+    const far = standAt('far', 400);
+    buildPlan(far, net, eightMs, zet('T0'), 1046, 1046, BANDS);
+    expect(far.next?.stopId).toBe('T600');
+    const other = standAt('other', 150);
+    buildPlan(other, net, eightMs, zet('T300'), 1046, 1046, BANDS);
+    expect(other.next?.stopId).toBe('T300');
+  });
+
+  it('does not go back to the first platform once a later one is named (ZET\'s truncated update, 102412 at 250 m past Borongaj)', () => {
+    const tram = standAt('flicker', 250, true);
+    buildPlan(tram, net, eightMs, zet('T300'), 1012, 1012, BANDS);
+    expect(tram.next?.stopId).toBe('T300');
+    matcher.matchFix(tram, fix(255, 0, 1020), matcher.priorFor('1_0', '1', 0), null);
+    tram.speed = estimateSpeed(tram.fixes);
+    buildPlan(tram, net, eightMs, zet('T0'), 1022, 1022, BANDS);
+    expect(tram.next?.stopId).toBe('T300');
+  });
+});

@@ -83,6 +83,11 @@ export const ETA_SLACK_S = 10;
  *  its next stop, never past it, and silenceDecay fades it linearly to 0 at
  *  EVICT_S. */
 export const SILENCE_HOLD_S = 30;
+/** How far past its path's first platform a tram whose TripUpdate still names
+ *  that platform is read as at the terminus stand, not yet served (rail round
+ *  3): the stands project 97 to 272 m along the departure rails past the
+ *  platform at Zapruđe (route 8) and Dubrava (route 7). */
+export const STAND_PAST_FIRST_M = 300;
 /** @deprecated Unused since T8 made the fade linear; still exported only
  *  because a local replay investigation imports it. */
 export const SILENCE_HALFLIFE_S = 60;
@@ -256,6 +261,8 @@ interface ArcGeometry {
   stopAt(s: number): { stopId: string; s: number } | null;
   /** The key the TimesProvider knows this geometry by, or null (a bus shape). */
   timesPath: number | null;
+  /** The first platform the path serves (the trip starts there), or null on a shape. */
+  first: { stopId: string; s: number } | null;
 }
 
 function pathGeometryOf(net: GraphNetwork, pathIdx: number): ArcGeometry {
@@ -269,6 +276,7 @@ function pathGeometryOf(net: GraphNetwork, pathIdx: number): ArcGeometry {
       return best;
     },
     timesPath: pathIdx,
+    first: stops.length > 0 ? { stopId: stops[0].stop.id, s: stops[0].s } : null,
   };
 }
 
@@ -292,6 +300,7 @@ function shapeGeometryOf(net: GraphNetwork, shapeIdx: number): ArcGeometry {
       return before && Math.abs(before.s - s) <= STOP_ZONE_M ? { stopId: before.stop.id, s: before.s } : null;
     },
     timesPath: null,
+    first: null,
   };
 }
 
@@ -671,6 +680,22 @@ export function buildPlan(
   if (!nextStop && !heldAtBranch) {
     const ahead = geometry.stopsAhead(knots[0][1])[0];
     if (ahead) nextStop = { stopId: ahead.stopId, s: round1(ahead.s), etaSec: null };
+  }
+  // A terminus stand that projects onto the departure rails past the trip's
+  // first platform (rail round 3): the tram has not served the platform ZET
+  // still names, the plan reads it as passed and would name the stop
+  // beyond. Within STAND_PAST_FIRST_M of the platform, off every zone, ZET's
+  // word is the evidence, and there is no time: the plan cannot say when the
+  // tram leaves the stand. Neither the plan's shape nor the speed estimate
+  // can say whether it stands there (the order law pushes a standing tram's
+  // plan ahead of a follower, 10314 at 17:43:56, 150 to 239 m in 8 s; the
+  // stand's scatter 20 to 47 m off the rails reads as 2.5 m/s, 17:36:23),
+  // so the fix's own arc is read, not the plan's. The one-next-stop rule
+  // below keeps a later platform once named (ZET's truncated update names
+  // the first platform again for a tick: 102412 at 250 m past Borongaj).
+  const firstPlatform = geometry.first;
+  if (firstPlatform && next?.stopId === firstPlatform.stopId && !here && !silentHere && track.match.s > firstPlatform.s + STOP_ZONE_M && track.match.s - firstPlatform.s <= STAND_PAST_FIRST_M) {
+    nextStop = { stopId: firstPlatform.stopId, s: round1(firstPlatform.s), etaSec: null };
   }
 
   // One next stop per visit (rail round 3): a platform the wire has named
