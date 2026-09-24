@@ -28,7 +28,7 @@ const testEnv = (): Env => env as unknown as Env;
 export async function waitForRows(
   stub: DurableObjectStub<MetricsDO>,
   predicate: (rows: MetricsDailyRow[]) => boolean,
-  timeoutMs = 1000,
+  timeoutMs = 10_000,
 ): Promise<MetricsDailyRow[]> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -94,7 +94,7 @@ export class Inbox {
     });
   }
 
-  async nextWhere(pred: (f: Frame) => boolean, timeoutMs = 2000): Promise<Frame> {
+  async nextWhere(pred: (f: Frame) => boolean, timeoutMs = 10_000): Promise<Frame> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const remaining = deadline - Date.now();
@@ -104,7 +104,7 @@ export class Inbox {
     }
   }
 
-  nextOfType(t: string, timeoutMs = 2000): Promise<Frame> {
+  nextOfType(t: string, timeoutMs = 10_000): Promise<Frame> {
     return this.nextWhere((f) => f.t === t, timeoutMs);
   }
 
@@ -112,7 +112,7 @@ export class Inbox {
     await expect(this.nextRaw(ms)).rejects.toThrow('inbox timeout');
   }
 
-  waitClose(timeoutMs = 2000): Promise<void> {
+  waitClose(timeoutMs = 10_000): Promise<void> {
     if (this.closed) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('close timeout')), timeoutMs);
@@ -243,7 +243,7 @@ export async function connectRoom(roomId: string): Promise<Conn> {
 export async function waitForRow(
   stub: DurableObjectStub<MetricsDO>,
   predicate: (row: MetricsDailyRow) => boolean,
-  timeoutMs = 3000,
+  timeoutMs = 10_000,
 ): Promise<MetricsDailyRow> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

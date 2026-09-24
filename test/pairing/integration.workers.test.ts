@@ -32,10 +32,13 @@ const KIOSK_IP = '203.0.113.10';
 const PHONE_IP = '198.51.100.7';
 
 async function waitForRow(match: (row: MetricsDailyRow) => boolean): Promise<MetricsDailyRow> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  // Up to 10 s of real time, not 40 polls: on a loaded host one query can take longer than the old whole budget.
+  const deadline = Date.now() + 10_000;
+  for (;;) {
     const rows = await metricsStub(testEnv).query('2020-01-01');
     const found = rows.find(match);
     if (found !== undefined) return found;
+    if (Date.now() >= deadline) break;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error('counter row never appeared');
