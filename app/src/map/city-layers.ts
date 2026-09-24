@@ -19,6 +19,11 @@ export const BIKE_COUNT_PX = 12;
  *  city/curated.ts) keeps each station a small dot without its number: a
  *  hundred counted discs over the whole town would bury the trams. */
 export const BIKE_FAR_RADIUS_PX = 3;
+/* Decision 60 (owner, 24 Sep): a station with no bike now is the same teal at
+ * the same small size and without its "0" -- a station is there, and nothing
+ * to rent. Its disc as big as a counted one, in a grey of its own, read as a
+ * different kind of mark. The spent grey stays for a station whose count is
+ * not known or which is not renting. */
 /** What shared/city/bikes.ts bikeAvailability writes for a station with
  *  nothing to give (no bike, not renting, a source gone quiet). A point from
  *  city/curated.ts says so with `spent` instead; both read in the station's
@@ -35,11 +40,13 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
   const mode:CityLabels=labels===true?'all':labels===false?'none':labels;
   const isBike=['==',['get','category'],'bikes'];
   const far=['all',isBike,['==',['get','far'],true]];
-  const spent=['all',isBike,['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
+  const empty=['all',isBike,['==',['get','badge'],'0']];
+  const small=['any',far,empty];
+  const spent=['all',isBike,['!',empty],['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
   // Every city place is drawn at full strength at every zoom: a station with
   // nothing to give is grey, never faded, and no mark is a merged cluster.
   const color=['case',spent,p.bikeSpent,['match',['get','category'],'bikes',p.bike,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
-  const radius=['*',scale,['case',far,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
+  const radius=['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
@@ -47,7 +54,7 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
     // A count is never dropped by a collision (text-allow-overlap takes no
     // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{
-      'text-field':['case',far,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
+      'text-field':['case',small,'',['get','badge']],'text-font':[MAP_FONTS.medium],'text-size':['*',scale,['case',isBike,BIKE_COUNT_PX,12]],'text-allow-overlap':true,
       'symbol-sort-key':['get','priority']},paint:{'text-color':['case',spent,p.bikeSpentText,isBike,p.bikeText,p.halo],'text-halo-width':0}},
     // The framed wall names its curated venues at every zoom its Kadar can
     // frame (Trg at Kadar 8 on 1920 is about 12.86): a venue without its

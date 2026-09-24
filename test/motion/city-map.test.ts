@@ -947,10 +947,11 @@ describe('the marker census of the city layers', () => {
     expect(CENSUS_COUNT_HALF_PX * 2).toBe(cityPlaces.BIKE_COUNT_PX);
   });
 
-  it('sorts the BAJS discs by what they say: a number, the grey "0", the grey blank and the far dot; none of them is unlabelled', () => {
+  // Decision 60: the empty station is a small teal dot and its "0" is not drawn; it is still the zero, not a mute mark.
+  it('sorts the BAJS discs by what they say: a number, the small dot of an empty station, the grey blank and the far dot; none of them is unlabelled', () => {
     const census = markerCensus([
       dot('bajs-a', bike('4', false)), badge('bajs-a', '4'),
-      dot('bajs-b', bike('0', true)), badge('bajs-b', '0'),
+      dot('bajs-b', bike('0', true)),
       dot('bajs-c', bike('', true)),
       dot('bajs-d', bike('', false, { far: true })),
       dot('culture-1', { category: 'culture', badge: '2', eventCount: 2 }), badge('culture-1', '2'), label('culture-1', 'Gavella'),

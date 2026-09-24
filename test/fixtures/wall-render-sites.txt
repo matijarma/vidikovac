@@ -317,8 +317,8 @@ app/src/layers/grad-sada.ts:62 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'
 app/src/layers/grad-sada.ts:81 #mapBand → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:130 #renderGradSada → vetExternal('name', place.name, 'row')
 app/src/layers/grad-sada.ts:132 #renderGradSada → e(name)
-app/src/map/city-layers.ts:50 #cityLayers → 'text-field':['case',far,'',['get','badge']]
-app/src/map/city-layers.ts:59 #cityLayers → 'text-field':['get','title']
+app/src/map/city-layers.ts:57 #cityLayers → 'text-field':['case',small,'',['get','badge']]
+app/src/map/city-layers.ts:66 #cityLayers → 'text-field':['get','title']
 app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
 app/src/map/city-map.ts:817 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')

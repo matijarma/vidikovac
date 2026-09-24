@@ -205,8 +205,8 @@ popisa „U blizini” i naslov tog popisa čitaju isti izmjereni broj, pa naslo
 ispisuje izmjerenu udaljenost i vrijeme hoda, na primjer
 „U blizini · 2 km · ~15 min”.
 Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
-dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, siv s nulom
-kad bicikala nema, a siv i bez broja kad broj nije poznat ili stanica ne
+dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, a kad
+bicikala nema, mala tirkizna točka bez broja; siv disk bez broja kad broj nije poznat ili stanica ne
 iznajmljuje, nikad s upitnikom; kulturna mjesta pojavljuju se samo s
 programom večeras, i to s imenom; od stajališta imenuju se samo mjesto
 zaslona i tramvajska čvorišta unutar polumjera kadra, a ulice se ne imenuju.
