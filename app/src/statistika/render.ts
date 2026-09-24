@@ -380,7 +380,7 @@ export function renderValues(s: PublicStats, scope: ScopeName): void {
     .sort((a, b) => a.x.ok / a.all - b.x.ok / b.all)[0];
   set('value-sources', worst ? `Najslabiji izvor: ${sourceLabel(worst.x.module)}, ${pct(worst.x.ok, worst.all)} u redu.` : 'Još nema zapisanih dohvata.');
   const j = s.system.live?.junctions[0];
-  set('value-trams', j ? `Najviše čekanja${j.near ? ` kod stajališta ${j.near}` : ''}: stane ${pct(j.waits, j.passes, 0)} prolaza, medijan ${seconds(j.p50)}.` : 'Karta čekanja pojavit će se kad model skupi dovoljno prolaza.');
+  set('value-trams', j ? `Najviše čekanja${j.near ? ` kod stajališta ${j.near}` : ''}: tramvaj stane u ${pct(j.waits, j.passes, 0)} prolaza, medijan ${seconds(j.p50)}.` : 'Karta čekanja pojavit će se kad model skupi dovoljno prolaza.');
 }
 
 // ---- sources -----------------------------------------------------------------------
@@ -432,7 +432,7 @@ export function renderSources(s: PublicStats): void {
 
 const RAMP = ['st-ramp-0', 'st-ramp-1', 'st-ramp-2', 'st-ramp-3', 'st-ramp-4'];
 const BUCKET_KEYS = ['lt25', 'lt50', 'lt100', 'lt200', 'ge200'];
-const BUCKET_REACH: Record<string, string> = { lt25: '25 m', lt50: '50 m', lt100: '100 m', lt200: '200 m', ge200: 'više od 200 m' };
+const BUCKET_REACH: Record<string, string> = { lt25: 'polovica unutar 25 m', lt50: 'polovica unutar 50 m', lt100: 'polovica unutar 100 m', lt200: 'polovica unutar 200 m', ge200: 'polovica dalje od 200 m' };
 
 function medianBucket(buckets: Record<string, number>): string | null {
   const total = BUCKET_KEYS.reduce((a, k) => a + (buckets[k] ?? 0), 0);
@@ -502,7 +502,7 @@ function accuracyCard(s: PublicStats): HTMLElement {
     return {
       label: `${h.horizon.replace('s', '')} s unaprijed`,
       parts: BUCKET_KEYS.map((k, i) => ({ key: k, label: BUCKETS[k], count: h.buckets[k] ?? 0, tone: RAMP[i] })),
-      summary: median ? `pola do ${BUCKET_REACH[median]}` : 'nema ocjena',
+      summary: median ? BUCKET_REACH[median] : 'nema ocjena',
     };
   });
   const any = s.system.hindsight.some((h) => BUCKET_KEYS.some((k) => (h.buckets[k] ?? 0) > 0));
@@ -562,7 +562,7 @@ function junctionsCard(s: PublicStats): HTMLElement {
       list.map((j, i) => ({
         key: String(i + 1),
         label: j.near ? `Kod stajališta ${j.near}` : 'Križanje bez obližnjeg stajališta',
-        note: `stane ${pct(j.waits, j.passes, 0)} od ${count(j.passes, FORMS.prolaz)}`,
+        note: `stane u ${pct(j.waits, j.passes, 0)} od ${count(j.passes, FORMS.prolaz)}`,
         count: j.p50 ?? 0,
       })),
       'Križanja na kojima tramvaji čekaju',
@@ -584,7 +584,7 @@ function junctionsCard(s: PublicStats): HTMLElement {
               lat: j.lat,
               weight: maxCost > 0 ? (j.share * (j.p50 ?? 0)) / maxCost : 0,
               rank: i + 1,
-              label: `${i + 1}. ${j.near ? `kod stajališta ${j.near}` : 'križanje'}: stane ${pct(j.waits, j.passes, 0)} prolaza, medijan ${seconds(j.p50)}`,
+              label: `${i + 1}. ${j.near ? `kod stajališta ${j.near}` : 'križanje'}: stane u ${pct(j.waits, j.passes, 0)} prolaza, medijan ${seconds(j.p50)}`,
             })),
             'Karta križanja na kojima tramvaji čekaju',
           ),
@@ -617,7 +617,7 @@ function dwellCard(s: PublicStats): HTMLElement {
           ),
         ]
       : [empty(live ? 'Model još nije izmjerio dovoljno zaustavljanja.' : 'Tablice modela trenutačno nisu dostupne.')],
-    method: live ? `Model zna nešto o ${num(live.stopsKnown)} perona. Mjerenja za ovo doba dana.` : undefined,
+    method: live ? `Model ima mjerenja za ${num(live.stopsKnown)} perona. Mjereno za ovo doba dana i ovu vrstu dana.` : undefined,
   });
 }
 
