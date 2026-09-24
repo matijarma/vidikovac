@@ -115,10 +115,13 @@ function safeSeverity(sev: string): Severity {
   return Object.prototype.hasOwnProperty.call(SEVERITY_WORDS, sev) ? (sev as Severity) : 'info';
 }
 
+// A badge sits beside the heading, never inside it: the h2 (and the section it
+// names through aria-labelledby) reads "Dežurne ljekarne", not "... provjeriti".
 function section(id: string, heading: string, body: string, badge = ''): string {
+  const h2 = `<h2 id="h-${id}">${heading}</h2>`;
   return (
     `<section id="${id}" aria-labelledby="h-${id}">` +
-    `<h2 id="h-${id}">${heading}${badge}</h2>${body}</section>`
+    `${badge ? `<div class="sec-head">${h2} ${badge}</div>` : h2}${body}</section>`
   );
 }
 
@@ -337,7 +340,7 @@ function pharmaciesSection(): string {
       `<ul class="pharmacies">${rows}</ul>` +
       `<footer class="src"><p>${escapeHtml(LJEKARNE_SOURCE.text)} · ` +
       `<a class="ext" href="${escapeHtml(LJEKARNE_SOURCE.url)}" rel="noopener">izvornik</a></p></footer>`,
-    ` <span class="check">provjeriti</span>`,
+    `<span class="check">provjeriti</span>`,
   );
 }
 
