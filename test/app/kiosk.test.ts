@@ -429,6 +429,8 @@ describe('the integrated companion sentence', () => {
     expect(shownAt).toBeGreaterThan(0);
     const text = painted(k.root);
     const deadline = el().dataset.validUntil;
+    const fact = el().dataset.fact;
+    expect(fact).toMatch(/\|/);
     // The vehicle's estimate moves five seconds earlier: the same words, the same deadline attribute.
     delay = 115;
     now = shownAt + 2_000;
@@ -446,6 +448,16 @@ describe('the integrated companion sentence', () => {
     expect(painted(k.root)).toMatch(/polazi za 2 min\.$/);
     expect(painted(k.root)).not.toBe(text);
     expect(el().dataset.validUntil).not.toBe(deadline);
+    // The restated countdown is the same fact (decision 29): data-fact holds, so the harness reads a refresh, not a turn.
+    expect(el().dataset.fact).toBe(fact);
+    // The next fact changes it.
+    for (let s = 5; s <= 400 && /^Tramvaj 6, /.test(painted(k.root)); s += 1) {
+      now = shownAt + s * 1000;
+      k.tick(CODE_TICK_MS);
+    }
+    expect(painted(k.root)).not.toMatch(/^Tramvaj 6, /);
+    expect(el().dataset.fact).toBeTruthy();
+    expect(el().dataset.fact).not.toBe(fact);
     k.handle.destroy();
   });
 

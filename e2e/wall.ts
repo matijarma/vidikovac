@@ -99,6 +99,10 @@ export const ROTATION_STEPS = 300;
 export const ROTATION_STEP_MS = 2000;
 /** Real time left to rAF work after each fake-clock step: MapLibre and the motion loop do not run on the fake clock. */
 export const ROTATION_SETTLE_MS = 30;
+/** Decision 29: a header sentence dwells at least this long unless its own fact expires (app SENTENCE_HOLD_MS). */
+export const SENTENCE_DWELL_MIN_MS = 20_000;
+/** §12: no wording is shown again verbatim within ten minutes. */
+export const SENTENCE_NO_REPEAT_MS = 600_000;
 /** The wrangler-dev floor with the deterministic template sentences (the production observer applies §12's no verbatim repeat within ten minutes instead). */
 export const DISTINCT_SENTENCES_MIN = 3;
 /** "U blizini · {km} km · ~{min} min", the radius measured per place [O-68]. */
@@ -147,6 +151,11 @@ export interface WallSample {
   kicker: string | null;
   kickerText: string;
   validUntil: string | null;
+  /**
+   * `data-fact` on the sentence: the fact the sentence says, in its template family (decision 29). Rewordings of
+   * one fact ("za 2 min" to "za 1 min") keep it; a new fact changes it. Absent on a wall before the attribute.
+   */
+  fact?: string | null;
   sentenceChars: number;
   sentenceOverflow: boolean;
   sentenceEllipsis: boolean;
@@ -292,6 +301,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     kicker: sentenceEl?.dataset.kicker ?? null,
     kickerText: words(q(p.sentenceKicker)),
     validUntil: sentenceEl?.dataset.validUntil ?? null,
+    fact: sentenceEl?.dataset.fact ?? null,
     sentenceChars: [...sentence].length,
     sentenceOverflow: overflows(textEl) || (textEl !== sentenceEl && overflows(sentenceEl)),
     sentenceEllipsis: ellipsis.test(sentence),
@@ -389,8 +399,19 @@ export interface RotationSummary {
   /** Distinct rows (by id, else text) that ever read as a caveat. */
   caveatRows: number;
   distinctSentences: number;
-  /** Sentence turns: a new `data-valid-until` or a new text. */
+  /** Sentence turns, per fact (sentenceTurns): a new `data-fact`; before the attribute, new words or a new `data-valid-until`. */
   sentenceTurns: number;
+  /** Same-fact rewordings inside a turn (a countdown's next minute, a restated end): not turns. */
+  sentenceRefreshes: number;
+  /** Turns shorter than SENTENCE_DWELL_MIN_MS whose own fact had not expired (the first and the open last turn are not judged). */
+  shortSentenceTurns: number;
+  /** Shortest and longest judged dwell, ms; null when no turn was judged. */
+  sentenceDwellMinMs: number | null;
+  sentenceDwellMaxMs: number | null;
+  /** Wordings shown again verbatim by a later turn within SENTENCE_NO_REPEAT_MS of their earlier showing (§12). */
+  verbatimRepeats: number;
+  /** The per-fact reading itself, for the artefact and the failure text. */
+  turns: SentenceTurns;
   /** Turns whose text equals the turn before (detectable only through `data-valid-until`). */
   consecutiveRepeats: number;
   sentenceOverflows: number;
@@ -422,7 +443,112 @@ export interface RotationSummary {
   emptyPlaceSamples: number;
 }
 
-export function summariseRotation(rows: readonly (WallSample | WallSampleError)[]): RotationSummary {
+/** One sentence turn: one fact on the header from its first reading to the next fact's. */
+export interface SentenceTurn {
+  /** Epoch ms of the turn's first reading. */
+  at: number;
+  /** Epoch ms of the next turn's first reading; null for the open last turn. */
+  end: number | null;
+  /** The fact identity: `data-fact`, or the inferred key on a wall before the attribute. */
+  fact: string;
+  /** The wordings in order, the first one and each refresh. */
+  texts: string[];
+  /** When each wording first showed. */
+  textsAt: number[];
+  refreshes: number;
+  /** end − at; null for the open last turn. */
+  dwellMs: number | null;
+  /** The latest data-valid-until read in the turn, epoch ms; null when none parsed. */
+  validUntil: number | null;
+  /** The turn ended at (within a reading of) its own fact's deadline: an early end is allowed. */
+  expired: boolean;
+  /** The first turn (the observation began mid-dwell) or the open last one: its dwell is not judged. */
+  truncated: boolean;
+  /** Judged, not expired, and shorter than SENTENCE_DWELL_MIN_MS beyond one reading's grid. */
+  short: boolean;
+}
+export interface SentenceTurns {
+  turns: SentenceTurn[];
+  refreshes: number;
+  shortTurns: SentenceTurn[];
+  /** A wording a later turn showed again within the window of its earlier showing (§12), `at` as HH:MM:SS UTC. */
+  verbatimRepeats: { at: string; afterMs: number; sentence: string }[];
+  /** 'attribute' when every reading carried data-fact, 'inferred' when none did, 'mixed' otherwise. */
+  factSource: 'attribute' | 'inferred' | 'mixed' | 'none';
+}
+export interface SentenceTurnOptions {
+  /** The reading grid: a dwell counts as short only below SENTENCE_DWELL_MIN_MS − stepMs, and a deadline within a step of the end is the fact's own. */
+  stepMs?: number;
+  windowMs?: number;
+  minDwellMs?: number;
+}
+const deadlineOf = (v: string | null | undefined): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = /^\d+$/.test(v) ? Number(v) : Date.parse(v);
+  return Number.isFinite(n) ? n : null;
+};
+/** Before data-fact: the words with their numbers masked, so a countdown's next minute or a moved end is the same fact. */
+const inferredFact = (text: string): string => text.replace(/\d+/g, '#');
+
+/**
+ * The header's sentence turns per fact (decision 29). A turn ends only when the sentence's fact changes: its
+ * `data-fact`, or on a wall before the attribute its words with the numbers masked (and, as before, the same
+ * words under a new `data-valid-until`). A rewording of the same fact is a refresh inside the turn, so a
+ * countdown shown 15.6 s as "za 2 min" and 4.4 s as "za 1 min" is one turn of 20.0 s with one refresh.
+ * Readings without a sentence are skipped.
+ */
+export function sentenceTurns(readings: readonly Pick<WallSample, 'at' | 'sentence' | 'validUntil' | 'fact'>[], options: SentenceTurnOptions = {}): SentenceTurns {
+  const stepMs = options.stepMs ?? ROTATION_STEP_MS;
+  const windowMs = options.windowMs ?? SENTENCE_NO_REPEAT_MS;
+  const minDwellMs = options.minDwellMs ?? SENTENCE_DWELL_MIN_MS;
+  const turns: SentenceTurn[] = [];
+  let withFact = 0;
+  let without = 0;
+  let prevValid: string | null = null;
+  for (const s of readings) {
+    if (!s.sentence) continue;
+    const attr = s.fact ?? null;
+    if (attr) withFact++; else without++;
+    const fact = attr ?? inferredFact(s.sentence);
+    const last = turns[turns.length - 1];
+    const text = last?.texts[last.texts.length - 1];
+    const same = last !== undefined && last.fact === fact
+      // Before the attribute: the same words under a new deadline stay a turn (a consecutive repeat, e2e rule of D5.3).
+      && (attr !== null || s.sentence !== text || (s.validUntil ?? null) === prevValid);
+    if (same) {
+      if (s.sentence !== text) { last.texts.push(s.sentence); last.textsAt.push(s.at); last.refreshes++; }
+    } else {
+      if (last) last.end = s.at;
+      turns.push({ at: s.at, end: null, fact, texts: [s.sentence], textsAt: [s.at], refreshes: 0, dwellMs: null, validUntil: null, expired: false, truncated: false, short: false });
+    }
+    const turn = turns[turns.length - 1];
+    const until = deadlineOf(s.validUntil);
+    if (until !== null) turn.validUntil = Math.max(turn.validUntil ?? -Infinity, until);
+    prevValid = s.validUntil ?? null;
+  }
+  turns.forEach((t, i) => {
+    t.dwellMs = t.end === null ? null : t.end - t.at;
+    t.truncated = i === 0 || t.end === null;
+    t.expired = t.end !== null && t.validUntil !== null && t.validUntil <= t.end + stepMs;
+    t.short = !t.truncated && !t.expired && t.dwellMs !== null && t.dwellMs < minDwellMs - stepMs;
+  });
+  const verbatimRepeats: SentenceTurns['verbatimRepeats'] = [];
+  turns.forEach((t, i) => t.texts.forEach((text, j) => {
+    const at = t.textsAt[j];
+    let earlier: number | null = null;
+    for (const u of turns.slice(0, i)) u.texts.forEach((x, k) => { if (x === text) earlier = Math.max(earlier ?? -Infinity, u.textsAt[k]); });
+    if (earlier !== null && at - earlier < windowMs) verbatimRepeats.push({ at: new Date(at).toISOString().slice(11, 19), afterMs: at - earlier, sentence: text });
+  }));
+  return {
+    turns,
+    refreshes: turns.reduce((n, t) => n + t.refreshes, 0),
+    shortTurns: turns.filter((t) => t.short),
+    verbatimRepeats,
+    factSource: withFact && without ? 'mixed' : withFact ? 'attribute' : without ? 'inferred' : 'none',
+  };
+}
+
+export function summariseRotation(rows: readonly (WallSample | WallSampleError)[], options: SentenceTurnOptions = {}): RotationSummary {
   const valid = rows.filter((r): r is WallSample => !isSampleError(r));
   const caveats = new Set<string>();
   const kinds: Record<string, number> = {};
@@ -431,11 +557,6 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
   // Row presence by id: the index of the last reading an id was seen in, and whether it has already come back once.
   const lastSeen = new Map<string, number>();
   const reentered = new Set<string>();
-  const texts: string[] = [];
-  let turns = 0;
-  let repeats = 0;
-  let prevKey: string | null = null;
-  let prevText: string | null = null;
   valid.forEach((s, i) => {
     for (const r of s.rows) if (r.caveat) caveats.add(r.id || r.text);
     for (const k of new Set(s.rows.map((r) => r.kind ?? 'none'))) kinds[k] = (kinds[k] ?? 0) + 1;
@@ -451,17 +572,11 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
       }
       lastSeen.set(key, i);
     }
-    if (s.sentence) {
-      const key = s.validUntil ?? s.sentence;
-      if (key !== prevKey || s.sentence !== prevText) {
-        turns++;
-        if (prevText !== null && s.validUntil !== null && s.sentence === prevText) repeats++;
-        texts.push(s.sentence);
-        prevKey = key;
-        prevText = s.sentence;
-      }
-    }
   });
+  const turns = sentenceTurns(valid, options);
+  const judged = turns.turns.filter((t) => !t.truncated && t.dwellMs !== null).map((t) => t.dwellMs as number);
+  // A turn repeating the one before: its first words are the last words of the turn before.
+  const repeats = turns.turns.filter((t, i) => i > 0 && t.texts[0] === turns.turns[i - 1].texts[turns.turns[i - 1].texts.length - 1]).length;
   const unlabelled = valid.map((s) => s.unlabelled).filter((n): n is number => n !== null);
   const max = (xs: number[]): number => (xs.length ? Math.max(...xs) : 0);
   const min = (xs: number[]): number => (xs.length ? Math.min(...xs) : 0);
@@ -472,8 +587,14 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     minDepartures: min(valid.map((s) => s.departures)),
     maxDepartures: max(valid.map((s) => s.departures)),
     caveatRows: caveats.size,
-    distinctSentences: new Set(texts).size,
-    sentenceTurns: turns,
+    distinctSentences: new Set(turns.turns.map((t) => t.fact)).size,
+    sentenceTurns: turns.turns.length,
+    sentenceRefreshes: turns.refreshes,
+    shortSentenceTurns: turns.shortTurns.length,
+    sentenceDwellMinMs: judged.length ? Math.min(...judged) : null,
+    sentenceDwellMaxMs: judged.length ? Math.max(...judged) : null,
+    verbatimRepeats: turns.verbatimRepeats.length,
+    turns,
     consecutiveRepeats: repeats,
     sentenceOverflows: valid.filter((s) => s.sentenceOverflow).length,
     sentenceEllipses: valid.filter((s) => s.sentenceEllipsis).length,
@@ -738,11 +859,15 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (r.solarRowsMax > SOLAR_ROWS_MAX) out.push(`up to ${r.solarRowsMax} solar rows in a reading (target ≤ ${SOLAR_ROWS_MAX})`);
   if (targets.solarMin && r.solarRowsMin < targets.solarMin) out.push(`a reading without the solar row (target ≥ ${targets.solarMin}: the next solar event is inside the shown horizon)`);
   if (r.pastLastRows > 0) out.push(`${r.pastLastRows} reading(s) with a last-departure row whose time has passed (target 0)`);
+  if (r.shortSentenceTurns > 0) {
+    const named = r.turns.shortTurns.slice(0, 3).map((t) => `${t.texts[t.texts.length - 1]} ${((t.dwellMs ?? 0) / 1000).toFixed(1)} s`).join(', ');
+    out.push(`${r.shortSentenceTurns} sentence turn(s) under ${SENTENCE_DWELL_MIN_MS / 1000} s whose own fact had not expired (target 0; ${named})`);
+  }
   if (targets.sentences === 'template-floor') {
     if (r.distinctSentences < DISTINCT_SENTENCES_MIN) out.push(`${r.distinctSentences} distinct sentence(s) in ten minutes (template floor ≥ ${DISTINCT_SENTENCES_MIN})`);
     if (r.consecutiveRepeats > 0) out.push(`${r.consecutiveRepeats} sentence turn(s) repeating the one before (target 0)`);
-  } else if (r.distinctSentences !== r.sentenceTurns) {
-    out.push(`${r.sentenceTurns} sentence turns but ${r.distinctSentences} distinct sentences: a sentence was repeated verbatim within ten minutes (§12)`);
+  } else if (r.verbatimRepeats > 0) {
+    out.push(`${r.verbatimRepeats} sentence wording(s) shown again verbatim within ten minutes (§12): ${[...new Set(r.turns.verbatimRepeats.map((x) => x.sentence))].slice(0, 3).join(', ')}`);
   }
   return out;
 }

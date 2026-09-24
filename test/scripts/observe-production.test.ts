@@ -294,10 +294,24 @@ describe('the thresholds are one table with a stage per row', () => {
 
   it('§12 counts a turn whose sentence was shown less than ten minutes before, not one shown earlier', () => {
     const s = (atMs: number, sentence: string, validUntil: string | null = null): WallSample => ({ ...wallReading(0), at: atMs, sentence, validUntil });
-    const r = repeatsWithin([s(0, 'A', 'v1'), s(2_000, 'A', 'v1'), s(20_000, 'B', 'v2'), s(40_000, 'A', 'v3'), s(700_000, 'B', 'v4')], 600_000);
+    const r = repeatsWithin([s(0, 'A', 'v1'), s(2_000, 'A', 'v1'), s(20_000, 'B', 'v2'), s(40_000, 'A', 'v3'), s(700_000, 'B', 'v4')], 600_000, wall);
     expect(r.turns).toBe(4);
     expect(r.distinct).toBe(2);
     expect(r.repeats.map((x) => x.sentence)).toEqual(['A']);
+  });
+
+  it('§12 and the dwell per fact: a countdown refreshed in place is one 20.0 s turn and one refresh, and no short turn (release smoke, D5.8)', () => {
+    const a2 = 'Tramvaj 11, smjer Črnomerec, polazi za 2 min.', a1 = 'Tramvaj 11, smjer Črnomerec, polazi za 1 min.';
+    const s = (ms: number, sentence: string, fact: string): WallSample => ({ ...wallReading(0), at: T0 + ms, sentence, fact, validUntil: String(T0 + 600_000) });
+    const rot = [s(-20_000, 'Z.', 'z'), s(0, a2, 'departureIn:11'), s(15_600, a1, 'departureIn:11'), s(20_000, 'B.', 'b'), s(40_000, 'C.', 'c')];
+    const r = repeatsWithin(rot, 600_000, wall);
+    expect(r).toMatchObject({ turns: 4, refreshes: 1, distinct: 4, repeats: [], short: [] });
+    expect(r.dwells.find((d) => d.sentence === a2)).toMatchObject({ dwellMs: 20_000, refreshes: 1 });
+    const obs = { kiosk: { rotation: rot.map((x, n) => ({ ...x, n })) } } as unknown as Parameters<(typeof METRICS)[string]>[0];
+    expect(METRICS['kiosk.sentenceShortTurns'](obs, instruments).value).toBe(0);
+    const cut = [s(-20_000, 'Z.', 'z'), s(0, a2, 'departureIn:11'), s(15_600, 'B.', 'b'), s(40_000, 'C.', 'c')];
+    const bad = { kiosk: { rotation: cut.map((x, n) => ({ ...x, n })) } } as unknown as typeof obs;
+    expect(METRICS['kiosk.sentenceShortTurns'](bad, instruments)).toMatchObject({ value: 1 });
   });
 
   it('a row applied at its stage fails when it could not be measured; above the stage it is information', () => {

@@ -13,7 +13,7 @@ import type { Page } from '@playwright/test';
 import {
   DEPARTURES_MAX, DISTINCT_SENTENCES_MIN, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, rotationFailures, sampleFailures,
-  sampleRotation, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
+  sampleRotation, sentenceTurns, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
 } from '../../e2e/wall';
 import { TILE_REQUESTS, attachRecorders, pathOf, summariseBody, type RecorderPage } from '../../e2e/recorders';
 import { PORTRAIT_SCENES, SCENES, SCENE_IDS } from '../../e2e/scenes';
@@ -251,7 +251,7 @@ describe('the ten-minute rotation', () => {
   });
 
   it('an empty sentence, a sentence over 80 characters and an untimed row anywhere in the rotation are failures', () => {
-    const at = (i: number) => Date.UTC(2026, 8, 21, 15, 45) + i * 2000;
+    const at = (i: number) => Date.UTC(2026, 8, 21, 15, 45) + i * 20_000; // a turn's dwell: 20 s (decision 29)
     const rows = ['A.', 'B.', 'C.'].map((text, i) => sample({ at: at(i), sentence: text, sentenceChars: text.length, validUntil: iso(at(i) + 20_000) }));
     expect(rotationFailures(summariseRotation(rows))).toEqual([]);
     const empty = [...rows, sample({ at: at(3), sentence: '', sentenceChars: 0, validUntil: null })];
@@ -275,14 +275,64 @@ describe('the ten-minute rotation', () => {
   });
 
   it('counts a turn that repeats the sentence before it, and applies §12 (no verbatim repeat within ten minutes) for the observer', () => {
-    const at = (i: number) => Date.UTC(2026, 8, 21, 15, 45) + i * 2000;
+    const at = (i: number) => Date.UTC(2026, 8, 21, 15, 45) + i * 20_000;
     const repeat = [0, 1, 2].map((i) => sample({ at: at(i), sentence: 'A.', validUntil: iso(at(i) + 20_000) }));
     expect(summariseRotation(repeat)).toMatchObject({ sentenceTurns: 3, distinctSentences: 1, consecutiveRepeats: 2 });
     const aba = ['A.', 'B.', 'A.'].map((s, i) => sample({ at: at(i), sentence: s, validUntil: iso(at(i) + 20_000) }));
     const r = summariseRotation(aba);
     expect(r).toMatchObject({ sentenceTurns: 3, distinctSentences: 2, consecutiveRepeats: 0 });
-    expect(rotationFailures(r, { sentences: 'no-repeat' })).toEqual(['3 sentence turns but 2 distinct sentences: a sentence was repeated verbatim within ten minutes (§12)']);
+    expect(rotationFailures(r, { sentences: 'no-repeat' })).toEqual(['1 sentence wording(s) shown again verbatim within ten minutes (§12): A.']);
     expect(rotationFailures(r)).toEqual(['2 distinct sentence(s) in ten minutes (template floor ≥ 3)']);
+  });
+
+  it('measures dwell per fact (decision 29): a countdown refreshed in place is one 20.0 s turn and one refresh, not a short turn', () => {
+    const t0 = Date.UTC(2026, 8, 21, 15, 45);
+    const a2 = 'Tramvaj 11, smjer Črnomerec, polazi za 2 min.', a1 = 'Tramvaj 11, smjer Črnomerec, polazi za 1 min.';
+    const at = (ms: number, sentence: string, fact: string | null, validUntil: number) => sample({ at: t0 + ms, sentence, fact, validUntil: String(t0 + validUntil) });
+    const rows = [
+      at(-20_000, 'Sunce zalazi u 18:51.', 'solar:sunset', 60_000),
+      at(0, a2, 'departureIn:trip-11', 180_000), at(8_000, a2, 'departureIn:trip-11', 180_000),
+      at(15_600, a1, 'departureIn:trip-11', 120_000), at(18_000, a1, 'departureIn:trip-11', 120_000),
+      at(20_000, 'Ilica je zatvorena do 20:00.', 'closure:7', 3_600_000),
+      at(40_000, 'Večeras u Gavelli: predstava u 20:00.', 'event:3', 3_600_000),
+    ];
+    const turns = sentenceTurns(rows, { stepMs: 0 });
+    expect(turns.turns.map((t) => [t.fact, t.dwellMs, t.refreshes])).toEqual([
+      ['solar:sunset', 20_000, 0], ['departureIn:trip-11', 20_000, 1], ['closure:7', 20_000, 0], ['event:3', null, 0],
+    ]);
+    expect(turns).toMatchObject({ refreshes: 1, shortTurns: [], verbatimRepeats: [], factSource: 'attribute' });
+    const r = summariseRotation(rows);
+    expect(r).toMatchObject({ sentenceTurns: 4, sentenceRefreshes: 1, shortSentenceTurns: 0, verbatimRepeats: 0, distinctSentences: 4, consecutiveRepeats: 0 });
+    expect(rotationFailures(r, { sentences: 'no-repeat' })).toEqual([]);
+  });
+
+  it('a turn under 20 s is short unless its own fact expired; a verbatim return inside ten minutes still counts, a refresh does not', () => {
+    const t0 = Date.UTC(2026, 8, 21, 15, 45);
+    const at = (ms: number, sentence: string, fact: string, validUntil: number) => sample({ at: t0 + ms, sentence, fact, validUntil: String(t0 + validUntil) });
+    const rows = [
+      at(0, 'A.', 'a', 600_000), at(20_000, 'B.', 'b', 600_000),
+      at(30_000, 'C.', 'c', 42_000), at(42_000, 'D.', 'd', 600_000),
+      at(62_000, 'A.', 'a', 600_000), at(90_000, 'E.', 'e', 600_000),
+    ];
+    const turns = sentenceTurns(rows, { stepMs: 2_000, windowMs: 600_000 });
+    expect(turns.shortTurns.map((t) => [t.fact, t.dwellMs])).toEqual([['b', 10_000]]);
+    expect(turns.turns.find((t) => t.fact === 'c')).toMatchObject({ dwellMs: 12_000, expired: true, short: false });
+    expect(turns.verbatimRepeats).toEqual([{ at: '15:46:02', afterMs: 62_000, sentence: 'A.' }]);
+    const r = summariseRotation(rows);
+    expect(rotationFailures(r, { sentences: 'no-repeat' })).toEqual([
+      '1 sentence turn(s) under 20 s whose own fact had not expired (target 0; B. 10.0 s)',
+      '1 sentence wording(s) shown again verbatim within ten minutes (§12): A.',
+    ]);
+  });
+
+  it('without data-fact (a wall before the attribute) a countdown\'s next minute is read as a refresh, other words as a turn', () => {
+    const t0 = Date.UTC(2026, 8, 21, 15, 45);
+    const at = (ms: number, sentence: string) => sample({ at: t0 + ms, sentence, validUntil: String(t0 + ms + 20_000) });
+    const turns = sentenceTurns([at(0, 'Z.'), at(20_000, 'Tramvaj 11 polazi za 2 min.'), at(35_600, 'Tramvaj 11 polazi za 1 min.'), at(40_000, 'Tramvaj 11 polazi u 15:46.'), at(60_000, 'Y.')], { stepMs: 0 });
+    expect(turns.factSource).toBe('inferred');
+    expect(turns.turns.map((t) => [t.texts[0], t.dwellMs, t.refreshes])).toEqual([
+      ['Z.', 20_000, 0], ['Tramvaj 11 polazi za 2 min.', 20_000, 1], ['Tramvaj 11 polazi u 15:46.', 20_000, 0], ['Y.', null, 0],
+    ]);
   });
 
   it('a last-departure row whose time has passed, a missing solar row where one is due, a failed reading and a missing map probe are named', () => {
