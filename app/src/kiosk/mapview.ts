@@ -202,11 +202,16 @@ export function majorStreetNames(fieldZoomNow: number): boolean {
   return fieldZoomNow >= THIN_NAMES_ZOOM;
 }
 
-export type FeedState = 'live' | 'stale' | 'down';
+/** The ZET feed as the wall reads it: the snapshot's own status, or
+ *  `loading` before the first poll has answered (lane p-map: the boot state
+ *  claimed an outage nobody had observed). A failed poll is never `loading`:
+ *  kiosk.ts turns it into stale copies, and a module with no copy into down. */
+export type FeedState = 'loading' | 'live' | 'stale' | 'down';
 
-/** The feed's own state; no snapshot yet is no evidence of motion either. */
+/** The feed's own state. No snapshot yet is no evidence of motion either,
+ *  and no evidence of an outage: the map holds, and nothing says ZET is down. */
 export function feedStateOf(zet: ModuleSnapshot | undefined): FeedState {
-  return zet?.status ?? 'down';
+  return zet?.status ?? 'loading';
 }
 
 export interface KioskMapRequest extends MapSlotOptions {
@@ -272,7 +277,7 @@ export interface KioskMapAdapter {
 export function createKioskMapAdapter(factory: MapFactory | undefined): KioskMapAdapter {
   let view: KioskMapView = { zoom: PAIRED_ZOOM };
   let pushed = '';
-  let feed: FeedState = 'down';
+  let feed: FeedState = 'loading';
   let extras: KioskMapExtras = { interactive: false, symbolScale: KIOSK_SYMBOL_SCALE, basemapProfile: KIOSK_BASEMAP_PROFILE, hitTolerancePx: KIOSK_HIT_TOLERANCE_PX };
   let current: KioskMapHandle | null = null;
   const wrapped: MapFactory | undefined = factory && ((options) => {

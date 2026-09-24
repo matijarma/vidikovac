@@ -1196,6 +1196,9 @@ describe('the first production observation after the release (24 Sep, 02:30 Zagr
     // An outage (stale, down) owes none, whatever the twin said before it.
     expect(pillsOwed(s({ feed: 'down', fleet: fleet(3) }))).toBe(false);
     expect(pillsOwed(s({ feed: 'stale', fleet: fleet(3) }))).toBe(false);
+    // Before the wall's first poll has answered (data-feed "loading", lane p-map) it holds no vehicle to draw.
+    expect(pillsOwed(s({ feed: 'loading', fleet: null }))).toBe(false);
+    expect(pillsOwed(s({ feed: 'loading' }))).toBe(false);
   });
 
   it('the wall is read once its census is written and its pills drawn: the 24 Sep portrait and first rotation reading pass', async () => {

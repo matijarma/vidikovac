@@ -1982,6 +1982,30 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(text(q(k.root, '.nearby-row[data-kind=closure]'))).toContain('Ilica');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
+  // Lane p-map (first production observation, 02:30): before the first
+  // /api/teaser answer the wall printed "ZET trenutačno ne šalje položaje
+  // vozila; polasci su po voznom redu." and its map read data-feed "down":
+  // an outage stated, not observed. Until the first poll has answered or
+  // failed, the wall is loading, and says nothing about ZET.
+  it('claims no outage before the first poll has answered: the map note hidden, no outage sentence, the map loading; the first answer or failure decides', async () => {
+    for (const outcome of ['live', 'fail'] as const) {
+      let answer!: (value: { modules: ModuleSnapshot[] }) => void;
+      let refuse!: (reason: unknown) => void;
+      const calls: string[] = [];
+      const handle = { update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), setFeedState: (state: string) => { calls.push(state); } };
+      const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never, fetchTeaser: () => new Promise((resolve, reject) => { answer = resolve; refuse = reject; }) });
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(true);
+      expect(sentenceText(k.root), outcome).not.toMatch(/ne šalje položaje/);
+      expect(calls, outcome).not.toContain('down');
+      expect(calls.at(-1), outcome).toBe('loading');
+      if (outcome === 'live') answer({ modules: MODULES }); else refuse(new TypeError('Failed to fetch'));
+      await flush();
+      expect(q(k.root, '[data-testid=map-note]')!.hidden, outcome).toBe(outcome === 'live');
+      expect(calls.at(-1), outcome).toBe(outcome === 'live' ? 'live' : 'down');
+      k.handle.destroy();
+    }
+  });
   it('a fetch that never succeeded reads as down once it fails: unknown, not loading and never clear', async () => {
     const k = mount({ stored: STORED, fetchTeaser: async () => { throw new Error('down'); } });
     await flush();
@@ -2152,7 +2176,8 @@ describe('alerts, polling, the first tap and disposal', () => {
     const map = fakeMap();
     const k = mount({ stored: STORED, viewport: { width: 390, height: 844 }, mapFactory: map.factory as never, fetchTeaser: async () => ({ modules: stale }) });
     // Created before any snapshot: held at once, told again on the paint, then appended (resize, resume, hold re-asserted).
-    expect(map.calls.slice(0, 5)).toEqual(['feed:down', 'feed:down', 'resize', 'resume', 'feed:down']);
+    // Held as loading, not as an outage: nothing has answered yet (lane p-map).
+    expect(map.calls.slice(0, 5)).toEqual(['feed:loading', 'feed:loading', 'resize', 'resume', 'feed:loading']);
     await flush();
     expect(map.calls.at(-1)).toBe('feed:stale');
     expect(q(k.root, '[data-testid=kiosk-map]')).not.toBeNull();

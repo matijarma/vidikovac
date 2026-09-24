@@ -757,7 +757,7 @@ describe('the one map, through the additive adapter', () => {
     requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': { ...zet, status: 'stale' } } }, adapter);
     expect(setFeedState.mock.calls.map((c) => c[0])).toEqual(['stale', 'stale']); // held at creation, then told from the snapshot
     requestKioskMap(maps, { ...base, snapshots: {} }, adapter);
-    expect(setFeedState).toHaveBeenLastCalledWith('down'); // no snapshot is no evidence of motion
+    expect(setFeedState).toHaveBeenLastCalledWith('loading'); // no snapshot is no evidence of motion, nor of an outage (lane p-map)
     requestKioskMap(maps, { ...base, snapshots: { 'zet-rt': zet } }, adapter);
     expect(setFeedState).toHaveBeenLastCalledWith('live');
     const options = factory.mock.calls[0]![0] as Record<string, unknown>;

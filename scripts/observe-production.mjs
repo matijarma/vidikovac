@@ -112,6 +112,8 @@ export const EXPIRY_MARGIN_MS = 90_000;
 export const AFTER_EXPIRY_MS = 31_000;
 /** A data-feed that says the vehicles are not live: during it the wall need draw no pill (§16.3 outage0800). */
 export const OUTAGE_FEEDS = Object.freeze(['stale', 'down']);
+/** The wall's data-feed before its first poll has answered (app/src/kiosk/mapview.ts feedStateOf): no outage, and no vehicle to draw yet. */
+export const LOADING_FEED = 'loading';
 /** Elements whose text is a pairing or share code: masked in every file. */
 export const CODE_TESTIDS = Object.freeze(['code-a', 'code-b', 'pair-code', 'kiosk-code', 'pair-url', 'share-code']);
 /** The pairing elements read for a redemption; the same names e2e/helpers.ts readPairing reads. */
@@ -1221,13 +1223,14 @@ function outageHeadlineIssues(s, k) {
   return out;
 }
 /**
- * Whether a wall reading owes vehicle pills (§16.3, [O-71]): its data-feed live (an outage, stale or down, owes none),
+ * Whether a wall reading owes vehicle pills (§16.3, [O-71]): its data-feed live (an outage, stale or down, owes none,
+ * and so does the boot state, loading, before the first poll has answered),
  * and the twin reporting vehicles to the page for at least PILLS_DRAW_GRACE_MS. A live feed whose last zet-rt snapshot
  * carried no vehicle owes none: the night between two runs, a timetable without service. A reading without a recorded
  * snapshot owes them: the row stays strict wherever the observer cannot tell.
  */
 export function pillsOwed(s) {
-  if (OUTAGE_FEEDS.includes(s.feed)) return false;
+  if (OUTAGE_FEEDS.includes(s.feed) || s.feed === LOADING_FEED) return false;
   const f = s.fleet;
   if (!f) return true;
   if (f.pins === 0) return false;

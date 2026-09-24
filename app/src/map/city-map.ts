@@ -518,7 +518,7 @@ export interface CityMapHandle {
   setLineFocus?(on: boolean): void;
   setClosuresVisible?(visible: boolean): void;
   /** The feed's own state: 'down' stops the motion and takes the vehicles off the map (an outage is no evidence of where a tram is) until the feed is live again; 'stale' keeps the motion. */
-  setFeedState?(state: 'live' | 'stale' | 'down'): void;
+  setFeedState?(state: 'loading' | 'live' | 'stale' | 'down'): void;
   setStop?(stop: ScreenStop | null): void;
   /** CityMapOptions.priorityStopId, live. */
   setPriorityStop?(id: string | null): void;
@@ -1927,7 +1927,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // the map (review-w, P1): an outage is no evidence of where a tram is,
       // and a mark held where it last was said so for as long as the outage
       // lasted. Live again, a vehicle is drawn from a fresh report only.
-      const next = state === 'down';
+      // `loading` (no snapshot yet: the wall before its first poll) holds the
+      // same way: no evidence of motion, though no outage either.
+      const next = state === 'down' || state === 'loading';
       container.dataset.feed = state;
       if (next === held) return;
       held = next;
