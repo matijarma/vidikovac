@@ -315,17 +315,17 @@ app/src/layers/grad-sada.ts:57 #sentenceMarkup → e(kickerWord(ctx, sentence.ki
 app/src/layers/grad-sada.ts:57 #sentenceMarkup → e(sentence.text)
 app/src/layers/grad-sada.ts:63 #nearbyBusy → e(ctx.i18n.t('kiosk.nearby.title'))
 app/src/layers/grad-sada.ts:85 #mapBand → vetExternal('name', place.name, 'row')
-app/src/layers/grad-sada.ts:142 #renderGradSada → vetExternal('name', place.name, 'row')
-app/src/layers/grad-sada.ts:144 #renderGradSada → e(name)
+app/src/layers/grad-sada.ts:145 #renderGradSada → vetExternal('name', place.name, 'row')
+app/src/layers/grad-sada.ts:147 #renderGradSada → e(name)
 app/src/map/city-layers.ts:63 #cityLayers → 'text-field':['case',small,'',['get','badge']]
 app/src/map/city-layers.ts:77 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']]
 app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:828 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:828 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1780 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1781 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1782 #relabelControls → el.title = controlLabel
+app/src/map/city-map.ts:839 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:839 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1794 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1795 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1796 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:25 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:34 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:44 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)

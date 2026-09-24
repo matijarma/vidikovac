@@ -92,6 +92,9 @@ function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLE
     zoom: camera.zoom,
     stop: place.stop ?? place.departuresStop,
     interactive: false,
+    // Still (lane p-map2): the band draws when its data or its box changes and parks; animating the glide on a
+    // 112 px preview cost 0.8 s of long tasks a second under SwiftShader. Karta is where the vehicles move.
+    still: true,
     attributionCompact: true,
     presentationProfile: 'handheld',
     cityLabels: 'venues',

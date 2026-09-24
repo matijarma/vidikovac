@@ -357,6 +357,44 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(metres(pushed[pushed.length - 1], 'vehicle:1', A)).toBeGreaterThan(0.5);
   });
 
+  // Lane p-map2 (lane/v-perf: Lighthouse TBT about 125 s on /d/ Sada): the
+  // phone's Sada band drew its vehicles' glide at 15 loop frames and 30
+  // animation frames a second, 0.8 s of long tasks in every second under
+  // SwiftShader. A still map draws on news and parks: the vehicles where the
+  // model places them at each update(), never animated between two.
+  it('a still map draws on news and parks: one push per update, no frame requested between', async () => {
+    const { map, handle, frame, vehicles, pending } = await harness({ extra: { still: true } });
+    for (let i = 0; i < 20; i++) frame();
+    expect(pending(), 'parked after the first data').toBe(0);
+    const afterFirst = vehicles().calls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+    handle.update([B], [CLOSURE]);
+    for (let i = 0; i < 60; i++) frame();
+    expect(vehicles().calls.length - afterFirst, 'one push for the update').toBe(1);
+    expect(pending(), 'parked again').toBe(0);
+    // The push is where the model places the vehicle at the update, not a frame of a glide later.
+    const at = metres(vehicles().calls.at(-1), 'vehicle:1', B);
+    for (let i = 0; i < 60; i++) frame();
+    expect(vehicles().calls.length - afterFirst).toBe(1);
+    expect(metres(vehicles().calls.at(-1), 'vehicle:1', B)).toBe(at);
+    // The page renders again with the same data (a poll that brought nothing new, the sentence turning): the
+    // band hears it as no news -- no source is re-set, no frame requested (0.46 such renders a second on /d/).
+    const places = map.getSource('places')!.calls.length;
+    for (let i = 0; i < 5; i++) { handle.update([{ ...B }], [{ ...CLOSURE }]); frame(); }
+    expect(map.getSource('places')!.calls.length, 'places not re-set').toBe(places);
+    expect(pending(), 'no frame for no news').toBe(0);
+    expect(vehicles().calls.length - afterFirst).toBe(1);
+    // The same map without `still` glides: it keeps pushing frame after frame.
+    const live = await harness();
+    for (let i = 0; i < 3; i++) live.frame();
+    live.handle.update([B], [CLOSURE]);
+    const liveBefore = live.vehicles().calls.length;
+    for (let i = 0; i < 60; i++) live.frame();
+    expect(live.vehicles().calls.length - liveBefore).toBeGreaterThan(1);
+    handle.destroy();
+    live.handle.destroy();
+  });
+
   it('never puts a vehicle report into the places source, and draws a place where it was given', async () => {
     const { map } = await harness({ points: [A, QUAKE] });
     const places = map.getSource('places')!.data as FC;
