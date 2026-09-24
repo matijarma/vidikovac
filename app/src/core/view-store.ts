@@ -47,7 +47,8 @@ export function createViewStore(deps: ViewStoreDeps = {}): ViewStore {
     // Ticket has already been spent by the entry; never resurrect one in history.
     p.delete('ticket');
     p.set('layer', state.layer);
-    for (const key of ['kind', 'id', 'module']) p.delete(key);
+    // Jos's own mark (dashboard.ts toggleDirectory) belongs to its entry alone, never to the layer entry after it.
+    for (const key of ['kind', 'id', 'module', 'jos']) p.delete(key);
     for (const [key, value] of Object.entries(selectionParams(state.selection) ?? {})) p.set(key, value);
     const url = `${location.pathname}${location.search}#${p}`;
     deps.history[replace ? 'replaceState' : 'pushState'](null, '', url);

@@ -2,6 +2,7 @@
 // The /d/ shell on the real core stores: navigation, session states, polling
 // aligned to the feed, reconciliation that keeps focus and typed text, the
 // session sheet, sharing, expiry and exports. Every browser global is injected.
+import { NEARBY_HOLD_MS } from '../../app/src/city/feed';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import type { LayerId } from '../../worker/protocol';
@@ -896,6 +897,37 @@ describe('the full map view (transport)', () => {
     shell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
     expect(shell.dataset.modality).toBe('keyboard');
   });
+  it('Jos is one history entry: opening it pushes, Back through the fragment closes it, closing it by its tab replaces, and Escape closes it (round 1, desktop F5)', async () => {
+    const pushes: string[] = [];
+    const replaces: string[] = [];
+    const location = { pathname: '/d/', search: '', hash: '#room=r1' };
+    const history = {
+      pushState: (_s: unknown, _t: string, url?: string | URL | null) => { pushes.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
+      replaceState: (_s: unknown, _t: string, url?: string | URL | null) => { replaces.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
+    };
+    const { root, session, handle } = mount({ deps: { location, history } });
+    session.join();
+    await flush();
+    const before = pushes.length;
+    root.querySelector<HTMLElement>('[data-testid=tab-more]')!.click();
+    expect(root.querySelector('#layer-directory, [data-testid=tab-more][aria-expanded="true"]')).not.toBeNull();
+    expect(pushes.length).toBe(before + 1);
+    expect(pushes.at(-1)).toContain('jos=1');
+    // Back: the browser lands on the entry under Jos, whose fragment carries no mark.
+    handle.restore('#room=r1&layer=grad-sada');
+    expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('#layer-grad-sada')).not.toBeNull();
+    // Forward: the marked entry opens Jos again.
+    handle.restore('#room=r1&layer=grad-sada&jos=1');
+    expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('true');
+    // Escape closes it in place: the mark leaves the fragment by a replace, never a new entry.
+    const replacesBefore = replaces.length;
+    root.querySelector<HTMLElement>('.ki')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(replaces.length).toBe(replacesBefore + 1);
+    expect(location.hash).not.toContain('jos');
+  });
+
   it('writes one history entry per place, none per poll, and Back through the fragment closes the detail', async () => {
     const pushes: string[] = [];
     const replaces: string[] = [];
@@ -910,22 +942,25 @@ describe('the full map view (transport)', () => {
     openViaMore(root, 'kultura');
     await flush();
     click(root, '[data-testid=event-row] [data-action=select]');
-    expect(pushes).toHaveLength(2);
-    expect(pushes[1]).toMatch(/room=r1/);
-    expect(pushes[1]).toMatch(/layer=kultura&kind=item&id=[0-9a-f]{16}&module=dogadanja/);
-    expect(pushes[1]).not.toMatch(/ticket/);
+    // Jos itself is one entry (round 1, desktop F5), then the layer, then the place.
+    expect(pushes).toHaveLength(3);
+    expect(pushes[0]).toMatch(/jos=1/);
+    expect(pushes[1]).not.toMatch(/jos/);
+    expect(pushes[2]).toMatch(/room=r1/);
+    expect(pushes[2]).toMatch(/layer=kultura&kind=item&id=[0-9a-f]{16}&module=dogadanja/);
+    expect(pushes[2]).not.toMatch(/ticket|jos/);
     tick();
     await flush();
     tick();
     await flush();
-    expect(pushes).toHaveLength(2); // polls never touch history
+    expect(pushes).toHaveLength(3); // polls never touch history
     // Back: the browser restores the previous fragment and the entry hands it to the dashboard.
     handle.restore('#room=r1&layer=kultura');
     expect(root.querySelector('.ws-split')?.getAttribute('data-detail-open')).toBe('false');
-    expect(pushes).toHaveLength(2);
+    expect(pushes).toHaveLength(3);
     click(root, '[data-testid=event-row] [data-action=select]');
     click(root, '[data-testid=event-row] [data-action=select]');
-    expect(pushes).toHaveLength(3); // the same selection again replaces instead of pushing
+    expect(pushes).toHaveLength(4); // the same selection again replaces instead of pushing
   });
   it('is a view mode on the shell with the session chrome kept; Escape and another domain leave it', async () => {
     const mapFactory = vi.fn((_options: CityMapOptions) => ({ update: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn() }));
@@ -1232,6 +1267,20 @@ describe('the sticky header and notices in flow', () => {
     expect(spent.root.querySelector('[data-key=no-ticket]')).not.toBeNull();
     expect(spent.root.querySelector('#layer-grad-sada')).not.toBeNull();
   });
+  it('a page the room refused a ticket to settles its list and band after the hold\'s own limit instead of holding reserved rows for good (round 1 finding F16)', () => {
+    let t = NOW;
+    const { root, session, tick, armed } = mount({ now: () => t });
+    session.error('no-ticket', 'no-ticket');
+    expect(root.querySelector('[data-key=no-ticket]')).not.toBeNull();
+    expect(root.querySelectorAll('[data-testid=nearby] .nearby-row-empty').length).toBeGreaterThan(0);
+    expect(armed()).toContain(NEARBY_HOLD_MS + 100);
+    t += NEARBY_HOLD_MS + 200;
+    tick();
+    expect(root.querySelectorAll('[data-testid=nearby] .nearby-row-empty')).toHaveLength(0);
+    expect(root.querySelector('[data-testid=nearby]')?.getAttribute('aria-busy')).toBeNull();
+    expect(armed()).not.toContain(NEARBY_HOLD_MS + 100);
+  });
+
   it('a closed room reported before any join is a spent credential: the no-ticket banner, nothing ended', () => {
     const { root, session } = mount();
     session.error('no-ticket', 'revoked');
