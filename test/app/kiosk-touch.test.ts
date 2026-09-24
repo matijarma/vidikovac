@@ -461,6 +461,131 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     k.handle.destroy();
   });
 
+  // lane/w-settings (24 Sep, second step): the operator was told "press and hold anywhere on the wall for about a
+  // second". A press held LONG_PRESS_MS anywhere on a screen-sized wall opens Postavke, except on the touch's own
+  // targets (a stop or pharmacy ring, a row of the list, the footer's pharmacy), which keep their tap and never open
+  // the settings. Slop 12 px; a handheld keeps only the brand's press.
+  describe('a press held anywhere on the wall', () => {
+    const pointer = (el: Element, type: string, x = 0, y = 0): boolean =>
+      el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    const click = (el: Element, x = 0, y = 0): boolean => el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+    const panel = (k: ReturnType<typeof mount>) => k.q('[data-testid=kiosk-settings-panel]');
+    const ring = (k: ReturnType<typeof mount>, point: { lon: number; lat: number }): [number, number] =>
+      fieldPixel(k.asked(), FIELD_DESIGN_WIDTH.wide, FIELD_DESIGN_HEIGHT.wide, point);
+
+    it('on the map\'s empty ground for LONG_PRESS_MS opens Postavke and no board; the tap that ends it opens nothing', async () => {
+      const k = mount();
+      await flush();
+      const map = k.q('[data-testid=kiosk-map]')!;
+      pointer(map, 'pointerdown', 30, 30);
+      expect(panel(k)).toBeNull();
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).not.toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
+      expect(k.board()).toBeNull();
+      pointer(map, 'pointerup', 30, 30);
+      click(map, 30, 30);
+      expect(k.board()).toBeNull();
+      expect(panel(k)!.hidden).toBe(false);
+      k.handle.destroy();
+    });
+
+    it('on the header\'s date and on the open board itself opens Postavke too', async () => {
+      const k = mount();
+      await flush();
+      pointer(k.q('[data-testid=kiosk-date]')!, 'pointerdown', 1800, 30);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)!.hidden).toBe(false);
+      pointer(k.q('[data-testid=kiosk-date]')!, 'pointerup', 1800, 30);
+      panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(panel(k)!.hidden).toBe(true);
+      k.touchMap(STOP);
+      const board = k.board()!;
+      expect(board).not.toBeNull();
+      pointer(board, 'pointerdown', 1500, 600);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)!.hidden).toBe(false);
+      k.tick(CODE_TICK_MS);
+      expect(k.board()).toBeNull();
+      k.handle.destroy();
+    });
+
+    it('on a stop ring for LONG_PRESS_MS opens no Postavke; the board opens on the tap that ends the press', async () => {
+      const k = mount();
+      await flush();
+      const map = k.q('[data-testid=kiosk-map]')!;
+      const [x, y] = ring(k, STOP);
+      pointer(map, 'pointerdown', x, y);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      expect(k.board()).toBeNull();
+      pointer(map, 'pointerup', x, y);
+      click(map, x, y);
+      expect(k.board()).not.toBeNull();
+      expect(panel(k)).toBeNull();
+      // Another ring on the frame, the same way.
+      const [zx, zy] = ring(k, ZRINJEVAC);
+      pointer(map, 'pointerdown', zx, zy);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      k.handle.destroy();
+    });
+
+    it('on a row of the list and on the footer\'s pharmacy opens no Postavke; their detail opens on the tap', async () => {
+      const k = mount();
+      await flush();
+      const row = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=event]')!;
+      expect(row).not.toBeNull();
+      pointer(row, 'pointerdown', 1500, 500);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      pointer(row, 'pointerup', 1500, 500);
+      click(row, 1500, 500);
+      expect(k.detail()).not.toBeNull();
+      const pharmacy = k.q('[data-testid=strip-pharmacy]')!;
+      pointer(pharmacy, 'pointerdown', 900, 1050);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      pointer(pharmacy, 'pointerup', 900, 1050);
+      click(pharmacy, 900, 1050);
+      expect(text(k.detail()!.querySelector('.k-touch-kicker'))).toBe('Dežurna ljekarna 24/7: Trg bana J. Jelačića 3.');
+      k.handle.destroy();
+    });
+
+    it('a short tap anywhere opens nothing, a finger past the 12 px slop opens nothing, and a handheld keeps only the brand\'s press', async () => {
+      const k = mount();
+      await flush();
+      const map = k.q('[data-testid=kiosk-map]')!;
+      pointer(map, 'pointerdown', 30, 30);
+      pointer(map, 'pointerup', 30, 30);
+      click(map, 30, 30);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      expect(k.board()).toBeNull();
+      pointer(map, 'pointerdown', 30, 30);
+      pointer(map, 'pointermove', 50, 30);
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      pointer(map, 'pointerup', 50, 30);
+      // Leaving the wall disarms as well.
+      pointer(map, 'pointerdown', 30, 30);
+      k.q('.kiosk')!.dispatchEvent(new PointerEvent('pointerleave', { clientX: -1, clientY: -1 }));
+      k.tick(LONG_PRESS_MS);
+      expect(panel(k)).toBeNull();
+      k.handle.destroy();
+      const phone = mount({ viewport: { width: 390, height: 844 } });
+      await flush();
+      expect(phone.q('.kiosk')!.dataset.size).toBe('handheld');
+      pointer(phone.q('[data-testid=kiosk-date]')!, 'pointerdown', 300, 30);
+      phone.tick(LONG_PRESS_MS);
+      expect(phone.q('[data-testid=kiosk-settings-panel]')).toBeNull();
+      pointer(phone.q('[data-testid=kiosk-brand]')!, 'pointerdown', 40, 30);
+      phone.tick(LONG_PRESS_MS);
+      expect(phone.q('[data-testid=kiosk-settings-panel]')!.hidden).toBe(false);
+      phone.handle.destroy();
+    });
+  });
+
   it('lets nothing else react: the ground, a vehicle, and the open board itself', async () => {
     const k = mount();
     await flush();

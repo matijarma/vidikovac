@@ -50,8 +50,8 @@ upute o pretraživanju dodirom. Ukratko:
 - Skeniranje nikad ne prekida javni prikaz. Izričita prezentacija zaustavlja
   rečenicu i popis; potvrda preuzimanja i potvrda iscrtavanja ostaju.
 - Za postavljanje postoje samo polje „Adresa ili stajalište” i **Pokreni**.
-  Dugi pritisak na natpis „Kaj ima?” otvara Postavke s prekidačima Mjesto,
-  Kadar, Prikaz, Tema i Ritam.
+  Dugi pritisak (0,8 s) bilo gdje na zaslonu otvara Postavke s prekidačima
+  Mjesto, Kadar, Prikaz, Tema i Ritam.
 - Postavke su prekidači: svaki klik odmah mijenja stanje; jedan okvir prema poslužitelju najviše svakih pet sekundi.
 - Na telefonu se nakon deset minuta sadržaj briše: ostaju poziv na novo
   skeniranje i poveznica na `/hitno`.
@@ -95,11 +95,13 @@ rute `/api/admin/*` i `/stats`.
    i točku stajališta poslužitelj uzima iz vlastite tablice, a područje
    (`area`, za statistiku) izvodi iz mjesta, inače `zagreb`. Postava sama ne
    daje otključanu sesiju.
-3. Sve ostalo mijenja se poslije, na samom zaslonu. Dugi pritisak (0,8 s) na
-   natpis „Kaj ima?” u zaglavlju otvara **Postavke**; s tipkovnice isto čine
-   Enter ili razmaknica na tom natpisu ili na samom zaslonu: zaslon drži fokus
-   od učitavanja, a dodir izvan gumba vraća fokus na zaslon. Kratak dodir i
-   prst koji se pomakne za više od 12 piksela ne otvaraju ništa, a u zaglavlju
+3. Sve ostalo mijenja se poslije, na samom zaslonu. Dugi pritisak (0,8 s)
+   bilo gdje na zaslonu otvara **Postavke**, osim na mjestima koja odgovaraju
+   na dodir (prsten stajališta ili ljekarne na karti, redak popisa, ljekarna
+   u podnožju): ondje dugi pritisak vrijedi kao dodir i ne otvara Postavke.
+   S tipkovnice isto čine Enter ili razmaknica; zaslon drži fokus od
+   učitavanja, a dodir izvan gumba vraća fokus na zaslon. Kratak dodir i prst
+   koji se pomakne za više od 12 piksela ne otvaraju Postavke, a u zaglavlju
    nema gumba ni za postavke ni za temu. Ploča se zatvara tipkom Esc, gumbom
    ili nakon 90 sekundi bez dodira i ne otvara se dok traje otključana sesija.
 
@@ -572,7 +574,7 @@ bilježe se zasebno, u tablici „Ručne provjere na uređaju” dokumenta
 |---|---|
 | Pojavljuje se početni zaslon | Nema valjane lokalne postave; upisati adresu ili stajalište, ili polje ostaviti prazno za cijeli grad, pa pritisnuti **Pokreni**. |
 | Stvaranje je odbijeno | Kod 429 znači dosegnuto ograničenje po mreži ili ukupno; slijediti navedeno vrijeme ponovnog pokušaja. Kod 403 znači zahtjev s druge domene. |
-| Treba promijeniti mjesto ili kadar | Dugi pritisak (0,8 s) na „Kaj ima?” u zaglavlju otvara **Postavke**. Postavke se ne otvaraju dok traje otključana sesija; pričekati da sesija istekne ili zaustaviti sesiju. |
+| Treba promijeniti mjesto ili kadar | Dugi pritisak (0,8 s) bilo gdje na zaslonu, izvan prstena stajališta, retka popisa i ljekarne u podnožju, otvara **Postavke**. Postavke se ne otvaraju dok traje otključana sesija; pričekati da sesija istekne ili zaustaviti sesiju. |
 | Promjena u Postavkama ne uspijeva | Ploča ostaje otvorena, kaže razlog i vraća prekidače na stanje koje drži poslužitelj. Odbijenica (`bad-place`, `bad-frame`) znači da Durable Object nije prihvatio mjesto ili kadar. Poruka o prebrzoj promjeni (`screen-set-rate`) znači da je od prethodne prihvaćene promjene prošlo manje od pet sekundi, pa pričekati i odabrati ponovno. Ako odgovor ne stigne u osam sekundi, ploča kaže da promjena nije poslana; odgovor koji ipak stigne poslije svejedno ponovno kadrira zaslon. |
 | Postava je istekla ili opozvana | Pokrenuti novu postavu izričito. Ne ponavljati automatski stvaranje. |
 | Kod je istekao ili iskorišten | Upisati novi aktualni kod; provjeriti automatsko podešavanje sata uređaja. |

@@ -69,19 +69,19 @@ app/src/kiosk.ts:565 #paintSessionLabel → until.textContent = presentation?.ta
 app/src/kiosk.ts:566 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
 app/src/kiosk.ts:570 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
 app/src/kiosk.ts:731 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:1032 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1033 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1034 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1036 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1046 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1047 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1051 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1069 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1070 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1070 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1157 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1164 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1338 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:1047 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1048 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1049 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1051 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1061 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1062 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1066 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1084 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1085 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1085 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1172 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1179 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1353 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -244,26 +244,26 @@ app/src/kiosk/place-field.ts:161 #rowMarkup → externalHtml('summary', meta)
 app/src/kiosk/place-field.ts:179 #render → vetExternal(row.kind === 'stop' ? 'name' : 'address', rowLabel(s, row), 'row')
 app/src/kiosk/place-field.ts:248 #choose → vetExternal(next.kind === 'address' || next.address ? 'address' : 'name', label, 'row')
 app/src/kiosk/place-field.ts:251 #choose → input.value = chosenText
-app/src/kiosk/settings.ts:340 #settingsMarkup → escapeHtml(label)
-app/src/kiosk/settings.ts:343 #settingsMarkup → escapeHtml(s.settings.title)
-app/src/kiosk/settings.ts:344 #settingsMarkup → escapeHtml(s.settings.hint)
-app/src/kiosk/settings.ts:346 #settingsMarkup → escapeHtml(s.settings.close)
-app/src/kiosk/settings.ts:350 #settingsMarkup → escapeHtml(s.settings.placeChange)
-app/src/kiosk/settings.ts:353 #settingsMarkup → escapeHtml(s.settings.areaWhole)
-app/src/kiosk/settings.ts:360 #settingsMarkup → escapeHtml(s.settings.forget)
-app/src/kiosk/settings.ts:362 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
-app/src/kiosk/settings.ts:363 #settingsMarkup → escapeHtml(s.settings.forgetYes)
-app/src/kiosk/settings.ts:364 #settingsMarkup → escapeHtml(s.settings.forgetNo)
-app/src/kiosk/settings.ts:406 #showError → errorEl.textContent = text
-app/src/kiosk/settings.ts:407 #clearError → errorEl.textContent = ''
-app/src/kiosk/settings.ts:423 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
-app/src/kiosk/settings.ts:428 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
-app/src/kiosk/settings.ts:428 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
-app/src/kiosk/settings.ts:432 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
-app/src/kiosk/settings.ts:435 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
-app/src/kiosk/settings.ts:438 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
-app/src/kiosk/settings.ts:447 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
-app/src/kiosk/settings.ts:450 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
+app/src/kiosk/settings.ts:347 #settingsMarkup → escapeHtml(label)
+app/src/kiosk/settings.ts:350 #settingsMarkup → escapeHtml(s.settings.title)
+app/src/kiosk/settings.ts:351 #settingsMarkup → escapeHtml(s.settings.hint)
+app/src/kiosk/settings.ts:353 #settingsMarkup → escapeHtml(s.settings.close)
+app/src/kiosk/settings.ts:357 #settingsMarkup → escapeHtml(s.settings.placeChange)
+app/src/kiosk/settings.ts:360 #settingsMarkup → escapeHtml(s.settings.areaWhole)
+app/src/kiosk/settings.ts:367 #settingsMarkup → escapeHtml(s.settings.forget)
+app/src/kiosk/settings.ts:369 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
+app/src/kiosk/settings.ts:370 #settingsMarkup → escapeHtml(s.settings.forgetYes)
+app/src/kiosk/settings.ts:371 #settingsMarkup → escapeHtml(s.settings.forgetNo)
+app/src/kiosk/settings.ts:413 #showError → errorEl.textContent = text
+app/src/kiosk/settings.ts:414 #clearError → errorEl.textContent = ''
+app/src/kiosk/settings.ts:430 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
+app/src/kiosk/settings.ts:435 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
+app/src/kiosk/settings.ts:435 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
+app/src/kiosk/settings.ts:439 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
+app/src/kiosk/settings.ts:442 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
+app/src/kiosk/settings.ts:445 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
+app/src/kiosk/settings.ts:454 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
+app/src/kiosk/settings.ts:457 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
 app/src/kiosk/start.ts:67 #setupErrorText → vetExternal('name', c.field, 'row')
 app/src/kiosk/start.ts:77 #previewText → vetExternal('name', place.name, 'row')
 app/src/kiosk/start.ts:91 #startMarkup → escapeHtml(s.appName)

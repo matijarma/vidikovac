@@ -55,6 +55,11 @@ test.describe('real self-service screen', () => {
     await expect(panel).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
+    // "Press and hold anywhere on the wall for about a second": the same 900 ms press on the date opens Postavke too.
+    await page.getByTestId('kiosk-date').click({ delay: 900 });
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
     await expect(page.getByTestId('kiosk-context')).toHaveText('Kvaternikov trg');
     const origin = new URL(page.url()).origin;
     // The shown code carries a middle dot; readPairing joins its two groups the way the URL and a person type it.

@@ -966,6 +966,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         : target.closest('[data-testid=kiosk-map-host]') ? touchOnMap(event) : null;
     if (next) openTouch(next);
   }
+  /** Whether a press at this point arms the wall-wide long press to Postavke (lane/w-settings, second step: the
+   *  operator was told "press and hold anywhere on the wall for about a second"). On a screen-sized wall in the
+   *  invitation, anywhere but the brand (its own binding), the open panel and the basics, and never on one of the
+   *  touch's own targets while the touch answers: a stop or pharmacy ring under the finger, a row of the list, the
+   *  footer's pharmacy. Those keep their tap, and a press held on them opens no settings. A handheld keeps the
+   *  browser's own gestures and only the brand's press. */
+  function wallPressable(event: MouseEvent): boolean {
+    if (disposed || layout.size === 'handheld' || phase !== 'invitation') return false;
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials]')) return false;
+    if (!touchable()) return true;
+    if (target.closest('[data-testid=nearby-rows] > .nearby-row, [data-testid=strip-pharmacy]')) return false;
+    return !(target.closest('[data-testid=kiosk-map-host]') && touchOnMap(event));
+  }
 
   function invitationModel(): InvitationModel {
     // The field is the map's side of the invitation (its name, and lagano's
@@ -1611,6 +1626,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   // Postavke open on a press held on the brand (or Enter/Space on it), never on
   // a tap: the header carries no operator control a passer-by could meet.
   const unbindBrand = bindLongPress(brand, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer });
+  // ... and on a press held anywhere else on a screen-sized wall (wallPressable: not on the touch's own targets,
+  // which keep their tap). Same timer, same slop; the keys stay with onWallKey below.
+  const unbindWall = bindLongPress(element, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer, accept: wallPressable, keys: false });
   // The wall keeps the keyboard's focus: a press anywhere on it that lands on nothing focusable hands the
   // focus back to the root (a browser that does not focus on a click included), and Enter or Space on the
   // root, or fallen back to the body, open Postavke exactly as they do on the brand.
@@ -1700,6 +1718,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       stopRepaint?.();
       stopTheme();
       unbindBrand();
+      unbindWall();
       document.removeEventListener('keydown', onWallKey);
       beacon?.close(); beacon = null;
       session?.close(); session = null;
