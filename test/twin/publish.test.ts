@@ -167,8 +167,12 @@ describe('buildPayload names no next stop past the last platform of a path (rail
     expect(standing.data?.nextStopId).toBe('T0');
     expect(standing.data?.nextStopEtaSec).toBeUndefined();
     expect(pinOn([at(250, twin)], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
-    // Moving, or too far past it, or ZET naming another stop: the twin's.
-    const moving = track({ id: '1', next: twin, plan: { on: 'path', pathIdx: 2, knots: [[0, 150], [60, 600]] } });
+    // Standing by its fixes with a plan the order law pushed ahead (10314 at 17:43:56, pushed 150 to 239 m in
+    // 8 s at speed 0): still ZET's.
+    const pushed = track({ id: '1', next: twin, speed: 0, plan: { on: 'path', pathIdx: 2, knots: [[0, 150], [2, 240], [20, 320]] } });
+    expect(pinOn([pushed], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T0');
+    // Moving by its fixes, or too far past it, or ZET naming another stop: the twin's.
+    const moving = track({ id: '1', next: twin, speed: 4, plan: { on: 'path', pathIdx: 2, knots: [[0, 150], [60, 600]] } });
     expect(pinOn([moving], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T300');
     expect(pinOn([at(400, { stopId: 'T600', s: 600, etaSec: null })], { T1: update({ stopId: 'T0' }) }).data?.nextStopId).toBe('T600');
     expect(pinOn([at(150, twin)], { T1: update({ stopId: 'T300' }) }).data?.nextStopId).toBe('T300');
