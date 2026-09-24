@@ -29,7 +29,7 @@ import { skippedTextCensus } from '../../app/src/city/nearby';
 import {
   ANY_PRESENT_IN_PAGE, CENSUS_TIMEOUT_MS, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_CENSUS_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
   PILLS_DRAWN_IN_PAGE, PILLS_DRAW_GRACE_MS, VEHICLES_TIMEOUT_MS, fleetAt, fleetOf, pillsOwed, type FleetRecord, type ObservedSample,
-  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, SURFACES, THRESHOLDS,
+  ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, STOP_BOARD_TIMEOUT_MS, SURFACES, THRESHOLDS,
   EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
   USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
@@ -588,6 +588,10 @@ interface FakeOptions {
   teaserPins?: number;
   /** The phone reads one /api/data/zet-rt with this many vehicle pins right after its scan answers. */
   phonePins?: number;
+  /** A click on this selector reports Playwright's timeout, as the stop search's result did on 24 Sep 03:40 while the board opened. */
+  clickTimesOut?: string;
+  /** The stop board never opens (a wait for it times out). */
+  noStopBoard?: boolean;
 }
 interface Handler { (arg: unknown): unknown }
 
@@ -675,6 +679,7 @@ function fakeRuntime(options: FakeOptions = {}) {
         }
         if (kind === 'phone' && fn === EXPIRY_STAMP_IN_PAGE && options.expiryWatch === 'no-stamp') throw new Error('Timeout 690000ms exceeded.');
         if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
+        if (fn === ANY_PRESENT_IN_PAGE && options.noStopBoard && (arg as { selectors: string[] }).selectors.includes(inventory.PHONE_PROBES.stopBoard)) throw new Error('Timeout 15000ms exceeded.');
         // The wall's census and its first pills come when they come; a wait that outlasts its timeout throws, as Playwright's does.
         for (const [waited, after, timeout] of [[MAP_CENSUS_IN_PAGE, options.censusAfterMs, CENSUS_TIMEOUT_MS], [PILLS_DRAWN_IN_PAGE, options.pillsAfterMs, VEHICLES_TIMEOUT_MS]] as const) {
           if (fn !== waited) continue;
@@ -693,7 +698,11 @@ function fakeRuntime(options: FakeOptions = {}) {
       keyboard: { press: async (key: string) => { log.keys.push({ kind, key }); } },
       async waitForTimeout(ms: number) { advance(ms); },
       async screenshot({ path }: { path: string }) { writeFileSync(path, 'png'); },
-      async click(selector: string) { log.clicks.push({ kind, selector }); if (kind === 'phone') onKarta = true; },
+      async click(selector: string) {
+        log.clicks.push({ kind, selector });
+        if (kind === 'phone') onKarta = true;
+        if (options.clickTimesOut && selector.startsWith(options.clickTimesOut)) { advance(STOP_BOARD_TIMEOUT_MS); throw new Error(`page.click: Timeout ${STOP_BOARD_TIMEOUT_MS}ms exceeded.\nCall log:\n  - waiting for element to be visible, enabled and stable`); }
+      },
       clock: { runFor: async () => { throw new Error('the observer runs on the real clock'); } },
       async evaluate(fn: unknown, _arg?: unknown) {
         if (fn === wall.WALL_SAMPLE_IN_PAGE) {
@@ -975,6 +984,22 @@ describe('a run over a fake browser', () => {
     expect(hidden.log.clicks.map((c) => c.selector)).not.toContain(`${inventory.PHONE_PROBES.shareCity}:visible`);
     expect(hidden.code, hidden.lines.join('\n')).toBe(0);
     expect(read(hidden.out, 'report.md')).toMatch(/\| phone-share-code \| d3 \| phone \| .* \| ≤ 0 \| 1 \| info \|/);
+  });
+
+  // Lane p-map (second observation, 24 Sep 03:40): the stop search's result
+  // click reported Playwright's 15 s timeout, yet the capture shows the board
+  // open with three departures inside the viewport; nothing but that tap
+  // opens it. A board that opened counts the tap; one that did not still fails.
+  it('counts the result tap when the board opened though the click reported a timeout, and fails the path when no board opened', async () => {
+    const select = `${inventory.PHONE_PROBES.selectStop}:visible`;
+    const slow = await observe([], { clickTimesOut: select });
+    expect(slow.lines.join('\n')).not.toContain('FAIL phone-stop-board');
+    const report = read(slow.out, 'report.md');
+    expect(report).toMatch(/\| phone-stop-board \| d3 \| phone \| .* \| ≤ 0 \| 0 \| pass \|/);
+    expect(report).toContain('Timeout 15000ms exceeded');
+    expect(report).toContain('waiting for element to be visible, enabled and stable');
+    const none = await observe([], { clickTimesOut: select, noStopBoard: true });
+    expect(none.lines.join('\n')).toContain('FAIL phone-stop-board');
   });
 
   it('a phone that never landed in its session fails its recorder row: an empty recorder proves nothing', () => {

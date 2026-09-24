@@ -533,6 +533,8 @@ const phoneSpec = (inventory) => {
   return { place: P.sadaPlace, sentence: P.sadaSentence, departures: inventory.PHONE_DEPARTURE_ROWS, tab: P.tab, shareCity: P.shareCity, slop: shipped(inventory.PHONE_SLOP_RE) };
 };
 const errText = (e) => String(e && e.message ? e.message : e).split(/\r?\n/)[0].slice(0, 300);
+/** An error's first line and the call log Playwright appends (what it was waiting for), on one line. */
+const errDetail = (e) => String(e && e.message ? e.message : e).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 6).join(' ').slice(0, 600);
 const zagreb = (ms) => new Date(ms).toLocaleString('hr-HR', { timeZone: 'Europe/Zagreb', hour12: false });
 
 /** One census value: "count:N;reason:n…" (the kiosk root) or a bare "N" (the timeline); anything else keeps its raw text and no count. */
@@ -867,7 +869,16 @@ export async function stopBoardBySearch(page, ctx) {
     await page.click(`${P.transportSearch}:visible`, { timeout: 10_000 });
     out.taps++;
     await page.fill(`${P.transportSearch}:visible`, inventory.STOP_SEARCH_QUERY, { timeout: 5_000 });
-    await page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS });
+    try {
+      await page.click(`${P.selectStop}:visible`, { timeout: STOP_BOARD_TIMEOUT_MS });
+    } catch (e) {
+      // 24 Sep 03:40: the click reported its timeout on a page whose frames were slow (Karta's first pill 8.2 s), yet
+      // the board stood open with three departures in the viewport, and nothing but that tap opens it. The tap is
+      // made when the board is there; only a board that is not fails the path. The click's own words go in the notes.
+      const opened = await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: 1_000 }).then(() => true, () => false);
+      if (!opened) throw e;
+      ctx.note(`phone: the stop search's result click reported "${errDetail(e)}", and the board opened: the tap counts`);
+    }
     out.taps++;
     await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.stopBoard] }, { timeout: STOP_BOARD_TIMEOUT_MS })
       .catch(() => ctx.note(`phone: no ${P.stopBoard} within ${STOP_BOARD_TIMEOUT_MS / 1000} s of the search result`));
