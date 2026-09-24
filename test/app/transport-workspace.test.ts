@@ -1029,7 +1029,7 @@ describe('the frame: Karta opens on the place', () => {
     render(context);
     context.place = JELACIC;
     render(context);
-    expect(last().setView).toHaveBeenLastCalledWith({ center: [JELACIC.lon, JELACIC.lat], zoom: frameView(JELACIC, 2000, 390, 600).zoom });
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [JELACIC.lon, JELACIC.lat], zoom: frameView(JELACIC, 2000, 390, 600).zoom, frame: true });
     expect(text(q('[data-testid=transport-peek] strong'))).toBe('Trg bana J. Jelačića');
     // The person moves the map: a later place change leaves the camera where they put it.
     last().options.onUserMove!({ center: [15.99, 45.8], zoom: 15 });
@@ -1059,7 +1059,7 @@ describe('the frame: Karta opens on the place', () => {
       const observe = (): void => { for (const o of observers) o([], {} as ResizeObserver); };
       box(412, 700);
       observe();
-      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom });
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom, frame: true });
       spy(last().setView).mockClear();
       spy(last().resize).mockClear();
       box(915, 412);
@@ -1068,13 +1068,13 @@ describe('the frame: Karta opens on the place', () => {
       expect(last().setView).not.toHaveBeenCalled();
       vi.advanceTimersByTime(REFIT_SETTLE_MS);
       expect(last().setView).toHaveBeenCalledTimes(1);
-      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 915, 412).zoom });
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 915, 412).zoom, frame: true });
       expect(spy(last().resize).mock.invocationCallOrder[0]).toBeLessThan(spy(last().setView).mock.invocationCallOrder[0]!);
       // And back: the first frame again, nothing left of the larger box.
       box(412, 700);
       observe();
       vi.advanceTimersByTime(REFIT_SETTLE_MS);
-      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom });
+      expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 412, 700).zoom, frame: true });
     } finally { vi.useRealTimers(); }
   });
 
@@ -1097,12 +1097,12 @@ describe('the frame: Karta opens on the place', () => {
     render(context);
     const narrow = frameView(KVATERNIKOV, 2000, 326, 718, 24, FIT_MIN_ZOOM);
     expect(narrow.zoom).toBeLessThan(FRAME_MIN_ZOOM);
-    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: narrow.zoom });
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: narrow.zoom, frame: true });
     expect(last().setMarkZoom).toHaveBeenLastCalledWith(markZoomFor(narrow.zoom));
     size('.transport-body', 1318, 998);
     size('.transport-map', 950, 998);
     render(context);
-    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 950, 998).zoom });
+    expect(last().setView).toHaveBeenLastCalledWith({ center: [KVATERNIKOV.lon, KVATERNIKOV.lat], zoom: frameView(KVATERNIKOV, 2000, 950, 998).zoom, frame: true });
     expect(last().setMarkZoom).toHaveBeenLastCalledWith(null);
   });
 

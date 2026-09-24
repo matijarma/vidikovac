@@ -321,11 +321,11 @@ app/src/map/city-layers.ts:63 #cityLayers → 'text-field':['case',small,'',['ge
 app/src/map/city-layers.ts:77 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']]
 app/src/map/city-map.ts:233 #vehicleLabel → vetExternal('headsign', v.short, 'row')
 app/src/map/city-map.ts:236 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:839 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:839 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1794 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1795 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1796 #relabelControls → el.title = controlLabel
+app/src/map/city-map.ts:844 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:844 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1800 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1801 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1802 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:25 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:34 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:44 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)

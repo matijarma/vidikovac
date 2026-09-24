@@ -1258,6 +1258,24 @@ describe('the first pills depend on the vehicle data alone', () => {
   });
 });
 
+// Lane p-map3 (release smoke run 2: the ring tap at the canvas centre opened no board in 2 of 3, then 3 of 5): the
+// map reports ready once the basemap is in, and a tap straight after it can land before MapLibre has laid out the
+// screen-stop source, so the rendered ring is not there to be hit. The place's own stop is where the map says it
+// is: a tap within its ring's reach opens it whether or not the ring has been drawn yet.
+describe('the tap on the place\u2019s own ring as soon as the map is ready', () => {
+  it('opens the own stop from its position before its ring is rendered, and nothing farther than its reach', async () => {
+    const stop = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97, lat: 45.81, routes: ['6'] };
+    const { map, selections, handle } = await harness({ extra: { stop, hitTolerancePx: 22 } });
+    map.rendered = [];
+    // FakeMap.project: (15.97, 45.81) is (700, 900).
+    map.fire('click', { point: { x: 712, y: 905 } });
+    expect(selections.at(-1)).toMatchObject({ kind: 'stop', id: '106_1' });
+    map.fire('click', { point: { x: 760, y: 900 } });
+    expect(selections.at(-1)).toBeNull();
+    handle.destroy();
+  });
+});
+
 describe('selection and status', () => {
   it('select() lights exactly the selected thing through filters and fits the camera; a tap picks a vehicle over a stop, a stop over nothing, and reports each', async () => {
     const { map, handle, selections } = await harness({ loadNetwork: async () => NET });
@@ -1330,6 +1348,20 @@ describe('selection and status', () => {
       expect((map.options.container as HTMLElement).dataset.center).toBe('15.96000,45.79000');
       handle.destroy();
     }
+  });
+  // Lane p-map3 (release smoke run 2: the Karta ring tap at the canvas centre missed 2 of 5): a frame is the
+  // place at the canvas centre, whatever covers the map, and it lands in one step, so a tap as soon as the map is
+  // ready finds the ring where the frame put it. A plain view still centres in the uncovered part and eases.
+  it('lands a frame (setView with frame) centred and in one step, under a sheet; a plain view keeps its offset and ease', async () => {
+    const { map, handle } = await harness({ extra: { presentationProfile: 'handheld', fitPadding: { bottom: 300 } } });
+    map.cameraCalls.length = 0;
+    handle.setView!({ center: [15.96, 45.79], zoom: 13, frame: true });
+    expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'easeTo', options: { center: [15.96, 45.79], zoom: 13, offset: [0, 0], duration: 0 } });
+    handle.setView!({ center: [15.97, 45.80], zoom: 13 });
+    const plain = map.cameraCalls.at(-1)!;
+    expect((plain.options.offset as number[])[1]).toBeLessThan(0);
+    expect(plain.options.duration).toBeGreaterThan(0);
+    handle.destroy();
   });
   it('a selection requested before initialization is fitted once its geometry exists', async () => {
     const container = document.createElement('div');
