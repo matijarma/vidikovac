@@ -28,6 +28,10 @@ test.describe('real self-service screen', () => {
     await expect(page.getByTestId('kiosk-theme')).toHaveCount(0);
     const shell = page.locator('.kiosk');
     await expect(shell).toHaveAttribute('data-frame', '6');
+    // The wall itself holds the keyboard's focus from the moment it mounts (lane/w-settings): the root, never a tab stop.
+    const wallHasFocus = () => page.evaluate(() => document.activeElement?.classList.contains('kiosk') ?? false);
+    await expect.poll(wallHasFocus, { message: 'the wall takes the focus when the invitation mounts' }).toBe(true);
+    await expect(shell).toHaveAttribute('tabindex', '-1');
     // Postavke open only on a press held past LONG_PRESS_MS (800 ms) on the brand.
     await page.getByTestId('kiosk-brand').click({ delay: 900 });
     const panel = page.getByTestId('kiosk-settings-panel');
@@ -42,6 +46,14 @@ test.describe('real self-service screen', () => {
     await expect(shell).toHaveAttribute('data-frame', '8', { timeout: 30_000 });
     await expect(panel).toBeVisible();
     await kadar.press('Escape');
+    await expect(panel).toBeHidden();
+    // The operator's mouse misses the brand and lands on the header's date (nothing focusable): the wall takes
+    // the focus back, and Enter on the wall opens Postavke without the brand. Escape closes them again.
+    await page.getByTestId('kiosk-date').click();
+    await expect.poll(wallHasFocus, { message: 'a press on nothing focusable hands the focus to the wall' }).toBe(true);
+    await page.keyboard.press('Enter');
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     await expect(page.getByTestId('kiosk-context')).toHaveText('Kvaternikov trg');
     const origin = new URL(page.url()).origin;

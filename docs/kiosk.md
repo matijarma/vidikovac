@@ -96,11 +96,12 @@ rute `/api/admin/*` i `/stats`.
    (`area`, za statistiku) izvodi iz mjesta, inače `zagreb`. Postava sama ne
    daje otključanu sesiju.
 3. Sve ostalo mijenja se poslije, na samom zaslonu. Dugi pritisak (0,8 s) na
-   natpis „Kaj ima?” u zaglavlju otvara **Postavke**; s tipkovnice isto čini
-   Enter ili razmaknica na tom natpisu. Kratak dodir i prst koji se pomakne
-   za više od 12 piksela ne otvaraju ništa, a u zaglavlju nema gumba ni za
-   postavke ni za temu. Ploča se zatvara tipkom Esc, gumbom ili nakon 90
-   sekundi bez dodira i ne otvara se dok traje otključana sesija.
+   natpis „Kaj ima?” u zaglavlju otvara **Postavke**; s tipkovnice isto čine
+   Enter ili razmaknica na tom natpisu ili na samom zaslonu: zaslon drži fokus
+   od učitavanja, a dodir izvan gumba vraća fokus na zaslon. Kratak dodir i
+   prst koji se pomakne za više od 12 piksela ne otvaraju ništa, a u zaglavlju
+   nema gumba ni za postavke ni za temu. Ploča se zatvara tipkom Esc, gumbom
+   ili nakon 90 sekundi bez dodira i ne otvara se dok traje otključana sesija.
 
    Redovi su *Mjesto* (**Promijeni** otvara isto polje
    „Adresa ili stajalište” i gumb **Cijeli grad** za povratak na prozor

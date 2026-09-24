@@ -19,6 +19,7 @@ import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
 import type { ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_TICK_MS, mountKiosk, type KioskDeps } from '../../app/src/kiosk';
+import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { drawnStops, fieldPixel, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, touchAt } from '../../app/src/kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from '../../app/src/kiosk/pharmacies';
@@ -412,6 +413,51 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     k.setNow(NOW + 30_000 + TOUCH_MS);
     k.tick(CODE_TICK_MS);
     expect(k.board()).toBeNull();
+    k.handle.destroy();
+  });
+
+  // lane/w-settings (24 Sep): the two ways a finger is read on the wall coexist. The brand's long press
+  // (WP3, the hidden opener) is not a touch and a touch is not a press: neither opens the other's thing,
+  // and the wall itself holds the keyboard's focus so Enter reaches Postavke without the brand.
+  it('a press held on the brand opens Postavke and no board; the tap that ends it opens nothing; a ring under the open panel is not read', async () => {
+    const k = mount();
+    await flush();
+    const brand = k.q<HTMLButtonElement>('[data-testid=kiosk-brand]')!;
+    brand.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    k.tick(LONG_PRESS_MS);
+    const panel = k.q('[data-testid=kiosk-settings-panel]');
+    expect(panel).not.toBeNull();
+    expect(panel!.hidden).toBe(false);
+    expect(k.board()).toBeNull();
+    brand.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    brand.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(k.board()).toBeNull();
+    expect(panel!.hidden).toBe(false);
+    k.touchMap(STOP);
+    expect(k.board()).toBeNull();
+    k.handle.destroy();
+  });
+
+  it('a short tap on a ring opens the board and not Postavke; Enter on the wall then opens Postavke and the board goes', async () => {
+    const k = mount();
+    await flush();
+    const brand = k.q<HTMLButtonElement>('[data-testid=kiosk-brand]')!;
+    brand.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    brand.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    brand.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    k.tick(LONG_PRESS_MS);
+    k.touchMap(STOP);
+    expect(k.board()).not.toBeNull();
+    expect(k.q('[data-testid=kiosk-settings-panel]')).toBeNull();
+    const wall = k.q('.kiosk')!;
+    expect(wall.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(wall);
+    wall.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(k.q('[data-testid=kiosk-settings-panel]')!.hidden).toBe(false);
+    k.tick(CODE_TICK_MS);
+    expect(k.board()).toBeNull();
+    // Still no control on the wall's stage.
+    expect(k.q('[data-testid=kiosk-invitation]')!.querySelectorAll('button, a[href], input, [tabindex]')).toHaveLength(0);
     k.handle.destroy();
   });
 

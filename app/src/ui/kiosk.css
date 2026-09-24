@@ -201,6 +201,8 @@
 
 /* --- Shell: header, stage, strip ------------------------------------------ */
 .kiosk { position: relative; }
+/* The wall holds the keyboard's focus (kiosk.ts focusWall) and shows no ring for it: a screen has no visible control. */
+.kiosk:focus, .kiosk:focus-visible { outline: none; }
 .kiosk p, .kiosk h1, .kiosk h2, .kiosk ul { margin: 0; }
 .kiosk ul { padding: 0; list-style: none; }
 .k-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
