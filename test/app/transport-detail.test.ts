@@ -166,15 +166,20 @@ describe('the stop sheet says what comes next, first', () => {
     expect(plan).not.toContain('class="t-live"');
   });
 
-  it('every departure row names its kind for the probe itself (§15.6 `[data-kind=departure]`), on Sada, in the sheet and under "Vozni red"', () => {
+  it('the three lead rows name their kind for the probe (§15.6, §16.4 `[data-kind=departure]`), the "Vozni red" rows their own', () => {
     const one = departureRow(i18n, row(), () => 'tram');
     expect(one.startsWith('<li class="sada-departure" data-kind="departure" ')).toBe(true);
+    // Once on the row (the line badge names its mode in its own data-kind: tram, bus).
     expect(one.split('data-kind="departure"')).toHaveLength(2);
-    const trips = Array.from({ length: 5 }, (_, i) => row({ tripId: `k${i}`, atMs: NOW + (i + 1) * 5 * 60_000 }));
+    expect(one).not.toContain('data-kind="timetable"');
+    expect(departureRow(i18n, row(), () => 'tram', undefined, 'timetable').startsWith('<li class="sada-departure" data-kind="timetable" ')).toBe(true);
+    // Twelve trips: the board's probe counts the three that lead it, never the nine of the timetable after them.
+    const trips = Array.from({ length: 12 }, (_, i) => row({ tripId: `k${i}`, atMs: NOW + (i + 1) * 5 * 60_000 }));
     const html = stop(trips);
-    const rows = html.match(/<li class="sada-departure"[^>]*>/g) ?? [];
-    expect(rows).toHaveLength(5);
-    for (const li of rows) expect(li).toContain(' data-kind="departure" ');
+    const kinds = (testid: string): string[] => ((html.split(`data-testid="${testid}"`)[1] ?? '').split('</ul>')[0]!.match(/<li class="sada-departure" data-kind="[a-z]+"/g) ?? []).map((li) => li.slice(li.indexOf('data-kind="') + 11, -1));
+    expect(kinds('arrival-rows')).toEqual(['departure', 'departure', 'departure']);
+    expect(kinds('timetable-rows')).toEqual(Array(9).fill('timetable'));
+    expect(html.split('data-kind="departure"')).toHaveLength(4);
   });
 
   it('leads with the three departures Sada shows, then "Vozni red" with the rest to the twelfth, then the note once', () => {

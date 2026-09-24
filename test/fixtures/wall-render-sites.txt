@@ -395,9 +395,9 @@ app/src/transport/view.ts:394 #routeDetailMarkup → vetExternal('title', d.dire
 app/src/transport/view.ts:405 #routeDetailMarkup → vetExternal('name', s.name, 'row')
 app/src/transport/view.ts:413 #routeDetailMarkup → vetExternal('name', route.long, 'row')
 app/src/transport/view.ts:413 #routeDetailMarkup → vetExternal('headsign', route.short, 'row')
-app/src/transport/view.ts:545 #stopDetailMarkup → vetExternal('name', d.stop.name, 'row')
-app/src/transport/view.ts:587 #closureDescription → vetExternal('summary', summary, 'row')
-app/src/transport/view.ts:596 #closureDetailMarkup → vetExternal('name', item.title, 'row')
+app/src/transport/view.ts:548 #stopDetailMarkup → vetExternal('name', d.stop.name, 'row')
+app/src/transport/view.ts:590 #closureDescription → vetExternal('summary', summary, 'row')
+app/src/transport/view.ts:599 #closureDetailMarkup → vetExternal('name', item.title, 'row')
 app/src/transport/workspace.ts:488 #setSelection → searchInput.value = ''
 app/src/transport/workspace.ts:495 #setSelection → searchInput.value = query
 app/src/transport/workspace.ts:608 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))

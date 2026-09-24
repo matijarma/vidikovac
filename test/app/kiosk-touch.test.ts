@@ -118,6 +118,9 @@ describe('the stop board (kiosk/timeline.ts stopBoardVariants)', () => {
     const departures = [...board.querySelectorAll<HTMLElement>('[data-kind=departure]')];
     expect(departures).toHaveLength(3);
     expect(departures.every((li) => li.matches('li.sada-departure'))).toBe(true);
+    // The same row code as the phone's board: the three lead rows alone are departures, the timetable line is no row.
+    expect(board.querySelectorAll('li.sada-departure')).toHaveLength(3);
+    expect(board.querySelectorAll('[data-kind=timetable]')).toHaveLength(0);
     // The tracked trip says "uživo" exactly as Sada's row does; the timetable's rows are plain grey clocks.
     expect(departures.map((li) => li.dataset.live)).toEqual(['true', 'false', 'false']);
     expect(departures[0]!.querySelector('.t-live')?.getAttribute('aria-label')).toBe('uživo');
