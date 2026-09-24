@@ -409,6 +409,46 @@ describe('the integrated companion sentence', () => {
     k.handle.destroy();
   });
 
+  it('writes the header\'s data-valid-until at a sentence turn, not while a tracked estimate moves by seconds under the same words', async () => {
+    // D5.3 production observer: eight "verbatim repeats" that were the deadline attribute shortening by 2 to 15 s under
+    // an unchanged countdown sentence (a new data-valid-until under the same text is a turn to the harness, §12).
+    let now = NOW;
+    let delay = 120;
+    const vehicle = () => item('zet-rt', 'vehicle:1', 'vehicle', '6', { at: '2026-09-11T12:31:40Z', geo: { type: 'Point', coordinates: [15.977, 45.813] }, data: { routeId: '6', routeType: 0, tripId: TRIP_LIVE, delaySeconds: delay } });
+    const modules = () => MODULES.map((m) => (m.module !== 'zet-rt' ? m : snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '156 vozila u pokretu', { data: { vehicles: 156 } }), vehicle()])));
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules: modules() }), createBoards: b.create, fetchSentences: async () => [] });
+    await flush();
+    const el = () => q(k.root, '[data-testid=kiosk-sentence]')!;
+    let shownAt = -1;
+    for (let s = 1; s <= 400 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (/^Tramvaj 6, .*polazi za 3 min\.$/.test(painted(k.root))) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    const text = painted(k.root);
+    const deadline = el().dataset.validUntil;
+    // The vehicle's estimate moves five seconds earlier: the same words, the same deadline attribute.
+    delay = 115;
+    now = shownAt + 2_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toBe(text);
+    expect(el().dataset.validUntil).toBe(deadline);
+    // It moves nearly a minute earlier: the sentence is restated ("za 2 min"), a turn, and the deadline follows.
+    delay = 65;
+    now = shownAt + 4_000;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toMatch(/polazi za 2 min\.$/);
+    expect(painted(k.root)).not.toBe(text);
+    expect(el().dataset.validUntil).not.toBe(deadline);
+    k.handle.destroy();
+  });
+
   it('lets a model sentence go at once when its fact changes, answer or no answer', async () => {
     let now = NOW;
     let modules = MODULES;
