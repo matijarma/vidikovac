@@ -103,21 +103,30 @@ const LOOP_ID_PREFIX = 'loop:';
  *  distance is unrounded metres, as decision 16's parked radius: 300.4 m
  *  prints as 300 and is beyond 300 m. */
 export const LOOP_HANDOVER_TERMINUS_M = 300;
-/** The class of a same-trip path change (describeEvent), from what it joins. */
-export function classifyEvent(x: { vehicleRoute: string; oldRoute: string; newRoute: string; oldId: string; newId: string; oldDirection: number; newDirection: number; terminalM: number | null }): EventClass {
+/** The class of a same-trip path change (describeEvent), from what it joins.
+ *  `diverted`: the matcher's TramTrack.diverted before or after the change
+ *  (rail round 2), a tram running its line's rails off its own path
+ *  mid-line; `turnaround`: the D4 mechanism fired (the tram moved against
+ *  the rail it stood on), a reversal whatever the flag says. */
+export function classifyEvent(x: { vehicleRoute: string; oldRoute: string; newRoute: string; oldId: string; newId: string; oldDirection: number; newDirection: number; terminalM: number | null; diverted?: boolean; turnaround?: boolean }): EventClass {
   if (x.newRoute !== x.vehicleRoute) return 'onto-other-route';
   if (x.oldRoute !== x.vehicleRoute) return 'back-to-own-route';
   // Own-route transitions onto or off a terminus loop path (direction -1) are
   // their own class at a terminus: otherwise they would read as direction flips.
   const loop = isLoopId(x.oldId) || isLoopId(x.newId);
   if (loop && (x.terminalM === null || x.terminalM <= LOOP_HANDOVER_TERMINUS_M)) return 'loop-transition';
+  // A hop of a diverted tram between rails of its own line: the leaving, the
+  // hops between variants and the return are one diversion, counted in the
+  // diversions block and not in row A; a D4 reversal is still a flip.
+  if (!loop && x.diverted === true && x.turnaround !== true) return 'diversion-hop';
   if (x.oldDirection !== x.newDirection) return 'direction-flip';
   return 'same-route-variant';
 }
 /** What row A counts, and A' inside the teaser box (decision 35): every
- *  same-trip path change but a direction flip at a terminal and a loop transition. */
+ *  same-trip path change but a direction flip at a terminal, a loop transition
+ *  and a diversion hop (rail round 2). */
 export function countsInA(e: { cls: string; atTerminus: boolean }): boolean {
-  return e.cls !== 'loop-transition' && !(e.cls === 'direction-flip' && e.atTerminus);
+  return e.cls !== 'loop-transition' && e.cls !== 'diversion-hop' && !(e.cls === 'direction-flip' && e.atTerminus);
 }
 /** Silence gaps (fresh fix to fresh fix of one vehicle) shorter than this are ZET's ordinary cadence. */
 const GAP_MIN_S = 60;
@@ -426,9 +435,11 @@ interface TickRecord {
   anchor: number | null;
   held: boolean;
   fresh: boolean;
+  /** match.ts TramTrack.diverted after the tick (rail round 2). */
+  diverted: boolean;
 }
 
-export type EventClass = 'onto-other-route' | 'back-to-own-route' | 'loop-transition' | 'direction-flip' | 'same-route-variant';
+export type EventClass = 'onto-other-route' | 'back-to-own-route' | 'loop-transition' | 'diversion-hop' | 'direction-flip' | 'same-route-variant';
 
 /** One matched-path change within an unchanged trip. */
 export interface BranchEvent {
@@ -485,6 +496,9 @@ export interface BranchEvent {
   nearestTerminal: string | null;
   nearestTerminalM: number | null;
   atTerminus: boolean;
+  /** The matcher's diverted flag at the tick before and after the change (rail round 2). */
+  divertedBefore: boolean;
+  divertedAfter: boolean;
   revertedInS?: number;
   foreignDurationS?: number;
   foreignGroundM?: number;
@@ -595,6 +609,44 @@ interface UnplacedEpisode {
   stopM: number | null;
   terminal: string | null;
   terminalM: number | null;
+}
+
+interface DivertedOpen {
+  gen: number;
+  startH: number;
+  lastH: number;
+  route: string;
+  trip: string | null;
+  prior: string | null;
+  startP: XY;
+  lastP: XY;
+  sec: number;
+  ticks: number;
+  fresh: number;
+  hops: number;
+  maxDistFromStart: number;
+}
+
+/** One diversion (rail round 2): the ticks a tram carried match.ts
+ *  TramTrack.diverted, with the same-trip path changes classed
+ *  `diversion-hop` that started it, moved it between variants and ended it. */
+interface DiversionEpisode {
+  start: string;
+  end: string;
+  id: string;
+  route: string;
+  trip: string | null;
+  prior: string | null;
+  hops: number;
+  durationS: number;
+  ticks: number;
+  freshFixes: number;
+  groundM: number;
+  maxDistFromStartM: number;
+  /** 'return' (back on the prior), 'trip-change', 'loop' (onto a terminus loop), 'evicted', 'other' (off the graph, or unplaced for another reason), 'open' (still diverted at the report). */
+  endedBy: string;
+  stop: string | null;
+  endStop: string | null;
 }
 
 interface SilencePast {
@@ -821,6 +873,12 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   // engine that does not say), by seconds and by episode.
   const unplacedSecByReason = new Map<string, number>();
   const unplacedOpen = new Map<string, UnplacedOpen>(); // vehicle id -> the running episode
+  // Diversions (rail round 2): ticks with match.ts TramTrack.diverted, per
+  // vehicle as episodes, and the tram time they add up to.
+  const divertedOpen = new Map<string, DivertedOpen>();
+  const diversions: DiversionEpisode[] = [];
+  let divertedSec = 0;
+  const divertedSecByRoute = new Map<string, number>();
   // Silence: fresh-fix gaps per vehicle (keyed by vehicle id, so a gap that
   // outlives the track's eviction is still one gap), and what the payload
   // publishes for vehicles whose last fix is old.
@@ -916,6 +974,31 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     });
   }
 
+  function closeDiverted(id: string, endedBy: string): void {
+    const ep = divertedOpen.get(id);
+    if (!ep) return;
+    divertedOpen.delete(id);
+    const near = nearestStop(ep.startP);
+    const endNear = nearestStop(ep.lastP);
+    diversions.push({
+      start: localClock(ep.startH),
+      end: localClock(ep.lastH),
+      id,
+      route: ep.route,
+      trip: ep.trip,
+      prior: ep.prior,
+      hops: ep.hops,
+      durationS: ep.sec,
+      ticks: ep.ticks,
+      freshFixes: ep.fresh,
+      groundM: Math.round(dist(ep.startP, ep.lastP)),
+      maxDistFromStartM: Math.round(ep.maxDistFromStart),
+      endedBy,
+      stop: near ? near.stop.name : null,
+      endStop: endNear ? endNear.stop.name : null,
+    });
+  }
+
   function closeGhost(id: string): void {
     const watch = ghostWatch.get(id);
     if (!watch) return;
@@ -949,7 +1032,6 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     const veh = rec.route;
     const near = nearestStop(rec.p);
     const terminal = nearestStop(rec.p, (s) => s.terminal);
-    const cls = classifyEvent({ vehicleRoute: veh, oldRoute: oldPath.route, newRoute: newPath.route, oldId: oldPath.id, newId: newPath.id, oldDirection: oldPath.direction, newDirection: newPath.direction, terminalM: terminal ? terminal.d : null });
 
     // Motion exactly as match.ts motionOf computed it for this fix.
     const groundM = dist(prev.p, rec.p);
@@ -978,6 +1060,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     else if (oldNow.d <= NEAR_M && prev.ag === FOLD_FIXES - 1 && oldPath.direction !== newPath.direction) mechanism = oldPath.route === newPath.route ? 'turnaround' : 'turnaround-cross-route';
     else if (oldNow.d > NEAR_M) mechanism = 'off-path-rederive?';
     else mechanism = 'unexplained';
+    // The class reads the mechanism (a D4 reversal is never a diversion hop) and the matcher's diverted flag around the change.
+    const cls = classifyEvent({ vehicleRoute: veh, oldRoute: oldPath.route, newRoute: newPath.route, oldId: oldPath.id, newId: newPath.id, oldDirection: oldPath.direction, newDirection: newPath.direction, terminalM: terminal ? terminal.d : null, diverted: prev.diverted || rec.diverted, turnaround: mechanism.startsWith('turnaround') });
 
     // The adoptPath pool at the adopted edge.
     const pool = rec.edge !== null ? pathsByEdge.get(rec.edge) ?? [] : [];
@@ -1050,6 +1134,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       nearestTerminal: terminal ? terminal.stop.name : null,
       nearestTerminalM: terminal ? Math.round(terminal.d) : null,
       atTerminus: terminal ? terminal.d <= TERMINAL_NEAR_M : false,
+      divertedBefore: prev.diverted,
+      divertedAfter: rec.diverted,
     };
     if (terminal) terminalDist.set(event, terminal.d);
     return event;
@@ -1193,6 +1279,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         anchor: planOnPath ? evalPathPlan(planOnPath.knots, 0) : null,
         held: heldById.get(track.id) ?? false,
         fresh: false,
+        diverted: (track as { diverted?: true }).diverted === true,
       };
       const h = history.get(track.id) ?? [];
       const fh = freshHistory.get(track.id) ?? [];
@@ -1293,6 +1380,28 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         }
       }
 
+      // Diversions (rail round 2): an episode per run of ticks with the flag;
+      // its hops are counted as their events are described below.
+      let divertedEp = divertedOpen.get(track.id);
+      if (divertedEp && divertedEp.gen !== gen) {
+        closeDiverted(track.id, 'evicted');
+        divertedEp = undefined;
+      }
+      if (rec.diverted) {
+        if (!divertedEp) {
+          divertedEp = { gen, startH: headerSec, lastH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, hops: 0, maxDistFromStart: 0 };
+          divertedOpen.set(track.id, divertedEp);
+        }
+        divertedEp.sec += dt;
+        divertedEp.ticks++;
+        if (fresh) divertedEp.fresh++;
+        divertedEp.lastP = rec.p;
+        divertedEp.lastH = headerSec;
+        divertedEp.maxDistFromStart = Math.max(divertedEp.maxDistFromStart, dist(divertedEp.startP, rec.p));
+        divertedSec += dt;
+        inc(divertedSecByRoute, track.routeId, dt);
+      }
+
       if (prev && prev.gen === gen) {
         if (prev.trip !== rec.trip) tripChanges++;
         if (prev.trip === rec.trip && prev.prior !== rec.prior) priorChanges.push({ h: headerSec, id: track.id, trip: rec.trip, from: prev.prior, to: rec.prior });
@@ -1321,12 +1430,21 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         } else if (fresh && backwardRun.has(track.id)) closeBackwardRun(track.id);
         // The event: matched path changed, trip unchanged, both paths real.
         if (prev.trip === rec.trip && prev.path !== null && rec.path !== null && prev.path !== rec.path) {
-          events.push(describeEvent(track, rec, prev, fh, state));
+          const event = describeEvent(track, rec, prev, fh, state);
+          events.push(event);
+          if (event.cls === 'diversion-hop') {
+            const ep = divertedOpen.get(track.id);
+            if (ep) ep.hops++;
+          }
         }
       } else if (prev && prev.gen !== gen) {
         h.length = 0;
         fh.length = 0;
         closeBackwardRun(track.id);
+      }
+      if (!rec.diverted && divertedOpen.has(track.id)) {
+        const endedBy = prev && prev.trip !== rec.trip ? 'trip-change' : rec.path !== null && rec.path === rec.prior ? 'return' : rec.path !== null && isLoopId(paths[rec.path].id) ? 'loop' : 'other';
+        closeDiverted(track.id, endedBy);
       }
       h.push(rec);
       if (h.length > 6) h.splice(0, h.length - 6);
@@ -1437,6 +1555,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     if (!finished) {
       for (const id of [...backwardRun.keys()]) closeBackwardRun(id);
       for (const id of [...unplacedOpen.keys()]) closeUnplaced(id);
+      for (const id of [...divertedOpen.keys()]) closeDiverted(id, 'open');
       for (const id of [...ghostWatch.keys()]) closeGhost(id);
       finished = true;
     }
@@ -1762,6 +1881,42 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       byRoute: Object.fromEntries(countBy(loopEvents, (e) => e.route)),
     };
 
+    // ---- diversions (rail round 2) ------------------------------------------------
+    const diversionHops = events.filter((e) => e.cls === 'diversion-hop');
+    const divertedEpisodesByRoute = new Map<string, number>();
+    const divertedHopsByRoute = new Map<string, number>();
+    for (const e of diversions) inc(divertedEpisodesByRoute, e.route);
+    for (const e of diversionHops) inc(divertedHopsByRoute, e.route);
+    const diversionsReport = {
+      definition: 'ticks with match.ts TramTrack.diverted (a tram on its line\'s rails off its own path mid-line, or on no rails with the reason diversion), per vehicle as episodes; a same-trip path change of such a tram that is not a D4 reversal and touches no loop is a diversion hop, out of rows A and E',
+      // Own-route hops of a diverted tram: metric A excludes exactly these.
+      events: diversionHops.length,
+      startHops: diversionHops.filter((e) => !e.divertedBefore && e.divertedAfter).length,
+      midHops: diversionHops.filter((e) => e.divertedBefore && e.divertedAfter).length,
+      returnHops: diversionHops.filter((e) => e.divertedBefore && !e.divertedAfter).length,
+      directionIdChanged: diversionHops.filter((e) => e.fromDir !== e.toDir).length,
+      vehicleHours: r2(divertedSec / 3600),
+      shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round((divertedSec / tramTrackedSec) * 1e6) / 1e6 : null,
+      episodes: diversions.length,
+      endedBy: Object.fromEntries(countBy(diversions, (e) => e.endedBy)),
+      durationS: { p50: percentile(diversions.map((e) => e.durationS), 0.5), p95: percentile(diversions.map((e) => e.durationS), 0.95), max: maxOf(diversions.map((e) => e.durationS)) },
+      hopsPerEpisode: { p50: percentile(diversions.map((e) => e.hops), 0.5), p95: percentile(diversions.map((e) => e.hops), 0.95), max: maxOf(diversions.map((e) => e.hops)) },
+      groundM: { p50: percentile(diversions.map((e) => e.groundM), 0.5), p95: percentile(diversions.map((e) => e.groundM), 0.95) },
+      byMechanism: Object.fromEntries(countBy(diversionHops, (e) => e.mechanism)),
+      byRoute: [...new Set([...divertedSecByRoute.keys(), ...divertedHopsByRoute.keys()])]
+        .map((route) => {
+          const sec = divertedSecByRoute.get(route) ?? 0;
+          const routeSec = tramSecByRoute.get(route) ?? 0;
+          return { route, episodes: divertedEpisodesByRoute.get(route) ?? 0, hops: divertedHopsByRoute.get(route) ?? 0, vehicleHours: r2(sec / 3600), shareOfRouteVehicleHours: routeSec > 0 ? Math.round((sec / routeSec) * 1e4) / 1e4 : null };
+        })
+        .sort((a, b) => b.hops - a.hops || b.vehicleHours - a.vehicleHours || String(a.route).localeCompare(String(b.route))),
+      byStop: countBy(diversionHops, (e) => e.nearestStop ?? '?', 15),
+      byPair: countBy(diversionHops, (e) => `${e.from} -> ${e.to} @ ${e.nearestStop}`, 15),
+      byVehicle: countBy(diversionHops, (e) => e.id, 12),
+      longest: [...diversions].sort((a, b) => b.hops - a.hops || b.durationS - a.durationS).slice(0, 12),
+      all: diversions,
+    };
+
     const eps = unplaced.episodes;
     const epTerminal = eps.map((e) => e.terminalM).filter((x): x is number => x !== null);
     const unplacedByStop = new Map<string, { stop: string; episodes: number; sec: number; terminalM: number[] }>();
@@ -1973,6 +2128,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       arcJumps: { n: arcJumps.length, byPath: countBy(arcJumps, (j) => j.path, 15), byStop: countBy(arcJumps, (j) => j.nearestStop ?? '?', 15), byPathAndStop: countBy(arcJumps, (j) => `${j.path} @ ${j.nearestStop} (${j.ds > 0 ? '+' : '-'})`, 12), all: arcJumps },
       client: clientReport,
       loops: loopsReport,
+      diversions: diversionsReport,
       unplaced: unplacedReport,
       silence: silenceReport,
       ghostAdvance: ghostReport,
@@ -2055,6 +2211,8 @@ export interface AcceptanceSource {
   totals: { pathChangesSameTrip: number };
   flips: { atTerminus: number; terminalDistanceHist: { le600: number; gt600: number } };
   loops?: { events: number };
+  /** Rail round 2: the hops of diverted trams, absent in reports written before it. */
+  diversions?: { events: number };
   teaserBox: { window: { per100vh: number | null } };
   otherRoute: { onto: number; ticks: { foreignVehicleHours: number | null; foreignFreshFixesWithPriorWithin60m: number } };
   rederive: { priorInPoolButOtherAdopted: number; planGapM: { p95: number | null } };
@@ -2124,11 +2282,13 @@ export const ACCEPTANCE_ROW_KEYS = ['A', 'Aprime', 'B', 'C_vh', 'C_fixes', 'D', 
 export const INFORMATIONAL_ROW_KEYS = ['U_raw', 'U_parkedVh', 'S_count', 'S_glide', 'S_pastNextStop'] as const satisfies readonly (typeof ACCEPTANCE_ROW_KEYS)[number][];
 
 /** Metric A as WP0 defines it: same-trip path changes less direction flips
- *  within 150 m of a terminal and own-route loop-path transitions, per 100
- *  tram vehicle-hours. `loops` is absent in reports written before WP0 step 7. */
+ *  within 150 m of a terminal, own-route loop-path transitions and (rail
+ *  round 2) the hops of diverted trams, per 100 tram vehicle-hours. `loops`
+ *  is absent in reports written before WP0 step 7, `diversions` before rail round 2. */
 export function metricA(r: AcceptanceSource): { n: number; per100vh: number | null } {
   const loops = r.loops?.events ?? 0;
-  const n = r.totals.pathChangesSameTrip - r.flips.atTerminus - loops;
+  const diversions = r.diversions?.events ?? 0;
+  const n = r.totals.pathChangesSameTrip - r.flips.atTerminus - loops - diversions;
   return { n, per100vh: r.tramVehicleHours !== null && r.tramVehicleHours > 0 ? (n / r.tramVehicleHours) * 100 : null };
 }
 
@@ -2266,7 +2426,7 @@ function acceptanceLines(r: BranchReport): string[] {
   const si = r.silence;
   const L: string[] = [];
   L.push('acceptance rows (targets: ACCEPTANCE_TARGETS in scripts/grade-branches-core.ts):');
-  L.push(`  A  (pathChangesSameTrip ${r.totals.pathChangesSameTrip} - flips.atTerminus ${r.flips.atTerminus} - loops.events ${r.loops?.events ?? 0}) / ${r.tramVehicleHours} vh * 100 = ${fmt(A.per100vh, 2)} per 100 vh  [target <= 5, stretch <= 1]`);
+  L.push(`  A  (pathChangesSameTrip ${r.totals.pathChangesSameTrip} - flips.atTerminus ${r.flips.atTerminus} - loops.events ${r.loops?.events ?? 0} - diversions.events ${r.diversions?.events ?? 0}) / ${r.tramVehicleHours} vh * 100 = ${fmt(A.per100vh, 2)} per 100 vh  [target <= 5, stretch <= 1]`);
   L.push(`  A' teaser box 17:15-17:44, with A's exclusions: ${fmt(r.teaserBox.window.per100vh)} per 100 vh (${r.teaserBox.window.events} events; every class ${r.teaserBox.window.eventsAllClasses})  [<= 5]`);
   L.push(`  B  onto another route's path: ${r.otherRoute.onto}  [0]`);
   L.push(`  C  foreign-path vehicle-hours ${r.otherRoute.ticks.foreignVehicleHours}; fresh fixes off the own path while it was within 60 m ${r.otherRoute.ticks.foreignFreshFixesWithPriorWithin60m}  [0; 0]`);
@@ -2276,6 +2436,8 @@ function acceptanceLines(r: BranchReport): string[] {
   L.push(`  G  same-trip re-seeds > 50 m: ${r.client.sameTripPathToPathOver50}, p95 ${fmt(r.client.sameTripPathToPathJumpP95)} m  [0; < 50 m]`);
   L.push(`  H  visible correction at a re-derive, p95: ${fmt(r.rederive.planGapM.p95)} m  [< 60 m]`);
   L.push(`  loops: ${r.loops.events} own-route loop transitions (onto ${r.loops.onto}, off ${r.loops.off}, loop to loop ${r.loops.loopToLoop}); foreign loop events ${r.loops.foreignEvents} (in B); own-route hand-overs beyond ${LOOP_HANDOVER_TERMINUS_M} m of a terminal ${r.loops.farEvents ?? 0} (direction flips, in A and E); ${r.loops.loopPaths} loop paths in the network`);
+  const dv = r.diversions;
+  L.push(`  diversions: ${dv.events} hops of diverted trams (leaving ${dv.startHops}, between variants ${dv.midHops}, returning ${dv.returnHops}; direction id changed ${dv.directionIdChanged}; D4 reversals stay flips) in ${dv.episodes} episodes, ${fmt(dv.vehicleHours, 2)} vh = ${fmt(asPercent(dv.shareOfTramVehicleHours), 2)} % of tram vehicle-hours; ended by ${Object.entries(dv.endedBy).map(([k, v]) => `${k} ${v}`).join(', ') || 'n/a'}; by route ${dv.byRoute.slice(0, 6).map((x) => `${x.route} ${x.hops} hops/${x.episodes} ep`).join(', ') || 'none'}`);
   L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m; by reason ${Object.entries(u.byReason ?? {}).map(([reason, x]: [string, { vehicleHours: number; episodes: number }]) => `${reason} ${fmt(x.vehicleHours, 2)} vh in ${x.episodes} ep`).join(', ') || 'n/a'}  [share without parked <= 3 %]`);
   L.push(`  silence (EVICT_S ${si.evictS} s, SILENCE_HOLD_S ${si.holdS} s): published older than EVICT_S ${si.publishedOlderThanEvict} (tram ${si.publishedOlderThanEvictTram}, frames ${si.publishedOlderThanEvictFrames})  [0]; silent trams planned past the next stop at +${si.lookaheadS} s ${si.extrapolatedPastNextStop} of ${si.silentTramItemsOnPath} silent on-path items (${si.extrapolatedPastNextStopVehicles} vehicles; at the horizon ${si.extrapolatedPastNextStopAtHorizon})  [0]`);
   const g = si.gaps.hist;
@@ -2407,6 +2569,19 @@ export function formatMarkdown(r: BranchReport): string {
   L.push(mdTable(['loop transition, nearest stop', 'events'], pairRows(lp.byStop)));
   L.push('');
   L.push(mdTable(['loop path', 'events (any class)'], pairRows(lp.byPath)));
+  L.push('');
+  const dv = r.diversions;
+  L.push('## Diversions (`diversion-hop`, rail round 2; excluded from metric A)');
+  L.push('');
+  L.push(`Definition: ${dv.definition}. Hops: **${dv.events}** (leaving the own path ${dv.startHops}, between variants ${dv.midHops}, returning ${dv.returnHops}; direction id changed ${dv.directionIdChanged}); by mechanism ${JSON.stringify(dv.byMechanism)}. Episodes: **${dv.episodes}**, ended by ${JSON.stringify(dv.endedBy)}; duration p50 ${fmt(dv.durationS.p50)} s, p95 ${fmt(dv.durationS.p95)} s, max ${fmt(dv.durationS.max)} s; hops per episode p50 ${fmt(dv.hopsPerEpisode.p50)}, p95 ${fmt(dv.hopsPerEpisode.p95)}, max ${fmt(dv.hopsPerEpisode.max)}; ground from start to end p50 ${fmt(dv.groundM.p50)} m, p95 ${fmt(dv.groundM.p95)} m. Tram time diverted: ${dv.vehicleHours} vehicle-hours = ${fmt(asPercent(dv.shareOfTramVehicleHours), 2)} % of tram vehicle-hours.`);
+  L.push('');
+  L.push(mdTable(['route', 'hops', 'episodes', 'vehicle-hours', 'share of the route'], dv.byRoute.map((x) => [x.route, x.hops, x.episodes, x.vehicleHours, x.shareOfRouteVehicleHours === null ? 'n/a' : `${(x.shareOfRouteVehicleHours * 100).toFixed(2)}%`])));
+  L.push('');
+  L.push(mdTable(['diversion hop: from -> to @ stop', 'events'], pairRows(dv.byPair)));
+  L.push('');
+  L.push(mdTable(['vehicle', 'hops'], pairRows(dv.byVehicle)));
+  L.push('');
+  L.push(mdTable(['longest diversions', 'route', 'prior', 'hops', 'duration s', 'ground m', 'ended by', 'from', 'to'], dv.longest.map((x) => [`${x.start} ${x.id}`, x.route, x.prior, x.hops, x.durationS, x.groundM, x.endedBy, x.stop, x.endStop])));
   L.push('');
   const u = r.unplaced;
   L.push('## Unplaced trams (on no path, not off the graph)');

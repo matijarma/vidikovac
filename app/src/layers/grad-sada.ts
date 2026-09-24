@@ -17,7 +17,7 @@ import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sent
 import { emptyCity } from '../../../shared/city/types';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { CURATED_WALL, curatedCityPoints } from '../city/curated';
-import { feedPlace, feedRadiusM, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
+import { feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
 import { departuresBlock } from '../city/next-departures';
 import type { PlaceContext } from '../city/place';
 import { provenanceBlock } from '../experience/status';
@@ -57,10 +57,11 @@ function sentenceMarkup(ctx: LayerContext, sentence: WrittenSentence | 'busy' | 
     + `<span class="sada-kicker">${e(kickerWord(ctx, sentence.kicker))}</span><p class="sada-sentence-text">${e(sentence.text)}</p></article>`;
 }
 
-/** The list's place while its rows are on their way: the head's title and one busy row. */
-function nearbyBusy(ctx: LayerContext): string {
+/** The list's place while its chunk is on its way: the head's title and the rows it will fill, reserved (the
+ *  same room the held list keeps, city/nearby-markup.ts RESERVED_NEARBY_ROW, written here so the chunk stays lazy). */
+function nearbyBusy(ctx: LayerContext, rows: number): string {
   return `<section class="nearby" data-testid="nearby" data-key="nearby" aria-busy="true"><h3 class="nearby-head" data-testid="nearby-head"><span class="nearby-head-title">${e(ctx.i18n.t('kiosk.nearby.title'))}</span></h3>`
-    + '<ol class="nearby-rows" data-testid="nearby-rows"><li class="nearby-row-empty" aria-hidden="true"><span class="skeleton"></span></li></ol></section>';
+    + `<ol class="nearby-rows" data-testid="nearby-rows">${'<li class="nearby-row-empty" aria-hidden="true"><span class="skeleton"></span></li>'.repeat(rows)}</ol></section>`;
 }
 
 /**
@@ -69,8 +70,11 @@ function nearbyBusy(ctx: LayerContext): string {
  * (map/frame.ts frameView over the measured circle), still, and a link over
  * it that opens Karta. Null on a desk, in lagano and without a map.
  */
+/** Whether this draw has a band at all: the phone with a map, not lagano. */
+const bandWanted = (ctx: LayerContext): boolean => ctx.screen?.surface === 'phone' && !ctx.lightweight && Boolean(ctx.maps);
+
 function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLElement | null {
-  if (ctx.screen?.surface !== 'phone' || ctx.lightweight || !ctx.maps) return null;
+  if (!bandWanted(ctx) || !ctx.maps || !ctx.screen) return null;
   const now = ctx.frozenAt ?? ctx.now;
   const camera = frameView(place, radiusM, SADA_MAP_BAND.width, SADA_MAP_BAND.height);
   const container = ctx.maps.slot({
@@ -115,23 +119,31 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   const feed = sadaFeed(ctx.onLocalData);
   const input = typeof feed === 'object' ? nearbyInput(ctx, place) : null;
   const rows = typeof feed === 'object' ? feed.selectNearby(input!) : null;
+  // Until the list's sources have answered it keeps its head and its reserved rows, and the band's live map waits
+  // with it: MapLibre is not evaluated in front of the first answer, and Karta loads it at once if asked first.
+  const held = typeof feed === 'object' && nearbyHeld(ctx);
+  const cap = desk ? NEARBY_DESK_ROWS : NEARBY_PHONE_ROWS;
   // The page's own sentence when it gives one (null: none), else the writer's first from these facts.
   const sentence: WrittenSentence | 'busy' | null = ctx.sentence !== undefined ? ctx.sentence
     : typeof feed === 'object' ? feed.sadaSentences(input!, rows!)[0] ?? null
     : feed === 'loading' ? 'busy' : null;
   // The departures block shows the departures; the list continues with what comes after them.
   const nearby = typeof feed === 'object'
-    ? feed.nearbySectionMarkup(i18n, rows!.filter((row) => row.kind !== 'departure'), input!.radiusM, now,
-      { cap: desk ? NEARBY_DESK_ROWS : NEARBY_PHONE_ROWS, id: 'sada' })
-    : feed === 'loading' ? nearbyBusy(ctx) : '';
-  const band = mapBand(ctx, place, input?.radiusM ?? feedRadiusM(ctx, nearbyPlace(place)));
+    ? feed.nearbySectionMarkup(i18n, held ? [] : rows!.filter((row) => row.kind !== 'departure'), input!.radiusM, now,
+      { cap, id: 'sada', ...(held ? { reserve: cap } : {}) })
+    : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
+  // The band's box stands from the first draw (112 px, its link to Karta); the map inside it once Sada has settled
+  // (the list's chunk in hand and its hold over).
+  const settling = held || feed === 'loading';
+  const band = settling ? null : mapBand(ctx, place, input?.radiusM ?? feedRadiusM(ctx, nearbyPlace(place)));
+  const bandBox = band !== null || (settling && bandWanted(ctx));
   // The place's name is the catalogue's or the operator's text: the title carries it only once the row check passes
   // (the boundary refuses everything until the policy chunk, this feed's own, is in hand).
   const name = vetExternal('name', place.name, 'row') ?? '';
   const section = createElementFromHTML(`<section class="layer ws ws-sada" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">`
     + `<h2 class="layer-title sada-place" id="layer-title-grad-sada" tabindex="-1" data-testid="sada-place">${e(name)}</h2>`
     + sentenceMarkup(ctx, sentence)
-    + (band ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
+    + (bandBox ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
     + departuresBlock(ctx, place, { heading: true })
     + nearby
     + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])

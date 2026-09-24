@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { renderIzvoriHtml } from './app/src/izvori-render';
+import { markPrintStylesheets } from './app/src/print-media';
 
 // Multi-page static build. Every HTML entry listed here becomes a real static
 // asset served by Cloudflare's asset store without invoking the Worker.
@@ -22,10 +23,30 @@ function izvoriHtmlPlugin(): Plugin {
   };
 }
 
+/** A stylesheet that is nothing but `@media print` (ui/print.css) is linked with media="print", so it never
+ *  blocks the first render (app/src/print-media.ts). Runs after Vite has written the page's links. */
+function printMediaPlugin(): Plugin {
+  return {
+    name: 'vidikovac-print-media',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const bundle = ctx.bundle;
+        if (!bundle) return html;
+        return markPrintStylesheets(html, (href) => {
+          const asset = bundle[href.replace(/^\//, '')];
+          return asset?.type === 'asset' ? String(asset.source) : undefined;
+        });
+      },
+    },
+  };
+}
+
 export default defineConfig({
   root: 'app',
   publicDir: 'public',
-  plugins: [izvoriHtmlPlugin()],
+  plugins: [izvoriHtmlPlugin(), printMediaPlugin()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

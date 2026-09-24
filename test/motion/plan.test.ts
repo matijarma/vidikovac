@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMatcher } from '../../shared/motion/match';
 import { buildPlan, evalFreePlan, evalPathPlan, silenceDecay } from '../../shared/motion/plan';
 import { serviceDayStartSec } from '../../shared/motion/bands';
+import { createBranchTable } from '../../shared/motion/branches';
 import { estimateSpeed } from '../../shared/motion/speed';
 import { scheduleTimes, type TimesProvider } from '../../shared/motion/times';
 import { newTrack, type PlaneFix, type Track } from '../../shared/motion/track';
@@ -288,5 +289,67 @@ describe('buildPlan reads the vehicle state', () => {
     expect(at(early, 1101, 1012)).toBeGreaterThan(50);
     // The service day a realtime startDate names begins at Zagreb midnight (CEST on this date).
     expect(serviceDayStartSec('20260916')).toBe(Date.UTC(2026, 8, 15, 22) / 1000);
+  });
+});
+
+describe('buildPlan holds a diverted tram at the next branch of its line (rail round 2)', () => {
+  // The diversion corridor of the matcher's tests: the own path runs the
+  // trunk east, variant A turns north at x = 1500. A tram the matcher names
+  // diverted (TramTrack.diverted), placed on variant A while still on the
+  // trunk, has an unknown way ahead of the branch: the plan runs to it and
+  // holds there until a fix says which way it went (line 11 on Sunday
+  // 20 Sep: the plan ran on along each depot variant past the junction
+  // while the tram turned, a 100 to 400 m correction). The same tram
+  // without the flag, or past the branch, is planned as before.
+  const corridor = syntheticNetwork({
+    edges: [
+      { from: 0, to: 1, pts: [{ x: 0, y: 0 }, { x: 1500, y: 0 }] },
+      { from: 1, to: 2, pts: [{ x: 1500, y: 0 }, { x: 2700, y: 0 }] },
+      { from: 1, to: 3, pts: [{ x: 1500, y: 0 }, { x: 1500, y: 1200 }] },
+    ],
+    routes: [{ id: '11', type: 0, paths: [
+      { id: 'own', direction: 0, edges: [0, 1], served: ['S1450'] },
+      { id: 'variantA', direction: 0, edges: [0, 2], served: ['S1450'] },
+    ] }],
+    stops: [{ id: 'S1450', edge: 0, s: 1450 }],
+  });
+  const m = createMatcher(corridor);
+  const branches = createBranchTable(corridor);
+  const onVariantA = (id: string, diverted: boolean): Track => {
+    const t = newTrack(id, '11', 'trip', 'tram');
+    const p = m.priorFor('variantA', '11', 0);
+    for (const [x, at] of [[1200, 1000], [1300, 1010], [1400, 1020]] as const) m.matchFix(t, fix(x, 0, at), p, null);
+    t.speed = estimateSpeed(t.fixes);
+    if (diverted) (t as { diverted?: true }).diverted = true;
+    return t;
+  };
+
+  it('runs to the branch and holds there, the platform before it still booked', () => {
+    const t = onVariantA('diverted', true);
+    buildPlan(t, corridor, eightMs, null, 1022, 1022, BANDS, { branches });
+    const knots = knotsOf(t);
+    expect(Math.max(...knots.map(([, s]) => s))).toBe(1500);
+    expect(knots.at(-1)).toEqual([90, 1500]);
+    expect(t.next?.stopId).toBe('S1450');
+    expect(at(t, 1112, 1022)).toBe(1500);
+  });
+
+  it('plans the same tram without the flag, or without a branch table, past the branch', () => {
+    const plain = onVariantA('plain', false);
+    buildPlan(plain, corridor, eightMs, null, 1022, 1022, BANDS, { branches });
+    expect(Math.max(...knotsOf(plain).map(([, s]) => s))).toBeGreaterThan(1500);
+    const noTable = onVariantA('no-table', true);
+    buildPlan(noTable, corridor, eightMs, null, 1022, 1022, BANDS);
+    expect(Math.max(...knotsOf(noTable).map(([, s]) => s))).toBeGreaterThan(1500);
+  });
+
+  it('plans a diverted tram past the last branch to the path\'s end as before', () => {
+    const t = newTrack('past-branch', '11', 'trip', 'tram');
+    const p = m.priorFor('variantA', '11', 0);
+    for (const [y, at] of [[100, 1000], [200, 1010], [300, 1020]] as const) m.matchFix(t, fix(1500, y, at), p, null);
+    t.speed = estimateSpeed(t.fixes);
+    (t as { diverted?: true }).diverted = true;
+    buildPlan(t, corridor, eightMs, null, 1022, 1022, BANDS, { branches });
+    expect(Math.max(...knotsOf(t).map(([, s]) => s))).toBeGreaterThan(1800);
   });
 });

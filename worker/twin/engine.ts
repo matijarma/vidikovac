@@ -5,6 +5,7 @@
 // loaded and rebuilds it when either changes; a tick without an engine
 // (no geometry loaded) still publishes free-plane plans (tick.ts).
 
+import { createBranchTable, type BranchTable } from '../../shared/motion/branches';
 import { createDwellTable, type DwellOverride, type DwellRecent, type DwellTable } from '../../shared/motion/dwell';
 import { createJunctionTable, type JunctionTable } from '../../shared/motion/junction';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
@@ -38,6 +39,9 @@ export interface Engine {
   /** Where the rails branch and how long a tram waits there (F11): the
    *  planner books the median wait at a crossing trams actually stop at. */
   junctions: JunctionTable;
+  /** Where each line's rails branch (rail round 2): the planner holds a
+   *  diverted tram at the next branch ahead instead of guessing its way. */
+  branches: BranchTable;
   matcher: Matcher;
   /** The path id each pattern of the index runs, resolved once here so a
    *  trip's join carries it and the matcher's prior and the timetable pick
@@ -82,6 +86,7 @@ export function createEngine(net: GraphNetwork, index: TripIndex, learned: Learn
     dwell: createDwellTable({ net, schedule, aggregates: learned, overrides: options.overrides ?? [], recent: dwellRecent }),
     dwellRecent,
     junctions: createJunctionTable({ net, aggregates: learned }),
+    branches: createBranchTable(net),
     matcher: createMatcher(net, { pathRanks }),
     patternPathIds: mapping.pathIdOf,
     pathRanks,

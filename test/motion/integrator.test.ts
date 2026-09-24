@@ -740,6 +740,42 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(later.s).toBeLessThan(667);
   });
 
+  it('re-seeds a held mark onto the new geometry it stands on when the plan window has moved ahead of it (rail round 2)', () => {
+    // Recorded 102204, 20 Sep 08:27:04: held 73 s at the Dubrava platform on
+    // the loop's joint edge, one metre from where 12_11 starts; the 12_11
+    // plan is 230 m along when it arrives, the window around it starts 110 m
+    // behind, and the mark landed on the window's edge, 110 m from where it
+    // stood, then raced on. The nearest compatible geometry behind the
+    // window is where the tram itself went: a one-metre re-seed and a
+    // catch-up along the rails.
+    const net = syntheticNetwork({
+      edges: [
+        { from: 0, to: 1, pts: straight(0, 1000) },
+        { from: 2, to: 3, pts: Array.from({ length: 25 }, (_, i) => ({ x: 1001 + 50 * i, y: 0 })) },
+      ],
+      routes: [{ id: '1', type: 0, paths: [
+        { id: 'arrival', direction: 0, edges: [0] },
+        { id: 'departure', direction: 1, edges: [1] },
+      ] }],
+      stops: [],
+    });
+    const integrator = createIntegrator(net);
+    integrator.update([pathFix('v', 'arrival', still(T0, 1000), 0, { held: true })], T0);
+    integrator.step(T0);
+    const t1 = T0 + 73_000;
+    const before = integrator.step(t1)[0];
+    expect(before.held).toBe(true);
+    expect(before.holding).not.toBe(true); // held by the twin's T8 rule, not waiting for a plan behind it
+    integrator.update([pathFix('v', 'departure', [[t1 - 11_000, 102], [t1 - 4_000, 166], [t1 + 56_000, 715]], 8, { held: false })], t1);
+    const after = integrator.step(t1)[0];
+    expect(after.path).toBe(1);
+    expect(after.s).toBeLessThan(2);
+    expect(Math.hypot(after.p.x - before.p.x, after.p.y - before.p.y)).toBeLessThan(2);
+    expect(after.lastSnapAt).toBe(t1);
+    const later = integrator.step(t1 + 1000)[0];
+    expect(later.s).toBeGreaterThan(after.s!); // catching up along the rails
+  });
+
   it('keeps the plan fold when a held mark is near a later return leg', () => {
     const net = syntheticNetwork({
       edges: [

@@ -25,12 +25,14 @@ describe('the /d/ no-room state', () => {
   });
 });
 
-// T2.6: Sada prefetches the MapLibre chunk while the phone is idle, once a
-// session exists, but never on the lightweight path. Proven by actually
-// executing the entry (it has no exports; every effect runs at import time,
-// exactly like entries/theme-init in test/app/boot.test.ts) with its heavy
-// collaborators mocked away, rather than by reading its source -- a
-// regression that reorders or misguards the call would fail this test.
+// T2.6, revised (lane/v-perf): the MapLibre chunk is 278 kB gzipped and 1.5 to 1.8 s of script on a 4x
+// throttled phone, so /d/ no longer fetches it on the first idle moment, in front of Sada's first answer. It
+// is asked for when Karta is likely: a pointer over or down on anything that opens Karta (its tab, Sada's map
+// band, a row that opens on the map), or one of them focused; Sada's band itself loads it once Sada has settled
+// (layers/grad-sada.ts), and the desk's Karta, which stands beside Sada, at once. Never on the lightweight path,
+// never while the device prefers the schema. Proven by executing the entry (it has no exports; every effect runs
+// at import time, exactly like entries/theme-init in test/app/boot.test.ts) with its heavy collaborators mocked
+// away, rather than by reading its source.
 stubLocalStorage();
 
 vi.mock('../../app/src/dashboard', () => ({
@@ -52,6 +54,8 @@ vi.mock('../../app/src/session', () => ({
 }));
 // The heavy MapLibre + worker module: this test only needs to see whether the
 // entry asks for it, never its real contents (a CSS import, WebGL, a worker).
+// Re-registered before every run of the entry (vi.doMock below), so each run counts its own loads.
+const maplibre = { loads: 0 };
 vi.mock('../../app/src/map/maplibre-entry', () => ({}));
 
 /** A fresh #dash and location, then a fresh copy of the entry module (it runs
@@ -62,51 +66,67 @@ async function importDashboardEntry(search: string, hash = '#room=r1&ticket=t1')
   location.search = search;
   location.hash = hash;
   vi.resetModules();
+  vi.doMock('../../app/src/map/maplibre-entry', () => { maplibre.loads += 1; return {}; });
   await import('../../app/src/entries/dashboard');
 }
 
-describe('idle prefetch of the MapLibre chunk from Sada (T2.6)', () => {
-  beforeEach(() => localStorage.removeItem('kajima:map-mode:v1'));
+describe('MapLibre is asked for when Karta is likely, not on the first idle moment (T2.6, lane/v-perf)', () => {
+  beforeEach(() => { localStorage.removeItem('kajima:map-mode:v1'); maplibre.loads = 0; });
   afterEach(() => {
     localStorage.removeItem('kajima:map-mode:v1');
     delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
     vi.restoreAllMocks();
   });
+  const settle = async (): Promise<void> => { for (let i = 0; i < 20; i += 1) await new Promise((done) => setTimeout(done, 0)); };
+  /** Something that opens Karta, as the page draws it: the tab, the band's link, a row's link. */
+  function karta(tag = 'button'): HTMLElement {
+    const el = document.createElement(tag);
+    el.dataset.layer = 'u-pokretu';
+    el.innerHTML = '<span class="inner">Karta</span>';
+    document.getElementById('dash')!.append(el);
+    return el;
+  }
 
-  it('schedules exactly one prefetch through requestIdleCallback, with a timeout, when not lightweight', async () => {
+  it('asks for nothing at load and schedules no idle prefetch', async () => {
     const idle = vi.fn();
     (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
-    await importDashboardEntry('?lagano=0');
-    expect(idle).toHaveBeenCalledTimes(1);
-    const [callback, options] = idle.mock.calls[0]!;
-    expect(options).toEqual({ timeout: 4000 });
-    // The scheduled work is the chunk import: calling it must not throw.
-    expect(() => (callback as () => void)()).not.toThrow();
-  });
-
-  it('schedules no prefetch at all on the lightweight path (?lagano=1)', async () => {
-    const idle = vi.fn();
-    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
-    await importDashboardEntry('?lagano=1');
-    expect(idle).not.toHaveBeenCalled();
-  });
-
-  it('does not idle-prefetch MapLibre when the device prefers the schema, and shares the store with the mounted dashboard', async () => {
-    const idle = vi.fn();
-    (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback = idle;
-    localStorage.setItem('kajima:map-mode:v1', 'schema');
-    await importDashboardEntry('?lagano=0');
-    expect(idle).not.toHaveBeenCalled();
-    expect(vi.mocked(mountDashboard).mock.lastCall?.[1].mapMode?.snapshot()).toBe('schema');
-  });
-
-  it('falls back to setTimeout(…, 2500) when the browser has no requestIdleCallback', async () => {
-    delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
     const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
     await importDashboardEntry('?lagano=0');
-    const scheduled = timeoutSpy.mock.calls.find(([, ms]) => ms === 2500);
-    expect(scheduled).toBeDefined();
-    expect(typeof scheduled?.[0]).toBe('function');
+    await settle();
+    expect(idle).not.toHaveBeenCalled();
+    expect(timeoutSpy.mock.calls.some(([, ms]) => ms === 2500)).toBe(false);
+    expect(maplibre.loads).toBe(0);
+  });
+
+  it.each(['pointerover', 'pointerdown', 'focusin'])('asks for it once on %s over anything that opens Karta, a child of it included', async (type) => {
+    await importDashboardEntry('?lagano=0');
+    const tab = karta();
+    document.getElementById('dash')!.append(Object.assign(document.createElement('button'), { textContent: 'Još' }));
+    document.querySelector('#dash button:not([data-layer])')!.dispatchEvent(new Event(type, { bubbles: true }));
+    await settle();
+    expect(maplibre.loads, 'a control that does not open Karta asks for nothing').toBe(0);
+    tab.querySelector('.inner')!.dispatchEvent(new Event(type, { bubbles: true }));
+    await settle();
+    expect(maplibre.loads).toBe(1);
+    tab.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await settle();
+    expect(maplibre.loads).toBe(1);
+  });
+
+  it('asks for nothing on the lightweight path (?lagano=1)', async () => {
+    await importDashboardEntry('?lagano=1');
+    karta().dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await settle();
+    expect(maplibre.loads).toBe(0);
+  });
+
+  it('asks for nothing while the device prefers the schema, and shares the store with the mounted dashboard', async () => {
+    localStorage.setItem('kajima:map-mode:v1', 'schema');
+    await importDashboardEntry('?lagano=0');
+    expect(vi.mocked(mountDashboard).mock.lastCall?.[1].mapMode?.snapshot()).toBe('schema');
+    karta('a').dispatchEvent(new Event('pointerover', { bubbles: true }));
+    await settle();
+    expect(maplibre.loads).toBe(0);
   });
 });
 

@@ -49,9 +49,10 @@ describe('the rail graph sentences (T-rail, D3 read-through)', () => {
   const izvori = read('docs/izvori.md');
   const arh = read('docs/arhitektura.md');
   it('count the network in the right grammatical number', () => {
-    expect(izvori).toContain('(tri čvora, 345 bridova)');
-    expect(izvori).toContain('154 linije, 345 bridova, 591 323 bajta.');
-    expect(izvori).not.toMatch(/345 brida|591 323 bajtova/);
+    // Rail round 2 (24 Sep): the Zapruđe connector and the piece its loops cut (347 edges, 591 814 B).
+    expect(izvori).toContain('(tri čvora, 347 bridova)');
+    expect(izvori).toContain('154 linije, 347 bridova, 591 814 bajtova.');
+    expect(izvori).not.toMatch(/347 brida|591 814 bajta\b/);
   });
   it('name line 1 and the last platform instead of a pronoun standing for them', () => {
     expect(izvori).toContain('bez kojeg se staze linije 1 nisu mogle provesti do Zapadnog kolodvora');

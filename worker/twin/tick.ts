@@ -250,6 +250,7 @@ export function runTick(input: TickInput): TickResult {
       buildPlan(track, engine.net, engine.times, next, nowSec, headerSec, bands, {
         dwell: dwellPlanner,
         junctions,
+        branches: engine.branches,
         publishedArcS: publishedArcAt(input.state.published[track.id], track, headerSec),
         counts: planCounts[track.kind],
       });

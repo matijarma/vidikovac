@@ -374,7 +374,12 @@ describe('own-path return and service eligibility', () => {
     matcher.matchFix(track, fix(600, 90, 1000), matcher.priorFor(null, '9', 0), null);
     track.routeId = '1';
     matcher.matchFix(track, fix(600, 90, 1010), matcher.priorFor('1_0', '1', 0), null);
-    expect(track.match.pathIdx).toBe(pathIdx('1_1')); // not a 90 m stray-fix hold on the prior
+    // Not a 90 m stray-fix hold on the prior: re-derived at once. Standing,
+    // it is not read onto 1_1 either, the other direction's track (rail
+    // round 2: that needs forward movement along it); it is unplaced on it.
+    expect(track.match.pathIdx).toBeNull();
+    expect(track.match.edge).not.toBeNull();
+    expect(track.offGraph).toBe(false);
     expect(track.offPathCount).toBe(0);
   });
 
@@ -418,7 +423,11 @@ describe('own-path return and service eligibility', () => {
     track.match = { pathIdx: pathIdx('1_1'), shapeIdx: shapeIdx('1_1'), edge: 5, s: 900, residual: 0 };
     track.fixes.push(fix(600, 60, 1000));
     m.matchFix(track, fix(700, 60, 1010), prior, null, { runningServices: new Set(['wd']) });
-    expect(track.match.pathIdx).toBe(pathIdx('1_1'));
+    expect(track.match.pathIdx).not.toBe(prior.pathIdx);
+    // Moving east against 1_1, the westbound track, with the eastbound one
+    // 60 m away: unplaced on 1_1's edge (rail round 2), never the bad prior.
+    expect(track.match.pathIdx).toBeNull();
+    expect(track.match.edge).not.toBeNull();
   });
 
   it.each([0, 400])('discards a persisted foreign match before an off-graph noise hold (y = %d)', (y) => {
@@ -614,7 +623,15 @@ describe('terminal placement continuity', () => {
     m.matchFix(t, fix(1000, 58, 1000), p, null);
     m.matchFix(t, fix(1000, 90, 1010), p, null);
     m.matchFix(t, fix(1006, 90, 1000 + age), p, null);
-    expect(n.paths[t.match.pathIdx!].id).toBe(age <= EVICT_S ? 'diversion' : 'opposite');
+    // Past the report lifetime the approach is forgotten, and two rails 6 m
+    // apart running against each other with no movement along either leave
+    // the direction unknown: the tram stays unplaced until it moves (rail
+    // round 2), instead of the nearer rail winning by centimetres.
+    if (age <= EVICT_S) expect(n.paths[t.match.pathIdx!].id).toBe('diversion');
+    else {
+      expect(t.match.pathIdx).toBeNull();
+      expect(t.offGraph).toBe(false);
+    }
   });
 
   it('holds a truncated trip endpoint instead of adopting the arrival variant', () => {
@@ -858,6 +875,9 @@ describe('terminal placement continuity', () => {
     const m = createMatcher(n);
     const t = newTrack('return-at-bend', '1', 'trip', 'tram');
     const p = m.priorFor('departure', '1', 0);
+    // The adopted rail runs the other direction id: it takes 60 m of movement
+    // along it (rail round 2) before it is adopted at all.
+    m.matchFix(t, fix(-160, -100, 990), p, null);
     m.matchFix(t, fix(-100, -100, 1000), p, null);
     expect(n.paths[t.match.pathIdx!].id).toBe('adopted');
     m.matchFix(t, fix(-70, -65, 1010), p, null);
@@ -1113,6 +1133,7 @@ describe('ranked own-route adoption', () => {
     const track = newTrack('edge-first', '7', 'trip', 'tram');
     track.priorPath = prior.pathIdx;
     track.match = { pathIdx: null, shapeIdx: null, edge: 0, s: 0, residual: 0 };
+    track.fixes.push(fix(1440, 0, 990)); // 60 m of movement along edge 1: the other direction's path may be adopted (rail round 2)
     m.matchFix(track, fix(1500, 0, 1000), prior, null, ctx);
     expect(track.match.pathIdx).toBe(1); // direction 1 and only one trip
   });
@@ -1196,5 +1217,243 @@ describe('matchFix on a circuit', () => {
     const shape = loop.shapes[c.match.shapeIdx!];
     expect(shape.id).toBe('B207');
     expect(c.fixes.map((f) => f.arc!.s)).toEqual([expect.closeTo(2706 + 700, 0), expect.closeTo(2706 + 800, 0), expect.closeTo(2706 + 900, 0)]);
+  });
+});
+
+describe('an opposite-direction variant needs movement evidence (rail round 2)', () => {
+  // Two tracks of one line 70 m apart: 'east' (direction 0) at y = 0 and
+  // 'west' (direction 1) at y = 70. Recorded 20 and 21 Sep: a tram standing
+  // 57 to 65 m off its own path was re-derived onto the opposite-direction
+  // variant a few metres away (102259 6_2 -> 6_25 at Frankopanska, 102270
+  // path:17:1 -> path:17:0, 102408 5_37 at Branimirova tržnica), a direction
+  // flip 350 to 460 m from every terminal on no movement evidence at all. D4
+  // demands FOLD_MOVE_M against the rail before it turns a tram; adopting the
+  // other direction from off the rails now demands the same forward metres
+  // along it. The trip's own path stays adoptable as before.
+  const n = syntheticNetwork({
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1500) },
+      { from: 2, to: 3, pts: straight(1500, 0, 70) },
+    ],
+    routes: [{ id: '1', type: 0, paths: [
+      { id: 'east', direction: 0, edges: [0] },
+      { id: 'west', direction: 1, edges: [1] },
+    ] }],
+    stops: [],
+  });
+  const m = createMatcher(n);
+  const reasonOf = (t: ReturnType<typeof newTrack>) => (t as { unplacedReason?: string }).unplacedReason;
+
+  it('stays unplaced while standing beside the other track, and adopts it once it moves along it', () => {
+    const t = newTrack('standing', '1', 'trip', 'tram');
+    const p = m.priorFor('east', '1', 0);
+    m.matchFix(t, fix(700, 0, 1000), p, null);
+    m.matchFix(t, fix(700, 65, 1010), p, null); // one stray fix: noise, still on its path
+    expect(n.paths[t.match.pathIdx!].id).toBe('east');
+    m.matchFix(t, fix(700, 65, 1020), p, null); // two: a detour, but no movement along the other track
+    expect(t.match.pathIdx).toBeNull();
+    expect(t.match.edge).toBe(1);
+    expect(t.offGraph).toBe(false);
+    expect(reasonOf(t)).toBe('diversion');
+    m.matchFix(t, fix(680, 65, 1030), p, null); // 20 m west: under FOLD_MOVE_M
+    expect(t.match.pathIdx).toBeNull();
+    m.matchFix(t, fix(620, 65, 1040), p, null); // 60 m west along 'west': adopted
+    expect(n.paths[t.match.pathIdx!].id).toBe('west');
+    expect(t.match.s).toBeCloseTo(880, 0);
+    expect(reasonOf(t)).toBeUndefined();
+  });
+
+  it('never adopts the other track while moving against it', () => {
+    const t = newTrack('against', '1', 'trip', 'tram');
+    const p = m.priorFor('east', '1', 0);
+    m.matchFix(t, fix(700, 0, 1000), p, null);
+    m.matchFix(t, fix(700, 65, 1010), p, null);
+    m.matchFix(t, fix(700, 65, 1020), p, null);
+    expect(t.match.pathIdx).toBeNull();
+    for (const [i, x] of [760, 830, 900].entries()) {
+      m.matchFix(t, fix(x, 65, 1030 + i * 10), p, null); // east, against 'west'
+      expect(t.match.pathIdx).toBeNull();
+      expect(t.offGraph).toBe(false);
+    }
+  });
+
+  it('places the trip\'s own path at once whatever the movement, and an unknown trip by the rails alone', () => {
+    const own = newTrack('own', '1', 'trip', 'tram');
+    m.matchFix(own, fix(700, 65, 1000), m.priorFor('west', '1', 1), null);
+    expect(n.paths[own.match.pathIdx!].id).toBe('west');
+    const unknown = newTrack('unknown', '1', 'trip', 'tram');
+    const noPrior = m.priorFor(null, '1', null);
+    expect(noPrior.pathIdx).toBeNull();
+    m.matchFix(unknown, fix(700, 65, 1000), noPrior, null);
+    expect(n.paths[unknown.match.pathIdx!].id).toBe('west');
+  });
+});
+
+describe('a terminus loop taken once the tram has left the arrival along it (rail round 2)', () => {
+  // Mihaljevac, 102301 07:04:48 on 20 Sep: the tram left 15_2's end along
+  // the loop and ZET named the next trip (15_1) only when it was 55 m past
+  // the end, so the arrival no longer fitted, the loop was not offered, and
+  // the re-derivation adopted 15_7, a variant of the other direction that
+  // runs the loop's rails; the hand-over to 15_1 at the far platform was
+  // then a 108 m re-seed (12 a day on Sunday, 9 on Monday). A tram on the
+  // loop's own edges, beyond the arrival's last one, is on the loop.
+  const n = syntheticNetwork({
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1000) },
+      { from: 1, to: 2, pts: [{ x: 1000, y: 0 }, { x: 1000, y: 200 }] },
+      { from: 2, to: 3, pts: [{ x: 1000, y: 200 }, { x: 1080, y: 200 }] },
+      { from: 3, to: 4, pts: [{ x: 1080, y: 200 }, { x: 2080, y: 200 }] },
+    ],
+    routes: [{ id: '1', type: 0, paths: [
+      { id: 'arrival', direction: 0, edges: [0] },
+      { id: 'loop', direction: -1, edges: [0, 1, 2] },
+      { id: 'siding', direction: 1, edges: [1] },
+      { id: 'departure', direction: 1, edges: [2, 3] },
+    ] }],
+    stops: [],
+  });
+
+  it('is the placement when the next trip is named with the tram already on the loop\'s middle edge', () => {
+    const m = createMatcher(n);
+    const t = newTrack('late-name', '1', 'old-trip', 'tram');
+    const arrival = m.priorFor('arrival', '1', 0);
+    for (const [i, x] of [800, 900, 1000].entries()) m.matchFix(t, fix(x, 0, 1000 + i * 10), arrival, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(1000, 100, 1030), p, null); // 100 m past the arrival's end, on the loop's middle edge
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    expect(t.match.s).toBeCloseTo(1100, 0);
+    m.matchFix(t, fix(1000, 150, 1040), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1040, 200, 1050), p, null); // the shared last edge: still the loop
+    expect(n.paths[t.match.pathIdx!].id).toBe('loop');
+    m.matchFix(t, fix(1100, 200, 1060), p, null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('departure');
+    expect(t.match.s).toBeCloseTo(100, 0);
+  });
+
+  it('is not taken while the tram is still on the arrival\'s own edge', () => {
+    const m = createMatcher(n);
+    const t = newTrack('approaching', '1', 'old-trip', 'tram');
+    const arrival = m.priorFor('arrival', '1', 0);
+    m.matchFix(t, fix(700, 0, 1000), arrival, null);
+    t.tripId = 'new-trip';
+    const p = m.priorFor('departure', '1', 1);
+    m.matchFix(t, fix(800, 0, 1010), p, null); // named 200 m before the end: still arriving
+    expect(n.paths[t.match.pathIdx!].id).toBe('arrival');
+  });
+});
+
+describe('a diverted tram (rail round 2)', () => {
+  // Line 11 on Sunday 20 September: works on Ilica sent every tram round
+  // Republike Austrije, Savska and Frankopanska, rails that only the depot
+  // variants of the line draw, so each tram left its own path at Trg dr. F.
+  // Tuđmana, hopped between two depot variants and rejoined its path at
+  // Frankopanska, six same-trip path changes a round trip and 260 a day.
+  // The matcher now names the state: a tram placed off its own path mid-line
+  // (beyond TERMINUS_NEAR_M of every terminal platform, beside the path's
+  // interior) on other rails of its line, or on no rails at all, is
+  // `diverted` until it is back on its path, on a terminus loop, off the
+  // graph, or on another trip. The grader reads the flag to count the hops
+  // of a diversion apart from a wrong turn.
+  //
+  // The corridor: the own path runs the trunk east (y = 0, x 0 to 3900); the
+  // diversion turns north at x = 1500 (variant A), east along y = 1200
+  // (variant B), south at x = 2700 (variant C) and rejoins the trunk there.
+  const n = syntheticNetwork({
+    edges: [
+      { from: 0, to: 1, pts: straight(0, 1500) },
+      { from: 1, to: 2, pts: straight(1500, 2700) },
+      { from: 2, to: 3, pts: straight(2700, 3900) },
+      { from: 1, to: 4, pts: [{ x: 1500, y: 0 }, { x: 1500, y: 1200 }] },
+      { from: 4, to: 5, pts: straight(1500, 2700, 1200) },
+      { from: 5, to: 2, pts: [{ x: 2700, y: 1200 }, { x: 2700, y: 0 }] },
+    ],
+    routes: [{ id: '11', type: 0, paths: [
+      { id: 'own', direction: 0, edges: [0, 1, 2] },
+      { id: 'variantA', direction: 0, edges: [0, 3] },
+      { id: 'variantB', direction: 0, edges: [4] },
+      { id: 'variantC', direction: 0, edges: [5, 2] },
+      { id: 'short', direction: 0, edges: [2] },
+    ] }],
+    stops: [{ id: 'T0', edge: 0, s: 0, terminal: true }, { id: 'T3900', edge: 2, s: 1200, terminal: true }],
+  });
+  const divertedOf = (t: ReturnType<typeof newTrack>) => (t as { diverted?: true }).diverted;
+
+  it('is set when the tram leaves its path mid-line onto other rails of its line, kept through the hops, and cleared on the return', () => {
+    const m = createMatcher(n);
+    const t = newTrack('diverted', '11', 'trip', 'tram');
+    const p = m.priorFor('own', '11', 0);
+    let at = 1000;
+    const go = (x: number, y: number) => m.matchFix(t, fix(x, y, (at += 10)), p, null);
+    for (const x of [1300, 1400, 1500]) go(x, 0);
+    expect(n.paths[t.match.pathIdx!].id).toBe('own');
+    expect(divertedOf(t)).toBeUndefined();
+    go(1500, 80); // one stray fix
+    expect(n.paths[t.match.pathIdx!].id).toBe('own');
+    expect(divertedOf(t)).toBeUndefined();
+    go(1500, 160); // a detour: variant A, and the diversion starts
+    expect(n.paths[t.match.pathIdx!].id).toBe('variantA');
+    expect(divertedOf(t)).toBe(true);
+    for (const y of [400, 700, 1000, 1200]) go(1500, y);
+    go(1600, 1200);
+    go(1700, 1200); // hop onto variant B: still diverted
+    expect(n.paths[t.match.pathIdx!].id).toBe('variantB');
+    expect(divertedOf(t)).toBe(true);
+    for (const x of [2000, 2300, 2600, 2700]) go(x, 1200);
+    go(2700, 1120);
+    go(2700, 1040); // hop onto variant C
+    expect(n.paths[t.match.pathIdx!].id).toBe('variantC');
+    expect(divertedOf(t)).toBe(true);
+    for (const y of [700, 400, 100]) go(2700, y);
+    go(2760, 0); // back on the trunk, which the own path runs: the return needs FOLD_MOVE_M along it
+    go(2840, 0);
+    expect(n.paths[t.match.pathIdx!].id).toBe('own');
+    expect(divertedOf(t)).toBeUndefined();
+    go(2940, 0);
+    expect(divertedOf(t)).toBeUndefined();
+  });
+
+  it('is set when the tram leaves its rails altogether mid-line, and not by a terminus turn', () => {
+    const m = createMatcher(n);
+    const off = newTrack('off-rails', '11', 'trip', 'tram');
+    const p = m.priorFor('own', '11', 0);
+    m.matchFix(off, fix(800, 0, 1000), p, null);
+    m.matchFix(off, fix(800, 100, 1010), p, null);
+    m.matchFix(off, fix(800, 120, 1020), p, null);
+    expect(off.match.pathIdx).toBeNull();
+    expect((off as { unplacedReason?: string }).unplacedReason).toBe('diversion');
+    expect(divertedOf(off)).toBe(true);
+
+    const turning = newTrack('turning', '11', 'trip', 'tram');
+    m.matchFix(turning, fix(100, 0, 1000), p, null);
+    m.matchFix(turning, fix(60, 100, 1010), p, null);
+    m.matchFix(turning, fix(30, 110, 1020), p, null);
+    expect(turning.match.pathIdx).toBeNull();
+    expect((turning as { unplacedReason?: string }).unplacedReason).toBe('terminus');
+    expect(divertedOf(turning)).toBeUndefined();
+  });
+
+  it('is not set for a trip named before its path begins, and is cleared by a trip change', () => {
+    // Dubrava, both days: a through service renamed to the short working
+    // before the platform it starts at, on shared rails. The tram is placed on
+    // the through variant with its own path's start ahead of it: not diverted.
+    const m = createMatcher(n);
+    const early = newTrack('early-name', '11', 'trip', 'tram');
+    const short = m.priorFor('short', '11', 0);
+    m.matchFix(early, fix(2000, 0, 1000), short, null);
+    m.matchFix(early, fix(2100, 0, 1010), short, null);
+    expect(n.paths[early.match.pathIdx!].id).toBe('own');
+    expect(divertedOf(early)).toBeUndefined();
+
+    const t = newTrack('renamed', '11', 'trip', 'tram');
+    const p = m.priorFor('own', '11', 0);
+    for (const [i, y] of [0, 80, 160, 300].entries()) m.matchFix(t, fix(1500, y, 1000 + i * 10), p, null);
+    expect(divertedOf(t)).toBe(true);
+    t.tripId = 'next-trip';
+    m.matchFix(t, fix(1500, 400, 1040), m.priorFor('variantA', '11', 0), null);
+    expect(n.paths[t.match.pathIdx!].id).toBe('variantA');
+    expect(divertedOf(t)).toBeUndefined();
   });
 });

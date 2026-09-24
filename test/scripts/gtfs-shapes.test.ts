@@ -442,7 +442,9 @@ describe('the committed artefact', () => {
   // (thirty loops, ten cuts): 584,224 B raw, 137,084 B gzip; the pins stand.
   // Decision 25 adds fourteen terminus connectors (seventy-one loops, the
   // set-back synthetic paths cut a lead's length past their platforms): 591,323 B raw,
-  // 138,400 B gzip, 1.2 % and 1.0 % more; the pins stand.
+  // 138,400 B gzip, 1.2 % and 1.0 % more; the pins stand. Rail round 2 adds
+  // the Zapruđe turning loop's connector (seventy-five loops): 591,814 B raw,
+  // 138,559 B gzip; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -473,8 +475,9 @@ describe('the committed artefact', () => {
     // top of the Mihaljevac loop, a joint in line 12's Dubrava loop) and the
     // ten pieces the terminus loops cut off their long boundary edges; decision
     // 25: plus fourteen terminus connectors and the pieces the seventy-one loops
-    // and the set-back synthetic paths cut off their boundary edges.
-    expect(net.edges).toHaveLength(345);
+    // and the set-back synthetic paths cut off their boundary edges; rail
+    // round 2: plus the Zapruđe connector and the piece its loops cut.
+    expect(net.edges).toHaveLength(347);
     // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
     // none. The terminus loops are counted in their own test below.
     expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
@@ -591,9 +594,10 @@ describe('the committed artefact', () => {
     const connectors = overrides.connectors as { from: [number, number]; to: [number, number]; via?: [number, number]; routes: string[]; reason: string }[];
     // Three joints (Glavni kolodvor, the Mihaljevac loop's top, a Dubrava
     // joint) and, per decision 25, the Tuđmana turn for line 1 and thirteen
-    // terminus turns the shapes stop short of.
-    expect(connectors.length).toBe(17);
-    expect(connectors.filter((c) => c.via).length).toBe(9);
+    // terminus turns the shapes stop short of; rail round 2 adds the Zapruđe
+    // turning loop east of the drawn tracks (via its stand).
+    expect(connectors.length).toBe(18);
+    expect(connectors.filter((c) => c.via).length).toBe(10);
     const near = (p: { x: number; y: number }, point: [number, number]) => {
       const [lon, lat] = toLonLat(p);
       const a = toMetres(lon, lat);
