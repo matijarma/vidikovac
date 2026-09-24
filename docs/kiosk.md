@@ -23,7 +23,7 @@ upute o pretraživanju dodirom. Ukratko:
 - Uz kartu stoji popis „U blizini · 2 km · ~15 min” (naslov ispisuje
   izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 2 km):
   najviše tri polaska, plavo „za N min” za praćeno vozilo i sivi sat za vozni
-  red, zatim redovi s vremenom i na kraju jedan redak „uvijek”.
+  red, zatim retci s vremenom i na kraju jedan redak „uvijek”.
 - Ispod popisa trajno je rezerviran QR s uvodom
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
   ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, na
@@ -73,8 +73,8 @@ rute `/api/admin/*` i `/stats`.
    stranici odabrati „Otvori gradski zaslon” (stranica `/kiosk/`).
 2. U polje **Adresa ili stajalište** upisati ulicu ili ime stajališta, ili
    polje ostaviti prazno. Već nakon dva slova polje predlaže tramvajska i
-   autobusna stajališta te ulice; duga ulica nudi se po dijelovima, uz
-   stajališta te ulice. Upisani kućni broj ostaje zapisan kao tekst, jer
+   autobusna stajališta, kao i ulice; duga ulica nudi se po dijelovima, svaki
+   dio uz jedno od stajališta duž ulice. Upisani kućni broj ostaje zapisan kao tekst, jer
    izvanmrežni popis ulica (`/data/streets-geo.json`, podaci OpenStreetMap,
    licenca ODbL 1.0) nema kućnih brojeva. Odabrano stajalište postaje mjesto
    zaslona. Kad je odabrana ulica, mjesto postaje najbliže tramvajsko
@@ -105,7 +105,7 @@ rute `/api/admin/*` i `/stats`.
    nema gumba ni za postavke ni za temu. Ploča se zatvara tipkom Esc, gumbom
    ili nakon 90 sekundi bez dodira i ne otvara se dok traje otključana sesija.
 
-   Redovi su *Mjesto* (**Promijeni** otvara isto polje
+   Retci su *Mjesto* (**Promijeni** otvara isto polje
    „Adresa ili stajalište” i gumb **Cijeli grad** za povratak na prozor
    cijeloga grada), *Kadar* („Kadar: 6 stajališta odavde”, redom 4, 6 i 8),
    *Prikaz* („Prikaz: karta” ili „Prikaz: shema”), *Tema*, *Ritam*
@@ -176,8 +176,8 @@ skeniranja. Karta zauzima cijeli lijevi stupac. Zaslon postavljen na cijeli
 grad (polje „Adresa ili stajalište” ostavljeno prazno) otvara kartu na
 prozoru cijeloga grada, od Črnomerca do Maksimira i od Save do Mirogoja;
 zaslon s izabranim mjestom otvara kadar oko tog mjesta, opisan u sljedećem
-odlomku. Na prozoru cijeloga grada su tramvajska mreža u neutralnom sivom,
-ispod svega ostaloga, pločice tramvaja u brendiranoj plavoj, prsten i ime
+odlomku. Na prozoru cijeloga grada su tramvajska mreža u neutralnoj sivoj boji,
+ispod svega ostaloga, pločice tramvaja u plavoj boji aplikacije, prsten i ime
 mjesta zaslona bez ijednoga drugog stajališta, BAJS stanice s barem jednim
 biciklom kao male tirkizne točke bez broja, zatvorene prometnice, prsten
 dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
@@ -185,9 +185,9 @@ ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
 mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
 imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
 jer u izvanrednom stanju oznaka je ta koja govori, a ne ime -- a od
-stajališta imenuje samo tramvajska čvorišta: ona na kojima staje tramvaj i
+stajališta imenuje samo tramvajska čvorišta, odnosno stajališta na kojima staje tramvaj i
 na kojima neka vožnja počinje ili završava (`terminal` iz mrežnog
-artefakta), njih 29 u gradu i dvanaest na zadnjoj snimci; prozor cijeloga
+artefakta), njih 29 u gradu i 12 na zadnjoj snimci; prozor cijeloga
 grada na zaslonu ne imenuje nijedno stajalište osim mjesta zaslona. Broj linija nije
 mjerilo: 111 od 114 tramvajskih stajališta vidi dvije ili više tramvajskih
 linija, pa bi "dva tramvaja" imenovalo gotovo sve. Od 13,5 naviše sva se
@@ -208,8 +208,8 @@ popisa „U blizini” i naslov tog popisa čitaju isti izmjereni broj, pa naslo
 ispisuje izmjerenu udaljenost i vrijeme hoda, na primjer
 „U blizini · 2 km · ~15 min”.
 Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
-dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, siv s nulom
-kad bicikala nema, a siv i bez broja kad broj nije poznat ili stanica ne
+dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, a kad
+bicikala nema, mala tirkizna točka bez broja; siv disk bez broja kad broj nije poznat ili stanica ne
 iznajmljuje, nikad s upitnikom; kulturna mjesta pojavljuju se samo s
 programom večeras, i to s imenom; od stajališta imenuju se samo mjesto
 zaslona i tramvajska čvorišta unutar polumjera kadra, a ulice se ne imenuju.
@@ -235,7 +235,7 @@ Ploča prekriva popis „U blizini” unutar okvira popisa, a drugi dodir
 zamjenjuje prvi. Zaslon se sam vraća nakon 60 sekundi, kad ZET prestane
 slati položaje vozila dok je ploča otvorena, kad počne prezentacija ili kad
 se promijeni stanje zaslona. Tijekom prezentacije i u Postavkama dodir ne
-otvara ništa. U prikazu sheme ne reagira dodir na kartu, a redovi popisa i
+otvara ništa. U prikazu sheme ne reagira dodir na kartu, a retci popisa i
 ljekarna u sigurnosnoj traci otvaraju se i dalje. Pretrage i izbornika nema,
 a sadržaj se može ponijeti samo skeniranjem.
 
@@ -244,7 +244,7 @@ ispisuje polumjer kruga i vrijeme hoda, na primjer
 „U blizini · 2,2 km · ~16 min”. Popis je jedna vremenska os oko mjesta. Prvo
 idu polasci, najviše tri: plavo „za N min” za praćeno vozilo u idućih deset
 minuta, a sivi sat za vozni red i za svaki kasniji polazak. Zatim slijede
-redovi s vremenom: kraj zatvaranja prometnice, događanje s mjestom
+retci s vremenom: kraj zatvaranja prometnice, događanje s mjestom
 održavanja i tramvajem do mjesta događanja, sljedeći zalazak ili izlazak
 sunca (nikad oba), večerašnji zadnji polasci kao jedan redak, četiri sata
 unaprijed, od 22 sata prvi jutarnji polazak linije koja sljedeća kreće, sve
@@ -254,15 +254,15 @@ stoji jedan redak „uvijek”: priča o imenu mjesta ili zaštićena građevina
 blizini, naizmjence svakih 20 minuta, a od 22 do 6 sati dežurna ljekarna
 24/7. Nijedan redak ne nosi napomenu o izvoru, svježini ili pouzdanosti:
 boja razlikuje praćeno vozilo od voznog reda, a izvori su na telefonu i na
-`/izvori`. Na popisu su samo cijeli redovi, onoliko koliko ih stane;
+`/izvori`. Na popisu su samo cijeli retci, onoliko koliko ih stane;
 najmanja visina retka, od 64 do 92 piksela, ovisi o broju stavki, pa manje
 stavki znači veće retke, a redak s duljim tekstom viši je. Oznaka linije u
 retku polaska velika je koliko i naslov retka: najmanje 40 piksela, a u
 tamnoj temi 44. Ništa se ne reže trotočjem: predug redak ispisuje kraći
-cjeloviti naziv iz izvora ili se prelama u cijelosti; kad redovi ne stanu, s
-popisa izlaze cijeli redovi, najprije najkasniji, a prvi redak iza polazaka
+cjeloviti naziv iz izvora ili se prelama u cijelosti; kad retci ne stanu, s
+popisa izlaze cijeli retci, najprije najkasniji, a prvi redak iza polazaka
 tek nakon kasnijih polazaka. Redak zadnjih polazaka, redak prvog jutarnjeg
-polaska i jedan redak „uvijek” zbog prostora nikad ne izlaze. Redovi se
+polaska i jedan redak „uvijek” zbog prostora nikad ne izlaze. Retci se
 mjere u skrivenom popisu iste širine, a na vidljivi popis stiže samo konačni
 izbor. Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak umeće
 se jednom, odmah na svoje mjesto u vremenu, i ondje se postupno pojavi;
@@ -326,7 +326,7 @@ Svako od šest područja ima raspored za gledanje s udaljenosti.
 Tekst pretrage, spremljeni popisi i koordinate uređaja ne prenose se.
 
 Tekst se ne reže trotočjem ni u šest rasporeda za gledanje s udaljenosti:
-s popisa izlaze cijeli redovi, najprije posljednji, a opis prognoze ili
+s popisa izlaze cijeli retci, najprije posljednji, a opis prognoze ili
 upozorenja gubi cijele rečenice od kraja ili izostaje u cijelosti.
 
 Nova osoba koja skenira ne prekida postojeći prikaz. Ako želi prikazati
@@ -465,7 +465,7 @@ poslužuju se s iste domene. Preglednik radi prikaza karte ne poziva
 `tile.openstreetmap.org`. Privatni R2 spremnik `vidikovac-maps` drži regionalni
 arhiv; podrijetlo i licence su u `app/public/maps/README.md`.
 
-Vjerodajnice postavljenog zaslona čuvaju se u njegovu pregledniku. One nisu kod
+Vjerodajnice postavljenog zaslona čuvaju se u pregledniku samog zaslona. Nisu kod
 za goste i ne šalju se e-poštom, ne stavljaju u snimke zaslona ni repozitorij.
 Brisanje podataka preglednika uklanja lokalnu postavu. Za trajni zaslon koristiti
 običan profil: privatni prozor pri zatvaranju briše postavu.

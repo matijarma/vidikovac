@@ -97,8 +97,9 @@ culture tonight), never a caveat, and no legend stands where no map is drawn
 stops around it (Kadar: 4, 6 or 8 "stajališta odavde", default 6), its radius
 measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
-disc carrying its count (grey at zero, grey and blank when the count is
-unknown, never "?", in a grey that recedes behind the teal in both themes),
+disc carrying its count (a station with no bike a small teal dot without a
+number; grey and blank when the count is unknown, never "?", in a grey that
+recedes behind the teal in both themes),
 venues only with a programme tonight and named, and of the stops only the
 tram interchanges named besides the place itself; nothing outside the frame's
 radius is drawn as a stop, a disc, a venue or a name. There is
