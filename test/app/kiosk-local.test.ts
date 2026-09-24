@@ -838,12 +838,12 @@ describe('the kiosk\u2019s whole-city window', () => {
   it('hands the whole-city window no event square, and a framed place its squares', () => {
     const located = [
       item('dogadanja', 'kvartovske:e2', 'event', 'Koncert na trgu', { at: new Date(NOW + 3_600_000).toISOString(), dateBasis: 'event', geo: { type: 'Point', coordinates: [15.9772, 45.8128] }, data: { source: 'kvartovske', venue: 'Trg', precision: 'time' } }),
-      item('dogadanja', 'komunalne:w1', 'event', 'Radovi', { dateBasis: 'change', geo: { type: 'Point', coordinates: [15.975, 45.811] }, data: { source: 'komunalne', phase: 'Radovi u tijeku' } }),
+      item('dogadanja', 'komunalne:w1', 'event', 'Radovi', { dateBasis: 'updated', geo: { type: 'Point', coordinates: [15.975, 45.811] }, data: { source: 'komunalne', phase: 'Radovi u tijeku' } }),
     ];
     const snapshots = { ...base.snapshots, dogadanja: snap('dogadanja', [...EVENTS, ...located]) };
     const city = stub();
     requestKioskMap(city.maps, { ...base, snapshots }, city.adapter);
-    const cityPoints = (city.factory.mock.calls[0]![0] as { points: { place?: string; id: string }[]; prozor: { placeTitles?: boolean } });
+    const cityPoints = (city.factory.mock.calls[0]![0] as { points: { place?: string; id: string; props?: Record<string, unknown> }[]; prozor: { placeTitles?: boolean } });
     expect(cityPoints.prozor.placeTitles).toBe(false);
     expect(cityPoints.points.filter((p) => p.place === 'event')).toEqual([]);
     expect(cityPoints.points.some((p) => p.place === 'city' && p.props?.category === 'bikes')).toBe(true);
