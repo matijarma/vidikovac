@@ -379,6 +379,11 @@ export interface CityMapOptions {
   points?: MapPoint[];
   lines?: MapLine[];
   reducedMotion?: boolean;
+  /** A still map (the phone's Sada band, lane p-map2): the vehicles are drawn
+   *  where the model places them at each update() -- the data's own moment --
+   *  and never animated between two, so the map draws on news (an update, a
+   *  camera or style change) and its loop parks. A live map glides. */
+  still?: boolean;
   /** The network artefact for the motion model (route geometry to snap
    *  to) and for the drawn network and stops. Absent, every vehicle
    *  free-planes -- still the model's motion, never a jump onto a report --
@@ -725,6 +730,12 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   const doc = deps.documentRef ?? (typeof document === 'undefined' ? undefined : document);
   const interactive = options.interactive !== false;
   const reduced = options.reducedMotion === true;
+  const still = options.still === true;
+  /** A still map's clock (CityMapOptions.still): the model is stepped to the last update's moment, never beyond. */
+  let stillAt = now();
+  const stepAt = (t: number): number => (still ? stillAt : t);
+  /** The data a still map last drew (update()), so a render that brings nothing new is not news. */
+  let stillSignature = still ? JSON.stringify([options.points ?? [], options.lines ?? []]) : '';
   let fitPadding: FitPadding = { ...options.fitPadding };
 
   /** FIT_PADDING_PX of breathing space on every side, plus the covered part, plus a call's own extra, kept inside the container's box. */
@@ -1041,7 +1052,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     const m = map;
     if (!model || !m || !styled || !l || !container.isConnected) return false;
-    lastDrawn = model.step(t);
+    lastDrawn = model.step(stepAt(t));
     // The selected vehicle's line becomes knowable the moment the model first
     // places it, and stops being so when it goes quiet: one re-derive on the
     // change, never a styleDiff per frame.
@@ -1198,6 +1209,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         networkBlocked = false;
         delete container.dataset.networkStale;
         installNetwork(network);
+        if (still) stillAt = now();
         model!.update(pointsToFixes(points), now());
         loop.nudge();
       })().catch(() => {
@@ -1224,6 +1236,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (disposed) return;
     installNetwork(network);
     const fixes = pointsToFixes(points);
+    if (still) stillAt = now();
     if (acceptNetwork(fixes)) model!.update(fixes, now());
     if (!loaded) {
       setStatus('unavailable');
@@ -1489,7 +1502,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  else about the pushes changes. */
   function firstVehicles(created: MapApi, l: MaplibreModule): VehicleFeatureCollection | null {
     if (!model || held) return null;
-    const drawn = model.step(now());
+    if (still) stillAt = now();
+    const drawn = model.step(stepAt(now()));
     if (drawn.length === 0) return null;
     const kept = keptVehicleId();
     const project = created.project && created.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
@@ -1850,6 +1864,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
 
   return {
     update(nextPoints, nextLines) {
+      // A still map hears a render with the same data as no news (lane p-map2: the page renders about every two
+      // seconds, and each re-set its three static sources and woke the loop): nothing is re-set, nothing drawn.
+      if (still) {
+        const signature = JSON.stringify([nextPoints, nextLines]);
+        if (signature === stillSignature) return;
+        stillSignature = signature;
+        stillAt = now();
+      }
       points = nextPoints;
       lines = nextLines;
       // Evidence in, motion out: the model folds the reports into each

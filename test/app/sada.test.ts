@@ -217,7 +217,8 @@ describe('the map band', () => {
     expect(band.querySelector('[data-testid=sada-map-canvas]')).not.toBeNull();
     expect(factory).toHaveBeenCalledTimes(1);
     const options = factory.mock.calls[0]![0];
-    expect(options).toMatchObject({ renderer: 'map', interactive: false, attributionCompact: true, presentationProfile: 'handheld', center: [TRG.lon, TRG.lat] });
+    expect(options).toMatchObject({ renderer: 'map', interactive: false, still: true, attributionCompact: true, presentationProfile: 'handheld', center: [TRG.lon, TRG.lat] });
+    // Lane p-map2: the band draws on news and parks (CityMapOptions.still); the glide is Karta's.
     expect(options.ariaLabel).toBe('Karta oko mjesta Trg bana J. Jelačića. Otvori Kartu.');
     expect(options.zoom).toBeGreaterThanOrEqual(12.7);
     expect(options.zoom).toBeLessThanOrEqual(15.5);
