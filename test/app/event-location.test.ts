@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { loadSadaFeed } from '../../app/src/city/feed';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderKultura } from '../../app/src/layers/kultura';
 import { renderGradSada } from '../../app/src/layers/grad-sada';
@@ -23,6 +26,7 @@ const snapshot: ModuleSnapshot = {
 // missing leaf with the bare key, which no rendered text contains, so a pin
 // through i18n.t would hold whatever the surfaces print.
 describe('events without a venue show the source alone, never an unknown-location placeholder', () => {
+  beforeAll(async () => { await loadSadaFeed(); });
   it.each([
     ['hr', 'Lokacija nije navedena'],
     ['en', 'Location not provided'],
@@ -31,9 +35,11 @@ describe('events without a venue show the source alone, never an unknown-locatio
     const ctx = { i18n, now, snapshots: { dogadanja: snapshot } };
     const venueLabel = i18n.t('events.venue');
     const source = i18n.t('events.sources.kulturpunkt');
-    const overview = renderGradSada(ctx).querySelector('.day-overview')!.textContent!;
-    expect(overview).not.toContain(missing);
-    expect(overview).toContain(source);
+    // Sada's U blizini lists what is near the place: an event with no venue is not near anything, so it is
+    // left out whole rather than listed with a placeholder where its place should stand.
+    const nearby = renderGradSada(ctx).querySelector('[data-testid=nearby]')!.textContent!;
+    expect(nearby).not.toContain(missing);
+    expect(nearby).not.toContain('Test event');
     const agenda = renderKultura(ctx).querySelector('[data-testid=agenda]')!.textContent!;
     expect(agenda).not.toContain(missing);
     expect(agenda).toContain(source);

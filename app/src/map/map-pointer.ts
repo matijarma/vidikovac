@@ -98,12 +98,18 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
     host.choose({ kind: 'vehicle', id: nearest });
   }
 
-  /** The mark under a tap, by priority: a vehicle over a city place over a
-   *  stop over a closure; nothing under it clears. The vehicle wins because a
-   *  numbered pill is what this map is for -- it is drawn last, over
-   *  everything, and it moves; a place dot standing under one is still
-   *  reachable by tapping beside the pill or by zooming, where a pill covered
-   *  by a dot could not be tapped at all. */
+  /** The mark under a tap, by priority: the place's own stop over a vehicle
+   *  over a city place over a stop over a closure; nothing under it clears.
+   *  The vehicle wins over everything else because a numbered pill is what
+   *  this map is for -- it is drawn last, over everything, and it moves; a
+   *  place dot standing under one is still reachable by tapping beside the
+   *  pill or by zooming, where a pill covered by a dot could not be tapped at
+   *  all. The one exception is the ring of the place's own stop (the screen's,
+   *  else the departures stop: LAYERS.screenStop), which the camera frames and
+   *  the reader comes to Karta for: at city zoom a cluster pill of the lines
+   *  that serve it stands right on it, so within the ring's tolerance the stop
+   *  wins and its board opens (D3 gate, companion-phone.spec:282). The rest
+   *  of the pill still opens the cluster. */
   function pick(point: { x: number; y: number }): Picked | null {
     const tolerance = host.hitTolerance();
     const box = [
@@ -111,6 +117,8 @@ export function bindCityMapPointer(m: PointerMap, l: PointerIds, host: PointerHo
       [point.x + tolerance, point.y + tolerance],
     ];
     const first = (layers: string[]): { properties: Record<string, unknown> } | undefined => m.queryRenderedFeatures(box, { layers })[0];
+    const own = first([l.LAYERS.screenStop]);
+    if (own) return { kind: 'stop', id: String(own.properties.id), ids: host.siblingPlatforms(String(own.properties.name)) };
     const vehicle = first([l.LAYERS.vehicleSelected, l.LAYERS.vehicles, l.LAYERS.vehicleDots]);
     if (vehicle) {
       const members = clusterMembers(vehicle.properties);

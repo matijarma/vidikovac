@@ -60,7 +60,7 @@ export function codeBlockMarkup(strings: KioskStrings): string {
         </div>`;
 }
 
-/** The paired compositions' weather block (zrak-i-nebo, the Sada overview): the condition icon, the reading with the condition word, one facts line of `facts` details (humidity, wind, pressure in that order; the compact column holds two), and the credit naming the observation time, the station and DHMZ. */
+/** The paired compositions' weather block (zrak-i-nebo, the Sada overview): the condition icon, the reading with the condition word, one facts line of `facts` details (humidity, wind, pressure in that order; the compact column holds two), and the credit naming the station and DHMZ, never the observation time (§12, [O-27]). */
 export function weatherMarkup(weather: WeatherNow, strings: KioskStrings, facts = 3): string {
   if (weather.state === 'loading' || (weather.state === 'down' && weather.temperature === null)) {
     const text = weather.state === 'loading' ? strings.weather.loading : strings.weather.unavailable;
@@ -74,7 +74,7 @@ export function weatherMarkup(weather: WeatherNow, strings: KioskStrings, facts 
   const condition = weather.condition ? `<span class="k-condition">${externalHtml('summary', weather.condition)}</span>` : '';
   const shown = weather.details.slice(0, facts);
   const details = shown.length > 0 ? `<p class="k-weather-details">${escapeHtml(shown.join(' · '))}</p>` : '';
-  return `<div class="k-weather-main">${icon ? iconMarkup(icon, undefined, 'icon k-weather-icon') : ''}${temp}${condition}${stale}</div>${details}<p class="k-meta">${escapeHtml([weather.observedAt, vetExternal('name', weather.station, 'row'), 'DHMZ'].filter(Boolean).join(' · '))}</p>`;
+  return `<div class="k-weather-main">${icon ? iconMarkup(icon, undefined, 'icon k-weather-icon') : ''}${temp}${condition}${stale}</div>${details}<p class="k-meta">${escapeHtml([vetExternal('name', weather.station, 'row'), 'DHMZ'].filter(Boolean).join(' · '))}</p>`;
 }
 
 function lineRow(row: LinesBoard['rows'][number], strings: KioskStrings, locale: string): string {
@@ -103,6 +103,8 @@ export function linesMarkup(board: LinesBoard, stop: ScreenStop | null, strings:
   // Without a stop the board is the lines seen nearby, so an empty one says so in the same words.
   if (board.rows.length === 0) return `${head}<p class="k-board-note">${escapeHtml(strings.lines.noneNearby)}</p>`;
   const more = board.more > 0 ? `<p class="k-line-more">${escapeHtml(plural(locale, strings.lines.more, board.more))}</p>` : '';
+  // The source and, for a last-good copy, the stale word: no caveat under the
+  // board on the wall (§12 "Never"); the phone's vehicle detail keeps its note.
   const stale = board.state === 'stale' ? ` · ${strings.paired.stale}` : '';
-  return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`${strings.lines.modelNote} · ZET${stale}`)}</p>`;
+  return `${head}<ul class="k-line-list">${lineRows(board, strings, locale)}</ul>${more}<p class="k-meta">${escapeHtml(`ZET${stale}`)}</p>`;
 }

@@ -77,7 +77,8 @@
     "15_3": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
     "15_7": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
     "path:14:0:b50fd278": "Feed 000395 synthetic depot path: no stop on the printed line 14.",
-    "path:14:1:16e81f64": "Feed 000395 synthetic depot path: only one stop on the printed line 14."
+    "path:14:1:16e81f64": "Feed 000395 synthetic depot path: only one stop on the printed line 14.",
+    "path:1:1:43a84913": "Feed 000395 synthetic depot path from Selska to Zapadni kolodvor: only Zapadni kolodvor is on the printed line 1, once the path ends at that platform instead of running on to Trg dr. F. Tuđmana (decision 25)."
   },
   "unmapped": [
     { "name": "Držićeva-petlja", "reason": "Loop-only platform absent from the original printed diagram." },

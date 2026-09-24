@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
@@ -12,7 +14,6 @@ import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
-import { createSchematicHost } from '../../app/src/motion/schematic-host';
 import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -72,8 +73,6 @@ const atStop = (over: Partial<LayerContext> = {}): LayerContext => ctx({
   screen: { surface: 'phone', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false, stop: STOP },
   ...over,
 });
-/** The real ZET feed dates itself from the GTFS-RT header, so its foot reads "podaci od", not "dohvaćeno". */
-const DATED_ZET: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, sourceUpdatedAt: new Date(NOW - 120_000).toISOString() };
 
 // Fixtures with more rows than a single default page, for T1.4's paging tests.
 // Real shapes (module, kind, data) match the single-item SNAPSHOTS above.
@@ -113,173 +112,22 @@ describe('layer registry', () => {
     expect(ALL_LAYER_MODULES).toContain('glasnik');
     expect(new Set(ALL_LAYER_MODULES).size).toBe(ALL_LAYER_MODULES.length);
   });
-  it('every layer renders a focusable heading with the Croatian layer name', () => {
+  it('every layer renders a focusable heading: the Croatian layer name, and on Sada the place (test/app/sada.test.ts)', () => {
     for (const layer of LAYERS) {
       const section = renderLayer(layer, ctx());
       expect(section.getAttribute('data-layer')).toBe(layer);
-      expect(text(section.querySelector('.layer-title'))).toBe(createDefaultI18n('hr').t(layer === 'grad-sada' ? 'cityOverview.title' : `layers.${layer}`));
+      if (layer === 'grad-sada') {
+        expect(section.querySelector('.layer-title')).toBe(section.querySelector('[data-testid=sada-place]'));
+        expect(text(section.querySelector('[data-testid=sada-place]'))).toBe('Trg bana J. Jelačića');
+      } else {
+        expect(text(section.querySelector('.layer-title'))).toBe(createDefaultI18n('hr').t(`layers.${layer}`));
+      }
       expect(section.querySelector('.layer-title')?.getAttribute('tabindex')).toBe('-1');
     }
   });
 });
 
-describe('grad-sada (Sada, the time band)', () => {
-  const DESK = { surface: 'desktop' as const, locale: 'hr' as const, theme: 'light' as const, themePreference: 'light' as const, lightweight: false, reducedMotion: false, stop: STOP };
-  const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
-
-  it('composes nearby facts and a dated agenda, with temporal filtering and one provenance disclosure', () => {
-    const section = renderLayer('grad-sada', atStop());
-    expect(section.querySelector('.day-overview')).not.toBeNull();
-    expect(section.querySelector('.day-now')!.compareDocumentPosition(section.querySelector('.day-ahead')!) & FOLLOWING).toBe(FOLLOWING);
-    expect(section.querySelectorAll('.tb-lanes, .ov-col')).toHaveLength(0);
-    const seg = section.querySelector('.day-times[role="group"]')!;
-    const buttons = [...seg.querySelectorAll('[aria-pressed]')];
-    expect(buttons).toHaveLength(5);
-    expect(buttons.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.getAttribute('data-filter-value'))).toEqual(['sada']);
-    expect(section.querySelector('details.provenance')).not.toBeNull();
-    expect(text(section.querySelector('.day-clock'))).toBe('14:32');
-    expect(section.querySelectorAll('.day-clock')).toHaveLength(1);
-  });
-
-  it('weather is legible on both surfaces and links its observation to Vrijeme', () => {
-    const phone = renderLayer('grad-sada', atStop());
-    const weather = phone.querySelector('.day-weather[data-layer=zrak-i-nebo]')!;
-    expect(weather).not.toBeNull();
-    expect(weather.getAttribute('href')).toBe('#layer=zrak-i-nebo');
-    expect(text(weather.querySelector('strong'))).toBe('21 °C');
-    expect(weather.querySelector('.icon use')?.getAttribute('href')).toBe('#icon-sun');
-    expect(weather.getAttribute('aria-label')).toContain('vedro');
-    expect(weather.getAttribute('aria-label')).toMatch(/zalazak \d{2}:\d{2}/);
-    const desk = renderLayer('grad-sada', ctx());
-    expect(text(desk.querySelector('.day-weather strong'))).toBe('21 °C');
-    for (const section of [phone, desk]) {
-      expect(section.querySelector('[data-testid=temp]')).toBeNull();
-      const tiles = [...section.querySelectorAll('.tl')];
-      expect(tiles.length).toBeGreaterThan(0);
-      expect(tiles.some((tile) => text(tile).includes('°C') || (tile.getAttribute('aria-label') ?? '').includes('°C'))).toBe(false);
-    }
-  });
-
-  it('states safety as one band whose level, word and time come from safetyState', () => {
-    const section = renderLayer('grad-sada', atStop());
-    const bands = section.querySelectorAll('.tl[data-domain=safety]');
-    expect(bands).toHaveLength(1);
-    const band = bands[0]!;
-    expect(band.getAttribute('data-variant')).toBe('band');
-    expect(band.getAttribute('data-level')).toBe('urgent');
-    expect(band.getAttribute('data-tone')).toBe('urgent');
-    expect(band.getAttribute('data-layer')).toBe('sigurnost');
-    expect(band.getAttribute('href')).toBe('#layer=sigurnost');
-    expect(text(band.querySelector('.tl-title'))).toBe('žuto upozorenje: Grmljavinsko nevrijeme');
-    expect(band.querySelector('.tl-glyph use')?.getAttribute('href')).toBe('#icon-triangle-alert');
-    // The untimed page is Sigurnost's to offer; the band only points at the domain.
-    expect(section.querySelector('[data-testid=hitno-link]')).toBeNull();
-
-    const calm = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': base('dhmz-cap', []) } }));
-    const calmBand = calm.querySelector('.tl[data-domain=safety]')!;
-    expect(calmBand.getAttribute('data-level')).toBe('calm');
-    expect(calmBand.getAttribute('data-tone')).toBe('calm');
-    expect(text(calmBand.querySelector('.tl-title'))).toBe('Nema hitnih upozorenja');
-    expect(text(calmBand.querySelector('.tl-trail'))).toMatch(/^potvrđeno \d{2}:\d{2}$/);
-  });
-
-  it('reads unknown, never all-clear, while a safety source is missing or down', () => {
-    const loading = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(loading.querySelector('.tl[data-domain=safety]')?.getAttribute('data-level')).toBe('unknown');
-    const down = renderLayer('grad-sada', ctx({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': { ...SNAPSHOTS['dhmz-cap']!, status: 'down', items: [] } } }));
-    const band = down.querySelector('.tl[data-domain=safety]')!;
-    expect(band.getAttribute('data-level')).toBe('unknown');
-    expect(text(band.querySelector('.tl-title'))).toBe('Stanje nije potvrđeno');
-    expect(text(band)).not.toContain('Nema hitnih upozorenja');
-    expect(band.querySelector('.tl-trail')).toBeNull();
-  });
-
-  it('names a level only when that level is the reason: a quake with minor warnings reads the urgent word', () => {
-    // safetyState raises urgent from a moderate/severe/extreme warning OR a quake
-    // of M3 and up. When the quake is the reason, a minor or info warning is not
-    // the verdict: "zeleno" is never a level word on any surface (R-K1).
-    const minorWarnings = base('dhmz-cap', [
-      { id: 'w2', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Vjetar u gorju', severity: 'minor', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
-      { id: 'w3', module: 'dhmz-cap', kind: 'warning', tier: 'open', title: 'Promjena vremena', severity: 'info', at: '2026-09-11T06:00:00Z', until: '2026-09-11T20:00:00Z' },
-    ]);
-    const felt = base('emsc', [{ id: 'q2', module: 'emsc', kind: 'quake', tier: 'open', title: 'ZAGREB', at: '2026-09-11T09:00:00Z', geo: { type: 'Point', coordinates: [15.98, 45.81] }, data: { mag: 3.5, depth: 8 } }]);
-    const section = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': minorWarnings, emsc: felt } }));
-    const band = section.querySelector('.tl[data-domain=safety]')!;
-    expect(band.getAttribute('data-level')).toBe('urgent');
-    expect(text(band.querySelector('.tl-title'))).toBe('Hitno sada');
-    expect(text(band)).not.toContain('zeleno');
-    expect(text(band)).not.toContain('obavijest');
-    expect(text(band)).not.toContain('Vjetar u gorju');
-
-    // A warning that is itself a reason for the urgency still names itself.
-    const yellow = base('dhmz-cap', [...minorWarnings.items, ...SNAPSHOTS['dhmz-cap']!.items]);
-    const named = renderLayer('grad-sada', atStop({ snapshots: { ...SNAPSHOTS, 'dhmz-cap': yellow, emsc: felt } }));
-    expect(text(named.querySelector('.tl[data-domain=safety] .tl-title'))).toBe('žuto upozorenje: Grmljavinsko nevrijeme');
-  });
-
-  it('tiles the lines of this screen’s stop: two on the phone, four on a desk, the rest counted into Promet', () => {
-
-    const ensure=vi.fn();
-    const boards={ensure,get:()=>undefined,destroy:vi.fn()};
-    for(const screen of [atStop().screen,DESK]){
-      const section=renderLayer('grad-sada',ctx({screen,boards}));
-      expect(section.querySelectorAll('.tl[data-domain=transit]')).toHaveLength(0);
-      const departures=section.querySelector('[data-testid=day-departures]')!;
-      expect(text(departures)).toContain(STOP.name);
-      expect(departures.querySelector('[data-layer=u-pokretu]')?.getAttribute('href')).toContain('kind=stop&id='+STOP.id);
-      expect(text(departures)).toContain('učitavanje');
-      expect(text(section)).not.toContain('vozila ZET-a u pokretu');
-    }
-    expect(ensure).toHaveBeenCalledWith('zet',[STOP.id],undefined);
-
-  });
-
-  it('buckets the next starts by time and keeps the sada lane for live values', () => {
-    const section = renderLayer('grad-sada', atStop());
-    // Saturday 20:00 is sutra; a dated notice today reads "cijeli dan" in the first time lane.
-    const concert = section.querySelector('.day-event[data-col=sutra] .tl[data-domain=events]')!;
-    expect(text(concert.querySelector('.tl-time'))).toBe('20:00');
-    expect(text(concert.querySelector('.tl-title'))).toBe('Koncert u parku');
-    expect(concert.getAttribute('data-layer')).toBe('kultura');
-    const notice = section.querySelector('.day-event[data-col=danas] .tl[data-key="dogadanja:kvartovske:3"]')!;
-    expect(text(notice.querySelector('.tl-time'))).toBe('cijeli dan');
-    // An exhibition already running is not a start: agenda parity.
-    expect(text(section)).not.toContain('Izložba tradicijskog nakita');
-    // The one ink tile on the page is the Assembly, in its own week.
-    const inks = section.querySelectorAll('.tl[data-variant=ink]');
-    expect(inks).toHaveLength(1);
-    expect(inks[0]!.closest('.day-event')?.getAttribute('data-col')).toBe('tjedan');
-    expect(text(inks[0]!.querySelector('.tl-title'))).toContain('13. sjednicu');
-    // The live values stay in sada: the gazette, works and the closed road.
-    const sada = section.querySelector('[data-testid=tb-lane-sada]')!;
-    const gazette = section.querySelector('.day-city [data-testid=tile-gazette]')!;
-    expect(text(gazette.querySelector('.tl-value'))).toBe('21/2026');
-    expect(text(gazette.querySelector('.tl-label'))).toBe('Glasnik');
-    expect(text(sada.querySelector('[data-testid=tile-works] .tl-trail'))).toBe('1');
-    expect(text(sada.querySelector('[data-testid=tile-closures] .tl-title'))).toBe('Grada Vukovara');
-    // Sada reads in domain order: what moves first, what the city decided last; on the phone the two compact Zatim rows (the next starts) follow the lane's own tiles.
-    expect([...sada.querySelectorAll('.tl')].map((tile) => tile.getAttribute('data-domain'))).toEqual(['mobility', 'komunalno', 'safety']);
-    expect(section.querySelector('.day-agenda')).not.toBeNull();
-  });
-
-  it('paints a loading source as skeleton tiles in its lane and only announces the word; a failed source offers the retry', () => {
-    const section = renderLayer('grad-sada', ctx({ snapshots: {} }));
-    expect(section.querySelectorAll('.tl[data-skeleton]').length).toBeGreaterThan(0);
-    expect(section.querySelector('[data-testid=tb-lane-sada]')?.getAttribute('aria-busy')).toBe('true');
-    expect(section.querySelector('.day-agenda')?.getAttribute('aria-busy')).toBe('true');
-    // Safety never skeletons: its band already says the state is unconfirmed.
-    const safety = section.querySelector('[data-testid=tile-safety]')!;
-    expect(safety.getAttribute('data-level')).toBe('unknown');
-    expect(safety.hasAttribute('data-skeleton')).toBe(false);
-    expect(text(section)).toContain('učitavanje podataka');
-    expect(section.querySelectorAll('.tl[data-skeleton] a, .tl[data-skeleton] button')).toHaveLength(0);
-    // A source that failed says so and offers the retry at the lane's foot, never a skeleton that never ends.
-    const down = renderLayer('grad-sada', ctx({ snapshots: {}, errors: { glasnik: 'fetch failed' } }));
-    expect(down.querySelector('.day-more [data-action=retry][data-module=glasnik]')).not.toBeNull();
-    expect(down.querySelector('[data-testid=tile-gazette]')).toBeNull();
-    expect(down.querySelectorAll('[data-testid=tb-lane-sada] .tl[data-skeleton][data-variant=row]')).toHaveLength(0);
-  });
-});
+// Sada (grad-sada) is tested in test/app/sada.test.ts: the place, the sentence, the band, the departures and U blizini.
 
 describe('u-pokretu', () => {
   it('reads the module’s own delay summary per route, worst first', () => {
@@ -297,7 +145,7 @@ describe('u-pokretu', () => {
       { id: 'route:17', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '17', data: { routeId: '17' } },
     ] }).map((row) => row.routeId)).toEqual(['6', '11']);
   });
-  it('builds the map from vehicle points and closure lines and prints the delay table', () => {
+  it('builds the map from vehicle points and closure lines, with no per-route delay table (it left the phone with the overview)', () => {
     const update = vi.fn();
     const factory = vi.fn((_options: CityMapOptions) => ({ update, destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
@@ -308,9 +156,7 @@ describe('u-pokretu', () => {
     expect(options.points![0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
     expect(options.lines![0]!.coordinates).toEqual([[15.959, 45.799], [15.957, 45.799]]);
     expect(options.ariaLabel).toContain('Karta');
-    const rows = [...section.querySelectorAll('[data-testid=delay-row]')].map(text);
-    expect(rows[0]).toContain('kasni 2 min');
-    expect(rows[1]).toContain('rani 1 min');
+    expect(section.querySelector('[data-testid=delay-row], #u-pokretu-delays')).toBeNull();
 
     // R-54: a second render reuses the same live map, moving the one container
     // into the new section instead of allocating another WebGL context.
@@ -322,34 +168,21 @@ describe('u-pokretu', () => {
     expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
-  // Lightweight retains the accessible schematic-host list. The full
-  // experience has one vector-map workspace, never two competing maps.
-  it('mounts the lightweight host with this snapshot’s fixes, delays and source state', () => {
+  // R-L2, decided in WP5 A3: the lightweight path is the same workspace sheet with no map. The page hands the
+  // layer map slots without a factory (dashboard.ts), so no canvas is ever made and no geometry is fetched; the
+  // old lightweight face (its own board, the schematic host's list, the closures and notices) is gone.
+  it('the lightweight path renders the workspace sheet without a map: the search, no canvas, no full-map toggle, no schematic host (R-L2)', () => {
     const element = document.createElement('div');
     element.dataset.testid = 'schematic-host';
     const schematic = { element, mount: vi.fn(() => element), update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() };
-    const section = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
-    expect(section.querySelector('[data-testid=schematic-host]')).toBe(element);
-    expect(section.querySelector('[data-testid=transport-workspace]')).toBeNull();
-    expect(schematic.update).toHaveBeenCalledTimes(1);
-    const [data, at] = schematic.update.mock.calls[0]!;
-    expect(at).toBe(NOW);
-    expect(data.fixes.map((f: { id: string }) => f.id)).toEqual(['vehicle:1', 'vehicle:2', 'vehicle:3']);
-    expect(data.fixes[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
-    expect([...data.delays!]).toEqual([['6', 90], ['11', -30]]);
-    // F8 / F5's leftover: the dashboard's own lightweight list can only say
-    // "stale" or "down" during an outage (R-X1's honesty rule) if it is
-    // handed the zet-rt snapshot itself, exactly as kiosk.ts's locked stage
-    // already does on its own update() call.
-    expect(data.snapshot).toBe(SNAPSHOTS['zet-rt']);
-    // A second render (the next poll) reuses the very same element.
-    const again = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
-    expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);
-    expect(schematic.update).toHaveBeenCalledTimes(2);
-    expect(text(again.querySelector('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
-    const full = renderLayer('u-pokretu', ctx({ schematic }));
-    expect(full.querySelector('[data-testid=schematic-host]')).toBeNull();
-    expect(full.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    const section = renderLayer('u-pokretu', ctx({ schematic, lightweight: true, maps: createMapSlots(undefined) }));
+    expect(section.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
+    expect(section.querySelector('[data-testid=map-full-toggle], #u-pokretu-map-full')).toBeNull();
+    expect(section.querySelector('[data-testid=transport-light], [data-testid=schematic-host], [data-testid=running-routes]')).toBeNull();
+    expect(schematic.mount).not.toHaveBeenCalled();
+    expect(schematic.update).not.toHaveBeenCalled();
   });
   it('renders no schematic panel when the page has no host (unit contexts, the kiosk essentials)', () => {
     const section = renderLayer('u-pokretu', ctx());
@@ -358,7 +191,7 @@ describe('u-pokretu', () => {
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
-    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stanice rade i bez nje.');
+    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stajališta rade i bez karte.');
     expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
   });
   // T10: the full map.
@@ -370,93 +203,15 @@ describe('u-pokretu', () => {
     expect(point).toMatchObject({ id: 'vehicle:1', lon: 15.97, lat: 45.81, routeId: '6', at: NOW - 60_000 });
     expect(point.title).toContain('6');
   });
-  it('renders no map panel at all in lightweight mode: no map, no fallback line, no button (R-L2)', () => {
-    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
-    const section = renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never), lightweight: true, mapView: { full: false, toggle: vi.fn() } }));
-    expect(section.querySelector('#u-pokretu-map')).toBeNull();
-    expect(section.querySelector('[data-testid=map-fallback]')).toBeNull();
-    expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
-    expect(factory).not.toHaveBeenCalled();
-  });
-  // T3.6: the lightweight face reads like the map's sheet -- the same board grammar without a stage.
-  it('the lightweight face: a search field first, "Linije u pokretu" as a board of rows with small badges (eight, then "još N linija" through the page filter), the host’s list, closures four then more, three notices, no map, no canvas, the honesty note once', () => {
-    const i18n = createDefaultI18n('hr');
-    const pins = Array.from({ length: 10 }, (_, i) => ({
-      id: `vehicle:l${i}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'session' as const, title: String(i + 1),
-      geo: { type: 'Point' as const, coordinates: [15.97 + i / 1000, 45.81] as [number, number] }, data: { routeId: String(i + 1), routeType: 0 },
-    }));
-    const zet: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, items: [...pins, { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 90, vehicles: 1 } }] };
-    const notices = Array.from({ length: 5 }, (_, i) => ({
-      id: `zet-promet:${i}`, module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: `Obavijest ${i}`, at: '2026-09-11T08:00:00Z', link: 'https://zet.hr/promet', data: { source: 'zet-promet' },
-    }));
-    const snapshots = { ...SNAPSHOTS, 'zet-rt': zet, prometnice: MANY_CLOSURES, dogadanja: { ...SNAPSHOTS.dogadanja!, items: notices } };
-    const schematic = createSchematicHost({ i18n, scope: { kind: 'network' }, lightweight: true, now: () => NOW });
-    const face = (filters: Record<string, string>, host = true): HTMLElement =>
-      renderLayer('u-pokretu', ctx({ i18n, snapshots, lightweight: true, view: { layer: 'u-pokretu', selection: null, filters }, ...(host ? { schematic } : {}) })).querySelector<HTMLElement>('[data-testid=transport-light]')!;
-    const light = face({});
-    // No stage, no map, no canvas, no workspace.
-    expect(light.querySelector('#u-pokretu-map')).toBeNull();
-    expect(light.querySelector('canvas')).toBeNull();
-    expect(light.querySelector('[data-testid=transport-workspace]')).toBeNull();
-    // The search field comes first and is the page's own filter (dashboard.ts's input delegation), 44 px by base.css.
-    const input = light.firstElementChild!.querySelector<HTMLInputElement>('input[type=search]')!;
-    expect(input.dataset.filterKey).toBe('q');
-    // The board: static signage rows with small badges, eight of ten shown, the fold as a filter action.
-    const rows = [...light.querySelectorAll<HTMLElement>('[data-testid=running-routes] .row')];
-    expect(rows).toHaveLength(10);
-    expect(rows.filter((r) => !r.hidden)).toHaveLength(8);
-    expect(rows.every((r) => r.querySelector('.line[data-size="s"]') !== null)).toBe(true);
-    expect(light.querySelector('[data-testid=running-routes] button')).toBeNull(); // nothing here opens a detail: there is no handler on this path
-    const more = light.querySelector<HTMLButtonElement>('[data-action=filter][data-filter-key=routes]')!;
-    expect(text(more)).toBe('još 2 linije');
-    expect(more.dataset.filterValue).toBe('all');
-    expect(more.getAttribute('aria-expanded')).toBe('false');
-    const six = rows.find((r) => text(r.querySelector('.line')) === '6')!;
-    // T2.12: the spelled-out count gives way to the glyph in this compact row (newdesignsystem.md's "vehicles on
-    // line" rule, tram-front/bus-front + the bare count); the sentence for a screen reader lives on the glyph's own
-    // label, so nothing here leans on the bare digit or the icon's shape alone.
-    const vehicleGlyph = six.querySelector<HTMLElement>('.row-sub [role="img"]')!;
-    expect(vehicleGlyph.getAttribute('aria-label')).toBe('1 vozilo u pokretu');
-    expect(vehicleGlyph.querySelector('use')?.getAttribute('href')).toBe('#icon-tram-front');
-    expect(text(vehicleGlyph)).toBe('1');
-    expect(text(six.querySelector('.route-delay'))).toBe('kasni 2 min');
-    expect(six.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
-    expect(rows.filter((r) => r !== six).every((r) => r.querySelector('.route-delay') === null)).toBe(true); // no median, no word
-    // The host's list face under its own head; the closures four of twenty, then "sve zatvaranja (20)"; three notices.
-    expect(light.querySelector('[data-testid=schematic-host] [data-testid=schematic-list]')).not.toBeNull();
-    const closures = [...light.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')];
-    expect(closures).toHaveLength(20);
-    expect(closures.filter((r) => !r.hidden)).toHaveLength(4);
-    expect(closures.every((r) => r.querySelector('.mark-closure') !== null && r.querySelector('button') === null)).toBe(true);
-    expect(text(light.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('sve zatvaranja (20)');
-    expect(light.querySelectorAll('[data-testid=transport-notices] .row')).toHaveLength(3);
-    // The honesty sentence exactly once on the face: the host carries it under its list.
-    expect(text(light).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
-    // The folds open and the query narrows through the page's own filters; the field keeps its text.
-    const open = face({ routes: 'all', closures: 'all', q: '6' });
-    expect(open.querySelector<HTMLInputElement>('input[type=search]')!.value).toBe('6');
-    expect([...open.querySelectorAll('[data-testid=running-routes] .row')].map((r) => text(r.querySelector('.line')))).toEqual(['6']);
-    expect([...open.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')].filter((r) => !r.hidden)).toHaveLength(20);
-    expect(text(open.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('Skupi');
-    expect(text(face({ q: 'zzz' }).querySelector('[data-testid=transport-no-results]'))).toContain('zzz');
-    // Without a host (a unit context) the face still says the sentence, once.
-    const bare = face({}, false);
-    expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
-    expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
-  });
-  it('offers the full-map button only when the page can switch view modes, labelled for the state it leads to', () => {
+  it('has no full-map button: the sheet’s own chevron and detents say how much map shows', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
     const maps = createMapSlots(factory as never);
     const toggle = vi.fn();
-    const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full: false, toggle } }));
-    const button = section.querySelector<HTMLButtonElement>('#u-pokretu-map [data-testid=map-full-toggle]')!;
-    expect(text(button)).toBe('Proširi kartu');
-    button.click();
-    expect(toggle).toHaveBeenCalledTimes(1);
-    const again = renderLayer('u-pokretu', ctx({ maps, mapView: { full: true, toggle } }));
-    expect(text(again.querySelector('[data-testid=map-full-toggle]'))).toBe('Skupi kartu');
-    // No view-mode owner: the stable control is hidden and not actionable.
-    expect(renderLayer('u-pokretu', ctx({ maps })).querySelector<HTMLButtonElement>('[data-testid=map-full-toggle]')!.hidden).toBe(true);
+    for (const full of [false, true]) {
+      const section = renderLayer('u-pokretu', ctx({ maps, mapView: { full, toggle } }));
+      expect(section.querySelector('[data-testid=map-full-toggle], #u-pokretu-map-full')).toBeNull();
+    }
+    expect(toggle).not.toHaveBeenCalled();
   });
 });
 
@@ -681,6 +436,42 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura', () => {
     expect(open.querySelector('[data-testid=event-detail] a[href="https://kulturpunkt.hr/clanak/1"]')).not.toBeNull();
     expect(section.querySelector('[data-filter-key=q]')).not.toBeNull();
     expect(section.querySelectorAll('[data-testid=event-category] option').length).toBeGreaterThan(1);
+  });
+  it('kultura says "do d. m." in the time column of a multi-day all-day item, never "cijeli dan", and names the end once', () => {
+    const extra: ModuleSnapshot['items'] = [
+      // "od 11. do 25. rujna": the parser's range, Zagreb midnight to 23:59 of the last day.
+      { id: 'kulturpunkt:8', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Festival u Tvornici', at: '2026-09-10T22:00:00Z', until: '2026-09-25T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'festival', precision: 'range' } },
+      // A range that begins next week keeps its own day head; an October end reads "do 4. 10.".
+      { id: 'kulturpunkt:9', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Sajam knjiga', at: '2026-09-13T22:00:00Z', until: '2026-10-04T21:59:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'sajam', precision: 'range' } },
+      // A timed start that runs on keeps its time; the end stays on the second line.
+      { id: 'kulturpunkt:10', module: 'dogadanja', kind: 'event', tier: 'session', title: 'Radionica keramike', at: '2026-09-12T16:00:00Z', until: '2026-09-13T18:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', category: 'radionica', precision: 'time' } },
+    ];
+    const dogadanja = { ...SNAPSHOTS.dogadanja!, items: [...SNAPSHOTS.dogadanja!.items, ...extra] };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const row = (title: string): Element => [...section.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes(title))!;
+    const lead = (title: string): string => text(row(title).querySelector('.ev-lead'));
+    const sub = (title: string): string => text(row(title).querySelector('.row-sub'));
+
+    expect(lead('Festival u Tvornici')).toBe('do 25. 9.');
+    expect(row('Festival u Tvornici').querySelector('.ev-lead .ev-allday')).not.toBeNull();
+    expect(text(row('Festival u Tvornici'))).not.toContain('cijeli dan');
+    expect(text(row('Festival u Tvornici')).match(/do 25\. 9\./g)).toHaveLength(1); // not repeated on the second line
+    expect(sub('Festival u Tvornici')).toBe('Kulturpunkt');
+    // Day and month stay together, so the 3.5rem column breaks after "do", never inside the date.
+    expect(row('Festival u Tvornici').querySelector('.ev-allday')!.textContent).toBe('do 25.\u00a09.');
+
+    expect(lead('Sajam knjiga')).toBe('do 4. 10.');
+    expect(sub('Sajam knjiga')).not.toContain('do 4. 10.');
+
+    expect(lead('Radionica keramike')).toBe('18:00');
+    expect(sub('Radionica keramike')).toBe('Kulturpunkt · do 13. 9.');
+
+    // A single-day day-precision entry still reads "cijeli dan".
+    expect(lead('Novo dječje igralište')).toBe('cijeli dan');
+
+    const en = renderLayer('kultura', ctx({ i18n: createDefaultI18n('en'), snapshots: { ...SNAPSHOTS, dogadanja } }));
+    const enRow = [...en.querySelectorAll('#ev-agenda [data-testid=event-row]')].find((r) => text(r).includes('Festival u Tvornici'))!;
+    expect(text(enRow.querySelector('.ev-lead'))).toBe('until 25. 9.');
   });
   it('filter chips are a labelled group holding a native list, and no <li> in a workspace is orphaned from a list (axe: listitem)', () => {
 

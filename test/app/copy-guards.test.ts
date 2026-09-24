@@ -3,6 +3,8 @@
 // the worker's string literals, and the delay words that stand beside a
 // `.line` badge. Canonical sentences live under `shared.*`; the dashboard
 // keys that say the same thing are pinned equal to them so they cannot drift.
+// The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
+import '../../shared/kiosk/external-text';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +15,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { stopDetailMarkup } from '../../app/src/transport/view';
 import * as sentenceModule from '../../app/src/city/sentence';
+import { acceptSentence } from '../../shared/kiosk/sentence';
 import { fill, kioskStrings } from '../../app/src/kiosk/strings';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -82,14 +85,92 @@ describe('address: one person, informal, never Vi', () => {
 });
 
 describe('one name per concept: the transport surface (slop #11, [O-51])', () => {
-  // "Karta" is the destination's one word and "Promet" only the subject word of a kicker. The
-  // rename itself (layers.u-pokretu 'Promet' → 'Karta') is WP4's, so its assertion waits in the
-  // accept tier (test/accept/trust.test.ts, TRANSPORT_TAB_WORD) and folds in here once WP4 lands.
-  // What holds today: the two retired synonyms of app/src/city/strings.ts (`movement`, `network`)
-  // never enter the catalogue while WP4 and WP5 move that file's words into it.
+  // "Karta" is the destination's one word and "Promet" only the subject word of a kicker. WP4
+  // renamed the tab (layers.u-pokretu); WP5 gave the map region, the sheet and the paired
+  // presentation the same word. The two retired synonyms of app/src/city/strings.ts
+  // (`movement`, `network`) never enter the catalogue while WP5 moves that file's words into it.
+  const TRANSPORT_TAB_WORD = 'Karta';
   it('no hr.json value is "Kretanje" or "Prijevoz i raspored"', () => {
     const synonyms = leafKeys(HR).filter((key) => ['Kretanje', 'Prijevoz i raspored'].includes(leaf(HR, key)!.trim()));
     expect(synonyms).toEqual([]);
+  });
+  it('app/src/city/strings.ts is the adapter over city.*: no movement or network word, no own copy', () => {
+    expect(Object.keys(hr.city)).not.toContain('movement');
+    expect(Object.keys(hr.city)).not.toContain('network');
+    const adapter = read('app/src/city/strings.ts');
+    expect(adapter).not.toMatch(/Kretanje|Prijevoz i raspored|Getting around|Transport and timetable/);
+    expect(adapter).not.toMatch(/[čćžšđ]/iu);
+  });
+  it('the tab, the map region and the landing line say "Karta"; the sheet says "Detalji"', () => {
+    expect(hr.layers['u-pokretu']).toBe(TRANSPORT_TAB_WORD);
+    expect(hr.transport.mapRegion).toBe(TRANSPORT_TAB_WORD);
+    expect(hr.transport.sheetLabel).toBe('Detalji');
+    expect(hr.kiosk.paired.overviewTransport).toBe(`${TRANSPORT_TAB_WORD} oko stajališta`);
+    expect(hr.landing.evidence.domains).toBe(`Sada · ${TRANSPORT_TAB_WORD} · Vrijeme · Sigurnost · Grad · Događanja`);
+    expect(read('app/index.html')).toContain(`>${hr.landing.evidence.domains}<`);
+    expect(read('app/src/izvori-render.ts')).toContain('<a href="#izvor-zet-rt">Promet</a>');
+    expect(JSON.stringify(hr)).not.toMatch(/Karta prometa|Detalji prometa|Promet oko/);
+  });
+});
+
+describe('one catalogue: no inline Croatian/English pair outside app/src/i18n (WP5 step 2)', () => {
+  // A word picked by `en ? 'English' : 'Hrvatski'` is copy the catalogue cannot see: the parity
+  // test, the orphan test and the owner's read-through all miss it. Locale-dependent formatting goes
+  // through intlLocale() or catalogueLocale(), copy through i18n.t / tr / ct.
+  const PAIR = [/(?:\ben|english|isEn)\s*\?\s*['"`]/, /getLocale\(\)\.startsWith\('en'\)\s*\?\s*['"`]/];
+  it('no .ts under app/src outside app/src/i18n chooses a string by locale inline', () => {
+    const hits = walk('app/src').filter((file) => !file.startsWith('app/src/i18n/')).flatMap((file) =>
+      read(file).split('\n').flatMap((line, i) => (PAIR.some((re) => re.test(line)) ? [`${file}:${i + 1}`] : [])));
+    expect(hits).toEqual([]);
+  });
+  it('the guard sees the forms it bans', () => {
+    for (const line of ["x = en ? 'Map' : 'Karta';", 'y = english ? `at` : `u`;', "z = i18n.getLocale().startsWith('en') ? 'en-GB' : 'hr-HR';"]) {
+      expect(PAIR.some((re) => re.test(line)), line).toBe(true);
+    }
+    expect(PAIR.some((re) => re.test("const code = catalogueLocale(i18n.getLocale());"))).toBe(false);
+  });
+});
+
+describe('one word per concept: "Sada" is now and "vozni red" the timetable (WP5 step 6)', () => {
+  it('the timetable word is "vozni red" wherever a time is not tracked', () => {
+    expect(hr.arrivals.scheduled).toBe('vozni red');
+    // tiles.scheduled, its twin, went with the phone's tiles (WP5 B1): one key says it.
+    expect(JSON.stringify(hr).split('"vozni red"').length - 1).toBe(1);
+    expect(JSON.stringify(hr)).not.toMatch(/po redu vožnje|po rasporedu|ZET GTFS/);
+  });
+  it('the weather now is "Sada"', () => {
+    expect(hr.weather.now).toBe('Sada');
+    expect(JSON.stringify(hr)).not.toMatch(/"Trenutno"/);
+  });
+});
+
+describe('one word per concept: a tram or bus stop is "stajalište" (WP5 step 6)', () => {
+  // "Stanica" is BAJS's word for a bike station and "postaja" DHMZ's for a measuring station.
+  // A leaf may say "stanica" only when its key is on this list, and the list takes BAJS keys
+  // under city.* only. None needs the word today: city.* says "BAJS" and the counts.
+  const BAJS_STANICA_KEYS: readonly string[] = [];
+  it('no hr.json leaf outside the BAJS allowlist says "stanica"', () => {
+    for (const key of BAJS_STANICA_KEYS) expect(key, 'BAJS keys live under city.*').toMatch(/^city\./);
+    const stanica = leafKeys(HR).filter((key) => /(?<![\p{L}\p{N}_])[Ss]tanic/u.test(leaf(HR, key)!));
+    expect(stanica.filter((key) => !BAJS_STANICA_KEYS.includes(key))).toEqual([]);
+  });
+});
+
+describe('the word "zid": never the screen, while a proper name keeps it [O-66]', () => {
+  // The header's register family ("{name}: {text}") keeps the slop register; the street
+  // "Pod zidom" is data, so a register sentence that names it may stand in the header.
+  const NOW = Date.parse('2026-09-22T12:10:00+02:00');
+  const header = (text: string) => acceptSentence(text, { facts: [{ id: 'always:heritage:kolmar', kind: 'kultura', text, validUntil: NOW + 600_000 }], now: NOW });
+  it('takes a register sentence that names the street Pod zidom', () => {
+    expect(header('Kuća Kolmar: servisni ulaz s ulice Pod zidom.')).toEqual({ ok: true });
+  });
+  it('still refuses every other "zid", the common noun included', () => {
+    for (const text of [
+      'Kuća Kolmar: slika na zidu u prizemlju.',
+      'Kuća Kolmar: ulaz je pod zidom.',
+      'Kuća Kolmar: servisni ulaz s ulice POD ZIDOM.',
+      'Pod zidom: ulica podno negdašnjeg obrambenog zida Kaptola.',
+    ]) expect(header(text), text).toEqual({ ok: false, reason: 'forbidden-copy' });
   });
 });
 
@@ -99,18 +180,15 @@ describe('canonical sentences', () => {
     warningsNone: 'Nema upozorenja DHMZ-a za Zagreb.',
     unlockedUntil: 'Otključano do {time}',
     safetyPage: 'Sigurnost',
-    safetyOpen: 'Sigurnost, bez skeniranja',
   };
   /** Dashboard keys read by call sites that do not change; each says exactly what its shared sentence says. */
   const TWINS: Record<keyof typeof SHARED_HR, string[]> = {
-    closuresNone: ['safety.closuresNone', 'transport.noClosures'],
+    closuresNone: ['safety.closuresNone'],
     warningsNone: ['weather.warningsNone'],
     unlockedUntil: ['session.unlockedAnnounce', 'session.sheetTitle'],
     safetyPage: ['layers.sigurnost', 'nav.safety'],
-    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
-    safetyOpen: ['common.links.hitno', 'landing.actions.safety', 'scan.errors.actions.safety'],
   };
-  it('shared.* carries the five canonical Croatian sentences', () => {
+  it('shared.* carries the four canonical Croatian sentences', () => {
     expect(hr.shared).toEqual(SHARED_HR);
   });
   it.each(Object.entries(TWINS))('every twin of shared.%s says the same sentence in both languages', (key, twins) => {
@@ -119,15 +197,35 @@ describe('canonical sentences', () => {
       expect(leaf(EN, twin), `${twin} (en)`).toBe(leaf(EN, `shared.${key}`));
     }
   });
+  it('the /hitno link says one label everywhere it stands (common.links.hitno is canonical)', () => {
+    // shared.safetyOpen had no reader and is gone (WP5 A1); the labels it pinned still agree.
+    // landing.pages.hitno ("Sigurnost, otvoreno svima") is a page description in a list of them, not this label.
+    expect(hr.common.links.hitno).toBe('Sigurnost, bez skeniranja');
+    for (const twin of ['landing.actions.safety', 'scan.errors.actions.safety']) {
+      expect(leaf(HR, twin), `${twin} (hr)`).toBe(hr.common.links.hitno);
+      expect(leaf(EN, twin), `${twin} (en)`).toBe(en.common.links.hitno);
+    }
+  });
   it('the kiosk reads the shared sentences for the same concepts', () => {
     expect(leaf(HR, 'kiosk.paired.closuresNone')).toBeUndefined();
     expect(leaf(HR, 'kiosk.paired.warningsNone')).toBeUndefined();
     expect(leaf(HR, 'kiosk.header.unlockedUntil')).toBeUndefined();
     expect(leaf(HR, 'kiosk.safety.hitno')).toBeUndefined();
   });
+  // §13 #13: the register caveat is said once, on /izvori, never on the wall [O-27]; the owner's words, byte-exact (WP5 B1).
+  it('/izvori says the city catalogue\'s register sentence once, in the owner\'s words, and no other page or catalogue repeats it', () => {
+    const REGISTER = 'Podaci gradskog kataloga (kultura, baština, voda, WC, tržnice …) su iz registara, ne provjera uživo; obuhvat zaštite baštine označava zaštićeno područje, ne ulaz.';
+    const page = read('app/izvori/index.html');
+    expect(page.split(`<p>${REGISTER}</p>`).length - 1).toBe(1);
+    // After the page's own intro, before the generated source list.
+    expect(page.indexOf(REGISTER)).toBeGreaterThan(page.indexOf('u trenutku prikaza.</p>'));
+    expect(page.indexOf(REGISTER)).toBeLessThan(page.indexOf('<!--IZVORI-->'));
+    for (const file of [...staticHtml().filter((f) => f !== 'app/izvori/index.html'), 'app/src/i18n/hr.json', 'app/src/i18n/en.json']) {
+      expect(read(file), file).not.toContain('Podaci gradskog kataloga');
+    }
+  });
   it('the Još heading is "Još" and the safety verdict has one calm sentence', () => {
     expect(hr.nav.moreTitle).toBe('Još');
-    expect(hr.overview.allClear).toBe(hr.safety.calm);
     expect(hr.directory.safetySummaryCalm).toBe(hr.safety.calm);
   });
 });
@@ -243,30 +341,41 @@ describe('an arrival time is never bare (WP5)', () => {
     stop: STOP, routes: [{ id: '11', short: '11', long: 'Črnomerec - Dubec', type: 0 }], counts: new Map(), delays: new Map(),
     isScreenStop: false, kiosk: false, arrivals: ROWS, arrivalsStatus: 'live', frozenAt,
   });
+  /** Every row of the stop's list: its first three (arrival-rows), then the rest under "Vozni red" (timetable-rows). */
   const arrivalRows = (html: string): string[] => {
-    const list = html.split('data-testid="arrival-rows"')[1]!.split('</ul>')[0]!;
-    return list.split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
+    const list = (testid: string): string => html.split(`data-testid="${testid}"`)[1]?.split('</ul>')[0] ?? '';
+    expect(html).toContain('data-testid="arrival-rows"');
+    return (list('arrival-rows') + list('timetable-rows')).split('<li ').slice(1).map((row) => row.split('</li>')[0]!);
   };
 
-  it.each(['hr', 'en'] as const)('%s: every row carries the live marker or the schedule mark, and the note names the source', (locale) => {
+  it.each(['hr', 'en'] as const)('%s: a live row carries the dot and data-live, a timetable row a plain clock and neither; the note names the source once', (locale) => {
+    const catalogue = locale === 'hr' ? HR : EN;
     const html = sheet(locale);
     const rows = arrivalRows(html);
     expect(rows).toHaveLength(ROWS.length);
-    for (const row of rows) {
-      const live = row.includes('class="t-live"');
-      const scheduled = row.includes(leaf(locale === 'hr' ? HR : EN, 'arrivals.scheduled')!);
-      expect(live || scheduled, row).toBe(true);
-      // Never both: a row is one thing or the other.
-      expect(live && scheduled, row).toBe(false);
-    }
-    expect(html).toContain(leaf(locale === 'hr' ? HR : EN, 'arrivals.note'));
+    rows.forEach((row, i) => {
+      const live = ROWS[i]!.live;
+      expect(row.includes('class="t-live"'), row).toBe(live);
+      expect(row.includes('data-live="true"'), row).toBe(live);
+      if (!live) expect(row, row).toContain('<time');
+      // No word per row [O-27]: the form carries it and the note says it once. Read the row's text, not its
+      // markup: the rows name their kind for the probe in an attribute (data-kind="timetable", lane/d3-copy2),
+      // and the English catalogue word for the form is "timetable" too.
+      const text = `<li ${row}`.replace(/<[^>]*>/g, ' ');
+      expect(text, row).not.toContain(leaf(catalogue, 'arrivals.scheduled')!);
+      expect(text, row).not.toMatch(/Procjena|Estimate/);
+    });
+    expect(html.split(leaf(catalogue, 'arrivals.note')!).length - 1).toBe(1);
+    // The live word names the dot for a screen reader; it is never text on the sheet.
+    expect(html.replace(/<[^>]*>/g, ' ')).not.toContain(leaf(catalogue, 'arrivals.live')!);
   });
 
   it('a frozen sheet keeps the marker but never says the live word', () => {
     const html = sheet('hr', Date.parse('2026-09-19T10:02:00Z'));
-    for (const row of arrivalRows(html)) {
-      expect(row.includes('class="t-live"') || row.includes(leaf(HR, 'arrivals.scheduled')!), row).toBe(true);
-    }
+    arrivalRows(html).forEach((row, i) => {
+      expect(row.includes('class="t-live"'), row).toBe(ROWS[i]!.live);
+      expect(row, row).not.toContain('data-live="true"');
+    });
     expect(html).not.toContain(leaf(HR, 'arrivals.live'));
     expect(html).toContain(leaf(HR, 'session.snapshotAt')!.replace('{time}', '12:02'));
   });
@@ -275,6 +384,17 @@ describe('an arrival time is never bare (WP5)', () => {
     for (const [name, catalogue] of [['hr', hr], ['en', en]] as const) {
       expect(JSON.stringify(catalogue), name).not.toMatch(/ne objavljuje dolaske|publishes no arrival/);
     }
+  });
+});
+
+describe('the end of a session clears the content (WP4 step 11, D3 read-through)', () => {
+  it('the landing story and the expired capture never promise a snapshot that stays', () => {
+    for (const [name, catalogue, promise] of [['hr', HR, /snimk|zamrz|izvoz/i], ['en', EN, /snapshot|frozen|export/i]] as const) {
+      for (const key of ['landing.story.leaveBody', 'landing.alt.frozen']) expect(leaf(catalogue, key), `${key} (${name})`).not.toMatch(promise);
+    }
+    const html = read('app/index.html');
+    expect(html).not.toContain('označena snimka');
+    expect(html).toContain(`alt="${leaf(HR, 'landing.alt.frozen')}" data-capture-alt="frozen"`);
   });
 });
 
@@ -288,11 +408,15 @@ describe('leaves', () => {
       }
     }
   });
+  it('no leaf in either catalogue ends or breaks off in an ellipsis: a status is a whole phrase (WP5)', () => {
+    for (const [name, catalogue] of [['hr', HR], ['en', EN]] as const) {
+      expect(leafKeys(catalogue).filter((key) => /…|\.\.\./u.test(leaf(catalogue, key)!)), name).toEqual([]);
+    }
+  });
 });
 
-// The wall of 22 September (WP1) owns three key groups. The rule is scoped to
-// them: older kiosk copy still carries loading ellipses ("Kod stiže…") that
-// belong to other surfaces and other packages.
+// The wall of 22 September (WP1) owns three key groups; these rules are theirs.
+// The ellipsis ban holds for every leaf ("leaves" above).
 describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP1)', () => {
   const GROUPS = ['nearby', 'sentence', 'handheld'] as const;
   const values = (catalogue: Catalogue): (readonly [string, string])[] =>
@@ -350,7 +474,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     sunriseTime: 'U {time} izlazi sunce.',
     lastTram: 'Zadnji tramvaj {route} polazi {time}.',
     firstTram: 'Prvi tramvaj {route} polazi {time}.',
-    event: '{time} počinje događanje „{title}“ ({venue}).',
+    event: '{time} počinje događanje „{title}” ({venue}).',
     opening: '{name}: rad počinje {time}.',
     pharmacy: 'Dežurna ljekarna 24/7: {address}.',
     always: '{name}: {text}',
@@ -399,7 +523,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
       to: /, smjer \{to\}, /,
       street: /^\{street\}: /,
       name: /^\{name\}: /,
-      title: /„\{title\}“/,
+      title: /„\{title\}”/,
       venue: /\(\{venue\}\)/,
       station: /^BAJS \{station\}: /,
       address: /: \{address\}\.$/,
@@ -418,7 +542,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.closureUntil, { street: 'Trg bana Josipa Jelačića', until: '18:00' })).toBe('Trg bana Josipa Jelačića: zatvoreno za promet do 18:00.');
     expect(fill(s.closureUntil, { street: 'Vukovarska avenija', until: '18:00' })).toBe('Vukovarska avenija: zatvoreno za promet do 18:00.');
     expect(fill(s.opening, { name: 'Klovićevi dvori', time: 'sutra u 10:00' })).toBe('Klovićevi dvori: rad počinje sutra u 10:00.');
-    expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus“ (Kino Europa).');
+    expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus” (Kino Europa).');
     expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
   });

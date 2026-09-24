@@ -10,12 +10,8 @@ import { fetchZetRss } from './zet-rss';
 // Six publishers, eight independently fetched endpoints. Counts alone cannot
 // distinguish an empty response from an outage; sources carries that evidence.
 // Each publisher's eligible rows are capped before merging.
-// Bounds a sub-fetcher's whole run, which since WP6 includes the one-line
-// brief step three of them take on a cold brief cache (worker/feed/brief.ts
-// caps a generation at 4 s and never rejects). A slow model on a first
-// refresh can therefore cost a source this ceiling: it then reports 'down'
-// for that refresh and recovers from the KV last-good copy, and the brief
-// cache -- positive or negative -- keeps it from happening twice.
+// Bounds a sub-fetcher's whole run: a source slower than this reports 'down'
+// for that refresh and recovers from the KV last-good copy.
 export const DOGADANJA_SOURCE_TIMEOUT_MS = 6000;
 export const DOGADANJA_SOURCE_CAP = 40;
 

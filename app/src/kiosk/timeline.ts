@@ -43,7 +43,7 @@
 // [data-when|data-always][data-live][data-source] with .nearby-when (<time>),
 // .nearby-title and .nearby-sub (present, and empty when the row has none);
 // data-key duplicates data-id for reconcile.ts.
-import type { ArrivalRow } from '../../../shared/city/arrivals';
+import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import { nearbyHead, rowBudget, type NearbyRow } from '../city/nearby';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
@@ -54,6 +54,8 @@ import { kBadge } from './markup';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { optionalExternal } from './external';
+import { vettedArrival } from './arrivals';
+import type { OnDutyPharmacy } from './pharmacies';
 
 /**
  * A row as the timeline reads it: the S5 NearbyRow, whose departure rows
@@ -534,4 +536,212 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   const fonts = (document as Document & { fonts?: EventTarget }).fonts ?? null;
   fonts?.addEventListener?.('loadingdone', refit);
   return handle;
+}
+
+// --- The read-only touch (WP2 step 9, [O-58]) -------------------------------------
+//
+// A touch on the wall (kiosk.ts) puts one thing in this list's box for TOUCH_MS:
+// a stop's board, a row's detail or the on-duty pharmacy, and then the wall
+// returns by itself. The list stays laid out under it (kiosk-city.css hides it
+// with visibility, never display, and never touches its rows), so its fit is
+// still the right one when the box is given back. Every label is vetted where it
+// is drawn (decision 22): departureRow vets the line and the headsign itself (the
+// same row Sada and Karta print, so "uživo" means the same thing on all three),
+// and every other string here is a return of vetExternal. Whole rows and whole
+// words: each builder offers its variants from the richest to the leanest, and
+// the panel keeps the first its box holds whole.
+
+/** How long a touch keeps its detail before the wall returns by itself [O-58]. */
+export const TOUCH_MS = 60_000;
+/** A stop's board leads with Sada's three departures, never more [O-27] (transport/view.ts STOP_DEPARTURES_FIRST). */
+export const STOP_BOARD_ROWS = 3;
+/** The trips the timetable line names after a stop's three departures ("Vozni red · 6 14:40 · 11 14:44"). */
+export const TIMETABLE_LINE_TRIPS = 4;
+/** How many rows of the timetable a board reads: its three departures may be among them. */
+export const STOP_BOARD_TIMETABLE_ROWS = STOP_BOARD_ROWS + TIMETABLE_LINE_TRIPS;
+
+/**
+ * Sada's row is the phone's transport view (transport/view.ts departureRow),
+ * which the wall's first screen does not carry (test/app/budget.test.ts, the
+ * 200 kB promise): it loads once, on the first touch (the finger's pointerdown
+ * starts it), and a board drawn before it is in hand says it is loading. A
+ * load that fails is asked for again on the next touch.
+ */
+type TransportView = Pick<typeof import('../transport/view'), 'departureRow'>;
+let transportView: TransportView | null = null;
+let transportViewLoad: Promise<boolean> | null = null;
+let transportViewFailed = false;
+export function loadStopBoardRows(): Promise<boolean> {
+  if (transportView) return Promise.resolve(true);
+  transportViewLoad ??= import('../transport/view').then((module) => {
+    transportView = module;
+    transportViewFailed = false;
+    return true;
+  }, () => {
+    transportViewLoad = null;
+    transportViewFailed = true;
+    return false;
+  });
+  return transportViewLoad;
+}
+
+/** What a stop's board is drawn from; the caller computes both lists with shared/city/arrivals.ts arrivalsAt. */
+export interface StopBoardModel {
+  /** The stop's name as the stop table gives it (vetted here as a name). */
+  name: string;
+  /** What comes next, soonest first, read with the fleet the feed rule allows (city/feed.ts liveFixes). */
+  rows: readonly ArrivalRow[];
+  /** The same boards read without the fleet: the timetable. */
+  timetable: readonly ArrivalRow[];
+  status: ArrivalsStatus;
+}
+
+const tripKey = (row: ArrivalRow): string => row.tripId || `${row.routeId}|${row.atMs}`;
+
+/** "Vozni red · 6 14:40 · 11 14:44": the next trips off the timetable alone, a grey clock each, never an estimate. */
+function timetableLine(i18n: I18n, trips: readonly ArrivalRow[]): string {
+  const items = trips.map((trip) => {
+    const route = vetExternal('headsign', trip.routeName, 'row');
+    return route === null ? '' : `<span class="k-touch-trip">${e(route)} <time datetime="${a(new Date(trip.atMs).toISOString())}">${e(clock(trip.atMs))}</time></span>`;
+  }).filter(Boolean);
+  if (items.length === 0) return '';
+  return `<p class="k-touch-timetable" data-testid="stop-board-timetable"><span class="k-touch-timetable-head">${e(i18n.t('arrivals.timetable'))}</span> · ${items.join(' · ')}</p>`;
+}
+
+/**
+ * A stop's board, as its variants from the richest to the leanest: the stop's
+ * name, its next three departures as Sada's rows, then the timetable line; a
+ * box that does not hold them all loses trips off the timetable line, then the
+ * line, then departures from the last. Probe: `[data-testid=stop-board]`, rows
+ * `[data-kind=departure]`, which Sada's row carries itself. A departure whose line or headsign fails the text
+ * check is not drawn (departureRow); a stop name that fails gives way to
+ * "Sljedeći polasci".
+ */
+export function stopBoardVariants(i18n: I18n, board: StopBoardModel): string[] {
+  const title = vetExternal('name', board.name, 'row') ?? i18n.t('arrivals.title');
+  const view = transportView;
+  const lead = view ? board.rows.filter(vettedArrival).slice(0, STOP_BOARD_ROWS) : [];
+  const leadKeys = new Set(lead.map(tripKey));
+  const later = view ? board.timetable.filter(vettedArrival).filter((row) => !leadKeys.has(tripKey(row))).slice(0, TIMETABLE_LINE_TRIPS) : [];
+  // No board (or no row renderer) in hand yet is "on its way"; every platform failing, the renderer failing to load,
+  // or rows that all failed the text check, is "not available".
+  const empty = !view
+    ? i18n.t(transportViewFailed ? 'arrivals.down' : 'status.loading')
+    : board.rows.length > 0 || board.status === 'down' ? i18n.t('arrivals.down') : board.status === 'none' ? i18n.t('status.loading') : i18n.t('arrivals.none');
+  const variant = (rows: number, trips: number): string => `<div class="k-touch-body" data-testid="stop-board">`
+    + `<h2 class="k-touch-title">${e(title)}</h2>`
+    + (view && lead.length > 0 ? `<ul class="k-touch-rows">${lead.slice(0, rows).map((row) => view.departureRow(i18n, row, kindOfRoute)).join('')}</ul>` : `<p class="k-touch-line">${e(empty)}</p>`)
+    + (trips > 0 ? timetableLine(i18n, later.slice(0, trips)) : '')
+    + '</div>';
+  return [...new Set([variant(STOP_BOARD_ROWS, TIMETABLE_LINE_TRIPS), variant(STOP_BOARD_ROWS, 2), variant(STOP_BOARD_ROWS, 0), variant(2, 0), variant(1, 0)])];
+}
+
+/**
+ * A row's detail: its time with the day word, then its whole title and whole
+ * sub (never the shorter twins the list may print), and for an event the
+ * venue's address from the city catalogue (the venue and the tram to it are
+ * the row's own sub). Each label under the kind selectNearby vetted it with
+ * (rowTextKinds). A box too short for everything loses the address, then
+ * takes the short labels, then keeps the title alone. Probe:
+ * `[data-testid=touch-detail][data-kind]`.
+ */
+export function rowDetailVariants(i18n: I18n, row: TimelineRow, now: number, address?: string | null): string[] {
+  if (!vettedTimelineRow(row)) return [];
+  const kinds = rowTextKinds(row);
+  const title = vetExternal(kinds.title, row.title, 'row');
+  if (title === null) return [];
+  const sub = row.sub ? vetExternal(kinds.sub, row.sub, 'row') : null;
+  const titleShort = row.titleShort ? vetExternal(kinds.title, row.titleShort, 'row') : null;
+  const subShort = row.subShort ? vetExternal(kinds.sub, row.subShort, 'row') : null;
+  const where = address ? vetExternal('address', address, 'row') : null;
+  const timeless = isTimeless(row);
+  const when = e(timeLabel(row, now, i18n));
+  const day = dayLabel(row, now, i18n);
+  const moment = timeless ? `<span>${when}</span>` : `<time datetime="${a(new Date(row.atMs!).toISOString())}">${when}</time>`;
+  const variant = (heading: string, line: string | null, place: string | null): string =>
+    `<div class="k-touch-body" data-testid="touch-detail" data-kind="${a(row.kind)}">`
+    + `<p class="k-touch-when">${moment}${day ? ` <span class="k-touch-day">${e(day)}</span>` : ''}</p>`
+    + `<h2 class="k-touch-title">${e(heading)}</h2>`
+    + (line ? `<p class="k-touch-line">${e(line)}</p>` : '')
+    + (place ? `<p class="k-touch-line">${e(place)}</p>` : '')
+    + '</div>';
+  return [...new Set([variant(title, sub, where), variant(title, sub, null), variant(title, subShort ?? sub, null), variant(titleShort ?? title, subShort ?? sub, null), variant(titleShort ?? title, null, null)])];
+}
+
+/** A phone number as the City's list prints it ("01 4816 198"): curated in the repository (worker/hitno/ljekarne.ts), never feed text. */
+const PHONE_DISPLAY = /^0\d{1,2}(?: \d{2,4}){1,3}$/u;
+
+/**
+ * The on-duty pharmacy, captioned as the strip and Osnovno caption it (kiosk/frame.ts, kiosk/essentials.ts):
+ * "Dežurna ljekarna 24/7: {address}." with its short address vetted as an address, "24/7" alone when the
+ * address is refused (never the bare label, slop #29); then its name and its phone ("Nazovi 01 4816 198", or
+ * that the source gives none). The phone is the repository's own curated number, shown only in the list's
+ * display form (the third-party text check refuses every phone number by design, which is why it is not the
+ * check for the one number the owner asked the wall to show).
+ */
+export function pharmacyDetailVariants(i18n: I18n, words: { caption: string; hours: string }, pharmacy: OnDutyPharmacy): string[] {
+  const address = vetExternal('address', pharmacy.label, 'row');
+  const caption = address === null ? words.hours : words.caption.replace('{address}', address);
+  const name = vetExternal('name', pharmacy.name, 'row');
+  const phone = pharmacy.phoneDisplay !== null && PHONE_DISPLAY.test(pharmacy.phoneDisplay) ? pharmacy.phoneDisplay : null;
+  const call = phone === null ? i18n.t('safety.noPhone') : i18n.t('safety.call', { number: phone });
+  const variant = (named: boolean): string => `<div class="k-touch-body" data-testid="touch-detail" data-kind="pharmacy">`
+    + `<p class="k-touch-kicker"><span class="k-touch-cross" aria-hidden="true"></span>${e(caption)}</p>`
+    + (named && name ? `<h2 class="k-touch-title">${e(name)}</h2>` : '')
+    + `<p class="k-touch-line k-touch-phone">${e(call)}</p>`
+    + '</div>';
+  return [...new Set([variant(true), variant(false)])];
+}
+
+export type TouchKind = 'stop' | 'row' | 'pharmacy';
+
+export interface TouchPanelHandle {
+  /** The panel's section while it shows something; null while the box is the list's. */
+  element(): HTMLElement | null;
+  /** Puts the first of `variants` (richest first) the box holds whole over the list; an empty list gives the box back. */
+  show(kind: TouchKind, variants: readonly string[]): void;
+  /** Gives the box back to the list: the panel leaves the DOM. */
+  clear(): void;
+}
+
+/**
+ * The panel a touch fills, beside the "U blizini" list in `host` (the aside's
+ * `.k-nearby-host`). It is in the DOM only while it shows something, marked
+ * `data-touch` on the host (the stylesheet hides the list under it), and an
+ * update with the same content and box writes nothing.
+ */
+export function mountTouchPanel(host: HTMLElement, deps: { measure?: TimelineMeasure } = {}): TouchPanelHandle {
+  const measure = deps.measure ?? DOM_MEASURE;
+  let section: HTMLElement | null = null;
+  let shown = '';
+  function clear(): void {
+    if (host.dataset.touch !== undefined) delete host.dataset.touch;
+    section?.remove();
+    section = null;
+    shown = '';
+  }
+  return {
+    element: () => section,
+    show(kind, variants) {
+      if (variants.length === 0) { clear(); return; }
+      if (!section) {
+        section = document.createElement('section');
+        section.className = 'k-touch';
+        section.setAttribute('aria-live', 'polite');
+        host.appendChild(section);
+      }
+      if (host.dataset.touch !== kind) host.dataset.touch = kind;
+      if (section.dataset.touch !== kind) section.dataset.touch = kind;
+      const box = measure.box(section);
+      const signature = `${kind}\u0001${box.height}x${box.width}\u0001${variants.join('\u0002')}`;
+      if (signature === shown) return;
+      shown = signature;
+      for (const markup of variants) {
+        section.innerHTML = markup;
+        const body = section.firstElementChild as HTMLElement | null;
+        if (!body || !measure.box(body).overflow) return;
+      }
+    },
+    clear,
+  };
 }

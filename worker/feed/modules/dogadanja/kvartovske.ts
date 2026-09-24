@@ -1,6 +1,5 @@
 import type { FetchContext } from '../../schema';
 import { decodeEntities, stripTags } from '../../html';
-import { briefRows } from '../../payload';
 
 // aktivnosti.zagreb.hr's "Kvartovske novosti" listing (mjesna samouprava
 // hyperlocal news: the city's neighbourhood councils and boards) publishes
@@ -16,16 +15,12 @@ import { briefRows } from '../../payload';
 
 export const KVARTOVSKE_URL = 'https://aktivnosti.zagreb.hr/kvartovske-novosti/134585';
 const KVARTOVSKE_BASE_URL = 'https://aktivnosti.zagreb.hr';
-/** How many of the listing's newest headlines the kiosk ticker can show, and so how many are condensed (WP6). */
-export const KVARTOVSKE_BRIEF_COUNT = 3;
 
 export interface KvartovskeEvent {
   id: string;
   title: string;
   link: string;
   dateBasis: 'unknown';
-  /** One-line machine-condensed reading of the headline (worker/feed/brief.ts, WP6). */
-  brief?: string;
   data: {
     source: 'kvartovske';
   };
@@ -77,9 +72,6 @@ export async function fetchKvartovske(ctx: FetchContext): Promise<KvartovskeResu
       },
     });
   }
-
-  // The listing supplies ordering, so its head is what the ticker can show.
-  await briefRows(ctx, items.slice(0, KVARTOVSKE_BRIEF_COUNT), (item) => item.title, 'novost');
 
   // This paginated listing does not publish an overall item total.
   return { items, ...(!/class=["'][^"']*pagination-table/i.test(html) ? { totalItems: items.length } : {}) };

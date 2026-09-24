@@ -46,32 +46,8 @@ export const HERITAGE_ROW_RESIDUALS: readonly RowTextResidual[] = [
   // W-C10: register initials and abbreviations (d.d., A.I., Dr.Ante, sv.Vinka)
   // are no longer lost; in a name or address a dotted token is a link only when
   // its last label is a top-level domain.
-  // VES is an ISO currency code. Case-folding also matches Nova Ves addresses.
-  numeric('name', 'Zgrada, Nova Ves 2', 'ves 2', 'payment'),
-  numeric('address', 'Nova Ves 02', 'ves 02', 'payment'),
-  numeric('name', 'Kuća Pavliček, Nova Ves 1', 'ves 1', 'payment'),
-  numeric('address', 'Nova Ves 01', 'ves 01', 'payment'),
-  numeric('name', 'Prebendarska kurija altarije sv. Jakova, Nova Ves 8', 'ves 8', 'payment'),
-  numeric('address', 'Nova Ves 08', 'ves 08', 'payment'),
-  numeric('name', 'Prebendarska kurija altarije sv. Magdalene, Nova Ves 7', 'ves 7', 'payment'),
-  numeric('address', 'Nova Ves 07', 'ves 07', 'payment'),
-  numeric('name', 'Prebendarska kurija altarije sv. Doroteje, Nova Ves 6', 'ves 6', 'payment'),
-  numeric('address', 'Nova Ves 06', 'ves 06', 'payment'),
-  numeric('name', 'Prebendarska kurija, Nova Ves 12', 'ves 12', 'payment'),
-  numeric('address', 'Nova Ves 12', 'ves 12', 'payment'),
-  numeric('name', 'Zgrada Biskupske ubožnice, Nova Ves 18', 'ves 18', 'payment'),
-  numeric('address', 'Nova Ves 018', 'ves 018', 'payment'),
-  numeric('address', 'Nova Ves 55', 'ves 55', 'payment'),
-  numeric('name', 'Ljetnikovac biskupa Aleksandra Alagovića, Nova Ves 86', 'ves 86', 'payment'),
-  numeric('address', 'Nova Ves 86', 'ves 86', 'payment'),
-  numeric('name', 'Prebendarska kurija sv. Uršule, Nova Ves 04 i 4/1', 'ves 04', 'payment'),
-  numeric('address', 'Nova Ves 04 i 4/1', 'ves 04', 'payment'),
-  numeric('name', 'Prebendarska kurija sv. Mihovila, Nova Ves 3', 'ves 3', 'payment'),
-  numeric('address', 'Nova Ves 3', 'ves 3', 'payment'),
-  numeric('name', 'Prebendarska kurija, Nova Ves 5 i 5a', 'ves 5', 'payment'),
-  numeric('address', 'Nova Ves 5 i 5a', 'ves 5', 'payment'),
-  numeric('name', 'Prebendarska kurija sv. Jakova, Nova Ves 22', 'ves 22', 'payment'),
-  numeric('address', 'Nova Ves 22', 'ves 22', 'payment'),
+  // Nova Ves (VES, an ISO 4217 code) left this list: the committed street's own name before a
+  // parsed house number is that street, not a currency (external-text.ts maskRegisterStreet).
 ];
 
 export const TITLE_ROW_RESIDUALS: readonly RowTextResidual[] = [

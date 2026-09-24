@@ -94,6 +94,31 @@ const WINDOW_TO_S = 17 * 3600 + 44 * 60;
  *  own-route transition onto or off such a path is its own class
  *  ('loop-transition'), counted in `loops` and excluded from metric A. */
 const LOOP_ID_PREFIX = 'loop:';
+/** A hand-over onto or off a terminus loop path is a terminus turn within this
+ *  of a terminal platform, row E's own band; farther from every terminal it is
+ *  a direction flip like any other and counts in rows A and E (23 Sep, the
+ *  review of lane/t-rail: 4 + 5 returns a day from a plan held at a loop stand,
+ *  seven after 55 to 119 s of silence and two after 14 and 27 s, 249 to 754 m
+ *  from the tram, read as loop transitions and so out of both rows). The
+ *  distance is unrounded metres, as decision 16's parked radius: 300.4 m
+ *  prints as 300 and is beyond 300 m. */
+export const LOOP_HANDOVER_TERMINUS_M = 300;
+/** The class of a same-trip path change (describeEvent), from what it joins. */
+export function classifyEvent(x: { vehicleRoute: string; oldRoute: string; newRoute: string; oldId: string; newId: string; oldDirection: number; newDirection: number; terminalM: number | null }): EventClass {
+  if (x.newRoute !== x.vehicleRoute) return 'onto-other-route';
+  if (x.oldRoute !== x.vehicleRoute) return 'back-to-own-route';
+  // Own-route transitions onto or off a terminus loop path (direction -1) are
+  // their own class at a terminus: otherwise they would read as direction flips.
+  const loop = isLoopId(x.oldId) || isLoopId(x.newId);
+  if (loop && (x.terminalM === null || x.terminalM <= LOOP_HANDOVER_TERMINUS_M)) return 'loop-transition';
+  if (x.oldDirection !== x.newDirection) return 'direction-flip';
+  return 'same-route-variant';
+}
+/** What row A counts, and A' inside the teaser box (decision 35): every
+ *  same-trip path change but a direction flip at a terminal and a loop transition. */
+export function countsInA(e: { cls: string; atTerminus: boolean }): boolean {
+  return e.cls !== 'loop-transition' && !(e.cls === 'direction-flip' && e.atTerminus);
+}
 /** Silence gaps (fresh fix to fresh fix of one vehicle) shorter than this are ZET's ordinary cadence. */
 const GAP_MIN_S = 60;
 /** How far ahead of the header a silent tram's published plan is read (WP0 step 7c). */
@@ -538,6 +563,8 @@ interface UnplacedOpen {
   route: string;
   trip: string | null;
   prior: string | null;
+  /** match.ts TramTrack.unplacedReason at the episode's first tick, or 'unknown'. */
+  reason: string;
   startP: XY;
   lastP: XY;
   sec: number;
@@ -554,6 +581,8 @@ interface UnplacedEpisode {
   route: string;
   trip: string | null;
   prior: string | null;
+  /** Why the matcher left the tram unplaced ('terminus', 'diversion', 'no-path', or 'unknown'). */
+  reason: string;
   durationS: number;
   ticks: number;
   freshFixes: number;
@@ -742,6 +771,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   const history = new Map<string, TickRecord[]>();
   const freshHistory = new Map<string, TickRecord[]>();
   const events: BranchEvent[] = [];
+  /** Each event's unrounded distance to the nearest terminal platform, for the 300 m boundaries (the event prints it rounded). */
+  const terminalDist = new WeakMap<BranchEvent, number>();
   const priorChanges: { h: number; id: string; trip: string | null; from: number | null; to: number | null }[] = [];
   const arcJumps: ArcJump[] = [];
   const tickDurations: number[] = [];
@@ -784,6 +815,11 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
   // it; the raw share stays beside it.
   const unplaced = { sec: 0, withEdgeSec: 0, noEdgeSec: 0, fresh: 0, offGraphSec: 0, episodes: [] as UnplacedEpisode[] };
   const unplacedSecByRoute = new Map<string, number>();
+  // Why the matcher left the tram unplaced (match.ts TramTrack.unplacedReason:
+  // 'terminus' within TERMINUS_NEAR_M of a terminal platform, 'diversion'
+  // mid-line, 'no-path' for a trip with no rails of its own; 'unknown' from an
+  // engine that does not say), by seconds and by episode.
+  const unplacedSecByReason = new Map<string, number>();
   const unplacedOpen = new Map<string, UnplacedOpen>(); // vehicle id -> the running episode
   // Silence: fresh-fix gaps per vehicle (keyed by vehicle id, so a gap that
   // outlives the track's eviction is still one gap), and what the payload
@@ -864,6 +900,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       route: ep.route,
       trip: ep.trip,
       prior: ep.prior,
+      reason: ep.reason,
       durationS: ep.sec,
       ticks: ep.ticks,
       freshFixes: ep.fresh,
@@ -910,14 +947,9 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     const oldPath = paths[oldIdx];
     const newPath = paths[newIdx];
     const veh = rec.route;
-    let cls: EventClass;
-    if (newPath.route !== veh) cls = 'onto-other-route';
-    else if (oldPath.route !== veh) cls = 'back-to-own-route';
-    // Own-route transitions onto or off a terminus loop path (direction -1) are
-    // their own class: before this line they would read as direction flips.
-    else if (isLoopId(oldPath.id) || isLoopId(newPath.id)) cls = 'loop-transition';
-    else if (oldPath.direction !== newPath.direction) cls = 'direction-flip';
-    else cls = 'same-route-variant';
+    const near = nearestStop(rec.p);
+    const terminal = nearestStop(rec.p, (s) => s.terminal);
+    const cls = classifyEvent({ vehicleRoute: veh, oldRoute: oldPath.route, newRoute: newPath.route, oldId: oldPath.id, newId: newPath.id, oldDirection: oldPath.direction, newDirection: newPath.direction, terminalM: terminal ? terminal.d : null });
 
     // Motion exactly as match.ts motionOf computed it for this fix.
     const groundM = dist(prev.p, rec.p);
@@ -964,9 +996,7 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     let planGapM: number | null = null;
     if (prev.planKnots && prev.planPath !== null) planGapM = dist(net.toPathPoint(prev.planPath, evalPathPlan(prev.planKnots, rec.h - prev.h)), rec.p);
 
-    const near = nearestStop(rec.p);
-    const terminal = nearestStop(rec.p, (s) => s.terminal);
-    return {
+    const event: BranchEvent = {
       h: rec.h,
       clock: localClock(rec.h),
       hour: localHour(rec.h),
@@ -1021,6 +1051,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       nearestTerminalM: terminal ? Math.round(terminal.d) : null,
       atTerminus: terminal ? terminal.d <= TERMINAL_NEAR_M : false,
     };
+    if (terminal) terminalDist.set(event, terminal.d);
+    return event;
   }
 
   /**
@@ -1177,13 +1209,15 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         else unplaced.noEdgeSec += dt;
         if (fresh) unplaced.fresh++;
         inc(unplacedSecByRoute, track.routeId, dt);
+        const unplacedReason = (track as { unplacedReason?: string }).unplacedReason ?? 'unknown';
+        inc(unplacedSecByReason, unplacedReason, dt);
         let ep = unplacedOpen.get(track.id);
         if (ep && ep.gen !== gen) {
           closeUnplaced(track.id);
           ep = undefined;
         }
         if (!ep) {
-          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0, maxDistFromStart: 0 };
+          ep = { gen, startH: headerSec, route: track.routeId, trip: track.tripId, prior: rec.prior !== null ? paths[rec.prior].id : null, reason: unplacedReason, startP: rec.p, lastP: rec.p, sec: 0, ticks: 0, fresh: 0, withEdgeTicks: 0, maxDistFromStart: 0 };
           unplacedOpen.set(track.id, ep);
         }
         ep.sec += dt;
@@ -1488,11 +1522,13 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
 
     const flips = events.filter((e) => e.cls === 'direction-flip');
     const d4 = events.filter((e) => e.mechanism.startsWith('turnaround'));
+    // The bands on unrounded metres (decision 35's boundary, as decision 16's radius): 300.4 m from a terminal prints as 300 and is beyond 300 m.
+    const termM = (e: BranchEvent): number => terminalDist.get(e) ?? Number(e.nearestTerminalM);
     const termHist = (list: readonly BranchEvent[]) => ({
-      le150: list.filter((e) => Number(e.nearestTerminalM) <= 150).length,
-      le300: list.filter((e) => Number(e.nearestTerminalM) > 150 && Number(e.nearestTerminalM) <= 300).length,
-      le600: list.filter((e) => Number(e.nearestTerminalM) > 300 && Number(e.nearestTerminalM) <= 600).length,
-      gt600: list.filter((e) => Number(e.nearestTerminalM) > 600).length,
+      le150: list.filter((e) => termM(e) <= 150).length,
+      le300: list.filter((e) => termM(e) > 150 && termM(e) <= 300).length,
+      le600: list.filter((e) => termM(e) > 300 && termM(e) <= 600).length,
+      gt600: list.filter((e) => termM(e) > 600).length,
     });
     const d4Mid = d4.filter((e) => !e.atTerminus);
     const flipReport = {
@@ -1610,8 +1646,12 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     };
 
     const windowEvents = events.filter((e) => inWindow(e.h));
-    const windowBoxEvents = windowEvents.filter((e) => e.inBox);
-    const boxEvents = events.filter((e) => e.inBox);
+    // Decision 35: A' is A inside the box, so the box rows take A's exclusions;
+  // the counts of every class stay beside them as eventsAllClasses.
+  const windowBoxEventsAll = windowEvents.filter((e) => e.inBox);
+  const windowBoxEvents = windowBoxEventsAll.filter(countsInA);
+    const boxEventsAll = events.filter((e) => e.inBox);
+  const boxEvents = boxEventsAll.filter(countsInA);
     const windowVh = windowSec / 3600;
     const boxVh = boxSec / 3600;
     const boxWindowVh = boxWindowSec / 3600;
@@ -1699,6 +1739,10 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     // ---- loops, unplaced, silence (WP0 step 7) ----------------------------------
     const loopEvents = events.filter((e) => e.cls === 'loop-transition');
     const loopTouching = events.filter((e) => isLoopId(e.from) || isLoopId(e.to));
+    // Every loop-touching event once: an own-route transition within LOOP_HANDOVER_TERMINUS_M of a terminal (loop-transition), a loop
+    // of another route adopted or left (row B), or an own-route hand-over beyond that distance (a direction flip, rows A and E).
+    const loopForeign = loopTouching.filter((e) => e.cls === 'onto-other-route' || e.cls === 'back-to-own-route');
+    const loopFar = loopTouching.filter((e) => e.cls !== 'loop-transition' && e.cls !== 'onto-other-route' && e.cls !== 'back-to-own-route');
     const loopsReport = {
       prefix: LOOP_ID_PREFIX,
       loopPaths: paths.filter((p) => isLoopId(p.id)).length,
@@ -1708,7 +1752,9 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       off: loopEvents.filter((e) => isLoopId(e.from) && !isLoopId(e.to)).length,
       loopToLoop: loopEvents.filter((e) => isLoopId(e.from) && isLoopId(e.to)).length,
       // A loop path of ANOTHER route adopted or left: classed onto-other-route / back-to-own-route, so still in row B.
-      foreignEvents: loopTouching.length - loopEvents.length,
+      foreignEvents: loopForeign.length,
+      // An own-route hand-over onto or off a loop more than LOOP_HANDOVER_TERMINUS_M from every terminal: a direction flip, in rows A and E.
+      farEvents: loopFar.length,
       byMechanism: Object.fromEntries(countBy(loopEvents, (e) => e.mechanism)),
       terminalDistanceHist: termHist(loopEvents),
       byStop: countBy(loopEvents, (e) => e.nearestStop ?? '?', 15),
@@ -1729,6 +1775,11 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
     }
     const unplacedEpisodesByRoute = new Map<string, number>();
     for (const e of eps) inc(unplacedEpisodesByRoute, e.route);
+    const unplacedByReason = Object.fromEntries(
+      [...unplacedSecByReason.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([reason, sec]) => [reason, { vehicleHours: r2(sec / 3600), shareOfTramVehicleHours: tramTrackedSec > 0 ? Math.round((sec / tramTrackedSec) * 1e6) / 1e6 : null, episodes: eps.filter((e) => e.reason === reason).length }]),
+    );
     const parkedEps = eps.filter((e) => e.parked);
     const parkedSec = parkedEps.reduce((sum, e) => sum + e.durationS, 0);
     const unplacedReport = {
@@ -1745,6 +1796,8 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
       noEdgeVehicleHours: r2(unplaced.noEdgeSec / 3600),
       offGraphVehicleHours: r2(unplaced.offGraphSec / 3600),
       freshFixes: unplaced.fresh,
+      // Why (match.ts TramTrack.unplacedReason), every unplaced second counted, parked or not.
+      byReason: unplacedByReason,
       episodes: eps.length,
       durationS: { p50: percentile(eps.map((e) => e.durationS), 0.5), p95: percentile(eps.map((e) => e.durationS), 0.95), max: maxOf(eps.map((e) => e.durationS)) },
       terminalM: { p50: percentile(epTerminal, 0.5), p95: percentile(epTerminal, 0.95) },
@@ -1888,11 +1941,12 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
         centre: TEASER_BOX_CENTRE,
         halfM: TEASER_BOX_HALF_M,
         events: boxEvents.length,
+      eventsAllClasses: boxEventsAll.length,
         vehicleHours: r1(boxVh),
         per100vh: per100(boxEvents.length, boxVh),
         meanVehiclesInBoxPerTick: boxTicks > 0 ? r1(boxVehicleTicks / boxTicks) : null,
-        byClass: Object.fromEntries(countBy(boxEvents, (e) => e.cls)),
-        window: { events: windowBoxEvents.length, vehicleHours: r1(boxWindowVh), per100vh: per100(windowBoxEvents.length, boxWindowVh), byClass: Object.fromEntries(countBy(windowBoxEvents, (e) => e.cls)), topStops: countBy(windowBoxEvents, (e) => e.nearestStop ?? '?', 8) },
+        byClass: Object.fromEntries(countBy(boxEventsAll, (e) => e.cls)),
+        window: { events: windowBoxEvents.length, eventsAllClasses: windowBoxEventsAll.length, vehicleHours: r1(boxWindowVh), per100vh: per100(windowBoxEvents.length, boxWindowVh), byClass: Object.fromEntries(countBy(windowBoxEventsAll, (e) => e.cls)), topStops: countBy(windowBoxEventsAll, (e) => e.nearestStop ?? '?', 8) },
       },
       dossierWindow: { events: windowEvents.length, vehicleHours: r1(windowVh), per100vh: per100(windowEvents.length, windowVh), byClass: Object.fromEntries(countBy(windowEvents, (e) => e.cls)) },
       byRoute: routeRows,
@@ -2213,7 +2267,7 @@ function acceptanceLines(r: BranchReport): string[] {
   const L: string[] = [];
   L.push('acceptance rows (targets: ACCEPTANCE_TARGETS in scripts/grade-branches-core.ts):');
   L.push(`  A  (pathChangesSameTrip ${r.totals.pathChangesSameTrip} - flips.atTerminus ${r.flips.atTerminus} - loops.events ${r.loops?.events ?? 0}) / ${r.tramVehicleHours} vh * 100 = ${fmt(A.per100vh, 2)} per 100 vh  [target <= 5, stretch <= 1]`);
-  L.push(`  A' teaser box 17:15-17:44: ${fmt(r.teaserBox.window.per100vh)} per 100 vh (${r.teaserBox.window.events} events)  [<= 5]`);
+  L.push(`  A' teaser box 17:15-17:44, with A's exclusions: ${fmt(r.teaserBox.window.per100vh)} per 100 vh (${r.teaserBox.window.events} events; every class ${r.teaserBox.window.eventsAllClasses})  [<= 5]`);
   L.push(`  B  onto another route's path: ${r.otherRoute.onto}  [0]`);
   L.push(`  C  foreign-path vehicle-hours ${r.otherRoute.ticks.foreignVehicleHours}; fresh fixes off the own path while it was within 60 m ${r.otherRoute.ticks.foreignFreshFixesWithPriorWithin60m}  [0; 0]`);
   L.push(`  D  re-derives with the own path in the pool but another adopted: ${r.rederive.priorInPoolButOtherAdopted}  [0]`);
@@ -2221,8 +2275,8 @@ function acceptanceLines(r: BranchReport): string[] {
   L.push(`  F  backward arc runs >= 500 m: ${r.backward.runsOver500m}  [0]`);
   L.push(`  G  same-trip re-seeds > 50 m: ${r.client.sameTripPathToPathOver50}, p95 ${fmt(r.client.sameTripPathToPathJumpP95)} m  [0; < 50 m]`);
   L.push(`  H  visible correction at a re-derive, p95: ${fmt(r.rederive.planGapM.p95)} m  [< 60 m]`);
-  L.push(`  loops: ${r.loops.events} own-route loop transitions (onto ${r.loops.onto}, off ${r.loops.off}, loop to loop ${r.loops.loopToLoop}); foreign loop events ${r.loops.foreignEvents} (in B); ${r.loops.loopPaths} loop paths in the network`);
-  L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m  [share without parked <= 3 %]`);
+  L.push(`  loops: ${r.loops.events} own-route loop transitions (onto ${r.loops.onto}, off ${r.loops.off}, loop to loop ${r.loops.loopToLoop}); foreign loop events ${r.loops.foreignEvents} (in B); own-route hand-overs beyond ${LOOP_HANDOVER_TERMINUS_M} m of a terminal ${r.loops.farEvents ?? 0} (direction flips, in A and E); ${r.loops.loopPaths} loop paths in the network`);
+  L.push(`  unplaced: share ${fmt(asPercent(u.shareOfTramVehicleHours), 2)} % of tram vehicle-hours without parked trams (raw ${fmt(asPercent(u.shareOfTramVehicleHoursRaw), 2)} %, ${u.vehicleHours} vh; parked ${fmt(u.parkedVehicleHours, 2)} vh in ${fmt(u.parkedEpisodes)} episodes; with a nearest edge ${u.withEdgeVehicleHours}, without ${u.noEdgeVehicleHours}); ${u.episodes} episodes, duration p50 ${fmt(u.durationS.p50)} s p95 ${fmt(u.durationS.p95)} s, nearest terminal p50 ${fmt(u.terminalM.p50)} m p95 ${fmt(u.terminalM.p95)} m; by reason ${Object.entries(u.byReason ?? {}).map(([reason, x]: [string, { vehicleHours: number; episodes: number }]) => `${reason} ${fmt(x.vehicleHours, 2)} vh in ${x.episodes} ep`).join(', ') || 'n/a'}  [share without parked <= 3 %]`);
   L.push(`  silence (EVICT_S ${si.evictS} s, SILENCE_HOLD_S ${si.holdS} s): published older than EVICT_S ${si.publishedOlderThanEvict} (tram ${si.publishedOlderThanEvictTram}, frames ${si.publishedOlderThanEvictFrames})  [0]; silent trams planned past the next stop at +${si.lookaheadS} s ${si.extrapolatedPastNextStop} of ${si.silentTramItemsOnPath} silent on-path items (${si.extrapolatedPastNextStopVehicles} vehicles; at the horizon ${si.extrapolatedPastNextStopAtHorizon})  [0]`);
   const g = si.gaps.hist;
   L.push(`  fresh-fix gaps > ${si.gaps.minS} s: ${si.gaps.total} (over EVICT_S ${si.gaps.overEvictS}); same trip 60-120 s ${g['60-120'].sameTrip}, 120-180 s ${g['120-180'].sameTrip} (moved <= 50 m ${g['120-180'].sameTripMovedLe50m}, <= 150 m of a terminal ${g['120-180'].sameTripWithin150mOfTerminal}), 180-300 s ${g['180-300'].sameTrip}, > 300 s ${g.over300.sameTrip}`);
@@ -2348,7 +2402,7 @@ export function formatMarkdown(r: BranchReport): string {
   const lp = r.loops;
   L.push('## Terminus loop paths (`loop:`; excluded from metric A)');
   L.push('');
-  L.push(`Loop paths in the network: ${lp.loopPaths}. Own-route transitions onto or off one (class \`loop-transition\`, not a direction flip): **${lp.events}** (onto ${lp.onto}, off ${lp.off}, loop to loop ${lp.loopToLoop}); by mechanism ${JSON.stringify(lp.byMechanism)}; terminal distance <=150 m ${lp.terminalDistanceHist.le150}, 150-300 m ${lp.terminalDistanceHist.le300}, 300-600 m ${lp.terminalDistanceHist.le600}, >600 m ${lp.terminalDistanceHist.gt600}. Loop paths of another route adopted or left (still counted in row B): ${lp.foreignEvents}.`);
+  L.push(`Loop paths in the network: ${lp.loopPaths}. Own-route transitions onto or off one (class \`loop-transition\`, not a direction flip): **${lp.events}** (onto ${lp.onto}, off ${lp.off}, loop to loop ${lp.loopToLoop}); by mechanism ${JSON.stringify(lp.byMechanism)}; terminal distance <=150 m ${lp.terminalDistanceHist.le150}, 150-300 m ${lp.terminalDistanceHist.le300}, 300-600 m ${lp.terminalDistanceHist.le600}, >600 m ${lp.terminalDistanceHist.gt600}. Loop paths of another route adopted or left (still counted in row B): ${lp.foreignEvents}. Own-route hand-overs beyond ${LOOP_HANDOVER_TERMINUS_M} m of every terminal (direction flips, rows A and E): ${lp.farEvents ?? 0}.`);
   L.push('');
   L.push(mdTable(['loop transition, nearest stop', 'events'], pairRows(lp.byStop)));
   L.push('');

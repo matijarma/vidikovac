@@ -1,9 +1,9 @@
-// The /d/ surface: one stable shell (the status line, banners, the FAB
-// slot, the tab bar) around one active workspace. Real
+// The /d/ surface: one stable shell (the status line, the presentation
+// panel, banners, the tab bar) around one active workspace. Real
 // session, real feeds through the core stores, keyed reconciliation of the
 // workspace so a poll never disturbs focus, typed text, scroll or a live map.
-// Casting is explicit (D5): navigation tells the room nothing, the cast
-// controls send one view frame. Every browser global is injected, so the
+// Casting is explicit (D5): navigation tells the room nothing, the Zaslon
+// panel sends one view frame. Every browser global is injected, so the
 // behaviour is unit-tested under happy-dom.
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS, type CodeSlot, type LayerId } from '../../worker/protocol';
@@ -20,15 +20,15 @@ import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
+import { fetchSentences as fetchSentencesImpl } from './api';
+import { askBoards, loadSadaFeed, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
-import { bannersMarkup, fabMarkup, snapshotLine, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
+import { resolvePlace } from './city/place';
+import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
-import { tickTimebandClock } from './experience/timeband';
-import { attachTimebandSync } from './experience/timeband-sync';
-import { weatherStatus } from './experience/weather-status';
-import { storeLocale } from './i18n/create-default-i18n';
+import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
 import type { ExportKind, LayerContext } from './layers/types';
@@ -36,7 +36,8 @@ import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay } from './motion/loop';
 import { loadNetwork, type Network } from '../../shared/motion/network';
-import { createSchematicHost } from './motion/schematic-host';
+import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
+import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import type { SessionClient } from './session';
 import { createDialog, type DialogHandle } from './ui/dialog';
@@ -45,7 +46,7 @@ import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
 import type { ThemeController, ThemePreference } from './ui/theme';
-import { PRESENTATION_ACK_MS, PRESENTATION_TIMES, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
+import { PRESENTATION_ACK_MS, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
 import { presentationPanel, presentationTargetLabel } from './experience/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
 import { dynamicPlaces } from './city/discovery';
@@ -53,8 +54,8 @@ import { ct } from './city/strings';
 
 /** The per-second tick for the remaining time; the poll has its own aligned timer. */
 const TICK_MS = 1_000;
-/** How long a cast button says "sent" after its frame went out. */
-const CAST_SENT_MS = 1_500;
+/** How many times a session asks for the stop catalogue before it leaves it down (one per draw after a failure). */
+const STOPS_ATTEMPTS = 3;
 
 /** The layer last opened, mirrored so the next scan reopens it (R-60). */
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
@@ -110,11 +111,14 @@ export interface DashboardDeps {
   reducedMotion?: boolean;
   /** Decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
+  /** Read by nothing since the phone's schematic host went with the lightweight face (WP5 A3); entries/dashboard.ts still passes it. */
   onRepaint?: (listener: () => void) => () => void;
   mapFactory?: MapFactory;
   /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
   mapMode?: MapModeStore;
   loadNetwork?: () => Promise<Network | null>;
+  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. */
+  fetchSentences?: (request: SentenceRequest) => Promise<WrittenSentence[]>;
   /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
@@ -182,29 +186,62 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const boards = deps.createBoards?.() ?? createBoardCache({now});
   let locationContext: LocationContext | undefined;
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
-  /** The stop catalogue, fetched once and only when a saved stop needs its walking row (B.10). */
+  /** The stop catalogue, fetched once per session: the place and its departures stop are resolved from it (B.10, WP4). */
   let stops: readonly ScreenStop[] | null = null;
   let stopsRequested = false;
+  /** How many times the catalogue has been asked for, and whether the last answer failed (the departures block then says so). */
+  let stopsAttempts = 0;
+  let stopsDown = false;
   /** The screen stop's last scheduled departures (T3.1, FEED_LASTRUN): fetched once per stop, null until it answers. */
   let lastRun: LastRunSnapshot | null = null;
   let lastRunStop: string | null = null;
   let networkPromise: Promise<Network | null> | null = null;
+  /** The network's tram lines in call order (shared/city/frame.ts frameLinesOf), once the artefact has loaded: the
+   *  phone's circle is then measured along the lines as the wall's is; until then frameRadiusM falls back among trams. */
+  let frameLines: readonly FrameLine[] | undefined;
+  // --- Sada's sentence (WP4 step 12; seam S6) -------------------------------
+  // The page rotates one sentence over the facts Sada's rows are chosen from: the model's answers (fetchSentences,
+  // asked at most once a minute since the route is rate-limited per IP) and WP1's templates, read through the
+  // wall's own sequence (20 s hold, no verbatim repeat within ten minutes, the header's strict acceptance on every
+  // candidate: a rejected fact yields no sentence, decision 21). The tools live in the lazy feed chunk.
+  /** The phone asks the sentence route at most this often. */
+  const SENTENCE_FETCH_MS = 60_000;
+  const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
+  let sentenceSequence: ReturnType<SadaFeedModule['createSentenceSequence']> | null = null;
+  let modelSentences: WrittenSentence[] = [];
+  let sentenceFetchKey = '';
+  let sentenceAskedAt = -Infinity;
+  let sentenceFetchSeq = 0;
+  let networkRefresh: Promise<Network | null> | null = null;
   const loadNetworkOnce = (refresh = false): Promise<Network | null> => {
     // Karta replaces this shared cache after a deploy, so later map mounts
-    // cannot reinstall the graph the current map just rejected.
-    if (!networkPromise || refresh) networkPromise = (deps.loadNetwork ?? (() => loadNetwork(
-      refresh ? (input, init) => fetch(input, { ...init, cache: 'reload' }) : fetch, lightweight,
-    )))();
+    // cannot reinstall the graph the current map just rejected. The map and
+    // the schematic host both ask past the cache after one deploy: a forced
+    // request still pending is the answer to the second asker too.
+    if (refresh) {
+      if (!networkRefresh) {
+        const request = (deps.loadNetwork ?? (() => loadNetwork((input, init) => fetch(input, { ...init, cache: 'reload' }), lightweight)))();
+        networkRefresh = request;
+        networkPromise = request;
+        const settled = (): void => { if (networkRefresh === request) networkRefresh = null; };
+        request.then(settled, settled);
+      }
+      return networkRefresh;
+    }
+    if (!networkPromise) networkPromise = (deps.loadNetwork ?? (() => loadNetwork(fetch, lightweight)))();
     return networkPromise;
   };
   const maps = createMapSlots(
     lightweight ? undefined : withTimers(withNetwork(deps.mapFactory, loadNetworkOnce, undefined, () => loadNetworkOnce(true)), setTimer as (fn: () => void, ms: number) => unknown, clearTimer),
   );
-  const schematic = createSchematicHost({
-    i18n, scope: { kind: 'network' }, lightweight, reducedMotion: deps.reducedMotion, now, onRepaint: deps.onRepaint, loadNetwork: loadNetworkOnce,
-  });
   const media = deps.matchMedia?.('(min-width: 60rem)') ?? (globalThis.matchMedia ? globalThis.matchMedia('(min-width: 60rem)') : null);
   const surface = (): Surface => (media ? media.matches : Boolean(deps.wide)) ? 'desktop' : 'phone';
+  /** The desk is the phone, wider [O-56] (WP4 step 8): Sada and Karta stand side by side in one .ki-desk pair whenever
+   *  either is the layer, so navigating between them redraws the same pair and the map is never re-created. */
+  const deskPair = (): boolean => {
+    const layer = view.snapshot().layer;
+    return surface() === 'desktop' && !directory && (layer === 'grad-sada' || layer === 'u-pokretu');
+  };
 
   let frozen = false;
   /** The moment freeze() ran: every workspace and time line is dated with it. */
@@ -213,9 +250,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let countdownHidden = false;
   let directory = false;
   const agendaScroll=new Map<LayerId,{top:number;focus:string}>();
-  /** The moment the last cast frame went out; the cast buttons say "sent" for CAST_SENT_MS after it. */
-  let castSentAt: number | null = null;
-  let castTimer: unknown = null;
   let presentationOpen = false;
   let presentationState: PresentationState | undefined = session.snapshot().presentation;
   let presentationConfirmRevision: number | null = null;
@@ -252,8 +286,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   // --- stable shell --------------------------------------------------------
   // The two live regions are visually hidden, never display: none, so readers hear them.
-  // Six regions in reading order on both surfaces (B.5); the CSS places them, never hides a control that exists.
-  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting" data-fab="0">
+  // Five regions in reading order on both surfaces (B.5); the CSS places them, never hides a control that exists.
+  const element = createElementFromHTML(`<div class="ki" data-testid="dash" data-surface="${surface()}" data-view="layers" data-state="connecting">
 <h1 class="visually-hidden" data-testid="dash-title" tabindex="-1"></h1>
 <p class="visually-hidden" role="status" aria-live="polite" data-testid="announce-polite"></p>
 <p class="ki-alert visually-hidden" role="alert" aria-live="assertive" data-testid="announce-assertive"></p>
@@ -261,7 +295,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 <div class="ki-presentation" data-region="presentation"></div>
 <div class="ki-banners" data-region="banners" data-testid="banners"></div>
 <main class="ki-main" id="ki-main" data-testid="dash-view" tabindex="-1"></main>
-<div class="ki-fab-slot" data-region="fab"></div>
 <nav class="ki-tabbar" data-region="tabs" aria-label="${escapeAttribute(i18n.t('nav.label'))}"></nav>
 </div>`);
   root.appendChild(element);
@@ -270,7 +303,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const polite = element.querySelector<HTMLElement>('[data-testid=announce-polite]')!;
   const assertive = element.querySelector<HTMLElement>('[data-testid=announce-assertive]')!;
   const main = element.querySelector<HTMLElement>('main')!;
-  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), fab: region('fab'), tabs: region('tabs') };
+  const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), tabs: region('tabs') };
 
   /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
   function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
@@ -290,7 +323,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   function shellState(): ShellState {
     const s = session.snapshot();
     const feed = store.snapshot();
-    const cast = castState();
     const stop = s.screen?.stop ?? undefined;
     const notify = notifyStore.snapshot();
     return {
@@ -300,7 +332,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       label: deps.label ?? null, role: s.role, participants: s.participants, error, lastRefresh, mapFull,
       notice, sourcesDown: sourcesDown(feed),
       surface: surface(), stopName: stop?.name ?? null,
-      hasScreen: Boolean(s.screen), canCast: cast.can, castReason: cast.reason, castSent: castSentAt !== null,
+      hasScreen: Boolean(s.screen),
       presentation: presentationState, presentationOpen,
       notify, notifyActive: activeCount(notify, notifyKeys), notifyKeys,
     };
@@ -310,13 +342,12 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
   }
 
+  /** The layer and its selection; Sada has no time filter any more, so no `time` rides along (the wire still accepts one). */
   function currentPresentationTarget(): PresentationTarget {
     const state = view.snapshot();
-    const time = state.filters['tb-col'];
     return {
       layer: state.layer,
       ...(state.selection ? { selection: state.selection } : {}),
-      ...(state.layer === 'grad-sada' && (PRESENTATION_TIMES as readonly string[]).includes(time ?? '') ? { time: time as PresentationTarget['time'] } : {}),
     };
   }
 
@@ -359,13 +390,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
     element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
     element.dataset.loading = String(s.loading);
-    // The weather group is status (D11): the desk's clock wraps it; the phone's band head carries it.
-    const weather = s.surface === 'desktop' ? weatherStatus(i18n, store.snapshot().snapshots, now()) : null;
-    paintRegion(regions.status, statusLineMarkup(i18n, s, now(), weather));
+    // One status row on both surfaces: no clock, so no weather here; weather is a row of the feed [O-56].
+    paintRegion(regions.status, statusLineMarkup(i18n, s));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
-    const fab = fabMarkup(i18n, s);
-    paintRegion(regions.fab, fab);
-    element.dataset.fab = fab ? '1' : '0';
     paintRegion(regions.tabs, tabbarMarkup(i18n, s));
     regions.tabs.setAttribute('aria-label', i18n.t('nav.label'));
     sheet.refresh();
@@ -380,7 +407,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   }
 
   function updateTitle(): void {
-    const layerName = directory ? i18n.t('nav.moreTitle') : i18n.t(`layers.${view.snapshot().layer}`);
+    // The desk pair is one page, titled by its feed whichever half the layer names.
+    const layerName = directory ? i18n.t('nav.moreTitle') : deskPair() ? i18n.t('layers.grad-sada') : i18n.t(`layers.${view.snapshot().layer}`);
     const title = i18n.t('session.documentTitle', { app: i18n.t('common.appName'), layer: layerName });
     titleEl.textContent = title;
     doc.title = title;
@@ -401,31 +429,106 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function layerContext(): LayerContext {
     const feed = store.snapshot();
-    // The cast state plus the moment of the last cast, which the panel's button shows as data-sent.
-    const cast: CastState & { sentAt: number | null } = { ...castState(), sentAt: castSentAt };
-    return {
+    const ctx: LayerContext = {
       city: cityStore.snapshot(),
       ensureCity: ids => { if (!frozen && !disposed) void cityStore.ensure(ids); },
       onDispose:fn=>workspaceDisposals.add(fn),
       i18n, snapshots: feed.snapshots, now: frozenAt??now(), errors: feed.errors, view: view.snapshot(), screen: screen(),
       location: locationContext ?? defaultLocation(screen()),
+      // Sada's title and the stop its departures come from (city/place.ts), resolved on every draw.
+      place: resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }),
       setLocation: value => { locationContext=value; },
       boards, onLocalData: repaintLocalData,
       onCopy: deps.onCopy, onShare: deps.onShare, onExport: deps.onExport,
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
-      maps, schematic, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
+      maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
       notify: notifyStore.snapshot(),
-      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, cast, stops: stops ?? undefined, lastRun,
+      saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
+      // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
+      frame: session.snapshot().screen?.frame, frameLines,
     };
+    // The place's "U blizini" list for Karta's default sheet (city/feed.ts, the same rows Sada lists), at most `cap`
+    // rows, with the head's circle and the radius the frame is fitted to. Null while the lazily loaded selection chunk
+    // is not in hand (the page repaints when it lands); never a static import of city/nearby.ts on /d/ (the budget).
+    ctx.nearby = (cap) => {
+      const feed = sadaFeed(repaintLocalData);
+      if (typeof feed !== 'object') return null;
+      // The list leads with the departures: the boards are asked for here too, so Karta opened first has them.
+      askBoards(ctx);
+      const input = nearbyInput(ctx);
+      const rows = feed.selectNearby(input);
+      return {
+        html: feed.nearbySectionMarkup(i18n, rows, input.radiusM, input.now, { cap, id: 'karta' }),
+        pill: feed.nearbyPill(i18n, input.radiusM),
+        radiusM: input.radiusM,
+      };
+    };
+    // Sada's sentence, the page's pick (step 12), only while Sada is drawn; absent, Sada holds its own place.
+    if (sadaShown()) {
+      const feed = sadaFeed(repaintLocalData);
+      if (typeof feed === 'object') {
+        const input = nearbyInput(ctx);
+        ctx.sentence = sadaSentence(feed, input, feed.selectNearby(input));
+      }
+    }
+    return ctx;
+  }
+
+  /** Whether Sada is on the page: the layer itself, or either half of the desk pair. */
+  function sadaShown(): boolean {
+    return !directory && (view.snapshot().layer === 'grad-sada' || deskPair());
+  }
+
+  /** The rotation's pick for this draw: the model's answers still valid against these facts, then the templates. */
+  function sadaSentence(feed: SadaFeedModule, input: ReturnType<typeof nearbyInput>, rows: ReturnType<SadaFeedModule['selectNearby']>): WrittenSentence | null {
+    const at = input.now;
+    const facts = feed.sadaSentenceFacts(input, rows);
+    // Old answers are never trusted against the facts they were requested with (the wall's rule).
+    modelSentences = feed.readWrittenSentences(modelSentences, { facts, budget: feed.PHONE_SENTENCE_BUDGET, now: at });
+    sentenceSequence ??= feed.createSentenceSequence({ rhythmMs: feed.SENTENCE_HOLD_MS, noRepeatMs: feed.SENTENCE_NO_REPEAT_MS });
+    const pool = [...modelSentences, ...feed.templateSentences(facts, i18n, feed.PHONE_SENTENCE_BUDGET, at)];
+    return sentenceSequence.read(pool, at);
+  }
+
+  /**
+   * Asks the sentence route for these facts: at most once a minute, the same facts again only after the
+   * wall's refresh period, never before the join, never after the end. The facts are the page's own at this
+   * moment (the same selection Sada draws from), so the answer is read against them on the next draw.
+   */
+  function ensureSentences(): void {
+    if (disposed || frozen || paused || session.snapshot().phase !== 'live' || !sadaShown()) return;
+    const feed = sadaFeed(repaintLocalData);
+    if (typeof feed !== 'object') return;
+    const ctx = layerContext();
+    const input = nearbyInput(ctx);
+    const at = now();
+    const stable = feed.modelSentenceFacts(feed.sadaSentenceFacts(input, feed.selectNearby(input)), at);
+    if (!stable.length) return;
+    const locale: SentenceRequest['locale'] = catalogueLocale(i18n.getLocale());
+    const key = JSON.stringify([locale, stable.map((fact) => [fact.id, fact.kind, fact.text])]);
+    if (at - sentenceAskedAt < (key === sentenceFetchKey ? feed.SENTENCE_REFRESH_MS : SENTENCE_FETCH_MS)) return;
+    sentenceFetchKey = key;
+    sentenceAskedAt = at;
+    const seq = ++sentenceFetchSeq;
+    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }).then((answer) => {
+      if (disposed || frozen || seq !== sentenceFetchSeq) return;
+      modelSentences = feed.readWrittenSentences(answer, { facts: stable, budget: feed.PHONE_SENTENCE_BUDGET, now: now() });
+      if (modelSentences.length) render();
+    }, () => { /* Optional inference never replaces the templates with an error. */ });
   }
 
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
   function repaintLocalData():void { if(!disposed&&!frozen)render(); }
+  /** After the end the workspace is the closing card alone (WP4 step 11): re-said on a locale change, never data. */
+  function renderEnded(): void {
+    main.replaceChildren(createElementFromHTML(sessionEndedMarkup(i18n, shellState(), scanUrl)));
+  }
   function render(): void {
-    if (screen().stop || saved.list().some((ref) => ref.kind === 'stop')) ensureStops();
+    if (frozen) { renderEnded(); return; }
+    ensureStops();
     ensureLastRun();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
@@ -436,26 +539,33 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       : null;
     const ctx = layerContext();
     const layer = view.snapshot().layer;
-    // Promet is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is the
-    // stage. An empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
-    element.dataset.stage = !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
-    const next = directory ? renderDirectory(ctx) : renderLayer(layer, ctx);
-    // Frozen: one dated line above the workspace, keyed so the reconciler keeps it, so every
-    // domain says "podaci od 13:57" (the renderers' own time lines read ctx.frozenAt).
-    const dated = ctx.frozenAt === undefined ? null : createElementFromHTML(`<p class="ki-snapshot" data-key="snapshot">${escapeHtml(snapshotLine(i18n, ctx.frozenAt))}</p>`);
-    if (directory || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
+    const pair = deskPair();
+    // Karta on the phone is a fixed stage (map.css, .ki[data-stage='map']): the shell is the viewport and main is
+    // the stage. The desk pair is its own stage (data-stage='desk': the feed scrolls, the map column sticks). An
+    // empty value removes the styling; the 60rem media query stays the one CSS breakpoint.
+    element.dataset.stage = pair ? 'desk' : !lightweight && !directory && layer === 'u-pokretu' ? 'map' : '';
+    let next: HTMLElement;
+    if (directory) next = renderDirectory(ctx);
+    else if (pair) {
+      // Sada then Karta, keyed so the reconciler morphs the same pair on every poll; the workspace section inside
+      // carries its own data-reconcile and its kaj-persist slot (layers/u-pokretu.ts), so the live map stays put.
+      next = doc.createElement('div');
+      next.className = 'ki-desk';
+      next.dataset.key = 'desk';
+      next.append(renderLayer('grad-sada', ctx), renderLayer('u-pokretu', ctx));
+    } else next = renderLayer(layer, ctx);
+    if (directory || pair || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
-      if (dated) wrapper.appendChild(dated);
       wrapper.appendChild(next);
       reconcile(main, wrapper);
     } else {
-      main.replaceChildren(...(dated ? [dated] : []), next);
+      main.replaceChildren(next);
     }
     // Motion that reports a fact: a genuine workspace switch (never a poll that
     // redraws the same place) fades `next` in -- it is the live node exactly
     // when the key actually changed, since reconcile.ts only morphs onto (and
     // discards `next` in favour of) a pre-existing node of the same key.
-    const workspaceKey = directory ? 'directory' : layer;
+    const workspaceKey = directory ? 'directory' : pair ? 'desk' : layer;
     if (workspaceKey !== lastWorkspaceKey) {
       lastWorkspaceKey = workspaceKey;
       if (!deps.reducedMotion && !lightweight) {
@@ -485,26 +595,34 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
     }
     maps.sweep();
-    if (frozen || error === 'no-ticket') maps.pause();
+    if (error === 'no-ticket') maps.pause();
   }
 
-  /** The 245 kB stop catalogue, once per mount and only when a saved stop needs its walking row. */
+  /** The 245 kB stop catalogue, once per mount. A failed load marks the catalogue down, so the departures
+   *  block says so in one row instead of waiting, and the next draw asks again, at most STOPS_ATTEMPTS times. */
   function ensureStops(): void {
     if (stopsRequested) return;
     stopsRequested = true;
+    stopsAttempts += 1;
     loadStops().then((list) => {
       if (disposed) return;
       stops = list;
+      stopsDown = false;
       render();
     }, () => {
-      // The walking row stays absent; nothing else depends on the catalogue.
+      if (disposed) return;
+      stopsDown = true;
+      render();
+      // Re-armed after this draw, not before it, so a retry waits for the next poll rather than looping here.
+      if (stopsAttempts < STOPS_ATTEMPTS && !frozen) stopsRequested = false;
     });
   }
 
   /** The stop's last-departure file, once per stop and only behind FEED_LASTRUN; a failed answer leaves the tile absent. */
   function ensureLastRun(): void {
     if (!FLAGS.FEED_LASTRUN) return;
-    const stop = session.snapshot().screen?.stop;
+    // The stop the departures block boards: the screen's, a saved one, or the one nearest the place.
+    const stop = resolvePlace({ screen: session.snapshot().screen, saved, stops: stops ?? undefined, location: locationContext }).departuresStop;
     if (!stop || stop.id === lastRunStop) return;
     lastRunStop = stop.id;
     // A new stop: the previous stop's schedule leaves the band at once rather than posing as this one until the fetch answers.
@@ -536,6 +654,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function activeModules(): readonly ModuleId[] {
     if (directory) return directoryModules(surface());
+    if (deskPair()) return [...new Set([...LAYER_MODULES['grad-sada'], ...LAYER_MODULES['u-pokretu']])];
     return LAYER_MODULES[view.snapshot().layer];
   }
 
@@ -613,13 +732,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     paintPresentation();
   }
 
-  /** The status search and "+ stanica": Promet with its search field focused (the phone workspace raises its sheet on focus). */
-  function openSearch(): void {
-    navigate('u-pokretu', null, true);
-    const field = doc.getElementById('u-pokretu-light-search') ?? main.querySelector<HTMLElement>('[data-testid=transport-search]');
-    field?.focus();
-  }
-
   function findItem(module: ModuleId, id: string): { item: FeedItem; snapshot: ModuleSnapshot } | null {
     const snapshot = store.snapshot().snapshots[module];
     const item = snapshot?.items.find((candidate) => candidate.id === id);
@@ -650,6 +762,9 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
 
   function setLocale(next: string): void {
     const applied = i18n.setLocale(next);
+    // The model's answers were written in the other language; the templates carry the card until the next ask.
+    modelSentences = [];
+    sentenceFetchKey = '';
     storeLocale(applied);
     doc.documentElement.lang = applied;
     i18n.translatePage(doc);
@@ -692,6 +807,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     await store.refresh(ids);
     if (frozen || disposed) return;
     lastRefresh = now();
+    ensureSentences();
     // A rejected data token means the session is over for this device; a refused
     // Access check needs the protected entrance again. Both get a visible way out.
     const messages = Object.values(store.snapshot().errors).filter((m): m is string => typeof m === 'string');
@@ -858,33 +974,43 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     shareTick = setTimer(() => paintProgress(), 1_000);
   }
 
-  /** The end of the session: the view stays, refreshing stops, exports keep working. */
+  /**
+   * The end of the ten minutes [O-59], [O-62] (WP4 step 11): the content clears and the workspace
+   * holds the invitation to scan again and the way to /hitno (chrome.ts sessionEndedMarkup). Every
+   * refresh stops (no /api/data after this), the maps are released, the sheets close; only the
+   * shell's pill, the disabled tabs and the safety control remain of the session.
+   */
   function freeze(): void {
     if (frozen) return;
     frozen = true;
     cityStore.pause();
-    // The session's clock, not the phone's, and never later than the session's end: a phone that
-    // hears of the end late (a socket dropped in the background, a resume after the room is gone)
-    // still dates its data by the minute the pill promised. Revoked keeps the moment itself, its
-    // expiry being in the future.
+    // The session's clock, not the phone's, and never later than the session's end (a phone that hears
+    // of the end late still ends at the minute the pill promised). Revoked keeps the moment itself.
     frozenAt = Math.min(session.serverNow(), session.snapshot().expiresAt ?? Infinity);
     closeShare();
     sheet.close();
     notifySheet.close();
-    schematic.pause();
-    maps.pause();
+    presentationOpen = false;
+    presentationConfirmRevision = null;
     store.pause(true);
     stopPolls();
     if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
-    if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
     // The closing card (role=alert) takes over from the notice and the assertive region.
     notice = null;
     assertive.textContent = '';
+    // The page's map view and the directory end with the content.
+    directory = false;
+    mapFull = false;
+    element.dataset.view = 'layers';
+    element.dataset.stage = '';
     paintShell();
-    // The workspace is painted once more so it carries its date (its cast control now frozen);
-    // after this only a locale or theme change repaints it (the store's subscriber stands down
-    // while frozen).
-    render();
+    renderEnded();
+    // The workspaces are gone from the document: their controllers and every map slot go with them.
+    workspaceDisposals.forEach((fn) => fn());
+    workspaceDisposals.clear();
+    maps.sweep();
+    maps.pause();
+    updateTitle();
   }
   // --- session -------------------------------------------------------------
   session.onJoined((snapshot) => {
@@ -925,7 +1051,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       error = 'no-ticket';
       reconnecting = false;
       store.pause(true);
-      schematic.pause();
       maps.pause();
       closeShare();
       stopPolls();
@@ -1009,7 +1134,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'directory': toggleDirectory(); return;
-      case 'cast': cast(); return;
       case 'presentation': cast(); return;
       case 'presentation-close': presentationOpen = false; presentationConfirmRevision = null; paintPresentation(); paintShell(); return;
       case 'present-request': present('present'); return;
@@ -1027,7 +1151,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'notify': notifySheet.open(); return;
-      case 'search': openSearch(); return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;
@@ -1071,8 +1194,6 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   element.addEventListener('keydown', (event) => {
     if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) element.dataset.modality = 'keyboard';
   }, true);
-  // Sada's phone form: a segment tap scrolls the lane row; a settled swipe selects the column through the same filter.
-  const detachTimebandSync = attachTimebandSync(element, setFilterAction, { reducedMotion: Boolean(deps.reducedMotion), lightweight });
 
   // --- subscriptions and start ---------------------------------------------
   const stopView = view.subscribe(() => { render(); paintShell(); });
@@ -1091,7 +1212,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     });
   });
   const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
-  // The reader's stores: a saved change repaints the layer and, at the desk, refreshes its modules; a switch repaints the bell.
+  // The reader's stores: a saved change repaints the layer and, at the desk, refreshes its modules; a switch repaints the shell.
   const stopSaved = onChange(saved.subscribe, () => {
     render();
     if (surface() === 'desktop') continuePoll(refresh(), rearmPoll, 'dashboard saved refresh');
@@ -1120,12 +1241,25 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   if (deps.history && deps.location) win.addEventListener?.('popstate', onPopState);
   updateTitle();
   paintShell();
+  // Sada's selection and sentence chunk is asked for at once, so it is in flight before the first draw (a phone
+  // opening on Karta needs it for the sheet too); the page repaints when it lands (city/feed.ts) and, once joined,
+  // asks for its first sentences.
+  void loadSadaFeed().then((module) => {
+    if (!module || disposed || frozen) return;
+    render();
+    ensureSentences();
+  });
+  // The network's tram lines measure the circle along the lines; the map loads the same artefact once.
+  void loadNetworkOnce().then((network) => {
+    if (disposed || !network) return;
+    frameLines = frameLinesOf(network);
+    if (!frozen) render();
+  });
   armPoll();
   armSlowPoll();
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
-    tickTimebandClock(main, now());
     paintShell();
     if (presentationOpen) paintPresentation();
   }, TICK_MS);
@@ -1141,8 +1275,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       disposed = true;
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
-      if (castTimer !== null) { clearTimer(castTimer); castTimer = null; }
-      stopView();
+        stopView();
       stopCity();
       stopStore();
       stopTheme?.();
@@ -1152,13 +1285,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopLineFocus();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
-      detachTimebandSync();
       closeShare();
       sheet.destroy();
       notifySheet.destroy();
       maps.destroy();
       boards.destroy();
-      schematic.destroy();
       store.destroy();
       element.remove();
     },

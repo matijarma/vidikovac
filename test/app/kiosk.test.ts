@@ -174,6 +174,8 @@ const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s
 const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelector<HTMLElement>(sel);
 const departures = (root: ParentNode): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('[data-testid=nearby-rows] [data-kind=departure]')];
 const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=kiosk-sentence-text]'));
+/** The header sentence as a passer-by sees it: '' while the sentence element is hidden. */
+const painted = (root: ParentNode): string => (q(root, '[data-testid=kiosk-sentence]')?.hidden ? '' : sentenceText(root));
 
 const submit = (root: ParentNode) => { q(root, 'form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); };
 
@@ -360,6 +362,81 @@ describe('the integrated companion sentence', () => {
     now += 1_000;
     k.tick(CODE_TICK_MS);
     expect(sentenceText(k.root)).not.toContain('Ilica');
+    k.handle.destroy();
+  });
+
+  // Review D2b finding 1: a model answer landing mid-dwell replaced the whole model set, so a model
+  // sentence on screen that the new answer did not repeat left before its rhythm (decision 29).
+  it('keeps a model sentence on screen through an answer that lands mid-dwell, until the rhythm ends or its fact changes', async () => {
+    let now = NOW;
+    let modules = MODULES;
+    const requests: ((answer: WrittenSentence[]) => void)[] = [];
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules }),
+      fetchSentences: () => new Promise(resolve => { requests.push(resolve); }) });
+    await flush();
+    const model = 'Temperatura u Zagrebu je 21 °C.';
+    requests.at(-1)!([{ text: model, kicker: 'vrijeme', refs: ['weather:now'], validUntil: null, origin: 'model' }]);
+    await flush();
+    let shownAt = -1;
+    for (let s = 1; s <= 200 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (painted(k.root) === model) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    // A stable fact changes (the closure's end is restated), so a new answer is asked for and lands
+    // 5 s into the dwell without the sentence on screen.
+    now = shownAt + 3_000;
+    modules = MODULES.map(module => module.module === 'prometnice'
+      ? { ...module, items: module.items.map(item => ({ ...item, until: '2026-09-11T18:30:00Z' })) } : module);
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    const before = requests.length;
+    now = shownAt + 5_000;
+    requests.at(-1)!([]);
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(requests.length).toBe(before);
+    for (let t = 5_000; t < 20_000; t += 1_000) {
+      now = shownAt + t;
+      k.tick(CODE_TICK_MS);
+      expect(painted(k.root), `${t / 1000} s into the dwell`).toBe(model);
+    }
+    now = shownAt + 20_000;
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).not.toBe(model);
+    k.handle.destroy();
+  });
+
+  it('lets a model sentence go at once when its fact changes, answer or no answer', async () => {
+    let now = NOW;
+    let modules = MODULES;
+    const requests: ((answer: WrittenSentence[]) => void)[] = [];
+    const k = mount({ stored: STORED, now: () => now, fetchTeaser: async () => ({ modules }),
+      fetchSentences: () => new Promise(resolve => { requests.push(resolve); }) });
+    await flush();
+    const model = 'Temperatura u Zagrebu je 21 °C.';
+    requests.at(-1)!([{ text: model, kicker: 'vrijeme', refs: ['weather:now'], validUntil: null, origin: 'model' }]);
+    await flush();
+    let shownAt = -1;
+    for (let s = 1; s <= 200 && shownAt < 0; s += 1) {
+      now = NOW + s * 1000;
+      k.tick(CODE_TICK_MS);
+      if (painted(k.root) === model) shownAt = now;
+    }
+    expect(shownAt).toBeGreaterThan(0);
+    // DHMZ now reports 22 °C: the claim on screen no longer holds, so the dwell ends.
+    now = shownAt + 4_000;
+    modules = MODULES.map(module => module.module === 'dhmz-now'
+      ? { ...module, items: module.items.map(item => ({ ...item, data: { ...item.data, temp: 22 } })) } : module);
+    const beforePoll = requests.length;
+    k.poll();
+    await flush();
+    k.tick(CODE_TICK_MS);
+    expect(requests.length).toBeGreaterThan(beforePoll);
+    // Every fact at hand was shown in the last ten minutes: the header waits rather than repeat one.
+    expect(painted(k.root)).not.toBe(model);
     k.handle.destroy();
   });
 
@@ -772,7 +849,7 @@ describe('start: the field turns what is typed into the screen’s place', () =>
   /** About 1.7 km from every stop of the fixture: a pick here stays the street. */
   const ILICA = street('Ilica', 15.955, 45.8125);
   const ZAPRUDJE_ROW: Suggestion = { kind: 'stop', stop: { ...STOPS[2], distanceM: null } };
-  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi prazno za cijeli grad.';
+  const NO_MATCH = 'Nema takvog stajališta ni ulice. Odaberi prijedlog ili ostavi polje prazno za cijeli grad.';
 
   interface StartEnv { mountStart: StartModule['mountStart']; strings: KioskStrings; isTram: (routeId: string) => boolean }
   /** start.ts over a places.ts whose suggestPlaces answers `suggest`; the rest of that module stays real. */
@@ -1066,6 +1143,35 @@ describe('settings: the panel on the screen itself', () => {
     expect(text(buttons[0]!)).toBe('Kaj ima?');
     expect(q(k.root, '[data-testid=kiosk-settings]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk-theme]')).toBeNull();
+  });
+
+  // review-w-fix6 P2: a Ritam change rebuilt the sentence sequence, so the closure on screen since
+  // 20 s gave way at 21 s with nothing changed. The same sequence is re-timed (decision 29).
+  it('keeps the header sentence and its dwell through a Ritam change', async () => {
+    let now = NOW;
+    const k = mount({ stored: STORED, now: () => now });
+    await flush();
+    now = NOW + 20_000;
+    k.tick(CODE_TICK_MS);
+    const closure = 'Ilica: zatvoreno za promet do 20:00.';
+    expect(painted(k.root)).toBe(closure);
+    now = NOW + 21_000;
+    open(k);
+    await flush();
+    toggle(k, 'rhythm').click();
+    expect(text(toggle(k, 'rhythm'))).toBe('Ritam: 30 s');
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).toBe(closure);
+    // The dwell that began at 20 s now runs the new rhythm: to 50 s, and no longer.
+    for (let t = 22_000; t < 50_000; t += 1_000) {
+      now = NOW + t;
+      k.tick(CODE_TICK_MS);
+      expect(painted(k.root), `${t / 1000} s`).toBe(closure);
+    }
+    now = NOW + 50_000;
+    k.tick(CODE_TICK_MS);
+    expect(painted(k.root)).not.toBe(closure);
+    k.handle.destroy();
   });
 
   it('opens on a press held on the brand, with the screen’s own place and frame; a tap opens nothing', async () => {
@@ -1467,7 +1573,7 @@ describe('invitation: the screen a passer-by sees', () => {
   it('keeps the link out of the page and the QR waiting until a code exists; the bar is quantised under reduced motion', () => {
     const k = mount({ stored: STORED, reducedMotion: true });
     expect((q(k.root, '[data-testid=pair-url]') as HTMLAnchorElement).hidden).toBe(true);
-    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže…');
+    expect(text(q(k.root, '[data-testid=kiosk-qr]'))).toBe('Kod stiže');
     k.handlers.onCodes(batch(NOW - 7_000), NOW);
     expect(q(k.root, '[data-testid=code-progress]')!.dataset.pct).toBe('0.80');
   });
@@ -1524,7 +1630,7 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe('Zagreb');
     // Without a stop the field is labelled by the lines title, never left nameless. The default Trg
     // is the list's place, not the map's: the field follows the whole-city map [O-52], [O-65].
-    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ove stanice');
+    expect(q(k.root, '[data-testid=kiosk-live]')!.getAttribute('aria-label')).toBe('Linije s ovog stajališta');
     k.handlers.onContext!({ kind: 'venue', expiresAt: null, stop: STOP });
     expect(JSON.parse(k.raw[BEACON_STORAGE_KEY]!)).toEqual({ beaconId: 'BEACON01', secret: 'tajna', screen: { kind: 'venue', expiresAt: null, stop: STOP } });
     expect(text(q(k.root, '[data-testid=kiosk-context]'))).toBe(STOP.name);
@@ -1620,7 +1726,8 @@ describe('paired: the phone steers, the screen mirrors glanceably', () => {
     // The reading the header used to carry, now inside the card.
     expect(text(q(weather, '.k-weather-current .k-temp'))).toBe('21 °C');
     expect(text(q(weather, '.k-condition'))).toBe('vedro');
-    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ · 14:00');
+    // The source, never the observation time (companion brief §12, [O-27]).
+    expect(text(q(weather, '.k-panel-meta'))).toBe('DHMZ');
     // Sized for the paired column: two ranges, never the whole forecast run.
     const rows = [...weather.querySelectorAll('.k-panel-rows .k-fr')];
     expect(rows.map((row) => text(row.querySelector('.k-fr-lead')))).toEqual(['danas', 'sutra']);
@@ -2107,7 +2214,7 @@ describe('alerts, polling, the first tap and disposal', () => {
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
     k.handlers.onStatus('live');
     k.handlers.onStatus('connecting');
-    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje…');
+    expect(text(q(k.root, '[data-testid=kiosk-alert]'))).toBe('Ponovno povezivanje');
     k.handlers.onStatus('live');
     expect(q(k.root, '[data-testid=kiosk-alert]')!.hidden).toBe(true);
   });
@@ -2837,7 +2944,7 @@ describe('arrivals on the public screen', () => {
     return { factory: vi.fn((_options: unknown) => handle), handle };
   }
 
-  it('a tapped stop says first which trams come next: the tracked row, then the timetable, the note once, the lines under them', async () => {
+  it('a tapped stop says first which trams come next: the tracked row, then the timetable, no note, the lines under them', async () => {
     const map = tappableMap();
     const b = fakeBoards(JELACIC_BOARDS);
     const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, mapFactory: map.factory as never, createBoards: b.create });
@@ -2849,18 +2956,18 @@ describe('arrivals on the public screen', () => {
     const card = q(k.root, '[data-testid=k-selection]')!;
     const rows = [...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')];
     // One line per row: the time, the plate, where it is going -- and no
-    // per-row "po redu vožnje", which doubled the height of every untracked row.
-    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+    // second line saying "vozni red", which doubled the height of every untracked row.
+    expect(rows.map((row) => text(row))).toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // The tracked row, and only it, carries the live dot and is marked live;
-    // the note under the list says what the unmarked times are.
+    // every other row says "vozni red" in its own words.
     expect(rows.map((row) => row.querySelector('.k-live') !== null)).toEqual([true, false, false]);
     expect(rows[0]!.querySelector('[data-live=true]')).not.toBeNull();
-    expect(text(card)).toContain('po redu vožnje');
-    // One note for the list, not one per row, and the stop's lines keep their place under it.
-    expect(text(card).split('Procjena iz ZET-ovih podataka').length - 1).toBe(1);
+    expect(text(card)).toContain('vozni red');
+    // No note under the list on the wall (companion brief §12 "Never"), and the stop's lines keep their place under it.
+    expect(text(card)).not.toMatch(/Procjena|ostalo po voznom redu/);
     expect(text(card)).toContain('linija 6, 11, 12');
     const order = [...card.querySelectorAll<HTMLElement>('.k-select-main, [data-testid=k-arrivals], .k-board-note, .k-select-sub')].map((el) => el.className.split(' ')[0]);
-    expect(order).toEqual(['k-select-main', 'k-rows', 'k-board-note', 'k-select-sub']);
+    expect(order).toEqual(['k-select-main', 'k-rows', 'k-select-sub']);
     // The card is the column while it is open (kiosk-city.css hides the screen's
     // own board behind this flag); going back gives the board the rail again.
     expect(q(k.root,'[data-testid=kiosk-invitation]')).toBeNull();
@@ -2879,7 +2986,7 @@ describe('arrivals on the public screen', () => {
     expect(rows.map(row => text(q(row, '.nearby-title')))).toEqual(['6 Črnomerec', '11 Velika Gorica', '13 Žitnjak']);
     expect(rows.map(row => text(q(row, '.nearby-when')))).toEqual(['za 3 min', '14:38', '14:45']);
     expect(rows.map(row => row.dataset.live)).toEqual(['1', undefined, undefined]);
-    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|po redu vožnje|ZET|Dohvaćeno/);
+    expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|vozni red|ZET|Dohvaćeno/);
     // Ten seconds later the poll comes round again; the minute's memo answers it.
     k.poll();
     await flush();
@@ -2981,7 +3088,7 @@ describe('arrivals on the public screen', () => {
     // And the wall shows the rows, not an empty card under the stop's name.
     const card = q(k.root, '[data-testid=k-selection]')!;
     expect([...card.querySelectorAll<HTMLElement>('[data-testid=k-arrivals] .k-row')].map((row) => text(row)))
-      .toEqual(['za 3 minuživo6 Črnomerec', '14:38po redu vožnje11 Velika Gorica', '14:45po redu vožnje13 Žitnjak']);
+      .toEqual(['za 3 minuživo6 Črnomerec', '14:38vozni red11 Velika Gorica', '14:45vozni red13 Žitnjak']);
     // A presented route is not a stop: the screen keeps quiet behind it, and
     // the screen's own stop is not polled behind the phone's subject either.
     const other = fakeBoards(JELACIC_BOARDS);
@@ -3029,6 +3136,64 @@ describe('W-C4: third-party text on the wall is checked and counted (decision 18
     expect(q(k.root, '.nearby-row[data-kind=closure]')).toBeNull();
     expect(q(k.root, '[data-testid=kiosk]')!.dataset.skippedText).toBe('count:1;phone:1');
     expect(text(q(k.root, '[data-testid=kiosk-sentence-text]'))).not.toContain('SMS');
+    k.handle.destroy();
+  });
+});
+
+// WP5 step 8 (companion brief §12 "Never", §13 #12-#15, [O-27]): no fetch or
+// update time, no disclaimer and no caveat anywhere on the wall. The phone
+// keeps its own notes; this reads only what the wall paints.
+describe('the wall carries no disclaimer, caveat or fetch time', () => {
+  /** WP5.md step 8's pattern, plus the forms the wall printed before it: the paired
+   *  credit "ZET 14:31", the weather meta "DHMZ · 14:00" and the Vrijeme card's
+   *  observation clock "opaženo 14:00 · Maksimir · DHMZ" (review of lane/c-B1, P1). */
+  const SLOP = /Podatak iz registra|Obuhvat zaštite|Procjena|Vozni red od|Zapis od|[Dd]ohvaćeno|podaci od \d|potvrđeno \d|[Oo]paženo \d|Izračunato na uređaju|ne procjena dolaska|ostalo po voznom redu|Položaj (je|vozila)|\b\d\d:\d\d(?: · [^·]{1,40})? · (DHMZ|ZET)\b|\b(DHMZ|ZET)( ·)? \d\d:\d\d|nepotvrđeno\)|\?/;
+  /** Every text node on its own, space-separated: adjacent elements never fuse into one word ("blizini" + "ZET 14:31"). */
+  const words = (el: Element | null): string => {
+    const out: string[] = [];
+    const walker = document.createTreeWalker(el ?? document.createElement('div'), NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) out.push(node.textContent ?? '');
+    return out.join(' ').replace(/\s+/g, ' ').trim();
+  };
+  it('no disclaimer: the invitation, the safety strip and every paired composition, live and stale', async () => {
+    for (const status of ['live', 'stale'] as const) {
+      const modules = ARRIVAL_MODULES.map((m) => ({ ...m, status }));
+      const b = fakeBoards(JELACIC_BOARDS);
+      const k = mount({ stored: STORED, modules, createBoards: b.create });
+      await flush();
+      k.handlers.onCodes(batch(NOW), NOW);
+      const overview = words(q(k.root, '[data-testid=kiosk-invitation] .k-overview'));
+      expect(departures(k.root).length, 'the list is painted').toBeGreaterThan(0);
+      const seen: [string, string][] = [['invitation aside', overview], ['invitation strip', words(q(k.root, '[data-testid=safety-strip]'))]];
+      k.handlers.onUnlocked({ roomId: 'r1', ticket: 't1', expiresAt: NOW + 600_000 });
+      await flush();
+      const views: [string, Record<string, string>?][] = [
+        ['grad-sada'], ['u-pokretu'], ['u-pokretu', { kind: 'stop', id: '106_1' }], ['u-pokretu', { kind: 'route', id: '6' }],
+        ['zrak-i-nebo'], ['sigurnost'], ['uprava-i-pravo'], ['kultura'],
+      ];
+      for (const [layer, params] of views) {
+        k.view(layer, params);
+        await flush();
+        const where = `${layer}${params ? ` ${params.kind} ${params.id}` : ''}`;
+        expect(q(k.root, '[data-testid=kiosk-layer]')!.dataset.layer, where).toBe(layer);
+        seen.push([where, words(q(k.root, '[data-testid=kiosk-layer]'))], [`${where} strip`, words(q(k.root, '[data-testid=safety-strip]'))]);
+      }
+      for (const [where, words] of seen) {
+        expect(words, `${status} ${where}`).not.toBe('');
+        expect(words, `${status} ${where}`).not.toMatch(SLOP);
+      }
+      k.handle.destroy();
+    }
+  });
+  it('no disclaimer under the departures of a stop the phone presents', async () => {
+    const b = fakeBoards(JELACIC_BOARDS);
+    const k = mount({ stored: STORED, modules: ARRIVAL_MODULES, createBoards: b.create });
+    await flush();
+    k.handlers.onPresentation?.({ version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'stop', id: '106_1' } }, expiresAt: NOW + 600_000, dataToken: 'dt' });
+    await flush();
+    const card = q(k.root, '[data-testid=k-selection]')!;
+    expect(card.querySelectorAll('[data-testid=k-arrivals] .k-row').length).toBeGreaterThan(0);
+    expect(words(card)).not.toMatch(SLOP);
     k.handle.destroy();
   });
 });

@@ -77,11 +77,24 @@ describe('i18n-scan on fixture sources', () => {
     expect(keys(scanOf(source, 'app/src/elsewhere.ts'))).toEqual(['common.appName']);
   });
 
-  it('reads tr(), trPlural() and ct() argument lists, ternaries included', () => {
+  it('reads tr(), trPlural() and ct() argument lists, ternaries included; ct() names city.* keys', () => {
     const scan = scanOf("tr(i18n, 'stopTitle'); trPlural(i18n, 'platforms', n); ct(i18n, heritage ? 'heritage' : 'map'); tr(i18n, open ? 'close' : 'open', { n });");
-    expect(keys(scan)).toEqual(['transport.close', 'transport.open', 'transport.stopTitle']);
+    expect(keys(scan)).toEqual(['city.heritage', 'city.map', 'transport.close', 'transport.open', 'transport.stopTitle']);
     expect([...scan.plurals.keys()]).toEqual(['transport.platforms']);
     expect([...scan.cityWords.keys()].sort()).toEqual(['heritage', 'map']);
+  });
+
+  it('reads the city adapter as the catalogue: ct() and bikeCount() are its helpers, a fact label its one prefix', () => {
+    const adapter = scanOf([
+      "export function ct(i18n, key, vars) { return catalogue(i18n.getLocale()).t(`city.${key}`, vars); }",
+      "export function bikeCount(i18n, value) { return ok ? catalogue(i18n.getLocale()).t('city.bikeCount', { count }) : ct(i18n, 'bikeCountUnknown'); }",
+    ].join('\n'), 'app/src/city/strings.ts');
+    expect(keys(adapter)).toEqual(['city.bikeCount', 'city.bikeCountUnknown']);
+    expect(adapter.dynamic.size).toBe(0);
+    const facts = scanOf("ct(i18n, `fact-${key}`); ct(i18n, word);");
+    expect([...facts.dynamic.keys()]).toEqual(['city.fact-']);
+    expect(facts.cityWords.size).toBe(0);
+    expect(facts.unresolved).toHaveLength(1);
   });
 
   it('reads data-i18n attributes inside strings and templates', () => {
@@ -119,6 +132,7 @@ describe('i18n-scan on app/src', () => {
     expect(scan.keys.has('arrivals.now')).toBe(true);
     expect(scan.plurals.has('kiosk.lines.nearby')).toBe(true);
     expect(scan.cityWords.has('noLocation')).toBe(true);
+    expect(scan.keys.has('city.noLocation')).toBe(true);
     expect(scan.keys.has('none')).toBe(false);
   });
 });

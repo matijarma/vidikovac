@@ -140,16 +140,19 @@ for (const scene of [
     await installExperienceFixture(page, await experienceSnapshots());
     await feeds(page, false); // HTTP only; the fixture owns this visual test's socket and clock.
     await page.goto(FIXTURE_DASHBOARD);
-    await expect(page.getByTestId('tb')).toBeVisible();
+    await expect(page.locator('#layer-grad-sada')).toBeVisible();
     if (scene.zoom) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
     for (const layer of ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'kultura', 'uprava-i-pravo', 'sigurnost']) {
-      const direct = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
-      if (scene.name==='desktop' || await direct.count()) await direct.click();
-      else {
+      // A phone tab (Sada, Karta) or, at the desk, the wordmark's way home to Sada; the desk pair already shows
+      // Karta beside Sada, so it needs no click; else Još and the domain's row.
+      const shown = page.locator(`[data-testid=dash-view] .layer[data-layer="${layer}"]`);
+      const direct = page.locator(`.ki-tab[data-layer="${layer}"]:visible, .ki-wordmark[data-layer="${layer}"]:visible`).first();
+      if (await direct.count()) await direct.click();
+      else if (!(await shown.count())) {
         await page.locator('[data-testid=tab-more]:visible, [data-testid=status-more]:visible').first().click();
         await page.getByTestId(`dir-${layer}`).click();
       }
-      await expect(page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`)).toBeVisible();
+      await expect(shown).toBeVisible();
       await page.waitForTimeout(180);
       await noOverflow(page);
       await axe(page);
@@ -186,7 +189,9 @@ test('real kiosk + two scanners: acknowledged subjects, removal/recovery, confir
     const second = await readPairing(kiosk, APP_URL);
     await unlockOnPhone(b, second.scanUrl, '10 minuta');
     await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', revision!);
-    await b.locator('.ki-tab[data-layer="kultura"]').click();
+    // Događanja is a Još row now: the tab bar's Još on the phone, the status line's at the desk.
+    await b.locator('[data-testid=tab-more]:visible, [data-testid=status-more]:visible').first().click();
+    await b.getByTestId('dir-kultura').click();
     const eventTitle = (await b.locator('[data-testid=event-row] .row-title').first().innerText()).trim();
     await b.locator('[data-testid=event-row] [data-action=select]').first().click();
     await b.getByTestId('screen-control').click();

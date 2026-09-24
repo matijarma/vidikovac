@@ -101,7 +101,7 @@ export function createSessionSheet(deps: SessionSheetDeps): SessionSheet {
       ['hint', s.frozen ? i18n.t('session.expiredHint') : ''],
     ];
     const actions = [
-      s.canShare && live ? actionRow('share', 'share-city', 'share-2', i18n.t('session.share'), 'share-city', i18n.t('session.shareHint')) : '',
+      s.canShare && live ? actionRow('share', 'share-city', 'share-2', i18n.t('session.share'), 'share-city-sheet', i18n.t('session.shareHint')) : '',
       !s.frozen ? actionRow('refresh-toggle', s.paused ? 'resume' : 'pause', s.paused ? 'play' : 'pause', i18n.t(s.paused ? 'session.resumeRefresh' : 'session.pauseRefresh'), 'toggle-refresh') : '',
       !s.frozen ? actionRow('countdown', s.countdownHidden ? 'show-countdown' : 'hide-countdown', s.countdownHidden ? 'eye' : 'eye-off', i18n.t(s.countdownHidden ? 'session.showCountdown' : 'session.hideCountdown'), 'toggle-countdown') : '',
       live && !s.paused ? actionRow('refresh-now', 'refresh', 'refresh-cw', i18n.t('session.refreshNow'), 'refresh-now') : '',

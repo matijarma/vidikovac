@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { firstDeparture, firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, lastRunExpired, loadLastRun, nightService, type LastRunRoutes, type LastRunSnapshot } from '../../app/src/core/lastrun';
-import { lastRunProducer } from '../../app/src/experience/producers';
-import { bucketOf, columnsFor } from '../../app/src/experience/timeband';
-import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { zagrebDayKey, zagrebHour, zagrebTime } from '../../app/src/format';
 
 // The last scheduled departure per line from the screen's stop (plan A.6, D7,
@@ -238,18 +235,5 @@ describe('the committed artefact for the fixture stop 106_1 (Trg bana J. Jelači
     expect(zagrebDayKey(first!.at)).not.toBe(zagrebDayKey(late));
     expect(zagrebHour(first!.at)).toBeGreaterThanOrEqual(3);
     expect(zagrebHour(first!.at)).toBeLessThan(7);
-  });
-  it('gives the Sada band two Zadnji polazak tiles in večeras with xs badges, and never the word dolazak', () => {
-    const hr = createDefaultI18n('hr');
-    const columns = columnsFor(hr, now);
-    const tiles = lastRunProducer.produce({ i18n: hr, snapshots: {}, now, lastRun: snapshot }, { columns, surface: 'desktop', bucket: (at, until, allDay) => bucketOf(now, columns, at, until, allDay) });
-    expect(tiles).toHaveLength(2);
-    for (const tile of tiles) {
-      expect(tile.label).toBe('Zadnji polazak');
-      expect(tile.context).toBe('po rasporedu · ZET GTFS');
-      expect(tile.labelMarkup).toContain('data-size="xs"');
-      expect(bucketOf(now, columns, tile.at)).toBe('veceras');
-      expect(JSON.stringify(tile).toLowerCase()).not.toContain('dolazak');
-    }
   });
 });

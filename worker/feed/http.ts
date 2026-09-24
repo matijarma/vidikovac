@@ -44,17 +44,14 @@ export async function upstreamFetchConditional(url: string, etag: string | null,
 }
 
 /** The only FetchContext modules ever see: identified, time-boxed, injectable
- *  clock, for the module the twin feeds the twin's payload (R-TE8), and, for
- *  the five modules with long texts, the one-line briefer (WP6). */
+ *  clock, and, for the module the twin feeds, the twin's payload (R-TE8). */
 export function makeFetchContext(
   now: () => Date = () => new Date(),
   twin?: FetchContext['twin'],
-  brief?: FetchContext['brief'],
 ): FetchContext {
   return {
     fetch: (url, init) => upstreamFetch(url, init),
     now,
     ...(twin ? { twin } : {}),
-    ...(brief ? { brief } : {}),
   };
 }

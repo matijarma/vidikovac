@@ -6,7 +6,7 @@
 // Red by design until WP1–WP3 land (D2) and the read-only touch lands (D3). A
 // red row is a finding, never skipped: every check is a soft assertion whose
 // message names the probe and the target, so one run lists every row a scene
-// misses. The only fixme is the touch block (stop-board), until D3.
+// misses. The touch block (stop-board) runs since D3 (WP2 step 9).
 //
 // Per scene, on one page: (A) the first-viewport inventory, the "U blizini"
 // head, the QR card's lead; (B) one reading of the header, list, map, QR card
@@ -14,7 +14,7 @@
 // legibility; (C) the ten-minute rotation (300 readings 2 s apart); (D) one
 // idle minute of calm motion; (E) the settings behind a 900 ms hold on the
 // brand; (I) the recorders; then (H) a DPR 0.25 proxy of the scene on a second
-// screen for the eye. (F) read-only touch is its own fixme test per scene.
+// screen for the eye. (F) read-only touch is its own test per scene.
 //
 // Fixtures: the kiosk feed stamped for the scene (then re-stamped to the page's
 // clock as it advances), the departures board and the last-run file of
@@ -25,7 +25,7 @@ import { resolve } from 'node:path';
 import { APP_URL, E2E_STOP_ID, isolateLocalNetwork, localContext, provisionKiosk } from '../helpers';
 import { installKioskFeedFixture } from '../experience-fixtures';
 import { installCityFixture } from '../city-fixtures';
-import { departuresBoard, lastRunSnapshot, serviceDays } from '../departures-fixture';
+import { departuresBoard, lastRunSnapshot, PLATFORM_IDS, serviceDays } from '../departures-fixture';
 import { firstViewport, firstViewportFailures, PHONE_PROBES } from '../inventory';
 import { legibilityReport, WALL_1920 } from '../legibility';
 import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
@@ -54,6 +54,8 @@ const SETTLE_MS = 30_000;
 const VEHICLES_MS = 10_000;
 /** The proxy page settles on a shorter leash: it is an artefact, never a verdict. */
 const PROXY_SETTLE_MS = 15_000;
+/** How long a touched stop's board may say it is loading: its rows are Sada's own row, whose module loads on the first touch (kiosk/timeline.ts loadStopBoardRows; lane-w-WP2T's handoff: "allow the spec's 5 s"). */
+const TOUCH_ROWS_MS = 5_000;
 
 const softly = expect.configure({ soft: true });
 
@@ -234,8 +236,8 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       await proxyShot(browser, request, scene, WALL_LANDSCAPE, label);
     });
 
-    // (F) Read-only touch [O-58] lands with D3; until then this is the one fixme of the tier.
-    test.fixme(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 60 s and the wall returns by itself`, async ({ page, request }) => {
+    // (F) Read-only touch [O-58], D3 (WP2 step 9): the ring at the frame's centre is the place's own stop.
+    test(`${id} (${scene.zagreb} Zagreb): read-only touch, the place's stop ring opens its departures for 60 s and the wall returns by itself`, async ({ page, request }) => {
       test.setTimeout(SCENE_TIMEOUT_MS);
       await openWall(page, request, scene, `${label}-touch`, false);
       await expect(page.getByTestId('kiosk-invitation'), `${label}: the wall paints its invitation within ${LOAD_MS / 1000} s`).toBeVisible({ timeout: LOAD_MS });
@@ -247,15 +249,26 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       await page.mouse.click(map!.x + map!.width / 2, map!.y + map!.height / 2);
       const board = page.locator(WALL_PROBES.stopBoard);
       await expect(board, `${label}: a touch on the place's stop ring opens ${WALL_PROBES.stopBoard}`).toBeVisible({ timeout: 5_000 });
-      const departures = await visibleOf(page, `${WALL_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`);
-      expect(departures.length, `${label}: the stop board lists 1–3 departures (principle 3), read ${departures.length}`).toBeGreaterThanOrEqual(1);
+      // What the fixture's timetable holds for the place's platforms at the scene's clock: a scene with no departure
+      // there reads 0 rows (lane-w-WP2T), and is never asserted 1–3. The board says it is loading until its rows'
+      // module is in (TOUCH_ROWS_MS).
+      const scheduled = PLATFORM_IDS.reduce((n, stopId) => n + departuresBoard({ now: scene.now, stopId }).departures.length, 0);
+      const rowsOnBoard = `${WALL_PROBES.stopBoard} ${PHONE_PROBES.departureRows}`;
+      if (scheduled > 0) {
+        await expect.poll(async () => (await visibleOf(page, rowsOnBoard)).length, { timeout: TOUCH_ROWS_MS, message: `${label}: the stop board's departures (${rowsOnBoard}) paint within ${TOUCH_ROWS_MS / 1000} s of the touch` }).toBeGreaterThanOrEqual(1);
+      }
+      const departures = await visibleOf(page, rowsOnBoard);
+      if (scheduled > 0) expect(departures.length, `${label}: the stop board lists 1–3 departures (principle 3), read ${departures.length}`).toBeGreaterThanOrEqual(1);
+      else expect(departures.length, `${label}: no departure at the scene's clock in the fixture, so the board lists none, read ${departures.length}`).toBe(0);
       expect(departures.length, `${label}: the stop board lists at most 3 departures, read ${departures.length}`).toBeLessThanOrEqual(3);
       for (let t = 0; t <= TOUCH_BOARD_MS; t += ROTATION_STEP_MS) {
         await page.clock.runFor(ROTATION_STEP_MS);
         await page.waitForTimeout(ROTATION_SETTLE_MS);
       }
       await expect(board, `${label}: the stop board closes by itself within ${TOUCH_BOARD_MS / 1000} s`).toBeHidden({ timeout: 5_000 });
-      expect(await attrOf(page, WALL_PROBES.map, 'data-zoom'), `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
+      const zoomAfter = await attrOf(page, WALL_PROBES.map, 'data-zoom');
+      writeArtefact(`touch-${label}.json`, { scheduled, departures: departures.map((d) => d.text), zoom, zoomAfter });
+      expect(zoomAfter, `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
     });
   }
 });

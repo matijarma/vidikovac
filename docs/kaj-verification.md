@@ -1970,7 +1970,8 @@ na 20.
 Prihvaćanje paketa WP0 do WP6 iz `docs/companion-2026-09-22.md` (odjeljak 16) na jednom mjestu: za
 svaki redak paket, mjera, naredba, prag i izvor praga, izmjerena vrijednost na isporuci D1 i na
 kandidatu D2 te ocjena. D1 je oznaka `D1` (`f0357bf`), u produkciji od 23. rujna 2026. Kandidat D2 u
-ovoj tablici je `2d46817` na grani `companion-2026-09`: isporuka D1 i trake C, V i W. Motor kretanja
+ovoj tablici je `2d46817` na grani `companion-2026-09`: isporuka D1 i trake C, V i W; ćelija koja
+navodi `10ed458` izmjerena je na kasnijem kandidatu iste grane. Motor kretanja
 i artefakti mreže na kandidatu D2 bajtno su isti kao na D1, pa reci ocjenjivača na D2 imaju
 vrijednosti s D1. Retke u pregledniku mjeri prolaz D2-e2e u glavnom stablu; dok taj prolaz ne
 završi, ćelija kaže „mjeri se u prolazu D2-e2e, na čekanju”. Crtica znači da se redak na toj
@@ -1989,6 +1990,19 @@ opisan je u
 162 okvira ZET-ova GTFS-RT-a samo s tramvajima, od 21. rujna 2026., od 17:15 do 17:44, isključivo
 testni podatak repozitorija. Reci A1 do A12 čitaju ključeve iz tablice „Kapija paketa WP0” iznad,
 gdje su i polazišta prije WP0.
+
+README uzorka generira `scripts/frames-sample.mjs`: `npm run frames:sample -- --readme-only
+test/fixtures/frames/2026-09-21-1715-1744` osvježava samo README, bez okvira. README navodi
+graphHash artefakta mreže, pa ga treba ponovno generirati kad se spoji novi artefakt s grane
+`lane/t-rail` (stavka isporuke D3).
+
+Na isporuci D4 „`npm test` uključuje razinu prihvaćanja” znači konkretno: skripta `test` dobiva
+projekt `accept` (`vitest run --project unit --project workers --project accept`), a skripta `e2e`
+Playwrightov projekt `accept`, i to tek kad je svaki redak razine zelen (pravilo spajanja u
+`vitest.config.ts`), jer je `npm test` kapija svake trake. Do tada je kapija isporuke D4
+`npm run typecheck && npm run typecheck:tests && npm test && npm run accept`, a `npm run accept`
+smije biti crven samo u retku U1: taj redak prema odluci od 23. rujna ostaje crven s nepromijenjenim
+pragovima dok ga ne zazeleni nastavak za tračnice i prepoznavanje staza (`lane/t-rail`).
 
 | # | Paket | Mjera | Naredba | Prag | Izvor | D1: ned 20. 9. / pon 21. 9. | Kandidat D2 | Ocjena |
 |---|---|---|---|---|---|---|---|---|
@@ -2016,7 +2030,7 @@ gdje su i polazišta prije WP0.
 | Z2 | WP1 | polasci u 300 očitanja kroz deset minuta | kao Z1 | 1 do 3 u svakom očitanju, i na zaslonu za cijeli grad | §16.3, [O-65] | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
 | Z3 | WP1 | rečenica u zaglavlju | kao Z1 | 1 do 80 znakova, bez prelijevanja i trotočja; najmanje 3 različite i nijedna uzastopno ponovljena (lokalni predložak); u produkciji nijedna doslovno ponovljena unutar deset minuta | §16.3, §12 | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
 | Z4 | WP1 | „U blizini” i kartica s QR-om | kao Z1 | zaglavlje odgovara `/^U blizini · \d+(,\d)? km · ~\d+ min$/`; najviše jedan redak sunca; svaki redak nosi `data-when` ili `data-always`; uvod točno „Skeniraj za 10 minuta grada.”; QR ≥ 240 px | §16.3, [O-68] | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
-| Z5 | WP1, WP3 | na zaslonu nema upravljanja | kao Z1, `npm run accept -- test/accept/trust.test.ts -t d-controls` | 0 kontrola osim marke i QR-a; Postavke samo držanjem marke 900 ms; podnožje bez HH:MM | §16.3, §16.5 | – | `d-controls-invitation` crven (poveznica `pair-url`, gumb `kiosk-essentials-open`, poveznica `k-strip-hitno`), `d-controls-presentation` crven (`pair-url`, `k-strip-hitno`); preglednik: mjeri se u prolazu D2-e2e, na čekanju | ne prolazi |
+| Z5 | WP1, WP3 | na zaslonu nema upravljanja | kao Z1, `npm run accept -- test/accept/trust.test.ts -t d-controls` | 0 kontrola osim marke i QR-a; Postavke samo držanjem marke 900 ms; podnožje bez HH:MM | §16.3, §16.5 | – | na `10ed458` `d-controls-invitation` i `d-controls-presentation` zeleni: poveznice `pair-url` i `k-strip-hitno` te gumb `kiosk-essentials-open` na zaslonu su sada običan tekst; preglednik: mjeri se u prolazu D2-e2e, na čekanju | Vitest prolazi; preglednik na čekanju |
 | Z6 | WP1 | mirno kretanje | kao Z1 | najviše 2 promjene DOM-a u minuti mirovanja; reci zadržavaju svoje čvorove | §16.3 | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
 | Z7 | WP1 | prizori zadnjeg i prvog polaska, noći, jutra i prekida ZET-a | kao Z1 | `lastTrams2240`: reci `last` i `first`; `afterLast0045`: nijedan `last` s prošlim vremenom i nijedno /zadnji/ kad su svi zadnji tramvaji otišli; `night0430`: tamna tema, `first` i `pharmacy`; `morning0745`: najmanje 1 živo odbrojavanje; `outage0800`: `data-feed` nije `live`, bez oznaka vozila, 0 živih redaka, `map-note` jednom, `data-markers` > 0, nijedan naslov /nedostup/ | §16.3, [O-41] | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
 | Z8 | WP2 | karta zaslona | kao Z1, `npm run e2e -- e2e/wall-map.spec.ts` | `data-unlabelled` 0; zum okvira unutar ±0,05 od `frameView`; autobusi u okviru; brojani krugovi BAJS, uz sivu nulu i prazan krug | §16.3, [O-71] | – | mjeri se u prolazu D2-e2e, na čekanju | na čekanju |
@@ -2028,12 +2042,27 @@ gdje su i polazišta prije WP0.
 | M2 | WP4 | Karta i Još | kao M1 | najmanje 1 oznaka vozila unutar 2.000 ms bez dodira; 0 sklopivih izbornika; `data-unlabelled` 0; dodir na platno otvara `stop-board` s 3 retka u prozoru; pretraga najviše 3 dodira; Još vodi na „Događanja ovaj tjedan” | §16.4 | – | ne mjeri se do D3 | na čekanju (D3) |
 | M3 | WP4 | kraj sesije i stolno računalo | kao M1 | `session-ended` s poveznicama `/s/` i `/hitno`, 0 redaka, 0 izvoza, nijedan daljnji zahtjev `/api/data`; na 1440 × 900 Sada i Karta u prozoru; axe, ozbiljni i kritični nalazi 0 | §16.4, [O-62] | – | ne mjeri se do D3 | na čekanju (D3) |
 | J1 | WP5 | jezik, katalozi i dokumenti | `npm test`, `npm run accept -- test/accept/trust.test.ts` | popis nekorištenih ključeva prazan; hr i en isti ključevi; bez hrvatskih literala u `app/src/city/strings.ts`; pojmovnik iz §16.6 | §16.6, [O-66] | – | u `trust.test.ts` crvenih je 9 redaka paketa WP5 (`e-obuhvat`, `e-registra`, `e-sto-trazis`, `e-zivi-grad`, `e-sada-u-gradu`, `e-zatim`, `e-dohvaceno`, `e-dohvaceno-key`, `e-tab-synonyms`); ostalo na D4 | na čekanju (D4) |
-| V1 | WP6 | čuvari povjerenja i suvišnog teksta | `npm run accept -- test/accept/trust.test.ts` | 0 crvenih | §16.5 | – | zelenih 21, crvenih 14: WP1 3 (`d-controls-invitation`, `d-controls-presentation`, `e-pharmacy-keys`), WP4 2 (`e-odaberi`, `e-referentna`), WP5 9 (redak J1) | ne prolazi |
+| V1 | WP6 | čuvari povjerenja i suvišnog teksta | `npm run accept -- test/accept/trust.test.ts` | 0 crvenih | §16.5 | – | na `10ed458` zelenih 24, crvenih 11: WP4 2 (`e-odaberi`, `e-referentna`), WP5 9 (redak J1); reci paketa WP1 (`d-controls-invitation`, `d-controls-presentation`, `e-pharmacy-keys`) zeleni | ne prolazi: 11 redaka čeka D3 i D4; reci paketa WP1 i WP3 zeleni |
 | V2 | WP6 | alati provjere mjere sami sebe | `npm test -- test/e2e test/scripts/grade-branches.test.ts test/app/font-metrics.test.ts` | zeleno | §16.1 | – | zeleno (dio punog `npm test`) | prolazi |
 | V3 | WP6 | nijedna skripta ne stvara zaslon u produkciji | `AUDIT_KIOSK_URL= node scripts/audit-production.mjs`; `E2E_KIOSK_URL= node scripts/observe-production.mjs` | izlazni kod 2 i rečenica odbijanja prije ijednog zahtjeva; u promatraču nema `setup-create` ni `/api/screens` | §16.7 | odbijanje s izlaznim kodom 2, bez preglednika / – | čuvar nepromijenjen od D1; `test/scripts/observe-production.test.ts` zelen | prolazi |
 | V4 | WP6 | promatranje produkcije nakon isporuke, samo čitanjem | `E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10` | izlazni kod 0; najviše 1 iskorišten kod po površini, najmanje 12 s razmaka | §16.7 | još nije pokrenuto: za dan isporuke nije zabilježena adresa zaslona / – | nakon isporuke D2 | na čekanju |
 | V5 | WP6 | ništa osjetljivo ni golemo u gitu | naredbe iz podnaslova „Što nikad ne ulazi u git” | 0 datoteka; `test/fixtures/frames` ≤ 6.500.000 B; 0 adresa postave s tajnom | §16.9 | – | 0; 6.215.319 B; 0 | prolazi |
 | V6 | WP6 | ručne provjere na uređaju | tablica „Ručne provjere na uređaju” niže | prije pilota svaki redak nosi uređaj, preglednik, datum i rezultat | §16.8 | prazno | prazno | na čekanju |
+
+### Praćene brojke, bez praga
+
+Dvije brojke prate se na svakoj isporuci, ali nijedna nije prag (odluka od 23. rujna) i nijedna ne
+mijenja izlazni kod: svježe probe koje granica vanjskog teksta propusti (tekst treće strane sročen
+kao poruka čitatelju, svaki put nov) i popis teksta koji zaslon preskoči (`data-skipped-text`).
+
+| Brojka | Gdje se mjeri | D1 | Kandidat D2 |
+|---|---|---|---|
+| propuštene svježe probe, zaglavlje i reci | pregled svake runde, 30 ili 50 novih proba po površini | – (granica stiže s D2) | 19/50 i 30/50 (`d08cb9b`), 7/30 i 7/30 (`cd71e53`), 1/30 i 1/30 (`3f18896`), 1/30 i 4/30 (`10ed458`) |
+| `data-skipped-text` na zaslonu | `npm run observe:production`: zbroj, najveća vrijednost u jednom očitanju i razlozi u `report.md` | nema popisa: isporuka D1 još ne piše atribut | `count:0` u svih 300 očitanja lokalnog promatranja od deset minuta (`08ce4bf`, 23. 9. od 15:41 do 15:53, živi ZET-ov feed); produkcija nakon isporuke D2 |
+
+Reci `e-obuhvat` i `e-registra` od grane `lane/v-F3` provjeravaju samo zaslon, kako §13 kaže za napomene
+#12 i #13: telefon zadržava napomenu o obuhvatu zaštite i rečenicu o registru, a provjera zaslona
+čita i zajednički opis mjesta onako kako ga zaslon iscrtava.
 
 ### Tri metra
 
@@ -2084,7 +2113,7 @@ preglednikom i datumom; prazna ćelija znači da provjera još nije provedena.
 - Sve pod `review.local/` (pravilo `*.local` u `.gitignore`), uključujući
   `review.local/companion/screen.json` s oznakom i tajnom zaslona, i svaki `screen-<datum>.json`.
 - `recordings/` na bilo kojoj dubini, oko 700 MB snimaka na dan. Jedini uzorak okvira u
-  repozitoriju je `test/fixtures/frames/2026-09-21-1715-1744/`; piše ga `npm run frames:sample`,
+  repozitoriju je `test/fixtures/frames/2026-09-21-1715-1744/`; taj uzorak piše `npm run frames:sample`,
   a naredba odbija izlaz pod `recordings/`.
 - `test-results/`, `.wrangler/`, `.cache/`.
 - Adrese postave zaslona (`E2E_KIOSK_URL`, `AUDIT_KIOSK_URL`): tajna je u dijelu adrese iza `#`,

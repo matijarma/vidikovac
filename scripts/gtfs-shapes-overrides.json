@@ -47,6 +47,267 @@
         "12"
       ],
       "reason": "A 1.36 m digitisation joint in line 12's Dubrava loop: the arriving shape 12_1 ends at node 67 and the departing shape 12_11 starts at node 68, end to start, which the near-duplicate pass (it merges parallel runs, not endpoints) never joins. Without it no loop path joins platform 209_12 to 209_13, 19.4 m apart."
+    },
+    {
+      "from": [
+        15.95729,
+        45.81313
+      ],
+      "to": [
+        15.95682,
+        45.81312
+      ],
+      "routes": [
+        "1"
+      ],
+      "reason": "The westbound-to-southbound turn at Trg dr. F. Tuđmana, drawn by no shape in feed 000395 because only line 1 makes it and line 1 has no shapes: the westbound Ilica track passes node 43 (where the northbound Republike Austrije track also ends) and the southbound Republike Austrije track starts 36 m away at node 33, the end of the eastbound Ilica track, so the two polylines never cross and no junction can be noded. Without it line 1's synthetic paths could not be routed past Trg dr. F. Tuđmana: Talovčeva and Zapadni kolodvor were trimmed from all four, every tram to Zapadni kolodvor ran off its path there onto a depot variant of the other direction and back (153 of Monday 21 September's 272 same-trip path changes stood at Trg dr. F. Tuđmana and Talovčeva). The connector carries the turn in and out; the 230 m station stub west of the through rails stays off the graph, as the recorded fixes of 10343 and 102406 at 07:10 to 07:38 show it."
+    },
+    {
+      "from": [
+        15.99722,
+        45.81491
+      ],
+      "to": [
+        15.99654,
+        45.81491
+      ],
+      "routes": [
+        "13"
+      ],
+      "reason": "Kvaternikov trg, the crossover from the end of the line 13 arrival track (node 76, platforms 236_2 and 236_13, where shapes 13_11 and 13_49 end) west onto the westbound trunk at node 53, 53 m, from where the departing loop through nodes 71, 72 and 73 already runs to the 13_50 and pattern 93 start. Recorded fixes of 102423 and 10316 on 21 September at 09:10 and 09:13: from the stand at the end of 13_11 the tram is next read 30 m west on the trunk 26 m before node 53, then on the loop edges 75, 76 and 77. No shape draws the crossover, so each departure was a same-trip path change (13_11 -> path:13:1:129fd87e, 25 on 20 September and 33 on 21 September) and a client re-seed of 40 to 60 m."
+    },
+    {
+      "from": [
+        16.0184,
+        45.81418
+      ],
+      "via": [
+        16.0194,
+        45.81412
+      ],
+      "to": [
+        16.01882,
+        45.81455
+      ],
+      "routes": [
+        "1",
+        "9",
+        "17",
+        "32"
+      ],
+      "reason": "The Borongaj turning loop: the arriving shapes 32_2 and 32_10 and the synthetic paths of lines 1, 9 and 17 end at node 203, the departing ones start 53 m away at node 204, and the loop between them is drawn by no shape. Recorded fixes of 102406 (line 1), 10347 (line 9) and 22110 (line 17) on 21 September at 09:03 to 09:07 run 80 m east of node 203 to a stand at 16.0194,45.8142, 59 m from node 204, and back north-west to it; the via point is that stand, so the two segments (78 m and 66 m) stay within 20 m of every recorded fix."
+    },
+    {
+      "from": [
+        15.93392,
+        45.8154
+      ],
+      "via": [
+        15.9335,
+        45.81505
+      ],
+      "to": [
+        15.93453,
+        45.81513
+      ],
+      "routes": [
+        "2",
+        "6"
+      ],
+      "reason": "The Črnomerec turning loop to platform 98_11 (lines 2 and 6): every arriving shape ends at node 46, the end of the westbound Ilica track, and the departing shapes 2_9, 2_12, 2_19 and the line 6 synthetic paths start 56 m away at node 194. Recorded fixes of 10481 (line 6), 102274 and 102416 (line 2) on 21 September at 08:59 to 09:03 leave node 46 westward, swing south to a stand at 15.9335,45.8150 (51 m from node 46, 78 m from node 194) and run east to node 194; the via point is that stand, the segments 51 m and 81 m."
+    },
+    {
+      "from": [
+        15.93392,
+        45.8154
+      ],
+      "via": [
+        15.9335,
+        45.81505
+      ],
+      "to": [
+        15.93493,
+        45.815
+      ],
+      "routes": [
+        "2",
+        "6",
+        "11",
+        "14",
+        "31"
+      ],
+      "reason": "The same Črnomerec loop to platform 98_1 (lines 11, 14, 31 and the other departures of 2 and 6), whose track starts at node 31, 90 m from node 46 and 30 m east of platform 98_11 on a separate polyline that only meets the other at node 32; recorded fixes of 102275, 102249 and 102293 (line 11) on 21 September at 09:00 to 09:03 stand at the same 15.9335,45.8150 and run east along the platforms to the e30 start. Segments 51 m and 111 m."
+    },
+    {
+      "from": [
+        15.9816,
+        45.86067
+      ],
+      "via": [
+        15.9814,
+        45.861
+      ],
+      "to": [
+        15.98094,
+        45.86025
+      ],
+      "routes": [
+        "15"
+      ],
+      "reason": "The Gračansko dolje turning loop of line 15: shape 15_1 ends at node 169 and 15_2 starts 69 m away at node 170, nothing between them drawn. Recorded fixes of 102302 on 21 September at 09:08 and 09:31 run 45 m north past the end of 15_1 (to 15.9814,45.8610), curve west and come back south to the 15_2 start, where the tram stands four minutes before departing; the via point is the northern apex, the segments 40 m and 91 m, and every fix lies within 25 m of them."
+    },
+    {
+      "from": [
+        15.93762,
+        45.79723
+      ],
+      "via": [
+        15.937,
+        45.79725
+      ],
+      "to": [
+        15.93856,
+        45.79723
+      ],
+      "routes": [
+        "1",
+        "2",
+        "3",
+        "5",
+        "6",
+        "9",
+        "11",
+        "12",
+        "14",
+        "17",
+        "32",
+        "34"
+      ],
+      "reason": "The Ljubljanica turning loop between arrival platform 245_2 (node 206, where 3_4, 9_6 and 34_3 end, and where the 17 m stub from node 41 brings 12_11 and the line 9 synthetic paths) and departure platform 245_1 (node 64, 73 m east), drawn by no shape. Recorded fixes of 102414 and 10325 (line 3) and 102410 (line 9) on 21 September at 09:01 to 09:14 leave 245_2 westward 50 to 60 m (15.9370,45.7974), curve south and run east along the platforms to node 64; the via point is the western apex, the segments 48 m and 121 m. Trams that carry on 100 m further south are entering the depot, and stay off the graph. Depot runs of lines 1, 2, 5, 6, 11, 14, 17 and 32 end at platform 245_12 beside 245_2 and their next pattern starts at Selska, 836 m of drawn rails east through this loop, so their loops run it as well."
+    },
+    {
+      "from": [
+        15.89259,
+        45.79427
+      ],
+      "via": [
+        15.89195,
+        45.79335
+      ],
+      "to": [
+        15.89348,
+        45.79436
+      ],
+      "routes": [
+        "5",
+        "17",
+        "32"
+      ],
+      "reason": "The Prečko turning loop: the arriving shapes and synthetic paths of lines 5, 17 and 32 end at node 175, the departing ones start 70 m away at node 176, and the loop is drawn by no shape. Recorded fixes of 102298, 22136 (line 17) and 101006 (line 5) on 21 September at 09:00 to 09:05 run 130 m south-west of node 175 (to 15.8918,45.7932), round the loop and back north-east through a stand 60 m from node 175 to node 176; the via point is the southern apex, the segments 114 m and 163 m, and the recorded fixes lie within 40 m of them, where a straight chord would have left them 100 m off."
+    },
+    {
+      "from": [
+        16.03446,
+        45.78908
+      ],
+      "via": [
+        16.03362,
+        45.78876
+      ],
+      "to": [
+        16.03492,
+        45.7894
+      ],
+      "routes": [
+        "2",
+        "3",
+        "33"
+      ],
+      "reason": "The Savišće turning loop: shapes 2_9, 2_11, 3_3, 33_11, 33_28 and two line 2 synthetic paths end at node 193 (the end of the Žitnjak-bound track), the departing ones start 50 m away at node 195, and the loop is drawn by no shape. Recorded fixes of 102424 and 10330 (line 3) and 10334, 22132, 102236 (line 2) on 21 September at 09:00 to 09:08 run 75 m west-south-west of node 193 to a stand at 16.0336,45.7888 and back east-north-east to node 195; the via point is that stand, the segments 74 m and 124 m."
+    },
+    {
+      "from": [
+        15.95245,
+        45.78508
+      ],
+      "to": [
+        15.95332,
+        45.7863
+      ],
+      "routes": [
+        "4",
+        "7",
+        "12",
+        "31"
+      ],
+      "reason": "Savski most: the arriving shapes 4_5, 4_7, 7_68, 31_2, 31_11 and the line 12 synthetic path end at node 200, the departing ones start 152 m north-east at node 201, and the return track between them is drawn by no shape. Recorded fixes of 22113, 102235 (line 7) and 102257, 102205 (line 4) on 21 September at 09:01 to 09:06 leave the stand at node 200 and run north 6 to 16 m east of the arrival track to the e245 start at node 201; the straight chord stays within 40 m of every fix, so no via point is needed."
+    },
+    {
+      "from": [
+        15.98462,
+        45.77772
+      ],
+      "to": [
+        15.98681,
+        45.77769
+      ],
+      "routes": [
+        "6"
+      ],
+      "reason": "Sopot: shapes 6_25 and 6_26 end on a 7 m stub at node 208, the end of the westbound track, and 6_2 and 6_23 start 170 m east at node 136, where the eastbound track becomes e152. Recorded fixes of 102239 and 102281 on 21 September at 09:00 to 09:10 run 190 m further west on the other lines' westbound track, cross to the eastbound one at 15.9825,45.7776 and come back east along it to node 136; the chord from 208 to 136 lies on that eastbound return within 5 m for its whole length, and the 190 m excursion west, a crossover on another line's rails 525 m round, is left off the graph."
+    },
+    {
+      "from": [
+        16.01498,
+        45.81978
+      ],
+      "via": [
+        16.0147,
+        45.8194
+      ],
+      "to": [
+        16.01215,
+        45.81862
+      ],
+      "routes": [
+        "5",
+        "12"
+      ],
+      "reason": "Park Maksimir: shapes 5_17 and 5_18 end at node 207, the top of a 104 m stub north of the eastbound track that only they draw, and 5_12 and 5_37 start 255 m south-west at node 52 on the westbound track; the line 12 short working (pattern path:12:0:3c0fade7 ends at node 25, the stub's foot, and path:12:1:157a32c2 starts at node 52) turns the same way. Recorded fixes of 101007 and 102108 (line 5) on 21 September at 09:00 to 09:09 stand on the loop at 16.0147,45.8194, 9 m from the stub and 13 m from the westbound track, then run west along that track to node 52; the via point is the stand, the segments 47 m and 216 m, the second within 13 m of the westbound track the tram runs."
+    },
+    {
+      "from": [
+        16.03477,
+        45.79886
+      ],
+      "via": [
+        16.0356,
+        45.79838
+      ],
+      "to": [
+        16.03433,
+        45.79917
+      ],
+      "routes": [
+        "2",
+        "5",
+        "13"
+      ],
+      "reason": "Žitnjak: the arriving shapes 2_19, 13_13, 13_50 and the synthetic paths of lines 5 and 13 end at node 86, where the line 3 track to Savišće begins, and the departing 2_20, 13_6, 13_27, 13_49 and their synthetic paths start 49 m away at node 87, where the line 3 track from Savišće ends. Recorded fixes of 102236, 102404 (line 2) and 10307 (line 13) on 21 September at 09:00 to 09:05 run 90 m down the Savišće-bound track to a stand at 16.0356,45.7984, cross, and come back up the other track to node 87; the via point is the stand, the segments 84 m and 132 m, each within 10 m of the line 3 track it follows."
+    },
+    {
+      "from": [
+        15.97478,
+        45.8415
+      ],
+      "to": [
+        15.97478,
+        45.84166
+      ],
+      "routes": [
+        "15"
+      ],
+      "reason": "The bottom of the Mihaljevac turning loop, 18 m between node 172, where the west side (e305) comes down and line 15 goes on south, and node 150, where the east side (e194) starts up. Line 15 from Gračansko dolje (15_2) ends at node 171 at the top of the west side and its next trip north (15_1) starts at node 168 at the top of the east side, 15 m away against the direction of the loop; recorded fixes of 102302 on 21 September at 09:19 to 09:21 take it down the west side, across this joint and up the east side (302 m) to the 15_1 start. No shape draws the joint, because every shape through the loop continues south from node 172."
     }
   ],
   "longLegs": []

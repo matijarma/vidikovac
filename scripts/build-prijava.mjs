@@ -8,16 +8,25 @@
 //   docs/prijava/rizici-i-odgovori.md         appendix 11 (expected questions)
 //
 // plus the figures under docs/prijava/figures (inline SVG and HTML fragments
-// with their manifests), the app's own tokens and tile grammar (app/src/ui),
-// and the document chrome in docs/prijava/src (template, stylesheet, script,
-// figure placement, data snapshot).
+// with their manifests), the app's tokens and tile grammar as they were when the
+// proposal was submitted (docs/prijava/src/*-2026-09-16.css, copies of app/src/ui
+// at 4e96dd2), and the document chrome in docs/prijava/src (template, stylesheet,
+// script, figure placement, data snapshot).
 //
 // Two variants come out of one source:
 //   file    docs/prijava/prijedlog-projekta.html   self-contained: fonts as data URIs,
 //                                                   script inline; opens from disk, prints to A4.
+//                                                   The submitted record: written only with
+//                                                   --file, never by a plain rebuild.
 //   hosted  app/prijava/index.html + prijava.js     served at /prijava/ under the app's CSP
 //                                                   (script-src 'self', font-src 'self'):
 //                                                   external module script, /fonts/manrope files.
+//
+// The hosted page alone carries the development-notes layer: a button at the top of
+// the document and an aside, hidden until the button is pressed, rendered from
+// docs/prijava/razvojne-biljeske.md into the fragment docs/prijava/src/biljeske.html.
+// The submitted text around the layer is the same markup, byte for byte, as without
+// it (test/docs/prijava.test.ts).
 //
 // The Markdown is the master text: nothing in this script writes prose. Run with
 // `node scripts/build-prijava.mjs` after editing any master; commit the outputs.
@@ -150,6 +159,56 @@ function figureMarkup(id, manifests, warnings) {
 }
 
 // ---------------------------------------------------------------------------
+// Development notes since submission (hosted page only). The master is a short
+// Markdown file: an h1, an intro paragraph, then one `## <date> · <title>` entry
+// per period with paragraphs, **strong**, `code` and [text](https://...) links.
+// ---------------------------------------------------------------------------
+const MONTHS = { 'siječnja': 1, 'veljače': 2, 'ožujka': 3, 'travnja': 4, 'svibnja': 5, 'lipnja': 6, 'srpnja': 7, 'kolovoza': 8, 'rujna': 9, 'listopada': 10, 'studenoga': 11, 'prosinca': 12 };
+/** "14. rujna 2026." or "17.–21. rujna 2026." → ISO date of the first day, or null. */
+export function noteDate(text) {
+  const m = /^(\d{1,2})\.(?:–\d{1,2}\.)? (\p{L}+) (\d{4})\.$/u.exec(text.trim());
+  if (!m || !MONTHS[m[2]]) return null;
+  return `${m[3]}-${String(MONTHS[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+function noteInline(text) {
+  return esc(text)
+    .replace(/ -- /g, ' – ')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+/** The notes master as { intro: string[], entries: { date, iso, title, paragraphs }[] }. */
+export function parseNotes(md) {
+  const intro = [];
+  const entries = [];
+  for (const b of parseBlocks(md)) {
+    if (b.type === 'h' && b.level === 2) {
+      const [date, ...rest] = b.text.split(' · ');
+      entries.push({ date: date.trim(), iso: noteDate(date), title: rest.join(' · ').trim(), paragraphs: [] });
+    } else if (b.type === 'p') {
+      (entries.length ? entries[entries.length - 1].paragraphs : intro).push(b.lines.join(' '));
+    }
+  }
+  return { intro, entries };
+}
+
+function notesMarkup(warnings) {
+  const { intro, entries } = parseNotes(read('docs/prijava/razvojne-biljeske.md'));
+  const body = [
+    ...intro.map((p) => `<p>${noteInline(p)}</p>`),
+    ...entries.map((e) => {
+      if (!e.iso) warnings.push(`note without a date: ${e.date}`);
+      const id = `biljeska-${e.iso ?? slugify(e.date)}`;
+      return `<article class="note" aria-labelledby="${id}-h"><h3 id="${id}-h"><time datetime="${e.iso ?? ''}">${esc(e.date)}</time> · ${noteInline(e.title)}</h3>\n`
+        + e.paragraphs.map((p) => `<p>${noteInline(p)}</p>`).join('\n') + '</article>';
+    }),
+  ].join('\n');
+  return read(`${SRC}/biljeske.html`).trim().replace('<!--@NOTES_BODY-->', () => body);
+}
+
+// ---------------------------------------------------------------------------
 // Document assembly
 // ---------------------------------------------------------------------------
 function renderDocument({ blocks, placement, manifests, warnings, headingIds }) {
@@ -242,8 +301,9 @@ function fontFaces(variant) {
 function stylesheet(variant) {
   const parts = [
     fontFaces(variant),
-    read('app/src/ui/tokens.css'),
-    read('app/src/ui/signage.css'),
+    // The app's sheets as submitted (16 September 2026), not today's: the document keeps its look.
+    read(`${SRC}/tokens-2026-09-16.css`),
+    read(`${SRC}/signage-2026-09-16.css`),
     existsSync(P(`${FIG}/figures-b.css`)) ? read(`${FIG}/figures-b.css`) : '',
     existsSync(P(`${FIG}/mocks.css`)) ? read(`${FIG}/mocks.css`) : '',
     read(`${SRC}/prijava.css`),
@@ -252,7 +312,8 @@ function stylesheet(variant) {
   return parts.join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n{3,}/g, '\n\n');
 }
 
-export function build() {
+/** Both variants as strings, nothing written. `notes: false` renders the hosted page without the layer. */
+export function render({ notes = true } = {}) {
   const warnings = [];
   const manifests = loadManifests();
   const placement = JSON.parse(read(`${SRC}/figures.json`));
@@ -287,7 +348,9 @@ export function build() {
     ? read(qrPath).replace(/^<\?xml[^>]*>\s*/, '').replace(/^<svg[^>]*>/, (tag) => tag.replace(/\s(width|height)="[^"]*"/g, '')).trim()
     : (warnings.push('qr-s.svg missing'), '<span class="invite-qr-missing">QR</span>');
 
-  const outputs = [];
+  const notesHtml = notes ? notesMarkup(warnings) : '';
+  let file = '';
+  let hosted = '';
   for (const variant of ['file', 'hosted']) {
     const head = `<style>\n${stylesheet(variant)}\n</style>`;
     const scriptTag = variant === 'file'
@@ -298,29 +361,42 @@ export function build() {
       .replace('<!--@TITLE-->', () => esc(title))
       .replace('<!--@HEAD-->', () => head)
       .replace('<!--@TOC-->', () => toc)
+      // The layer sits on the hosted page only; in the file the marker leaves no trace.
+      .replace('<!--@NOTES-->', () => (variant === 'hosted' && notesHtml ? `${notesHtml}\n  ` : ''))
       .replace('<!--@COVER_META-->', () => coverMetaHtml)
       .replace('<!--@BODY-->', () => bodyHtml)
       .replace('<!--@QR-->', () => qr)
       .replace('<!--@SNAPSHOT-->', () => snapshot)
       .replace('<!--@SCRIPT-->', () => scriptTag);
-    if (variant === 'file') {
-      writeFileSync(P('docs/prijava/prijedlog-projekta.html'), html);
-      outputs.push({ variant, path: 'docs/prijava/prijedlog-projekta.html', bytes: Buffer.byteLength(html) });
-    } else {
-      // The app's CSP is script-src 'self': no inline classic scripts survive on the hosted page
-      // (a figure may carry a tiny progressive-enhancement script; its CSS fallback stands).
-      html = html.replace(/<script>[\s\S]*?<\/script>/g, '');
-      mkdirSync(P('app/prijava'), { recursive: true });
-      writeFileSync(P('app/prijava/index.html'), html);
-      writeFileSync(P('app/prijava/prijava.js'), script);
-      outputs.push({ variant, path: 'app/prijava/index.html', bytes: Buffer.byteLength(html) });
-    }
+    if (variant === 'file') file = html;
+    // The app's CSP is script-src 'self': no inline classic scripts survive on the hosted page
+    // (a figure may carry a tiny progressive-enhancement script; its CSS fallback stands).
+    else hosted = html.replace(/<script>[\s\S]*?<\/script>/g, '');
   }
-  return { outputs, warnings, headings: [...headingIds.entries()] };
+  return { file, hosted, script, warnings, headings: [...headingIds.entries()] };
+}
+
+/**
+ * Writes the hosted page and its script. The self-contained file is the submitted
+ * record (built 16 September 2026), so a rebuild leaves it alone; `{ file: true }`
+ * (`--file`) writes it too.
+ */
+export function build({ file = false } = {}) {
+  const { file: fileHtml, hosted, script, warnings, headings } = render();
+  const outputs = [];
+  if (file) {
+    writeFileSync(P('docs/prijava/prijedlog-projekta.html'), fileHtml);
+    outputs.push({ variant: 'file', path: 'docs/prijava/prijedlog-projekta.html', bytes: Buffer.byteLength(fileHtml) });
+  }
+  mkdirSync(P('app/prijava'), { recursive: true });
+  writeFileSync(P('app/prijava/index.html'), hosted);
+  writeFileSync(P('app/prijava/prijava.js'), script);
+  outputs.push({ variant: 'hosted', path: 'app/prijava/index.html', bytes: Buffer.byteLength(hosted) });
+  return { outputs, warnings, headings };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const { outputs, warnings } = build();
+  const { outputs, warnings } = build({ file: process.argv.includes('--file') });
   for (const o of outputs) console.log(`${o.variant.padEnd(7)} ${o.path} ${(o.bytes / 1024).toFixed(0)} KB`);
   for (const w of warnings) console.warn(`warning: ${w}`);
 }

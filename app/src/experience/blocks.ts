@@ -4,7 +4,7 @@
 // so the reconciler can keep nodes without keeping stale closures.
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
-import { publicItemKey, type PublicSelection } from '../core/contracts';
+import { publicItemKey, selectionParams, type PublicSelection } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
 import { iconMarkup, type IconName } from '../ui/icons';
@@ -182,6 +182,12 @@ export interface NavLinkOptions {
   icon?: IconName;
   selection?: PublicSelection;
   className?: string;
+}
+
+/** '#layer=…' plus the public selection as view-store writes it, so the hash restores the same place (a row, a tile, a link that opens a subject). */
+export function selectionHref(layer: LayerId, selection?: PublicSelection | null): string {
+  const params = selectionParams(selection ?? null);
+  return params ? `#layer=${layer}&${new URLSearchParams(params).toString()}` : `#layer=${layer}`;
 }
 
 /** A link into another domain, optionally carrying a public selection. */

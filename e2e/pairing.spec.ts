@@ -35,7 +35,7 @@ test.describe('pairing: a public screen and a phone', () => {
       await unlockOnPhone(phone, scanUrl, '10 minuta');
       const originalExpiry = await phone.getByTestId('session-label').getAttribute('data-expires-at');
       await phone.getByTestId('session-label').click();
-      await phone.getByTestId('share-city').click();
+      await phone.getByTestId('share-city-sheet').click();
       const code = phone.getByTestId('share-code');
       await expect(code).toHaveText(CODE_RE);
       const peer = await peerCtx.newPage();
@@ -51,6 +51,7 @@ test.describe('pairing: a public screen and a phone', () => {
       await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
       await peer.getByTestId('session-label').click();
       await expect(peer.getByTestId('session-sheet')).toBeVisible();
+      await expect(peer.getByTestId('share-city-sheet')).toHaveCount(0);
       await expect(peer.getByTestId('share-city')).toHaveCount(0);
       const reuse = await request.post(`${APP_URL}/api/scan`, { data: { code: raw }, headers: localHeaders() });
       expect((await reuse.json()).error).toBe('code-used');
@@ -140,9 +141,9 @@ test.describe('expiry with SESSION_MINUTES=0.2', () => {
 
       const token = await readDataToken(phone);
 
-      const frozen = phone.getByTestId('frozen-line');
-      await expect(frozen).toBeVisible({ timeout: 45_000 });
-      await expect(frozen).toContainText('Sesija je završila. Prikaz je zamrznut.');
+      const ended = phone.getByTestId('session-ended');
+      await expect(ended).toBeVisible({ timeout: 45_000 });
+      await expect(ended).toContainText('Deset minuta je prošlo.');
       await expect(kiosk.getByTestId('kiosk-code')).toBeVisible({ timeout: 45_000 });
       await expect(kiosk.getByTestId('session-label')).toHaveCount(0);
 
