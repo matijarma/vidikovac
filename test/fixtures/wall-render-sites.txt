@@ -63,25 +63,25 @@ app/src/kiosk.ts:392 #sentenceOverflows → setText(probeKicker, s.sentence.kick
 app/src/kiosk.ts:393 #sentenceOverflows → setText(probeText, sentence.text)
 app/src/kiosk.ts:411 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
 app/src/kiosk.ts:412 #paintSentence → setText(sentenceText, next.text)
-app/src/kiosk.ts:518 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
-app/src/kiosk.ts:518 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
-app/src/kiosk.ts:542 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
-app/src/kiosk.ts:543 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
-app/src/kiosk.ts:547 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
-app/src/kiosk.ts:708 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:899 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:900 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:901 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:903 #paintCode → link.textContent = ''
-app/src/kiosk.ts:913 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:914 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:918 #paintCode → link.textContent = payload
-app/src/kiosk.ts:936 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:937 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:937 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1021 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1028 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1176 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:520 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
+app/src/kiosk.ts:520 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
+app/src/kiosk.ts:544 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
+app/src/kiosk.ts:545 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
+app/src/kiosk.ts:549 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
+app/src/kiosk.ts:710 #paintMap → vetExternal('name', stop.name, 'row')
+app/src/kiosk.ts:901 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:902 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:903 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:905 #paintCode → link.textContent = ''
+app/src/kiosk.ts:915 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:916 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:920 #paintCode → link.textContent = payload
+app/src/kiosk.ts:938 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:939 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:939 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1023 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1030 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1178 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
