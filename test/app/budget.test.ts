@@ -209,3 +209,19 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
     });
   }
 });
+
+// ui/print.css is nothing but `@media print`: the build links it with media="print" (vite.config.ts,
+// app/src/print-media.ts), so it is still on the wire (and counted above) but never blocks the first render.
+describe('the print sheet never blocks rendering', () => {
+  for (const entry of ['d/index.html', 'izvori/index.html'] as const) {
+    it(`/${entry.replace('index.html', '')} links its print-only stylesheet with media="print", every other stylesheet without`, () => {
+      const html = readFileSync(join(outDir, entry), 'utf8');
+      const links = html.match(/<link rel="stylesheet"[^>]*>/g) ?? [];
+      const print = links.filter((tag) => tag.includes('media="print"'));
+      expect(print, `${entry} links one print-only sheet`).toHaveLength(1);
+      const href = /href="\/([^"]+)"/.exec(print[0]!)![1]!;
+      expect(readFileSync(join(outDir, href), 'utf8').trim()).toMatch(/^@media print\s*\{[\s\S]*\}$/);
+      expect(links.length - print.length, `${entry} keeps its screen stylesheets`).toBeGreaterThan(0);
+    });
+  }
+});
