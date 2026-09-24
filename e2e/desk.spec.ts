@@ -108,4 +108,13 @@ test.describe('desk 1440×900 keyboard', () => {
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
     await expect(page.getByTestId('transport-detail')).toHaveAttribute('tabindex', '0');
   });
+
+  test('the events search stands over the list it filters, not across the empty detail pane (F18)', async ({ page }) => {
+    await open(page);
+    await page.getByTestId('status-more').click();
+    await page.getByTestId('dir-kultura').click();
+    await expect(page.locator('.ws-events .ws-toolbar')).toBeVisible();
+    const [toolbar, list] = await page.evaluate(() => ['.ws-events .ws-toolbar', '.ws-events .ws-split > *'].map((s) => document.querySelector(s)!.getBoundingClientRect().width));
+    expect(Math.abs(toolbar - list), `toolbar ${toolbar} px over a ${list} px list`).toBeLessThanOrEqual(2);
+  });
 });

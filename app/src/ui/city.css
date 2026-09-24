@@ -60,7 +60,8 @@
 .wx-reference>summary::before,.cv-phase-reference>summary::before{content:'+';margin-inline-end:var(--sp-2)}
 .wx-reference[open]>summary::before,.cv-phase-reference[open]>summary::before{content:'−'}
 .wx-warnings{grid-column:1/-1}
-@media(min-width:60rem){.ws-events .ws-split{grid-template-columns:minmax(24rem,32rem) minmax(0,1fr)}.ws-events .ws-detail{max-width:42rem}.cv-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+/* round 2, desktop F18: the search and the category stand over the list they filter, not across the empty detail pane */
+@media(min-width:60rem){.ws-events .ws-toolbar{max-inline-size:32rem}.ws-events .ws-split{grid-template-columns:minmax(24rem,32rem) minmax(0,1fr)}.ws-events .ws-detail{max-width:42rem}.cv-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .city-filter-disclosure>summary::before{content:'+';font-size:1.25rem}
 .city-filter-disclosure[open]>summary::before{content:'−'}
 .city-filter-disclosure[open]{max-height:30vh;overflow:auto}
