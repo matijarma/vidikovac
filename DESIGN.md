@@ -99,8 +99,9 @@ measured per place and the same number the "U blizini" circle and its pill
 use. The frame is a neighbourhood: buses at every hour, every BAJS station a
 disc carrying its count (grey at zero, grey and blank when the count is
 unknown, never "?", in a grey that recedes behind the teal in both themes),
-venues only with a programme tonight and named, ranked
-stop names with every tram interchange, and the major street names. There is
+venues only with a programme tonight and named, and of the stops only the
+tram interchanges named besides the place itself; nothing outside the frame's
+radius is drawn as a stop, a disc, a venue or a name. There is
 no "+N" mark on the wall map: no geographic clusters, and a merged vehicle
 pill lists every line number and wraps to a second and a third row as it
 grows. Vehicle pills keep their place: a stop name first moves to another side
@@ -248,8 +249,8 @@ begins or ends there; the wall's own whole-city window names no stop but its
 place. Route count is not a measure of importance and is not
 used for this. From the thinning zoom up every name is back, exactly as
 derived. A framed screen names by being framed, not by zoom: whatever its
-Kadar, it draws the ranked stop names with every tram interchange and the
-major street names, so Kadar 4, 6 or 8 never changes the naming grammar; the
+Kadar, it names the place and the tram interchanges inside its radius and no
+street, so Kadar 4, 6 or 8 never changes the naming grammar; the
 thinning rule belongs to the whole-city window alone. Preserve the map
 instance across polling and composition changes.
 

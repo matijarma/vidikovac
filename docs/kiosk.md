@@ -208,8 +208,10 @@ Kadar je susjedstvo: autobusi i autobusne linije na kadru su u svako doba
 dana; svaka BAJS stanica je disk s brojem raspoloživih bicikala, siv s nulom
 kad bicikala nema, a siv i bez broja kad broj nije poznat ili stanica ne
 iznajmljuje, nikad s upitnikom; kulturna mjesta pojavljuju se samo s
-programom večeras, i to s imenom; imenuju se važnija stajališta (po rangu iz
-mrežnog artefakta), sva tramvajska čvorišta i glavne ulice. Imena slijede
+programom večeras, i to s imenom; od stajališta imenuju se samo mjesto
+zaslona i tramvajska čvorišta unutar polumjera kadra, a ulice se ne imenuju.
+Izvan polumjera kadra ne crta se nijedno stajalište, disk, kulturno mjesto ni
+ime. Imena slijede
 kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
 nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
 ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika
