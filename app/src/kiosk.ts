@@ -1612,6 +1612,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const crossed = (next.size === 'handheld') !== (layout.size === 'handheld');
     layout = next;
     if (crossed && phase === 'invitation') { setPhase('invitation'); return; }
+    // The canvas takes its new box before the frame is fitted to it (lane p-map): the refit is for the size the map now has.
+    mapAdapter.handle()?.resize?.();
     if (changed) { paintLocal(); if (crossed) paintCode(); return; }
     paintWall();
     paintMap();

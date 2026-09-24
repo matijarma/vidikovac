@@ -460,6 +460,10 @@ export interface CityMapOptions {
   basemapProfile?: BasemapProfile;
   /** The public screen's overlay set (map/overlays.ts ProzorOptions, plan D4); absent, today's drawing. Changed live with setProzor. */
   prozor?: ProzorOptions;
+  /** The zoom the pills and the stop rings draw from when the surface fits its
+   *  frame below their thresholds (map/frame.ts markZoomFor; the desk's Karta
+   *  in a narrow window, lane p-map). Changed live with setMarkZoom. */
+  markZoom?: number | null;
   /** CSS px of the map covered by something (the sheet along the bottom): every
    *  fit keeps its geometry inside the uncovered part. Changed live with setFitPadding. */
   fitPadding?: FitPadding;
@@ -541,6 +545,8 @@ export interface CityMapHandle {
    *  stop changes, the field's zoom when it is re-measured (one map lives for
    *  the screen's life, R-54). null draws every surface as before. */
   setProzor?(prozor: ProzorOptions | null): void;
+  /** CityMapOptions.markZoom, changed live: null keeps the marks' own thresholds. */
+  setMarkZoom?(zoom: number | null): void;
   /** Unique `name` values of the symbols MapLibre actually placed for a layer
    *  (the e2e's proof that the prozor profile places few street names);
    *  [] before the style loads or for a layer the style does not carry. */
@@ -779,6 +785,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
+  let markZoom: number | null = options.markZoom ?? null;
+  /** The zoom the pills draw and merge from here (overlays.ts pillZoomOf): the surface's markZoom, else the public screen's. */
+  const pillZoomNow = (l: MaplibreModule): number => l.pillZoomOf({ markZoom: markZoom ?? prozor?.markZoom ?? null });
   let cityLabels: CityLabels = cityLabelsOf(options.cityLabels);
   let hitTolerance = options.hitTolerancePx ?? profile.hitTolerancePx;
   let closuresVisible = options.closures !== false;
@@ -864,7 +873,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const focus = routeId === null
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
-    return { scale, modes, closuresVisible, selection, emphasis, prozor, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
+    return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
       // Decision 58: a placed wall's frame draws the stops inside it alone.
       ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) } : {}) };
   }
@@ -975,7 +984,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
 
   function writeMarkProbe(m: MapApi, pushed: VehicleFeatureCollection | null): void {
     container.dataset.zoom = m.getZoom().toFixed(2);
+    writeCenterProbe(m);
     if (pushed) probeHasMarks = pushed.features.length > 0;
+  }
+
+  /** `data-center`: the camera's centre as "lon,lat" (5 decimals), beside
+   *  data-zoom, so a browser proof can project a place onto the canvas (lane
+   *  p-map: the frame's stops stay inside it after a refit). Written when it
+   *  changes, on each drawn frame and at the end of every camera move. */
+  function writeCenterProbe(m: MapApi): void {
+    const c = m.getCenter();
+    const value = `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`;
+    if (container.dataset.center !== value) container.dataset.center = value;
   }
 
   /** The census key for the map as it stands: zoom, selection, "has any marks" and the evidence version. */
@@ -1043,7 +1063,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       // where pills are drawn at all: below PILL_ZOOM every vehicle is a small
       // dot, nothing can pile up, and merging there would empty the city of the
       // marks that say it is moving.
-      const project = m.project && m.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+      const project = m.project && m.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
       fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
@@ -1325,6 +1345,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.on('webglcontextrestored', () => setStatus(styled ? 'ready' : 'loading'));
     created.on('move', onCameraMove);
     created.on('moveend', onMoveEnd);
+    created.on('moveend', () => { if (map === created) writeCenterProbe(created); });
     created.on('moveend', refreshTileLabels);
     if (options.onCamera) created.on('zoomend', () => { const camera = cameraOf(created); if (camera) options.onCamera!(camera); });
     // The one moment MapLibre has finished painting what it was given: the
@@ -1471,7 +1492,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const drawn = model.step(now());
     if (drawn.length === 0) return null;
     const kept = keptVehicleId();
-    const project = created.project && created.getZoom() >= l.PILL_ZOOM ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
+    const project = created.project && created.getZoom() >= pillZoomNow(l) ? (lonLat: [number, number]) => created.project!(lonLat) : undefined;
     const fc = l.vehiclesToGeoJson(drawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined });
     if (fc.features.length > 0) probeHasMarks = true;
     return fc;
@@ -1817,10 +1838,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyOverlays();
   }
 
+  /** The public screen's camera moves in one step (calm motion, lane p-map:
+   *  a refit after a resize, a fullscreen change or a turn of the screen is
+   *  a new frame, not a flight); every other surface eases. */
   const move = (center: [number, number], zoom: number): void => {
     pendingSelectionFit = null;
     if (!styled) pendingCamera = { center: [...center], zoom };
-    map?.easeTo({ center, zoom, offset: offsetFor(), duration: reduced ? 0 : CAMERA_MS });
+    const still = reduced || profile === MAP_PRESENTATIONS['public-display'];
+    map?.easeTo({ center, zoom, offset: offsetFor(), duration: still ? 0 : CAMERA_MS });
   };
 
   return {
@@ -1960,6 +1985,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     status: () => status,
     network: () => net,
     vehicles,
+    setMarkZoom(next) {
+      if (next === markZoom) return;
+      markZoom = next;
+      // The pills merge from the new zoom on the next push, and the layers draw from it.
+      lastPushedSignature = '';
+      applyOverlays();
+    },
     setProzor(next) {
       if (JSON.stringify(next) === JSON.stringify(prozor)) return;
       prozor = next;

@@ -19,6 +19,25 @@ export const METRES_PER_DEGREE = 111_320;
 export const FRAME_PADDING_PX = 24;
 export const FRAME_MIN_ZOOM = 12.7;
 export const FRAME_MAX_ZOOM = 15.5;
+/** The floor of a frame fitted WHOLE (lane p-map, owner 24 Sep: a 1280 x 800
+ *  browser window, fullscreen off, cut part of Zagreb off the map): the
+ *  placed wall's frame and whole-city window (kiosk/mapview.ts
+ *  WALL_FIT_MIN_ZOOM) and the desk's Karta, down to the 669 x 405 of that
+ *  window's wall field (the whole-city window needs z11.44 there) and the
+ *  desk's 326 px Karta. Below FRAME_MIN_ZOOM the marks draw from the fit
+ *  (markZoomFor), so the floor's reason, plates and rings on the picture,
+ *  holds. */
+export const FIT_MIN_ZOOM = 11.4;
+/** FRAME_MIN_ZOOM's margin over overlays.ts's PILL_ZOOM (12.5): a view fitted
+ *  below FRAME_MIN_ZOOM draws its marks from this far under its own zoom. */
+export const MARK_ZOOM_MARGIN = 0.2;
+
+/** The zoom the marks (pills, their arrows, the stop rings) draw from on a
+ *  view fitted at `zoom`: undefined from FRAME_MIN_ZOOM up, where their own
+ *  thresholds already draw them; `zoom` less MARK_ZOOM_MARGIN below it. */
+export function markZoomFor(zoom: number): number | undefined {
+  return zoom < FRAME_MIN_ZOOM ? zoom - MARK_ZOOM_MARGIN : undefined;
+}
 
 /** The camera that fits a lon/lat box in a widthPx x heightPx field with
  *  `paddingPx` of clearance on every side: the box's centre, and the zoom at

@@ -12,7 +12,7 @@ import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
 import { decodeNetwork } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
-import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, NAME_TICK_MS, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/name-census';
+import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/name-census';
 import * as nameCensus from '../../app/src/map/name-census';
 import * as externalLabels from '../../app/src/map/external-labels';
 import * as externalFeatures from '../../app/src/map/external-features';
@@ -1274,6 +1274,24 @@ describe('selection and status', () => {
     expect(map.cameraCalls.at(-1)).toMatchObject({ kind: 'jumpTo', options: { center: [16.02, 45.82], zoom: 14 } });
     expect(handle.status!()).toBe('ready');
     handle.destroy();
+  });
+  // Lane p-map: a refit after a resize, a fullscreen change or a turn of the
+  // screen moves the wall's camera in one step (calm motion); a person's map
+  // still eases.
+  it('moves the wall\u2019s camera in one step and eases every other surface\u2019s', async () => {
+    for (const profile of ['public-display', 'handheld'] as const) {
+      const { map, handle } = await harness({ extra: { presentationProfile: profile } });
+      map.cameraCalls.length = 0;
+      handle.setView!({ center: [15.96, 45.79], zoom: 13 });
+      const call = map.cameraCalls.at(-1)!;
+      if (profile === 'public-display') expect(call.kind === 'jumpTo' || call.options.duration === 0, `${profile}: ${JSON.stringify(call)}`).toBe(true);
+      else expect(call).toMatchObject({ kind: 'easeTo', options: { duration: expect.any(Number) } });
+      if (profile !== 'public-display') expect(call.options.duration).toBeGreaterThan(0);
+      // data-center: where the camera came to rest, for a browser proof that projects the frame onto the canvas.
+      map.fire('moveend', {});
+      expect((map.options.container as HTMLElement).dataset.center).toBe('15.96000,45.79000');
+      handle.destroy();
+    }
   });
   it('a selection requested before initialization is fitted once its geometry exists', async () => {
     const container = document.createElement('div');

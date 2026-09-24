@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { districtBySlug } from '../../app/src/kiosk/districts';
-import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView } from '../../app/src/kiosk/mapview';
+import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, MARK_ZOOM_MARGIN, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView, WALL_FIT_MIN_ZOOM } from '../../app/src/kiosk/mapview';
 import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
 import { BIKE_COUNT_PX, BIKE_DISC_RADIUS_PX, BIKE_FAR_RADIUS_PX, cityLayers } from '../../app/src/map/city-layers';
 import * as basemap from '../../app/src/map/basemap';
@@ -464,7 +464,7 @@ describe('the city places’ marks', () => {
   });
 
   it('draws no venue whose name is empty or refused: a disc on a map that names places is never a bare count', () => {
-    const place = (id: string, title: string, props: Record<string, unknown>) => ({ id, lon: 15.97, lat: 45.81, title, place: 'city' as const, props });
+    const place = (id: string, title: string, props: Record<string, string | number | boolean>) => ({ id, lon: 15.97, lat: 45.81, title, place: 'city' as const, props });
     const fc = pointsToGeoJson([place('culture-1', '', { category: 'culture', badge: '4', eventCount: 4 }), place('culture-2', 'Gavella', { category: 'culture', badge: '1', eventCount: 1 }), place('bajs-1', '', { category: 'bikes', badge: '7' }), place('air-1', '', { category: 'air', badge: '' })], false);
     expect(fc.features.map((f) => f.properties.id)).toEqual(['culture-2', 'bajs-1', 'air-1']);
   });
@@ -535,23 +535,33 @@ describe('the field camera and the paired camera', () => {
   // The screen a person sets up with one button has no stop and no district:
   // it opens on the whole city (CITY_WINDOW, Crnomerec to Maksimir, the Sava
   // to Mirogoj), fitted to whatever box the composition gives it.
-  it('frames the whole city when neither a stop nor a district is configured: the window fitted with 24 px of clearance, the tighter axis governing, never below the zoom that still carries plates and stop rings', () => {
+  it('frames the whole city when neither a stop nor a district is configured: the window fitted whole with 24 px of clearance, the tighter axis governing, the marks drawn at the fit', () => {
     expect(CITY_WINDOW).toEqual({ west: 15.925, south: 45.775, east: 16.035, north: 45.838 });
-    // The floor is map/overlays.ts's PILL_ZOOM (and STOP_ZOOM) plus a fifth: under it the
-    // plates and the stop rings stop drawing and the window would be a basemap with nothing on it.
+    // The marks' own floor is map/overlays.ts's PILL_ZOOM (and STOP_ZOOM) plus a fifth.
     expect(FIELD_MIN_ZOOM).toBe(overlays.PILL_ZOOM + 0.2);
     expect(FIELD_MIN_ZOOM).toBe(12.7);
-    // Every field the kiosk lays out is smaller than the window's 8.5 x 7.0 km asks for, so each sits on the floor.
-    for (const [w, h] of [[1300, 880], [880, 620], [1032, 900], [358, 420]] as const) {
-      expect(cityWindowView(w, h).zoom, `${w}x${h}`).toBe(FIELD_MIN_ZOOM);
+    expect(MARK_ZOOM_MARGIN).toBe(0.2);
+    // Lane p-map (owner, 24 Sep): the window is fitted whole in every field the kiosk lays out, the
+    // 669 x 405 of a 1280 x 800 browser window included (z11.44); below FIELD_MIN_ZOOM the plates and
+    // the rings draw from the fit (prozorOptions markZoom), and WALL_FIT_MIN_ZOOM is the last floor.
+    expect(WALL_FIT_MIN_ZOOM).toBe(11.4);
+    const mid = (45.775 + 45.838) / 2;
+    for (const [w, h] of [[1300, 880], [1170, 803], [880, 620], [1032, 900], [669, 405]] as const) {
+      const { zoom } = cityWindowView(w, h);
+      const ppm = 1 / metresPerPixel(zoom, mid);
+      expect(zoom, `${w}x${h}`).toBeLessThan(FIELD_MIN_ZOOM);
+      expect(zoom, `${w}x${h}`).toBeGreaterThanOrEqual(WALL_FIT_MIN_ZOOM);
+      expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M * ppm, `${w}x${h} tall`).toBeLessThanOrEqual(h - 48 + 0.5);
+      expect(((16.035 - 15.925) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((mid * Math.PI) / 180) * ppm, `${w}x${h} wide`).toBeLessThanOrEqual(w - 48 + 0.5);
     }
-    expect(cityWindowView(0, 0).zoom).toBe(FIELD_MIN_ZOOM); // a box not yet laid out is the floor, never NaN
+    // A field too small even for that sits on the last floor.
+    expect(cityWindowView(358, 420).zoom).toBe(WALL_FIT_MIN_ZOOM);
+    expect(cityWindowView(0, 0).zoom).toBe(WALL_FIT_MIN_ZOOM); // a box not yet laid out is the floor, never NaN
     expect(cityWindowView(1300, 880).center).toEqual([(15.925 + 16.035) / 2, (45.775 + 45.838) / 2]);
     // A field with room for the window takes the tighter of the two axes: 2600 x 1760 could
     // carry the window's width at z13.99 and only its height at z13.70.
     const big = cityWindowView(2600, 1760);
     expect(big.zoom).toBeCloseTo(13.70, 2);
-    const mid = (45.775 + 45.838) / 2;
     const ppm = 1 / metresPerPixel(big.zoom, mid);
     expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M * ppm).toBeCloseTo(1760 - 48, 0);
     expect(((16.035 - 15.925) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((mid * Math.PI) / 180) * ppm).toBeLessThan(2600 - 48);
@@ -636,7 +646,7 @@ describe('the field camera and the paired camera', () => {
     const across = (EARTH_CIRCUMFERENCE_M * Math.cos((STOP.lat * Math.PI) / 180) * (box.east - box.west)) / 360;
     expect(Math.abs(across - 4000)).toBeLessThan(1);
     expect(Math.abs((EARTH_CIRCUMFERENCE_M * (box.north - box.south)) / 360 - 4000)).toBeLessThan(1);
-    expect(boundsView(CITY_WINDOW, 1300, 880, CITY_WINDOW_PADDING_PX, FIELD_MIN_ZOOM, FIELD_MAX_ZOOM)).toEqual(cityWindowView(1300, 880));
+    expect(boundsView(CITY_WINDOW, 1300, 880, CITY_WINDOW_PADDING_PX, WALL_FIT_MIN_ZOOM, FIELD_MAX_ZOOM)).toEqual(cityWindowView(1300, 880));
   });
 
   it('the worker\u2019s teaser box reaches past the field by one stop spacing (TEASER_BOX_HALF_M >= FIELD_SPAN_M / 2 + 400, D2): a vehicle has given the motion model one fix of its own before it enters the picture', () => {

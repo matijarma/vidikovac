@@ -85,13 +85,26 @@ function fakeTheme() {
 
 function fakeView() {
   const resize = new Set<() => void>();
+  const others = new Map<string, Set<() => void>>();
   let raf: (() => void) | null = null;
   return {
-    addEventListener: vi.fn((type: string, l: () => void) => { if (type === 'resize') resize.add(l); }),
-    removeEventListener: vi.fn((type: string, l: () => void) => { if (type === 'resize') resize.delete(l); }),
+    addEventListener: vi.fn((type: string, l: () => void) => { if (type === 'resize') resize.add(l); else (others.get(type) ?? others.set(type, new Set()).get(type)!).add(l); }),
+    removeEventListener: vi.fn((type: string, l: () => void) => { if (type === 'resize') resize.delete(l); else others.get(type)?.delete(l); }),
     requestAnimationFrame: vi.fn((cb: () => void) => { raf = cb; return 1; }),
     triggerResize: () => resize.forEach((l) => l()),
+    trigger: (type: string) => others.get(type)?.forEach((l) => l()),
     runFrame: () => { raf?.(); raf = null; },
+  };
+}
+
+/** A document for fullscreenchange, and a timer pair the test runs by hand. */
+function fakeRefit(settleMs: number) {
+  const doc = fakeView();
+  const timers: { fn: () => void; ms: number; cleared: boolean }[] = [];
+  return {
+    doc, timers,
+    options: { doc, settleMs, setTimeout: (fn: () => void, ms: number) => { const t = { fn, ms, cleared: false }; timers.push(t); return t; }, clearTimeout: (t: unknown) => { (t as { cleared: boolean }).cleared = true; } },
+    settle: () => { for (const t of timers.splice(0)) if (!t.cleared) t.fn(); },
   };
 }
 
@@ -131,6 +144,39 @@ describe('repaintOn', () => {
     view.triggerResize();
     view.runFrame();
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  // Lane p-map: the wall refits its frame when the box it is laid out in
+  // changes -- a resize, a fullscreen change, a turn of the screen -- once per
+  // change, after the burst of events the change sends has settled.
+  it('with a refit: one run per change after it settles, from a resize, a fullscreen change or a turn, and none left after unsubscribe', () => {
+    const theme = fakeTheme();
+    const view = fakeView();
+    const refit = fakeRefit(250);
+    const listener = vi.fn();
+    const off = repaintOn(theme, view, refit.options)(listener);
+    listener.mockClear();
+    // A fullscreen toggle: the document's event and a burst of resizes, one refit.
+    refit.doc.trigger('fullscreenchange');
+    view.triggerResize();
+    view.triggerResize();
+    view.runFrame();
+    expect(listener).not.toHaveBeenCalled();
+    expect(refit.timers.filter((t) => !t.cleared).map((t) => t.ms)).toEqual([250]);
+    refit.settle();
+    expect(listener).toHaveBeenCalledTimes(1);
+    view.trigger('orientationchange');
+    refit.settle();
+    expect(listener).toHaveBeenCalledTimes(2);
+    // The theme still repaints at once.
+    theme.fire();
+    expect(listener).toHaveBeenCalledTimes(3);
+    off();
+    view.triggerResize();
+    view.trigger('orientationchange');
+    refit.doc.trigger('fullscreenchange');
+    refit.settle();
+    expect(listener).toHaveBeenCalledTimes(3);
   });
 
   it('defaults view to globalThis when omitted', () => {

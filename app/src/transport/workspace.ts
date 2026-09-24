@@ -55,8 +55,9 @@ import { locatedEvents, type ActivityWindow } from '../../../shared/city/events'
 import { DEFAULT_FRAME_STOPS, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../../shared/city/frame';
 import { matchStreet } from '../../../shared/city/geo';
 import { routeType } from '../kiosk/stops';
-import { frameView } from '../map/frame';
+import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameView, markZoomFor } from '../map/frame';
 import { reconcile } from '../ui/dom/reconcile';
+import { REFIT_SETTLE_MS } from '../ui/canvas';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { externalTextReady, feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
@@ -282,6 +283,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     : ctx().location??defaultLocation(ctx().screen);
   /** The frame the camera last took (the place, its circle and the stage's size), and whether the person has moved the map since. */
   let framedKey: string | null = null;
+  /** The mark zoom the last frame asked the map for (map/frame.ts markZoomFor): null where the marks' own thresholds draw them. */
+  let frameMarks: number | null = null;
   let movedSinceFrame = false;
   /** The stop table the circle is measured over, rebuilt only when the catalogue or the network changes. */
   let frameTable: { stops: readonly ScreenStop[]; net: Network | null; table: FrameStop[] } | null = null;
@@ -347,16 +350,30 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const radiusM = frameRadius(place);
     // Before the page lays the stage out (the first render happens off the document) a phone's stage stands in;
     // the stage's own first layout frames again at its real size.
-    const laidOut = stage.clientWidth > 0 && stage.clientHeight > 0;
-    const width = laidOut ? stage.clientWidth : FRAME_FALLBACK_BOX.width;
-    const height = laidOut ? stage.clientHeight : FRAME_FALLBACK_BOX.height;
-    const key = `${place.lon.toFixed(5)},${place.lat.toFixed(5)}|${Math.round(radiusM / 10)}|${Math.round(width / 40)}x${Math.round(height / 40)}`;
+    const box = frameBox();
+    const width = box?.width ?? FRAME_FALLBACK_BOX.width;
+    const height = box?.height ?? FRAME_FALLBACK_BOX.height;
+    const key = `${place.lon.toFixed(5)},${place.lat.toFixed(5)}|${Math.round(radiusM / 10)}|${Math.round(width / 40)}x${Math.round(height / 40)}|${mode}`;
     if (key === framedKey) return;
     if (framedKey !== null && (movedSinceFrame || selection || following || query)) return;
     framedKey = key;
     movedSinceFrame = false;
-    camera = frameView(place, radiusM, width, height);
-    if (mapMode === 'map') handle?.setView?.({ center: camera.center, zoom: camera.zoom });
+    // The desk's Karta shares the window with Sada: in a narrow window its canvas is a column, and the circle is
+    // fitted whole below the marks' own floor, the pills and the rings drawn from the fit (lane p-map). The phone's
+    // stage is the whole screen and keeps FRAME_MIN_ZOOM.
+    const desk = mode === 'desk';
+    camera = frameView(place, radiusM, width, height, FRAME_PADDING_PX, desk ? FIT_MIN_ZOOM : FRAME_MIN_ZOOM);
+    frameMarks = desk ? markZoomFor(camera.zoom) ?? null : null;
+    if (mapMode === 'map') {
+      handle?.setMarkZoom?.(frameMarks);
+      handle?.setView?.({ center: camera.center, zoom: camera.zoom });
+    }
+  }
+  /** The box the map is drawn in: the map region (on the desk the sheet is a column beside it, never over it), else
+   *  the stage; null before layout. */
+  function frameBox(): { width: number; height: number } | null {
+    for (const el of [mapRegion, stage]) if (el.clientWidth > 0 && el.clientHeight > 0) return { width: el.clientWidth, height: el.clientHeight };
+    return null;
   }
   /** The city's own marks: the curated set the wall draws (city/curated.ts, CURATED_WALL: every BAJS station as
    *  a disc with its count, the venues with a programme tonight, never a "+N" bubble), the places a search finds
@@ -579,12 +596,29 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   // map view): the stage's own observer reports it at the first layout and on every resize, the column's transition
   // at its end, and every render again. On the phone the detent controller owns it. The same first layout frames
   // the camera at the stage's real size (frameCamera).
+  // A later change to the stage's box -- a resize, a fullscreen change, a turn of the phone -- refits once it has
+  // settled (lane p-map: each event of a fullscreen toggle's burst would be a camera move), the canvas resized to its
+  // new box first; the first real layout, a new place and every poll frame at once.
+  let stageBox = '';
+  let refitTimer: ReturnType<typeof setTimeout> | null = null;
   const onStageBox = (): void => {
     if (!sheet) syncFitPadding();
-    if (input && !disposed) frameCamera();
+    if (!input || disposed) return;
+    const box = frameBox();
+    const next = box ? `${box.width}x${box.height}` : '';
+    const changed = box !== null && stageBox !== '' && next !== stageBox;
+    if (box) stageBox = next;
+    if (!changed) { if (refitTimer === null) frameCamera(); return; }
+    if (refitTimer !== null) clearTimeout(refitTimer);
+    refitTimer = setTimeout(() => {
+      refitTimer = null;
+      if (!input || disposed) return;
+      handle?.resize?.();
+      frameCamera();
+    }, REFIT_SETTLE_MS);
   };
   const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(onStageBox):null;
-  if (resizeObserver) resizeObserver.observe(stage);
+  if (resizeObserver) { resizeObserver.observe(stage); resizeObserver.observe(mapRegion); }
   else window.addEventListener('resize', onStageBox);
   sheetEl.addEventListener('transitionend', (event) => {
     if (event.target === sheetEl) onStageBox();
@@ -1043,6 +1077,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         fitPadding: fitPadding(),
         center: renderer === 'map' ? camera?.center : undefined,
         zoom: renderer === 'map' ? camera?.zoom : undefined,
+        markZoom: renderer === 'map' ? frameMarks : null,
         onSelect: (sel) => { if (epoch === mapEpoch) setSelection(sel); },
         resolveStreet:(name,point)=>matchStreet(name,point,cityState().streets,cityState().settlements)?.id??null,
         onStatus: (next) => {
@@ -1105,7 +1140,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       else { query=remembered; searchInput.value=query; restoreSearchSheet=Boolean(query); }
     }
     if(c.onDispose&&!disposalRegistered){
-      disposalRegistered=true;c.onDispose(()=>{disposed=true;boards.destroy();sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
+      disposalRegistered=true;c.onDispose(()=>{disposed=true;if(refitTimer!==null)clearTimeout(refitTimer);boards.destroy();sheet?.destroy();resizeObserver?.disconnect();window.removeEventListener('resize',onStageBox);deskMedia?.removeEventListener?.('change',onMedia);landscapeMedia?.removeEventListener?.('change',onMedia);});
     }
     if(c.city&&!streetRequested&&!c.lightweight){streetRequested=true;c.ensureCity?.(['streets','settlements']);}
     askCity();
