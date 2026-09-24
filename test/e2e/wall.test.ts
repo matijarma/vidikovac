@@ -296,7 +296,7 @@ describe('the ten-minute rotation', () => {
       at(20_000, 'Ilica je zatvorena do 20:00.', 'closure:7', 3_600_000),
       at(40_000, 'Večeras u Gavelli: predstava u 20:00.', 'event:3', 3_600_000),
     ];
-    const turns = sentenceTurns(rows, { stepMs: 0 });
+    const turns = sentenceTurns(rows);
     expect(turns.turns.map((t) => [t.fact, t.dwellMs, t.refreshes])).toEqual([
       ['solar:sunset', 20_000, 0], ['departureIn:trip-11', 20_000, 1], ['closure:7', 20_000, 0], ['event:3', null, 0],
     ]);
@@ -308,27 +308,48 @@ describe('the ten-minute rotation', () => {
 
   it('a turn under 20 s is short unless its own fact expired; a verbatim return inside ten minutes still counts, a refresh does not', () => {
     const t0 = Date.UTC(2026, 8, 21, 15, 45);
-    const at = (ms: number, sentence: string, fact: string, validUntil: number) => sample({ at: t0 + ms, sentence, fact, validUntil: String(t0 + validUntil) });
-    const rows = [
-      at(0, 'A.', 'a', 600_000), at(20_000, 'B.', 'b', 600_000),
-      at(30_000, 'C.', 'c', 42_000), at(42_000, 'D.', 'd', 600_000),
-      at(62_000, 'A.', 'a', 600_000), at(90_000, 'E.', 'e', 600_000),
+    // Readings every 2 s over the segments [text, fact, from, to, deadline].
+    const segments: [string, string, number, number, number][] = [
+      ['A.', 'a', 0, 20_000, 600_000], ['B.', 'b', 20_000, 30_000, 600_000], ['C.', 'c', 30_000, 42_000, 42_000],
+      ['D.', 'd', 42_000, 62_000, 600_000], ['A.', 'a', 62_000, 90_000, 600_000], ['E.', 'e', 90_000, 100_000, 600_000],
     ];
-    const turns = sentenceTurns(rows, { stepMs: 2_000, windowMs: 600_000 });
-    expect(turns.shortTurns.map((t) => [t.fact, t.dwellMs])).toEqual([['b', 10_000]]);
+    const rows = segments.flatMap(([sentence, fact, from, to, until]) => Array.from({ length: (to - from) / 2_000 }, (_, i) =>
+      sample({ at: t0 + from + i * 2_000, sentence, fact, validUntil: String(t0 + until) })));
+    const turns = sentenceTurns(rows, { windowMs: 600_000 });
+    expect(turns.shortTurns.map((t) => [t.fact, t.dwellMs, t.dwellMinMs, t.dwellMaxMs])).toEqual([['b', 10_000, 8_000, 12_000]]);
     expect(turns.turns.find((t) => t.fact === 'c')).toMatchObject({ dwellMs: 12_000, expired: true, short: false });
     expect(turns.verbatimRepeats).toEqual([{ at: '15:46:02', afterMs: 62_000, sentence: 'A.' }]);
     const r = summariseRotation(rows);
     expect(rotationFailures(r, { sentences: 'no-repeat' })).toEqual([
-      '1 sentence turn(s) under 20 s whose own fact had not expired (target 0; B. 10.0 s)',
+      '1 sentence turn(s) under 20 s whose own fact had not expired (target 0; B. 10.0 s, at most 12.0 s between readings)',
       '1 sentence wording(s) shown again verbatim within ten minutes (§12): A.',
     ]);
+  });
+
+  it('bounds a dwell by the actual reading gaps: 3.1 s apart under load, a 17.7 s reading of a 20 s dwell is not short (release smoke run 2)', () => {
+    const t0 = Date.UTC(2026, 8, 21, 22, 40);
+    const read = (sentence: string, fact: string, ats: number[]) => ats.map((ms) => sample({ at: t0 + ms, sentence, fact, validUntil: String(t0 + 3_600_000) }));
+    const grid = (from: number, n: number) => Array.from({ length: n }, (_, i) => from + i * 3_100);
+    const rows = [
+      ...read('Z.', 'z', grid(1_200, 7)), // … 19 800
+      ...read('Zadnji tramvaj 4 polazi u 23:58.', 'last:4', grid(22_900, 6)), // … 38 400, then a 2.2 s gap
+      ...read('B.', 'b', grid(40_600, 7)), // … 59 200
+      ...read('C.', 'c', grid(62_300, 4)), // … 71 600: a real 12 s dwell
+      ...read('D.', 'd', grid(74_700, 7)),
+      ...read('E.', 'e', grid(96_400, 2)),
+    ];
+    const turns = sentenceTurns(rows);
+    expect(turns.turns.find((t) => t.fact === 'last:4')).toMatchObject({
+      dwellMs: 17_700, dwellMinMs: 15_500, dwellMaxMs: 20_800, gapBeforeMs: 3_100, gapAfterMs: 2_200, short: false,
+    });
+    expect(turns.shortTurns.map((t) => [t.fact, t.dwellMaxMs])).toEqual([['c', 15_500]]);
+    expect(summariseRotation(rows)).toMatchObject({ shortSentenceTurns: 1, readingGapMaxMs: 3_100 });
   });
 
   it('without data-fact (a wall before the attribute) a countdown\'s next minute is read as a refresh, other words as a turn', () => {
     const t0 = Date.UTC(2026, 8, 21, 15, 45);
     const at = (ms: number, sentence: string) => sample({ at: t0 + ms, sentence, validUntil: String(t0 + ms + 20_000) });
-    const turns = sentenceTurns([at(0, 'Z.'), at(20_000, 'Tramvaj 11 polazi za 2 min.'), at(35_600, 'Tramvaj 11 polazi za 1 min.'), at(40_000, 'Tramvaj 11 polazi u 15:46.'), at(60_000, 'Y.')], { stepMs: 0 });
+    const turns = sentenceTurns([at(0, 'Z.'), at(20_000, 'Tramvaj 11 polazi za 2 min.'), at(35_600, 'Tramvaj 11 polazi za 1 min.'), at(40_000, 'Tramvaj 11 polazi u 15:46.'), at(60_000, 'Y.')]);
     expect(turns.factSource).toBe('inferred');
     expect(turns.turns.map((t) => [t.texts[0], t.dwellMs, t.refreshes])).toEqual([
       ['Z.', 20_000, 0], ['Tramvaj 11 polazi za 2 min.', 20_000, 1], ['Tramvaj 11 polazi u 15:46.', 20_000, 0], ['Y.', null, 0],

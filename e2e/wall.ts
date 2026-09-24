@@ -405,7 +405,9 @@ export interface RotationSummary {
   sentenceRefreshes: number;
   /** Turns shorter than SENTENCE_DWELL_MIN_MS whose own fact had not expired (the first and the open last turn are not judged). */
   shortSentenceTurns: number;
-  /** Shortest and longest judged dwell, ms; null when no turn was judged. */
+  /** The longest gap between two consecutive readings, ms (2 s planned; more under load); null under two readings. */
+  readingGapMaxMs: number | null;
+  /** Shortest and longest judged dwell (point reading), ms; null when no turn was judged. */
   sentenceDwellMinMs: number | null;
   sentenceDwellMaxMs: number | null;
   /** Wordings shown again verbatim by a later turn within SENTENCE_NO_REPEAT_MS of their earlier showing (§12). */
@@ -456,15 +458,25 @@ export interface SentenceTurn {
   /** When each wording first showed. */
   textsAt: number[];
   refreshes: number;
-  /** end − at; null for the open last turn. */
+  /** Epoch ms of the turn's last reading. */
+  lastAt: number;
+  /** end − at, the point reading; null for the open last turn. */
   dwellMs: number | null;
+  /** Gap from the reading before the turn's first one to that first one (the start lies inside it); null for none. */
+  gapBeforeMs: number | null;
+  /** Gap from the turn's last reading to the reading after it (the end lies inside it); null for none. */
+  gapAfterMs: number | null;
+  /** Lower bound on the dwell: last reading − first reading. */
+  dwellMinMs: number;
+  /** Upper bound: the lower bound plus both adjacent gaps (reading after the last − reading before the first); null for a truncated turn. */
+  dwellMaxMs: number | null;
   /** The latest data-valid-until read in the turn, epoch ms; null when none parsed. */
   validUntil: number | null;
-  /** The turn ended at (within a reading of) its own fact's deadline: an early end is allowed. */
+  /** Its own deadline fell no later than the reading after its last one: the fact may have expired, an early end is allowed. */
   expired: boolean;
   /** The first turn (the observation began mid-dwell) or the open last one: its dwell is not judged. */
   truncated: boolean;
-  /** Judged, not expired, and shorter than SENTENCE_DWELL_MIN_MS beyond one reading's grid. */
+  /** Judged, not expired, and even the upper bound (dwellMaxMs) is under SENTENCE_DWELL_MIN_MS. */
   short: boolean;
 }
 export interface SentenceTurns {
@@ -477,8 +489,6 @@ export interface SentenceTurns {
   factSource: 'attribute' | 'inferred' | 'mixed' | 'none';
 }
 export interface SentenceTurnOptions {
-  /** The reading grid: a dwell counts as short only below SENTENCE_DWELL_MIN_MS − stepMs, and a deadline within a step of the end is the fact's own. */
-  stepMs?: number;
   windowMs?: number;
   minDwellMs?: number;
 }
@@ -498,15 +508,18 @@ const inferredFact = (text: string): string => text.replace(/\d+/g, '#');
  * Readings without a sentence are skipped.
  */
 export function sentenceTurns(readings: readonly Pick<WallSample, 'at' | 'sentence' | 'validUntil' | 'fact'>[], options: SentenceTurnOptions = {}): SentenceTurns {
-  const stepMs = options.stepMs ?? ROTATION_STEP_MS;
   const windowMs = options.windowMs ?? SENTENCE_NO_REPEAT_MS;
   const minDwellMs = options.minDwellMs ?? SENTENCE_DWELL_MIN_MS;
   const turns: SentenceTurn[] = [];
   let withFact = 0;
   let without = 0;
   let prevValid: string | null = null;
-  for (const s of readings) {
-    if (!s.sentence) continue;
+  // Every reading's clock, with or without a sentence: the gaps that bound each turn are the actual ones (3.1 s under load).
+  const clock = readings.map((s) => s.at);
+  const firstIndex: number[] = [];
+  const lastIndex: number[] = [];
+  readings.forEach((s, index) => {
+    if (!s.sentence) return;
     const attr = s.fact ?? null;
     if (attr) withFact++; else without++;
     const fact = attr ?? inferredFact(s.sentence);
@@ -519,18 +532,29 @@ export function sentenceTurns(readings: readonly Pick<WallSample, 'at' | 'senten
       if (s.sentence !== text) { last.texts.push(s.sentence); last.textsAt.push(s.at); last.refreshes++; }
     } else {
       if (last) last.end = s.at;
-      turns.push({ at: s.at, end: null, fact, texts: [s.sentence], textsAt: [s.at], refreshes: 0, dwellMs: null, validUntil: null, expired: false, truncated: false, short: false });
+      turns.push({ at: s.at, end: null, fact, texts: [s.sentence], textsAt: [s.at], refreshes: 0, lastAt: s.at, dwellMs: null,
+        gapBeforeMs: null, gapAfterMs: null, dwellMinMs: 0, dwellMaxMs: null, validUntil: null, expired: false, truncated: false, short: false });
+      firstIndex.push(index);
     }
     const turn = turns[turns.length - 1];
+    turn.lastAt = s.at;
+    lastIndex[turns.length - 1] = index;
     const until = deadlineOf(s.validUntil);
     if (until !== null) turn.validUntil = Math.max(turn.validUntil ?? -Infinity, until);
     prevValid = s.validUntil ?? null;
-  }
+  });
   turns.forEach((t, i) => {
+    const before = firstIndex[i] > 0 ? clock[firstIndex[i] - 1] : null;
+    const after = lastIndex[i] < clock.length - 1 ? clock[lastIndex[i] + 1] : null;
     t.dwellMs = t.end === null ? null : t.end - t.at;
-    t.truncated = i === 0 || t.end === null;
-    t.expired = t.end !== null && t.validUntil !== null && t.validUntil <= t.end + stepMs;
-    t.short = !t.truncated && !t.expired && t.dwellMs !== null && t.dwellMs < minDwellMs - stepMs;
+    t.gapBeforeMs = before === null ? null : t.at - before;
+    t.gapAfterMs = after === null ? null : after - t.lastAt;
+    t.dwellMinMs = t.lastAt - t.at;
+    t.dwellMaxMs = before === null || after === null ? null : after - before;
+    t.truncated = i === 0 || t.end === null || t.dwellMaxMs === null;
+    // The end lies before the reading after the last one; a deadline up to there may be the fact's own expiry.
+    t.expired = after !== null && t.validUntil !== null && t.validUntil <= after;
+    t.short = !t.truncated && !t.expired && t.dwellMaxMs !== null && t.dwellMaxMs < minDwellMs;
   });
   const verbatimRepeats: SentenceTurns['verbatimRepeats'] = [];
   turns.forEach((t, i) => t.texts.forEach((text, j) => {
@@ -591,6 +615,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     sentenceTurns: turns.turns.length,
     sentenceRefreshes: turns.refreshes,
     shortSentenceTurns: turns.shortTurns.length,
+    readingGapMaxMs: valid.length > 1 ? Math.max(...valid.slice(1).map((s, i) => s.at - valid[i].at)) : null,
     sentenceDwellMinMs: judged.length ? Math.min(...judged) : null,
     sentenceDwellMaxMs: judged.length ? Math.max(...judged) : null,
     verbatimRepeats: turns.verbatimRepeats.length,
@@ -860,7 +885,7 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (targets.solarMin && r.solarRowsMin < targets.solarMin) out.push(`a reading without the solar row (target ≥ ${targets.solarMin}: the next solar event is inside the shown horizon)`);
   if (r.pastLastRows > 0) out.push(`${r.pastLastRows} reading(s) with a last-departure row whose time has passed (target 0)`);
   if (r.shortSentenceTurns > 0) {
-    const named = r.turns.shortTurns.slice(0, 3).map((t) => `${t.texts[t.texts.length - 1]} ${((t.dwellMs ?? 0) / 1000).toFixed(1)} s`).join(', ');
+    const named = r.turns.shortTurns.slice(0, 3).map((t) => `${t.texts[t.texts.length - 1]} ${((t.dwellMs ?? 0) / 1000).toFixed(1)} s, at most ${((t.dwellMaxMs ?? 0) / 1000).toFixed(1)} s between readings`).join('; ');
     out.push(`${r.shortSentenceTurns} sentence turn(s) under ${SENTENCE_DWELL_MIN_MS / 1000} s whose own fact had not expired (target 0; ${named})`);
   }
   if (targets.sentences === 'template-floor') {
