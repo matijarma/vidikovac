@@ -20,7 +20,7 @@ factory (`createKioskMapAdapter`) so every created map receives, on top of
   a stop from a caller before place-v2, keep the centred street-level camera;
   the read-path default place (`placeSet` false) keeps `CITY_WINDOW`, the whole city fitted
   to the field with 24 px of clearance. The frame and the window are fitted
-  whole down to `WALL_FIT_MIN_ZOOM` (11.4), below the marks' own
+  whole down to `WALL_FIT_MIN_ZOOM` (10, the map's own floor), below the marks' own
   `FIELD_MIN_ZOOM` (12.7); `prozor.markZoom` then draws the plates and the
   stop marks from the fit. A resize, a fullscreen change or a turn of the
   screen refits once it has settled (`REFIT_SETTLE_MS`), in one step.

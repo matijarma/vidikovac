@@ -94,11 +94,11 @@ export const FIELD_MIN_ZOOM = 12.7;
 /** The floor of the views the wall FITS -- the placed wall's frame, the
  *  whole-city window, a quarter's outline -- lower than FIELD_MIN_ZOOM (lane
  *  p-map, owner 24 Sep: a 1280 x 800 browser window, fullscreen off, cut part
- *  of Zagreb off the map). What the wall presents stays whole in every box it
- *  is laid out in down to that window's 669 x 405 field (the whole-city
- *  window needs z11.44 there); the marks follow the fit (prozorOptions
- *  markZoom), so the reason for FIELD_MIN_ZOOM, plates and rings on the
- *  picture, still holds. */
+ *  of Zagreb off the map): the map's own floor (map/frame.ts FIT_MIN_ZOOM),
+ *  so what the wall presents stays whole in every box it is laid out in down
+ *  to the compact wall's 669 x 167 at 1280 x 800; the marks follow the fit
+ *  (prozorOptions markZoom), so the reason for FIELD_MIN_ZOOM, plates and
+ *  rings on the picture, still holds. */
 export const WALL_FIT_MIN_ZOOM = FIT_MIN_ZOOM;
 /** FIELD_MIN_ZOOM's margin over overlays.ts's PILL_ZOOM (map/frame.ts). */
 export { MARK_ZOOM_MARGIN };

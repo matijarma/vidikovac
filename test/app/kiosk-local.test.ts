@@ -1067,8 +1067,9 @@ describe('the kiosk\u2019s framed wall', () => {
   });
 
   // Lane p-map (owner, 24 Sep: fullscreen off, and part of Zagreb was off the
-  // map): a 1280 x 800 browser window lays the wide wall's field out at
-  // 669 x 405 beside the 448 px rail, 1920 x 1080 at 1170 x 803. The wall
+  // map): a 1280 x 800 browser window lays the wall's field out at 669 x 167
+  // (the compact wall, decision 50: the card under the map; 669 x 405 before
+  // it), 1920 x 1080 at 1170 x 803. The wall
   // refits to each box it is given, and what it presents stays whole in it:
   // the frame's square of side 2R, and the whole-city window. Its marks keep
   // drawing on a fit below their usual floor (ProzorOptions.markZoom).
@@ -1079,7 +1080,7 @@ describe('the kiosk\u2019s framed wall', () => {
       const s = stub();
       const input = place === 'frame' ? { ...base, frame: 6 as const, radiusM: R } : { ...base, stop: null, placeSet: undefined };
       const views: Record<string, unknown>[] = [];
-      for (const [w, h] of [[669, 405], [1170, 803], [669, 405]] as const) {
+      for (const [w, h] of [[669, 167], [1170, 803], [669, 167]] as const) {
         requestKioskMap(s.maps, { ...input, widthPx: w, heightPx: h }, s.adapter);
         const view = views.length === 0 ? first(s) : s.calls.setView.mock.calls.at(-1)![0] as Record<string, unknown>;
         views.push(view);
@@ -1088,10 +1089,13 @@ describe('the kiosk\u2019s framed wall', () => {
           expect(view.center, `${place} ${w}x${h}`).toEqual([STOP.lon, STOP.lat]);
           expect(fits(zoom, STOP.lat, 2 * R, Math.min(w, h)), `${place} ${w}x${h}: 2R inside at z${zoom.toFixed(2)}`).toBe(true);
         } else {
+          // The whole window inside the box: within its clearance where the map's own floor allows, else at
+          // that floor inside the box itself (669 x 167 needs z9.85).
           const mid = (CITY_WINDOW_BOX.south + CITY_WINDOW_BOX.north) / 2;
           const tall = ((CITY_WINDOW_BOX.north - CITY_WINDOW_BOX.south) / 360) * 40_075_016.686;
           const wide = ((CITY_WINDOW_BOX.east - CITY_WINDOW_BOX.west) / 360) * 40_075_016.686 * Math.cos((mid * Math.PI) / 180);
-          expect(fits(zoom, mid, tall, h) && fits(zoom, mid, wide, w), `${place} ${w}x${h}: the whole window inside at z${zoom.toFixed(2)}`).toBe(true);
+          const whole = zoom > WALL_FIT_MIN_ZOOM ? fits(zoom, mid, tall, h) && fits(zoom, mid, wide, w) : tall / metresPerPixel(zoom, mid) <= h && wide / metresPerPixel(zoom, mid) <= w;
+          expect(whole, `${place} ${w}x${h}: the whole window inside at z${zoom.toFixed(2)}`).toBe(true);
         }
         // The plates and the stop rings still draw at the fitted zoom.
         const prozor = s.calls.setProzor.mock.calls.at(-1)![0] as { markZoom?: number };

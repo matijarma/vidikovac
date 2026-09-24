@@ -541,12 +541,14 @@ describe('the field camera and the paired camera', () => {
     expect(FIELD_MIN_ZOOM).toBe(overlays.PILL_ZOOM + 0.2);
     expect(FIELD_MIN_ZOOM).toBe(12.7);
     expect(MARK_ZOOM_MARGIN).toBe(0.2);
-    // Lane p-map (owner, 24 Sep): the window is fitted whole in every field the kiosk lays out, the
-    // 669 x 405 of a 1280 x 800 browser window included (z11.44); below FIELD_MIN_ZOOM the plates and
-    // the rings draw from the fit (prozorOptions markZoom), and WALL_FIT_MIN_ZOOM is the last floor.
-    expect(WALL_FIT_MIN_ZOOM).toBe(11.4);
+    // Lane p-map (owner, 24 Sep): the window is fitted whole in every field the kiosk lays out that the
+    // map's own floor allows, a 1280 x 800 browser window's 669 x 405 included; below FIELD_MIN_ZOOM the
+    // plates and the rings draw from the fit (prozorOptions markZoom), and WALL_FIT_MIN_ZOOM, the map's
+    // own MAP_MIN_ZOOM, is the last floor.
+    expect(WALL_FIT_MIN_ZOOM).toBe(10);
+    expect(WALL_FIT_MIN_ZOOM).toBe(basemap.MAP_MIN_ZOOM);
     const mid = (45.775 + 45.838) / 2;
-    for (const [w, h] of [[1300, 880], [1170, 803], [880, 620], [1032, 900], [669, 405]] as const) {
+    for (const [w, h] of [[1300, 880], [1170, 803], [880, 620], [1032, 900], [669, 405], [358, 420]] as const) {
       const { zoom } = cityWindowView(w, h);
       const ppm = 1 / metresPerPixel(zoom, mid);
       expect(zoom, `${w}x${h}`).toBeLessThan(FIELD_MIN_ZOOM);
@@ -554,8 +556,10 @@ describe('the field camera and the paired camera', () => {
       expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M * ppm, `${w}x${h} tall`).toBeLessThanOrEqual(h - 48 + 0.5);
       expect(((16.035 - 15.925) / 360) * EARTH_CIRCUMFERENCE_M * Math.cos((mid * Math.PI) / 180) * ppm, `${w}x${h} wide`).toBeLessThanOrEqual(w - 48 + 0.5);
     }
-    // A field too small even for that sits on the last floor.
-    expect(cityWindowView(358, 420).zoom).toBe(WALL_FIT_MIN_ZOOM);
+    // A field too small even for that (the compact wall's 669 x 167 at 1280 x 800 needs z9.85) sits on the
+    // last floor, the window's 6.3 km of its 7.0 km in the box less its clearance, all of it inside the box.
+    expect(cityWindowView(669, 167).zoom).toBe(WALL_FIT_MIN_ZOOM);
+    expect(((45.838 - 45.775) / 360) * EARTH_CIRCUMFERENCE_M / metresPerPixel(WALL_FIT_MIN_ZOOM, mid)).toBeLessThan(167);
     expect(cityWindowView(0, 0).zoom).toBe(WALL_FIT_MIN_ZOOM); // a box not yet laid out is the floor, never NaN
     expect(cityWindowView(1300, 880).center).toEqual([(15.925 + 16.035) / 2, (45.775 + 45.838) / 2]);
     // A field with room for the window takes the tighter of the two axes: 2600 x 1760 could
