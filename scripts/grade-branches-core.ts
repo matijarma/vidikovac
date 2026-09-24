@@ -1387,7 +1387,10 @@ export function createBranchGrader(engine: Engine, options: BranchGraderOptions)
             watch.path = rec.path;
             if (rec.path !== null) watch.arc = stopArcOn(rec.path, published);
           }
-        } else if (watch) nextWatch.delete(track.id);
+        }
+        // A tick without a next stop on the wire (a tram past the last platform
+        // of its path) keeps the watch: the next name is read against the last
+        // one of the trip, not as a fresh start.
       }
 
       // Unplaced (WP0 step 7b): on no path, yet not off the graph.

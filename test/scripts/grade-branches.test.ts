@@ -405,14 +405,15 @@ describe('the branch grader, fault injection on the corridor', () => {
     // one forward move, one backward move that returns to a platform the wire
     // had left. A rewrite T600, T900, T1200 is two forward moves and no
     // backward one; a rewrite onto another path's platform counts nothing.
-    function observeNext(ids: readonly string[]): BranchReport {
+    function observeNext(ids: readonly (string | null)[]): BranchReport {
       expect(kept).not.toBeNull();
       const { state, headerSec, payload, victimId } = structuredClone(kept!);
       const grader = createBranchGrader(engine, { stops });
       for (let k = 0; k < ids.length; k++) {
         const copy = structuredClone(payload);
         const item = copy.items.find((i) => i.id === `vehicle:${victimId}`)!;
-        (item.data as Record<string, unknown>)['nextStopId'] = ids[k];
+        if (ids[k] === null) delete (item.data as Record<string, unknown>)['nextStopId'];
+        else (item.data as Record<string, unknown>)['nextStopId'] = ids[k];
         grader.observe(state, headerSec + 10 * k, copy);
       }
       return grader.report();
@@ -432,6 +433,16 @@ describe('the branch grader, fault injection on the corridor', () => {
       expect(r.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 2 });
       const off = observeNext(['T600', 'D300', 'T600']);
       expect(off.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 0 });
+    });
+
+    it('reads a name after a tick without one against the last name of the trip', () => {
+      // A wire that names nothing for a tick (a tram past the last platform of
+      // its path, rail round 3) does not start the trip's sequence over: the
+      // next name is read against the last one.
+      const back = observeNext(['T600', 'T900', null, 'T600']);
+      expect(back.nextStop).toMatchObject({ backwardMoves: 1, returns: 1, forwardMoves: 1 });
+      const on = observeNext(['T600', null, 'T900']);
+      expect(on.nextStop).toMatchObject({ backwardMoves: 0, returns: 0, forwardMoves: 1 });
     });
   });
 
