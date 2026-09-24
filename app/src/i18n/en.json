@@ -406,7 +406,7 @@
     "waste": "Waste pickup tomorrow",
     "dhmz": "DHMZ warnings",
     "note": "Nothing is sent: a switched-on alert only highlights tiles in this browser.",
-    "bellLabel": "In-app highlights, {state}"
+    "bellLabel": "In-app highlights: {state}"
   },
   "directory": {
     "domains": "Domains",
@@ -663,7 +663,7 @@
     "pasteInvalid": "The clipboard does not contain a complete code. Copy the code from the screen.",
     "title": "Unlock a view of Zagreb",
     "noCode": "No code? See how to try it.",
-    "intro": "Scan the QR code on the screen or type the code below. Ten minutes from a screen, five from another person's phone.",
+    "intro": "Scan the QR code or type the code from the screen. Ten minutes from a screen, five from another person's phone.",
     "scanButton": "Scan with the camera",
     "or": "or",
     "codeLabel": "Code from the screen",
@@ -1022,7 +1022,7 @@
     "stop": "Return to city overview",
     "close": "Close",
     "current": "Currently on screen",
-    "next": "You want to show",
+    "next": "This view",
     "overview": "City overview",
     "self": "You control the screen",
     "other": "Another visitor controls the screen",

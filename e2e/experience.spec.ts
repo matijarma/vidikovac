@@ -169,7 +169,12 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 1000
         await expect(page.locator('.ki')).toHaveAttribute('data-view', 'map');
       }
       if (phone) await expect.poll(async () => (await uncovered()).height).toBeGreaterThanOrEqual(before.height + 100);
-      else await expect.poll(async () => (await uncovered()).width).toBeGreaterThanOrEqual(before.width + 300);
+      // The desk pair's board sits under the map (round 2, desktop F1): its map view folds the board to a strip, so
+      // the map grows in height and keeps the column's width.
+      else {
+        await expect.poll(async () => (await uncovered()).height).toBeGreaterThan(before.height + 8);
+        expect((await uncovered()).width).toBeGreaterThanOrEqual(before.width - 1);
+      }
       expect(await canvas!.evaluate((el) => el === document.querySelector('[data-testid=map-canvas] canvas'))).toBe(true);
       await expect(page.getByTestId('session-label')).toBeVisible();
       if (phone) await expect(page.getByTestId('safety-shortcut')).toBeVisible();

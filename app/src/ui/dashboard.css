@@ -69,8 +69,11 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 /* The desk pair (data-stage='desk', from 60rem): Sada and Karta side by side in
    .ki-desk, the feed in a reading column and the map beside it. The page scrolls
    with the feed; map.css keeps the Karta column in view under the status line. */
-.ki[data-stage='desk'] .ki-desk { display: grid; grid-template-columns: minmax(22rem, 32rem) minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
-.ki[data-stage='desk'] .ki-main { padding-block-end: var(--sp-6); }
+/* The feed takes at most 36 % of the pair (never under 22rem, never over 32rem), so a zoomed or narrow window gives
+   its width to the map first (round 2, desktop F1: at 960 CSS px, 1920×1080 at 200 %, a greedy 32rem feed left the
+   map 6 px). */
+.ki[data-stage='desk'] .ki-desk { display: grid; grid-template-columns: minmax(22rem, min(32rem, 36%)) minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
+.ki[data-stage='desk'] .ki-main { padding-block-end: var(--sp-3); }   /* round 2, desktop F15: the sticky Karta column plus a 24 px foot scrolled the page 12 px */
 /* .ki-alert is the assertive live region: .visually-hidden hides it while readers
    still hear it. It is never display: none, which would silence it. */
 
@@ -187,7 +190,12 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-head > [data-key='session'] { grid-column: 5; }
   .ki-head > [data-key='more'] { grid-column: 6; }
   .ki-head > [data-key='safety'] { grid-column: 7; }
-  .present { padding: var(--sp-5) var(--sp-8); }
+  /* The Zaslon panel in one band (round 2, desktop F6: 228 of 900 px pushed Sada down): the two views and the action
+     share a row under the head, the privacy line closes it. */
+  .present { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--sp-2) var(--sp-6); padding: var(--sp-3) var(--sp-8); }
+  .present > :not(.present-views):not(.present-actions) { grid-column: 1 / -1; }
+  .present-views { gap: var(--sp-6); }
+  .present-actions { justify-content: end; }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
   .ki-more[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
