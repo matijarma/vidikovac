@@ -596,7 +596,9 @@ describe('sentence sequence', () => {
     const second = seq.read(choices.slice(0, 2), NOW + 20_000);
     expect(second).not.toBe(first);
     expect(seq.read(choices.slice(0, 2), NOW + 600_000)).toBe(second);
-    expect(seq.read(choices.slice(0, 2), NOW + 620_000)).toBe(first);
+    // The first left at NOW + 20 s: exactly 600 s later is still inside the window, a tick more is not.
+    expect(seq.read(choices.slice(0, 2), NOW + 620_000)).toBe(second);
+    expect(seq.read(choices.slice(0, 2), NOW + 620_001)).toBe(first);
   });
   it('drops expired last trams even during a hold or suspension, and skips overflowing text', () => {
     const seq = createSentenceSequence({ rhythmMs: 60_000 });
@@ -631,7 +633,8 @@ describe('sentence sequence', () => {
     expect(seq.read([], NOW + 60_000, suspended)).toBeNull();
     expect(seq.read([first], NOW + 650_000)).toBeNull(); // 590 s after removal.
     expect(seq.read([first], NOW + 659_999)).toBeNull();
-    expect(seq.read([first], NOW + 660_000)).toBe(first);
+    expect(seq.read([first], NOW + 660_000)).toBeNull(); // exactly 600 s after removal: the window's own edge
+    expect(seq.read([first], NOW + 660_001)).toBe(first);
   });
 
   it.each([20_000, 30_000, 60_000])('refuses a hostile description for the %i ms rhythm', rhythmMs => {
@@ -652,8 +655,9 @@ describe('sentence sequence', () => {
     expect(seq.read([always], NOW + rhythmMs, true)).toBeNull();
     expect(seq.read([always], NOW + rhythmMs + 590_000)).toBeNull();
     expect(seq.read([always], NOW + rhythmMs + 599_999)).toBeNull();
-    expect(seq.read([always], NOW + rhythmMs + 600_000))
-      .toEqual({ ...always, validUntil: NOW + 2 * rhythmMs + 600_000 });
+    expect(seq.read([always], NOW + rhythmMs + 600_000)).toBeNull();
+    expect(seq.read([always], NOW + rhythmMs + 600_001))
+      .toEqual({ ...always, validUntil: NOW + 2 * rhythmMs + 600_001 });
   });
 
   it('never displays a timeless sentence, even with a solar paraphrase', () => {
@@ -752,8 +756,9 @@ describe('sentence sequence: one fact, once in ten minutes', () => {
     // x1's minute ends inside its dwell: the next minute of the same countdown takes its place there.
     expect(seq.read(pool, NOW + 52_000)?.text).toBe(x2.text);
     for (let tick = 60_000; tick < 620_000; tick += 20_000) expect(seq.read(pool, NOW + tick)?.text).toBe(x2.text);
-    // Ten minutes after y left the screen, its fact may return.
-    expect(seq.read(pool, NOW + 620_000)?.refs).toEqual(['event:y']);
+    // More than ten minutes after y left the screen, its fact may return; at exactly ten it may not.
+    expect(seq.read(pool, NOW + 620_000)?.text).toBe(x2.text);
+    expect(seq.read(pool, NOW + 620_001)?.refs).toEqual(['event:y']);
   });
 });
 
@@ -1096,6 +1101,25 @@ describe('sentence sequence: a dwell ends early only when its own fact expires',
     expect(seq.read([tram17, ...others], NIGHT)).toBe(tram17);
     const refreshed = { ...tram17, text: 'Tramvaj 17, smjer Prečko, polazi za 3 min.', validUntil: NIGHT + 120_000 };
     expect(seq.read([refreshed, ...others], NIGHT + 5_000)?.text).toBe(refreshed.text);
+  });
+});
+
+describe('the no-repeat window is strictly longer than ten minutes from the moment the sentence last showed', () => {
+  // Release smoke on D5.8 (13:52 to 14:03): "Sunce zalazi u 18:51." came back exactly 600.0 s after it had left the
+  // screen, the window's own edge (the pruning read "at least 600 s"). The window is more than 600 s from the end
+  // of the previous showing, so a verbatim return is never inside the ten minutes by a tick.
+  const T = Date.parse('2026-09-24T13:52:00+02:00');
+  const a = sentence('Sunce zalazi u 18:51.', { refs: ['solar:sunset:2026-09-24'], kicker: 'vrijeme', validUntil: T + 7_200_000 });
+  const b = sentence('Amruševa: zatvoreno za promet do 16:00.', { refs: ['closure:amruseva'], kicker: 'radovi', validUntil: T + 7_200_000 });
+
+  it('does not offer a sentence again at exactly 600 s after it left, and does a tick later', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000, noRepeatMs: 600_000 });
+    expect(seq.read([a, b], T)?.text).toBe(a.text);
+    for (let t = 1_000; t < 20_000; t += 1_000) expect(seq.read([a, b], T + t)?.text).toBe(a.text);
+    // The boundary: b takes over, a's last showing ends at T + 20 s.
+    expect(seq.read([a, b], T + 20_000)?.text).toBe(b.text);
+    expect(seq.read([a, b], T + 620_000)?.text).toBe(b.text);
+    expect(seq.read([a, b], T + 620_001)?.text).toBe(a.text);
   });
 });
 

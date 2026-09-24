@@ -390,7 +390,9 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
         heldSince = now;
       }
       previousNow = now;
-      for (const [text, at] of lastSeen) if (now - at >= noRepeat && text !== current?.text) lastSeen.delete(text);
+      // Strictly more than the window since the sentence last showed: a return exactly at 600 s is inside the ten
+      // minutes to the harness and to a passer-by (release smoke on D5.8: a verbatim return at 600.0 s).
+      for (const [text, at] of lastSeen) if (now - at > noRepeat && text !== current?.text) lastSeen.delete(text);
       const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
@@ -421,7 +423,7 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
           : { ...held, validUntil: current.validUntil };
       }
       const onScreen = current ? sentenceFactKeys(current) : [];
-      for (const [key, seen] of factSeen) if (now - seen.at >= noRepeat && !onScreen.includes(key)) factSeen.delete(key);
+      for (const [key, seen] of factSeen) if (now - seen.at > noRepeat && !onScreen.includes(key)) factSeen.delete(key);
       if (suspended) {
         if (held && current) { remember(current, now, held.validUntil); return current; }
         if (current) remember(current, now, current.validUntil);

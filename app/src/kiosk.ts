@@ -496,7 +496,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       }
     }
     for (const [text, shownAt] of shownSentences) {
-      if (at - shownAt >= SENTENCE_NO_REPEAT_MS && text !== currentSentence?.text) shownSentences.delete(text);
+      // Strictly more than the window since the wording last showed (city/sentence.ts keeps the same edge).
+      if (at - shownAt > SENTENCE_NO_REPEAT_MS && text !== currentSentence?.text) shownSentences.delete(text);
     }
     // The sentence on screen keeps its refreshed words in the pool even where they were shown before
     // (an estimate that moves back): decision 29 refreshes it in place instead of moving on.
