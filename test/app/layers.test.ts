@@ -14,7 +14,6 @@ import { routeDelays } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
-import { createSchematicHost } from '../../app/src/motion/schematic-host';
 import type { LayerContext } from '../../app/src/layers/types';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
@@ -169,34 +168,21 @@ describe('u-pokretu', () => {
     expect(again.querySelector('[data-testid=map-canvas]')).toBe(canvas);
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
   });
-  // Lightweight retains the accessible schematic-host list. The full
-  // experience has one vector-map workspace, never two competing maps.
-  it('mounts the lightweight host with this snapshot’s fixes, delays and source state', () => {
+  // R-L2, decided in WP5 A3: the lightweight path is the same workspace sheet with no map. The page hands the
+  // layer map slots without a factory (dashboard.ts), so no canvas is ever made and no geometry is fetched; the
+  // old lightweight face (its own board, the schematic host's list, the closures and notices) is gone.
+  it('the lightweight path renders the workspace sheet without a map: the search, no canvas, no full-map toggle, no schematic host (R-L2)', () => {
     const element = document.createElement('div');
     element.dataset.testid = 'schematic-host';
     const schematic = { element, mount: vi.fn(() => element), update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn() };
-    const section = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
-    expect(section.querySelector('[data-testid=schematic-host]')).toBe(element);
-    expect(section.querySelector('[data-testid=transport-workspace]')).toBeNull();
-    expect(schematic.update).toHaveBeenCalledTimes(1);
-    const [data, at] = schematic.update.mock.calls[0]!;
-    expect(at).toBe(NOW);
-    expect(data.fixes.map((f: { id: string }) => f.id)).toEqual(['vehicle:1', 'vehicle:2', 'vehicle:3']);
-    expect(data.fixes[0]).toMatchObject({ lon: 15.97, lat: 45.81, routeId: '6' });
-    expect([...data.delays!]).toEqual([['6', 90], ['11', -30]]);
-    // F8 / F5's leftover: the dashboard's own lightweight list can only say
-    // "stale" or "down" during an outage (R-X1's honesty rule) if it is
-    // handed the zet-rt snapshot itself, exactly as kiosk.ts's locked stage
-    // already does on its own update() call.
-    expect(data.snapshot).toBe(SNAPSHOTS['zet-rt']);
-    // A second render (the next poll) reuses the very same element.
-    const again = renderLayer('u-pokretu', ctx({ schematic, lightweight: true }));
-    expect(again.querySelector('[data-testid=schematic-host]')).toBe(element);
-    expect(schematic.update).toHaveBeenCalledTimes(2);
-    expect(text(again.querySelector('[data-testid=transport-closures]'))).toContain('Grada Vukovara');
-    const full = renderLayer('u-pokretu', ctx({ schematic }));
-    expect(full.querySelector('[data-testid=schematic-host]')).toBeNull();
-    expect(full.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    const section = renderLayer('u-pokretu', ctx({ schematic, lightweight: true, maps: createMapSlots(undefined) }));
+    expect(section.querySelector('[data-testid=transport-workspace]')).not.toBeNull();
+    expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
+    expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
+    expect(section.querySelector('[data-testid=map-full-toggle], #u-pokretu-map-full')).toBeNull();
+    expect(section.querySelector('[data-testid=transport-light], [data-testid=schematic-host], [data-testid=running-routes]')).toBeNull();
+    expect(schematic.mount).not.toHaveBeenCalled();
+    expect(schematic.update).not.toHaveBeenCalled();
   });
   it('renders no schematic panel when the page has no host (unit contexts, the kiosk essentials)', () => {
     const section = renderLayer('u-pokretu', ctx());
@@ -205,7 +191,7 @@ describe('u-pokretu', () => {
   it('falls back to the list when no map factory is available', () => {
     const section = renderLayer('u-pokretu', ctx({ maps: undefined }));
     expect(section.querySelector('[data-testid=map-canvas]')).toBeNull();
-    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stanice rade i bez nje.');
+    expect(text(section.querySelector('[data-testid=map-status]'))).toBe('Karta nije dostupna u ovom pregledniku. Pretraga, linije i stajališta rade i bez karte.');
     expect(section.querySelector('[data-testid=transport-search]')).not.toBeNull();
   });
   // T10: the full map.
@@ -216,80 +202,6 @@ describe('u-pokretu', () => {
     // No `at` on the pin: dated at the snapshot's own fetch time, never `now`.
     expect(point).toMatchObject({ id: 'vehicle:1', lon: 15.97, lat: 45.81, routeId: '6', at: NOW - 60_000 });
     expect(point.title).toContain('6');
-  });
-  it('renders no map panel at all in lightweight mode: no map, no fallback line, no button (R-L2)', () => {
-    const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));
-    const section = renderLayer('u-pokretu', ctx({ maps: createMapSlots(factory as never), lightweight: true, mapView: { full: false, toggle: vi.fn() } }));
-    expect(section.querySelector('#u-pokretu-map')).toBeNull();
-    expect(section.querySelector('[data-testid=map-fallback]')).toBeNull();
-    expect(section.querySelector('[data-testid=map-full-toggle]')).toBeNull();
-    expect(factory).not.toHaveBeenCalled();
-  });
-  // T3.6: the lightweight face reads like the map's sheet -- the same board grammar without a stage.
-  it('the lightweight face: a search field first, "Linije u pokretu" as a board of rows with small badges (eight, then "još N linija" through the page filter), the host’s list, closures four then more, three notices, no map, no canvas, the honesty note once', () => {
-    const i18n = createDefaultI18n('hr');
-    const pins = Array.from({ length: 10 }, (_, i) => ({
-      id: `vehicle:l${i}`, module: 'zet-rt' as const, kind: 'vehicle' as const, tier: 'session' as const, title: String(i + 1),
-      geo: { type: 'Point' as const, coordinates: [15.97 + i / 1000, 45.81] as [number, number] }, data: { routeId: String(i + 1), routeType: 0 },
-    }));
-    const zet: ModuleSnapshot = { ...SNAPSHOTS['zet-rt']!, items: [...pins, { id: 'route:6', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6', data: { routeId: '6', medianDelaySeconds: 90, vehicles: 1 } }] };
-    const notices = Array.from({ length: 5 }, (_, i) => ({
-      id: `zet-promet:${i}`, module: 'dogadanja' as const, kind: 'event' as const, tier: 'session' as const, title: `Obavijest ${i}`, at: '2026-09-11T08:00:00Z', link: 'https://zet.hr/promet', data: { source: 'zet-promet' },
-    }));
-    const snapshots = { ...SNAPSHOTS, 'zet-rt': zet, prometnice: MANY_CLOSURES, dogadanja: { ...SNAPSHOTS.dogadanja!, items: notices } };
-    const schematic = createSchematicHost({ i18n, scope: { kind: 'network' }, lightweight: true, now: () => NOW });
-    const face = (filters: Record<string, string>, host = true): HTMLElement =>
-      renderLayer('u-pokretu', ctx({ i18n, snapshots, lightweight: true, view: { layer: 'u-pokretu', selection: null, filters }, ...(host ? { schematic } : {}) })).querySelector<HTMLElement>('[data-testid=transport-light]')!;
-    const light = face({});
-    // No stage, no map, no canvas, no workspace.
-    expect(light.querySelector('#u-pokretu-map')).toBeNull();
-    expect(light.querySelector('canvas')).toBeNull();
-    expect(light.querySelector('[data-testid=transport-workspace]')).toBeNull();
-    // The search field comes first and is the page's own filter (dashboard.ts's input delegation), 44 px by base.css.
-    const input = light.firstElementChild!.querySelector<HTMLInputElement>('input[type=search]')!;
-    expect(input.dataset.filterKey).toBe('q');
-    // The board: static signage rows with small badges, eight of ten shown, the fold as a filter action.
-    const rows = [...light.querySelectorAll<HTMLElement>('[data-testid=running-routes] .row')];
-    expect(rows).toHaveLength(10);
-    expect(rows.filter((r) => !r.hidden)).toHaveLength(8);
-    expect(rows.every((r) => r.querySelector('.line[data-size="s"]') !== null)).toBe(true);
-    expect(light.querySelector('[data-testid=running-routes] button')).toBeNull(); // nothing here opens a detail: there is no handler on this path
-    const more = light.querySelector<HTMLButtonElement>('[data-action=filter][data-filter-key=routes]')!;
-    expect(text(more)).toBe('još 2 linije');
-    expect(more.dataset.filterValue).toBe('all');
-    expect(more.getAttribute('aria-expanded')).toBe('false');
-    const six = rows.find((r) => text(r.querySelector('.line')) === '6')!;
-    // T2.12: the spelled-out count gives way to the glyph in this compact row (newdesignsystem.md's "vehicles on
-    // line" rule, tram-front/bus-front + the bare count); the sentence for a screen reader lives on the glyph's own
-    // label, so nothing here leans on the bare digit or the icon's shape alone.
-    const vehicleGlyph = six.querySelector<HTMLElement>('.row-sub [role="img"]')!;
-    expect(vehicleGlyph.getAttribute('aria-label')).toBe('1 vozilo u pokretu');
-    expect(vehicleGlyph.querySelector('use')?.getAttribute('href')).toBe('#icon-tram-front');
-    expect(text(vehicleGlyph)).toBe('1');
-    expect(text(six.querySelector('.route-delay'))).toBe('kasni 2 min');
-    expect(six.querySelector('.route-delay')!.getAttribute('data-state')).toBe('late');
-    expect(rows.filter((r) => r !== six).every((r) => r.querySelector('.route-delay') === null)).toBe(true); // no median, no word
-    // The host's list face under its own head; the closures four of twenty, then "sve zatvaranja (20)"; three notices.
-    expect(light.querySelector('[data-testid=schematic-host] [data-testid=schematic-list]')).not.toBeNull();
-    const closures = [...light.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')];
-    expect(closures).toHaveLength(20);
-    expect(closures.filter((r) => !r.hidden)).toHaveLength(4);
-    expect(closures.every((r) => r.querySelector('.mark-closure') !== null && r.querySelector('button') === null)).toBe(true);
-    expect(text(light.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('sve zatvaranja (20)');
-    expect(light.querySelectorAll('[data-testid=transport-notices] .row')).toHaveLength(3);
-    // The honesty sentence exactly once on the face: the host carries it under its list.
-    expect(text(light).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
-    // The folds open and the query narrows through the page's own filters; the field keeps its text.
-    const open = face({ routes: 'all', closures: 'all', q: '6' });
-    expect(open.querySelector<HTMLInputElement>('input[type=search]')!.value).toBe('6');
-    expect([...open.querySelectorAll('[data-testid=running-routes] .row')].map((r) => text(r.querySelector('.line')))).toEqual(['6']);
-    expect([...open.querySelectorAll<HTMLElement>('[data-testid=transport-closures] .row')].filter((r) => !r.hidden)).toHaveLength(20);
-    expect(text(open.querySelector('[data-action=filter][data-filter-key=closures]'))).toBe('Skupi');
-    expect(text(face({ q: 'zzz' }).querySelector('[data-testid=transport-no-results]'))).toContain('zzz');
-    // Without a host (a unit context) the face still says the sentence, once.
-    const bare = face({}, false);
-    expect(bare.querySelector('[data-testid=transport-note]')).not.toBeNull();
-    expect(text(bare).split('ZET ne objavljuje smjer ni brzinu').length - 1).toBe(1);
   });
   it('has no full-map button: the sheet’s own chevron and detents say how much map shows', () => {
     const factory = vi.fn(() => ({ update: vi.fn(), destroy: vi.fn() }));

@@ -66,7 +66,7 @@ describe('departuresBlock', () => {
     }
     expect(rows.map((r) => r.querySelector('.line')?.getAttribute('data-kind'))).toEqual(['tram', 'tram', 'tram']);
     // No word per row, no fetch time, no prompt, no note: colour and the dot carry it [O-27].
-    for (const word of ['Procjena', 'po redu vožnje', 'uživo', 'Odaberi', 'ZET']) expect(text(host)).not.toContain(word);
+    for (const word of ['Procjena', 'vozni red', 'uživo', 'Odaberi', 'ZET']) expect(text(host)).not.toContain(word);
     expect(host.querySelector('section.sada-departures')?.getAttribute('aria-label')).toBe('Sljedeći polasci, Trg bana J. Jelačića');
   });
 

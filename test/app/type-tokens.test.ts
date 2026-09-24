@@ -97,18 +97,12 @@ describe('layers.css: the 13 px floor (T1.5)', () => {
     expect(LAYERS).toContain(".ws .meta { font-size: var(--type-secondary); }");
   });
 
-  it('sets the time band tile family at its roles in signage.css: value tile-l, title tile-m, time tile-time, context and trail secondary, the xs badge secondary', () => {
-    expect(SIGNAGE).toMatch(/\.tl-value \{[^}]*font-size: var\(--type-tile-l\);/);
-    expect(SIGNAGE).toMatch(/\.tl-title \{[^}]*font-size: var\(--type-tile-m\);/);
-    expect(SIGNAGE).toMatch(/\.tl-time \{[^}]*font-size: var\(--type-tile-time\);/);
-    expect(SIGNAGE).toMatch(/\.tl-context, \.tl-trail \{[^}]*font-size: var\(--type-secondary\);/);
+  it('sets the phone\'s count mark and the xs badge at the secondary role in signage.css (the time band\'s tiles went with WP5 B1)', () => {
+    expect(SIGNAGE).toMatch(/\.tl-context \{[^}]*font-size: var\(--type-secondary\);/);
+    expect(SIGNAGE).not.toMatch(/\.tl-(?:value|title|time|trail) \{/);
     expect(SIGNAGE).toMatch(/\.line\[data-size='xs'\] \{[^}]*font-size: var\(--type-secondary\);/);
-    // layers.css sizes the band's own type from the roles too: the heads at title, the clock at numeral, the labels at secondary.
-    expect(LAYERS).toMatch(/\.tb-h \{[^}]*font-size: var\(--type-title\);/);
-    expect(LAYERS).toMatch(/\.tb-clock \{[^}]*font-size: var\(--type-numeral\);/);
-    expect(LAYERS).toMatch(/\.tb-seg-btn \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/\.tb-empty \{[^}]*font-size: var\(--type-secondary\);/);
-    expect(LAYERS).toMatch(/\.tb-more \{[^}]*font-size: var\(--type-control\);/);
+    // The band's own heads, clock, segments and feet left layers.css with their renderers (WP5 A3).
+    expect(LAYERS).not.toMatch(/\.tb-(?:h|clock|seg-btn|empty|more)\b/);
   });
 
   it('leaves the changed rules at the body line height', () => {

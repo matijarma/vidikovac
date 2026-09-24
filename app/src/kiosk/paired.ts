@@ -2,7 +2,8 @@
 // from several steps away, showing the subject a visitor explicitly chose.
 // Not the phone's long page cropped into a kiosk:
 // each domain has its own arrangement of two or three blocks, big figures
-// first, lists bounded, every block naming its source and its own time.
+// first, lists bounded, every block naming its source; no block prints a
+// fetch or update time (companion brief §12, [O-27]).
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import type { PresentationTarget } from '../../../worker/presentation';
@@ -12,6 +13,7 @@ import { publicItemKey, type PublicSelection, type ScreenStop } from '../core/co
 import type { I18n } from '../i18n/i18n';
 import { DOGADANJA_SOURCES, IZVORI } from '../izvori-render';
 import { safetyState } from '../experience/safety-state';
+import { isAllDay } from '../layers/kultura';
 import { delayWord } from '../layers/shared';
 import { dataNumber, dataText } from '../panels/panel';
 import { escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -23,7 +25,7 @@ import { arrivalsEmptyText, ARRIVAL_ROWS, platformIds, vettedArrival, type StopA
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { cardMarkup } from './invitation';
-import { frontPanels, panelMarkup } from './front';
+import { frontPanels, panelMarkup, untilDay } from './front';
 import { kindOfRoute } from './exceptions';
 import { columnsFor } from './columns';
 import type { CityState } from '../../../shared/city/types';
@@ -86,16 +88,13 @@ export interface PairedHandle {
 
 // --- Shared block helpers ---------------------------------------------------
 
-/** "podaci od 14:32" / "zastarjelo · podaci od 14:02" / "Izvor trenutačno ne odgovara". */
+/** A block's state word, never a time: "zastarjelo" for a last-good copy,
+ *  "Izvor trenutačno ne odgovara" for a source that is down, nothing for a
+ *  live one. The wall prints no fetch or update time (§12, [O-27]). */
 export function statusLine(snapshot: ModuleSnapshot | undefined, s: KioskStrings): string {
   if (!snapshot) return '';
   if (snapshot.status === 'down') return s.paired.sourceDown;
-  // Gazette rows carry their publication date. Midnight derived from a date
-  // is not a useful "live data" clock in a block header.
-  if (snapshot.module === 'glasnik') return snapshot.status === 'stale' ? s.paired.stale : '';
-  const time = clock(snapshot.sourceUpdatedAt ?? snapshot.fetchedAt);
-  const from = fill(snapshot.sourceUpdatedAt ? s.paired.dataFrom : s.paired.fetchedAt, { time });
-  return snapshot.status === 'stale' ? `${s.paired.stale} · ${from}` : from;
+  return snapshot.status === 'stale' ? s.paired.stale : '';
 }
 
 /** Who publishes a module, as a credit line names it: the public body for the
@@ -410,7 +409,7 @@ function renderSada(ctx: PairedContext): PairedMarkup {
       ...module, items: module.items.filter(item => item.dateBasis !== 'event' || (item.at && Date.parse(item.at) >= window.start && Date.parse(item.at) < window.end)),
     });
   }
-  const front = frontPanels({ modules, stop: ctx.stop, now: ctx.now, lastRun: null, strings: ctx.strings, i18n: ctx.i18n, locale: ctx.locale, lightweight: false, composition: ctx.size });
+  const front = frontPanels({ modules, stop: ctx.stop, now: ctx.now, strings: ctx.strings, i18n: ctx.i18n, locale: ctx.locale, lightweight: false, composition: ctx.size });
   // A legacy phone may still send the retired 'kvart' target (worker/presentation.ts keeps
   // accepting the wire literal); it falls straight through to the plain Sada below.
   const panels = ['promet', 'tonight', 'weather', 'city'] as const;
@@ -469,8 +468,8 @@ function selectionStatus(ctx: PairedContext): 'loading' | 'displayed' | 'unavail
 
 /** What comes next at the tapped stop, as the card's first block: the rows
  *  the controller's board cache and the live fleet already agreed on
- *  (kiosk/arrivals.ts), then the one note that says where an estimate comes
- *  from. Four rows on a wide screen, three in a narrow column; in a paired
+ *  (kiosk/arrivals.ts); the colour and the accessible word of each row say
+ *  tracked or timetable, so no note stands under them on the wall. Four rows on a wide screen, three in a narrow column; in a paired
  *  composition the row fitter hides any the block still cannot hold, and in
  *  the exploration slot the column scrolls under a finger.
  *
@@ -487,7 +486,7 @@ function arrivalsBody(ctx: PairedContext, stop: { id: string; name?: string }): 
     const cells = arrivalCells(arrival, ctx.strings);
     return `<li class="k-row">${row(cells.main, '', cells.aside)}</li>`;
   }).join('');
-  return `<ul class="k-rows" data-testid="k-arrivals">${list}</ul><p class="k-board-note">${escapeHtml(ctx.strings.arrivals.note)}</p>`;
+  return `<ul class="k-rows" data-testid="k-arrivals">${list}</ul>`;
 }
 
 /** One card naming what the driver's phone selected: a line with its delay
@@ -582,7 +581,7 @@ function sunBlock(ctx: PairedContext): string {
   const sun = sunToday(ctx.now);
   const hours = Math.floor(sun.daylightMinutes / 60);
   const minutes = sun.daylightMinutes % 60;
-  const text = `<div class="k-sun-text"><p class="k-figure">${escapeHtml(`${fill(s.weather.sunrise, { time: sun.sunrise })} · ${fill(s.weather.sunset, { time: sun.sunset })}`)}</p><p class="k-figure-sub">${escapeHtml(fill(s.weather.daylight, { hours, minutes }))}</p><p class="k-meta">${escapeHtml(ctx.i18n.t('panels.sunComputed'))}</p></div>`;
+  const text = `<div class="k-sun-text"><p class="k-figure">${escapeHtml(`${fill(s.weather.sunrise, { time: sun.sunrise })} · ${fill(s.weather.sunset, { time: sun.sunset })}`)}</p><p class="k-figure-sub">${escapeHtml(fill(s.weather.daylight, { hours, minutes }))}</p></div>`;
   return `<article class="k-block k-block--sun" data-testid="k-sun">${kicker(s.paired.sun)}<div class="k-block-body">${text}${sunArc(sun)}</div></article>`;
 }
 
@@ -795,12 +794,15 @@ export function eventGroups(items: readonly FeedItem[], now: number): EventGroup
   return out;
 }
 
+/** A day's event: its clock, or for an all-day one the all-day word, or "do
+ *  25. 9." when it runs on for days (never "cijeli dan" for those [O-53]); a
+ *  later day's event names its start day first. A range of days has no clock. */
 function eventRow(item: FeedItem, ctx: PairedContext, withDay: boolean): string {
   const { strings: s, locale } = ctx;
-  const allDay = dataText(item, 'precision') === 'day';
+  const allDay = isAllDay(item);
   const when = withDay
     ? (allDay ? weekdayDayMonth(locale, item.at!) : `${weekdayDayMonth(locale, item.at!)} ${clock(item.at)}`)
-    : (allDay ? s.paired.allDay : clock(item.at));
+    : (allDay ? untilDay(item, ctx.i18n) || s.paired.allDay : clock(item.at));
   // A category slug is printed only as a word the catalogue knows; a raw slug never reaches the screen.
   const category = s.events[dataText(item, 'category')] ?? '';
   const sub = [category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
@@ -822,10 +824,10 @@ function noticeRows(ctx: PairedContext, items: readonly FeedItem[], limit: numbe
 }
 
 function ongoingRow(item: FeedItem, ctx: PairedContext): string {
-  const { strings: s, locale } = ctx;
+  const { strings: s } = ctx;
   const category = s.events[dataText(item, 'category')] ?? '';
   const sub = [s.paired.ongoingWord, category, vetExternal('name', dataText(item, 'venue') || dataText(item, 'organiser'), 'row')].filter(Boolean).join(' · ');
-  const until = item.until ? fill(s.paired.ongoingUntil, { date: weekdayDayMonth(locale, item.until) }) : '';
+  const until = untilDay(item, ctx.i18n);
   return row(externalHtml('title', item.title), escapeHtml(sub), escapeHtml(until));
 }
 

@@ -59,7 +59,7 @@ describe('conditions and consultations', () => {
     expect(consultations).not.toContain(other.city.consultationsNote);
   });
   it('keeps the approved Croatian wording', () => {
-    expect(conditionsMarkup(ctx('hr'))).toContain('Opažanja postaja su preliminarna, ne ocjena za cijeli grad. Indeksi čestica koriste pomične prosjeke.');
+    expect(conditionsMarkup(ctx('hr'))).toContain('Opažanja postaja su preliminarna i ne vrijede za cijeli grad. Indeksi čestica računaju se iz pomičnih prosjeka.');
     expect(consultationsMarkup(ctx('hr'))).toContain('<h3>Nacionalna savjetovanja</h3><p class="city-meta">Nacionalni izvori, ne savjetovanja Grada Zagreba.</p>');
   });
 });

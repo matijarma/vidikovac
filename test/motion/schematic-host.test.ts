@@ -45,7 +45,7 @@ const flush = async (): Promise<void> => { for (let i = 0; i < 6; i += 1) await 
 const frame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 const legend = (el: HTMLElement) => el.querySelector('[data-testid=schematic-legend]')?.textContent;
 
-function host(opts: { scope?: 'network' | 'crop'; lightweight?: boolean; net?: Network | null; deferred?: boolean; locale?: 'hr' | 'en' } = {}) {
+function host(opts: { scope?: 'network' | 'crop'; lightweight?: boolean; net?: Network | null; deferred?: boolean; locale?: 'hr' | 'en'; publicDisplay?: boolean } = {}) {
   let resolve: ((net: Network | null) => void) | null = null;
   const loadNetwork = vi.fn(() => new Promise<Network | null>((r) => {
     if (opts.deferred) resolve = r;
@@ -55,6 +55,7 @@ function host(opts: { scope?: 'network' | 'crop'; lightweight?: boolean; net?: N
     i18n: createDefaultI18n(opts.locale ?? 'hr'),
     scope: opts.scope === 'crop' ? { kind: 'crop', types: TRAMS_ONLY } : { kind: 'network' },
     lightweight: opts.lightweight ?? false,
+    publicDisplay: opts.publicDisplay,
     now: () => NOW,
     loadNetwork,
   });
@@ -80,6 +81,15 @@ describe('createSchematicHost', () => {
     // Note after the view, so the map is read first and the caveat under it.
     const children = [...root.querySelector('[data-testid=schematic-host]')!.children].map((c) => c.getAttribute('data-testid'));
     expect(children.indexOf('schematic')).toBeLessThan(children.indexOf('schematic-note'));
+  });
+
+  it('prints no note on a public display: the wall carries no caveat (companion brief §12), the phone keeps it', async () => {
+    const { h, root } = host({ scope: 'crop', publicDisplay: true });
+    root.appendChild(h.mount());
+    await flush();
+    expect(root.querySelector('[data-testid=schematic]')).not.toBeNull();
+    expect(root.querySelector('[data-testid=schematic-note], .schematic-note')).toBeNull();
+    expect(root.textContent).not.toContain(HONESTY_NOTE_HR);
   });
 
   it('prints the note from the catalogue in the page language, so an English page reads motion.note in English', () => {

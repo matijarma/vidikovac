@@ -595,7 +595,9 @@ describe('(e) the §13 "out" strings are absent outside their allowed files', ()
     { id: 'e-zivi-grad', text: 'Živi grad', match: 'includes', allowedIn: [], scope: 'app', due: 'WP5', slop: 10 },
     { id: 'e-sada-u-gradu', text: 'Sada u gradu.', match: 'includes', allowedIn: [], scope: 'app', due: 'WP5', slop: 5 },
     // The "Zatim" segment (timeband.next): the word alone as a string, not "Zatim uzmi grad sa sobom." (landing).
-    { id: 'e-zatim', text: 'Zatim', match: 'exact', allowedIn: [], scope: 'app', due: 'WP5', slop: 8 },
+    // app/prijava/index.html is the filed application, which may never be edited (COMMON hard rule); its
+    // figure of the old phone keeps the word, and no city surface shows that document.
+    { id: 'e-zatim', text: 'Zatim', match: 'exact', allowedIn: ['app/prijava/index.html'], scope: 'app', due: 'WP5', slop: 8 },
     // The phone's provenance may keep its fetch word ([O-27]); the wall never prints one.
     { id: 'e-dohvaceno', text: 'Dohvaćeno', match: 'includes', allowedIn: [], scope: 'wall', due: 'WP5', slop: 15 },
   ];
@@ -611,8 +613,8 @@ describe('(e) the §13 "out" strings are absent outside their allowed files', ()
     for (const file of ['app/src/i18n/hr.json', 'app/src/i18n/en.json', 'app/src/data/izvori.json', 'app/src/city/strings.ts', 'app/izvori/index.html', 'app/kiosk/index.html']) {
       expect(files.has(file), file).toBe(true);
     }
-    // A value, not the JSON around it: the hr.json segment word is read as "Zatim" under its key.
-    expect(appStrings().filter((place) => place.where === 'app/src/i18n/hr.json timeband.next').map((place) => place.text)).toEqual([leaf(HR, 'timeband.next')]);
+    // A value, not the JSON around it: the transport tab's word is read as "Karta" under its key.
+    expect(appStrings().filter((place) => place.where === 'app/src/i18n/hr.json layers.u-pokretu').map((place) => place.text)).toEqual([leaf(HR, 'layers.u-pokretu')]);
     // Markup never reads as copy.
     expect(htmlStrings('<p class="x">Tekst &amp; <b>još</b></p><!-- komentar -->')).toEqual(['x', 'Tekst & ', 'još']);
   });

@@ -6,7 +6,6 @@ import type { ModuleId, ModuleSnapshot, ModuleSpec } from './schema';
 import { TWIN_DO_NAME } from '../twin/twin-name';
 import { MODULES, WARM_MODULES, moduleSpec } from './registry';
 import { makeFetchContext } from './http';
-import { briefAll } from './brief';
 import { recordMetric } from '../metrics';
 import { DOGADANJA_AVAILABILITY_IDS } from './modules/dogadanja';
 import { CETVRTI_DATASET, ZBORNA_MJESTA_LAYER } from './modules/ckan-geo';
@@ -131,15 +130,7 @@ async function refresh(
   const now = clock();
 
   try {
-    const fresh = await spec.fetcher(makeFetchContext(
-      clock,
-      spec.twin ? twinPublish(env) : undefined,
-      // briefAll itself decides whether a brief is possible (binding, test
-      // environment) and never rejects, so a module always sees the seam. Its
-      // KV writes ride the same ExecutionContext as this module's own, so
-      // remembering a brief never delays the fetch that produced it.
-      (texts, kind) => briefAll(env, texts, kind, (promise) => ctx.waitUntil(promise)),
-    ));
+    const fresh = await spec.fetcher(makeFetchContext(clock, spec.twin ? twinPublish(env) : undefined));
     // A composite module is stale when one of its sources is; the twin's module
     // is not (R-TE5): its status is the twin's, its source's silence its own.
     const partial = spec.degradeOnSources !== false && Object.values(fresh.sources ?? {}).some((source) => source.status !== 'live');

@@ -59,8 +59,6 @@
 .ki-banners:empty { display: none; }
 .ki-main { grid-area: main; min-block-size: 0; min-inline-size: 0; padding: var(--sp-3) max(var(--sp-4), env(safe-area-inset-right, 0px)) calc(var(--ki-tabs) + var(--sp-6)) max(var(--sp-4), env(safe-area-inset-left, 0px)); touch-action: pan-y; }
 .ki-main:focus-visible { outline: none; }
-/* The FAB floats over the foot of the workspace, so main gives its last rows the room to scroll clear of it. */
-.ki[data-fab='1'] .ki-main { padding-block-end: calc(var(--ki-tabs) + 5rem); }
 /* Focus and anchor scrolls keep clear of the sticky header and the fixed tab bar, so a focused row is never hidden under either (the Tab walk in e2e/a11y-session.spec.ts). */
 html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0px)) calc(4rem + env(safe-area-inset-bottom, 0px)); }
 /* The Promet stage (the transport layer writes data-stage): the shell is the viewport, main is the stage. */
@@ -143,19 +141,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .ki-tab:not([aria-current='page']) .ki-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 
-/* "Na zaslon" (D5): the one primary touch action on the phone, a 48 px accent pill
-   fixed above the tab bar, present only for a scanner with a screen off Promet. */
-.ki-fab { position: fixed; inset-inline-end: max(var(--sp-4), env(safe-area-inset-right, 0px)); inset-block-end: calc(var(--ki-tabs) + var(--sp-4)); z-index: var(--z-sticky); display: inline-flex; align-items: center; gap: var(--sp-2); min-block-size: var(--target-primary); padding: 0 var(--sp-5); border: 0; border-radius: var(--r-pill); background: var(--tone-action-brand); color: var(--tone-action-brand-fg); font: inherit; font-size: var(--type-control); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-md); cursor: pointer; touch-action: manipulation; }
-.ki-fab .icon { color: inherit; }
-/* The frame went: the pill turns the live tone for the moment the polite region says so. */
-.ki-fab[data-sent='1'] { background: var(--tone-live); }
-:root[data-lagano='1'] .ki-fab { box-shadow: none; }
-/* On a very narrow viewport (a 320 px phone, or 390 px at 200 % text) the FAB keeps its glyph and its aria-label and drops the word, so it covers no more than a tile corner. */
-@media (max-width: 24rem) {
-  .ki-fab { inline-size: var(--target-primary); padding: 0; justify-content: center; }
-  .ki-fab > span { display: none; }
-}
-
 /* Banners: the session's own states, never confused with data states. */
 .banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); border: 1px solid var(--tone-stroke); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
 .banner-text { margin: 0; flex: 1 1 16rem; font-weight: var(--weight-medium); line-height: var(--leading-snug); }
@@ -187,7 +172,7 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    workspace column (spec §3, D4, D10): wordmark, the spacer, Zaslon, Podijeli
    grad, the session pill, Još and the safety control. No six-domain bar, no
    clock and no way into Karta [O-56]: Karta stands beside Sada on the page
-   (.ki-desk); the tab bar and the FAB leave. */
+   (.ki-desk); the tab bar leaves. */
 @media (min-width: 60rem) {
   .ki { --ki-top: 3.5rem; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: 'status' 'presentation' 'banners' 'main'; }
   html:has(.ki) { scroll-padding-block: 3.5rem 0; }
@@ -205,26 +190,16 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .present { padding: var(--sp-5) var(--sp-8); }
   .ki-more { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
   .ki-more[aria-current='page'] { background: var(--tone-tint-action); color: var(--tone-text-primary); }
-  .ki-more[aria-disabled='true'], .ki-search[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
-  .ki-search { display: inline-flex; align-items: center; gap: var(--sp-2); inline-size: 100%; max-inline-size: 26.25rem; min-block-size: var(--target); padding: 0 var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-pill); background: var(--tone-surface-2); color: var(--tone-text-subtle); font: inherit; font-size: var(--type-control); text-align: start; cursor: text; touch-action: manipulation; }
-  .ki-search .icon { color: var(--tone-text-muted); flex: none; }
-  .ki-search > span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* A narrow header (200 % text on a 1440 desk is 45rem): the search keeps its glyph and its accessible name, the words wait for room. */
-  @container header (max-width: 56rem) {
-    .ki-search { inline-size: var(--target); max-inline-size: var(--target); padding: 0; justify-content: center; }
-    .ki-search > span { display: none; }
-  }
+  .ki-more[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
   .ki-clock { display: inline-flex; align-items: center; gap: var(--sp-1); min-block-size: var(--target); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--tone-text-primary); font-size: var(--type-control); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; touch-action: manipulation; }
   .ki-clock .icon { width: 1rem; height: 1rem; color: var(--tone-text-muted); }
   /* The shared weather group (weather-status.ts) keeps its own classes; a hairline separates it from the clock and another the sunset from the temperature (kajimafix 01.9); only the sunset glyph takes the amber tone here. */
   .ki-weather { display: inline-flex; align-items: center; gap: var(--sp-1); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
   .ki-clock .tb-sun { color: var(--tone-weather); margin-inline-start: var(--sp-1); padding-inline-start: var(--sp-2); border-inline-start: 1px solid var(--tone-stroke); }
-  .ki-bell { position: relative; color: var(--tone-text-muted); }
-  .ki-bell[data-active]:not([data-active='0'])::after { content: ''; position: absolute; inset-block-start: 0.6rem; inset-inline-end: 0.6rem; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
-  .ki-tabbar, .ki-fab { display: none; }
+  .ki-tabbar { display: none; }
   .ki-banners { grid-area: banners; padding: var(--sp-4) var(--sp-6) 0; }
   .ki-main { grid-area: main; padding: var(--sp-3) var(--sp-6) var(--sp-10); }   /* spec §3: page inset 24 px, band to content 12 px */
-  @media (hover: hover) { .ki-more:hover, .ki-clock:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } .ki-search:hover { border-color: var(--tone-stroke-strong); } }
+  @media (hover: hover) { .ki-more:hover, .ki-clock:hover { background: var(--tone-surface-2); color: var(--tone-text-primary); } }
 }
 @media (min-width: 90rem) {
   .ki-main { padding-inline: var(--sp-8); }
@@ -235,7 +210,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
    on press with no transition, releasing over the usual duration on lift. */
 @media (hover: none) {
   .ki-tab:active, .ki-session:active, .ki-safety:active, .ki-more:active, .ki-share:active { background-color: var(--tone-surface-2); transition: none; }
-  .ki-fab:active { filter: brightness(0.92); transition: none; }
 }
 
 /* Full-map view mode (transport): the workspace takes the height, chrome stays. The desk pair keeps its page

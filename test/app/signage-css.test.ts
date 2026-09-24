@@ -146,100 +146,17 @@ describe('the row is three columns: lead, main, trail', () => {
   });
 });
 
-describe('the time-band tile family .tl (plan A.5): one control, five variants, tokens only', () => {
-  it('is a stroked surface-1 grid at least one target tall, with the medium radius and no shadow', () => {
-    const tl = decls('.tl', CSS);
-    expect(tl.display).toBe('grid');
-    expect(tl.border).toBe('1px solid var(--tone-stroke)');
-    expect(tl['box-shadow']).toBeUndefined();
-    expect(tl.background).toBe('var(--tone-surface-1)');
-    expect(tl['border-radius']).toBe('var(--r-md)');
-    expect(tl['min-block-size']).toBe('var(--target)');
-    expect(tl['min-inline-size']).toBe('0');
-    expect(tl['text-decoration']).toBe('none');
-    expect(tl['touch-action']).toBe('manipulation');
-  });
-  it('sets the value at the tile-l role, nowrap with an ellipsis, and the xl and m sizes from their roles', () => {
-    const value = decls('.tl-value', CSS);
-    expect(value['font-size']).toBe('var(--type-tile-l)');
-    expect(value['white-space']).toBe('nowrap');
-    expect(value['text-overflow']).toBe('ellipsis');
-    expect(value['font-variant-numeric']).toBe('tabular-nums');
-    expect(decls(".tl-value[data-size='xl']", CSS)['font-size']).toBe('var(--type-tile-xl)');
-    expect(decls(".tl-value[data-size='m']", CSS)['font-size']).toBe('var(--type-tile-m)');
-  });
-  it('colours the delay word by state in the roles delayTone names: late urgency, early weather, on time live', () => {
-    expect(decls(".tl-value[data-state='late']", CSS).color).toBe('var(--tone-urgency)');
-    expect(decls(".tl-value[data-state='early']", CSS).color).toBe('var(--tone-weather)');
-    expect(decls(".tl-value[data-state='ontime']", CSS).color).toBe('var(--tone-live)');
-  });
-  it('clamps the title to two lines at the tile-m role and sets the time at the tile-time role', () => {
-    const title = decls('.tl-title', CSS);
-    expect(title['font-size']).toBe('var(--type-tile-m)');
-    expect(title['-webkit-line-clamp']).toBe('2');
-    expect(title['line-clamp']).toBe('2');
-    expect(title.overflow).toBe('hidden');
-    expect(decls('.tl-time', CSS)['font-size']).toBe('var(--type-tile-time)');
-  });
-  it('keeps the context and the trail on one 13 px muted line that never wraps, with 14 px glyphs and a 20 px band glyph', () => {
-    const context = decls('.tl-context, .tl-trail', CSS);
+describe('the time-band tile family .tl went with its producers (WP5 B1)', () => {
+  it('keeps no tile, value, title, trail, skeleton or crossfade rule: only the count mark the phone still draws', () => {
+    const tileRules = [...CSS.matchAll(/(^|\n)([^{}\n]*\.tl(?:-[\w-]+)?\b[^{}]*)\{/g)].map((m) => m[2]!.trim());
+    expect(tileRules).toEqual(['.tl-context', '.tl-ctx-text', '.tl-context .icon']);
+    // transport/view.ts's count beside a stop's line is the one reader left.
+    expect(readFileSync(join(ROOT, 'app/src/transport/view.ts'), 'utf8')).toContain('<span class="tl-context" role="img"');
+    const context = decls('.tl-context', CSS);
     expect(context['font-size']).toBe('var(--type-secondary)');
     expect(context['white-space']).toBe('nowrap');
-    expect(context.color).toBe('var(--tone-text-muted)');
-    expect(decls('.tl-ctx-text', CSS)['text-overflow']).toBe('ellipsis');
-    expect(decls('.tl-context .icon, .tl-trail .icon', CSS)['inline-size']).toBe('0.875rem');
-    expect(decls('.tl-glyph', CSS)['inline-size']).toBe('1.25rem');
-  });
-  it('colours the kicker by domain, and the safety kicker by level, never by colour alone', () => {
-    expect(decls(".tl[data-domain='transit'] .kicker, .tl[data-domain='mobility'] .kicker", CSS).color).toBe('var(--tone-transit)');
-    expect(decls(".tl[data-domain='komunalno'] .kicker", CSS).color).toBe('var(--tone-weather)');
-    expect(decls(".tl[data-domain='events'] .kicker", CSS).color).toBe('var(--tone-events)');
-    expect(decls(".tl[data-domain='civic'] .kicker", CSS).color).toBe('var(--tone-civic)');
-    expect(decls(".tl[data-domain='safety'][data-level='calm'] .kicker", CSS).color).toBe('var(--tone-live)');
-    expect(decls(".tl[data-domain='safety'][data-level='urgent'] .kicker", CSS).color).toBe('var(--tone-urgency)');
-  });
-  it('lays the band and the row out as glyph, main, trail', () => {
-    const band = decls(".tl[data-variant='band'], .tl[data-variant='row']", CSS);
-    expect(band['grid-template-columns']).toBe('auto minmax(0, 1fr) auto');
-    expect(band['align-items']).toBe('center');
-    expect(decls('.tl-main', CSS)['min-inline-size']).toBe('0');
-    expect(decls(".tl[data-variant='band'] .tl-trail", CSS)['justify-self']).toBe('end');
-  });
-  it('tints komunalno, events, urgent and unknown from the tint roles and drops their stroke', () => {
-    expect(decls(".tl[data-tone='komunalno']", CSS)).toEqual({ background: 'var(--tone-tint-weather)', 'border-color': 'transparent' });
-    expect(decls(".tl[data-tone='events']", CSS)).toEqual({ background: 'var(--tone-tint-events)', 'border-color': 'transparent' });
-    expect(decls(".tl[data-tone='urgent']", CSS)).toEqual({ background: 'var(--tone-tint-urgency)', 'border-color': 'transparent' });
-    expect(decls(".tl[data-tone='unknown']", CSS)).toEqual({ background: 'var(--tone-tint-weather)', 'border-color': 'transparent' });
-  });
-  it('strokes calm and mobility at 1.5 px in their roles with no fill', () => {
-    expect(decls(".tl[data-tone='calm']", CSS)).toEqual({ background: 'transparent', border: '1.5px solid var(--tone-live)' });
-    expect(decls(".tl[data-tone='mobility']", CSS)).toEqual({ background: 'transparent', border: '1.5px solid var(--tone-transit)' });
-  });
-  it('fills the ink tile with the primary text colour and sets its text and kicker in the canvas colour (D8), its context in surface-3', () => {
-    const ink = decls(".tl[data-variant='ink']", CSS);
-    expect(ink.background).toBe('var(--tone-text-primary)');
-    expect(ink.color).toBe('var(--tone-surface-canvas)');
-    expect(ink['border-color']).toBe('transparent');
-    expect(decls(".tl[data-variant='ink'] .kicker", CSS).color).toBe('var(--tone-surface-canvas)');
-    expect(decls(".tl[data-variant='ink'] .tl-context", CSS).color).toBe('var(--tone-surface-3)');
-  });
-  it('strokes a notification-highlighted tile at 1.5 px in the brand accent, a stroke with no fill (plan T3.3)', () => {
-    expect(decls(".tl[data-highlight='1']", CSS)).toEqual({ 'box-shadow': 'inset 0 0 0 1.5px var(--tone-action-brand)' });
-  });
-  it('crossfades a replaced value at the base duration, with a reduced-motion twin and a lagano twin', () => {
-    expect(decls(".tl-value[data-replace]", CSS).animation).toBe('ki-fade var(--dur-base) var(--ease) both');
-    expect(atRule('@media (prefers-reduced-motion: reduce)', CSS, '.tl-value')).toContain('animation: none');
-    expect(decls(":root[data-lagano='1'] .tl-value[data-replace]", CSS).animation).toBe('none');
-  });
-  it('gives a skeleton tile the box of the finished one: every bar takes its type role’s line height, the glyph is round, and it is no control', () => {
-    expect(decls('.tl[data-skeleton]', CSS).cursor).toBe('default');
-    expect(decls('.tl-sk-label', CSS)['block-size']).toBe('calc(var(--type-secondary) * var(--lh-body))');
-    expect(decls('.tl-sk-value', CSS)['block-size']).toBe('calc(var(--type-tile-l) * var(--lh-tight))');
-    expect(decls('.tl-sk-time', CSS)['block-size']).toBe('calc(var(--type-tile-time) * var(--lh-tight))');
-    expect(decls('.tl-sk-title', CSS)['block-size']).toBe('calc(var(--type-tile-m) * var(--lh-title) * 2)');
-    expect(decls('.tl-sk-title1', CSS)['block-size']).toBe('calc(var(--type-tile-m) * var(--lh-title))');
-    expect(decls('.tl-sk-context', CSS)['block-size']).toBe('calc(var(--type-secondary) * var(--lh-body))');
-    expect(decls('.tl-sk-glyph', CSS)['border-radius']).toBe('50%');
+    // A count is a number: nothing to cut (lane-w-fix3's phone clamps).
+    expect(body('.tl-ctx-text', CSS)).not.toContain('ellipsis');
   });
   it('leaves the emergency-number tiles (.tile*) and the safety band (.band*) untouched: sigurnost.ts still renders them', () => {
     expect(decls('.tile-value', CSS)['font-size']).toBe('var(--type-tile-xl)');

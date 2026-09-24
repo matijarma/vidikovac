@@ -119,3 +119,89 @@ describe('docs/implementation-kaj-ima.md', () => {
     expect(doc).toContain('implement-vidikovac-newdesignsystem-md-agile-locket.md');
   });
 });
+
+// WP5 step 10 (22 Sep): the one §11 rewrite of the four product documents. Every
+// retired phrase is matched whitespace-tolerant, so a line break inside it cannot
+// hide it from the guard; the owner's strings are asserted as written.
+describe('the §11 rewrite of PRODUCT.md, DESIGN.md, docs/kiosk.md and INTEGRATION.md', () => {
+  const kiosk = read('docs/kiosk.md');
+  const product = read('PRODUCT.md');
+  const design = read('DESIGN.md');
+  const integration = read('app/src/kiosk/INTEGRATION.md');
+
+  it('docs/kiosk.md opens on the approved public screen and keeps the setup words', () => {
+    for (const text of ['## Javni zaslon, odobreno 22. rujna 2026.', 'U blizini', 'Adresa ili stajalište', '„Skeniraj za 10 minuta grada.”', '„uvijek”']) {
+      expect(kiosk, text).toContain(text);
+    }
+    expect(kiosk).toMatch(/Ništa\s+se\s+ne\s+izmišlja/);
+    for (const re of [
+      /svakih\s+8\s+sekundi/,
+      /gumbom\s+za\s+zaustavljanje/,
+      /Dodir\s+na\s+stajalište\s+otvara\s+istraživanje\s+grada/,
+      /Radovi\s+u\s+gradu/,
+      /Procjena\s+iz\s+ZET-ovih\s+podataka\s+o\s+vozilima;\s+ostalo\s+po\s+voznom\s+redu\./,
+      /zupčanik/i,
+      /tri\s+ploče/,
+      /bez\s+dodira\s+vraća\s+prozor/,
+      /zamrznuti\s+prikaz\s+i\s+dostupne\s+izvoze/,
+      // D3/D4 facts: rows are inserted at their time (W-fix7), the first-tram row
+      // follows the lines still to start (decision 27), the wall's footer is text.
+      /novi\s+redak\s+ulazi\s+na\s+dnu/,
+      /prvi\s+jutarnji\s+tramvaj\s+od\s+22\s+sata\s+dok\s+ne\s+krene/,
+      /„Osnovno”,\s+koje\s+se\s+otvara/,
+    ]) expect(kiosk).not.toMatch(re);
+    for (const re of [/60\s+sekundi\s+pokazuje\s+ploču\s+tog\s+stajališta/, /Vozni\s+red/, /barem\s+jedan\s+ritam/]) {
+      expect(kiosk).toMatch(re);
+    }
+  });
+
+  it('PRODUCT.md dates the approval, marks what it superseded and records the deferred vision', () => {
+    expect(product).toMatch(/On\s+22\s+September\s+2026\s+the\s+owner\s+approved\s+the\s+companion\s+round/);
+    expect(product).toContain('Superseded 22 September 2026:');
+    expect(product).toMatch(/"without\s+too\s+much\s+fuss"/);
+    expect(product).toMatch(/remain\s+pinned\s+so\s+that\s+a\s+person\s+can\s+easily\s+walk\s+with\s+it/);
+  });
+
+  it('DESIGN.md states the "U blizini" wall and none of the retired rules', () => {
+    expect(design).toContain('U blizini');
+    for (const re of [
+      /one\s+map-linked\s+highlight\s+held\s+for\s+20\s+seconds/,
+      /geographic\s+clusters\s+use\s+a\s+distinct\s+plus-count\s+mark/,
+      /frozen\s+attributed\s+exports/,
+      /Touch\s+exploration\s+has\s+search/,
+      /A\s+ZET\s+arrival\s+is\s+an\s+estimate\s+and\s+is\s+labelled\s+one/,
+      /enters\s+at\s+the\s+bottom,\s+fades\s+in\s+once\s+and\s+takes\s+its\s+place/,
+      /Otherwise\s+touch\s+opens\s+only\s+Osnovno/,
+      /Phone\s+destinations\s+are\s+Sada,\s+Karta,\s+Događanja\s+and\s+Još/,
+    ]) expect(design).not.toMatch(re);
+    expect(design).toMatch(/Sada\s+·\s+Karta\s+·\s+Još/);
+  });
+
+  it('INTEGRATION.md names the catalogue adapter and none of the retired testids', () => {
+    expect(integration).toContain('kiosk/strings.ts');
+    for (const re of [/kiosk-ticker/, /kiosk-lastrun/, /strings-hr\.ts/, /strings-en\.ts/]) expect(integration).not.toMatch(re);
+    expect(integration).toContain('[data-testid=stop-board]');
+  });
+
+  // §16.8 and WP5 §0 ruling 3: the owner reads every new or changed Croatian
+  // string before it ships, and that read-through is the last row of the
+  // manual checklist in docs/kaj-verification.md.
+  it('ends the manual checklist with the owner\u2019s read-through of the Croatian copy', () => {
+    const verification = read('docs/kaj-verification.md');
+    const start = verification.indexOf('### Ručne provjere na uređaju');
+    expect(start, 'the manual checklist heading').toBeGreaterThan(-1);
+    const next = verification.indexOf(NL + '#', start + 1);
+    const section = verification.slice(start, next === -1 ? undefined : next);
+    const rows = section.split(NL).filter((line) => /^\| R\d+ \|/.test(line));
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[rows.length - 1]).toMatch(/vlasnik\s+čita\s+svaki\s+novi\s+ili\s+promijenjeni\s+hrvatski\s+tekst/);
+  });
+
+  it.each([
+    ['PRODUCT.md', product], ['DESIGN.md', design], ['docs/kiosk.md', kiosk], ['app/src/kiosk/INTEGRATION.md', integration],
+  ])('%s: never "zid", no em dash, no ellipsis character', (name, text) => {
+    expect(text, name).not.toMatch(/(?<![\p{L}\p{N}_])zid/iu);
+    expect(text, name).not.toContain('—');
+    expect(text, name).not.toContain('…');
+  });
+});

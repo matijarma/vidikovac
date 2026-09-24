@@ -77,8 +77,10 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   element.dataset.interactive = String(interactive);
   element.dataset.testid = 'schema-map';
   element.style.setProperty('--schema-bottom-pad', `${Math.max(0, options.fitPadding?.bottom ?? 0)}px`);
-  element.innerHTML = `${sceneMarkup(i18n, { prefix: 'schema', interactive, externalSelection: true })}
-    <p class="schema-note" data-testid="schema-note">${escapeHtml(i18n.t('motion.note'))}</p>`;
+  // The position note is the phone's: a public display prints no caveat
+  // (companion brief §12 "Never"), so its schema carries no note at all.
+  element.innerHTML = `${sceneMarkup(i18n, { prefix: 'schema', interactive, externalSelection: true })}${publicDisplay ? '' : `
+    <p class="schema-note" data-testid="schema-note">${escapeHtml(i18n.t('motion.note'))}</p>`}`;
   container.appendChild(element);
   container.setAttribute('aria-label', options.ariaLabel);
   container.dataset.renderer = 'schema';
@@ -86,7 +88,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
   const routesCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=schema-routes]')!;
   const vehicleCanvas = element.querySelector<HTMLCanvasElement>('[data-testid=schema-vehicles]')!;
   const legend = element.querySelector<HTMLElement>('[data-testid=schema-legend]')!;
-  const note = element.querySelector<HTMLElement>('[data-testid=schema-note]')!;
+  const note = element.querySelector<HTMLElement>('[data-testid=schema-note]');
   const density = DENSITY;
   let destroyed = false, paused = false, down = false;
   let status: MapStatus = 'loading';
@@ -179,7 +181,7 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
       ? i18n.t('transport.mapUnavailable') : i18n.t('transport.schemaTramsOnly');
     legend.textContent = text;
     vehicleCanvas.setAttribute('aria-label', `${title}. ${text}`);
-    note.textContent = i18n.t('motion.note');
+    if (note) note.textContent = i18n.t('motion.note');
     const hint = element.querySelector('.scene-canvas-hint');
     if (hint) hint.textContent = canvasHint();
   }

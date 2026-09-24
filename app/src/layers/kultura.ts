@@ -43,7 +43,7 @@ const SOURCE_NAME: Record<CultureEventSource, string> = {
   etnografski: 'Etnografski muzej',
   kvartovske: 'Kvartovske novosti',
 };
-/** Per-source attribution naming the licence; the kiosk card (grad-teaser.ts) reuses the kvartovske string. */
+/** Per-source attribution naming the licence, as an event's detail prints it. */
 export const CULTURE_SOURCE_ATTRIBUTION: Record<CultureEventSource, string> = {
   kulturpunkt: 'Kulturpunkt (CC BY-SA 3.0 HR)',
   etnografski: 'Etnografski muzej',

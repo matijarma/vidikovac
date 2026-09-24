@@ -146,7 +146,7 @@
 /* What comes next at a stop (shared/city/arrivals.ts): the time sits at the
    row's end, bold and never wrapped, like the delay word it replaces there.
    An estimate carries the live dot and the live tone; a timetable row is plain
-   ink, and says "po redu vožnje" on its second line. */
+   ink, with no word for its kind and no second line. */
 .t-eta { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--type-control); font-weight: var(--weight-bold); white-space: nowrap; }
 .t-eta[data-live='true'] { color: var(--tone-live); }
 .t-live { flex: none; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: currentColor; }

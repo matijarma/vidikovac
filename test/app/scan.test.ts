@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScanFail, ScanOk, ScreenStop } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
-import { codeFromHash, confirmLabel, confirmStopLine, createScanPage, dashboardUrl } from '../../app/src/scan';
+import { codeFromHash, confirmLabel, createScanPage, dashboardUrl } from '../../app/src/scan';
 import type { QrScannerDeps, QrScannerHandle } from '../../app/src/ui/qrScanner';
 import { flush, text } from './helpers';
 
@@ -97,9 +97,10 @@ describe('codeFromHash', () => {
   });
 });
 
-// The confirm line is assembled from parts joined by a middle dot, never by
-// interpolating a sentence and then scrubbing the holes with regexes: an
-// absent part leaves nothing behind.
+// The session label the status line says while the page hands over to /d/ is
+// assembled from parts joined by a middle dot, never by interpolating a
+// sentence and then scrubbing the holes with regexes: an absent part leaves
+// nothing behind.
 describe('confirmLabel', () => {
   const i18n = createDefaultI18n('hr');
   it('joins the screen label, the district and the minutes', () => {
@@ -124,26 +125,6 @@ describe('confirmLabel', () => {
     expect(confirmLabel(KIOSK, en, NOW)).toBe('Kavana Velebit · Donji grad · 10 minutes');
     expect(confirmLabel({ ...KIOSK, screenLabel: null }, en, NOW)).toBe('Café · Donji grad · 10 minutes');
     expect(confirmLabel(PHONE, en, NOW)).toBe("Another person's phone · 5 minutes");
-  });
-});
-
-describe('confirmStopLine', () => {
-  const i18n = createDefaultI18n('hr');
-  it('names the stop and its lines when the screen stands at one', () => {
-    expect(confirmStopLine(AT_STOP, i18n)).toBe('Stanica Trg bana J. Jelačića · linije 6, 11, 12, 13');
-  });
-  it('names at most six lines at a hub', () => {
-    const hub = { ...AT_STOP, screen: { ...AT_STOP.screen!, stop: { ...STOP, routes: ['1', '2', '3', '4', '5', '6', '7', '8'] } } };
-    expect(confirmStopLine(hub, i18n)).toBe('Stanica Trg bana J. Jelačića · linije 1, 2, 3, 4, 5, 6');
-  });
-  it('names only the stop when the data lists no lines for it', () => {
-    const bare = { ...AT_STOP, screen: { ...AT_STOP.screen!, stop: { ...STOP, routes: [] } } };
-    expect(confirmStopLine(bare, i18n)).toBe('Stanica Trg bana J. Jelačića');
-  });
-  it('is null for a screen without a stop and for a phone', () => {
-    expect(confirmStopLine(KIOSK, i18n)).toBeNull();
-    expect(confirmStopLine({ ...KIOSK, screen: { kind: 'venue', expiresAt: null, stop: null } }, i18n)).toBeNull();
-    expect(confirmStopLine(PHONE, i18n)).toBeNull();
   });
 });
 
@@ -301,7 +282,6 @@ describe('createScanPage', () => {
     const { root } = mountWithCamera();
     const selectors = [
       'h1',
-      '[data-testid=confirm-card]',
       '[data-testid=scan-camera-region]',
       '.scan-label',
       '[data-testid=code-input]',
@@ -368,8 +348,8 @@ describe('createScanPage', () => {
     const { root, scan, replaceUrl, navigate, form } = mount({ hash: '#ABCD-EFGH' });
     await flush();
     expect(scan).toHaveBeenCalledWith('ABCDEFGH');
-    const card = root.querySelector<HTMLElement>('[data-testid=confirm-card]')!;
-    expect(card.hidden).toBe(true);
+    // No confirm card and no second "unlock" decision: the redemption is the grant (WP5 A3).
+    expect(root.querySelector('[data-testid=confirm-card]')).toBeNull();
     expect(root.querySelector('[data-testid=unlock]')).toBeNull();
     expect(form.hidden).toBe(true);
     expect(navigate).toHaveBeenCalledWith(dashboardUrl(KIOSK));
@@ -402,7 +382,7 @@ describe('createScanPage', () => {
   it('successful redemption introduces no second unlock or cancel decision', async () => {
     const { root, form } = mount({ hash: '#ABCD-EFGH' });
     await flush();
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+    expect(root.querySelector('[data-testid=confirm-card]')).toBeNull();
     expect(root.querySelector('[data-testid=confirm-cancel]')).toBeNull();
     expect(form.hidden).toBe(true);
   });
@@ -420,7 +400,7 @@ describe('createScanPage', () => {
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(input.getAttribute('aria-describedby')).toBe('scan-hint scan-error');
     expect(document.activeElement).toBe(input);
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+    expect(root.querySelector('[data-testid=confirm-card]')).toBeNull();
   });
 
   it('maps the client-side network failure to the network sentence, with no action', async () => {
@@ -450,7 +430,7 @@ describe('createScanPage', () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it('keeps the keyboard during the check: the field is read-only and busy, never disabled; the check reads Provjera…', async () => {
+  it('keeps the keyboard during the check: the field is read-only and busy, never disabled; the check reads Provjera', async () => {
     let release!: (value: ScanOk) => void;
     const pending = new Promise<ScanOk>((resolve) => {
       release = resolve;
@@ -461,19 +441,19 @@ describe('createScanPage', () => {
     send();
     await flush();
     expect(scan).toHaveBeenCalledTimes(1);
-    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda…');
+    expect(text(root.querySelector('[data-testid=scan-status]'))).toBe('Provjera koda');
     expect(input.disabled).toBe(false);
     expect(input.readOnly).toBe(true);
     expect(input.getAttribute('aria-busy')).toBe('true');
     expect(submitButton.disabled).toBe(true);
-    expect(text(submitButton)).toBe('Provjera…');
+    expect(text(submitButton)).toBe('Provjera');
     release(KIOSK);
     await flush();
     expect(text(root.querySelector('[data-testid=scan-status]'))).toContain('Kavana Velebit');
     expect(input.readOnly).toBe(false);
     expect(input.hasAttribute('aria-busy')).toBe(false);
     expect(text(submitButton)).toBe('Provjeri kod');
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+    expect(root.querySelector('[data-testid=confirm-card]')).toBeNull();
   });
 
   it('destroy() takes the section off the page', () => {
@@ -589,7 +569,7 @@ describe('camera region', () => {
     button.click();
     expect(scroll).toHaveBeenCalledWith({ block: 'center' });
     expect(before(region, root.querySelector('form')!)).toBe(true);
-    expect(text(status)).toBe('Kamera se uključuje…');
+    expect(text(status)).toBe('Kamera se uključuje');
     expect(document.activeElement).toBe(scanner().element.querySelector('[data-qr-scan-cancel]'));
     await flush();
     expect(text(status)).toBe('Kamera je uključena.');
@@ -663,12 +643,12 @@ describe('camera region', () => {
     release(KIOSK);
     await flush();
     expect(button.disabled).toBe(false);
-    expect(root.querySelector<HTMLElement>('[data-testid=confirm-card]')!.hidden).toBe(true);
+    expect(root.querySelector('[data-testid=confirm-card]')).toBeNull();
   });
 });
 
 // The stylesheet composes the page in the signage roles: the h1 at display,
-// the confirm title at title, the hint at secondary, the intro at control; the
+// the hint at secondary, the intro at control; the
 // actions stack full width; the error box is the urgency tint at body size.
 describe('scan.css composes the page in the type roles', () => {
   const CSS = stripComments(read('app', 'src', 'ui', 'scan.css'));
@@ -688,12 +668,9 @@ describe('scan.css composes the page in the type roles', () => {
     expect(CSS).toMatch(/^\.scan-error\[hidden\]\s*\{\s*display:\s*none;?\s*\}/m);
   });
 
-  it('sets the h1 at display, the confirm title at title, the code at 2rem mono, the hint at secondary and the intro at control', () => {
+  it('sets the h1 at display, the hint at secondary and the intro at control; the confirm card left with its rules', () => {
     expect(ruleBody(CSS, /^\.scan-title\s*\{/m)).toMatch(/font-size:\s*var\(--type-display\)/);
-    expect(ruleBody(CSS, /^\.scan-confirm-title\s*\{/m)).toMatch(/font-size:\s*var\(--type-title\)/);
-    const code = ruleBody(CSS, /^\.scan-confirm-code\s*\{/m);
-    expect(code).toMatch(/font-size:\s*2rem/);
-    expect(code).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(CSS).not.toContain('.scan-confirm');
     expect(ruleBody(CSS, /^\.scan-hint\s*\{/m)).toMatch(/font-size:\s*var\(--type-secondary\)/);
     expect(ruleBody(CSS, /^\.scan-intro\s*\{/m)).toMatch(/font-size:\s*var\(--type-control\)/);
   });

@@ -66,7 +66,6 @@ import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
 
 export type { KioskPhase } from './kiosk/credentials';
-export { safetyStripText, teaserCards, type TeaserCard } from './kiosk/teaser';
 
 /** The paired compositions refresh their layer's modules on this tick; nothing else moves on it. */
 export const REFRESH_MS = 20_000;

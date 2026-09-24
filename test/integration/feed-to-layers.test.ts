@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The seam the unit tests could not see: real upstream samples go through the
-// real module parsers, and the layers and the kiosk teaser render from that
-// output. Hand-built fixtures let Area A and Area C use two different `data`
+// real module parsers, and the layers and the wall's safety strip render from
+// that output. Hand-built fixtures let Area A and Area C use two different `data`
 // vocabularies while every test stayed green and the dashboard showed
 // "Nedostupno" over healthy data (final review, C1). Nothing here builds a
 // FeedItem by hand.
@@ -19,10 +19,11 @@ import { delayTone } from '../../app/src/experience/delay';
 import { renderLayer } from '../../app/src/layers';
 import { dataText } from '../../app/src/panels/panel';
 import { routeDelays } from '../../app/src/layers/u-pokretu';
-import { safetyStripText, teaserCards } from '../../app/src/kiosk';
 import { loadSadaFeed } from '../../app/src/city/feed';
 import type { DepartureBoard } from '../../shared/city/types';
 import type { LayerContext } from '../../app/src/layers/types';
+import { safetyStrip } from '../../app/src/kiosk/local';
+import { kioskStrings } from '../../app/src/kiosk/strings';
 
 const NOW = FIXTURE_NOW.getTime();
 const i18n = createDefaultI18n('hr');
@@ -176,63 +177,16 @@ describe('every layer renders the real feed output', () => {
   });
 });
 
-describe('the kiosk teaser renders the real feed output', () => {
+describe('the wall\u2019s safety strip reads the real feed output', () => {
   // Exactly what /api/teaser answers: the open modules plus the three session
   // teasers, each through teaserSubset (worker/routes/feed.ts).
   const teaser = [...OPEN_MODULES, ...TEASER_MODULES].map((id) => teaserSubset(snapshots[id]!));
-  // The two sentences kiosk/teaser.ts puts in a body when a source gives it
-  // nothing: the loading word for a module the payload lacks, the empty
-  // sentence for a city feed with no licensed row. Pinned as literals, because
-  // i18n.t answers a missing leaf with the bare key, and "not.toBe('kiosk.…')"
-  // holds whatever the card says (the kiosk.teaser* keys went with T6.3). The
-  // first test checks the literals against the catalogue, so a reworded
-  // sentence fails here and updates the pins instead of hollowing them.
-  const LOADING = 'učitavanje podataka';
-  const CITY_EMPTY = 'Trenutačno nema novih obavijesti.';
-
-  it('pins the two placeholder sentences a card can fall back to', () => {
-    expect(i18n.t('status.loading')).toBe(LOADING);
-    expect(i18n.t('kiosk.story.empty')).toBe(CITY_EMPTY);
-  });
-
-  it('puts real values on every card and leaves none on the loading word', () => {
-    const cards = teaserCards(teaser, i18n, NOW);
-    const card = (id: string) => cards.find((c) => c.id === id)!;
-    expect(card('weather').body).toMatch(/-?\d+([.,]\d+)? °C/);
-    expect(card('quake').body).toMatch(/M \d+([.,]\d+)?/);
-    expect(card('closures').body).toMatch(/^\d+ zatvaranj/);
-    for (const c of cards) {
-      expect(c.body, c.id).not.toContain(UNAVAILABLE);
-      expect(c.body, c.id).not.toContain(DASH);
-      expect(c.body, c.id).not.toBe(LOADING);
-    }
-  });
-
-  it('fills every teaser card attribution so no brace reaches the kiosk (R-62)', () => {
-    const cards = teaserCards(teaser, i18n, NOW);
-    for (const c of cards) {
-      for (const text of [c.title, c.body, c.attribution?.text ?? '']) {
-        expect(text, c.id).not.toContain('{');
-        expect(text, c.id).not.toContain('}');
-      }
-    }
-  });
-
-  it('puts one city row on the screen from the real dogadanja fixtures, credited to its own source', () => {
-    const card = teaserCards(teaser, i18n, NOW).find((c) => c.id === 'city')!;
-    expect(card).toBeDefined();
-    expect(card.body).not.toBe('');
-    expect(card.body).not.toBe(LOADING);
-    expect(card.body).not.toBe(CITY_EMPTY);
-    expect(card.body).not.toContain(UNAVAILABLE);
-    expect(card.attribution?.text).toMatch(/^Izvor: /);
-  });
 
   it('keeps the safety strip counting real closures', () => {
-    const strip = safetyStripText(teaser, i18n);
-    expect(strip.closures).toMatch(/^\d+ zatvaranj/);
-    expect(strip.cap).not.toBe('');
-    expect(strip.pharmacy).not.toBe('');
+    const strip = safetyStrip(teaser, null, i18n, kioskStrings('hr'), Date.now());
+    expect(strip.closures.text).toMatch(/^\d+ zatvaranj/);
+    expect(strip.warning.text).not.toBe('');
+    expect(strip.pharmacy.label).not.toBe('');
   });
 });
 

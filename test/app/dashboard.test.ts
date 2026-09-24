@@ -452,7 +452,7 @@ describe('session states', () => {
     expect(text(sheet.querySelector('.dialog-title'))).toBe('Otključano do 14:42');
     expect(text(sheet.querySelector('[data-testid=sheet-time]'))).toBe('Preostalo 10:00');
     const body = text(sheet.querySelector('.dialog-body'));
-    expect(body).toContain('Sa zaslona Kavana Velebit, stanica Trg bana J. Jelačića.');
+    expect(body).toContain('Sa zaslona Kavana Velebit, stajalište Trg bana J. Jelačića.');
     expect(body).toContain('Na ovom pogledu su 2 uređaja.');
     expect(body).not.toMatch(/stanje sesije/i);
     expect(body).not.toContain('skenirano sa zaslona');
@@ -1241,20 +1241,20 @@ describe('the sticky header and notices in flow', () => {
 // in reading order on both surfaces; the CSS orders and sizes them but never
 // hides a control that exists.
 describe('the shell regions', () => {
-  it('is five children in order: the status line, banners, main, the FAB slot and the tab bar, with no rail, no sidebar and no kvart aside', () => {
+  it('is five children in order: the status line, the presentation panel, banners, main and the tab bar, with no rail, no sidebar, no kvart aside and no FAB slot', () => {
     const { root } = mount();
     const shell = root.querySelector<HTMLElement>('.ki')!;
     const order = [...shell.children].filter((el) => !el.matches('h1, p')).map((el) => el.className);
-    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-fab-slot', 'ki-tabbar']);
+    expect(order).toEqual(['ki-head ki-status', 'ki-presentation', 'ki-banners', 'ki-main', 'ki-tabbar']);
     expect(shell.querySelector('.ki-rail')).toBeNull();
     expect(shell.querySelector('nav.ki-side')).toBeNull();
     expect(shell.querySelector('.ki-kvart')).toBeNull();
     const head = shell.querySelector<HTMLElement>('header.ki-head')!;
     expect(head.parentElement).toBe(shell);
     expect(head.dataset.region).toBe('status');
-    expect(shell.querySelector<HTMLElement>('.ki-fab-slot')!.dataset.region).toBe('fab');
+    expect(shell.querySelector('[data-region=fab]')).toBeNull();
     expect(shell.querySelector('nav.ki-tabbar')?.getAttribute('aria-label')).toBe('Domene');
-    expect(shell.dataset.fab).toBe('0');
+    expect(shell.dataset.fab).toBeUndefined();
   });
 });
 

@@ -165,7 +165,7 @@ describe('the transport workspace', () => {
     const { raw, storage } = memoryStorage();
     const mapMode = createMapModeStore({ storage });
     expect(mapMode.snapshot()).toBe('map');
-    const { maps, last, made } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context, navigate } = ctx({ maps });
     context.mapMode = mapMode;
     const main = document.createElement('main');
@@ -241,11 +241,13 @@ describe('the transport workspace', () => {
     paint();
     expect(text(toggle)).toBe('Map');
     expect(toggle.getAttribute('aria-label')).toBe('City map');
-    const count = made.length;
     context.lightweight = true;
     paint();
-    expect(document.querySelector('[data-testid=map-mode-toggle]')).toBeNull();
-    expect(made).toHaveLength(count);
+    // R-L2 (WP5 A3): the lightweight path is this same workspace; the toggle is not offered and the renderer is
+    // never the schema. The page hands a lightweight workspace map slots without a factory (dashboard.ts), so no
+    // canvas is made there at all (test/app/layers.test.ts); these slots keep their factory, so a map is made here.
+    expect(document.querySelector<HTMLElement>('[data-testid=map-mode-toggle]')?.hidden ?? true).toBe(true);
+    expect(last().options.renderer).toBe('map');
     stop();
     maps.destroy();
     // Private mode and stale values do not change the default or break an in-tab choice.
@@ -348,7 +350,7 @@ describe('the sheet', () => {
     expect(text(pending)).toBe(createDefaultI18n('hr').t('status.loading'));
     // No place of its own on this context: Trg bana J. Jelačića [O-65], with no circle to print yet.
     expect(text(q('[data-testid=transport-peek]'))).toBe('Trg bana J. Jelačića');
-    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava…');
+    expect(text(q('[data-testid=map-status]'))).toBe('Karta se učitava');
     context.nearby = NEARBY;
     render(context);
     expect(q('[data-testid=nearby-pending]')).toBeNull();
@@ -392,7 +394,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-vehicles] button').id).toBe('t-row-vehicle-vehicle_1');
     expect(vehicleRows.every((row) => row.querySelector('button.t-row .line[data-size="m"]') !== null)).toBe(true);
     expect(vehicleRows.map((row) => text(row.querySelector('.row-title')))).toEqual(['Smjer istok', 'Smjer nepoznat']);
-    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stanici');
+    expect(text(vehicleRows[1]!.querySelector('.row-sub'))).toBe('stoji na stajalištu');
     const stops = all<HTMLElement>('[data-testid=route-stops] li');
     expect(stops.length).toBeGreaterThan(15);
     expect(visible('[data-testid=route-stops] li')).toHaveLength(12);
@@ -401,7 +403,7 @@ describe('search and selection', () => {
     expect(q<HTMLElement>('[data-testid=route-stops] button').id).toMatch(/^t-row-stop-/);
     const allStops = q<HTMLButtonElement>('[data-testid=toggle-stops]');
     expect(allStops).toMatchObject({ dataset: { action: 'toggle-fold', fold: 'stops' } }); // the workspace's one fold contract
-    expect(text(allStops)).toBe(`sve stanice (${stops.length})`);
+    expect(text(allStops)).toBe(`sva stajališta (${stops.length})`);
     expect(allStops.getAttribute('aria-expanded')).toBe('false');
     allStops.click();
     expect(visible('[data-testid=route-stops] li')).toHaveLength(stops.length);
@@ -415,7 +417,7 @@ describe('search and selection', () => {
     expect(last().select).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'stop', id: stopOption.dataset.id }), { fit: false }); // a stop opens the sheet, so no fit (§16.4);
     expect(navigate).toHaveBeenLastCalledWith('u-pokretu', { kind: 'stop', id: stopOption.dataset.id });
     expect(text(q('[data-testid=stop-title]'))).toBe('Črnomerec');
-    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stanica"
+    expect(text(q('[data-testid=stop-meta]'))).toMatch(/^\d+ peron/); // "N perona" at secondary; the head never repeats "Stajalište"
     expect(text(q('[data-testid=stop-routes]'))).toContain('6');
     const stopRoute = q<HTMLElement>('[data-testid=stop-routes] .row');
     expect(stopRoute.querySelector('button.t-row .line[data-size="m"]')).not.toBeNull();
@@ -524,6 +526,9 @@ describe('the map, the paired screen and the feed', () => {
     expect(q<HTMLElement>('[data-testid=transport-toolbar]').hidden).toBe(true);
     expect(q<HTMLElement>('[data-testid=map-mode-toggle]').hidden).toBe(true); // a public screen has no finger for the switch
     expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset).toMatchObject({ kiosk: 'true', sheet: 'open' });
+    // A public display prints no caveat under its sheet (companion brief §12); the phone keeps the note.
+    expect(q<HTMLElement>('[data-testid=transport-note]').hidden).toBe(true);
+    expect(text(q('[data-testid=transport-note]'))).toBe('');
   });
 });
 
@@ -911,7 +916,7 @@ describe('what comes next at a stop', () => {
     // Beyond the countdown horizon, and with no vehicle behind it: the clock and the timetable mark.
     expect(text(rows[1])).toContain('Dubec');
     expect(rows[1]!.dataset.live).toBe('false');
-    expect(text(rows[1])).not.toContain('po redu vožnje'); // the form says it, never a word per row [O-27]
+    expect(text(rows[1])).not.toContain('vozni red'); // the form says it, never a word per row [O-27]
     expect(rows[1]!.querySelector('time')).not.toBeNull();
     expect(rows[1]!.querySelector('.t-live')).toBeNull();
     // One note, first in the sheet, and the retired sentence and slot are gone.

@@ -106,7 +106,7 @@ describe('the stop sheet says what comes next, first', () => {
     expect(rowOf(html, 't2')).toContain('<time');
     expect(rowOf(html, 't2')).toContain('data-live="false"');
     expect(html).toContain('12:24');
-    expect(html.split('po redu vožnje').length - 1).toBe(0);
+    expect(html.split('vozni red').length - 1).toBe(0);
     expect(html.split('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.').length - 1).toBe(1);
     expect(html).toContain('aria-label="uživo"');
     expect(html).toContain('Dubec');
@@ -135,13 +135,13 @@ describe('the stop sheet says what comes next, first', () => {
     expect(tracked).toContain('za 4 min');
     expect(tracked).toContain('data-live="true"');
     expect(tracked).toContain('aria-label="uživo"');
-    expect(tracked).not.toContain('po redu vožnje');
+    expect(tracked).not.toContain('vozni red');
     // Beyond it a countdown would be a guess dressed as a fact: 10:14 UTC is 12:14 in Zagreb.
     const far = rowOf(html, 'far');
     expect(far).toContain('12:14');
     expect(far).not.toContain('za 1');
     expect(far).toContain('data-live="false"');
-    expect(far).not.toContain('po redu vožnje');
+    expect(far).not.toContain('vozni red');
   });
 
   it('labels a row beyond the horizon too: a tracked clock keeps the live dot, a timetable clock keeps the mark', () => {
@@ -157,12 +157,12 @@ describe('the stop sheet says what comes next, first', () => {
     expect(live).toContain('class="t-live"');
     expect(live).toContain('aria-label="uživo"');
     expect(live).toContain('data-live="true"');
-    expect(live).not.toContain('po redu vožnje');
+    expect(live).not.toContain('vozni red');
     const plan = rowOf(html, 'farPlan');
     expect(plan).toContain('12:18');
     expect(plan).toContain('<time');
     expect(plan).toContain('data-live="false"');
-    expect(plan).not.toContain('po redu vožnje');
+    expect(plan).not.toContain('vozni red');
     expect(plan).not.toContain('class="t-live"');
   });
 
@@ -243,6 +243,14 @@ describe('the stop sheet says what comes next, first', () => {
     const named = stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' });
     expect(named).toContain('data-testid="stop-title"></h3>');
     expect(named).not.toContain('Pošalji');
+  });
+
+  it('the save label names a stop by its name, never by its id; a refused name saves it without one [B-7]', () => {
+    const label = (html: string): string => html.split('class="btn-quiet icon-btn t-save"')[1]!.match(/aria-label="([^"]*)"/)![1]!;
+    const data = { routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row()], arrivalsStatus: 'live' as const };
+    expect(label(stop([row()]))).toBe('Spremi stajalište Kvaternikov trg');
+    expect(label(stopDetailMarkup(createDefaultI18n('en'), { stop: STOP, ...data }))).toBe('Save stop Kvaternikov trg');
+    expect(label(stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, ...data }))).toBe('Spremi stajalište');
   });
 
   it('the stop\'s name and its arrivals stand in one element, the stop-board probe (§15.6, §16.4), with the meta and the lines outside it', () => {

@@ -25,7 +25,6 @@ import { weatherMarkup } from '../../app/src/kiosk/markup';
 import { creditText, eventGroups, fitRows, fitSentences, joinWithFit, pairedMarkup, row, sentencesOf, statusLine } from '../../app/src/kiosk/paired';
 import { classifySetupError } from '../../app/src/kiosk/start';
 import { DEFAULT_STOP_ID, rankStops, sortRouteIds } from '../../app/src/kiosk/stops';
-import { safetyStripText, teaserCards } from '../../app/src/kiosk/teaser';
 import { fill, kioskStrings, plural } from '../../app/src/kiosk/strings';
 // WP2 step 4: the framed wall (mapview.ts kioskCityLabels, map/frame.ts frameView).
 import { kioskCityLabels } from '../../app/src/kiosk/mapview';
@@ -194,14 +193,18 @@ describe('districts, stops and the wizard\u2019s error sentences', () => {
 });
 
 describe('formatting for a screen read from steps away', () => {
-  it('does not present a retrieval or date-only publication as an observation clock', () => {
+  it('a block states its source\'s condition in a word and never a fetch or update time (companion brief §12)', () => {
     const observation = snap('dhmz-now', []);
-    expect(statusLine(observation, hr)).toBe('podaci od 14:31');
+    expect(statusLine(observation, hr)).toBe('');
     const retrieved = { ...snap('dogadanja', []), sourceUpdatedAt: undefined };
-    expect(statusLine(retrieved, hr)).toBe('dohvaćeno 14:31');
-    expect(statusLine(retrieved, kioskStrings('en'))).toBe('retrieved 14:31');
+    expect(statusLine(retrieved, hr)).toBe('');
+    expect(statusLine(retrieved, kioskStrings('en'))).toBe('');
+    expect(statusLine(snap('dhmz-now', [], 'stale'), hr)).toBe('zastarjelo');
+    expect(statusLine(snap('dogadanja', [], 'stale'), kioskStrings('en'))).toBe(kioskStrings('en').paired.stale);
     expect(statusLine(snap('glasnik', []), hr)).toBe('');
     expect(statusLine(snap('glasnik', [], 'stale'), hr)).toBe('zastarjelo');
+    expect(statusLine(snap('dhmz-now', [], 'down'), hr)).toBe(hr.paired.sourceDown);
+    expect(statusLine(undefined, hr)).toBe('');
   });
   it('uses Croatian decimals, spaced units and the Zagreb wall clock', () => {
     expect(fmtNumber('hr', 12.8)).toBe('12,8');
@@ -216,14 +219,15 @@ describe('formatting for a screen read from steps away', () => {
 });
 
 describe('local content from the stop-scoped teaser', () => {
-  it('reads the observation into a reading, a condition, three details and its own time', () => {
+  it('reads the observation into a reading, a condition, three details and its own time (for freshness, never for print)', () => {
     const w = weatherNow(MODULES, hr, 'hr');
     expect(w.state).toBe('live');
     expect(w.temperature).toBe('21,4 °C');
     expect(w.condition).toBe('vedro');
     expect(w.station).toBe('Zagreb-Maksimir');
     expect(w.details).toEqual(['vlaga 55 %', 'vjetar sjeverozapad 2,3 m/s', '1016 hPa']);
-    expect(w.observedAt).toBe('opaženo 14:00');
+    expect(w.observedMs).toBe(Date.parse('2026-09-11T12:00:00Z'));
+    expect(w).not.toHaveProperty('observedAt');
     expect(weatherNow(MODULES.filter((m) => m.module !== 'dhmz-now'), hr, 'hr').state).toBe('loading');
     const dash = MODULES.map((m) => (m.module === 'dhmz-now' ? snap('dhmz-now', [item('dhmz-now', 'o1', 'observation', 'Zagreb-Maksimir', { at: '2026-09-11T12:00:00Z', data: { temp: 11.2, weather: '-' } })]) : m));
     expect(weatherNow(dash, hr, 'hr').condition).toBe(''); // DHMZ's "-" is "nothing to report", not a word
@@ -283,22 +287,18 @@ describe('local content from the stop-scoped teaser', () => {
     expect(byId.get('city:komunalne:1')?.meta).toBe('zadnja izmjena čet 2. 7.');
     expect(cityDateLine(item('dogadanja', 'x', 'event', 'x', { at: '2026-09-11T00:00:00Z', dateBasis: 'unknown' }), hr, 'hr')).toBe('');
   });
-  it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
+  it('lets every source the payload carries into the city rotation, the Assembly session included', () => {
     const unfiltered = MODULES.map((m) => (m.module === 'dogadanja' ? snap('dogadanja', [item('dogadanja', 'kp:9', 'event', 'Koncert u Močvari (Kulturpunkt)', { at: '2026-09-11T20:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt' } }), ...m.items]) : m));
     const list = stories(unfiltered, hr, 'hr', NOW);
     expect(list.some((s) => s.title.includes('Kulturpunkt'))).toBe(true); // every source the app fetches reaches the screen
     expect(list.some((s) => s.id === 'city:skupstina:13')).toBe(true);
-    const cards = teaserCards(MODULES, i18n, NOW);
-    expect(cards.map((c) => c.id)).toEqual(['weather', 'quake', 'closures', 'city', 'invitation']);
-    expect(cards.find(c => c.id === 'invitation')?.body).toBe('Skeniraj za 10 minuta grada.');
-    expect(cards[0]!.body).toBe('21,4 °C · vedro');
-    expect(cards[1]!.body).toBe('M 1,6 · CROATIA');
-    expect(cards[2]!.body).toBe('2 zatvaranja');
-    expect(cards[3]!.body).toContain('13. sjednica Gradske skupštine');
-    expect(cards.every((c) => !(c.attribution?.text ?? '').includes('{'))).toBe(true);
+  });
+  it('reads the safety strip without a stop: the warning, the closures and the pharmacy', () => {
+    const strip = (now: number) => safetyStrip(MODULES, null, i18n, hr, now);
     // The strip is judged at the fixture's clock: by the real one the Ilica closure (until 12 September) has ended.
-    expect(safetyStripText(MODULES, i18n, NOW)).toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
-    expect(safetyStripText(MODULES, i18n, Date.parse('2026-09-13T12:00:00Z')).closures).toBe('1 zatvaranje');
+    expect({ cap: strip(NOW).warning.text, closures: strip(NOW).closures.text, pharmacy: strip(NOW).pharmacy.label })
+      .toEqual({ cap: 'Nema upozorenja DHMZ-a za Zagreb', closures: '2 zatvaranja', pharmacy: 'Trg bana J. Jelačića 3' });
+    expect(strip(Date.parse('2026-09-13T12:00:00Z')).closures.text).toBe('1 zatvaranje');
   });
   it('the basics rows skip a silent source and read the tagged pharmacy when one exists', () => {
     const rows = essentialsRows(MODULES, i18n, hr, 'hr', STOP, NOW);
@@ -505,7 +505,7 @@ describe('local content from the stop-scoped teaser', () => {
     const culture = pairedMarkup(withOngoing);
     expect(culture.main).toContain('data-testid="k-ongoing"');
     expect(culture.main).toContain('u tijeku · izložba · Etnografski muzej, Zagreb');
-    expect(culture.main).toContain('do sri 30. 9.');
+    expect(culture.main).toContain('do 30.\u00a09.'); // events.untilDate, day and month only [O-53]
     expect(culture.main).not.toContain('13. sjednica');
     expect(culture.main).not.toContain('Splitu');
     // Promet's column is the departure board alone: ZET's notices are Događanja's undated notices (asserted above), closures stay on Sada and Sigurnost.
@@ -1175,7 +1175,9 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(markup).not.toContain('k-kicker');
     expect(markup).not.toContain('k-weather-sun');
     expect(markup).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s · 1016 hPa</p>');
-    expect(markup).toContain('<p class="k-meta">opaženo 14:00 · Zagreb-Maksimir · DHMZ</p>');
+    // The credit names the station and DHMZ, never the observation time (§12, review of lane/c-B1 P1).
+    expect(markup).toContain('<p class="k-meta">Zagreb-Maksimir · DHMZ</p>');
+    expect(markup).not.toMatch(/opaženo|\d\d:\d\d/);
     // The compact column holds two details on its one facts line; the pressure yields.
     expect(weatherMarkup(weatherNow(MODULES, hr, 'hr'), hr, 2)).toContain('<p class="k-weather-details">vlaga 55 % · vjetar sjeverozapad 2,3 m/s</p>');
     // A sky the words do not name gets no picture, and the word still prints.
@@ -1184,7 +1186,7 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(quiet).not.toContain('k-weather-icon');
     expect(quiet).toContain('<span class="k-condition">lahor</span>');
     const loading = weatherMarkup(weatherNow([], hr, 'hr'), hr);
-    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a…</p>');
+    expect(loading).toBe('<p class="k-weather-note" data-state="loading">Učitavanje podataka DHMZ-a</p>');
   });
   it('transport gives the board its own region, and a selected route becomes its subject', () => {
     const { lines, side } = paired('u-pokretu');
@@ -1210,14 +1212,11 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(sada.side).not.toContain('k-weather');
     expect(sada.side).toContain('data-testid="k-closures"');
   });
-  it('the strip pill and the coverage sentence exist in both catalogues; the hostname sentence carries a {host} slot', () => {
+  it('the strip pill exists in both catalogues; the hostname sentence carries a {host} slot', () => {
     expect(hr.safety.hitno).toBe('Sigurnost');
     expect(kioskStrings('en').safety.hitno).toBe('Safety');
     expect(hr.invitation.typeCode).toBe('ili upiši kod na {host}');
     expect(kioskStrings('en').invitation.typeCode).toBe('or type the code at {host}');
-    expect(plural('hr', hr.paired.coverageLines, 15)).toBe('prikazano {shown} od {total} linija');
-    expect(plural('hr', hr.paired.coverageLines, 3)).toBe('prikazano {shown} od {total} linije');
-    expect(plural('en', kioskStrings('en').paired.coverageLines, 15)).toBe('showing {shown} of {total} lines');
     expect(JSON.stringify(hr)).not.toContain('zagreb.aningfilm.hr');
   });
 });

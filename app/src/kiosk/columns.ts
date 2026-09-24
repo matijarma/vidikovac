@@ -3,8 +3,9 @@
 // the service day's 04:00, in Zagreb time and safe across the DST cuts. After
 // 18:00 the afternoon leaves and the axis shifts left one column. The paired
 // wall (paired.ts) reads a column's window to filter the agenda by the time
-// word a phone sent (PresentationTarget.time); experience/timeband.ts
-// re-exports these for its own callers until WP5 deletes it.
+// word a phone sent (PresentationTarget.time), and experience/presentation.ts
+// names the same words. The phone's time band that first held them is gone
+// (WP4, WP5 B1).
 import type { PresentationTime } from '../../../worker/presentation';
 import { zagrebDayKey, zagrebHour, zagrebTime, zagrebWeekdayShort } from '../format';
 import type { I18n } from '../i18n/i18n';
