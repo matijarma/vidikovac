@@ -308,6 +308,25 @@
         "15"
       ],
       "reason": "The bottom of the Mihaljevac turning loop, 18 m between node 172, where the west side (e305) comes down and line 15 goes on south, and node 150, where the east side (e194) starts up. Line 15 from Gračansko dolje (15_2) ends at node 171 at the top of the west side and its next trip north (15_1) starts at node 168 at the top of the east side, 15 m away against the direction of the loop; recorded fixes of 102302 on 21 September at 09:19 to 09:21 take it down the west side, across this joint and up the east side (302 m) to the 15_1 start. No shape draws the joint, because every shape through the loop continues south from node 172."
+    },
+    {
+      "from": [
+        16.00191,
+        45.77831
+      ],
+      "via": [
+        16.00231,
+        45.77834
+      ],
+      "to": [
+        16.0011,
+        45.77813
+      ],
+      "routes": [
+        "14",
+        "6"
+      ],
+      "reason": "The Zapruđe turning loop east of the drawn tracks, for line 14 (rail round 2, 24 September 2026). The arriving shapes 14_27 and 14_2 and the line 14 synthetic paths end at platform 1780_11 / 185_1 (nodes 137 to 140, 2 m apart), the departing 14_24 and 14_30 start 48 m west at node 141 and the westbound track that reaches it, e168 from node 152, is drawn only from the north-east (14_25's arrival). Recorded fixes of 22117 (09:00:04 to 09:03:34) and 22125 (09:04:05 to 09:06:56) on 21 September 2026: past the platform the trams run east along e169 and e170 to a stand at 16.00231,45.77834, 40 m beyond node 154, come back west along the alignment of e170 (fixes 9, 1.7 and 0.4 m from it), join the westbound track at node 152 and run e168 to node 141. Without the connector every such turn read as 14_27 -> 14_28 -> 14_24 with a plan running north-east toward Most mladosti while the tram came back: 95 same-trip re-seeds over 50 m on 20 September and 80 on 21 September, the largest single item of row G, and 90 and 76 direction flips at the terminus. Segments 31 m and 96 m; the loops from platform 1780_11 through it are 286 to 385 m. Line 6 is named too: feed 000395 has line 6 trips that end at 1780_11 and start at 185_14, and the loop is the only turn between them; no line 6 tram turned there on the two recorded days."
     }
   ],
   "longLegs": []

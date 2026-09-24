@@ -1787,7 +1787,7 @@ na kandidatu D2.
 
 | Redak | Mjera | Ključ u `branches-<dan>.json` | ned 20. 9. prije WP0 | pon 21. 9. prije WP0 | ned 20. 9. D1 | pon 21. 9. D1 | Prag |
 |---|---|---|---|---|---|---|---|
-| A | promjene staze unutar iste vožnje na 100 vozilo-sati tramvaja, bez okretanja do 150 m od okretišta i bez ulaska u okretišnu petlju i izlaska iz nje | `(totals.pathChangesSameTrip - flips.atTerminus - loops.events) / tramVehicleHours * 100` | 165,6 | 136,5 | 21,44 | 12,25 | ≤ 5 |
+| A | promjene staze unutar iste vožnje na 100 vozilo-sati tramvaja, bez okretanja do 150 m od okretišta, bez ulaska u okretišnu petlju i izlaska iz nje i bez skokova preusmjerenog tramvaja između tračnica vlastite linije (`diversion-hop`, drugi krug 24. rujna 2026.) | `(totals.pathChangesSameTrip - flips.atTerminus - loops.events - diversions.events) / tramVehicleHours * 100` | 165,6 | 136,5 | 21,44 | 12,25 | ≤ 5 |
 | A′ | isto u kvadratu središta, 17:15 do 17:44 | `teaserBox.window.per100vh` | 220 | 131 | 41,7 (7 događaja) | 18,7 (6 događaja) | ≤ 5 |
 | B | preuzimanja staze druge linije | `otherRoute.onto` | 441 | 483 | 0 | 0 | 0 |
 | C | vozilo-sati na tuđoj stazi; svježa očitanja na tuđoj stazi dok je vlastita unutar 60 m | `otherRoute.ticks.foreignVehicleHours`, `otherRoute.ticks.foreignFreshFixesWithPriorWithin60m` | 85,4; 13.707 | 116,4; 19.700 | 0; 0 | 0; 0 | 0; 0 |
