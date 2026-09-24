@@ -595,6 +595,8 @@ export function buildPlan(
   /** Nothing ahead has been reached yet: ZET's ETA is about the first
    *  PLATFORM ahead, which a junction wait in front of it must not displace. */
   let firstPlatformAhead = true;
+  /** The plan ended at the next branch of a diverted tram's rails: no platform beyond it is named. */
+  let heldAtBranch = false;
 
   while (t < horizonEnd) {
     const stop = stopIdx < halts.length ? halts[stopIdx] : null;
@@ -626,6 +628,7 @@ export function buildPlan(
     if (own !== null && !viaEta && ownLeg > 0.5 && ownLeg < target - s - 0.5) knots.push([rel(t + ownLeg / own), round1(s + ownLeg)]);
     knots.push([rel(arrive), round1(target)]);
     if (!stop || stop.branch) {
+      if (stop?.branch) heldAtBranch = true;
       // The end of the path is a terminus: hold until the trip changes. The
       // next branch of a diverted tram's rails is held the same way, until a
       // fix says which way it went.
@@ -658,6 +661,17 @@ export function buildPlan(
     }
   }
   if (knots[knots.length - 1][0] < rel(horizonEnd)) knots.push([rel(horizonEnd), knots[knots.length - 1][1]]);
+  // The first platform ahead is the next stop whether or not the plan
+  // reaches it within its horizon (rail round 3): a 40 s stand and a
+  // junction wait ahead can eat the 90 s (101007 standing 112 m short of
+  // Šubićeva, 21 Sep 08:43:54, named nothing for a tick and ZET's stop
+  // behind went on the wire). Without the plan's arrival there is no time.
+  // A diverted tram held at a branch names nothing beyond it: which way it
+  // goes is not known.
+  if (!nextStop && !heldAtBranch) {
+    const ahead = geometry.stopsAhead(knots[0][1])[0];
+    if (ahead) nextStop = { stopId: ahead.stopId, s: round1(ahead.s), etaSec: null };
+  }
 
   // One next stop per visit (rail round 3): a platform the wire has named
   // and moved on from is not named again on this path unless the anchor

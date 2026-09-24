@@ -410,3 +410,28 @@ describe('buildPlan keeps the later next stop through a T8 hold inside a zone th
     expect(tram.next?.stopId).toBe('T900');
   });
 });
+
+describe('buildPlan names the first platform ahead when the horizon does not reach it (rail round 3)', () => {
+  // 101007 standing 112 m short of Šubićeva, 21 Sep 08:43:54: a 40 s stand
+  // hold and a learned junction wait ahead ate the 90 s horizon, the plan
+  // named no platform for a tick and ZET's stop behind went on the wire.
+  const junction = (waitSec: number) => ({ aheadOf: (_pathIdx: number, s: number) => (s < 150 ? [{ s: 150, waitSec }] : []) });
+
+  it('names it without a time, and with the plan\'s arrival when the plan reaches it', () => {
+    const tram = tramOn1('short-horizon', [[100, 1000], [100, 1045]]);
+    buildPlan(tram, net, eightMs, null, 1045, 1045, BANDS, { junctions: junction(60) });
+    for (const [, s] of knotsOf(tram)) expect(s).toBeLessThanOrEqual(150.05);
+    expect(tram.next).toEqual({ stopId: 'T300', s: 300, etaSec: null });
+    const reached = tramOn1('reaches', [[100, 1000], [100, 1045]]);
+    buildPlan(reached, net, eightMs, null, 1045, 1045, BANDS, { junctions: junction(10) });
+    expect(reached.next?.stopId).toBe('T300');
+    expect(typeof reached.next?.etaSec).toBe('number');
+  });
+
+  it('names nothing for a diverted tram held at a branch short of the platform', () => {
+    const tram = tramOn1('branch', [[100, 1000], [100, 1045]]);
+    (tram as { diverted?: true }).diverted = true;
+    buildPlan(tram, net, eightMs, null, 1045, 1045, BANDS, { branches: { aheadOf: () => 150 } });
+    expect(tram.next).toBeNull();
+  });
+});
