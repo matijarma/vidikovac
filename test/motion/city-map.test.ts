@@ -446,10 +446,10 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     const unproject = ({ x, y }: { x: number; y: number }): [number, number] => [15.9 + x / 1e4, 45.9 - y / 1e4];
     const disc = { x: (15.97 - 15.9) * 1e4, y: (45.9 - 45.81) * 1e4, r: 10 };
     const moved = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [disc] }).features[0]!;
-    // North-bound, dead on the disc: east by half the plate, the disc's radius and the margin (20 px at scale 1).
+    // North-bound, dead on the disc: ahead (up the screen, north) by half the plate, the disc's radius and the margin (20 px at scale 1).
     expect(moved.properties.moved).toBeCloseTo(20, 6);
-    expect(moved.geometry.coordinates[0]).toBeCloseTo(15.97 + 20 / 1e4, 9);
-    expect(moved.geometry.coordinates[1]).toBeCloseTo(45.81, 9);
+    expect(moved.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
+    expect(moved.geometry.coordinates[1]).toBeCloseTo(45.81 + 20 / 1e4, 9);
     const still = vehiclesToGeoJson([north('a', '6', 15.97)], { project, discs: [disc] }).features[0]!;
     expect(still.properties.moved).toBe(0);
     expect(still.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
@@ -457,7 +457,7 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     // The public screen's scale 2: the same step in the pill geometry's px is twice as far on the screen.
     const wall = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [{ ...disc, x: disc.x / 2, y: disc.y / 2 }], symbolScale: 2 }).features[0]!;
     expect(wall.properties.moved).toBeCloseTo(20, 6);
-    expect(wall.geometry.coordinates[0]).toBeCloseTo(15.97 + 40 / 1e4, 9);
+    expect(wall.geometry.coordinates[1]).toBeCloseTo(45.81 + 40 / 1e4, 9);
     // The obstacles: the discs with a number, at their drawn radius, in the pill geometry's px.
     const points: MapPoint[] = [
       { id: 'b1', title: '', lon: 15.97, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '7' } },

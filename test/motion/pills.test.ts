@@ -389,7 +389,7 @@ describe('the nose: one triangle for the city map’s SDF image and the schema�
 // Round 2, F6 (phone lane's handoff): at the frame zoom half the BAJS discs sat under vehicle pills (26 of 53 on
 // the framed wall at 22:32, 21 of 41 on the phone's Karta at z12.7), and a tram standing at a stop covered the
 // station's count for a minute at a time. A mark now steps aside for a disc's number, and a bus pill for a tram's
-// plate, perpendicular to its heading, by exactly what clears it and never by a jump.
+// plate: up or down the screen, by the smallest hop past everything in its way, ramped so it never jumps.
 describe('deflectMarks: a mark steps aside for a disc\u2019s number and for a mark placed before it', () => {
   const tram = (id: string, x: number, y: number, bearing: number | null = 0, label = '6'): DeflectableMark => ({ id, x, y, label, kind: 'tram', bearing });
   const bus = (id: string, x: number, y: number, bearing: number | null = 90, label = '109'): DeflectableMark => ({ id, x, y, label, kind: 'bus', bearing });
@@ -400,74 +400,82 @@ describe('deflectMarks: a mark steps aside for a disc\u2019s number and for a ma
     const dx = Math.max(0, Math.abs(disc.x - at.x) - spine);
     return Math.hypot(dx, disc.y - at.y) - halfHeight - disc.r;
   };
+  const disc = { x: 100, y: 100, r: 11 };
+  /** Half the plate, the disc and the margin: the hop that clears a disc under the plate's middle. */
+  const clear = PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX;
 
-  it('a plate dead on a disc steps aside perpendicular to its heading, to its right, by what clears the number and a margin', () => {
-    const disc = { x: 100, y: 100, r: 11 };
-    const north = tram('a', 100, 100, 0);
-    const placed = deflectMarks([north], [disc]).get('a')!;
-    // North-bound: the right of the heading is east.
-    expect(placed.x).toBeCloseTo(100 + PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX, 6);
-    expect(placed.y).toBe(100);
-    expect(placed.moved).toBeCloseTo(PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX, 6);
-    expect(clearance(north, placed, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
-    // East-bound: its right is south.
-    const east = deflectMarks([tram('b', 100, 100, 90)], [disc]).get('b')!;
-    expect(east.x).toBe(100);
-    expect(east.y).toBeCloseTo(100 + PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX, 6);
-    // A mark on the left of a disc it meets keeps to its left: the side it is already on.
-    const left = deflectMarks([tram('c', 90, 100, 0)], [disc]).get('c')!;
-    expect(left.x).toBeLessThan(90);
-    expect(clearance(tram('c', 90, 100, 0), left, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
+  it('a plate dead on a disc steps ahead of it: up for a north-bound tram, down for a south-bound one, by what clears the number and a margin', () => {
+    const north = deflectMarks([tram('a', 100, 100, 0)], [disc]).get('a')!;
+    expect(north.x).toBe(100);
+    expect(north.y).toBeCloseTo(100 - clear, 6);
+    expect(north.moved).toBeCloseTo(clear, 6);
+    expect(clearance(tram('a', 100, 100, 0), north, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
+    const south = deflectMarks([tram('b', 100, 100, 180)], [disc]).get('b')!;
+    expect(south.y).toBeCloseTo(100 + clear, 6);
+    // A wide hub label costs no more: the hop is across the capsule's height, never along its width.
+    const hub = tram('h', 100, 100, 0, '1·2·3·4·5·6·7·8·9·11·12·13·14·17');
+    const placedHub = deflectMarks([hub], [disc]).get('h')!;
+    expect(placedHub.moved).toBeCloseTo(clear, 6);
+    expect(clearance(hub, placedHub, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
+  });
+
+  it('a mark moving across the screen keeps to the side of the disc it is already on; one with no heading too; dead level it steps down', () => {
+    const above = deflectMarks([tram('a', 100, 95, 90)], [disc]).get('a')!;
+    expect(above.y).toBeLessThan(95);
+    expect(clearance(tram('a', 100, 95, 90), above, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
+    const below = deflectMarks([bus('b', 100, 104, 270)], [disc]).get('b')!;
+    expect(below.y).toBeGreaterThan(104);
+    const headless = deflectMarks([bus('c', 100, 98, null)], [disc]).get('c')!;
+    expect(headless.y).toBeLessThan(98);
+    expect(deflectMarks([bus('d', 100, 100, 90)], [disc]).get('d')!.y).toBeCloseTo(100 + clear, 6);
   });
 
   it('a mark that does not meet a disc, and a mark with no disc at all, stay exactly where the model put them', () => {
-    const disc = { x: 100, y: 100, r: 11 };
-    const clear = deflectMarks([tram('a', 100 + PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX + 0.01, 100)], [disc]).get('a')!;
-    expect(clear).toMatchObject({ x: 100 + PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX + 0.01, y: 100, moved: 0 });
-    expect(deflectMarks([tram('a', 100, 100)], []).get('a')).toMatchObject({ x: 100, y: 100, moved: 0 });
+    const at = deflectMarks([tram('a', 100, 100 - clear - 0.01)], [disc]).get('a')!;
+    expect(at).toMatchObject({ x: 100, y: 100 - clear - 0.01, moved: 0 });
+    expect(deflectMarks([tram('a', 100, 100)], [])).toEqual(new Map([['a', { x: 100, y: 100, moved: 0 }]]));
   });
 
-  it('is continuous: a north-bound plate sweeping through a disc slides aside and back with no step past the gain, and rides its rail again beyond it', () => {
-    const disc = { x: 100, y: 100, r: 11 };
+  it('is continuous: a north-bound plate sweeping through a disc steps ahead by a growing hop and settles back on its rail beyond it, never a jump', () => {
     const offsets: number[] = [];
-    for (let t = 40; t >= -40; t -= 1) offsets.push(deflectMarks([tram('a', 100, 100 + t, 0)], [disc]).get('a')!.x - 100);
+    for (let t = 40; t >= -40; t -= 1) offsets.push(deflectMarks([tram('a', 100, 100 + t, 0)], [disc]).get('a')!.y - (100 + t));
     expect(offsets[0]).toBe(0);
     expect(offsets.at(-1)).toBe(0);
-    expect(Math.max(...offsets)).toBeCloseTo(PILL_HEIGHT_PX / 2 + 11 + DEFLECT_MARGIN_PX, 6);
+    // Deepest while still short of the centre (ahead of the disc means past it), the clearance itself at the centre.
+    expect(Math.min(...offsets)).toBeLessThanOrEqual(-clear);
+    expect(Math.min(...offsets)).toBeGreaterThanOrEqual(-2 * clear);
+    expect(offsets[40]).toBeCloseTo(-clear, 6);
+    // Always ahead (up), never flipped below.
+    expect(Math.max(...offsets)).toBe(0);
     for (let i = 1; i < offsets.length; i++) expect(Math.abs(offsets[i]! - offsets[i - 1]!), `step ${i}`).toBeLessThanOrEqual(DEFLECT_GAIN + 1e-9);
-    // Never to the other side: the sweep passes through the centre and the plate keeps to the east.
-    expect(Math.min(...offsets)).toBe(0);
+    // A tram standing at the stop, dead on the station's disc: its plate just ahead of the disc, clear of the number.
+    const standing = deflectMarks([tram('s', 100, 100, 0)], [disc]).get('s')!;
+    expect(clearance(tram('s', 100, 100, 0), standing, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
   });
 
-  it('a bus pill on a tram plate steps aside; the plate, placed first, stays', () => {
+  it('hops past a pile of discs in its way, not into the next one, and stops at the cap', () => {
+    // Hub stations twelve pixels apart under a north-bound plate: the hop clears the whole pile.
+    const pile = [disc, { x: 100, y: 88, r: 11 }, { x: 100, y: 76, r: 11 }];
+    const placed = deflectMarks([tram('a', 100, 100, 0)], pile).get('a')!;
+    for (const d of pile) expect(clearance(tram('a', 100, 100, 0), placed, d), `disc at ${d.y}`).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
+    expect(placed.moved).toBeCloseTo(24 + clear, 6);
+    // A pile too deep to hop: the mark goes as far as the cap and keeps what it covers.
+    const deep = Array.from({ length: 8 }, (_, i) => ({ x: 100, y: 100 - 12 * i, r: 11 }));
+    expect(deflectMarks([tram('b', 100, 100, 0)], deep).get('b')!.moved).toBe(DEFLECT_MAX_PX);
+  });
+
+  it('a bus pill on a tram plate steps off it; the plate, placed first, stays; a plate pushed onto a neighbour pushes the neighbour on', () => {
     const marks = [bus('b', 100, 100, 90), tram('a', 100, 100, 0)];
     const placed = deflectMarks(marks, []);
-    expect(placed.get('a')).toMatchObject({ x: 100, y: 100, moved: 0 });
+    expect(placed.get('a')).toEqual({ x: 100, y: 100, moved: 0 });
     const b = placed.get('b')!;
     expect(b.x).toBe(100);
     expect(b.y).toBeCloseTo(100 + PILL_HEIGHT_PX + DEFLECT_MARGIN_PX, 6);
-  });
-
-  it('a mark placed earlier is an obstacle for the next: a plate pushed off a disc onto a neighbour pushes the neighbour on by the overlap, and no more', () => {
-    const disc = { x: 100, y: 100, r: 11 };
-    const a = tram('a', 100, 100, 0);
-    const b = tram('b', 135, 100, 0, '11');
-    const placed = deflectMarks([b, a], [disc]);
-    const pa = placed.get('a')!;
-    const pb = placed.get('b')!;
-    expect(pa.x).toBeCloseTo(121, 6);
-    // 'a' now reaches 130; 'b' (a two-digit plate, 12 px half-width) began at 123 and moves on by what they overlap plus the margin.
-    expect(pb.x).toBeCloseTo(pa.x + 9 + 12 + DEFLECT_MARGIN_PX, 6);
-    expect(pb.moved).toBeCloseTo(pb.x - 135, 6);
-  });
-
-  it('a mark without a heading steps up; a wide hub label is pushed no further than the cap and keeps what it covers', () => {
-    const disc = { x: 100, y: 100, r: 11 };
-    const up = deflectMarks([bus('b', 100, 100, null)], [disc]).get('b')!;
-    expect(up.x).toBe(100);
-    expect(up.y).toBeLessThan(100);
-    const wide = deflectMarks([bus('w', 100, 100, 0, '220·221·268·281·311')], [disc]).get('w')!;
-    expect(wide.moved).toBe(DEFLECT_MAX_PX);
-    expect(wide.x).toBe(100 + DEFLECT_MAX_PX);
+    // 'a' steps up off the disc onto 'c', placed after it, which steps up in turn by what they overlap.
+    const c = tram('c', 100, 100 - clear - 4, 0, '11');
+    const chain = deflectMarks([c, tram('a', 100, 100, 0)], [disc]);
+    expect(chain.get('a')!.y).toBeCloseTo(100 - clear, 6);
+    expect(chain.get('c')!.y).toBeLessThan(c.y);
+    expect(chain.get('c')!.y).toBeCloseTo(chain.get('a')!.y - PILL_HEIGHT_PX - DEFLECT_MARGIN_PX, 6);
   });
 });

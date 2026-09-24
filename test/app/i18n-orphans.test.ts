@@ -130,10 +130,12 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // kvart.walkMinutes): 1,044 hr, 1,016 en; B1 review -1 kiosk.weather.observed ("opaženo {time}", the Vrijeme
     // card's observation clock): 1,043 hr, 1,015 en; A4 final -1 timeband.next ("Zatim", the retired
     // segment word): 1,042 hr, 1,014 en; +3 landing.purpose.countTitle/countBody and
-    // landing.actions.stats, the landing's link to the public statistics: 1,045 hr, 1,017 en.
+    // landing.actions.stats, the landing's link to the public statistics: 1,045 hr, 1,017 en; round 2 F9 +2
+    // kiosk.legend.bikesEmpty and kiosk.legend.bikesFar, the wall legend's BAJS entries by what the map draws
+    // (kiosk/invitation.ts): 1,047 hr, 1,019 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1045);
-    expect(leafKeys(en).length).toBe(1017);
+    expect(leaves.length).toBe(1047);
+    expect(leafKeys(en).length).toBe(1019);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });
