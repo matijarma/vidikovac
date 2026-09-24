@@ -905,6 +905,9 @@ button.k-strip-verdict { cursor: pointer; }
 .k-setup .k-suggest-name { font-size: 1rem; }
 .k-setup .k-suggest-meta, .k-setup .k-suggest-status { font-size: 0.8125rem; }
 .kiosk[data-size='handheld'] .k-suggest-box { position: static; }
+/* The start screen (round 2 F16): the suggestions and the no-match status stand in the flow above Pokreni, never
+   over it; the form has the room, and the button is always reachable. */
+.k-start .k-suggest-box { position: static; }
 .kiosk[data-size='handheld'] .k-place .k-search-label, .kiosk[data-size='handheld'] .k-place .k-search-input { flex-basis: auto; }
 
 /* Postavke: the same overlay geometry as Osnovno, with its own rows. Every

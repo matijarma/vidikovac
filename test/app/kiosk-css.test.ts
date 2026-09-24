@@ -19,6 +19,14 @@ const ruleIn = (sheet: string, selector: string) => {
 const rule = (selector: string) => ruleIn(css, selector);
 const windowRule = (selector: string) => ruleIn(cityCss, selector);
 
+describe('the start screen (round 2, F16)', () => {
+  it('keeps the place field\u2019s suggestion box and its status in the flow, so Pokreni is never covered', () => {
+    // The wall's settings row and the handheld already have it so; the start screen's absolute box lay over Pokreni.
+    expect(rule('.k-start .k-suggest-box')).toContain('position: static');
+    expect(rule('.k-settings .k-suggest-box')).toContain('position: static');
+  });
+});
+
 describe('public-screen design invariants', () => {
   it('uses the shared semantic palette, including the scanner-safe QR pair', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
