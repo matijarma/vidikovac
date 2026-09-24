@@ -430,6 +430,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     v.nextStopEtaMs = fix.nextStopEtaMs;
     v.speed = fix.speed ?? 0;
     v.confidence = fix.confidence ?? CONFIDENCE_FREE_CAP;
+    const wasHeld = v.held;
     v.held = fix.held === true;
     // The order comes from the twin's register alone (E3): a poll that names
     // no leader is the register saying there is none, and between polls the
@@ -445,7 +446,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
         // drawn, so the change of mind is recorded, never shown as a jump.
-        const heldHeading = v.holding ? (v.geom ? tangent(v.geom.pts, v.geom.cum, v.s) : v.moveDir) : null;
+        // A mark that stood (waiting for a plan behind it, or held by the
+        // twin's T8 rule while its tram was silent) may be far behind the
+        // new plan; its heading is what the re-seed reads nearby geometry by.
+        const heldHeading = v.holding || wasHeld ? (v.geom ? tangent(v.geom.pts, v.geom.cum, v.s) : v.moveDir) : null;
         v.s = reseedArc(v.geom, geom!, v.s, v.p, target.s, heldHeading);
         v.lastSnapAt = now;
       }
@@ -480,7 +484,13 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
       graph && to.path !== null
         ? graph.projectionsOntoPath(to.path, p, sFrom, sTo, OFF_GRAPH_M)
         : projectionsWithin(to.pts, to.cum, p, sFrom, sTo, OFF_GRAPH_M).map((proj) => ({ s: proj.s, d: proj.d }));
-    if (heldHeading && window.length === 0) {
+    // A candidate at the window's own lower edge is where the search was
+    // cut, not where the geometry passes the mark: the minimum lies behind
+    // the window (102204, 20 Sep 08:27:04: held 73 s at the Dubrava
+    // platform one metre from where 12_11 starts, the 12_11 plan 230 m
+    // along, the mark landed 110 m away on the window's edge).
+    const cutAtEdge = window.length > 0 && window.every((candidate) => candidate.s <= sFrom);
+    if (heldHeading && (window.length === 0 || cutAtEdge)) {
       // A held marker can be far behind the new plan's window. Before
       // falling to that plan (22139: 750 m), use nearby geometry behind
       // the target and catch up forwards (its departure starts 89 m away).
