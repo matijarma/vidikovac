@@ -592,6 +592,9 @@ interface FakeOptions {
   clickTimesOut?: string;
   /** The stop board never opens (a wait for it times out). */
   noStopBoard?: boolean;
+  /** The Karta's marker census (data-unlabelled, data-markers) lands this long after the Karta's first read;
+   *  before it the Karta read carries its pills and no census (lane p-map: the pills no longer wait for it). */
+  kartaCensusAfterMs?: number;
 }
 interface Handler { (arg: unknown): unknown }
 
@@ -631,6 +634,8 @@ function fakeRuntime(options: FakeOptions = {}) {
     const emit = (event: string, arg: unknown): void => { for (const fn of handlers.get(event) ?? []) void fn(arg); };
     let onKarta = false;
     let expiryReads = 0;
+    /** When the Karta was first read (kartaCensusAfterMs counts from it). */
+    let kartaFirstAt: number | null = null;
     let answered = false;
     let calmReads = 0;
     let censusReads = 0;
@@ -681,6 +686,12 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === INVITATION_READY_IN_PAGE && (options.noInvitation || options.noInvitationOn?.includes(kind))) throw new Error('Timeout 90000ms exceeded.');
         if (fn === ANY_PRESENT_IN_PAGE && options.noStopBoard && (arg as { selectors: string[] }).selectors.includes(inventory.PHONE_PROBES.stopBoard)) throw new Error('Timeout 15000ms exceeded.');
         // The wall's census and its first pills come when they come; a wait that outlasts its timeout throws, as Playwright's does.
+        if (kind === 'phone' && fn === MAP_CENSUS_IN_PAGE && options.kartaCensusAfterMs !== undefined) {
+          const wait = (kartaFirstAt ?? t) + options.kartaCensusAfterMs - t;
+          if (wait > CENSUS_TIMEOUT_MS) { advance(CENSUS_TIMEOUT_MS); throw new Error(`Timeout ${CENSUS_TIMEOUT_MS}ms exceeded.`); }
+          advance(Math.max(0, wait));
+          return true;
+        }
         for (const [waited, after, timeout] of [[MAP_CENSUS_IN_PAGE, options.censusAfterMs, CENSUS_TIMEOUT_MS], [PILLS_DRAWN_IN_PAGE, options.pillsAfterMs, VEHICLES_TIMEOUT_MS]] as const) {
           if (fn !== waited) continue;
           const wait = dueOf(after) - t;
@@ -720,7 +731,11 @@ function fakeRuntime(options: FakeOptions = {}) {
         if (fn === legibility.LEGIBILITY_IN_PAGE) return t < dueOf(options.censusAfterMs) ? CENSUS_MISSING : { violations: [], warnings: [], symbols: [], otherSmall: [], dark: false, map: CANVAS_MAP };
         if (fn === PAIRING_IN_PAGE) return { code: codeNow(), href: `https://zagreb.example/s/#${codeNow()}`, progress: 80 };
         if (fn === PHONE_READ_IN_PAGE) return options.phone ?? GOOD_PHONE;
-        if (fn === KARTA_READ_IN_PAGE) return options.karta ?? GOOD_KARTA;
+        if (fn === KARTA_READ_IN_PAGE) {
+          const karta = options.karta ?? GOOD_KARTA;
+          kartaFirstAt ??= t;
+          return options.kartaCensusAfterMs !== undefined && t < kartaFirstAt + options.kartaCensusAfterMs ? { ...karta, unlabelled: null, markers: null } : karta;
+        }
         if (fn === DESKTOP_READ_IN_PAGE) return options.desktop ?? GOOD_DESKTOP;
         if (fn === SHARE_CODE_IN_PAGE) return options.shareCode ?? GOOD_SHARE;
         if (fn === STOP_BOARD_READ_IN_PAGE) return options.stopBoard ?? GOOD_BOARD;
@@ -984,6 +999,17 @@ describe('a run over a fake browser', () => {
     expect(hidden.log.clicks.map((c) => c.selector)).not.toContain(`${inventory.PHONE_PROBES.shareCity}:visible`);
     expect(hidden.code, hidden.lines.join('\n')).toBe(0);
     expect(read(hidden.out, 'report.md')).toMatch(/\| phone-share-code \| d3 \| phone \| .* \| ≤ 0 \| 1 \| info \|/);
+  });
+
+  // Lane p-map: the Karta's pills are written the moment one is drawn, before the
+  // marker census (every city source loaded and a settled second); the read that
+  // judges karta-unlabelled waits for that census as the wall's settle does.
+  it('reads the Karta\u2019s census once it is written, after the first pills', async () => {
+    const run = await observe([], { kartaCensusAfterMs: 5_000 });
+    expect(run.lines.join('\n')).not.toContain('FAIL karta-unlabelled');
+    expect(run.lines.join('\n')).not.toContain('FAIL karta-pills');
+    const never = await observe([], { kartaCensusAfterMs: CENSUS_TIMEOUT_MS * 10 });
+    expect(never.lines.join('\n')).toContain('FAIL karta-unlabelled');
   });
 
   // Lane p-map (second observation, 24 Sep 03:40): the stop search's result

@@ -160,6 +160,9 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
       }).toBeGreaterThanOrEqual(1);
       softly(pillFailures(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-pills')), `${label}: every vehicle pill drawn, none folded into "+N" (${String(PLUS_PILL_RE)} on every label of data-pills)`).toEqual([]);
       softly(await page.locator(PHONE_PROBES.kartaDisclosures).count(), `${label}: no map disclosure or group taxonomy (${PHONE_PROBES.kartaDisclosures})`).toBe(0);
+      // The pills are written the moment one is drawn; the marker census waits for every city source and a settled
+      // second (app/src/map/name-census.ts, lane p-map). Read it once written, as companion-phone.spec.ts does.
+      await softly.poll(() => attrOf(page, PHONE_PROBES.mapCanvas, 'data-unlabelled'), { timeout: PAINT_MS, message: `${label}: the Karta's marker census (data-unlabelled) is written` }).not.toBeNull();
       softly(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-unlabelled'), `${label}: every marker carries a label or a count (data-unlabelled "0")`).toBe('0');
       softly(Number(await attrOf(page, PHONE_PROBES.mapCanvas, 'data-markers')), `${label}: curated markers are drawn (data-markers ≥ 1)`).toBeGreaterThanOrEqual(1);
     }

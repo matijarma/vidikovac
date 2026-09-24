@@ -1021,6 +1021,15 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
       await ctx.sleep(POLL_MS);
       read = await page.evaluate(KARTA_READ_IN_PAGE, spec);
     }
+    // The pills are written the moment one is drawn; the marker census (data-unlabelled, data-markers) waits for
+    // every city source and a settled second (app/src/map/name-census.ts). Read that once it is there, as the
+    // wall's settle does; waits, never gates: a census that never comes still fails karta-unlabelled.
+    if (read.unlabelled === null) {
+      const censusAt = await page.waitForFunction(MAP_CENSUS_IN_PAGE, { map: P.mapCanvas }, { timeout: CENSUS_TIMEOUT_MS }).then(() => ctx.now() - readyAt, () => null);
+      ctx.note(`phone Karta: the map census ${censusAt === null ? `not written within ${CENSUS_TIMEOUT_MS / 1000} s` : `${censusAt} ms`} after ready`);
+      const census = await page.evaluate(KARTA_READ_IN_PAGE, spec);
+      read = { ...read, unlabelled: census.unlabelled, markers: census.markers };
+    }
   }
   // Whether the twin had any vehicle for the phone by the end of the window: without one no pill is owed.
   out.karta = { ...read, pillsAfterMs, fleet: fleetNow(ctx, page, readyAt + inventory.KARTA_PILLS_WITHIN_MS) };
