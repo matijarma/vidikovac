@@ -245,26 +245,26 @@ app/src/kiosk/place-field.ts:161 #rowMarkup → externalHtml('summary', meta)
 app/src/kiosk/place-field.ts:179 #render → vetExternal(row.kind === 'stop' ? 'name' : 'address', rowLabel(s, row), 'row')
 app/src/kiosk/place-field.ts:248 #choose → vetExternal(next.kind === 'address' || next.address ? 'address' : 'name', label, 'row')
 app/src/kiosk/place-field.ts:251 #choose → input.value = chosenText
-app/src/kiosk/settings.ts:374 #settingsMarkup → escapeHtml(label)
-app/src/kiosk/settings.ts:377 #settingsMarkup → escapeHtml(s.settings.title)
-app/src/kiosk/settings.ts:378 #settingsMarkup → escapeHtml(s.settings.hint)
-app/src/kiosk/settings.ts:380 #settingsMarkup → escapeHtml(s.settings.close)
-app/src/kiosk/settings.ts:384 #settingsMarkup → escapeHtml(s.settings.placeChange)
-app/src/kiosk/settings.ts:387 #settingsMarkup → escapeHtml(s.settings.areaWhole)
-app/src/kiosk/settings.ts:394 #settingsMarkup → escapeHtml(s.settings.forget)
-app/src/kiosk/settings.ts:396 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
-app/src/kiosk/settings.ts:397 #settingsMarkup → escapeHtml(s.settings.forgetYes)
-app/src/kiosk/settings.ts:398 #settingsMarkup → escapeHtml(s.settings.forgetNo)
-app/src/kiosk/settings.ts:440 #showError → errorEl.textContent = text
-app/src/kiosk/settings.ts:441 #clearError → errorEl.textContent = ''
-app/src/kiosk/settings.ts:457 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
-app/src/kiosk/settings.ts:462 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
-app/src/kiosk/settings.ts:462 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
-app/src/kiosk/settings.ts:466 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
-app/src/kiosk/settings.ts:469 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
-app/src/kiosk/settings.ts:472 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
-app/src/kiosk/settings.ts:481 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
-app/src/kiosk/settings.ts:484 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
+app/src/kiosk/settings.ts:392 #settingsMarkup → escapeHtml(label)
+app/src/kiosk/settings.ts:395 #settingsMarkup → escapeHtml(s.settings.title)
+app/src/kiosk/settings.ts:396 #settingsMarkup → escapeHtml(s.settings.hint)
+app/src/kiosk/settings.ts:398 #settingsMarkup → escapeHtml(s.settings.close)
+app/src/kiosk/settings.ts:402 #settingsMarkup → escapeHtml(s.settings.placeChange)
+app/src/kiosk/settings.ts:405 #settingsMarkup → escapeHtml(s.settings.areaWhole)
+app/src/kiosk/settings.ts:412 #settingsMarkup → escapeHtml(s.settings.forget)
+app/src/kiosk/settings.ts:414 #settingsMarkup → escapeHtml(s.settings.forgetAsk)
+app/src/kiosk/settings.ts:415 #settingsMarkup → escapeHtml(s.settings.forgetYes)
+app/src/kiosk/settings.ts:416 #settingsMarkup → escapeHtml(s.settings.forgetNo)
+app/src/kiosk/settings.ts:458 #showError → errorEl.textContent = text
+app/src/kiosk/settings.ts:459 #clearError → errorEl.textContent = ''
+app/src/kiosk/settings.ts:475 #paintTheme → escapeHtml(fill(s.header.theme, { pref: s.header.themeWord[preference] }))
+app/src/kiosk/settings.ts:480 #paintRows → placeValue.textContent = vetExternal('name', placeText(s, shown.place), 'row') ?? ''
+app/src/kiosk/settings.ts:480 #paintRows → vetExternal('name', placeText(s, shown.place), 'row')
+app/src/kiosk/settings.ts:484 #paintRows → frameBtn.textContent = fill(s.settings.frameValue, { count: shown.frame })
+app/src/kiosk/settings.ts:487 #paintRows → viewBtn.textContent = view === 'schema' ? s.settings.viewSchema : s.settings.viewMap
+app/src/kiosk/settings.ts:490 #paintRows → rhythmBtn.textContent = fill(s.settings.rhythmValue, { seconds: rhythm })
+app/src/kiosk/settings.ts:499 #paintScreenRow → expiryEl.textContent = s.settings.expiryNone
+app/src/kiosk/settings.ts:502 #paintScreenRow → expiryEl.textContent = fill(s.settings.expiry, { time: when })
 app/src/kiosk/start.ts:67 #setupErrorText → vetExternal('name', c.field, 'row')
 app/src/kiosk/start.ts:77 #previewText → vetExternal('name', place.name, 'row')
 app/src/kiosk/start.ts:91 #startMarkup → escapeHtml(s.appName)
