@@ -291,6 +291,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   /** The page's nearby list for this render, asked once however often the sheet paints before the next one. */
   let nearbyMemo: { ctx: LayerContext; list: ReturnType<NonNullable<LayerContext['nearby']>> } | null = null;
   let cityLimit = 20;
+  /** What the sheet's peek and body were last set to, so an unchanged render leaves the DOM alone. */
+  let lastPeekHtml: string | null = null;
+  let lastBodyHtml: string | null = null;
   let cityData: Discovery|null = null;
   let streetRequested=false;
   let disposed=false;
@@ -568,6 +571,27 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     syncFitPadding();
     stage.scrollTop = 0;
     if (input) renderSheetToggle();
+    syncMotion();
+  }
+
+  /**
+   * The vehicles glide only while the map can be seen: at the open detent the sheet covers the stage but a strip,
+   * and the person is reading the list or typing, so the motion loop rests until the sheet comes down. Every frame
+   * of the loop re-renders the whole map, and on a slow device that frame is what a tap on the search field waits
+   * for (round 3, phone A: about one frame a second on the observer's host, ten of them for one Playwright click).
+   */
+  let motionPaused = false;
+  function syncMotion(): void {
+    if (!input) return;
+    const c = ctx();
+    const covered = mode === 'phone' && sheet?.detent() === 'open';
+    if (covered === motionPaused) return;
+    // Never resumed with nothing live to move on: a session that ended, a ticket the room refused (the page paused
+    // the map and polls nothing), a feed gone quiet (round 3 review, N2). The next render with a live feed resumes it.
+    if (!covered && (c.session?.frozen === true || c.session?.live === false || !feedLive(c.snapshots['zet-rt'], c.now))) return;
+    motionPaused = covered;
+    if (covered) handle?.pause();
+    else handle?.resume();
   }
 
   function syncStage(): void {
@@ -752,8 +776,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     }
     if (query && activeOption) searchInput.setAttribute('aria-activedescendant', activeOption);
     else searchInput.removeAttribute('aria-activedescendant');
-    peek.innerHTML = following && selection?.kind === 'vehicle' && peekText ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
-    swapBody(html);
+    const peekNext = following && selection?.kind === 'vehicle' && peekText ? esc(tr(i18n, 'peekFollowing', { title: peekText })) : peekHtml;
+    // The same markup again (a poll that changed nothing, a map status echo) is not parsed or reconciled again:
+    // the cold Karta open renders its sheet a dozen times in its first seconds (round 3, phone A).
+    if (peekNext !== lastPeekHtml) { lastPeekHtml = peekNext; peek.innerHTML = peekNext; }
+    if (html !== lastBodyHtml) { lastBodyHtml = html; swapBody(html); }
     if(activeOption)document.getElementById(activeOption)?.scrollIntoView?.({block:'nearest'});
     element.dataset.searching=String(Boolean(query));
     element.dataset.idle=String(html==='');
@@ -1122,6 +1149,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       const next = c.maps?.handle(slotId) ?? null;
       if (next !== handle) {
         handle = next;
+        // A new map takes the rest the covered stage asked for; the slot's own pause() before load still wins.
+        if (motionPaused) handle?.pause();
         status = handle?.status?.() ?? 'loading';
         const network = handle?.network?.() ?? null;
         if (network && network !== net) {
@@ -1214,6 +1243,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (changed) handle?.select?.(selection, { fit: selection !== null });
     onStageBox();
     renderSheet();
+    syncMotion();
     if(returnScroll!==null)body.scrollTop=returnScroll;
   }
 

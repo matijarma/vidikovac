@@ -36,8 +36,9 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
   let timer: ReturnType<typeof setInterval> | undefined;
   let manifestTime = 0;
   const emit = () => { if (!stopped) listeners.forEach(fn => fn()); };
+  /** The catalogue and the live stations come after the page's answer on a narrow link (the fetch priority hint). */
   async function request<T>(url: string): Promise<T> {
-    const response = await fetcher(url, { signal: AbortSignal.timeout(15_000) });
+    const response = await fetcher(url, { signal: AbortSignal.timeout(15_000), priority: 'low' });
     if (!response.ok) throw new CityHttpError(retryAfterMs(response));
     return response.json() as Promise<T>;
   }

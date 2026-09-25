@@ -99,7 +99,8 @@ export function createBoardCache(options: BoardCacheOptions = {}): BoardCache {
     // request ticking on to twelve seconds after it is no longer wanted.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('schedule-timeout')), timeoutMs);
-    void fetchImpl(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`, { signal: controller.signal })
+    // The board is the answer the page opens with: ahead of the feeds on a narrow link (the fetch priority hint).
+    void fetchImpl(`/api/city/departures?operator=${operator}&stop=${encodeURIComponent(stopId)}`, { signal: controller.signal, priority: 'high' })
       .then(async (response) => {
         if (!response.ok) throw new Error('schedule-down');
         const body: unknown = await response.json();

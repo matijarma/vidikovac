@@ -20,7 +20,7 @@ import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
-import { fetchSentences as fetchSentencesImpl } from './api';
+import { fetchSentences as fetchSentencesImpl, type SentenceFetchOptions } from './api';
 import { askBoards, loadSadaFeed, NEARBY_HOLD_MS, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
@@ -120,8 +120,9 @@ export interface DashboardDeps {
   /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
   mapMode?: MapModeStore;
   loadNetwork?: () => Promise<Network | null>;
-  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. */
-  fetchSentences?: (request: SentenceRequest) => Promise<WrittenSentence[]>;
+  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. The options carry the page's
+   *  last word before the request is sent (its validator loads lazily; the page may have ended meanwhile). */
+  fetchSentences?: (request: SentenceRequest, options?: SentenceFetchOptions) => Promise<WrittenSentence[]>;
   /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
@@ -132,6 +133,8 @@ export interface DashboardDeps {
   onItemShare?: (item: FeedItem, snapshot: ModuleSnapshot) => void;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
+  /** Runs a draw asked for by data landing on its own; the next animation frame by default (tests pass a microtask). */
+  scheduleFrame?: (fn: () => void) => void;
   theme?: ThemeController;
   /** Layer memory; null disables it, omitted uses sessionStorage. */
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
@@ -162,6 +165,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const now = deps.now ?? (() => Date.now());
   const setTimer = deps.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((h) => globalThis.clearInterval(h as never));
+  const scheduleFrame = deps.scheduleFrame ?? ((fn) => {
+    if (typeof globalThis.requestAnimationFrame === 'function') globalThis.requestAnimationFrame(() => fn());
+    else globalThis.setTimeout(fn, 0);
+  });
   const lightweight = Boolean(deps.lightweight);
   const storage = deps.storage === undefined ? safeSessionStorage() : deps.storage ?? undefined;
   const local = deps.localStorage === undefined ? safeLocalStorage() : deps.localStorage ?? undefined;
@@ -209,7 +216,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   // candidate: a rejected fact yields no sentence, decision 21). The tools live in the lazy feed chunk.
   /** The phone asks the sentence route at most this often. */
   const SENTENCE_FETCH_MS = 60_000;
-  const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
+  const fetchSentences = deps.fetchSentences ?? ((request: SentenceRequest, options?: SentenceFetchOptions) => fetchSentencesImpl(request, fetch, options));
   let sentenceSequence: ReturnType<SadaFeedModule['createSentenceSequence']> | null = null;
   let modelSentences: WrittenSentence[] = [];
   let sentenceFetchKey = '';
@@ -312,9 +319,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const main = element.querySelector<HTMLElement>('main')!;
   const regions = { status: region('status'), presentation: region('presentation'), banners: region('banners'), tabs: region('tabs') };
 
-  /** Active modules whose last fetch failed or whose snapshot is down: the shell says it once. */
+  /** Active modules whose last fetch failed or whose snapshot is down or stale: the shell says it once. A stale
+   *  source is one that stopped answering while its last data stays on the page (status.stale says the same), so
+   *  the quiet line is the page's one stale mark beside the grey clocks (round 3, desktop F23). */
   function sourcesDown(feed: ReturnType<typeof store.snapshot>): number {
-    return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down').length;
+    return activeModules().filter((m) => feed.errors[m] !== undefined || feed.snapshots[m]?.status === 'down' || feed.snapshots[m]?.status === 'stale').length;
   }
 
   /**
@@ -451,7 +460,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
-      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
+      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live' },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
@@ -521,23 +530,68 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     sentenceFetchKey = key;
     sentenceAskedAt = at;
     const seq = ++sentenceFetchSeq;
-    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }).then((answer) => {
+    // Decided while live; sent only if still live once the route's chunk is in hand (the ten-minute end can fall in
+    // between, and a request after it is one the page promised never to make: accept/phone.spec.ts, the expiry row).
+    const proceed = (): boolean => !disposed && !frozen && !paused && session.snapshot().phase === 'live';
+    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }, { proceed }).then((answer) => {
       if (disposed || frozen || seq !== sentenceFetchSeq) return;
       modelSentences = feed.readWrittenSentences(answer, { facts: stable, budget: feed.PHONE_SENTENCE_BUDGET, now: now() });
       if (modelSentences.length) render();
     }, () => { /* Optional inference never replaces the templates with an error. */ });
   }
 
+  /**
+   * One draw per frame for whatever lands on its own: a poll's modules, a board, a city chunk, the feed module.
+   * Each landing used to draw at once, and the Karta cold open drew five times in its first 1.5 s, every draw
+   * handing the map its 250 vehicles and the sheet its rows again (round 3, phone A); a frame later is as soon
+   * as anyone can see it. A person's own action (a tab, history) still draws at once.
+   */
+  let frameQueued = false;
+  let frameShell = false;
+  function requestRender(shell = false): void {
+    frameShell ||= shell;
+    if (frameQueued || disposed) return;
+    frameQueued = true;
+    scheduleFrame(() => {
+      frameQueued = false;
+      const withShell = frameShell;
+      frameShell = false;
+      if (disposed || frozen) return;
+      render();
+      if (withShell) paintShell();
+    });
+  }
   /** Draws the active workspace: reconciled in place for delegated renderers, replaced for the rest. */
-  function repaintLocalData():void { if(!disposed&&!frozen)render(); }
+  function repaintLocalData():void { if(!disposed&&!frozen)requestRender(); }
   /** After the end the workspace is the closing card alone (WP4 step 11): re-said on a locale change, never data. */
   function renderEnded(): void {
     main.replaceChildren(createElementFromHTML(sessionEndedMarkup(i18n, shellState(), scanUrl)));
+  }
+  /**
+   * The network's tram lines measure the circle along the lines (seam S2); the map loads the same artefact once.
+   * Asked for once the first departures are in hand, not beside them: on a slow open the 140 KB artefact shared
+   * the phone's link with the boards and the feeds, and the answer waited for it (round 3, phone F3). The head
+   * refines from the stop table's circle to the lines' when it lands, as it did when the artefact came second.
+   */
+  let frameLinesAsked = false;
+  function ensureFrameLines(): void {
+    if (frameLinesAsked || frozen || disposed || lightweight) return;
+    const s = session.snapshot();
+    if (s.phase !== 'live') return;
+    const stop = resolvePlace({ screen: s.screen, saved, stops: stops ?? undefined, location: locationContext }).departuresStop;
+    if (stop && boards.get('zet', stop.id) === undefined) return;
+    frameLinesAsked = true;
+    void loadNetworkOnce().then((network) => {
+      if (disposed || !network) return;
+      frameLines = frameLinesOf(network);
+      if (!frozen) render();
+    });
   }
   function render(): void {
     if (frozen) { renderEnded(); return; }
     ensureStops();
     ensureLastRun();
+    ensureFrameLines();
     // A renderer may move a controller's live node while producing its tree.
     // Capture focus before calling it, not after that move has blurred it.
     const focused = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
@@ -1265,20 +1319,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (layer !== viewLayer) { viewLayer = layer; closePresentation(); }
     render(); paintShell();
   });
-  const stopCity = cityStore.subscribe(() => { if(!disposed&&!frozen){render();paintShell();} });
-  // A batch can finish several modules in the same turn. Render the latest
-  // combined state once, without delaying independent slow-source responses.
-  let feedRenderQueued = false;
-  const stopStore = store.subscribe(() => {
-    if (feedRenderQueued || frozen || disposed) return;
-    feedRenderQueued = true;
-    queueMicrotask(() => {
-      feedRenderQueued = false;
-      if (frozen || disposed) return;
-      render();
-      paintShell();
-    });
-  });
+  const stopCity = cityStore.subscribe(() => { if(!disposed&&!frozen)requestRender(true); });
+  // A batch can finish several modules in the same turn, and several turns in one frame: the latest combined
+  // state is drawn once per frame, without delaying independent slow-source responses beyond it.
+  const stopStore = store.subscribe(() => { if (!frozen && !disposed) requestRender(true); });
   const stopTheme = deps.theme?.onChange(() => { if (!disposed) render(); });
   // The reader's stores: a saved change repaints the layer and, at the desk, refreshes its modules; a switch repaints the shell.
   const stopSaved = onChange(saved.subscribe, () => {
@@ -1320,12 +1364,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     render();
     ensureSentences();
   });
-  // The network's tram lines measure the circle along the lines; the map loads the same artefact once.
-  void loadNetworkOnce().then((network) => {
-    if (disposed || !network) return;
-    frameLines = frameLinesOf(network);
-    if (!frozen) render();
-  });
+  ensureFrameLines();
   armPoll();
   armSlowPoll();
   tickTimer = setTimer(() => {

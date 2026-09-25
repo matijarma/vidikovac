@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DataError, fetchData, fetchTeaser, scan } from '../../app/src/api';
+import { DataError, fetchData, fetchSentences, fetchTeaser, scan } from '../../app/src/api';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -58,5 +58,22 @@ describe('fetchData / fetchTeaser', () => {
   it('fetchTeaser returns the module list', async () => {
     const t = await fetchTeaser((async () => json({ modules: [{ module: 'dhmz-cap', tier: 'open', status: 'live', fetchedAt: 'x', attribution: { text: 'a', url: 'u', licence: 'l' }, items: [] }] })) as unknown as typeof fetch);
     expect(t.modules[0]?.module).toBe('dhmz-cap');
+  });
+});
+
+describe('fetchSentences', () => {
+  const ok = () => new Response(JSON.stringify({ generatedAt: new Date().toISOString(), sentences: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  // A stable fact (shared/kiosk/sentence.ts stableSentenceFacts): typed, no countdown, a finite end still ahead.
+  const request = { locale: 'hr' as const, budget: 80, facts: [{ id: 'solar:sunrise', kind: 'vrijeme', text: 'Sunce izlazi u 06:46.', validUntil: Date.now() + 600_000 }] };
+  it('asks the caller once its lazy chunk is in hand and sends nothing when the answer is no (the page ended meanwhile)', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => ok());
+    expect(await fetchSentences(request as never, fetchImpl as never, { proceed: () => false })).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await fetchSentences(request as never, fetchImpl as never, { proceed: () => true })).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain('/api/kiosk/sentences');
+    // Without the option the request goes out as before.
+    await fetchSentences(request as never, fetchImpl as never);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

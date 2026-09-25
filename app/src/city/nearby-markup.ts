@@ -37,9 +37,20 @@ export function rowLayer(selection: PublicSelection): LayerId {
   return selection.kind === 'item' && selection.module === 'dogadanja' ? 'kultura' : 'u-pokretu';
 }
 
+/**
+ * A closure row whose feed brief is empty says what it is: the feed's own summary ("zatvoreno zbog radova, oba
+ * smjera"), else the plain words of the wall's sentence ("do 21:45 Gundulićeva" alone said nothing of a closure;
+ * round 1 phone F8, kiosk round 2 F11). The phone's own row: the wall draws the selection's row as it is.
+ */
+function withClosureSub(i18n: I18n, row: NearbyRow): NearbyRow {
+  if (row.kind !== 'closure' || row.sub) return row;
+  const { subShort: _short, ...rest } = row;
+  return { ...rest, sub: row.summary ?? i18n.t('sada.closureRow') };
+}
+
 /** One row as the wall draws it; a row with a subject holds, inside its li, the link that opens it. */
 export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string {
-  const html = rowMarkup(row, now, i18n);
+  const html = rowMarkup(withClosureSub(i18n, row), now, i18n);
   if (!html || !row.selection) return html;
   // The li's own tag ends at its first '>': every attribute value is escaped, so none carries one.
   const open = html.indexOf('>') + 1;
