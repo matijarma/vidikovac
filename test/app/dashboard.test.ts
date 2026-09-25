@@ -121,6 +121,8 @@ function mount(opts: MountOptions = {}) {
     loadNetwork: opts.loadNetwork ?? (async () => null), matchMedia: () => ({ matches: Boolean(opts.wide) }),
     setInterval: (fn: () => void, ms: number) => { const t = { fn, ms, cleared: false }; ticks.push(t); return t; },
     clearInterval: (h: unknown) => { (h as { cleared: boolean }).cleared = true; },
+    // Landings draw a microtask later here (a frame in the browser), so flush() sees every draw.
+    scheduleFrame: (fn: () => void) => queueMicrotask(fn),
     ...opts.deps,
   });
   const tick = (): void => { for (const t of [...ticks]) if (!t.cleared) t.fn(); };
@@ -1999,5 +2001,89 @@ describe('the place’s last departures (T3.1, FEED_LASTRUN)', () => {
       expect(lastRows(root)).toHaveLength(0);
       expect(root.querySelectorAll('[data-testid=nearby] li.nearby-row').length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('round 3, phone: draws that land on their own, the stale mark, the devices line, the alerts row, the lines behind the answer', () => {
+  const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.9773, lat: 45.8131, routes: ['6', '11', '12'] };
+  it('draws once per frame however many landings come in it: three boards answering in one frame are one draw, and the frame draws the rows', async () => {
+    const board = { operator: 'zet', stopId: STOP.id, stopName: STOP.name, status: 'live', generatedAt: new Date(NOW).toISOString(),
+      departures: [4, 12, 25].map((m, i) => ({ operator: 'zet', tripId: `t${i}`, routeId: '6', routeName: '6', headsign: 'Črnomerec', at: new Date(NOW + m * 60_000).toISOString() })) };
+    let landed = false;
+    const cache = { get: vi.fn((_op: string, id: string) => (landed && id === STOP.id ? board : undefined)), ensure: vi.fn(), destroy: vi.fn() };
+    const frames: (() => void)[] = [];
+    const { root, session, handle } = mount({ deps: { createBoards: () => cache as never, scheduleFrame: (fn) => { frames.push(fn); }, location: { pathname: '/d/', search: '', hash: '#layer=u-pokretu' } } });
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    while (frames.length) frames.shift()!();
+    const rows = () => root.querySelectorAll('[data-testid=transport-workspace] [data-testid=nearby] li.nearby-row[data-kind=departure]').length;
+    expect(rows()).toBe(0);
+    landed = true;
+    const settled = cache.ensure.mock.calls[0]![2] as () => void;
+    settled(); settled(); settled();
+    expect(frames, 'three landings in one frame ask for one draw').toHaveLength(1);
+    expect(rows(), 'nothing is drawn before the frame').toBe(0);
+    frames.shift()!();
+    expect(rows()).toBeGreaterThanOrEqual(1);
+    expect(frames).toHaveLength(0);
+    handle.destroy();
+  });
+  it('a stale source counts in the quiet line as one that stopped answering (desktop F23)', async () => {
+    const stale = (module: ModuleId): ModuleSnapshot => (module === 'glasnik' ? { ...snapshotOf(module), status: 'stale', staleSince: '2026-09-11T11:00:00Z' } : snapshotOf(module));
+    const { root, session, handle } = mount({ snapshot: stale });
+    session.join();
+    await flush();
+    expect(text(root.querySelector('[data-testid=sources-down]'))).toBe('1 izvor ne odgovara.');
+    handle.destroy();
+  });
+  it('the session sheet counts devices only once a second one is in the view (desktop F17)', () => {
+    const { root, session, handle } = mount();
+    session.join();
+    click(root, '[data-testid=session-label]');
+    const sheet = document.querySelector<HTMLElement>('[data-testid=session-sheet]')!;
+    expect(text(sheet.querySelector('.dialog-body'))).toContain('Ovaj je pogled otvoren na 2 uređaja.');
+    // The body is written when the sheet opens: the count is read again on the next opening.
+    const reopen = (): void => { click(sheet, '.dialog-close'); click(root, '[data-testid=session-label]'); };
+    session.count(1);
+    reopen();
+    expect(text(sheet.querySelector('.dialog-body'))).not.toContain('uređaj');
+    session.count(3);
+    reopen();
+    expect(text(sheet.querySelector('.dialog-body'))).toContain('Ovaj je pogled otvoren na 3 uređaja.');
+    handle.destroy();
+  });
+  it('the Još alerts row counts the switched-on alerts with their noun, so both states agree with their words', () => {
+    const { root, handle } = mount();
+    click(root, '[data-testid=tab-more]');
+    const title = () => text(root.querySelector('[data-testid=dir-notify] .row-title'));
+    expect(title()).toBe('Isticanje u aplikaciji: isključeno');
+    click(root, '[data-testid=dir-notify]');
+    click(document, '[data-testid=notify-sheet] [data-testid=notify-works]');
+    expect(title()).toBe('Isticanje u aplikaciji: 1 obavijest uključena');
+    click(document, '[data-testid=notify-sheet] [data-testid=notify-dhmz]');
+    expect(title()).toBe('Isticanje u aplikaciji: 2 obavijesti uključene');
+    click(document, '[data-testid=notify-sheet] [data-testid=notify-delays]');
+    expect(title()).toBe('Isticanje u aplikaciji: 3 obavijesti uključene');
+    handle.destroy();
+  });
+  it('the network artefact for the frame\'s lines is asked for after the first board is in hand, never beside it (F3)', async () => {
+    const board = { operator: 'zet', stopId: STOP.id, stopName: STOP.name, status: 'live', generatedAt: new Date(NOW).toISOString(), departures: [] };
+    let landed = false;
+    const cache = { get: vi.fn((_op: string, id: string) => (landed && id === STOP.id ? board : undefined)), ensure: vi.fn(), destroy: vi.fn() };
+    const loadNetwork = vi.fn(async () => null);
+    const { session, handle } = mount({ loadNetwork, deps: { createBoards: () => cache as never } });
+    await flush();
+    expect(loadNetwork, 'nothing before the join').not.toHaveBeenCalled();
+    session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
+    await flush();
+    expect(loadNetwork, 'the boards first').not.toHaveBeenCalled();
+    landed = true;
+    (cache.ensure.mock.calls[0]![2] as () => void)();
+    await flush();
+    expect(loadNetwork).toHaveBeenCalledTimes(1);
+    (cache.ensure.mock.calls[0]![2] as () => void)();
+    await flush();
+    expect(loadNetwork, 'once').toHaveBeenCalledTimes(1);
+    handle.destroy();
   });
 });
