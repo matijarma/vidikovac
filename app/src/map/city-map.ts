@@ -1002,6 +1002,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   //                   sources were handed, nameCandidates) that the collision
   //                   pass held back: where the wall's names yield to its
   //                   pills (decision 17), this is how many are yielding
+  //   data-stops      the stop beads MapLibre renders (once each; 0 where a
+  //                   window keeps them at opacity 0 for the finger) and
+  //   data-stop-names the stop names it placed: a surface's density as a
+  //                   number (round 4 kiosk lane, D-F4)
   /** Whether the last pushed collection had any mark at all; see probeKeyOf. */
   let probeHasMarks = false;
   /** Bumped by update() and applyCityOverlays(): the census is re-taken at the next idle, or the next settled still frame. */
@@ -1479,6 +1483,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       sourcePoints: (id) => sourcePoints(l, id),
       stop: () => stop,
       prozor: () => prozor !== null,
+      stopMarks: () => prozor?.stopMarks !== false,
       hold: (names) => { heldNames = names; applyOverlays(); },
     });
     destroyCensus = census.destroy;
