@@ -51,10 +51,21 @@ export function routeDelays(snapshot: ModuleSnapshot | undefined): RouteDelay[] 
  * the map's accessible label would say.
  */
 export function vehiclePoints(snapshot: ModuleSnapshot | undefined, now: number): MapPoint[] {
+  if (!snapshot) return [];
+  // A snapshot with its own time dates every fix without `now` (motion/fixes.ts): the same snapshot yields the same
+  // points, so the band and Karta, and the several draws one poll can cause, read them once (round 3, phone A).
+  const dated = snapshot.sourceUpdatedAt !== undefined || snapshot.fetchedAt !== undefined;
+  const memo = dated ? pointsMemo.get(snapshot) : undefined;
+  if (memo) return memo;
   const titles = new Map<string, string>();
-  for (const item of snapshot?.items ?? []) titles.set(item.id, item.title);
-  return vehicleFixes(snapshot, now).map((fix) => ({ ...fix, title: routeName(fix.routeId || titles.get(fix.id) || '') }));
+  for (const item of snapshot.items) titles.set(item.id, item.title);
+  const points = vehicleFixes(snapshot, now).map((fix) => ({ ...fix, title: routeName(fix.routeId || titles.get(fix.id) || '') }));
+  if (dated) pointsMemo.set(snapshot, points);
+  return points;
 }
+
+/** The points last built per snapshot object; a snapshot the store drops takes its entry with it. */
+const pointsMemo = new WeakMap<ModuleSnapshot, MapPoint[]>();
 
 export function closureLines(snapshot: ModuleSnapshot | undefined): MapLine[] {
   return (snapshot?.items ?? [])
