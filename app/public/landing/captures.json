@@ -1,5 +1,5 @@
 {
-  "provenance": "Actual application with live source data and real local code redemption. No fixtures or session bypass.",
+  "provenance": "The local application (wrangler dev) with a real local screen and real local code redemption; feed, city and departure data from the repository test fixtures (e2e/experience-fixtures.ts, e2e/city-fixtures.ts, e2e/departures-fixture.ts) on a browser clock set to Monday 21 September 2026, 17:45 Zagreb; basemap tiles read from the Protomaps build the regional archive is extracted from.",
   "masking": "QR, pairing code, and read-aloud code regions are explicitly masked as example captures. No active credentials are published.",
   "frozen": "Captured after the real ten-minute session expired. No clock or source data is simulated.",
   "captures": [
@@ -16,7 +16,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-21T02:56:47.787Z"
+      "capturedAt": "2026-09-25T02:36:12.480Z"
     },
     {
       "name": "kiosk",
@@ -31,7 +31,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-21T02:56:57.100Z"
+      "capturedAt": "2026-09-25T02:36:22.139Z"
     },
     {
       "name": "kiosk",
@@ -46,7 +46,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-21T02:57:06.575Z"
+      "capturedAt": "2026-09-25T02:36:31.352Z"
     },
     {
       "name": "kiosk",
@@ -61,67 +61,7 @@
         "height": 1080
       },
       "route": "/kiosk/",
-      "capturedAt": "2026-09-21T02:57:15.892Z"
-    },
-    {
-      "name": "phone",
-      "locale": "hr",
-      "theme": "light",
-      "widths": [
-        390,
-        780
-      ],
-      "viewport": {
-        "width": 390,
-        "height": 844
-      },
-      "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:57:29.710Z"
-    },
-    {
-      "name": "events",
-      "locale": "hr",
-      "theme": "light",
-      "widths": [
-        390,
-        780
-      ],
-      "viewport": {
-        "width": 390,
-        "height": 844
-      },
-      "route": "/d/ Događanja",
-      "capturedAt": "2026-09-21T02:57:32.460Z"
-    },
-    {
-      "name": "desktop",
-      "locale": "hr",
-      "theme": "light",
-      "widths": [
-        720,
-        1280
-      ],
-      "viewport": {
-        "width": 1440,
-        "height": 900
-      },
-      "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:57:35.283Z"
-    },
-    {
-      "name": "transport",
-      "locale": "hr",
-      "theme": "light",
-      "widths": [
-        720,
-        1280
-      ],
-      "viewport": {
-        "width": 1440,
-        "height": 900
-      },
-      "route": "/d/ Karta / Kretanje",
-      "capturedAt": "2026-09-21T02:58:02.064Z"
+      "capturedAt": "2026-09-25T02:36:41.397Z"
     },
     {
       "name": "peer",
@@ -136,12 +76,12 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-21T02:58:06.288Z"
+      "capturedAt": "2026-09-25T02:36:56.483Z"
     },
     {
       "name": "phone",
       "locale": "hr",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         390,
         780
@@ -151,12 +91,12 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:58:16.858Z"
+      "capturedAt": "2026-09-25T02:37:14.547Z"
     },
     {
       "name": "events",
       "locale": "hr",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         390,
         780
@@ -166,12 +106,12 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-21T02:58:19.593Z"
+      "capturedAt": "2026-09-25T02:37:21.547Z"
     },
     {
       "name": "desktop",
       "locale": "hr",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         720,
         1280
@@ -181,12 +121,12 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:58:22.486Z"
+      "capturedAt": "2026-09-25T02:59:01.054Z"
     },
     {
       "name": "transport",
       "locale": "hr",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         720,
         1280
@@ -195,8 +135,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Karta / Kretanje",
-      "capturedAt": "2026-09-21T02:59:00.098Z"
+      "route": "/d/ Karta",
+      "capturedAt": "2026-09-25T02:56:48.656Z"
     },
     {
       "name": "peer",
@@ -211,12 +151,12 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-21T02:59:03.436Z"
+      "capturedAt": "2026-09-25T02:43:06.222Z"
     },
     {
       "name": "phone",
-      "locale": "en",
-      "theme": "light",
+      "locale": "hr",
+      "theme": "dark",
       "widths": [
         390,
         780
@@ -226,12 +166,12 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:59:13.422Z"
+      "capturedAt": "2026-09-25T02:44:08.760Z"
     },
     {
       "name": "events",
-      "locale": "en",
-      "theme": "light",
+      "locale": "hr",
+      "theme": "dark",
       "widths": [
         390,
         780
@@ -241,12 +181,12 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-21T02:59:16.111Z"
+      "capturedAt": "2026-09-25T02:44:26.214Z"
     },
     {
       "name": "desktop",
-      "locale": "en",
-      "theme": "light",
+      "locale": "hr",
+      "theme": "dark",
       "widths": [
         720,
         1280
@@ -256,12 +196,12 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T02:59:18.977Z"
+      "capturedAt": "2026-09-25T03:03:39.200Z"
     },
     {
       "name": "transport",
-      "locale": "en",
-      "theme": "light",
+      "locale": "hr",
+      "theme": "dark",
       "widths": [
         720,
         1280
@@ -270,8 +210,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Karta / Kretanje",
-      "capturedAt": "2026-09-21T02:59:55.756Z"
+      "route": "/d/ Karta",
+      "capturedAt": "2026-09-25T03:00:56.459Z"
     },
     {
       "name": "peer",
@@ -286,12 +226,12 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-21T02:59:58.931Z"
+      "capturedAt": "2026-09-25T02:50:30.881Z"
     },
     {
       "name": "phone",
       "locale": "en",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         390,
         780
@@ -301,12 +241,12 @@
         "height": 844
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T03:00:09.507Z"
+      "capturedAt": "2026-09-25T02:50:57.334Z"
     },
     {
       "name": "events",
       "locale": "en",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         390,
         780
@@ -316,12 +256,12 @@
         "height": 844
       },
       "route": "/d/ Događanja",
-      "capturedAt": "2026-09-21T03:00:12.226Z"
+      "capturedAt": "2026-09-25T02:51:01.304Z"
     },
     {
       "name": "desktop",
       "locale": "en",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         720,
         1280
@@ -331,12 +271,12 @@
         "height": 900
       },
       "route": "/d/ Sada",
-      "capturedAt": "2026-09-21T03:00:15.145Z"
+      "capturedAt": "2026-09-25T03:04:11.588Z"
     },
     {
       "name": "transport",
       "locale": "en",
-      "theme": "dark",
+      "theme": "light",
       "widths": [
         720,
         1280
@@ -345,8 +285,8 @@
         "width": 1440,
         "height": 900
       },
-      "route": "/d/ Karta / Kretanje",
-      "capturedAt": "2026-09-21T03:00:53.811Z"
+      "route": "/d/ Karta",
+      "capturedAt": "2026-09-25T03:04:06.096Z"
     },
     {
       "name": "peer",
@@ -361,7 +301,67 @@
         "height": 844
       },
       "route": "/d/ actual five-minute peer session",
-      "capturedAt": "2026-09-21T03:00:56.942Z"
+      "capturedAt": "2026-09-25T02:51:32.918Z"
+    },
+    {
+      "name": "phone",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-25T02:51:38.542Z"
+    },
+    {
+      "name": "events",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        390,
+        780
+      ],
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "route": "/d/ Događanja",
+      "capturedAt": "2026-09-25T02:51:42.351Z"
+    },
+    {
+      "name": "desktop",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Sada",
+      "capturedAt": "2026-09-25T03:04:34.601Z"
+    },
+    {
+      "name": "transport",
+      "locale": "en",
+      "theme": "dark",
+      "widths": [
+        720,
+        1280
+      ],
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "route": "/d/ Karta",
+      "capturedAt": "2026-09-25T03:04:29.179Z"
     },
     {
       "name": "frozen",
