@@ -1,9 +1,12 @@
 // Build step (vite.config.ts dashboardPrefetchPlugin): the /s/ page hands over to /d/ within a second or two of a
 // scan, and /d/'s module graph (about 160 kB gzipped over twenty files) was fetched only then, over the same slow
 // link the check had just used (round 3, phone F3: the /d/ shell 2 s behind the hop on slow 4G). The built /s/
-// page therefore carries one `<link rel="prefetch">` per file of /d/'s static graph, JavaScript and stylesheets,
-// at the end of its body: the browser fetches them at its lowest priority, after the page's own assets and never
-// ahead of the check's POST, and the hop finds them in the HTTP cache. Files /s/ links itself are left out.
+// page therefore carries one `<link rel="modulepreload">` per script of /d/'s static graph and one
+// `<link rel="prefetch">` per stylesheet, at the end of its body, after the page's own scripts. Modulepreload,
+// not prefetch, for the scripts: across the navigation Chromium revalidates and reuses only what was loaded as a
+// module (a 304 per file), while a `rel="prefetch"` or a plain fetch() of the same file was fetched again in full
+// (round 3, the probe in review.local/companion/iterate/round3/phone/harness/prefetch-probe3.spec.ts). Files /s/
+// links itself are left out.
 
 /** What the plugin reads of Rollup's bundle: entry chunks, their static imports and the stylesheets they carry. */
 export interface BundleChunkLike {
@@ -41,8 +44,9 @@ export function entryChunkFor(bundle: Readonly<Record<string, BundleChunkLike>>,
 }
 
 /**
- * The prefetch links for `entrySuffix`'s graph appended before `</body>` of `html`; files the page already links are
- * skipped, and a page with no `</body>` or a bundle without that entry is returned as it was.
+ * The warm-up links for `entrySuffix`'s graph appended before `</body>` of `html`: modulepreload for its scripts,
+ * prefetch for its stylesheets. Files the page already links are skipped, and a page with no `</body>` or a bundle
+ * without that entry is returned as it was.
  */
 export function withDashboardPrefetch(html: string, bundle: Readonly<Record<string, BundleChunkLike>>, entrySuffix = '/entries/dashboard.ts'): string {
   const entry = entryChunkFor(bundle, entrySuffix);
@@ -50,7 +54,7 @@ export function withDashboardPrefetch(html: string, bundle: Readonly<Record<stri
   const { scripts, styles } = staticGraph(bundle, entry.fileName);
   const own = (file: string): boolean => html.includes(`/${file}"`) || html.includes(`/${file}'`);
   const links = [
-    ...scripts.filter((file) => !own(file)).map((file) => `<link rel="prefetch" as="script" crossorigin href="/${file}">`),
+    ...scripts.filter((file) => !own(file)).map((file) => `<link rel="modulepreload" crossorigin href="/${file}">`),
     ...styles.filter((file) => !own(file)).map((file) => `<link rel="prefetch" as="style" href="/${file}">`),
   ];
   if (links.length === 0) return html;

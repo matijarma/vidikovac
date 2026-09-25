@@ -24,13 +24,15 @@ const root = document.querySelector<HTMLElement>('#scan')!;
 let hash = location.hash;
 
 const { i18n } = bootPage({ page: 'scan', onLocaleChange: () => remount() });
+// Read before mount() spends the fragment: whether a code is on its way to /d/.
+const codeOnItsWay = codeFromHash(hash) !== null;
 let page = mount();
 // The one Manrope family: at once when the person is going to read this page, and only after FONTS_BEHIND_CODE_MS
 // when a code came in the fragment, since that page hands over to /d/ within a second or two and its five font
 // files (105 kB) were sharing a slow link with the check and with /d/'s own graph (round 3, phone F3). A check
 // that fails, or crawls, still gets its fonts once the wait is over.
 const FONTS_BEHIND_CODE_MS = 3_000;
-if (codeFromHash(hash) === null) void import('../ui/fonts.css');
+if (!codeOnItsWay) void import('../ui/fonts.css');
 else setTimeout(() => { void import('../ui/fonts.css'); }, FONTS_BEHIND_CODE_MS);
 
 function mount(): ScanPageHandle {

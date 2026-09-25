@@ -29,10 +29,10 @@ describe('staticGraph', () => {
 });
 
 describe('withDashboardPrefetch', () => {
-  it('appends a prefetch link per file /s/ does not already link, scripts with crossorigin as module scripts are fetched, before </body>', () => {
+  it('appends a modulepreload per script and a prefetch per stylesheet /s/ does not already link, before </body>', () => {
     const out = withDashboardPrefetch(S_HTML, BUNDLE);
-    expect(out).toContain('<link rel="prefetch" as="script" crossorigin href="/assets/d-1.js">\n<link rel="prefetch" as="script" crossorigin href="/assets/base-1.js">\n<link rel="prefetch" as="script" crossorigin href="/assets/qr-1.js">\n<link rel="prefetch" as="style" href="/assets/d-1.css">\n</body>');
-    expect(out).not.toContain('prefetch" as="script" crossorigin href="/assets/boot-1.js"');
+    expect(out).toContain('<link rel="modulepreload" crossorigin href="/assets/d-1.js">\n<link rel="modulepreload" crossorigin href="/assets/base-1.js">\n<link rel="modulepreload" crossorigin href="/assets/qr-1.js">\n<link rel="prefetch" as="style" href="/assets/d-1.css">\n</body>');
+    expect(out).not.toContain('modulepreload" crossorigin href="/assets/boot-1.js"');
     expect(out).not.toContain('prefetch" as="style" href="/assets/base-1.css"');
     expect(out).not.toContain('maplibre');
     expect(out.startsWith(S_HTML.slice(0, S_HTML.indexOf('</body>')))).toBe(true);
