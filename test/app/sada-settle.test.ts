@@ -172,9 +172,13 @@ describe('Sada stays calm and fits a phone held sideways (overview.css; round 1 
     expect(badge).toContain('min-inline-size: 2.75rem');
     expect(badge).toContain('font-size: var(--type-head)');
   });
-  it('F13: in a short landscape viewport the sentence card and the band share one row and everything else spans both columns', () => {
+  it('F13: in a short landscape viewport the place and its departures take the left half, the sentence over the band the right, everything else spans both columns (review of round 1, note 2)', () => {
     const block = /@media \(max-height: 30rem\) and \(orientation: landscape\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
-    expect(block).toContain(".ki[data-surface='phone'] .ws-sada { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);");
-    expect(block).toContain(".ki[data-surface='phone'] .ws-sada > :not(.sada-sentence):not(.sada-map) { grid-column: 1 / -1; }");
+    expect(block).toContain('display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);');
+    expect(block).toContain("grid-template-areas: 'place sentence' 'departures sentence' 'departures band';");
+    expect(block).toContain(".ki[data-surface='phone'] .ws-sada > * { grid-column: 1 / -1; }");
+    for (const [selector, area] of [['.sada-place', 'place'], ['.sada-sentence', 'sentence'], ['.sada-map', 'band'], ['.sada-departures', 'departures']]) {
+      expect(block).toContain(`.ki[data-surface='phone'] .ws-sada > ${selector} { grid-area: ${area}; }`);
+    }
   });
 });

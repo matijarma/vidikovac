@@ -21,6 +21,8 @@ export default defineConfig({
           environment: 'node',
           include: ['test/**/*.test.ts'],
           exclude: ['test/**/*.workers.test.ts', 'test/accept/**', '**/node_modules/**', 'video/**', 'e2e/**'],
+          // happy-dom pages sit at http://localhost:3000: a relative fetch fails there without a connection.
+          setupFiles: ['test/setup/dom-offline.ts'],
         },
       },
       {
@@ -55,9 +57,18 @@ export default defineConfig({
         test: {
           name: 'workers',
           include: ['test/**/*.workers.test.ts'],
+          // The host is shared: two worktrees' suites at once (load 13, 24 Sep 22:44) starve workerd, and a
+          // Durable Object round trip that takes 50 ms alone takes seconds. vitest's 5 s default then times a
+          // test out, and its leaked work (the module seams stay installed) breaks the next test in the file.
+          // A passing test returns as fast as before; only a stalled one waits longer.
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
         },
       },
     ],
     exclude: ['**/node_modules/**', 'app/dist/**', 'e2e/**', 'video/**'],
+    // Stopping a workers-pool runner disposes its workerd; on a loaded host that outlasts the 10 s default and the
+    // next file's runner failed to start ("socket hang up", two suites at once, 24 Sep 23:15).
+    teardownTimeout: 60_000,
   },
 });

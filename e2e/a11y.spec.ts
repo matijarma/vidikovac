@@ -26,6 +26,12 @@ const PAGES: { path: string; viewport: typeof KIOSK }[] = [
   { path: '/prijava/', viewport: KIOSK },
   { path: '/statistika/', viewport: PHONE },
   { path: '/statistika/', viewport: KIOSK },
+  { path: '/izvori/', viewport: PHONE },
+  { path: '/izvori/', viewport: KIOSK },
+  { path: '/privatnost/', viewport: PHONE },
+  { path: '/privatnost/', viewport: KIOSK },
+  { path: '/pristupacnost/', viewport: PHONE },
+  { path: '/pristupacnost/', viewport: KIOSK },
 ];
 const SCHEMES = ['light', 'dark'] as const;
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -64,6 +70,32 @@ for (const { path, viewport } of PAGES) {
       expect(blocking, blocking.map(describeViolation).join('\n\n')).toEqual([]);
     });
   }
+}
+
+// --- D-F19: one chrome on every public page. -------------------------------
+// The prose pages and /hitno read like / and /statistika: exactly one banner,
+// one main, one contentinfo, and the six-link "Stranice" list (with the rest of
+// the chrome) outside main. A page-local contents list may sit in main; the site
+// navigation may not. On /hitno the "provjeriti" badge stays out of the heading.
+for (const path of ['/izvori/', '/privatnost/', '/pristupacnost/', '/hitno']) {
+  test(`landmarks ${path}: one banner, one main, the site nav outside main`, async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    const response = await page.goto(`${APP_URL}${path}`);
+    expect(response?.status(), `${path} must answer 200`).toBe(200);
+    await expect(page.getByRole('banner'), `${path} banner`).toHaveCount(1);
+    await expect(page.getByRole('main'), `${path} main`).toHaveCount(1);
+    await expect(page.getByRole('contentinfo'), `${path} contentinfo`).toHaveCount(1);
+    await expect(page.locator('h1'), `${path} h1`).toHaveCount(1);
+    const main = page.getByRole('main');
+    await expect(main.getByRole('banner'), `${path} banner inside main`).toHaveCount(0);
+    await expect(main.getByRole('contentinfo'), `${path} contentinfo inside main`).toHaveCount(0);
+    await expect(main.locator('nav[aria-label="Stranice"]'), `${path} "Stranice" inside main`).toHaveCount(0);
+    await expect(page.getByRole('banner').locator('a[href="/"]'), `${path} wordmark in the banner`).toHaveCount(1);
+    if (path === '/hitno') {
+      await expect(page.getByRole('heading', { level: 2, name: 'Dežurne ljekarne', exact: true })).toHaveCount(1);
+      await expect(page.getByRole('region', { name: 'Dežurne ljekarne', exact: true })).toHaveCount(1);
+    }
+  });
 }
 
 // --- R-F5: the moving map has a text path. ----------------------------------

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lighthouse accessibility category over the five public surfaces. Requires a
+// Lighthouse accessibility category over the public surfaces. Requires a
 // running server (default the wrangler dev app server on E2E_PORT) and a local
 // Chrome or Chromium that chrome-launcher can find (CHROME_PATH overrides).
 //   node scripts/lighthouse-a11y.mjs
@@ -11,7 +11,7 @@ import { renderTable, summarise } from './lib/lighthouse-report.mjs';
 import { e2ePorts, localOrigin } from './e2e-ports.mjs';
 
 const BASE = process.env.E2E_APP_URL ?? localOrigin(e2ePorts().app);
-const PAGES = ['/', '/hitno', '/kiosk/', '/s/', '/d/', '/prijava/', '/statistika/'];
+const PAGES = ['/', '/hitno', '/kiosk/', '/s/', '/d/', '/prijava/', '/statistika/', '/izvori/', '/privatnost/', '/pristupacnost/'];
 const MIN = Number(process.env.LH_MIN_A11Y ?? '95');
 
 const chrome = await launch({ chromeFlags: ['--headless=new', '--no-sandbox', '--window-size=1366,768'] });

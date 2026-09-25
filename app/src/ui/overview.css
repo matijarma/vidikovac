@@ -93,11 +93,22 @@
 @container ws (max-width: 18rem) {
   .nearby-row, .nearby-link { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-1); }
 }
-/* A phone held sideways (round 1 finding F13): the sentence card and the band share one row, so the first departures
-   stand above the tab bar instead of a whole screen below it. */
+/* A phone held sideways (round 1 finding F13; review of round 1, note 2): the place and its three departures in the
+   left half, the sentence card over the band in the right, so the three departures stand whole above the tab bar
+   (at 844×390 one and a half did when the sentence and the band took a row above them). */
 @media (max-height: 30rem) and (orientation: landscape) {
-  .ki[data-surface='phone'] .ws-sada { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
-  .ki[data-surface='phone'] .ws-sada > :not(.sada-sentence):not(.sada-map) { grid-column: 1 / -1; }
+  .ki[data-surface='phone'] .ws-sada {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start;
+    grid-template-areas: 'place sentence' 'departures sentence' 'departures band';
+  }
+  .ki[data-surface='phone'] .ws-sada > * { grid-column: 1 / -1; }
+  .ki[data-surface='phone'] .ws-sada > .sada-place { grid-area: place; }
+  .ki[data-surface='phone'] .ws-sada > .sada-sentence { grid-area: sentence; }
+  .ki[data-surface='phone'] .ws-sada > .sada-map { grid-area: band; }
+  .ki[data-surface='phone'] .ws-sada > .sada-departures { grid-area: departures; }
 }
 /* The desk pair (dashboard.css .ki-desk): the feed keeps the phone's reading measure beside the map. */
 .ki[data-stage='desk'] .ws-sada { max-inline-size: 32rem; }
+/* Read at arm's length or more, the desk's secondary lines (a day under a clock, a row's detail, the sentence's kicker)
+   take the control size, 14 px (round 2, desktop F20: 12 to 13 px beside a 16 px feed). */
+.ki[data-stage='desk'] .ws-sada { --type-secondary: var(--type-control); }

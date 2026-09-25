@@ -133,6 +133,9 @@ describe('the stop sheet says what comes next, first', () => {
     const withNow = departureRow(i18n, tomorrow, kindOf, undefined, 'timetable', NOW);
     expect(withNow).toContain('04:31');
     expect(withNow).toContain('<span class="t-eta-day">sutra</span>');
+    // The text a reader or a copy takes has a space between the clock and the day (review of round 1, note 4).
+    const etaText = (/class="t-eta"[^>]*>(.*)$/.exec(withNow)?.[1] ?? '').replace(/<[^>]+>/g, '');
+    expect(etaText.startsWith('04:31 sutra')).toBe(true);
     expect(departureRow(i18n, today, kindOf, undefined, 'timetable', NOW)).not.toContain('t-eta-day');
     expect(departureRow(i18n, tomorrow, kindOf, undefined, 'timetable')).not.toContain('t-eta-day');
     // The stop sheet passes the page's clock through StopDetailData.now: its "Vozni red" tail says the day too.

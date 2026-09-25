@@ -10,7 +10,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import en from '../../app/src/i18n/en.json';
 import hr from '../../app/src/i18n/hr.json';
 import type { SessionClient, SessionSnapshot } from '../../app/src/session';
-import { LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
+import { LAST_POLL_GUARD_MS, LAYER_STORAGE_KEY, mountDashboard, parseSessionHash, type DashboardDeps } from '../../app/src/dashboard';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import { THEME_PREFERENCES } from '../../app/src/ui/theme';
 import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
@@ -339,7 +339,7 @@ describe('shell and navigation', () => {
   it('carries the notify row the Kvart panel used to be the only way to reach the bell through; its action opens the same sheet', () => {
     const { root } = mount();
     click(root, '[data-testid=tab-more]');
-    expect(text(root.querySelector('[data-testid=dir-notify] .row-title'))).toBe('Isticanje u aplikaciji, isključene');
+    expect(text(root.querySelector('[data-testid=dir-notify] .row-title'))).toBe('Isticanje u aplikaciji: isključeno');
     expect(text(root.querySelector('[data-testid=dir-notify] .row-sub'))).toBe('Ništa se ne šalje: uključena obavijest samo ističe pločice u ovom pregledniku.');
     click(root, '[data-testid=dir-notify]');
     expect(document.querySelector('[data-testid=notify-sheet]')).not.toBeNull();
@@ -897,13 +897,17 @@ describe('the full map view (transport)', () => {
     shell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
     expect(shell.dataset.modality).toBe('keyboard');
   });
-  it('Jos is one history entry: opening it pushes, Back through the fragment closes it, closing it by its tab replaces, and Escape closes it (round 1, desktop F5)', async () => {
+  it('Jos is one history entry: opening it pushes, Back through the fragment closes it, closing it by its tab or by Escape steps back off it, so no two entries alike are left (round 1, desktop F5)', async () => {
     const pushes: string[] = [];
     const replaces: string[] = [];
     const location = { pathname: '/d/', search: '', hash: '#room=r1' };
+    // The browser's stack of fragments: push adds one above the current, replace rewrites it, back steps down.
+    const stack: string[] = [location.hash];
+    let at = 0;
     const history = {
-      pushState: (_s: unknown, _t: string, url?: string | URL | null) => { pushes.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
-      replaceState: (_s: unknown, _t: string, url?: string | URL | null) => { replaces.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; },
+      pushState: (_s: unknown, _t: string, url?: string | URL | null) => { pushes.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; stack.splice(++at, Infinity, location.hash); },
+      replaceState: (_s: unknown, _t: string, url?: string | URL | null) => { replaces.push(String(url)); location.hash = String(url).split('#')[1] ? `#${String(url).split('#')[1]}` : ''; stack[at] = location.hash; },
+      back: () => { at = Math.max(0, at - 1); location.hash = stack[at]!; handle.restore(location.hash); },
     };
     const { root, session, handle } = mount({ deps: { location, history } });
     session.join();
@@ -920,12 +924,46 @@ describe('the full map view (transport)', () => {
     // Forward: the marked entry opens Jos again.
     handle.restore('#room=r1&layer=grad-sada&jos=1');
     expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('true');
-    // Escape closes it in place: the mark leaves the fragment by a replace, never a new entry.
+    // Escape closes it by a step back off Jos's entry: no copy of the layer's entry is left for the next Back.
     const replacesBefore = replaces.length;
     root.querySelector<HTMLElement>('.ki')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('false');
-    expect(replaces.length).toBe(replacesBefore + 1);
+    expect(replaces.length).toBe(replacesBefore);
     expect(location.hash).not.toContain('jos');
+    // Its tab closes it the same way (review of round 1, note 1): the stack holds one entry per state, never two alike.
+    root.querySelector<HTMLElement>('[data-testid=tab-more]')!.click();
+    expect(stack.slice(0, at + 1).at(-1)).toContain('jos=1');
+    const depth = at;
+    root.querySelector<HTMLElement>('[data-testid=tab-more]')!.click();
+    expect(root.querySelector('[data-testid=tab-more]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(at).toBe(depth - 1);
+    expect(replaces.length).toBe(replacesBefore);
+    expect(location.hash).not.toContain('jos');
+    const live = stack.slice(0, at + 1);
+    expect(new Set(live).size, `the entries a Back walks through: ${live.join(' | ')}`).toBe(live.length);
+  });
+
+  it('sends no data poll inside the session\'s last 2 s by its clock, so a client behind the server\'s clock never polls past the end (observe-d521b)', async () => {
+    let clock = NOW;
+    const { root, session, fetchData, tick } = mount({ now: () => clock });
+    session.join();
+    await flush();
+    clock = EXPIRES - LAST_POLL_GUARD_MS - 3_000;
+    fetchData.mockClear();
+    tick();
+    await flush();
+    expect(fetchData, 'a poll with time to spare goes out').toHaveBeenCalled();
+    fetchData.mockClear();
+    clock = EXPIRES - LAST_POLL_GUARD_MS + 500;
+    tick();
+    await flush();
+    expect(fetchData, 'no poll in the last 2 s').not.toHaveBeenCalled();
+    expect(root.querySelector('[data-testid=session-ended]')).toBeNull();
+    clock = EXPIRES + 100;
+    tick();
+    await flush();
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(root.querySelector('[data-testid=session-ended]')).not.toBeNull();
   });
 
   it('writes one history entry per place, none per poll, and Back through the fragment closes the detail', async () => {
@@ -1666,16 +1704,15 @@ describe('the desk pair (WP4 chunk E)', () => {
     handle.destroy();
   });
 
-  it('Karta\'s default sheet lists the place\'s U blizini rows through the page (ctx.nearby), with the circle in its peek', async () => {
+  it('the pair\'s Karta repeats nothing Sada lists beside it: an idle sheet with the place and the circle in its peek, one U blizini on the page (round 2, desktop F3)', async () => {
     const { root, session, handle } = mount({ wide: true });
     session.join('scanner', { kind: 'venue', expiresAt: null, stop: STOP });
     await flush();
     const workspace = root.querySelector<HTMLElement>('[data-testid=transport-workspace]')!;
-    const list = workspace.querySelector<HTMLElement>('[data-testid=nearby]')!;
-    expect(list, 'the sheet body is the shared nearby section').not.toBeNull();
-    expect(text(list.querySelector('[data-testid=nearby-head]'))).toMatch(/^U blizini · \d+(,\d)? km · ~\d+ min$/);
-    expect(list.querySelector('[data-testid=nearby-rows]')).not.toBeNull();
-    expect(workspace.querySelector('[data-testid=nearby-pending]')).toBeNull();
+    expect(workspace.querySelector('[data-testid=nearby], [data-testid=nearby-pending], [data-kind=departure]'), 'no rows of its own beside Sada').toBeNull();
+    expect(workspace.dataset.idle).toBe('true');
+    expect(root.querySelectorAll('[data-testid=nearby]')).toHaveLength(1);
+    expect(root.querySelector('#layer-grad-sada [data-testid=nearby]')).not.toBeNull();
     const peek = workspace.querySelector<HTMLElement>('[data-testid=transport-peek]')!;
     expect(text(peek.querySelector('strong'))).toBe(STOP.name);
     expect(text(peek.querySelector('.t-peek-pill'))).toMatch(/^\d+(,\d)? km · ~\d+ min$/);
@@ -1791,6 +1828,37 @@ describe('explicit casting (D5)', () => {
     expect(text(root.querySelector('[data-testid=presentation-panel]'))).toContain('Koncert u parku');
     click(root, '[data-testid=present-view]');
     expect(session.presentations[0]!.target).toEqual({ layer: 'kultura', selection: { kind: 'item', id: expect.stringMatching(/^[0-9a-f]{16}$/), module: 'dogadanja' } });
+  });
+  it('the panel closes on Escape with the focus back on its control, and on a move to Jos or another layer; a selection inside the layer keeps it (round 2, desktop F6)', async () => {
+    const { root, session, handle } = mount({ wide: true });
+    session.join('scanner', screen);
+    await flush();
+    const panel = () => root.querySelector('[data-testid=presentation-panel]');
+    click(root, '[data-testid=screen-control]');
+    expect(panel()).not.toBeNull();
+    expect(text(panel())).toContain('Ovaj pogled');
+    expect(text(panel())).not.toContain('Želiš');
+    root.querySelector<HTMLElement>('[data-testid=present-view]')!.focus();
+    root.querySelector<HTMLElement>('.ki')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel()).toBeNull();
+    expect(root.querySelector('[data-testid=screen-control]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(root.querySelector('[data-testid=screen-control]'));
+    // Escape with the panel shut is left to the rest of the page: Jos opened after it still closes on the next one.
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=status-more]');
+    expect(panel()).toBeNull();
+    click(root, '[data-testid=status-more]');
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=status-more]');
+    expect(panel()).toBeNull();
+    click(root, '[data-testid=dir-kultura]');
+    await flush();
+    click(root, '[data-testid=screen-control]');
+    click(root, '[data-testid=event-row] [data-action=select]');
+    expect(text(panel())).toContain('Koncert u parku');
+    // Back to another layer (the browser's Back): the panel offered the view that has gone, so it closes.
+    handle.restore('#room=r1&layer=grad-sada');
+    expect(panel()).toBeNull();
   });
   it('does not offer public-screen controls to a peer or a session without a screen', () => {
     const noScreen = mount();

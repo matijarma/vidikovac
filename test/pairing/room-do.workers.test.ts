@@ -204,7 +204,7 @@ describe('RoomDO events', () => {
     await waitForRow(
       stub,
       (row) => row.event === 'panel_open' && row.dim1 === 'kultura' && row.count === EVENTS_PER_SOCKET_MAX - 2,
-      5000,
+      30_000,
     );
     const rows = await stub.query('2020-01-01');
     const sum = (event: string, dim1: string, dim2: string): number =>
@@ -213,7 +213,7 @@ describe('RoomDO events', () => {
     expect(sum('export', 'u-pokretu', 'ics')).toBe(1);
     expect(sum('export', 'u-pokretu', 'zip')).toBe(0);
     expect(rows.some((r) => r.event === 'page_view')).toBe(false);
-  }, 15_000);
+  }, 60_000);
 });
 
 describe('RoomDO share and redeemPeer', () => {
@@ -352,7 +352,7 @@ describe('RoomDO expiry chain', () => {
     await waitForRow(
       metricsStub(testEnv),
       (row) => row.event === 'session_end' && row.dim1 === 'expired' && row.dim2 === '<1min',
-      5000,
+      30_000,
     );
-  }, 20_000);
+  }, 60_000);
 });

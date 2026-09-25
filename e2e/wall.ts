@@ -675,8 +675,9 @@ export interface CalmMotionSpec {
   row: string;
   /** The window and element property the watcher uses. */
   key: string;
+  /** How many records the detail keeps (CALM_DETAIL_RECORDS_MAX). */
+  detailMax: number;
 }
-export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion' });
 
 export interface CalmMotionReading {
   /** The watched subtree existed when the minute started. */
@@ -711,7 +712,41 @@ export interface CalmMotionReading {
   entered: string[];
   /** Rows without a data-id: their node cannot be followed. */
   untracked: number;
+  /**
+   * The evidence behind the counts, so a failing minute can be read afterwards (lane v-observe6): the row keys at
+   * every reading that bounded a pair, and every structural record with its nodes' keys and what each node did.
+   * Informational only: no rule reads it. Absent in a reading recorded before it existed.
+   */
+  detail?: CalmMotionDetail;
 }
+
+/**
+ * What one node of a record did. `add`: a node not seen before, whose key was not on the list at the previous
+ * reading (a row entering, or any other element); `remove`: a node taken out for good, no row with its key left on
+ * the list; `move`: a node already seen, put back (an add) or taken out and put back in the same batch (a remove);
+ * `re-create`: a new node for a key that was on the list at the previous reading (an add), or a node taken out while
+ * another node with its key stands (a remove).
+ */
+export type CalmMutationKind = 'add' | 'remove' | 'move' | 're-create';
+export interface CalmMutationNode { key: string | null; tag: string; kind: CalmMutationKind }
+export interface CalmMutationRecord {
+  /** Page clock (Date.now()) when the observer callback saw the record. */
+  at: number;
+  /** The reading pair it fell in: 0 between the window's start and its first mark, and so on. */
+  seg: number;
+  adds: CalmMutationNode[];
+  removes: CalmMutationNode[];
+}
+export interface CalmMotionDetail {
+  /** The row keys at each reading that bounded a pair (the start, every mark, the read), with the page clock. */
+  marks: { at: number; keys: string[] }[];
+  /** The structural records in order; at most CALM_DETAIL_RECORDS_MAX, `dropped` counts the rest. */
+  records: CalmMutationRecord[];
+  dropped: number;
+}
+/** A runaway minute (a list rebuilt every frame) keeps its first records only: enough to read, never a huge file. */
+export const CALM_DETAIL_RECORDS_MAX = 400;
+export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
 
 /** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
 export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
@@ -722,6 +757,10 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
   // A record's element nodes by their row key (null: not a keyed row), so a turnover can be told from churn.
   const nodeKey = (n: Node): string | null => ((n as HTMLElement).dataset ? keyOf(n as HTMLElement) : null);
   rows.forEach((el, i) => { (el as unknown as Record<string, unknown>)[spec.key] = i; });
+  // Every element node this window has seen under the root, so an add can tell a node put back (a move) from a new one.
+  const seen = new WeakSet<Node>(root ? [root, ...Array.from(root.querySelectorAll('*'))] : []);
+  const tagOf = (n: Node): string => ((n as Element).tagName || '').toLowerCase();
+  const standing = (key: string): boolean => Array.from(document.querySelectorAll<HTMLElement>(spec.row)).some((el) => keyOf(el) === key);
   const state = {
     rootFound: Boolean(root),
     before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
@@ -730,10 +769,15 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
     records: [] as { adds: (string | null)[]; removes: (string | null)[]; seg: number }[],
     /** The row keys at each reading: the window's start, every mark, and the read. */
     marks: [rows.map(keyOf).filter((k): k is string => k !== null)] as string[][],
+    markTimes: [Date.now()] as number[],
+    /** The same records with what each node did (CalmMotionDetail), capped. */
+    log: [] as { at: number; seg: number; adds: { key: string | null; tag: string; kind: string }[]; removes: { key: string | null; tag: string; kind: string }[] }[],
+    dropped: 0,
     observer: null as MutationObserver | null,
     mark(): void {
       if (state.observer) state.count(state.observer.takeRecords());
       state.marks.push(Array.from(document.querySelectorAll<HTMLElement>(spec.row)).map(keyOf).filter((k): k is string => k !== null));
+      state.markTimes.push(Date.now());
     },
     count(records: MutationRecord[]): void {
       for (const m of records) {
@@ -742,7 +786,23 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
         const removes = Array.from(m.removedNodes).filter((n) => n.nodeType === 1);
         if (adds.length || removes.length) {
           state.mutations++;
-          state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey), seg: state.marks.length - 1 });
+          const seg = state.marks.length - 1;
+          state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey), seg });
+          const previous = state.marks[seg] ?? [];
+          const added = adds.map((n) => {
+            const key = nodeKey(n);
+            const kind = seen.has(n) ? 'move' : key !== null && previous.includes(key) ? 're-create' : 'add';
+            seen.add(n);
+            if ((n as Element).querySelectorAll) for (const d of Array.from((n as Element).querySelectorAll('*'))) seen.add(d);
+            return { key, tag: tagOf(n), kind };
+          });
+          const removed = removes.map((n) => {
+            const key = nodeKey(n);
+            const kind = n.isConnected ? 'move' : key !== null && standing(key) ? 're-create' : 'remove';
+            return { key, tag: tagOf(n), kind };
+          });
+          if (state.log.length < spec.detailMax) state.log.push({ at: Date.now(), seg, adds: added, removes: removed });
+          else state.dropped++;
         } else if (m.addedNodes.length || m.removedNodes.length) state.textSwaps++;
       }
     },
@@ -769,6 +829,7 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   const state = w[spec.key] as {
     rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
     records: { adds: (string | null)[]; removes: (string | null)[]; seg?: number }[]; marks?: string[][];
+    markTimes?: number[]; log?: CalmMutationRecord[]; dropped?: number;
     observer: MutationObserver | null; count: (r: MutationRecord[]) => void; mark?: () => void;
   } | undefined;
   if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, marks: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
@@ -821,10 +882,12 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
     turnovers += Math.max(addsTaken.size, removesTaken.size);
   }
   delete w[spec.key];
+  const times = state.markTimes ?? [];
   return {
     rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations,
     turnovers, marks: marks.length, churn: state.mutations - excused,
     textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked,
+    ...(state.log ? { detail: { marks: marks.map((keys, i) => ({ at: times[i] ?? 0, keys })), records: state.log, dropped: state.dropped ?? 0 } } : {}),
   };
 };
 

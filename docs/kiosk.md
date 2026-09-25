@@ -307,7 +307,7 @@ bez vremena dohvata. Dežurnu ljekarnu traka pokazuje kao zeleni križ, „24/7�
 i kratku adresu; čitač zaslona zeleni križ najavljuje nazivom i adresom
 dežurne ljekarne, a kad adresu nije moguće prikazati, samo kao „24/7”. Na
 javnom zaslonu traka je samo tekst: riječ stanja nije ni gumb ni poveznica,
-oznake `/hitno` na njoj nema, a ni navod izvora karte nije poveznica. Telefon
+oznake `/hitno` na traci nema, a ni navod izvora karte nije poveznica. Telefon
 ili tablet koji je otvorio `/kiosk/` zadržava poveznicu na `/hitno` i gumb za
 „Osnovno”.
 Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.

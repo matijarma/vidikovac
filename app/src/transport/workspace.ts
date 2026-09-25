@@ -213,7 +213,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
             <p class="visually-hidden" id="${id}-hint" data-ref="search-hint"></p>
           </div>
         </div>
-        <div class="t-sheet-body" id="${ids.body}" data-testid="transport-detail">
+        <div class="t-sheet-body" id="${ids.body}" data-testid="transport-detail" tabindex="0">
           <div class="t-sheet-content" data-ref="content"></div>
           <p class="t-sheet-note" data-testid="transport-note"></p>
         </div>
@@ -688,9 +688,17 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const focusId = active instanceof HTMLElement && content.contains(active) ? active.id : '';
     const next=document.createElement('div');next.innerHTML=html;
     const scroll = body.scrollTop;
+    // A detail's heading holds the focus a choice moved there (focusDetail) with a tabindex the markup does not carry:
+    // the reconciler takes the attribute away and the browser drops the focus to <body> (round 2, desktop F7). The
+    // same heading, kept by the reconciler, takes it back.
+    const heldHeading = active instanceof HTMLElement && content.contains(active) && !focusId && /^H[1-6]$/.test(active.tagName) ? active : null;
     reconcile(content,next);
     body.scrollTop = scroll;
     if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+    else if (heldHeading?.isConnected && document.activeElement !== heldHeading) {
+      heldHeading.tabIndex = -1;
+      heldHeading.focus({ preventScroll: true });
+    }
   }
 
   /** The sheet: search results while typing, the selection's detail, else the place and what is near it; and the peek line above it. */
@@ -748,6 +756,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     swapBody(html);
     if(activeOption)document.getElementById(activeOption)?.scrollIntoView?.({block:'nearest'});
     element.dataset.searching=String(Boolean(query));
+    element.dataset.idle=String(html==='');
     for(const slot of content.querySelectorAll<HTMLElement>('[data-city-air]')){
       const station=slot.dataset.cityAir!;
       if(pollutants.has(station))slot.innerHTML=pollutants.get(station)!;
@@ -778,6 +787,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const list = nearbyList();
     // The place's name is the catalogue's or the operator's text: vetted before the peek says it.
     const peekHtml = `<strong>${esc(vetExternal('name', placeNow().name, 'row') ?? '')}</strong>${list ? `<span class="t-peek-pill">${esc(list.pill)}</span>` : ''}`;
+    // The desk pair (round 2, desktop F3): Sada beside the map already lists these rows, so the sheet under the map is
+    // the place's name, its circle and the search, and grows only for what the person looks up or taps.
+    if (c.pair) return ['', peekHtml];
     if (list) return [list.html, peekHtml];
     // The page has a list but not its rows yet (the selection code loads with its own chunk): one quiet line.
     return [c.nearby ? `<p class="t-empty" role="status" aria-busy="true" data-testid="nearby-pending">${esc(c.i18n.t('status.loading'))}</p>` : '', peekHtml];

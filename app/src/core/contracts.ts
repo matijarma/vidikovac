@@ -72,6 +72,9 @@ export interface ExperienceActions {
    *  it while nothing is typed or selected. Supplied by the page; null while the rows are not in hand
    *  yet. Absent where no list exists (the kiosk's paired board, a unit context). */
   nearby?: (cap: number) => NearbyList | null;
+  /** Karta is the map half of the desk pair: Sada stands beside it with the same departures and "U blizini" rows,
+   *  so the idle sheet lists nothing of its own (round 2, desktop F3). */
+  pair?: boolean;
   setLocation?: (location: LocationContext) => void;
   boards?: BoardCache;
   onLocalData?: () => void;
