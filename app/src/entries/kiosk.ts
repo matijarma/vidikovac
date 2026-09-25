@@ -85,6 +85,8 @@ mountKiosk(root, {
   // A resize, a fullscreen change or a turn of the screen refits the wall's frame once it has settled (lane p-map).
   onRepaint: repaintOn(theme, window, { doc: document, settleMs: REFIT_SETTLE_MS, setTimeout: (fn, ms) => window.setTimeout(fn, ms), clearTimeout: (t) => window.clearTimeout(t as number) }),
   mapFactory: createMapRenderer,
+  raf: (fn) => window.requestAnimationFrame(fn),
+  cancelRaf: (handle) => window.cancelAnimationFrame(handle as number),
 });
 // The secret is in localStorage now, and ?tema= only ever needed to land
 // once: keep both out of the address bar and history, the same way as before.
