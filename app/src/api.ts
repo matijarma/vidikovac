@@ -88,16 +88,25 @@ export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: stri
   return body;
 }
 
+export interface SentenceFetchOptions {
+  /** Asked once the lazily loaded chunk is in hand, right before the request goes out: false sends nothing and answers []. */
+  proceed?: () => boolean;
+}
+
 /**
  * Model-written header sentences for a set of facts (POST /api/kiosk/sentences, WP1's route).
  * Anything but a 200 with JSON, or no network at all, answers [] -- the template sentences
  * cover every such case, so a caller never waits on this or shows an error for it.
+ * The validator's chunk is loaded lazily, and a page that decided to ask while live can have
+ * ended before it arrives: `proceed` is the caller's last word before the request is sent
+ * (the ten-minute end: a request after it is one the page promised never to make).
  */
-export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch): Promise<WrittenSentence[]> {
+export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch, options: SentenceFetchOptions = {}): Promise<WrittenSentence[]> {
   try {
     // scan/fetchData are shared by every page. Optional sentence inference
     // must not put its validator into all of those pages' initial bundles.
     const { fetchSentenceResponse } = await import('./city/sentence-api');
+    if (options.proceed && !options.proceed()) return [];
     return await fetchSentenceResponse(request, fetchImpl);
   } catch {
     return [];

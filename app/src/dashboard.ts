@@ -20,7 +20,7 @@ import { createSavedStore, type SavedKind } from './core/saved-store';
 import { loadStops } from './core/screens';
 import { createViewStore } from './core/view-store';
 import { createBoardCache, type BoardCache } from './city/boards';
-import { fetchSentences as fetchSentencesImpl } from './api';
+import { fetchSentences as fetchSentencesImpl, type SentenceFetchOptions } from './api';
 import { askBoards, loadSadaFeed, NEARBY_HOLD_MS, nearbyInput, sadaFeed, type SadaFeedModule } from './city/feed';
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
@@ -120,8 +120,9 @@ export interface DashboardDeps {
   /** Shared with the entry's idle-prefetch guard; omitted creates the device store here. */
   mapMode?: MapModeStore;
   loadNetwork?: () => Promise<Network | null>;
-  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. */
-  fetchSentences?: (request: SentenceRequest) => Promise<WrittenSentence[]>;
+  /** Sada's sentence route (seam S6, WP4 step 12); omitted uses api.ts fetchSentences. The options carry the page's
+   *  last word before the request is sent (its validator loads lazily; the page may have ended meanwhile). */
+  fetchSentences?: (request: SentenceRequest, options?: SentenceFetchOptions) => Promise<WrittenSentence[]>;
   /** The screen stop's last-departure table (T3.1); omitted uses the static file under /data/lastrun. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
   onCopy?: (text: string, attribution: Attribution) => void;
@@ -215,7 +216,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   // candidate: a rejected fact yields no sentence, decision 21). The tools live in the lazy feed chunk.
   /** The phone asks the sentence route at most this often. */
   const SENTENCE_FETCH_MS = 60_000;
-  const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
+  const fetchSentences = deps.fetchSentences ?? ((request: SentenceRequest, options?: SentenceFetchOptions) => fetchSentencesImpl(request, fetch, options));
   let sentenceSequence: ReturnType<SadaFeedModule['createSentenceSequence']> | null = null;
   let modelSentences: WrittenSentence[] = [];
   let sentenceFetchKey = '';
@@ -529,7 +530,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     sentenceFetchKey = key;
     sentenceAskedAt = at;
     const seq = ++sentenceFetchSeq;
-    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }).then((answer) => {
+    // Decided while live; sent only if still live once the route's chunk is in hand (the ten-minute end can fall in
+    // between, and a request after it is one the page promised never to make: accept/phone.spec.ts, the expiry row).
+    const proceed = (): boolean => !disposed && !frozen && !paused && session.snapshot().phase === 'live';
+    void fetchSentences({ locale, budget: feed.PHONE_SENTENCE_BUDGET, facts: stable }, { proceed }).then((answer) => {
       if (disposed || frozen || seq !== sentenceFetchSeq) return;
       modelSentences = feed.readWrittenSentences(answer, { facts: stable, budget: feed.PHONE_SENTENCE_BUDGET, now: now() });
       if (modelSentences.length) render();

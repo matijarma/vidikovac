@@ -1525,6 +1525,20 @@ describe('Sada\'s sentence (WP4 step 12)', () => {
     handle.destroy();
   });
 
+  it('hands the route its last word before sending: yes while the session is live, no once it ended (the request decided before the end, sent after the lazy chunk, accept phone-expiry)', async () => {
+    const fetchSentences = answerWith((req) => req.facts[0]!.text);
+    const { session, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });
+    session.join();
+    await flush();
+    expect(fetchSentences).toHaveBeenCalledTimes(1);
+    const options = (fetchSentences.mock.calls[0] as unknown as [Request, { proceed?: () => boolean }])[1];
+    expect(options?.proceed).toBeTypeOf('function');
+    expect(options!.proceed!()).toBe(true);
+    session.expire();
+    expect(options!.proceed!(), 'the session ended between the decision and the chunk: nothing is sent').toBe(false);
+    handle.destroy();
+  });
+
   it('asks at most once a minute: the polls inside the minute ask nothing, a new request (another language) waits for it too', async () => {
     const time = clock();
     const fetchSentences = answerWith((req) => req.facts[0]!.text);
