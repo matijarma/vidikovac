@@ -24,7 +24,7 @@ import {
   type NearbyInput,
   type NearbyKind,
   type NearbyRow,
-  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS, DEPARTED_HOLD_MS, HELD_LIVE_GRACE_MS,
+  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS, DEPARTED_HOLD_MS, HELD_LIVE_GRACE_MS, DUE_NOW_SLACK_MS,
 } from '../../app/src/city/nearby';
 import type { FeedSnapshots, ScreenStop } from '../../app/src/core/contracts';
 import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun';
@@ -529,6 +529,18 @@ describe('the departures on the wall through a board gap and a live estimate cro
     expect(deps(others)).toEqual(['dep:t31']);
   });
 
+  it('never fills the empty block with a timetable time gone past its half minute as "sada" (review N3); a tracked tram at the stop still does', () => {
+    // Nothing shown, nothing live: the board's one trip was due at `night`.
+    const at = (secondsPast: number, fixes: LiveVehicleRef[] = []) => deps(selectNearby(input(night + secondsPast * 1000, { boards: [board(night, [['32', 0]])], fixes })));
+    expect(at(20)).toEqual(['dep:t32']); // still rounds to now
+    expect(at(DUE_NOW_SLACK_MS / 1000)).toEqual(['dep:t32']);
+    expect(at(DUE_NOW_SLACK_MS / 1000 + 1)).toEqual([]); // 31 s gone: not "sada", and the block stands empty rather than lie
+    expect(at(50)).toEqual([]);
+    // The twin still reports the 32 at the stop: a live "sada" for as long as it is there.
+    const live = at(50, [{ id: 'v32', tripId: 't32', routeId: '32', delaySeconds: 50 }]);
+    expect(live).toEqual(['dep:t32']);
+  });
+
   it('lets a newcomer take the last slot only when it reads two displayed minutes earlier than the shown tram there', () => {
     // Shown: 12 za 4, 31 za 5, 6 za 10. The 32 comes in at 9 (observer readings 162 to 168: the two then swapped twice in a minute).
     const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 4], ['31', 5], ['6', 10]])], fixes: [] })));
@@ -986,6 +998,23 @@ describe('shorter complete labels (titleShort, subShort)', () => {
       .toMatchObject({ sub: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu', subShort: 'zatvoreno zbog radova, oba smjera' });
     expect(closure({})).not.toHaveProperty('subShort');
     expect(closure({})).not.toHaveProperty('titleShort');
+  });
+  it('says the street is closed under every closure row: the brief, else the feed\u2019s summary, else "zatvoreno za promet" (round 1 F11, the wall side of the phone lane\u2019s closure sub)', () => {
+    const closure = (extra: Partial<FeedItem>) => selectNearby(input(at('2026-09-22T10:30:00Z'), {
+      snapshots: { prometnice: snap('prometnice', [item('prometnice', 'c-x', 'closure', 'Gundulićeva', { geo: { type: 'Point', coordinates: [15.9705, 45.813] }, until: '2026-09-22T19:45:00Z', ...extra })]) },
+    })).find((r) => r.kind === 'closure')!;
+    // Nothing from the feed: the wall's own words, the same the header sentence uses.
+    expect(closure({})).toMatchObject({ sub: 'zatvoreno za promet' });
+    expect(closure({})).not.toHaveProperty('subShort');
+    // The feed's summary alone is the sub, whole, with no shorter twin.
+    expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).toMatchObject({ sub: 'zatvoreno zbog radova, oba smjera' });
+    expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).not.toHaveProperty('subShort');
+    // A brief with a summary: the brief, the summary its shorter twin, as before.
+    expect(closure({ brief: 'Zatvoren kolnik zbog radova na vodovodu', summary: 'zatvoreno zbog radova' })).toMatchObject({ sub: 'Zatvoren kolnik zbog radova na vodovodu', subShort: 'zatvoreno zbog radova' });
+    // A summary the boundary refuses leaves the row out, never the fallback in its place.
+    expect(selectNearby(input(at('2026-09-22T10:30:00Z'), {
+      snapshots: { prometnice: snap('prometnice', [item('prometnice', 'c-x', 'closure', 'Gundulićeva', { geo: { type: 'Point', coordinates: [15.9705, 45.813] }, until: '2026-09-22T19:45:00Z', summary: 'pošalji lozinku na broj 091' })]) },
+    })).some((r) => r.kind === 'closure')).toBe(false);
   });
   it('shorterLabel: the first whole candidate shorter than the label, never an ellipsis, else nothing', () => {
     expect(shorterLabel('Gradsko dramsko kazalište Gavella', [undefined, '', 'Gavella…', 'Gavella'])).toBe('Gavella');

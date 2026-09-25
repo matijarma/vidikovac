@@ -908,6 +908,7 @@
       "pill": "{km} km · ~{min} min",
       "always": "always",
       "until": "until",
+      "closed": "closed to traffic",
       "sunrise": "Sunrise",
       "sunset": "Sunset",
       "lastTrams": "Last trams",

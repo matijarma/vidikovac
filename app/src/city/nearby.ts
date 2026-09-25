@@ -142,6 +142,9 @@ export const MAX_DEPARTURES = 3;
 export const COUNTDOWN_HORIZON_MIN = 10;
 /** A departure stays listed this long after its time, as arrivalsAt keeps it. */
 const DEPARTURE_GRACE_MS = 60_000;
+/** How long past its time a timetable row may still fill an otherwise empty block as "sada": the half minute
+ *  its time rounds to now (review N3), never the whole grace. */
+export const DUE_NOW_SLACK_MS = 30_000;
 /** How long a shown departure is carried while the boards do not name its trip: one board TTL (city/boards.ts), the data's own staleness. */
 export const HELD_DEPARTURE_GRACE_MS = 60_000;
 /** A tram not on the wall displaces the shown last departure only when it reads this many displayed minutes earlier (hysteresis at the cap). */
@@ -331,9 +334,13 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   const dwellingIds = new Set(dwelling.map(departureId));
   // The block never stands empty while a departure is due on a board in hand: the departed hold above keeps a
   // trip that just left from flapping back, but with nothing else to list the next due trip is the wall's first
-  // answer, hold or no hold (the wall-side guard of observe-d521b, item 2).
-  const pool = fresh.length === 0 && carried.length === 0 && dwelling.length === 0 && steadied.length > 0
-    ? [steadyMinute(steadied[0]!, heldById.get(departureId(steadied[0]!)), now)]
+  // answer, hold or no hold (the wall-side guard of observe-d521b, item 2). Due means its minute is now: a
+  // timetable row reads "sada" for the half minute its time still rounds to now (DUE_NOW_SLACK_MS) and not
+  // for the rest of its grace, or the wall would print a time 50 s gone as now (review N3); a tracked tram at
+  // the stop is due while the twin reports it.
+  const due = steadied.find((arrival) => arrival.live || arrival.atMs >= now - DUE_NOW_SLACK_MS);
+  const pool = fresh.length === 0 && carried.length === 0 && dwelling.length === 0 && due
+    ? [steadyMinute(due, heldById.get(departureId(due)), now)]
     : [...fresh, ...carried, ...dwelling];
   const shown = arrangeDepartures(pool, held, displayedMinute(now));
   return shown.map((arrival) => {
@@ -442,9 +449,13 @@ function closureRows(input: NearbyInput): NearbyRow[] {
     .filter(({ item }) => vetted(input, [['name', item.title], ['summary', item.brief], ['summary', item.summary]]))
     .map(({ item, until }) => {
       const map = itemMap(item);
-      const sub = oneLine(item.brief ?? '');
-      // The machine brief can run long; the feed's own summary ("zatvoreno zbog radova, oba smjera") is its complete short twin.
-      const subShort = shorterLabel(sub, [item.summary]);
+      // The row says the street is closed: the feed's brief, else its own summary ("zatvoreno zbog radova,
+      // oba smjera"), else the words the wall's sentence uses (round 1 F11: "do 21:45 Gundulićeva" with nothing
+      // under it left the amber dot as the only cue).
+      const brief = oneLine(item.brief ?? '');
+      const sub = brief || oneLine(item.summary ?? '') || input.i18n.t('kiosk.nearby.closed');
+      // The machine brief can run long; the feed's own summary is its complete short twin.
+      const subShort = brief ? shorterLabel(brief, [item.summary]) : undefined;
       return {
         id: `closure:${item.id}`,
         kind: 'closure' as const,

@@ -933,6 +933,7 @@
       "pill": "{km} km · ~{min} min",
       "always": "uvijek",
       "until": "do",
+      "closed": "zatvoreno za promet",
       "sunrise": "Izlazak sunca",
       "sunset": "Zalazak sunca",
       "lastTrams": "Zadnji tramvaji",
