@@ -70,11 +70,13 @@ export function dataPriority(module: ModuleId): 'high' | 'low' | 'auto' {
 const LATER_MODULES: ReadonlySet<ModuleId> = new Set<ModuleId>(['dogadanja', 'glasnik', 'emsc', 'dhmz-forecast', 'dhmz-cap', 'ckan-geo']);
 
 export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: typeof fetch = fetch): Promise<ModuleSnapshot> {
-  const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, {
+  // The priority hint is the browser's (lib.dom); the Worker's own RequestInit does not name it.
+  const init: RequestInit & { priority?: ReturnType<typeof dataPriority> } = {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
     priority: dataPriority(module),
-  }, fetchImpl);
+  };
+  const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, init, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
   return body;
 }

@@ -6,8 +6,9 @@ import { entryChunkFor, staticGraph, withDashboardPrefetch, type BundleChunkLike
 
 const chunk = (fileName: string, over: Partial<BundleChunkLike> = {}): BundleChunkLike => ({ type: 'chunk', fileName, imports: [], ...over });
 const BUNDLE: Record<string, BundleChunkLike> = {
-  'assets/d-1.js': chunk('assets/d-1.js', { isEntry: true, facadeModuleId: '/repo/app/src/entries/dashboard.ts', imports: ['assets/boot-1.js', 'assets/qr-1.js'], viteMetadata: { importedCss: new Set(['assets/d-1.css', 'assets/base-1.css']) } }),
-  'assets/s-1.js': chunk('assets/s-1.js', { isEntry: true, facadeModuleId: '/repo/app/src/entries/scan.ts', imports: ['assets/boot-1.js'] }),
+  // As Vite builds an HTML entry: the page's html is the facade, the entry script one of the chunk's modules.
+  'assets/d-1.js': chunk('assets/d-1.js', { isEntry: true, facadeModuleId: '/repo/app/d/index.html', modules: { '/repo/app/src/entries/dashboard.ts': {}, '/repo/app/src/dashboard.ts': {} }, imports: ['assets/boot-1.js', 'assets/qr-1.js'], viteMetadata: { importedCss: new Set(['assets/d-1.css', 'assets/base-1.css']) } }),
+  'assets/s-1.js': chunk('assets/s-1.js', { isEntry: true, facadeModuleId: '/repo/app/s/index.html', modules: { '/repo/app/src/entries/scan.ts': {} }, imports: ['assets/boot-1.js'] }),
   'assets/boot-1.js': chunk('assets/boot-1.js', { imports: ['assets/base-1.js'], viteMetadata: { importedCss: ['assets/base-1.css'] } }),
   'assets/base-1.js': chunk('assets/base-1.js'),
   'assets/qr-1.js': chunk('assets/qr-1.js', { imports: ['assets/base-1.js'] }),
@@ -20,8 +21,9 @@ describe('staticGraph', () => {
   it('walks the entry and its static imports once each, the entry first, and collects the stylesheets they carry; a lazy chunk is not in it', () => {
     expect(staticGraph(BUNDLE, 'assets/d-1.js')).toEqual({ scripts: ['assets/d-1.js', 'assets/boot-1.js', 'assets/base-1.js', 'assets/qr-1.js'], styles: ['assets/d-1.css', 'assets/base-1.css'] });
   });
-  it('finds the entry by its source file', () => {
+  it('finds the entry by its script among the chunk\'s modules, or by its facade', () => {
     expect(entryChunkFor(BUNDLE, '/entries/dashboard.ts')?.fileName).toBe('assets/d-1.js');
+    expect(entryChunkFor(BUNDLE, '/d/index.html')?.fileName).toBe('assets/d-1.js');
     expect(entryChunkFor(BUNDLE, '/entries/kiosk.ts')).toBeUndefined();
   });
 });

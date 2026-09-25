@@ -11,6 +11,8 @@ export interface BundleChunkLike {
   fileName: string;
   isEntry?: boolean;
   facadeModuleId?: string | null;
+  /** The chunk's modules by id: an HTML entry's chunk has the page's own html as its facade and the entry script inside. */
+  modules?: Readonly<Record<string, unknown>>;
   imports?: readonly string[];
   viteMetadata?: { importedCss?: Set<string> | readonly string[] };
 }
@@ -31,9 +33,11 @@ export function staticGraph(bundle: Readonly<Record<string, BundleChunkLike>>, e
   return { scripts, styles: [...styles] };
 }
 
-/** The entry chunk of the page whose source file ends with `entrySuffix` ("/entries/dashboard.ts"). */
+/** The entry chunk carrying the module whose id ends with `entrySuffix` ("/entries/dashboard.ts"): Vite's HTML entries
+ *  keep the page's html as the chunk's facade and the entry script among its modules. */
 export function entryChunkFor(bundle: Readonly<Record<string, BundleChunkLike>>, entrySuffix: string): BundleChunkLike | undefined {
-  return Object.values(bundle).find((chunk) => chunk.type === 'chunk' && chunk.isEntry === true && (chunk.facadeModuleId ?? '').endsWith(entrySuffix));
+  return Object.values(bundle).find((chunk) => chunk.type === 'chunk' && chunk.isEntry === true
+    && ((chunk.facadeModuleId ?? '').endsWith(entrySuffix) || Object.keys(chunk.modules ?? {}).some((id) => id.endsWith(entrySuffix))));
 }
 
 /**
