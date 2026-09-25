@@ -57,10 +57,23 @@ export async function scan(code: string, fetchImpl: typeof fetch = fetch): Promi
   return { error: response.status === 429 ? 'rate-limited' : 'bad-request', message: '' };
 }
 
+/**
+ * How a module's poll queues against the rest on a narrow link (the fetch priority hint, where the browser has
+ * one): the vehicles first, since the departures and the sentence read them; the modules whose rows come below
+ * the fold, or after the list's hold, last. The first open fires twelve of these together with the boards and
+ * the stop table (round 3, phone F3).
+ */
+export function dataPriority(module: ModuleId): 'high' | 'low' | 'auto' {
+  if (module === 'zet-rt') return 'high';
+  return LATER_MODULES.has(module) ? 'low' : 'auto';
+}
+const LATER_MODULES: ReadonlySet<ModuleId> = new Set<ModuleId>(['dogadanja', 'glasnik', 'emsc', 'dhmz-forecast', 'dhmz-cap', 'ckan-geo']);
+
 export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: typeof fetch = fetch): Promise<ModuleSnapshot> {
   const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
+    priority: dataPriority(module),
   }, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
   return body;

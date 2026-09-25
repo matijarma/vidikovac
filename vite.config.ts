@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { renderIzvoriHtml } from './app/src/izvori-render';
+import { withDashboardPrefetch, type BundleChunkLike } from './app/src/prefetch-dashboard';
 import { markPrintStylesheets } from './app/src/print-media';
 
 // Multi-page static build. Every HTML entry listed here becomes a real static
@@ -43,10 +44,26 @@ function printMediaPlugin(): Plugin {
   };
 }
 
+/** The /s/ page prefetches /d/'s static graph, so the hop after a scan finds it in the cache (app/src/prefetch-dashboard.ts). */
+function dashboardPrefetchPlugin(): Plugin {
+  return {
+    name: 'vidikovac-dashboard-prefetch',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const bundle = ctx.bundle;
+        if (!bundle || !/\/s\/index\.html$/.test(ctx.path)) return html;
+        return withDashboardPrefetch(html, bundle as unknown as Record<string, BundleChunkLike>);
+      },
+    },
+  };
+}
+
 export default defineConfig({
   root: 'app',
   publicDir: 'public',
-  plugins: [izvoriHtmlPlugin(), printMediaPlugin()],
+  plugins: [izvoriHtmlPlugin(), printMediaPlugin(), dashboardPrefetchPlugin()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

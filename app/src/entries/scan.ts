@@ -12,7 +12,7 @@
 // first paint and never in front of it. With the theme module in <head> these
 // are the page's only two scripts, both external (R-16).
 import { bootPage } from '../boot';
-import { createScanPage, type ScanPageHandle } from '../scan';
+import { codeFromHash, createScanPage, type ScanPageHandle } from '../scan';
 import { isQrScanSupported } from '../ui/qrScanner';
 import '../ui/base.css';
 import '../ui/signage.css';
@@ -25,7 +25,13 @@ let hash = location.hash;
 
 const { i18n } = bootPage({ page: 'scan', onLocaleChange: () => remount() });
 let page = mount();
-void import('../ui/fonts.css');
+// The one Manrope family: at once when the person is going to read this page, and only after FONTS_BEHIND_CODE_MS
+// when a code came in the fragment, since that page hands over to /d/ within a second or two and its five font
+// files (105 kB) were sharing a slow link with the check and with /d/'s own graph (round 3, phone F3). A check
+// that fails, or crawls, still gets its fonts once the wait is over.
+const FONTS_BEHIND_CODE_MS = 3_000;
+if (codeFromHash(hash) === null) void import('../ui/fonts.css');
+else setTimeout(() => { void import('../ui/fonts.css'); }, FONTS_BEHIND_CODE_MS);
 
 function mount(): ScanPageHandle {
   const handle = createScanPage(root, {
