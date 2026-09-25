@@ -78,11 +78,13 @@ async function layer(page, id) {
   const tab = page.locator(`.ki-tab[data-layer="${id}"]:visible, .ki-domains [data-layer="${id}"]:visible`).first();
   if (await tab.count()) await tab.click();
   else if (id === 'grad-sada') await page.locator('.ki-wordmark[data-layer=grad-sada]').click();
+  // The desk (≥ 1280 px) shows Sada and Karta side by side and has no Karta tab.
+  else if (id === 'u-pokretu') await page.evaluate(() => { location.hash = '#layer=u-pokretu'; });
   else {
     await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
     await page.locator(`[data-testid="dir-${id}"]`).click();
   }
-  await page.locator(`[data-testid=dash-view] > [data-layer="${id}"]`).waitFor();
+  await page.locator(`[data-testid=dash-view] > [data-layer="${id}"], [data-testid=dash-view] > .ki-desk > [data-layer="${id}"]`).first().waitFor({ state: 'attached' });
   await settle(page);
 }
 
