@@ -2667,7 +2667,7 @@ describe('the field, the column and the one map', () => {
       { id: 'heritage-a', name: 'Palača', category: 'heritage', sourceId: 'heritage', sourceRecord: 'a', lon: STOP.lon, lat: STOP.lat, address: 'Ilica 1' },
     ] });
     const b = fakeBoards(JELACIC_BOARDS);
-    let now = Date.now();
+    let now = NOW;
     const k = mount({ stored: STORED, cityStore, createBoards: b.create, now: () => now });
     await flush();
     const list = q(k.root, '[data-testid=nearby-rows]')!;
@@ -2681,9 +2681,12 @@ describe('the field, the column and the one map', () => {
     expect(list.querySelector('[hidden]')).toBeNull();
     height = 128;
     k.repaint();
-    // A smaller box stands FIT_SHRINK_HOLD_MS before the rows follow it (timeline.ts, the D5.25 replay); a resize is a shrink that stays.
+    // A smaller box stands FIT_SHRINK_HOLD_MS before the rows follow it (timeline.ts, the D5.25 replay); a resize is a
+    // shrink that stays, and the next paint after the hold (a poll's beat) refits to it.
     expect(list.children).toHaveLength(3);
     now += FIT_SHRINK_HOLD_MS;
+    k.poll();
+    await flush();
     k.repaint();
     expect(list.children).toHaveLength(2);
     expect(departures(k.root)).toHaveLength(1);
