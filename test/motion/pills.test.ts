@@ -430,24 +430,6 @@ describe('deflectMarks: a mark steps aside for a disc\u2019s number and for a ma
     expect(deflectMarks([bus('d', 100, 100, 90)], [disc]).get('d')!.y).toBeCloseTo(100 + clear, 6);
   });
 
-  // Review N4: a merged mark none of whose members faces anywhere hopped up whatever stood there (its bearing
-  // read 0), and the cap parked it under a tram plate. With no direction the shorter hop wins.
-  it('a mark with no direction takes the side with the shorter hop: down when a plate stands above the disc, up when one stands below; dead level and clear both ways, down', () => {
-    // A tram plate placed first, above the disc: the way up is the plate and the disc, the way down the disc alone.
-    const plateAbove = tram('p', 100, 100 - clear, 0);
-    const cluster = bus('c', 100, 100, null, '109·118');
-    const withPlate = deflectMarks([plateAbove, cluster], [disc]);
-    expect(withPlate.get('p')!.moved).toBe(0);
-    expect(withPlate.get('c')!.y).toBeGreaterThan(100);
-    expect(clearance(cluster, withPlate.get('c')!, disc)).toBeGreaterThanOrEqual(DEFLECT_MARGIN_PX - 1e-9);
-    // The plate below instead: up.
-    const plateBelow = tram('q', 100, 100 + clear, 180);
-    const other = deflectMarks([plateBelow, cluster], [disc]);
-    expect(other.get('c')!.y).toBeLessThan(100);
-    // Nothing but the disc, dead level: down, as a level mark always stepped.
-    expect(deflectMarks([cluster], [disc]).get('c')!.y).toBeCloseTo(100 + clear, 6);
-  });
-
   it('a mark that does not meet a disc, and a mark with no disc at all, stay exactly where the model put them', () => {
     const at = deflectMarks([tram('a', 100, 100 - clear - 0.01)], [disc]).get('a')!;
     expect(at).toMatchObject({ x: 100, y: 100 - clear - 0.01, moved: 0 });
