@@ -836,6 +836,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let cityPaths: MapLine[] = [];
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
+  /** The model's output as the last frame saw it (vehicle-features.ts stepSignature): whether the fleet still moves. */
+  let lastStepSignature = '';
   /** Whether the bodies source last received bodies rather than the empty collection; see pushBodies. */
   let bodiesShown = false;
   let nextPushAt = -Infinity;
@@ -1077,17 +1079,29 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // places it, and stops being so when it goes quiet: one re-derive on the
     // change, never a styleDiff per frame.
     if (focusRouteId() !== focusedApplied) applyOverlays();
-    // What a frame costs when nothing is pushed: one feature per vehicle and
-    // the string over it. The clustering is a screen-space pass over every
-    // mark, and it runs where its result is used -- inside the push below --
-    // not sixty times a second to answer a question the plain marks already
-    // answer (vehicle-features.ts vehicleSignature).
+    // What a frame costs when nothing is pushed: one string over the drawn
+    // marks (vehicle-features.ts stepSignature), which says whether the fleet
+    // still moves at all -- the loop parks when it does not. The clustering is
+    // a screen-space pass over every mark, and it runs where its result is
+    // used -- inside the push below -- not sixty times a second.
     const kept = keptVehicleId();
     container.dataset.frames = String(loop.frames());
-    const signature = l.vehicleSignature(l.vehiclesToGeoJson(lastDrawn), kept);
-    const changed = signature !== lastPushedSignature;
-    const pushing = changed && t >= nextPushAt - PUSH_TOLERANCE_MS;
+    const step = l.stepSignature(lastDrawn, kept);
+    const moving = step !== lastStepSignature;
+    lastStepSignature = step;
+    // The push (round 4 kiosk lane, handoff A2): only on the 12 Hz grid, and
+    // only when the picture would differ by a visible step (visibleSignature:
+    // half a pixel, a nose's degree, a shade of alpha, a mark entering or
+    // leaving the view), because MapLibre re-tiles the source and repaints the
+    // whole scene for every push. A camera move, a new mark zoom, a new scale
+    // or a new artefact clears lastPushedSignature, so the next frame pushes
+    // whatever moved.
     let fc: VehicleFeatureCollection | null = null;
+    const due = t >= nextPushAt - PUSH_TOLERANCE_MS;
+    const signature = due && (moving || lastPushedSignature === '')
+      ? l.visibleSignature(lastDrawn, kept, { project: m.project ? (lonLat) => m.project!(lonLat) : undefined, width: container.clientWidth, height: container.clientHeight, scale })
+      : null;
+    const pushing = signature !== null && signature !== lastPushedSignature;
     if (pushing) {
       // The pills are merged against the camera of this very frame, so a mark
       // never merges with one the reader can see is somewhere else -- and only
@@ -1098,7 +1112,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, ...stepAside(m, l, project) });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
-      lastPushedSignature = signature;
+      lastPushedSignature = signature!;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
       // park, when the old grid is long behind us.
       nextPushAt = nextPushAt + SOURCE_UPDATE_INTERVAL_MS > t ? nextPushAt + SOURCE_UPDATE_INTERVAL_MS : t + SOURCE_UPDATE_INTERVAL_MS;
@@ -1106,7 +1120,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       else if (following) followCamera(fc);
     }
     writeMarkProbe(m, fc);
-    return changed;
+    return moving;
   }
 
   /** The outage (setFeedState('down')): every vehicle mark off the map and
@@ -1176,6 +1190,68 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     map?.getSource(id)?.setData(data);
   }
 
+  // --- Work that follows the first paint, one task at a time (round 4 kiosk lane, handoff A1) ---
+  //
+  // The style.load handler once built the stops and the network features
+  // (2,000 platforms with their vetted names and route order, every shape's
+  // coordinates) and handed both to MapLibre in the same task as the
+  // overlays and the first vehicles: on a phone at CPU x4 that task held the
+  // main thread 0.8 to 3 s right after the canvas appeared, and a tap on the
+  // search field waited for it. The vehicles are the first promise and stay
+  // in that task; the named sources are created empty there and filled by
+  // these slices, each its own task on the page's clock (the injected pair
+  // under a fake clock, setTimeout otherwise), so input and a frame get a
+  // turn between them. Keyed, so the artefact landing while a slice is
+  // pending replaces it rather than doubling the worker's re-tiling.
+  const slices = new Map<string, () => void>();
+  let sliceTimer: unknown = null;
+  const sliceSetTimer = options.setTimer ?? ((fn: () => void, ms: number) => globalThis.setTimeout(fn, ms));
+  const sliceClearTimer = options.clearTimer ?? ((h: unknown) => globalThis.clearTimeout(h as never));
+  function armSlice(): void {
+    if (sliceTimer === null && slices.size > 0 && !disposed) sliceTimer = sliceSetTimer(runSlice, 0);
+  }
+  function runSlice(): void {
+    if (sliceTimer !== null) { sliceClearTimer(sliceTimer); sliceTimer = null; } // the injected pair is interval-shaped
+    const next = slices.entries().next();
+    if (!next.done) {
+      slices.delete(next.value[0]);
+      if (!disposed) next.value[1]();
+    }
+    armSlice();
+  }
+  function queueSlice(key: string, work: () => void): void {
+    slices.delete(key);
+    slices.set(key, work);
+    armSlice();
+  }
+  function dropSlices(): void {
+    slices.clear();
+    if (sliceTimer !== null) { sliceClearTimer(sliceTimer); sliceTimer = null; }
+  }
+  /** The stops source from the artefact, then the census's copy, the frame's ids and a fresh census key. */
+  function sliceStops(): void {
+    const l = lib;
+    const n = net;
+    if (!n || !styled || !l || !map) return;
+    stopsData = l.stopsToGeoJson(n);
+    setData(l.SOURCES.stops, stopsData);
+    applyOverlays();
+    probeVersion++;
+  }
+  /** The network source from the artefact. */
+  function sliceNetwork(): void {
+    const l = lib;
+    const n = net;
+    if (!n || !styled || !l || !map) return;
+    setData(l.SOURCES.network, l.networkToGeoJson(n));
+    probeVersion++;
+  }
+  /** The named sources of the artefact in hand, in slices: the stops (the frame's beads and names) before the lines. */
+  function queueNamedSources(): void {
+    queueSlice('stops', sliceStops);
+    queueSlice('network', sliceNetwork);
+  }
+
   /** Places and closures do not move: re-set at once on every update. */
   function applyStatic(): void {
     if (!styled || !lib) return;
@@ -1193,13 +1269,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     nextPushAt = -Infinity;
     if (styled && lib) {
       // The named features come from the lazy renderer (external-features.ts
-      // through maplibre-entry), and the census reads the stops it was last handed.
-      const empty = { type: 'FeatureCollection', features: [] };
-      setData(lib.SOURCES.network, net ? lib.networkToGeoJson(net) : empty);
-      const stops = net ? lib.stopsToGeoJson(net) : empty;
-      stopsData = stops;
-      setData(lib.SOURCES.stops, stops);
-      applyOverlays();
+      // through maplibre-entry), and the census reads the stops it was last
+      // handed. An artefact fills them in slices (queueNamedSources); none
+      // empties them at once.
+      dropSlices();
+      if (net) queueNamedSources();
+      else {
+        const empty = { type: 'FeatureCollection', features: [] };
+        setData(lib.SOURCES.network, empty);
+        stopsData = empty;
+        setData(lib.SOURCES.stops, empty);
+        applyOverlays();
+      }
     }
     options.onNetwork?.(net);
   }
@@ -1465,12 +1546,15 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const empty = { type: 'FeatureCollection', features: [] };
     const geojson = (data: unknown): Record<string, unknown> => ({ type: 'geojson', data });
     created.addSource(l.SOURCES.vehicles, geojson(firstVehicles(created, l) ?? empty));
-    created.addSource(l.SOURCES.network, geojson(net ? l.networkToGeoJson(net) : empty));
-    const stops = net ? l.stopsToGeoJson(net) : empty;
-    stopsData = stops;
+    // The network and the stops are created empty and filled by the slices
+    // after this task (queueNamedSources), so the first vehicles and the
+    // overlays are on the screen before the artefact's 2,000 platforms and
+    // every shape are built and re-tiled.
+    created.addSource(l.SOURCES.network, geojson(empty));
+    stopsData = empty;
     // Keyed by the platform id, so the name hysteresis addresses one stop's
     // name by feature state (decision 19).
-    created.addSource(l.SOURCES.stops, { ...geojson(stops), promoteId: 'id' });
+    created.addSource(l.SOURCES.stops, { ...geojson(empty), promoteId: 'id' });
     created.addSource(l.SOURCES.closures, geojson(l.linesToGeoJson(lines, wallLabels)));
     created.addSource(l.SOURCES.places, geojson(l.pointsToGeoJson(points.filter(p=>p.place!=='city'), wallLabels)));
     if (l.CITY_POINTS) {
@@ -1515,6 +1599,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     else if (!cameraMovedByUser && !options.center && selection) fitSelection();
     if (typeof following === 'string') centreOn(following);
     if (!paused && !held) loop.start();
+    if (net) queueNamedSources();
   }
 
   /** The vehicles as the first frame will draw them, for the vehicles
@@ -1920,6 +2005,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     destroy() {
       disposed = true;
       loop.stop();
+      dropSlices();
       destroyCensus?.();
       observer?.disconnect();
       observer = null;

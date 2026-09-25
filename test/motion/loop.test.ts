@@ -122,6 +122,34 @@ describe('createLoop', () => {
     expect(draw).toHaveBeenCalledTimes(6);
   });
 
+  // Round 4 kiosk lane, handoff A2: what a frame costs the device beyond draw() (MapLibre re-tiling and painting
+  // what the frame pushed, on a software GPU the better part of a second) shows as the gap before the next
+  // animation frame. A late frame after a drawn one counts as a slow frame; three in a row halve the rate.
+  it('halves its rate when the frame after a drawn one comes late (the renderer\u2019s cost), whether or not that tick draws, and recovers once the frames come on time', () => {
+    const { raf, cancel, fire } = fakeRaf();
+    let t = 0;
+    const draw = vi.fn(() => true); // the draw itself is instant: the cost is in the gap
+    const loop = createLoop(draw, { raf, cancel, now: () => t });
+    loop.start();
+    // Three drawn frames, each followed by a 300 ms gap: the third late frame halves the rate.
+    fire(); t += 300;
+    fire(); t += 300;
+    fire(); t += 300;
+    fire(); // tick 4: the late gap after tick 3 makes three; the divisor is 2 now, tick 4 is even and draws
+    expect(draw).toHaveBeenCalledTimes(4);
+    t += 300;
+    fire(); // tick 5, odd: skipped -- but it still reads the late gap after tick 4 (the streak counts on)
+    expect(draw).toHaveBeenCalledTimes(4);
+    t += 16;
+    fire(); // tick 6, even: draws, on time after the skipped tick: a fast frame, one halving undone
+    expect(draw).toHaveBeenCalledTimes(5);
+    // Healthy frames from here: the gap after a drawn frame is one display frame, and each fast drawn frame undoes one halving.
+    for (let i = 0; i < 12; i++) { t += 16; fire(); }
+    const drawnBefore = draw.mock.calls.length;
+    for (let i = 0; i < 4; i++) { t += 16; fire(); }
+    expect(draw.mock.calls.length - drawnBefore).toBe(4); // back at full rate: every tick draws
+  });
+
   it('calls draw once a second under reducedMotion on the timer path, never asking for an animation frame (R-F6)', () => {
     const { raf, cancel } = fakeRaf();
     const { setTimer, clearTimer, advance, clock } = fakeTimers();

@@ -440,21 +440,29 @@ function check(kind: ExternalTextKind, value: string, surface: ExternalTextSurfa
 
 // Every tick rebuilds the same rows from the same texts: remember the verdicts.
 const verdicts = new Map<string, ExternalTextVerdict>();
+/** How many verdicts are kept. The map's named sources alone (round 4 kiosk lane, A1) vet about 2,000 stop
+ *  names, 1,000 route numbers and the city's places in one pass, and a cache of 2,048 was cleared in the
+ *  middle of every pass, so the same names were read again on every poll. */
+export const VERDICT_CACHE_MAX = 8192;
+/** A verdict by surface, kind and text, kept once; the personal map's vectors-only reading is its own surface key. */
+function remembered(kind: ExternalTextKind, value: string, surface: ExternalTextSurface, vectorsOnly: boolean): ExternalTextVerdict {
+  // Do not retain arbitrarily large rejected source strings in the tick cache.
+  if (value.length > EXTERNAL_TEXT_RULES[kind].max * 3) return check(kind, value, surface, vectorsOnly);
+  const key = `${vectorsOnly ? 'map' : surface}\u0000${kind}\u0000${value}`;
+  const known = verdicts.get(key);
+  if (known) return known;
+  const verdict = check(kind, value, surface, vectorsOnly);
+  if (verdicts.size >= VERDICT_CACHE_MAX) verdicts.clear();
+  verdicts.set(key, verdict);
+  return verdict;
+}
 /**
  * The one check for third-party text before the wall shows it, in a row or in the
  * header. The surface is required: header slots must never inherit row leniency.
  * Never repairs; a failing value is skipped on that surface only.
  */
 export function externalText(kind: ExternalTextKind, value: string, { surface }: ExternalTextOptions): ExternalTextVerdict {
-  // Do not retain arbitrarily large rejected source strings in the tick cache.
-  if (value.length > EXTERNAL_TEXT_RULES[kind].max * 3) return check(kind, value, surface);
-  const key = `${surface}\u0000${kind}\u0000${value}`;
-  const known = verdicts.get(key);
-  if (known) return known;
-  const verdict = check(kind, value, surface);
-  if (verdicts.size >= 2048) verdicts.clear();
-  verdicts.set(key, verdict);
-  return verdict;
+  return remembered(kind, value, surface, false);
 }
 
 /** Render-boundary API. Return the exact input or null, never a repair.
@@ -469,6 +477,6 @@ export function vetExternal(kind: ExternalTextKind, value: unknown, surface: Ext
 export function vetExternalMap(kind: ExternalTextKind, value: unknown, publicDisplay: boolean): string | null {
   if (publicDisplay) return vetExternal(kind, value, 'row');
   if (typeof value !== 'string' || !Object.hasOwn(EXTERNAL_TEXT_RULES, kind)) return null;
-  return check(kind, value, 'row', true).ok ? value : null;
+  return remembered(kind, value, 'row', true).ok ? value : null;
 }
 installExternalTextBoundary(vetExternal, vetExternalMap);

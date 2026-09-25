@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, vehicleLabel, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
 import { discObstacles, vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
-import { stopsToGeoJson } from '../../app/src/map/external-features';
+import { networkToGeoJson, stopsToGeoJson } from '../../app/src/map/external-features';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
 import { NOSE_LENGTH_PX, noseCentrePx, PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
@@ -112,10 +112,13 @@ class FakeMap {
   }
   getCenter() { return this.center; }
   getZoom(): number { return this.zoom; }
+  /** The camera stand-in's scale, CSS px per degree: ten thousand (a city view, where a tram's 12 Hz step is
+   *  under a pixel) unless a test asks for a street-level camera. */
+  pxPerDegree = 1e4;
   /** A camera stand-in for the pill clustering: ten thousand CSS px per degree
    *  from a fixed origin, so a test can say in pixels how far apart two
    *  vehicles are drawn without a real projection. */
-  project([lon, lat]: [number, number]): { x: number; y: number } { return { x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 }; }
+  project([lon, lat]: [number, number]): { x: number; y: number } { return { x: (lon - 15.9) * this.pxPerDegree, y: (45.9 - lat) * this.pxPerDegree }; }
   remove(): void { this.removed = true; }
 }
 class FakeControl { constructor(public readonly options: Record<string, unknown> = {}) {} }
@@ -594,7 +597,9 @@ describe('the full map draws the model, never the report (R-P2)', () => {
 
 describe('12 Hz source updates, not one per frame', () => {
   it('pushes the vehicle source about twelve times in a second of sixty moving frames, and counts every frame', async () => {
-    const { handle, frame, vehicles, container } = await harness();
+    const { handle, frame, vehicles, container, map } = await harness();
+    // A street-level camera: every 12 Hz step of the converging mark is a visible one (visibleSignature).
+    map.pxPerDegree = 1e6;
     handle.update([B], [CLOSURE]);
     const before = vehicles().calls.length;
     for (let i = 0; i < 60; i++) frame();
@@ -603,6 +608,40 @@ describe('12 Hz source updates, not one per frame', () => {
     expect(pushes).toBeGreaterThanOrEqual(11);
     expect(pushes).toBeLessThanOrEqual(13);
     expect(Number(container.dataset.frames)).toBeGreaterThanOrEqual(59);
+  });
+
+  // Round 4 kiosk lane, handoff A2: MapLibre re-tiles the vehicle source and repaints the whole scene for every
+  // push, and at the wall's zoom 13 a tram's 12 Hz step is a seventeenth of a pixel. A push is made only when the
+  // picture would differ by a visible step (vehicle-features.ts visibleSignature); the loop stays awake while
+  // the model still moves, and a camera move pushes the next frame whatever moved under it.
+  it('pushes only a visible step: sub-pixel motion at a city zoom pushes a few times where the street pushed twelve, the loop stays awake, and a camera move pushes at once', async () => {
+    const city = await harness();
+    city.handle.update([B], [CLOSURE]);
+    const cityBefore = city.vehicles().calls.length;
+    for (let i = 0; i < 60; i++) city.frame();
+    const cityPushes = city.vehicles().calls.length - cityBefore;
+    const street = await harness();
+    street.map.pxPerDegree = 1e6;
+    street.handle.update([B], [CLOSURE]);
+    const streetBefore = street.vehicles().calls.length;
+    for (let i = 0; i < 60; i++) street.frame();
+    const streetPushes = street.vehicles().calls.length - streetBefore;
+    expect(streetPushes).toBeGreaterThanOrEqual(11);
+    expect(cityPushes).toBeGreaterThanOrEqual(1);
+    expect(cityPushes).toBeLessThan(streetPushes / 2);
+    // Awake: the mark still converges, so the loop keeps asking for frames and counting them.
+    expect(city.pending()).toBe(1);
+    expect(Number(city.container.dataset.frames)).toBeGreaterThanOrEqual(59);
+    // A camera move: the next due frame pushes though nothing moved a visible step since the last push.
+    const moved = city.vehicles().calls.length;
+    city.map.fire('move');
+    city.frame(100);
+    expect(city.vehicles().calls.length).toBe(moved + 1);
+    // What is pushed is the model's own position, never a stale one: the last push lies where the model is.
+    const last = city.vehicles().calls.at(-1) as FC;
+    expect(last.features[0]!.properties.id).toBe('vehicle:1');
+    city.handle.destroy();
+    street.handle.destroy();
   });
 
   it('takes the clustering pass only on the frames that push: a fleet that has stopped moving pushes nothing at all', async () => {
@@ -655,13 +694,26 @@ describe('lifecycle', () => {
   });
 
   it('applies a report that arrived before the library loaded, draws the artefact\u2019s network and stops once, and stops everything on destroy', async () => {
-    const { handle, map, container, frame, loadNetwork } = await harness({ points: [], lines: [], loadNetwork: vi.fn(async () => NET), load: false });
+    const { handle, map, container, frame, loadNetwork, timers, tickTimers } = await harness({ points: [], lines: [], loadNetwork: vi.fn(async () => NET), load: false });
     handle.update([QUAKE, A], [CLOSURE]);
     map.fire('load');
     expect((map.getSource('places')!.data as FC).features).toHaveLength(1);
     expect((map.getSource('closures')!.data as FC).features).toHaveLength(1);
-    expect((map.getSource('network')!.data as FC).features.length).toBeGreaterThan(100);
-    expect((map.getSource('stops')!.data as FC).features.length).toBeGreaterThan(1000);
+    // Round 4 kiosk lane, handoff A1: the named sources are created empty with the style and filled after it,
+    // each its own task on the page's clock -- the stops first (the frame's beads and names), then the lines --
+    // so the first vehicles and the overlays are on the screen before 2,000 platforms and every shape are built.
+    expect((map.getSource('network')!.data as FC).features).toHaveLength(0);
+    expect((map.getSource('stops')!.data as FC).features).toHaveLength(0);
+    expect(timers.filter((t) => !t.cleared)).toHaveLength(1);
+    tickTimers();
+    expect((map.getSource('stops')!.calls.at(-1) as FC).features.length).toBeGreaterThan(1000);
+    expect(map.getSource('network')!.calls).toHaveLength(0);
+    tickTimers();
+    expect((map.getSource('network')!.calls.at(-1) as FC).features.length).toBeGreaterThan(100);
+    expect(timers.filter((t) => !t.cleared)).toHaveLength(0);
+    // Once each: the artefact was in hand before the style, and the style's own slices are the only ones.
+    expect(map.getSource('stops')!.calls).toHaveLength(1);
+    expect(map.getSource('network')!.calls).toHaveLength(1);
     expect(loadNetwork).toHaveBeenCalledTimes(1);
     expect(handle.network!()).toBe(NET);
     handle.destroy();
@@ -867,6 +919,7 @@ describe('the vehicle bodies under the pills', () => {
     const { map, handle, frame, vehicles } = await harness();
     const bodies = () => map.getSource('bodies')!;
     map.zoom = 17;
+    map.pxPerDegree = 1e6; // a street-level camera: every 12 Hz step is a visible one, so the pills go on being pushed
     handle.update([B], [CLOSURE]); // two fixes east: the facing is evident, so the body knows which way to lie
     for (let i = 0; i < 10; i++) frame();
     const fc = bodies().calls.at(-1) as BodyFC;
@@ -1811,6 +1864,24 @@ describe('a tap on the place’s own stop ring under a pill (D3 gate, companion-
 // the city's 19 tram routes overlap so heavily that 111 of the 114
 // tram-served names see two or more, so "two trams" would name nearly every
 // tram stop there is. What the flag reads is the artefact's own terminal bit.
+describe('the named sources of the artefact (round 4 kiosk lane, handoff A1)', () => {
+  it('are built once per artefact and read back the same, with the routes on a stop in the Croatian numeric order', () => {
+    // The style's slice and the artefact's landing both ask; the census reads the stops it was last handed.
+    expect(stopsToGeoJson(NET)).toBe(stopsToGeoJson(NET));
+    expect(networkToGeoJson(NET)).toBe(networkToGeoJson(NET));
+    const collator = new Intl.Collator('hr', { numeric: true });
+    for (const f of stopsToGeoJson(NET).features) {
+      const routes = f.properties.routes;
+      expect(routes, f.properties.id).toEqual([...routes].sort(collator.compare));
+    }
+    // A stop that sees a two-digit and a three-digit route lists them by number, not by their first digit.
+    const mixed = stopsToGeoJson(NET).features.find((f) => f.properties.routes.some((r) => r.length === 1) && f.properties.routes.some((r) => r.length >= 2));
+    expect(mixed).toBeDefined();
+    const numbers = mixed!.properties.routes.map((r) => Number.parseInt(r, 10)).filter((n) => Number.isFinite(n));
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
+  });
+});
+
 describe('tram interchanges on the stop features (Ruling 30)', () => {
   const features = stopsToGeoJson(NET).features;
   const named = (name: string) => features.filter((f) => f.properties.name === name);

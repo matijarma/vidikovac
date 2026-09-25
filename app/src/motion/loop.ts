@@ -54,6 +54,16 @@ export interface Loop {
  *  room left for the browser's own paint and compositing after our JS
  *  returns; 12ms is that headroom, not the whole budget. */
 const FRAME_BUDGET_MS = 12;
+/** The other half of a frame's cost, which `draw` never sees: what the
+ *  renderer does with what the frame pushed (MapLibre re-tiles the source
+ *  and paints the whole scene, on a software GPU for the better part of a
+ *  second). It shows as the gap before the next animation frame, so a frame
+ *  that follows a drawn one later than this (three display frames at 60 Hz,
+ *  times the rate divisor already in force) counts as a slow frame too,
+ *  and the loop derates as for a slow draw (round 4 kiosk lane, handoff
+ *  A2: the phone that scanned the wall, on a loaded main thread, drew a
+ *  frame a second and answered a tap in six). */
+export const SLOW_GAP_MS = 50;
 /** One slow frame is jitter -- a GC pause, a stray layout. Three in a row is
  *  the device telling us it cannot sustain this rate. */
 const SLOW_STREAK_TO_HALVE = 3;
@@ -88,6 +98,9 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
   let rateDivisor = 1; // 1 = every tick draws; 2 = every other tick, etc.
   let slowStreak = 0;
   let unchangedStreak = 0;
+  /** When the last drawn frame began, on the loop's clock; null until one has, and again after a park. The
+   *  first tick after it measures the gap (SLOW_GAP_MS) and then forgets it. */
+  let lastDrawnAt: number | null = null;
 
   // Reduced-motion / lightweight path state: the armed tick, and when the
   // last tick actually drew (null before the first).
@@ -98,17 +111,44 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     handle = rafFn(onFullFrame);
   }
 
+  /** One slow or fast frame's verdict: three slow in a row halve the rate, a fast one undoes one halving. */
+  function pace(slow: boolean): void {
+    if (slow) {
+      slowStreak++;
+      if (slowStreak >= SLOW_STREAK_TO_HALVE) {
+        rateDivisor *= 2;
+        slowStreak = 0;
+      }
+    } else {
+      slowStreak = 0;
+      // Recovery is one step at a time (a halving undone), never a jump
+      // straight back to full rate -- see decision 3's reasoning for the
+      // model's own constants; the loop follows the same discipline.
+      if (rateDivisor > 1) rateDivisor = Math.floor(rateDivisor / 2) || 1;
+    }
+  }
+
   function onFullFrame(): void {
     handle = null;
     if (!running || parked) return; // stop()/park raced a callback already in flight
 
     tick++;
+    // The gap after the last drawn frame is what that frame cost the device
+    // beyond `draw` itself (SLOW_GAP_MS). Read once, on the first tick after
+    // it, whether or not this tick draws, so a skipped tick measures too.
+    let late = false;
+    if (lastDrawnAt !== null) {
+      late = clockNow() - lastDrawnAt > SLOW_GAP_MS * rateDivisor;
+      lastDrawnAt = null;
+    }
     if (tick % rateDivisor !== 0) {
+      if (late) pace(true);
       scheduleFull(); // this tick is deliberately skipped to relieve an overloaded device
       return;
     }
 
     const before = clockNow();
+    lastDrawnAt = before;
     let changed = false;
     try {
       changed = draw(before);
@@ -126,20 +166,9 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       console.error('[motion loop] draw() threw; treating this frame as unchanged', err);
     }
     const elapsed = clockNow() - before;
-
-    if (elapsed > FRAME_BUDGET_MS) {
-      slowStreak++;
-      if (slowStreak >= SLOW_STREAK_TO_HALVE) {
-        rateDivisor *= 2;
-        slowStreak = 0;
-      }
-    } else {
-      slowStreak = 0;
-      // Recovery is one step at a time (a halving undone), never a jump
-      // straight back to full rate -- see decision 3's reasoning for the
-      // model's own constants; the loop follows the same discipline.
-      if (rateDivisor > 1) rateDivisor = Math.floor(rateDivisor / 2) || 1;
-    }
+    // One verdict per drawn tick: slow when the draw ran over its budget or the frame came late after the
+    // last drawn one, fast only when neither did, so the two readings never cancel each other.
+    pace(late || elapsed > FRAME_BUDGET_MS);
 
     if (changed) {
       unchangedStreak = 0;
@@ -147,6 +176,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       unchangedStreak++;
       if (unchangedStreak >= PARK_AFTER_UNCHANGED) {
         parked = true;
+        lastDrawnAt = null; // the gap across a park is the park's, not the frame's
         return; // no scheduleFull(): parked means no further frame is requested
       }
     }
@@ -203,6 +233,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       rateDivisor = 1;
       slowStreak = 0;
       unchangedStreak = 0;
+      lastDrawnAt = null;
       lastReducedDrawAt = null;
       frameCount = 0; // frames() is documented as "since the last start()" -- a restart is a fresh count
       if (reduced) scheduleReduced();
@@ -226,6 +257,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       unchangedStreak = 0; // fresh evidence: give it a full run before parking again
       if (running && parked) {
         parked = false;
+        lastDrawnAt = null;
         if (reduced) scheduleReduced();
         else scheduleFull();
       }

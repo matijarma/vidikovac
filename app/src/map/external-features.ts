@@ -11,6 +11,15 @@ import { NOT_VENUES } from './city-layers';
 
 const RESERVED_POINT_PROPS: ReadonlySet<string> = new Set(['id', 'title', 'routeId', 'place']);
 
+/** One collator for the route order on every stop (round 4 kiosk lane, A1: `localeCompare` with options builds
+ *  a collator per call, and over 2,000 stops that was a third of the style.load task on a phone). */
+const ROUTE_ORDER = new Intl.Collator('hr', { numeric: true });
+/** The named sources built once per artefact: city-map.ts asks for them when the style is up and again when
+ *  the artefact lands, whichever comes first, and the census reads the stops back. Keyed by the network
+ *  object, so a reloaded artefact is built afresh. */
+const NETWORK_FEATURES = new WeakMap<Network, NetworkFeatureCollection>();
+const STOP_FEATURES = new WeakMap<Network, StopFeatureCollection>();
+
 export function outlineToGeoJson(outline: MapOutline | null): LineStringFeatureCollection {
   const rings: [number, number][][] = [];
   for (const polygon of outline?.polygons ?? []) {
@@ -61,7 +70,9 @@ export function linesToGeoJson(lines: readonly MapLine[], publicDisplay = true):
 }
 
 export function networkToGeoJson(net: Network): NetworkFeatureCollection {
-  return {
+  const known = NETWORK_FEATURES.get(net);
+  if (known) return known;
+  const built: NetworkFeatureCollection = {
     type: 'FeatureCollection',
     features: net.shapes.filter(shape => shape.pts.length >= 2).map((shape, i) => {
       const route = net.routes.get(shape.route);
@@ -72,14 +83,18 @@ export function networkToGeoJson(net: Network): NetworkFeatureCollection {
       };
     }),
   };
+  NETWORK_FEATURES.set(net, built);
+  return built;
 }
 
 /** Interchange and label rank remain properties of the original platform
  * name. A rejected name cannot enter the source's text field. */
 export function stopsToGeoJson(net: Network): StopFeatureCollection {
+  const known = STOP_FEATURES.get(net);
+  if (known) return known;
   const rows = net.stops.map(stop => {
     const routes = [...new Set(stop.on.map(on => net.shapes[on.shape]?.route).filter((r): r is string => Boolean(r)))]
-      .sort((a, b) => a.localeCompare(b, 'hr', { numeric: true }));
+      .sort(ROUTE_ORDER.compare);
     const types = routes.map(r => net.routes.get(r)?.type);
     return { stop, routes, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
   });
@@ -91,7 +106,7 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
     const seen = interchange.get(stop.name) ?? { tram: false, terminal: false };
     interchange.set(stop.name, { tram: seen.tram || tram, terminal: seen.terminal || stop.terminal });
   }
-  return {
+  const built: StopFeatureCollection = {
     type: 'FeatureCollection',
     features: rows.map(({ stop, routes, tram, bus }) => {
       const hub = interchange.get(stop.name)!;
@@ -105,4 +120,6 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
       };
     }),
   };
+  STOP_FEATURES.set(net, built);
+  return built;
 }
