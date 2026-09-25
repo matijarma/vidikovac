@@ -802,14 +802,21 @@ export function prozorOptions(stop: ScreenStop | null, fieldZoomNow: number, lab
 }
 
 /** The wall legend's entries (kiosk.legend.*), in its order. */
-export type LegendKind = 'tram' | 'bikes' | 'culture';
+export type LegendKind = 'tram' | 'bikes' | 'bikesEmpty' | 'bikesFar' | 'culture';
 /** What the legend may explain, from the marks the map is handed (lane w-labels2, 24 Sep: a strip drew no
- *  station and no venue, and its legend still listed both). The tram line is always on the map; BAJS
- *  while a station is; culture while a venue with a programme is, or an event's own mark (the events ink,
- *  map/overlays.ts placeEvents; a communal work is the works ink and is not culture). */
+ *  station and no venue, and its legend still listed both). The tram line is always on the map; BAJS by what
+ *  its stations draw (round 2 F9, owner, 24 Sep: the legend describes what is drawn): `bikes` while a disc
+ *  with a count is on the map, `bikesEmpty` while an empty station's small dot is (decision 60), `bikesFar`
+ *  while the whole-city window's small dots are (city/curated.ts far); a blank grey disc says itself; culture
+ *  while a venue with a programme is, or an event's own mark (the events ink, map/overlays.ts placeEvents; a
+ *  communal work is the works ink and is not culture). */
 export function legendKinds(points: readonly MapPoint[]): LegendKind[] {
   const kinds: LegendKind[] = ['tram'];
-  if (points.some((p) => p.place === 'city' && p.props?.category === 'bikes')) kinds.push('bikes');
+  const bikes = points.filter((p) => p.place === 'city' && p.props?.category === 'bikes');
+  const badge = (p: MapPoint): string => String(p.props?.badge ?? '');
+  if (bikes.some((p) => p.props?.far !== true && /^[1-9]\d*$/.test(badge(p)))) kinds.push('bikes');
+  if (bikes.some((p) => p.props?.far !== true && badge(p) === '0')) kinds.push('bikesEmpty');
+  if (bikes.some((p) => p.props?.far === true)) kinds.push('bikesFar');
   if (points.some((p) => (p.place === 'city' && p.props?.category !== 'bikes' && p.props?.category !== 'air' && Number(p.props?.eventCount ?? 0) > 0)
     || (p.place === 'event' && p.props?.source !== 'komunalne'))) kinds.push('culture');
   return kinds;
@@ -955,7 +962,11 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
    *  below which the 40 px discs and the pills of a 2R frame pile on each other: 669 x 457 frames Trg at
    *  z12.3). The whole-city window's small dots are drawn for its low zoom and keep it. */
   const strip = cityWindow && input.handheld !== true && ((input.heightPx > 0 && input.heightPx < MAP_MIN_HEIGHT_PX * (input.displayScale ?? 1)) || (framed && field.zoom < FIELD_MIN_ZOOM));
-  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && inside(p))));
+  // Round 2 F8 (owner, 24 Sep): no marker without a name on the whole-city window. An event's or a work's square
+  // is titled only from THIN_NAMES_ZOOM (ruling 31, placeTitles), so an unframed window below it is handed none;
+  // a framed place keeps its squares (decision 58 drops their titles there: the square is the claim).
+  const squares = !cityWindow || framed || placeTitles(field.zoom);
+  points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && squares && inside(p))));
   if(input.city){
     if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}
     else{

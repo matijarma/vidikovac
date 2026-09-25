@@ -565,6 +565,73 @@ describe('the long press on the brand', () => {
   // 1.2 s press on the brand opened nothing, because the 800 ms timer ran 600 to 3000 ms late behind the
   // map's long tasks and the release had already cleared it. The press is judged by the pointer events'
   // own timestamps on release, so a late timer never loses a press that was held long enough.
+  // Review of lane/iter1-kiosk, N2: under load the timer fired before a queued pointermove past the slop arrived,
+  // and 1 of 12 swipes opened Postavke. The timer now takes the open on the next beat of the same clock, after
+  // whatever input the queue holds, and a release checks its own distance from the press.
+  describe('a swipe whose move arrives late, after the timer (N2)', () => {
+    it('opens nothing when the move past the slop lands between the timer and its beat; a steady press opens on the beat', () => {
+      const b = brand();
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      // The queued move is a timer of the same clock, registered after the press: it runs between the press's
+      // timer and the beat that timer schedules.
+      b.time.setTimeout(() => b.pointer('pointermove', { clientX: 100 + LONG_PRESS_SLOP_PX + 20, clientY: 100, pointerId: 1 }), LONG_PRESS_MS);
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).not.toHaveBeenCalled();
+      b.pointer('pointerup', { clientX: 100 + LONG_PRESS_SLOP_PX + 20, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).not.toHaveBeenCalled();
+      const steady = brand();
+      steady.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      steady.time.advance(LONG_PRESS_MS);
+      expect(steady.open).toHaveBeenCalledTimes(1);
+      steady.pointer('pointerup', { clientX: 102, clientY: 101, pointerId: 1 });
+      steady.time.advance(LONG_PRESS_MS);
+      expect(steady.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('a release before the beat opens at once when it is within the slop of the press, and never when it is not', () => {
+      const b = brand();
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      // The timer fires and queues its beat; the release lands first (the test harness of kiosk.test.ts does the same).
+      const timers = b.time;
+      timers.setTimeout(() => b.pointer('pointerup', { clientX: 103, clientY: 100, pointerId: 1 }), LONG_PRESS_MS);
+      timers.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      const far = brand();
+      far.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      far.time.setTimeout(() => far.pointer('pointerup', { clientX: 100 + LONG_PRESS_SLOP_PX + 30, clientY: 100, pointerId: 1 }), LONG_PRESS_MS);
+      far.time.advance(LONG_PRESS_MS);
+      expect(far.open).not.toHaveBeenCalled();
+    });
+  });
+
+  // Review N3: two fingers resting on the wall for 0.8 s opened Postavke. A press is one finger: while more than
+  // one pointer is down nothing arms, and a second finger ends a press already armed; one finger alone still opens.
+  describe('two fingers are not a press (N3)', () => {
+    it('two pointers down together open nothing, a second finger ends an armed press, and one finger opens once they are gone', () => {
+      const b = brand();
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.pointer('pointerdown', { clientX: 300, clientY: 120, pointerId: 2 });
+      b.time.advance(LONG_PRESS_MS * 2);
+      expect(b.open).not.toHaveBeenCalled();
+      b.pointer('pointerup', { clientX: 300, clientY: 120, pointerId: 2 });
+      b.pointer('pointerup', { clientX: 100, clientY: 100, pointerId: 1 });
+      expect(b.open).not.toHaveBeenCalled();
+      // A second finger mid-press.
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS / 2);
+      b.pointer('pointerdown', { clientX: 300, clientY: 120, pointerId: 2 });
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).not.toHaveBeenCalled();
+      b.pointer('pointerup', { clientX: 300, clientY: 120, pointerId: 2 });
+      b.pointer('pointerup', { clientX: 100, clientY: 100, pointerId: 1 });
+      // One finger, once the other is gone.
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('a timer that runs late behind a busy main thread', () => {
     /** A pointer event stamped at `at` ms on the events' own clock (Event.timeStamp is read-only; the instance shadows it). */
     const stamped = (button: HTMLElement, type: string, at: number, init: PointerEventInit = {}): void => {

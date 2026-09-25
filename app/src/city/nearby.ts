@@ -90,6 +90,9 @@ export interface NearbyRow {
   arrival?: ArrivalRow;
   /** A departure row: when the boards last named its trip (epoch ms). A row carried through a momentary gap keeps its earlier stamp. */
   confirmedAt?: number;
+  /** When the boards' fix for this departure was last in hand (a tracked estimate): a row whose fix has just gone
+   *  keeps its last estimate for HELD_LIVE_GRACE_MS rather than fall to the timetable and back (observe-d523). */
+  liveAt?: number;
   /** A last-trams or first-tram row's lines, soonest first; a line drops out once it has left. */
   services?: readonly NearbyService[];
 }
@@ -152,6 +155,10 @@ export const MINUTE_MARGIN_MS = 15_000;
 export const HELD_AT_STOP_MS = 3 * 60_000;
 /** A departure that left the wall is not shown again this long on an estimate that flapped back, unless re-estimated DISPLACE_MINUTES ahead. */
 export const DEPARTED_HOLD_MS = 60_000;
+/** A shown tram whose fix has just gone keeps its last estimate this long while the boards still name its trip
+ *  (observe-d523, 00:53: the 32's estimate, six minutes ahead of its timetable, came and went every few seconds and
+ *  the row swapped places with the 34 three times in a minute). Past it the timetable, as before. */
+export const HELD_LIVE_GRACE_MS = 60_000;
 /** The morning a first tram belongs to: 03:00 to 12:00 of its service date's own calendar day, in GTFS minutes. */
 const MORNING_FROM_MIN = 3 * 60;
 const MORNING_UNTIL_MIN = 12 * 60;
@@ -239,7 +246,10 @@ export function rowBudget(availablePx: number, count: number): { rowPx: number; 
 // --- (a) departures -----------------------------------------------------------
 
 function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
-  if (input.boards.length === 0) return [];
+  // No board in hand is a moment, not a verdict: the shown departures ride through it on their grace below
+  // (observe-d521b, item 2: the wall listed no departure for 25 to 46 s while the trams ran). Without held rows
+  // there is nothing to carry, and nothing is invented.
+  if (input.boards.length === 0 && !(input.heldDepartures ?? []).some((row) => row.kind === 'departure')) return [];
   const stopIds = [...new Set([...input.boards.map((b) => b.stopId), ...(input.place.stopId ? [input.place.stopId] : [])])];
   const { now } = input;
   // With ZET sending no positions every departure is a timetable time, whatever vehicles the caller still holds (§4.8).
@@ -281,7 +291,24 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       const leftAt = departed.get(departureId(arrival));
       return leftAt === undefined || now - leftAt > DEPARTED_HOLD_MS || arrival.atMs - now >= DISPLACE_MINUTES * MINUTE_MS;
     })
+    // A timetable row whose time has already passed enters no wall: the grace after a departure's time is for a
+    // row already shown, so it does not vanish at the second, and a newcomer with nothing to promise would stand
+    // "sada" for what is left of its minute and go (observe-d524, 01:58: the 32 Borongaj entered 38 s past its
+    // time, the fitter dropped the 31 for it, and 22 s later the 32 left and the 31 came back as a new row).
+    .filter((arrival) => arrival.live || arrival.atMs >= now || heldById.has(departureId(arrival)))
+    // A shown tracked row whose fix is not in hand this instant keeps its last estimate for HELD_LIVE_GRACE_MS (its
+    // timetable would put it below the tram it was ahead of, and back above once the fix returns), never in an outage.
+    .map((arrival) => {
+      const shown = heldById.get(departureId(arrival));
+      if (!outage && !arrival.live && shown?.live && shown.arrival?.live && shown.liveAt !== undefined && now - shown.liveAt <= HELD_LIVE_GRACE_MS
+        && shown.arrival.atMs >= now - DEPARTURE_GRACE_MS) {
+        return { ...shown.arrival, minutes: countdownMinutes(shown.arrival.atMs, now) };
+      }
+      return arrival;
+    })
     .map((arrival) => steadyMinute(arrival, heldById.get(departureId(arrival)), now));
+  /** The fix for a fresh live row is in hand now; a carried estimate keeps the stamp of the fix it came from. */
+  const liveNow = new Set(steadied.filter((arrival) => arrival.live).map(departureId));
   const freshIds = new Set(fresh.map(departureId));
   // A shown departure the boards do not name this instant is carried on its last estimate: the twin drops a
   // vehicle for a snapshot, a platform board refetches without a trip (D5.3 observer: rows 34 and 32 removed and
@@ -305,7 +332,13 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       && stopIds.includes(vehicleOf.get(row.arrival.tripId)?.nextStopId ?? ''))
     .map((row) => ({ ...row.arrival, minutes: 0 }));
   const dwellingIds = new Set(dwelling.map(departureId));
-  const shown = arrangeDepartures([...fresh, ...carried, ...dwelling], held, displayedMinute(now));
+  // The block never stands empty while a departure is due on a board in hand: the departed hold above keeps a
+  // trip that just left from flapping back, but with nothing else to list the next due trip is the wall's first
+  // answer, hold or no hold (the wall-side guard of observe-d521b, item 2).
+  const pool = fresh.length === 0 && carried.length === 0 && dwelling.length === 0 && steadied.length > 0
+    ? [steadyMinute(steadied[0]!, heldById.get(departureId(steadied[0]!)), now)]
+    : [...fresh, ...carried, ...dwelling];
+  const shown = arrangeDepartures(pool, held, displayedMinute(now));
   return shown.map((arrival) => {
     const live = arrival.live;
     const id = departureId(arrival);
@@ -322,6 +355,7 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       map: placePoint(input.place),
       arrival,
       confirmedAt: carriedIds.has(id) || dwellingIds.has(id) ? held[rank.get(id)!]!.confirmedAt ?? now : now,
+      ...(live ? { liveAt: liveNow.has(id) ? now : heldById.get(id)?.liveAt ?? now } : {}),
     };
   });
 }

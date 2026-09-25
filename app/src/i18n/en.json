@@ -738,6 +738,8 @@
     "legend": {
       "tram": "Tram route",
       "bikes": "BAJS: bikes available",
+      "bikesEmpty": "BAJS: empty station",
+      "bikesFar": "BAJS station",
       "culture": "Culture tonight"
     },
     "weather": {

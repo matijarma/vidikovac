@@ -29,7 +29,7 @@ import { escapeHtml } from '../ui/dom/escape';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { iconMarkup, type IconName } from '../ui/icons';
 import type { ThemePreference } from '../ui/theme';
-import { LONG_PRESS_MS } from './constants';
+import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from './constants';
 import { clock, sameZagrebDay, weekdayDayMonth } from './format';
 import { FIELD_SPAN_M, HANDHELD_SPAN_M } from './mapview';
 import { placeInputOf } from './places';
@@ -94,8 +94,10 @@ export function wallSpanM(input: { handheld: boolean; wall: WallPlace; stops: re
 
 // --- The long press on the brand ----------------------------------------------
 
+/** How the panel was asked for: a press held (a finger, a mouse) or the keyboard (Enter, Space). */
+export type LongPressVia = 'pointer' | 'keyboard';
 export interface LongPressDeps {
-  open: () => void;
+  open: (via: LongPressVia) => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (handle: unknown) => void;
   /** Whether this press arms at all (kiosk.ts: the wall-wide press skips the touch's own targets, the brand and the
@@ -126,37 +128,54 @@ export interface LongPressDeps {
  */
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
+  /** The beat after the timer (review N2): the open waits one task of the same clock, so a pointermove the
+   *  queue holds (a swipe whose events ran late behind the map's work) still ends the press first. */
+  let beat: unknown = null;
   let origin: { x: number; y: number } | null = null;
   /** The pointerdown's own timestamp while a press is armed and the timer has not opened yet. */
   let downAt: number | null = null;
+  /** The pointers down on the target right now (review N3): a press is one finger. */
+  const pointers = new Set<number>();
   const disarm = (): void => {
     if (timer !== null) { deps.clearTimeout(timer); timer = null; }
+    if (beat !== null) { deps.clearTimeout(beat); beat = null; }
     origin = null;
     downAt = null;
   };
+  const near = (event: PointerEvent): boolean => origin !== null && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= LONG_PRESS_SLOP_PX;
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
+    pointers.add(event.pointerId);
     disarm();
+    // Two fingers resting on the wall are not a press (N3): nothing arms while more than one is down.
+    if (pointers.size > 1) return;
     if (deps.accept && !deps.accept(event)) return;
     origin = { x: event.clientX, y: event.clientY };
     downAt = event.timeStamp;
-    timer = deps.setTimeout(() => { timer = null; origin = null; downAt = null; deps.open(); }, LONG_PRESS_MS);
+    timer = deps.setTimeout(() => {
+      timer = null;
+      beat = deps.setTimeout(() => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); }, LONG_PRESS_BEAT_MS);
+    }, LONG_PRESS_MS);
   };
   const move = (event: PointerEvent): void => {
-    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > LONG_PRESS_SLOP_PX) disarm();
+    if (origin && !near(event)) disarm();
   };
-  /** The release: a press the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
+  /** The release: a press the timer has answered but the beat has not (opens now, within the slop of the press),
+   *  or one the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
   const up = (event: PointerEvent): void => {
-    const held = downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS;
+    pointers.delete(event.pointerId);
+    const long = beat !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
+    const opens = long && near(event);
     disarm();
-    if (held) deps.open();
+    if (opens) deps.open('pointer');
   };
+  const gone = (event: PointerEvent): void => { pointers.delete(event.pointerId); disarm(); };
   const key = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     if (event.repeat) return;
     disarm();
-    deps.open();
+    deps.open('keyboard');
   };
   // A held finger on a touch screen otherwise asks for the context menu or a text selection.
   const menu = (event: MouseEvent): void => { if (!deps.accept || deps.accept(event)) event.preventDefault(); };
@@ -165,15 +184,16 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   target.addEventListener('pointerdown', down);
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerup', up);
-  for (const type of ends) target.addEventListener(type, disarm);
+  for (const type of ends) target.addEventListener(type, gone);
   if (keys) target.addEventListener('keydown', key);
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
+    pointers.clear();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
-    for (const type of ends) target.removeEventListener(type, disarm);
+    for (const type of ends) target.removeEventListener(type, gone);
     if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
   };
@@ -339,7 +359,8 @@ export interface SettingsDeps {
   /** Forget the screen and start over; the panel is closed by then. */
   forget: () => void;
   onOpen?: () => void;
-  onClose?: (restoreFocus: boolean) => void;
+  /** `via` is how the panel was opened (open's argument): the caller returns the focus by it (round 2 F18). */
+  onClose?: (restoreFocus: boolean, via: LongPressVia) => void;
   /** The screen's own clock, so the expiry line can tell today from tomorrow. */
   now: () => number;
   setTimeout: (fn: () => void, ms: number) => unknown;
@@ -348,7 +369,8 @@ export interface SettingsDeps {
 
 export interface SettingsHandle {
   element: HTMLElement;
-  open(): void;
+  /** `via` says how it was asked for; a pointer press by default. */
+  open(via?: LongPressVia): void;
   /** `restoreFocus` false is for a phase change, where the thing that opened the panel is going away. */
   close(restoreFocus?: boolean): void;
   isOpen(): boolean;
@@ -531,8 +553,11 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     field.focus();
   }
 
-  function open(): void {
+  /** How the panel on screen was opened, for the close (round 2 F18). */
+  let openedBy: LongPressVia = 'pointer';
+  function open(via: LongPressVia = 'pointer'): void {
     if (!element.hidden) return;
+    openedBy = via;
     clearError();
     hideConfirm();
     paintRows();
@@ -549,7 +574,7 @@ export function mountSettings(host: HTMLElement, deps: SettingsDeps): SettingsHa
     element.hidden = true;
     closePlaceEdit();
     hideConfirm();
-    deps.onClose?.(restoreFocus);
+    deps.onClose?.(restoreFocus, openedBy);
   }
 
   placeToggle.addEventListener('click', () => { if (field) closePlaceEdit(); else openPlaceEdit(); armIdle(); });

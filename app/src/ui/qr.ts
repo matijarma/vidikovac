@@ -13,6 +13,9 @@ export interface QrOptions {
   ariaLabel: string;
   /** Shown instead of the QR if generation fails or the payload is empty. */
   unavailableText: string;
+  /** Empty modules round the code inside the SVG (uqr's `border`): 1 by default, as every surface has
+   *  drawn it; the public screen asks for the standard's 4 so a camera finds the code from 3 m (round 2, F7). */
+  quietZoneModules?: number;
 }
 
 export interface QrHandle {
@@ -31,6 +34,7 @@ export function createQr(options: QrOptions): QrHandle {
       ecc: 'M',
       blackColor: 'currentColor',
       whiteColor: 'transparent',
+      border: options.quietZoneModules ?? 1,
     });
     const element = createElementFromHTML(
       `<div class="qr" role="img" aria-label="${escapeAttribute(options.ariaLabel)}">${svg}</div>`,

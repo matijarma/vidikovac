@@ -55,7 +55,12 @@ export interface KioskStrings {
    *  invitation mounts it only where there is a map. */
   legend: {
     tram: string;
+    /** Beside a disc with a number: the free bikes at a station. */
     bikes: string;
+    /** Beside a small dot on the frame: a station with no bike now (decision 60). */
+    bikesEmpty: string;
+    /** Beside a small dot on the whole-city window: a station, its count not drawn there. */
+    bikesFar: string;
     culture: string;
   };
   weather: {
@@ -381,7 +386,7 @@ function build(code: SupportedLocale): KioskStrings {
     },
     status: group('status', ['offline', 'reconnecting', 'dataDown']),
     invitation: group('invite', ['lead', 'typeCode', 'qrLabel', 'qrWaiting', 'progressLabel']),
-    legend: group('legend', ['tram', 'bikes', 'culture']),
+    legend: group('legend', ['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture']),
     weather: {
       ...group('weather', ['humidity', 'wind', 'windCalm', 'windNoDir', 'pressure', 'sunrise', 'sunset', 'daylight', 'range', 'unavailable', 'loading', 'noReading']),
       compass: record(COMPASS, (point) => `motion.compass.${point}`),

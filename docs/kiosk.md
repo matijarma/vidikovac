@@ -26,8 +26,9 @@ upute o pretraživanju dodirom. Ukratko:
   red, zatim retci s vremenom i na kraju jedan redak „uvijek”.
 - Ispod popisa trajno je rezerviran QR s uvodom
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
-  ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, na
-  podlozi od 264 piksela. Telefon na `/kiosk/` dobiva upute za postavljanje,
+  ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, s
+  praznim rubom od četiri modula na svakoj strani unutar bijele podloge od
+  288 piksela (264 na zaslonu 1366 × 768). Telefon na `/kiosk/` dobiva upute za postavljanje,
   kod i mali pregled.
 - Na zaslonu nema vremena dohvata ni opažanja, napomena o izvoru, svježini
   ili pouzdanosti ni brojeva bez imena, ni na pregledu grada ni u
@@ -183,7 +184,9 @@ mjesta zaslona bez ijednoga drugog stajališta, BAJS stanice s barem jednim
 biciklom kao male tirkizne točke bez broja, zatvorene prometnice, prsten
 dežurne ljekarne i kulturna mjesta s programom večeras. Imena se ne ispisuju:
 ni nazivi gradskih četvrti s podloge, ni nazivi BAJS stanica i kulturnih
-mjesta. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
+mjesta. Kvadrate događanja i komunalnih radova prozor cijeloga grada ne
+crta: oznaka bez imena ne govori ništa, a kadar oko izabranog mjesta ih
+zadržava. Ispod zuma 13,5 (`THIN_NAMES_ZOOM`) prozor ispušta i promovirana
 imena glavnih ulica s podloge i naslove zbornih mjesta -- kvadrati ostaju,
 jer u izvanrednom stanju oznaka je ta koja govori, a ne ime -- a od
 stajališta imenuje samo tramvajska čvorišta, odnosno stajališta na kojima staje tramvaj i
@@ -218,9 +221,11 @@ Izvan polumjera kadra ne crta se nijedno stajalište, disk, kulturno mjesto ni
 ime. Imena slijede
 kadar, a ne zum, pa Kadar 4, 6 ili 8 ne mijenja što se imenuje. Na karti
 nema oznake „+N”: nema geografskih skupina mjesta, a spojena oznaka vozila
-ispisuje svaku liniju. Legenda uz kartu ima tri stavke bez upitnika
-(„Tramvajska linija”, „BAJS: broj bicikala”, „Kultura večeras”), a pod
-`?lagano=1`, gdje karte nema, nema ni legende.
+ispisuje svaku liniju. Legenda uz kartu opisuje ono što karta crta, bez
+upitnika: „Tramvajska linija”, uz disk s brojem „BAJS: slobodni bicikli”, uz
+točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
+grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
+ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
@@ -310,7 +315,8 @@ Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
 Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena
 ploča ne smije postati prazna samo da bi se uklonilo prelijevanje teksta.
 Rasporedi za 1920 × 1080, 1366 × 768 i okomiti totem namjerno su
-različiti; sam QR kod na tim zaslonima ima najmanje 240 CSS piksela.
+različiti; sam QR kod na tim zaslonima ima najmanje 240 CSS piksela, s
+praznim rubom od četiri modula.
 Dežurna ljekarna na karti nosi prsten; adresa uz prsten ispisuje se tek kad
 je kamera u kvartu, a zeleni križ i kratku adresu uvijek nosi sigurnosna
 traka.

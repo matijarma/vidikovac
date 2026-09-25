@@ -24,7 +24,7 @@ import {
   type NearbyInput,
   type NearbyKind,
   type NearbyRow,
-  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS, DEPARTED_HOLD_MS,
+  HELD_DEPARTURE_GRACE_MS, DISPLACE_MINUTES, MINUTE_MARGIN_MS, HELD_AT_STOP_MS, DEPARTED_HOLD_MS, HELD_LIVE_GRACE_MS,
 } from '../../app/src/city/nearby';
 import type { FeedSnapshots, ScreenStop } from '../../app/src/core/contracts';
 import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun';
@@ -438,6 +438,97 @@ describe('the departures on the wall through a board gap and a live estimate cro
     expect(deps(outage)).toEqual(['dep:t31', 'dep:t32']);
   });
 
+  // observe-d521b, item 2 (D5.21, 22:23 Zagreb): the wall listed no departure for 25 to 46 s while trams ran, after a
+  // failed fetch became the board in hand. The cache now keeps the good board (city/boards.ts); the wall itself
+  // carries its shown departures through a moment with no board at all, and never leaves the block empty while a
+  // departure is due on a board in hand.
+  it('carries the shown departures through a moment with no board in hand, on their grace, and never lists a departure it was not shown', () => {
+    const first = selectNearby(input(night, { boards: [board(night, FULL)], fixes: [] }));
+    expect(deps(first)).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+    let rows = held(first);
+    for (let t = 10_000; t <= HELD_DEPARTURE_GRACE_MS; t += 10_000) {
+      const shown = selectNearby(input(night + t, { boards: [], fixes: [], heldDepartures: rows }));
+      expect(deps(shown), `${t / 1000} s without a board`).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+      rows = held(shown);
+    }
+    // The board is back: the stamps are fresh and the rows unchanged.
+    const back = selectNearby(input(night + HELD_DEPARTURE_GRACE_MS + 5_000, { boards: [board(night, FULL)], fixes: [], heldDepartures: rows }));
+    expect(deps(back)).toEqual(['dep:t12', 'dep:t31', 'dep:t32']);
+    for (const r of held(back)) expect(r.confirmedAt).toBe(night + HELD_DEPARTURE_GRACE_MS + 5_000);
+    // Past the grace with still no board, the carried rows go: nothing is invented, and no board means no row.
+    const gone = selectNearby(input(night + HELD_DEPARTURE_GRACE_MS + 10_000, { boards: [], fixes: [], heldDepartures: rows }));
+    expect(deps(gone)).toEqual([]);
+    expect(deps(selectNearby(input(night, { boards: [], fixes: [] })))).toEqual([]);
+  });
+
+  // observe-d523 (D5.23, 00:53 Zagreb): the 32 Borongaj's estimate (six minutes ahead of its timetable) came and went
+  // every few seconds as its fix did, so the row swapped places with the 34 three times in a minute (calm-motion
+  // 210 to 240: six moves, no turnover). A shown tracked row keeps its last estimate while its fix is away.
+  it('keeps a shown tram\u2019s estimate while its fix is away, so the order stands; the timetable only past the grace, and the fix back at once', () => {
+    // The 32 is early: its fix says 10 minutes, its timetable 16; the 34's timetable 14.
+    const boards = [board(night, [['32', 16], ['34', 14]])];
+    const fix = [{ id: 'v32', tripId: 't32', routeId: '32', delaySeconds: -360 }];
+    const first = selectNearby(input(night, { boards, fixes: fix }));
+    expect(deps(first)).toEqual(['dep:t32', 'dep:t34']);
+    expect(first[0]!.live).toBe(true);
+    expect(first[0]!.liveAt).toBe(night);
+    // The fix is gone five seconds on: the 32 keeps its estimate, and its place.
+    let shown = held(first);
+    const gone = selectNearby(input(night + 5_000, { boards, fixes: [], heldDepartures: shown }));
+    expect(deps(gone)).toEqual(['dep:t32', 'dep:t34']);
+    expect(gone[0]!.live).toBe(true);
+    expect(gone[0]!.arrival?.minutes).toBe(10);
+    expect(gone[0]!.liveAt).toBe(night);
+    shown = held(gone);
+    // Back ten seconds on: live again, stamped now.
+    const back = selectNearby(input(night + 10_000, { boards, fixes: fix, heldDepartures: shown }));
+    expect(deps(back)).toEqual(['dep:t32', 'dep:t34']);
+    expect(back[0]!.liveAt).toBe(night + 10_000);
+    shown = held(back);
+    // Away for longer than the grace: the timetable, and the 34 leads.
+    for (let t = 10_000; t <= 10_000 + HELD_LIVE_GRACE_MS; t += 10_000) shown = held(selectNearby(input(night + t, { boards, fixes: t === 10_000 ? fix : [], heldDepartures: shown })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t32', 'dep:t34']);
+    const late = selectNearby(input(night + 10_000 + HELD_LIVE_GRACE_MS + 10_000, { boards, fixes: [], heldDepartures: shown }));
+    expect(deps(late)).toEqual(['dep:t34', 'dep:t32']);
+    expect(late[1]!.live).toBe(false);
+    // In an outage no estimate is kept (§4.8).
+    const outage = selectNearby(input(night + 5_000, { boards, fixes: [], heldDepartures: held(first), snapshots: snapshots('down') }));
+    expect(outage.filter((r) => r.kind === 'departure').every((r) => !r.live)).toBe(true);
+  });
+
+  // observe-d524 (D5.24, 01:58 Zagreb, calm-motion 240 to 270): a timetable row for the 32 Borongaj entered the wall
+  // 38 s past its time, the list grew to seven rows and the fitter dropped the 31 Savski most for it; 22 s later,
+  // at the 32's grace, it left and the 31 was re-created. A row already past its time is not a newcomer.
+  it('lets no timetable row enter after its time, keeps a shown one through its grace, and lets a tracked "sada" in', () => {
+    const shown = held(selectNearby(input(night, { boards: [board(night, [['34', 4], ['31', 10]])], fixes: [{ id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }] })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t34', 'dep:t31']);
+    // The boards now name a 32 whose time was 38 s ago: not on the wall, it stays off it; the 34 and the 31 stand.
+    const late = selectNearby(input(night + 30_000, { boards: [board(night, [['32', -0.1], ['34', 4], ['31', 10]])], fixes: [{ id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }], heldDepartures: shown }));
+    expect(deps(late)).toEqual(['dep:t34', 'dep:t31']);
+    // A shown row keeps its grace after its time (the 34 at +4 min, 30 s past it), as before.
+    const past = selectNearby(input(night + 4.5 * MIN, { boards: [board(night, [['34', 4], ['31', 10]])], fixes: [], heldDepartures: held(late) }));
+    expect(deps(past)).toEqual(['dep:t34', 'dep:t31']);
+    // A tracked tram at the stop, its estimate a moment ago, is a "sada" to catch and enters.
+    const sada = selectNearby(input(night + 30_000, { boards: [board(night, [['32', 0.4], ['34', 4], ['31', 10]])], fixes: [{ id: 'v32', tripId: 't32', routeId: '32', delaySeconds: -40 }, { id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }], heldDepartures: shown }));
+    expect(deps(sada)).toEqual(['dep:t32', 'dep:t34', 'dep:t31']);
+    expect(sada[0]!.live).toBe(true);
+  });
+
+  it('never leaves the block empty while a departure is due on a board in hand: the departed hold yields to the next due trip', () => {
+    // The 12 left the wall a moment ago (its estimate flapped past now); the board still names it, due now, and nothing else.
+    const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 0]])], fixes: [] })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t12']);
+    const flapped = selectNearby(input(night + 5_000, {
+      boards: [board(night, [['12', 0]])], fixes: [], heldDepartures: [], departedDepartures: [{ id: 'dep:t12', leftAt: night + 4_000 }],
+    }));
+    expect(deps(flapped)).toEqual(['dep:t12']);
+    // With another due trip on the board the hold stands: the 31 is listed, the 12 waits out its minute.
+    const others = selectNearby(input(night + 5_000, {
+      boards: [board(night, [['12', 0], ['31', 10]])], fixes: [], heldDepartures: [], departedDepartures: [{ id: 'dep:t12', leftAt: night + 4_000 }],
+    }));
+    expect(deps(others)).toEqual(['dep:t31']);
+  });
+
   it('lets a newcomer take the last slot only when it reads two displayed minutes earlier than the shown tram there', () => {
     // Shown: 12 za 4, 31 za 5, 6 za 10. The 32 comes in at 9 (observer readings 162 to 168: the two then swapped twice in a minute).
     const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 4], ['31', 5], ['6', 10]])], fixes: [] })));
@@ -485,12 +576,17 @@ describe('the departures on the wall through a board gap and a live estimate cro
     rows = selectNearby(input(night + 45_000, { boards, fixes: secs(10), heldDepartures: shown }));
     expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(1);
     expect(label(rows)).toBe(130);
-    // A whole-minute jump moves at once, and a timetable row (no vehicle) is never held to an old estimate.
+    // A whole-minute jump moves at once. A row whose fix has just gone keeps its last estimate through
+    // HELD_LIVE_GRACE_MS (observe-d523); past it the timetable row is never held to an old estimate.
     rows = selectNearby(input(night, { boards, fixes: secs(120), heldDepartures: shown }));
     expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(4);
+    shown = held(rows);
     rows = selectNearby(input(night, { boards, fixes: [], heldDepartures: shown }));
+    expect(rows.find((r) => r.id === 'dep:t14')!.live).toBe(true);
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(4);
+    rows = selectNearby(input(night + HELD_LIVE_GRACE_MS + 1_000, { boards, fixes: [], heldDepartures: held(rows) }));
     expect(rows.find((r) => r.id === 'dep:t14')!.live).toBe(false);
-    expect(label(rows)).toBe(120);
+    expect(rows.find((r) => r.id === 'dep:t14')!.arrival?.minutes).toBe(1);
     expect(MINUTE_MARGIN_MS).toBe(15_000);
   });
 

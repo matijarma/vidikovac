@@ -17,7 +17,7 @@ import { publicItemKey } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS } from '../../app/src/kiosk/settings';
-import { LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
 import { RHYTHM_STORAGE_KEY, type Rhythm } from '../../app/src/kiosk/prefs';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
@@ -1175,7 +1175,7 @@ describe('settings: the panel on the screen itself', () => {
   const brand = (k: ReturnType<typeof mount>) => q(k.root, '[data-testid=kiosk-brand]') as HTMLButtonElement;
   const press = (k: ReturnType<typeof mount>, type: string, init: PointerEventInit = {}) => brand(k).dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, ...init }));
   /** A press held on the brand: Postavke open after LONG_PRESS_MS on the kiosk's own clock. */
-  const open = (k: ReturnType<typeof mount>) => { press(k, 'pointerdown'); k.tick(LONG_PRESS_MS); press(k, 'pointerup'); };
+  const open = (k: ReturnType<typeof mount>) => { press(k, 'pointerdown'); k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS); press(k, 'pointerup'); };
   const panel = (k: ReturnType<typeof mount>) => q(k.root, '[data-testid=kiosk-settings-panel]');
   const toggle = (k: ReturnType<typeof mount>, name: string) => q(panel(k)!, `[data-testid=toggle-${name}]`) as HTMLButtonElement;
   const TRG_PLACE = { kind: 'tram' as const, name: 'Trg bana J. Jelačića', lon: STOP.lon, lat: STOP.lat, stopId: '106_1' };
@@ -1234,7 +1234,7 @@ describe('settings: the panel on the screen itself', () => {
     press(k, 'pointerdown');
     k.tick(CODE_TICK_MS);
     press(k, 'pointerup');
-    k.tick(LONG_PRESS_MS);
+    k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
     expect(panel(k)).toBeNull(); // built on the first long press, not at mount
     open(k);
     await flush();
@@ -1261,10 +1261,10 @@ describe('settings: the panel on the screen itself', () => {
     await flush();
     press(k, 'pointerdown');
     press(k, 'pointerup');
-    k.tick(LONG_PRESS_MS);
+    k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
     press(k, 'pointerdown', { clientX: 10, clientY: 10 });
     press(k, 'pointermove', { clientX: 30, clientY: 10 });
-    k.tick(LONG_PRESS_MS);
+    k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
     expect(panel(k)).toBeNull();
     brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     expect(panel(k)!.hidden).toBe(false);
@@ -1564,13 +1564,15 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(true);
   });
 
-  it('closes on Escape, on the close button and after 90 seconds untouched, and gives the focus back to the brand', async () => {
+  it('closes on Escape, on the close button and after 90 seconds untouched, and after a pointer open hands the focus to the wall itself', async () => {
     const k = mount({ stored: STORED });
     await flush();
     open(k); await flush();
     panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(panel(k)!.hidden).toBe(true);
-    expect(document.activeElement).toBe(brand(k));
+    // Round 2, F18: a press (pointer) opened it, so no element that draws a focus ring takes the focus back; the wall
+    // root does (its ring is suppressed), and Enter or Space on it open the panel again.
+    expect(document.activeElement).toBe(k.root.querySelector('.kiosk'));
     open(k);
     q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
     expect(panel(k)!.hidden).toBe(true);
@@ -1578,6 +1580,39 @@ describe('settings: the panel on the screen itself', () => {
     expect(panel(k)!.hidden).toBe(false);
     k.tick(SETTINGS_IDLE_MS);
     expect(panel(k)!.hidden).toBe(true);
+  });
+
+  it('after a pointer open, Escape, the close button and the idle close leave no ring: the wall holds the focus; after a keyboard open the brand keeps the focus and its ring (round 2, F18)', async () => {
+    const k = mount({ stored: STORED });
+    await flush();
+    const wall = k.root.querySelector<HTMLElement>('.kiosk')!;
+    open(k); await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
+    // Enter on the wall reopens it (the keyboard path is intact), and Escape then gives the brand the focus, ring and all.
+    wall.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    panel(k)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(brand(k));
+    // Enter on the brand (a keyboard open) as well.
+    brand(k).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+    expect(panel(k)!.hidden).toBe(false);
+    q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
+    expect(document.activeElement).toBe(brand(k));
+    // A pointer open closed by the close button, and one closed by the idle timer: the wall.
+    open(k); await flush();
+    q(panel(k)!, '[data-testid=kiosk-settings-close]')!.click();
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
+    open(k); await flush();
+    k.tick(SETTINGS_IDLE_MS);
+    expect(panel(k)!.hidden).toBe(true);
+    expect(document.activeElement).toBe(wall);
   });
 
   it('forgets the screen only after an inline confirmation, and never opens over a granted session', async () => {
@@ -1664,8 +1699,9 @@ describe('invitation: the screen a passer-by sees', () => {
     expect(Number(sentence.dataset.validUntil)).toBeGreaterThan(NOW);
     expect(sentenceText(k.root).length).toBeLessThanOrEqual(80);
     expect(q(k.root,'.k-map-legend')).not.toBeNull();
-    // Three plain items from kiosk.legend.* (WP2), never a caveat: a BAJS disc with no count is grey and blank, not "?".
-    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(3);
+    // Plain items from kiosk.legend.* (WP2; round 2 F9: BAJS in three entries, by what the map draws), never a caveat: a BAJS disc with no count is grey and blank, not "?".
+    expect(k.root.querySelectorAll('.k-map-legend span')).toHaveLength(5);
+    expect([...k.root.querySelectorAll<HTMLElement>('.k-map-legend span')].map((el) => el.dataset.legend)).toEqual(['tram', 'bikes', 'bikesEmpty', 'bikesFar', 'culture']);
     expect(text(q(k.root, '.k-map-legend'))).not.toContain('?');
     expect(q(k.root, '[data-testid=kiosk-weather]')).toBeNull();
     expect(k.root.querySelectorAll('.k-weather-current .k-temp')).toHaveLength(0);
@@ -2854,7 +2890,7 @@ describe('the field, the column and the one map', () => {
     const k = mount({ stored: STORED, mapFactory: vi.fn(() => handle) as never });
     await flush();
     q(k.root, '[data-testid=kiosk-brand]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    k.tick(LONG_PRESS_MS);
+    k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
     await flush();
     // The panel is over the stage and the map is held.
     expect(order).toContain('pause');
@@ -2972,7 +3008,7 @@ describe('T5.3: the theme toggle', () => {
   async function openPanel(k: ReturnType<typeof mount>): Promise<HTMLButtonElement> {
     await flush();
     q(k.root, '[data-testid=kiosk-brand]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    k.tick(LONG_PRESS_MS);
+    k.tick(LONG_PRESS_MS); k.tick(LONG_PRESS_BEAT_MS);
     return q(k.root, '[data-testid=toggle-theme]') as HTMLButtonElement;
   }
   it('names the current preference beside its glyph, and four clicks cycle auto -> light -> dark -> solar in order', async () => {

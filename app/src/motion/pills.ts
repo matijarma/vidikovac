@@ -432,3 +432,139 @@ export function createLineColours(
 ): (routeId: string | undefined, fallback: string) => string {
   return (routeId, fallback) => (routeId !== undefined && Object.hasOwn(table, routeId) ? table[routeId]! : fallback);
 }
+
+// --- A mark steps aside for a disc's number (round 2, F6) ------------------
+//
+// At the frame zoom the wall's pills and its BAJS discs share the main
+// streets: half the discs lay under a pill at 22:32 (26 of 53), and a tram
+// standing at a stop covered the station's count for a minute at a time; on
+// the phone's Karta at z12.7 the same (21 of 41). Both marks must stay (every
+// vehicle is drawn, every station says its count), so the vehicle mark, the
+// one that moves anyway, steps aside. Up or down the screen, never along its
+// own width: the capsule stands upright in the viewport whatever the heading,
+// so across its height a mark clears a disc within a radius or two, while
+// along a hub label's width it would have to travel half the label. Which
+// way: a mark moving mostly up or down the screen steps ahead of the disc, so
+// its side never flips as it passes the centre; one moving mostly across
+// steps to the side of the disc it is already on, which does not change on a
+// straight pass. By the smallest hop past every disc in its way (hub stations
+// stand twelve pixels apart at z13, each forty wide, a pile no single hop
+// clears) plus DEFLECT_MARGIN_PX, and never by a jump: the hop is ramped with
+// the true overlap (DEFLECT_GAIN), so a mark meeting a disc slides off it and
+// back once past. A bus pill steps aside for a tram plate the same way (trams
+// are placed first, then buses, then the rest), and every mark placed is in
+// the way of the ones after it. Never further than DEFLECT_MAX_PX: a mark in
+// a pile too deep to hop goes as far as that and keeps what it still covers.
+// Pure, in the CSS px
+// the pill geometry is stated in (vehicle-features.ts divides the projected
+// positions by the symbol scale first, as it does for the clustering).
+
+/** A round obstacle a mark must not cover: a disc with a number, as its drawn radius (city-layers.ts). */
+export interface DiscObstacle { x: number; y: number; r: number }
+/** A mark to place: its centre, the label its capsule is fitted to, its kind and its heading (null: none known). */
+export interface DeflectableMark { id: string; x: number; y: number; label: string; kind: string; bearing: number | null }
+/** Where a mark was placed and how far it moved (0: where the model put it). */
+export interface PlacedMark { x: number; y: number; moved: number }
+
+/** The clearance left between a placed mark and what it stepped aside for. */
+export const DEFLECT_MARGIN_PX = 1;
+/** How far a mark may be moved per pixel of true overlap: the hop a mark stepping ahead of a disc needs is
+ *  two radii at the first touch, which unramped would be a jump. Eight per pixel completes a single disc's
+ *  hop within three pixels of travel and a hub pile's within six, so a tram standing on a station with a
+ *  partial overlap (its dwell at the stop) is clear and not half over the count; the slide is fast but has
+ *  no step, and the plate then waits ahead of the disc while the tram passes under it. (Three per pixel,
+ *  the first try, left 8 of 16 covered discs covered on a replay of Trg: the hops stopped part-way through
+ *  the pile, on the next disc.) */
+export const DEFLECT_GAIN = 8;
+/** The furthest a mark is ever moved from where the model put it: two capsule heights, one disc's hop and a
+ *  little more. In ground that is 450 m at the wall's z13 (where the disc itself claims 500 m of street) and
+ *  66 m at street level; a mark whose pile needs more stays where it is. */
+export const DEFLECT_MAX_PX = 2 * PILL_HEIGHT_PX;
+
+/** A capsule's spine (a horizontal segment) and its radius, as drawn. */
+interface Capsule { x: number; y: number; spine: number; radius: number }
+function capsuleOf(m: { x: number; y: number; label: string }): Capsule {
+  const { halfWidth, halfHeight } = capsuleHalfPx(m.label);
+  return { x: m.x, y: m.y, spine: Math.max(0, halfWidth - halfHeight), radius: halfHeight };
+}
+/** Something in a mark's way as the mark's own capsule meets it: a round obstacle, or a placed capsule
+ *  (a horizontal segment of `spine` with `radius`): its centre, its half-length across and its radius. */
+interface Obstacle { x: number; y: number; spine: number; r: number }
+/** The distance between a capsule's spine and an obstacle's (a disc is a spine of 0). */
+function spinesDistance(a: Capsule, b: Obstacle): number {
+  const gap = Math.max(0, Math.abs(a.x - b.x) - a.spine - b.spine);
+  return Math.hypot(gap, a.y - b.y);
+}
+/** Draw order among the kinds: a tram's plate is placed first, a bus pill steps aside for it. */
+const DEFLECT_RANK: Readonly<Record<string, number>> = { tram: 0, bus: 1 };
+
+/**
+ * The smallest hop `p` (0 or more) along the screen's vertical, in direction `side` (+1 down, -1 up), that
+ * leaves the capsule `own` clear of every obstacle it would meet on the way: each obstacle it reaches across
+ * forbids an interval of `p`, and the hop walks past the chain of them the mark stands in. Never past
+ * DEFLECT_MAX_PX: a chain that runs further is not hopped whole, the mark goes as far as the cap (a hop
+ * that switched to nothing as the chain shortened under the cap would be the jump the gain avoids).
+ */
+function hopPast(own: Capsule, obstacles: readonly Obstacle[], side: 1 | -1): number {
+  const forbidden: [number, number][] = [];
+  for (const o of obstacles) {
+    const r = o.r + DEFLECT_MARGIN_PX;
+    // Reached across: the spines' horizontal gap is inside the two radii, so the vertical distance decides.
+    const gap = Math.max(0, Math.abs(own.x - o.x) - own.spine - o.spine);
+    const reach = own.radius + r;
+    if (gap >= reach) continue;
+    const across = Math.sqrt(reach * reach - gap * gap);
+    const centre = side * (o.y - own.y);
+    forbidden.push([centre - across, centre + across]);
+  }
+  forbidden.sort((a, b) => a[0] - b[0]);
+  let p = 0;
+  for (const [from, to] of forbidden) {
+    if (to <= p) continue;
+    if (from >= p) break;
+    p = to;
+  }
+  return Math.min(p, DEFLECT_MAX_PX);
+}
+
+/**
+ * The marks placed: each in `marks` (singles and clusters alike, in the CSS px
+ * of the pill geometry) moved off the `discs` and off the marks placed before
+ * it, as described above. Every mark comes back, moved or not.
+ */
+export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly DiscObstacle[]): Map<string, PlacedMark> {
+  const placed = new Map<string, PlacedMark>();
+  const before: Obstacle[] = [];
+  const order = [...marks].sort((a, b) => (DEFLECT_RANK[a.kind] ?? 2) - (DEFLECT_RANK[b.kind] ?? 2) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const mark of order) {
+    const own = capsuleOf(mark);
+    const inWay: Obstacle[] = [...discs.map((d) => ({ x: d.x, y: d.y, spine: 0, r: d.r })), ...before];
+    // The true overlap now: how far the nearest thing in the way reaches into the capsule (0: clear).
+    let overlap = 0;
+    let nearest: Obstacle | null = null;
+    for (const o of inWay) {
+      const depth = own.radius + o.r + DEFLECT_MARGIN_PX - spinesDistance(own, o);
+      if (depth > overlap) { overlap = depth; nearest = o; }
+    }
+    if (overlap <= 0 || !nearest) {
+      placed.set(mark.id, { x: mark.x, y: mark.y, moved: 0 });
+      before.push({ x: own.x, y: own.y, spine: own.spine, r: own.radius });
+      continue;
+    }
+    // Which way: ahead of the disc for a mark moving mostly up or down the screen (screen y grows
+    // downward, a bearing of 0 is up); the side it is already on for one moving mostly across, or one
+    // with no heading; dead level, down.
+    const rad = ((mark.bearing ?? 90) * Math.PI) / 180;
+    const ux = Math.sin(rad);
+    const uy = -Math.cos(rad);
+    const vertical = mark.bearing !== null && Math.abs(uy) > Math.abs(ux);
+    const side: 1 | -1 = vertical ? (uy < 0 ? -1 : 1) : (own.y - nearest.y < 0 ? -1 : 1);
+    const hop = hopPast(own, inWay, side);
+    // Never a jump: at most DEFLECT_GAIN per pixel of true overlap, nothing at a touch.
+    const m = Math.min(hop, DEFLECT_GAIN * overlap);
+    const at = { x: mark.x, y: mark.y + side * m, moved: m };
+    placed.set(mark.id, at);
+    before.push({ x: at.x, y: at.y, spine: own.spine, r: own.radius });
+  }
+  return placed;
+}

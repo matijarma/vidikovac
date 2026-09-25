@@ -7,8 +7,9 @@
 // them through the loaded module, as it does the layers.
 import { toLonLat } from '../../../shared/motion/geo';
 import type { Drawn } from '../motion/integrator';
-import { clusterPills, noseCentrePx, type Cluster, type PillPoint } from '../motion/pills';
-import { bearingOf, vehicleLabel, type VehicleFeature, type VehicleFeatureCollection } from './city-map';
+import { clusterPills, deflectMarks, noseCentrePx, type Cluster, type DeflectableMark, type DiscObstacle, type PillPoint } from '../motion/pills';
+import { bearingOf, vehicleLabel, type MapPoint, type VehicleFeature, type VehicleFeatureCollection } from './city-map';
+import { discRadiusPx } from './city-layers';
 import { markAlpha, vehicleKind, type VehicleKind } from './vehicle-mark';
 
 export { bodiesToGeoJson } from '../motion/bodies';
@@ -60,6 +61,30 @@ export interface VehicleGeoJsonOptions {
    *  member on that line answers with it, and the mark reads as what it
    *  partly is. Absent, the '' of a mixed cluster stands as before. */
   focusedRoute?: string;
+  /** The discs with a number on them (discObstacles), in the CSS px of the pill geometry (the projected
+   *  positions divided by the symbol scale, as the marks are): a mark steps aside for them, and a bus pill
+   *  for a tram plate (round 2 F6, motion/pills.ts deflectMarks). Absent, nothing steps aside. */
+  discs?: readonly DiscObstacle[];
+  /** CSS px on the live camera back to [lon, lat] (MapLibre's own `map.unproject`), for a mark that stepped
+   *  aside. Without it no mark moves. */
+  unproject?: (point: { x: number; y: number }) => [number, number];
+}
+
+/** The city discs that carry a number, as obstacles for the vehicle marks (round 2 F6): a counted BAJS disc at
+ *  its drawn radius, a venue's programme disc at its own (city-layers.ts discRadiusPx); never a far dot, an
+ *  empty station's dot or a blank disc, which have no number to keep clear. In the CSS px of the pill geometry
+ *  (divided by the symbol scale, as vehiclesToGeoJson divides the marks). */
+export function discObstacles(points: readonly MapPoint[], project: (lonLat: [number, number]) => { x: number; y: number } | null, scale: number): DiscObstacle[] {
+  const out: DiscObstacle[] = [];
+  for (const p of points) {
+    if (p.place !== 'city' || !p.props) continue;
+    const r = discRadiusPx(p.props);
+    if (r === null || !Number.isFinite(p.lon) || !Number.isFinite(p.lat)) continue;
+    const at = project([p.lon, p.lat]);
+    if (!at) continue;
+    out.push({ x: at.x / scale, y: at.y / scale, r });
+  }
+  return out;
 }
 
 /** A vehicle's mark as `clusterPills` measures it: its pill's centre on screen
@@ -105,6 +130,7 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: str
       alpha: Math.max(...members.map((f) => f.properties.alpha)),
       sort: SORT_CLUSTER,
       held: false,
+      moved: 0,
       cluster: true,
       ids: members.map((f) => f.properties.id),
       n: members.length,
@@ -150,6 +176,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
         alpha: markAlpha(v.confidence),
         sort: kind === 'tram' ? SORT_TRAM : SORT_BUS,
         held: v.held === true,
+        moved: 0,
         cluster: false,
       },
     });
@@ -184,6 +211,27 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
     for (const group of clusterPills(points, { selectedId })) {
       merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
     }
+  }
+  // Round 2 F6: the marks step aside for a disc's number and for one another (a bus pill for a tram
+  // plate), where the camera can put a moved mark back on the ground. Continuous in the model's
+  // positions (motion/pills.ts deflectMarks), so a mark meeting a disc slides off it, never jumps;
+  // `moved` says how far, for the census (data-pill-moved).
+  const unproject = options.unproject;
+  if (!unproject || (!options.discs?.length && merged.length < 2)) return { type: 'FeatureCollection', features: merged };
+  const marks: DeflectableMark[] = [];
+  const byId = new Map<string, VehicleFeature>();
+  for (const feature of merged) {
+    if (feature.properties.kind === 'other') continue;
+    const at = project(feature.geometry.coordinates);
+    if (!at) continue;
+    marks.push({ id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, kind: feature.properties.kind, bearing: feature.properties.bearing });
+    byId.set(feature.properties.id, feature);
+  }
+  for (const [id, at] of deflectMarks(marks, options.discs ?? [])) {
+    if (!(at.moved > 0)) continue;
+    const feature = byId.get(id)!;
+    feature.geometry.coordinates = unproject({ x: at.x * scale, y: at.y * scale });
+    feature.properties.moved = at.moved;
   }
   return { type: 'FeatureCollection', features: merged };
 }

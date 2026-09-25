@@ -3,7 +3,7 @@ import '../../shared/kiosk/external-text';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, vehicleLabel, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
-import { vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
+import { discObstacles, vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
 import { stopsToGeoJson } from '../../app/src/map/external-features';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
@@ -434,6 +434,43 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(vehicleLabel({ short: 'X'.repeat(PILL_MAX_CHARS_CLUSTER) })).toBe('X'.repeat(PILL_MAX_CHARS_CLUSTER));
     expect(vehicleLabel({ short: '6' })).toBe('6');
     expect(vehicleLabel({})).toBe('');
+  });
+
+  // Round 2, F6 (the phone lane's handoff): a mark steps aside for a disc's number (motion/pills.ts deflectMarks)
+  // and is put back on the ground through the camera, saying how far; without a way back, or with nothing to keep
+  // clear of, it stands where the model put it.
+  it('steps a mark aside for a disc\u2019s number through the camera, says how far, and moves nothing without a way back', () => {
+    const north = (id: string, short: string, lon: number): Drawn =>
+      ({ id, type: 0, routeId: short, short, p: toPlane(lon, 45.81), heading: { x: 0, y: 1 }, speed: 5, confidence: 1, onShape: null });
+    const project = ([lon, lat]: [number, number]): { x: number; y: number } => ({ x: (lon - 15.9) * 1e4, y: (45.9 - lat) * 1e4 });
+    const unproject = ({ x, y }: { x: number; y: number }): [number, number] => [15.9 + x / 1e4, 45.9 - y / 1e4];
+    const disc = { x: (15.97 - 15.9) * 1e4, y: (45.9 - 45.81) * 1e4, r: 10 };
+    const moved = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [disc] }).features[0]!;
+    // North-bound, dead on the disc: ahead (up the screen, north) by half the plate, the disc's radius and the margin (20 px at scale 1).
+    expect(moved.properties.moved).toBeCloseTo(20, 6);
+    expect(moved.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
+    expect(moved.geometry.coordinates[1]).toBeCloseTo(45.81 + 20 / 1e4, 9);
+    const still = vehiclesToGeoJson([north('a', '6', 15.97)], { project, discs: [disc] }).features[0]!;
+    expect(still.properties.moved).toBe(0);
+    expect(still.geometry.coordinates[0]).toBeCloseTo(15.97, 9);
+    expect(vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [] }).features[0]!.properties.moved).toBe(0);
+    // The public screen's scale 2: the same step in the pill geometry's px is twice as far on the screen.
+    const wall = vehiclesToGeoJson([north('a', '6', 15.97)], { project, unproject, discs: [{ ...disc, x: disc.x / 2, y: disc.y / 2 }], symbolScale: 2 }).features[0]!;
+    expect(wall.properties.moved).toBeCloseTo(20, 6);
+    expect(wall.geometry.coordinates[1]).toBeCloseTo(45.81 + 40 / 1e4, 9);
+    // The obstacles: the discs with a number, at their drawn radius, in the pill geometry's px.
+    const points: MapPoint[] = [
+      { id: 'b1', title: '', lon: 15.97, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '7' } },
+      { id: 'b2', title: '', lon: 15.971, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '5', far: true } },
+      { id: 'b3', title: '', lon: 15.972, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '0' } },
+      { id: 'b4', title: '', lon: 15.973, lat: 45.81, place: 'city', props: { category: 'bikes', badge: '', spent: true } },
+      { id: 'c1', title: 'Gavella', lon: 15.974, lat: 45.81, place: 'city', props: { category: 'culture', badge: '4', eventCount: 4 } },
+      { id: 'q1', title: 'M 3.1', lon: 15.975, lat: 45.81, place: 'quake' },
+    ];
+    expect(discObstacles(points, project, 2)).toEqual([
+      { x: disc.x / 2, y: disc.y / 2, r: 10 },
+      { x: (15.974 - 15.9) * 1e4 / 2, y: disc.y / 2, r: 13 },
+    ]);
   });
 
   it('merges pills that overlap on screen into one cluster mark, leaves a vehicle standing on its own alone, and never absorbs the selected one', () => {

@@ -396,7 +396,12 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const valid = (s: WrittenSentence) => (s.validUntil !== null && Number.isFinite(s.validUntil) && s.validUntil > now)
         && acceptSentence(s.text, { facts: [{ id: 'self', kind: s.kicker, text: s.text, validUntil: s.validUntil }], now }).ok
         && !overflowed(s);
-      let held = current && valid(current) && sentences.find(s => s.text === current!.text && valid(s));
+      // The same text of the sentence's own origin first (observe-d523, 22:45: the model wrote the template's
+      // words, the pool listed it first, and its refs and origin took over the sentence on screen: the fact
+      // attribute flipped without the words changing, and a count change six seconds later ended the turn,
+      // since only a template's turn survives its fact leaving the pool).
+      let held = current && valid(current) && (sentences.find(s => s.text === current!.text && s.origin === current!.origin && valid(s))
+        ?? sentences.find(s => s.text === current!.text && valid(s)));
       // Decision 29: the sentence on screen in its refreshed words (a restated end, a moved estimate,
       // a countdown's next minute) is the same sentence. It keeps its dwell and its wording; only a
       // fact that can no longer be said in that wording ends the dwell early.
@@ -416,8 +421,11 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       // template sentence in place (the refresh above); a model sentence leaves the pool only when it no
       // longer grounds against the current facts (kiosk.ts readWrittenSentences), which is that exception.
       if (!held && current && current.origin === 'template' && valid(current) && now - heldSince < rhythm) held = current;
-      // Retain object identity on ordinary refreshes, but update a shortened deadline.
-      if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
+      // Retain object identity on ordinary refreshes, but update a shortened deadline. An equal text of
+      // another origin lends its deadline only: the sentence on screen keeps its own refs and origin.
+      if (held && current && held.origin !== current.origin) {
+        if (held.validUntil! < current.validUntil!) current = { ...current, validUntil: held.validUntil };
+      } else if (held && current && (held.validUntil! < current.validUntil! || held.kicker !== current.kicker
         || held.refs.length !== current.refs.length || held.refs.some((ref, index) => ref !== current!.refs[index]))) {
         current = held.validUntil! <= current.validUntil! ? held
           : { ...held, validUntil: current.validUntil };
@@ -443,11 +451,24 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       const kickerAge = (s: WrittenSentence) => kickers.get(s.kicker) ?? -Infinity;
       // A sentence that can be said in its words for a whole rhythm comes first: "za 1 min" ten
       // seconds before its minute rounds to 0 would stand ten seconds (decision 29).
-      const lasts = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm ? 0 : 1;
-      choices.sort((a, b) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b)));
+      const lasting = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm;
+      const lasts = (s: WrittenSentence) => lasting(s) ? 0 : 1;
+      const order = (a: WrittenSentence, b: WrittenSentence) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b));
+      choices.sort(order);
       // No restatement in another wording: with three facts at hand the header waits for a fact it has
       // not shown rather than say the one that just left in other words.
-      const next = choices[0] ?? (held ? current : null);
+      //
+      // observe-d522 (D5.22, 22:55 and 23:18 Zagreb): "polazi za 1 min" chosen with 19 s of its minute left
+      // stood 10.5 s, "polazi u 23:18" chosen two seconds before the tram left, 8 s; both were the only
+      // fresh wording of an unshown fact. A sentence that cannot stand a whole rhythm is never the next
+      // one while the one on screen can still be said in its words (the header waits), nor while a fresh
+      // wording of a fact shown lately lasts (the fact rule yields to the dwell); only with nothing else
+      // is it taken, rather than a blank header.
+      const first = choices[0];
+      const restated = byFact && first && !lasting(first) ? fresh.filter(s => lasting(s) && !choices.includes(s)).sort(order) : [];
+      const next = first && lasting(first) ? first
+        : held && current ? current
+        : restated[0] ?? first ?? null;
       if (next !== current) {
         if (current) remember(current, now, current.validUntil);
         // Timeless source descriptions are only leased for this display rhythm.

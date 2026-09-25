@@ -19,6 +19,14 @@ const ruleIn = (sheet: string, selector: string) => {
 const rule = (selector: string) => ruleIn(css, selector);
 const windowRule = (selector: string) => ruleIn(cityCss, selector);
 
+describe('the start screen (round 2, F16)', () => {
+  it('keeps the place field\u2019s suggestion box and its status in the flow, so Pokreni is never covered', () => {
+    // The wall's settings row and the handheld already have it so; the start screen's absolute box lay over Pokreni.
+    expect(rule('.k-start .k-suggest-box')).toContain('position: static');
+    expect(rule('.k-settings .k-suggest-box')).toContain('position: static');
+  });
+});
+
 describe('public-screen design invariants', () => {
   it('uses the shared semantic palette, including the scanner-safe QR pair', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
@@ -268,14 +276,17 @@ describe('public-screen design invariants', () => {
     expect(rule(".kiosk[data-portrait='1'] .k-paired .k-side")).toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(rule(".kiosk[data-size='handheld']")).toContain('--k-paired-side-w: 100%');
   });
-  it('keeps the QR SVG at 240px inside a 264px plate with 12px padding', () => {
-    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
+  it('keeps the QR on a plate whose quiet zone is drawn inside the SVG (four modules, round 2 F7), with no padding of its own: 288px wide, 264px compact', () => {
+    expect(rule(".kiosk[data-size='wide']")).toContain('--k-qr: calc(288px * var(--k-sign-zoom))');
+    // The compact wall keeps its 264 px plate: 24 px more took the paired rail's summary past its box at 1366 x 768
+    // (kiosk-layout.spec, grad-sada: 134/110); its code is 207 px, larger on a 43 inch panel at 1366 than the wide wall's.
     expect(rule(".kiosk[data-size='compact']")).toContain('--k-qr: calc(264px * var(--k-sign-zoom))');
-    expect(windowRule('.kiosk:not([data-size=handheld])')).toContain('--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))');
+    expect(windowRule('.kiosk[data-size=wide]')).toContain('--k-qr:max(288px,calc(288px * var(--k-sign-zoom)))');
+    expect(windowRule('.kiosk[data-size=compact]')).toContain('--k-qr:max(264px,calc(264px * var(--k-sign-zoom)))');
     expect(rule('.k-qr')).toContain('width: var(--k-qr)');
     expect(windowRule('.kiosk .k-city-window .k-invite')).toContain('var(--k-qr)');
     expect(rule('.k-qr .qr')).toContain('var(--k-qr-plate)');
-    expect(rule('.k-qr .qr')).toContain('padding: 12px');
+    expect(rule('.k-qr .qr')).toContain('padding: 0');
     expect(rule(".kiosk[data-size='handheld']")).toContain('--k-qr: 240px');
   });
   it('uses the walk-up floor for the head, map note and card, with a 1.1 dark read multiplier', () => {

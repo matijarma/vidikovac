@@ -584,6 +584,60 @@ describe('sentence sequence', () => {
     expect(seq.read(choices.map(s => ({ ...s })), NOW + rhythmMs - 1)).toBe(first);
     expect(seq.read(choices, NOW + rhythmMs)).not.toBe(first);
   });
+  // observe-d522 (D5.22, 22:55 and 23:18 Zagreb): "Tramvaj 17, smjer Prečko, polazi za 1 min." was chosen with
+  // 19 s of its minute left and stood 10.5 s; "polazi u 23:18" two seconds before the tram left, 8 s. A sentence
+  // that cannot stand a whole rhythm is never the next one while the one on screen can still be said, nor while
+  // another fresh wording lasts; only with nothing else does the header wait rather than blink (decision 29).
+  it('never takes a sentence that cannot stand a whole rhythm while the one on screen still holds, and takes it once nothing longer is left', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const long = sentence('Ilica: zatvoreno za promet do 18:00.', { kicker: 'radovi', refs: ['closure:ilica'] });
+    const brief = { ...sentence('Tramvaj 17, smjer Prečko, polazi za 1 min.', { kicker: 'promet', refs: ['dep:t17'], validUntil: NOW + 39_000 }), formUntil: NOW + 39_000 };
+    expect(seq.read([long, brief], NOW)).toBe(long);
+    // The rhythm is up and the only fresh wording has 19 s left: the closure stays.
+    expect(seq.read([long, brief], NOW + 20_000)?.text).toBe(long.text);
+    expect(seq.read([long, brief], NOW + 24_000)?.text).toBe(long.text);
+    // A fresh wording that lasts arrives: it is next, the short one never shown.
+    const other = sentence('21 °C, vedro; danas do 24 °C.', { kicker: 'vrijeme', refs: ['weather:now'] });
+    expect(seq.read([long, brief, other], NOW + 26_000)?.text).toBe(other.text);
+    // On screen with a deadline of its own and nothing else lasting: the header holds the current to its deadline
+    // rather than take the short one, and only past it takes what is left rather than blank.
+    // The tram's own sentence has 18 s left at the rhythm's end (it does not last: the sunset, with 10 s
+    // left, stays to its deadline), 7 once the sunset has passed (taken then, rather than a blank header).
+    const short2 = { ...sentence('Tramvaj 6, smjer Sopot, polazi u 12:31.', { kicker: 'promet', refs: ['dep:t6'], validUntil: NOW + 38_000 }), formUntil: NOW + 38_000 };
+    const seq3 = createSentenceSequence({ rhythmMs: 20_000 });
+    const soon3 = sentence('Sunce zalazi u 18:57.', { kicker: 'vrijeme', refs: ['solar:sunset:x'], validUntil: NOW + 30_000 });
+    expect(seq3.read([soon3], NOW)?.text).toBe(soon3.text);
+    expect(seq3.read([soon3, short2], NOW + 20_000)?.text).toBe(soon3.text);
+    expect(seq3.read([soon3, short2], NOW + 29_000)?.text).toBe(soon3.text);
+    expect(seq3.read([soon3, short2], NOW + 31_000)?.text).toBe(short2.text);
+  });
+
+  // observe-d523 (D5.23, 00:45 Zagreb): "BAJS VLAŠKA UL.: 2 bicikla." stood 6.2 s with its fact attribute, then
+  // the same words with none (the model had written the template's words and its entry took the sentence over),
+  // then a tram sentence 5 s later: two short turns and a verbatim return to the observer, while nothing on the
+  // wall had changed but the count behind it.
+  it('keeps its own refs and origin when the model writes the same words, and restates a changed count in place through the rhythm', () => {
+    const seq = createSentenceSequence({ rhythmMs: 20_000 });
+    const template = (n: number): RotatingSentence => ({ ...sentence(`BAJS VLAŠKA UL.: ${n} bicikla.`, { kicker: 'bicikli', refs: ['bikes:bajs-556701511'] }), factKey: 'bikes|bajs-556701511', wording: 'bikes' });
+    const model: WrittenSentence = { text: 'BAJS VLAŠKA UL.: 2 bicikla.', kicker: 'bicikli', refs: ['bajs-556701511'], validUntil: NOW + 3_600_000, origin: 'model' };
+    const first = seq.read([template(2)], NOW)!;
+    expect(first.origin).toBe('template');
+    // Six seconds on, the model's equal words are in the pool, listed first: the sentence keeps its own identity.
+    const six = seq.read([model, template(2)], NOW + 6_000)!;
+    expect(six.origin).toBe('template');
+    expect(sentenceFactKeys(six)).toEqual(['bikes|bajs-556701511']);
+    expect(six.text).toBe(first.text);
+    // Eleven seconds on, the count is three: the template restates it in place, the model's words are gone, the turn goes on.
+    const eleven = seq.read([template(3)], NOW + 11_000)!;
+    expect(eleven.text).toBe('BAJS VLAŠKA UL.: 3 bicikla.');
+    expect(eleven.origin).toBe('template');
+    expect(seq.read([template(3)], NOW + 19_000)?.text).toBe('BAJS VLAŠKA UL.: 3 bicikla.');
+    // The rhythm up, another fact takes its turn; the bikes never return verbatim inside ten minutes.
+    const other = sentence('Ilica: zatvoreno za promet do 18:00.', { kicker: 'radovi', refs: ['closure:ilica'] });
+    expect(seq.read([template(3), other], NOW + 20_000)?.text).toBe(other.text);
+    expect(seq.read([template(2), other], NOW + 40_000)?.text).not.toBe('BAJS VLAŠKA UL.: 2 bicikla.');
+  });
+
   it('never repeats in thirty turns, and prefers a different least-recent kicker', () => {
     const seq = createSentenceSequence({ rhythmMs: 20_000 });
     const seen = Array.from({ length: 30 }, (_, n) => seq.read(choices, NOW + n * 20_000));

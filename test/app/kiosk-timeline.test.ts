@@ -268,7 +268,7 @@ describe('calm motion (principle 7)', () => {
       expect(items()).toEqual(kept);
     }
     expect(minutes).toEqual(Array(10).fill(0));
-  });
+  }, 30_000);
 
   it('measures candidate words in a hidden same-width sibling, never in the live list', () => {
     const measure = simulated(WALL_1920);

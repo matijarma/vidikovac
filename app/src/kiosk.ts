@@ -41,6 +41,9 @@ import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
 import { escapeAttribute, escapeHtml } from './ui/dom/escape';
 import { createQr } from './ui/qr';
+/** Round 2 F7 (owner, 24 Sep): the standard quiet zone, four modules, drawn inside the SVG on the white plate,
+ *  so a phone camera finds the 120 mm code from 3 m; the code's own module stays its size (kiosk.css --k-qr). */
+const QR_QUIET_ZONE_MODULES = 4;
 import { THEME_PREFERENCES, type ThemeController } from './ui/theme';
 import { forgetBeacon, msUntilExpiry, screenExpired, withScreen, type KioskPhase, type StorageLike } from './kiosk/credentials';
 import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essentials';
@@ -60,7 +63,7 @@ import type { PairedContext, PairedHandle } from './kiosk/paired';
 import { mountPlaceField } from './kiosk/place-field';
 import type { StreetGeo } from './kiosk/places';
 import { readRhythm, readView, writeRhythm, writeView, type Rhythm, type WallView } from './kiosk/prefs';
-import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type SettingsHandle, type WallPlace } from './kiosk/settings';
+import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia, type SettingsHandle, type WallPlace } from './kiosk/settings';
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
 import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
@@ -1088,7 +1091,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const label = fill(s.invitation.qrLabel, { code: speakableCode(slot.code) });
     // A slot change (a live code giving way to a different one) crossfades; the first code, a re-sent batch and a fresh mount paint at once.
     const previous = codeEl?.dataset.state === 'live' ? (codeEl.textContent ?? '').trim() : null;
-    if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display }).element);
+    if (qrBox) qrBox.replaceChildren(createQr({ payload, ariaLabel: label, unavailableText: display, quietZoneModules: QR_QUIET_ZONE_MODULES }).element);
     if (codeA) codeA.textContent = display.slice(0, 4);
     if (codeB) codeB.textContent = display.slice(5);
     if (codeEl) codeEl.dataset.state = 'live';
@@ -1290,14 +1293,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (disposed || !element.isConnected || layout.size === 'handheld') return;
     event.preventDefault();
     if (event.repeat) return;
-    openSettings();
+    openSettings('keyboard');
   }
   /** Postavke, built on the first long press of the brand and kept for the
    *  screen's life. Mjesto and Kadar go to the DO as screen-set version 2
    *  (the panel's SendQueue); the DO's answer re-frames the wall through
    *  applyScreen, exactly as a change from the DO does. Prikaz, Tema and
    *  Ritam are this browser's and apply at once. */
-  function openSettings(): void {
+  function openSettings(via: LongPressVia = 'pointer'): void {
     if (!credentials || phase !== 'invitation') return;
     closeEssentials(false);
     settings ??= mountSettings(element, {
@@ -1330,17 +1333,21 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       },
       forget: startOver,
       onOpen: () => { stage.hidden = true; mapAdapter.handle()?.pause(); },
-      onClose: (restoreFocus) => {
+      onClose: (restoreFocus, via) => {
         showStage();
         // The camera held while the panel covered the stage; the box is real
         // again. A phase change (restoreFocus false) repaints on its own.
-        if (restoreFocus) { paintLocal(); brand.focus(); }
+        // Round 2 F18: the focus goes back to what opened the panel. A keyboard open (Enter or Space)
+        // returns it to the brand, ring and all, as a keyboard user expects; a press returns it to the
+        // wall itself, whose ring is suppressed (a screen shows no ring after a finger), and Enter or
+        // Space there open the panel again exactly as on the brand.
+        if (restoreFocus) { paintLocal(); if (via === 'keyboard') brand.focus(); else element.focus({ preventScroll: true }); }
       },
       now,
       setTimeout: oneShot,
       clearTimeout: clearTimer,
     });
-    settings.open();
+    settings.open(via);
   }
   function closeSettings(restoreFocus = true): void {
     settings?.close(restoreFocus);
