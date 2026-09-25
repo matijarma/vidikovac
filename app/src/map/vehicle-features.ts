@@ -241,7 +241,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
  *  alpha, the number), read off the drawn marks themselves so a frame that
  *  pushes nothing builds no feature. Whether the fleet is still moving at
  *  all is what this answers; whether a push is worth making is
- *  visibleSignature's question. */
+ *  visibleStep's question. */
 export function stepSignature(drawn: readonly Drawn[], selectedId: string | null): string {
   if (drawn.length === 0) return '';
   return `${selectedId ?? ''}|${drawn
@@ -255,18 +255,23 @@ export function stepSignature(drawn: readonly Drawn[], selectedId: string | null
  *  MapLibre re-tiled and repainted the whole scene twelve times a second for
  *  motion the eye reads as one step every second or two (round 4 kiosk lane,
  *  handoff A2). At street level (zoom 16 and up) every push moves a mark
- *  past this and the 12 Hz glide is what it was. */
+ *  past this and the 12 Hz glide is what it was. Measured against where each
+ *  mark was LAST PUSHED, not against a grid: with fifteen marks gliding at
+ *  different phases a grid step was crossed by one of them in almost every
+ *  push (the branch wall pushed 8.7 a second with the live fleet where the
+ *  base pushed 12), while the fastest mark's own displacement reaches half
+ *  a pixel about once a second at the wall's zoom, whatever the count. */
 export const VISIBLE_STEP_PX = 0.5;
 /** Ground beyond the viewport's edges a mark still counts on (a pill's
  *  width): a mark this close to the edge may be half drawn. */
 export const VISIBLE_MARGIN_PX = 80;
 /** The bearing step the nose can show: five degrees is under a pixel at the nose's tip. */
-const VISIBLE_BEARING_DEG = 5;
+export const VISIBLE_BEARING_DEG = 5;
 /** The alpha step the eye can tell on a 20 px mark. */
-const VISIBLE_ALPHA = 0.1;
+export const VISIBLE_ALPHA = 0.1;
 
-/** The camera a visible signature is taken on: the projection, the viewport's box in CSS px (0 x 0 before
- *  layout, when every mark counts) and the symbol scale. */
+/** The camera a visible reading is taken on: the projection, the viewport's box in CSS px (0 x 0 before layout,
+ *  when every mark counts) and the symbol scale. */
 export interface VisibleView {
   project?: (lonLat: [number, number]) => { x: number; y: number } | null;
   width: number;
@@ -274,32 +279,55 @@ export interface VisibleView {
   scale: number;
 }
 
-/** What a push would change on the screen: every mark inside the viewport
- *  (VISIBLE_MARGIN_PX beyond its edges), its position to VISIBLE_STEP_PX,
- *  its bearing to VISIBLE_BEARING_DEG, its alpha to VISIBLE_ALPHA and its
- *  number, plus how many marks are in view, so one leaving or entering is a
- *  change. Two frames with the same visible signature would paint the same
- *  picture, and the frame between them pushes nothing (city-map.ts draw).
- *  Without a projection every mark counts at the coarseness of
- *  stepSignature. A camera move clears the last pushed signature
- *  (city-map.ts onCameraMove), so what was out of view is pushed the moment
- *  it can be seen. */
-export function visibleSignature(drawn: readonly Drawn[], selectedId: string | null, view: VisibleView): string {
-  if (drawn.length === 0) return '';
+/** One mark as the screen last saw it: its place in CSS px (the plane's metres without a camera), its bearing,
+ *  whether its facing is known, its alpha and its number. */
+export interface VisibleMark { x: number; y: number; bearing: number; heading: boolean; alpha: number; label: string }
+/** The marks inside the viewport (VISIBLE_MARGIN_PX beyond its edges) by vehicle id. */
+export type VisibleMarks = Map<string, VisibleMark>;
+
+/** The marks a push would draw inside the view, as visibleStep compares them. Without a projection every mark
+ *  counts, at the plane's metres. */
+export function visibleMarks(drawn: readonly Drawn[], view: VisibleView): VisibleMarks {
+  const out: VisibleMarks = new Map();
   const project = view.project;
-  if (!project) return stepSignature(drawn, selectedId);
-  const laidOut = view.width > 0 && view.height > 0;
+  const laidOut = project !== undefined && view.width > 0 && view.height > 0;
   const margin = VISIBLE_MARGIN_PX * view.scale;
-  const parts: string[] = [];
   for (const v of drawn) {
-    const at = project(toLonLat(v.p));
-    if (!at) { parts.push(`${v.id}:?`); continue; }
-    if (laidOut && (at.x < -margin || at.y < -margin || at.x > view.width + margin || at.y > view.height + margin)) continue;
-    const bearing = Math.round(bearingOf(v.heading ?? v.track) / VISIBLE_BEARING_DEG) * VISIBLE_BEARING_DEG % 360;
-    const alpha = Math.round(markAlpha(v.confidence) / VISIBLE_ALPHA) * VISIBLE_ALPHA;
-    parts.push(`${v.id}:${Math.round(at.x / VISIBLE_STEP_PX)},${Math.round(at.y / VISIBLE_STEP_PX)},${bearing},${v.heading !== null ? 1 : 0},${alpha.toFixed(1)},${vehicleLabel(v)}`);
+    let x = v.p.x;
+    let y = v.p.y;
+    if (project) {
+      const at = project(toLonLat(v.p));
+      if (!at) continue;
+      if (laidOut && (at.x < -margin || at.y < -margin || at.x > view.width + margin || at.y > view.height + margin)) continue;
+      x = at.x;
+      y = at.y;
+    }
+    out.set(v.id, { x, y, bearing: bearingOf(v.heading ?? v.track), heading: v.heading !== null, alpha: markAlpha(v.confidence), label: vehicleLabel(v) });
   }
-  return `${selectedId ?? ''}|${parts.length}|${parts.join('|')}`;
+  return out;
+}
+
+/**
+ * Whether the picture would differ by a visible step from the last push
+ * (`previous`, null before any): a mark entering or leaving the view, a
+ * number or a facing changed, a bearing turned VISIBLE_BEARING_DEG, an alpha
+ * moved VISIBLE_ALPHA, or a mark displaced VISIBLE_STEP_PX from where it was
+ * last pushed (a camera move clears the last push: city-map.ts onCameraMove,
+ * so what was out of view is pushed the moment it can be seen). Without a
+ * projection (`stepPx` 0) any motion is a step, as before.
+ */
+export function visibleStep(previous: VisibleMarks | null, next: VisibleMarks, stepPx: number = VISIBLE_STEP_PX): boolean {
+  if (previous === null || previous.size !== next.size) return true;
+  for (const [id, mark] of next) {
+    const was = previous.get(id);
+    if (!was) return true;
+    if (was.label !== mark.label || was.heading !== mark.heading) return true;
+    if (Math.abs(was.x - mark.x) >= stepPx || Math.abs(was.y - mark.y) >= stepPx) return true;
+    if (Math.abs(was.alpha - mark.alpha) >= VISIBLE_ALPHA) return true;
+    const turn = Math.abs(was.bearing - mark.bearing) % 360;
+    if (Math.min(turn, 360 - turn) >= VISIBLE_BEARING_DEG) return true;
+  }
+  return false;
 }
 
 /** Coarse enough that convergence noise never keeps the loop awake, fine

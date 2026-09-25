@@ -19,6 +19,7 @@ import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
+import type { VisibleMarks } from './vehicle-features';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { pillLabel } from '../motion/pill-label';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
@@ -843,6 +844,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let lastPushedSignature = '';
   /** The model's output as the last frame saw it (vehicle-features.ts stepSignature): whether the fleet still moves. */
   let lastStepSignature = '';
+  /** The marks in view as the last push drew them (vehicle-features.ts visibleMarks); null before a push, and again
+   *  whenever lastPushedSignature is cleared (a camera move, a new mark zoom, scale or artefact). */
+  let lastPushedVisible: VisibleMarks | null = null;
   /** Whether the bodies source last received bodies rather than the empty collection; see pushBodies. */
   let bodiesShown = false;
   let nextPushAt = -Infinity;
@@ -1100,18 +1104,21 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const moving = step !== lastStepSignature;
     lastStepSignature = step;
     // The push (round 4 kiosk lane, handoff A2): only on the 12 Hz grid, and
-    // only when the picture would differ by a visible step (visibleSignature:
-    // half a pixel, a nose's degree, a shade of alpha, a mark entering or
-    // leaving the view), because MapLibre re-tiles the source and repaints the
-    // whole scene for every push. A camera move, a new mark zoom, a new scale
-    // or a new artefact clears lastPushedSignature, so the next frame pushes
-    // whatever moved.
+    // only when the picture would differ by a visible step from the last push
+    // (visibleStep: half a pixel of displacement, a nose's five degrees, a
+    // shade of alpha, a mark entering or leaving the view, the kept vehicle),
+    // because MapLibre re-tiles the source and repaints the whole scene for
+    // every push. A camera move, a new mark zoom, a new scale or a new
+    // artefact clears lastPushedSignature, so the next frame pushes whatever
+    // moved.
     let fc: VehicleFeatureCollection | null = null;
     const due = t >= nextPushAt - PUSH_TOLERANCE_MS;
-    const signature = due && (moving || lastPushedSignature === '')
-      ? l.visibleSignature(lastDrawn, kept, { project: m.project ? (lonLat) => m.project!(lonLat) : undefined, width: container.clientWidth, height: container.clientHeight, scale })
-      : null;
-    const pushing = signature !== null && signature !== lastPushedSignature;
+    let visible: VisibleMarks | null = null;
+    if (due && (moving || lastPushedSignature === '')) {
+      const project = m.project ? (lonLat: [number, number]) => m.project!(lonLat) : undefined;
+      visible = l.visibleMarks(lastDrawn, { project, width: container.clientWidth, height: container.clientHeight, scale });
+    }
+    const pushing = visible !== null && (lastPushedSignature !== `${kept ?? ''}|${lastDrawn.length}` || l.visibleStep(lastPushedVisible, visible, m.project ? l.VISIBLE_STEP_PX : 0));
     if (pushing) {
       // The pills are merged against the camera of this very frame, so a mark
       // never merges with one the reader can see is somewhere else -- and only
@@ -1122,7 +1129,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       fc = l.vehiclesToGeoJson(lastDrawn, { project, selectedId: kept, symbolScale: scale, focusedRoute: litRouteId() ?? undefined, ...stepAside(m, l, project) });
       m.getSource(l.SOURCES.vehicles)?.setData(fc);
       pushBodies(m, l);
-      lastPushedSignature = signature!;
+      lastPushedSignature = `${kept ?? ''}|${lastDrawn.length}`;
+      lastPushedVisible = visible;
       // Stay on the 12 Hz grid while frames keep coming; re-anchor after a
       // park, when the old grid is long behind us.
       nextPushAt = nextPushAt + SOURCE_UPDATE_INTERVAL_MS > t ? nextPushAt + SOURCE_UPDATE_INTERVAL_MS : t + SOURCE_UPDATE_INTERVAL_MS;

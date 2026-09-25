@@ -3,7 +3,7 @@ import '../../shared/kiosk/external-text';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as basemap from '../../app/src/map/basemap';
 import { CLUSTER_ZOOM_IN_UNTIL, createCityMap, documentTheme, vehicleLabel, withNetwork, withTimers, SOURCE_UPDATE_HZ, type MapFactory, type MapLine, type MapPoint, type MapSelection, type MapStatus } from '../../app/src/map/city-map';
-import { discObstacles, vehiclesToGeoJson } from '../../app/src/map/vehicle-features';
+import { discObstacles, vehiclesToGeoJson, visibleMarks, visibleStep } from '../../app/src/map/vehicle-features';
 import { networkToGeoJson, stopsToGeoJson } from '../../app/src/map/external-features';
 import * as overlays from '../../app/src/map/overlays';
 import * as cityPlaces from '../../app/src/map/city-layers';
@@ -345,7 +345,8 @@ describe('the full map draws the model, never the report (R-P2)', () => {
   });
 
   it('converges onto a new fix over frames instead of jumping: the drawn vehicle is at neither the old nor the new report', async () => {
-    const { handle, frame, vehicles } = await harness();
+    const { handle, frame, vehicles, map } = await harness();
+    map.pxPerDegree = 1e6; // a street-level camera, where every 12 Hz step of the glide is a visible one (visibleStep)
     frame(); frame(); frame();
     handle.update([B], [CLOSURE]);
     const before = vehicles().calls.length;
@@ -598,7 +599,7 @@ describe('the full map draws the model, never the report (R-P2)', () => {
 describe('12 Hz source updates, not one per frame', () => {
   it('pushes the vehicle source about twelve times in a second of sixty moving frames, and counts every frame', async () => {
     const { handle, frame, vehicles, container, map } = await harness();
-    // A street-level camera: every 12 Hz step of the converging mark is a visible one (visibleSignature).
+    // A street-level camera: every 12 Hz step of the converging mark is a visible one (visibleStep).
     map.pxPerDegree = 1e6;
     handle.update([B], [CLOSURE]);
     const before = vehicles().calls.length;
@@ -612,7 +613,7 @@ describe('12 Hz source updates, not one per frame', () => {
 
   // Round 4 kiosk lane, handoff A2: MapLibre re-tiles the vehicle source and repaints the whole scene for every
   // push, and at the wall's zoom 13 a tram's 12 Hz step is a seventeenth of a pixel. A push is made only when the
-  // picture would differ by a visible step (vehicle-features.ts visibleSignature); the loop stays awake while
+  // picture would differ by a visible step (vehicle-features.ts visibleStep); the loop stays awake while
   // the model still moves, and a camera move pushes the next frame whatever moved under it.
   it('pushes only a visible step: sub-pixel motion at a city zoom pushes a few times where the street pushed twelve, the loop stays awake, and a camera move pushes at once', async () => {
     const city = await harness();
@@ -642,6 +643,42 @@ describe('12 Hz source updates, not one per frame', () => {
     expect(last.features[0]!.properties.id).toBe('vehicle:1');
     city.handle.destroy();
     street.handle.destroy();
+  });
+
+  // The step is each mark's displacement since the last push, never a grid: fifteen marks gliding at different
+  // phases crossed a half-pixel grid line in almost every push (the live wall pushed 8.7 a second where the base
+  // pushed 12), while the fastest mark's own half pixel comes about once a second at the wall's zoom.
+  it('visibleStep: a push when any mark has moved half a pixel since the last push, turned five degrees, faded a tenth, changed its number, or entered or left the view; not for a crowd creeping under it', () => {
+    const view = { width: 400, height: 300, scale: 1 };
+    // A projection in px straight from the plane (metres are px here), so the arithmetic is the test's own.
+    const project = ([lon, lat]: [number, number]) => { const p = toPlane(lon, lat); return { x: p.x, y: p.y }; };
+    const mark = (id: string, x: number, y: number, over: Partial<Drawn> = {}): Drawn => ({ id, type: 0, p: { x, y }, heading: null, speed: 0, confidence: 1, onShape: null, ...over } as Drawn);
+    const marks = (list: Drawn[]) => visibleMarks(list, { project, ...view });
+    const first = marks([mark('a', 100, 100), mark('b', 200, 100)]);
+    expect(visibleStep(null, first)).toBe(true);
+    // Both creep 0.4 px each: no push, however many pushes were skipped (the displacement is against the last push).
+    expect(visibleStep(first, marks([mark('a', 100.4, 100), mark('b', 200.4, 100)]))).toBe(false);
+    expect(visibleStep(first, marks([mark('a', 100.49, 100.49), mark('b', 200.49, 100.49)]))).toBe(false);
+    // One of them reaches half a pixel: a push.
+    expect(visibleStep(first, marks([mark('a', 100.51, 100), mark('b', 200.4, 100)]))).toBe(true);
+    // A mark entering the view, or leaving it; one beyond the margin does not count.
+    expect(visibleStep(first, marks([mark('a', 100, 100), mark('b', 200, 100), mark('c', 300, 200)]))).toBe(true);
+    expect(visibleStep(first, marks([mark('a', 100, 100)]))).toBe(true);
+    expect(marks([mark('a', 100, 100), mark('far', 1000, 1000)]).size).toBe(1);
+    // A turn of five degrees, a shade of alpha, a facing found, a number: each a push; under them none.
+    const facing = (deg: number) => ({ heading: { x: Math.sin((deg * Math.PI) / 180), y: Math.cos((deg * Math.PI) / 180) } });
+    const turned = marks([mark('a', 100, 100, facing(0)), mark('b', 200, 100)]);
+    expect(visibleStep(turned, marks([mark('a', 100, 100, facing(4)), mark('b', 200, 100)]))).toBe(false);
+    expect(visibleStep(turned, marks([mark('a', 100, 100, facing(5)), mark('b', 200, 100)]))).toBe(true);
+    expect(visibleStep(first, turned)).toBe(true); // the facing found
+    // markAlpha floors at MIN_ICON_ALPHA: a tenth of alpha is a larger step of confidence.
+    expect(visibleStep(first, marks([mark('a', 100, 100, { confidence: 0.98 }), mark('b', 200, 100)]))).toBe(false);
+    expect(visibleStep(first, marks([mark('a', 100, 100, { confidence: 0.3 }), mark('b', 200, 100)]))).toBe(true);
+    expect(visibleStep(first, marks([mark('a', 100, 100, { short: '6' }), mark('b', 200, 100)]))).toBe(true);
+    // Without a camera every mark counts and any motion is a step.
+    const blind = visibleMarks([mark('a', 100, 100), mark('far', 1000, 1000)], { width: 0, height: 0, scale: 1 });
+    expect(blind.size).toBe(2);
+    expect(visibleStep(blind, visibleMarks([mark('a', 100.01, 100), mark('far', 1000, 1000)], { width: 0, height: 0, scale: 1 }), 0)).toBe(true);
   });
 
   it('takes the clustering pass only on the frames that push: a fleet that has stopped moving pushes nothing at all', async () => {

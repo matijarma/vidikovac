@@ -320,13 +320,13 @@ app/src/layers/grad-sada.ts:145 #renderGradSada → vetExternal('name', place.na
 app/src/layers/grad-sada.ts:147 #renderGradSada → e(name)
 app/src/map/city-layers.ts:76 #cityLayers → 'text-field':['case',small,'',['get','badge']]
 app/src/map/city-layers.ts:90 #cityLayers → 'text-field':mode==='venues'?['get','title']:['step',['zoom'],['case',notVenue,'',['get','title']],PLACE_NAMES_ZOOM,['get','title']]
-app/src/map/city-map.ts:238 #vehicleLabel → vetExternal('headsign', v.short, 'row')
-app/src/map/city-map.ts:241 #vehicleLabel → vetExternal('headsign', text, 'row')
-app/src/map/city-map.ts:858 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
-app/src/map/city-map.ts:858 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1911 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1912 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1913 #relabelControls → el.title = controlLabel
+app/src/map/city-map.ts:239 #vehicleLabel → vetExternal('headsign', v.short, 'row')
+app/src/map/city-map.ts:242 #vehicleLabel → vetExternal('headsign', text, 'row')
+app/src/map/city-map.ts:862 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
+app/src/map/city-map.ts:862 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
+app/src/map/city-map.ts:1919 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1920 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1921 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:34 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:43 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:53 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
