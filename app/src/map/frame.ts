@@ -89,6 +89,23 @@ export function frameView(
   return { center: [center.lon, center.lat], zoom };
 }
 
+/** The inverse of frameView for a camera that was framed on a viewport: the
+ *  radius R whose square of side 2R fits the field's shorter side with the
+ *  clearance at `zoom`. What the desk's Karta reads back off the frame the
+ *  workspace gave it (map/city-map.ts, round 4 kiosk lane D-F4), since the
+ *  frame's own circle is not handed over: at the desk's 855 x 757 stage and
+ *  z13.11 this is the 2.2 km the wall measured for Trg bana Jelačića. A
+ *  zoom held at the fit's floor (FIT_MIN_ZOOM) answers the ground the floor
+ *  shows in the field, which is what is presented, less than the frame
+ *  asked for. A field not laid out (0 px) has no frame. */
+export function frameRadiusFor(center: { lat: number }, zoom: number, widthPx: number, heightPx: number, paddingPx = FRAME_PADDING_PX): number | null {
+  const side = Math.min(widthPx, heightPx) - 2 * paddingPx;
+  if (!(side > 0) || !Number.isFinite(zoom)) return null;
+  const across = EARTH_CIRCUMFERENCE_M * Math.cos((center.lat * Math.PI) / 180);
+  const groundM = (across * side) / (512 * Math.pow(2, zoom));
+  return groundM / 2;
+}
+
 /** The ground a placed wall presents (decision 58, 24 Sep): the circle of
  *  radius R round its place, R the "N stops around it" radius the camera,
  *  the "U blizini" circle and its pill read (shared/city/frame.ts). Nothing

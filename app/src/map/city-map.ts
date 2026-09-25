@@ -30,7 +30,7 @@ import { tr } from '../transport/strings';
 import type { CityLabels } from './city-layers';
 import type { BasemapProfile, BasemapStyleOptions, MapTheme, OverlayPalette, StyleLayerLike, StyleOp } from './basemap';
 import type { OverlayOptions, ProzorOptions } from './overlays';
-import { idsInFrame } from './frame';
+import { idsInFrame, frameRadiusFor, type FrameCircle } from './frame';
 import type { RenderedFeature, SourcePoint } from './name-census';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { TileLabelFeature } from './external-labels';
@@ -807,6 +807,11 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let focusedApplied: string | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
   let markZoom: number | null = options.markZoom ?? null;
+  /** The desk's presented frame (round 4 kiosk lane, D-F4): the circle the workspace framed the camera on, read
+   *  back off the frame move (map/frame.ts frameRadiusFor) since the circle itself is not handed over. The desk
+   *  draws the wall's picture inside it (overlays.ts DESK_FRAME_UNTIL_ZOOM); a move the person makes keeps it,
+   *  the next frame move replaces it. Only the desktop profile; the phone's stage frames the whole screen. */
+  let deskFrame: FrameCircle | null = null;
   /** The zoom the pills draw and merge from here (overlays.ts pillZoomOf): the surface's markZoom, else the public screen's. */
   const pillZoomNow = (l: MaplibreModule): number => l.pillZoomOf({ markZoom: markZoom ?? prozor?.markZoom ?? null });
   let cityLabels: CityLabels = cityLabelsOf(options.cityLabels);
@@ -899,8 +904,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
     return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
-      // Decision 58: a placed wall's frame draws the stops inside it alone.
-      ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) } : {}) };
+      // Decision 58: a placed wall's frame draws the stops inside it alone; the desk's presented frame the same (D-F4).
+      ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) }
+        : prozor === null && deskFrame && profile === MAP_PRESENTATIONS.desktop ? { frameStopIds: idsInFrame(stopsData.features, deskFrame) } : {}) };
   }
 
   /** The vehicle the clustering must leave standing: the selected one, or the
@@ -1974,7 +1980,18 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (!styled) { pendingCamera = { center: [...center], zoom }; pendingFrame = frame; }
     const jump = frame || reduced || profile === MAP_PRESENTATIONS['public-display'];
     map?.easeTo({ center, zoom, offset: frame ? [0, 0] : offsetFor(), duration: jump ? 0 : CAMERA_MS });
+    if (frame) presentDeskFrame(center, zoom);
   };
+
+  /** A frame move on the desk: the presented circle, read back off the camera and the map's box (D-F4). */
+  function presentDeskFrame(center: [number, number], zoom: number): void {
+    if (profile !== MAP_PRESENTATIONS.desktop || prozor !== null) return;
+    const radiusM = frameRadiusFor({ lat: center[1] }, zoom, container.clientWidth, container.clientHeight);
+    const next: FrameCircle | null = radiusM === null ? null : { lon: center[0], lat: center[1], radiusM };
+    if (JSON.stringify(next) === JSON.stringify(deskFrame)) return;
+    deskFrame = next;
+    applyOverlays();
+  }
 
   return {
     update(nextPoints, nextLines) {

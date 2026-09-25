@@ -486,6 +486,15 @@ function stopLabelFilter(stops: Expr): Expr {
   return ['step', ['zoom'], ['all', base, ['>=', ['get', 'rank'], 4]], STOP_LABEL_ZOOM + 1, ['all', base, ['>=', ['get', 'rank'], 2]], STOP_LABEL_ZOOM + 2, base];
 }
 
+/** The desk's Karta draws the wall's picture at the frame's zoom (round 4
+ *  kiosk lane, D-F4: at 1440 x 900 the desk drew about a thousand grey stop
+ *  beads over the whole centre where the wall draws the frame's sixty):
+ *  with OverlayOptions.frameStopIds and no public option set the beads and
+ *  the names are the frame's alone below this zoom, read at the tile's
+ *  whole zoom as every step in a filter is. From it the person has zoomed
+ *  in to a street and every stop draws as it always did. */
+export const DESK_FRAME_UNTIL_ZOOM = 14;
+
 /** Stops called at by one of `routes` (the features carry their route ids);
  *  null is every stop, an empty list none. */
 export function routeStopsFilter(modes: ReadonlySet<number> | null | undefined, routes: readonly string[] | null): Expr {
@@ -581,7 +590,12 @@ export interface OverlayOptions {
   screenStopId?: string | null;
   /** The ids of the stops inside ProzorOptions.frame (map/frame.ts
    *  idsInFrame over the stops source). Read only with a frame; null there
-   *  (the stops not loaded yet) draws none of them, never all of them. */
+   *  (the stops not loaded yet) draws none of them, never all of them. On a
+   *  map without the public option set (the desk's Karta, round 4 kiosk lane
+   *  D-F4) the ids are the desk's own presented frame (city-map.ts
+   *  deskFrame): the beads and names inside it alone up to
+   *  DESK_FRAME_UNTIL_ZOOM, every stop from there, where the person has
+   *  zoomed to a street. */
   frameStopIds?: readonly string[] | null;
   /** The line the map is about and the colour ZET prints it in (F5 section C):
    *  the selected route, or the route of the selected/followed vehicle, which
@@ -816,9 +830,13 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
    *  nor line under it is the same clutter by another means. Focus off, every
    *  stop the modes admit, exactly as before. */
   const stopRoutes = focus ? [focus.routeId] : prozor ? prozor.stopRoutes : null;
+  const inFrame: Expr = ['in', ['get', 'id'], ['literal', [...(options.frameStopIds ?? [])]]];
   const stops: Expr = prozor?.frame
-    ? ['all', routeStopsFilter(modes, stopRoutes), ['in', ['get', 'id'], ['literal', [...(options.frameStopIds ?? [])]]]]
-    : routeStopsFilter(modes, stopRoutes);
+    ? ['all', routeStopsFilter(modes, stopRoutes), inFrame]
+    : prozor === null && options.frameStopIds !== undefined
+      // The desk's presented frame (DESK_FRAME_UNTIL_ZOOM): the frame's stops below it, every stop from it.
+      ? ['step', ['zoom'], ['all', routeStopsFilter(modes, stopRoutes), inFrame], DESK_FRAME_UNTIL_ZOOM, routeStopsFilter(modes, stopRoutes)]
+      : routeStopsFilter(modes, stopRoutes);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.

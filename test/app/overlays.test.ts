@@ -43,6 +43,8 @@ import {
 } from '../../app/src/map/overlays';
 import { PILL_HEIGHT_PX, PILL_LINE_HEIGHT_PX, PILL_MAX_CHARS_CLUSTER, PILL_MAX_LINES, clusterLabel, noseCentrePx, pillChars, pillHeightPx, pillRows, pillWidthPx } from '../../app/src/motion/pills';
 import { SDF_PIXEL_RATIO, SDF_SPREAD_PX } from '../../app/src/map/sdf';
+import { DESK_FRAME_UNTIL_ZOOM } from '../../app/src/map/overlays';
+import { evaluateExpression } from '../../app/src/map/name-census';
 import type { MapPoint } from '../../app/src/map/city-map';
 import { pointsToGeoJson } from '../../app/src/map/external-features';
 import { DISTRICTS } from '../../app/src/kiosk/districts';
@@ -352,6 +354,29 @@ describe('the kiosk overlay set (prozor)', () => {
     expect(JSON.stringify(empty.find((l) => l.id === LAYERS.stops)!.filter)).toContain(JSON.stringify(['in', ['get', 'id'], ['literal', []]]));
     // Without a frame the ids change nothing.
     expect(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR, frameStopIds: ['a'] }))).toBe(JSON.stringify(overlayLayers(OVERLAY_DARK, { prozor: PROZOR })));
+  });
+
+  // Round 4 kiosk lane, D-F4: the desk's Karta at the frame's zoom drew about a thousand beads over the whole
+  // centre. With frameStopIds and no public option set the beads and the ranked names are the frame's alone
+  // below DESK_FRAME_UNTIL_ZOOM, and every stop from it; the phone, which hands no ids, is untouched.
+  it('draws only the frame\u2019s stops on a plain map handed frame ids, until the person zooms to a street; a map without ids draws every stop', () => {
+    const desk = overlayLayers(OVERLAY_DARK, { frameStopIds: ['a', 'b'] });
+    const by = (id: string) => desk.find((l) => l.id === id)!;
+    const inside = ['in', ['get', 'id'], ['literal', ['a', 'b']]];
+    const stops = by(LAYERS.stops).filter as unknown[];
+    expect(stops[0]).toBe('step');
+    expect(JSON.stringify(stops)).toContain(JSON.stringify(inside));
+    expect(stops[3]).toBe(DESK_FRAME_UNTIL_ZOOM);
+    expect(JSON.stringify(stops[4])).not.toContain('"literal"');
+    expect(JSON.stringify(by(LAYERS.stopLabels).filter)).toContain(JSON.stringify(inside));
+    // The census's evaluator reads the same filter: inside below the line, everything from it.
+    const passes = (id: string, zoom: number) => evaluateExpression(by(LAYERS.stops).filter, { id, routes: ['6'], rank: 1, tram: true, bus: false, label: true, tramInterchange: false }, zoom);
+    expect(passes('a', 13)).toBe(true);
+    expect(passes('z', 13)).toBe(false);
+    expect(passes('z', DESK_FRAME_UNTIL_ZOOM)).toBe(true);
+    // Not loaded yet (null): none of them below the line, never all of them; no ids at all: every stop, as before.
+    expect(evaluateExpression(overlayLayers(OVERLAY_DARK, { frameStopIds: null }).find((l) => l.id === LAYERS.stops)!.filter, { id: 'a', routes: ['6'], rank: 1, tram: true, bus: false, label: true, tramInterchange: false }, 13)).toBe(false);
+    expect(JSON.stringify(overlayLayers(OVERLAY_DARK, {}).find((l) => l.id === LAYERS.stops)!.filter)).not.toContain('"step"');
   });
 
   // Ruling 30: below THIN_NAMES_ZOOM the window asks for interchanges and the
