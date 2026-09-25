@@ -116,7 +116,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1045 Croatian leaves and 1017 English ones', () => {
+  it('the catalogue holds 1046 Croatian leaves and 1018 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -132,8 +132,8 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // segment word): 1,042 hr, 1,014 en; +3 landing.purpose.countTitle/countBody and
     // landing.actions.stats, the landing's link to the public statistics: 1,045 hr, 1,017 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1045);
-    expect(leafKeys(en).length).toBe(1017);
+    expect(leaves.length).toBe(1046);
+    expect(leafKeys(en).length).toBe(1018);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

@@ -396,9 +396,9 @@
     "saveRoute": "Spremi liniju {id}",
     "saveStop": "Spremi stajalište {name}",
     "unsave": "Ukloni iz spremljenog",
-    "notifyOn_one": "{count} uključena",
-    "notifyOn_few": "{count} uključene",
-    "notifyOn_other": "{count} uključenih",
+    "notifyOn_one": "{count} obavijest uključena",
+    "notifyOn_few": "{count} obavijesti uključene",
+    "notifyOn_other": "{count} obavijesti uključeno",
     "notifyOff": "isključeno"
   },
   "cast": {
@@ -1198,6 +1198,7 @@
     "departuresAt": "Sljedeći polasci, {stop}",
     "mapBand": "Karta oko mjesta {place}. Otvori Kartu.",
     "viewSchema": "Shema",
-    "viewMap": "Karta"
+    "viewMap": "Karta",
+    "closureRow": "zatvoreno za promet"
   }
 }

@@ -75,6 +75,9 @@ export interface NearbyRow {
   titleShort?: string;
   /** The same for the sub. */
   subShort?: string;
+  /** A closure's feed summary ("zatvoreno zbog radova, oba smjera", worker/feed/modules/prometnice.ts closureWords):
+   *  the phone's sub when the brief is empty (city/nearby-markup.ts); the wall's row does not read it. */
+  summary?: string;
   /** A departure timed by a tracked vehicle (data-live="1"). */
   live: boolean;
   /** Where the row comes from (data-source): a feed module id or a static data set. */
@@ -411,6 +414,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
       const sub = oneLine(item.brief ?? '');
       // The machine brief can run long; the feed's own summary ("zatvoreno zbog radova, oba smjera") is its complete short twin.
       const subShort = shorterLabel(sub, [item.summary]);
+      const summary = oneLine(item.summary ?? '');
       return {
         id: `closure:${item.id}`,
         kind: 'closure' as const,
@@ -419,6 +423,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
         title: item.title,
         sub,
         ...(subShort ? { subShort } : {}),
+        ...(summary ? { summary } : {}),
         live: false,
         source: 'prometnice',
         selection: { kind: 'item' as const, id: publicItemKey('prometnice', item.id), module: 'prometnice' as const },
@@ -426,7 +431,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
       };
     })
     // Before the bound, so the next closure stands in for one whose text is refused.
-    .filter((row) => vetted(input, [['name', row.title], ['summary', row.sub], ['summary', row.subShort]]))
+    .filter((row) => vetted(input, [['name', row.title], ['summary', row.sub], ['summary', row.subShort], ['summary', row.summary]]))
     .slice(0, MAX_CLOSURES);
 }
 

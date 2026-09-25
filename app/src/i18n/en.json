@@ -387,8 +387,8 @@
     "saveRoute": "Save line {id}",
     "saveStop": "Save stop {name}",
     "unsave": "Remove from saved",
-    "notifyOn_one": "{count} on",
-    "notifyOn_other": "{count} on",
+    "notifyOn_one": "{count} alert on",
+    "notifyOn_other": "{count} alerts on",
     "notifyOff": "off"
   },
   "cast": {
@@ -1170,6 +1170,7 @@
     "departuresAt": "Next departures, {stop}",
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
-    "viewMap": "Map"
+    "viewMap": "Map",
+    "closureRow": "closed to traffic"
   }
 }

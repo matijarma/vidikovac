@@ -182,6 +182,16 @@ describe('U blizini on the phone', () => {
     expect(event.querySelector('time.nearby-when')).not.toBeNull();
   });
 
+  it('a closure row says what it is even when the feed has no brief: the feed\'s summary, else "zatvoreno za promet" (round 1 F8, kiosk round 2 F11)', () => {
+    const sub = (ctx0: LayerContext) => text(renderGradSada(ctx0).querySelector('[data-testid=nearby] li.nearby-row[data-kind=closure] .nearby-sub'));
+    // The fixture's closure carries neither brief nor summary.
+    expect(sub(ctx())).toBe('zatvoreno za promet');
+    const items = SNAPSHOTS.prometnice!.items.map((item) => (item.id === 'c1' ? { ...item, summary: 'zatvoreno zbog radova, oba smjera' } : item));
+    expect(sub(ctx({ snapshots: { ...SNAPSHOTS, prometnice: { ...SNAPSHOTS.prometnice!, items } } }))).toBe('zatvoreno zbog radova, oba smjera');
+    const briefed = SNAPSHOTS.prometnice!.items.map((item) => (item.id === 'c1' ? { ...item, brief: 'Ilica zatvorena od Frankopanske do Trga', summary: 'zatvoreno' } : item));
+    expect(sub(ctx({ snapshots: { ...SNAPSHOTS, prometnice: { ...SNAPSHOTS.prometnice!, items: briefed } } }))).toBe('Ilica zatvorena od Frankopanske do Trga');
+  });
+
   it('keeps more rows on a desk and reads the same input the Karta sheet reads', () => {
     const input = nearbyInput(ctx({ screen: DESK }));
     expect(input.place).toMatchObject({ kind: 'tram', name: 'Trg bana J. Jelačića', stopId: '106_1' });
