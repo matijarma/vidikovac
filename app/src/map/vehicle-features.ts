@@ -207,9 +207,15 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
     else byKind.set(kind, [point]);
   }
   const merged: VehicleFeature[] = [...alone];
+  /** The direction a mark steps aside by (deflectMarks): a single's bearing (its heading, else its track); a
+   *  merged mark's first facing member's, and none when no member faces anywhere (review N4). */
+  const direction = new Map<string, number | null>();
   for (const points of byKind.values()) {
     for (const group of clusterPills(points, { selectedId })) {
-      merged.push(group.kind === 'single' ? group.point.feature : clusterToFeature(group, options.focusedRoute));
+      if (group.kind === 'single') { merged.push(group.point.feature); continue; }
+      const feature = clusterToFeature(group, options.focusedRoute);
+      merged.push(feature);
+      direction.set(feature.properties.id, group.members.some((m) => m.feature.properties.hasHeading) ? feature.properties.bearing : null);
     }
   }
   // Round 2 F6: the marks step aside for a disc's number and for one another (a bus pill for a tram
@@ -224,7 +230,7 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
     if (feature.properties.kind === 'other') continue;
     const at = project(feature.geometry.coordinates);
     if (!at) continue;
-    marks.push({ id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, kind: feature.properties.kind, bearing: feature.properties.bearing });
+    marks.push({ id: feature.properties.id, x: at.x / scale, y: at.y / scale, label: feature.properties.short, kind: feature.properties.kind, bearing: direction.has(feature.properties.id) ? direction.get(feature.properties.id)! : feature.properties.bearing });
     byId.set(feature.properties.id, feature);
   }
   for (const [id, at] of deflectMarks(marks, options.discs ?? [])) {

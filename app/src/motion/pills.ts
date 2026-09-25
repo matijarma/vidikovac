@@ -552,14 +552,25 @@ export function deflectMarks(marks: readonly DeflectableMark[], discs: readonly 
       continue;
     }
     // Which way: ahead of the disc for a mark moving mostly up or down the screen (screen y grows
-    // downward, a bearing of 0 is up); the side it is already on for one moving mostly across, or one
-    // with no heading; dead level, down.
-    const rad = ((mark.bearing ?? 90) * Math.PI) / 180;
-    const ux = Math.sin(rad);
-    const uy = -Math.cos(rad);
-    const vertical = mark.bearing !== null && Math.abs(uy) > Math.abs(ux);
-    const side: 1 | -1 = vertical ? (uy < 0 ? -1 : 1) : (own.y - nearest.y < 0 ? -1 : 1);
-    const hop = hopPast(own, inWay, side);
+    // downward, a bearing of 0 is up); the side it is already on for one moving mostly across; and for a
+    // mark with no direction at all (a merged mark none of whose members faces anywhere, review N4: it
+    // always hopped up and the cap parked it under a tram plate) the side with the shorter hop, down when
+    // they are equal.
+    let side: 1 | -1;
+    let hop: number;
+    if (mark.bearing === null) {
+      const down = hopPast(own, inWay, 1);
+      const up = hopPast(own, inWay, -1);
+      side = up < down ? -1 : 1;
+      hop = Math.min(up, down);
+    } else {
+      const rad = (mark.bearing * Math.PI) / 180;
+      const ux = Math.sin(rad);
+      const uy = -Math.cos(rad);
+      const vertical = Math.abs(uy) > Math.abs(ux);
+      side = vertical ? (uy < 0 ? -1 : 1) : (own.y - nearest.y < 0 ? -1 : 1);
+      hop = hopPast(own, inWay, side);
+    }
     // Never a jump: at most DEFLECT_GAIN per pixel of true overlap, nothing at a touch.
     const m = Math.min(hop, DEFLECT_GAIN * overlap);
     const at = { x: mark.x, y: mark.y + side * m, moved: m };
