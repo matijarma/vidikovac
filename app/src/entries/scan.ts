@@ -11,7 +11,9 @@
 // Manrope family as a dynamic import, so the font sheet arrives after the
 // first paint and never in front of it. With the theme module in <head> these
 // are the page's only two scripts, both external (R-16).
+import { scan as scanRequest } from '../api';
 import { bootPage } from '../boot';
+import { activateDashboardGraph } from '../prefetch-dashboard';
 import { codeFromHash, createScanPage, type ScanPageHandle } from '../scan';
 import { isQrScanSupported } from '../ui/qrScanner';
 import '../ui/base.css';
@@ -24,16 +26,18 @@ const root = document.querySelector<HTMLElement>('#scan')!;
 let hash = location.hash;
 
 const { i18n } = bootPage({ page: 'scan', onLocaleChange: () => remount() });
-// Read before mount() spends the fragment: whether a code is on its way to /d/.
+// Read before mount() spends the fragment: a code on its way is posted at mount, and the page hands over to /d/
+// the moment the room answers.
 const codeOnItsWay = codeFromHash(hash) !== null;
 let page = mount();
-// The one Manrope family: at once when the person is going to read this page, and only after FONTS_BEHIND_CODE_MS
-// when a code came in the fragment, since that page hands over to /d/ within a second or two and its five font
-// files (105 kB) were sharing a slow link with the check and with /d/'s own graph (round 3, phone F3). A check
-// that fails, or crawls, still gets its fonts once the wait is over.
-const FONTS_BEHIND_CODE_MS = 3_000;
-if (!codeOnItsWay) void import('../ui/fonts.css');
-else setTimeout(() => { void import('../ui/fonts.css'); }, FONTS_BEHIND_CODE_MS);
+// The one Manrope family, at once: a slow link never finishes it before the hop and the hop cancels it, a fast link
+// has it cached for /d/, which then never swaps its fonts (round 3 review, N3).
+void import('../ui/fonts.css');
+// /d/'s scripts are warmed only while this page will stay a while: no code on its way (the person is about to scan
+// or type, seconds the link is idle) and after a refused code (the same). Never beside a redemption in flight: on a
+// narrow link the eleven files took the connections the check needed, and the answer came later than with no
+// warm-up at all (round 3 review, B1). The links come inert from the build (prefetch-dashboard.ts).
+if (!codeOnItsWay) activateDashboardGraph(document);
 
 function mount(): ScanPageHandle {
   const handle = createScanPage(root, {
@@ -43,6 +47,11 @@ function mount(): ScanPageHandle {
       location.assign(url);
     },
     scannerSupported: isQrScanSupported(),
+    scan: async (code) => {
+      const result = await scanRequest(code);
+      if ('error' in result) activateDashboardGraph(document);
+      return result;
+    },
   });
   hash = '';
   return handle;

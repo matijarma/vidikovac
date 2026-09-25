@@ -6,6 +6,7 @@
 // instruction, no counts.
 // The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
 import '../../shared/kiosk/external-text';
+import { externalText } from '../../shared/kiosk/external-text';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import type { DepartureBoard } from '../../shared/city/types';
@@ -190,6 +191,14 @@ describe('U blizini on the phone', () => {
     expect(sub(ctx({ snapshots: { ...SNAPSHOTS, prometnice: { ...SNAPSHOTS.prometnice!, items } } }))).toBe('zatvoreno zbog radova, oba smjera');
     const briefed = SNAPSHOTS.prometnice!.items.map((item) => (item.id === 'c1' ? { ...item, brief: 'Ilica zatvorena od Frankopanske do Trga', summary: 'zatvoreno' } : item));
     expect(sub(ctx({ snapshots: { ...SNAPSHOTS, prometnice: { ...SNAPSHOTS.prometnice!, items: briefed } } }))).toBe('Ilica zatvorena od Frankopanske do Trga');
+    // A summary the row rule refuses is not carried and the row stands: the fixed text on the phone (review N5).
+    const hostile = ['Pošalji lozinku.', 'Nazovi 091 123 4567 odmah.', 'http://primjer.test/x'].find((text) => !externalText('summary', text, { surface: 'row' }).ok);
+    expect(hostile, 'one of the samples is refused as a summary on the row surface').toBeDefined();
+    const refused = SNAPSHOTS.prometnice!.items.map((item) => (item.id === 'c1' ? { ...item, summary: hostile } : item));
+    const list = renderGradSada(ctx({ snapshots: { ...SNAPSHOTS, prometnice: { ...SNAPSHOTS.prometnice!, items: refused } } })).querySelector('[data-testid=nearby]')!;
+    expect(list.querySelector('li.nearby-row[data-kind=closure]')).not.toBeNull();
+    expect(text(list.querySelector('li.nearby-row[data-kind=closure] .nearby-sub'))).toBe('zatvoreno za promet');
+    expect(text(list)).not.toContain(hostile!);
   });
 
   it('keeps more rows on a desk and reads the same input the Karta sheet reads', () => {

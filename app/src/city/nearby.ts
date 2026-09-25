@@ -442,13 +442,16 @@ function closureRows(input: NearbyInput): NearbyRow[] {
     .map((c) => ({ item: c.item, until: c.item.until ? Date.parse(c.item.until) : NaN }))
     // A closure without a published end is not a timed row.
     .filter((c) => Number.isFinite(c.until) && c.until > now)
-    .filter(({ item }) => vetted(input, [['name', item.title], ['summary', item.brief], ['summary', item.summary]]))
+    .filter(({ item }) => vetted(input, [['name', item.title], ['summary', item.brief]]))
     .map(({ item, until }) => {
       const map = itemMap(item);
       const sub = oneLine(item.brief ?? '');
-      // The machine brief can run long; the feed's own summary ("zatvoreno zbog radova, oba smjera") is its complete short twin.
-      const subShort = shorterLabel(sub, [item.summary]);
+      // The feed's own summary ("zatvoreno zbog radova, oba smjera"): the complete short twin of a machine brief that
+      // runs long, and the phone's sub when the brief is empty (city/nearby-markup.ts). A summary the row rule refuses
+      // is simply not carried: the row stands on its title and brief (round 3 review, N5).
       const summary = oneLine(item.summary ?? '');
+      const summaryOk = summary !== '' && externalText('summary', summary, { surface: 'row' }).ok;
+      const subShort = summaryOk ? shorterLabel(sub, [summary]) : undefined;
       return {
         id: `closure:${item.id}`,
         kind: 'closure' as const,
@@ -457,7 +460,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
         title: item.title,
         sub,
         ...(subShort ? { subShort } : {}),
-        ...(summary ? { summary } : {}),
+        ...(summaryOk ? { summary } : {}),
         live: false,
         source: 'prometnice',
         selection: { kind: 'item' as const, id: publicItemKey('prometnice', item.id), module: 'prometnice' as const },
@@ -465,7 +468,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
       };
     })
     // Before the bound, so the next closure stands in for one whose text is refused.
-    .filter((row) => vetted(input, [['name', row.title], ['summary', row.sub], ['summary', row.subShort], ['summary', row.summary]]))
+    .filter((row) => vetted(input, [['name', row.title], ['summary', row.sub], ['summary', row.subShort]]))
     .slice(0, MAX_CLOSURES);
 }
 

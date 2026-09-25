@@ -1,8 +1,10 @@
-// The /s/ page hands over to /d/ within seconds of a scan; the build appends one prefetch link per file of /d/'s static
-// graph to /s/, so the hop finds the graph in the HTTP cache (app/src/prefetch-dashboard.ts through vite.config.ts;
-// round 3, phone F3).
+// @vitest-environment happy-dom
+// The /s/ page carries /d/'s static graph as inert modulepreload links in a template, and the scan entry moves them
+// into the head only while the page idles (app/src/prefetch-dashboard.ts through vite.config.ts and
+// app/src/entries/scan.ts; round 3, phone F3 and its review B1). test/app/scan-graph-build.test.ts holds the same
+// against a real build.
 import { describe, expect, it } from 'vitest';
-import { entryChunkFor, staticGraph, withDashboardPrefetch, type BundleChunkLike } from '../../app/src/prefetch-dashboard';
+import { activateDashboardGraph, DASHBOARD_GRAPH_ID, dashboardGraphLinks, entryChunkFor, staticGraph, withDashboardGraph, type BundleChunkLike } from '../../app/src/prefetch-dashboard';
 
 const chunk = (fileName: string, over: Partial<BundleChunkLike> = {}): BundleChunkLike => ({ type: 'chunk', fileName, imports: [], ...over });
 const BUNDLE: Record<string, BundleChunkLike> = {
@@ -16,6 +18,11 @@ const BUNDLE: Record<string, BundleChunkLike> = {
   'assets/d-1.css': { type: 'asset', fileName: 'assets/d-1.css' },
 };
 const S_HTML = '<html><head><script type="module" crossorigin src="/assets/s-1.js"></script><link rel="modulepreload" crossorigin href="/assets/boot-1.js"><link rel="stylesheet" crossorigin href="/assets/base-1.css"></head><body><main></main></body></html>';
+const LINKS = [
+  '<link rel="modulepreload" crossorigin fetchpriority="low" href="/assets/d-1.js">',
+  '<link rel="modulepreload" crossorigin fetchpriority="low" href="/assets/base-1.js">',
+  '<link rel="modulepreload" crossorigin fetchpriority="low" href="/assets/qr-1.js">',
+];
 
 describe('staticGraph', () => {
   it('walks the entry and its static imports once each, the entry first, and collects the stylesheets they carry; a lazy chunk is not in it', () => {
@@ -28,18 +35,35 @@ describe('staticGraph', () => {
   });
 });
 
-describe('withDashboardPrefetch', () => {
-  it('appends a modulepreload per script and a prefetch per stylesheet /s/ does not already link, before </body>', () => {
-    const out = withDashboardPrefetch(S_HTML, BUNDLE);
-    expect(out).toContain('<link rel="modulepreload" crossorigin href="/assets/d-1.js">\n<link rel="modulepreload" crossorigin href="/assets/base-1.js">\n<link rel="modulepreload" crossorigin href="/assets/qr-1.js">\n<link rel="prefetch" as="style" href="/assets/d-1.css">\n</body>');
+describe('withDashboardGraph', () => {
+  it('appends one inert modulepreload per script /s/ does not already link, at the lowest priority, inside a template before </body>; no stylesheet', () => {
+    expect(dashboardGraphLinks(S_HTML, BUNDLE)).toEqual(LINKS);
+    const out = withDashboardGraph(S_HTML, BUNDLE);
+    expect(out).toContain(`<template id="${DASHBOARD_GRAPH_ID}">\n${LINKS.join('\n')}\n</template>\n</body>`);
     // boot-1.js is the page's own modulepreload in its head: not appended a second time.
     expect(out.split('href="/assets/boot-1.js"').length - 1).toBe(1);
-    expect(out).not.toContain('prefetch" as="style" href="/assets/base-1.css"');
-    expect(out).not.toContain('maplibre');
-    expect(out.startsWith(S_HTML.slice(0, S_HTML.indexOf('</body>')))).toBe(true);
+    expect(out).not.toContain('.css">\n');
+    expect(out).not.toContain('rel="prefetch"');
+    // Outside the template the page is as it was: nothing of /d/ is fetched by the markup itself.
+    expect(out.slice(0, out.indexOf('<template'))).toBe(S_HTML.slice(0, S_HTML.indexOf('</body>')));
   });
   it('leaves a page without the entry, or without a body, as it was', () => {
-    expect(withDashboardPrefetch(S_HTML, { 'assets/s-1.js': BUNDLE['assets/s-1.js']! })).toBe(S_HTML);
-    expect(withDashboardPrefetch('<html></html>', BUNDLE)).toBe('<html></html>');
+    expect(withDashboardGraph(S_HTML, { 'assets/s-1.js': BUNDLE['assets/s-1.js']! })).toBe(S_HTML);
+    expect(withDashboardGraph('<html></html>', BUNDLE)).toBe('<html></html>');
+  });
+});
+
+describe('activateDashboardGraph', () => {
+  it('moves the template\'s links into the head once; nothing without a template, nothing the second time', () => {
+    document.documentElement.innerHTML = `<head></head><body><main></main><template id="${DASHBOARD_GRAPH_ID}">${LINKS.join('')}</template></body>`;
+    expect(document.head.querySelectorAll('link').length).toBe(0);
+    expect(activateDashboardGraph(document)).toBe(3);
+    const links = [...document.head.querySelectorAll('link')];
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/assets/d-1.js', '/assets/base-1.js', '/assets/qr-1.js']);
+    expect(links.every((l) => l.getAttribute('rel') === 'modulepreload' && l.hasAttribute('crossorigin') && l.getAttribute('fetchpriority') === 'low')).toBe(true);
+    expect(activateDashboardGraph(document)).toBe(0);
+    expect(document.head.querySelectorAll('link').length).toBe(3);
+    document.documentElement.innerHTML = '<head></head><body></body>';
+    expect(activateDashboardGraph(document)).toBe(0);
   });
 });

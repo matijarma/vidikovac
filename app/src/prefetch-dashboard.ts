@@ -1,14 +1,15 @@
-// Build step (vite.config.ts dashboardPrefetchPlugin): the /s/ page hands over to /d/ within a second or two of a
-// scan, and /d/'s module graph (about 160 kB gzipped over twenty files) was fetched only then, over the same slow
-// link the check had just used (round 3, phone F3: the /d/ shell 2 s behind the hop on slow 4G). The built /s/
-// page therefore carries one `<link rel="modulepreload">` per script of /d/'s static graph and one
-// `<link rel="prefetch">` per stylesheet, at the end of its body, after the page's own scripts. Modulepreload,
-// not prefetch, for the scripts: across the navigation Chromium revalidates and reuses only what was loaded as a
-// module (a 304 per file), while a `rel="prefetch"` or a plain fetch() of the same file was fetched again in full
-// (round 3, the probe in review.local/companion/iterate/round3/phone/harness/prefetch-probe3.spec.ts). Files /s/
-// links itself are left out.
+// Build step (vite.config.ts dashboardGraphPlugin) and its runtime half: the /s/ page hands over to /d/, whose
+// module graph (about 160 kB gzipped over a dozen files) is fetched only then, over the same link the check just
+// used. The built /s/ page carries the graph's scripts as `<link rel="modulepreload">` inside an inert
+// `<template id="dashboard-graph">` at the end of its body, and app/src/entries/scan.ts moves them into the head
+// only while the page will stay a while: no code in the fragment (the person is about to scan or type) or a code
+// the room refused. A code on its way to /d/ warms nothing: on a slow link the warm-up took the connections the
+// redemption needed and the answer came later than with no warm-up at all (round 3 review, B1). Modulepreload,
+// not prefetch, because across the navigation Chromium revalidates and reuses (a 304 per file) only what was
+// loaded as a module; a prefetch link or a fetch() of the same file was fetched again in full (the probe in
+// review.local/companion/iterate/round3/phone/harness/prefetch-probe3.spec.ts). Stylesheets are not warmed.
 
-/** What the plugin reads of Rollup's bundle: entry chunks, their static imports and the stylesheets they carry. */
+/** What the plugin reads of Rollup's bundle: entry chunks, their static imports and the modules they hold. */
 export interface BundleChunkLike {
   type: 'chunk' | 'asset';
   fileName: string;
@@ -19,6 +20,9 @@ export interface BundleChunkLike {
   imports?: readonly string[];
   viteMetadata?: { importedCss?: Set<string> | readonly string[] };
 }
+
+/** The template's id on /s/, and the mark it carries once its links have been moved into the head. */
+export const DASHBOARD_GRAPH_ID = 'dashboard-graph';
 
 /** Every file of the entry's static graph in load order (the entry first, then its imports, depth first), and its stylesheets. */
 export function staticGraph(bundle: Readonly<Record<string, BundleChunkLike>>, entryFileName: string): { scripts: string[]; styles: string[] } {
@@ -43,20 +47,35 @@ export function entryChunkFor(bundle: Readonly<Record<string, BundleChunkLike>>,
     && ((chunk.facadeModuleId ?? '').endsWith(entrySuffix) || Object.keys(chunk.modules ?? {}).some((id) => id.endsWith(entrySuffix))));
 }
 
-/**
- * The warm-up links for `entrySuffix`'s graph appended before `</body>` of `html`: modulepreload for its scripts,
- * prefetch for its stylesheets. Files the page already links are skipped, and a page with no `</body>` or a bundle
- * without that entry is returned as it was.
- */
-export function withDashboardPrefetch(html: string, bundle: Readonly<Record<string, BundleChunkLike>>, entrySuffix = '/entries/dashboard.ts'): string {
+/** One inert link per script of the graph, as the template carries them. */
+export function dashboardGraphLinks(html: string, bundle: Readonly<Record<string, BundleChunkLike>>, entrySuffix = '/entries/dashboard.ts'): string[] {
   const entry = entryChunkFor(bundle, entrySuffix);
-  if (!entry || !html.includes('</body>')) return html;
-  const { scripts, styles } = staticGraph(bundle, entry.fileName);
+  if (!entry) return [];
   const own = (file: string): boolean => html.includes(`/${file}"`) || html.includes(`/${file}'`);
-  const links = [
-    ...scripts.filter((file) => !own(file)).map((file) => `<link rel="modulepreload" crossorigin href="/${file}">`),
-    ...styles.filter((file) => !own(file)).map((file) => `<link rel="prefetch" as="style" href="/${file}">`),
-  ];
+  return staticGraph(bundle, entry.fileName).scripts.filter((file) => !own(file))
+    .map((file) => `<link rel="modulepreload" crossorigin fetchpriority="low" href="/${file}">`);
+}
+
+/**
+ * The inert template with the graph's links appended before `</body>` of `html`; scripts the page already links are
+ * skipped, and a page with no `</body>`, a bundle without that entry or a graph with nothing to add is returned as it was.
+ */
+export function withDashboardGraph(html: string, bundle: Readonly<Record<string, BundleChunkLike>>, entrySuffix = '/entries/dashboard.ts'): string {
+  if (!html.includes('</body>')) return html;
+  const links = dashboardGraphLinks(html, bundle, entrySuffix);
   if (links.length === 0) return html;
-  return html.replace('</body>', `${links.join('\n')}\n</body>`);
+  return html.replace('</body>', `<template id="${DASHBOARD_GRAPH_ID}">\n${links.join('\n')}\n</template>\n</body>`);
+}
+
+/**
+ * The runtime half: moves the template's links into the head, once; the browser then fetches and compiles /d/'s
+ * scripts at the lowest priority. Returns how many links it added: 0 when the page has no template, or already did.
+ */
+export function activateDashboardGraph(doc: Document): number {
+  const template = doc.getElementById(DASHBOARD_GRAPH_ID);
+  if (!template || !('content' in template) || template.getAttribute('data-active') === '1') return 0;
+  template.setAttribute('data-active', '1');
+  const links = [...(template as HTMLTemplateElement).content.querySelectorAll('link')];
+  for (const link of links) doc.head.appendChild(doc.importNode(link, true));
+  return links.length;
 }

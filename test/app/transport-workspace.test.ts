@@ -1235,4 +1235,30 @@ describe('the map under the sheet (round 3, phone A)', () => {
     q<HTMLInputElement>('[data-testid=transport-search]').dispatchEvent(new Event('focus'));
     expect(desk.last().pause).not.toHaveBeenCalled();
   });
+
+  it('never resumes the motion with nothing live behind the page: a refused ticket, a feed gone quiet; the next live render resumes it (review N2)', () => {
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    // The room refused the ticket: the page paused the map and polls nothing.
+    context.session = { expiresAt: null, frozen: false, live: false };
+    render(context);
+    const handle = last();
+    const input = q<HTMLInputElement>('[data-testid=transport-search]');
+    input.focus();
+    input.dispatchEvent(new Event('focus'));
+    expect(handle.pause).toHaveBeenCalledTimes(1);
+    input.blur();
+    q<HTMLElement>('[data-testid=transport-detail]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(q<HTMLElement>('[data-testid=transport-workspace]').dataset.sheet).not.toBe('open');
+    expect(handle.resume, 'no feed behind the page: the vehicles are not extrapolated').not.toHaveBeenCalled();
+    // A live page whose feed is down: the same.
+    context.session = { expiresAt: null, frozen: false, live: true };
+    context.snapshots = { ...context.snapshots, 'zet-rt': { ...ZET, status: 'down' } };
+    render(context);
+    expect(handle.resume).not.toHaveBeenCalled();
+    // The feed is back and the page polls: the render resumes it.
+    context.snapshots = { ...context.snapshots, 'zet-rt': ZET };
+    render(context);
+    expect(handle.resume).toHaveBeenCalledTimes(1);
+  });
 });

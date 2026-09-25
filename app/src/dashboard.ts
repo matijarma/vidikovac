@@ -459,7 +459,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
-      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen },
+      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live' },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).

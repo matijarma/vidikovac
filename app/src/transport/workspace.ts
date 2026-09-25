@@ -582,9 +582,13 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
    */
   let motionPaused = false;
   function syncMotion(): void {
-    if (!input || ctx().session?.frozen) return;
+    if (!input) return;
+    const c = ctx();
     const covered = mode === 'phone' && sheet?.detent() === 'open';
     if (covered === motionPaused) return;
+    // Never resumed with nothing live to move on: a session that ended, a ticket the room refused (the page paused
+    // the map and polls nothing), a feed gone quiet (round 3 review, N2). The next render with a live feed resumes it.
+    if (!covered && (c.session?.frozen === true || c.session?.live === false || !feedLive(c.snapshots['zet-rt'], c.now))) return;
     motionPaused = covered;
     if (covered) handle?.pause();
     else handle?.resume();
@@ -1239,6 +1243,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (changed) handle?.select?.(selection, { fit: selection !== null });
     onStageBox();
     renderSheet();
+    syncMotion();
     if(returnScroll!==null)body.scrollTop=returnScroll;
   }
 
