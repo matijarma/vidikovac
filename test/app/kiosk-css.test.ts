@@ -239,6 +239,10 @@ describe('public-screen design invariants', () => {
     expect(rule('.k-strip-item')).toContain('overflow-wrap: break-word');
     expect(rule('.k-strip-item')).not.toContain('nowrap');
     expect(rule('.k-strip')).toContain('min-height: var(--k-strip-h)');
+    // The portrait totem's strip is two aligned rows (round 1 F12): the items take a row of their own and the pharmacy line stays whole.
+    expect(rule(".kiosk[data-portrait='1'][data-phase='invitation'] .k-strip")).toContain('flex-wrap: wrap');
+    expect(rule(".kiosk[data-portrait='1'][data-phase='invitation'] .k-strip-items")).toContain('flex: 1 0 100%');
+    expect(rule(".kiosk[data-portrait='1'][data-phase='invitation'] .k-strip-pharmacy")).toContain('white-space: nowrap');
   });
   it('clips no wall text either: nothing both forbids wrapping and hides what overflows', () => {
     // A visually hidden label (clip: rect(0 ...)) is not shown text; the header sentence is the one line
