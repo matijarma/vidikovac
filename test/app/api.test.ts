@@ -63,9 +63,10 @@ describe('fetchData / fetchTeaser', () => {
 
 describe('fetchSentences', () => {
   const ok = () => new Response(JSON.stringify({ generatedAt: new Date().toISOString(), sentences: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
-  const request = { locale: 'hr' as const, budget: 80, facts: [{ id: 'f1', kind: 'vrijeme', text: 'Sunce izlazi u 06:46.', validUntil: null }] };
+  // A stable fact (shared/kiosk/sentence.ts stableSentenceFacts): typed, no countdown, a finite end still ahead.
+  const request = { locale: 'hr' as const, budget: 80, facts: [{ id: 'solar:sunrise', kind: 'vrijeme', text: 'Sunce izlazi u 06:46.', validUntil: Date.now() + 600_000 }] };
   it('asks the caller once its lazy chunk is in hand and sends nothing when the answer is no (the page ended meanwhile)', async () => {
-    const fetchImpl = vi.fn(async () => ok());
+    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => ok());
     expect(await fetchSentences(request as never, fetchImpl as never, { proceed: () => false })).toEqual([]);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(await fetchSentences(request as never, fetchImpl as never, { proceed: () => true })).toEqual([]);
