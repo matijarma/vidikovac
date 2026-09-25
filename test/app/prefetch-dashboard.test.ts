@@ -32,7 +32,8 @@ describe('withDashboardPrefetch', () => {
   it('appends a modulepreload per script and a prefetch per stylesheet /s/ does not already link, before </body>', () => {
     const out = withDashboardPrefetch(S_HTML, BUNDLE);
     expect(out).toContain('<link rel="modulepreload" crossorigin href="/assets/d-1.js">\n<link rel="modulepreload" crossorigin href="/assets/base-1.js">\n<link rel="modulepreload" crossorigin href="/assets/qr-1.js">\n<link rel="prefetch" as="style" href="/assets/d-1.css">\n</body>');
-    expect(out).not.toContain('modulepreload" crossorigin href="/assets/boot-1.js"');
+    // boot-1.js is the page's own modulepreload in its head: not appended a second time.
+    expect(out.split('href="/assets/boot-1.js"').length - 1).toBe(1);
     expect(out).not.toContain('prefetch" as="style" href="/assets/base-1.css"');
     expect(out).not.toContain('maplibre');
     expect(out.startsWith(S_HTML.slice(0, S_HTML.indexOf('</body>')))).toBe(true);
