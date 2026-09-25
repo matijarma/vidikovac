@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { districtBySlug } from '../../app/src/kiosk/districts';
 import { CITY_WINDOW, CITY_WINDOW_PADDING_PX, cityWindowView, DISTRICT_SPAN_M, FIELD_MAX_ZOOM, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldView, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, MARK_ZOOM_MARGIN, metresPerPixel, outlineView, PAIRED_ZOOM, pairedView, WALL_FIT_MIN_ZOOM } from '../../app/src/kiosk/mapview';
 import { EARTH_CIRCUMFERENCE_M } from '../../app/src/map/scale';
-import { FIT_MIN_ZOOM, frameRadiusFor, frameView } from '../../app/src/map/frame';
 import { BIKE_COUNT_PX, BIKE_DISC_RADIUS_PX, BIKE_FAR_RADIUS_PX, cityLayers } from '../../app/src/map/city-layers';
 import * as basemap from '../../app/src/map/basemap';
 import {
@@ -25,7 +24,7 @@ import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 // WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
 import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
+import { boundsView, FIT_MIN_ZOOM, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameRadiusFor, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
 import { distanceM } from '../../shared/city/geo';
 
 describe('open raster basemap', () => {
