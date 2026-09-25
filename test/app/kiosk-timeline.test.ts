@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, FIT_SHRINK_HOLD_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -712,8 +712,10 @@ function simulated(layout: Layout): TimelineMeasure & { rowHeight(li: Element): 
   const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
   const rowHeight = (li: Element): number => Math.max(rowPx(), 44 * lines(li.querySelector('.nearby-title')!) + 32 * lines(li.querySelector('.nearby-sub')!) + 8);
   const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
+  // The measuring list carries the box it is fitted in as its own height (timeline.ts fit), as the DOM measure reads it.
+  const heightOf = (list: Element): number => Number.parseFloat((list as HTMLElement).style?.height ?? '') || layout.boxPx;
   return {
-    box: (list) => ({ height: layout.boxPx, width: layout.titleChars, overflow: sum(list) > layout.boxPx }),
+    box: (list) => ({ height: heightOf(list), width: layout.titleChars, overflow: sum(list) > heightOf(list) }),
     lines: (el) => lines(el),
     rowHeight,
     sum,
@@ -1085,6 +1087,59 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     expect(solarRecords).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }, { added: ['li[solar:sunset:2026-09-24]'], removed: [] }]);
     expect(FIT_RESTORE_HOLD_MS).toBe(60_000);
   });
+
+  // D5.25 production observer (25 Sep, 16:41:16 to 16:41:19): the second closure row (Amruševa, "do 26. 9.") left
+  // the list and came back re-created three seconds later while the rows, their labels and the feed's closures were
+  // the same in every reading. The list's box was smaller for one paint (anything the stage gives its height to:
+  // the page's alert row, a legend line) and the row estimate cut the last discretionary row at once, in list order
+  // and with none of the measured fit's memory, then put it back on the next paint.
+  it('keeps every node through a box that shrinks for a beat (the D5.25 replay), and on a lasting shrink lets the second departure go before a closure, which keeps its node', () => {
+    const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
+    const measure = simulated(layout);
+    const t = mount({ measure, designHeightPx: layout.boxPx });
+    const T = day('16:40');
+    const rows = (): TimelineRow[] => [
+      dep(13, { atMs: T, live: false, title: 'Kvat. trg', source: 'zet-gtfs', arrival: { routeId: '13', routeName: '13' } }),
+      dep(11, { atMs: T + 30_000, title: 'Črnomerec', arrival: { routeId: '11', routeName: '11' } }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+      row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:49'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:amruseva', kind: 'closure', atMs: at('2026-09-26T20:00:00+02:00'), title: 'Amruševa', source: 'prometnice' }),
+      always({ title: 'Trg bana J. Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859' }),
+    ];
+    const all = ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'closure:amruseva', 'always:story:trg'];
+    t.update(rows(), 2200, T);
+    expect(ids()).toEqual(all);
+    const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
+    const w = structure();
+    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most); 16:41:19 it is back.
+    layout.boxPx = 380;
+    t.update(rows(), 2200, T + 76_000);
+    expect(ids()).toEqual(all);
+    layout.boxPx = 462;
+    t.update(rows(), 2200, T + 79_000);
+    expect(ids()).toEqual(all);
+    for (const [id, li] of nodes) expect(byId(id), id).toBe(li);
+    expect(w.records()).toEqual([]);
+    // A shrink that lasts (an alert that stays) takes a row once it has stood FIT_SHRINK_HOLD_MS, the last
+    // discretionary row as the estimate always cut it, and every other row keeps its node.
+    layout.boxPx = 380;
+    let s = 80;
+    for (; s * 1000 < 80_000 + FIT_SHRINK_HOLD_MS; s++) {
+      t.update(rows(), 2200, T + s * 1000);
+      expect(ids(), `${s} s`).toEqual(all);
+    }
+    t.update(rows(), 2200, T + s * 1000);
+    expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    expect(w.records()).toEqual([{ added: [], removed: ['li[closure:amruseva]'] }]);
+    // The box back: the row returns, everything else on its node.
+    layout.boxPx = 462;
+    t.update(rows(), 2200, T + (s + 1) * 1000);
+    expect(ids()).toEqual(all);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    w.stop();
+    expect(FIT_SHRINK_HOLD_MS).toBe(5_000);
+  });
 });
 
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
@@ -1310,7 +1365,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     t.update(longRows(), 2000, NOW);
     const roomy = t.shown();
     layout.boxPx = 300;
+    // A smaller box stands FIT_SHRINK_HOLD_MS before the rows follow it (the D5.25 replay above).
     t.update(longRows(), 2000, NOW + 20_000);
+    expect(t.shown()).toBe(roomy);
+    t.update(longRows(), 2000, NOW + 20_000 + FIT_SHRINK_HOLD_MS);
     expect(t.shown()).toBeLessThan(roomy);
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(300);
     layout.boxPx = 498;

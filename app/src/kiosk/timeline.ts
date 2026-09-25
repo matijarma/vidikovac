@@ -123,6 +123,17 @@ export const ENTER_CLEAR_MS = 260;
  * of the departures, two records and a re-created node each time. Drops stay immediate: nothing is ever cut.
  */
 export const FIT_RESTORE_HOLD_MS = 60_000;
+/**
+ * The other way round: a shown list keeps its rows through a box that is smaller for a beat. The D5.25 production
+ * observer (25 Sep, 16:41) saw the second closure row leave and come back re-created three seconds later with
+ * nothing in the rows changed: the box was smaller for one paint (anything the stage gives its height to: the page's
+ * alert row, a legend line) and the row estimate cut the last discretionary row at once, with none of the measured
+ * fit's memory. Now the rows keep the box they were fitted in until the smaller box has stood this long; then the
+ * list refits to it as it always did. Five seconds outlasts a beacon reconnect and a poll's beat; a shrink that
+ * stays (an alert that stays, a resize) takes its row soon enough. While the hold runs the list overflows its box
+ * by at most one row, hidden by the box's own overflow.
+ */
+export const FIT_SHRINK_HOLD_MS = 5_000;
 
 const ROW_MAX = 92;
 
@@ -355,7 +366,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let count = 0;
   let last: [readonly TimelineRow[], number, number] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
-  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
+  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number; box: { height: number; width: number } } | null = null;
+  /** When the list's box was first measured smaller than the one the shown rows were fitted in (FIT_SHRINK_HOLD_MS); null while it is not. */
+  let shrunkSince: number | null = null;
   /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
   const heldOut = new Map<string, number | null>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -493,7 +506,13 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       }
       const design = typeof deps.designHeightPx === 'function' ? deps.designHeightPx() : deps.designHeightPx;
       const unbounded = design === Number.POSITIVE_INFINITY;
-      const box = unbounded ? { height: 0, width: 0, overflow: false } : measure.box(list);
+      let box = unbounded ? { height: 0, width: 0, overflow: false } : measure.box(list);
+      // A box smaller than the one the shown rows were fitted in stands for FIT_SHRINK_HOLD_MS before the rows
+      // follow it; the box they were fitted in is measured against meanwhile. A box as tall or taller ends the hold.
+      if (!unbounded && memo && box.height > 0 && memo.box.height > 0 && box.height < memo.box.height) {
+        shrunkSince ??= now;
+        if (now - shrunkSince < FIT_SHRINK_HOLD_MS) box = { ...memo.box, overflow: box.overflow };
+      } else shrunkSince = null;
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
       const budget = rowBudget(available, rows.length);
       const candidates = fitRows(rows, budget.rows);
@@ -526,7 +545,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
             const tighter = fit(candidates, now, box);
             if (tighter.shown.length > fitted.shown.length) { fitted = tighter; rowPx = ROW_MIN_PX; }
           }
-          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx };
+          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx, box: { height: box.height, width: box.width } };
         }
         rowVars(memo.rowPx);
         shown = candidates.filter((row) => memo!.ids.has(row.id));

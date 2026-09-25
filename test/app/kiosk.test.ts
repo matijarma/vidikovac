@@ -18,6 +18,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS } from '../../app/src/kiosk/settings';
 import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
+import { FIT_SHRINK_HOLD_MS } from '../../app/src/kiosk/timeline';
 import { RHYTHM_STORAGE_KEY, type Rhythm } from '../../app/src/kiosk/prefs';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
@@ -2666,7 +2667,8 @@ describe('the field, the column and the one map', () => {
       { id: 'heritage-a', name: 'Palača', category: 'heritage', sourceId: 'heritage', sourceRecord: 'a', lon: STOP.lon, lat: STOP.lat, address: 'Ilica 1' },
     ] });
     const b = fakeBoards(JELACIC_BOARDS);
-    const k = mount({ stored: STORED, cityStore, createBoards: b.create });
+    let now = Date.now();
+    const k = mount({ stored: STORED, cityStore, createBoards: b.create, now: () => now });
     await flush();
     const list = q(k.root, '[data-testid=nearby-rows]')!;
     const always = q(list, '[data-always="1"]')!;
@@ -2678,6 +2680,10 @@ describe('the field, the column and the one map', () => {
     expect(q(list, '[data-always="1"]')).toBe(always);
     expect(list.querySelector('[hidden]')).toBeNull();
     height = 128;
+    k.repaint();
+    // A smaller box stands FIT_SHRINK_HOLD_MS before the rows follow it (timeline.ts, the D5.25 replay); a resize is a shrink that stays.
+    expect(list.children).toHaveLength(3);
+    now += FIT_SHRINK_HOLD_MS;
     k.repaint();
     expect(list.children).toHaveLength(2);
     expect(departures(k.root)).toHaveLength(1);
