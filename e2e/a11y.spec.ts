@@ -305,7 +305,8 @@ test.describe('the moving map has a text path (R-F5)', () => {
     // "BAJS: prazna stanica", beside the whole-city dot "BAJS stanica", and "Kultura večeras" when a venue has a
     // programme; which of them show depends on the live city answer, so every shown entry is one of those.
     const LEGEND_ENTRIES = ['Tramvajska linija', 'BAJS: slobodni bicikli', 'BAJS: prazna stanica', 'BAJS stanica', 'Kultura večeras'];
-    const shown = await page.locator('.k-map-legend span[data-legend]:not([hidden])').evaluateAll((els) => els.map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim()));
+    // Each entry is its chip (a sample "6", "7" or a drawn dot in a <b>) and its words: the words alone are compared.
+    const shown = await page.locator('.k-map-legend span[data-legend]:not([hidden])').evaluateAll((els) => els.map((el) => [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent ?? '').join('').replace(/\s+/g, ' ').trim()));
     expect(shown.length, 'the legend lists at least the tram line').toBeGreaterThanOrEqual(1);
     expect(shown.filter((text) => !LEGEND_ENTRIES.includes(text)), `every legend entry is one the map draws; shown: ${shown.join(' · ')}`).toEqual([]);
     await expect(page.locator('.k-map-legend')).not.toContainText('?');
