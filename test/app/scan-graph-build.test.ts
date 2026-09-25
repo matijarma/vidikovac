@@ -28,10 +28,10 @@ describe('the /s/ page and /d/\'s static graph', () => {
     const expected = staticGraph(bundle, entry!.fileName).scripts.filter((f) => !head.includes(`/${f}"`)).map((f) => `/${f}`);
     expect(hrefs).toEqual(expected);
     expect(hrefs.length).toBeGreaterThanOrEqual(5);
-    // Every warmed file is a real chunk of this build and is a script /d/ itself links.
+    // Every warmed file is a real chunk of this build and a script /d/ itself loads (its entry by src, the rest by modulepreload).
     for (const href of hrefs) {
       expect(bundle[href.slice(1)]?.type, href).toBe('chunk');
-      expect(dHtml, href).toContain(`href="${href}"`);
+      expect(dHtml.includes(`href="${href}"`) || dHtml.includes(`src="${href}"`), `${href} on /d/`).toBe(true);
     }
     // Outside the template /s/ links nothing of /d/: the entry's chunk appears only inside the template.
     expect(head).not.toContain(`/${entry!.fileName}`);
