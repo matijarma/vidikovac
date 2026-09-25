@@ -397,20 +397,20 @@ app/src/transport/view.ts:551 #closureDescription → vetExternal('summary', sum
 app/src/transport/view.ts:561 #closureDetailMarkup → vetExternal('name', item.title, 'row')
 app/src/transport/workspace.ts:508 #setSelection → searchInput.value = ''
 app/src/transport/workspace.ts:515 #setSelection → searchInput.value = query
-app/src/transport/workspace.ts:662 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
-app/src/transport/workspace.ts:675 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
-app/src/transport/workspace.ts:677 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
-app/src/transport/workspace.ts:678 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
-app/src/transport/workspace.ts:686 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
-app/src/transport/workspace.ts:687 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
-app/src/transport/workspace.ts:694 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
-app/src/transport/workspace.ts:702 #renderStatus → statusEl.textContent = line ?? ''
-app/src/transport/workspace.ts:767 #renderSheet → vetExternal(peekKind, peekText, 'row')
-app/src/transport/workspace.ts:812 #nearbySheet → vetExternal('name', placeNow().name, 'row')
-app/src/transport/workspace.ts:824 #resultTexts → vetExternal(kind, value ?? '', 'row')
-app/src/transport/workspace.ts:933 #clearSearch → searchInput.value = ''
-app/src/transport/workspace.ts:1177 #render → searchInput.value=query
-app/src/transport/workspace.ts:1218 #render → searchInput.value=query
+app/src/transport/workspace.ts:666 #renderSheetToggle → sheetToggle.setAttribute('aria-label', tr(i18n, up ? 'details' : 'collapse'))
+app/src/transport/workspace.ts:679 #renderChrome → searchLabel.textContent = ct(i18n, 'search')
+app/src/transport/workspace.ts:681 #renderChrome → searchHint.textContent = tr(i18n, 'searchHint')
+app/src/transport/workspace.ts:682 #renderChrome → clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'))
+app/src/transport/workspace.ts:690 #renderChrome → mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'))
+app/src/transport/workspace.ts:691 #renderChrome → sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'))
+app/src/transport/workspace.ts:698 #renderChrome → note.textContent = k ? '' : i18n.t('motion.note')
+app/src/transport/workspace.ts:706 #renderStatus → statusEl.textContent = line ?? ''
+app/src/transport/workspace.ts:771 #renderSheet → vetExternal(peekKind, peekText, 'row')
+app/src/transport/workspace.ts:816 #nearbySheet → vetExternal('name', placeNow().name, 'row')
+app/src/transport/workspace.ts:828 #resultTexts → vetExternal(kind, value ?? '', 'row')
+app/src/transport/workspace.ts:937 #clearSearch → searchInput.value = ''
+app/src/transport/workspace.ts:1181 #render → searchInput.value=query
+app/src/transport/workspace.ts:1222 #render → searchInput.value=query
 shared/kiosk/sentence.ts:122 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
 shared/kiosk/sentence.ts:224 #decodeTyped → externalText('headsign', value, { surface: 'header' })
 shared/kiosk/sentence.ts:249 #decodeRegister → externalText(type, value, { surface: 'header' })
