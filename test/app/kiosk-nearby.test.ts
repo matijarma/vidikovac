@@ -496,6 +496,24 @@ describe('the departures on the wall through a board gap and a live estimate cro
     expect(outage.filter((r) => r.kind === 'departure').every((r) => !r.live)).toBe(true);
   });
 
+  // observe-d524 (D5.24, 01:58 Zagreb, calm-motion 240 to 270): a timetable row for the 32 Borongaj entered the wall
+  // 38 s past its time, the list grew to seven rows and the fitter dropped the 31 Savski most for it; 22 s later,
+  // at the 32's grace, it left and the 31 was re-created. A row already past its time is not a newcomer.
+  it('lets no timetable row enter after its time, keeps a shown one through its grace, and lets a tracked "sada" in', () => {
+    const shown = held(selectNearby(input(night, { boards: [board(night, [['34', 4], ['31', 10]])], fixes: [{ id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }] })));
+    expect(shown.map((r) => r.id)).toEqual(['dep:t34', 'dep:t31']);
+    // The boards now name a 32 whose time was 38 s ago: not on the wall, it stays off it; the 34 and the 31 stand.
+    const late = selectNearby(input(night + 30_000, { boards: [board(night, [['32', -0.1], ['34', 4], ['31', 10]])], fixes: [{ id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }], heldDepartures: shown }));
+    expect(deps(late)).toEqual(['dep:t34', 'dep:t31']);
+    // A shown row keeps its grace after its time (the 34 at +4 min, 30 s past it), as before.
+    const past = selectNearby(input(night + 4.5 * MIN, { boards: [board(night, [['34', 4], ['31', 10]])], fixes: [], heldDepartures: held(late) }));
+    expect(deps(past)).toEqual(['dep:t34', 'dep:t31']);
+    // A tracked tram at the stop, its estimate a moment ago, is a "sada" to catch and enters.
+    const sada = selectNearby(input(night + 30_000, { boards: [board(night, [['32', 0.4], ['34', 4], ['31', 10]])], fixes: [{ id: 'v32', tripId: 't32', routeId: '32', delaySeconds: -40 }, { id: 'v34', tripId: 't34', routeId: '34', delaySeconds: 0 }], heldDepartures: shown }));
+    expect(deps(sada)).toEqual(['dep:t32', 'dep:t34', 'dep:t31']);
+    expect(sada[0]!.live).toBe(true);
+  });
+
   it('never leaves the block empty while a departure is due on a board in hand: the departed hold yields to the next due trip', () => {
     // The 12 left the wall a moment ago (its estimate flapped past now); the board still names it, due now, and nothing else.
     const shown = held(selectNearby(input(night, { boards: [board(night, [['12', 0]])], fixes: [] })));

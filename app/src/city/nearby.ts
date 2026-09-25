@@ -288,6 +288,11 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
       const leftAt = departed.get(departureId(arrival));
       return leftAt === undefined || now - leftAt > DEPARTED_HOLD_MS || arrival.atMs - now >= DISPLACE_MINUTES * MINUTE_MS;
     })
+    // A timetable row whose time has already passed enters no wall: the grace after a departure's time is for a
+    // row already shown, so it does not vanish at the second, and a newcomer with nothing to promise would stand
+    // "sada" for what is left of its minute and go (observe-d524, 01:58: the 32 Borongaj entered 38 s past its
+    // time, the fitter dropped the 31 for it, and 22 s later the 32 left and the 31 came back as a new row).
+    .filter((arrival) => arrival.live || arrival.atMs >= now || heldById.has(departureId(arrival)))
     // A shown tracked row whose fix is not in hand this instant keeps its last estimate for HELD_LIVE_GRACE_MS (its
     // timetable would put it below the tram it was ahead of, and back above once the fix returns), never in an outage.
     .map((arrival) => {
