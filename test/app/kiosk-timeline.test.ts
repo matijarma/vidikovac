@@ -1093,10 +1093,16 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
   // the same in every reading. The list's box was smaller for one paint (anything the stage gives its height to:
   // the page's alert row, a legend line) and the row estimate cut the last discretionary row at once, in list order
   // and with none of the measured fit's memory, then put it back on the next paint.
-  it('keeps every node through a box that shrinks for a beat (the D5.25 replay), and on a lasting shrink lets the second departure go before a closure, which keeps its node', () => {
+  it('keeps every node through a box that shrinks for a beat on the ResizeObserver path (the D5.25 replay), refits a lasting shrink after the hold with every staying node kept, and refits a grown box at once', () => {
+    // The browser's path (review of round 4, item 1): the ResizeObserver on the list fires refit() on every change of
+    // the box, before any update; happy-dom has none, so the stand-in hands the callback to the test.
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const resized = (): void => { for (const observe of observers) observe([], {} as ResizeObserver); };
     const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
     const measure = simulated(layout);
     const t = mount({ measure, designHeightPx: layout.boxPx });
+    expect(observers).toHaveLength(1);
     const T = day('16:40');
     const rows = (): TimelineRow[] => [
       dep(13, { atMs: T, live: false, title: 'Kvat. trg', source: 'zet-gtfs', arrival: { routeId: '13', routeName: '13' } }),
@@ -1111,20 +1117,25 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     expect(ids()).toEqual(all);
     const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
     const w = structure();
-    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most); 16:41:19 it is back.
+    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most) and the observer fires; 16:41:19 it is
+    // back and the observer fires again. No update of the wall's own between the two.
     layout.boxPx = 380;
-    t.update(rows(), 2200, T + 76_000);
+    resized();
     expect(ids()).toEqual(all);
     layout.boxPx = 462;
+    resized();
+    expect(ids()).toEqual(all);
     t.update(rows(), 2200, T + 79_000);
     expect(ids()).toEqual(all);
     for (const [id, li] of nodes) expect(byId(id), id).toBe(li);
     expect(w.records()).toEqual([]);
-    // A shrink that lasts (an alert that stays) takes a row once it has stood FIT_SHRINK_HOLD_MS, the last
-    // discretionary row as the estimate always cut it, and every other row keeps its node.
+    // A shrink that lasts (an alert that stays): the observer fires once, the wall's own paints follow; the rows
+    // keep their box through FIT_SHRINK_HOLD_MS, then the list refits to the smaller box, the last discretionary row
+    // going as the estimate always cut it, every other row on its node.
     layout.boxPx = 380;
+    resized(); // the refit reads the last update's moment, 79 s: the hold runs from there
     let s = 80;
-    for (; s * 1000 < 80_000 + FIT_SHRINK_HOLD_MS; s++) {
+    for (; (s - 79) * 1000 < FIT_SHRINK_HOLD_MS; s++) {
       t.update(rows(), 2200, T + s * 1000);
       expect(ids(), `${s} s`).toEqual(all);
     }
@@ -1132,13 +1143,52 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
     for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
     expect(w.records()).toEqual([{ added: [], removed: ['li[closure:amruseva]'] }]);
-    // The box back: the row returns, everything else on its node.
+    // The box back (the observer fires): the row returns at once, everything else on its node.
     layout.boxPx = 462;
-    t.update(rows(), 2200, T + (s + 1) * 1000);
+    resized();
     expect(ids()).toEqual(all);
     for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    // A box that grows past the fitted one refits at once, hold or no hold: the rows a taller box holds come back.
+    layout.boxPx = 380;
+    resized();
+    t.update(rows(), 2200, T + (s + 2) * 1000 + FIT_SHRINK_HOLD_MS);
+    expect(ids()).toHaveLength(5);
+    layout.boxPx = 600;
+    resized();
+    expect(ids()).toEqual(all);
     w.stop();
+    vi.unstubAllGlobals();
     expect(FIT_SHRINK_HOLD_MS).toBe(5_000);
+  });
+
+  it('a shrink that stays is refitted when the hold ends on the page\u2019s own clock, with no paint of the wall\u2019s in between', () => {
+    vi.useFakeTimers();
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
+    const measure = simulated(layout);
+    const t = mount({ measure, designHeightPx: layout.boxPx });
+    const T = day('16:40');
+    const rows = (): TimelineRow[] => [
+      dep(13, { atMs: T, live: false, title: 'Kvat. trg', source: 'zet-gtfs', arrival: { routeId: '13', routeName: '13' } }),
+      dep(11, { atMs: T + 30_000, title: 'Črnomerec', arrival: { routeId: '11', routeName: '11' } }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+      row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:49'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:amruseva', kind: 'closure', atMs: at('2026-09-26T20:00:00+02:00'), title: 'Amruševa', source: 'prometnice' }),
+      always({ title: 'Trg bana J. Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859' }),
+    ];
+    t.update(rows(), 2200, T);
+    expect(ids()).toHaveLength(6);
+    const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
+    layout.boxPx = 380;
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    expect(ids()).toHaveLength(6);
+    vi.advanceTimersByTime(FIT_SHRINK_HOLD_MS - 1);
+    expect(ids()).toHaveLength(6);
+    vi.advanceTimersByTime(1);
+    expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    vi.unstubAllGlobals();
   });
 });
 

@@ -369,6 +369,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number; box: { height: number; width: number } } | null = null;
   /** When the list's box was first measured smaller than the one the shown rows were fitted in (FIT_SHRINK_HOLD_MS); null while it is not. */
   let shrunkSince: number | null = null;
+  /** The refit armed for the end of the hold (the page's own clock). */
+  let shrinkTimer: ReturnType<typeof setTimeout> | null = null;
   /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
   const heldOut = new Map<string, number | null>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -510,7 +512,19 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       // A box smaller than the one the shown rows were fitted in stands for FIT_SHRINK_HOLD_MS before the rows
       // follow it; the box they were fitted in is measured against meanwhile. A box as tall or taller ends the hold.
       if (!unbounded && memo && box.height > 0 && memo.box.height > 0 && box.height < memo.box.height) {
-        shrunkSince ??= now;
+        if (shrunkSince === null) {
+          shrunkSince = now;
+          // The hold ends on its own clock, not on the wall's next paint: the refit that follows reads the box as
+          // it stands then (the last update's moment advanced by the hold), so a shrink that stays is refitted
+          // within FIT_SHRINK_HOLD_MS whether or not a poll's beat comes first.
+          if (shrinkTimer !== null) clearTimeout(shrinkTimer);
+          shrinkTimer = setTimeout(() => {
+            shrinkTimer = null;
+            if (!last || !element.isConnected) return;
+            last = [last[0], last[1], Math.max(last[2], (shrunkSince ?? last[2]) + FIT_SHRINK_HOLD_MS)];
+            refit();
+          }, FIT_SHRINK_HOLD_MS);
+        }
         if (now - shrunkSince < FIT_SHRINK_HOLD_MS) box = { ...memo.box, overflow: box.overflow };
       } else shrunkSince = null;
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
@@ -596,6 +610,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     destroy() {
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
+      if (shrinkTimer !== null) { clearTimeout(shrinkTimer); shrinkTimer = null; }
       list.removeEventListener('animationend', onAnimationEnd);
       resize?.disconnect();
       fonts?.removeEventListener('loadingdone', refit);
@@ -605,9 +620,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   };
 
   // The fit is only as good as the layout it read: a resized box or a web font
-  // that arrives after the first paint fits the last rows again.
+  // that arrives after the first paint fits the last rows again. The signature
+  // is what goes, never the box the rows were fitted in: the ResizeObserver
+  // below fires on every change of the list's box, and a refit that forgot the
+  // fitted box let a one-paint shrink cut a row at once (review of round 4,
+  // item 1: the D5.25 re-entry reproduced on the branch), where update() holds
+  // the fitted box for FIT_SHRINK_HOLD_MS against a smaller one.
   const refit = (): void => {
-    memo = null;
+    memo = memo && { ...memo, sig: '' };
     if (last) handle.update(...last);
   };
   const resize = typeof ResizeObserver === 'function'
