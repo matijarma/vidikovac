@@ -14,10 +14,15 @@ export interface CityStore {
 /** A failed chunk is retried on its own: Retry-After when the server gives one,
  * otherwise 15 s doubling to 10 min; the last good places stay on screen. */
 const CHUNK_RETRY_BASE_MS = 15_000, CHUNK_RETRY_MAX_MS = 600_000;
-/** A failed live poll or manifest is asked again early (5 s, 15 s, 30 s), then the interval as before: a cold Worker
- * that missed the first answer (release smoke run 4, the client's 15 s timeout) left the wall without its BAJS census for
- * 48 s and the phone without its catalogue for 300 s (round 5, phone finding B1). */
+/** A failed live poll is asked again early, 5 s, 15 s and 30 s after the failures, then the interval alone carries
+ * on: a cold Worker that missed the first answer (release smoke run 4, the client's 15 s timeout) left the wall
+ * without its BAJS census for 48 s (round 5, phone finding B1). Bounded, so a ten-minute outage costs three requests
+ * beyond the interval's (review N1); a Retry-After the server sends stretches every wait; a hidden tab retries nothing
+ * (the interval asks once the tab is seen again). */
 const EARLY_RETRY_MS: readonly number[] = [5_000, 15_000, 30_000];
+/** A good manifest is fresh for five minutes; a failed one is asked again by the next poll a minute after the attempt,
+ * never by the early retries (they ask for the live stations alone, review N1) and never before Retry-After. */
+const MANIFEST_FRESH_MS = 300_000, MANIFEST_RETRY_MS = 60_000;
 class CityHttpError extends Error {
   constructor(readonly retryAfterMs: number | null) { super('city-unavailable'); }
 }
@@ -39,22 +44,22 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
   const wanted = new Set<string>(['culture', 'water']);
   let timer: ReturnType<typeof setInterval> | undefined;
   let manifestTime = 0;
+  /** The last attempt at the manifest (success or failure) and the one request in flight, so the start's live poll and its manifest never double it. */
+  let manifestAskedAt = 0, manifestPending: Promise<boolean> | null = null;
+  /** Retry-After: no poll before this instant. */
+  let notBefore = 0;
+  const noteRetryAfter = (error: unknown): void => { if (error instanceof CityHttpError && error.retryAfterMs !== null) notBefore = Math.max(notBefore, Date.now() + error.retryAfterMs); };
+  const hidden = (): boolean => typeof document !== 'undefined' && document.hidden === true;
   let earlyTimer: ReturnType<typeof setTimeout> | undefined, earlyRetries = 0;
   const clearEarly = () => { if (earlyTimer !== undefined) { clearTimeout(earlyTimer); earlyTimer = undefined; } };
-  /** One early retry at a time; the ladder climbs per failure and rests on the first answer. */
+  /** One early retry at a time, three steps at most since the last answer, each no sooner than Retry-After allows. */
   const scheduleEarly = () => {
-    if (stopped || paused || earlyTimer !== undefined) return;
-    const delay = EARLY_RETRY_MS[Math.min(earlyRetries, EARLY_RETRY_MS.length - 1)]!;
+    if (stopped || paused || earlyTimer !== undefined || earlyRetries >= EARLY_RETRY_MS.length) return;
+    const delay = Math.max(EARLY_RETRY_MS[earlyRetries]!, notBefore - Date.now());
     earlyRetries++;
-    earlyTimer = setTimeout(() => { earlyTimer = undefined; void retryEarly(); }, delay);
+    earlyTimer = setTimeout(() => { earlyTimer = undefined; if (!hidden()) void refresh(); }, delay);
   };
-  /** The early retry: the manifest again when a failure took its stamp back, then the live poll (which climbs or rests the ladder). */
-  async function retryEarly(): Promise<void> {
-    if (stopped || paused) return;
-    const manifestOk = manifestTime === 0 ? await manifest() : true;
-    await refresh();
-    if (!manifestOk) scheduleEarly();
-  }
+  const manifestDue = (): boolean => manifestTime === 0 ? Date.now() - manifestAskedAt >= MANIFEST_RETRY_MS : Date.now() - manifestTime > MANIFEST_FRESH_MS;
   const emit = () => { if (!stopped) listeners.forEach(fn => fn()); };
   /** The catalogue and the live stations come after the page's answer on a narrow link (the fetch priority hint). */
   async function request<T>(url: string): Promise<T> {
@@ -112,45 +117,55 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
     }));
   }
   async function refresh(): Promise<void> {
-    if (stopped || paused || refreshing) return;
+    if (stopped || paused || refreshing || Date.now() < notBefore) return;
     refreshing = true;
     let failed = false;
     try {
       const live = await request<CityLive>('/api/city/live');
       if (live.schema !== 1 || !Array.isArray(live.bikes) || !Array.isArray(live.sources)) throw new Error('city-invalid-live');
       if (!stopped && !paused) state = { ...state, live, errors: state.errors.filter(e=>e !== 'live') };
-    } catch {
+    } catch (error) {
       failed = true;
+      noteRetryAfter(error);
       if (!stopped && !paused) state = { ...state, errors: [...new Set([...state.errors, 'live'])],
         live: state.live ? { ...state.live, sources: state.live.sources.map(s=>({...s,status:s.status==='down'?'down':'stale'})) } : null };
     } finally { refreshing = false; emit(); }
-    // A stamp of 0 is a failure's: the early retry re-asks the manifest, never this poll at once.
-    if (manifestTime !== 0 && Date.now() - manifestTime > 300_000 && !(await manifest())) failed = true;
-    if (failed) scheduleEarly(); else if (manifestTime !== 0) earlyRetries = 0;
+    if (manifestDue()) await manifest();
+    if (failed) scheduleEarly(); else earlyRetries = 0;
   }
-  /** Resolves false when the manifest could not be read: the stamp is taken back so the next poll asks again. */
-  async function manifest(): Promise<boolean> {
-    manifestTime = Date.now();
-    let ok = true;
-    try {
-      const next = await request<CatalogueManifest>('/api/city/manifest');
-      if (next.schema !== 1 || !Array.isArray(next.sources)) throw new Error('city-invalid-manifest');
-      if (stopped || paused) return true;
-      const previous = state.manifest;
-      const changed = state.loaded.filter(id => JSON.stringify(previous?.sources.find(s=>s.id===id)?.chunks) !== JSON.stringify(next.sources.find(s=>s.id===id)?.chunks));
-      state = { ...state, manifest: next, loaded: state.loaded.filter(id=>!changed.includes(id)), errors: state.errors.filter(e=>e!=='manifest') };
-      await ensure([...new Set([...wanted, ...changed])]);
-    } catch { ok = false; manifestTime = 0; if (!stopped && !paused) state = { ...state, errors: [...new Set([...state.errors, 'manifest'])] }; }
-    if(!stopped&&!paused){state = { ...state, loading: pending.size>0 }; emit();}
-    return ok;
+  /** Resolves false when the manifest could not be read; one request at a time. */
+  function manifest(): Promise<boolean> {
+    if (manifestPending) return manifestPending;
+    manifestPending = (async () => {
+      manifestAskedAt = Date.now();
+      try {
+        const next = await request<CatalogueManifest>('/api/city/manifest');
+        if (next.schema !== 1 || !Array.isArray(next.sources)) throw new Error('city-invalid-manifest');
+        if (stopped || paused) return true;
+        const previous = state.manifest;
+        const changed = state.loaded.filter(id => JSON.stringify(previous?.sources.find(s=>s.id===id)?.chunks) !== JSON.stringify(next.sources.find(s=>s.id===id)?.chunks));
+        state = { ...state, manifest: next, loaded: state.loaded.filter(id=>!changed.includes(id)), errors: state.errors.filter(e=>e!=='manifest') };
+        manifestTime = Date.now();
+        await ensure([...new Set([...wanted, ...changed])]);
+        return true;
+      } catch (error) {
+        noteRetryAfter(error);
+        manifestTime = 0;
+        if (!stopped && !paused) state = { ...state, errors: [...new Set([...state.errors, 'manifest'])] };
+        return false;
+      } finally {
+        manifestPending = null;
+        if(!stopped&&!paused){state = { ...state, loading: pending.size>0 }; emit();}
+      }
+    })();
+    return manifestPending;
   }
   return {
     snapshot: () => state, ensure, refresh,
     async start() {
       if (started || stopped) return;
       started = true; state = { ...state, loading: true };
-      const [manifestOk] = await Promise.all([manifest(), refresh()]);
-      if (!manifestOk) scheduleEarly();
+      await Promise.all([manifest(), refresh()]);
       if (!stopped && !paused) timer = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) void refresh(); }, 60_000);
     },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
