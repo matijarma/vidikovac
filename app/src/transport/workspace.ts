@@ -81,6 +81,16 @@ export const KARTA_NEARBY_ROWS = 8;
 const PROGRAMME_WINDOW: ActivityWindow = 'week';
 /** The stage a first frame fits into before the page has laid the workspace out: a 390 x 600 phone stage. */
 const FRAME_FALLBACK_BOX = { width: 390, height: 600 } as const;
+/** The camera of a framed place whose stage is covered on the right by `coveredPx` (the landscape phone's column):
+ *  the circle fitted to the uncovered part, and the centre moved east by half the covered width at that zoom, so
+ *  the place stands in the middle of what the person sees and its ring clear of the map's own controls at the
+ *  canvas centre (round 5, review N2). Longitude per pixel at zoom z is 360 / (512 · 2^z), the world MapLibre lays
+ *  out at 512 px per zoom-0 tile (map/frame.ts boundsView). A framed move takes no offset of its own. */
+export function coveredFrame(place: { lon: number; lat: number }, radiusM: number, widthPx: number, heightPx: number, coveredPx: number, minZoom: number): { center: [number, number]; zoom: number } {
+  const covered = Math.max(0, Math.min(coveredPx, widthPx));
+  const fitted = frameView(place, radiusM, widthPx - covered, heightPx, FRAME_PADDING_PX, minZoom);
+  return { center: [place.lon + (covered / 2) * (360 / (512 * 2 ** fitted.zoom)), place.lat], zoom: fitted.zoom };
+}
 /** A tram line is route type 0 (kiosk/stops.ts routeType), the frame's measure (shared/city/frame.ts). */
 const isTram = (routeId: string): boolean => routeType(routeId) === ROUTE_TYPE_TRAM;
 
@@ -356,7 +366,9 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     const box = frameBox();
     const width = box?.width ?? FRAME_FALLBACK_BOX.width;
     const height = box?.height ?? FRAME_FALLBACK_BOX.height;
-    const key = `${place.lon.toFixed(5)},${place.lat.toFixed(5)}|${Math.round(radiusM / 10)}|${Math.round(width / 40)}x${Math.round(height / 40)}|${mode}`;
+    // The landscape column covers the stage's right: the place is framed in the uncovered part (coveredFrame).
+    const covered = mode === 'landscape' ? fitPadding().right ?? 0 : 0;
+    const key = `${place.lon.toFixed(5)},${place.lat.toFixed(5)}|${Math.round(radiusM / 10)}|${Math.round(width / 40)}x${Math.round(height / 40)}|${mode}|${Math.round(covered / 40)}`;
     if (key === framedKey) return;
     if (framedKey !== null && (movedSinceFrame || selection || following || query)) return;
     framedKey = key;
@@ -365,7 +377,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // fitted whole below the marks' own floor, the pills and the rings drawn from the fit (lane p-map). The phone's
     // stage is the whole screen and keeps FRAME_MIN_ZOOM.
     const desk = mode === 'desk';
-    camera = frameView(place, radiusM, width, height, FRAME_PADDING_PX, desk ? FIT_MIN_ZOOM : FRAME_MIN_ZOOM);
+    camera = covered > 0 ? coveredFrame(place, radiusM, width, height, covered, FRAME_MIN_ZOOM)
+      : frameView(place, radiusM, width, height, FRAME_PADDING_PX, desk ? FIT_MIN_ZOOM : FRAME_MIN_ZOOM);
     frameMarks = desk ? markZoomFor(camera.zoom) ?? null : null;
     if (mapMode === 'map') {
       handle?.setMarkZoom?.(frameMarks);
