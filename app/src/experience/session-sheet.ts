@@ -96,7 +96,9 @@ export function createSessionSheet(deps: SessionSheetDeps): SessionSheet {
     // After the end the devices and the screen's own expiry are stale; the origin and the hint stand.
     const lines: [string, string][] = [
       ['origin', originSentence(i18n, s)],
-      ['devices', live && s.session.participants > 0 ? i18n.t('session.sheetDevices', { count: s.session.participants }) : ''],
+      // The count is news once a second device is in the view (a shared code taken up); "1 uređaju" told the
+      // person what they held in their hand (round 3, desktop F17).
+      ['devices', live && s.session.participants > 1 ? i18n.t('session.sheetDevices', { count: s.session.participants }) : ''],
       ['temporary', temporary],
       ['hint', s.frozen ? i18n.t('session.expiredHint') : ''],
     ];

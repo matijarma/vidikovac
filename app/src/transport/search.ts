@@ -46,9 +46,13 @@ export function fold(text: string): string {
     .trim();
 }
 
+/** One collator for every route sort: `localeCompare` with an options object builds a collator per call, and the
+ *  stop groups sort their routes thousands of times while the network is installed (round 3, phone A). */
+const ROUTE_ORDER = new Intl.Collator('hr', { numeric: true });
+
 /** Route numbers the way a person reads them: numeric first, then text. */
 export function compareRouteShort(a: string, b: string): number {
-  return a.localeCompare(b, 'hr', { numeric: true });
+  return ROUTE_ORDER.compare(a, b);
 }
 
 function scoreName(folded: string, query: string): number {

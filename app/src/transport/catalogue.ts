@@ -11,6 +11,9 @@ import type { Network } from '../../../shared/motion/network';
 import { compareRouteShort, sortRoutes, type RouteEntry, type StopGroup } from './search';
 
 let routes: RouteEntry[] | null = null;
+/** The one collator each sort below uses (see search.ts compareRouteShort): the platform ids as numbers, the names as Croatian. */
+const ID_ORDER = new Intl.Collator('en', { numeric: true });
+const NAME_ORDER = new Intl.Collator('hr');
 
 /** Every route GTFS knows, trams first, then by number as read. */
 export function routeCatalogue(): RouteEntry[] {
@@ -57,7 +60,7 @@ function groupPlatforms(rows: readonly PlatformRow[]): StopGroup[] {
   }
   return [...byName.entries()]
     .map(([name, group]) => {
-      const ids = [...group.ids].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+      const ids = [...group.ids].sort(ID_ORDER.compare);
       return {
         id: ids[0]!,
         ids,
@@ -67,7 +70,7 @@ function groupPlatforms(rows: readonly PlatformRow[]): StopGroup[] {
         routes: [...group.routes].sort(compareRouteShort),
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name, 'hr'));
+    .sort((a, b) => NAME_ORDER.compare(a.name, b.name));
 }
 
 /** Named stops from the network artefact: each platform's routes are the

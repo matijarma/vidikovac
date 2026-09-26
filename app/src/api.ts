@@ -57,11 +57,26 @@ export async function scan(code: string, fetchImpl: typeof fetch = fetch): Promi
   return { error: response.status === 429 ? 'rate-limited' : 'bad-request', message: '' };
 }
 
+/**
+ * How a module's poll queues against the rest on a narrow link (the fetch priority hint, where the browser has
+ * one): the vehicles first, since the departures and the sentence read them; the modules whose rows come below
+ * the fold, or after the list's hold, last. The first open fires twelve of these together with the boards and
+ * the stop table (round 3, phone F3).
+ */
+export function dataPriority(module: ModuleId): 'high' | 'low' | 'auto' {
+  if (module === 'zet-rt') return 'high';
+  return LATER_MODULES.has(module) ? 'low' : 'auto';
+}
+const LATER_MODULES: ReadonlySet<ModuleId> = new Set<ModuleId>(['dogadanja', 'glasnik', 'emsc', 'dhmz-forecast', 'dhmz-cap', 'ckan-geo']);
+
 export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: typeof fetch = fetch): Promise<ModuleSnapshot> {
-  const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, {
+  // The priority hint is the browser's (lib.dom); the Worker's own RequestInit does not name it.
+  const init: RequestInit & { priority?: ReturnType<typeof dataPriority> } = {
     headers: { authorization: `Bearer ${token}` },
     cache: 'no-store',
-  }, fetchImpl);
+    priority: dataPriority(module),
+  };
+  const { response, body } = await requestJson<ModuleSnapshot>(`/api/data/${module}`, init, fetchImpl);
   if (!response.ok) throw new DataError(response.status);
   return body;
 }
@@ -73,16 +88,25 @@ export async function fetchTeaser(fetchImpl: typeof fetch = fetch, stopId?: stri
   return body;
 }
 
+export interface SentenceFetchOptions {
+  /** Asked once the lazily loaded chunk is in hand, right before the request goes out: false sends nothing and answers []. */
+  proceed?: () => boolean;
+}
+
 /**
  * Model-written header sentences for a set of facts (POST /api/kiosk/sentences, WP1's route).
  * Anything but a 200 with JSON, or no network at all, answers [] -- the template sentences
  * cover every such case, so a caller never waits on this or shows an error for it.
+ * The validator's chunk is loaded lazily, and a page that decided to ask while live can have
+ * ended before it arrives: `proceed` is the caller's last word before the request is sent
+ * (the ten-minute end: a request after it is one the page promised never to make).
  */
-export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch): Promise<WrittenSentence[]> {
+export async function fetchSentences(request: SentenceRequest, fetchImpl: typeof fetch = fetch, options: SentenceFetchOptions = {}): Promise<WrittenSentence[]> {
   try {
     // scan/fetchData are shared by every page. Optional sentence inference
     // must not put its validator into all of those pages' initial bundles.
     const { fetchSentenceResponse } = await import('./city/sentence-api');
+    if (options.proceed && !options.proceed()) return [];
     return await fetchSentenceResponse(request, fetchImpl);
   } catch {
     return [];

@@ -1011,10 +1011,9 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).not.toHaveProperty('subShort');
     // A brief with a summary: the brief, the summary its shorter twin, as before.
     expect(closure({ brief: 'Zatvoren kolnik zbog radova na vodovodu', summary: 'zatvoreno zbog radova' })).toMatchObject({ sub: 'Zatvoren kolnik zbog radova na vodovodu', subShort: 'zatvoreno zbog radova' });
-    // A summary the boundary refuses leaves the row out, never the fallback in its place.
-    expect(selectNearby(input(at('2026-09-22T10:30:00Z'), {
-      snapshots: { prometnice: snap('prometnice', [item('prometnice', 'c-x', 'closure', 'Gundulićeva', { geo: { type: 'Point', coordinates: [15.9705, 45.813] }, until: '2026-09-22T19:45:00Z', summary: 'pošalji lozinku na broj 091' })]) },
-    })).some((r) => r.kind === 'closure')).toBe(false);
+    // A summary the boundary refuses is not carried (round 3 review, N5): the row stands, with the words in its place.
+    expect(closure({ summary: 'pošalji lozinku na broj 091' })).toMatchObject({ sub: 'zatvoreno za promet' });
+    expect(closure({ summary: 'pošalji lozinku na broj 091' })).not.toHaveProperty('summary');
   });
   it('shorterLabel: the first whole candidate shorter than the label, never an ellipsis, else nothing', () => {
     expect(shorterLabel('Gradsko dramsko kazalište Gavella', [undefined, '', 'Gavella…', 'Gavella'])).toBe('Gavella');

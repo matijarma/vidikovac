@@ -10,7 +10,7 @@ import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '
 import { cultureEvents, cultureEventsEmptyText } from '../../app/src/layers/kultura';
 import { delayWord, vehicleCount } from '../../app/src/layers/shared';
 import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-summary';
-import { routeDelays } from '../../app/src/layers/u-pokretu';
+import { routeDelays, vehiclePoints } from '../../app/src/layers/u-pokretu';
 import { cityWorkEmptyText, cityWorkEvents } from '../../app/src/layers/uprava-i-pravo';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
@@ -144,6 +144,16 @@ describe('u-pokretu', () => {
       { id: 'route:13', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '13', data: { routeId: '13', medianDelaySeconds: 18_600 } },
       { id: 'route:17', module: 'zet-rt', kind: 'vehicle', tier: 'open', title: '17', data: { routeId: '17' } },
     ] }).map((row) => row.routeId)).toEqual(['6', '11']);
+  });
+  it('reads a dated snapshot\'s vehicle points once for every draw that shares it (the band, Karta, the several draws of one poll), and an undated one afresh', () => {
+    const snapshot = SNAPSHOTS['zet-rt']!;
+    const first = vehiclePoints(snapshot, NOW);
+    expect(first).toHaveLength(3);
+    expect(vehiclePoints(snapshot, NOW + 5_000)).toBe(first);
+    expect(vehiclePoints({ ...snapshot }, NOW)).not.toBe(first);
+    const undated = { ...snapshot, fetchedAt: undefined as unknown as string, sourceUpdatedAt: undefined };
+    expect(vehiclePoints(undated, NOW)).not.toBe(vehiclePoints(undated, NOW));
+    expect(vehiclePoints(undefined, NOW)).toEqual([]);
   });
   it('builds the map from vehicle points and closure lines, with no per-route delay table (it left the phone with the overview)', () => {
     const update = vi.fn();

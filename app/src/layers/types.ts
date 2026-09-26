@@ -69,7 +69,8 @@ export interface LayerContext extends ExperienceActions {
    */
   frozenAt?: number;
   /** The session as the shell knows it, for the views that name it (the directory's session row). */
-  session?: { expiresAt: number | null; frozen: boolean };
+  /** The session's end and state; `live` false while the page polls nothing (before the join, a refused ticket, the end). */
+  session?: { expiresAt: number | null; frozen: boolean; live?: boolean };
 }
 
 export type LayerRenderer = (ctx: LayerContext) => HTMLElement;
