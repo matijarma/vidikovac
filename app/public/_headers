@@ -11,3 +11,9 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), browsing-topics=()
+
+# The vendored Manrope files are not content-hashed; without a rule the asset layer revalidates them on every
+# warm /d/ open (max-age=0, must-revalidate) and the place paints once in the metric fallback before the 304s land
+# (round 5, phone finding B2). A week fresh, a month served while revalidating; the files change only with a rename.
+/fonts/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
