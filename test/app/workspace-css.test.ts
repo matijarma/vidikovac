@@ -76,3 +76,24 @@ describe('sections are content, not cards (plan "Surfaces", R-D3)', () => {
     expect(sec).toContain('display: grid');
   });
 });
+
+// Round 5, phone finding A1: at 844x390 the Karta stage was blank. city.css's short-window block (a rule from before
+// the companion round: a window under 30rem of height gave the sheet the whole stage and hid the map under it) still
+// matched the landscape phone, while map.css's landscape block (round 1) had made the sheet a 45 % side column there,
+// so the person saw a side column beside an empty field with the page reporting the map ready and its pills drawn.
+describe('the landscape phone shows its map (city.css and map.css agree on a short window)', () => {
+  const CITY = ui('city.css');
+  const MAP = ui('map.css');
+  it('city.css hides the map only in a short portrait window, never in landscape', () => {
+    const shortBlock = /@media\(max-height:30rem\) and \(max-width:59\.99rem\) and \(orientation:portrait\)\{([\s\S]*?)\n\}/.exec(CITY)?.[1] ?? '';
+    expect(shortBlock, 'the short-window block is scoped to portrait').toContain('.ki[data-stage=map] .transport-map{visibility:hidden}');
+    const unscoped = /@media\(max-height:30rem\) and \(max-width:59\.99rem\)\{/.exec(CITY);
+    expect(unscoped, 'no short-window block without the orientation').toBeNull();
+  });
+  it('map.css keeps the landscape stage visible beside the side column', () => {
+    const landscape = /@media \(max-height: 30rem\) and \(orientation: landscape\) \{([\s\S]*?)\n\}/.exec(MAP)?.[1] ?? '';
+    expect(landscape).toContain('inline-size: 45%');
+    // The block hides the handle and, in the page's map view, the sheet's body; never the map region or its canvas.
+    expect(landscape).not.toMatch(/\.(transport-map|t-map-canvas)[^{,]*\{[^}]*(visibility: hidden|display: none)/);
+  });
+});
