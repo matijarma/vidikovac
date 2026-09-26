@@ -1156,6 +1156,16 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     layout.boxPx = 600;
     resized();
     expect(ids()).toEqual(all);
+    const nodesAt600 = new Map(items().map((li) => [li.dataset.id!, li]));
+    // A smaller box that still holds every row (the page settling at boot, a legend line: 600 to 462) is taken at
+    // once, no hold: the rows' heights follow it (the six rows with the story's two-line row fit at the smallest
+    // row), none overflows, and every node stays.
+    layout.boxPx = 462;
+    resized();
+    expect(ids()).toEqual(all);
+    expect(section().style.getPropertyValue('--k-nearby-row')).toBe('64px');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(462);
+    for (const id of all) expect(byId(id), id).toBe(nodesAt600.get(id));
     w.stop();
     vi.unstubAllGlobals();
     expect(FIT_SHRINK_HOLD_MS).toBe(5_000);
