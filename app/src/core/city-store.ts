@@ -135,7 +135,7 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
     try {
       const next = await request<CatalogueManifest>('/api/city/manifest');
       if (next.schema !== 1 || !Array.isArray(next.sources)) throw new Error('city-invalid-manifest');
-      if (stopped || paused) return;
+      if (stopped || paused) return true;
       const previous = state.manifest;
       const changed = state.loaded.filter(id => JSON.stringify(previous?.sources.find(s=>s.id===id)?.chunks) !== JSON.stringify(next.sources.find(s=>s.id===id)?.chunks));
       state = { ...state, manifest: next, loaded: state.loaded.filter(id=>!changed.includes(id)), errors: state.errors.filter(e=>e!=='manifest') };
