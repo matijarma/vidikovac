@@ -22,6 +22,11 @@ export interface SceneExpect {
   noPastKinds: readonly NearbyKind[];
   /** Solar rows per reading: at most 1 always (only the next event); at least 1 where the next sunset or sunrise lies inside the shown horizon. */
   solarMin: 0 | 1;
+  /** Solar rows per reading at most: 1, or 0 where the next solar event is more than an hour away (timeline.ts IMMINENT_ROW_MIN)
+   *  and three departures are due, so the row goes to the third departure (decision 67, observe-d530). */
+  solarMax: 0 | 1;
+  /** Departure rows in every reading: the wall's floor of 1, or 3 where three are due and a solar row gives them its room (decision 67). */
+  departuresMin: 1 | 3;
   /** Rows with `data-live="1"`: at least this many (morning0745: the fixture tracks two trips). */
   liveMin: number;
   /** At most this many live rows; null when unbounded. The outage allows none. */
@@ -57,6 +62,8 @@ const base: SceneExpect = {
   requiredKinds: ['departure'],
   noPastKinds: [],
   solarMin: 0,
+  solarMax: 1,
+  departuresMin: 1,
   liveMin: 0,
   liveMax: null,
   feedLive: true,
@@ -79,8 +86,9 @@ export const SCENES: Readonly<Record<SceneId, Scene>> = Object.freeze({
   lastTrams2240: scene('lastTrams2240', Date.UTC(2026, 8, 21, 20, 40), '2026-09-21 22:40', 'dark', { requiredKinds: ['departure', 'last', 'first'] }),
   /** 00:45, after the last departure at 24:31: no last-tram row whose time has passed, no "zadnji" in the sentence [O-41]; the first tram stays. */
   afterLast0045: scene('afterLast0045', Date.UTC(2026, 8, 21, 22, 45), '2026-09-22 00:45', 'dark', { requiredKinds: ['departure', 'first'], noPastKinds: ['last'], sentenceNot: /zadnji/i }),
-  /** Quiet hour: dark palette, the first tram, the pharmacy on duty; sunrise at 06:42 is the next solar event. */
-  night0430: scene('night0430', Date.UTC(2026, 8, 22, 2, 30), '2026-09-22 04:30', 'dark', { requiredKinds: ['departure', 'first', 'pharmacy'], noPastKinds: ['event'], solarMin: 1 }),
+  /** Quiet hour: dark palette, the first tram, the pharmacy on duty; sunrise at 06:42 is the next solar event, 2 h 12 min away
+   *  with three departures due (the 04:38 tram the third), so at 1920 x 1080 its row goes to the third departure (decision 67). */
+  night0430: scene('night0430', Date.UTC(2026, 8, 22, 2, 30), '2026-09-22 04:30', 'dark', { requiredKinds: ['departure', 'first', 'pharmacy'], noPastKinds: ['event'], solarMin: 0, solarMax: 0, departuresMin: 3 }),
   /** Morning peak: at least one tracked countdown (the departures fixture joins two vehicles by trip id). */
   morning0745: scene('morning0745', Date.UTC(2026, 8, 22, 5, 45), '2026-09-22 07:45', 'light', { liveMin: 1 }),
   /** Midday. */

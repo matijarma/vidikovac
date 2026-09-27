@@ -26,6 +26,7 @@ import { scheduleInstant } from '../../worker/city/schedules';
 import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
+import { IMMINENT_ROW_MIN } from '../../app/src/kiosk/timeline';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
 import tripData from '../../app/public/data/zet-trips.json';
 import { decodeTripIndex } from '../../shared/motion/trips';
@@ -408,15 +409,25 @@ describe('the eight scenes', () => {
     expect(PORTRAIT_SCENES).toEqual(['peak1745']);
   });
 
-  it('carry the solar theme the wall resolves (sunset 18:57, sunrise 06:42), and a solar row exactly where the next one is within three hours', () => {
+  it('carry the solar theme the wall resolves (sunset 18:57, sunrise 06:42), and a solar row where the next one is within the hour, or within three hours unless three departures are due (decision 67)', () => {
     for (const id of SCENE_IDS) {
       const s = SCENES[id];
       expect(s.theme, id).toBe(isDaylight(new Date(s.now)) ? 'light' : 'dark');
       const today = sunTimes(new Date(s.now));
       const tomorrow = sunTimes(new Date(s.now + 86_400_000));
       const next = [today.sunrise, today.sunset, tomorrow.sunrise].map((d) => d.getTime()).filter((t) => t > s.now).sort((a, b) => a - b)[0];
-      expect(s.expect.solarMin, id).toBe(next - s.now <= 3 * 3_600_000 ? 1 : 0);
+      // A sunrise or sunset within IMMINENT_ROW_MIN keeps its row; one further away gives it to the third departure
+      // where three are due (the scene's departuresMin), and is shown otherwise inside the three hours.
+      const ahead = next - s.now;
+      const yields = ahead > IMMINENT_ROW_MIN * MIN && s.expect.departuresMin === 3;
+      expect(s.expect.solarMin, id).toBe(ahead <= 3 * 3_600_000 && !yields ? 1 : 0);
+      expect(s.expect.solarMax, id).toBe(yields ? 0 : 1);
     }
+    // night0430: the 04:38 tram is the third departure due and the 06:42 sunrise 2 h 12 min away: three departures, no
+    // sunrise row. peak1745: the 18:57 sunset 72 minutes away, with the wall's floor of one departure, keeps solarMin 1.
+    expect(SCENES.night0430.expect).toMatchObject({ departuresMin: 3, solarMin: 0, solarMax: 0 });
+    expect(SCENES.peak1745.expect).toMatchObject({ departuresMin: 1, solarMin: 1, solarMax: 1 });
+    expect(SCENE_IDS.filter((id) => SCENES[id].expect.departuresMin === 3)).toEqual(['night0430']);
   });
 
   it('every scene requires departures; the night scenes their first tram; the outage is ZET down with timetable times and one map note', () => {

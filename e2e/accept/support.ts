@@ -281,6 +281,8 @@ export function rotationSceneFailures(scene: Scene, samples: readonly WallSample
     const n = count((s) => x.headingNot!.test(s.sentence));
     if (n) out.push(`${n} ${of} with a sentence matching ${String(x.headingNot)} (target 0, principle 9)`);
   }
+  if (summary.minDepartures < x.departuresMin) out.push(`a reading with ${summary.minDepartures} departure row(s) (target ${x.departuresMin} in every reading: three are due, decision 67)`);
+  if (summary.solarRowsMax > x.solarMax) out.push(`up to ${summary.solarRowsMax} solar row(s) in a reading (target ≤ ${x.solarMax}: the next solar event is more than an hour away and its row goes to the third departure, decision 67)`);
   if (x.liveMax !== null && summary.liveRowsMax > x.liveMax) out.push(`up to ${summary.liveRowsMax} live countdown row(s) in a reading (target ≤ ${x.liveMax})`);
   if (x.pills === 'none') {
     const n = count((s) => Boolean((s.pills ?? '').trim()));

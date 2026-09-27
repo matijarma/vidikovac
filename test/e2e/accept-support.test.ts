@@ -362,13 +362,20 @@ describe('the ten minutes against the scene', () => {
     ]);
   });
 
-  it('afterLast0045 names every "zadnji" sentence; night0430 counts an event that has ended', () => {
+  it('afterLast0045 names every "zadnji" sentence; night0430 counts an event that has ended, a reading short of its three departures and a sunrise row (decision 67)', () => {
     const after = SCENES.afterLast0045;
     const rows = readings(after, 20, (i) => ({ theme: 'dark', sentence: i === 3 ? 'Zadnji tramvaj je otišao.' : `S${Math.floor(i / 10)}.` }));
     expect(rotationSceneFailures(after, rows, summariseRotation(rows))).toEqual(['1 of 20 readings with a sentence matching /zadnji/i: "Zadnji tramvaj je otišao."']);
     const night = SCENES.night0430;
-    const nightRows = readings(night, 10, (i) => ({ theme: 'dark', rows: [row({ id: 't', when: new Date(night.now + 3 * MIN).toISOString(), text: '6' }), ...(i === 2 ? [row({ id: 'ev', kind: 'event', when: new Date(night.now - MIN).toISOString(), text: 'Koncert' })] : [])] }));
+    const trams = [3, 8, 12].map((m) => row({ id: `t${m}`, when: new Date(night.now + m * MIN).toISOString(), text: '6' }));
+    const nightRows = readings(night, 10, (i) => ({ theme: 'dark', rows: [...trams, ...(i === 2 ? [row({ id: 'ev', kind: 'event', when: new Date(night.now - MIN).toISOString(), text: 'Koncert' })] : [])] }));
     expect(rotationSceneFailures(night, nightRows, summariseRotation(nightRows))).toEqual(['1 of 10 readings with a "event" row whose time has passed (target 0)']);
+    const sunrise = row({ id: 'sun', kind: 'solar', when: new Date(night.now + 132 * MIN).toISOString(), whenText: '06:42', text: 'Izlazak sunca 06:42', source: 'solar' });
+    const shortRows = readings(night, 10, (i) => ({ theme: 'dark', rows: i === 4 ? [...trams.slice(0, 2), sunrise] : trams }));
+    expect(rotationSceneFailures(night, shortRows, summariseRotation(shortRows))).toEqual([
+      'a reading with 2 departure row(s) (target 3 in every reading: three are due, decision 67)',
+      'up to 1 solar row(s) in a reading (target ≤ 0: the next solar event is more than an hour away and its row goes to the third departure, decision 67)',
+    ]);
   });
 });
 

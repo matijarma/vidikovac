@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, IMMINENT_ROW_MIN, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -630,20 +630,26 @@ describe('whole rows from the row budget', () => {
     expect(fitRows(rows, 0)).toEqual([rows[2]]); // A zero estimate never removes the reserved place row.
     const closure = row({ id: 'closure:x', kind: 'closure', atMs: NOW + 30 * MIN });
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
-    // A second departure goes before a closure (D5.16 and D5.19 observers), an event, and a sunset that comes
-    // sooner or at its moment; a sunrise, sunset or opening further away than it goes first, the latest first
-    // (decision 67, observe-d530), and the first departure never yields to one.
+    // A second departure goes before a closure or the sunset row (D5.16 and D5.19 observers).
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('dep:2');
+    // Decision 67 (observe-d530): a sunrise, sunset or opening more than IMMINENT_ROW_MIN away and further away than
+    // the second or third departure goes before it, the latest first; one within the hour, one sooner than the
+    // departure, a closure and an event keep their order, and the first departure never yields to one. Without
+    // `now` the step is skipped.
     const solarSoon = row({ id: 'solar:soon', kind: 'solar', atMs: NOW + 6 * MIN });
-    const solarTie = row({ id: 'solar:tie', kind: 'solar', atMs: NOW + 8 * MIN });
-    const opening = row({ id: 'opening:x', kind: 'opening', atMs: NOW + 45 * MIN });
+    const solarFar = row({ id: 'solar:far', kind: 'solar', atMs: NOW + 90 * MIN });
+    const opening = row({ id: 'opening:x', kind: 'opening', atMs: NOW + 75 * MIN });
     const event = row({ id: 'event:x', kind: 'event', atMs: NOW + 90 * MIN });
-    expect(dropCandidate([dep(1), dep(2), closure, solarSoon, always()])?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), closure, solarTie, always()])?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
-    expect(dropCandidate([dep(1), dep(2), dep(3), opening, solar, always()])?.id).toBe('solar:x');
-    expect(dropCandidate([dep(1), dep(2), dep(3), opening, always()])?.id).toBe('opening:x');
-    expect(dropCandidate([dep(1), dep(2), event, always()])?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), closure, solarSoon, always()])?.id).toBe('solar:soon');
+    expect(IMMINENT_ROW_MIN).toBe(60);
+    expect(dropCandidate([dep(1), dep(2), closure, solarFar, always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solarFar, always()], NOW)?.id).toBe('solar:far');
+    expect(dropCandidate([dep(1), dep(2), closure, solarSoon, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, row({ id: 'solar:hour', kind: 'solar', atMs: NOW + IMMINENT_ROW_MIN * MIN }), always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), dep(3), opening, solarFar, always()], NOW)?.id).toBe('solar:far');
+    expect(dropCandidate([dep(1), dep(2), dep(3), opening, always()], NOW)?.id).toBe('opening:x');
+    expect(dropCandidate([dep(1), dep(2, { atMs: NOW + 120 * MIN }), solarFar, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), event, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), closure, solarSoon, always()], NOW)?.id).toBe('solar:soon');
     expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
     // The next thing that is not a departure outlasts a second departure, and goes before the first one.
     expect(dropCandidate([dep(1), dep(2), closure, always()])?.id).toBe('dep:2');
@@ -662,8 +668,7 @@ describe('whole rows from the row budget', () => {
     expect(dropCandidate([dep(1), dep(2), sunriseTomorrow, always()], NOW)?.id).toBe('solar:sunrise');
     expect(dropCandidate([dep(1), openingTomorrow, always()], NOW)?.id).toBe('opening:muzej');
     expect(dropCandidate([dep(1), dep(2), closureTomorrow, always()], NOW)?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), closure, solarSoon, always()], NOW)?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), closure, solar, always()], NOW)?.id).toBe('solar:x');
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()], NOW)?.id).toBe('dep:2');
     const first = row({ id: 'first:morning', kind: 'first', atMs: NOW + DAY });
     expect(dropCandidate([dep(1), first, always()], NOW)).toBeNull();
     expect([openingTomorrow, sunriseTomorrow].map((r) => onLaterDay(r, NOW))).toEqual([true, true]);
@@ -1056,8 +1061,9 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     const nodes = new Map(items().map((li) => [li.dataset.id, li]));
     const w = structure();
     // The third slot alternates between a bus (a different trip) and a tram every five seconds for a minute and a half.
-    // The bus's three title lines leave no room for the sunset at 18:51, which is further away than the bus (decision
-    // 67): the sunset goes at the first bus, and the tram's room never lasts the restore hold, so it stays out.
+    // The bus's three title lines leave no room for the sunset at 18:51, more than an hour away and further away than
+    // the bus (decision 67): the sunset goes at the first bus, and the tram's room never lasts the restore hold, so it
+    // stays out.
     for (let s = 1; s <= 90; s++) {
       const third = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(3);
       t.update([tram(1), tram(2), third, ...timed()], 2200, NOW0 + s * 1000);
@@ -1472,15 +1478,15 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
   it('drops a row after the sub-lines, in dropCandidate\u2019s order, and gives the closures their sub-lines back in its room', () => {
     // 460 px holds the seven rows neither with the sub-lines (512) nor without (474), not even at the smallest row
     // (468): a whole row goes, and the room it leaves holds the two sub-lines again (409 with none, 447 with both): a
-    // sub-line yields to a row, never for nothing. The sunset at 19:07 is further away than the third departure at
-    // 17:57, so the sunset goes (decision 67) and the three departures stay.
+    // sub-line yields to a row, never for nothing. The sunset at 19:07 is 82 minutes away and further away than the
+    // third departure at 17:57, so the sunset goes (decision 67) and the three departures stay.
     fitted({ boxPx: 460, titleChars: 17, subChars: 26 });
     expect(departures()).toBe(3);
     expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
     expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
     expect(section().dataset.fitOverflow).toBe('0');
-    // A sunset at 17:55, sooner than the third departure, keeps its row and the third departure goes (the yield order of
-    // decision 50 and fix11 for a row that comes first).
+    // A sunset at 17:55, within the hour and sooner than the third departure, keeps its row and the third departure
+    // goes (the yield order of decision 50 and fix11 for a row that comes first).
     handle?.destroy();
     host.innerHTML = '';
     fitted({ boxPx: 460, titleChars: 17, subChars: 26 }, NOW + 10 * MIN);
@@ -1550,9 +1556,48 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
     expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', 'always:pharmacy']);
     expect(section().dataset.fitOverflow).toBe('0');
+    // At 05:50 the same sunrise is 58 minutes away (IMMINENT_ROW_MIN): it keeps its row and the third departure goes.
+    handle?.destroy();
+    host.innerHTML = '';
+    const dawn = [
+      dep(1, { atMs: night('05:52'), live: false, title: 'Prečko', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+      dep(2, { atMs: night('05:58'), title: 'Črnomerec', source: 'zet-rt', arrival: { routeId: '31', routeName: '31' } }),
+      dep(3, { atMs: night('06:12'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+      row({ id: 'first:2026-09-27', kind: 'first', atMs: night('06:16'), title: 'Prvi tramvaj', sub: '14 06:16 · 13 06:21', source: 'zet-gtfs' }),
+      row({ id: SUNRISE, kind: 'solar', atMs: night('06:48'), title: 'Izlazak sunca', source: 'solar' }),
+      rows().at(-1)!,
+    ];
+    mount({ measure: simulated({ ...WALL_1920, boxPx: 400 }), designHeightPx: 400 }).update(dawn, 2182, night('05:50'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'first:2026-09-27', SUNRISE, 'always:pharmacy']);
+    expect(section().dataset.fitOverflow).toBe('0');
   });
 
-  it('by day a sunset twenty minutes away keeps its row against a departure forty minutes away, and yields to one that comes sooner', () => {
+  it('the night0430 scene\u2019s list at its 459 px box (e2e/scenes.ts): three departures due, the sunrise 2 h 12 min away gives its row to the third; with two due, the sunrise is shown', () => {
+    // The fit probe's first reading of night0430 at 1920 x 1080: 12 Dubrava in 2 minutes, 1 Borongaj 04:33, 17 Borongaj
+    // 04:38, the first tram, the sunrise at 06:42, the closure until 08:30, the pharmacy.
+    const scene = (hhmm: string): number => at(`2026-09-22T${hhmm}:00+02:00`);
+    const list = (due: number): TimelineRow[] => [
+      dep(1, { atMs: scene('04:32'), title: 'Dubrava', source: 'zet-rt', arrival: { routeId: '12', routeName: '12' } }),
+      dep(2, { atMs: scene('04:33'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '1', routeName: '1' } }),
+      dep(3, { atMs: scene('04:38'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '17', routeName: '17' } }),
+    ].slice(0, due).concat([
+      row({ id: 'first:2026-09-22', kind: 'first', atMs: scene('04:33'), title: 'Prvi tramvaj', sub: '1 04:33 · 11 04:51 · 6 04:57 · 14 05:11', subShort: '1 04:33 · 11 04:51', source: 'zet-gtfs' }),
+      row({ id: 'solar:sunrise:2026-09-22', kind: 'solar', atMs: scene('06:42'), title: 'Izlazak sunca', source: 'solar' }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: scene('08:30'), title: 'Gundulićeva', sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' }),
+      row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
+    ]);
+    const BOX: Layout = { boxPx: 459, titleChars: 17, subChars: 26 };
+    mount({ measure: simulated(BOX), designHeightPx: BOX.boxPx }).update(list(3), 2182, scene('04:30'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-22', 'closure:gunduliceva', 'always:pharmacy']);
+    expect(section().dataset.fitOverflow).toBe('0');
+    handle?.destroy();
+    host.innerHTML = '';
+    mount({ measure: simulated(BOX), designHeightPx: BOX.boxPx }).update(list(2), 2182, scene('04:30'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'first:2026-09-22', 'solar:sunrise:2026-09-22', 'closure:gunduliceva', 'always:pharmacy']);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+
+  it('by day a sunset within the hour keeps its row against a departure forty minutes away, and one more than an hour away yields', () => {
     // A list one row too tall for its 390 px box (65 px rows; the closure and the place row 84 px with their sub-lines).
     const DAY: Layout = { boxPx: 390, titleChars: 17, subChars: 26 };
     const evening = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
@@ -1568,10 +1613,17 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
     expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-27', 'closure:gunduliceva', 'always:story:trg']);
     expect(text(byId('closure:gunduliceva').querySelector('.nearby-sub'))).toBe('zatvoreno za promet');
     expect(section().dataset.fitOverflow).toBe('0');
-    // 17:51: the sunset in an hour, the third departure in 40 minutes (18:31): the sunset goes, the three departures stay.
+    // 18:01: the sunset in 50 minutes, further away than the third departure in 40 (18:41) but within the hour
+    // (IMMINENT_ROW_MIN): it keeps its row and the departure goes.
     handle?.destroy();
     host.innerHTML = '';
-    mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['17:54', '18:00', '18:31']), 2200, evening('17:51'));
+    mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['18:04', '18:10', '18:41']), 2200, evening('18:01'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-27', 'closure:gunduliceva', 'always:story:trg']);
+    expect(section().dataset.fitOverflow).toBe('0');
+    // 17:41: the sunset in 70 minutes, the third departure in 40 (18:21): the sunset goes, the three departures stay.
+    handle?.destroy();
+    host.innerHTML = '';
+    mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['17:44', '17:50', '18:21']), 2200, evening('17:41'));
     expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'always:story:trg']);
     expect(section().dataset.fitOverflow).toBe('0');
   });
