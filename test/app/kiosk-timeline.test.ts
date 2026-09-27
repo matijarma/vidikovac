@@ -630,8 +630,20 @@ describe('whole rows from the row budget', () => {
     expect(fitRows(rows, 0)).toEqual([rows[2]]); // A zero estimate never removes the reserved place row.
     const closure = row({ id: 'closure:x', kind: 'closure', atMs: NOW + 30 * MIN });
     const solar = row({ id: 'solar:x', kind: 'solar', atMs: NOW + 60 * MIN });
-    // A second departure goes before a closure or the sunset row (D5.16 and D5.19 observers).
-    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('dep:2');
+    // A second departure goes before a closure (D5.16 and D5.19 observers), an event, and a sunset that comes
+    // sooner or at its moment; a sunrise, sunset or opening further away than it goes first, the latest first
+    // (decision 67, observe-d530), and the first departure never yields to one.
+    const solarSoon = row({ id: 'solar:soon', kind: 'solar', atMs: NOW + 6 * MIN });
+    const solarTie = row({ id: 'solar:tie', kind: 'solar', atMs: NOW + 8 * MIN });
+    const opening = row({ id: 'opening:x', kind: 'opening', atMs: NOW + 45 * MIN });
+    const event = row({ id: 'event:x', kind: 'event', atMs: NOW + 90 * MIN });
+    expect(dropCandidate([dep(1), dep(2), closure, solarSoon, always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solarTie, always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('solar:x');
+    expect(dropCandidate([dep(1), dep(2), dep(3), opening, solar, always()])?.id).toBe('solar:x');
+    expect(dropCandidate([dep(1), dep(2), dep(3), opening, always()])?.id).toBe('opening:x');
+    expect(dropCandidate([dep(1), dep(2), event, always()])?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), closure, solarSoon, always()])?.id).toBe('solar:soon');
     expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
     // The next thing that is not a departure outlasts a second departure, and goes before the first one.
     expect(dropCandidate([dep(1), dep(2), closure, always()])?.id).toBe('dep:2');
@@ -650,7 +662,8 @@ describe('whole rows from the row budget', () => {
     expect(dropCandidate([dep(1), dep(2), sunriseTomorrow, always()], NOW)?.id).toBe('solar:sunrise');
     expect(dropCandidate([dep(1), openingTomorrow, always()], NOW)?.id).toBe('opening:muzej');
     expect(dropCandidate([dep(1), dep(2), closureTomorrow, always()], NOW)?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), closure, solar, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solarSoon, always()], NOW)?.id).toBe('dep:2');
+    expect(dropCandidate([dep(1), dep(2), closure, solar, always()], NOW)?.id).toBe('solar:x');
     const first = row({ id: 'first:morning', kind: 'first', atMs: NOW + DAY });
     expect(dropCandidate([dep(1), first, always()], NOW)).toBeNull();
     expect([openingTomorrow, sunriseTomorrow].map((r) => onLaterDay(r, NOW))).toEqual([true, true]);
@@ -1011,7 +1024,7 @@ describe('calm motion credited per reading pair (D5.20 observer, readings 90 to 
   });
 });
 
-describe('a list at the edge of its box (D5.16 and D5.19 production observers): departures yield before a closure or the sunset row, and a dropped row returns only after a minute of room', () => {
+describe('a list at the edge of its box (D5.16 and D5.19 production observers): departures yield before a closure, the sunset row further away than the third departure yields before it (decision 67), and a dropped row returns only after a minute of room', () => {
   /** The 1920 x 1080 list of that afternoon: 483 px, the heritage row with an address line (84 px); a bus with a long destination wraps its title to two lines (96 px). */
   const DAY: Layout = { boxPx: 483, titleChars: 17, subChars: 26 };
   const day = (hhmm: string): number => at(`2026-09-24T${hhmm}:00+02:00`);
@@ -1035,26 +1048,29 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     };
   }
 
-  it('drops the third departure, never a closure or the sunset row, when a two-line bus makes seven rows too tall: zero records for the closure and sunset rows across polls whose closure set is unchanged', () => {
+  it('keeps the third departure, never drops a closure, when a two-line bus makes seven rows too tall: the sunset row three and a half hours away yields once and stays out while the slot turns over, zero records for the closure rows', () => {
     const measure = simulated(DAY);
     const t = mount({ measure, designHeightPx: DAY.boxPx });
     t.update([tram(1), tram(2), tram(3), ...timed()], 2200, NOW0);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
     const nodes = new Map(items().map((li) => [li.dataset.id, li]));
     const w = structure();
     // The third slot alternates between a bus (a different trip) and a tram every five seconds for a minute and a half.
+    // The bus's three title lines leave no room for the sunset at 18:51, which is further away than the bus (decision
+    // 67): the sunset goes at the first bus, and the tram's room never lasts the restore hold, so it stays out.
     for (let s = 1; s <= 90; s++) {
       const third = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(3);
       t.update([tram(1), tram(2), third, ...timed()], 2200, NOW0 + s * 1000);
-      for (const id of ['closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']) expect(byId(id), `${s} s ${id}`).toBe(nodes.get(id));
-      if (third.id === 'dep:5') expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
-      else expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+      for (const id of ['closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']) expect(byId(id), `${s} s ${id}`).toBe(nodes.get(id));
+      expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', third.id, 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
       expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
     }
     const records = w.records();
     w.stop();
-    // Every record is the tram in the third slot entering or leaving; the bus never reaches the list.
-    expect(records.every((r) => [...r.added, ...r.removed].every((k) => k === 'li[dep:3]')), JSON.stringify(records)).toBe(true);
-    expect(records.some((r) => [...r.added, ...r.removed].some((k) => k.includes('closure') || k.includes('solar') || k.includes('always')))).toBe(false);
+    // Every record is the third slot's trip entering or leaving, and the sunset row leaving once.
+    expect(records.every((r) => [...r.added, ...r.removed].every((k) => k === 'li[dep:3]' || k === 'li[dep:5]' || k === 'li[solar:sunset:2026-09-24]')), JSON.stringify(records)).toBe(true);
+    expect(records.filter((r) => [...r.added, ...r.removed].some((k) => k.includes('solar')))).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }]);
+    expect(records.some((r) => [...r.added, ...r.removed].some((k) => k.includes('closure') || k.includes('always')))).toBe(false);
   });
 
   it('holds a dropped discretionary row out until the list has fitted with it for a minute, and never holds a reserved row or a departure out', () => {
@@ -1404,20 +1420,20 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
   // readings of the smoke's live minutes, 1 where run 4 had 3 by day. The rows as the simulation draws them: 44 px a
   // title line, 32 a sub line, 8 of padding; 26 characters a sub line at 1920 x 1080, 51 on the totem.
   const closure = (id: string, title: string): TimelineRow => row({ id: `closure:${id}`, kind: 'closure', atMs: at('2026-09-22T16:00:00Z'), title, sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' });
-  const rows = (): TimelineRow[] => [
+  const rows = (sunsetAt = at('2026-09-22T17:07:00Z')): TimelineRow[] => [
     dep(1, { title: 'Črnomerec', arrival: { routeId: '6', routeName: '6' } }),
     dep(2, { title: 'Savski most', arrival: { routeId: '13', routeName: '13' } }),
     dep(3, { title: 'Dubrava', arrival: { routeId: '11', routeName: '11' } }),
-    row({ id: 'solar:sunset:2026-09-22', kind: 'solar', atMs: at('2026-09-22T17:07:00Z'), title: 'Zalazak sunca', source: 'solar' }),
+    row({ id: 'solar:sunset:2026-09-22', kind: 'solar', atMs: sunsetAt, title: 'Zalazak sunca', source: 'solar' }),
     closure('gunduliceva', 'Gundulićeva'),
     closure('amruseva', 'Amruševa'),
     always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
   ];
   const departures = (): number => items().filter((li) => li.dataset.kind === 'departure').length;
   const closureSubs = (): string[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => li.querySelector('.nearby-sub')!.textContent ?? '');
-  const fitted = (layout: Layout): ReturnType<typeof simulated> => {
+  const fitted = (layout: Layout, sunsetAt?: number): ReturnType<typeof simulated> => {
     const measure = simulated(layout);
-    mount({ measure, designHeightPx: layout.boxPx }).update(rows(), 2200, NOW);
+    mount({ measure, designHeightPx: layout.boxPx }).update(rows(sunsetAt), 2200, NOW);
     return measure;
   };
   const subLines = (measure: ReturnType<typeof simulated>): number[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => measure.lines(li.querySelector('.nearby-sub')!));
@@ -1453,14 +1469,110 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
     expect(closureSubs()).toEqual(['', '']);
     expect(section().dataset.fitOverflow).toBe('0');
   });
-  it('drops the third departure after the sub-lines, in dropCandidate\u2019s order, and gives the closures their sub-lines back in its room', () => {
+  it('drops a row after the sub-lines, in dropCandidate\u2019s order, and gives the closures their sub-lines back in its room', () => {
     // 460 px holds the seven rows neither with the sub-lines (512) nor without (474), not even at the smallest row
-    // (468): the third departure goes (the yield order of decision 50 and fix11, unchanged), and the room it leaves
-    // holds the two sub-lines again (409 with none, 447 with both): a sub-line yields to a row, never for nothing.
+    // (468): a whole row goes, and the room it leaves holds the two sub-lines again (409 with none, 447 with both): a
+    // sub-line yields to a row, never for nothing. The sunset at 19:07 is further away than the third departure at
+    // 17:57, so the sunset goes (decision 67) and the three departures stay.
     fitted({ boxPx: 460, titleChars: 17, subChars: 26 });
+    expect(departures()).toBe(3);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
+    expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
+    expect(section().dataset.fitOverflow).toBe('0');
+    // A sunset at 17:55, sooner than the third departure, keeps its row and the third departure goes (the yield order of
+    // decision 50 and fix11 for a row that comes first).
+    handle?.destroy();
+    host.innerHTML = '';
+    fitted({ boxPx: 460, titleChars: 17, subChars: 26 }, NOW + 10 * MIN);
     expect(departures()).toBe(2);
     expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
     expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+});
+
+describe('the night list at 04:00 (decision 67, observe-d530): the second and third departures keep their place before a sunrise or an opening further away', () => {
+  // Production D5.30, Sunday 27 September, 03:52 to 04:03: the wall at 1920 x 1080 showed one departure in all 300
+  // readings while three were due and the wall's own sentences named them. After midnight the morning rows are
+  // today's (onLaterDay protects the departures only against a later day), the museum's name takes two title lines
+  // over "Kultura" at 1920 x 1080, and the fit dropped the third and then the second night tram (each the only tram of
+  // its line or direction for forty minutes) to keep a sunrise at 06:48 and an opening at 10:00. The ten rows the
+  // selection gave, in its order (departures, then the timed rows by time, then the timeless row).
+  const night = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
+  const NOW4 = night('04:00');
+  const closure = (id: string, title: string, until: string): TimelineRow => row({ id: `closure:${id}`, kind: 'closure', atMs: night(until), title,
+    sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' });
+  const opening = (id: string, title: string): TimelineRow => row({ id: `open:culture-${id}:2026-09-27`, kind: 'opening', atMs: night('10:00'), title, sub: 'Kultura', source: 'culture' });
+  const MUSEUM = 'open:culture-d62358d5d2fc659f:2026-09-27';
+  const SUNRISE = 'solar:sunrise:2026-09-27';
+  const rows = (): TimelineRow[] => [
+    dep(1, { atMs: night('04:04'), live: false, title: 'Prečko', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+    dep(2, { atMs: night('04:06'), title: 'Črnomerec', source: 'zet-rt', arrival: { routeId: '31', routeName: '31' } }),
+    dep(3, { atMs: night('04:22'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+    row({ id: 'first:2026-09-27', kind: 'first', atMs: night('05:19'), title: 'Prvi tramvaj',
+      sub: '11 05:19 · 12 05:20 · 17 05:31 · 6 05:59 · 14 06:16 · 13 06:21', subShort: '11 05:19 · 12 05:20', source: 'zet-gtfs' }),
+    row({ id: SUNRISE, kind: 'solar', atMs: night('06:48'), title: 'Izlazak sunca', source: 'solar' }),
+    opening('d62358d5d2fc659f', 'Arheološki muzej u Zagrebu'),
+    opening('karas', 'Galerija Karas'),
+    closure('amruseva', 'Amruševa', '16:00'),
+    closure('gunduliceva', 'Gundulićeva', '18:00'),
+    row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
+  ];
+  const departures = (): string[] => ids().filter((id) => id.startsWith('dep:'));
+
+  it('at 1920 x 1080 shows the three due departures: the two-line opening goes first, and the sunrise stays', () => {
+    const measure = simulated(WALL_1920);
+    const t = mount({ measure, designHeightPx: WALL_1920.boxPx });
+    const all = rows();
+    t.update(all, 2182, NOW4);
+    // The row budget's estimate (64 px rows, seven of ten) is what D5.30 fitted: the three departures, the first tram,
+    // the sunrise, the museum and the pharmacy, 552 px in 486. D5.30 then dropped the third departure (488 px, still
+    // over) and the second; now the museum, whose 10:00 is further away than the 04:22 tram, goes first (424 px).
+    const estimate = fitRows(all, 7);
+    expect(estimate.map((r) => r.id)).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', SUNRISE, MUSEUM, 'always:pharmacy']);
+    expect(wrapLines('Arheološki muzej u Zagrebu', WALL_1920.titleChars)).toBe(2);
+    expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', SUNRISE, 'always:pharmacy']);
+    expect(text(byId('first:2026-09-27').querySelector('.nearby-sub'))).toBe('11 05:19 · 12 05:20');
+    expect(section().dataset.fitOverflow).toBe('0');
+    expect(section().dataset.skippedFit).toBe('4');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
+    // The whole yield order from that estimate: the opening, then the sunrise, then the later departures; the first
+    // departure, the first tram and the pharmacy never.
+    const order: string[] = [];
+    for (let left: TimelineRow[] = estimate, drop = dropCandidate(left, NOW4); drop; left = left.filter((r) => r !== drop), drop = dropCandidate(left, NOW4)) order.push(drop.id);
+    expect(order).toEqual([MUSEUM, SUNRISE, 'dep:3', 'dep:2']);
+  });
+
+  it('in a box that holds five rows the sunrise goes too, before a departure does', () => {
+    const measure = simulated({ ...WALL_1920, boxPx: 400 });
+    mount({ measure, designHeightPx: 400 }).update(rows(), 2182, NOW4);
+    expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', 'always:pharmacy']);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+
+  it('by day a sunset twenty minutes away keeps its row against a departure forty minutes away, and yields to one that comes sooner', () => {
+    // A list one row too tall for its 390 px box (65 px rows; the closure and the place row 84 px with their sub-lines).
+    const DAY: Layout = { boxPx: 390, titleChars: 17, subChars: 26 };
+    const evening = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
+    const list = (departuresAt: readonly string[]): TimelineRow[] => [
+      ...departuresAt.map((hhmm, i) => dep(i + 1, { atMs: evening(hhmm), title: ['Črnomerec', 'Dubrava', 'Borongaj'][i]!, arrival: { routeId: ['6', '12', '17'][i]!, routeName: ['6', '12', '17'][i]! } })),
+      row({ id: 'solar:sunset:2026-09-27', kind: 'solar', atMs: evening('18:51'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: evening('21:45'), title: 'Gundulićeva', sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' }),
+      always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
+    ];
+    // 18:31: the sunset in 20 minutes, the third departure in 40 (19:11): the departure goes, the sunset and the
+    // closure (further away still, its order unchanged) stay.
+    mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['18:34', '18:40', '19:11']), 2200, evening('18:31'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-27', 'closure:gunduliceva', 'always:story:trg']);
+    expect(text(byId('closure:gunduliceva').querySelector('.nearby-sub'))).toBe('zatvoreno za promet');
+    expect(section().dataset.fitOverflow).toBe('0');
+    // 17:51: the sunset in an hour, the third departure in 40 minutes (18:31): the sunset goes, the three departures stay.
+    handle?.destroy();
+    host.innerHTML = '';
+    mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['17:54', '18:00', '18:31']), 2200, evening('17:51'));
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'always:story:trg']);
     expect(section().dataset.fitOverflow).toBe('0');
   });
 });

@@ -28,9 +28,10 @@
 // selection layer supplies one (titleShort, subShort), and a label without one
 // wraps whole; when the list still overflows its box, every label that takes
 // more than one line gives way to its short one, then whole rows are dropped:
-// the latest timed rows first, then departures beyond the first, then the next
-// row that is not a departure (so a long title the source cannot shorten keeps
-// its row while a third departure can make room). First/last trams and one
+// a later day's rows first, then a sunrise, sunset or opening further away than
+// the last departure beyond the first, then that departure, then the next row
+// that is not a departure (so a closure or an event the source cannot shorten
+// keeps its row while a third departure can make room). First/last trams and one
 // "uvijek" row are reserved (decision 27). The fit is measured once
 // per change of content or box and remembered, so a steady wall does not
 // re-measure or re-insert anything.
@@ -177,8 +178,12 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
  * opening at 08:00 tomorrow, its second and third trams dropped for them, while §11 lists the departures
  * first and tomorrow's openings last. Then the latest departure while more than one is left (the wall
  * promises one to three, and a third tram is worth less than a closure or the sunset that would otherwise
- * leave and return with the trams, D5.16 and D5.19 observers); then the latest timed row that is not a
- * departure; then a second timeless row. First/last trams and one timeless row never enter the drop order
+ * leave and return with the trams, D5.16 and D5.19 observers), except that a sunrise, sunset or opening further
+ * away than that departure goes before it, the latest first (decision 67, observe-d530: at 04:00 on a Sunday the
+ * 06:48 sunrise and a 10:00 museum opening on two title lines took the second and third night trams, each the
+ * only tram of its line or direction for forty minutes; a sunset twenty minutes away still outlasts a tram in forty);
+ * then the latest timed row that is not a departure; then a second timeless row. The first departure, the
+ * closures and the rest keep their order. First/last trams and one timeless row never enter the drop order
  * (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while the list
  * can hold it, and returns under a new identity only when its fact changed. Without `now` (older callers)
  * the later-day step is skipped.
@@ -189,11 +194,22 @@ export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: num
     if (later.length > 0) return later[later.length - 1]!;
   }
   const departures = rows.filter((row) => row.kind === 'departure');
-  if (departures.length > 1) return departures[departures.length - 1]!;
+  if (departures.length > 1) {
+    const departure = departures[departures.length - 1]!;
+    const further = rows.filter((row) => outlivedBy(row, departure));
+    if (further.length > 0) return further.reduce((latest, row) => (row.atMs! >= latest.atMs! ? row : latest));
+    return departure;
+  }
   const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
   if (others.length > 0) return others[others.length - 1]!;
   const timeless = rows.filter(isTimeless);
   return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
+}
+
+/** A sunrise, sunset or opening row whose moment lies further away than `departure`'s (decision 67). */
+function outlivedBy(row: NearbyRow, departure: NearbyRow): boolean {
+  if ((row.kind !== 'solar' && row.kind !== 'opening') || isTimeless(row) || isTimeless(departure)) return false;
+  return row.atMs! > departure.atMs!;
 }
 
 const WEEKDAY_HR = new Intl.DateTimeFormat('hr-HR', { timeZone: 'Europe/Zagreb', weekday: 'short' });
