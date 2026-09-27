@@ -117,6 +117,106 @@ describe('chunk backoff',()=>{
     store.destroy();
   });
 });
+describe('early retry after a failed poll (round 5, phone finding B1; kiosk round 4 handoff; review N1)',()=>{
+  // A cold Worker at load 50 answered the first /api/city/live after the client's 15 s timeout (release smoke run 4):
+  // the wall stood without its BAJS census for the first 48 s of readings, since a failed poll waited the whole 60 s
+  // interval. The early retry is bounded (three steps, then the interval alone), honours Retry-After, asks for the
+  // live stations alone (a failed manifest is the next poll's, a minute on) and retries nothing in a hidden tab.
+  function scripted(liveFailures:number,manifestFailures=0,retryAfter?:string){
+    const liveCalls:number[]=[],manifestCalls:number[]=[];
+    const fail=()=>{if(retryAfter)return new Response('{}',{status:503,headers:{'retry-after':retryAfter}});throw new Error('offline');};
+    const fetcher=vi.fn(async(url:RequestInfo|URL)=>{
+      const path=String(url);
+      if(path.endsWith('/manifest')){manifestCalls.push(Date.now());if(manifestCalls.length<=manifestFailures)return fail();return Response.json(manifest);}
+      if(path.endsWith('/live')){liveCalls.push(Date.now());if(liveCalls.length<=liveFailures)return fail();return Response.json(live);}
+      return Response.json(chunk);
+    });
+    return {fetcher,liveCalls,manifestCalls};
+  }
+  const at=(calls:number[])=>calls.map(t=>(t-NOW)/1000);
+  it('asks again 5 s after a failed live poll, then 15 s, then 30 s, and goes back to the interval once it answers',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,liveCalls}=scripted(3);
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();
+    expect(liveCalls).toHaveLength(1);expect(store.snapshot().errors).toContain('live');
+    await vi.advanceTimersByTimeAsync(4_900);expect(liveCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(200);expect(liveCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(15_100);expect(liveCalls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(30_100);expect(liveCalls).toHaveLength(4);
+    expect(store.snapshot().errors).not.toContain('live');expect(store.snapshot().live).not.toBeNull();
+    // Answered: the ladder rests and the interval carries on as before (no fifth call before its 60 s).
+    await vi.advanceTimersByTimeAsync(9_000);expect(liveCalls).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(60_000);expect(liveCalls.length).toBeGreaterThanOrEqual(5);
+    store.destroy();
+  });
+  it('a ten-minute outage: three early live polls beyond the interval, the manifest asked by the interval alone',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,liveCalls,manifestCalls}=scripted(99,99);
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(at(liveCalls)).toEqual([0,5,20,50,60,120,180,240,300,360,420,480,540,600]);
+    expect(at(manifestCalls)).toEqual([0,60,120,180,240,300,360,420,480,540,600]);
+    expect(store.snapshot().errors).toEqual(expect.arrayContaining(['live','manifest']));
+    store.destroy();
+  });
+  it('a failed first manifest is asked again by the poll a minute on, not after 300 s, and the catalogue lands',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,manifestCalls}=scripted(0,1);
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();
+    expect(manifestCalls).toHaveLength(1);expect(store.snapshot().errors).toContain('manifest');expect(store.snapshot().places).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(59_000);expect(manifestCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(manifestCalls).toHaveLength(2);expect(store.snapshot().errors).not.toContain('manifest');
+    expect(store.snapshot().places).toHaveLength(1);
+    // Good again: fresh for five minutes, so the next polls leave it alone.
+    await vi.advanceTimersByTimeAsync(240_000);expect(manifestCalls).toHaveLength(2);
+    store.destroy();
+  });
+  it('honours Retry-After: no poll, early or on the interval, before the server\'s moment',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,liveCalls}=scripted(99,0,'45');
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();expect(liveCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(44_900);expect(liveCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(200);expect(liveCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(16_000);expect(liveCalls).toHaveLength(2); // the 60 s tick waits for 90 s
+    await vi.advanceTimersByTimeAsync(29_000);expect(liveCalls).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(31_000);expect(liveCalls).toHaveLength(3); // the 120 s tick waits for 135 s
+    await vi.advanceTimersByTimeAsync(14_100);expect(liveCalls).toHaveLength(4);
+    expect(at(liveCalls)).toEqual([0,45,90,135]);
+    store.destroy();
+  });
+  it('retries nothing in a hidden tab; the interval asks once the tab is seen again',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const doc={hidden:true};
+    vi.stubGlobal('document',doc);
+    try{
+      const {fetcher,liveCalls}=scripted(99);
+      const store=createCityStore(fetcher as typeof fetch);
+      await store.start();expect(liveCalls).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(65_000);expect(liveCalls).toHaveLength(1);
+      doc.hidden=false;
+      await vi.advanceTimersByTimeAsync(60_000);expect(liveCalls).toHaveLength(2);
+      store.destroy();
+    }finally{vi.unstubAllGlobals();}
+  });
+  it('never retries early after destroy or pause',async()=>{
+    vi.useFakeTimers({now:NOW});
+    const {fetcher,liveCalls}=scripted(9);
+    const store=createCityStore(fetcher as typeof fetch);
+    await store.start();expect(liveCalls).toHaveLength(1);
+    store.destroy();
+    await vi.advanceTimersByTimeAsync(120_000);expect(liveCalls).toHaveLength(1);
+    const second=scripted(9);
+    const paused=createCityStore(second.fetcher as typeof fetch);
+    await paused.start();expect(second.liveCalls).toHaveLength(1);paused.pause();
+    await vi.advanceTimersByTimeAsync(120_000);expect(second.liveCalls).toHaveLength(1);
+    paused.destroy();
+  });
+});
 describe('live source safety',()=>{
   it('coalesces simultaneous source requests and negatively caches outages',async()=>{
     const {env}=environment(),fetcher=vi.fn(async()=>{throw new Error('offline');});

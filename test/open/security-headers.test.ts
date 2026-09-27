@@ -79,11 +79,16 @@ describe('security header policy', () => {
     expect(DATA_SECURITY_HEADERS['Access-Control-Allow-Origin']).toBeUndefined();
   });
 
-  it('app/public/_headers carries exactly APP_SECURITY_HEADERS under /*', () => {
+  it('app/public/_headers carries exactly APP_SECURITY_HEADERS under /*, and the fonts a cache life of their own', () => {
     const file = readFileSync(fileURLToPath(new URL('../../app/public/_headers', import.meta.url)), 'utf8');
     const rules = parseHeadersFile(file);
-    expect(Object.keys(rules)).toEqual(['/*']);
+    expect(Object.keys(rules)).toEqual(['/*', '/fonts/*']);
     expect(rules['/*']).toEqual(APP_SECURITY_HEADERS);
+    // The vendored Manrope files are not content-hashed, so the asset layer's default (max-age=0, must-revalidate)
+    // revalidated them on every warm /d/ open and the place painted once in the metric fallback before the 304s
+    // landed (round 5, phone finding B2). A week fresh, a month served while revalidating; the files change only
+    // with a rename.
+    expect(rules['/fonts/*']).toEqual({ 'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000' });
   });
 });
 

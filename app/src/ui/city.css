@@ -71,7 +71,9 @@
 .transport[data-sheet=peek] .city-filter-disclosure{display:none}
 .transport[data-keyboard=true] .city-filter-disclosure{display:none}
 .ki[data-stage=map] .transport-map{isolation:isolate}
-@media(max-height:30rem) and (max-width:59.99rem){
+/* A short portrait window (a split screen) gives the sheet the whole stage and hides the map under it; the landscape
+   phone is map.css's side column with its map beside it (round 5, phone finding A1: both blocks matched 844x390 and the stage stood blank). */
+@media(max-height:30rem) and (max-width:59.99rem) and (orientation:portrait){
   .ki[data-stage=map] .transport-sheet{inset:0;inline-size:100%;min-inline-size:0;transform:none;border-radius:0}
   .ki[data-stage=map] .transport-map{visibility:hidden}
   .ki[data-stage=map] .transport-toolbar{padding-bottom:var(--sp-1)}

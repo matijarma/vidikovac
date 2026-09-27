@@ -10,10 +10,11 @@ import { publicItemKey, type CastState, type PublicSelection } from '../../app/s
 import { emptyCity } from '../../shared/city/types';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
-import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, frameView, markZoomFor } from '../../app/src/map/frame';
+import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameView, markZoomFor } from '../../app/src/map/frame';
 import type { SavedRef } from '../../app/src/core/saved-store';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
+import { coveredFrame } from '../../app/src/transport/workspace';
 import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapHandle, CityMapOptions, MapSelection, MapStatus, VehicleInfo } from '../../app/src/map/city-map';
 import { createMapSlots, type MapSlots } from '../../app/src/map/map-slots';
@@ -719,6 +720,36 @@ describe('detents on the phone stage', () => {
     spy(last().setFitPadding).mockClear();
     render(context); // the poll: the live element is in the document, so its box is real
     expect(last().setFitPadding).toHaveBeenLastCalledWith({ bottom: 0, right: 380 });
+  });
+});
+
+describe('the landscape phone frames the place in the uncovered part of the stage (round 5, review N2)', () => {
+  it('fits the circle to the width left of the column and moves the centre east by half the column, so the ring is clear of the locate control at the canvas centre', () => {
+    fakeMedia({ landscape: true });
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps, place: KVATERNIKOV });
+    render(context);
+    // 844×390: the stage spans the width, the 45 % column starts at 464, the map region is 844×282 under the header.
+    const rect = (left: number, right: number): DOMRect => ({ left, right, top: 52, bottom: 334, x: left, y: 52, width: right - left, height: 282, toJSON: () => ({}) });
+    q<HTMLElement>('.transport-body').getBoundingClientRect = () => rect(0, 844);
+    q<HTMLElement>('.transport-sheet').getBoundingClientRect = () => rect(464, 844);
+    for (const el of ['.transport-map', '.transport-body']) {
+      Object.defineProperty(q<HTMLElement>(el), 'clientWidth', { value: 844, configurable: true });
+      Object.defineProperty(q<HTMLElement>(el), 'clientHeight', { value: 282, configurable: true });
+    }
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    const framed = coveredFrame(KVATERNIKOV, 2000, 844, 282, 380, FRAME_MIN_ZOOM);
+    expect(last().setView).toHaveBeenLastCalledWith({ center: framed.center, zoom: framed.zoom, frame: true });
+    // The zoom is the uncovered 464 px's fit, and the centre lies east of the place by 190 px at that zoom: the
+    // place is projected 190 px left of the canvas centre, in the middle of the uncovered part.
+    expect(framed.zoom).toBeCloseTo(frameView(KVATERNIKOV, 2000, 464, 282, FRAME_PADDING_PX, FRAME_MIN_ZOOM).zoom, 6);
+    expect(framed.center[1]).toBe(KVATERNIKOV.lat);
+    const pxEast = (framed.center[0] - KVATERNIKOV.lon) / (360 / (512 * 2 ** framed.zoom));
+    expect(pxEast).toBeCloseTo(190, 6);
+    // A stage nothing covers frames the place at its centre, as before.
+    expect(coveredFrame(KVATERNIKOV, 2000, 844, 282, 0, FRAME_MIN_ZOOM)).toEqual(frameView(KVATERNIKOV, 2000, 844, 282, FRAME_PADDING_PX, FRAME_MIN_ZOOM));
   });
 });
 
