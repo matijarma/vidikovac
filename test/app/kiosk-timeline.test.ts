@@ -1306,7 +1306,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         const title = text(li.querySelector('.nearby-title')).replace(/^\d+ /, '');
         const sub = text(li.querySelector('.nearby-sub'));
         expect([r.title, r.titleShort]).toContain(title);
-        expect([r.sub, r.subShort]).toContain(sub);
+        // A closure's sub-line may be left out for a row (decision 66); every other sub is the full one or its twin.
+        expect([r.sub, r.subShort, ...(r.kind === 'closure' ? [''] : [])]).toContain(sub);
         // A short label is printed only where the full one ran long.
         if (r.titleShort && title === r.titleShort) expect(wrapLines(`${r.arrival ? `${r.arrival.routeName} ` : ''}${r.title}`, layout.titleChars)).toBeGreaterThan(TITLE_MAX_LINES);
         if (r.subShort !== undefined && sub === r.subShort) expect(wrapLines(r.sub, layout.subChars)).toBeGreaterThan(1);
@@ -1450,6 +1451,73 @@ function px(value: string): number {
   if (!/^[\d.\s+\-*/(),]+$/.test(js.replace(/Math\.(max|min)/g, ''))) throw new Error(`not a length: ${value}`);
   return Number(new Function(`return (${js});`)());
 }
+
+describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 5): one line or none, and it goes before a departure does', () => {
+  // The feed's summary under every closure (dd09f213, merged as D5.28) wrapped to two lines at 1920 x 1080 (a 116 px
+  // row for 66) and the fit took the second and third departures to keep the closures: one departure in all 300
+  // readings of the smoke's live minutes, 1 where run 4 had 3 by day. The rows as the simulation draws them: 44 px a
+  // title line, 32 a sub line, 8 of padding; 26 characters a sub line at 1920 x 1080, 51 on the totem.
+  const closure = (id: string, title: string): TimelineRow => row({ id: `closure:${id}`, kind: 'closure', atMs: at('2026-09-22T16:00:00Z'), title, sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' });
+  const rows = (): TimelineRow[] => [
+    dep(1, { title: 'Črnomerec', arrival: { routeId: '6', routeName: '6' } }),
+    dep(2, { title: 'Savski most', arrival: { routeId: '13', routeName: '13' } }),
+    dep(3, { title: 'Dubrava', arrival: { routeId: '11', routeName: '11' } }),
+    row({ id: 'solar:sunset:2026-09-22', kind: 'solar', atMs: at('2026-09-22T17:07:00Z'), title: 'Zalazak sunca', source: 'solar' }),
+    closure('gunduliceva', 'Gundulićeva'),
+    closure('amruseva', 'Amruševa'),
+    always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
+  ];
+  const departures = (): number => items().filter((li) => li.dataset.kind === 'departure').length;
+  const closureSubs = (): string[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => li.querySelector('.nearby-sub')!.textContent ?? '');
+  const fitted = (layout: Layout): ReturnType<typeof simulated> => {
+    const measure = simulated(layout);
+    mount({ measure, designHeightPx: layout.boxPx }).update(rows(), 2200, NOW);
+    return measure;
+  };
+  const subLines = (measure: ReturnType<typeof simulated>): number[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => measure.lines(li.querySelector('.nearby-sub')!));
+
+  it('prints the wall\u2019s own words where the summary would wrap (1920 x 1080): three departures, every closure row one line under its title', () => {
+    // 600 px holds the seven rows at one sub line each (7 x 85); with the summary's two lines the two closures are 116.
+    const measure = fitted({ boxPx: 600, titleChars: 17, subChars: 26 });
+    expect(departures()).toBe(3);
+    expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
+    expect(subLines(measure)).toEqual([1, 1]);
+    for (const li of items()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(85);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+  it('prints the summary whole where a line holds it (the totem)', () => {
+    const measure = fitted({ boxPx: 700, titleChars: 34, subChars: 51 });
+    expect(departures()).toBe(3);
+    expect(closureSubs()).toEqual(['zatvoreno zbog radova, oba smjera', 'zatvoreno zbog radova, oba smjera']);
+    expect(subLines(measure)).toEqual([1, 1]);
+  });
+  it('leaves a closure\u2019s sub-line out where even the words would wrap, and never grows the row', () => {
+    const measure = fitted({ boxPx: 600, titleChars: 17, subChars: 12 });
+    expect(departures()).toBe(3);
+    expect(closureSubs()).toEqual(['', '']);
+    expect(subLines(measure)).toEqual([0, 0]);
+    for (const li of items()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(85);
+  });
+  it('gives up the closure sub-lines before the third departure, and the departure only after them', () => {
+    // 566 px: the budget's row is 80; the three rows with a sub-line are 84, so the seven rows are 572 with the
+    // closures' words under them and 564 without: the sub-lines go, every row stays.
+    fitted({ boxPx: 566, titleChars: 17, subChars: 26 });
+    expect(departures()).toBe(3);
+    expect(ids()).toHaveLength(7);
+    expect(closureSubs()).toEqual(['', '']);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+  it('drops the third departure after the sub-lines, in dropCandidate\u2019s order, and gives the closures their sub-lines back in its room', () => {
+    // 460 px holds the seven rows neither with the sub-lines (512) nor without (474), not even at the smallest row
+    // (468): the third departure goes (the yield order of decision 50 and fix11, unchanged), and the room it leaves
+    // holds the two sub-lines again (409 with none, 447 with both): a sub-line yields to a row, never for nothing.
+    fitted({ boxPx: 460, titleChars: 17, subChars: 26 });
+    expect(departures()).toBe(2);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
+    expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
+    expect(section().dataset.fitOverflow).toBe('0');
+  });
+});
 
 describe('the 3-metre floors in every wall composition (computed from the real sheets)', () => {
   const sheets = ['app/src/ui/kiosk.css', 'app/src/ui/kiosk-city.css'].map((f) => readFileSync(join(import.meta.dirname, '..', '..', f), 'utf8')).join('\n');

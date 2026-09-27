@@ -116,6 +116,11 @@ export const TYPE_GROWTH = 0.1;
 /** The longest a full label may run before its short one is printed instead. */
 export const TITLE_MAX_LINES = 1;
 export const SUB_MAX_LINES = 2;
+/** A closure's sub-line on the wall is one line or none (decision 66): past this it prints its twin, and a twin that
+ *  still wraps is left out, never a taller row. Release smoke run 5: the feed's summary under every closure wrapped
+ *  at 1920 x 1080 (a 116 px row for 66) and the fit took the second and third departures to keep the closures. */
+export const CLOSURE_SUB_MAX_LINES = 1;
+const subMaxLines = (row: NearbyRow): number => (row.kind === 'closure' ? CLOSURE_SUB_MAX_LINES : SUB_MAX_LINES);
 /** The entrance fade (kiosk-city.css k-nearby-in) and the moment data-enter is cleared if no animationend came. */
 export const ENTER_MS = 220;
 export const ENTER_CLEAR_MS = 260;
@@ -247,11 +252,11 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   return clock(atMs);
 }
 
-/** Which of a row's labels print short (only where the row offers a short one). */
-export interface ShortLabels { title?: boolean; sub?: boolean }
+/** Which of a row's labels print short (only where the row offers a short one), and a sub-line left out (a closure's, decision 66). */
+export interface ShortLabels { title?: boolean; sub?: boolean; subOff?: boolean }
 
 const titleOf = (row: TimelineRow, short?: ShortLabels): string => (short?.title && row.titleShort ? row.titleShort : row.title);
-const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.sub && row.subShort !== undefined ? row.subShort : row.sub);
+const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.subOff ? '' : short?.sub && row.subShort !== undefined ? row.subShort : row.sub);
 
 /**
  * Each field under the kind selectNearby vetted it with (app/src/city/nearby.ts),
@@ -461,17 +466,29 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         short.set(row.id, { ...short.get(row.id), [which]: true });
         return true;
       };
+      /** A closure's sub-line left out: one line or none on the wall (CLOSURE_SUB_MAX_LINES). */
+      const off = (row: TimelineRow): boolean => {
+        if (row.kind !== 'closure' || short.get(row.id)?.subOff) return false;
+        short.set(row.id, { ...short.get(row.id), subOff: true });
+        return true;
+      };
+      /** The closure sub-lines given up for room (not the ones that wrap): they come back where the rows that went leave it. */
+      const forRoom = new Set<string>();
       draw();
-      let changed = false;
-      for (const li of list.children) {
-        const row = byId.get(li.getAttribute('data-key') ?? '');
-        if (!row) continue;
-        const title = li.querySelector<HTMLElement>('.nearby-title');
-        const sub = li.querySelector<HTMLElement>('.nearby-sub');
-        if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
-        if (sub && measure.lines(sub) > SUB_MAX_LINES) changed = set(row, 'sub') || changed;
+      // Labels past their lines print their short twin, and a closure's sub-line that still wraps is left out.
+      for (let pass = 0; pass < 3; pass++) {
+        let changed = false;
+        for (const li of list.children) {
+          const row = byId.get(li.getAttribute('data-key') ?? '');
+          if (!row) continue;
+          const title = li.querySelector<HTMLElement>('.nearby-title');
+          const sub = li.querySelector<HTMLElement>('.nearby-sub');
+          if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
+          if (sub && measure.lines(sub) > subMaxLines(row)) changed = set(row, 'sub') || off(row) || changed;
+        }
+        if (!changed) break;
+        draw();
       }
-      if (changed) draw();
       if (measure.box(list).overflow) {
         // Still too tall: every label that takes more than one line gives way to its short twin, where that saves a line.
         let more = false;
@@ -485,6 +502,13 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         }
         if (more) draw();
       }
+      // Still too tall: the closure sub-lines go before any row does (decision 66: the second and third departures
+      // keep their place over a closure's sub-line), the last closure's first; only then do whole rows yield, in
+      // dropCandidate's order as before.
+      for (const row of [...shown].reverse()) {
+        if (!measure.box(list).overflow) break;
+        if (off(row)) { forRoom.add(row.id); draw(); }
+      }
       while (shown.length > 0 && measure.box(list).overflow) {
         const reserved = reservedRows(shown);
         // The wall shows one to three departures in every reading: the first one is a promise too, so a
@@ -497,6 +521,15 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         if (!drop) break;
         shown = shown.filter((row) => row !== drop);
         draw();
+      }
+      // A sub-line yields to a row, never for nothing: where the rows that went left the room, the sub-lines given
+      // up for it come back, in list order, each only while the list still holds every row whole.
+      for (const row of shown) {
+        if (!forRoom.has(row.id)) continue;
+        const was = short.get(row.id)!;
+        short.set(row.id, { ...was, subOff: false });
+        draw();
+        if (measure.box(list).overflow) { short.set(row.id, was); draw(); }
       }
       return { shown, short };
     }

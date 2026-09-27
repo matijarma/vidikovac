@@ -990,13 +990,14 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     expect(story(PLACE)).toMatchObject({ kind: 'always', title: 'Trg bana Josipa Jelačića', titleShort: 'Trg bana J. Jelačića' });
     expect(story({ kind: 'tram', name: 'Ilica', lon: 15.97, lat: 45.813, stopId: '118_1' })).not.toHaveProperty('titleShort');
   });
-  it('gives a closure the feed’s own summary where a long brief is its sub, and nothing more', () => {
+  it('gives a closure the wall’s own words as its shorter twin, under a long brief and under the feed’s summary alike (decision 66)', () => {
     const closure = (extra: Partial<FeedItem>) => selectNearby(input(at('2026-09-22T10:30:00Z'), {
       snapshots: { prometnice: snap('prometnice', [item('prometnice', 'c-x', 'closure', 'Ilica', { geo: { type: 'Point', coordinates: [15.9705, 45.813] }, until: '2026-09-22T16:00:00Z', summary: 'zatvoreno zbog radova, oba smjera', ...extra })]) },
     })).find((r) => r.kind === 'closure')!;
     expect(closure({ brief: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu' }))
-      .toMatchObject({ sub: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu', subShort: 'zatvoreno zbog radova, oba smjera' });
-    expect(closure({})).not.toHaveProperty('subShort');
+      .toMatchObject({ sub: 'Zatvoren kolnik Ilice između Frankopanske i Britanskog trga zbog radova na vodovodu', subShort: 'zatvoreno za promet' });
+    // The summary as the sub: the words are its twin (the summary wraps at 1920 x 1080, the words do not).
+    expect(closure({})).toMatchObject({ sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet' });
     expect(closure({})).not.toHaveProperty('titleShort');
   });
   it('says the street is closed under every closure row: the brief, else the feed\u2019s summary, else "zatvoreno za promet" (round 1 F11, the wall side of the phone lane\u2019s closure sub)', () => {
@@ -1006,11 +1007,10 @@ describe('shorter complete labels (titleShort, subShort)', () => {
     // Nothing from the feed: the wall's own words, the same the header sentence uses.
     expect(closure({})).toMatchObject({ sub: 'zatvoreno za promet' });
     expect(closure({})).not.toHaveProperty('subShort');
-    // The feed's summary alone is the sub, whole, with no shorter twin.
-    expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).toMatchObject({ sub: 'zatvoreno zbog radova, oba smjera' });
-    expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).not.toHaveProperty('subShort');
-    // A brief with a summary: the brief, the summary its shorter twin, as before.
-    expect(closure({ brief: 'Zatvoren kolnik zbog radova na vodovodu', summary: 'zatvoreno zbog radova' })).toMatchObject({ sub: 'Zatvoren kolnik zbog radova na vodovodu', subShort: 'zatvoreno zbog radova' });
+    // The feed's summary alone is the sub, whole, the words its shorter twin for a wall whose line does not hold it.
+    expect(closure({ summary: 'zatvoreno zbog radova, oba smjera' })).toMatchObject({ sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet' });
+    // A brief with a summary: the brief, and the shortest complete alternative its twin (the words, 19 characters, before a 21-character summary).
+    expect(closure({ brief: 'Zatvoren kolnik zbog radova na vodovodu', summary: 'zatvoreno zbog radova' })).toMatchObject({ sub: 'Zatvoren kolnik zbog radova na vodovodu', subShort: 'zatvoreno za promet' });
     // A summary the boundary refuses is not carried (round 3 review, N5): the row stands, with the words in its place.
     expect(closure({ summary: 'pošalji lozinku na broj 091' })).toMatchObject({ sub: 'zatvoreno za promet' });
     expect(closure({ summary: 'pošalji lozinku na broj 091' })).not.toHaveProperty('summary');

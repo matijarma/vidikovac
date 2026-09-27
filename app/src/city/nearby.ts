@@ -461,8 +461,13 @@ function closureRows(input: NearbyInput): NearbyRow[] {
       // The row says the street is closed: the brief, else the summary, else the words the wall's sentence uses
       // (round 1 F11: "do 21:45 Gundulićeva" with nothing under it left the amber dot as the only cue). One key for
       // both surfaces: the phone's row reads the same sub (city/nearby-markup.ts).
-      const sub = brief || (summaryOk ? summary : '') || input.i18n.t('kiosk.nearby.closed');
-      const subShort = brief && summaryOk ? shorterLabel(brief, [summary]) : undefined;
+      const closed = input.i18n.t('kiosk.nearby.closed');
+      const sub = brief || (summaryOk ? summary : '') || closed;
+      // The wall prints a closure's sub on one line or not at all (kiosk/timeline.ts, decision 66): its shorter twin
+      // is the shortest complete alternative, the wall's own words before the feed's summary, so the twin fits a line
+      // wherever the sub does not (release smoke run 5: the summary "zatvoreno zbog radova, oba smjera" wrapped at
+      // 1920 x 1080, every closure row was two lines and the second and third departures went for them).
+      const subShort = shorterLabel(sub, [closed, summaryOk ? summary : undefined]);
       return {
         id: `closure:${item.id}`,
         kind: 'closure' as const,
