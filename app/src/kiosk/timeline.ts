@@ -91,6 +91,9 @@ export interface TimelineDeps {
   designHeightPx: number | (() => number);
   /** Test seam: the layout the fit reads. */
   measure?: TimelineMeasure;
+  /** Test seam: the page's animation frame, which the hold on a smaller box counts its paints with (FIT_SHRINK_HOLD_PAINTS). */
+  raf?: (fn: () => void) => unknown;
+  cancelRaf?: (handle: unknown) => void;
 }
 
 export interface TimelineHandle {
@@ -123,6 +126,20 @@ export const ENTER_CLEAR_MS = 260;
  * of the departures, two records and a re-created node each time. Drops stay immediate: nothing is ever cut.
  */
 export const FIT_RESTORE_HOLD_MS = 60_000;
+/**
+ * How many paints of the page a box smaller than the one the shown rows were fitted in must stand before the
+ * rows follow it. The D5.25 production observer (25 Sep, 16:41:16 to 16:41:19) saw the second closure row leave
+ * and come back re-created three seconds later with nothing in the rows changed: the list's box was smaller for
+ * one paint (anything the stage gives its height to: the alert row, a legend line) and the row estimate cut the
+ * last discretionary row at once, with none of the measured fit's memory. Now a smaller box may not drop a row
+ * until it has stood this many paints; a smaller box that still holds every row (the page settling at boot, a
+ * legend line) is taken at once, the rows' heights following it. Two paints outlast any one-paint wobble, and a
+ * shrink that stays (an alert that stays, an outage note, a resize) takes its row within the next paint after
+ * them, before a reading can find a cut row (e2e/readable-city.spec.ts reads whole rows right after the outage's
+ * note appears; a hold on the page's clock of 5 s left the fifth row clipped by 8 px at that reading). While the
+ * hold keeps a row the list overflows its box by at most that row, hidden by the box's own overflow.
+ */
+export const FIT_SHRINK_HOLD_PAINTS = 2;
 
 const ROW_MAX = 92;
 
@@ -355,7 +372,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let count = 0;
   let last: [readonly TimelineRow[], number, number] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
-  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
+  let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number; box: { height: number; width: number } } | null = null;
+  /** A box smaller than the fitted one stands and its paints are being counted (FIT_SHRINK_HOLD_PAINTS); the frame request pending for it. */
+  let shrinkPending = false;
+  let shrinkFrame: unknown = null;
+  /** The refit after the hold's paints is running: the smaller box is taken as measured, not held again. */
+  let shrinkTaken = false;
+  const raf = deps.raf ?? ((fn: () => void): unknown => typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => fn()) : setTimeout(fn, 16));
+  const cancelRaf = deps.cancelRaf ?? ((handle: unknown): void => { if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(handle as number); else clearTimeout(handle as ReturnType<typeof setTimeout>); });
   /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
   const heldOut = new Map<string, number | null>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -494,8 +518,41 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       const design = typeof deps.designHeightPx === 'function' ? deps.designHeightPx() : deps.designHeightPx;
       const unbounded = design === Number.POSITIVE_INFINITY;
       const box = unbounded ? { height: 0, width: 0, overflow: false } : measure.box(list);
+      // A box smaller than the one the shown rows were fitted in: the rows keep their fit and the box they were
+      // fitted in until the smaller box has stood FIT_SHRINK_HOLD_PAINTS paints of the page (the rows it would drop
+      // keep their nodes and overflow it, hidden by the box's own overflow, for those paints), then the list refits
+      // to it. A box smaller for one paint (the D5.25 re-entry) never cuts a row; a smaller box that still holds
+      // every row is taken at once, the rows' heights following it; a box as tall or taller ends the hold.
+      const shrunk = !unbounded && memo !== null && box.height > 0 && memo.box.height > 0 && box.height < memo.box.height;
+      if (shrunk && !shrinkTaken) {
+        if (!shrinkPending) {
+          shrinkPending = true;
+          let paints = 0;
+          const tick = (): void => {
+            shrinkFrame = null;
+            if (!shrinkPending || !element.isConnected) { shrinkPending = false; return; }
+            if (++paints < FIT_SHRINK_HOLD_PAINTS) { shrinkFrame = raf(tick); return; }
+            // The refit reads the box as it stands now: still smaller, the rows follow it; back, nothing moves.
+            shrinkPending = false;
+            shrinkTaken = true;
+            try { refit(); } finally { shrinkTaken = false; }
+          };
+          shrinkFrame = raf(tick);
+        }
+      } else if (shrinkPending) {
+        shrinkPending = false;
+        if (shrinkFrame !== null) { cancelRaf(shrinkFrame); shrinkFrame = null; }
+      }
+      const holding = shrunk && shrinkPending;
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
-      const budget = rowBudget(available, rows.length);
+      let budget = rowBudget(available, rows.length);
+      /** The box the shown rows were fitted in, while the hold keeps the smaller box's estimate from cutting a row
+       *  the fitted one kept; null when the smaller box holds as many rows (the rows' heights follow it at once). */
+      let heldBox: { height: number; width: number } | null = null;
+      if (holding) {
+        const heldBudget = rowBudget(memo!.box.height / zoom(), rows.length);
+        if (fitRows(rows, budget.rows).length < fitRows(rows, heldBudget.rows).length) { heldBox = memo!.box; budget = heldBudget; }
+      }
       const candidates = fitRows(rows, budget.rows);
       const rowVars = (rowPx: number): void => {
         setVar('--k-nearby-row', `${rowPx}px`);
@@ -526,7 +583,11 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
             const tighter = fit(candidates, now, box);
             if (tighter.shown.length > fitted.shown.length) { fitted = tighter; rowPx = ROW_MIN_PX; }
           }
-          memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx };
+          // The smaller box would drop a row while the hold runs (its estimate cut one, or the measured fit did):
+          // the rows keep the fit they have, and the box they were fitted in, until the hold ends (the refit after
+          // FIT_SHRINK_HOLD_PAINTS paints) or the box comes back. A smaller box that keeps every row is taken as measured.
+          if (holding && memo && (heldBox !== null || fitted.shown.length < candidates.length)) memo = { ...memo, sig };
+          else memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx, box: { height: box.height, width: box.width } };
         }
         rowVars(memo.rowPx);
         shown = candidates.filter((row) => memo!.ids.has(row.id));
@@ -577,6 +638,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     destroy() {
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
+      shrinkPending = false;
+      if (shrinkFrame !== null) { cancelRaf(shrinkFrame); shrinkFrame = null; }
       list.removeEventListener('animationend', onAnimationEnd);
       resize?.disconnect();
       fonts?.removeEventListener('loadingdone', refit);
@@ -586,9 +649,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   };
 
   // The fit is only as good as the layout it read: a resized box or a web font
-  // that arrives after the first paint fits the last rows again.
+  // that arrives after the first paint fits the last rows again. The signature
+  // is what goes, never the box the rows were fitted in: the ResizeObserver
+  // below fires on every change of the list's box, and a refit that forgot the
+  // fitted box let a one-paint shrink cut a row at once (review of round 4,
+  // item 1: the D5.25 re-entry reproduced on the branch), where update() holds
+  // the fitted box for FIT_SHRINK_HOLD_PAINTS paints against a smaller one.
   const refit = (): void => {
-    memo = null;
+    memo = memo && { ...memo, sig: '' };
     if (last) handle.update(...last);
   };
   const resize = typeof ResizeObserver === 'function'

@@ -115,6 +115,11 @@ export interface KioskDeps {
   mapMode?: MapMode;
   /** Re-runs the layout decision on theme change and resize (ui/canvas.ts's `repaintOn`). */
   onRepaint?: (listener: () => void) => () => void;
+  /** The page's animation frame, for the beat of the settings press (kiosk/settings.ts bindLongPress, review N6):
+   *  a coalesced pointermove is delivered before the frame's callbacks. The entry passes the window's; a harness
+   *  without one keeps the timer's own beat. */
+  raf?: (fn: () => void) => unknown;
+  cancelRaf?: (handle: unknown) => void;
   mapFactory?: MapFactory;
   loadNetwork?: () => Promise<Network | null>;
   fetchTeaser?: (stopId?: string) => Promise<TeaserResponse>;
@@ -1665,10 +1670,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   element.addEventListener('click', onTouch);
   // Postavke open on a press held on the brand (or Enter/Space on it), never on
   // a tap: the header carries no operator control a passer-by could meet.
-  const unbindBrand = bindLongPress(brand, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer });
+  // The frame between the timer and its beat (review N6) is the page's own: a coalesced pointermove waits for it.
+  const press = { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer, ...(deps.raf ? { raf: deps.raf, cancelRaf: deps.cancelRaf } : {}) };
+  const unbindBrand = bindLongPress(brand, press);
   // ... and on a press held anywhere else on a screen-sized wall (wallPressable: not on the touch's own targets,
   // which keep their tap). Same timer, same slop; the keys stay with onWallKey below.
-  const unbindWall = bindLongPress(element, { open: openSettings, setTimeout: oneShot, clearTimeout: clearTimer, accept: wallPressable, keys: false });
+  const unbindWall = bindLongPress(element, { ...press, accept: wallPressable, keys: false });
   // The wall keeps the keyboard's focus: a press anywhere on it that lands on nothing focusable hands the
   // focus back to the root (a browser that does not focus on a click included), and Enter or Space on the
   // root, or fallen back to the body, open Postavke exactly as they do on the brand.

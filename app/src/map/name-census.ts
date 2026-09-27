@@ -510,6 +510,9 @@ export interface RenderCensusHost {
   stop(): { lon: number; lat: number } | null;
   /** Whether this is the public screen's map (prozor), where the name hysteresis runs. */
   prozor(): boolean;
+  /** Whether the stop beads are drawn at all (ProzorOptions.stopMarks): the whole-city window keeps them
+   *  rendered at opacity 0 for the finger, and data-stops says 0 for it. Absent, they are drawn. */
+  stopMarks?(): boolean;
   /** The names the hysteresis holds changed: the overlays are re-derived with them. */
   hold(names: readonly string[]): void;
 }
@@ -697,6 +700,15 @@ export function createRenderCensus(m: CensusMap, l: CensusIds, host: RenderCensu
     host.container.dataset.pillMoved = String(pillFeatures.filter((f) => Number(f.properties.moved ?? 0) > 0).length);
     host.container.dataset.hiddenNames = String(hidden.length);
     host.container.dataset.ownName = ownName;
+    // Round 4 kiosk lane, D-F4: the stop beads MapLibre renders (once each across a tile seam) and the stop names
+    // it placed, so a surface's density is a number (the desk drew about a thousand beads where the wall draws
+    // the frame's). A window that keeps its beads at opacity 0 for the finger reports 0.
+    const beads = new Set<string>();
+    if (has(l.LAYERS.stops) && host.stopMarks?.() !== false) {
+      for (const feature of m.queryRenderedFeatures(undefined, { layers: [l.LAYERS.stops] })) beads.add(String(feature.properties.id ?? ''));
+    }
+    host.container.dataset.stops = String(beads.size);
+    host.container.dataset.stopNames = String([...placed].filter((key) => key.startsWith(`${l.LAYERS.stopLabels}:`) || key.startsWith(`${l.LAYERS.stopLabelsHeld}:`)).length);
   }
 
   /** Decision 19 on the public screen (createNameHysteresis above). */

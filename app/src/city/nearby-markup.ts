@@ -40,12 +40,14 @@ export function rowLayer(selection: PublicSelection): LayerId {
 /**
  * A closure row whose feed brief is empty says what it is: the feed's own summary ("zatvoreno zbog radova, oba
  * smjera"), else the plain words of the wall's sentence ("do 21:45 Gundulićeva" alone said nothing of a closure;
- * round 1 phone F8, kiosk round 2 F11). The phone's own row: the wall draws the selection's row as it is.
+ * round 1 phone F8, kiosk round 2 F11). Since kiosk round 4 the row's own sub already carries them (city/nearby.ts
+ * closureRows, one key for both surfaces: kiosk.nearby.closed); this stays for a row that reaches the phone without
+ * one (a relayed selection from an older wall).
  */
 function withClosureSub(i18n: I18n, row: NearbyRow): NearbyRow {
   if (row.kind !== 'closure' || row.sub) return row;
   const { subShort: _short, ...rest } = row;
-  return { ...rest, sub: row.summary ?? i18n.t('sada.closureRow') };
+  return { ...rest, sub: row.summary ?? i18n.t('kiosk.nearby.closed') };
 }
 
 /** One row as the wall draws it; a row with a subject holds, inside its li, the link that opens it. */

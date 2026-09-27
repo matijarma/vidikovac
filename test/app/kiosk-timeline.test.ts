@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, FIT_SHRINK_HOLD_PAINTS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -76,8 +76,14 @@ function scene(): TimelineRow[] {
 
 let host: HTMLElement;
 let handle: TimelineHandle | null = null;
+/** The page's animation frames, run by hand: paint() runs every frame requested so far (the hold on a smaller box counts them). */
+const frames: Array<() => void> = [];
+const raf = (fn: () => void): unknown => { frames.push(fn); return fn; };
+const cancelRaf = (handle: unknown): void => { const i = frames.indexOf(handle as () => void); if (i >= 0) frames.splice(i, 1); };
+const paint = (): void => { for (const fn of frames.splice(0)) fn(); };
 function mount(over: Partial<Parameters<typeof mountTimeline>[1]> = {}): TimelineHandle {
-  handle = mountTimeline(host, { i18n, reduced: false, designHeightPx: 520, ...over });
+  frames.length = 0;
+  handle = mountTimeline(host, { i18n, reduced: false, designHeightPx: 520, raf, cancelRaf, ...over });
   return handle;
 }
 const items = (): HTMLLIElement[] => [...host.querySelectorAll<HTMLLIElement>('li.nearby-row')];
@@ -712,8 +718,10 @@ function simulated(layout: Layout): TimelineMeasure & { rowHeight(li: Element): 
   const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
   const rowHeight = (li: Element): number => Math.max(rowPx(), 44 * lines(li.querySelector('.nearby-title')!) + 32 * lines(li.querySelector('.nearby-sub')!) + 8);
   const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
+  // The measuring list carries the box it is fitted in as its own height (timeline.ts fit), as the DOM measure reads it.
+  const heightOf = (list: Element): number => Number.parseFloat((list as HTMLElement).style?.height ?? '') || layout.boxPx;
   return {
-    box: (list) => ({ height: layout.boxPx, width: layout.titleChars, overflow: sum(list) > layout.boxPx }),
+    box: (list) => ({ height: heightOf(list), width: layout.titleChars, overflow: sum(list) > heightOf(list) }),
     lines: (el) => lines(el),
     rowHeight,
     sum,
@@ -1085,6 +1093,120 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     expect(solarRecords).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }, { added: ['li[solar:sunset:2026-09-24]'], removed: [] }]);
     expect(FIT_RESTORE_HOLD_MS).toBe(60_000);
   });
+
+  // D5.25 production observer (25 Sep, 16:41:16 to 16:41:19): the second closure row (Amruševa, "do 26. 9.") left
+  // the list and came back re-created three seconds later while the rows, their labels and the feed's closures were
+  // the same in every reading. The list's box was smaller for one paint (anything the stage gives its height to:
+  // the page's alert row, a legend line) and the row estimate cut the last discretionary row at once, in list order
+  // and with none of the measured fit's memory, then put it back on the next paint.
+  it('keeps every node through a box that shrinks for one paint on the ResizeObserver path (the D5.25 replay), refits a lasting shrink after the hold\u2019s paints with every staying node kept, and refits a grown box at once', () => {
+    // The browser's path (review of round 4, item 1): the ResizeObserver on the list fires refit() on every change of
+    // the box, before any update; happy-dom has none, so the stand-in hands the callback to the test.
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const resized = (): void => { for (const observe of observers) observe([], {} as ResizeObserver); };
+    const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
+    const measure = simulated(layout);
+    const t = mount({ measure, designHeightPx: layout.boxPx });
+    expect(observers).toHaveLength(1);
+    const T = day('16:40');
+    const rows = (): TimelineRow[] => [
+      dep(13, { atMs: T, live: false, title: 'Kvat. trg', source: 'zet-gtfs', arrival: { routeId: '13', routeName: '13' } }),
+      dep(11, { atMs: T + 30_000, title: 'Črnomerec', arrival: { routeId: '11', routeName: '11' } }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+      row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:49'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:amruseva', kind: 'closure', atMs: at('2026-09-26T20:00:00+02:00'), title: 'Amruševa', source: 'prometnice' }),
+      always({ title: 'Trg bana J. Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859' }),
+    ];
+    const all = ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'closure:amruseva', 'always:story:trg'];
+    t.update(rows(), 2200, T);
+    expect(ids()).toEqual(all);
+    const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
+    const w = structure();
+    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most) and the observer fires; the next paint
+    // it is back and the observer fires again. No update of the wall's own between the two.
+    layout.boxPx = 380;
+    resized();
+    expect(ids()).toEqual(all);
+    paint();
+    expect(ids()).toEqual(all);
+    layout.boxPx = 462;
+    resized();
+    expect(ids()).toEqual(all);
+    paint();
+    expect(frames).toHaveLength(0);
+    t.update(rows(), 2200, T + 79_000);
+    expect(ids()).toEqual(all);
+    for (const [id, li] of nodes) expect(byId(id), id).toBe(li);
+    expect(w.records()).toEqual([]);
+    // A shrink that lasts (an alert that stays): the observer fires once, the page's paints follow; the rows keep
+    // their box through FIT_SHRINK_HOLD_PAINTS paints (a poll's beat inside them holds too), then the list refits to
+    // the smaller box, the last discretionary row going as the estimate always cut it, every other row on its node.
+    layout.boxPx = 380;
+    resized();
+    expect(ids()).toEqual(all);
+    t.update(rows(), 2200, T + 80_000);
+    expect(ids()).toEqual(all);
+    for (let p = 1; p < FIT_SHRINK_HOLD_PAINTS; p++) { paint(); expect(ids(), `paint ${p}`).toEqual(all); }
+    paint();
+    expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    expect(w.records()).toEqual([{ added: [], removed: ['li[closure:amruseva]'] }]);
+    // The box back (the observer fires): the row returns at once, everything else on its node.
+    layout.boxPx = 462;
+    resized();
+    expect(ids()).toEqual(all);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    // A box that grows past the fitted one refits at once, hold or no hold: the rows a taller box holds come back.
+    layout.boxPx = 380;
+    resized();
+    for (let p = 0; p < FIT_SHRINK_HOLD_PAINTS; p++) paint();
+    expect(ids()).toHaveLength(5);
+    layout.boxPx = 600;
+    resized();
+    expect(ids()).toEqual(all);
+    const nodesAt600 = new Map(items().map((li) => [li.dataset.id!, li]));
+    // A smaller box that still holds every row (the page settling at boot, a legend line: 600 to 462) is taken at
+    // once, no hold: the rows' heights follow it (the six rows with the story's two-line row fit at the smallest
+    // row), none overflows, and every node stays.
+    layout.boxPx = 462;
+    resized();
+    expect(ids()).toEqual(all);
+    expect(section().style.getPropertyValue('--k-nearby-row')).toBe('64px');
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(462);
+    for (const id of all) expect(byId(id), id).toBe(nodesAt600.get(id));
+    w.stop();
+    vi.unstubAllGlobals();
+    expect(FIT_SHRINK_HOLD_PAINTS).toBe(2);
+  });
+
+  it('a shrink that stays is refitted after the hold\u2019s paints of the page, with no update of the wall\u2019s in between', () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
+    const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
+    const measure = simulated(layout);
+    const t = mount({ measure, designHeightPx: layout.boxPx });
+    const T = day('16:40');
+    const rows = (): TimelineRow[] => [
+      dep(13, { atMs: T, live: false, title: 'Kvat. trg', source: 'zet-gtfs', arrival: { routeId: '13', routeName: '13' } }),
+      dep(11, { atMs: T + 30_000, title: 'Črnomerec', arrival: { routeId: '11', routeName: '11' } }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', atMs: day('18:00'), title: 'Gundulićeva', source: 'prometnice' }),
+      row({ id: 'solar:sunset:2026-09-24', kind: 'solar', atMs: day('18:49'), title: 'Zalazak sunca', source: 'solar' }),
+      row({ id: 'closure:amruseva', kind: 'closure', atMs: at('2026-09-26T20:00:00+02:00'), title: 'Amruševa', source: 'prometnice' }),
+      always({ title: 'Trg bana J. Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859' }),
+    ];
+    t.update(rows(), 2200, T);
+    expect(ids()).toHaveLength(6);
+    const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
+    layout.boxPx = 380;
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    expect(ids()).toHaveLength(6);
+    for (let p = 1; p < FIT_SHRINK_HOLD_PAINTS; p++) { paint(); expect(ids(), `paint ${p}`).toHaveLength(6); }
+    paint();
+    expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
+    for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
@@ -1310,7 +1432,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     t.update(longRows(), 2000, NOW);
     const roomy = t.shown();
     layout.boxPx = 300;
+    // A smaller box stands FIT_SHRINK_HOLD_PAINTS paints before the rows follow it (the D5.25 replay above).
     t.update(longRows(), 2000, NOW + 20_000);
+    expect(t.shown()).toBe(roomy);
+    for (let p = 0; p < FIT_SHRINK_HOLD_PAINTS; p++) paint();
     expect(t.shown()).toBeLessThan(roomy);
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(300);
     layout.boxPx = 498;

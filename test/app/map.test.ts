@@ -24,7 +24,7 @@ import { TEASER_BOX_HALF_M } from '../../worker/feed/modules/zet-rt';
 // WP2 step 4: the frame's camera (map/frame.ts) and the wall's framing rule (kiosk/mapview.ts).
 import { framedPlace, frameRadiusOf } from '../../app/src/kiosk/mapview';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
-import { boundsView, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
+import { boundsView, FIT_MIN_ZOOM, FRAME_MAX_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameBounds, frameRadiusFor, frameView, idsInFrame, inFrame } from '../../app/src/map/frame';
 import { distanceM } from '../../shared/city/geo';
 
 describe('open raster basemap', () => {
@@ -674,3 +674,25 @@ describe('the field camera and the paired camera', () => {
   });
 });
 import '../../shared/kiosk/external-text';
+
+// Round 4 kiosk lane, D-F4: the desk's Karta reads its presented frame back off the camera the workspace framed.
+describe('frameRadiusFor: the inverse of frameView', () => {
+  const trg = { lon: 15.97726, lat: 45.81286 };
+  it('gives back the radius a frame was fitted with, on the desk stage and the wall field, and the floor\u2019s ground when the fit was clamped', () => {
+    for (const [radiusM, w, h] of [[2182, 855, 757], [2182, 1318, 937], [1300, 1250, 870], [2700, 1250, 870]] as const) {
+      const { zoom } = frameView(trg, radiusM, w, h);
+      expect(frameRadiusFor(trg, zoom, w, h)).toBeCloseTo(radiusM, 0);
+    }
+    // The desk's narrow column (326 px at 1440 x 900 and 200 %, lane p-map) fits the frame below FRAME_MIN_ZOOM and reads it back.
+    const column = frameView(trg, 2182, 326, 700, undefined, FIT_MIN_ZOOM);
+    expect(column.zoom).toBeLessThan(12.7);
+    expect(frameRadiusFor(trg, column.zoom, 326, 700)).toBeCloseTo(2182, 0);
+    // A sliver clamps the fit at FIT_MIN_ZOOM: the answer is the ground the floor shows in it, less than the frame asked for.
+    const clamped = frameView(trg, 2182, 100, 700, undefined, FIT_MIN_ZOOM);
+    expect(clamped.zoom).toBe(FIT_MIN_ZOOM);
+    expect(frameRadiusFor(trg, clamped.zoom, 100, 700)!).toBeLessThan(2182);
+    expect(frameRadiusFor(trg, clamped.zoom, 100, 700)!).toBeGreaterThan(1000);
+    // Not laid out: no frame.
+    expect(frameRadiusFor(trg, 13, 0, 0)).toBeNull();
+  });
+});

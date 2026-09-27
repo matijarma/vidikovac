@@ -26,10 +26,11 @@ upute o pretraživanju dodirom. Ukratko:
   red, zatim retci s vremenom i na kraju jedan redak „uvijek”.
 - Ispod popisa trajno je rezerviran QR s uvodom
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
-  ima najmanje 240 CSS piksela na dokumentiranim veličinama zaslona, s
-  praznim rubom od četiri modula na svakoj strani unutar bijele podloge od
-  288 piksela (264 na zaslonu 1366 × 768). Telefon na `/kiosk/` dobiva upute za postavljanje,
-  kod i mali pregled.
+  ima 226 CSS piksela na zaslonu 1920 × 1080 (113 mm na panelu od 43 inča)
+  i 207 na zaslonu 1366 × 768 (145 mm na istom panelu, čiji je piksel
+  veći), s praznim rubom od četiri modula na svakoj strani unutar bijele
+  podloge od 288 odnosno 264 piksela. Telefon na `/kiosk/` dobiva upute za
+  postavljanje, kod i mali pregled.
 - Na zaslonu nema vremena dohvata ni opažanja, napomena o izvoru, svježini
   ili pouzdanosti ni brojeva bez imena, ni na pregledu grada ni u
   prezentaciji. Jedini datum stoji u navodu izvora popisa dežurnih ljekarni
@@ -315,8 +316,8 @@ Izvori, datum događanja i vrijeme opažanja nisu zamjenjivi.
 Broj stavki bira se prema korisnosti i raspoloživom prostoru. Popunjena
 ploča ne smije postati prazna samo da bi se uklonilo prelijevanje teksta.
 Rasporedi za 1920 × 1080, 1366 × 768 i okomiti totem namjerno su
-različiti; sam QR kod na tim zaslonima ima najmanje 240 CSS piksela, s
-praznim rubom od četiri modula.
+različiti; bijela podloga QR koda na tim zaslonima ima najmanje 264 CSS
+piksela, sam kod najmanje 207, s praznim rubom od četiri modula.
 Dežurna ljekarna na karti nosi prsten; adresa uz prsten ispisuje se tek kad
 je kamera u kvartu, a zeleni križ i kratku adresu uvijek nosi sigurnosna
 traka.

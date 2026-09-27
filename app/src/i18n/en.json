@@ -908,6 +908,7 @@
       "pill": "{km} km · ~{min} min",
       "always": "always",
       "until": "until",
+      "closed": "closed to traffic",
       "sunrise": "Sunrise",
       "sunset": "Sunset",
       "lastTrams": "Last trams",
@@ -1172,7 +1173,6 @@
     "departuresAt": "Next departures, {stop}",
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
-    "viewMap": "Map",
-    "closureRow": "closed to traffic"
+    "viewMap": "Map"
   }
 }

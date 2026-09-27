@@ -621,6 +621,12 @@ button.k-strip-verdict { cursor: pointer; }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-items { overflow: visible; gap: calc(var(--k-gap) * .25) 0; }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy { display: inline-flex; align-items: center; font-size: var(--k-main-size); white-space: normal; overflow: visible; }
 .kiosk[data-phase='invitation']:not([data-size='handheld']) .k-strip-pharmacy strong { overflow-wrap: break-word; }
+/* The portrait totem's strip (round 1 F12): at 1080 px the label, the verdict, the trail and the pharmacy do not
+   share one row, and the trail floated above an address broken in two. Two rows, aligned: the shield, the label
+   and the verdict on the first, the trail and the whole pharmacy line on the second, each row its own width. */
+.kiosk[data-portrait='1'][data-phase='invitation'] .k-strip { flex-wrap: wrap; row-gap: 0; padding-block: calc(6px * var(--k-zoom)); }
+.kiosk[data-portrait='1'][data-phase='invitation'] .k-strip-items { flex: 1 0 100%; align-content: start; }
+.kiosk[data-portrait='1'][data-phase='invitation'] .k-strip-pharmacy { white-space: nowrap; }
 
 /* --- Basics: over the stage, sessionless, 90 s idle ---------------------------
    An absolute box placed by the grid in the stage's own row: exactly the room

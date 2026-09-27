@@ -100,6 +100,11 @@ export interface LongPressDeps {
   open: (via: LongPressVia) => void;
   setTimeout: (fn: () => void, ms: number) => unknown;
   clearTimeout: (handle: unknown) => void;
+  /** An animation frame between the timer and its beat (review N6): a coalesced pointermove is delivered before
+   *  the frame's callbacks, so a swipe whose move waited for the frame ends the press before the beat judges it.
+   *  Absent (a harness without frames), the beat follows the timer at once. */
+  raf?: (fn: () => void) => unknown;
+  cancelRaf?: (handle: unknown) => void;
   /** Whether this press arms at all (kiosk.ts: the wall-wide press skips the touch's own targets, the brand and the
    *  panel). Omitted, every primary press arms. The same answer decides whether the context menu is suppressed. */
   accept?: (event: MouseEvent) => boolean;
@@ -128,24 +133,28 @@ export interface LongPressDeps {
  */
 export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => void {
   let timer: unknown = null;
+  /** The frame after the timer (review N6), then the beat. */
+  let frame: unknown = null;
   /** The beat after the timer (review N2): the open waits one task of the same clock, so a pointermove the
    *  queue holds (a swipe whose events ran late behind the map's work) still ends the press first. */
   let beat: unknown = null;
   let origin: { x: number; y: number } | null = null;
   /** The pointerdown's own timestamp while a press is armed and the timer has not opened yet. */
   let downAt: number | null = null;
-  /** The pointers down on the target right now (review N3): a press is one finger. */
-  const pointers = new Set<number>();
+  /** The pointers down on the whole document right now (review N3, N7): a press is one finger, wherever the
+   *  other one rests. Shared by every binding of the document, kept by listeners on the document itself. */
+  const pointers = downPointers(target.ownerDocument);
   const disarm = (): void => {
     if (timer !== null) { deps.clearTimeout(timer); timer = null; }
+    if (frame !== null) { deps.cancelRaf?.(frame); frame = null; }
     if (beat !== null) { deps.clearTimeout(beat); beat = null; }
     origin = null;
     downAt = null;
   };
   const near = (event: PointerEvent): boolean => origin !== null && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= LONG_PRESS_SLOP_PX;
+  const onBeat = (): void => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); };
   const down = (event: PointerEvent): void => {
     if (event.button > 0) return; // a secondary button is not a press
-    pointers.add(event.pointerId);
     disarm();
     // Two fingers resting on the wall are not a press (N3): nothing arms while more than one is down.
     if (pointers.size > 1) return;
@@ -154,7 +163,8 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
     downAt = event.timeStamp;
     timer = deps.setTimeout(() => {
       timer = null;
-      beat = deps.setTimeout(() => { beat = null; if (origin === null) return; disarm(); deps.open('pointer'); }, LONG_PRESS_BEAT_MS);
+      if (deps.raf) frame = deps.raf(() => { frame = null; beat = deps.setTimeout(onBeat, LONG_PRESS_BEAT_MS); });
+      else beat = deps.setTimeout(onBeat, LONG_PRESS_BEAT_MS);
     }, LONG_PRESS_MS);
   };
   const move = (event: PointerEvent): void => {
@@ -163,13 +173,15 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   /** The release: a press the timer has answered but the beat has not (opens now, within the slop of the press),
    *  or one the timer has not yet answered, held LONG_PRESS_MS by the events' own clock, opens now. */
   const up = (event: PointerEvent): void => {
-    pointers.delete(event.pointerId);
-    const long = beat !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
+    const long = beat !== null || frame !== null || (downAt !== null && timer !== null && Number.isFinite(event.timeStamp) && event.timeStamp - downAt >= LONG_PRESS_MS);
     const opens = long && near(event);
     disarm();
     if (opens) deps.open('pointer');
   };
-  const gone = (event: PointerEvent): void => { pointers.delete(event.pointerId); disarm(); };
+  const gone = (): void => { disarm(); };
+  /** A second finger anywhere on the document ends a press already armed (N7); the document's own listener
+   *  (downPointers) has counted it first. */
+  const elsewhere = (event: PointerEvent): void => { if (event.button <= 0 && pointers.size > 1) disarm(); };
   const key = (event: KeyboardEvent): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -185,18 +197,32 @@ export function bindLongPress(target: HTMLElement, deps: LongPressDeps): () => v
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerup', up);
   for (const type of ends) target.addEventListener(type, gone);
+  target.ownerDocument.addEventListener('pointerdown', elsewhere, true);
   if (keys) target.addEventListener('keydown', key);
   target.addEventListener('contextmenu', menu);
   return () => {
     disarm();
-    pointers.clear();
     target.removeEventListener('pointerdown', down);
     target.removeEventListener('pointermove', move);
     target.removeEventListener('pointerup', up);
     for (const type of ends) target.removeEventListener(type, gone);
+    target.ownerDocument.removeEventListener('pointerdown', elsewhere, true);
     if (keys) target.removeEventListener('keydown', key);
     target.removeEventListener('contextmenu', menu);
   };
+}
+
+/** The pointers down on a document right now, by pointer id, counted once per document by capture listeners on
+ *  the document itself (review N7: a set per binding never saw the finger resting on another target). */
+const DOWN_POINTERS = new WeakMap<Document, Set<number>>();
+function downPointers(doc: Document): Set<number> {
+  const known = DOWN_POINTERS.get(doc);
+  if (known) return known;
+  const set = new Set<number>();
+  DOWN_POINTERS.set(doc, set);
+  doc.addEventListener('pointerdown', (event) => { if (event.button <= 0) set.add(event.pointerId); }, true);
+  for (const type of ['pointerup', 'pointercancel'] as const) doc.addEventListener(type, (event) => { set.delete(event.pointerId); }, true);
+  return set;
 }
 
 // --- The send queue -------------------------------------------------------------

@@ -473,7 +473,11 @@ describe('Postavke: open, close, idle', () => {
 });
 
 describe('the long press on the brand', () => {
+  /** The fingers are counted per document (N7): a test's button leaves the body with its finger still down, so
+   *  every harness lifts the ids the tests use before it starts, as a real document's pointerup would have. */
+  const liftAll = (): void => { for (const id of [0, 1, 2, 3]) document.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: id })); };
   function brand() {
+    liftAll();
     const button = document.createElement('button');
     document.body.replaceChildren(button);
     const time = fakeClock();
@@ -632,6 +636,90 @@ describe('the long press on the brand', () => {
     });
   });
 
+  // Review N6: under a blocked thread a coalesced pointermove waits for the animation frame, and the beat, a
+  // task, ran before it: 1 of 12 moved presses opened. With a frame between the timer and the beat the move
+  // is delivered first and ends the press; a steady press opens on the beat after the frame.
+  describe('the frame between the timer and its beat (N6)', () => {
+    function framed() {
+      liftAll();
+      const button = document.createElement('button');
+      document.body.replaceChildren(button);
+      const time = fakeClock();
+      const open = vi.fn();
+      const frames: (() => void)[] = [];
+      const cancelled: unknown[] = [];
+      bindLongPress(button, { open, setTimeout: time.setTimeout, clearTimeout: time.clearTimeout, raf: (fn) => { frames.push(fn); return fn; }, cancelRaf: (h) => { cancelled.push(h); } });
+      const pointer = (type: string, init: PointerEventInit = {}) => button.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, ...init }));
+      const frame = () => { const fn = frames.shift(); fn?.(); };
+      return { button, time, open, pointer, frame, frames, cancelled };
+    }
+
+    it('a move past the slop delivered with the frame ends the press before the beat; a steady press opens on the beat after the frame', () => {
+      const b = framed();
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.frames).toHaveLength(1);
+      expect(b.open).not.toHaveBeenCalled();
+      // The coalesced move arrives with the frame, before its callbacks.
+      b.pointer('pointermove', { clientX: 100 + LONG_PRESS_SLOP_PX + 20, clientY: 100, pointerId: 1 });
+      expect(b.cancelled).toHaveLength(1);
+      b.frame();
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).not.toHaveBeenCalled();
+      b.pointer('pointerup', { clientX: 100 + LONG_PRESS_SLOP_PX + 20, clientY: 100, pointerId: 1 });
+      expect(b.open).not.toHaveBeenCalled();
+      const steady = framed();
+      steady.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      steady.time.advance(LONG_PRESS_MS);
+      expect(steady.open).not.toHaveBeenCalled();
+      steady.frame();
+      expect(steady.open).not.toHaveBeenCalled(); // the beat is a task after the frame
+      steady.time.advance(1);
+      expect(steady.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('a release while the frame is pending opens at once within the slop, as a release before the beat does', () => {
+      const b = framed();
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS);
+      b.pointer('pointerup', { clientX: 103, clientY: 100, pointerId: 1 });
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.frame();
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Review N7: the fingers were counted per binding, so a finger resting on the map never reached the brand's
+  // binding and two fingers, one on the brand, opened 2/2. They are counted per document now.
+  describe('two fingers on two targets are not a press (N7)', () => {
+    it('a finger on another element blocks a press on the brand, ends one already armed, and one finger opens once it is gone', () => {
+      const b = brand();
+      const elsewhere = document.createElement('div');
+      document.body.appendChild(elsewhere);
+      const rest = (type: string, id: number) => elsewhere.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, clientX: 500, clientY: 500 }));
+      rest('pointerdown', 2);
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS * 2);
+      expect(b.open).not.toHaveBeenCalled();
+      b.pointer('pointerup', { clientX: 100, clientY: 100, pointerId: 1 });
+      rest('pointerup', 2);
+      // Armed on the brand, then a finger lands elsewhere.
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS / 2);
+      rest('pointerdown', 2);
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).not.toHaveBeenCalled();
+      rest('pointerup', 2);
+      b.pointer('pointerup', { clientX: 100, clientY: 100, pointerId: 1 });
+      // One finger, once the other is gone.
+      b.pointer('pointerdown', { clientX: 100, clientY: 100, pointerId: 1 });
+      b.time.advance(LONG_PRESS_MS);
+      expect(b.open).toHaveBeenCalledTimes(1);
+      b.pointer('pointerup', { clientX: 100, clientY: 100, pointerId: 1 });
+    });
+  });
+
   describe('a timer that runs late behind a busy main thread', () => {
     /** A pointer event stamped at `at` ms on the events' own clock (Event.timeStamp is read-only; the instance shadows it). */
     const stamped = (button: HTMLElement, type: string, at: number, init: PointerEventInit = {}): void => {
@@ -668,6 +756,7 @@ describe('the long press on the brand', () => {
     });
 
     it('a press the binding did not accept, a swipe past the slop and a pointer that left never open on release', () => {
+      liftAll();
       const button = document.createElement('button');
       document.body.replaceChildren(button);
       const time = fakeClock();
