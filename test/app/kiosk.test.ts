@@ -18,7 +18,6 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { CODE_SWAP_MS, CODE_TICK_MS, ESSENTIALS_IDLE_MS, LASTRUN_DOWN_RETRY_MS, mountKiosk, REFRESH_MS, type KioskDeps } from '../../app/src/kiosk';
 import { SAVE_TIMEOUT_MS, SETTINGS_IDLE_MS, SETTINGS_SEND_DELAY_MS } from '../../app/src/kiosk/settings';
 import { LONG_PRESS_BEAT_MS, LONG_PRESS_MS } from '../../app/src/kiosk/constants';
-import { FIT_SHRINK_HOLD_PAINTS } from '../../app/src/kiosk/timeline';
 import { RHYTHM_STORAGE_KEY, type Rhythm } from '../../app/src/kiosk/prefs';
 import { FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH } from '../../app/src/kiosk/layout';
 import { cityWindowView, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_EMPHASIS, labelPadding } from '../../app/src/kiosk/mapview';
@@ -2679,16 +2678,9 @@ describe('the field, the column and the one map', () => {
     expect(list.children).toHaveLength(3);
     expect(q(list, '[data-always="1"]')).toBe(always);
     expect(list.querySelector('[hidden]')).toBeNull();
-    // A smaller box stands FIT_SHRINK_HOLD_PAINTS paints of the page before the rows follow it (timeline.ts, the
-    // D5.25 replay); a resize is a shrink that stays, and the timeline refits itself after those paints.
-    const frames: Array<() => void> = [];
-    vi.stubGlobal('requestAnimationFrame', (fn: () => void) => { frames.push(fn); return frames.length; });
-    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    // A smaller box is taken at once (timeline.ts, decision 66: no hold, never a cut row).
     height = 128;
     k.repaint();
-    expect(list.children).toHaveLength(3);
-    for (let p = 0; p < FIT_SHRINK_HOLD_PAINTS; p++) for (const fn of frames.splice(0)) fn();
-    vi.unstubAllGlobals();
     expect(list.children).toHaveLength(2);
     expect(departures(k.root)).toHaveLength(1);
     expect(q(list, '[data-always="1"]')).toBe(always);
