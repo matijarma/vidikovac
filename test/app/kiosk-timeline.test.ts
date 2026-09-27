@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, FIT_SHRINK_HOLD_MS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, FIT_SHRINK_HOLD_PAINTS, GROW_FROM_PX, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -76,8 +76,14 @@ function scene(): TimelineRow[] {
 
 let host: HTMLElement;
 let handle: TimelineHandle | null = null;
+/** The page's animation frames, run by hand: paint() runs every frame requested so far (the hold on a smaller box counts them). */
+const frames: Array<() => void> = [];
+const raf = (fn: () => void): unknown => { frames.push(fn); return fn; };
+const cancelRaf = (handle: unknown): void => { const i = frames.indexOf(handle as () => void); if (i >= 0) frames.splice(i, 1); };
+const paint = (): void => { for (const fn of frames.splice(0)) fn(); };
 function mount(over: Partial<Parameters<typeof mountTimeline>[1]> = {}): TimelineHandle {
-  handle = mountTimeline(host, { i18n, reduced: false, designHeightPx: 520, ...over });
+  frames.length = 0;
+  handle = mountTimeline(host, { i18n, reduced: false, designHeightPx: 520, raf, cancelRaf, ...over });
   return handle;
 }
 const items = (): HTMLLIElement[] => [...host.querySelectorAll<HTMLLIElement>('li.nearby-row')];
@@ -1093,7 +1099,7 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
   // the same in every reading. The list's box was smaller for one paint (anything the stage gives its height to:
   // the page's alert row, a legend line) and the row estimate cut the last discretionary row at once, in list order
   // and with none of the measured fit's memory, then put it back on the next paint.
-  it('keeps every node through a box that shrinks for a beat on the ResizeObserver path (the D5.25 replay), refits a lasting shrink after the hold with every staying node kept, and refits a grown box at once', () => {
+  it('keeps every node through a box that shrinks for one paint on the ResizeObserver path (the D5.25 replay), refits a lasting shrink after the hold\u2019s paints with every staying node kept, and refits a grown box at once', () => {
     // The browser's path (review of round 4, item 1): the ResizeObserver on the list fires refit() on every change of
     // the box, before any update; happy-dom has none, so the stand-in hands the callback to the test.
     const observers: ResizeObserverCallback[] = [];
@@ -1117,29 +1123,32 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     expect(ids()).toEqual(all);
     const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
     const w = structure();
-    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most) and the observer fires; 16:41:19 it is
-    // back and the observer fires again. No update of the wall's own between the two.
+    // 16:41:16: the box is 380 px for one paint (five rows of 64 px at most) and the observer fires; the next paint
+    // it is back and the observer fires again. No update of the wall's own between the two.
     layout.boxPx = 380;
     resized();
+    expect(ids()).toEqual(all);
+    paint();
     expect(ids()).toEqual(all);
     layout.boxPx = 462;
     resized();
     expect(ids()).toEqual(all);
+    paint();
+    expect(frames).toHaveLength(0);
     t.update(rows(), 2200, T + 79_000);
     expect(ids()).toEqual(all);
     for (const [id, li] of nodes) expect(byId(id), id).toBe(li);
     expect(w.records()).toEqual([]);
-    // A shrink that lasts (an alert that stays): the observer fires once, the wall's own paints follow; the rows
-    // keep their box through FIT_SHRINK_HOLD_MS, then the list refits to the smaller box, the last discretionary row
-    // going as the estimate always cut it, every other row on its node.
+    // A shrink that lasts (an alert that stays): the observer fires once, the page's paints follow; the rows keep
+    // their box through FIT_SHRINK_HOLD_PAINTS paints (a poll's beat inside them holds too), then the list refits to
+    // the smaller box, the last discretionary row going as the estimate always cut it, every other row on its node.
     layout.boxPx = 380;
-    resized(); // the refit reads the last update's moment, 79 s: the hold runs from there
-    let s = 80;
-    for (; (s - 79) * 1000 < FIT_SHRINK_HOLD_MS; s++) {
-      t.update(rows(), 2200, T + s * 1000);
-      expect(ids(), `${s} s`).toEqual(all);
-    }
-    t.update(rows(), 2200, T + s * 1000);
+    resized();
+    expect(ids()).toEqual(all);
+    t.update(rows(), 2200, T + 80_000);
+    expect(ids()).toEqual(all);
+    for (let p = 1; p < FIT_SHRINK_HOLD_PAINTS; p++) { paint(); expect(ids(), `paint ${p}`).toEqual(all); }
+    paint();
     expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
     for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
     expect(w.records()).toEqual([{ added: [], removed: ['li[closure:amruseva]'] }]);
@@ -1151,7 +1160,7 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     // A box that grows past the fitted one refits at once, hold or no hold: the rows a taller box holds come back.
     layout.boxPx = 380;
     resized();
-    t.update(rows(), 2200, T + (s + 2) * 1000 + FIT_SHRINK_HOLD_MS);
+    for (let p = 0; p < FIT_SHRINK_HOLD_PAINTS; p++) paint();
     expect(ids()).toHaveLength(5);
     layout.boxPx = 600;
     resized();
@@ -1168,11 +1177,10 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     for (const id of all) expect(byId(id), id).toBe(nodesAt600.get(id));
     w.stop();
     vi.unstubAllGlobals();
-    expect(FIT_SHRINK_HOLD_MS).toBe(5_000);
+    expect(FIT_SHRINK_HOLD_PAINTS).toBe(2);
   });
 
-  it('a shrink that stays is refitted when the hold ends on the page\u2019s own clock, with no paint of the wall\u2019s in between', () => {
-    vi.useFakeTimers();
+  it('a shrink that stays is refitted after the hold\u2019s paints of the page, with no update of the wall\u2019s in between', () => {
     const observers: ResizeObserverCallback[] = [];
     vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} unobserve(): void {} disconnect(): void {} });
     const layout: Layout = { boxPx: 462, titleChars: 24, subChars: 40 };
@@ -1193,9 +1201,8 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     layout.boxPx = 380;
     for (const observe of observers) observe([], {} as ResizeObserver);
     expect(ids()).toHaveLength(6);
-    vi.advanceTimersByTime(FIT_SHRINK_HOLD_MS - 1);
-    expect(ids()).toHaveLength(6);
-    vi.advanceTimersByTime(1);
+    for (let p = 1; p < FIT_SHRINK_HOLD_PAINTS; p++) { paint(); expect(ids(), `paint ${p}`).toHaveLength(6); }
+    paint();
     expect(ids()).toEqual(['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']);
     for (const id of ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg']) expect(byId(id), id).toBe(nodes.get(id));
     vi.unstubAllGlobals();
@@ -1425,10 +1432,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     t.update(longRows(), 2000, NOW);
     const roomy = t.shown();
     layout.boxPx = 300;
-    // A smaller box stands FIT_SHRINK_HOLD_MS before the rows follow it (the D5.25 replay above).
+    // A smaller box stands FIT_SHRINK_HOLD_PAINTS paints before the rows follow it (the D5.25 replay above).
     t.update(longRows(), 2000, NOW + 20_000);
     expect(t.shown()).toBe(roomy);
-    t.update(longRows(), 2000, NOW + 20_000 + FIT_SHRINK_HOLD_MS);
+    for (let p = 0; p < FIT_SHRINK_HOLD_PAINTS; p++) paint();
     expect(t.shown()).toBeLessThan(roomy);
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(300);
     layout.boxPx = 498;
