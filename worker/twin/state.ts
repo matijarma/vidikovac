@@ -8,7 +8,7 @@
 import type { DwellRecent } from '../../shared/motion/dwell';
 import type { PublishedPlan } from '../../shared/motion/hindsight';
 import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/learn';
-import { EVICT_S } from '../../shared/motion/plan';
+import { EVICT_S, FUTURE_TOLERANCE_S } from '../../shared/motion/plan';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
 
@@ -63,11 +63,16 @@ export function emptyState(): TwinState {
 
 /** The update to keep for a trip: the earliest stop still ahead of the header
  *  (ZET lists a passed stop or two beside the next one), else the last in
- *  sequence order. Delays are kept in sequence order for the route median. */
+ *  sequence order. Delays are kept in sequence order for the route median.
+ *  An update ZET stamped more than FUTURE_TOLERANCE_S after the header is
+ *  skipped, as its vehicle reports are (tick.ts): a stamp a day ahead is
+ *  no evidence of the trip now. */
 export function nextStopOf(feed: DecodedFeed): Record<string, TripNext> {
   const out: Record<string, TripNext> = {};
+  const ceiling = feed.headerTs === null ? null : feed.headerTs + FUTURE_TOLERANCE_S;
   for (const update of feed.tripUpdates) {
     if (!update.tripId) continue;
+    if (ceiling !== null && update.atSec !== null && update.atSec > ceiling) continue;
     const stops = [...update.stops].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     const ahead = feed.headerTs === null ? [] : stops.filter((s) => s.timeSec !== null && s.timeSec >= feed.headerTs!);
     const chosen = ahead.length > 0 ? ahead.reduce((best, s) => (s.timeSec! < best.timeSec! ? s : best)) : stops[stops.length - 1];
@@ -80,6 +85,18 @@ export function nextStopOf(feed: DecodedFeed): Record<string, TripNext> {
       delays: stops.map((s) => s.delaySec).filter((d): d is number => d !== null),
       atSec: update.atSec ?? feed.headerTs ?? null,
     };
+  }
+  return out;
+}
+
+/** The updates still worth keeping when no new frame came (a 304, a repeated
+ *  header): those issued within EVICT_S of now, the age at which the twin
+ *  drops a silent vehicle. Without it a frozen feed kept the per-route delay
+ *  rows of its last frame long after every vehicle had gone from the map. */
+export function ageTripUpdates(updates: Readonly<Record<string, TripNext>>, nowSec: number): Record<string, TripNext> {
+  const out: Record<string, TripNext> = {};
+  for (const [tripId, update] of Object.entries(updates)) {
+    if (update.atSec !== null && update.atSec >= nowSec - EVICT_S) out[tripId] = update;
   }
   return out;
 }

@@ -32,6 +32,7 @@ import { join } from 'node:path';
 
 import { vehicleFixes } from '../app/src/motion/fixes';
 import { createIntegrator } from '../app/src/motion/integrator';
+import { inDepot, isParked, PARKED_AFTER_S_BY_MODE } from '../shared/motion/depots';
 import { dist, toPlane } from '../shared/motion/geo';
 import { BUCKETS, emptyCounts, emptySignCounts, gradeFix, HORIZONS_S, SIGN_BAND_M, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
 import { parseDwellOverrides, pushDwellRecent, trimDwellRecent } from '../shared/motion/dwell';
@@ -39,15 +40,16 @@ import { junctionsOnPath } from '../shared/motion/junction';
 import { recordEvidence } from '../shared/motion/learn';
 import { HEADWAY_M } from '../shared/motion/order';
 import { decodeNetwork, type GraphNetwork, type Path } from '../shared/motion/network';
-import { emptyPlanCounts, evalFreePlan, evalPathPlan, PLAN_EVENTS, STAND_SCATTER_M, type PlanCounts } from '../shared/motion/plan';
-import { lastFix, type PathKnot, type Plan } from '../shared/motion/track';
+import { emptyPlanCounts, evalFreePlan, evalPathPlan, FUTURE_TOLERANCE_S, PLAN_EVENTS, STAND_SCATTER_M, type PlanCounts } from '../shared/motion/plan';
+import { STOP_ZONE_M } from '../shared/motion/speed';
+import { lastFix, type PathKnot, type Plan, type Stand, type VehicleKind } from '../shared/motion/track';
 import { decodeTripIndex, type TripIndex } from '../shared/motion/trips';
 import type { FeedPayload } from '../worker/feed/payload';
 import type { FeedItem, ModuleSnapshot } from '../worker/feed/schema';
 import { nextTickAt } from '../worker/twin/clock';
 import { createEngine, type Engine } from '../worker/twin/engine';
 import { decodeFeed, type DecodedFeed } from '../worker/twin/feed-decode';
-import type { TripJoin } from '../worker/twin/publish';
+import { SOURCE_KEY, type TripJoin } from '../worker/twin/publish';
 import { emptyState, type TwinState } from '../worker/twin/state';
 import { runTick } from '../worker/twin/tick';
 import type { ZetRoutes } from '../worker/feed/modules/zet-routes';
@@ -312,6 +314,106 @@ export interface ReplayReport {
   /** What the run taught the engine, so a table can say whether the learned
    *  layers had anything to answer with by the end (F11). */
   learned: { edgeCells: number; stopCells: number; nodeCells: number; recentStops: number; dwellSamples: number; waitSamples: number; nodePasses: number };
+  /** The independent parked census, present only when the run was asked
+   *  for it (ReplayOptions.standing). */
+  standing?: StandingSummary;
+}
+
+/** One tick's fleet as the payload published it (U0 of October 2026): what
+ *  the acceptance of the future-stamp guard, the count and the parked rule
+ *  reads frame by frame (`scripts/replay-twin.mjs --fleet-series`). */
+export interface FleetFrame {
+  /** The frame's header, epoch seconds. */
+  h: number;
+  /** `vehicle:` items on the wire. */
+  pins: number;
+  /** The payload's `sources.zet.itemCount` (null only if the source is missing). */
+  itemCount: number | null;
+  /** `route:` items on the wire. */
+  routeRows: number;
+  /** The vehicle ids of the pins, in wire order. */
+  ids: string[];
+  /** Pins stamped more than FUTURE_TOLERANCE_S after the payload's source time. */
+  futurePins: number;
+  /** Tracks in the state but off the wire: in a depot, else parked. */
+  hidden: { depot: string[]; parked: string[] };
+  /** Reports the tick refused for a stamp after the header (TickResult.rejectedFuture). */
+  rejectedFuture: number;
+}
+
+/** The standing census over a run: (vehicle, frame) pairs where a PINNED
+ *  vehicle had stood longer than its mode's parked limit plus
+ *  STANDING_SLACK_S, by the harness's own stand (not the twin's), and every
+ *  vehicle the run ever held off the wire. */
+export interface StandingSummary {
+  publishedStandOver: Record<VehicleKind, number>;
+  everHidden: { depot: string[]; parked: string[] };
+}
+
+/** How far past its mode's limit the harness lets a pinned vehicle's stand
+ *  run before it counts one: two ticks, since the harness samples stands at
+ *  frames and the twin at fresh fixes. */
+export const STANDING_SLACK_S = 20;
+
+/** The harness's own stand per vehicle (the 40 m rule of depots.ts
+ *  noteStand, kept independently of the twin's Track.stand from each frame's
+ *  last fix and dropped when the vehicle leaves the state), so a twin that
+ *  forgot a stand, or published a parked vehicle, is counted. */
+function createStandingCensus() {
+  const stands = new Map<string, Stand>();
+  const over: Record<VehicleKind, number> = { tram: 0, bus: 0 };
+  const everDepot = new Set<string>();
+  const everParked = new Set<string>();
+  return {
+    observe(state: TwinState, frame: FleetFrame): void {
+      for (const id of [...stands.keys()]) if (!state.tracks[id]) stands.delete(id);
+      for (const track of Object.values(state.tracks)) {
+        const last = lastFix(track);
+        if (!last) continue;
+        const stand = stands.get(track.id);
+        if (!stand || dist(stand, last) > STOP_ZONE_M) stands.set(track.id, { x: last.x, y: last.y, sinceSec: last.atSec });
+      }
+      for (const id of frame.ids) {
+        const track = state.tracks[id];
+        const last = track ? lastFix(track) : null;
+        const stand = stands.get(id);
+        if (!track || !last || !stand) continue;
+        if (last.atSec - stand.sinceSec > PARKED_AFTER_S_BY_MODE[track.kind] + STANDING_SLACK_S) over[track.kind]++;
+      }
+      for (const id of frame.hidden.depot) everDepot.add(id);
+      for (const id of frame.hidden.parked) everParked.add(id);
+    },
+    summary(): StandingSummary {
+      return { publishedStandOver: { ...over }, everHidden: { depot: [...everDepot].sort(), parked: [...everParked].sort() } };
+    },
+  };
+}
+
+/** The fleet frame of one tick: the payload's pins, count and route rows,
+ *  and the state's held-back tracks classified as the twin classifies them. */
+function fleetFrameOf(state: TwinState, payload: FeedPayload, headerSec: number, rejectedFuture: number): FleetFrame {
+  const pins = payload.items.filter((item) => item.id.startsWith('vehicle:'));
+  const sourceMs = payload.sourceUpdatedAt !== undefined ? Date.parse(payload.sourceUpdatedAt) : null;
+  const futurePins = sourceMs === null ? 0 : pins.filter((item) => item.at !== undefined && Date.parse(item.at) > sourceMs + FUTURE_TOLERANCE_S * 1000).length;
+  const hidden: FleetFrame['hidden'] = { depot: [], parked: [] };
+  for (const track of Object.values(state.tracks)) {
+    const last = lastFix(track);
+    if (!last) continue;
+    if (inDepot(last.lon, last.lat)) hidden.depot.push(track.id);
+    else if (isParked(track)) hidden.parked.push(track.id);
+  }
+  hidden.depot.sort();
+  hidden.parked.sort();
+  return {
+    h: headerSec,
+    pins: pins.length,
+    itemCount: payload.sources?.[SOURCE_KEY]?.itemCount ?? null,
+    routeRows: payload.items.filter((item) => item.id.startsWith('route:')).length,
+    ids: pins.map((item) => item.id.slice('vehicle:'.length)),
+    futurePins,
+    hidden,
+    rejectedFuture,
+  };
 }
 
 /** The static join per trip id, from the trip index alone (no SQLite
@@ -770,6 +872,10 @@ function movedM(plan: Plan): number {
 export interface ReplayOptions {
   /** Called with every tick's grader snapshot, for a test that wants to write a fault into one. */
   onSnapshot?: (snapshot: TickSnapshot) => void;
+  /** Called with every tick's fleet frame (the CLI's `--fleet-series`). */
+  onFrame?: (frame: FleetFrame) => void;
+  /** Keep the independent standing census and return it as `standing`. */
+  standing?: boolean;
 }
 
 /**
@@ -807,6 +913,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
   const publishedContext = new Map<string, Map<number, PublishedContext>>();
   const learnedTotals = { dwellSamples: 0, waitSamples: 0, nodePasses: 0 };
   let previousBehind: Map<string, string | null> | null = null;
+  const census = options.standing ? createStandingCensus() : null;
 
   for (const feed of frames) {
     const headerSec = feed.headerTs ?? state.headerTs ?? 0;
@@ -828,6 +935,11 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     const result = runTick({ state, feed, nowMs, joins, routes, engine, validUntilMs });
     tickMs.push(performance.now() - t0);
     state = result.state;
+    if (options.onFrame || census) {
+      const fleet = fleetFrameOf(state, result.payload, headerSec, result.rejectedFuture);
+      options.onFrame?.(fleet);
+      census?.observe(state, fleet);
+    }
     // What the Durable Object does with every tick's evidence
     // (worker/do/twin-do.ts advance): the engine reads its aggregates and its
     // rolling dwell window LIVE, so a replay that never fed them back would
@@ -1020,6 +1132,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
       recentStops: Object.keys(engine.dwellRecent).length,
       ...learnedTotals,
     },
+    ...(census ? { standing: census.summary() } : {}),
   };
 }
 
@@ -1035,7 +1148,7 @@ export async function replayDirectory(dir: string, engine: Engine, options: Repl
   const files = await loadFrameFiles(dir);
   const { ordered, dropped } = orderFrames(files);
   const limited = options.limit !== undefined ? ordered.slice(0, options.limit) : ordered;
-  const report = replay(limited, engine, options.routes ?? {}, { onSnapshot: options.onSnapshot });
+  const report = replay(limited, engine, options.routes ?? {}, { onSnapshot: options.onSnapshot, onFrame: options.onFrame, standing: options.standing });
   return { ...report, droppedFrames: dropped };
 }
 

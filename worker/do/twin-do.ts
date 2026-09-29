@@ -22,7 +22,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import type { OrderReport } from '../../shared/motion/order';
-import { emptyPlanCountsByKind, PLAN_EVENTS, type PlanCountsByKind } from '../../shared/motion/plan';
+import { emptyPlanCountsByKind, FUTURE_TOLERANCE_S, PLAN_EVENTS, type PlanCountsByKind } from '../../shared/motion/plan';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
@@ -80,9 +80,12 @@ export { TWIN_DO_NAME };
  *  depot move with a placeholder id) is normal on any day. */
 export const STALE_INDEX_SHARE = 0.5;
 
-/** The four outcomes a tick reports. The fifth dim the twin writes under
- *  `twin_tick`, `overrides_unreadable`, is a fault of the object and not of a
- *  tick, so it is not one of these; both live in protocol.ts's TWIN_TICK_DIMS. */
+/** The outcomes a tick reports: ok, unchanged, error, stale_index, and the
+ *  two headers that are not a new frame (`regressed`: older than the last
+ *  one; `future`: more than FUTURE_TOLERANCE_S ahead of the clock). The
+ *  other dim the twin writes under `twin_tick`, `overrides_unreadable`, is a
+ *  fault of the object and not of a tick, so it is not one of these; all
+ *  live in protocol.ts's TWIN_TICK_DIMS. */
 export type TickOutcome = Exclude<TwinTickDim, 'overrides_unreadable'>;
 
 /** The live F11 tables, as /stats asks for them over RPC. */
@@ -334,6 +337,21 @@ export class TwinDO extends DurableObject<Env> {
     const bytes = new Uint8Array(await response.arrayBuffer());
     const decoded = decodeFeed(bytes);
     const etag = response.headers.get('etag') ?? prev.etag;
+    // A header older than the last one, or one lying in the future, is not
+    // a new frame: the plans move on from the old evidence exactly as for a
+    // repeat, and nothing is recorded. No recorded day has had either (every
+    // header advanced), so these are guards, counted where /stats reads the
+    // tick outcomes; the public statistics keep their own list and count
+    // such ticks in the total only (worker/stats/public.ts).
+    const refused: TickOutcome | null = decoded.headerTs === null ? null
+      : prev.headerTs !== null && decoded.headerTs < prev.headerTs ? 'regressed'
+        : decoded.headerTs * 1000 > now + FUTURE_TOLERANCE_S * 1000 ? 'future'
+          : null;
+    if (refused !== null) {
+      const result = this.advance({ ...prev, etag }, null, now, routes);
+      recordMetric(this.env, 'twin_tick', refused, cold ? 'cold' : 'warm');
+      return finish({ ...baseline(refused), vehicles: Object.keys(result.state.tracks).length, evicted: result.evicted, order: result.order, stateBytes: result.stateBytes, learnedFlushed: result.learnedFlushed, plan: result.plan });
+    }
     if (decoded.headerTs !== null && decoded.headerTs === prev.headerTs) {
       // The same frame again (the cushion beat ZET's publish): nothing new.
       const result = this.advance({ ...prev, etag }, null, now, routes);
@@ -390,6 +408,9 @@ export class TwinDO extends DurableObject<Env> {
       for (const old of Object.values(prev.tracks)) {
         const track = newTrack(old.id, old.routeId, old.tripId, old.kind);
         track.tripStartSec = old.tripStartSec;
+        // A stand is plane positions and report times, no graph in it: a
+        // new network must not publish every parked tram for half an hour.
+        track.stand = old.stand ?? null;
         const join = old.tripId === null ? undefined : joins.get(old.tripId);
         const prior = this.engine?.matcher.priorFor(join?.shapeId ?? null, old.routeId, join?.direction ?? null, join?.pathId ?? null);
         for (const report of old.fixes) {
@@ -404,6 +425,10 @@ export class TwinDO extends DurableObject<Env> {
       prev = { ...prev, tracks, published: {}, pendingLearned: { ...emptyAggregates(), stops: prev.pendingLearned.stops } };
     }
     const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs) });
+    // Reports stamped a day ahead (ZET's midnight defect) are a feed fault,
+    // not a planner decision, so they stay out of `twin_plan` and its public
+    // shares: one line per tick that refused any.
+    if (result.rejectedFuture > 0) logInfo('twin_future_fixes', { count: result.rejectedFuture, headerTs: feed?.headerTs ?? undefined });
     // What the tick learned joins the live aggregates the planner reads now,
     // and the pending minute in the state row; once a minute the pending
     // minute reaches the tables in one transaction and the row starts over.
@@ -427,8 +452,15 @@ export class TwinDO extends DurableObject<Env> {
     // row actually is, against the Durable Object's ~2 MB row cap (I5). The
     // round's own replay measured 1.42 MB at the morning peak and production
     // has never measured it at all; `published` is the part that grows with
-    // the fleet, and shrinking it is the next round's work.
-    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length });
+    // the fleet, and shrinking it is the next round's work. The same line
+    // says how many of the vehicles are on the map and how many are held off
+    // it (in a depot, or parked), so a group held in service at one place
+    // (four trams for 69 to 76 minutes at Sveti Duh on 25 Sep) shows here.
+    if (learnedFlushed) {
+      const pins = result.payload.items.filter((item) => item.id.startsWith('vehicle:')).length;
+      const { depot, parked } = result.hidden;
+      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked, depot, parked });
+    }
 
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);

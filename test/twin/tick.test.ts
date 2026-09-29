@@ -11,6 +11,7 @@ import { emptyState, type TwinState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
 import { simulate } from '../motion/simulator';
 import { corridorSpec, lonLatOf, syntheticNetwork } from '../motion/synthetic-network';
+import type { RawTripUpdate } from '../../worker/twin/feed-decode';
 import type { TripJoin } from '../../worker/twin/publish';
 import { corridorIndex, corridorJoins, frameAsFeed } from './engine-fixture';
 
@@ -528,5 +529,63 @@ describe('runTick on the corridor', () => {
     result = runTick({ state, feed: twoTrams(T + 20, 1150, 1600), nowMs: (T + 22) * 1000, joins: pairJoins, routes, engine, validUntilMs: 0 });
     expect(result.state.tracks['B'].order.leader).toBeNull();
     expect(behindOf(result, 'B')).toBeUndefined();
+  });
+});
+
+// U0 (October 2026): a report stamped far after its frame's header is no
+// evidence of where the vehicle was. ZET stamps some vehicles +24 h just
+// after Zagreb midnight (106 stamps into 27 Sep, about twenty ghosts on the
+// public map all day), and those vehicles keep sending real positions
+// afterwards: the guard must refuse the stamp, not the vehicle. And a
+// frozen feed must not keep ZET's delay rows alive after the fixes are gone.
+describe('runTick refuses future stamps and ages trip updates in a freeze', () => {
+  const net = syntheticNetwork(corridorSpec());
+  const engine = createEngine(net, corridorIndex(net, [{ tripId: 'ta', pathId: '1_0' }]));
+  const joins = new Map<string, TripJoin>([['ta', { direction: 0, headsign: 'Kraj 1_0', shapeId: '1_0', pathId: '1_0', service: 'wd' }]]);
+  const routes = { '1': { shortName: '1', longName: 'Trunk east', type: 0 } };
+  const T = 1_800_000_000;
+  const report = (x: number, atSec: number) => ({ vehicleId: 'G', tripId: 'ta', routeId: '1', ...lonLatOf({ x, y: 0 }), atSec });
+  const tick = (state: TwinState, nowSec: number, feed: { headerTs: number; vehicles: ReturnType<typeof report>[]; tripUpdates: RawTripUpdate[] } | null) =>
+    runTick({ state, feed, nowMs: nowSec * 1000, joins, routes, engine, validUntilMs: 0 });
+
+  it('keeps the last good fix over a +86 400 s stamp, takes the next real report, and evicts 180 s after it', () => {
+    let result = tick(emptyState(), T + 2, { headerTs: T, vehicles: [report(400, T)], tripUpdates: [] });
+    expect(result.rejectedFuture).toBe(0);
+    const good = result.state.tracks.G.fixes.at(-1)!;
+
+    result = tick(result.state, T + 12, { headerTs: T + 10, vehicles: [report(500, T + 10 + 86_400)], tripUpdates: [] });
+    expect(result.rejectedFuture).toBe(1);
+    expect(result.newFixes).toBe(0);
+    const held = result.state.tracks.G.fixes.at(-1)!;
+    expect([held.atSec, held.lon, held.lat]).toEqual([good.atSec, good.lon, good.lat]);
+    expect(result.payload.items.find((item) => item.id === 'vehicle:G')?.at).toBe(new Date(T * 1000).toISOString());
+
+    // The ghost never entered, so the vehicle's next real report is newer
+    // than its last fix and passes pushFix.
+    result = tick(result.state, T + 22, { headerTs: T + 20, vehicles: [report(600, T + 20)], tripUpdates: [] });
+    expect(result.rejectedFuture).toBe(0);
+    expect(result.newFixes).toBe(1);
+    expect(result.state.tracks.G.fixes.at(-1)!.atSec).toBe(T + 20);
+
+    const quiet = tick(result.state, T + 20 + 179, null);
+    expect(quiet.evicted).toBe(0);
+    expect(quiet.payload.items.some((item) => item.id === 'vehicle:G')).toBe(true);
+    const gone = tick(quiet.state, T + 20 + 181, null);
+    expect(gone.evicted).toBe(1);
+    expect(gone.state.tracks.G).toBeUndefined();
+  });
+
+  it('keeps a trip update through feed-less ticks at +170 s and drops it, with its route row, at +190 s', () => {
+    const update: RawTripUpdate = { tripId: 'ta', routeId: '1', atSec: T, stops: [{ seq: 2, stopId: 'T600', delaySec: 60, timeSec: T + 60 }] };
+    let result = tick(emptyState(), T + 2, { headerTs: T, vehicles: [report(400, T)], tripUpdates: [update] });
+    expect(result.payload.items.some((item) => item.id === 'route:1')).toBe(true);
+
+    result = tick(result.state, T + 170, null);
+    expect(Object.keys(result.state.tripUpdates)).toEqual(['ta']);
+    expect(result.payload.items.find((item) => item.id === 'route:1')?.data).toMatchObject({ medianDelaySeconds: 60 });
+
+    result = tick(result.state, T + 190, null);
+    expect(result.state.tripUpdates).toEqual({});
+    expect(result.payload.items.some((item) => item.id.startsWith('route:'))).toBe(false);
   });
 });

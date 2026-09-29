@@ -102,6 +102,17 @@ export const SILENCE_HALFLIFE_S = 60;
  *  blink about 3,200 standing terminus trams a day off the map and back at
  *  their next fix. */
 export const EVICT_S = 180;
+/** How far a vehicle report may be stamped after its frame's header, in
+ *  seconds, before the twin refuses it (U0 of the October 2026 round). On
+ *  21 Sep 948 of 5,313 vehicle stamps ran ahead of the header, none by more
+ *  than 4 s; the +24 h stamps arrive only at Zagreb midnight (106 into
+ *  27 Sep, about twenty ghosts on the public map all day). A stamp a day
+ *  ahead says nothing about where the vehicle was, so it is refused, not
+ *  clamped: the last good fix stays, EVICT_S ends it, and the vehicle's
+ *  next real report passes pushFix because the ghost never entered. The
+ *  bike feed already refuses 30 s. The same bound keeps a payload's header
+ *  from reading as fresh when it lies ahead of the clock (publish.ts). */
+export const FUTURE_TOLERANCE_S = 30;
 /** Confidence with movement evidence on geometry, with a single fix on
  *  geometry, and the cap off every geometry (nothing verifies a free fit). */
 export const CONFIDENCE_ON_GEOMETRY = 0.9;

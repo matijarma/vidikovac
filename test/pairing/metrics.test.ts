@@ -17,8 +17,10 @@ describe('metric vocabulary', () => {
     // would not parse, so no hand-written dwell default reached the planner.
     // It rides on twin_tick because it is the same object's own health and
     // /stats already pivots that table by dim1; it is deliberately NOT a
-    // TickOutcome, which is what a tick of the feed did.
-    expect([...TWIN_TICK_DIMS]).toEqual(['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable']);
+    // TickOutcome, which is what a tick of the feed did. `regressed` and
+    // `future` (October 2026, appended) are the two headers that are not a
+    // new frame: older than the last one, or more than 30 s ahead of the clock.
+    expect([...TWIN_TICK_DIMS]).toEqual(['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable', 'regressed', 'future']);
   });
   it('export kinds and layers are closed lists', () => {
     // EXPORT_KINDS lives only in protocol.ts (R-44); metrics.ts no longer

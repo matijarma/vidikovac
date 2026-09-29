@@ -1,15 +1,17 @@
 // The twin's state as the feed pipeline's payload: the same items
 // worker/feed/modules/zet-rt.ts always published (one `vehicle:` pin per
-// vehicle, one `route:` median-delay row per route), with what only an
-// engine that outlives a page can say: the pin sits where the plan puts the
-// vehicle at the header (R-TE13, so R-P2 holds on the wire: a reported
-// position is never shown), the motion carries the plan the client
-// integrates (R-TE2), and the scalars carry the twin's own speed,
+// vehicle seen now, one `route:` median-delay row per route with a pin; a
+// vehicle in a depot or parked stays in the state, off the wire), with
+// what only an engine that outlives a page can say: the pin sits where the
+// plan puts the vehicle at the header (R-TE13, so R-P2 holds on the wire: a
+// reported position is never shown), the motion carries the plan the
+// client integrates (R-TE2), and the scalars carry the twin's own speed,
 // confidence and standing state (R-TE1) beside the static join.
 
 import { toLonLat } from '../../shared/motion/geo';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
+import { inDepot, isParked } from '../../shared/motion/depots';
+import { evalFreePlan, evalPathPlan, EVICT_S, FUTURE_TOLERANCE_S } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { STOP_ZONE_M } from '../../shared/motion/speed';
 import { lastFix, type FreeKnot, type PathKnot, type Track } from '../../shared/motion/track';
@@ -89,6 +91,24 @@ interface Placed {
   pastLast: boolean;
 }
 
+/**
+ * The vehicles the twin publishes as pins, sorted by id: a last fix stamped
+ * inside (nowSec - EVICT_S, nowSec + FUTURE_TOLERANCE_S], not inside a tram
+ * depot, not parked (shared/motion/depots.ts). The one answer to "how many
+ * vehicles are out there now": it is the payload's `itemCount` and the count
+ * on the `route:` rows. Trip updates count nothing here: a trip ZET estimates
+ * without a position is not a vehicle anyone can see.
+ */
+export function fleetSeen(tracks: readonly Track[], nowSec: number): Track[] {
+  return tracks
+    .filter((track) => {
+      const last = lastFix(track);
+      if (last === null || last.atSec <= nowSec - EVICT_S || last.atSec > nowSec + FUTURE_TOLERANCE_S) return false;
+      return !inDepot(last.lon, last.lat) && !isParked(track);
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** The pin's position and the wire form of the plan, at the header. */
 function place(track: Track, net: GraphNetwork | null): Placed {
   const last = lastFix(track)!;
@@ -128,7 +148,7 @@ export function buildPayload(
   const items: ItemInput[] = [];
   const headerTs = state.headerTs;
 
-  const tracks = Object.values(state.tracks).filter((t) => t.fixes.length > 0).sort((a, b) => a.id.localeCompare(b.id));
+  const tracks = fleetSeen(Object.values(state.tracks), Math.floor(nowMs / 1000));
   for (const track of tracks) {
     const last = lastFix(track)!;
     const routeId = track.routeId;
@@ -193,28 +213,35 @@ export function buildPayload(
   }
 
   // One summary row per route, never per stop (R-22, R-50): a rider asks
-  // whether the 6 is late, not what the delay is at stop 311_1.
-  const byRoute = new Map<string, { delays: number[]; trips: number }>();
+  // whether the 6 is late, not what the delay is at stop 311_1. Only for a
+  // route with a vehicle on the map, and `vehicles` counts those pins: ZET's
+  // trip updates outnumber the positioned vehicles, and a count that read
+  // them promised vehicles nobody could see. The delay stays ZET's median.
+  const pinsByRoute = new Map<string, number>();
+  for (const track of tracks) if (track.routeId) pinsByRoute.set(track.routeId, (pinsByRoute.get(track.routeId) ?? 0) + 1);
+  const delaysByRoute = new Map<string, number[]>();
   for (const update of Object.values(state.tripUpdates)) {
-    if (!update.routeId) continue;
-    const bucket = byRoute.get(update.routeId) ?? { delays: [], trips: 0 };
-    bucket.delays.push(...update.delays);
-    bucket.trips++;
-    byRoute.set(update.routeId, bucket);
+    if (!update.routeId || !pinsByRoute.has(update.routeId)) continue;
+    const delays = delaysByRoute.get(update.routeId) ?? [];
+    delays.push(...update.delays);
+    delaysByRoute.set(update.routeId, delays);
   }
-  for (const [routeId, bucket] of [...byRoute].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (bucket.delays.length === 0) continue;
-    const medianDelaySeconds = median(bucket.delays);
+  for (const [routeId, delays] of [...delaysByRoute].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (delays.length === 0) continue;
+    const medianDelaySeconds = median(delays);
     items.push({
       id: `route:${routeId}`,
       kind: 'vehicle',
       title: routeLabel(routeId, routes),
       summary: delayWords(medianDelaySeconds),
-      data: { routeId, routeShortName: routeShortName(routeId, routes), medianDelaySeconds, vehicles: bucket.trips },
+      data: { routeId, routeShortName: routeShortName(routeId, routes), medianDelaySeconds, vehicles: pinsByRoute.get(routeId)! },
     });
   }
 
-  const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS;
+  // A header ahead of the clock by more than the tolerance is not fresh
+  // evidence either: the Durable Object refuses such a frame, and a state
+  // that carries one must not read as live.
+  const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS && headerTs * 1000 <= nowMs + FUTURE_TOLERANCE_S * 1000;
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,

@@ -12,6 +12,7 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
+import { inDepot, isParked, noteStand } from '../../shared/motion/depots';
 import { dist, toPlane, type XY } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
@@ -19,7 +20,7 @@ import { extractEvidence, recordEvidence, type DwellDropped, type DwellEvidence,
 import { dwellPlannerAt, pushDwellRecent, trimDwellRecent, type DwellRecent } from '../../shared/motion/dwell';
 import type { GraphNetwork } from '../../shared/motion/network';
 import { OFF_GRAPH_M, type MatchContext } from '../../shared/motion/match';
-import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, EVICT_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
+import { buildPlan, CONFIDENCE_FREE_CAP, emptyPlanCountsByKind, evalPathPlan, EVICT_S, FUTURE_TOLERANCE_S, PLAN_AHEAD_S, silenceDecay, type NextStopUpdate, type PlanCountsByKind } from '../../shared/motion/plan';
 import { junctionWaitsAt } from '../../shared/motion/junction';
 import { estimateSpeed, STOP_ZONE_M } from '../../shared/motion/speed';
 import { serviceDayStartSec } from '../../shared/motion/bands';
@@ -30,7 +31,7 @@ import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { kindOf, type Engine } from './engine';
 import type { DecodedFeed, RawFix } from './feed-decode';
 import { buildPayload, type TripJoin } from './publish';
-import { nextStopOf, type TwinState } from './state';
+import { ageTripUpdates, nextStopOf, type TwinState } from './state';
 
 /** The twin and the client evict from the same report-age limit. */
 const TRACK_STALE_S = EVICT_S;
@@ -66,17 +67,33 @@ export interface TickResult {
   /** What the planner had to intervene about this tick, by vehicle kind
    *  (F11): `twin_plan`, dim1 the event, dim2 the kind. */
   plan: PlanCountsByKind;
+  /** Vehicle reports refused this tick for a stamp more than
+   *  FUTURE_TOLERANCE_S after the frame's header (the midnight +24 h
+   *  stamps). A feed defect, not a planner decision: logged by the Durable
+   *  Object (`twin_future_fixes`), never counted into `twin_plan`. */
+  rejectedFuture: number;
+  /** Tracks kept in the state but not published after this tick: standing
+   *  inside a tram depot, or parked past their mode's limit elsewhere
+   *  (shared/motion/depots.ts). A vehicle in a depot counts as depot only. */
+  hidden: { depot: number; parked: number };
 }
 
-/** One entry per vehicle id, the newest report winning a duplicate. */
-function dedupe(vehicles: readonly RawFix[], fallbackAt: number): Map<string, RawFix & { atSec: number }> {
+/** One entry per vehicle id, the newest report winning a duplicate. A report
+ *  stamped after `ceilingSec` is refused before it can win (and counted),
+ *  so a vehicle's real report in the same frame still does. */
+function dedupe(vehicles: readonly RawFix[], fallbackAt: number, ceilingSec: number): { byId: Map<string, RawFix & { atSec: number }>; rejected: number } {
   const byId = new Map<string, RawFix & { atSec: number }>();
+  let rejected = 0;
   for (const raw of vehicles) {
     const dated = { ...raw, atSec: raw.atSec ?? fallbackAt };
+    if (dated.atSec > ceilingSec) {
+      rejected++;
+      continue;
+    }
     const current = byId.get(raw.vehicleId);
     if (!current || dated.atSec > current.atSec) byId.set(raw.vehicleId, dated);
   }
-  return byId;
+  return { byId, rejected };
 }
 
 /** The trip's first departure in epoch seconds (R-TE49): the index's start
@@ -154,15 +171,20 @@ export function runTick(input: TickInput): TickResult {
   const planCounts = emptyPlanCountsByKind();
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
-  const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
+  // Without a new frame (a 304 or a repeated header) the delay rows age out
+  // on the same clock as the fixes, so they cannot outlive them in a freeze.
+  const tripUpdates = feed ? nextStopOf(feed) : ageTripUpdates(input.state.tripUpdates, nowSec);
   const fresh = new Set<string>();
   let newFixes = 0;
+  let rejectedFuture = 0;
 
   if (feed) {
     const running = new Set<string>();
     for (const join of joins.values()) if (join.service) running.add(join.service);
     const ctx: MatchContext = { runningServices: running.size > 0 ? running : null };
-    for (const raw of dedupe(feed.vehicles, feed.headerTs ?? nowSec).values()) {
+    const reports = dedupe(feed.vehicles, feed.headerTs ?? nowSec, (feed.headerTs ?? nowSec) + FUTURE_TOLERANCE_S);
+    rejectedFuture = reports.rejected;
+    for (const raw of reports.byId.values()) {
       const routeId = raw.routeId ?? tracks[raw.vehicleId]?.routeId ?? '';
       const tripId = raw.tripId ?? null;
       let track = tracks[raw.vehicleId];
@@ -178,7 +200,12 @@ export function runTick(input: TickInput): TickResult {
       const continues = tripChanged && engine !== null && track!.kind === kindOf(engine, routes, routeId)
         && continuesRun(engine.net, track!, prior?.pathIdx ?? null, plane);
       if (!track || (tripChanged && !continues)) {
+        const oldStand = track?.stand ?? null;
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
+        // A stand belongs to the vehicle, not the trip: a bus that changes
+        // trip while it stands at its terminus has not moved. The new Track
+        // inherits it when its first report lies inside the stand's zone.
+        if (oldStand !== null && dist(oldStand, plane) <= STOP_ZONE_M) track.stand = oldStand;
         tracks[raw.vehicleId] = track;
         if (tripChanged) {
           delete published[raw.vehicleId];
@@ -209,9 +236,11 @@ export function runTick(input: TickInput): TickResult {
       } else {
         pushFix(track, fix);
       }
-      if ((lastFix(track)?.atSec ?? null) !== before) {
+      const newest = lastFix(track);
+      if (newest !== null && newest.atSec !== before) {
         newFixes++;
         fresh.add(raw.vehicleId);
+        noteStand(track, newest);
       }
     }
   }
@@ -225,6 +254,15 @@ export function runTick(input: TickInput): TickResult {
       delete learnedUpTo[id];
       evicted++;
     }
+  }
+  // What stays in the state but off the map (publish.ts fleetSeen): a
+  // vehicle in a tram depot, or one parked past its mode's limit.
+  const hidden = { depot: 0, parked: 0 };
+  for (const track of Object.values(tracks)) {
+    const last = lastFix(track);
+    if (!last) continue;
+    if (inDepot(last.lon, last.lat)) hidden.depot++;
+    else if (isParked(track)) hidden.parked++;
   }
 
   const all = Object.values(tracks);
@@ -318,7 +356,7 @@ export function runTick(input: TickInput): TickResult {
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture, hidden };
 }
 
 /**
