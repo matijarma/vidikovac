@@ -30,7 +30,7 @@ ZET GTFS-Realtime (https://www.zet.hr/gtfs-rt-protobuf), the `zet-rt` source of 
 
 The frames name trips of ZET's static GTFS feed **000395**: 1,667 of 1,667 tram reports with a trip id (100.000 %) and 231 of 231 distinct tram trip ids are found in `app/public/data/zet-trips.json` (feed 000395). Service prefixes of the tram trip ids: 0_23. The network artefact of the same feed is `app/public/data/zet-network.json`, graphHash `7ad4834435980e22`.
 
-If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.
+If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining; what that means for this sample is said under "What it is for".
 
 ## How it was cut
 

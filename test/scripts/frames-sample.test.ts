@@ -408,9 +408,24 @@ describe('frames-sample --keep-alerts and --every', () => {
     expect(readme).not.toContain('## How it is graded');
     expect(readme).toContain('They let the tests named under "What it is for" replay real frames');
     expect(readme).toContain('The cut also passed `--lead` and `--use` with the text of this file\'s first line and "What it is for" paragraph.');
+    expect(readme).toContain('the trip ids stop joining; what that means for this sample is said under "What it is for".');
+    expect(readme).not.toContain('Re-cut the sample then');
     expect(readme).not.toContain('—');
     await run(['--readme-only', out]);
     expect(await readFile(join(out, 'README.md'), 'utf8')).toBe(readme);
+  });
+
+  it('says so when the frames name trips of another feed than the committed artefacts', async () => {
+    const headerTs = at('151503');
+    await writeFile(join(input, nameOf(headerTs)), FeedMessage.encode({
+      header: { gtfsRealtimeVersion: '1.0', incrementality: 0, timestamp: headerTs },
+      entity: [{ id: 'veh-13', vehicle: { trip: { tripId: '0_30_1_13_7', routeId: '13' }, position: { latitude: 45.8, longitude: 15.98 }, vehicle: { id: '2202' }, timestamp: headerTs - 8 } }],
+    }).finish());
+    const out = join(root, 'other-feed');
+    await run([input, '--from', '151503', '--to', '151503', '--out', out, '--all-modes']);
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    expect(readme).toContain("The frames name trips of a feed other than the committed artefacts' **000395**: only 0 of 1 tram reports with a trip id (0.000 %)");
+    expect(readme).toContain('Service prefixes of the tram trip ids: 0_30. The network artefact of the committed feed is');
   });
 
   it('dates the Zagreb window by Zagreb, not by the UTC day of the file names', async () => {

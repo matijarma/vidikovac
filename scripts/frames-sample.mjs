@@ -339,6 +339,8 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
   const effects = Object.entries(s.alertEffects ?? {}).map(([name, n]) => `${name} ${thousands(n)}`).join(', ');
   const signals = `CANCELED trip updates ${thousands(s.canceledUpdates ?? 0)} (distinct trips ${s.canceledTrips ?? 0}); Alert entities ${thousands(s.alertEntities ?? 0)} (distinct ids ${s.alertIds ?? 0}${effects ? `; by effect ${effects}` : ''})`;
   const extraFlags = [s.lead && ['`--lead`', 'first line'], s.use && ['`--use`', '"What it is for" paragraph']].filter(Boolean);
+  /** At least half the tram reports join the committed trip index: the frames belong to its feed. */
+  const joinsArtefact = s.tripReports === 0 || s.tripReportsJoined / s.tripReports >= 0.5;
   const join = s.tripReports > 0
     ? `${thousands(s.tripReportsJoined)} of ${thousands(s.tripReports)} tram reports with a trip id (${(100 * s.tripReportsJoined / s.tripReports).toFixed(3)} %) and ${thousands(s.tripsJoined)} of ${thousands(s.trips)} distinct tram trip ids are found in \`${TRIPS_PATH}\``
     : `no tram report in the sample carries a trip id`;
@@ -374,9 +376,11 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '',
     '## Artefact it belongs to',
     '',
-    `The frames name trips of ZET's static GTFS feed **${s.feedVersion ?? 'unknown'}**: ${join} (feed ${s.feedVersion ?? 'unknown'}). Service prefixes of the tram trip ids: ${s.services.join(', ') || 'none'}. The network artefact of the same feed is \`${NETWORK_PATH}\`, graphHash \`${network.graphHash ?? 'unknown'}\`.`,
+    `${joinsArtefact ? `The frames name trips of ZET's static GTFS feed **${s.feedVersion ?? 'unknown'}**: ` : `The frames name trips of a feed other than the committed artefacts' **${s.feedVersion ?? 'unknown'}**: only `}${join} (feed ${s.feedVersion ?? 'unknown'}). Service prefixes of the tram trip ids: ${s.services.join(', ') || 'none'}. The network artefact of the ${joinsArtefact ? 'same feed' : 'committed feed'} is \`${NETWORK_PATH}\`, graphHash \`${network.graphHash ?? 'unknown'}\`.`,
     '',
-    'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
+    s.use
+      ? 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining; what that means for this sample is said under "What it is for".'
+      : 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
     '',
     '## How it was cut',
     '',
