@@ -110,3 +110,49 @@ describe('the committed file', () => {
     expect(places.every((p) => p.closesAt - noon >= 30 * 60_000)).toBe(true);
   });
 });
+
+describe('untrusted hours and DST boundaries', () => {
+  const one = (week = EVERY('0800-2000')) => file([{ name: 'Proba', kind: 'kafic', ...HERE, week }]);
+
+  it.each([
+    { lon: [null] }, { lat: [false] }, { lon: [0.5] }, { kind: ['1'] }, { origin: [1_587_000.5, 4_572_000] },
+    { origin: [0, 0], lon: [99_000_000] }, { name: [' '] }, { count: 2 }, { venues: -1 }, { dropped: -1 },
+    { licence: 'unknown' }, { attribution: '' }, { builtAt: 'yesterday' }, { osmDate: 'invalid' },
+  ])('refuses malformed file fields %j', (patch) => {
+    expect(decodeOsmHours({ ...one(), ...patch })).toBeNull();
+  });
+
+  it('does not accept a malformed week as a name-only venue', () => {
+    const malformed = file([{ name: 'Proba', kind: 'venue', ...HERE, week: null }]);
+    expect(decodeOsmHours({ ...malformed, week: ['not a week'] })).toBeNull();
+  });
+
+  it('refuses non-finite points and invalid instants without throwing', () => {
+    const index = decodeOsmHours(one());
+    for (const point of [{ lon: NaN, lat: HERE.lat }, { lon: HERE.lon, lat: Infinity }]) {
+      expect(openPlacesNear(index, point, 2_000, Date.parse('2026-09-29T10:00:00Z'), false)).toEqual([]);
+    }
+    expect(openPlacesNear(index, HERE, 2_000, 1e20, false)).toEqual([]);
+  });
+
+  it('does not invent a closing instant in the spring clock gap', () => {
+    const index = decodeOsmHours(one('|||||2200-0230|'));
+    expect(openPlacesNear(index, HERE, 2_000, Date.parse('2026-03-29T00:00:00Z'), false)).toEqual([]);
+  });
+
+  it.each(['2026-10-24T23:45:00Z', '2026-10-25T00:15:00Z', '2026-10-25T01:15:00Z'])('does not promise the later of two possible closes at %s', (now) => {
+    const index = decodeOsmHours(one('|||||2200-0230|'));
+    expect(openPlacesNear(index, HERE, 2_000, Date.parse(now), false)).toEqual([]);
+  });
+
+  it('does not promise an ambiguous opening in the repeated hour', () => {
+    const index = decodeOsmHours(one('||||||0230-0400'));
+    expect(openPlacesNear(index, HERE, 2_000, Date.parse('2026-10-25T00:45:00Z'), false)).toEqual([]);
+  });
+
+  it('uses elapsed minutes for an unambiguous close across spring DST', () => {
+    const index = decodeOsmHours(one('|||||2200-0330|'));
+    expect(openPlacesNear(index, HERE, 2_000, Date.parse('2026-03-29T00:45:00Z'), false)[0]?.closesAt)
+      .toBe(Date.parse('2026-03-29T01:30:00Z'));
+  });
+});

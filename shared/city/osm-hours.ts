@@ -61,24 +61,32 @@ export function decodeOsmHours(file: unknown): OsmHoursIndex | null {
   if (!file || typeof file !== 'object') return null;
   const f = file as Partial<OsmHoursFile>;
   if (f.version !== 1 || typeof f.builtAt !== 'string' || typeof f.osmDate !== 'string') return null;
+  if (!Number.isFinite(Date.parse(f.builtAt)) || !Number.isFinite(Date.parse(f.osmDate))) return null;
+  if (f.licence !== 'ODbL 1.0' || typeof f.attribution !== 'string' || !f.attribution.trim()) return null;
+  if (![f.count, f.venues, f.dropped].every((v) => Number.isSafeInteger(v) && v! >= 0)) return null;
   const n = Array.isArray(f.name) ? f.name.length : -1;
   const arrays = [f.kind, f.lon, f.lat, f.week];
   if (n < 0 || !arrays.every((a) => Array.isArray(a) && a.length === n) || !Array.isArray(f.kinds)) return null;
-  if (!Array.isArray(f.origin) || f.origin.length !== 2 || !f.origin.every(Number.isFinite)) return null;
+  if (f.count! + f.venues! !== n) return null;
+  if (!Array.isArray(f.origin) || f.origin.length !== 2 || !f.origin.every(Number.isSafeInteger)) return null;
   const known: readonly string[] = [...OPEN_KINDS, 'venue'];
   if (!f.kinds.every((k) => known.includes(k))) return null;
   const names: string[] = [], kinds: (OpenKind | 'venue')[] = [], weeks: (readonly [number, number][][] | null)[] = [];
   const lon = new Float64Array(n), lat = new Float64Array(n);
   let x = f.origin[0], y = f.origin[1];
   for (let i = 0; i < n; i++) {
+    if (![f.kind![i], f.lon![i], f.lat![i]].every(Number.isSafeInteger)) return null;
     const kind = f.kinds[f.kind![i]], week = f.week![i], name = f.name![i];
     x += f.lon![i]; y += f.lat![i];
-    if (typeof name !== 'string' || !kind || !Number.isFinite(x) || !Number.isFinite(y)) return null;
-    const days = week === null ? null : typeof week === 'string' ? parseWeek(week) : undefined;
-    if (days === undefined || (days === null) !== (kind === 'venue')) return null;
+    if (typeof name !== 'string' || !name.trim() || !kind || !Number.isSafeInteger(x) || !Number.isSafeInteger(y)
+      || Math.abs(x) > 180 * SCALE || Math.abs(y) > 90 * SCALE) return null;
+    if ((week === null) !== (kind === 'venue')) return null;
+    const days = typeof week === 'string' ? parseWeek(week) : null;
+    if (week !== null && !days) return null;
     names.push(name); kinds.push(kind); weeks.push(days);
     lon[i] = x / SCALE; lat[i] = y / SCALE;
   }
+  if (weeks.filter((week) => week === null).length !== f.venues) return null;
   const index: Decoded = { size: n, builtAt: f.builtAt, osmDate: f.osmDate, names, kinds, lon, lat, weeks };
   return index;
 }
@@ -93,16 +101,20 @@ function zagrebWall(ms: number): ZagrebWall {
   for (const part of ZAGREB.formatToParts(new Date(ms))) p[part.type] = part.value;
   return { year: +p.year, month: +p.month, day: +p.day, weekday: WEEKDAYS.indexOf(p.weekday), minute: (+p.hour % 24) * 60 + +p.minute, second: +p.second };
 }
-/** The instant of a Zagreb wall time: day `day` of the month (may overflow) at `minute` past midnight. */
-function zagrebInstant(year: number, month: number, day: number, minute: number): number {
+/** A unique instant of a Zagreb wall time; a clock gap or repeated time is not a safe boundary to promise. */
+function zagrebInstant(year: number, month: number, day: number, minute: number): number | null {
   const wall = Date.UTC(year, month - 1, day, 0, minute);
-  let guess = wall;
-  for (let i = 0; i < 2; i++) {
-    const z = zagrebWall(guess);
-    const seen = Date.UTC(z.year, z.month - 1, z.day, 0, z.minute, z.second);
-    guess += wall - seen;
+  const asWall = (ms: number) => {
+    const z = zagrebWall(ms);
+    return Date.UTC(z.year, z.month - 1, z.day, 0, z.minute, z.second);
+  };
+  const candidates = new Set<number>();
+  for (const delta of [-36, 0, 36]) {
+    const probe = wall + delta * 3_600_000;
+    const instant = wall - (asWall(probe) - probe);
+    if (asWall(instant) === wall) candidates.add(instant);
   }
-  return guess;
+  return candidates.size === 1 ? [...candidates][0] : null;
 }
 
 /**
@@ -110,7 +122,7 @@ function zagrebInstant(year: number, month: number, day: number, minute: number)
  * midnight: ranges that touch or overlap are one stretch, across midnight too. null when closed now, and
  * null for a place open the whole week ahead (24/7): there is no closing time to say.
  */
-function closingMinute(days: readonly (readonly [number, number][])[], weekday: number, minuteNow: number): number | null {
+function openingStretch(days: readonly (readonly [number, number][])[], weekday: number, minuteNow: number): [number, number] | null {
   const stretches: [number, number][] = [];
   for (let offset = -1; offset <= 7; offset++) {
     for (const [open, close] of days[(weekday + offset + 7) % 7]) {
@@ -118,22 +130,28 @@ function closingMinute(days: readonly (readonly [number, number][])[], weekday: 
       stretches.push([start, offset * DAY_MIN + (close > open ? close : DAY_MIN + close)]);
     }
   }
-  let end: number | null = null;
-  for (const [s, e] of stretches) if (s <= minuteNow && minuteNow < e) end = Math.max(end ?? e, e);
-  if (end === null) return null;
-  for (let grown = true; grown;) {
-    grown = false;
-    for (const [s, e] of stretches) if (s <= end && end < e) { end = e; grown = true; }
-    if (end >= 7 * DAY_MIN) return null;
+  const merged: [number, number][] = [];
+  for (const [start, end] of stretches.sort((a, b) => a[0] - b[0])) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
   }
-  return end;
+  const active = merged.find(([start, end]) => start <= minuteNow && minuteNow < end);
+  return active && active[1] < 7 * DAY_MIN ? active : null;
 }
 
 /** Open at `now` (Zagreb time) within radiusM, closing 30 min or more after now; [] when holiday. */
 export function openPlacesNear(index: OsmHoursIndex | null, point: { lon: number; lat: number }, radiusM: number, now: number, holiday: boolean): OpenPlace[] {
-  if (holiday || !isDecoded(index) || !(radiusM > 0) || !Number.isFinite(now)) return [];
+  if (holiday || !isDecoded(index) || !(radiusM > 0) || !Number.isFinite(radiusM)
+    || !Number.isFinite(new Date(now).getTime()) || !Number.isFinite(point.lon) || !Number.isFinite(point.lat)
+    || Math.abs(point.lon) > 180 || Math.abs(point.lat) > 90) return [];
   const wall = zagrebWall(now);
   const minuteNow = wall.minute + wall.second / 60;
+  const instants = new Map<number, number | null>();
+  const instantAt = (minute: number) => {
+    if (!instants.has(minute)) instants.set(minute, zagrebInstant(wall.year, wall.month, wall.day, minute));
+    return instants.get(minute)!;
+  };
   // A cheap box before the great-circle distance: 1e-5 degree of latitude is 1.11 m.
   const dLat = radiusM / 111_000, dLon = radiusM / (111_000 * Math.cos((point.lat * Math.PI) / 180));
   const found: (OpenPlace & { distance: number })[] = [];
@@ -143,10 +161,10 @@ export function openPlacesNear(index: OsmHoursIndex | null, point: { lon: number
     const at = { lon: index.lon[i], lat: index.lat[i] };
     const distance = distanceM(point, at);
     if (distance > radiusM) continue;
-    const close = closingMinute(days, wall.weekday, minuteNow);
-    if (close === null) continue;
-    const closesAt = zagrebInstant(wall.year, wall.month, wall.day, close);
-    if (closesAt - now < MIN_OPEN_MS) continue;
+    const stretch = openingStretch(days, wall.weekday, minuteNow);
+    if (!stretch) continue;
+    const opensAt = instantAt(stretch[0]), closesAt = instantAt(stretch[1]);
+    if (opensAt === null || closesAt === null || now < opensAt || closesAt - now < MIN_OPEN_MS) continue;
     const name = index.names[i];
     found.push({ id: cityId('osm', `${name}|${Math.round(at.lon * SCALE)}|${Math.round(at.lat * SCALE)}`), name, kind: index.kinds[i] as OpenKind, ...at, closesAt, distance });
   }
