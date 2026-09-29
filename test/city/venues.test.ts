@@ -10,7 +10,7 @@ import type { Place } from '../../shared/city/types';
 import { eventLocation } from '../../worker/city/event-location';
 import { decodeEntities, stripTags } from '../../worker/feed/html';
 import { decodeOsmHours, osmVenues } from '../../shared/city/osm-hours';
-import { buildGazetteer, resolveVenuePoint } from '../../shared/city/venues';
+import { buildGazetteer, resolveVenueName, resolveVenuePoint } from '../../shared/city/venues';
 import { resolveVenues } from '../../shared/city/events';
 import { distanceM } from '../../shared/city/geo';
 
@@ -113,6 +113,38 @@ describe('Kulturpunkt venues through the three gazetteers', () => {
   it('places none of the 12 in other cities and none of the 6 without a venue', () => {
     for (const id of [...ELSEWHERE, ...NO_VENUE]) expect(resolveVenuePoint(byId(id), gazetteer), String(id)).toBeNull();
   });
+
+  it('pairs canonical names with the same verified points for the real fixture', () => {
+    const entries = [...places, ...osm, ...kultura.map((item) => {
+      const [lon, lat] = item.geo!.coordinates as number[];
+      return { name: item.data!.venue, lon, lat };
+    })];
+    let named = 0;
+    for (const item of announcements) {
+      // Real Kulturpunkt items have location hints/tags, not a display venue field.
+      expect(item.data?.venue).toBeUndefined();
+      const got = resolveVenuePoint(item, gazetteer);
+      const name = resolveVenueName(item, gazetteer);
+      if (!got) { expect(name, item.id).toBeNull(); continue; }
+      expect(Object.keys(got).sort()).toEqual(['lat', 'lon']);
+      expect(entries.some((e) => e.name === name && e.lon === got.lon && e.lat === got.lat), item.id).toBe(true);
+      const verified = ZAGREB[Number(item.id.split(':')[1])]?.at;
+      expect(verified, item.id).toBeTruthy();
+      expect(distanceM(got, verified!)).toBeLessThanOrEqual(300);
+      named++;
+    }
+    expect(named).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each([
+    [85565, 'POGON JEDINSTVO'],
+    [85401, 'Zagrebački plesni centar'],
+    [85382, 'KunstTeatar'],
+  ])('names Kulturpunkt %i from its matched source, not its inflected hint', (id, name) => {
+    const item = byId(Number(id));
+    expect(resolveVenueName(item, gazetteer)).toBe(name);
+    expect(item.data?.venueHint).not.toBe(name);
+  });
 });
 
 describe('what counts as evidence', () => {
@@ -156,5 +188,58 @@ describe('what counts as evidence', () => {
       kultura: [], osm: [],
     });
     expect(resolveVenuePoint(hint({ venue: 'Tvornica kulture', venueHint: 'Dvorani Tvornice kulture' }), register)).toBeNull();
+  });
+
+  const unresolvedHints: Record<string, string>[] = [
+    { venueHint: 'Dvorani Kvart' },
+    { venueHint: 'Tvornici kulture u Splitu' },
+    { venueHint: 'Tvornici kulture', city: 'Rijeci' },
+    { venueHint: 'Prostoru bez poznatog imena' },
+    { venueHint: 'Galeriji' },
+    {},
+  ];
+  it.each(unresolvedHints)('returns neither a point nor a name without unambiguous evidence: %j', (data) => {
+    const item = hint(data);
+    expect(resolveVenuePoint(item, g)).toBeNull();
+    expect(resolveVenueName(item, g)).toBeNull();
+  });
+
+  it('uses the same source priority for the canonical name and point', () => {
+    const calendarItem: FeedItem = {
+      ...hint({ venue: 'TVORNICA KULTURE' }),
+      geo: { type: 'Point', coordinates: [15.99, 45.81] },
+    };
+    const register = [place('1', 'Tvornica kulture', 15.97)];
+    const calendarEntries = [calendarItem];
+    const osmEntries = [{ name: 'Tvornica Kulture', ...at(16.01, 45.81) }];
+    const item = hint({ venueHint: 'Tvornici kulture od 20 sati' });
+    for (const [source, name, lon] of [
+      [{ places: register, kultura: calendarEntries, osm: osmEntries }, 'Tvornica kulture', 15.97],
+      [{ places: [], kultura: calendarEntries, osm: osmEntries }, 'TVORNICA KULTURE', 15.99],
+      [{ places: [], kultura: [], osm: osmEntries }, 'Tvornica Kulture', 16.01],
+    ] as const) {
+      const index = buildGazetteer(source);
+      expect(resolveVenuePoint(item, index)).toEqual(at(lon, 45.81));
+      expect(resolveVenueName(item, index)).toBe(name);
+    }
+  });
+
+  it('uses the canonical register name for an alias-only match', () => {
+    const name = 'Gradsko dramsko kazalište Gavella';
+    const register = buildGazetteer({ places: [place('1', name, 15.97)], kultura: [], osm: [] });
+    const item = hint({ venueHint: 'Gavelli' });
+    expect(resolveVenuePoint(item, register)).toEqual(at(15.97, 45.81));
+    expect(resolveVenueName(item, register)).toBe(name);
+  });
+
+  it('takes both name and point from the longest agreeing match', () => {
+    const name = 'Dvorana Pogona Jedinstvo';
+    const index = buildGazetteer({ places: [], kultura: [], osm: [
+      { name: 'Pogon Jedinstvo', ...at(15.97, 45.81) },
+      { name, ...at(15.9701, 45.81) },
+    ] });
+    const item = hint({ venueHint: 'Dvorani Pogona Jedinstvo' });
+    expect(resolveVenuePoint(item, index)).toEqual(at(15.9701, 45.81));
+    expect(resolveVenueName(item, index)).toBe(name);
   });
 });

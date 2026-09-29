@@ -107,12 +107,12 @@ export function buildGazetteer(input: { places: readonly Place[]; kultura: reado
   return built;
 }
 
-/** One point for matches that agree, the longest name's; null when two lie AGREE_M or more apart. */
-function agreed(hits: readonly { lon: number; lat: number; stems?: readonly string[] }[]): { lon: number; lat: number } | null {
+/** One named entry for matches that agree, the longest name's; null when two lie AGREE_M or more apart. */
+function agreed(hits: readonly (VenueEntry & { stems?: readonly string[] })[]): VenueEntry | null {
   if (!hits.length) return null;
   for (let i = 0; i < hits.length; i++) for (let j = i + 1; j < hits.length; j++) if (distanceM(hits[i], hits[j]) >= AGREE_M) return null;
   const best = hits.reduce((a, b) => ((b.stems?.length ?? 0) > (a.stems?.length ?? 0) ? b : a));
-  return { lon: best.lon, lat: best.lat };
+  return best;
 }
 
 const phrasesOf = (text: unknown): string[][] =>
@@ -128,7 +128,8 @@ function leadsOf(text: unknown): string[][] {
   }).filter((p) => p.length > 0);
 }
 
-export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: number; lat: number } | null {
+/** Shared evidence path: a display name must identify the same entry as its point. */
+function resolveVenue(item: FeedItem, gazetteer: Gazetteer): VenueEntry | null {
   const g = gazetteer as Partial<Built>;
   if (!g.sources || !g.places || !g.placeById) return null;
   const data = item.data ?? {};
@@ -156,4 +157,14 @@ export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: 
     if (hits.length) return agreed(hits);
   }
   return null;
+}
+
+export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: number; lat: number } | null {
+  const venue = resolveVenue(item, gazetteer);
+  return venue ? { lon: venue.lon, lat: venue.lat } : null;
+}
+
+/** Canonical name from the matched source entry, never an unmatched venue hint. */
+export function resolveVenueName(item: FeedItem, gazetteer: Gazetteer): string | null {
+  return resolveVenue(item, gazetteer)?.name ?? null;
 }

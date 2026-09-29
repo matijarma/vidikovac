@@ -51,6 +51,8 @@
 //               carry, and every open door of the city would swamp them (on 28 September the rows of
 //               the six places alone were 39 distinct facts, with no U3 source live). The distinct
 //               open rows of a day are reported beside it.
+// Confirmed 29 September 2026 at 20:48: open facts are excluded from the citywide distinct count, which measures the round's sources.
+// Confirmed 29 September 2026 at 20:48: venue/open scoring starts at the DU3 capability marker so the measured baseline remains comparable.
 //
 // Output: per place x band (night 00-05, early 05-09, day 09-17, evening 17-22, late 22-24,
 // Zagreb local hour of the sample) the mean count of facts per sample; per Zagreb day the
