@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 import { e2ePorts, localOrigin } from './scripts/e2e-ports.mjs';
 
 // Two local servers, both `wrangler dev` on the same code:
+// --local disables remote bindings as well, so an AI binding cannot start a
+// Cloudflare proxy session before the APP_ENV=test worker gets to run.
 //   app    .dev.vars as committed in .dev.vars.example (SESSION_MINUTES=10, NETWORK_CHECK=off)
 //   short  the same plus --var SESSION_MINUTES:0.2, so the expiry spec sees a
 //          12-second session without touching the main instance's state
@@ -71,7 +73,7 @@ export default defineConfig({
   webServer: MANAGED_SERVERS
     ? [
         {
-          command: `npm run build && npm run dev -- --port ${PORTS.app} --inspector-port ${PORTS.appInspector} --var APP_ENV:test`,
+          command: `npm run build && npm run dev -- --local --port ${PORTS.app} --inspector-port ${PORTS.appInspector} --var APP_ENV:test`,
           url: `${APP_URL}/api/health`,
           timeout: 240_000,
           reuseExistingServer: !process.env.CI,
@@ -80,7 +82,7 @@ export default defineConfig({
         },
         {
           command:
-            `node scripts/require-app-build.mjs && npx wrangler dev --port ${PORTS.short} --inspector-port ${PORTS.shortInspector} --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short`,
+            `node scripts/require-app-build.mjs && npx wrangler dev --local --port ${PORTS.short} --inspector-port ${PORTS.shortInspector} --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short`,
           url: `${SHORT_URL}/api/health`,
           timeout: 120_000,
           reuseExistingServer: !process.env.CI,

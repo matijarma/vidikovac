@@ -1,8 +1,8 @@
 // One variable moves the whole local harness: E2E_PORT names the app server,
 // the short-session server takes the next port and both devtools inspectors
 // keep their old distance, so a second Playwright run on the host (from another
-// checkout) meets the first on no port. Unset, every value and both webServer
-// commands are byte for byte what the harness always ran.
+// checkout) meets the first on no port. Both managed servers explicitly
+// disable remote bindings, so an AI binding cannot request production access.
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlaywrightTestConfig } from '@playwright/test';
@@ -64,13 +64,13 @@ describe('playwright.config.ts', () => {
     return { baseURL: loaded.use?.baseURL, servers: servers as { command: string; url?: string }[] };
   }
 
-  it('without E2E_PORT starts exactly the servers it always started', async () => {
+  it('without E2E_PORT starts the classic servers with remote bindings disabled', async () => {
     const { baseURL, servers } = await config(undefined);
     expect(baseURL).toBe('http://localhost:8787');
     expect(servers.map((s) => [s.command, s.url])).toEqual([
-      ['npm run build && npm run dev -- --port 8787 --inspector-port 9229 --var APP_ENV:test', 'http://localhost:8787/api/health'],
+      ['npm run build && npm run dev -- --local --port 8787 --inspector-port 9229 --var APP_ENV:test', 'http://localhost:8787/api/health'],
       [
-        'node scripts/require-app-build.mjs && npx wrangler dev --port 8788 --inspector-port 9230 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
+        'node scripts/require-app-build.mjs && npx wrangler dev --local --port 8788 --inspector-port 9230 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
         'http://localhost:8788/api/health',
       ],
     ]);
@@ -80,9 +80,9 @@ describe('playwright.config.ts', () => {
     const { baseURL, servers } = await config('8797');
     expect(baseURL).toBe('http://localhost:8797');
     expect(servers.map((s) => [s.command, s.url])).toEqual([
-      ['npm run build && npm run dev -- --port 8797 --inspector-port 9239 --var APP_ENV:test', 'http://localhost:8797/api/health'],
+      ['npm run build && npm run dev -- --local --port 8797 --inspector-port 9239 --var APP_ENV:test', 'http://localhost:8797/api/health'],
       [
-        'node scripts/require-app-build.mjs && npx wrangler dev --port 8798 --inspector-port 9240 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
+        'node scripts/require-app-build.mjs && npx wrangler dev --local --port 8798 --inspector-port 9240 --var APP_ENV:test --var SESSION_MINUTES:0.2 --persist-to .wrangler/state-e2e-short',
         'http://localhost:8798/api/health',
       ],
     ]);
