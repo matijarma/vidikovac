@@ -23,7 +23,23 @@ import { closeSync, openSync, readSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { PbfReader } from 'pbf';
 
-const UTF8 = new TextDecoder('utf-8');
+const UTF8 = new TextDecoder('utf-8', { fatal: true });
+const MAX_RAW_BYTES = 32 * 1024 * 1024 - 1; // PBF_Format: uncompressed blobs must be less than 32 MiB.
+
+/** pbf is permissive about length-delimited fields. Never accept a partial message. */
+class CheckedReader extends PbfReader {
+  readFields(readField, result, end = this.length) {
+    if (!Number.isSafeInteger(end) || end < this.pos || end > this.length) throw new Error('osm-pbf: invalid message length');
+    const out = super.readFields((tag, value, pbf) => {
+      const expected = WIRE_TYPES.get(readField)?.[tag];
+      if (expected !== undefined && !expected.includes(pbf.type)) throw new Error('osm-pbf: invalid field wire type');
+      readField(tag, value, pbf);
+      if (this.pos > end) throw new Error('osm-pbf: field exceeds message');
+    }, result, end);
+    if (this.pos !== end) throw new Error('osm-pbf: truncated message');
+    return out;
+  }
+}
 
 /** Reads `length` bytes at `position` or throws when the file ends first. */
 function readExactly(fd, length, position) {
@@ -60,16 +76,21 @@ export function* readBlocks(path) {
       if (n === 0) return;
       if (n < 4) throw new Error('osm-pbf: truncated block length');
       const headerLength = lengthBytes.readUInt32BE(0);
-      if (headerLength > 64 * 1024) throw new Error(`osm-pbf: BlobHeader of ${headerLength} bytes (limit 64 KiB): not a PBF file`);
+      if (!headerLength || headerLength >= 64 * 1024) throw new Error(`osm-pbf: BlobHeader of ${headerLength} bytes (limit 64 KiB): not a PBF file`);
       position += 4;
-      const header = new PbfReader(readExactly(fd, headerLength, position)).readFields(readBlobHeader, { type: '', datasize: 0 });
+      const header = new CheckedReader(readExactly(fd, headerLength, position)).readFields(readBlobHeader, { type: '', datasize: 0 });
       position += headerLength;
-      if (!(header.datasize > 0) || header.datasize > 32 * 1024 * 1024) throw new Error(`osm-pbf: Blob of ${header.datasize} bytes (limit 32 MiB)`);
-      const blob = new PbfReader(readExactly(fd, header.datasize, position)).readFields(readBlob, {});
+      if (!header.type || !(header.datasize > 0) || header.datasize > 32 * 1024 * 1024) throw new Error(`osm-pbf: invalid BlobHeader (${header.datasize} bytes)`);
+      const blob = new CheckedReader(readExactly(fd, header.datasize, position)).readFields(readBlob, {});
       position += header.datasize;
       if (blob.unsupported) throw new Error(`osm-pbf: Blob field ${blob.unsupported} (lzma, bzip2, lz4 or zstd) is not supported`);
-      const data = blob.raw ?? (blob.zlib ? inflateSync(blob.zlib) : null);
-      if (!data) throw new Error('osm-pbf: Blob without data');
+      if ((blob.raw !== undefined) === (blob.zlib !== undefined)) throw new Error('osm-pbf: Blob must have exactly one payload');
+      if (blob.rawSize !== undefined && (!Number.isSafeInteger(blob.rawSize) || blob.rawSize < 0 || blob.rawSize > MAX_RAW_BYTES)) {
+        throw new Error('osm-pbf: invalid uncompressed Blob size');
+      }
+      if (blob.zlib && blob.rawSize === undefined) throw new Error('osm-pbf: compressed Blob without raw_size');
+      const data = blob.raw ?? inflateSync(blob.zlib, { maxOutputLength: MAX_RAW_BYTES });
+      if (data.length > MAX_RAW_BYTES) throw new Error('osm-pbf: uncompressed Blob exceeds limit');
       if (blob.rawSize !== undefined && data.length !== blob.rawSize) throw new Error(`osm-pbf: Blob inflated to ${data.length} bytes, header says ${blob.rawSize}`);
       yield { type: header.type, data };
     }
@@ -89,7 +110,7 @@ function readHeaderBlock(tag, h, pbf) {
 
 /** The HeaderBlock: features, writing program and the replication timestamp (seconds). */
 export function decodeHeader(data) {
-  const h = new PbfReader(data).readFields(readHeaderBlock, { requiredFeatures: [], optionalFeatures: [] });
+  const h = new CheckedReader(data).readFields(readHeaderBlock, { requiredFeatures: [], optionalFeatures: [] });
   const unknown = h.requiredFeatures.filter((f) => f !== 'OsmSchema-V0.6' && f !== 'DenseNodes');
   if (unknown.length) throw new Error(`osm-pbf: required features not supported: ${unknown.join(', ')}`);
   return h;
@@ -131,10 +152,10 @@ function readRelation(tag, r, pbf) {
 }
 
 function readGroup(tag, g, pbf) {
-  if (tag === 1) g.nodes.push(pbf.readMessage(readNode, { id: 0, keys: [], vals: [], lat: 0, lon: 0 }));
+  if (tag === 1) g.nodes.push(pbf.readMessage(readNode, { keys: [], vals: [] }));
   else if (tag === 2) g.dense = pbf.readMessage(readDense, { id: [], lat: [], lon: [], keysVals: [] });
-  else if (tag === 3) g.ways.push(pbf.readMessage(readWay, { id: 0, keys: [], vals: [], refs: [] }));
-  else if (tag === 4) g.relations.push(pbf.readMessage(readRelation, { id: 0, keys: [], vals: [] }));
+  else if (tag === 3) g.ways.push(pbf.readMessage(readWay, { keys: [], vals: [], refs: [] }));
+  else if (tag === 4) g.relations.push(pbf.readMessage(readRelation, { keys: [], vals: [] }));
 }
 
 function readBlock(tag, b, pbf) {
@@ -144,6 +165,20 @@ function readBlock(tag, b, pbf) {
   else if (tag === 19) b.latOffset = pbf.readVarint(true);
   else if (tag === 20) b.lonOffset = pbf.readVarint(true);
 }
+
+// Repeated numeric fields may be packed (2) or unpacked (0), per protobuf.
+const WIRE_TYPES = new Map([
+  [readBlobHeader, { 1: [2], 3: [0] }],
+  [readBlob, { 1: [2], 2: [0], 3: [2] }],
+  [readHeaderBlock, { 4: [2], 5: [2], 16: [2], 17: [2], 32: [0], 33: [0] }],
+  [readStringTable, { 1: [2] }],
+  [readDense, { 1: [0, 2], 8: [0, 2], 9: [0, 2], 10: [0, 2] }],
+  [readNode, { 1: [0], 2: [0, 2], 3: [0, 2], 8: [0], 9: [0] }],
+  [readWay, { 1: [0], 2: [0, 2], 3: [0, 2], 8: [0, 2] }],
+  [readRelation, { 1: [0], 2: [0, 2], 3: [0, 2] }],
+  [readGroup, { 1: [2], 2: [2], 3: [2], 4: [2] }],
+  [readBlock, { 1: [2], 2: [2], 17: [0], 19: [0], 20: [0] }],
+]);
 
 // ---------------------------------------------------------------------------
 // Node coordinates inside the box
@@ -197,20 +232,38 @@ export function readPois(path, { bbox, keys, select }) {
   const stats = { blocks: 0, nodes: 0, nodesInBox: 0, ways: 0, waysKept: 0, waysOutside: 0, relations: 0, relationsSkipped: 0, missingRefs: 0 };
   const index = new NodeIndex();
   const elements = [];
-  let header = null;
+  let header = null, sawWays = false;
   const wantedKeys = new Set(keys);
 
   for (const { type, data } of readBlocks(path)) {
     stats.blocks += 1;
-    if (type === 'OSMHeader') { header = decodeHeader(data); continue; }
+    if (type === 'OSMHeader') {
+      if (header) throw new Error('osm-pbf: duplicate OSMHeader block');
+      header = decodeHeader(data); continue;
+    }
     if (type !== 'OSMData') continue;
-    const block = new PbfReader(data).readFields(readBlock, { strings: [], groups: [], granularity: 100, latOffset: 0, lonOffset: 0 });
+    if (!header) throw new Error('osm-pbf: OSMData before OSMHeader');
+    const block = new CheckedReader(data).readFields(readBlock, { strings: [], groups: [], granularity: 100, latOffset: 0, lonOffset: 0 });
     const s = block.strings;
+    if (s[0] !== '' || !Number.isSafeInteger(block.granularity) || block.granularity <= 0
+      || !Number.isSafeInteger(block.latOffset) || !Number.isSafeInteger(block.lonOffset)) throw new Error('osm-pbf: invalid PrimitiveBlock metadata');
     const wanted = new Uint8Array(s.length);
     for (let i = 0; i < s.length; i++) if (wantedKeys.has(s[i])) wanted[i] = 1;
     const g = block.granularity;
     // Degrees * 1e7 as an integer: nanodegrees / 100.
-    const toE7 = (offset, value) => Math.round((offset + g * value) / 100);
+    const toE7 = (offset, value) => {
+      if (!Number.isSafeInteger(value) || !Number.isSafeInteger(offset + g * value)) throw new Error('osm-pbf: invalid coordinate');
+      return Math.round((offset + g * value) / 100);
+    };
+    const validId = (id) => {
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('osm-pbf: missing or unsafe object id');
+    };
+    const validStringId = (id) => Number.isInteger(id) && id > 0 && id < s.length;
+    const validateTags = (keysArr, valsArr) => {
+      if (keysArr.length !== valsArr.length || !keysArr.every(validStringId) || !valsArr.every(validStringId)) {
+        throw new Error('osm-pbf: invalid tag columns or string id');
+      }
+    };
     const inBox = (lonE7, latE7) => lonE7 >= west * 1e7 && lonE7 <= east * 1e7 && latE7 >= south * 1e7 && latE7 <= north * 1e7;
     const tagsOf = (keysArr, valsArr) => {
       const tags = {};
@@ -220,16 +273,26 @@ export function readPois(path, { bbox, keys, select }) {
     const hasWanted = (keysArr) => keysArr.some((k) => wanted[k] === 1);
 
     for (const group of block.groups) {
+      if ([group.nodes.length > 0, !!group.dense, group.ways.length > 0, group.relations.length > 0].filter(Boolean).length > 1) {
+        throw new Error('osm-pbf: mixed PrimitiveGroup types');
+      }
+      if (sawWays && (group.dense || group.nodes.length)) throw new Error('osm-pbf: nodes after ways cannot be resolved in one pass');
       if (group.dense) {
         const d = group.dense;
+        if (d.id.length !== d.lat.length || d.id.length !== d.lon.length) throw new Error('osm-pbf: unequal DenseNodes columns');
         let id = 0, lat = 0, lon = 0, kv = 0;
         for (let i = 0; i < d.id.length; i++) {
           id += d.id[i]; lat += d.lat[i]; lon += d.lon[i];
+          validId(id);
           stats.nodes += 1;
           // This node's tags: key/value string ids up to a 0 delimiter (an empty keysVals means no node has tags).
           let from = kv, candidate = false;
           if (d.keysVals.length) {
-            while (kv < d.keysVals.length && d.keysVals[kv] !== 0) { if (wanted[d.keysVals[kv]] === 1) candidate = true; kv += 2; }
+            while (kv < d.keysVals.length && d.keysVals[kv] !== 0) {
+              if (!validStringId(d.keysVals[kv]) || !validStringId(d.keysVals[kv + 1])) throw new Error('osm-pbf: invalid DenseNodes tag string id');
+              if (wanted[d.keysVals[kv]] === 1) candidate = true;
+              kv += 2;
+            }
             if (kv >= d.keysVals.length) throw new Error('osm-pbf: DenseNodes keys_vals ends without its delimiter');
             kv += 1;
           }
@@ -242,8 +305,11 @@ export function readPois(path, { bbox, keys, select }) {
           for (let j = from; d.keysVals[j] !== 0; j += 2) tags[s[d.keysVals[j]]] = s[d.keysVals[j + 1]];
           if (select(tags)) elements.push({ type: 'node', id, lon: lonE7 / 1e7, lat: latE7 / 1e7, tags });
         }
+        if (kv !== d.keysVals.length) throw new Error('osm-pbf: extra DenseNodes tag delimiters');
       }
       for (const n of group.nodes) {
+        validId(n.id);
+        validateTags(n.keys, n.vals);
         stats.nodes += 1;
         const lonE7 = toE7(block.lonOffset, n.lon), latE7 = toE7(block.latOffset, n.lat);
         if (!inBox(lonE7, latE7)) continue;
@@ -254,6 +320,9 @@ export function readPois(path, { bbox, keys, select }) {
         if (select(tags)) elements.push({ type: 'node', id: n.id, lon: lonE7 / 1e7, lat: latE7 / 1e7, tags });
       }
       for (const w of group.ways) {
+        sawWays = true;
+        validId(w.id);
+        validateTags(w.keys, w.vals);
         stats.ways += 1;
         if (!hasWanted(w.keys)) continue;
         const tags = tagsOf(w.keys, w.vals);
@@ -261,7 +330,7 @@ export function readPois(path, { bbox, keys, select }) {
         index.ensureSorted();
         let ref = 0, sumLon = 0, sumLat = 0, found = 0;
         const refs = [];
-        for (const delta of w.refs) { ref += delta; refs.push(ref); }
+        for (const delta of w.refs) { ref += delta; validId(ref); refs.push(ref); }
         if (refs.length > 1 && refs[0] === refs[refs.length - 1]) refs.pop();
         for (const r of refs) {
           const at = index.find(r);
@@ -273,6 +342,8 @@ export function readPois(path, { bbox, keys, select }) {
         elements.push({ type: 'way', id: w.id, lon: Math.round(sumLon / found) / 1e7, lat: Math.round(sumLat / found) / 1e7, tags });
       }
       for (const r of group.relations) {
+        validId(r.id);
+        validateTags(r.keys, r.vals);
         stats.relations += 1;
         if (hasWanted(r.keys) && select(tagsOf(r.keys, r.vals))) stats.relationsSkipped += 1;
       }
