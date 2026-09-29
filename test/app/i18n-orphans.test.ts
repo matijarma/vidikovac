@@ -116,7 +116,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1048 Croatian leaves and 1020 English ones', () => {
+  it('the catalogue holds 1084 Croatian leaves and 1056 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -132,10 +132,13 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // segment word): 1,042 hr, 1,014 en; +3 landing.purpose.countTitle/countBody and
     // landing.actions.stats, the landing's link to the public statistics: 1,045 hr, 1,017 en; round 2 F9 +2
     // kiosk.legend.bikesEmpty and kiosk.legend.bikesFar, the wall legend's BAJS entries by what the map draws
-    // (kiosk/invitation.ts): 1,047 hr, 1,019 en; the closure row's sub (kiosk.nearby.closed): 1,048 hr, 1,020 en.
+    // (kiosk/invitation.ts): 1,047 hr, 1,019 en; the closure row's sub (kiosk.nearby.closed): 1,048 hr, 1,020 en;
+    // U3 (docs/upgrade-2026-10-plan/U3.md S2 to S4) +36: 24 kiosk.nearby.* row words (rainChance, rain.*, cut.*,
+    // openKind.*, road.*), 9 kiosk.sentence.* families and the 2 kiosk.sentence.utility.* words, arrivals.train:
+    // 1,084 hr, 1,056 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1048);
-    expect(leafKeys(en).length).toBe(1020);
+    expect(leaves.length).toBe(1084);
+    expect(leafKeys(en).length).toBe(1056);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

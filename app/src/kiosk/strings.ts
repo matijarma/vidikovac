@@ -21,6 +21,7 @@
 // Croatian JSON at compile time; hr/en parity is the i18n test's.
 import type { LayerId } from '../../../worker/protocol';
 import type { SentenceKicker } from '../../../shared/kiosk/sentence';
+import type { OpenKind } from '../../../shared/city/osm-hours';
 import { createDefaultI18n, type SupportedLocale } from '../i18n/create-default-i18n';
 import en from '../i18n/en.json';
 import hr from '../i18n/hr.json';
@@ -164,11 +165,18 @@ export interface KioskStrings {
     lastTrams: string;
     firstTram: string;
     outageNote: string;
+    /** The facts-breadth rows' own words (U3): the rain chance "vjerojatnost {p} %", the rain word by
+     *  amount, a cut's sub, the open row's kind word and a road state. */
+    rainChance: string;
+    rain: Record<'slaba' | 'kisa' | 'jaka', string>;
+    cut: Record<'struja' | 'voda' | 'vodaDay', string>;
+    openKind: Record<OpenKind, string>;
+    road: Record<'radovi' | 'regulacija' | 'zatvoreno' | 'zastoj', string>;
   };
   /** The header sentence (WP1, kiosk.sentence.*): the six kicker words
    *  (Promet · Kultura · Vrijeme · Bicikli · Noćas · Radovi) and the templates
    *  the deterministic fallback fills, one fact each. */
-  sentence: Record<SentenceTemplate, string> & { kicker: Record<SentenceKicker, string> };
+  sentence: Record<SentenceTemplate, string> & { kicker: Record<SentenceKicker, string>; utility: Record<'struja' | 'voda', string> };
   /** The handheld invitation's one line: how a public display is started, and that scanning changes nothing on it. */
   handheld: { info: string };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
@@ -345,7 +353,9 @@ export interface KioskStrings {
 export type SentenceTemplate =
   | 'departureIn' | 'departureAt' | 'busIn' | 'busAt' | 'closureUntil' | 'weather' | 'weatherNoRange' | 'weatherTemperature'
   | 'bikes' | 'sunset' | 'sunsetAt' | 'sunsetTime' | 'sunrise' | 'sunriseAt' | 'sunriseTime' | 'lastTram' | 'firstTram'
-  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage';
+  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage'
+  | 'trainAt' | 'rainAt' | 'forecastTomorrow' | 'supplyCutToday' | 'supplyCutTomorrow' | 'roadUntil' | 'openUntil'
+  | 'eventLastTram' | 'bikesEmpty';
 
 type Kiosk = typeof hr.kiosk;
 type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
@@ -409,14 +419,25 @@ function build(code: SupportedLocale): KioskStrings {
       notices: forms('front', 'notices'),
       moreLate: forms('front', 'moreLate'),
     },
-    nearby: group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote']),
+    nearby: {
+      ...group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote', 'rainChance']),
+      rain: record(['slaba', 'kisa', 'jaka'] as const, (word) => `kiosk.nearby.rain.${word}`),
+      cut: record(['struja', 'voda', 'vodaDay'] as const, (word) => `kiosk.nearby.cut.${word}`),
+      openKind: record([
+        'ljekarna', 'posta', 'knjiznica', 'trznica', 'trgovina', 'pekara', 'kafic', 'bar', 'restoran', 'kino', 'banka', 'benzinska', 'ordinacija',
+      ] as const satisfies readonly OpenKind[], (kind) => `kiosk.nearby.openKind.${kind}`),
+      road: record(['radovi', 'regulacija', 'zatvoreno', 'zastoj'] as const, (state) => `kiosk.nearby.road.${state}`),
+    },
     sentence: {
       ...group('sentence', [
         'departureIn', 'departureAt', 'busIn', 'busAt', 'closureUntil', 'weather', 'weatherNoRange', 'weatherTemperature',
         'bikes', 'sunset', 'sunsetAt', 'sunsetTime', 'sunrise', 'sunriseAt', 'sunriseTime', 'lastTram', 'firstTram',
         'event', 'opening', 'pharmacy', 'always', 'outage',
+        'trainAt', 'rainAt', 'forecastTomorrow', 'supplyCutToday', 'supplyCutTomorrow', 'roadUntil', 'openUntil',
+        'eventLastTram', 'bikesEmpty',
       ]),
       kicker: record(['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const, (kind) => `kiosk.sentence.kicker.${kind}`),
+      utility: record(['struja', 'voda'] as const, (utility) => `kiosk.sentence.utility.${utility}`),
     },
     handheld: group('handheld', ['info']),
     say: {

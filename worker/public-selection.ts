@@ -14,6 +14,9 @@ const KEY = /^[0-9a-f]{16}$/;
 const MODULE_IDS: readonly ModuleId[] = [
   'zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap',
   'emsc', 'glasnik', 'ckan-geo', 'dogadanja',
+  // The two event modules of the facts-breadth package (docs/upgrade-2026-10-plan/U3.md §0.2(a)): a "U blizini" event
+  // row of theirs opens Kultura like a dogadanja row. Named by id: the schema that types them is U3-modules'.
+  'kultura-zg' as ModuleId, 'programi' as ModuleId,
 ];
 
 /** Stable, bounded identity for UI reconciliation and relay, NOT a security hash. */

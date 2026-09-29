@@ -32,9 +32,12 @@ export { readWrittenSentences } from '../../../shared/kiosk/sentence';
 /** The phone's sentence runs to the header's own length (companion §12, step 12). */
 export const PHONE_SENTENCE_BUDGET = 80;
 
+/** The modules whose items the phone's Kultura layer opens: dogadanja and, since U3, the City's programme and the libraries'. */
+const CULTURE_MODULES: readonly string[] = ['dogadanja', 'kultura-zg', 'programi'];
+
 /** Where a row's subject opens on the phone: an event in Događanja, everything else on Karta. */
 export function rowLayer(selection: PublicSelection): LayerId {
-  return selection.kind === 'item' && selection.module === 'dogadanja' ? 'kultura' : 'u-pokretu';
+  return selection.kind === 'item' && CULTURE_MODULES.includes(String(selection.module)) ? 'kultura' : 'u-pokretu';
 }
 
 /**
@@ -61,9 +64,14 @@ export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string
   return `${html.slice(0, open)}${link}${html.slice(open, html.length - '</li>'.length)}</a></li>`;
 }
 
+/** The rows the list shows: selectNearby's order, at most `cap`, the timeless row kept, a row whose text fails the check left out whole. */
+export function nearbyShownRows(rows: readonly NearbyRow[], cap: number): NearbyRow[] {
+  return fitRows(rows.filter(vettedTimelineRow), cap);
+}
+
 /** The rows in selectNearby's order, at most `cap`, the timeless row kept; a row whose text fails the check is left out whole. */
 export function nearbyRowsMarkup(i18n: I18n, rows: readonly NearbyRow[], cap: number, now: number): string {
-  return fitRows(rows.filter(vettedTimelineRow), cap).map((row) => nearbyRowMarkup(i18n, row, now)).join('');
+  return nearbyShownRows(rows, cap).map((row) => nearbyRowMarkup(i18n, row, now)).join('');
 }
 
 export interface NearbySectionOptions {

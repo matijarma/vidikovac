@@ -321,7 +321,8 @@
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
     "down": "The timetable is unavailable right now.",
-    "timetable": "Timetable"
+    "timetable": "Timetable",
+    "train": "Train"
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
@@ -849,7 +850,20 @@
       "sunsetTime": "At {time} the sun sets.",
       "sunriseAt": "Sunrise is at {time}.",
       "sunriseTime": "At {time} the sun rises.",
-      "opening": "{name} opens {time}."
+      "opening": "{name} opens {time}.",
+      "trainAt": "{station}: train towards {to} leaves at {time}.",
+      "rainAt": "Around {time} {condition}; chance {p}.",
+      "forecastTomorrow": "Tomorrow {condition}, {min} to {max} °C.",
+      "supplyCutToday": "{street}: no {what} today from {from} to {until}.",
+      "supplyCutTomorrow": "{street}: no {what} tomorrow from {from} to {until}.",
+      "roadUntil": "{street}: {what} until {until}.",
+      "openUntil": "{name}: open until {time}.",
+      "eventLastTram": "After “{title}” the last tram {route} leaves {time}.",
+      "bikesEmpty": "BAJS {station}: 0 bikes; BAJS {other}: {bikes}.",
+      "utility": {
+        "struja": "power",
+        "voda": "water"
+      }
     },
     "handheld": {
       "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
@@ -913,7 +927,39 @@
       "sunset": "Sunset",
       "lastTrams": "Last trams",
       "firstTram": "First tram",
-      "outageNote": "ZET is not sending vehicle positions right now; departures follow the timetable."
+      "outageNote": "ZET is not sending vehicle positions right now; departures follow the timetable.",
+      "rainChance": "chance {p} %",
+      "rain": {
+        "slaba": "light rain",
+        "kisa": "rain",
+        "jaka": "heavy rain"
+      },
+      "cut": {
+        "struja": "no power {from}–{until}",
+        "voda": "no water {from}–{until}",
+        "vodaDay": "no water"
+      },
+      "openKind": {
+        "ljekarna": "pharmacy",
+        "posta": "post office",
+        "knjiznica": "library",
+        "trznica": "market",
+        "trgovina": "shop",
+        "pekara": "bakery",
+        "kafic": "café",
+        "bar": "bar",
+        "restoran": "restaurant",
+        "kino": "cinema",
+        "banka": "bank",
+        "benzinska": "petrol station",
+        "ordinacija": "doctor’s office"
+      },
+      "road": {
+        "radovi": "roadworks",
+        "regulacija": "temporary traffic regulation",
+        "zatvoreno": "closed to traffic",
+        "zastoj": "congestion"
+      }
     },
     "paired": {
       "warnings": "DHMZ warnings",
