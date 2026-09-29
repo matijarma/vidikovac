@@ -76,6 +76,21 @@ describe('what enters and what leaves', () => {
     expect(ends.noServiceTrips).toEqual({ t: T + 900 });
   });
 
+  it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])('keeps %s as a literal trip id with its finite expiry through persistence', (tripId) => {
+    const operator = fold([
+      { id: 'first', tripId, end: T + 100 },
+      { id: 'later', tripId, end: T + 200 },
+    ]);
+    expect(Object.hasOwn(operator.noServiceTrips, tripId)).toBe(true);
+    expect(operator.noServiceTrips[tripId]).toBe(T + 200);
+    expect(noServiceTripIds(operator, none, T)).toEqual([tripId]);
+    expect(noServiceTripIds(operator, new Set([tripId]), T)).toEqual([]);
+    const restored = deserializeState(serializeState({ ...emptyState(), operator })).operator;
+    expect(restored.noServiceTrips[tripId]).toBe(T + 200);
+    expect(noServiceTripIds(restored, none, T + 200)).toEqual([]);
+    expect(operatorSummary(restored, none, T + 200).cancelledTrips).toBe(0);
+  });
+
   it('leaves out a trip a positioned vehicle carries', () => {
     const operator = fold([{ id: 'a', tripId: 'ran' }, { id: 'b', tripId: 'gone' }]);
     expect(noServiceTripIds(operator, new Set(['ran']), T)).toEqual(['gone']);

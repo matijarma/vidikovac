@@ -82,7 +82,9 @@ function periodEnd(alert: RawAlert): number | null {
  *  and the counts; `textAtSec` only moves forward when an alert has words. */
 export function foldOperator(prev: OperatorState, feed: DecodedFeed): OperatorState {
   const counts = emptyOperatorCounts();
-  const noServiceTrips: Record<string, number | null> = {};
+  // Feed ids are literal keys, including Object.prototype names: inherited
+  // values must not become expiry times or swallow a "__proto__" trip.
+  const noServiceTrips: Record<string, number | null> = Object.create(null);
   let anyText = false;
 
   for (const alert of feed.alerts ?? []) {
