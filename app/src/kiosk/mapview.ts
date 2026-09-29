@@ -338,11 +338,11 @@ export function vehiclePoints(zet: ModuleSnapshot | undefined, now: number): Map
   return vehicleFixes(zet, now).map((fix) => ({ ...fix, title: routeName(fix.routeId ?? '') }));
 }
 
-/** Closures with a line geometry, as map lines. */
-export function closureLines(prometnice: ModuleSnapshot | undefined): MapLine[] {
+/** Closures with a line geometry and a window that holds now (the rule the list's rows use), as map lines. */
+export function closureLines(prometnice: ModuleSnapshot | undefined, now: number): MapLine[] {
   const out: MapLine[] = [];
   for (const item of prometnice?.items ?? []) {
-    if (item.kind !== 'closure' || item.geo?.type !== 'LineString') continue;
+    if (item.kind !== 'closure' || item.geo?.type !== 'LineString' || windowOf(item, now) !== 'active') continue;
     out.push({ id: item.id, title: item.title, coordinates: item.geo.coordinates as [number, number][] });
   }
   return out;
@@ -1058,7 +1058,7 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     testid: 'kiosk-map',
     ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? '',
     points: points.filter(point => point.at !== undefined || point.title === '' || vetExternal('name', point.title, 'row') !== null),
-    lines: closureLines(input.snapshots.prometnice).filter(line => line.title === '' || vetExternal('name', line.title, 'row') !== null),
+    lines: closureLines(input.snapshots.prometnice, input.now).filter(line => line.title === '' || vetExternal('name', line.title, 'row') !== null),
     reducedMotion: input.reducedMotion,
     onSelect:input.onSelect,
     onCamera:input.onCamera,

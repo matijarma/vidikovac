@@ -87,7 +87,7 @@ function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLE
       ...vehiclePoints(ctx.snapshots['zet-rt'], now),
       ...curatedCityPoints(ctx.city ?? emptyCity(), ctx.snapshots.dogadanja?.items ?? [], now, CURATED_WALL),
     ],
-    lines: closureLines(ctx.snapshots.prometnice),
+    lines: closureLines(ctx.snapshots.prometnice, now),
     center: camera.center,
     zoom: camera.zoom,
     stop: place.stop ?? place.departuresStop,
