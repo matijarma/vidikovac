@@ -42,8 +42,15 @@ upute o pretraživanju dodirom. Ukratko:
 - Sigurnosna traka uvijek je vidljiva i nosi stanje, izvore bez vremena i
   dežurnu ljekarnu kao zeleni križ, „24/7” i adresu.
 - Zadana tema zaslona prati sunce, pa zaslon noću prelazi na tamnu paletu.
-  Kad ZET ne šalje položaje vozila, karta ostaje karta bez vozila, s jednom
-  tihom napomenom, a svaki je polazak siv sat po voznom redu.
+  Kad ZET ne šalje položaje vozila ili tri minute ne stigne nijedan nov, karta
+  ostaje karta bez vozila, s jednom tihom napomenom, svaki je polazak siv sat
+  po voznom redu, a zaglavlje ne najavljuje nijedan polazak. Kad ZET šalje
+  znatno manje vozila nego što ih predviđa vozni red, zaglavlje to jednom
+  kaže brojem (koliko ih je u pokretu i koliko ih predviđa vozni red),
+  rečenicu o polasku po voznom redu zadržavaju samo linije za koje se vozilo
+  vidi, a vlakovi i BAJS idu naprijed. Kad vozila gotovo nema, zaglavlje ne
+  najavljuje nijedan polazak, karta pokazuje mrežu i vozila koja postoje, a
+  jedna tiha napomena kaže ista dva broja. Uzrok se ne navodi.
 - Na zaslonu s dodirom dodir služi samo za čitanje: dodir na prsten
   stajališta 60 sekundi pokazuje polaske s tog stajališta, dodir na redak
   popisa pokazuje pojedinosti retka, a dodir na dežurnu ljekarnu adresu i
@@ -250,9 +257,16 @@ Desni stupac nosi popis „U blizini”, a ispod popisa pozivnicu. Naslov popisa
 ispisuje polumjer kruga i vrijeme hoda, na primjer
 „U blizini · 2,2 km · ~16 min”. Popis je jedna vremenska os oko mjesta. Prvo
 idu polasci, najviše tri: plavo „za N min” za praćeno vozilo u idućih deset
-minuta, a sivi sat za vozni red i za svaki kasniji polazak. Zatim slijede
-retci s vremenom: kraj zatvaranja prometnice, događanje s mjestom
-održavanja i tramvajem do mjesta događanja, sljedeći zalazak ili izlazak
+minuta, a sivi sat za vozni red i za svaki kasniji polazak. Odmah iza polazaka
+stoji najviše jedna ZET-ova obavijest, s riječima „ZET javlja” umjesto
+vremena: prometna obavijest kad imenuje liniju koja staje na tom mjestu,
+obavijest iz ZET-ovih novosti kad govori o prometu, obje najviše četiri dana
+od objave i ne nakon dana koji naslov imenuje. Zatim slijede retci s
+vremenom: kraj zatvaranja prometnice (zatvaranje nepoznatog kraja ispisuje
+„u tijeku”), događanje s mjestom održavanja i tramvajem do mjesta događanja,
+prvi polazak vlaka kad je kolodvor u krugu (sivi sat), kiša u iduća dva sata,
+planirani prekid struje ili vode, stanje ceste s krajem i najbliže otvoreno
+mjesto s vremenom zatvaranja, sljedeći zalazak ili izlazak
 sunca (nikad oba), večerašnji zadnji polasci kao jedan redak, četiri sata
 unaprijed, od 22 sata prvi jutarnji polazak linije koja sljedeća kreće, sve
 dok ne krenu sve linije koje ondje staju, a najkasnije do 6 sati, i, kad se
@@ -266,12 +280,19 @@ najmanja visina retka, od 64 do 92 piksela, ovisi o broju stavki, pa manje
 stavki znači veće retke, a redak s duljim tekstom viši je. Oznaka linije u
 retku polaska velika je koliko i naslov retka: najmanje 40 piksela, a u
 tamnoj temi 44. Ništa se ne reže trotočjem: predug redak ispisuje kraći
-cjeloviti naziv iz izvora ili se prelama u cijelosti; kad retci ne stanu, s
-popisa izlaze cijeli retci: najprije retci za sutra (sutrašnje otvaranje ili
-događanje, sutrašnji izlazak sunca), najkasniji prvi, zatim drugi i treći
-polazak, pa današnji retci s vremenom, najkasniji prvi; zatvaranje prometnice
-nije redak za sutra, jer je ulica zatvorena sada. Redak zadnjih polazaka, redak prvog jutarnjeg
-polaska i jedan redak „uvijek” zbog prostora nikad ne izlaze. Retci se
+cjeloviti naziv iz izvora ili se prelama u cijelosti. Jedine su iznimke naslov
+događanja bez kraćeg naziva i naslov ZET-ove obavijesti, koji se režu na dva
+retka. Kad retci ne stanu, s popisa izlaze cijeli retci: najprije retci za
+sutra (sutrašnje otvaranje ili događanje, sutrašnji izlazak sunca),
+najkasniji prvi; zatim retci vlaka, kiše, prekida struje ili vode, stanja
+ceste i najbližeg otvorenog mjesta, najkasniji prvi; zatim zadnji od drugog i
+trećeg polaska, osim kad je dalje od njega izlazak ili zalazak sunca,
+otvaranje ili događanje za više od sat vremena, koje tada izlazi prije
+polaska, najkasnije prvo; pa današnji retci s vremenom, najkasniji prvi,
+događanja prije zatvaranja. Kad nakon izlaska retka za već izbačeni redak
+opet ima mjesta, on se vraća u istom mjerenju, najvredniji prvi. Zatvaranje
+prometnice nije redak za sutra, jer je ulica zatvorena sada. Redak zadnjih polazaka, redak prvog jutarnjeg
+polaska, redak ZET-ove obavijesti i jedan redak „uvijek” zbog prostora nikad ne izlaze. Retci se
 mjere u skrivenom popisu iste širine, a na vidljivi popis stiže samo konačni
 izbor. Redak se ne iscrtava ponovno dok ostaje na popisu: novi redak umeće
 se jednom, odmah na svoje mjesto u vremenu, i ondje se postupno pojavi;
@@ -291,8 +312,13 @@ smanjeni pokret ili lagani prikaz. Nema pomične trake, teksta koji klizi ni
 trotočja: preduga rečenica preskače se, a ne reže. Pločica sesije i
 obavijest o uparivanju imaju prednost pred rečenicom, a izričita
 prezentacija zaustavlja i rečenicu i popis. Rečenica nastaje iz istih
-činjenica kao popis, uz vremenske prilike, zatvaranja i BAJS stanice u
-krugu. Rečenica ostaje barem jedan ritam, osim kad činjenica te rečenice
+činjenica kao popis, uz vremenske prilike, kišu u iduća dva sata, sutrašnju
+prognozu, zatvaranja, BAJS stanice u krugu i ZET-ove obavijesti. Kad vozila
+koja se vide i vozni red nisu u skladu, prva je rečenica o broju vozila u
+pokretu, bez navođenja uzroka. Tri spoja povezuju izvore: kiša u iduća dva
+sata, događanje koje završava nakon zadnjeg tramvaja (rečenica kaže koji
+tramvaj još polazi) i prazna BAJS stanica (rečenica kaže i najbližu koja ima
+bicikala). Rečenica ostaje barem jedan ritam, osim kad činjenica te rečenice
 prestane vrijediti. Kad se ista činjenica ponovno izrekne (sljedeća minuta
 odbrojavanja, pomaknuta procjena, ponovljeni kraj zatvaranja), isti se tekst
 osvježi na mjestu, bez prijelaza, a rečenica nikad ne prelazi s „za N min”
@@ -392,17 +418,25 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   „uživo” ili „vozni red”. Na telefonu čitač zaslona praćeni redak najavljuje
   riječju „uživo”, a jedna rečenica o tome odakle procjena dolazi prikazuje
   se samo u pojedinostima stajališta. Ništa se ne izmišlja: bez praćenog
-  vozila nema odbrojavanja.
+  vozila nema odbrojavanja. Polazak za koji ZET u svom feedu objavi da neće
+  prometovati ne prikazuje se, osim kad tu vožnju već vozi vozilo s javljenim
+  položajem; ZET-ova oznaka otkazane vožnje u rasporedu sama ne uklanja
+  polazak, jer takve vožnje u pravilu prometuju. Na telefonu pojedinosti
+  stajališta kažu kad je ZET otkazao polaske linije.
 - Nedostajući ili neupotrebljivo velik medijan ne prikazuje se kao „na vrijeme”
   niti se skraćuje na izmišljenu vrijednost. Sirovi izvor ostaje neizmijenjen.
 - Prekid izvora zaustavlja procijenjeno kretanje. Na telefonu posljednji
   podaci mogu ostati vidljivi uz oznaku zastarjelosti; pregled grada na
   zaslonu ne ispisuje ni oznake svježine ni vrijeme dohvata.
-- Kad ZET ne šalje položaje vozila, karta na pregledu grada ostaje karta
-  (mreža, stajališta, BAJS stanice, zatvaranja i mjesta), ali bez vozila i s
-  jednom tihom napomenom na karti. Svaki je polazak na popisu tada ispisan
-  kao vrijeme po voznom redu, a rečenica u zaglavlju kaže ono što se zna.
-  Nijedan naslov ne kaže „nedostupno”.
+- Kad ZET ne šalje položaje vozila ili tri minute ne stigne nijedan nov,
+  karta na pregledu grada ostaje karta (mreža, stajališta, BAJS stanice,
+  zatvaranja i mjesta), ali bez vozila i s jednom tihom napomenom na karti
+  („ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez
+  potvrde.”). Svaki je polazak na popisu tada ispisan kao vrijeme po voznom
+  redu, a zaglavlje ne najavljuje nijedan polazak. Nijedan naslov ne kaže
+  „nedostupno”. Broj vozila u pokretu broji samo vozila sa svježim
+  položajem; vozilo u spremištu ili ono koje s dodijeljenom vožnjom stoji
+  dulje od pola sata (autobus 46 minuta) ne broji se i ne crta.
 - Prognoza prikazuje stvarne dnevne vrijednosti, ne izmišljeni satni niz.
 - Nedatirane obavijesti nisu današnja događanja; trajanje izložbe nije novo
   otvorenje svakog dana.
@@ -413,12 +447,16 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   pojedinostima postaje na Karti: to je opažanje postaje, a ne ocjena za
   cijeli grad. Arhivska građa nije implementirana integracija ovog
   prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
-  nema praćenih vozila, pa nema ni procjene dolaska.
+  nema praćenih vozila, pa nema ni procjene dolaska. Kad je kolodvor u
+  krugu, prvi polazak vlaka stoji i na popisu „U blizini”, kao siv sat, a
+  kad ZET gotovo ne vozi, vlakovi dolaze prije ostalih redaka s vremenom.
 - „Zadnji polazak” je posljednji polazak po voznom redu ZET-a, ne procjena
   dolaska.
 - Svaka rečenica u zaglavlju odobreni je predložak ispunjen jednom
   činjenicom samog zaslona (polasci, zatvaranja, događanja, sunce, vremenske
-  prilike, BAJS stanice, ljekarna), ne izvornim tekstom. Poslužitelj
+  prilike, BAJS stanice, ljekarna, broj vozila u pokretu, ZET-ove obavijesti,
+  vlakovi, kiša, sutrašnja prognoza, prekidi struje i vode, stanje na
+  cestama, radno vrijeme mjesta), ne izvornim tekstom. Poslužitelj
   (`POST /api/kiosk/sentences`) modelu Workers AI nudi samo provjerene
   predloške s vrijednostima; model smije samo birati među ponuđenima i ne
   piše vlastite riječi. Poslužitelj prihvaća rečenicu samo ako ima najviše 80
