@@ -362,7 +362,9 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
       'The copies stay as they are: a rail-graph change to the committed network is not measured on them. To measure it on this matcher, re-cut a sample from a fresh recording of the current feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
     ]
     : [
-      'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
+      s.use
+        ? 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining; what that means for this sample is said under "What it is for".'
+        : 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
     ];
   const lines = [
     ...(s.lead ? [s.lead, ''] : []),
@@ -398,9 +400,6 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '',
     `${joinsArtefact ? `The frames name trips of ZET's static GTFS feed **${s.feedVersion ?? 'unknown'}**: ` : `The frames name trips of a feed other than the committed artefacts' **${s.feedVersion ?? 'unknown'}**: only `}${join} (feed ${s.feedVersion ?? 'unknown'}). Service prefixes of the tram trip ids: ${s.services.join(', ') || 'none'}. The network artefact of the ${joinsArtefact ? 'same feed' : 'committed feed'} is \`${networkCited}\`, graphHash \`${network.graphHash ?? 'unknown'}\`.`,
     '',
-    s.use
-      ? 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining; what that means for this sample is said under "What it is for".'
-      : 'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
     ...artefactNote,
     '',
     '## How it was cut',
