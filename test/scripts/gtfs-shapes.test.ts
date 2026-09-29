@@ -36,11 +36,17 @@ import {
   decodeStopOnEdge,
   fromColumnar,
   graphHashOf,
+  SERVICE_AREA,
   main,
+  parseShapesTxt,
+  parseTripsTxt,
   pathThroughStops,
+  placeStops,
+  repeatedSequences,
   stopSequenceHash,
   toMetres,
 } from '../../scripts/gtfs-shapes.mjs';
+import { parseCsv } from '../../scripts/gtfs-routes.mjs';
 import { FEED_VERSION } from '../../app/src/motion/network-meta';
 import { toLonLat } from '../../shared/motion/geo';
 import { decodeNetwork } from '../../shared/motion/network';
@@ -421,6 +427,74 @@ describe('buildNetwork', () => {
 // trimmed any more.
 const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:102900d1 317_1', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:1:1:7e51cfc2 317_2', 'path:8:0:dce55b90 1780_18'];
 const TRIMMED_CASES: string[] = [];
+
+// Feed 000396 (28 Sep 2026) carried two kinds of defect the builders met for
+// the first time: shapes whose shape_pt_sequence values repeat (3_3 held its
+// own 164 points and 121 rows of 2_30 under the same numbers, zigzagging 59.7 km
+// for 9.9 km of track) and platforms far outside Zagreb (Kvaternikov trg
+// 236_10 at 74.19 N). A repeating shape is dropped and its trips are built as
+// trips without a shape; a platform outside SERVICE_AREA fails by name unless
+// the overrides file gives its position.
+describe('feed defects: a shape that is no polyline, a platform outside the service area', () => {
+  const shapeRows = (rows: string) => parseShapesTxt(parseCsv('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n' + rows));
+
+  it('names every shape that repeats a sequence number, with how many repeat, and no other', () => {
+    const byId = shapeRows('A,45.80,15.90,1\nA,45.81,15.90,2\nB,45.80,15.91,10001\nB,45.81,15.91,10002\nB,45.82,15.92,10001\nB,45.83,15.92,10002\nB,45.84,15.92,10003\n');
+    expect([...repeatedSequences(byId)]).toEqual([['B', 2]]);
+    expect(repeatedSequences(shapeRows('A,45.80,15.90,1\nA,45.81,15.90,3\n')).size).toBe(0);
+  });
+
+  it('builds the trips of a dropped shape as trips without a shape_id', () => {
+    const rows = parseCsv('route_id,service_id,trip_id,shape_id,direction_id\n3,wd,a,3_3,0\n3,wd,b,3_4,1\n');
+    const parsed = parseTripsTxt(rows, new Set(['3_3']));
+    expect([...parsed.shapelessTrips.keys()]).toEqual(['a']);
+    expect([...parsed.shapeToRoute.keys()]).toEqual(['3_4']);
+    expect(parseTripsTxt(rows).shapelessTrips.size).toBe(0);
+  });
+
+  it('moves a platform outside the service area to the position an override gives it, and refuses one no override names, and a stale entry', () => {
+    const stops = () => [
+      { id: 'in', name: 'Unutra', lat: 45.81, lon: 15.98 },
+      { id: 'out', name: 'Vani', lat: 74.1942, lon: 70.743484 },
+    ];
+    const entry = { id: 'out', name: 'Vani', lonLat: [15.996662, 45.814861] as [number, number], reason: 'Test: the previous feed placed it there.' };
+    const list = stops();
+    expect(placeStops(list, [entry])).toEqual([{ id: 'out', name: 'Vani', from: [70.743484, 74.1942], to: [15.996662, 45.814861], reason: entry.reason }]);
+    expect(list[1]).toMatchObject({ lat: 45.814861, lon: 15.996662 });
+    expect(() => placeStops(stops(), [])).toThrow(/1 platform\(s\) lie outside the service area .*out "Vani" at 74.1942,70.743484/);
+    expect(() => placeStops(stops(), [entry, { ...entry, id: 'in', name: 'Unutra' }])).toThrow(/Stop position for in "Unutra": the feed now places it at 45.81,15.98/);
+    expect(() => placeStops(stops(), [entry, { ...entry, id: 'gone' }])).toThrow(/Stop position for gone .*no such platform/);
+    expect(() => placeStops(stops(), [{ ...entry, lonLat: [29.683367, 52.909696] }])).toThrow(/its own position .* lies outside the service area/);
+    expect(SERVICE_AREA.west).toBeLessThan(15.77);
+    expect(SERVICE_AREA.east).toBeGreaterThan(16.23);
+  });
+
+  it('builds a feed with both defects: the repeating shape is not drawn and its trips run without it, the platform stands where the override puts it', async () => {
+    const shapes = SHAPES_TXT + shapesRow('B2_shape', 2, { lon: 16.002, lat: 45.823 });
+    const stops = STOPS_TXT + 'S_arctic,,Kvaternikov trg,,74.1942,70.743484,,,0,\n';
+    const zip = makeZip([
+      { name: 'routes.txt', data: ROUTES_TXT, method: 8 },
+      { name: 'trips.txt', data: TRIPS_TXT, method: 8 },
+      { name: 'shapes.txt', data: shapes, method: 8 },
+      { name: 'stops.txt', data: stops, method: 8 },
+      { name: 'stop_times.txt', data: STOP_TIMES_TXT, method: 8 },
+      { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+    ]);
+    await expect(buildNetwork(zip, { diagramBusCount: 1, overrides: FULL_OVERRIDES })).rejects.toThrow(/S_arctic "Kvaternikov trg"/);
+    const logs: string[] = [];
+    const overrides = { ...FULL_OVERRIDES, stopPositions: [{ id: 'S_arctic', name: 'Kvaternikov trg', lonLat: [15.996662, 45.814861], reason: 'Test: feed 000395 placed it there.' }] };
+    const net = await buildNetwork(zip, { diagramBusCount: 1, overrides, log: (line: string) => logs.push(line) });
+    expect(net.shapes.id).not.toContain('B2_shape');
+    expect(net.shapes.id).toContain('B1_shape');
+    expect(net.report.invalidShapes).toEqual([{ id: 'B2_shape', repeats: 1 }]);
+    expect(net.report.movedStops.map((m: any) => m.id)).toEqual(['S_arctic']);
+    expect(logs.some((line) => /^Shape B2_shape dropped: 1 of its shape_pt_sequence values repeat/.test(line))).toBe(true);
+    const arctic = decodeNetwork(net).stops.find((st) => st.id === 'S_arctic')!;
+    const [lon, lat] = toLonLat(arctic.p);
+    expect(lon).toBeCloseTo(15.996662, 4);
+    expect(lat).toBeCloseTo(45.814861, 4);
+  });
+});
 
 describe('the committed artefact', () => {
   const artefactPath = resolve(process.cwd(), 'app/public/data/zet-network.json');

@@ -107,6 +107,13 @@ export const STOP_SHAPE_MAX_METRES = 40;
 // already settled. Olipska 251_2 is the case that set it: 42.8 m from the
 // rails of lines 2, 3, 13 and 33, every one of which calls there.
 export const SERVED_STOP_MAX_METRES = 60;
+// Where a ZET platform can be: every platform of feed 000395 lies between
+// 15.77 and 16.23 E and between 45.57 and 45.95 N (Dubranec to Reber). A
+// platform outside this box is a wrong coordinate, not a place a line
+// reaches (feed 000396 put Kvaternikov trg 236_10 at 74.19 N 70.74 E), and
+// fails the build by name unless gtfs-shapes-overrides.json `stopPositions`
+// gives its position.
+export const SERVICE_AREA = { west: 15.5, south: 45.4, east: 16.5, north: 46.1 };
 // The first and last stop of a shapeless pattern may sit further from the
 // rails any shape draws: a terminus platform served only by that line has
 // no shape of its own in the feed (line 1 at Zapadni kolodvor, 168 m past
@@ -1322,7 +1329,7 @@ export function parseRoutesTxt(rows) {
  *  shaped trip runs (the served lists are the union over a shape's trips,
  *  F8), and the trips that carry no shape_id at all (route and direction),
  *  which the synthetic paths are built for. */
-export function parseTripsTxt(rows) {
+export function parseTripsTxt(rows, invalidShapes = new Set()) {
   if (rows.length === 0) throw new Error('trips.txt is empty');
   const col = columnIndexer(rows[0], 'trips.txt');
   const routeIdx = col('route_id');
@@ -1338,7 +1345,10 @@ export function parseTripsTxt(rows) {
   for (const r of rows.slice(1)) {
     const routeId = r[routeIdx];
     const tripId = r[tripIdx];
-    const shapeId = (r[shapeIdx] ?? '').trim();
+    const named = (r[shapeIdx] ?? '').trim();
+    // A shape that is no polyline (repeatedSequences) is as good as none: its
+    // trips are built as trips without a shape_id, like scripts/gtfs-trips.mjs does.
+    const shapeId = invalidShapes.has(named) ? '' : named;
     const direction = directionIdx === -1 ? 0 : Number(r[directionIdx]) === 1 ? 1 : 0;
     tripCountByRoute.set(routeId, (tripCountByRoute.get(routeId) ?? 0) + 1);
     if (shapeId === '') {
@@ -1382,6 +1392,80 @@ export function parseShapesTxt(rows) {
   }
   for (const arr of byId.values()) arr.sort((a, b) => a.seq - b.seq);
   return byId;
+}
+
+/**
+ * The shapes that are no polyline: GTFS keys shapes.txt by (shape_id,
+ * shape_pt_sequence), so a shape that repeats a sequence number names two
+ * points for one place in its order, and no sort can say which comes first.
+ * Feed 000396 (28 Sep 2026) carries nine such shapes: the tram shape 3_3
+ * holds its own 164 points and 121 rows of shape 2_30 under the same
+ * sequence numbers, and the bus shapes 161_1/9/10, 162_1/12/13 and 330_3/4
+ * the same fault; drawn in sequence order, 3_3 zigzags 59.7 km for its 9.9 km
+ * of track. Such a shape is dropped and its trips are built as trips without
+ * a shape_id (a tram pattern gets a synthetic path through the stops over the
+ * rails the other shapes draw); both builders apply the same rule, so the
+ * network and the trip index agree on every pattern's path.
+ * @param {Map<string, { seq: number }[]>} byId parseShapesTxt's result, sorted by sequence
+ * @returns {Map<string, number>} shape id -> how many of its sequence numbers repeat
+ */
+export function repeatedSequences(byId) {
+  const out = new Map();
+  for (const [id, pts] of byId) {
+    let repeats = 0;
+    for (let i = 1; i < pts.length; i++) if (pts[i].seq === pts[i - 1].seq) repeats++;
+    if (repeats > 0) out.set(id, repeats);
+  }
+  return new Map([...out].sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true })));
+}
+
+/**
+ * Moves the platforms the feed places outside SERVICE_AREA to the position
+ * an override gives them, in place, and refuses by name one no override
+ * names. An entry { id, name, lonLat: [lon, lat], reason } matches on the id
+ * (the name is for the reader) and is itself refused once it is stale: when
+ * the feed has no such platform, or already places it inside the area, or
+ * the override's own position lies outside it.
+ * @param {{ id: string; name: string; lat: number; lon: number }[]} stops parseStopsTxt's result
+ * @param {{ id: string; name?: string; lonLat: [number, number]; reason?: string }[]} entries
+ * @returns {{ id: string; name: string; from: [number, number]; to: [number, number]; reason: string }[]} the platforms moved
+ */
+export function placeStops(stops, entries = []) {
+  const inside = (lon, lat) =>
+    Number.isFinite(lon) && Number.isFinite(lat) && lon >= SERVICE_AREA.west && lon <= SERVICE_AREA.east && lat >= SERVICE_AREA.south && lat <= SERVICE_AREA.north;
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const where = `${SERVICE_AREA.west}-${SERVICE_AREA.east} E, ${SERVICE_AREA.south}-${SERVICE_AREA.north} N`;
+  for (const entry of entries) {
+    const stop = stops.find((st) => st.id === entry.id);
+    const [lon, lat] = entry.lonLat ?? [];
+    let stale = null;
+    if (!stop) stale = 'the feed has no such platform';
+    else if (inside(stop.lon, stop.lat)) stale = `the feed now places it at ${stop.lat},${stop.lon}, inside the service area`;
+    else if (!inside(lon, lat)) stale = `its own position ${JSON.stringify(entry.lonLat)} lies outside the service area (${where})`;
+    if (stale) throw new Error(`Stop position for ${entry.id} "${entry.name ?? ''}": ${stale}; update the entry in ${OVERRIDES_PATH}.`);
+  }
+  const moved = [];
+  const refused = [];
+  for (const stop of stops) {
+    if (inside(stop.lon, stop.lat)) continue;
+    const entry = byId.get(stop.id);
+    if (!entry) {
+      refused.push(stop);
+      continue;
+    }
+    moved.push({ id: stop.id, name: stop.name, from: [stop.lon, stop.lat], to: [entry.lonLat[0], entry.lonLat[1]], reason: entry.reason ?? '' });
+    stop.lon = entry.lonLat[0];
+    stop.lat = entry.lonLat[1];
+  }
+  if (refused.length > 0) {
+    throw new Error(
+      `Stops: ${refused.length} platform(s) lie outside the service area (${where}): ` +
+        refused.map((st) => `${st.id} "${st.name}" at ${st.lat},${st.lon}`).join('; ') +
+        `. A platform there is a wrong coordinate, not a place a ZET line reaches; give its position in ${OVERRIDES_PATH} ` +
+        '`stopPositions` ({ id, name, lonLat, reason }, the reason saying where the position comes from) or build from a feed that places it.',
+    );
+  }
+  return moved;
 }
 
 export function parseStopsTxt(rows) {
@@ -1523,9 +1607,19 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const textOf = (name) => new TextDecoder('utf-8').decode(extractEntry(zipBuf, findEntry(name)));
 
   const routesMeta = parseRoutesTxt(parseCsv(textOf('routes.txt')));
-  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip } = parseTripsTxt(parseCsv(textOf('trips.txt')));
   const rawShapesByShapeId = parseShapesTxt(parseCsv(textOf('shapes.txt')));
+  const invalidShapes = repeatedSequences(rawShapesByShapeId);
+  for (const id of invalidShapes.keys()) rawShapesByShapeId.delete(id);
+  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip } = parseTripsTxt(
+    parseCsv(textOf('trips.txt')),
+    new Set(invalidShapes.keys()),
+  );
   const rawStops = parseStopsTxt(parseCsv(textOf('stops.txt')));
+  const movedStops = placeStops(rawStops, overrides.stopPositions ?? []);
+  for (const shapeId of invalidShapes.keys()) {
+    log(`Shape ${shapeId} dropped: ${invalidShapes.get(shapeId)} of its shape_pt_sequence values repeat, so it is no polyline; its trips are built as trips without a shape_id`);
+  }
+  for (const m of movedStops) log(`Stop ${m.id} "${m.name}" placed at ${m.to[1]},${m.to[0]} by ${OVERRIDES_PATH} (the feed says ${m.from[1]},${m.from[0]}): ${m.reason}`);
 
   let feedVersion = fallbackMtime;
   try {
@@ -2774,6 +2868,8 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const edges = graph.edges.map((e, idx) => ({ from: e.from, to: e.to, d: edgeD[idx] }));
 
   const report = {
+    invalidShapes: [...invalidShapes].map(([id, repeats]) => ({ id, repeats })),
+    movedStops,
     tramShapes: tramRows.length,
     edges: edges.length,
     nodes: graph.nodeCount,
