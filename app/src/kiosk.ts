@@ -50,7 +50,7 @@ import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essenti
 import { presentationLabelKind } from './kiosk/external';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
-import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
@@ -67,8 +67,7 @@ import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
 import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
-import { railPolicy, serviceNumbers, serviceStateOf } from '../../shared/city/service-state';
-import { serviceVars } from './city/sentence';
+import { railPolicy, serviceStateOf } from '../../shared/city/service-state';
 
 export type { KioskPhase } from './kiosk/credentials';
 
@@ -1031,16 +1030,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // lines board in place of the map), so it follows the map: the chosen
     // place's stop, or the whole city while Trg is only the read-path default
     // for the list and the departures [O-52], [O-65].
-    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, note: mapNote(),
+    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame,
+      note: wallMapNote({ zet: byModule(teaser)['zet-rt'], now: now(), outage: outage(), strings: s, i18n }),
       modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout) };
-  }
-  /** The map's one quiet note: ZET sends no positions (U0's outage, the kinds down and unconfirmed), or its fleet is
-   *  silent and the departures are the timetable's (upgrade U2); otherwise none. Never a cause. */
-  function mapNote(): string | null {
-    if (outage()) return s.nearby.outageNote;
-    const zet = byModule(teaser)['zet-rt'];
-    const numbers = serviceStateOf(zet, now()).kind === 'silent' ? serviceNumbers(zet) : null;
-    return numbers ? fill(s.nearby.silentNote, serviceVars(i18n, numbers)) : null;
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
