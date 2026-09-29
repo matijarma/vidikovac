@@ -9,6 +9,9 @@ import type { FetchContext, ModuleId } from '../../worker/feed/schema';
 import { ZBORNA_MJESTA_URL } from '../../worker/feed/modules/ckan-geo';
 
 export const FIXTURE_NOW = new Date('2026-09-11T12:00:00.000Z');
+/** The instant of the U3 fixtures (test/fixtures/README-u3.md, saved 29 Sep 2026 between 15:42 and 15:47 UTC); the modules of
+ *  that package are read at 17:45 Zagreb time, when the pages they were cut from were true. */
+export const U3_FIXTURE_NOW = new Date('2026-09-29T15:45:00Z');
 
 // Resolved through node:path, not `new URL(..., import.meta.url)`: under
 // happy-dom the global URL resolves a relative path against the document's

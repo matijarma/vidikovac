@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { FetchContext } from '../../worker/feed/schema';
 import { fetchDogadanja } from '../../worker/feed/modules/dogadanja';
 import { ARCGIS_CETVRTI_URL, ZBORNA_MJESTA_URL, fetchCkanGeo } from '../../worker/feed/modules/ckan-geo';
+import { KULTURA_ZG_URL, fetchKulturaZg } from '../../worker/feed/modules/kultura-zg';
+import { U3_FIXTURE_NOW } from './fixture-contexts';
 
 // The robots guarantee (R-P5, task E6's own name for it): a test that records
 // every URL the dogadanja module actually requests through an injected fetch,
@@ -11,14 +13,17 @@ import { ARCGIS_CETVRTI_URL, ZBORNA_MJESTA_URL, fetchCkanGeo } from '../../worke
 // research sweep recorded in the area E preamble and R-P5:
 //   - kultura.zagreb.hr/robots.txt disallows /api/ and /_next/ (task-E1's own
 //     report confirms this live; "Guru za kulturu" events live only behind
-//     that disallowed /api/ path, so the whole host stays out of this module).
+//     that disallowed /api/ path, so the whole host stays out of the dogadanja
+//     module). Since 29 September 2026 one route of it is read by the kultura-zg
+//     module under the owner's ruling O-70 (see OWNER_OVERRIDES below); every
+//     other path of the host is still refused.
 //   - youtube.com/robots.txt disallows /feeds/videos.xml -- the Skupština
 //     channel's own Atom feed path; skupstina.ts links the channel's live page
 //     instead (linking is not crawling) and never fetches this path.
 //   - Muzika.hr and InfoZagreb are excluded entirely (not partially), per the
 //     brief's own phrasing, so both hosts are disallowed in full rather than
 //     by a single path prefix.
-// This is deliberately independent of what the six sub-fetchers do today: the
+// This is deliberately independent of what the sub-fetchers do today: the
 // guard below is tested against the four examples directly (so the check
 // itself is proven sound), and separately against a full live run of the real
 // module (so a regression that adds a seventh, disallowed request is caught
@@ -38,12 +43,20 @@ const DISALLOWED_PREFIXES = [
   'http://data.zagreb.hr/api/',
 ];
 
+// The owner's ruling O-70 (22 September 2026): kultura.zagreb.hr is the City of Zagreb's own domain and
+// programme, its terms (kultura.zagreb.hr/pravila-koristenja) allow reuse with the source named and a link,
+// and the product reads it openly, once an hour and identified by its User-Agent, despite the domain's
+// `Disallow: /api/`. The ruling covers exactly this one URL, the kultura-zg module's; the disclosure is in
+// docs/izvori.md and on /izvori. Any other /api/ or /_next/ path of the host stays refused above.
+const OWNER_OVERRIDES: readonly string[] = ['https://kultura.zagreb.hr/api/chatbot/events'];
+
 // These two hosts are excluded entirely -- no prefix carve-out, unlike
 // kultura.zagreb.hr (whose /robots.txt allows plenty else on the same host).
 const DISALLOWED_HOSTS = new Set(['muzika.hr', 'www.muzika.hr', 'infozagreb.hr', 'www.infozagreb.hr']);
 
-/** Throws when `url` matches a disallowed prefix or sits on a fully-disallowed host. */
+/** Throws when `url` matches a disallowed prefix or sits on a fully-disallowed host, unless the owner's ruling names that exact URL. */
 function assertRobotsAllow(url: string): void {
+  if (OWNER_OVERRIDES.includes(url)) return;
   for (const prefix of DISALLOWED_PREFIXES) {
     if (url.startsWith(prefix)) throw new Error(`robots.txt disallows this path: ${url}`);
   }
@@ -54,6 +67,7 @@ function assertRobotsAllow(url: string): void {
 describe('assertRobotsAllow (the guard itself)', () => {
   it('flags every one of the four concrete examples the research found', () => {
     expect(() => assertRobotsAllow('https://kultura.zagreb.hr/api/events?page=1')).toThrow();
+    expect(() => assertRobotsAllow('http://kultura.zagreb.hr/api/chatbot/events')).toThrow();
     expect(() => assertRobotsAllow('https://kultura.zagreb.hr/_next/static/chunks/main.js')).toThrow();
     expect(() => assertRobotsAllow('https://www.youtube.com/feeds/videos.xml?channel_id=UCRMm4Xt9ruoQ8FG7NpIHCsA')).toThrow();
     expect(() => assertRobotsAllow('https://muzika.hr/dogadjanja')).toThrow();
@@ -61,7 +75,7 @@ describe('assertRobotsAllow (the guard itself)', () => {
     expect(() => assertRobotsAllow('https://data.zagreb.hr/api/3/action/package_show?id=zborna-mjesta')).toThrow();
   });
 
-  it('allows the real URLs the six sub-fetchers actually use today', () => {
+  it('allows the real URLs the six sub-fetchers and the October modules actually use', () => {
     const realUrls = [
       'https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc',
       'https://skupstina.zagreb.hr/rokovnik-sjednica/76',
@@ -73,8 +87,28 @@ describe('assertRobotsAllow (the guard itself)', () => {
       'https://www.zet.hr/rss_promet.aspx',
       'https://emz.hr/wp-json/wp/v2/dogadjanja?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc',
       'https://emz.hr/wp-json/wp/v2/izlozbe?_fields=id,link,title,type,meta,class_list,date&per_page=20&orderby=date&order=desc',
+      // The October modules (U3).
+      KULTURA_ZG_URL,
+      'https://www.kgz.hr/hr/dogadjanja/10?page=1',
+      'https://www.kgz.hr/hr/dogadjanja/10?page=2',
+      'https://meteo.hr/7d_graf_i_simboli.xml',
+      'https://www.hak.hr/info/stanje-na-cestama/',
+      'https://www.hep.hr/ods/bez-struje/19?dp=zagreb&datum=29.09.2026',
+      'https://www.vio.hr/zona-za-medije/obavijesti/1832',
     ];
     for (const url of realUrls) expect(() => assertRobotsAllow(url), url).not.toThrow();
+  });
+
+  it('opens exactly the one URL of ruling O-70 and nothing beside it on kultura.zagreb.hr', () => {
+    expect(OWNER_OVERRIDES).toEqual(['https://kultura.zagreb.hr/api/chatbot/events']);
+    expect(() => assertRobotsAllow('https://kultura.zagreb.hr/api/chatbot/events')).not.toThrow();
+    for (const other of [
+      'https://kultura.zagreb.hr/api/chatbot/events?page=2',
+      'https://kultura.zagreb.hr/api/chatbot/events/1',
+      'https://kultura.zagreb.hr/api/chatbot/organisations',
+      'https://kultura.zagreb.hr/api/',
+      'https://kultura.zagreb.hr/_next/static/chunks/main.js',
+    ]) expect(() => assertRobotsAllow(other), other).toThrow();
   });
 
   it('does not over-block: kultura.zagreb.hr paths outside /api/ and /_next/ are allowed', () => {
@@ -131,6 +165,22 @@ describe('fetchDogadanja never requests a disallowed URL', () => {
       expect(hostname).not.toBe('infozagreb.hr');
       expect(url).not.toContain('/feeds/videos.xml');
     }
+  });
+});
+
+describe('fetchKulturaZg requests the one route O-70 opens, and nothing else', () => {
+  it('records one request, to the route the ruling names, which the guard lets through only as an owner override', async () => {
+    const requested: string[] = [];
+    await fetchKulturaZg({
+      now: () => U3_FIXTURE_NOW,
+      fetch: async (url) => {
+        requested.push(url);
+        return new Response(JSON.stringify({ events: [] }));
+      },
+    });
+    expect(requested).toEqual([KULTURA_ZG_URL]);
+    expect(OWNER_OVERRIDES).toContain(requested[0]);
+    for (const url of requested) expect(() => assertRobotsAllow(url), url).not.toThrow();
   });
 });
 
