@@ -15,7 +15,7 @@ import { EXTERNAL_HEADER_LEXICON, EXTERNAL_SENSITIVE_LEXICON } from '../../share
 import { CODE_WORD_FIELDS, CODE_WORD_STREETS } from '../../shared/kiosk/code-word-streets';
 import { ISO_4217_CODES } from '../../shared/kiosk/iso-4217';
 import { CONTEXT_PAIR_REGRESSIONS, REVIEW_W2_REGRESSIONS, W_C2_ATTACKS } from '../fixtures/external-text-attacks';
-import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES } from '../fixtures/external-text-corpus';
+import { SAMPLED_CLOSURE_TITLES, SAMPLED_EVENT_TITLES, SAMPLED_NOTICE_SUMMARIES } from '../fixtures/external-text-corpus';
 import { HERITAGE_ROW_RESIDUALS, STREET_ROW_RESIDUALS, TITLE_ROW_RESIDUALS, type RowTextResidual } from '../fixtures/external-text-residuals';
 import { acceptSentence, sentenceTemplateChoices, type SentenceFact } from '../../shared/kiosk/sentence';
 import { csvField, firstSentence, selectNearby, skippedTextCensus, type NearbyInput, type NearbyRow } from '../../app/src/city/nearby';
@@ -391,6 +391,19 @@ describe('the sampled source and GTFS corpus', () => {
   it('keeps all 36 sampled closure names', () => {
     expect(SAMPLED_CLOSURE_TITLES).toHaveLength(36);
     for (const title of SAMPLED_CLOSURE_TITLES) expect(rowText('name', title), title).toEqual({ ok: true });
+  });
+
+  // Upgrade U1: ZET's notices print the start of their description under "ZET javlja", so the summary limit is 240
+  // and every sentence the sanitiser takes from the saved copies has to pass the row policy at it.
+  it('keeps every sampled ZET notice summary, at the 240-character limit and no more', () => {
+    expect(SAMPLED_NOTICE_SUMMARIES).toHaveLength(25);
+    for (const summary of SAMPLED_NOTICE_SUMMARIES) {
+      expect(summary.length, summary).toBeLessThanOrEqual(240);
+      expect(externalText('summary', summary, { surface: 'row' }), summary).toEqual({ ok: true });
+    }
+    expect(Math.max(...SAMPLED_NOTICE_SUMMARIES.map((summary) => summary.length))).toBeGreaterThan(180);
+    expect(externalText('summary', 'a'.repeat(240), { surface: 'row' })).toEqual({ ok: true });
+    expect(externalText('summary', 'a'.repeat(241), { surface: 'row' })).toEqual({ ok: false, reason: 'too-long' });
   });
 
   it('keeps every committed GTFS headsign and route short name', () => {
