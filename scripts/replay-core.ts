@@ -1269,10 +1269,10 @@ export function zagrebDay(sec: number): string {
   return ZAGREB_DAY.format(new Date(sec * 1000));
 }
 
-/** The lines where the state differs from the line before. */
+/** Changes between minute lines, dated at the frame that entered the state. */
 export function serviceChanges(lines: readonly ServiceLogLine[]): { atSec: number; from: ServiceWireState; to: ServiceWireState }[] {
   const out: { atSec: number; from: ServiceWireState; to: ServiceWireState }[] = [];
-  for (let i = 1; i < lines.length; i++) if (lines[i].state !== lines[i - 1].state) out.push({ atSec: lines[i].atSec, from: lines[i - 1].state, to: lines[i].state });
+  for (let i = 1; i < lines.length; i++) if (lines[i].state !== lines[i - 1].state) out.push({ atSec: lines[i].sinceSec ?? lines[i].atSec, from: lines[i - 1].state, to: lines[i].state });
   return out;
 }
 
@@ -1308,12 +1308,14 @@ export function assertNormalDay(lines: readonly ServiceLogLine[]): NormalDayVerd
     if (l.state === 'reduced' || l.state === 'silent') problems.push(`${zagrebDay(l.atSec)} ${zagrebClock(l.atSec)} reads ${l.state} (${l.seen} of ${l.expected})`);
     if (l.expected < MIN_EXPECTED || l.ratio === null) continue;
     const hour = `${zagrebDay(l.atSec)} ${zagrebClock(l.atSec).slice(0, 2)}`;
-    byHour.set(hour, [...(byHour.get(hour) ?? []), l.ratio]);
+    // The wire ratio is rounded to two decimals for display, not for the
+    // acceptance floor: 259 / 400 must not pass merely because it prints 0.65.
+    byHour.set(hour, [...(byHour.get(hour) ?? []), l.seen / l.expected]);
   }
   const hours = [...byHour].map(([hour, ratios]) => {
     const sorted = [...ratios].sort((a, b) => a - b);
     return { hour, minutes: sorted.length, p05: sorted[Math.floor(sorted.length * 0.05)] };
   });
-  for (const h of hours) if (h.p05 < NORMAL_DAY_P05) problems.push(`${h.hour}h: p05 ratio ${h.p05.toFixed(2)} below ${NORMAL_DAY_P05} over ${h.minutes} judged minutes`);
+  for (const h of hours) if (h.p05 < NORMAL_DAY_P05) problems.push(`${h.hour}h: p05 ratio ${h.p05.toFixed(4)} below ${NORMAL_DAY_P05} over ${h.minutes} judged minutes`);
   return { ok: problems.length === 0, problems, hours };
 }

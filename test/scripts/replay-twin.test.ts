@@ -3,13 +3,40 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEngine } from '../../worker/twin/engine';
-import { createGrader, formatTable, ORDER_FIX_WINDOW_S, ORDER_MIN_GAP_M, phantomStops, REGRESSION_M, REPLAY_NOW_CUSHION_S, replayDirectory, type ReplayReport, type TickSnapshot } from '../../scripts/replay-core';
+import { assertNormalDay, createGrader, formatServiceLog, formatTable, ORDER_FIX_WINDOW_S, ORDER_MIN_GAP_M, phantomStops, REGRESSION_M, REPLAY_NOW_CUSHION_S, replayDirectory, serviceChanges, type ReplayReport, type ServiceLogLine, type TickSnapshot } from '../../scripts/replay-core';
 import { evalPathPlan, SILENCE_HOLD_S } from '../../shared/motion/plan';
 import type { PathKnot } from '../../shared/motion/track';
 import { simulate } from '../motion/simulator';
 import { corridorSpec, syntheticNetwork } from '../motion/synthetic-network';
 import { corridorIndex } from '../twin/engine-fixture';
 import { frame as encodeFrame, type FrameTrip, type FrameVehicle } from '../twin/frames';
+
+describe('service replay diagnostics', () => {
+  const t0 = Date.parse('2026-10-06T08:00:00Z') / 1000;
+  const line = (over: Partial<ServiceLogLine> = {}): ServiceLogLine => ({
+    atSec: t0, state: 'normal', sinceSec: t0, seen: 320, expected: 400, ratio: 0.8,
+    hold: null, byMode: { tram: [160, 200], bus: [160, 200] }, ...over,
+  });
+
+  it.each([
+    { seen: 259, ok: false },
+    { seen: 260, ok: true },
+  ])('checks the p05 floor before wire rounding: $seen of 400, ok=$ok', ({ seen, ok }) => {
+    const verdict = assertNormalDay([line({ seen, ratio: 0.65 })]);
+    expect(verdict.ok).toBe(ok);
+    expect(verdict.hours).toEqual([{ hour: '2026-10-06 10', minutes: 1, p05: seen / 400 }]);
+    if (!ok) expect(verdict.problems[0]).toContain('0.6475 below 0.65');
+  });
+
+  it('dates a state change at its entry frame, not the minute last frame', () => {
+    const lines = [
+      line({ atSec: t0 + 299 }),
+      line({ atSec: t0 + 354, state: 'reduced', sinceSec: t0 + 304, seen: 160, ratio: 0.4 }),
+    ];
+    expect(serviceChanges(lines)).toEqual([{ atSec: t0 + 304, from: 'normal', to: 'reduced' }]);
+    expect(formatServiceLog(lines)).toContain('2026-10-06 10:05:04 normal -> reduced');
+  });
+});
 
 // The harness core over a short recorded run: the same corridor and
 // simulator parameters test/motion/engine-envelope.test.ts already proves
