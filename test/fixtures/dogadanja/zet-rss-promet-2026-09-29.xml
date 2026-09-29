@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+   <channel>
+		<title>ZET - Novosti</title>
+		<link>http://www.zet.hr/</link>
+		<description>ZET - RSS</description>
+		<language>hr-HR</language>
+		<lastBuildDate>Tue, 29 Sep 2026 18:05:00 +0200</lastBuildDate>
+		<ttl>25</ttl>
+	  	<atom:link href="http://www.zet.hr/rss_novosti.aspx" rel="self" type="application/rss+xml" />
+		<item>
+<title><![CDATA[Uspinjača u srijedu na mjesečnom servisu]]></title>
+<description><![CDATA[<div style="text-align: justify;">Zbog redovnog mjesečnog servisa, zagrebačka uspinjača neće prometovati<strong> u srijedu,&nbsp;30. rujna, od 6.30 do 14&nbsp;sati</strong>.<br>
+<br>
+Riječ je o obaveznom mjesečnom servisu kojim se provjerava ispravnost sustava i osiguravaju uvjeti za siguran i nesmetan rad uspinjače.<br>
+<br>
+Korisnike ljubazno molimo za razumijevanje.</div>
+
+<div style="text-align: justify;"><br>
+<img alt="" data-fileid="4431" src="https://www.zet.hr/UserDocsImages/Prilozi/Fotografije/Motivi/facebook logo web.jpg?vel=3988" style="float:left; height:30px; width:30px"></div>
+]]></description>
+<link>https://www.zet.hr/default.aspx?id=1794</link>
+<pubDate>Tue, 29 Sep 2026 11:00:00 +0200</pubDate>
+<guid>http://www.zet.hr/default.aspx?id=1794</guid>
+</item>
+	
+		
+   </channel>
+</rss>
