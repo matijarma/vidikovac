@@ -99,8 +99,12 @@ export function linesOf(html: string): string[] {
     .filter(Boolean);
 }
 
-/** The instant the line's notice ends, or undefined when it names none in a form this module reads. */
-export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): string | undefined {
+/**
+ * The window a line's notice names: its end, and its start where the line names one ("od 00:00 do 05:00 sati", "30. rujna
+ * od 00:00 do 05:00"); undefined when it names no end in a form this module reads. A line with only an end ("do 3.
+ * listopada", "do 22:00") has no start: it is on from the section's time.
+ */
+export function lineWindow(line: string, section: Pick<Section, 'at' | 'day'>): { start?: string; end: string } | undefined {
   const stamp = Date.parse(section.at);
   const { year, month, day } = section.day;
   const at = (offset: number, hour: number, minute: number): number => Date.parse(zagrebIso(year, month, day + offset, hour, minute));
@@ -112,7 +116,7 @@ export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): str
     const target = MONTHS[date[2]!.toLocaleLowerCase('hr')]!;
     let end = Date.parse(zagrebIso(year, target, Number(date[1]) + 1, 0, 0));
     if (end < stamp - 86_400_000) end = Date.parse(zagrebIso(year + 1, target, Number(date[1]) + 1, 0, 0));
-    return iso(end);
+    return { end: iso(end) };
   }
   // "30. rujna od 00:00 do 05:00 sati": that day's window.
   const dated = DATE_WINDOW.exec(line);
@@ -122,7 +126,7 @@ export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): str
     const start = Date.parse(zagrebIso(year, target, d, sh, sm));
     let end = Date.parse(zagrebIso(year, target, d, eh, em));
     if (end <= start) end = Date.parse(zagrebIso(year, target, d + 1, eh, em));
-    return iso(end);
+    return { start: iso(start), end: iso(end) };
   }
   // "od 00:00 do 05:00 sati": the window that is on at the section's time or the next one after it.
   const window = WINDOW.exec(line);
@@ -132,7 +136,7 @@ export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): str
       const start = at(offset, sh, sm);
       let end = at(offset, eh, em);
       if (end <= start) end = at(offset + 1, eh, em);
-      if (end > stamp) return iso(end);
+      if (end > stamp) return { start: iso(start), end: iso(end) };
     }
     return undefined;
   }
@@ -141,9 +145,14 @@ export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): str
   if (clock) {
     const [h, m] = [Number(clock[1]), Number(clock[2])] as const;
     const today = at(0, h, m);
-    return iso(today > stamp ? today : at(1, h, m));
+    return { end: iso(today > stamp ? today : at(1, h, m)) };
   }
   return undefined;
+}
+
+/** The instant the line's notice ends, or undefined when it names none in a form this module reads (lineWindow). */
+export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): string | undefined {
+  return lineWindow(line, section)?.end;
 }
 
 /** The state the line describes, by the first of these that its words name. */
@@ -205,8 +214,12 @@ export function parseHak(html: string, now: Date): FeedPayload {
   for (const section of sections) {
     for (const line of linesOf(section.html)) {
       if (!ZAGREB_LINE.test(line)) continue;
-      const until = lineEnd(line, section);
-      if (!until || Date.parse(until) <= now.getTime() || Date.parse(until) > horizon) continue;
+      const window = lineWindow(line, section);
+      if (!window || Date.parse(window.end) <= now.getTime() || Date.parse(window.end) > horizon) continue;
+      // A window that has not begun is not the road now: at 17:39 "od 00:00 do 05:00 sati bit će zatvorena" is tonight's
+      // closure, not the junction closed until 05:00. It is read once its start is at or before the section's time or now.
+      if (window.start !== undefined && Date.parse(window.start) > Math.max(Date.parse(section.at), now.getTime())) continue;
+      const until = window.end;
       const place = placeOf(line);
       if (!place) continue;
       const id = `hak:${fnv1a(line.toLocaleLowerCase('hr').replace(/\s+/g, ' ').trim())}`;

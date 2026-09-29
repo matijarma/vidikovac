@@ -6,12 +6,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import {
-  HAK_URL, ZAGREB_LINE, fetchHak, fnv1a, lineEnd, lineState, linesOf, parseHak, placeOf, sectionsOf, streetCandidates,
+  HAK_URL, ZAGREB_LINE, fetchHak, fnv1a, lineEnd, lineState, lineWindow, linesOf, parseHak, placeOf, sectionsOf, streetCandidates,
 } from '../../worker/feed/modules/hak';
 import { U3_FIXTURE_NOW } from './fixture-contexts';
 
 const PAGE = readFileSync(new URL('../fixtures/hak-stanje.html', import.meta.url), 'utf8');
 const NOW = U3_FIXTURE_NOW;
+/** 00:30 on 30 September in Zagreb, the same page: the night closure between Lučko and Donja Zdenčina (00:00 to 05:00) is on. */
+const TONIGHT = new Date('2026-09-30T00:30:00+02:00');
 
 /** A section as the page writes one, for the cases the saved page does not hold. */
 function section(title: string, stamp: string, lines: string[]): string {
@@ -35,17 +37,15 @@ describe('hak on the saved page', () => {
     expect(sections.map((s) => s.at.slice(11, 16))).toEqual(['15:39', '15:39', '15:39', '15:39', '15:09', '15:03', '15:03', '15:03', '15:03', '15:03']);
   });
 
-  it('keeps five lines about the Zagreb area that end within a week, each with a point, a time and a state', () => {
+  it('keeps three lines about the Zagreb area that are on at 17:45 and end within a week, each with a point, a time and a state', () => {
     const { items, sourceUpdatedAt, coverage } = parseHak(PAGE, NOW);
-    expect(items).toHaveLength(5);
+    expect(items).toHaveLength(3);
     expect(items.map((item) => [item.title, item.data?.state, item.until])).toEqual([
-      ['Čvor Lučko', 'zatvoreno za promet', '2026-09-30T03:00:00.000Z'],
-      ['Čvor Lučko', 'zatvoreno za promet', '2026-09-30T03:00:00.000Z'],
       ['Čvor Zagreb zapad', 'zatvoreno za promet', '2026-10-03T22:00:00.000Z'],
       ['Čvor Lučko', 'privremena regulacija', '2026-09-30T22:00:00.000Z'],
       ['Čvor Zagreb istok', 'zastoj', '2026-10-01T22:00:00.000Z'],
     ]);
-    for (const item of items) {
+    for (const item of [...items, ...parseHak(PAGE, TONIGHT).items]) {
       expect(item.kind).toBe('road');
       expect(item.id).toMatch(/^hak:[0-9a-f]{8}$/);
       expect(item.geo?.type).toBe('Point');
@@ -57,10 +57,30 @@ describe('hak on the saved page', () => {
       expect(item.data?.district, item.id).toBeTruthy();
       for (const key of Object.keys(item.data!)) expect(DATA_KEYS.road, key).toContain(key);
     }
-    expect(new Set(items.map((item) => item.id)).size).toBe(5);
+    expect(new Set(items.map((item) => item.id)).size).toBe(3);
     // The credit names the update the lines stand on, and the read says it is a selection.
     expect(sourceUpdatedAt).toBe('2026-09-29T15:39:00.000Z');
-    expect(coverage).toEqual({ shown: 5, limited: true });
+    expect(coverage).toEqual({ shown: 3, limited: true });
+  });
+
+  it('leaves a window that has not begun out until its start: the night closure at Lučko is not the road at 17:45', () => {
+    // Both lines say 00:00 to 05:00 tonight. At 17:45 the junction is open; printed then, "Čvor Lučko: zatvoreno za promet
+    // do 30. 9." would be a closure that is not there. From 00:00 the page, unchanged, says it.
+    const closure = (items: ReturnType<typeof parseHak>['items']) => items.filter((item) => item.until === '2026-09-30T03:00:00.000Z');
+    expect(closure(parseHak(PAGE, NOW).items)).toEqual([]);
+    expect(closure(parseHak(PAGE, new Date('2026-09-29T23:59:00+02:00')).items)).toEqual([]);
+    for (const at of [new Date('2026-09-30T00:00:00+02:00'), TONIGHT]) {
+      const { items } = parseHak(PAGE, at);
+      expect(items).toHaveLength(5);
+      expect(closure(items).map((item) => [item.title, item.data?.state, item.summary!.slice(0, 26)])).toEqual([
+        ['Čvor Lučko', 'zatvoreno za promet', 'od 00:00 do 05:00 sati bit'],
+        ['Čvor Lučko', 'zatvoreno za promet', '30. rujna od 00:00 do 05:0'],
+      ]);
+    }
+    // Over at 05:00.
+    expect(closure(parseHak(PAGE, new Date('2026-09-30T05:00:00+02:00')).items)).toEqual([]);
+    // A line with only an end is on from the section's time, as before.
+    expect(parseHak(PAGE, NOW).items.map((item) => item.summary!.slice(0, 20))).toEqual(['do 3. listopada zbog', 'do 30.rujna u noćnim', 'do 01. listopada izm']);
   });
 
   it('puts a junction on the ZET stop of its locality, the first one the line names', () => {
@@ -80,7 +100,7 @@ describe('hak on the saved page', () => {
   });
 
   it('gives the line verbatim as the summary, without a word added or cut', () => {
-    const { items } = parseHak(PAGE, NOW);
+    const { items } = parseHak(PAGE, TONIGHT);
     const lines = sectionsOf(PAGE).flatMap((s) => linesOf(s.html));
     for (const item of items) expect(lines, item.id).toContain(item.summary);
     expect(items[0]!.summary).toBe('od 00:00 do 05:00 sati bit će zatvorena autocesta A1 između čvorova Lučko i Donja Zdenčina u oba smjera. Obilazak: čvor Lučko (A1) - DC1 - DC543 - čvor Donja Zdenčina (A1) i obratno');
@@ -102,19 +122,25 @@ describe('hak on the saved page', () => {
     expect(items.every((item) => item.title.startsWith('Čvor '))).toBe(true);
   });
 
-  it('drops the Zagreb lines that name no end within a week, and says why for each of the nine', () => {
+  it('drops the Zagreb lines that name no end within a week or have not begun, and says why for each of the eleven', () => {
     const section0 = sectionsOf(PAGE)[0]!;
     const zagreb = sectionsOf(PAGE).flatMap((s) => linesOf(s.html).filter((line) => ZAGREB_LINE.test(line)).map((line) => ({ s, line })));
     expect(zagreb).toHaveLength(14);
     const kept = new Set(parseHak(PAGE, NOW).items.map((item) => item.summary));
     const dropped = zagreb.filter(({ line }) => !kept.has(line));
-    expect(dropped).toHaveLength(9);
+    expect(dropped).toHaveLength(11);
     const noEnd = dropped.filter(({ s, line }) => lineEnd(line, s) === undefined);
     // No end at all: the two "zona radova" lines, the marathon, the four lists of lorry limits and the forecast.
     expect(noEnd).toHaveLength(8);
     // The ninth ends on 31 December.
     const late = dropped.find(({ line }) => line.startsWith('do 31. prosinca'))!;
     expect(lineEnd(late.line, section0)).toBe('2026-12-31T23:00:00.000Z');
+    // The tenth and eleventh are tonight's closure at Lučko, from 00:00.
+    const notBegun = dropped.filter(({ s, line }) => lineWindow(line, s)?.start !== undefined);
+    expect(notBegun.map(({ s, line }) => lineWindow(line, s))).toEqual([
+      { start: '2026-09-29T22:00:00.000Z', end: '2026-09-30T03:00:00.000Z' },
+      { start: '2026-09-29T22:00:00.000Z', end: '2026-09-30T03:00:00.000Z' },
+    ]);
   });
 
   it('reads the same page whatever its line endings', () => {
@@ -125,7 +151,7 @@ describe('hak on the saved page', () => {
     const requested: string[] = [];
     const payload = await fetchHak({ now: () => NOW, fetch: async (url) => (requested.push(url), new Response(PAGE)) });
     expect(requested).toEqual(['https://www.hak.hr/info/stanje-na-cestama/']);
-    expect(payload.items).toHaveLength(5);
+    expect(payload.items).toHaveLength(3);
   });
 });
 
@@ -177,6 +203,15 @@ describe('when a line ends', () => {
     expect(lineEnd('radovi do 22:00', EVENING)).toBe('2026-09-29T20:00:00.000Z');
     expect(lineEnd('radovi do 16:00', EVENING)).toBe('2026-09-30T14:00:00.000Z');
     expect(lineEnd('radovi do 22:00 sati', at('2026-09-29T20:00:00.000Z'))).toBe('2026-09-30T20:00:00.000Z');
+  });
+
+  it('names the start of a window, and none for a line with only an end', () => {
+    expect(lineWindow('od 00:00 do 05:00 sati bit će zatvorena', EVENING)).toEqual({ start: '2026-09-29T22:00:00.000Z', end: '2026-09-30T03:00:00.000Z' });
+    expect(lineWindow('od 08:00 do 20:00 sati radovi', EVENING)).toEqual({ start: '2026-09-29T06:00:00.000Z', end: '2026-09-29T18:00:00.000Z' });
+    expect(lineWindow('1. listopada od 22:00 do 02:00 sati', EVENING)).toEqual({ start: '2026-10-01T20:00:00.000Z', end: '2026-10-02T00:00:00.000Z' });
+    expect(lineWindow('do 3. listopada zbog radova', EVENING)).toEqual({ end: '2026-10-03T22:00:00.000Z' });
+    expect(lineWindow('radovi do 22:00', EVENING)).toEqual({ end: '2026-09-29T20:00:00.000Z' });
+    expect(lineWindow('vozi se jednim trakom', EVENING)).toBeUndefined();
   });
 
   it('has no end for a line that names none', () => {
