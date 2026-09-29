@@ -9,7 +9,7 @@ import { activeCount, NOTIFY_KEYS } from '../core/notify-store';
 import { zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
-import { eventsCount } from '../layers/kultura';
+import { CULTURE_MODULES, eventsCount } from '../layers/kultura';
 import type { LayerContext } from '../layers/types';
 import { dataNumber, dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
@@ -55,7 +55,7 @@ function safetyLine(i18n: I18n, ctx: LayerContext): string {
 function eventsLine(i18n: I18n, ctx: LayerContext): string {
   const snapshot = ctx.snapshots.dogadanja;
   if (unusable(snapshot)) return i18n.t('directory.noSummary');
-  const { count, ongoing } = eventsCount(snapshot, ctx.city, ctx.now);
+  const { count, ongoing } = eventsCount(snapshot, ctx.city, ctx.now, CULTURE_MODULES.map((id) => ctx.snapshots[id]));
   if (count && ongoing) return i18n.t('events.countLine', { count, ongoing });
   if (count) return i18n.t('events.count', { count });
   if (ongoing) return i18n.t('events.ongoingCount', { count: ongoing });

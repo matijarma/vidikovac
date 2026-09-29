@@ -28,7 +28,10 @@ export interface ObradaEntry {
   tekst: string;
 }
 
-/** A source considered for the dogadanja module and left out for a robots.txt reason (R-P5) -- named, not silently dropped. */
+/**
+ * A source that a robots.txt bears on -- named, not silently dropped: the YouTube channel is left out for the reason (R-P5); Guru za
+ * kulturu is read all the same, under the owner's ruling O-70, and its entry is the disclosure of that (the module kultura-zg).
+ */
 export interface DogadanjaDroppedEntry {
   naziv: string;
   url: string;
@@ -75,7 +78,7 @@ function renderDogadanjaSources(): string {
   <ul class="izvor-podizvori">
 ${rows}
   </ul>
-  <h3>Isključeno zbog robots.txt</h3>
+  <h3>Izvori i robots.txt</h3>
   <ul class="izvor-iskljuceno">
 ${dropped}
   </ul>`;

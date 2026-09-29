@@ -9,6 +9,9 @@ import type { FetchContext, ModuleId } from '../../worker/feed/schema';
 import { ZBORNA_MJESTA_URL } from '../../worker/feed/modules/ckan-geo';
 
 export const FIXTURE_NOW = new Date('2026-09-11T12:00:00.000Z');
+/** The instant of the U3 fixtures (test/fixtures/README-u3.md, saved 29 Sep 2026 between 15:42 and 15:47 UTC); the modules of
+ *  that package are read at 17:45 Zagreb time, when the pages they were cut from were true. */
+export const U3_FIXTURE_NOW = new Date('2026-09-29T15:45:00Z');
 
 // Resolved through node:path, not `new URL(..., import.meta.url)`: under
 // happy-dom the global URL resolves a relative path against the document's
@@ -17,10 +20,10 @@ const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixture
 const text = (name: string) => readFileSync(join(FIXTURE_DIR, name), 'utf8');
 const bytes = (name: string) => new Uint8Array(readFileSync(join(FIXTURE_DIR, name)));
 
-/** Answers each upstream from the first fixture whose key the URL contains. */
-function fixtureContext(routes: [string, () => BodyInit][]): FetchContext {
+/** Answers each upstream from the first fixture whose key the URL contains, at `now` (the U3 modules: their fixtures are of 29 Sep). */
+function fixtureContext(routes: [string, () => BodyInit][], now: Date = FIXTURE_NOW): FetchContext {
   return {
-    now: () => FIXTURE_NOW,
+    now: () => now,
     fetch: async (url) => {
       const match = routes.find(([needle]) => url.includes(needle));
       if (!match) throw new Error(`no fixture for ${url}`);
@@ -70,4 +73,17 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
     [ZBORNA_MJESTA_URL, () => ZBORNA_RECORDS],
   ]),
   dogadanja: dogadanjaFixtureContext(),
+  // The October 2026 modules (U3), each from the response saved on 29 Sep 2026 (test/fixtures/README-u3.md), read at U3_FIXTURE_NOW.
+  'kultura-zg': fixtureContext([['api/chatbot/events', () => text('kultura-zagreb-events.json')]], U3_FIXTURE_NOW),
+  programi: fixtureContext([
+    ['dogadjanja/10?page=1', () => text('kgz-dogadjanja-p1.html')],
+    ['dogadjanja/10?page=2', () => text('kgz-dogadjanja-p2.html')],
+  ], U3_FIXTURE_NOW),
+  'dhmz-hourly': fixtureContext([['7d_graf_i_simboli.xml', () => text('dhmz-7d.xml')]], U3_FIXTURE_NOW),
+  hak: fixtureContext([['stanje-na-cestama', () => text('hak-stanje.html')]], U3_FIXTURE_NOW),
+  prekidi: fixtureContext([
+    ['datum=29.09.2026', () => text('hep-ods-bez-struje-today.html')],
+    ['datum=30.09.2026', () => text('hep-ods-bez-struje-tomorrow.html')],
+    ['obavijesti/1832', () => text('vio-obavijesti.html')],
+  ], U3_FIXTURE_NOW),
 };

@@ -260,7 +260,7 @@ describe('getModules and warmFeeds', () => {
     await waitOnExecutionContext(ctx);
 
     expect([...touched].sort()).toEqual(
-      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik'].sort(),
+      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi'].sort(),
     );
     expect(touched).not.toContain('zet-rt');
     expect(touched).not.toContain('prometnice');

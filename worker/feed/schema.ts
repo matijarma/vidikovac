@@ -16,7 +16,14 @@ export type ModuleId =
   | 'emsc'
   | 'glasnik'
   | 'ckan-geo'
-  | 'dogadanja';
+  | 'dogadanja'
+  // The October 2026 modules (U3): the City's culture programme, the libraries' programme, DHMZ's hourly
+  // steps, HAK's road report for the Zagreb area, and planned power and water cuts.
+  | 'kultura-zg'
+  | 'programi'
+  | 'dhmz-hourly'
+  | 'hak'
+  | 'prekidi';
 
 /** open: readable without a session (safety tier, kiosk teaser). session: needs a data token. */
 export type Tier = 'open' | 'session';
@@ -30,7 +37,11 @@ export type ItemKind =
   | 'quake'
   | 'act'
   | 'poi'
-  | 'event';
+  | 'event'
+  /** A planned power or water cut on a street (prekidi, U3). */
+  | 'cut'
+  /** A state of the road network outside the City's own closures (hak, U3). */
+  | 'road';
 
 export type Severity = 'info' | 'minor' | 'moderate' | 'severe' | 'extreme';
 
@@ -185,7 +196,9 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'nextStopEtaSec', 'delaySeconds', 'speed', 'confidence', 'held', 'behind', 'tripStatus'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
-  forecast: ['tmin', 'tmax', 'weather', 'text'],
+  // 'tmin', 'tmax' and 'text' are the daily forecast; 'temp', 'precip' (mm), 'prob' (%) and
+  // 'station' are one hourly step of the dhmz-hourly module (U3), 'weather' there only on a wet step.
+  forecast: ['tmin', 'tmax', 'weather', 'text', 'temp', 'precip', 'prob', 'station'],
   warning: ['event', 'certainty', 'urgency'],
   quake: ['mag', 'depth', 'magType', 'region'],
   act: ['broj', 'godina', 'category'],
@@ -196,5 +209,11 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // district key is the one every geocoded sub-fetcher can carry (only
   // komunalne.ts does today, R-DG6): districtOf from the item's own
   // coordinates, never guessed for an item without one.
-  event: ['source', 'category', 'venue', 'venueHint', 'venueTags', 'city', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district'],
+  // 'kids' is kultura-zg's own flag (the programme is for children), true or false, absent when the source has none.
+  event: ['source', 'category', 'venue', 'venueHint', 'venueTags', 'city', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district', 'kids'],
+  // A planned cut (prekidi): 'utility' struja or voda, 'source' hep-ods or vio, 'street' as the source writes it,
+  // 'houseNumbers' the source's own text, 'precision' time (HEP) or day (VIO).
+  cut: ['utility', 'source', 'street', 'houseNumbers', 'district', 'precision'],
+  // A HAK line about the Zagreb area (hak): the HAK section it stands in, its state and the street or junction.
+  road: ['source', 'section', 'state', 'street', 'district'],
 };

@@ -47,3 +47,28 @@ export function isoOrUndefined(value: string | undefined | null): string | undef
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined;
 }
+
+export interface ZagrebDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+const ZAGREB_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: ZAGREB_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** Zagreb's calendar day at an instant. */
+export function zagrebDate(instant: Date): ZagrebDate {
+  const parts = Object.fromEntries(ZAGREB_DATE.formatToParts(instant).map((part) => [part.type, part.value]));
+  return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
+}
+
+/** The calendar day `days` after (or before, when negative) a day: plain calendar arithmetic, no clock in it. */
+export function addZagrebDays(date: ZagrebDate, days: number): ZagrebDate {
+  const moved = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return { year: moved.getUTCFullYear(), month: moved.getUTCMonth() + 1, day: moved.getUTCDate() };
+}
+
+/** "2026-09-29" */
+export function zagrebDayKey(date: ZagrebDate): string {
+  return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+}

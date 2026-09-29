@@ -25,16 +25,20 @@ export const LAYER_RENDERERS: Record<LayerId, LayerRenderer> = {
 export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   // The overview composes five domains: weather, safety, transit, the next
   // dated events and the gazette issue.
-  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik'],
+  // The five October 2026 modules (U3) are read by Sada's list beside the rest: the City's and the libraries' programmes,
+  // DHMZ's hourly steps, HAK's road report and the planned power and water cuts.
+  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'],
   // Transport notices (ZET's two feeds) ride in the dogadanja module.
   'u-pokretu': ['zet-rt', 'prometnice', 'dogadanja'],
   'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc'],
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
   // dogadanja is one module, session tier, shared by both layers below: each
   // reads the same merged snapshot and filters to its own subset of the six
-  // sources (kultura.ts, uprava-i-pravo.ts), so it is listed for both.
+  // sources (kultura.ts, uprava-i-pravo.ts), so it is listed for both. Kultura
+  // also lists the City's culture programme (kultura-zg) and the libraries'
+  // programme (programi), whose every item is culture.
   'uprava-i-pravo': ['glasnik', 'dogadanja'],
-  kultura: ['dogadanja'],
+  kultura: ['dogadanja', 'kultura-zg', 'programi'],
 };
 
 /** Every module any layer needs, once: what the wide grid polls. */

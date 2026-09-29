@@ -13,7 +13,7 @@ import { isOpenLicenceEvent } from '../../worker/feed/modules/dogadanja/licence'
 import { OPEN_DATASETS } from '../../worker/open/catalog';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { LAYERS } from '../../worker/protocol';
-import { FIXTURE_CONTEXTS, FIXTURE_NOW } from '../feed/fixture-contexts';
+import { FIXTURE_CONTEXTS, FIXTURE_NOW, U3_FIXTURE_NOW } from '../feed/fixture-contexts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { delayTone } from '../../app/src/experience/delay';
 import { renderLayer } from '../../app/src/layers';
@@ -215,5 +215,50 @@ describe('every source reaches the public screen; only /open stays licence-selec
     expect(passed.items.map(source)).toContain('etnografski');
     expect(passed.items).toHaveLength(merged.items.length);
     expect(passed.attribution).toBe(merged.attribution);
+  });
+});
+
+// U3: the five October modules go through their real parsers on the pages saved on 29 Sep 2026, and the phone's culture
+// list and Sada's provenance render from that output. The clock is that of the fixtures (17:45 in Zagreb).
+describe('the October 2026 modules reach the phone from their real fixtures', () => {
+  const at = U3_FIXTURE_NOW.getTime();
+  const october = () => ({ i18n, snapshots, now: at });
+
+  it('lists the City\'s programme and the libraries\' events on Kultura, each with its own credit and no unavailable field', () => {
+    const kultura = renderLayer('kultura', october());
+    const rows = [...kultura.querySelectorAll('[data-testid=event-row]')].map(clean);
+    expect(rows.length).toBeGreaterThan(0);
+    // Guru za kulturu: today\'s evening programme with its venue; the libraries\': the events of 29 and 30 September.
+    expect(rows.filter((row) => row.includes('Guru za kulturu')).length).toBeGreaterThan(5);
+    expect(rows.filter((row) => row.includes('Knjižnice grada Zagreba')).length).toBeGreaterThan(2);
+    for (const row of rows) expect(row, row).not.toContain(UNAVAILABLE);
+    const credits = [...kultura.querySelectorAll('[data-testid=panel-attr]')].map(clean);
+    expect(credits).toHaveLength(3);
+    expect(credits.some((credit) => credit.includes('Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje'))).toBe(true);
+    expect(credits.some((credit) => credit.includes('Izvor: Knjižnice grada Zagreba; neslužbeni prikaz'))).toBe(true);
+    for (const credit of credits) expect(credit).not.toMatch(/[{}]/);
+    expect(clean(kultura)).not.toContain(UNAVAILABLE);
+  });
+
+  it('credits every one of the five on Sada with its time filled in, brace-free', () => {
+    const provenance = clean(renderLayer('grad-sada', { ...sadaCtx(), now: at }).querySelector('[data-testid=provenance]'));
+    for (const credit of [
+      'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr)',
+      'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz',
+      'Izvor: DHMZ, Otvorena dozvola,',
+      'Izvor: HAK, stanje na cestama,',
+      'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+    ]) expect(provenance, credit).toContain(credit);
+    expect(provenance).not.toMatch(/[{}]/);
+    // HAK\'s credit names the update its lines stand on (17:39 in Zagreb), as article 8 of its terms asks.
+    expect(provenance).toMatch(/Izvor: HAK, stanje na cestama, [^;]*17:39[^;]*; neslužbeni prikaz/);
+  });
+
+  it('sends all five to the public screen, the two large ones cut to the hours the wall can name', () => {
+    for (const id of ['kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'] as const) expect(TEASER_MODULES).toContain(id);
+    const cut = teaserSubset(snapshots['dhmz-hourly']!, undefined, at);
+    expect(cut.items.length).toBeGreaterThan(0);
+    expect(cut.items.length).toBeLessThan(snapshots['dhmz-hourly']!.items.length);
+    expect(teaserSubset(snapshots.hak!, undefined, at).items).toHaveLength(snapshots.hak!.items.length);
   });
 });

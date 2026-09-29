@@ -51,10 +51,36 @@ const EXPECTED: Record<string, { url: string; text: string; licence: string }> =
       'plan komunalnih aktivnosti i ZET (Otvorena dozvola), Etnografski muzej; licenca i poveznica navedeni uz svaku stavku prema polju "source"',
     licence: 'Više licenci, vidi izvor uz svaku stavku',
   },
+  // The October 2026 modules (U3): the strings of the plan's Data table, character for character.
+  'kultura-zg': {
+    url: 'https://kultura.zagreb.hr/',
+    text: 'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje',
+    licence: 'Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)',
+  },
+  programi: {
+    url: 'https://www.kgz.hr/hr/dogadjanja/10',
+    text: 'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz',
+    licence: 'Licenca nije navedena',
+  },
+  'dhmz-hourly': {
+    url: 'https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici',
+    text: 'Izvor: DHMZ, Otvorena dozvola, {vrijeme}',
+    licence: 'Otvorena dozvola (NN 67/17)',
+  },
+  hak: {
+    url: 'https://www.hak.hr/info/stanje-na-cestama/',
+    text: 'Izvor: HAK, stanje na cestama, {vrijeme}; neslužbeni prikaz',
+    licence: 'Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu',
+  },
+  prekidi: {
+    url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
+    text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+    licence: 'Licenca nije navedena',
+  },
 };
 
 describe('app/src/data/izvori.json', () => {
-  it('lists exactly the nine modules, once each', () => {
+  it('lists exactly the fourteen modules, once each', () => {
     const ids = izvori.sources.map((s) => s.module);
     expect([...ids].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
@@ -90,7 +116,7 @@ describe.skipIf(registryMissing)('parity with worker/feed/registry.ts', () => {
 describe('renderIzvoriHtml', () => {
   it('renders one article per source with the text, link and licence', () => {
     const html = renderIzvoriHtml();
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
     expect(html).toContain('Public dataset by ZET provided under Open license');
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -107,8 +133,8 @@ describe('renderIzvoriHtml', () => {
     expect(OBRADA.tekst).toMatch(/predložak|predložaka|predloške/);
     expect(OBRADA.tekst).toMatch(/ne piše slobodan tekst/);
     expect(`${OBRADA.naslov} ${OBRADA.tekst}`).not.toMatch(/saže|sažim|sažet|traku|traka/i);
-    // Still nine source articles: the note is a section, not a tenth source.
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+    // Still fourteen source articles: the note is a section, not a fifteenth source.
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
   });
 
   it('escapes the values instead of trusting the JSON', () => {
@@ -145,7 +171,7 @@ describe('renderIzvoriHtml', () => {
     expect(article).toContain('Licenca nije navedena');
   });
 
-  it('renders the two robots-dropped sources with their reason under the dogadanja article', () => {
+  it('renders the two sources a robots.txt bears on with their reason under the dogadanja article: one read under O-70, one left out', () => {
     const html = renderIzvoriHtml();
     const article = html.slice(html.indexOf('id="izvor-dogadanja"'), html.indexOf('</article>', html.indexOf('id="izvor-dogadanja"')));
     expect(DOGADANJA_DROPPED.length).toBe(2);
@@ -154,24 +180,43 @@ describe('renderIzvoriHtml', () => {
       expect(article, `${dropped.naziv} reason`).toContain(dropped.reason);
       expect(article, `${dropped.naziv} reason mentions robots.txt`).toMatch(/robots\.txt/);
     }
+    // Guru za kulturu is read, and the page says so under the ruling that allows it; the heading no longer calls it left out.
+    const [guru, youtube] = DOGADANJA_DROPPED;
+    expect(guru!.naziv).toBe('Guru za kulturu');
+    expect(guru!.reason).toContain('O-70');
+    expect(guru!.reason).toContain('22. rujna 2026.');
+    expect(guru!.reason).toContain('Disallow: /api/');
+    expect(guru!.reason).toContain('najviše jednom na sat');
+    expect(guru!.reason).toContain('poveznicu');
+    expect(guru!.reason).not.toMatch(/Isključeno/);
+    expect(youtube!.reason).toMatch(/^Isključeno \(R-P5\)/);
+    expect(article).toContain('<h3>Izvori i robots.txt</h3>');
+    expect(article).not.toContain('Isključeno zbog robots.txt');
   });
 });
 
 // WP3 step 2: the street index behind "Adresa ili stajalište" is OpenStreetMap
 // data (ODbL 1.0). It is a static dataset, not a feed module, so the page names
-// it in a section of its own and `sources` stays the nine modules.
+// it in a section of its own and `sources` stays the feed modules; the opening hours of places (U3) are the second.
 describe('static datasets', () => {
-  it('names the ODbL street index in its own section, not as a tenth source', () => {
-    expect(izvori.sources.length).toBe(9);
-    expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo']);
-    const [streets] = STATIC_SOURCES;
+  it('names the ODbL street index and the ODbL opening hours in their own section, not as more sources', () => {
+    expect(izvori.sources.length).toBe(14);
+    expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo', 'osm-hours']);
+    const [streets, hours] = STATIC_SOURCES;
+    expect(hours).toMatchObject({
+      licence: 'ODbL 1.0',
+      url: 'https://www.openstreetmap.org/copyright',
+      text: '© OpenStreetMap contributors, ODbL 1.0; izvedena baza podataka (radno vrijeme mjesta)',
+    });
     expect(streets).toMatchObject({ licence: 'ODbL 1.0', url: 'https://www.openstreetmap.org/copyright', text: '© OpenStreetMap contributors · Protomaps' });
     const html = renderIzvoriHtml();
     expect(html).toContain('aria-labelledby="static-sources-title"');
     expect(html).toContain('id="static-source-streets-geo"');
+    expect(html).toContain('id="static-source-osm-hours"');
     expect(html).toContain('© OpenStreetMap contributors · Protomaps');
+    expect(html).toContain('© OpenStreetMap contributors, ODbL 1.0; izvedena baza podataka (radno vrijeme mjesta)');
     expect(html).toContain('ODbL 1.0');
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(9);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
     const section = html.slice(html.indexOf('static-sources-title'));
     expect(section).not.toContain('<article');
   });

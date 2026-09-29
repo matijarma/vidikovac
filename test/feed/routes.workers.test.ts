@@ -147,6 +147,11 @@ describe('GET /api/teaser', () => {
       'dogadanja',
       'dhmz-forecast',
       'glasnik',
+      'kultura-zg',
+      'programi',
+      'dhmz-hourly',
+      'hak',
+      'prekidi',
     ]);
     const zet = body.modules.find((m) => m.module === 'zet-rt');
     // R-P1: the fleet count, then the pins inside the default screen's box
@@ -193,12 +198,12 @@ describe('GET /api/data', () => {
     expect(wrong.status).toBe(401);
   });
 
-  it('serves all nine modules for a valid token and never caches them', async () => {
+  it('serves all fourteen modules for a valid token and never caches them', async () => {
     const response = await call('/api/data?token=dobar-token');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
     const body = (await response.json()) as { modules: ModuleSnapshot[] };
-    expect(body.modules).toHaveLength(9);
+    expect(body.modules).toHaveLength(14);
     expect(body.modules.find((m) => m.module === 'zet-rt')?.items).toHaveLength(2);
   });
 

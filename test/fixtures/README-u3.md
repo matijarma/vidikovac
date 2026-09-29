@@ -9,6 +9,7 @@ These files were saved on 29 Sep 2026 (15:42 to 15:47 UTC) from the live sources
 | `arena-program.html` | Arena Zagreb programme, whole year in one table | Arena parser; the list has dates but no time of day |
 | `dinamo-utakmice-cf-challenge.html` | gnkdinamo.hr fixtures page | NOT the fixtures page: the Cloudflare challenge (HTTP 403) the site returns to the identifying User-Agent; pins the failure mode |
 | `dhmz-7d.xml` | DHMZ hourly model output, ZAGREB-GRIČ and ZAGREB-MAKSIMIR, run 06 | `dhmz-hourly` slicing and parsing; the slice is dry |
+| `dhmz-7d-rain.xml` | `dhmz-7d.xml` made wet by hand (not a saved response) | the rain rules of `dhmz-hourly`; in the ZAGREB-GRIČ block the steps of 29.09.2026. at 13 and 14 h carry oborina 0.6 with vjerojatnost 70 and oborina 2.4 with vjerojatnost 90, a leading comment says so, every other byte is `dhmz-7d.xml` |
 | `hak-stanje.html` | HAK road state | `hak` parser (sections, "Ažurirano" times) |
 | `hep-ods-bez-struje-today.html`, `hep-ods-bez-struje-tomorrow.html` | HEP ODS Elektra Zagreb outages for 29.09.2026 and 30.09.2026 | `prekidi` (electricity) parser |
 | `vio-obavijesti.html` | Vodoopskrba i odvodnja notices | `prekidi` (water) parser |

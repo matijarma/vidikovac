@@ -59,7 +59,7 @@ export async function handleFeed(
     // snapshot (a no-op for most); applying it to every module here, not just
     // the session ones in TEASER_MODULES, is what also caps an open module
     // such as emsc down to its teaser size.
-    const modules = snapshots.map((snapshot) => teaserSubset(snapshot, stop ?? undefined));
+    const modules = snapshots.map((snapshot) => teaserSubset(snapshot, stop ?? undefined, now().getTime()));
     return json({ generatedAt: now().toISOString(), modules } satisfies FeedResponse, 200, {
       'cache-control': TEASER_CACHE_CONTROL,
     });
