@@ -56,7 +56,9 @@ import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './ki
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
-import { liveFixes } from './city/feed';
+import { liveFixes, railStationsNear } from './city/feed';
+import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venuePointFor } from './core/open-hours';
+import { openPlacesNear, type OsmHoursIndex } from '../../shared/city/osm-hours';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
 import type { PairedContext, PairedHandle } from './kiosk/paired';
@@ -128,6 +130,8 @@ export interface KioskDeps {
   fetchData?: (module: ModuleId, token: string) => Promise<ModuleSnapshot>;
   /** The stop's last-departure table (core/lastrun.ts); the real loader by default, behind FLAGS.FEED_LASTRUN. */
   loadLastRun?: (stopId: string) => Promise<LastRunSnapshot | null>;
+  /** The OpenStreetMap hours behind the list's open row (core/open-hours.ts, U3 S6); the real loader by default. */
+  loadOpenHours?: () => Promise<OsmHoursIndex | null>;
   /** One real POST /api/screens per press of the start screen's Pokreni: `{}` for an empty field (the whole city), `{ place, frame }` for a picked stop or street. */
   createScreen?: (input: StartScreenInput) => Promise<CreateBeaconResponse>;
   loadStops?: () => Promise<ScreenStop[]>;
@@ -209,6 +213,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   const fetchSentences = deps.fetchSentences ?? fetchSentencesImpl;
   const fetchData = deps.fetchData ?? ((module: ModuleId, token: string) => fetchDataImpl(module, token));
   const fetchLastRun = deps.loadLastRun ?? ((stopId: string) => loadLastRunImpl(stopId));
+  const fetchOpenHours = deps.loadOpenHours ?? (() => loadOpenHoursImpl());
   const loadStops = deps.loadStops ?? (() => loadStopsImpl());
   const loadStreets = deps.loadStreets ?? (() => loadStreetsImpl());
   const createScreen = deps.createScreen ?? ((input: StartScreenInput) => createTemporaryScreen(input));
@@ -486,9 +491,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
       const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       const departedDepartures = [...departedAt].map(([id, leftAt]) => ({ id, leftAt }));
+      // The trains of the two nearest HŽ stations inside the circle, never live (U3 S3).
+      const railBoards = railStationsNear(city.places, place, radiusM)
+        .map(station => boards.get('hz', station.sourceRecord)).filter((board): board is DepartureBoard => board !== undefined);
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
+        railBoards,
+        // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
+        openPlaces: openPlacesNear(openHours, place, radiusM, at, false),
+        venuePoint: venuePointFor(city.places, snapshots, openHours),
       });
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
@@ -838,6 +850,24 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     });
   }
 
+  // --- The facts-breadth rows' own inputs (U3 S3, S6): the OpenStreetMap hours, once a session ---
+  let openHours: OsmHoursIndex | null = null;
+  let openHoursPending = false;
+  let openHoursDownAt = -Infinity;
+  /** A decoded index stands for the screen's life (the file is a monthly extract); a down answer is asked for again
+   *  OPEN_HOURS_RETRY_MS after it came, on the arrivals' beat, never on a paint. */
+  function ensureOpenHours(): void {
+    if (openHours || openHoursPending || now() - openHoursDownAt < OPEN_HOURS_RETRY_MS) return;
+    openHoursPending = true;
+    fetchOpenHours().then((index) => {
+      openHoursPending = false;
+      if (disposed) return;
+      if (!index) { openHoursDownAt = now(); return; }
+      openHours = index;
+      paintWall();
+    }, () => { openHoursPending = false; openHoursDownAt = now(); });
+  }
+
   // --- Arrivals (WP5b): what comes next at a stop, on the screen's own beat ---
   /** The scheduled boards this screen has in hand: one request per platform
    *  per minute however many surfaces ask (city/boards.ts), made once with the
@@ -877,6 +907,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function ensureArrivals(): void {
     if (disposed || (phase !== 'invitation' && phase !== 'paired')) return;
     for (const subject of arrivalSubjects()) boards.ensure('zet', platformIds(subject, stops), onBoardSettled);
+    // The wall's own list, never behind a presented subject (Ruling 31): the HŽ stations, the boards of the two nearest
+    // inside the circle and the opening hours (U3 S3, S6).
+    if (phase === 'invitation' && !presentation?.target) {
+      void cityStore.ensure(['hz-schedule']);
+      const rail = railStationsNear(cityStore.snapshot().places, placeForNearby(), wallRadiusM());
+      if (rail.length > 0) boards.ensure('hz', rail.map((station) => station.sourceRecord), onBoardSettled);
+      ensureOpenHours();
+    }
   }
   /** What the cache holds for these platforms, merged with the live fleet the
    *  map is already drawing (kiosk/mapview.ts vehiclePoints): the screen has

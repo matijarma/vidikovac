@@ -15,10 +15,13 @@
 // out rather than promising them.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { DEFAULT_FRAME_STOPS, frameRadiusM, frameStopsFrom, type FrameLine, type FrameStop } from '../../../shared/city/frame';
+import { distanceM, located } from '../../../shared/city/geo';
+import { openPlacesNear } from '../../../shared/city/osm-hours';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ScreenPlace } from '../../../shared/city/place';
-import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
+import { emptyCity, type DepartureBoard, type Place } from '../../../shared/city/types';
 import type { ScreenStop } from '../core/contracts';
+import { loadOpenHours, openHoursIndex, venuePointFor } from '../core/open-hours';
 import { platformIds } from '../kiosk/arrivals';
 import { routeType } from '../kiosk/stops';
 import type { LayerContext } from '../layers/types';
@@ -103,12 +106,42 @@ function heldBoards(ctx: LayerContext, stop: ScreenStop | null): DepartureBoard[
   return platformIds(stop, ctx.stops).map((id) => ctx.boards!.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
 }
 
+/** How many HŽ stations inside the circle the list reads (docs/upgrade-2026-10-plan/U3.md S3). */
+export const RAIL_STATIONS = 2;
+
+/** The HŽ stations (the catalogue's rail places) inside the circle, the nearest first, RAIL_STATIONS at most: the wall
+ *  (kiosk.ts) and the phone ask for the same boards. */
+export function railStationsNear(places: readonly Place[], place: { lon: number; lat: number }, radiusM: number): (Place & { lon: number; lat: number })[] {
+  return places
+    .filter((p): p is Place & { lon: number; lat: number } => p.category === 'rail' && located(p))
+    .map((p) => ({ p, d: distanceM(place, p) }))
+    .filter(({ d }) => d <= radiusM)
+    .sort((a, b) => a.d - b.d || a.p.id.localeCompare(b.p.id))
+    .slice(0, RAIL_STATIONS)
+    .map(({ p }) => p);
+}
+
+/**
+ * Asks for what the facts-breadth rows read (U3 S3, S6): the HŽ stations (the catalogue's hz-schedule), the boards of
+ * the nearest two inside the circle once they are in hand, and the OpenStreetMap hours (core/open-hours.ts, once a
+ * session). The page redraws when a board or the hours land. Nothing is asked once the session ended.
+ */
+export function askNearby(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): void {
+  if (ctx.frozenAt !== undefined || ctx.session?.frozen) return;
+  ctx.ensureCity?.(['hz-schedule']);
+  const place = nearbyPlace(placeContext);
+  const stations = railStationsNear(ctx.city?.places ?? [], place, feedRadiusM(ctx, place));
+  if (ctx.boards && stations.length > 0) ctx.boards.ensure('hz', stations.map((station) => station.sourceRecord), ctx.onLocalData);
+  if (!openHoursIndex()) void loadOpenHours().then((index) => { if (index) ctx.onLocalData?.(); });
+}
+
 /**
  * Asks the page's board cache for the departures stop's platforms, so the list leads with the departures wherever it
  * is first drawn: Sada's block asks for them itself, Karta's default sheet did not, and a phone opening on Karta (a
  * reload, a saved link) listed the place without them until Sada was visited. Nothing is asked once the session ended.
  */
 export function askBoards(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): void {
+  askNearby(ctx, placeContext);
   const stop = placeContext.departuresStop;
   if (!stop || !ctx.boards || ctx.frozenAt !== undefined || ctx.session?.frozen) return;
   ctx.boards.ensure('zet', platformIds(stop, ctx.stops), ctx.onLocalData);
@@ -123,18 +156,28 @@ export function askBoards(ctx: LayerContext, placeContext: PlaceContext = feedPl
 export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): NearbyInput {
   const now = ctx.frozenAt ?? ctx.now;
   const place = nearbyPlace(placeContext);
+  const radiusM = feedRadiusM(ctx, place);
+  const city = ctx.city ?? emptyCity();
+  const index = openHoursIndex();
+  const railBoards = ctx.boards
+    ? railStationsNear(city.places, place, radiusM).map((station) => ctx.boards!.get('hz', station.sourceRecord)).filter((b): b is DepartureBoard => b !== undefined)
+    : [];
   return {
     place,
-    radiusM: feedRadiusM(ctx, place),
+    radiusM,
     now,
     boards: heldBoards(ctx, placeContext.departuresStop),
     fixes: liveFixes(ctx.snapshots['zet-rt'], now),
     snapshots: ctx.snapshots,
-    city: ctx.city ?? emptyCity(),
+    city,
     lastRun: ctx.lastRun ?? null,
     locale: ctx.i18n.getLocale(),
     i18n: ctx.i18n,
     ...(ctx.stops ? { stops: ctx.stops } : {}),
+    ...(railBoards.length > 0 ? { railBoards } : {}),
+    // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
+    openPlaces: openPlacesNear(index, place, radiusM, now, false),
+    venuePoint: venuePointFor(city.places, ctx.snapshots, index),
   };
 }
 

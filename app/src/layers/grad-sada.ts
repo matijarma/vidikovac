@@ -17,7 +17,8 @@ import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sent
 import { emptyCity } from '../../../shared/city/types';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { CURATED_WALL, curatedCityPoints } from '../city/curated';
-import { feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
+import { askNearby, feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
+import { OSM_HOURS_CREDIT } from '../core/open-hours';
 import { departuresBlock } from '../city/next-departures';
 import type { PlaceContext } from '../city/place';
 import { provenanceBlock } from '../experience/status';
@@ -120,6 +121,8 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   const now = ctx.frozenAt ?? ctx.now;
   const desk = ctx.screen?.surface === 'desktop';
   const feed = sadaFeed(ctx.onLocalData);
+  // The trains' boards and the opening hours the list reads besides the page's feeds (city/feed.ts askNearby).
+  if (typeof feed === 'object') askNearby(ctx, place);
   const input = typeof feed === 'object' ? nearbyInput(ctx, place) : null;
   const rows = typeof feed === 'object' ? feed.selectNearby(input!) : null;
   // Until the list's sources have answered it keeps its head and its reserved rows, and the band's live map waits
@@ -131,10 +134,14 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     : typeof feed === 'object' ? feed.sadaSentences(input!, rows!)[0] ?? null
     : feed === 'loading' ? 'busy' : null;
   // The departures block shows the departures; the list continues with what comes after them.
+  const listed = typeof feed === 'object' && !held ? rows!.filter((row) => row.kind !== 'departure') : [];
   const nearby = typeof feed === 'object'
-    ? feed.nearbySectionMarkup(i18n, held ? [] : rows!.filter((row) => row.kind !== 'departure'), input!.radiusM, now,
+    ? feed.nearbySectionMarkup(i18n, listed, input!.radiusM, now,
       { cap, id: 'sada', ...(held ? { reserve: cap } : {}) })
     : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
+  // An open row on the list is the OpenStreetMap hours' (ODbL): the sources name that credit while one is shown.
+  const credits = typeof feed === 'object' && feed.nearbyShownRows(listed, cap).some((row) => row.kind === 'open')
+    ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : [];
   // The band's box stands from the first draw (112 px, its link to Karta); the map inside it once Sada has settled
   // (the list's chunk in hand and its hold over).
   const settling = held || feed === 'loading';
@@ -149,7 +156,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     + (bandBox ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
     + departuresBlock(ctx, place, { heading: true })
     + nearby
-    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])
+    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[], 'provenance', credits)
     + '</section>');
   if (band) section.querySelector('.sada-map')!.prepend(band);
   return section;
