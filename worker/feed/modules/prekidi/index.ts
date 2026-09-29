@@ -6,9 +6,11 @@ import { fetchVio } from './vio';
 
 // Planned power and water cuts on a street, two publishers read independently (the shape of
 // dogadanja/index.ts): HEP ODS Elektra Zagreb (electricity, with hours) and Vodoopskrba i odvodnja
-// (water, whole days). Each has its own 6 s race; one that fails leaves the other live, reports itself
-// 'down' in `sources`, and the cache layer serves its last good rows beside the fresh ones
-// (worker/feed/source-recovery.ts reads `data.source`, which is the key of `sources` here).
+// (water, whole days). Each has its own 6 s race; one that fails leaves the other live (U3 M4): the module
+// stays 'live' (the registry's `degradeOnSources: false`) and the failed source reports itself 'down' in
+// `sources`, where the Još pages read it. Only when both fail does this throw, so the last good copy serves
+// as 'stale'. (A 'stale' module for one failed source put "1 izvor ne odgovara." over the phone's first
+// viewport every night VIO refused the Worker's requests: round 1 phone F1, 29 September 2026.)
 // Both are unofficial views of a page that states no terms ("neslužbeni prikaz").
 
 export const PREKIDI_SOURCE_TIMEOUT_MS = 6000;

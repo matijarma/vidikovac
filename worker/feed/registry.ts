@@ -168,7 +168,9 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   'dhmz-hourly': defineModule({ id: 'dhmz-hourly', tier: 'session', ttl: 3600, maxStale: 21600, load: fetchDhmzHourly }),
   hak: defineModule({ id: 'hak', tier: 'session', ttl: 600, maxStale: 21600, load: fetchHak }),
   // Its own fetcher reports each publisher in `sources` (hep-ods, vio), so one failing leaves the other live.
-  prekidi: defineModule({ id: 'prekidi', tier: 'session', ttl: 3600, maxStale: 172800, load: fetchPrekidi }),
+  // M4: one failing source leaves the other live. The module is live while HEP or VIO answers, the failed one 'down' in
+  // `sources`; only when both fail does fetchPrekidi throw and the last good copy serve as 'stale' (or 'down').
+  prekidi: defineModule({ id: 'prekidi', tier: 'session', ttl: 3600, maxStale: 172800, load: fetchPrekidi, degradeOnSources: false }),
 };
 
 export const MODULE_IDS = Object.keys(MODULES) as ModuleId[];

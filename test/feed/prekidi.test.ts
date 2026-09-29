@@ -2,8 +2,10 @@
 // September 2026 (test/fixtures/hep-ods-bez-struje-{today,tomorrow}.html) and the notices of VIO
 // (test/fixtures/vio-obavijesti.html), saved with the servers' own CRLF line endings.
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Env } from '../../worker/env';
 import type { FetchContext } from '../../worker/feed/schema';
+import { getModules } from '../../worker/feed/cache';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import { fetchPrekidi } from '../../worker/feed/modules/prekidi';
 import { HEP_URL, hepUrl, parseHep, splitStreets } from '../../worker/feed/modules/prekidi/hep';
@@ -248,5 +250,43 @@ describe('fetchPrekidi', () => {
 
   it('throws when neither source answers, so the last good copy serves', async () => {
     await expect(fetchPrekidi(context({ 'datum=29.09.2026': new Error('a'), 'datum=30.09.2026': new Error('b'), 'vio.hr': new Error('c') }))).rejects.toThrow(/both sources failed/);
+  });
+});
+
+// Round 1 phone F1 (29 September 2026): VIO refused the Worker's requests while HEP answered, the cache layer served the
+// module 'stale' for the one failed source, and the phone put "1 izvor ne odgovara." over its first viewport. M4: one
+// failing source leaves the other live; the module is stale or down only when every source failed.
+describe('prekidi as the feed serves it', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+  /** The cache layer over empty Cache API and KV, the upstream pages from `pages` (an Error: that source fails). */
+  async function served(pages: Record<string, string | Error>) {
+    vi.stubGlobal('caches', { default: { match: async () => undefined, put: async () => undefined } });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input);
+      const page = Object.entries(pages).find(([needle]) => url.includes(needle))?.[1];
+      if (page === undefined || page instanceof Error) return new Response('refused', { status: 503 });
+      return new Response(page);
+    });
+    const env = { FEED: { get: async () => null, put: async () => undefined } } as unknown as Env;
+    const ctx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+    const [snapshot] = await getModules(env, ctx, ['prekidi'], { now: () => NOW, recordMetric: () => undefined });
+    return snapshot!;
+  }
+
+  it('is live while HEP answers and VIO fails, VIO down in its sources and HEP\'s streets served', async () => {
+    const snapshot = await served({ ...PAGES, 'vio.hr': new Error('refused') });
+    expect(snapshot.status).toBe('live');
+    expect(snapshot.staleSince).toBeUndefined();
+    expect(snapshot.sources).toMatchObject({ 'hep-ods': { status: 'live', itemCount: 28 }, vio: { status: 'down', itemCount: 0 } });
+    expect(snapshot.items).toHaveLength(28);
+  });
+
+  it('is live while VIO answers and HEP fails, and down when both fail with no last good copy', async () => {
+    const hepDown = await served({ ...PAGES, 'datum=29.09.2026': new Error('a'), 'datum=30.09.2026': new Error('b') });
+    expect(hepDown.status).toBe('live');
+    expect(hepDown.sources).toMatchObject({ 'hep-ods': { status: 'down' }, vio: { status: 'live', itemCount: 4 } });
+    const bothDown = await served({});
+    expect(bothDown.status).toBe('down');
+    expect(bothDown.items).toEqual([]);
   });
 });
