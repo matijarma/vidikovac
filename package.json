@@ -10,6 +10,7 @@
   "scripts": {
     "build:city": "node scripts/city-catalogue.mjs",
     "build:streets": "node scripts/streets-geo.mjs",
+    "build:street-points": "node scripts/street-points.mjs",
     "build:prijava": "node scripts/build-prijava.mjs",
     "build": "node scripts/build-hitno-style.mjs && vite build && tsc --noEmit -p worker/tsconfig.json",
     "dev": "wrangler dev",
