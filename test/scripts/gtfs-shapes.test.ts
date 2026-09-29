@@ -425,7 +425,10 @@ describe('buildNetwork', () => {
 // routed to Zapadni kolodvor, whose two platforms lie 93 to 172 m west of the
 // Republike Austrije tracks: a set-back terminus on all four, and nothing is
 // trimmed any more.
-const TERMINUS_CASES = ['8_18 1780_18', '8_42 1780_18', 'path:1:0:102900d1 317_1', 'path:1:0:cd13fb90 317_1', 'path:1:1:43a84913 317_2', 'path:1:1:7e51cfc2 317_2', 'path:8:0:dce55b90 1780_18'];
+// Re-measured on feed 000396 (28 Sep 2026): line 1 has shapes of its own that
+// run to Zapadni kolodvor, and line 8's shapes are 8_23 and 8_42, so Zapruđe
+// is the one set-back terminus left.
+const TERMINUS_CASES = ['8_23 1780_18', '8_42 1780_18'];
 const TRIMMED_CASES: string[] = [];
 
 // Feed 000396 (28 Sep 2026) carried two kinds of defect the builders met for
@@ -518,7 +521,9 @@ describe('the committed artefact', () => {
   // set-back synthetic paths cut a lead's length past their platforms): 591,323 B raw,
   // 138,400 B gzip, 1.2 % and 1.0 % more; the pins stand. Rail round 2 adds
   // the Zapruđe turning loop's connector (seventy-five loops): 591,814 B raw,
-  // 138,559 B gzip; the pins stand.
+  // 138,559 B gzip; the pins stand. Feed 000396 (28 Sep 2026) draws a shape
+  // for all but one tram pattern (sixty-six loops, fifteen connectors):
+  // 578,118 B raw, 136,165 B gzip; the pins stand.
   const RAW_BUDGET_BYTES = 640 * 1024;
   const GZIP_BUDGET_BYTES = 150 * 1024;
 
@@ -550,11 +555,16 @@ describe('the committed artefact', () => {
     // ten pieces the terminus loops cut off their long boundary edges; decision
     // 25: plus fourteen terminus connectors and the pieces the seventy-one loops
     // and the set-back synthetic paths cut off their boundary edges; rail
-    // round 2: plus the Zapruđe connector and the piece its loops cut.
-    expect(net.edges).toHaveLength(347);
-    // F8b's seven brought the patterns' own synthetic paths to 52; F8c moved
-    // none. The terminus loops are counted in their own test below.
-    expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION)).toHaveLength(52);
+    // round 2: plus the Zapruđe connector and the piece its loops cut. That
+    // was 347 on feed 000395; feed 000396 draws the rails of the patterns
+    // that ran synthetic paths before (line 1 among them), 412 edges.
+    expect(net.edges).toHaveLength(412);
+    // F8b's seven brought the patterns' own synthetic paths to 52 on feed
+    // 000395; F8c moved none. Feed 000396 carries a shape for every tram
+    // pattern but line 3's towards Savišće, whose shape 3_3 repeats its
+    // shape_pt_sequence values and is dropped (repeatedSequences). The
+    // terminus loops are counted in their own test below.
+    expect(net.paths.filter((p) => p.shape === null && p.direction !== LOOP_DIRECTION).map((p) => p.id)).toEqual(['path:3:0:1bfe2538']);
     expect(net.routes.size).toBeGreaterThan(100); // the real ZET feed has 154 routes
     const trams = [...net.routes.entries()].filter(([, r]) => r.type === 0);
     expect(trams.length).toBeGreaterThanOrEqual(15);
@@ -562,7 +572,7 @@ describe('the committed artefact', () => {
       const onGraph = route.shapes.some((shapeIdx) => (net.shapes[shapeIdx].edges?.length ?? 0) > 0) || net.paths.some((p) => p.route === routeId && p.shape === null);
       expect(onGraph, `tram route ${routeId} has no path on the graph`).toBe(true);
     }
-    expect(net.paths.some((p) => p.route === '1' && p.shape === null)).toBe(true); // line 1 has no shape_id in the feed
+    expect(net.paths.some((p) => p.route === '3' && p.shape === null)).toBe(true); // 3_3 is no polyline in feed 000396
     const used = new Set<number>();
     for (const path of net.paths) {
       for (let k = 0; k < path.edges.length; k++) {
@@ -591,7 +601,7 @@ describe('the committed artefact', () => {
     // subset of what lies geometrically on its edges. (A terminus loop serves
     // only its two ends, sometimes one: its own test below.)
     const tramPaths = net.paths.filter((p) => net.routes.get(p.route)?.type === 0 && p.direction !== LOOP_DIRECTION);
-    expect(tramPaths).toHaveLength(152);
+    expect(tramPaths).toHaveLength(141); // 152 on feed 000395
     for (const path of tramPaths) {
       const idx = net.paths.indexOf(path);
       expect(path.served?.length, `path ${path.id} has no served list`).toBeGreaterThan(1);
@@ -603,7 +613,7 @@ describe('the committed artefact', () => {
     }
     // The terminus flag reaches the ends of the network, not every platform.
     const terminals = net.stops.filter((s) => s.terminal);
-    expect(terminals.length).toBe(464);
+    expect(terminals.length).toBe(458); // 464 on feed 000395
     expect(terminals.length).toBeLessThan(net.stops.length / 2);
     expect(net.stops.find((s) => s.name === 'Trg bana J. Jelačića')!.terminal).toBe(false);
   });
@@ -638,24 +648,30 @@ describe('the committed artefact', () => {
     expect(long).toEqual([]);
     expect(overrides.longLegs ?? []).toEqual([]);
 
-    // And the three crossings that were noded are nodes: route 13 turns out
-    // of Šubićeva into Kralja Zvonimira, and route 6 out of the southbound
-    // centre track into Mihanovićeva, in a few hundred metres rather than two
-    // kilometres of arc.
-    const hop = (pathId: string, from: string, to: string) => {
-      const path = net.paths.find((p) => p.id === pathId)!;
-      const served = path.served!;
-      const k = served.findIndex((entry, i) => i > 0 && net.stops[served[i - 1].stop].name === from && net.stops[entry.stop].name === to);
-      expect(k, `${pathId} does not run ${from} -> ${to}`).toBeGreaterThan(0);
-      return served[k].s - served[k - 1].s;
+    // And the turns that ran the long way round now run short: route 13 out
+    // of Šubićeva into Kralja Zvonimira, route 6 out of the southbound centre
+    // track into Mihanovićeva, and routes 6 and 9 west to north at Glavni
+    // kolodvor. On feed 000395 these were synthetic paths (the three noded
+    // crossings, then the Glavni kolodvor connector); feed 000396 draws them
+    // as shapes (13_30, 13_28, 13_7, 6_69, 6_68, 9_17), so each hop is read
+    // on every path of the route that runs it, shape or synthetic.
+    const hops = (route: string, from: string, to: string) => {
+      const found: number[] = [];
+      for (const path of net.paths) {
+        if (path.route !== route || path.direction === LOOP_DIRECTION) continue;
+        const served = path.served ?? [];
+        for (let i = 1; i < served.length; i++) {
+          if (net.stops[served[i - 1].stop].name === from && net.stops[served[i].stop].name === to) found.push(served[i].s - served[i - 1].s);
+        }
+      }
+      expect(found.length, `no path of route ${route} runs ${from} -> ${to}`).toBeGreaterThan(0);
+      return Math.max(...found);
     };
-    expect(hop('path:13:1:129fd87e', 'Šubićeva', 'Trg žrt. fašizma')).toBeLessThan(400); // was 1779 m
-    expect(hop('path:13:0:096d3646', 'Trg žrt. fašizma', 'Šubićeva')).toBeLessThan(700); // was 2122 m
-    expect(hop('path:6:0:840b2879', 'Zrinjevac', 'Botanički vrt')).toBeLessThan(900); // was 3261 m
-    // ...and the turn no crossing could express runs the Glavni kolodvor
-    // connector: west to north in one hop, as the ground runs.
-    expect(hop('path:6:1:e641be7c', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m
-    expect(hop('path:9:0:892fe989', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m
+    expect(hops('13', 'Šubićeva', 'Trg žrt. fašizma')).toBeLessThan(400); // was 1779 m before F8c; 304 m on 13_30
+    expect(hops('13', 'Trg žrt. fašizma', 'Šubićeva')).toBeLessThan(700); // was 2122 m; 566 m on 13_28
+    expect(hops('6', 'Zrinjevac', 'Botanički vrt')).toBeLessThan(900); // was 3261 m; 708 m on 6_69
+    expect(hops('6', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m; 730 m on 6_68
+    expect(hops('9', 'Botanički vrt', 'Zrinjevac')).toBeLessThan(900); // was 3242 m; 730 m on 9_17
   });
 
   // WP0: the connectors of gtfs-shapes-overrides.json are in the graph, each
@@ -669,8 +685,11 @@ describe('the committed artefact', () => {
     // Three joints (Glavni kolodvor, the Mihaljevac loop's top, a Dubrava
     // joint) and, per decision 25, the Tuđmana turn for line 1 and thirteen
     // terminus turns the shapes stop short of; rail round 2 adds the Zapruđe
-    // turning loop east of the drawn tracks (via its stand).
-    expect(connectors.length).toBe(18);
+    // turning loop east of the drawn tracks (via its stand). Feed 000396
+    // draws the Glavni kolodvor and Tuđmana turns and the Kvaternikov trg
+    // crossover of line 13 in its own shapes, and the build refuses a
+    // connector no path runs, so those three left the file: 15.
+    expect(connectors.length).toBe(15);
     expect(connectors.filter((c) => c.via).length).toBe(10);
     const near = (p: { x: number; y: number }, point: [number, number]) => {
       const [lon, lat] = toLonLat(p);
@@ -707,7 +726,9 @@ describe('the committed artefact', () => {
     const patterns = index.patterns.route
       .map((route: string, i: number) => ({ route, direction: index.patterns.direction[i], shape: index.patterns.shape[i], stops: index.patterns.stops[i] as string[], trips: index.patterns.trips[i] }))
       .filter((p: any) => p.shape === '' && tramRouteIds.has(p.route));
-    expect(patterns).toHaveLength(52);
+    // 52 on feed 000395; on feed 000396 the one tram pattern without a shape
+    // is line 3's towards Savišće, whose shape 3_3 is dropped (repeatedSequences).
+    expect(patterns.map((p: any) => `${p.route}/${p.direction}`)).toEqual(['3/0']);
 
     const exactByStops = new Map(net.paths.filter((p) => p.shape === null).map((p) => [`${p.route}|${p.direction}|${(p.stops ?? []).join(',')}`, p] as const));
     const withoutExact = patterns.filter((p: any) => !exactByStops.has(`${p.route}|${p.direction}|${p.stops.join(',')}`));
@@ -722,7 +743,7 @@ describe('the committed artefact', () => {
         .filter((p) => pattern.stops.join(SEP).includes((p.stops ?? []).join(SEP)));
       expect(runs.map((p) => p.id), `pattern ${pattern.route}/${pattern.direction}`).toHaveLength(1);
     }
-    // Every one of the 52 reaches a path, and its own stops in order.
+    // Every one reaches a path, and its own stops in order.
     for (const pattern of patterns) {
       const exact = exactByStops.get(`${pattern.route}|${pattern.direction}|${pattern.stops.join(',')}`);
       if (!exact) continue;
@@ -774,9 +795,9 @@ describe('the committed artefact', () => {
         off.push(`${path.id} (route ${pattern.route}) ${stopId} "${stop.name}" ${Math.round(d)} m`);
       });
     });
-    expect(tramPatterns).toBe(152); // 100 by shape, 49 exact synthetic, 3 trimmed (times.test.ts)
+    expect(tramPatterns).toBe(141); // 140 by shape, 1 exact synthetic (times.test.ts); 152 on feed 000395
     expect(off).toEqual([]);
-    // Pinned by name, measured on feed 000395, so a new such case fails here
+    // Pinned by name, measured on feed 000396, so a new such case fails here
     // rather than passing unnoticed.
     expect([...terminus].sort()).toEqual(TERMINUS_CASES);
     expect([...trimmed].sort()).toEqual(TRIMMED_CASES);

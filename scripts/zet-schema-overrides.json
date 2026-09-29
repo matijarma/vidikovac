@@ -68,17 +68,17 @@
     "Arena Zagreb": [383, 724],
     "Jadranski most": [370, 693],
     "Slavonska": [692, 580],
-    "Zagrebački transporti": [827, 616],
-    "Zapadni kolodvor": [264, 341]
+    "Zagrebački transporti": [827, 616]
   },
   "unmappedPaths": {
     "14_25": "Feed 000395 short/depot path: only one stop on the printed line 14.",
     "14_28": "Feed 000395 short/depot path: only one stop on the printed line 14.",
     "15_3": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
     "15_7": "Feed 000395 depot path: only Mihaljevac matches the printed short line 15.",
-    "path:14:0:b50fd278": "Feed 000395 synthetic depot path: no stop on the printed line 14.",
-    "path:14:1:16e81f64": "Feed 000395 synthetic depot path: only one stop on the printed line 14.",
-    "path:1:1:43a84913": "Feed 000395 synthetic depot path from Selska to Zapadni kolodvor: only Zapadni kolodvor is on the printed line 1, once the path ends at that platform instead of running on to Trg dr. F. Tuđmana (decision 25)."
+    "14_73": "Feed 000396 depot path Selska -> Črnomerec (10 trips): only Studentski centar is on the printed line 14.",
+    "14_77": "Feed 000396 depot path Črnomerec -> Ljubljanica (10 trips): no stop on the printed line 14.",
+    "1_7": "Feed 000396 depot path Selska -> Zapadni kolodvor (6 trips), the shape of what feed 000395 ran as the synthetic path:1:1:43a84913: only Zapadni kolodvor is on the printed line 1.",
+    "1_9": "Feed 000396 depot path Zapadni kolodvor -> Ljubljanica (10 trips): only Zapadni kolodvor is on the printed line 1."
   },
   "unmapped": [
     { "name": "Držićeva-petlja", "reason": "Loop-only platform absent from the original printed diagram." },
