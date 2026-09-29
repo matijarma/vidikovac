@@ -109,6 +109,29 @@ describe('the committed file', () => {
     expect(places.length).toBeGreaterThan(20);
     expect(places.every((p) => p.closesAt - noon >= 30 * 60_000)).toBe(true);
   });
+
+  it.each([338800281, 419207575, 428648489])('does not offer canceled overnight spills for OSM node %i', (id) => {
+    const raw = JSON.parse(readFileSync(new URL('../../app/public/data/osm-hours.json', import.meta.url), 'utf8'));
+    const fixture = JSON.parse(readFileSync(new URL('../fixtures/osm-hours-overpass.json', import.meta.url), 'utf8')) as {
+      elements: { id: number; lon: number; lat: number; tags: { name: string } }[];
+    };
+    const source = fixture.elements.find((e) => e.id === id)!;
+    expect(source).toBeDefined();
+    const index = decodeOsmHours(raw);
+    expect(index).not.toBeNull();
+    const at = (iso: string) => openPlacesNear(index, source, 5, Date.parse(iso), false)
+      .filter((p) => p.name === source.tags.name);
+    // Saturday 23:00 CEST: all three close at midnight, not in Sunday's canceled spill.
+    expect(at('2026-10-03T21:00:00Z').map((p) => p.closesAt)).toEqual([Date.parse('2026-10-03T22:00:00Z')]);
+    expect(at('2026-10-03T22:15:00Z')).toEqual([]);
+    // Their actual Sunday opening is retained.
+    expect(at('2026-10-04T08:00:00Z')).toHaveLength(1);
+    if (id === 428648489) {
+      // Pif also has a Friday override that cancels Thursday's spill.
+      expect(at('2026-10-01T21:00:00Z').map((p) => p.closesAt)).toEqual([Date.parse('2026-10-01T22:00:00Z')]);
+      expect(at('2026-10-01T22:15:00Z')).toEqual([]);
+    }
+  });
 });
 
 describe('untrusted hours and DST boundaries', () => {

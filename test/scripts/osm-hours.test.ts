@@ -152,4 +152,20 @@ describe('the committed app/public/data/osm-hours.json', () => {
     expect(rows.every((r) => (r.kind === 'venue') === (r.week === null))).toBe(true);
     expect(rows.filter((r) => r.week !== null).every((r) => /^(?:\d{4}-\d{4}(?:,\d{4}-\d{4})*)?(?:\|(?:\d{4}-\d{4}(?:,\d{4}-\d{4})*)?){6}$/.test(r.week!))).toBe(true);
   });
+
+  it.each([
+    [338800281, '0500-0100|0500-0100|0500-0100|0500-0100|0500-0100|0500-2400|0600-0100'],
+    [419207575, '0700-0200|0700-0200|0700-0200|0700-0200|0700-0200|0700-2400|0800-0200'],
+    [428648489, '0730-0100|0730-0100|0730-0100|0730-2400|0730-0200|0730-2400|1000-0100'],
+  ])('stores the corrected overnight overrides for OSM node %i', (id, expected) => {
+    const fixture = JSON.parse(readFileSync(join(ROOT, FIXTURE), 'utf8')) as {
+      elements: { id: number; lon: number; lat: number; tags: { name: string; opening_hours: string } }[];
+    };
+    const source = fixture.elements.find((e) => e.id === id)!;
+    expect(source).toBeDefined();
+    const row = records(file).find((r) => r.name === source.tags.name
+      && r.lon === Math.round(source.lon * 1e5) / 1e5 && r.lat === Math.round(source.lat * 1e5) / 1e5);
+    expect(week(source.tags.opening_hours)).toBe(expected);
+    expect(row?.week).toBe(expected);
+  });
 });
