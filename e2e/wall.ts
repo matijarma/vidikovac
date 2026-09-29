@@ -97,6 +97,18 @@ export const DEPARTURES_FIT_FULL = 3;
 export const DEPARTURES_FIT_RESERVED = 2;
 /** The row kinds the fit never drops; any of them on the wall lowers the floor to DEPARTURES_FIT_RESERVED. */
 export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice'];
+/**
+ * Beside a reserved row the fit keeps fewer than DEPARTURES_FIT_RESERVED only where the list is full: the painted rows
+ * leave less than DEPARTURE_ROW_MIN_PX of its box, and every row beside the departures is one the fit keeps before a
+ * second departure (app/src/kiosk/timeline.ts dropCandidate): a reserved kind, a closure, the one timeless row.
+ * Measured on the integrated tree (lastTrams2240 at 22:49 Zagreb, 1920×1080, a 459 px list): the 22:50 tram
+ * "1 Zapadni kolodvor" takes two title lines (109 px) beside the last and first trams and the pharmacy (89 px each)
+ * and the Gundulićeva closure (64 px), 439 px, and a second departure needs 64; September's "two at night" was measured
+ * with one-line departure titles.
+ */
+export const FIT_FULL_KEEPS_KINDS: readonly string[] = [...FIT_RESERVED_KINDS, 'closure'];
+/** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts). */
+export const DEPARTURE_ROW_MIN_PX = 64;
 /** A tram or bus family sentence says a departure ("polazi"): none may stand while ZET's fleet is judged silent (upgrade U2). */
 export const DEPARTURE_SENTENCE_RE = /\bpolazi\b/i;
 /** Only the trainAt envelope is exempt: a quoted event title such as "Vlak" can still promise a last tram. */
@@ -185,6 +197,12 @@ export interface WallSample {
   fitDropped: string[] | null;
   /** `data-fit-overflow` on the list: the fit found no room even after dropping (`1`); null when the probe is missing. */
   fitOverflow: boolean | null;
+  /**
+   * The height the painted rows leave free in the list's box (`[data-testid=nearby-rows]`, px): its content height less
+   * the stretch from its content top to the lowest row on the wall; null without the list or a row on the wall, absent
+   * in a reading recorded before it (fitPlan's full-list exception then never applies).
+   */
+  listRoom?: number | null;
   solarRows: number;
   liveRows: number;
   pills: string | null;
@@ -316,6 +334,16 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
   });
 
   const fit = q(p.nearby)?.dataset;
+  const listEl = q(p.nearbyRows);
+  const listRoom = ((): number | null => {
+    if (!listEl || visibleRows.length === 0) return null;
+    const cs = getComputedStyle(listEl);
+    const padTop = parseFloat(cs.paddingTop) || 0;
+    const top = listEl.getBoundingClientRect().top + listEl.clientTop + padTop;
+    const inner = listEl.clientHeight - padTop - (parseFloat(cs.paddingBottom) || 0);
+    const used = Math.max(...visibleRows.map((li) => li.getBoundingClientRect().bottom)) - top;
+    return Math.round((inner - used) * 10) / 10;
+  })();
   const mapc = q(p.map);
   const qrEl = q(p.qrSvg);
   const qb = qrEl ? qrEl.getBoundingClientRect() : null;
@@ -344,6 +372,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     departures: rows.filter((r) => r.kind === 'departure').length,
     fitDropped: fitDroppedIn(fit?.fitDropped),
     fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
+    listRoom,
     solarRows: rows.filter((r) => r.kind === 'solar').length,
     liveRows: rows.filter((r) => r.live).length,
     pills: mapc?.dataset.pills ?? null,
@@ -688,21 +717,40 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
 }
 
 // --- verdicts, shared by the accept spec and the observer -----------------------------------------
+/** What the fitted count reads of a reading; the list's room and hidden rows are absent in readings recorded before them. */
+export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> & Partial<Pick<WallSample, 'listRoom' | 'hiddenRows'>>;
+
+const timelessRow = (r: WallRow): boolean => r.always || r.when === null;
+
+/**
+ * The list is full beside its departures (FIT_FULL_KEEPS_KINDS): every row on the wall is whole, the rows leave less
+ * than DEPARTURE_ROW_MIN_PX of the box, and each row beside the departures is a reserved kind, a closure or the one
+ * timeless row, all of which the fit keeps before a second departure.
+ */
+function fullBesideKeptRows(s: FitReading): boolean {
+  if (typeof s.listRoom !== 'number' || !(s.listRoom < DEPARTURE_ROW_MIN_PX) || (s.hiddenRows ?? 0) > 0) return false;
+  const beside = s.rows.filter((r) => r.kind !== 'departure');
+  return beside.filter(timelessRow).length <= 1 && beside.every((r) => timelessRow(r) || (r.kind !== null && FIT_FULL_KEEPS_KINDS.includes(r.kind)));
+}
+
 /**
  * The departures the fit must keep, of those the list offered: null without the `data-fit-dropped` probe. The offer is
  * the visible departures plus the departures the fit left out (never more than DEPARTURES_MAX); the floor is
- * DEPARTURES_FIT_FULL, or DEPARTURES_FIT_RESERVED while a row of a FIT_RESERVED_KINDS kind is on the wall.
+ * DEPARTURES_FIT_FULL, or DEPARTURES_FIT_RESERVED while a row of a FIT_RESERVED_KINDS kind is on the wall, and beside
+ * such a row the departures a full list holds (fullBesideKeptRows, at least DEPARTURES_MIN) where that is fewer.
  */
-export function fitPlan(s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): { offered: number; expected: number } | null {
+export function fitPlan(s: FitReading): { offered: number; expected: number; full: boolean } | null {
   if (s.fitDropped == null) return null;
   const offered = Math.min(DEPARTURES_MAX, s.departures + s.fitDropped.filter((kind) => kind === 'departure').length);
   const reserved = s.rows.some((r) => r.kind !== null && FIT_RESERVED_KINDS.includes(r.kind));
-  return { offered, expected: Math.min(offered, reserved ? DEPARTURES_FIT_RESERVED : DEPARTURES_FIT_FULL) };
+  const floor = Math.min(offered, reserved ? DEPARTURES_FIT_RESERVED : DEPARTURES_FIT_FULL);
+  const full = reserved && s.departures >= DEPARTURES_MIN && s.departures < floor && fullBesideKeptRows(s);
+  return { offered, expected: full ? s.departures : floor, full };
 }
-export const fittedDepartures = (s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): number | null => fitPlan(s)?.expected ?? null;
+export const fittedDepartures = (s: FitReading): number | null => fitPlan(s)?.expected ?? null;
 
 /** The departure rows of one reading: 1 to 3, and at least the fitted count of those the list offered; `[]` means it holds. */
-export function departureFailures(s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): string[] {
+export function departureFailures(s: FitReading): string[] {
   const out: string[] = [];
   if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departure rows (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
   const plan = fitPlan(s);
@@ -735,6 +783,14 @@ export function sampleFailures(s: WallSample): string[] {
 export const IDLE_MINUTE_MS = 60_000;
 /** Structural mutations allowed in that minute: a departure leaving at the top and one row entering (principle 7). */
 export const IDLE_MUTATIONS_MAX = 2;
+/**
+ * The same minute where the departure's leaving gives a row the fit had left out its room back (U0 step 7: a dropped row
+ * returns once a later change leaves room): the departure leaving, the next departure entering and that one row, all
+ * three between the same two readings (calmRestoreBeat). Measured on the integrated tree (lastTrams2240, 22:51:00 Zagreb):
+ * the two-line 22:50 "1 Zapadni kolodvor" left, and the 22:54 "1 Borongaj" and the 22:57 "13 Kvaternikov trg" the fit
+ * had dropped beside it entered, two departures again beside the reserved rows and the closure.
+ */
+export const IDLE_MUTATIONS_RESTORE_MAX = 3;
 
 export interface CalmMotionSpec {
   /** The subtree watched for structural mutations. */
@@ -806,8 +862,11 @@ export interface CalmMutationRecord {
   removes: CalmMutationNode[];
 }
 export interface CalmMotionDetail {
-  /** The row keys at each reading that bounded a pair (the start, every mark, the read), with the page clock. */
-  marks: { at: number; keys: string[] }[];
+  /**
+   * The row keys at each reading that bounded a pair (the start, every mark, the read), with the page clock and the
+   * timeline's `data-fit-dropped` then (null without the probe; absent in a reading recorded before it).
+   */
+  marks: { at: number; keys: string[]; fitDropped?: string | null }[];
   /** The structural records in order; at most CALM_DETAIL_RECORDS_MAX, `dropped` counts the rest. */
   records: CalmMutationRecord[];
   dropped: number;
@@ -838,6 +897,8 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
     /** The row keys at each reading: the window's start, every mark, and the read. */
     marks: [rows.map(keyOf).filter((k): k is string => k !== null)] as string[][],
     markTimes: [Date.now()] as number[],
+    /** The timeline's data-fit-dropped at each reading (calmRestoreBeat reads it). */
+    markDrops: [(root as HTMLElement | null)?.dataset?.fitDropped ?? null] as (string | null)[],
     /** The same records with what each node did (CalmMotionDetail), capped. */
     log: [] as { at: number; seg: number; adds: { key: string | null; tag: string; kind: string }[]; removes: { key: string | null; tag: string; kind: string }[] }[],
     dropped: 0,
@@ -846,6 +907,7 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
       if (state.observer) state.count(state.observer.takeRecords());
       state.marks.push(Array.from(document.querySelectorAll<HTMLElement>(spec.row)).map(keyOf).filter((k): k is string => k !== null));
       state.markTimes.push(Date.now());
+      state.markDrops.push(document.querySelector<HTMLElement>(spec.root)?.dataset?.fitDropped ?? null);
     },
     count(records: MutationRecord[]): void {
       for (const m of records) {
@@ -897,7 +959,7 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   const state = w[spec.key] as {
     rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
     records: { adds: (string | null)[]; removes: (string | null)[]; seg?: number }[]; marks?: string[][];
-    markTimes?: number[]; log?: CalmMutationRecord[]; dropped?: number;
+    markTimes?: number[]; markDrops?: (string | null)[]; log?: CalmMutationRecord[]; dropped?: number;
     observer: MutationObserver | null; count: (r: MutationRecord[]) => void; mark?: () => void;
   } | undefined;
   if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, marks: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
@@ -951,11 +1013,12 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   }
   delete w[spec.key];
   const times = state.markTimes ?? [];
+  const drops = state.markDrops;
   return {
     rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations,
     turnovers, marks: marks.length, churn: state.mutations - excused,
     textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked,
-    ...(state.log ? { detail: { marks: marks.map((keys, i) => ({ at: times[i] ?? 0, keys })), records: state.log, dropped: state.dropped ?? 0 } } : {}),
+    ...(state.log ? { detail: { marks: marks.map((keys, i) => ({ at: times[i] ?? 0, keys, ...(drops ? { fitDropped: drops[i] ?? null } : {}) })), records: state.log, dropped: state.dropped ?? 0 } } : {}),
   };
 };
 
@@ -966,12 +1029,41 @@ function calmMotionBasics(r: CalmMotionReading): { unmeasurable: string | null; 
   return { unmeasurable: null, rebuilt: r.rebuilt.length ? `${r.rebuilt.length} row(s) stayed on the list but were re-created: ${r.rebuilt.join(', ')} (target 0, a row keeps its node)` : null };
 }
 
+const kindOfKey = (key: string | null): string => (key ?? '').split('|')[0] ?? '';
+const kindCount = (fitDropped: string | null | undefined, kind: string): number => (fitDroppedOf(fitDropped ?? undefined) ?? []).filter((k) => k === kind).length;
+
+/**
+ * The idle minute is one departure's beat with a restored row (IDLE_MUTATIONS_RESTORE_MAX): exactly three records, no
+ * churn, all between the same two readings, one removing the departure that left and two each adding one row that
+ * entered, one of them a departure (the next); and one of the two a row the fit had left out, its kind in the list's
+ * data-fit-dropped at the first reading and fewer of it there at the second. Anything else keeps IDLE_MUTATIONS_MAX.
+ */
+export function calmRestoreBeat(r: CalmMotionReading): boolean {
+  const d = r.detail;
+  if (!d || d.dropped > 0 || r.mutations !== IDLE_MUTATIONS_RESTORE_MAX || r.churn !== 0 || r.rebuilt.length > 0 || d.records.length !== r.mutations) return false;
+  const seg = d.records[0]!.seg;
+  if (d.records.some((x) => x.seg !== seg) || !d.marks[seg] || !d.marks[seg + 1]) return false;
+  const [from, to] = [d.marks[seg]!, d.marks[seg + 1]!];
+  const removes = d.records.filter((x) => x.removes.length > 0);
+  const adds = d.records.filter((x) => x.adds.length > 0);
+  if (removes.length !== 1 || adds.length !== 2 || removes.some((x) => x.adds.length > 0 || x.removes.length !== 1) || adds.some((x) => x.removes.length > 0 || x.adds.length !== 1)) return false;
+  const left = removes[0]!.removes[0]!;
+  if (left.kind !== 'remove' || kindOfKey(left.key) !== 'departure' || !from.keys.includes(left.key ?? '') || to.keys.includes(left.key ?? '')) return false;
+  const entered = adds.map((x) => x.adds[0]!);
+  if (entered.some((n) => n.kind !== 'add' || n.key === null || from.keys.includes(n.key) || !to.keys.includes(n.key)) || entered[0]!.key === entered[1]!.key) return false;
+  if (!entered.some((n) => kindOfKey(n.key) === 'departure')) return false;
+  return entered.some((n) => {
+    const kind = kindOfKey(n.key);
+    return kindCount(from.fitDropped, kind) > 0 && kindCount(to.fitDropped, kind) < kindCount(from.fitDropped, kind);
+  });
+}
+
 /** The accept spec's idle minute (fake clock, no service change): every structural record counts. */
 export function calmMotionFailures(r: CalmMotionReading): string[] {
   const b = calmMotionBasics(r);
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
-  if (r.mutations > IDLE_MUTATIONS_MAX) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  if (r.mutations > IDLE_MUTATIONS_MAX && !calmRestoreBeat(r)) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
@@ -1030,7 +1122,7 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (r.errors > 0) out.push(`${r.errors} of ${r.samples + r.errors} readings failed`);
   if (!r.departuresEverySample) out.push(`a reading without a departure row (min ${r.minDepartures} over ${r.samples} readings; target ≥ ${DEPARTURES_MIN} in every one)`);
   if (r.maxDepartures > DEPARTURES_MAX) out.push(`${r.maxDepartures} departure rows at most (target ≤ ${DEPARTURES_MAX})`);
-  if (r.departuresUnderFit > 0) out.push(`${r.departuresUnderFit} reading(s) with fewer departure rows than the fit keeps of those the list offered, or without the data-fit-dropped probe (target 0: ${DEPARTURES_FIT_FULL}, or ${DEPARTURES_FIT_RESERVED} beside a first, last or notice row)`);
+  if (r.departuresUnderFit > 0) out.push(`${r.departuresUnderFit} reading(s) with fewer departure rows than the fit keeps of those the list offered, or without the data-fit-dropped probe (target 0: ${DEPARTURES_FIT_FULL}, or ${DEPARTURES_FIT_RESERVED} beside a first, last or notice row, fewer only as many as a full list holds beside reserved rows, closures and one timeless row)`);
   if (r.caveatRows > 0) out.push(`${r.caveatRows} row(s) read as a caveat (target 0)`);
   if (r.closureReentries > 0) out.push(`${r.closureReentries} closure row(s) left the list and came back (target 0)`);
   if (r.plusPills > 0) out.push(`${r.plusPills} reading(s) with a "+N" vehicle pill (target 0)`);

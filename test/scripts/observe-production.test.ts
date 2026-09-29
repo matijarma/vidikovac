@@ -285,6 +285,7 @@ describe('the thresholds are one table with a stage per row', () => {
     const target = (id: string): string => fillTarget(THRESHOLDS.find((t) => t.id === id)!.target, instruments);
     expect(target('departures')).toContain(`${wall.DEPARTURES_MIN}–${wall.DEPARTURES_MAX}`);
     expect(target('departures')).toContain(`the fitted count of those the list offered (${wall.DEPARTURES_FIT_FULL}, or ${wall.DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts)`);
+    expect(target('departures')).toContain(`fewer beside such a row only as many as a full list holds (under ${wall.DEPARTURE_ROW_MIN_PX} px left, every other row a reserved one, a closure or the one timeless row)`);
     expect(target('silent-departures')).toContain(String(wall.DEPARTURE_SENTENCE_RE));
     expect(target('sentence-length')).toContain(`1–${wall.SENTENCE_MAX_CHARS}`);
     expect(target('lead')).toContain('"Skeniraj za 10 minuta grada."');

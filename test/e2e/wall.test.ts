@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
+  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURE_SENTENCE_RE, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
@@ -27,6 +28,7 @@ import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
 import { IMMINENT_ROW_MIN } from '../../app/src/kiosk/timeline';
+import { ROW_MIN_PX } from '../../app/src/city/nearby';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
 // Feed 000395's trip index, the one the departures fixture reads (e2e/departures-fixture.ts says why).
 import tripData from '../fixtures/frames/2026-09-21-1715-1744/artefacts/zet-trips.json';
@@ -271,6 +273,113 @@ describe('one reading of the wall', () => {
     expect(r).toMatchObject({ departuresUnderFit: 1, fitDroppedByKind: { departure: 1, event: 3 }, fitOverflowReadings: 1 });
     expect(rotationFailures(r).some((f) => f.startsWith('1 reading(s) with fewer departure rows than the fit keeps'))).toBe(true);
     expect(rotationFailures(summariseRotation([fine, fine])).some((f) => /fit keeps/.test(f))).toBe(false);
+  });
+
+  it('beside a reserved row a full list keeps what it holds: lastTrams2240 at 22:49, one two-line departure beside the promises and a closure', () => {
+    expect(DEPARTURE_ROW_MIN_PX).toBe(ROW_MIN_PX);
+    expect(FIT_FULL_KEEPS_KINDS).toEqual(['first', 'last', 'notice', 'closure']);
+    // The integrated tree's reading at 22:49:02 Zagreb (1920×1080, a 459 px list): 109 + 89 + 64 + 89 + 89 = 439 px.
+    const promises = [
+      row({ id: 'last:2026-09-21', kind: 'last', when: '2026-09-21T21:31:00.000Z' }),
+      row({ id: 'closure:gunduliceva', kind: 'closure', when: '2026-09-22T00:40:00.000Z' }),
+      row({ id: 'first:2026-09-22', kind: 'first', when: '2026-09-22T02:13:00.000Z' }),
+      row({ id: 'always:pharmacy', kind: 'pharmacy', when: null, always: true }),
+    ];
+    const tram = row({ id: 'dep:0_23_101_1_11288', when: '2026-09-21T20:50:00.000Z', title: '1 Zapadni kolodvor' });
+    const at2249 = sample({ at: Date.UTC(2026, 8, 21, 20, 49, 2), rows: [tram, ...promises], fitDropped: ['departure', 'departure', 'closure', 'solar'], listRoom: 19.8 });
+    expect(fittedDepartures(at2249)).toBe(1);
+    expect(departureFailures(at2249)).toEqual([]);
+    const short = '1 departure rows where the list offered 3 and the fit keeps 2 (left out: departure departure closure solar)';
+    // Room for a one-line departure (64 px) left in the box: the floor of two stands.
+    expect(departureFailures({ ...at2249, listRoom: DEPARTURE_ROW_MIN_PX })).toEqual([short]);
+    // A reading without the room (recorded before it) or with a row clipped is judged by the floor alone.
+    expect(departureFailures({ ...at2249, listRoom: undefined })).toEqual([short]);
+    expect(departureFailures({ ...at2249, listRoom: null })).toEqual([short]);
+    expect(departureFailures({ ...at2249, hiddenRows: 1 })).toEqual([short]);
+    // A row the fit drops before a second departure fills the list instead (an event, a solar row, a second timeless row): red.
+    for (const extra of [row({ id: 'event-1', kind: 'event', when: '2026-09-21T21:00:00.000Z' }), row({ id: 'solar-1', kind: 'solar', when: '2026-09-22T04:42:00.000Z' }), row({ id: 'always:heritage', kind: 'heritage', when: null, always: true })]) {
+      expect(departureFailures({ ...at2249, rows: [tram, ...promises.slice(0, 3), extra, promises[3]!] })).toHaveLength(1);
+    }
+    // With no reserved row the day floor of three stands, full list or not (the 29 September shape).
+    expect(departureFailures({ ...at2249, rows: [tram, promises[1]!, promises[3]!] })).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure closure solar)']);
+    // The sampler reads no room without a painted row.
+    const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+    document.body.innerHTML = '<section data-testid="nearby" data-fit-dropped=""><ol data-testid="nearby-rows"></ol></section>';
+    expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ listRoom: null });
+    expect(summariseRotation([at2249, { ...at2249, listRoom: 70 }])).toMatchObject({ departuresUnderFit: 1 });
+  });
+
+  describe('calm motion: a departure\'s beat that gives a dropped row its room back (lastTrams2240 at 22:51:00)', () => {
+    const start = new Function(`return (${String(CALM_MOTION_START_IN_PAGE)});`)() as typeof CALM_MOTION_START_IN_PAGE;
+    const read = new Function(`return (${String(CALM_MOTION_READ_IN_PAGE)});`)() as typeof CALM_MOTION_READ_IN_PAGE;
+    const li = (id: string, kind = 'departure'): HTMLLIElement => {
+      const el = document.createElement('li');
+      el.className = 'nearby-row';
+      el.dataset.id = id;
+      el.dataset.kind = kind;
+      return el;
+    };
+    /** The 22:50 wall: one two-line departure, the promises and the closure; the fit left two departures, a closure and the sunrise out. */
+    const wall = (): { section: HTMLElement; ol: HTMLElement } => {
+      document.body.innerHTML = '<section data-testid="nearby" data-fit-dropped="departure departure closure solar"><ol data-testid="nearby-rows"></ol></section>';
+      const ol = document.querySelector<HTMLElement>('ol')!;
+      for (const [id, kind] of [['dep:101_1', 'departure'], ['last:2026-09-21', 'last'], ['closure:gunduliceva', 'closure'], ['first:2026-09-22', 'first'], ['always:pharmacy', 'pharmacy']]) ol.appendChild(li(id!, kind));
+      return { section: document.querySelector<HTMLElement>('section')!, ol };
+    };
+
+    it('three records, the departure leaving and two departures entering where one was left out, hold at IDLE_MUTATIONS_RESTORE_MAX', async () => {
+      expect(IDLE_MUTATIONS_RESTORE_MAX).toBe(3);
+      const { section, ol } = wall();
+      start(CALM_MOTION_SPEC);
+      ol.firstElementChild!.remove();
+      ol.insertBefore(li('dep:103_1'), ol.firstElementChild);
+      ol.insertBefore(li('dep:1301_13'), ol.children[1]!);
+      section.dataset.fitDropped = 'departure closure solar';
+      await Promise.resolve();
+      const r = read(CALM_MOTION_SPEC);
+      expect(r).toMatchObject({ mutations: 3, churn: 0, rebuilt: [], left: ['departure|dep:101_1'], entered: ['departure|dep:103_1', 'departure|dep:1301_13'] });
+      expect(r.detail!.marks.map((m) => m.fitDropped)).toEqual(['departure departure closure solar', 'departure closure solar']);
+      expect(calmRestoreBeat(r)).toBe(true);
+      expect(calmMotionFailures(r)).toEqual([]);
+    });
+
+    it('keeps the target of two when no dropped row came back, when a second row returns, or when no departure left', async () => {
+      const beat = async (change: (section: HTMLElement, ol: HTMLElement) => void, droppedBefore?: string) => {
+        const { section, ol } = wall();
+        if (droppedBefore !== undefined) section.dataset.fitDropped = droppedBefore;
+        start(CALM_MOTION_SPEC);
+        change(section, ol);
+        await Promise.resolve();
+        return read(CALM_MOTION_SPEC);
+      };
+      // The same records, but the fit had left no departure out: a new row, not a restored one.
+      const fresh = await beat((_section, ol) => {
+        ol.firstElementChild!.remove();
+        ol.insertBefore(li('dep:103_1'), ol.firstElementChild);
+        ol.insertBefore(li('dep:1301_13'), ol.children[1]!);
+      }, 'closure solar');
+      expect(calmRestoreBeat(fresh)).toBe(false);
+      expect(calmMotionFailures(fresh)).toEqual(['3 structural mutations under the timeline in an idle minute (target ≤ 2: a departure leaving and one row entering; left 1, entered 2)']);
+      // Two rows restored beside the next departure: four records.
+      const two = await beat((section, ol) => {
+        ol.firstElementChild!.remove();
+        ol.insertBefore(li('dep:103_1'), ol.firstElementChild);
+        ol.insertBefore(li('dep:1301_13'), ol.children[1]!);
+        ol.appendChild(li('solar:sunrise', 'solar'));
+        section.dataset.fitDropped = 'departure closure';
+      });
+      expect(two.mutations).toBe(4);
+      expect(calmMotionFailures(two)).toHaveLength(1);
+      // The closure left instead of a departure: no departure's beat.
+      const closure = await beat((section, ol) => {
+        ol.children[2]!.remove();
+        ol.insertBefore(li('dep:103_1'), ol.children[1]!);
+        ol.insertBefore(li('dep:1301_13'), ol.children[2]!);
+        section.dataset.fitDropped = 'closure closure solar';
+      });
+      expect(calmRestoreBeat(closure)).toBe(false);
+      expect(calmMotionFailures(closure)).toHaveLength(1);
+    });
   });
 
   it('the header sentences: a tram or bus departure says "polazi", only the train family is exempt', () => {
