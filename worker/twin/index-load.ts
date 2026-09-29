@@ -1,12 +1,15 @@
-// Where the twin gets its two static assets from: the trip index
-// (scripts/gtfs-trips.mjs) and the network artefact (scripts/gtfs-shapes.mjs),
-// both served by the ASSETS binding like any file under app/public/data and
+// Where the twin gets its static assets from: the trip index
+// (scripts/gtfs-trips.mjs), the network artefact (scripts/gtfs-shapes.mjs)
+// and the declared expectation (scripts/gtfs-expect.mjs, upgrade U2), all
+// served by the ASSETS binding like any file under app/public/data and
 // decoded by the one decoder each that knows its wire (shared/motion/trips.ts,
-// shared/motion/network.ts). A missing or unreadable asset is null, never a
-// throw: the twin keeps what it has and degrades (no join, or free-plane
-// plans), it does not die. The index also becomes rows for persist.ts.
+// shared/motion/network.ts, shared/motion/expect.ts). A missing or unreadable
+// asset is null, never a throw: the twin keeps what it has and degrades (no
+// join, free-plane plans, a service state of unknown), it does not die. The
+// index also becomes rows for persist.ts.
 
 import { parseDwellOverrides, type DwellOverride } from '../../shared/motion/dwell';
+import { decodeExpectIndex, type ExpectIndex } from '../../shared/motion/expect';
 import { decodeNetwork, type GraphNetwork } from '../../shared/motion/network';
 import { decodeTripIndex, type TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
@@ -20,6 +23,9 @@ export const NETWORK_PATH = '/data/zet-network.json';
  *  nothing transforms it: what the owner commits is what the twin reads, with
  *  no build step in between to forget. */
 export const DWELL_OVERRIDES_PATH = '/data/stop-dwell-overrides.json';
+/** The declared expectation (upgrade U2): the runs the timetable has in
+ *  service per five-minute slot, what the service state judges against. */
+export const EXPECT_PATH = '/data/zet-expect.json';
 
 /** The asset is fetched through the binding, so any host works; the
  *  production hostname keeps the request readable in a log. */
@@ -39,6 +45,18 @@ export async function fetchTripIndex(env: Env): Promise<TripIndex | null> {
     return raw === null ? null : decodeTripIndex(raw);
   } catch (error) {
     logError('twin_index_unreadable', error);
+    return null;
+  }
+}
+
+/** The decoded expectation, or null on the same terms: the service state
+ *  then reads unknown (`no-artefact`) until the hourly asset check finds it. */
+export async function fetchExpectIndex(env: Env): Promise<ExpectIndex | null> {
+  try {
+    const raw = await fetchAsset(env, EXPECT_PATH);
+    return raw === null ? null : decodeExpectIndex(raw);
+  } catch (error) {
+    logError('twin_expect_unreadable', error);
     return null;
   }
 }
