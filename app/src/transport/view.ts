@@ -406,6 +406,9 @@ export interface StopDetailData {
    *  sheet therefore leaves out (arrivalsAt's `cancelledRoutes`, at most three):
    *  one note each. The sheet says it; the wall never does. */
   cancelledRoutes?: readonly string[];
+  /** While ZET's fleet deviates (upgrade U2): the note under the rows in place of arrivals.note, with the two
+   *  numbers and that the times are the timetable's (arrivals.noteReduced, filled by transport/workspace.ts). */
+  serviceNote?: string;
 }
 
 /** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
@@ -502,7 +505,7 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
     .map((route) => `<p class="t-note" data-testid="stop-cancelled">${esc(i18n.t('arrivals.cancelledRoute', { route }))}</p>`)
     .join('');
   const body = lead.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}<p class="t-note">${esc(d.serviceNote ?? i18n.t('arrivals.note'))}</p>`
     : `<p class="t-empty">${esc(empty)}</p>${cancelled}`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }

@@ -93,7 +93,7 @@ export function sentenceDeadline(text: string, validUntil: number, now: number):
 }
 
 export type SentenceSlotType = 'route' | 'stop' | 'minutes' | 'clock' | 'time' | 'until'
-  | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition';
+  | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition' | 'vehicles' | 'about';
 interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // Only the display's supported alphabets, not visually similar Latin letters
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
@@ -112,6 +112,9 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   venue: { max: 48, pattern: nameChars, names: 'name' },
   street: { max: 64, pattern: nameChars, names: 'address' },
   condition: { max: 32, pattern: /^(?:vedro|pretežno vedro|sunčano|pretežno sunčano|malo oblačno|umjereno oblačno|pretežno oblačno|oblačno|naoblaka|kiša|slaba kiša|jaka kiša|rosulja|pljusak|pljuskovi|grmljavina|snijeg|slab snijeg|susnježica|magla|sumaglica|clear|sunny|partly cloudy|mostly cloudy|cloudy|overcast|rain|light rain|heavy rain|drizzle|showers|thunderstorm|snow|sleet|fog|mist)$/u },
+  // The service families (upgrade U2): the vehicles ZET has moving, with their noun, and the timetable's count after "oko".
+  vehicles: { max: 16, pattern: /^(?:0|[1-9]\d{0,3}) (?:vozilo|vozila|vehicle|vehicles)$/u },
+  about: { max: 4, pattern: /^[1-9]\d{0,3}$/u },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
   const rule = SENTENCE_SLOT_RULES[type];
@@ -162,6 +165,8 @@ export const SENTENCE_FAMILIES = {
   // ZET's own headline while the "ZET javlja" row stands (upgrade U1, shared/city/notices.ts). The slot is `notice`,
   // not `title`, because the copy guard puts every {title} inside „…”; the full stop is the writer's own.
   notice: { hr: 'ZET javlja: {notice}.', en: 'ZET reports: {notice}.', slots: { notice: 'title' }, kinds: ['promet'] },
+  service: { hr: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.', en: 'ZET: {seen} moving, about {expected} by the timetable.', slots: { seen: 'vehicles', expected: 'about' }, kinds: ['promet'] },
+  serviceNone: { hr: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.', en: 'ZET: no vehicle moving, about {expected} by the timetable.', slots: { expected: 'about' }, kinds: ['promet'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a

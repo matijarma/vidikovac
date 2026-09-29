@@ -24,6 +24,7 @@ import { routeType } from '../kiosk/stops';
 import type { LayerContext } from '../layers/types';
 import { vehicleFixes } from '../motion/fixes';
 import type { NearbyInput } from './nearby';
+import { railPolicy, serviceStateOf } from '../../../shared/city/service-state';
 import { resolvePlace, type PlaceContext } from './place';
 
 /** The rows "U blizini" shows on the phone and beside the map on a desk (§12 bounds; one timeless row is kept). */
@@ -142,6 +143,8 @@ export function askBoards(ctx: LayerContext, placeContext: PlaceContext = feedPl
 export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feedPlace(ctx)): NearbyInput {
   const now = ctx.frozenAt ?? ctx.now;
   const place = nearbyPlace(placeContext);
+  // Upgrade U2: rail moves forward while ZET's fleet deviates, as on the wall (U3's policy field).
+  const policy = railPolicy(serviceStateOf(ctx.snapshots['zet-rt'], now).kind);
   return {
     place,
     radiusM: feedRadiusM(ctx, place),
@@ -154,6 +157,7 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
     locale: ctx.i18n.getLocale(),
     i18n: ctx.i18n,
     ...(ctx.stops ? { stops: ctx.stops } : {}),
+    ...(policy ? { policy } : {}),
   };
 }
 

@@ -35,6 +35,7 @@ import { placeDetail,streetDetail } from '../city/markup';
 import { locatedEvents } from '../../../shared/city/events';
 import { externalHtml, itemTitleKind, optionalExternal } from './external';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
+import { aboutExpected, serviceNumbers } from '../../../shared/city/service-state';
 
 /** What the kiosk polls per mirrored layer: the layer's own modules plus
  *  the observation for the weather and safety screens, which read it. */
@@ -91,11 +92,15 @@ export interface PairedHandle {
 
 /** A block's state word, never a time: "zastarjelo" for a last-good copy,
  *  "Izvor trenutačno ne odgovara" for a source that is down, nothing for a
- *  live one. The wall prints no fetch or update time (§12, [O-27]). */
-export function statusLine(snapshot: ModuleSnapshot | undefined, s: KioskStrings): string {
+ *  live one. The wall prints no fetch or update time (§12, [O-27]). A live
+ *  ZET block whose fleet deviates (reduced, silent) says the two numbers
+ *  instead, never a cause (upgrade U2). `locale` picks the vehicles' plural. */
+export function statusLine(snapshot: ModuleSnapshot | undefined, s: KioskStrings, locale = 'hr'): string {
   if (!snapshot) return '';
   if (snapshot.status === 'down') return s.paired.sourceDown;
-  return snapshot.status === 'stale' ? s.paired.stale : '';
+  if (snapshot.status === 'stale') return s.paired.stale;
+  const numbers = snapshot.module === 'zet-rt' ? serviceNumbers(snapshot) : null;
+  return numbers ? fill(s.paired.serviceLine, { seen: plural(locale, s.sentence.vehicles, numbers.seen), expected: aboutExpected(numbers.expected) }) : '';
 }
 
 /** Who publishes a module, as a credit line names it: the public body for the
@@ -167,10 +172,12 @@ export interface BlockOptions {
   /** A further class on the article: the departure board's five-row floor. */
   extraClass?: string;
   s: KioskStrings;
+  /** The screen's locale, for a plural in the status line (statusLine). */
+  locale?: string;
 }
 
 export function block(title: string, body: string, o: BlockOptions): string {
-  const status = [o.meta ?? '', statusLine(o.snapshot, o.s)].filter(Boolean).join(' · ');
+  const status = [o.meta ?? '', statusLine(o.snapshot, o.s, o.locale)].filter(Boolean).join(' · ');
   const list = body.includes('class="k-rows"') ? ' k-block--list' : '';
   return `<article class="k-block${o.tone ? ` k-block--${escapeAttribute(o.tone)}` : ''}${o.grow ? ' k-block--grow' : ''}${list}${o.extraClass ? ` ${escapeAttribute(o.extraClass)}` : ''}"${o.testid ? ` data-testid="${escapeAttribute(o.testid)}"` : ''}${o.snapshot ? ` data-status="${o.snapshot.status}"` : ''}>
     ${kicker(title, status)}
@@ -498,7 +505,7 @@ export function selectionCard(ctx: PairedContext): string {
   const { strings: s, selection, i18n } = ctx;
   if (!selection) return '';
   // The selection is the column's subject: it takes the room the column has.
-  const o = { s, testid: 'k-selection', tone: 'select', grow: true };
+  const o = { s, testid: 'k-selection', tone: 'select', grow: true, locale: ctx.locale };
   const status = selectionStatus(ctx);
   if (status !== 'displayed') {
     const message = status === 'loading' ? s.paired.noData : i18n.t('presentation.unavailable');

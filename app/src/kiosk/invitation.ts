@@ -9,7 +9,9 @@ import { escapeHtml as e } from '../ui/dom/escape';
 import { mountField } from './field';
 import type { Composition } from './layout';
 import { codeBlockMarkup, hintMarkup } from './markup';
-import type { KioskStrings } from './strings';
+import { fill, type KioskStrings } from './strings';
+import { serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
+import { serviceVars } from '../city/sentence';
 import { mountTimeline } from './timeline';
 import { MAP_MIN_HEIGHT_PX } from '../map/frame';
 
@@ -66,7 +68,9 @@ export function compactArrangement(b: CompactBox): { placement: CompactPlacement
   return map;
 }
 export interface InvitationModel {
-  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops; outage: boolean;
+  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops;
+  /** The one quiet note on the map (kiosk.ts invitationModel): ZET sends no positions, or its fleet is silent; null hides it. */
+  note: string | null;
   modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
   now: number; composition: Composition;
 }
@@ -78,6 +82,16 @@ export interface InvitationHandle {
   /** The legend's entries follow what the map draws (kiosk/mapview.ts legendKinds): the others are hidden. */
   setLegend(kinds: readonly string[]): void;
   fit(): void; destroy(): void;
+}
+/**
+ * The map's one quiet note (InvitationModel.note): U0's outage note while ZET sends no positions (`outage`, the kinds
+ * down and unconfirmed), the silent note with the two numbers while ZET's fleet is silent and the departures are the
+ * timetable's (upgrade U2), otherwise none. Never a cause.
+ */
+export function wallMapNote(o: { zet: ModuleSnapshot | undefined; now: number; outage: boolean; strings: KioskStrings; i18n: Pick<I18n, 't'> }): string | null {
+  if (o.outage) return o.strings.nearby.outageNote;
+  const numbers = serviceStateOf(o.zet, o.now).kind === 'silent' ? serviceNumbers(o.zet) : null;
+  return numbers ? fill(o.strings.nearby.silentNote, serviceVars(o.i18n, numbers)) : null;
 }
 /** Shared with presented content: scanning remains possible in every phase. */
 export function cardMarkup(s: KioskStrings, codeBase?: string): string {
@@ -113,7 +127,6 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   note.className='k-map-note';
   note.dataset.testid='map-note';
   note.hidden=true;
-  note.textContent=s.nearby.outageNote;
   geography.appendChild(note);
   let model:InvitationModel|null=null;
   const timeline=mountTimeline(element.querySelector<HTMLElement>('.k-nearby-host')!,{
@@ -201,7 +214,8 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       model=next;
       field.update({modules:model.modules,stop:model.stop,strings:s,i18n,locale});
       setFrame(model.frame);
-      const hidden=lightweight||!model.outage;
+      const hidden=lightweight||model.note===null;
+      if(model.note!==null&&note.textContent!==model.note)note.textContent=model.note;
       if(note.hidden!==hidden)note.hidden=hidden;
       fit();
     },

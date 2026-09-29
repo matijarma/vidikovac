@@ -137,9 +137,11 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // 1,050 hr, 1,022 en.
     // upgrade U1 +3 arrivals.cancelledRoute (the phone stop sheet's note), kiosk.nearby.zetSays (the notice row's
     // time cell), kiosk.sentence.notice (its header sentence): 1,053 hr, 1,025 en.
+    // upgrade U2 +10 hr / +9 en: the service sentences and their vehicles plural, the silent map note, the paired
+    // status line, the lines board's and the landing's timetable count, the phone's reduced note: 1,063 hr, 1,034 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1053);
-    expect(leafKeys(en).length).toBe(1025);
+    expect(leaves.length).toBe(1063);
+    expect(leafKeys(en).length).toBe(1034);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

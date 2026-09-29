@@ -51,7 +51,7 @@ import { essentialsMarkup, essentialsRows, fitEssentials } from './kiosk/essenti
 import { presentationLabelKind } from './kiosk/external';
 import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
-import { cardMarkup, mountInvitation, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
+import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
@@ -68,6 +68,7 @@ import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
 import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
+import { railPolicy, serviceStateOf } from '../../shared/city/service-state';
 
 export type { KioskPhase } from './kiosk/credentials';
 
@@ -488,9 +489,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
       const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       const departedDepartures = [...departedAt].map(([id, leftAt]) => ({ id, leftAt }));
+      // Upgrade U2: rail moves forward while ZET's fleet deviates (U3's policy field; undefined keeps today's order).
+      const policy = railPolicy(serviceStateOf(snapshots['zet-rt'], at).kind);
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : liveFixes(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
+        ...(policy ? { policy } : {}),
       });
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
@@ -1031,7 +1035,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // lines board in place of the map), so it follows the map: the chosen
     // place's stop, or the whole city while Trg is only the read-path default
     // for the list and the departures [O-52], [O-65].
-    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, outage: outage(),
+    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame,
+      note: wallMapNote({ zet: byModule(teaser)['zet-rt'], now: now(), outage: outage(), strings: s, i18n }),
       modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout) };
   }
   function pairedContext(): PairedContext {

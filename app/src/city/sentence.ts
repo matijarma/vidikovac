@@ -4,7 +4,7 @@ import type { ArrivalRow } from '../../../shared/city/arrivals';
 import { distanceM, located } from '../../../shared/city/geo';
 import { NOTICE_WINDOW_MS } from '../../../shared/city/notices';
 import type { ScreenPlace } from '../../../shared/city/place';
-import { departureVoice } from '../../../shared/city/service-state';
+import { aboutExpected, departureVoice, routeConfirmed, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { CityState } from '../../../shared/city/types';
 import {
   acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, writeSentence,
@@ -116,6 +116,8 @@ export const SENTENCE_COPY_HR = {
   always: '{name}: {text}',
   outage: 'ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.',
   notice: 'ZET javlja: {notice}.',
+  service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
+  serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -141,6 +143,8 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   always: '{name}: {text}',
   outage: 'ZET is not sending vehicle positions; timetable departures, unconfirmed.',
   notice: 'ZET reports: {notice}.',
+  service: 'ZET: {seen} moving, about {expected} by the timetable.',
+  serviceNone: 'ZET: no vehicle moving, about {expected} by the timetable.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -222,6 +226,18 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     facts.push({ ...fact, ...(factKey ? { factKey } : {}), ...(wording ? { wording } : {}),
       ...(formUntil !== undefined ? { formUntil } : {}) });
   };
+  // Upgrade U2: while ZET's fleet deviates from the timetable (reduced, silent) the deviation is said once, first, with
+  // its two numbers; the cause is never said, because it is not known.
+  const zet = input.snapshots['zet-rt'];
+  const fleet = serviceStateOf(zet, now).kind;
+  const numbers = fleet === 'reduced' || fleet === 'silent' ? serviceNumbers(zet) : null;
+  if (numbers) {
+    const wording = numbers.seen === 0 ? 'serviceNone' : 'service';
+    // One fact whatever the count: a changed count restates the sentence in place (decision 29).
+    add('service:zet', 'promet', copy(i18n, wording, serviceVars(i18n, numbers)), now + SENTENCE_REFRESH_MS,
+      { factKey: 'service:zet', wording });
+  }
+
   const solar = nextSolar(now);
   const solarRow = input.rows.find(row => row.kind === 'solar' && row.atMs !== null && row.atMs > now);
   const solarAt = solarRow?.atMs ?? solar.at;
@@ -256,13 +272,18 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       station: station.name.replace(/^BAJS\s*[-:·]?\s*/i, ''), bikes: bikeCount(i18n, station.facts!.bikes),
     }), Date.parse(station.updatedAt!) + 180_000, { wording: 'bikes' });
   }
+  // Upgrade U2: while the fleet deviates, the bikes come right after the service fact (same station, same radius).
+  const serviceAt = numbers ? facts.findIndex(fact => fact.id === 'service:zet') : -1;
+  if (serviceAt >= 0) facts.splice(serviceAt + 1, 0, ...facts.splice(serviceAt + 1).sort((a, b) =>
+    Number(b.kind === 'bicikli') - Number(a.kind === 'bicikli')));
   if (input.outage) add('outage:zet', 'promet', copy(i18n, 'outage'), now + SENTENCE_REFRESH_MS, { wording: 'outage' });
+  // The voice the departures keep (shared/city/service-state.ts): 'none' (ZET down or unconfirmed, U0; the city
+  // silent, U2) says no departure, first or last tram at all, whatever the rows hold (timetable promises of the same
+  // kind); 'live-only' says a live row, or a timetable row of a line the twin still sees running.
+  const voice = input.outage ? 'none' : departureVoice(zet, now);
 
   const hour = zagrebHour(now) ?? 12;
   const atNight = hour >= 20 || hour < 5;
-  // Which departures the sentence may say (shared/city/service-state.ts): none while ZET is down or unconfirmed,
-  // whatever the rows hold, and the first and last trams with them (timetable promises of the same kind).
-  const voice = input.outage ? 'none' : departureVoice(input.snapshots['zet-rt'], now);
   let departures = 0;
   for (const row of input.rows) {
     // ZET's own headline, said while its row stands (its window, not a day, and in every service state: it is ZET's
@@ -279,10 +300,10 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     if (row.kind === 'departure') {
       const arrival = row.arrival;
       if (!arrival || ++departures > 3 || !arrival.headsign) continue;
-      if (voice === 'none' || (voice === 'live-only' && !(row.live && arrival.live))) continue;
-      // An ETA cannot be made into a timetable by changing its colour or words.
-      // The selector must rebuild these rows without fixes during an outage.
-      if (input.outage && (row.live || arrival.live)) continue;
+      // An ETA cannot be made into a timetable by changing its colour or words, and a timetable row is not said
+      // while the timetable is not what runs.
+      if (voice === 'none') continue;
+      if (voice === 'live-only' && !((row.live && arrival.live) || routeConfirmed(zet, arrival.routeId))) continue;
       const mode = kindOfRoute(arrival.routeId);
       if (mode === 'other') continue;
       const at = row.atMs;
@@ -309,9 +330,11 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
         street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),
       }), Math.min(row.atMs, nextMidnight(now)), { wording: 'closureUntil' });
     } else if ((row.kind === 'last' || row.kind === 'first') && row.services) {
+      // A first or last tram is a timetable promise: none under 'none', only a confirmed line's under 'live-only'.
       if (voice === 'none') continue;
       for (const service of row.services) {
         if (kindOfRoute(service.routeId) !== 'tram' || service.atMs <= now) continue;
+        if (voice === 'live-only' && !routeConfirmed(zet, service.routeId)) continue;
         const text = copy(i18n, row.kind === 'last' ? 'lastTram' : 'firstTram', {
           route: service.routeName, time: timedLabel(service.atMs, input),
         });
@@ -336,6 +359,14 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   }
   const pinned = new Set(input.pinned ?? []);
   return [...facts.slice(0, MAX_FACTS), ...facts.slice(MAX_FACTS).filter(fact => pinned.has(fact.id))];
+}
+
+/**
+ * The {seen} and {expected} of every service string (the sentence, the wall's map note, the paired status line):
+ * ZET's moving vehicles with their noun (kiosk.sentence.vehicles_*) and the timetable's count as "oko" says it.
+ */
+export function serviceVars(i18n: Pick<I18n, 't'>, numbers: { seen: number; expected: number }): { seen: string; expected: number } {
+  return { seen: i18n.t('kiosk.sentence.vehicles', { count: numbers.seen }), expected: aboutExpected(numbers.expected) };
 }
 
 /** Only stable facts go to AI; countdowns must never enter a twenty-minute cache. */

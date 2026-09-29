@@ -23,6 +23,7 @@ import { lastDeparture } from '../core/lastrun';
 import { clock, dayTime, fmtNumber, fmtTemp, sameZagrebDay, weekdayDayMonth } from './format';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
+import { aboutExpected, serviceNumbers } from '../../../shared/city/service-state';
 import { nearestPharmacy, type OnDutyPharmacy } from './pharmacies';
 
 export type SourceState = 'loading' | 'live' | 'stale' | 'down';
@@ -193,6 +194,8 @@ export interface LinesBoard {
   more: number;
   /** Whole-fleet count the teaser states, null before the first poll. */
   moving: number | null;
+  /** The runs the timetable has in service while ZET's fleet deviates (reduced, silent; upgrade U2), else null. */
+  expected: number | null;
   attribution: string;
 }
 
@@ -230,6 +233,7 @@ export function linesAtStop(modules: readonly ModuleSnapshot[], stop: ScreenStop
     rows: rows.slice(0, cap),
     more: Math.max(0, rows.length - cap),
     moving: moving ? dataNumber(moving, 'vehicles') : null,
+    expected: serviceNumbers(zet)?.expected ?? null,
     attribution: zet?.attribution.text ?? '',
   };
 }
@@ -514,7 +518,9 @@ export function quakeLine(quake: FeedItem, strings: KioskStrings, locale: string
 
 /** Nearby-lines count in words for a board caption; null before data. */
 export function nearbyCountLine(board: LinesBoard, strings: KioskStrings, locale: string): string {
-  return board.moving === null ? '' : plural(locale, strings.lines.vehiclesMoving, board.moving);
+  if (board.moving === null) return '';
+  const moving = plural(locale, strings.lines.vehiclesMoving, board.moving);
+  return board.expected === null ? moving : `${moving} · ${fill(strings.lines.usually, { count: aboutExpected(board.expected) })}`;
 }
 
 // --- The front page's readers (kiosk/front.ts), moved here from the old scenes

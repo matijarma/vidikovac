@@ -16,6 +16,7 @@
 // a normal weekday. The one ZET-side gap over 180 s of a normal weekday (around
 // 07:15) may honestly show the note.
 import type { ModuleSnapshot } from '../../worker/feed/schema';
+import type { ZetService } from './service-wire';
 
 export type ServiceStateKind = 'loading' | 'down' | 'unconfirmed' | 'silent' | 'reduced' | 'normal' | 'unknown';
 
@@ -70,18 +71,22 @@ export function serviceStateOf(snapshot: ModuleSnapshot | undefined, now: number
   }
   if (held && now - held.enteredAt < UNCONFIRMED_HOLD_MS) return { kind: 'unconfirmed', since: held.sourceAt + UNCONFIRMED_AFTER_MS };
   held = null;
-  return { kind: 'unknown', since: null };
+  return fleetState(snapshot);
 }
 
-/** Which departures the header sentence may say: none while ZET is down or unconfirmed, every one otherwise. */
+/** Which departures the header sentence may say: none while ZET is down, unconfirmed or silent; only those a vehicle
+ *  or a confirmed route backs while reduced (U2); every one otherwise. */
 export function departureVoice(snapshot: ModuleSnapshot | undefined, now: number): DepartureVoice {
   const { kind } = serviceStateOf(snapshot, now);
-  return kind === 'down' || kind === 'unconfirmed' ? 'none' : 'all';
+  if (kind === 'down' || kind === 'unconfirmed') return 'none';
+  return fleetVoice(kind);
 }
 
-/** Whether a line's timetable may be taken as running: not while the module is down. */
-export function routeConfirmed(snapshot: ModuleSnapshot | undefined, _routeId: string): boolean {
-  return snapshot?.status !== 'down';
+/** Whether a line's timetable may be taken as running: not while the module is down or the city is silent, and in
+ *  reduced not for a route the twin names below half its trips (U2). */
+export function routeConfirmed(snapshot: ModuleSnapshot | undefined, routeId: string): boolean {
+  if (snapshot?.status === 'down') return false;
+  return fleetRouteConfirmed(snapshot, routeId);
 }
 
 /**
@@ -91,4 +96,72 @@ export function routeConfirmed(snapshot: ModuleSnapshot | undefined, _routeId: s
 export function positionsUnavailable(snapshot: ModuleSnapshot | undefined, now: number): boolean {
   const { kind } = serviceStateOf(snapshot, now);
   return kind === 'down' || kind === 'unconfirmed';
+}
+
+// --- the city's fleet (U2)
+// sources.zet.service is the twin's judgement of the vehicles it publishes
+// against the runs the timetable has in service (worker/twin/service.ts). The
+// states it names are only as good as the source under them: U0's states
+// above outrank them, so a frozen feed never reads as a silent city. A
+// snapshot without it (an older twin, a cold start) reads unknown and keeps
+// today's voice.
+
+type Kind = ReturnType<typeof serviceStateOf>['kind'];
+const FLEET_STATES = new Set(['normal', 'reduced', 'silent', 'unknown']);
+
+/** The twin's judgement as this client can trust it: a known state with whole, non-negative counts. */
+function fleetService(snapshot: ModuleSnapshot | undefined): ZetService | undefined {
+  const service = snapshot?.sources?.zet?.service;
+  if (!service || typeof service !== 'object' || !FLEET_STATES.has(service.state)) return undefined;
+  return service;
+}
+
+function fleetState(snapshot: ModuleSnapshot): { kind: Kind; since: number | null } {
+  const service = fleetService(snapshot);
+  if (!service) return { kind: 'unknown', since: null };
+  const since = typeof service.since === 'string' ? Date.parse(service.since) : Number.NaN;
+  return { kind: service.state, since: Number.isFinite(since) ? since : null };
+}
+
+function fleetVoice(kind: Kind): 'all' | 'live-only' | 'none' {
+  return kind === 'silent' ? 'none' : kind === 'reduced' ? 'live-only' : 'all';
+}
+
+function fleetRouteConfirmed(snapshot: ModuleSnapshot | undefined, routeId: string): boolean {
+  const service = fleetService(snapshot);
+  if (service?.state === 'silent') return false;
+  if (service?.state !== 'reduced') return true;
+  // `routes` names the routes whose own share of their trips is below one half.
+  const routes = service.routes;
+  return !(routes && typeof routes === 'object' && Object.prototype.hasOwnProperty.call(routes, routeId));
+}
+
+const count = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+/** The two numbers a surface says while the city deviates (reduced or silent); null in every other state. */
+export function serviceNumbers(snapshot: ModuleSnapshot | undefined): { seen: number; expected: number } | null {
+  const service = fleetService(snapshot);
+  if (!service || (service.state !== 'reduced' && service.state !== 'silent')) return null;
+  if (!count(service.seen) || !count(service.expected) || service.expected === 0) return null;
+  return { seen: service.seen, expected: service.expected };
+}
+
+/**
+ * The timetable's count as a surface says it after "oko": to ten above a hundred, else to five,
+ * never below five. The count is the timetable's runs, not a measurement, so it is never said
+ * to the vehicle.
+ */
+export function aboutExpected(expected: number): number {
+  if (expected > 100) return Math.round(expected / 10) * 10;
+  return Math.max(5, Math.round(expected / 5) * 5);
+}
+
+/**
+ * Rail and bikes move forward while ZET deviates (NearbyInput.policy, U3's field): three train
+ * rows fill the departures' place when no tram is confirmed, two leave room for confirmed trams.
+ */
+export function railPolicy(kind: Kind): { railMax: number; railFirst: boolean } | undefined {
+  if (kind === 'silent') return { railMax: 3, railFirst: true };
+  if (kind === 'reduced') return { railMax: 2, railFirst: true };
+  return undefined;
 }

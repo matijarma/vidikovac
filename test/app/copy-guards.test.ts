@@ -15,7 +15,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { stopDetailMarkup } from '../../app/src/transport/view';
 import * as sentenceModule from '../../app/src/city/sentence';
-import { acceptSentence } from '../../shared/kiosk/sentence';
+import { acceptSentence, SENTENCE_FAMILIES } from '../../shared/kiosk/sentence';
 import { fill, kioskStrings } from '../../app/src/kiosk/strings';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -448,7 +448,8 @@ describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP
   });
 
   it('every template names the same slots in both languages', () => {
-    for (const [key, value] of values(HR)) expect(slots(leaf(EN, key)!), key).toEqual(slots(value));
+    // English writes no _few form: a Croatian _few compares with the English _other.
+    for (const [key, value] of values(HR)) expect(slots((leaf(EN, key) ?? leaf(EN, key.replace(/_few$/, '_other')))!), key).toEqual(slots(value));
   });
 });
 
@@ -483,6 +484,8 @@ describe('the header sentence templates are name-safe and match the sentence cli
     always: '{name}: {text}',
     outage: 'ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.',
     notice: 'ZET javlja: {notice}.',
+    service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
+    serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -508,9 +511,12 @@ describe('the header sentence templates are name-safe and match the sentence cli
     always: '{name}: {text}',
     outage: 'ZET is not sending vehicle positions; timetable departures, unconfirmed.',
     notice: 'ZET reports: {notice}.',
+    service: 'ZET: {seen} moving, about {expected} by the timetable.',
+    serviceNone: 'ZET: no vehicle moving, about {expected} by the timetable.',
   };
+  /** The templates of kiosk.sentence.*: not the kicker words, nor the plural of the {seen} slot (vehicles_*). */
   const templates = (sentence: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker'));
+    Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker' && !/_(?:one|few|other)$/.test(key)));
 
   it('the catalogues carry the reviewed templates byte-exact, in both languages', () => {
     expect(templates(hr.kiosk.sentence)).toEqual(HR_TEMPLATES);
@@ -554,5 +560,37 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
     expect(fill(s.notice, { notice: 'Linije 5 i 13 u nedjelju mijenjaju trase' })).toBe('ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.');
+  });
+});
+
+// Upgrade U2: the service families say the deviation with its two numbers and never a cause; the
+// product does not know why ZET's vehicles are not moving (brief §5.3).
+describe('the service families (upgrade U2)', () => {
+  it('equal the catalogues, the typed families and the sentence client in both languages', () => {
+    for (const key of ['service', 'serviceNone'] as const) {
+      expect(sentenceModule.SENTENCE_COPY_HR[key]).toBe(hr.kiosk.sentence[key]);
+      expect(sentenceModule.SENTENCE_COPY_EN[key]).toBe(en.kiosk.sentence[key]);
+      expect(SENTENCE_FAMILIES[key].hr).toBe(hr.kiosk.sentence[key]);
+      expect(SENTENCE_FAMILIES[key].en).toBe(en.kiosk.sentence[key]);
+    }
+    expect(fill(hr.kiosk.sentence.service, { seen: fill(hr.kiosk.sentence.vehicles_few, { count: 2 }), expected: 460 }))
+      .toBe('ZET: u pokretu 2 vozila, po voznom redu oko 460.');
+    expect(fill(en.kiosk.sentence.serviceNone, { expected: 460 })).toBe('ZET: no vehicle moving, about 460 by the timetable.');
+  });
+  it('the notes, the status line and the counts beside them carry the same numbers as the sentence', () => {
+    for (const catalogue of [HR, EN]) {
+      const sentence = leaf(catalogue, 'kiosk.sentence.service')!;
+      expect(leaf(catalogue, 'kiosk.nearby.silentNote')!.startsWith(sentence)).toBe(true);
+      expect(leaf(catalogue, 'arrivals.noteReduced')!.startsWith(sentence)).toBe(true);
+      expect(`${leaf(catalogue, 'kiosk.paired.serviceLine')!}.`).toBe(sentence);
+      expect(leaf(catalogue, 'kiosk.lines.usually')).toBe(leaf(catalogue, 'landing.live.usually'));
+    }
+  });
+  it('no kiosk.*, arrivals.* or landing.* string names a cause', () => {
+    for (const [name, catalogue] of [['hr', HR], ['en', EN]] as const) {
+      for (const group of ['kiosk', 'arrivals', 'landing']) {
+        for (const key of leafKeys(catalogue[group], group)) expect(leaf(catalogue, key), `${key} (${name})`).not.toMatch(/štrajk|strike/iu);
+      }
+    }
   });
 });
