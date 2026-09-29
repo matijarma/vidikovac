@@ -28,6 +28,8 @@ const ONE_DAY = /^(\d{2})\.(\d{2})\.(\d{4})\.?$/;
 const RECURRING = /ponedjeljkom|utorkom|srijedom|četvrtkom|petkom|subotom|nedjeljom|svak/i;
 const FULL_DATE = /\d{1,2}\.\s*\d{1,2}\.\s*\d{4}\.?/g;
 const CLOCK = /(?<![\d.:])(\d{1,2})(?:[:.](\d{2}))?(?![\d:])/g;
+/** A floor ("2. kat", "na 1. katu", "3. etaža"): a bare "N." before the word is the storey, not a time. */
+const FLOOR = /(?<![\d.:])\d{1,2}\.\s*(?:kat|etaž)\p{L}*/giu;
 
 export interface KgzPage {
   items: ItemInput[];
@@ -40,7 +42,7 @@ export interface KgzPage {
 
 /** The one start time of "Početak događanja: ..." as [hour, minute], or null when the text names none or several. */
 export function startTime(text: string): [number, number] | null {
-  const tokens = [...text.replace(FULL_DATE, ' ').matchAll(CLOCK)];
+  const tokens = [...text.replace(FULL_DATE, ' ').replace(FLOOR, ' ').matchAll(CLOCK)];
   if (tokens.length !== 1) return null;
   const hour = Number(tokens[0]![1]);
   const minute = tokens[0]![2] === undefined ? 0 : Number(tokens[0]![2]);

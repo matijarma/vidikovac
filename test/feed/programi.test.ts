@@ -107,11 +107,15 @@ describe('the start time of a listing', () => {
     ['18:00', [18, 0]],
     ['17:00 sati', [17, 0]],
     ['petak, 2. 10. 2026. u 9.15 sati', [9, 15]],
+    // A floor is no time: "2. kat" is the second storey.
+    ['utorak, 29. 9. 2026. u 18 sati, 2. kat', [18, 0]],
+    ['u 11 sati, dvorana na 1. katu', [11, 0]],
+    ['3. etaža, 10:30', [10, 30]],
   ] as const)('%s is one time', (text, expected) => {
     expect(startTime(text)).toEqual(expected);
   });
 
-  it.each(['', 'sutra', 'od 17 do 18 sati', 'u 18 i u 20 sati', '25 sati', '18:75', 'utorak, 29. 9. 2026.'])('%j is no single start time', (text) => {
+  it.each(['', 'sutra', 'od 17 do 18 sati', 'u 18 i u 20 sati', '25 sati', '18:75', 'utorak, 29. 9. 2026.', 'utorak, 29. 9. 2026., 2. kat', '1. katu'])('%j is no single start time', (text) => {
     expect(startTime(text)).toBeNull();
   });
 });
