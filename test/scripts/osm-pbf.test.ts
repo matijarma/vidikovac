@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { PbfWriter } from 'pbf';
 import { decodeHeader, readBlocks, readPois } from '../../scripts/lib/osm-pbf.mjs';
+import { main } from '../../scripts/osm-hours.mjs';
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -92,5 +93,17 @@ describe('PBF source validation', () => {
   it('refuses a length-delimited protobuf field truncated inside its message', () => {
     const malformedHeader = Buffer.from([0x22, 0x10, 0x78]); // required_features claims sixteen bytes, only one follows
     expect(() => decodeHeader(malformedHeader)).toThrow(/osm-pbf/);
+  });
+
+  it('does not replace an existing artefact with an under-floor PBF extract', async () => {
+    const source = save(Buffer.concat([HEADER, block('OSMData', primitive([dense()]))]));
+    const out = join(dirs[dirs.length - 1], 'osm-hours.json');
+    writeFileSync(out, 'existing artefact\n');
+    const exitCode = process.exitCode;
+    try {
+      const result = await main({ argv: ['--pbf', source, '--out', out], log: () => {} });
+      expect(result.written).toBe(false);
+      expect(readFileSync(out, 'utf8')).toBe('existing artefact\n');
+    } finally { process.exitCode = exitCode; }
   });
 });

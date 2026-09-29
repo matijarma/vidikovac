@@ -150,12 +150,19 @@ export function overpassElements(json) {
   const elements = [];
   let relationsSkipped = 0;
   for (const e of json.elements) {
+    if (!e || typeof e !== 'object' || !['node', 'way', 'relation'].includes(e.type)) throw new Error('osm-hours: invalid Overpass element type');
     const tags = e.tags ?? {};
+    if (typeof tags !== 'object' || Array.isArray(tags) || !Object.values(tags).every((value) => typeof value === 'string')) {
+      throw new Error('osm-hours: Overpass tags must be strings');
+    }
     if (e.type === 'relation') { if (selectElement(tags)) relationsSkipped += 1; continue; }
     const lon = e.type === 'node' ? e.lon : e.center?.lon, lat = e.type === 'node' ? e.lat : e.center?.lat;
+    if ((!Number.isFinite(lon) || !Number.isFinite(lat)) && selectElement(tags)) throw new Error('osm-hours: selected Overpass element has no point');
     if (Number.isFinite(lon) && Number.isFinite(lat)) elements.push({ lon, lat, tags });
   }
-  return { elements, relationsSkipped, osmDate: json.osm3s?.timestamp_osm_base ?? null };
+  const osmDate = json.osm3s?.timestamp_osm_base ?? null;
+  if (osmDate !== null && (typeof osmDate !== 'string' || !Number.isFinite(Date.parse(osmDate)))) throw new Error('osm-hours: invalid Overpass data date');
+  return { elements, relationsSkipped, osmDate };
 }
 
 function parseArgs(argv) {
@@ -207,6 +214,13 @@ export async function main({ argv = process.argv.slice(2), cwd = process.cwd(), 
   log(`${bytes} bytes raw, ${gzipBytes} gzip (budgets ${MAX_BYTES} and ${MAX_GZIP_BYTES}); ${seconds.toFixed(1)} s`);
   if (bytes > MAX_BYTES || gzipBytes > MAX_GZIP_BYTES) {
     log('osm-hours: over budget; nothing written');
+    process.exitCode = 1;
+    return { ...summary, file, written: false };
+  }
+  // The small --input fixture is deliberately exempt from the production floor.
+  // A partial/corrupt real extract must not replace the last usable artefact.
+  if (!args.input && (file.count < MIN_COUNT || dropped / (file.count + dropped) >= 0.25)) {
+    log('osm-hours: below the record floor or above the dropped-record limit; nothing written');
     process.exitCode = 1;
     return { ...summary, file, written: false };
   }

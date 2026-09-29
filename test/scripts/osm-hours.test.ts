@@ -18,6 +18,7 @@ import {
   OPEN_KINDS as SCRIPT_KINDS,
   OUTPUT_PATH,
   main,
+  overpassElements,
 } from '../../scripts/osm-hours.mjs';
 import { parseOpeningHours, weekString } from '../../scripts/opening-hours.mjs';
 import { OPEN_KINDS, type OsmHoursFile } from '../../shared/city/osm-hours';
@@ -115,6 +116,16 @@ describe('the Overpass fixture through --input', () => {
       .toEqual(['ljekarna Gradske ljekarne Dubrava', 'ljekarna Ljekarna Centar', 'pekara Dubravica', 'restoran Zdravljak Forino']);
     const sorted = rows.map((r) => r.name);
     expect(sorted).toEqual([...sorted].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+  });
+
+  it.each([
+    { type: 'alien', center: { lon: 15.97, lat: 45.81 }, tags: { name: 'Proba', amenity: 'cafe' } },
+    { type: 'node', lon: 15.97, lat: 45.81, tags: { name: { text: 'Proba' }, amenity: 'cafe' } },
+    { type: 'node', lon: 15.97, lat: 45.81, tags: { name: 'Proba', amenity: 'cafe', opening_hours: ['24/7'] } },
+    { type: 'node', lon: 15.97, tags: { name: 'Proba', amenity: 'cafe' } },
+    { type: 'way', tags: { name: 'Proba', amenity: 'cafe' } },
+  ])('refuses a malformed Overpass element instead of coercing or losing it: %j', (row) => {
+    expect(() => overpassElements({ elements: [row] })).toThrow(/osm-hours/);
   });
 });
 
