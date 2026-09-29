@@ -10,6 +10,7 @@ import { emptyAggregates, emptyHistogram, histogramCount, isEmptyAggregates, mer
 import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
+import { emptyService } from './service';
 
 /** Tick rows kept: the newest is the restore point, two more survive a row
  *  that was written half-way when the object died. Days of tick rows would
@@ -235,6 +236,9 @@ export function deserializeState(body: string): TwinState {
     // rolling dwell window; both start empty and fill within a minute.
     pendingLearned: { edges: pendingLearned.edges ?? {}, stops: pendingLearned.stops ?? {}, nodes: pendingLearned.nodes ?? {}, nodePasses: pendingLearned.nodePasses ?? {} },
     dwellRecent: stored.dwellRecent ?? {},
+    // A row written before upgrade U2 carries no service memory: the state
+    // machine starts unknown and takes its first verdict at the next frame.
+    service: stored.service ?? emptyService(),
   };
 }
 

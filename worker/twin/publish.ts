@@ -20,6 +20,7 @@ import type { SourceAvailability } from '../feed/schema';
 import { delayWords, routeLabel, routeShortName, routeType } from '../feed/modules/zet-rt';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { FEED_TICK_MS } from './clock';
+import { emptyService, serviceOnWire } from './service';
 import type { TwinState } from './state';
 import { BUILT_AT } from '../../app/src/motion/network-meta';
 
@@ -117,6 +118,14 @@ function place(track: Track, net: GraphNetwork | null): Placed {
   return { lon, lat, motion: { path: shape.id, plan: wirePathKnots(plan.knots) }, held: flat && atStop, pastLast: false };
 }
 
+/** The tracks published as vehicle pins, sorted by id: the ones with a fix.
+ *  The count on the wire and the service state's `seen` (service.ts) are
+ *  both this list, so the two never disagree. U0 narrows it to fixes inside
+ *  the freshness window and outside the depots and the parked limit. */
+export function fleetSeen(tracks: readonly Track[], _nowSec: number): Track[] {
+  return tracks.filter((t) => t.fixes.length > 0).sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function buildPayload(
   state: TwinState,
   joins: ReadonlyMap<string, TripJoin>,
@@ -128,7 +137,7 @@ export function buildPayload(
   const items: ItemInput[] = [];
   const headerTs = state.headerTs;
 
-  const tracks = Object.values(state.tracks).filter((t) => t.fixes.length > 0).sort((a, b) => a.id.localeCompare(b.id));
+  const tracks = fleetSeen(Object.values(state.tracks), Math.floor(nowMs / 1000));
   for (const track of tracks) {
     const last = lastFix(track)!;
     const routeId = track.routeId;
@@ -215,11 +224,16 @@ export function buildPayload(
   }
 
   const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS;
+  // The city's fleet against the timetable (service.ts, upgrade U2): additive,
+  // and absent until the twin has taken a state. The module stays live
+  // (R-TE5); a silent city is a verdict, not an outage.
+  const service = serviceOnWire(state.service ?? emptyService());
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,
     ...(state.tickAtMs > 0 ? { fetchedAt: iso(state.tickAtMs) } : {}),
     ...(headerTs !== null ? { sourceUpdatedAt: iso(headerTs * 1000) } : {}),
+    ...(service ? { service } : {}),
   };
 
   return {

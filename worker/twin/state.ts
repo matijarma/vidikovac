@@ -11,6 +11,7 @@ import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/lea
 import { EVICT_S } from '../../shared/motion/plan';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
+import { emptyService, type ServiceMemory } from './service';
 
 /** Silence after which a vehicle leaves the twin, in seconds: the planner's
  *  eviction age itself (plan.ts EVICT_S, 180 s, T8), so the twin drops a
@@ -55,10 +56,15 @@ export interface TwinState {
    *  wakes up planning from the last ninety minutes rather than from the
    *  timetable while SQLite is read. */
   dwellRecent: DwellRecent;
+  /** The service state machine's memory (service.ts, upgrade U2): the
+   *  state the wire carries, when it was entered, and the dwell timers,
+   *  so an eviction between two ticks neither forgets a `silent` city nor
+   *  restarts a dwell. A row written before U2 loads emptyService(). */
+  service: ServiceMemory;
 }
 
 export function emptyState(): TwinState {
-  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {} };
+  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {}, service: emptyService() };
 }
 
 /** The update to keep for a trip: the earliest stop still ahead of the header

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeExpectIndex, type ExpectIndex, type ExpectIndexWire } from '../../shared/motion/expect';
+import { deserializeState, serializeState } from '../../worker/twin/persist';
+import { emptyState } from '../../worker/twin/state';
 import {
   CONTINUITY_S,
   emptyService,
@@ -262,5 +264,16 @@ describe('judgeService', () => {
     const back = drive(reduced, [[400, NORMAL], [550, NORMAL], [700, NORMAL]]);
     expect(back.state).toBe('normal');
     expect(back.last?.routes).toBeUndefined();
+  });
+
+  it('rides the state row: the memory round-trips through serializeState, and a row written before it loads emptyService', () => {
+    const thin: Fleet = { tram: 0, bus: 0, routes: { T: 10, B: 5, Y: 2 } };
+    const memory = drive(emptyService(), [[0, NORMAL], [10, thin], [150, thin], [310, thin]]);
+    expect(memory.state).toBe('reduced');
+    const state = { ...emptyState(), headerTs: T0 + 310, tickAtMs: (T0 + 312) * 1000, service: memory };
+    expect(deserializeState(serializeState(state)).service).toEqual(memory);
+    const old = JSON.parse(serializeState(state)) as Record<string, unknown>;
+    delete old.service;
+    expect(deserializeState(JSON.stringify(old)).service).toEqual(emptyService());
   });
 });
