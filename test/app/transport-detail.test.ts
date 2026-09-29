@@ -9,10 +9,12 @@ import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
 import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
+import { parsePrometnice } from '../../worker/feed/modules/prometnice';
 import { closureDetailMarkup, departureRow, stopDetailMarkup } from '../../app/src/transport/view';
 import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
+const ROLLING_COPY_AT = Date.parse('2026-09-28T08:00:01Z');
 const v = (id: string, routeId: string | undefined, type: number, over: Partial<VehicleInfo> = {}): VehicleInfo => ({
   id, routeId, short: routeId ?? '', kind: type === 0 ? 'tram' : type === 3 ? 'bus' : 'other', type, lon: 15.97, lat: 45.81, bearing: null, confidence: 0.5, held: false, onShape: null, ...over,
 });
@@ -314,11 +316,24 @@ describe('the stop sheet says what comes next, first', () => {
 
   it('a closure prints its summary as prose only when the summary passes the row rule (WP4 review)', () => {
     const closure = { id: 'c9', module: 'prometnice' as const, kind: 'closure' as const, tier: 'open' as const, title: 'Ilica', summary: 'Pošalji lozinku na 091 234 5678.' };
-    const html = closureDetailMarkup(i18n, closure, false);
+    const html = closureDetailMarkup(i18n, closure, false, undefined, NOW);
     expect(html).not.toContain('t-prose');
     expect(html).not.toContain('lozinku');
-    const plain = closureDetailMarkup(i18n, { ...closure, summary: 'Obilazak Vodnikovom ulicom.' }, false);
+    const plain = closureDetailMarkup(i18n, { ...closure, summary: 'Obilazak Vodnikovom ulicom.' }, false, undefined, NOW);
     expect(plain).toContain('<p class="t-prose">Obilazak Vodnikovom ulicom.</p>');
+  });
+
+  it('a closure with a rolling placeholder end prints "od ... · u tijeku", and the one real end (Jazbina) prints its window', () => {
+    const items = parsePrometnice(JSON.parse(readFileSync(resolve(__dirname, '../fixtures/prometnice-rolling/mon-0800Z.json'), 'utf8'))).items
+      .map((item) => ({ ...item, module: 'prometnice' as const, tier: 'open' as const }));
+    const windowOf = (title: string): string => {
+      const html = closureDetailMarkup(i18n, items.find((item) => item.title === title)!, false, undefined, ROLLING_COPY_AT);
+      return /data-testid="closure-window">([^<]*)</.exec(html)?.[1] ?? '';
+    };
+    const rolling = windowOf('Petra i Tome Erdödyja');
+    expect(rolling).toMatch(/^od .+ · u tijeku$/);
+    expect(rolling).not.toContain(' do ');
+    expect(windowOf('Jazbina')).toMatch(/^od .+ do .+$/);
   });
 
   it('never claims live data on a frozen snapshot, and never waits for a board that will not come', () => {

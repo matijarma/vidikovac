@@ -930,7 +930,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       case 'closure': {
         const item = closureItems(c.snapshots.prometnice).find((x) => x.id === sel.id);
         if (!item) return null;
-        return [closureDetailMarkup(i18n, item, k, c.cast), item.title, 'name'];
+        return [closureDetailMarkup(i18n, item, k, c.cast, c.frozenAt ?? c.now), item.title, 'name'];
       }
     }
   }

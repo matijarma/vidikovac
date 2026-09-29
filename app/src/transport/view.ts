@@ -14,6 +14,7 @@
 // front of the vehicle. Where a row opens something, the whole row is one
 // button (`.t-row`, map.css) inside the row, so the target is the row.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
+import { closureEndKnown } from '../../../shared/city/closures';
 import type { FeedItem } from '../../../worker/feed/schema';
 import { closureWords as workerClosureWords } from '../../../worker/feed/modules/prometnice';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
@@ -541,9 +542,14 @@ function closureWords(i18n: I18n, item: FeedItem): string {
   return `${type} · ${direction}`;
 }
 
-/** The closure's window as one sentence: "od 8. 9. 08:00 do 13. 9. 06:00", or the one end the item names, or nothing. */
-function closureWindow(i18n: I18n, item: FeedItem): string {
+/** The closure's window as one sentence: "od 8. 9. 08:00 do 13. 9. 06:00", or the one end the item names, or nothing.
+ *  A rolling placeholder end (closureEndKnown false: the City moves it a day forward every night) is never printed:
+ *  the window reads "od 30. 3. 09:54 · u tijeku". */
+function closureWindow(i18n: I18n, item: FeedItem, now: number): string {
   const from = item.at ? zagrebDateTime(item.at) : '';
+  if (!closureEndKnown(item, now)) {
+    return from ? `${i18n.t('panels.from', { time: from })} · ${i18n.t('panels.ongoing')}` : i18n.t('panels.ongoing');
+  }
   const until = item.until ? zagrebDateTime(item.until) : '';
   if (from && until) return tr(i18n, 'windowFromUntil', { from, until });
   if (until) return i18n.t('panels.until', { time: until });
@@ -566,9 +572,10 @@ function closureDescription(item: FeedItem): string {
 
 /** One closure: the mark and the street at title, the type words at body, the window as one sentence, then the
  *  description as prose when the module has one (closureDescription). `_cast` is unread since the ghost cast
- *  button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). */
-export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, _cast?: CastState): string {
-  const window = closureWindow(i18n, item);
+ *  button went (WP5 A3); transport/workspace.ts still passes it (plan/WP5/handoff.md). `now` decides whether the
+ *  end is a fact (closureEndKnown). */
+export function closureDetailMarkup(i18n: I18n, item: FeedItem, kiosk: boolean, _cast: CastState | undefined, now: number): string {
+  const window = closureWindow(i18n, item, now);
   const description = closureDescription(item);
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="closure-title">${closureMark()}<span>${esc(vetExternal('name', item.title, 'row') ?? '')}</span></h3>`, kiosk) +
