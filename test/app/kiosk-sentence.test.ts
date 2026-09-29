@@ -395,6 +395,8 @@ describe('facts and standalone deterministic fallback', () => {
     // No departure at all while positions are unavailable (the voice 'none', upgrade U0 and U2).
     expect(outage.some(f => f.id.startsWith('dep:'))).toBe(false);
     expect(outage.find(f => f.id === 'outage:zet')?.text).toBe(SENTENCE_COPY_HR.outage);
+    // The outage fact is the first, before the sun, as the service fact is in silent and reduced (round 1 desktop F1).
+    expect(outage[0]?.id).toBe('outage:zet');
   });
 
   it('never interprets an arbitrary row title as a route or timetable', () => {

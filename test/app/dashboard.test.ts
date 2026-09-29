@@ -1596,6 +1596,42 @@ describe('Sada\'s sentence (WP4 step 12)', () => {
     injected.handle.destroy();
   });
 
+  // Round 1 desktop F1: the rotation started before ZET's snapshot landed, the sunset took the card, and its dwell held
+  // it for 24 s after a silent snapshot arrived. The card waits for ZET's answer; the state's fact is the first sentence.
+  it.each([
+    ['silent', { status: 'live' as const, service: true }, 'ZET: u pokretu 2 vozila, po voznom redu oko 460.'],
+    ['down', { status: 'down' as const, service: false }, hr.kiosk.sentence.outage],
+  ])('opens cold on a %s fleet with the fleet\'s fact as the first sentence, the card held until ZET answers', async (_state, o, first) => {
+    const fresh = new Date(NOW - 10_000).toISOString();
+    const zet: ModuleSnapshot = {
+      ...base('zet-rt', []), tier: 'session', status: o.status, sourceUpdatedAt: fresh,
+      sources: { zet: { status: 'live', itemCount: 2, sourceUpdatedAt: fresh, ...(o.service ? { service: {
+        state: 'silent', since: new Date(NOW - 3_600_000).toISOString(), expected: 460, seen: 2, ratio: 0, confidence: 1, baseline: 'declared', byMode: { tram: [0, 150], bus: [2, 310] },
+      } } : {}) } },
+    };
+    let answer!: () => void;
+    const zetAnswers = new Promise<void>((resolve) => { answer = resolve; });
+    const fetchData = vi.fn(async (module: ModuleId) => {
+      if (module !== 'zet-rt') return snapshotOf(module);
+      await zetAnswers;
+      return zet;
+    });
+    const { root, session, handle } = mount({ deps: { fetchData: fetchData as never, fetchSentences: vi.fn(async () => []) as never } });
+    session.join();
+    await flush();
+    await flush();
+    // Everything else has answered; the card holds its place and says nothing yet.
+    const card = () => root.querySelector<HTMLElement>('[data-testid=sada-sentence]');
+    expect(card()?.getAttribute('aria-busy')).toBe('true');
+    expect(text(card())).toBe('');
+    answer();
+    await flush();
+    await flush();
+    expect(card()?.dataset.kicker).toBe('promet');
+    expect(text(card()!.querySelector('.sada-sentence-text'))).toBe(first);
+    handle.destroy();
+  });
+
   it('asks nothing before the join and nothing after the end', async () => {
     const fetchSentences = answerWith((req) => req.facts[0]!.text);
     const { session, tick, handle } = mount({ deps: { fetchSentences: fetchSentences as never } });

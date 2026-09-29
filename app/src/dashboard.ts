@@ -483,15 +483,24 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         radiusM: input.radiusM,
       };
     };
-    // Sada's sentence, the page's pick (step 12), only while Sada is drawn; absent, Sada holds its own place.
+    // Sada's sentence, the page's pick (step 12), only while Sada is drawn; absent, Sada holds its own place. The
+    // rotation starts once ZET's snapshot has answered (or failed): its state decides the first sentence, the service or
+    // outage fact before the sun (the voice table, U2 §0.1). Started before, the sunset took the card and its dwell
+    // held it for 24 s after a silent snapshot landed (round 1 desktop F1); until then the card holds its place.
     if (sadaShown()) {
       const feed = sadaFeed(repaintLocalData);
       if (typeof feed === 'object') {
         const input = nearbyInput(ctx);
-        ctx.sentence = sadaSentence(feed, input, feed.selectNearby(input));
+        ctx.sentence = fleetPending() ? 'busy' : sadaSentence(feed, input, feed.selectNearby(input));
       }
     }
     return ctx;
+  }
+
+  /** Whether ZET's snapshot is still on its way: asked for on this page, neither answered nor failed, the session live. */
+  function fleetPending(): boolean {
+    const state = store.snapshot();
+    return !frozen && activeModules().includes('zet-rt') && !state.snapshots['zet-rt'] && state.errors['zet-rt'] === undefined;
   }
 
   /** Whether Sada is on the page: the layer itself, or either half of the desk pair. */

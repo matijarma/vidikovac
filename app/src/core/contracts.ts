@@ -110,8 +110,9 @@ export interface ExperienceActions {
    *  session from GTFS static, null until it answers or without a stop; never read from zet-rt. */
   lastRun?: LastRunSnapshot | null;
   /** Sada's sentence card (seam S6, the page's rotation of fetchSentences / templateSentences): null says there is none
-   *  to show; absent, Sada writes the first template sentence of its own facts (city/feed.ts). */
-  sentence?: WrittenSentence | null;
+   *  to show; 'busy' holds the card while the city's fleet is on its way (its state decides the first sentence);
+   *  absent, Sada writes the first template sentence of its own facts (city/feed.ts). */
+  sentence?: WrittenSentence | 'busy' | null;
   /** How many stops around the place the circle counts (the screen's Kadar, ScreenMetadata.frame); absent: DEFAULT_FRAME_STOPS. */
   frame?: FrameStops;
   /** The tram lines in call order (shared/city/frame.ts frameLinesOf, from the network the map loads), so the phone's

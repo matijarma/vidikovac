@@ -261,6 +261,9 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     add('service:zet', 'promet', copy(i18n, wording, serviceVars(i18n, numbers)), now + SENTENCE_REFRESH_MS,
       { factKey: 'service:zet', wording });
   }
+  // While ZET sends no positions (down, unconfirmed; upgrade U0) the outage fact goes first too, before the sun: a
+  // cold open says what the grey times are before anything else (round 1 desktop F1).
+  if (input.outage) add('outage:zet', 'promet', copy(i18n, 'outage'), now + SENTENCE_REFRESH_MS, { wording: 'outage' });
 
   const solar = nextSolar(now);
   const solarRow = input.rows.find(row => row.kind === 'solar' && row.atMs !== null && row.atMs > now);
@@ -308,7 +311,6 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const serviceAt = numbers ? facts.findIndex(fact => fact.id === 'service:zet') : -1;
   if (serviceAt >= 0) facts.splice(serviceAt + 1, 0, ...facts.splice(serviceAt + 1).sort((a, b) =>
     Number(b.kind === 'bicikli') - Number(a.kind === 'bicikli')));
-  if (input.outage) add('outage:zet', 'promet', copy(i18n, 'outage'), now + SENTENCE_REFRESH_MS, { wording: 'outage' });
   // The voice the departures keep (shared/city/service-state.ts): 'none' (ZET down or unconfirmed, U0; the city
   // silent, U2) says no departure, first or last tram at all, whatever the rows hold (timetable promises of the same
   // kind); 'live-only' says a live row, or a timetable row of a line the twin still sees running.
