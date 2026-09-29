@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SLOTS, SLOT_SEC, buildExpectIndex, calendarDates, main } from '../../scripts/gtfs-expect.mjs';
+import { decodeExpectIndex, expectedAt } from '../../shared/motion/expect';
 
 // scripts/gtfs-expect.mjs cuts the declared fleet out of ZET's static GTFS:
 // per service, per five-minute slot of a 31-hour service day, the vehicle runs
 // (blocks) in service by mode and the trips in service per route, plus the
 // services of every date the calendar names. Here on a mini feed with two
-// services, a night trip past 24:00 and a calendar_dates removal.
+// services, a night trip past 24:00 and a calendar_dates removal, then on the
+// committed artefact.
 
 interface ZipInput {
   name: string;
@@ -175,5 +178,59 @@ describe('the expectation builder on a mini feed', () => {
     // The same bytes again: a build is a function of the archive and the stamp.
     await main({ zipPath: 'feed.zip', builtAt: '2026-10-01T08:00:00Z', cwd: dir, out: 'data/again.json', log: () => {} });
     expect(await readFile(join(dir, 'data/again.json'), 'utf8')).toBe(text);
+  });
+});
+
+// The committed artefact, built from the archive the other ZET artefacts were
+// cut from. Budget pins: at most 1 MiB raw and 120 KiB gzipped (upgrade plan
+// P-U2d). Measured on feed 000396 (28 Sep 2026): 761,173 B raw, 37,790 B gzip,
+// seven services, calendar 2026-09-28 to 2026-12-31.
+describe('the committed zet-expect.json', () => {
+  const rawText = readFileSync(new URL('../../app/public/data/zet-expect.json', import.meta.url), 'utf8');
+  const raw = JSON.parse(rawText);
+  const RAW_BUDGET_BYTES = 1024 * 1024;
+  const GZIP_BUDGET_BYTES = 120 * 1024;
+
+  it('is inside the budget and cut from the feed the trip index is', () => {
+    const bytes = Buffer.byteLength(rawText);
+    const gzipped = gzipSync(Buffer.from(rawText)).length;
+    console.log(`zet-expect.json: ${bytes} B raw (budget ${RAW_BUDGET_BYTES} B), ${gzipped} B gzipped (budget ${GZIP_BUDGET_BYTES} B)`);
+    expect(bytes).toBeLessThanOrEqual(RAW_BUDGET_BYTES);
+    expect(gzipped).toBeLessThanOrEqual(GZIP_BUDGET_BYTES);
+    const trips = JSON.parse(readFileSync(new URL('../../app/public/data/zet-trips.json', import.meta.url), 'utf8'));
+    expect(raw.feedVersion).toBe(trips.feedVersion);
+    expect(raw).toMatchObject({ version: 1, slotSec: SLOT_SEC, slots: SLOTS });
+  });
+
+  it('names only routes the route index knows, and splits them by the same type', () => {
+    const routes = JSON.parse(readFileSync(new URL('../../app/src/data/zet-routes.json', import.meta.url), 'utf8')) as Record<string, { type: number }>;
+    expect(raw.routes.id.length).toBeGreaterThan(100);
+    raw.routes.id.forEach((id: string, i: number) => {
+      expect(routes[id], `route ${id}`).toBeDefined();
+      expect(routes[id].type, `route ${id}`).toBe(raw.routes.type[i]);
+    });
+    for (const byRoute of Object.values(raw.trips) as Record<string, number[]>[]) for (const id of Object.keys(byRoute)) expect(routes[id], `route ${id}`).toBeDefined();
+  });
+
+  it('declares between 250 and 500 vehicles at 07:00 on every working day it names, and a calendar without gaps', () => {
+    const index = decodeExpectIndex(raw);
+    expect(index.firstDate).not.toBeNull();
+    const dates = [...index.calendar.keys()];
+    for (let i = 1; i < dates.length; i++) expect(Date.parse(dates[i]) - Date.parse(dates[i - 1]), dates[i]).toBe(86_400_000);
+    let weekdays = 0;
+    for (const date of dates) {
+      const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+      if (weekday === 0 || weekday === 6) continue;
+      const services = index.calendar.get(date)!;
+      const at7 = services.reduce((n, service) => n + index.blocks.get(service)!.all[slot(7)], 0);
+      // A holiday on a working day runs the Sunday service (1 Nov, 18 Nov, 25 and 26 Dec).
+      if (at7 < 250) continue;
+      weekdays++;
+      expect(at7, date).toBeLessThanOrEqual(500);
+      // What expectedAt answers at 07:02 Zagreb on that date is the same service day's slot.
+      const nowSec = Date.parse(`${date}T07:02:00+0${date < '2026-10-25' ? 2 : 1}:00`) / 1000;
+      expect(expectedAt(index, nowSec).blocks.all, date).toBe(at7);
+    }
+    expect(weekdays).toBeGreaterThan(40);
   });
 });

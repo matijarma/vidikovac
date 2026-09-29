@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeExpectIndex, expectedAt, ExpectIndexError, zagrebDate, type ExpectIndexWire } from '../../shared/motion/expect';
 
@@ -107,5 +108,37 @@ describe('expectedAt', () => {
     // so this is its 08:00 slot (5), not the 09:00 one (7) local midnight would give.
     expect(expectedAt(index, at('2026-10-25T08:02', '+01:00')).blocks.all).toBe(5);
     expect(zagrebDate(at('2026-10-25T00:30', '+02:00'))).toBe('2026-10-25');
+  });
+});
+
+// The committed artefact and the 000395 variant the strike fixtures replay
+// with (test/fixtures/frames/zet-expect-000395.json): feed 000396's calendar
+// starts on Monday 28 September, so the evening of Sunday 27 September and
+// the small hours of the 28th need the feed that was published then.
+describe('the committed expectation artefacts', () => {
+  const read = (path: string) => decodeExpectIndex(JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')));
+
+  it('000396: knows the strike days from Monday 28 September, the small hours of that Monday excepted', () => {
+    const index = read('app/public/data/zet-expect.json');
+    expect(index.feedVersion).toBe('000396');
+    expect(expectedAt(index, at('2026-09-28T07:02', '+02:00')).known).toBe(true);
+    expect(expectedAt(index, at('2026-09-29T07:02', '+02:00')).blocks.all).toBeGreaterThan(300);
+    expect(expectedAt(index, at('2026-09-28T01:00', '+02:00'))).toMatchObject({ known: false, reason: 'no-calendar' });
+    expect(expectedAt(index, at('2026-09-27T22:00', '+02:00')).known).toBe(false);
+  });
+
+  it('000395: knows Sunday 27 September and the night into Monday, Sunday\'s night runs summed with Monday\'s first', () => {
+    const index = read('test/fixtures/frames/zet-expect-000395.json');
+    expect(index.feedVersion).toBe('000395');
+    expect(index.calendar.get('2026-09-27')).toEqual(['0_25']);
+    expect(index.calendar.get('2026-09-28')).toEqual(['0_23']);
+    const evening = expectedAt(index, at('2026-09-27T23:00', '+02:00'));
+    expect(evening.known).toBe(true);
+    expect(evening.blocks.all).toBeGreaterThan(100);
+    const small = expectedAt(index, at('2026-09-28T01:00', '+02:00'));
+    const sundayNight = index.blocks.get('0_25')!.all[slot(25)];
+    const mondayEarly = index.blocks.get('0_23')!.all[slot(1)];
+    expect(small).toMatchObject({ known: true, blocks: { all: sundayNight + mondayEarly } });
+    expect(sundayNight).toBeGreaterThan(0);
   });
 });
