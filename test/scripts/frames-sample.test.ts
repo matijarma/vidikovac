@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { main, parseArgs, realPathOf, refusalFor, renderReadme, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
+import { everyNth, main, parseArgs, parseEvery, realPathOf, refusalFor, renderReadme, SampleRefusal, selectFrames, tripIdsOf } from '../../scripts/frames-sample.mjs';
 import { decodeFeed } from '../../worker/twin/feed-decode';
 import { recordingKey } from '../../worker/twin/record';
 
@@ -296,6 +296,131 @@ describe('frames-sample README regeneration', () => {
     await symlink(victim, join(out, 'README.md'));
     await expect(run(['--readme-only', out])).rejects.toThrow(/README\.md: it is a symlink/);
     expect(await readFile(victim, 'utf8')).toBe('keep me');
+  });
+});
+
+describe('frames-sample --keep-alerts and --every', () => {
+  const { TripDescriptor, Alert } = GtfsRealtimeBindings.transit_realtime;
+  const CANCELED = TripDescriptor.ScheduleRelationship.CANCELED;
+
+  /** ZET's operator signals in one frame: a cancelled tram trip, its NO_SERVICE alert, a bus, a tram. */
+  function signalFrame(headerTs: number): Uint8Array {
+    const trip = (tripId: string, routeId: string) => ({ tripId, routeId, startDate: '20260921' });
+    return FeedMessage.encode({
+      header: { gtfsRealtimeVersion: '1.0', incrementality: 0, timestamp: headerTs },
+      entity: [
+        { id: 'tu-4-x', tripUpdate: { trip: { ...trip('0_23_1_4_9', '4'), scheduleRelationship: CANCELED }, timestamp: headerTs - 40 } },
+        {
+          id: 'alert-4-x',
+          alert: {
+            effect: Alert.Effect.NO_SERVICE,
+            informedEntity: [{ routeId: '4', trip: { tripId: '0_23_1_4_9' } }],
+            headerText: { translation: [{ text: 'Polazak otkazan', language: 'hr' }] },
+          },
+        },
+        { id: 'bus-220', vehicle: { trip: trip('0_23_2_220_9', '220'), position: { latitude: 45.77, longitude: 15.99 }, vehicle: { id: '195' }, timestamp: headerTs - 30 } },
+        { id: 'veh-6', vehicle: { trip: trip('0_23_1_6_1', '6'), position: { latitude: 45.81, longitude: 15.97 }, vehicle: { id: '2201' }, timestamp: headerTs - 5 } },
+      ],
+    }).finish();
+  }
+
+  async function signalInput(clock: string): Promise<string> {
+    const name = nameOf(at(clock));
+    await writeFile(join(input, name), signalFrame(at(clock)));
+    return name;
+  }
+
+  const alertOf = (bytes: Uint8Array) => FeedMessage.toObject(FeedMessage.decode(bytes)).entity.find((e: { alert?: unknown }) => e.alert);
+
+  it('drops Alert entities from a tram-only cut unless --keep-alerts keeps them unchanged, in place', async () => {
+    const name = await signalInput('151502');
+    const plain = join(root, 'plain');
+    const kept = join(root, 'kept');
+    await run([input, '--from', '151502', '--to', '151502', '--out', plain]);
+    const result = await run([input, '--from', '151502', '--to', '151502', '--out', kept, '--keep-alerts']);
+    const source = new Uint8Array(await readFile(join(input, name)));
+    const withAlerts = new Uint8Array(await readFile(join(kept, name)));
+    expect(FeedMessage.decode(new Uint8Array(await readFile(join(plain, name)))).entity.map((e) => e.id)).toEqual(['tu-4-x', 'veh-6']);
+    expect(FeedMessage.decode(withAlerts).entity.map((e) => e.id)).toEqual(['tu-4-x', 'alert-4-x', 'veh-6']);
+    expect(alertOf(withAlerts)).toEqual(alertOf(source));
+    // The re-encode keeps ZET's scheduleRelationship: a cancellation stays a cancellation.
+    expect(FeedMessage.decode(withAlerts).entity[0]!.tripUpdate?.trip?.scheduleRelationship).toBe(CANCELED);
+    expect(decodeFeed(withAlerts).tripUpdates).toEqual(decodeFeed(source).tripUpdates);
+    expect([result.alertEntities, result.alertIds, result.canceledUpdates, result.canceledTrips]).toEqual([1, 1, 1, 1]);
+
+    const readme = await readFile(join(kept, 'README.md'), 'utf8');
+    expect(readme).toContain('| filter | tram only, plus every Alert entity (`--keep-alerts`). An entity is kept when');
+    expect(readme).toContain('or when it is an Alert, which has no route of its own');
+    expect(readme).toContain('| operator signals in the kept entities | CANCELED trip updates 1 (distinct trips 1); Alert entities 1 (distinct ids 1; by effect NO_SERVICE 1) |');
+    expect(readme).toMatch(/ --out \S+ --keep-alerts\n/);
+    const plainReadme = await readFile(join(plain, 'README.md'), 'utf8');
+    expect(plainReadme).toContain('buses, alerts and reports without a route are dropped');
+    expect(plainReadme).not.toContain('operator signals');
+  });
+
+  it('--all-modes keeps the alerts as unchanged bytes; --keep-alerts adds nothing there and the README says so', async () => {
+    const name = await signalInput('151502');
+    const out = join(root, 'all');
+    const result = await run([input, '--from', '151502', '--to', '151502', '--out', out, '--all-modes', '--keep-alerts']);
+    expect(new Uint8Array(await readFile(join(out, name)))).toEqual(new Uint8Array(await readFile(join(input, name))));
+    expect(result.alertEntities).toBe(1);
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    expect(readme).toContain('`--keep-alerts` adds nothing here: the Alert entities are among the unchanged bytes.');
+    expect(readme).toContain('| every mode, per frame | on average 2.0 vehicle reports and 1.0 trip updates |');
+    expect(readme).toMatch(/ --all-modes --keep-alerts\n/);
+  });
+
+  it('--every N keeps the first frame of the window and every Nth after it, by name order', async () => {
+    expect(everyNth(['a', 'b', 'c', 'd', 'e', 'f', 'g'], 3)).toEqual(['a', 'd', 'g']);
+    expect(everyNth(['a', 'b'], 1)).toEqual(['a', 'b']);
+    const out = join(root, 'thin');
+    const result = await run([input, '--from', '151455', '--to', '154500', '--out', out, '--every', '2']);
+    const expected = ['151455', '151505', '154500'].map((c) => nameOf(at(c)));
+    expect(result.names).toEqual(expected);
+    expect(result.windowFrames).toBe(5);
+    expect((await readdir(out)).sort()).toEqual([...expected, 'README.md'].sort());
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    expect(readme).toContain("| cadence | every 2nd recorded frame of the window's 5 (`--every 2`): header gap median");
+    expect(readme).toContain('| frames | 3 (');
+    expect(readme).toMatch(/ --out \S+ --every 2\n/);
+  });
+
+  it('refuses a malformed --every and a --lead or --use that is not one plain line', () => {
+    const base = [input, '--from', '151500', '--to', '154459', '--out', 'o'];
+    for (const bad of ['0', '-1', '1.5', 'x', '10000', '']) expect(() => parseArgs([...base, '--every', bad])).toThrow(SampleRefusal);
+    expect(() => parseArgs([...base, '--every'])).toThrow(/needs a value/);
+    expect([parseEvery('1'), parseEvery('3'), parseEvery('9999'), parseEvery('03')]).toEqual([1, 3, 9999, null]);
+    for (const bad of ['', '  ', 'two\nlines', '# heading', '| row |']) {
+      expect(() => parseArgs([...base, '--lead', bad])).toThrow(SampleRefusal);
+      expect(() => parseArgs([...base, '--use', bad])).toThrow(SampleRefusal);
+    }
+    expect(parseArgs([...base, '--every', '3', '--keep-alerts', '--lead', ' Deviation fixture. '])).toMatchObject({ every: 3, keepAlerts: true, lead: 'Deviation fixture.', use: null });
+  });
+
+  it('--lead opens the README, --use replaces the grading section, and --readme-only keeps both and the thinning', async () => {
+    const out = join(root, 'deviation');
+    const lead = 'Deviation fixture: a synthetic day. Never a normal-behaviour replay, tuning or fixture day.';
+    const use = 'Read by `test/accept/example.test.ts`: the state machine holds on it.';
+    await run([input, '--from', '151455', '--to', '154500', '--out', out, '--all-modes', '--every', '2', '--lead', lead, '--use', use]);
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    expect(readme.split('\n').slice(0, 3)).toEqual([lead, '', '# ZET GTFS-RT frame sample, 2026-09-21, 17:14–17:45 Zagreb']);
+    expect(readme).toContain(`\n## What it is for\n\n${use}\n`);
+    expect(readme).not.toContain('## How it is graded');
+    expect(readme).toContain('They let the tests named under "What it is for" replay real frames');
+    expect(readme).toContain('The cut also passed `--lead` and `--use` with the text of this file\'s first line and "What it is for" paragraph.');
+    expect(readme).not.toContain('—');
+    await run(['--readme-only', out]);
+    expect(await readFile(join(out, 'README.md'), 'utf8')).toBe(readme);
+  });
+
+  it('dates the Zagreb window by Zagreb, not by the UTC day of the file names', async () => {
+    await writeFile(join(input, nameOf(at('223000'))), frameBytes(at('223000')));
+    const out = join(root, 'late');
+    await run([input, '--from', '223000', '--to', '223000', '--out', out, '--all-modes']);
+    const readme = await readFile(join(out, 'README.md'), 'utf8');
+    expect(readme).toMatch(/^# ZET GTFS-RT frame sample, 2026-09-22, 00:30–00:30 Zagreb\n/);
+    expect(readme).toContain('| window (UTC, from the file names, inclusive) | 2026-09-21 22:30:00–22:30:00 |');
+    expect(readme).toContain('| window (Zagreb, UTC+2) | 2026-09-22 00:30:00–00:30:00 |');
   });
 });
 

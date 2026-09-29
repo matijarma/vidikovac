@@ -7,7 +7,8 @@
 // seven days only.
 //
 // Usage:
-//   node scripts/frames-sample.mjs <frames-dir> --from HHMMSS --to HHMMSS --out <dir> [--all-modes]
+//   node scripts/frames-sample.mjs <frames-dir> --from HHMMSS --to HHMMSS --out <dir>
+//     [--all-modes] [--keep-alerts] [--every N] [--lead <line>] [--use <text>]
 //   node scripts/frames-sample.mjs --readme-only <fixture-dir>
 // README-only reads the existing frames and cut provenance; it never writes
 // or removes a frame or expectation file and does not need the recordings.
@@ -19,12 +20,20 @@
 // app/src/data/zet-routes.json), and re-encoded with the same library from
 // its own header and the kept entities in their original order: no
 // reshaping, so worker/twin/feed-decode.ts reads the result exactly as it
-// reads ZET's bytes. `--all-modes` copies the frames unchanged instead. The
-// original file names are kept, frames stay at their recorded cadence (the
-// matcher needs consecutive fixes), and a README.md with the provenance,
-// the ZET licence sentence, the filter and the byte total is written next
-// to them. Stale `.pb` files already in <dir> are removed, so the
-// directory always holds exactly one window.
+// reads ZET's bytes. `--all-modes` copies the frames unchanged instead.
+// `--keep-alerts` also keeps every Alert entity (an Alert has no route of
+// its own) unchanged in the tram-only re-encode; with `--all-modes` the
+// alerts are among the unchanged bytes anyway. The original file names are
+// kept and frames stay at their recorded cadence (the matcher needs
+// consecutive fixes) unless `--every N` keeps only the first frame of the
+// window and every Nth after it, by name order, for a long window at a
+// fraction of the bytes. A README.md with the provenance, the ZET licence
+// sentence, the filter, the flags and the byte total is written next to
+// them; `--lead` puts one line above its heading (a warning such as
+// "Deviation fixture: ..."), `--use` replaces its grading section with a
+// "What it is for" paragraph naming the tests that read the sample, and
+// `--readme-only` keeps both. Stale `.pb` files already in <dir> are
+// removed, so the directory always holds exactly one window.
 //
 // Refusals (exit 2, nothing written or removed): an --out anywhere under a
 // directory named `recordings` (.gitignore ignores `recordings/` at any
@@ -61,7 +70,14 @@ export const ZET_ATTRIBUTION =
   'Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669';
 
 const ZAGREB_TZ = 'Europe/Zagreb';
-const USAGE = 'usage: node scripts/frames-sample.mjs <frames-dir> --from HHMMSS --to HHMMSS --out <dir> [--all-modes]\n       node scripts/frames-sample.mjs --readme-only <fixture-dir>';
+const USAGE =
+  'usage: node scripts/frames-sample.mjs <frames-dir> --from HHMMSS --to HHMMSS --out <dir>\n' +
+  '         [--all-modes] [--keep-alerts] [--every N] [--lead <line>] [--use <text>]\n' +
+  '       node scripts/frames-sample.mjs --readme-only <fixture-dir>';
+/** Options that take a value. */
+const VALUED = new Set(['--from', '--to', '--out', '--every', '--lead', '--use']);
+const CANCELED = GtfsRealtimeBindings.transit_realtime.TripDescriptor.ScheduleRelationship.CANCELED;
+const EFFECT = GtfsRealtimeBindings.transit_realtime.Alert.Effect;
 
 /** A refusal: nothing was read or written, the caller exits 2. */
 export class SampleRefusal extends Error {
@@ -81,6 +97,25 @@ export function parseClock(text) {
   return h <= 23 && m <= 59 && s <= 59 ? text : null;
 }
 
+/** `--every`: a whole number from 1 to 9999, or null. */
+export function parseEvery(text) {
+  return typeof text === 'string' && /^[1-9]\d{0,3}$/.test(text) ? Number(text) : null;
+}
+
+/**
+ * A README line given on the command line (`--lead`, `--use`): one line of
+ * text that --readme-only can find again, so no heading, table row or line
+ * break.
+ */
+function readmeText(flag, value) {
+  if (value === null) return null;
+  const text = value.trim();
+  if (text === '' || /[\r\n]/.test(text) || /^[#|]/.test(text)) {
+    throw new SampleRefusal(`${flag} must be one line of text that is not a heading or a table row\n${USAGE}`);
+  }
+  return text;
+}
+
 export function parseArgs(argv) {
   if (argv.includes('--readme-only')) {
     if (argv.length !== 2 || argv[0] !== '--readme-only' || argv[1].startsWith('--')) {
@@ -89,11 +124,12 @@ export function parseArgs(argv) {
     return { input: argv[1], out: argv[1], readmeOnly: true };
   }
   const positional = [];
-  const flags = { from: null, to: null, out: null, allModes: false };
+  const flags = { from: null, to: null, out: null, every: '1', lead: null, use: null, allModes: false, keepAlerts: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--all-modes') flags.allModes = true;
-    else if (arg === '--from' || arg === '--to' || arg === '--out') {
+    else if (arg === '--keep-alerts') flags.keepAlerts = true;
+    else if (VALUED.has(arg)) {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) throw new SampleRefusal(`${arg} needs a value\n${USAGE}`);
       flags[arg.slice(2)] = value;
@@ -107,7 +143,12 @@ export function parseArgs(argv) {
   const to = parseClock(flags.to);
   if (from === null || to === null) throw new SampleRefusal(`--from and --to must be UTC clock times HHMMSS\n${USAGE}`);
   if (from > to) throw new SampleRefusal(`--from ${from} is after --to ${to} (a window cannot cross midnight)`);
-  return { input: positional[0], from, to, out: flags.out, allModes: flags.allModes };
+  const every = parseEvery(flags.every);
+  if (every === null) throw new SampleRefusal(`--every must be a whole number from 1 to 9999, got ${flags.every}\n${USAGE}`);
+  return {
+    input: positional[0], from, to, out: flags.out, allModes: flags.allModes, keepAlerts: flags.keepAlerts, every,
+    lead: readmeText('--lead', flags.lead), use: readmeText('--use', flags.use),
+  };
 }
 
 /** Refused writes never follow a symlink, even one created after the checks. */
@@ -192,6 +233,11 @@ export function selectFrames(names, from, to) {
     .sort();
 }
 
+/** The first of `names` and every `n`th after it, in their order. */
+export function everyNth(names, n) {
+  return names.filter((_, i) => i % n === 0);
+}
+
 export function tramRouteIds(routes) {
   return new Set(
     Object.entries(routes)
@@ -218,10 +264,10 @@ function routeOf(entity) {
   return entity.vehicle?.trip?.routeId || entity.tripUpdate?.trip?.routeId || '';
 }
 
-/** Decodes one frame and keeps the entities `keep(routeId)` accepts, in order. */
+/** Decodes one frame and keeps the entities `keep(routeId, entity)` accepts, in order. */
 export function filterFrame(bytes, keep) {
   const feed = FeedMessage.decode(bytes);
-  const kept = feed.entity.filter((entity) => keep(routeOf(entity)));
+  const kept = feed.entity.filter((entity) => keep(routeOf(entity), entity));
   const out = FeedMessage.encode({ header: feed.header, entity: kept }).finish();
   return { bytes: out, headerTs: Number(String(feed.header?.timestamp ?? 0)), entities: feed.entity.length, kept };
 }
@@ -232,6 +278,13 @@ function thousands(n) {
 
 function utcDay(headerTs) {
   return new Date(headerTs * 1000).toISOString().slice(0, 10);
+}
+
+/** 1st, 2nd, 3rd, 4th, 11th, 21st. */
+function ordinal(n) {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] ?? 'th';
+  return `${n}${suffix}`;
 }
 
 function clockText(hhmmss) {
@@ -246,6 +299,10 @@ function zagrebClock(ms) {
     second: '2-digit',
     hourCycle: 'h23',
   }).format(new Date(ms));
+}
+
+function zagrebDate(ms) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: ZAGREB_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
 }
 
 function zagrebOffset(ms) {
@@ -268,16 +325,28 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
   const at = (hhmmss) => dayStart + (Number(hhmmss.slice(0, 2)) * 3600 + Number(hhmmss.slice(2, 4)) * 60 + Number(hhmmss.slice(4, 6))) * 1000;
   const localFrom = zagrebClock(at(s.from));
   const localTo = zagrebClock(at(s.to));
+  const zagrebDay = zagrebDate(at(s.from));
+  const every = s.every ?? 1;
+  const dropped = s.keepAlerts
+    ? ' or when it is an Alert, which has no route of its own and is kept unchanged whatever it informs; buses and reports without a route are dropped.'
+    : '; buses, alerts and reports without a route are dropped.';
   const filter = s.allModes
-    ? 'none: every entity of every frame, bytes copied unchanged (`--all-modes`).'
-    : `tram only. An entity is kept when its \`vehicle.trip.routeId\` or \`tripUpdate.trip.routeId\` is a tram route (\`type === ${TRAM_ROUTE_TYPE}\` in \`${ROUTES_PATH}\`, ${s.tramRoutes.length} ids: ${s.tramRoutes.join(', ')}); buses, alerts and reports without a route are dropped. Each frame is decoded and re-encoded with \`gtfs-realtime-bindings\` from its own header and the kept entities in their original order, so \`worker/twin/feed-decode.ts\` reads it as ZET's own bytes.`;
+    ? `none: every entity of every frame, bytes copied unchanged (\`--all-modes\`).${s.keepAlerts ? ' `--keep-alerts` adds nothing here: the Alert entities are among the unchanged bytes.' : ''}`
+    : `tram only${s.keepAlerts ? ', plus every Alert entity (`--keep-alerts`)' : ''}. An entity is kept when its \`vehicle.trip.routeId\` or \`tripUpdate.trip.routeId\` is a tram route (\`type === ${TRAM_ROUTE_TYPE}\` in \`${ROUTES_PATH}\`, ${s.tramRoutes.length} ids: ${s.tramRoutes.join(', ')})${dropped} Each frame is decoded and re-encoded with \`gtfs-realtime-bindings\` from its own header and the kept entities in their original order, so \`worker/twin/feed-decode.ts\` reads it as ZET's own bytes.`;
+  const cadence = every > 1
+    ? `every ${ordinal(every)} recorded frame of the window's ${thousands(s.windowFrames)} (\`--every ${every}\`): header gap median ${s.medianGapS ?? 'n/a'} s, max ${s.maxGapS ?? 'n/a'} s`
+    : `header gap median ${s.medianGapS ?? 'n/a'} s, max ${s.maxGapS ?? 'n/a'} s, as recorded`;
+  const effects = Object.entries(s.alertEffects ?? {}).map(([name, n]) => `${name} ${thousands(n)}`).join(', ');
+  const signals = `CANCELED trip updates ${thousands(s.canceledUpdates ?? 0)} (distinct trips ${s.canceledTrips ?? 0}); Alert entities ${thousands(s.alertEntities ?? 0)} (distinct ids ${s.alertIds ?? 0}${effects ? `; by effect ${effects}` : ''})`;
+  const extraFlags = [s.lead && ['`--lead`', 'first line'], s.use && ['`--use`', '"What it is for" paragraph']].filter(Boolean);
   const join = s.tripReports > 0
     ? `${thousands(s.tripReportsJoined)} of ${thousands(s.tripReports)} tram reports with a trip id (${(100 * s.tripReportsJoined / s.tripReports).toFixed(3)} %) and ${thousands(s.tripsJoined)} of ${thousands(s.trips)} distinct tram trip ids are found in \`${TRIPS_PATH}\``
     : `no tram report in the sample carries a trip id`;
   const lines = [
-    `# ZET GTFS-RT frame sample, ${s.day}, ${localFrom.slice(0, 5)}–${localTo.slice(0, 5)} Zagreb`,
+    ...(s.lead ? [s.lead, ''] : []),
+    `# ZET GTFS-RT frame sample, ${zagrebDay}, ${localFrom.slice(0, 5)}–${localTo.slice(0, 5)} Zagreb`,
     '',
-    `**Test fixture only.** These ${s.frames} files are a fixture of this repository's tests and nothing else: the Worker never serves them (its static assets are \`app/dist\`, built from \`app/\`), no client downloads them and no page links to them. They let the tram-path acceptance test replay real frames on any machine without the full recordings (hundreds of megabytes a day), which are never committed.`,
+    `**Test fixture only.** These ${s.frames} files are a fixture of this repository's tests and nothing else: the Worker never serves them (its static assets are \`app/dist\`, built from \`app/\`), no client downloads them and no page links to them. They let ${s.use ? 'the tests named under "What it is for"' : 'the tram-path acceptance test'} replay real frames on any machine without the full recordings (hundreds of megabytes a day), which are never committed.`,
     '',
     'Generated by `scripts/frames-sample.mjs`; edit the script, not this file. Use `--readme-only <fixture-dir>` to refresh this file without changing the frames.',
     '',
@@ -292,13 +361,15 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '| | |',
     '|---|---|',
     `| window (UTC, from the file names, inclusive) | ${s.day} ${clockText(s.from)}–${clockText(s.to)} |`,
-    `| window (Zagreb, ${zagrebOffset(at(s.from))}) | ${localFrom}–${localTo} |`,
+    `| window (Zagreb, ${zagrebOffset(at(s.from))}) | ${zagrebDay === s.day ? '' : `${zagrebDay} `}${localFrom}–${localTo} |`,
     `| frames | ${s.frames} (${s.distinctHeaders} distinct header timestamps, ${s.firstHeaderTs}–${s.lastHeaderTs}) |`,
-    `| cadence | header gap median ${s.medianGapS ?? 'n/a'} s, max ${s.maxGapS ?? 'n/a'} s, as recorded |`,
+    `| cadence | ${cadence} |`,
     `| file names | the recorder's own \`HHMMSS-<headerTs>.pb\` (UTC time of the header) |`,
     `| filter | ${filter} |`,
     `| entities kept | ${thousands(s.keptEntities)} of ${thousands(s.sourceEntities)}; per frame on average ${s.vehiclesPerFrame.toFixed(1)} tram vehicle reports and ${s.tripUpdatesPerFrame.toFixed(1)} tram trip updates |`,
     `| distinct tram vehicles / trips | ${s.vehicles} / ${s.trips} |`,
+    ...(s.allModes ? [`| every mode, per frame | on average ${(s.allVehicleReports / s.frames).toFixed(1)} vehicle reports and ${(s.allTripUpdates / s.frames).toFixed(1)} trip updates |`] : []),
+    ...(s.allModes || s.keepAlerts ? [`| operator signals in the kept entities | ${signals} |`] : []),
     `| bytes | **${thousands(s.bytes)} B** in the ${s.frames} \`.pb\` files (the unfiltered frames: ${thousands(s.sourceBytes)} B) |`,
     '',
     '## Artefact it belongs to',
@@ -310,22 +381,24 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '## How it was cut',
     '',
     '```',
-    `node scripts/frames-sample.mjs <recordings>/${s.day.replaceAll('-', '/')} --from ${s.from} --to ${s.to} --out ${s.outRel}${s.allModes ? ' --all-modes' : ''}`,
+    `node scripts/frames-sample.mjs <recordings>/${s.day.replaceAll('-', '/')} --from ${s.from} --to ${s.to} --out ${s.outRel}${s.allModes ? ' --all-modes' : ''}${s.keepAlerts ? ' --keep-alerts' : ''}${every > 1 ? ` --every ${every}` : ''}`,
     '```',
     '',
-    `\`<recordings>\` is a local copy of R2's \`zet-rt/\` prefix. The script refuses an \`--out\` under any \`recordings/\` directory, because \`.gitignore\` ignores \`recordings/\` at any depth.`,
+    `\`<recordings>\` is a local copy of R2's \`zet-rt/\` prefix. The script refuses an \`--out\` under any \`recordings/\` directory, because \`.gitignore\` ignores \`recordings/\` at any depth.${extraFlags.length > 0 ? ` The cut also passed ${extraFlags.map(([flag]) => flag).join(' and ')} with the text of this file's ${extraFlags.map(([, part]) => part).join(' and ')}.` : ''}`,
     '',
-    '## How it is graded',
-    '',
-    '```',
-    'npx vitest run --project accept test/accept/wrong-turn.test.ts',
-    `npm run replay:grade -- ${s.outRel} --out <scratch>/wrong-turn --targets stage1`,
-    '```',
-    '',
-    "The first is WP0's acceptance test: `scripts/grade-branches-core.ts` replays the frames through the real engine and the committed artefacts and judges the rows against the stage-1 targets; `test/accept/wrong-turn.expect.json` records the rows this sample gave before WP0 and after it. The second writes the grader's full report, `<scratch>/wrong-turn.json` and `.md`, and exits 1 while a row misses its target.",
-    '',
-    'The rows, their thresholds and the values measured on this sample at each deploy are in [`docs/kaj-verification.md`](../../../../docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09" (row U1); the whole-day rows are in its "Kapija paketa WP0" table.',
-    '',
+    ...(s.use ? ['## What it is for', '', s.use, ''] : [
+      '## How it is graded',
+      '',
+      '```',
+      'npx vitest run --project accept test/accept/wrong-turn.test.ts',
+      `npm run replay:grade -- ${s.outRel} --out <scratch>/wrong-turn --targets stage1`,
+      '```',
+      '',
+      "The first is WP0's acceptance test: `scripts/grade-branches-core.ts` replays the frames through the real engine and the committed artefacts and judges the rows against the stage-1 targets; `test/accept/wrong-turn.expect.json` records the rows this sample gave before WP0 and after it. The second writes the grader's full report, `<scratch>/wrong-turn.json` and `.md`, and exits 1 while a row misses its target.",
+      '',
+      'The rows, their thresholds and the values measured on this sample at each deploy are in [`docs/kaj-verification.md`](../../../../docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09" (row U1); the whole-day rows are in its "Kapija paketa WP0" table.',
+      '',
+    ]),
   ];
   return lines.join('\n');
 }
@@ -341,14 +414,26 @@ async function cutProvenance(out) {
   const entities = /\| entities kept \| [\d,]+ of ([\d,]+);/.exec(readme);
   const bytes = /\(the unfiltered frames: ([\d,]+) B\)/.exec(readme);
   const allModes = readme.includes('| filter | none:');
-  if (!window || !entities || !bytes || (!allModes && !readme.includes('| filter | tram only.'))) {
+  const command = /^node scripts\/frames-sample\.mjs <recordings>\/\S+ --from \d{6} --to \d{6} --out \S+(.*)$/m.exec(readme);
+  if (!window || !entities || !bytes || !command || (!allModes && !readme.includes('| filter | tram only'))) {
     throw new SampleRefusal('README.md has no complete cut provenance; --readme-only cannot recover the unfiltered recording');
   }
   const from = parseClock(window[2].replaceAll(':', ''));
   const to = parseClock(window[3].replaceAll(':', ''));
   if (from === null || to === null || from > to) throw new SampleRefusal('README.md has an invalid cut window');
+  const flags = command[1];
+  const every = parseEvery(/ --every (\S+)/.exec(flags)?.[1] ?? '1');
+  const windowFrames = /of the window's ([\d,]+) \(`--every/.exec(readme)?.[1];
+  if (every === null || (every > 1 && windowFrames === undefined)) {
+    throw new SampleRefusal('README.md names an --every cut without its step or the window it thinned');
+  }
   return {
     day: window[1], from, to, allModes,
+    keepAlerts: / --keep-alerts\b/.test(flags),
+    every,
+    windowFrames: windowFrames === undefined ? null : Number(windowFrames.replaceAll(',', '')),
+    lead: readme.startsWith('# ') ? null : readme.slice(0, readme.indexOf('\n')),
+    use: /\n## What it is for\n\n([^\n]+)\n/.exec(readme)?.[1] ?? null,
     sourceEntities: Number(entities[1].replaceAll(',', '')),
     sourceBytes: Number(bytes[1].replaceAll(',', '')),
   };
@@ -372,8 +457,10 @@ export async function main({
   if (destination !== null) throw new SampleRefusal(destination);
   const provenance = args.readmeOnly ? await cutProvenance(out) : null;
   if (provenance) Object.assign(args, provenance);
-  const names = selectFrames(await readdir(input), args.from, args.to);
-  if (names.length === 0) throw new SampleRefusal(`no frame in ${args.input} between ${args.from} and ${args.to} UTC`);
+  const windowNames = selectFrames(await readdir(input), args.from, args.to);
+  if (windowNames.length === 0) throw new SampleRefusal(`no frame in ${args.input} between ${args.from} and ${args.to} UTC`);
+  // A fixture's frames were thinned when it was cut; README-only reads them as they are.
+  const names = args.readmeOnly ? windowNames : everyNth(windowNames, args.every);
 
   const routes = JSON.parse(await readFile(resolve(cwd, routesPath), 'utf8'));
   const trams = tramRouteIds(routes);
@@ -381,7 +468,7 @@ export async function main({
   const trips = JSON.parse(await readFile(resolve(cwd, tripsPath), 'utf8'));
   const knownTrips = tripIdsOf(trips);
   const network = JSON.parse(await readFile(resolve(cwd, networkPath), 'utf8'));
-  const keep = args.allModes ? () => true : (routeId) => trams.has(routeId);
+  const keep = args.allModes ? () => true : (routeId, entity) => trams.has(routeId) || (args.keepAlerts && entity.alert != null);
 
   const written = [];
   let bytes = 0;
@@ -392,6 +479,13 @@ export async function main({
   let tripUpdates = 0;
   let tripReports = 0;
   let tripReportsJoined = 0;
+  let allVehicleReports = 0;
+  let allTripUpdates = 0;
+  let canceledUpdates = 0;
+  let alertEntities = 0;
+  const canceledTrips = new Set();
+  const alertIds = new Set();
+  const alertEffects = new Map();
   const headers = [];
   const vehicles = new Set();
   const tripIds = new Set();
@@ -411,6 +505,20 @@ export async function main({
     keptEntities += frame.kept.length;
     headers.push(frame.headerTs);
     for (const entity of frame.kept) {
+      if (entity.alert) {
+        alertEntities += 1;
+        alertIds.add(entity.id);
+        const effect = EFFECT[entity.alert.effect] ?? String(entity.alert.effect);
+        alertEffects.set(effect, (alertEffects.get(effect) ?? 0) + 1);
+      }
+      if (entity.vehicle) allVehicleReports += 1;
+      if (entity.tripUpdate) {
+        allTripUpdates += 1;
+        if (entity.tripUpdate.trip?.scheduleRelationship === CANCELED) {
+          canceledUpdates += 1;
+          canceledTrips.add(entity.tripUpdate.trip.tripId || entity.id);
+        }
+      }
       if (!trams.has(routeOf(entity))) continue;
       const tripId = entity.vehicle?.trip?.tripId || entity.tripUpdate?.trip?.tripId || '';
       if (entity.vehicle) {
@@ -455,6 +563,11 @@ export async function main({
     from: args.from,
     to: args.to,
     allModes: args.allModes,
+    keepAlerts: args.keepAlerts,
+    every: args.every,
+    windowFrames: args.readmeOnly ? (args.windowFrames ?? names.length) : windowNames.length,
+    lead: args.lead,
+    use: args.use,
     outRel: relative(cwd, out).split(sep).join('/') || '.',
     frames: names.length,
     distinctHeaders: new Set(headers).size,
@@ -472,6 +585,13 @@ export async function main({
     tripsJoined: [...tripIds].filter((id) => knownTrips.has(id)).length,
     tripReports,
     tripReportsJoined,
+    allVehicleReports,
+    allTripUpdates,
+    canceledUpdates,
+    canceledTrips: canceledTrips.size,
+    alertEntities,
+    alertIds: alertIds.size,
+    alertEffects: Object.fromEntries([...alertEffects].sort(([a], [b]) => a.localeCompare(b))),
     services: [...services].sort(),
     feedVersion: typeof trips?.feedVersion === 'string' ? trips.feedVersion : null,
     graphHash: typeof network?.graphHash === 'string' ? network.graphHash : null,
@@ -481,7 +601,9 @@ export async function main({
   await writeFile(resolve(out, 'README.md'), renderReadme(summary, resolve(cwd, networkPath)), { encoding: 'utf8', flag: WRITE_FLAGS });
   log(
     `${summary.frames} frames ${summary.day} ${args.from}-${args.to} UTC -> ${summary.outRel}: ${bytes} B ` +
-      `(${args.allModes ? 'all modes' : 'tram only'}, from ${sourceBytes} B; ${removed} stale frames removed); ` +
+      `(${args.allModes ? 'all modes' : 'tram only'}${args.keepAlerts ? ', alerts kept' : ''}${args.every > 1 ? `, every ${args.every} of ${summary.windowFrames}` : ''}, ` +
+      `from ${sourceBytes} B; ${removed} stale frames removed); ` +
+      `${canceledUpdates} CANCELED trip updates, ${alertEntities} alerts kept; ` +
       `feed ${summary.feedVersion ?? 'unknown'}: ${tripReportsJoined}/${tripReports} tram reports join, ` +
       `${summary.tripsJoined}/${summary.trips} trips; graphHash ${summary.graphHash ?? 'unknown'}`,
   );
