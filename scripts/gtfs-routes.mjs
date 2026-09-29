@@ -209,7 +209,7 @@ export function routesFromZip(buf) {
 export async function main({
   fetchImpl = fetch,
   url = GTFS_URL,
-  zipPath = null,
+  zipPath = /** @type {string | null} */ (null),
   out = OUTPUT_PATH,
   log = console.log,
   cwd = process.cwd(),

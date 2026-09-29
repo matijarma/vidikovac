@@ -263,7 +263,9 @@ export async function buildExpectIndex(zipBuf, { builtAt, log = () => {} }) {
     throw new Error(`trip ${late.tripId} ends at ${h}:${String(m).padStart(2, '0')}, past the ${SLOTS * SLOT_SEC / 3600}-hour service day the artefact covers`);
   }
 
+  /** @type {Record<string, { all: number[]; tram: number[]; bus: number[] }>} */
   const blocks = {};
+  /** @type {Record<string, Record<string, number[]>>} */
   const tripsOut = {};
   let mixed = 0;
   let longest = 0;
