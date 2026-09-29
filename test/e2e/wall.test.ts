@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
   CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
-  DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURE_SENTENCE_RE, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
+  DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
 } from '../../e2e/wall';
@@ -307,6 +307,50 @@ describe('one reading of the wall', () => {
     document.body.innerHTML = '<section data-testid="nearby" data-fit-dropped=""><ol data-testid="nearby-rows"></ol></section>';
     expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ listRoom: null });
     expect(summariseRotation([at2249, { ...at2249, listRoom: 70 }])).toMatchObject({ departuresUnderFit: 1 });
+  });
+
+  it('trains placed before the departures (reduced and silent, U2 §0.1) fill their place: one fewer each, never under one', () => {
+    expect(FIT_RAIL_FIRST_KIND).toBe('rail');
+    const rail = (i: number): WallRow => row({ id: `rail:hz:${i}`, kind: 'rail', source: 'hz', when: `2026-09-29T05:5${i}:00.000Z` });
+    const deps = (n: number): WallRow[] => Array.from({ length: n }, (_, i) => row({ id: `trip-${i}`, when: '2026-09-29T06:00:00.000Z' }));
+    const closure = row({ id: 'closure-1', kind: 'closure', when: '2026-09-29T14:00:00.000Z' });
+    const last = row({ id: 'last-6', kind: 'last', when: '2026-09-29T21:40:00.000Z' });
+    const dropped = ['departure', 'departure'];
+    // Silent (railMax 3): three trains above one timetable departure, the other two left out beside a closure.
+    const silent = sample({ rows: [rail(0), rail(1), rail(2), ...deps(1), closure], fitDropped: dropped });
+    expect(railsFirst(silent.rows).map((r) => r.id)).toEqual(['rail:hz:0', 'rail:hz:1', 'rail:hz:2']);
+    expect(fittedDepartures(silent)).toBe(1);
+    expect(departureFailures(silent)).toEqual([]);
+    // Reduced (railMax 2): 3 - 2.
+    expect(fittedDepartures(sample({ rows: [rail(0), rail(1), ...deps(1), closure], fitDropped: dropped }))).toBe(1);
+    // One train first costs one departure: two of the three stand.
+    const one = sample({ rows: [rail(0), ...deps(1), closure], fitDropped: dropped });
+    expect(fittedDepartures(one)).toBe(2);
+    expect(departureFailures(one)).toEqual(['1 departure rows where the list offered 3 and the fit keeps 2 (left out: departure departure)']);
+    expect(departureFailures(sample({ rows: [rail(0), ...deps(2), closure], fitDropped: ['departure'] }))).toEqual([]);
+    // Beside a reserved row as well (2 - 1), and never under DEPARTURES_MIN (2 - 3).
+    expect(fittedDepartures(sample({ rows: [rail(0), ...deps(1), last], fitDropped: dropped }))).toBe(1);
+    expect(fittedDepartures(sample({ rows: [rail(0), rail(1), rail(2), ...deps(1), last], fitDropped: dropped }))).toBe(DEPARTURES_MIN);
+    // A list that offered one keeps one, and one that offered none none.
+    expect(fittedDepartures(sample({ rows: [rail(0), rail(1), rail(2), ...deps(1)], fitDropped: [] }))).toBe(1);
+    expect(fittedDepartures(sample({ rows: [rail(0), closure], fitDropped: [] }))).toBe(0);
+    // A train below the first departure is a timed row like the rest (railFirst off): the day floor stands.
+    const below = sample({ rows: [...deps(1), rail(0), rail(1), rail(2), closure], fitDropped: dropped });
+    expect(railsFirst(below.rows)).toEqual([]);
+    expect(departureFailures(below)).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure)']);
+    // Without a departure on the wall no train precedes one (timeline.ts breadthRow).
+    expect(railsFirst([rail(0), closure])).toEqual([]);
+    // A full list counts a train placed first among the rows the fit keeps: one train, one departure, two closures and the
+    // pharmacy leave 12 px, so the second departure (3 - 1) has no room.
+    const pharmacy = row({ id: 'always:pharmacy', kind: 'pharmacy', when: null, always: true });
+    const full = sample({ rows: [rail(0), ...deps(1), closure, row({ id: 'closure-2', kind: 'closure', when: '2026-09-29T16:00:00.000Z' }), pharmacy], fitDropped: dropped, listRoom: 12 });
+    expect(fittedDepartures(full)).toBe(1);
+    expect(departureFailures(full)).toEqual([]);
+    const short = '1 departure rows where the list offered 3 and the fit keeps 2 (left out: departure departure)';
+    expect(departureFailures({ ...full, listRoom: DEPARTURE_ROW_MIN_PX })).toEqual([short]);
+    expect(departureFailures({ ...full, rows: [...full.rows.slice(0, 4), row({ id: 'event-1', kind: 'event', when: '2026-09-29T17:00:00.000Z' }), pharmacy] })).toEqual([short]);
+    // The same train below the departure is no kept row: the day floor of three.
+    expect(departureFailures({ ...full, rows: [...deps(1), rail(0), ...full.rows.slice(2)] })).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure)']);
   });
 
   describe('calm motion: a departure\'s beat that gives a dropped row its room back (lastTrams2240 at 22:51:00)', () => {

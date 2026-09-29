@@ -285,7 +285,7 @@ describe('the thresholds are one table with a stage per row', () => {
     const target = (id: string): string => fillTarget(THRESHOLDS.find((t) => t.id === id)!.target, instruments);
     expect(target('departures')).toContain(`${wall.DEPARTURES_MIN}–${wall.DEPARTURES_MAX}`);
     expect(target('departures')).toContain(`the fitted count of those the list offered (${wall.DEPARTURES_FIT_FULL}, or ${wall.DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts)`);
-    expect(target('departures')).toContain(`fewer beside such a row only as many as a full list holds (under ${wall.DEPARTURE_ROW_MIN_PX} px left, every other row a reserved one, a closure or the one timeless row)`);
+    expect(target('departures')).toContain(`one fewer for each train placed before the departures (never under ${wall.DEPARTURES_MIN}), fewer beside such a row or train only as many as a full list holds (under ${wall.DEPARTURE_ROW_MIN_PX} px left, every other row a reserved one, a train placed first, a closure or the one timeless row)`);
     expect(target('silent-departures')).toContain(String(wall.DEPARTURE_SENTENCE_RE));
     expect(target('sentence-length')).toContain(`1–${wall.SENTENCE_MAX_CHARS}`);
     expect(target('lead')).toContain('"Skeniraj za 10 minuta grada."');
@@ -974,6 +974,20 @@ describe('a run over a fake browser', () => {
     expect(bare.lines.join('\n')).toContain('FAIL departures');
     expect(read(bare.out, 'report.md')).toContain('the list carries no data-fit-dropped probe');
     expect(read(bare.out, 'report.md')).toContain('0 of 3 readings carried the probe');
+  });
+
+  it('departures holds on the strike morning: three trains placed before one departure fill the place of the two left out; below it they do not', async () => {
+    const silent = (n: number, at: number, code: string): WallSample => {
+      const good = wallReading(n, at, code);
+      const trains = [0, 1, 2].map((i) => row({ id: `rail:hz:${n}:${i}`, kind: 'rail', source: 'hz', when: new Date(at + (5 + i) * 60_000).toISOString(), title: 'Glavni kolodvor', whenText: `07:5${i}`, text: `Glavni kolodvor 07:5${i}` }));
+      return { ...good, rows: [...trains, ...good.rows], fitDropped: ['departure', 'departure'] };
+    };
+    const held = await observe([], { reading: silent });
+    expect(held.lines.join('\n')).not.toContain('FAIL departures');
+    expect(read(held.out, 'report.md')).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    const below = await observe([], { reading: (n, at, code) => { const r = silent(n, at, code); return { ...r, rows: [r.rows[3]!, ...r.rows.slice(0, 3), ...r.rows.slice(4)] }; } });
+    expect(below.lines.join('\n')).toContain('FAIL departures');
+    expect(read(below.out, 'report.md')).toContain('1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure)');
   });
 
   it('while the twin reports its fleet silent no header sentence says a departure; a train is the one exception; a normal twin may say them', async () => {

@@ -109,6 +109,13 @@ export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice']
 export const FIT_FULL_KEEPS_KINDS: readonly string[] = [...FIT_RESERVED_KINDS, 'closure'];
 /** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts). */
 export const DEPARTURE_ROW_MIN_PX = 64;
+/**
+ * The trains the response policy puts before the departures (U2.md §0.1 railPolicy: at most three in silent, two in
+ * reduced, `data-kind="rail"` above the first departure row). They fill the departures' place: the fit keeps them before
+ * a second or third departure (app/src/kiosk/timeline.ts breadthRow, dropCandidate), so like a reserved row each lowers
+ * the floor, by one, never under DEPARTURES_MIN, and a full list may hold them beside its departures.
+ */
+export const FIT_RAIL_FIRST_KIND = 'rail';
 /** A tram or bus family sentence says a departure ("polazi"): none may stand while ZET's fleet is judged silent (upgrade U2). */
 export const DEPARTURE_SENTENCE_RE = /\bpolazi\b/i;
 /** Only the trainAt envelope is exempt: a quoted event title such as "Vlak" can still promise a last tram. */
@@ -722,29 +729,38 @@ export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> 
 
 const timelessRow = (r: WallRow): boolean => r.always || r.when === null;
 
+/** The train rows above the first departure row (FIT_RAIL_FIRST_KIND); none without a departure row, as in timeline.ts. */
+export function railsFirst(rows: readonly WallRow[]): WallRow[] {
+  const first = rows.findIndex((r) => r.kind === 'departure');
+  return first < 0 ? [] : rows.slice(0, first).filter((r) => r.kind === FIT_RAIL_FIRST_KIND);
+}
+
 /**
  * The list is full beside its departures (FIT_FULL_KEEPS_KINDS): every row on the wall is whole, the rows leave less
- * than DEPARTURE_ROW_MIN_PX of the box, and each row beside the departures is a reserved kind, a closure or the one
- * timeless row, all of which the fit keeps before a second departure.
+ * than DEPARTURE_ROW_MIN_PX of the box, and each row beside the departures is a reserved kind, a closure, a train placed
+ * before the departures or the one timeless row, all of which the fit keeps before a second departure.
  */
-function fullBesideKeptRows(s: FitReading): boolean {
+function fullBesideKeptRows(s: FitReading, rails: readonly WallRow[]): boolean {
   if (typeof s.listRoom !== 'number' || !(s.listRoom < DEPARTURE_ROW_MIN_PX) || (s.hiddenRows ?? 0) > 0) return false;
   const beside = s.rows.filter((r) => r.kind !== 'departure');
-  return beside.filter(timelessRow).length <= 1 && beside.every((r) => timelessRow(r) || (r.kind !== null && FIT_FULL_KEEPS_KINDS.includes(r.kind)));
+  return beside.filter(timelessRow).length <= 1 && beside.every((r) => timelessRow(r) || rails.includes(r) || (r.kind !== null && FIT_FULL_KEEPS_KINDS.includes(r.kind)));
 }
 
 /**
  * The departures the fit must keep, of those the list offered: null without the `data-fit-dropped` probe. The offer is
  * the visible departures plus the departures the fit left out (never more than DEPARTURES_MAX); the floor is
- * DEPARTURES_FIT_FULL, or DEPARTURES_FIT_RESERVED while a row of a FIT_RESERVED_KINDS kind is on the wall, and beside
- * such a row the departures a full list holds (fullBesideKeptRows, at least DEPARTURES_MIN) where that is fewer.
+ * DEPARTURES_FIT_FULL, or DEPARTURES_FIT_RESERVED while a row of a FIT_RESERVED_KINDS kind is on the wall, one fewer
+ * for each train placed before the departures (railsFirst, never under DEPARTURES_MIN), and beside such a row or train
+ * the departures a full list holds (fullBesideKeptRows, at least DEPARTURES_MIN) where that is fewer.
  */
 export function fitPlan(s: FitReading): { offered: number; expected: number; full: boolean } | null {
   if (s.fitDropped == null) return null;
   const offered = Math.min(DEPARTURES_MAX, s.departures + s.fitDropped.filter((kind) => kind === 'departure').length);
   const reserved = s.rows.some((r) => r.kind !== null && FIT_RESERVED_KINDS.includes(r.kind));
-  const floor = Math.min(offered, reserved ? DEPARTURES_FIT_RESERVED : DEPARTURES_FIT_FULL);
-  const full = reserved && s.departures >= DEPARTURES_MIN && s.departures < floor && fullBesideKeptRows(s);
+  const rails = railsFirst(s.rows);
+  const base = Math.min(offered, reserved ? DEPARTURES_FIT_RESERVED : DEPARTURES_FIT_FULL);
+  const floor = Math.max(Math.min(base, DEPARTURES_MIN), base - rails.length);
+  const full = (reserved || rails.length > 0) && s.departures >= DEPARTURES_MIN && s.departures < floor && fullBesideKeptRows(s, rails);
   return { offered, expected: full ? s.departures : floor, full };
 }
 export const fittedDepartures = (s: FitReading): number | null => fitPlan(s)?.expected ?? null;
@@ -1122,7 +1138,7 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (r.errors > 0) out.push(`${r.errors} of ${r.samples + r.errors} readings failed`);
   if (!r.departuresEverySample) out.push(`a reading without a departure row (min ${r.minDepartures} over ${r.samples} readings; target ≥ ${DEPARTURES_MIN} in every one)`);
   if (r.maxDepartures > DEPARTURES_MAX) out.push(`${r.maxDepartures} departure rows at most (target ≤ ${DEPARTURES_MAX})`);
-  if (r.departuresUnderFit > 0) out.push(`${r.departuresUnderFit} reading(s) with fewer departure rows than the fit keeps of those the list offered, or without the data-fit-dropped probe (target 0: ${DEPARTURES_FIT_FULL}, or ${DEPARTURES_FIT_RESERVED} beside a first, last or notice row, fewer only as many as a full list holds beside reserved rows, closures and one timeless row)`);
+  if (r.departuresUnderFit > 0) out.push(`${r.departuresUnderFit} reading(s) with fewer departure rows than the fit keeps of those the list offered, or without the data-fit-dropped probe (target 0: ${DEPARTURES_FIT_FULL}, or ${DEPARTURES_FIT_RESERVED} beside a first, last or notice row, one fewer for each train placed before the departures, never under ${DEPARTURES_MIN}; fewer only as many as a full list holds beside reserved rows, trains placed first, closures and one timeless row)`);
   if (r.caveatRows > 0) out.push(`${r.caveatRows} row(s) read as a caveat (target 0)`);
   if (r.closureReentries > 0) out.push(`${r.closureReentries} closure row(s) left the list and came back (target 0)`);
   if (r.plusPills > 0) out.push(`${r.plusPills} reading(s) with a "+N" vehicle pill (target 0)`);
