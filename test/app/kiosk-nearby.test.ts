@@ -35,6 +35,7 @@ import { nearbyRowMarkup } from '../../app/src/city/nearby-markup';
 import { rowMarkup } from '../../app/src/kiosk/timeline';
 import { ZET_RSS_NOVOSTI_URL, ZET_RSS_PROMET_URL, fetchZetRss } from '../../worker/feed/modules/dogadanja/zet-rss';
 import { DISCL } from '../../e2e/inventory';
+import { NOVOSTI_NOTICE, noticeDayOver, noticeLines, zetNoticeLink } from '../../shared/city/notices';
 
 const hr = createDefaultI18n('hr');
 const en = createDefaultI18n('en');
@@ -1238,6 +1239,43 @@ describe('the operator\'s voice: cancelled trips and the ZET notice row (upgrade
       expect(noticeIds(rows([]))).toEqual([]);
       expect(noticeIds(selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', []) } })))).toEqual([]);
       expect(noticeIds(selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', []), dogadanja: snap('dogadanja', [item], 'down') } })))).toEqual([]);
+    });
+
+    it('reads a news item as a service statement by its title: the strike notice and line 228 in the news of 27 to 29 Sep, one old funicular item in the 12 Sep copy, nothing else', async () => {
+      const strike = await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml', 'zet-novosti');
+      const old = await feedOf('zet-rss-promet.xml', 'zet-rss-novosti.xml', 'zet-novosti');
+      const hits = (feed: ModuleSnapshot): string[] => feed.items.filter((i) => NOVOSTI_NOTICE.test(i.title)).map((i) => i.id);
+      expect(hits(strike)).toEqual(['zet-novosti:10166', 'zet-novosti:10164', 'zet-novosti:10006']);
+      expect(hits(old)).toEqual(['zet-novosti:10006']); // "Uspinjača svečano puštena u promet", published in May
+      expect(NOVOSTI_NOTICE.test('Predsjednik Uprave ZET-a o stanju u prometu i sudskom postupku')).toBe(false);
+    });
+
+    it('finds the lines a text names, whatever the case and the joining word', () => {
+      expect(noticeLines('Linije 5 i 13 u nedjelju mijenjaju trase')).toEqual(['5', '13']);
+      expect(noticeLines('U subotu izmjene na linijama 111, 112, 132, 164 i 168')).toEqual(['111', '112', '132', '164', '168']);
+      expect(noticeLines('Linija 263 do Kašine, uvodi se linija 263A. Autobusna linija 113 (Ljubljanica - Jarun)')).toEqual(['263', '263A', '113']);
+      expect(noticeLines('Linije 139 te 141')).toEqual(['139', '141']);
+      expect(noticeLines('Autobusi terminala Glavni kolodvor u nedjelju mijenjaju trase')).toEqual([]);
+    });
+
+    it('ends a notice after the weekday its title names, counted from its publication day, and never dates one that names none', () => {
+      const friday = at('2026-09-25T08:15:00+02:00');
+      expect(noticeDayOver('Linija 137 u subotu prometuje skraćenom trasom', friday, at('2026-09-26T23:59:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Linija 137 u subotu prometuje skraćenom trasom', friday, at('2026-09-27T00:01:00+02:00'))).toBe(true);
+      // Published on the day itself: that day.
+      expect(noticeDayOver('Radovi u petak skreću linije 102', friday, at('2026-09-25T20:00:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Radovi u petak skreću linije 102', friday, at('2026-09-26T00:30:00+02:00'))).toBe(true);
+      expect(noticeDayOver('Linije 5 i 13 u nedjelju mijenjaju trase', at('2026-09-24T12:50:00+02:00'), at('2026-09-27T23:00:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Linija 13 prometuje do Savišća', friday, at('2026-10-20T12:00:00+02:00'))).toBe(false);
+    });
+
+    it('links only ZET\'s own pages, over https, and nothing that carries credentials or another host', () => {
+      expect(zetNoticeLink('https://www.zet.hr/default.aspx?id=10160')).toBe('https://www.zet.hr/default.aspx?id=10160');
+      expect(zetNoticeLink('http://www.zet.hr/default.aspx?id=10160')).toBe('https://www.zet.hr/default.aspx?id=10160');
+      expect(zetNoticeLink('https://zet.hr/vijesti/1')).toBe('https://zet.hr/vijesti/1');
+      for (const link of [undefined, '', 'not a url', 'https://www.zet.hr.example.com/x', 'https://example.com/www.zet.hr', 'https://user:pw@www.zet.hr/x', 'https://www.zet.hr:8443/x', 'javascript:alert(1)', 'ftp://www.zet.hr/x']) {
+        expect(zetNoticeLink(link), String(link)).toBeUndefined();
+      }
     });
 
     it('names no cause: the row is ZET\'s title, whatever ZET calls the day', async () => {

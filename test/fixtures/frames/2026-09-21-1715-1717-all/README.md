@@ -28,7 +28,7 @@ ZET GTFS-Realtime (https://www.zet.hr/gtfs-rt-protobuf), the `zet-rt` source of 
 
 ## Artefact it belongs to
 
-The frames name trips of ZET's static GTFS feed **000395**: 1,667 of 1,667 tram reports with a trip id (100.000 %) and 231 of 231 distinct tram trip ids are found in `app/public/data/zet-trips.json` (feed 000395). Service prefixes of the tram trip ids: 0_23. The network artefact of the same feed is `app/public/data/zet-network.json`, graphHash `7ad4834435980e22`.
+The frames name trips of a feed other than the committed artefacts' **000396**: only 0 of 1,667 tram reports with a trip id (0.000 %) and 0 of 231 distinct tram trip ids are found in `app/public/data/zet-trips.json` (feed 000396). Service prefixes of the tram trip ids: 0_23. The network artefact of the committed feed is `app/public/data/zet-network.json`, graphHash `b0ac946be55f8f79`.
 
 If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining; what that means for this sample is said under "What it is for".
 
@@ -42,4 +42,4 @@ node scripts/frames-sample.mjs <recordings>/2026/09/21 --from 151500 --to 151700
 
 ## What it is for
 
-Written for U1 acceptance row U1-1 (the operator's voice): a normal Monday on which ZET publishes its own cancellations, as CANCELED trip updates and NO_SERVICE Alert entities in every frame (counted above). The U1 decoder tests (`test/twin/feed-decode.test.ts` and `test/twin/publish.test.ts`, added by U1) decode it and require at least one CANCELED trip and at least one alert, and published `cancelled:` items equal to the CANCELED set. Two facts of these frames for U1-2: in every frame the 7 CANCELED trip updates (tram lines 6, 11, 14) and the 25 trips the NO_SERVICE alerts name are disjoint sets, and 4 of the 7 CANCELED trips have a positioned vehicle whose own report carries the same trip as CANCELED. Normal behaviour, not a deviation fixture; replay it against the artefacts of feed 000395 like the 17:15 to 17:44 tram sample beside it.
+Written for U1 acceptance row U1-1 (the operator's voice): a normal Monday on which ZET publishes its own statements in every frame: 25 NO_SERVICE Alert entities, each naming one bus trip and no stop, none of them carried by a vehicle (ZET's real cancellations), and 7 trips marked CANCELED in their trip updates (tram lines 6, 11 and 14), 4 of them carried by a positioned vehicle whose own report marks the trip CANCELED; the two sets are disjoint. test/twin/feed-decode.test.ts and test/twin/operator.test.ts (added by U1) require the 25 alert trips in sources.zet.noServiceTrips and none of the 7 CANCELED trips there: on 21 and 24 September four in five trips ZET marked CANCELED were driven on schedule, so the marker never removes a departure. Normal behaviour, not a deviation fixture; replay it against the artefacts of feed 000395 like the 17:15 to 17:44 tram sample beside it.
