@@ -7,12 +7,12 @@
 // index the app ships: OpenStreetMap, ODbL 1.0). A name is matched on the case-ending stems
 // of its words (shared/city/stems.ts): "Aleji Seljačke bune" is the street "Aleja Seljačke
 // bune", and "JURJA NEIDHARDTA" is "Ulica Jurja Neidhardta". A name the index does not hold,
-// or one that stands in two places far apart, has no point: a cut is never put on a guessed
-// street.
+// one that stands in two places far apart, and one that stands only outside the settlement the
+// source names have no point: a cut is never put on a guessed street.
 import points from '../../data/street-points.json' with { type: 'json' };
-import type { AreaSlug } from '../../pairing/areas';
+import { areaName, type AreaSlug } from '../../pairing/areas';
 import { distanceM } from '../../../shared/city/geo';
-import { stemWords } from '../../../shared/city/stems';
+import { containsStems, stemWords } from '../../../shared/city/stems';
 import { districtOf } from './districts';
 
 export interface StreetPoint {
@@ -71,13 +71,24 @@ function stemKeys(stems: readonly string[]): string[] {
   return keys;
 }
 
+/**
+ * A place name's stems, a fleeting "e" before the last consonant left out, so that the settlement a source writes in a
+ * case agrees with the index's: "Adamovec" and "u Adamovcu", "Stenjevec" and "u Stenjevcu", "Sesvete" and "Sesvetama".
+ */
+function placeStems(text: string): string[] {
+  return stemWords(text).map((stem) => stem.replace(/ec$/, 'c'));
+}
+
 let byKey: Map<string, Row[]> | undefined;
+/** The settlements of the index, as placeStems keys. */
+let settlementSet: Set<string> | undefined;
 
 function index(): Map<string, Row[]> {
   if (byKey) return byKey;
   const wire = points as unknown as Wire;
   const [ox, oy] = wire.origin;
-  const settlementKeys = wire.settlements.map((settlement) => stemWords(settlement).join(' '));
+  const settlementKeys = wire.settlements.map((settlement) => placeStems(settlement).join(' '));
+  settlementSet = new Set(settlementKeys);
   const map = new Map<string, Row[]>();
   wire.name.forEach((name, i) => {
     const row: Row = {
@@ -97,11 +108,27 @@ function index(): Map<string, Row[]> {
 }
 
 /**
+ * The streets of `candidates` that stand where the source says. A settlement of the index (compared on placeStems, so
+ * "Sesvete" and "Sesvetama", "Adamovec" and "Adamovcu" agree) keeps its own streets; a name the index holds as no
+ * settlement ("u Podsusedu": a part of the settlement Zagreb) keeps the streets inside the city district that names it
+ * (Podsused – Vrapče). None there: the street of that name the index holds is another street.
+ */
+function inSettlement(candidates: readonly Row[], settlement: string): Row[] {
+  const wanted = placeStems(settlement);
+  const key = wanted.join(' ');
+  if (settlementSet!.has(key)) return candidates.filter((row) => row.settlementKey === key);
+  return candidates.filter((row) => {
+    const district = districtOf(row.lon, row.lat);
+    return district !== null && containsStems(placeStems(areaName(district)), wanted);
+  });
+}
+
+/**
  * The point of a street named in a text, or null. House numbers and "bb" are dropped; the words are
  * matched on their stems against each street of the index, also with a leading or trailing "ulica"
- * left out. With several matches the one in the given settlement (compared on stems, so "Sesvete" and
- * "Sesvetama" agree) stands; if several still remain and any two are more than a kilometre apart, the
- * name is ambiguous and there is no point.
+ * left out. With a settlement given, only the matches in it stand (inSettlement): several matches
+ * choose by it, and a single match outside it is another street, so there is no point. If several
+ * still remain and any two are more than a kilometre apart, the name is ambiguous and there is no point.
  */
 export function streetPoint(name: string, settlement?: string): StreetPoint | null {
   const stems = stemWords(splitHouseNumbers(name).name);
@@ -109,11 +136,7 @@ export function streetPoint(name: string, settlement?: string): StreetPoint | nu
   const found = new Set<Row>();
   for (const key of stemKeys(stems)) for (const row of index().get(key) ?? []) found.add(row);
   let candidates = [...found];
-  if (candidates.length > 1 && settlement) {
-    const wanted = stemWords(settlement).join(' ');
-    const there = candidates.filter((row) => row.settlementKey === wanted);
-    if (there.length > 0) candidates = there;
-  }
+  if (candidates.length > 0 && settlement && settlement.trim()) candidates = inSettlement(candidates, settlement);
   if (candidates.length === 0) return null;
   for (let i = 0; i < candidates.length; i += 1) {
     for (let j = i + 1; j < candidates.length; j += 1) {

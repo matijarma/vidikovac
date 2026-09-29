@@ -57,6 +57,19 @@ describe('streetPoint', () => {
     expect(vinska!.lat).toBeGreaterThan(45.85);
   });
 
+  it('has no point for a street that stands only outside the settlement the source names', () => {
+    // One Vinska cesta in the index, in Adamovec: "Vinska cesta u Sesvetama" or "u Zagrebu" is another street.
+    expect(streetPoint('Vinskoj cesti', 'Sesvete')).toBeNull();
+    expect(streetPoint('Vinskoj cesti', 'Zagrebu')).toBeNull();
+    expect(streetPoint('Vinskoj cesti', 'Adamovcu')?.name).toBe('Vinska cesta');
+    // One Jarunska ulica, in Zagreb.
+    expect(streetPoint('JARUNSKA 6', 'SESVETE')).toBeNull();
+    expect(streetPoint('JARUNSKA 6', 'ZAGREB')).toEqual(streetPoint('JARUNSKA'));
+    // A part of Zagreb the index holds as no settlement ("u Podsusedu") is read by the city district that names it.
+    for (const name of ['Aleja Seljačke bune', 'Jagodišće', 'Meglenjak']) expect(streetPoint(name, 'Podsusedu')?.district, name).toBe('podsused-vrapce');
+    expect(streetPoint('JARUNSKA', 'Podsusedu')).toBeNull();
+  });
+
   it('has no point for a street the index does not hold', () => {
     expect(streetPoint('Draga Svetojanska')).toBeNull();
     expect(streetPoint('SAVSKA CESTA I. i II. ODVOJAK', 'SESVETE')).toBeNull();
