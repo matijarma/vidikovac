@@ -1,11 +1,12 @@
 // Događanja: a dated agenda from the culture and community sources of the
-// dogadanja module (Kulturpunkt, Etnografski muzej, kvartovske novosti). The
+// dogadanja module (Kulturpunkt, Etnografski muzej, kvartovske novosti) and the
+// two culture modules of October 2026 (Guru za kulturu, Knjižnice grada Zagreba). The
 // search and one row of category chips come first, a count line under them,
 // then the agenda under day heads, what is running apart with its end date,
 // the undated notices in a well and venues outside Zagreb folded away. A
 // date-only entry is all day; a notice without an event date is never
 // today's listing.
-import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
+import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { DogadanjaSourceId } from '../../../worker/feed/modules/dogadanja';
 import { canExportCalendarItem } from '../export';
 import { actionButton, chip, externalLink, filterChips, findSelected, isSelected, itemActions, itemRow, listDetail, searchField, section, sectionHead } from '../experience/blocks';
@@ -43,11 +44,18 @@ const SOURCE_NAME: Record<CultureEventSource, string> = {
   etnografski: 'Etnografski muzej',
   kvartovske: 'Kvartovske novosti',
 };
+/** The modules beside dogadanja whose every item is a culture event -- the City's programme and the libraries' (U3) -- and the `data.source` of their items. */
+const CULTURE_MODULE_SOURCE = { 'kultura-zg': 'kultura-zagreb', programi: 'kgz' } as const satisfies Partial<Record<ModuleId, string>>;
+export const CULTURE_MODULES = Object.keys(CULTURE_MODULE_SOURCE) as (keyof typeof CULTURE_MODULE_SOURCE)[];
+const CULTURE_MODULE_SOURCES: readonly string[] = Object.values(CULTURE_MODULE_SOURCE);
+
 /** Per-source attribution naming the licence, as an event's detail prints it. */
-export const CULTURE_SOURCE_ATTRIBUTION: Record<CultureEventSource, string> = {
+export const CULTURE_SOURCE_ATTRIBUTION: Record<CultureEventSource | (typeof CULTURE_MODULE_SOURCE)[keyof typeof CULTURE_MODULE_SOURCE], string> = {
   kulturpunkt: 'Kulturpunkt (CC BY-SA 3.0 HR)',
   etnografski: 'Etnografski muzej',
   kvartovske: 'Kvartovske novosti, Grad Zagreb (Otvorena dozvola)',
+  'kultura-zagreb': 'Guru za kulturu, Grad Zagreb (kultura.zagreb.hr)',
+  kgz: 'Knjižnice grada Zagreba (neslužbeni prikaz)',
 };
 
 /** The subset of the merged dogadanja snapshot whose `data.source` is one of `sources`, in the module's own order. */
@@ -80,6 +88,14 @@ export function sourceStatusEmptyText(
 /** The culture/community subset of the merged dogadanja snapshot, in the module's own order. */
 export function cultureEvents(snapshot: ModuleSnapshot | undefined): FeedItem[] {
   return filterBySource(snapshot, CULTURE_EVENT_SOURCE_TUPLE);
+}
+
+/**
+ * Every culture event the phone lists: the culture subset of dogadanja, then all of the City's programme and the libraries'
+ * (a down or absent module adds nothing), in that order, so that on an event announced twice the first announcer stands.
+ */
+export function cultureItems(dogadanja: ModuleSnapshot | undefined, more: readonly (ModuleSnapshot | undefined)[] = []): FeedItem[] {
+  return [...cultureEvents(dogadanja), ...more.flatMap((snapshot) => snapshot?.items ?? [])];
 }
 
 export function cultureEventsEmptyText(i18n: I18n, snapshot: ModuleSnapshot | undefined): string {
@@ -149,7 +165,7 @@ export function ongoingEvents(items: readonly FeedItem[], now: number): FeedItem
 // stems with up to two letters of case ending ("Splitu", "Hvaru", "Rijeci").
 // A venue naming one of them is not a Zagreb event and is shown apart; a
 // venue that also names Zagreb stays.
-const OUTSIDE_ZAGREB = /\b(split|hvar|rijek|osijek|zadar|dubrovnik|pul|varazdin|sibenik|karlov[ac]|sis[ak]|koprivnic|cakov|vukovar|vinkovc|bjelovar|pozeg|rovinj|porec|makarsk|trogir|korcul|opatij|umag|krk)[a-z]{0,2}\b/;
+const OUTSIDE_ZAGREB = /\b(split|hvar|rijek|osijek|zadar|dubrovnik|pul|varazdin|sibenik|karlov[ac]|sis[ak]|koprivnic|cakov|vukovar|vinkovc|bjelovar|pozeg|rovinj|porec|makarsk|trogir|korcul|opatij|umag|krk|zapresic)[a-z]{0,2}\b/;
 
 export function venueOutsideZagreb(item: FeedItem): boolean {
   if (item.data?.city && normalise(String(item.data.city)) !== 'zagreb') return true;
@@ -306,7 +322,7 @@ function outsideSection(i18n: I18n, items: readonly FeedItem[], ctx: LayerContex
 
 /** The open event: the title, when, the facts the source gave, the summary, one row of actions ending in the original. */
 function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
-  const source = dataText(item, 'source') as CultureEventSource;
+  const source = dataText(item, 'source') as keyof typeof CULTURE_SOURCE_ATTRIBUTION;
   const when = isDated(item) ? eventWhen(i18n, item, ctx.now) : i18n.t('events.timeUnknown');
   const facts: [string, string][] = [
     [i18n.t('events.venue'), dataText(item, 'venue')],
@@ -324,7 +340,8 @@ function eventDetail(i18n: I18n, item: FeedItem, ctx: LayerContext): string {
 export function renderKultura(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const dogadanja = ctx.snapshots.dogadanja;
-  const all = deduplicateEvents(cultureEvents(dogadanja),ctx.city?.places??[]);
+  const more = CULTURE_MODULES.map((id) => ctx.snapshots[id]);
+  const all = deduplicateEvents(cultureItems(dogadanja, more),ctx.city?.places??[]);
   const query = ctx.view?.filters.q ?? '';
   const category = ctx.view?.filters.category ?? '';
   const window = ctx.view?.filters['event-window'] ?? 'week';
@@ -362,10 +379,14 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
     body: `<h3 class="visually-hidden" id="ev-agenda-title">${escapeHtml(i18n.t('events.agenda'))}</h3>` +
       (state || `<ul class="rows agenda" role="list" data-testid="agenda">${agendaRows(i18n, filtered.slice(0, shown), ctx)}</ul>${moreButton(i18n, 'events', shown, filtered.length, AGENDA_PAGE)}`),
   });
-  const selected = findSelected(dogadanja, ctx.view?.selection);
-  const detail = selected && CULTURE_EVENT_SOURCES.includes(dataText(selected,'source') as DogadanjaSourceId) ? eventDetail(i18n, selected, ctx) : null;
+  const selected = [dogadanja, ...more].map((snapshot) => findSelected(snapshot, ctx.view?.selection)).find(Boolean);
+  const detail = selected && (CULTURE_EVENT_SOURCES.includes(dataText(selected,'source') as DogadanjaSourceId) || CULTURE_MODULE_SOURCES.includes(dataText(selected,'source'))) ? eventDetail(i18n, selected, ctx) : null;
   const list = agenda + ongoingSection(i18n, ongoingShown, ctx) + undatedSection(i18n, undated.filter(keep), ctx) + outsideSection(i18n, outside.filter(keep), ctx);
-  const down = downSources(dogadanja);
+  // A culture module that answered 'down' is named beside dogadanja's own down sources, so a short list is not read as a quiet week.
+  const down = [
+    ...downSources(dogadanja),
+    ...CULTURE_MODULES.filter((id) => ctx.snapshots[id]?.status === 'down').map((id) => i18n.t(`events.sources.${CULTURE_MODULE_SOURCE[id]}`)),
+  ];
   const notes = [down.length ? i18n.t('status.sourcesDown', { list: down.join(', ') }) : '']
     .filter(Boolean).map((t) => `<p class="sec-note">${escapeHtml(t)}</p>`).join('');
   // The domain's name is the tab's: hidden on the phone, shown as the desk's title (layers.css .ev-title); it stays for aria-labelledby and the focus after a switch.
@@ -373,7 +394,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
 <h2 class="layer-title ev-title" id="layer-title-kultura" tabindex="-1">${escapeHtml(i18n.t('layers.kultura'))}</h2>
 ${toolbar}
 ${listDetail(i18n, { list, detail, detailTitle: i18n.t('events.detailTitle') })}
-${notes}${attributionFoot(i18n, dogadanja)}
+${notes}${attributionFoot(i18n, dogadanja)}${more.map((snapshot) => attributionFoot(i18n, snapshot)).join('')}
 </section>`);
 }
 
@@ -383,8 +404,13 @@ ${notes}${attributionFoot(i18n, dogadanja)}
  * starts of the default seven-day window (today and the six days after) and
  * what is running now. No filter applies: the row counts the page as it opens.
  */
-export function eventsCount(snapshot: ModuleSnapshot | undefined, city: { places: Parameters<typeof deduplicateEvents>[1] } | null | undefined, now: number): { count: number; ongoing: number } {
-  const inZagreb = deduplicateEvents(cultureEvents(snapshot), city?.places ?? []).filter((item) => !venueOutsideZagreb(item));
+export function eventsCount(
+  snapshot: ModuleSnapshot | undefined,
+  city: { places: Parameters<typeof deduplicateEvents>[1] } | null | undefined,
+  now: number,
+  more: readonly (ModuleSnapshot | undefined)[] = [],
+): { count: number; ongoing: number } {
+  const inZagreb = deduplicateEvents(cultureItems(snapshot, more), city?.places ?? []).filter((item) => !venueOutsideZagreb(item));
   const count = upcomingEvents(inZagreb, now).filter((item) => {
     const offset = dayOffset(zagrebDayKey(item.at), zagrebDayKey(now));
     return offset !== null && offset >= 0 && offset < 7;

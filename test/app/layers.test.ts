@@ -7,7 +7,7 @@ import { LAYERS } from '../../worker/protocol';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { publicItemKey } from '../../app/src/core/contracts';
 import { ALL_LAYER_MODULES, LAYER_MODULES, LAYER_RENDERERS, renderLayer } from '../../app/src/layers';
-import { cultureEvents, cultureEventsEmptyText } from '../../app/src/layers/kultura';
+import { cultureEvents, cultureEventsEmptyText, eventsCount } from '../../app/src/layers/kultura';
 import { delayWord, vehicleCount } from '../../app/src/layers/shared';
 import { summariseRoutes, type RouteVehicle } from '../../app/src/layers/route-summary';
 import { routeDelays, vehiclePoints } from '../../app/src/layers/u-pokretu';
@@ -105,7 +105,9 @@ describe('layer registry', () => {
       expect(typeof LAYER_RENDERERS[layer]).toBe('function');
       expect(Array.isArray(LAYER_MODULES[layer])).toBe(true);
     }
-    expect(LAYER_MODULES.kultura).toEqual(['dogadanja']);
+    // Kultura also lists the City's culture programme and the libraries' (U3, October 2026); Sada reads the five new modules.
+    expect(LAYER_MODULES.kultura).toEqual(['dogadanja', 'kultura-zg', 'programi']);
+    expect(LAYER_MODULES['grad-sada']).toEqual(expect.arrayContaining(['kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi']));
     expect(LAYER_MODULES['uprava-i-pravo']).toEqual(['glasnik', 'dogadanja']);
     expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
     expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
@@ -530,6 +532,103 @@ describe('zrak-i-nebo, sigurnost, uprava, kultura', () => {
     expect(text(section.querySelector('#ev-agenda'))).not.toContain('Koncert na rivi');
     expect(text(section.querySelector('#ev-outside'))).toContain('Koncert na rivi');
     expect(text(section.querySelector('#ev-outside'))).toContain('izvan Zagreba');
+  });
+});
+
+// U3, M8: the phone's culture list merges the City's programme (kultura-zg) and the libraries' (programi) with the culture
+// subset of dogadanja, and credits each of the three once.
+describe('kultura with the City\'s programme and the libraries\'', () => {
+  const zg = (id: string, title: string, at: string, over: Partial<ModuleSnapshot['items'][number]> = {}, data: Record<string, string | number | boolean> = {}) => ({
+    id: `kultura-zg:${id}`, module: 'kultura-zg', kind: 'event', tier: 'session', title, at, dateBasis: 'event', link: `https://kultura.zagreb.hr/dogadanja/${id}`,
+    geo: { type: 'Point', coordinates: [15.98, 45.81] },
+    data: { source: 'kultura-zagreb', category: 'izvedba', venue: 'Gavella', organiser: 'GDK Gavella', precision: 'time', district: 'donji-grad', ...data }, ...over,
+  }) as ModuleSnapshot['items'][number];
+  const kgz = (id: string, title: string, at: string, venue: string) => ({
+    id: `programi:kgz:${id}`, module: 'programi', kind: 'event', tier: 'session', title, at, dateBasis: 'event', link: `https://www.kgz.hr/hr/dogadjanja/x/${id}`,
+    data: { source: 'kgz', category: 'program', venue, precision: 'time' },
+  }) as ModuleSnapshot['items'][number];
+  const kulturaZg: ModuleSnapshot = {
+    ...base('kultura-zg', [
+      zg('a1', 'Hamlet', '2026-09-12T17:00:00Z'),
+      zg('a2', 'Fotografije grada', '2026-09-11T22:00:00Z', { until: '2026-09-12T21:59:00Z' }, { category: 'izlozba', precision: 'day', venue: 'Muzej grada' }),
+    ]),
+    tier: 'session', attribution: { text: 'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje', url: 'https://kultura.zagreb.hr/', licence: 'Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)' },
+  };
+  const programi: ModuleSnapshot = {
+    ...base('programi', [
+      kgz('74738', 'Egli Ilić: Mačji kodeks uspjeha', '2026-09-12T16:00:00Z', 'Knjižnica Ivana Gorana Kovačića'),
+      kgz('72700', 'Kreativna radionica za umirovljenike', '2026-09-12T09:30:00Z', 'Gradska knjižnica Ante Kovačića Zaprešić'),
+    ]),
+    tier: 'session', attribution: { text: 'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz', url: 'https://www.kgz.hr/hr/dogadjanja/10', licence: 'Licenca nije navedena' },
+  };
+  const both = { ...SNAPSHOTS, 'kultura-zg': kulturaZg, programi };
+
+  it('lists the events of all three modules, each with its venue and its own source name, and the Zaprešić branch apart', () => {
+    const section = renderLayer('kultura', ctx({ snapshots: both, view: { layer: 'kultura', selection: null, filters: { 'event-window': 'week' } } }));
+    const agenda = text(section.querySelector('#ev-agenda'));
+    const hamlet = [...section.querySelectorAll('[data-testid=event-row]')].map(text).find((row) => row.includes('Hamlet'))!;
+    expect(hamlet).toContain('Gavella');
+    expect(hamlet).toContain('Guru za kulturu');
+    expect(hamlet).toContain('19:00'); // 17:00Z on 12 September is 19:00 in Zagreb
+    const egli = [...section.querySelectorAll('[data-testid=event-row]')].map(text).find((row) => row.includes('Mačji kodeks'))!;
+    expect(egli).toContain('Knjižnica Ivana Gorana Kovačića');
+    expect(egli).toContain('Knjižnice grada Zagreba');
+    expect(egli).toContain('18:00');
+    // The exhibition of the City's programme is all day, like the exhibitions of the other sources.
+    expect([...section.querySelectorAll('[data-testid=event-row]')].map(text).find((row) => row.includes('Fotografije grada'))).toContain('cijeli dan');
+    // The Kulturpunkt concert of the base fixture is still there.
+    expect(agenda).toContain('Koncert u parku');
+    // A branch in Zaprešić is not a Zagreb event: folded away, like a venue in Split.
+    expect(agenda).not.toContain('Kreativna radionica');
+    expect(text(section.querySelector('#ev-outside'))).toContain('Kreativna radionica za umirovljenike');
+  });
+
+  it('credits each of the three modules once, with its own text, licence and link', () => {
+    const section = renderLayer('kultura', ctx({ snapshots: both }));
+    const foots = [...section.querySelectorAll('[data-testid=panel-attr]')].map(text);
+    expect(foots).toHaveLength(3);
+    expect(foots[0]).toContain('Izvor: dogadanja');
+    expect(foots[1]).toContain('Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje');
+    expect(foots[1]).toContain('Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)');
+    expect(foots[2]).toContain('Izvor: Knjižnice grada Zagreba; neslužbeni prikaz');
+    expect(foots[2]).toContain('Licenca nije navedena');
+    expect(section.querySelector('a.source-link[href="https://kultura.zagreb.hr/"]')).not.toBeNull();
+    expect(section.querySelector('a.source-link[href="https://www.kgz.hr/hr/dogadjanja/10"]')).not.toBeNull();
+    // Without the modules the page is what it was: one credit.
+    expect(renderLayer('kultura', ctx()).querySelectorAll('[data-testid=panel-attr]')).toHaveLength(1);
+  });
+
+  it('opens the detail of an event of either module, with the name of its source and the link to the original', () => {
+    const open = (module: 'kultura-zg' | 'programi', id: string) => renderLayer('kultura', ctx({
+      snapshots: both, view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey(module, id), module }, filters: {} },
+    }));
+    const hamlet = open('kultura-zg', 'kultura-zg:a1').querySelector('[data-testid=event-detail]')!;
+    expect(text(hamlet)).toContain('Hamlet');
+    expect(text(hamlet)).toContain('Guru za kulturu, Grad Zagreb (kultura.zagreb.hr)');
+    expect(text(hamlet)).toContain('GDK Gavella');
+    expect(hamlet.querySelector('a[href="https://kultura.zagreb.hr/dogadanja/a1"]')).not.toBeNull();
+    const egli = open('programi', 'programi:kgz:74738').querySelector('[data-testid=event-detail]')!;
+    expect(text(egli)).toContain('Knjižnice grada Zagreba (neslužbeni prikaz)');
+    expect(egli.querySelector('a[href="https://www.kgz.hr/hr/dogadjanja/x/74738"]')).not.toBeNull();
+    // A selection of a module the page does not read opens nothing.
+    expect(renderLayer('kultura', ctx({ snapshots: both, view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('hak', 'x'), module: 'hak' }, filters: {} } })).querySelector('[data-testid=event-detail]')).toBeNull();
+  });
+
+  it('names a module that is down beside the sources it lists, so a short list is not a quiet week', () => {
+    const section = renderLayer('kultura', ctx({ snapshots: { ...both, programi: { ...programi, status: 'down', items: [] } } }));
+    const notes = [...section.querySelectorAll(':scope > .sec-note')].map(text);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('Knjižnice grada Zagreba');
+    expect(renderLayer('kultura', ctx({ snapshots: both })).querySelectorAll(':scope > .sec-note')).toHaveLength(0);
+  });
+
+  it('counts the week the way the page lists it, for the directory row', () => {
+    const window = Date.parse('2026-09-11T12:32:00Z');
+    const alone = eventsCount(SNAPSHOTS.dogadanja, null, window);
+    const merged = eventsCount(SNAPSHOTS.dogadanja, null, window, [kulturaZg, programi]);
+    // Hamlet, the exhibition day and the Egli Ilić event join; the Zaprešić branch does not.
+    expect(merged.count).toBe(alone.count + 3);
+    expect(eventsCount(SNAPSHOTS.dogadanja, null, window, [undefined, undefined])).toEqual(alone);
   });
 });
 
