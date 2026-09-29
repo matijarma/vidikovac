@@ -5,6 +5,7 @@ import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { TeaserResponse } from '../api';
 import type { I18n } from '../i18n/i18n';
 import { vehicleCount } from '../layers/shared';
+import { aboutExpected, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 
 export type Freshness = 'loading' | 'live' | 'stale' | 'down';
 export interface StripLine {
@@ -68,7 +69,11 @@ export function liveStripTexts(modules: readonly ModuleSnapshot[], now: number, 
   if (zet && sourceFreshness(zet) !== 'down') {
     const count = vehicleCount(zet);
     if (count !== null && Number.isFinite(count)) {
-      transit = { text: i18n.t('landing.live.vehicles', { count }), detail: sourceDetail(zet, i18n), freshness: sourceFreshness(zet), severity: 'normal' };
+      // Upgrade U2: while ZET's fleet deviates, the detail beside the count is the timetable's, never a cause.
+      const kind = serviceStateOf(zet, now).kind;
+      const numbers = kind === 'reduced' || kind === 'silent' ? serviceNumbers(zet) : null;
+      const detail = numbers ? i18n.t('landing.live.usually', { count: aboutExpected(numbers.expected) }) : sourceDetail(zet, i18n);
+      transit = { text: i18n.t('landing.live.vehicles', { count }), detail, freshness: sourceFreshness(zet), severity: 'normal' };
     }
   }
   let safety = { ...unavailable(), text: i18n.t('landing.live.unconfirmed') };

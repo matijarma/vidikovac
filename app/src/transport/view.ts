@@ -402,6 +402,9 @@ export interface StopDetailData {
    *  the schedule and never a live estimate. Absent, the later trips are shown
    *  as their clock. */
   timetable?: readonly ArrivalRow[];
+  /** While ZET's fleet deviates (upgrade U2): the note under the rows in place of arrivals.note, with the two
+   *  numbers and that the times are the timetable's (arrivals.noteReduced, filled by transport/workspace.ts). */
+  serviceNote?: string;
 }
 
 /** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
@@ -492,7 +495,7 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
     ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(timetableRow).join('')}</ul>`
     : '';
   const body = lead.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(d.serviceNote ?? i18n.t('arrivals.note'))}</p>`
     : `<p class="t-empty">${esc(empty)}</p>`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
