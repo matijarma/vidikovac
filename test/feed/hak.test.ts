@@ -41,9 +41,9 @@ describe('hak on the saved page', () => {
     const { items, sourceUpdatedAt, coverage } = parseHak(PAGE, NOW);
     expect(items).toHaveLength(3);
     expect(items.map((item) => [item.title, item.data?.state, item.until])).toEqual([
-      ['Čvor Zagreb zapad', 'zatvoreno za promet', '2026-10-03T22:00:00.000Z'],
+      ['Čvor Zagreb zapad', 'privremena regulacija', '2026-10-03T22:00:00.000Z'],
       ['Čvor Lučko', 'privremena regulacija', '2026-09-30T22:00:00.000Z'],
-      ['Čvor Zagreb istok', 'zastoj', '2026-10-01T22:00:00.000Z'],
+      ['Čvor Zagreb istok', 'privremena regulacija', '2026-10-01T22:00:00.000Z'],
     ]);
     for (const item of [...items, ...parseHak(PAGE, TONIGHT).items]) {
       expect(item.kind).toBe('road');
@@ -143,6 +143,29 @@ describe('hak on the saved page', () => {
     ]);
   });
 
+  it('reads the state of every Zagreb line as the road is now, not as it may become', () => {
+    const zagreb = sectionsOf(PAGE).flatMap((s) => linesOf(s.html).filter((line) => ZAGREB_LINE.test(line)));
+    expect(zagreb.map((line) => [line.slice(0, 24), lineState(line)])).toEqual([
+      ['zagrebačkoj obilaznici (', 'radovi'],
+      ['autocesti A4 Goričan-Zag', 'zastoj'],
+      ['od 00:00 do 05:00 sati b', 'zatvoreno za promet'],
+      ['30. rujna od 00:00 do 05', 'zatvoreno za promet'],
+      // "zatvoren je kolnik u smjeru Lipovca - vozi se dvosmjerno ... po dva sužena prometna traka": open, on fewer lanes.
+      ['do 3. listopada zbog rad', 'privremena regulacija'],
+      ['do 30.rujna u noćnim ter', 'privremena regulacija'],
+      ['do 31. prosinca zbog pro', 'privremena regulacija'],
+      // "vozi se jednim trakom ... očekuje se stvaranje kolona vozila": one lane now, a queue only expected.
+      ['do 01. listopada između ', 'privremena regulacija'],
+      ['Privremeno zatvaranje pr', 'radovi'],
+      ['A1 Zagreb (čvorište Lučk', 'radovi'],
+      ['A2 G.P. Macelj (granica ', 'radovi'],
+      ['A4 G.P. Goričan (granica', 'radovi'],
+      ['A11 Zagreb (čvorište Jak', 'radovi'],
+      // The forecast: "Gužve i zastoji očekuju se".
+      ['Gužve i zastoji očekuju ', 'radovi'],
+    ]);
+  });
+
   it('reads the same page whatever its line endings', () => {
     expect(parseHak(PAGE.replace(/\r\n/g, '\n'), NOW)).toEqual(parseHak(PAGE, NOW));
   });
@@ -224,9 +247,19 @@ describe('the state of a line', () => {
   it.each([
     ['bit će zatvorena autocesta A1', 'zatvoreno za promet'],
     ['zatvoren je kolnik, moguće je stvaranje zastoja', 'zatvoreno za promet'],
+    ['zatvorena je cesta, očekuju se gužve', 'zatvoreno za promet'],
+    ['zatvorena je Ulica grada Vukovara, promet je preusmjeren', 'zatvoreno za promet'],
+    ['zatvoren je kolnik u smjeru Lipovca - vozi se dvosmjerno, kolnikom u smjeru Bregane', 'privremena regulacija'],
+    ['zatvoren je kolnik, po dva sužena prometna traka u oba smjera', 'privremena regulacija'],
     ['u kolonama uz kraće zastoje', 'zastoj'],
-    ['očekuju se gužve', 'zastoj'],
+    ['kolona je oko 1 km', 'zastoj'],
+    ['očekuju se gužve', 'radovi'],
+    ['Gužve i zastoji očekuju se na gradskim prometnicama', 'radovi'],
+    ['zbog opterećenja autoceste očekuje se stvaranje kolona vozila u zonama radova', 'radovi'],
+    ['radovi na kolniku, moguće je stvaranje zastoja i kolona', 'radovi'],
     ['vozi se jednim trakom', 'privremena regulacija'],
+    ['prometuje se jednim prometnim trakom', 'privremena regulacija'],
+    ['u smjeru Lipovca po jednom traku', 'privremena regulacija'],
     ['promet je preusmjeren', 'privremena regulacija'],
     ['po dva sužena prometna traka', 'privremena regulacija'],
     ['zbog privremene regulacije prometa', 'privremena regulacija'],

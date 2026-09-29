@@ -155,11 +155,29 @@ export function lineEnd(line: string, section: Pick<Section, 'at' | 'day'>): str
   return lineWindow(line, section)?.end;
 }
 
-/** The state the line describes, by the first of these that its words name. */
+/**
+ * The words of a traffic regulation on the lanes: one lane, narrowed lanes, two-way traffic on one carriageway. A line that
+ * names one is a regulation even where it says a carriageway is closed ("zatvoren je kolnik u smjeru Lipovca - vozi se
+ * dvosmjerno ... po dva sužena prometna traka"): the road is open, on fewer lanes.
+ */
+const LANE_REGULATION = /jednim (?:prometnim )?trakom|jednom (?:prometnom )?traku|dvosmjern|sužen|regulacij/i;
+/**
+ * A clause that expects or allows a state says nothing of the road now: "očekuje se stvaranje kolona vozila", "Gužve i
+ * zastoji očekuju se", "moguće je stvaranje zastoja". It is cut from the line before the state is read, up to the next
+ * comma, full stop, colon or semicolon (and back to the one before, for "... očekuju se").
+ */
+const EXPECTED = /[^.;:,]*\b(?:očekuj\w*\s+se|se\s+očekuj\w*)\b[^.;:,]*|\bmoguć\w*\s+(?:je|su)\b[^.;:,]*/gi;
+
+/**
+ * The state the line describes now: a regulation on the lanes first, then a closure, then a queue that is there (not
+ * one expected), then a diversion, else works.
+ */
 export function lineState(line: string): 'zatvoreno za promet' | 'zastoj' | 'privremena regulacija' | 'radovi' {
-  if (/zatvor/i.test(line)) return 'zatvoreno za promet';
-  if (/kolon|zastoj|gužv/i.test(line)) return 'zastoj';
-  if (/jednim trakom|preusmjer|regulacij|sužen/i.test(line)) return 'privremena regulacija';
+  const now = line.replace(EXPECTED, ' ');
+  if (LANE_REGULATION.test(now)) return 'privremena regulacija';
+  if (/zatvor/i.test(now)) return 'zatvoreno za promet';
+  if (/kolon|zastoj|gužv/i.test(now)) return 'zastoj';
+  if (/preusmjer/i.test(now)) return 'privremena regulacija';
   return 'radovi';
 }
 
