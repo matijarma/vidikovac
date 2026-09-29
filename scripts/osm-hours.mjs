@@ -35,7 +35,7 @@ export const CACHE_PBF = '.cache/osm/croatia-latest.osm.pbf';
 export const OUTPUT_PATH = 'app/public/data/osm-hours.json';
 /** The Zagreb box [west, south, east, north]: the city and the first ring of its suburbs. */
 export const BBOX = [15.87, 45.72, 16.16, 45.9];
-/** Budgets of docs/upgrade-2026-10-plan/U3.md: 900 KB raw, 300 KB gzip. */
+/** Budgets of docs/history/upgrade-2026-10-plan/U3.md: 900 KB raw, 300 KB gzip. */
 export const MAX_BYTES = 921_600;
 export const MAX_GZIP_BYTES = 307_200;
 /** The floor of hour records a real extract must reach (U3 §0.5). */

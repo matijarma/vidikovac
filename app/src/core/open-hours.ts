@@ -1,4 +1,4 @@
-// The OpenStreetMap opening hours behind the "U blizini" open row (docs/upgrade-2026-10-plan/U3.md S1, S6): the
+// The OpenStreetMap opening hours behind the "U blizini" open row (docs/history/upgrade-2026-10-plan/U3.md S1, S6): the
 // derived database app/public/data/osm-hours.json (ODbL 1.0, cut by scripts/osm-hours.mjs), fetched once a session
 // like the stop's last-run file (core/lastrun.ts) and decoded by shared/city/osm-hours.ts. A down answer (refused,
 // unreachable, not the file) reads as null and is asked for again an hour later, never on every paint. The same

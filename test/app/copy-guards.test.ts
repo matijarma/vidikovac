@@ -486,7 +486,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     notice: 'ZET javlja: {notice}.',
     service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
     serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
-    // The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4, brief §7).
+    // The facts-breadth families (docs/history/upgrade-2026-10-plan/U3.md S4, brief §7).
     trainAt: '{station}: vlak, smjer {to}, polazi u {time}.',
     rainAt: 'Oko {time} {condition}; vjerojatnost {p}.',
     forecastTomorrow: 'Sutra {condition}, od {min} do {max} °C.',

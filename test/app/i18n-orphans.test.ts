@@ -141,7 +141,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // status line, the lines board's and the landing's timetable count, the phone's reduced note: 1,063 hr, 1,034 en.
     // U3-modules +2 events.sources.kultura-zagreb and events.sources.kgz, the names of the two culture sources of
     // October 2026 (layers/kultura.ts reads events.sources.<source>): 1,065 hr, 1,036 en.
-    // U3-surfaces (docs/upgrade-2026-10-plan/U3.md S2 to S4) +36: 24 kiosk.nearby.* row words (rainChance, rain.*,
+    // U3-surfaces (docs/history/upgrade-2026-10-plan/U3.md S2 to S4) +36: 24 kiosk.nearby.* row words (rainChance, rain.*,
     // cut.*, openKind.*, road.*), 9 kiosk.sentence.* families and the 2 kiosk.sentence.utility.* words,
     // arrivals.train: 1,101 hr, 1,072 en.
     // A new leaf changes this number on purpose, with its reader.

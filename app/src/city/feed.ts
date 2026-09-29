@@ -126,7 +126,7 @@ function heldBoards(ctx: LayerContext, stop: ScreenStop | null): DepartureBoard[
   return platformIds(stop, ctx.stops).map((id) => ctx.boards!.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
 }
 
-/** How many HŽ stations inside the circle the list reads (docs/upgrade-2026-10-plan/U3.md S3). */
+/** How many HŽ stations inside the circle the list reads (docs/history/upgrade-2026-10-plan/U3.md S3). */
 export const RAIL_STATIONS = 2;
 
 /** The HŽ stations (the catalogue's rail places) inside the circle, the nearest first, RAIL_STATIONS at most: the wall

@@ -1343,7 +1343,7 @@ describe('the operator\'s voice: cancelled trips and the ZET notice row (upgrade
   });
 });
 
-// --- the facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2, S3) ------------------------------------------------
+// --- the facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2, S3) ------------------------------------------------
 // The five modules are read by id (§0.2(d)); their items follow the §0.2(a) wire contract.
 const u3 = (base: FeedSnapshots, extra: Record<string, ModuleSnapshot>): FeedSnapshots => ({ ...base, ...extra } as FeedSnapshots);
 const u3snap = (module: string, items: FeedItem[], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot => snap(module as ModuleId, items, status);

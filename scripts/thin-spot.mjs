@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Thin-spot KPI of the October 2026 round (docs/upgrade-2026-10-plan/U3.md O4), ported from the
+// Thin-spot KPI of the October 2026 round (docs/history/upgrade-2026-10-plan/U3.md O4), ported from the
 // preparation phase's prototype (review.local/upgrade/kpi/thin-spot.mjs) with its predicates
 // unchanged, plus what the product does from DU3 on: events without a point placed at their
 // venue, and the "open now" row from OpenStreetMap opening hours.

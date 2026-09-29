@@ -318,7 +318,7 @@ describe('every wall text render boundary', () => {
   });
 });
 
-// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2): every sub they print is an answer, never a caveat,
+// The facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2): every sub they print is an answer, never a caveat,
 // source or freshness line (e2e/inventory.ts DISCL, the class the harness counts against the wall).
 describe('the facts-breadth rows print answers, not disclaimers', () => {
   it('every new sub, badge and title word, filled as the rows fill it, in both languages', () => {

@@ -151,7 +151,7 @@ export function isTimeless(row: NearbyRow): boolean {
   return row.always || row.atMs === null || !Number.isFinite(row.atMs);
 }
 
-/** The facts-breadth kinds (docs/upgrade-2026-10-plan/U3.md S2, S3): the first to give way when the list does not fit,
+/** The facts-breadth kinds (docs/history/upgrade-2026-10-plan/U3.md S2, S3): the first to give way when the list does not fit,
  *  right after a later day's rows, and before the second and third tram (§0.5). */
 export const BREADTH_KINDS: readonly NearbyKind[] = ['rail', 'rain', 'cut', 'road', 'open'];
 

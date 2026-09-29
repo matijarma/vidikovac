@@ -93,7 +93,7 @@ describe('module registry', () => {
     for (const id of MODULE_IDS) expect(MODULES[id].attribution).toEqual(ATTRIBUTION[id]);
   });
 
-  // U3: the strings of the brief's table (§7 and the Data table of docs/upgrade-2026-10-plan/U3.md), character for character.
+  // U3: the strings of the brief's table (§7 and the Data table of docs/history/upgrade-2026-10-plan/U3.md), character for character.
   it('carries the attribution, address and licence of the five October modules verbatim', () => {
     expect(ATTRIBUTION['kultura-zg']).toEqual({
       text: 'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje',

@@ -116,7 +116,7 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   // The service families (upgrade U2): the vehicles ZET has moving, with their noun, and the timetable's count after "oko".
   vehicles: { max: 16, pattern: /^(?:0|[1-9]\d{0,3}) (?:vozilo|vozila|vehicle|vehicles)$/u },
   about: { max: 4, pattern: /^[1-9]\d{0,3}$/u },
-  // The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4): a chance of rain, what a cut takes away, a road state.
+  // The facts-breadth families (docs/history/upgrade-2026-10-plan/U3.md S4): a chance of rain, what a cut takes away, a road state.
   percent: { max: 5, pattern: /^(?:[1-9]\d?|100) %$/u },
   utility: { max: 6, pattern: /^(?:struje|vode|power|water)$/u },
   roadState: { max: 32, pattern: /^(?:radovi|privremena regulacija|zatvoreno za promet|zastoj|roadworks|temporary traffic regulation|closed to traffic|congestion)$/u },

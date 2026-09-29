@@ -1,4 +1,4 @@
-// Three cheap joins across sources (docs/upgrade-2026-10-plan/U3.md S5), pure: no DOM, no fetch, no clock of its
+// Three cheap joins across sources (docs/history/upgrade-2026-10-plan/U3.md S5), pure: no DOM, no fetch, no clock of its
 // own. The header sentence (city/sentence.ts sentenceFacts) says what they find in its own families.
 //   J1 is the rain row's rainAt fact (city/nearby.ts rainRows): the nearest DHMZ station's next wet step.
 //   J2 eventLastTram: the soonest timed event today inside the circle that has an end, and the place's last tram

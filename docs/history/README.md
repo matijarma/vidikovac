@@ -1,6 +1,6 @@
 # Development history
 
-Executed plans and dated implementation records, kept as the project's history. Each describes its own day and is not a current specification: the product today is described in [PRODUCT.md](../../PRODUCT.md), [DESIGN.md](../../DESIGN.md) and the documents indexed from the [README](../../README.md). The [companion brief](../companion-2026-09-22.md) stays in `docs/` as the record of the latest round. Some records are in Croatian.
+Executed plans and dated implementation records, kept as the project's history. Each describes its own day and is not a current specification: the product today is described in [PRODUCT.md](../../PRODUCT.md), [DESIGN.md](../../DESIGN.md) and the documents indexed from the [README](../../README.md). The [companion brief](../companion-2026-09-22.md) and the [October upgrade brief](../upgrade-2026-10.md) stay in `docs/` as the records of the last two rounds. Some records are in Croatian.
 
 | Record | What it was |
 |---|---|
@@ -21,5 +21,6 @@ Executed plans and dated implementation records, kept as the project's history. 
 | [kaj-review-checks.md](kaj-review-checks.md) | Acceptance checks for integration reviews, as of 19 September 2026. |
 | [readable-city-2026-09-20.md](readable-city-2026-09-20.md) | The readable-city refinement approved on 20 September 2026 and its verification of 21 September. |
 | [companion-2026-09-plan/](companion-2026-09-plan/README.md) | The eight execution files of the companion round (WP0 to WP7), 22 September 2026: planner text, verifier verdict and the binding reconciliation of each package, executed in four deploys. |
+| [upgrade-2026-10-plan/](upgrade-2026-10-plan/README.md) | The five execution files of the October upgrade pass (U0 to U4), 29 September 2026: binding reconciliation, steps, acceptance and briefs, executed in three deploys. |
 
 Earlier material, the design specification and plans of 11 and 12 September 2026, is under [docs/superpowers/](../superpowers/).

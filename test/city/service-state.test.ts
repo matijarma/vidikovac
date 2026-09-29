@@ -1,4 +1,4 @@
-// U0 step 5 (docs/upgrade-2026-10-plan/U0.md): the service-state seam. U0 fills loading, down and unconfirmed and
+// U0 step 5 (docs/history/upgrade-2026-10-plan/U0.md): the service-state seam. U0 fills loading, down and unconfirmed and
 // says unknown for every other snapshot; unconfirmed is entered past three minutes of source age and held a minute.
 import { afterEach, describe, expect, it } from 'vitest';
 import {

@@ -327,7 +327,7 @@ export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot
   return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
 }
 /** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists. The five of the
- *  facts-breadth package (docs/upgrade-2026-10-plan/U3.md §0.2(a)) are named by id: the schema that types them is U3-modules'. */
+ *  facts-breadth package (docs/history/upgrade-2026-10-plan/U3.md §0.2(a)) are named by id: the schema that types them is U3-modules'. */
 export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja', 'glasnik',
   'kultura-zg' as ModuleId, 'programi' as ModuleId, 'dhmz-hourly' as ModuleId, 'hak' as ModuleId, 'prekidi' as ModuleId];
 

@@ -1,5 +1,5 @@
 // scripts/osm-hours.mjs and scripts/opening-hours.mjs: the OpenStreetMap opening-hours
-// extract (docs/upgrade-2026-10-plan/U3.md O2). The Overpass fixture is built through
+// extract (docs/history/upgrade-2026-10-plan/U3.md O2). The Overpass fixture is built through
 // --input (the Geofabrik PBF is 200 MB and stays in .cache/osm/); the parser is pinned on
 // the forms Zagreb's data carries; the committed app/public/data/osm-hours.json is held to
 // its budgets and its floor.

@@ -1,4 +1,4 @@
-// shared/city/osm-hours.ts: which places near a point are open now (docs/upgrade-2026-10-plan/U3.md O3).
+// shared/city/osm-hours.ts: which places near a point are open now (docs/history/upgrade-2026-10-plan/U3.md O3).
 // A small file written here pins the rules (past midnight, 24/7, a closed day, the 30-minute margin, a
 // holiday, a change of clock); the committed file is decoded once to prove the two formats agree.
 import { describe, expect, it } from 'vitest';

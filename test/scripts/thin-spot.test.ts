@@ -1,4 +1,4 @@
-// scripts/thin-spot.mjs: the KPI port (docs/upgrade-2026-10-plan/U3.md O4). Four sample folders of a
+// scripts/thin-spot.mjs: the KPI port (docs/history/upgrade-2026-10-plan/U3.md O4). Four sample folders of a
 // Tuesday morning carry an event that names its venue only in words, a power cut, a rain step and a
 // rolled closure; the first folder also carries the run's osm-hours.json with one pharmacy and the
 // venue. The event is placed at the venue, the pharmacy is the open row, the rolled closure is never a

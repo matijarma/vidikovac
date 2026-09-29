@@ -1,4 +1,4 @@
-// Frozen seam of the U3 package (docs/upgrade-2026-10-plan/U3.md §0.2): created identically by two briefs.
+// Frozen seam of the U3 package (docs/history/upgrade-2026-10-plan/U3.md §0.2): created identically by two briefs.
 import { normalName } from './geo';
 
 /** Croatian case endings, longest first. */

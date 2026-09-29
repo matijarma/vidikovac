@@ -358,7 +358,7 @@ describe('third-party text on Sada (WP4 review)', () => {
   });
 });
 
-describe('the trains on Sada (docs/upgrade-2026-10-plan/U3.md S3)', () => {
+describe('the trains on Sada (docs/history/upgrade-2026-10-plan/U3.md S3)', () => {
   it('lists the next train from the HŽ station inside the circle as a timetable row, never live, and asks for its board', () => {
     const station: Place = { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' };
     const hz: DepartureBoard = {

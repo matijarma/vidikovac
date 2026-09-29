@@ -1,5 +1,5 @@
 // shared/city/venues.ts: Kulturpunkt events placed at their venue through the City's culture register,
-// the City's culture calendar and OpenStreetMap (docs/upgrade-2026-10-plan/U3.md O3). The 40 announcements
+// the City's culture calendar and OpenStreetMap (docs/history/upgrade-2026-10-plan/U3.md O3). The 40 announcements
 // of test/fixtures/dogadanja/kulturpunkt.json go through the module's own hint extractor; 22 name a Zagreb
 // venue, 12 a venue in another city, 6 none (review.local/upgrade/plan/U3/notes.md). At least 10 of the 22
 // must be placed, each within 300 m of its venue; none of the other 18 may be.

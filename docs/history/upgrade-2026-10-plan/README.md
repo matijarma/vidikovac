@@ -1,6 +1,6 @@
 # October 2026 upgrade pass: execution files
 
-*A working plan. Once the pass is executed, this folder moves to `docs/history/upgrade-2026-10-plan/` with a row in the history index; the brief stays at `docs/upgrade-2026-10.md` as the record of the round.*
+*Executed. Moved here from `docs/upgrade-2026-10-plan/` by U4 as the record of the round; the brief stays at `docs/upgrade-2026-10.md`.*
 
 These five files are the execution plan referenced by `docs/upgrade-2026-10.md` §4 (the packages) and §5 (lanes, seams, rules, the execution model). The brief is the master; each file here is one package with its own agent briefs, and the whole pass runs as nine briefs in parallel from one base commit, one integration, one gate, three pushes.
 

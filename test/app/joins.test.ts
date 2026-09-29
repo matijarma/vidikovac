@@ -1,4 +1,4 @@
-// The three joins of the facts-breadth package (docs/upgrade-2026-10-plan/U3.md S5, app/src/city/joins.ts): J2 the
+// The three joins of the facts-breadth package (docs/history/upgrade-2026-10-plan/U3.md S5, app/src/city/joins.ts): J2 the
 // last tram after an event, J3 the nearest empty BAJS station beside one with bikes, and both as the header says them
 // (city/sentence.ts sentenceFacts). J1 is the rain row's own fact (test/app/kiosk-sentence.test.ts).
 import { describe, expect, it } from 'vitest';

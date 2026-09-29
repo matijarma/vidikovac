@@ -18,7 +18,7 @@
 //     tomorrow's openings from the catalogue's hours when the evening empties;
 //   - last, one timeless row: the place's naming story or a protected building
 //     nearby, alternating every 20 minutes, and the 24/7 pharmacy at night.
-// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2, S3) join the timed
+// The facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2, S3) join the timed
 // rows, one of each at most: the next HŽ train from a station inside the circle
 // (timetable only, never live; before the departures when the response policy
 // asks), the nearest DHMZ station's next rain step, a power or water cut, a road

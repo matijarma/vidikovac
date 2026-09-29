@@ -1828,7 +1828,7 @@ describe('lifecycle', () => {
 });
 
 
-// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2): a train, rain, a cut, a road state, a place open now.
+// The facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2): a train, rain, a cut, a road state, a place open now.
 describe('the facts-breadth rows on the wall (U3 S2)', () => {
   // Route id "6" on purpose: an HŽ id that reads as a ZET tram line in ZET's table still gets no tram badge.
   const rail = row({ id: 'rail:2201', kind: 'rail', atMs: NOW + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', source: 'hz',

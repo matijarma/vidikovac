@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// U0 step 7 (docs/upgrade-2026-10-plan/U0.md, acceptance U0-6): the wall fitter on the one-departure morning. On
+// U0 step 7 (docs/history/upgrade-2026-10-plan/U0.md, acceptance U0-6): the wall fitter on the one-departure morning. On
 // Tuesday 29 September from about 06:00 to 12:00 the wall at 106_1 showed one departure: a 111-character event title
 // with no short form wrapped to nine lines, and the fitter dropped the second and third departures and both closures
 // to keep it. This replays the kiosk loop (kiosk.ts paintWall: selectNearby with the held and departed departures,

@@ -1018,7 +1018,7 @@ describe('fetchSentences validates the response', () => {
 describe('W-C2 fail-closed family and slot grammar', () => {
   it('pins all 33 owner-reviewed families in both languages, with always carrying register text', () => {
     // 22 of the companion round, U1's notice, U2's two service families and the nine facts-breadth families
-    // (docs/upgrade-2026-10-plan/U3.md S4).
+    // (docs/history/upgrade-2026-10-plan/U3.md S4).
     expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(33);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
@@ -1326,7 +1326,7 @@ describe('the fact list at night: every promise and the pharmacy reach the heade
   }, 30_000); // 720 reads of the whole selection and template layer: 3 s alone, 8 s under a full gate.
 });
 
-// The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4): the rows' typed facts, never their words read back.
+// The facts-breadth families (docs/history/upgrade-2026-10-plan/U3.md S4): the rows' typed facts, never their words read back.
 describe('the facts-breadth facts', () => {
   const at = (iso: string): number => Date.parse(iso);
   const EVENING = at('2026-09-22T19:30:00+02:00');

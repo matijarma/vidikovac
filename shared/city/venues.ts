@@ -52,7 +52,7 @@ const FUNCTION_WORDS: ReadonlySet<string> = new Set(['za', 'i', 'u', 'na', 'od',
 /** A fleeting a: "centar", "centra", "centru" (stems centar, centr) and "teatar", "teatru" become one stem. */
 const fold = (stem: string): string => (stem.length >= 5 ? stem.replace(/([^aeiou])a([^aeiou])$/, '$1$2') : stem);
 /** Words that name a kind of place or an area, not a place: a name made only of these matches everywhere. The
- *  list of docs/upgrade-2026-10-plan/U3.md O3, plus the city's own name, the words of its seventeen districts
+ *  list of docs/history/upgrade-2026-10-plan/U3.md O3, plus the city's own name, the words of its seventeen districts
  *  (a café called "Maksimir" is not the park) and the calendar's placeholders ("Sjedište Organizacije", "Ulaz za
  *  gledatelje") that name no particular venue. */
 const GENERIC: ReadonlySet<string> = new Set([

@@ -1,6 +1,6 @@
 // The fleet's states of the service-state helper (upgrade U2, S2): the twin's
 // judgement on the wire (sources.zet.service) read into a kind, the voice
-// table of docs/upgrade-2026-10-plan/U2.md §0.1, the two numbers the surfaces
+// table of docs/history/upgrade-2026-10-plan/U2.md §0.1, the two numbers the surfaces
 // say, and the rail promotion. U0's own states are held by
 // test/city/service-state.test.ts.
 import { afterEach, describe, expect, it } from 'vitest';

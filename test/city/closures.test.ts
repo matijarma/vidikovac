@@ -1,4 +1,4 @@
-// U0 step 6 (docs/upgrade-2026-10-plan/U0.md, acceptance U0-4): rolling closure ends, on the two copies of the City's
+// U0 step 6 (docs/history/upgrade-2026-10-plan/U0.md, acceptance U0-4): rolling closure ends, on the two copies of the City's
 // closures dataset a night apart (test/fixtures/prometnice-rolling/README.md), each read at its own fetch time.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
