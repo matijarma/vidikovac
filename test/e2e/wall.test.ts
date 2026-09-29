@@ -273,13 +273,16 @@ describe('one reading of the wall', () => {
     expect(rotationFailures(summariseRotation([fine, fine])).some((f) => /fit keeps/.test(f))).toBe(false);
   });
 
-  it('the header sentences: a tram or bus departure says "polazi", a train says "vlak"', () => {
+  it('the header sentences: a tram or bus departure says "polazi", only the train family is exempt', () => {
     expect(DEPARTURE_SENTENCE_RE.test('Tramvaj 12, smjer Dubrava, polazi u 07:53.')).toBe(true);
     expect(DEPARTURE_SENTENCE_RE.test('Zadnji tramvaj 12 polazi 23:40.')).toBe(true);
     expect(DEPARTURE_SENTENCE_RE.test('ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.')).toBe(false);
     expect(DEPARTURE_SENTENCE_RE.test('ZET: u pokretu 2 vozila, po voznom redu oko 460.')).toBe(false);
     expect(RAIL_SENTENCE_RE.test('Glavni kolodvor: vlak, smjer Savski Marof, polazi u 07:53.')).toBe(true);
+    expect(RAIL_SENTENCE_RE.test('Glavni kolodvor: train towards Savski Marof leaves at 07:53.')).toBe(true);
     expect(RAIL_SENTENCE_RE.test('Tramvaj 12, smjer Dubrava, polazi u 07:53.')).toBe(false);
+    expect(RAIL_SENTENCE_RE.test('Nakon „Vlak” zadnji tramvaj 6 polazi u 23:52.')).toBe(false);
+    expect(RAIL_SENTENCE_RE.test('Tramvaj 12 polazi u 07:53.; vlak stiže kasnije.')).toBe(false);
   });
 
   it('a good reading has no failures', () => {

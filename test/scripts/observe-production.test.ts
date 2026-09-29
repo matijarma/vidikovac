@@ -1006,6 +1006,17 @@ describe('a run over a fake browser', () => {
     expect(read(unjudged.out, 'report.md')).toMatch(/\| silent-departures \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
   });
 
+  it('does not exempt a last-tram sentence for an event named Vlak while the fleet is silent', async () => {
+    const sentence = 'Nakon „Vlak” zadnji tramvaj 6 polazi u 23:52.';
+    const result = await observe([], {
+      reading: (n, at, code) => ({ ...wallReading(n, at, code), sentence, sentenceChars: sentence.length }),
+      teaserPins: 2,
+      teaserService: 'silent',
+    });
+    expect(result.lines.join('\n')).toContain('FAIL silent-departures');
+    expect(read(result.out, 'report.md')).toMatch(/\| silent-departures \| d2 \| kiosk \| .* \| ≤ 0 \| 5 \| \*\*fail\*\* \|/);
+  });
+
   it('a "+N" pill in one reading fails d1', async () => {
     const r = await observe(['--stage', 'd1'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), pills: n === 2 ? '6|2 +11' : '6|12' }) });
     expect(r.code).toBe(1);

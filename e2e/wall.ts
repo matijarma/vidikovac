@@ -99,8 +99,8 @@ export const DEPARTURES_FIT_RESERVED = 2;
 export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice'];
 /** A tram or bus family sentence says a departure ("polazi"): none may stand while ZET's fleet is judged silent (upgrade U2). */
 export const DEPARTURE_SENTENCE_RE = /\bpolazi\b/i;
-/** A rail sentence ("trainAt", the promoted alternative while silent) is the one departure a silent header may say. */
-export const RAIL_SENTENCE_RE = /\bvlak\b/i;
+/** Only the trainAt envelope is exempt: a quoted event title such as "Vlak" can still promise a last tram. */
+export const RAIL_SENTENCE_RE = /^.+: (?:vlak, smjer .+, polazi u|train towards .+ leaves at) \d{2}:\d{2}\.$/i;
 /** The QR SVG's minimum side in CSS px. */
 export const QR_MIN_PX = 240;
 /** Only the next solar event, never both (§12). */
