@@ -51,7 +51,10 @@ export const PUBLIC_SYSTEM_EVENTS = [
 ] as const;
 
 /** The source modules in the order the page lists them (worker/feed/schema.ts ModuleId). */
-export const SOURCE_ORDER = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'glasnik', 'ckan-geo', 'dogadanja'] as const;
+export const SOURCE_ORDER = [
+  'zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'glasnik', 'ckan-geo', 'dogadanja',
+  'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi',
+] as const;
 
 const TICK_DIMS = ['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable'] as const;
 const ORDER_DIMS = ['established', 'dropped', 'hold', 'push', 'concession', 'swap'] as const;

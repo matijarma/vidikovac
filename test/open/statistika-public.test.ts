@@ -6,7 +6,8 @@ import { FOLDED_KEY, PEOPLE_EVENTS, type PeopleEvent, type PublicStats } from '.
 import { statistikaWindow } from '../../shared/statistika';
 import type { MetricsDailyRow, MetricsTotalRow } from '../../worker/metrics-do';
 import { cityRows } from '../../worker/stats/export';
-import { LIVE_ROWS, buildPublicStats, dayList, foldPublic, shapeLive, unwrapEvaluation, type PublicStatsInput } from '../../worker/stats/public';
+import { LIVE_ROWS, SOURCE_ORDER, buildPublicStats, dayList, foldPublic, shapeLive, unwrapEvaluation, type PublicStatsInput } from '../../worker/stats/public';
+import { MODULE_IDS } from '../../worker/feed/registry';
 
 const row = (day: string, hour: number, event: string, dim1: string, dim2: string, count: number): MetricsDailyRow => ({ day, hour, event, dim1, dim2, count });
 const total = (event: string, dim1: string, dim2: string, count: number, day = ''): MetricsTotalRow => ({ day, event, dim1, dim2, count });
@@ -172,6 +173,14 @@ describe('the public report: system', () => {
     expect(stats.system.coldTicks).toBe(7);
     expect(stats.system.ticksAll).toEqual([0, 0, 0, 505, 0, 0, 0]);
     expect(stats.system.ticksGood).toEqual([0, 0, 0, 500, 0, 0, 0]);
+  });
+
+  it('lists the sources in the module order, the October modules after the rest, a module it does not know last', () => {
+    const october = [...SYSTEM, ...['prekidi', 'hak', 'hrt-news', 'dhmz-hourly', 'programi', 'kultura-zg', 'dogadanja'].map((m) => total('source_fetch', m, 'ok', 10))];
+    expect(buildPublicStats(input({ systemTotals: october })).system.sources.map((s) => s.module)).toEqual([
+      'zet-rt', 'dhmz-now', 'dogadanja', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi', 'hrt-news',
+    ]);
+    expect(SOURCE_ORDER).toEqual(MODULE_IDS);
   });
 
   it('drops the fetch history of a module that no longer exists when the route names the ones that do; without the list every row stays', () => {
