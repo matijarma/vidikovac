@@ -165,6 +165,13 @@ describe('public-screen design invariants', () => {
     expect(rule(".kiosk[data-size='wide']")).toContain('--k-sentence-size: calc(40px * var(--k-zoom))');
     expect(rule(".kiosk[data-size='compact']")).toContain('--k-sentence-size: calc(40px * var(--k-zoom))');
     expect(css).toContain(".kiosk .k-sentence[data-swap='1'] { animation: none; }");
+    // While ZET's state is at hand (kiosk.ts data-sentence-lines), its sentence may take two whole lines, the middle
+    // holds their height for the state's span, and the twin wraps alike (the silent night of 30 September 2026: one
+    // line at 1920 x 1080 beside Jelačić held 1061 px of the 1243 the fleet's sentence needs).
+    const twoLines = ".kiosk[data-phase='invitation'][data-sentence-lines='2']";
+    expect(rule(`${twoLines} .k-sentence-text`)).toContain('white-space: normal');
+    expect(rule(`${twoLines} .k-sentence-text`)).toContain('max-height: 2.5em');
+    expect(rule(`${twoLines} .k-head-mid`)).toContain('min-height: calc(2.5 * var(--k-sentence-size))');
     // The header's weather group is gone for good: the card owns the weather (T3).
     expect(css).not.toMatch(/\.k-weather(?![\w-])/);
     expect(css).not.toMatch(/\.k-sun(?![\w-])/);

@@ -413,13 +413,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (node.textContent !== value) node.textContent = value;
   }
   /** The probe is laid out even while the live sentence yields to a notice.
-   * Its kicker, gap, font and available width are the live sentence's exact twins. */
+   * Its kicker, gap, font, available width and lines (data-sentence-lines) are the live sentence's exact twins. */
   function sentenceOverflows(sentence: WrittenSentence): boolean {
     if (!typedSentenceFact({ id: 'render', kind: sentence.kicker, text: sentence.text, validUntil: sentence.validUntil }, locale.startsWith('en') ? 'en' : 'hr').ok) return true;
     setText(probeKicker, s.sentence.kicker[sentence.kicker]);
     setText(probeText, sentence.text);
-    return sentenceProbe.clientWidth > 0
-      && (probeText.scrollWidth > probeText.clientWidth + 1 || sentenceProbe.scrollWidth > sentenceProbe.clientWidth + 1);
+    if (!(sentenceProbe.clientWidth > 0)) return false;
+    if (probeText.scrollWidth > probeText.clientWidth + 1 || sentenceProbe.scrollWidth > sentenceProbe.clientWidth + 1) return true;
+    // Two lines while ZET's state is at hand: a third line overflows, not the glyphs' overhang below the last line box.
+    return element.dataset.sentenceLines === '2'
+      && probeText.scrollHeight > probeText.clientHeight + Number.parseFloat(getComputedStyle(probeText).lineHeight) / 2;
   }
   function paintSentence(): void {
     if (currentSentence && !typedSentenceFact({ id: 'render', kind: currentSentence.kicker, text: currentSentence.text, validUntil: currentSentence.validUntil }, locale.startsWith('en') ? 'en' : 'hr').ok) currentSentence = null;
@@ -522,6 +525,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       facts = [];
       paintSkippedText([]);
     }
+    // ZET's state (the fleet deviating, U2; no positions, U0) is said first, and its sentence is wider than one header
+    // line beside the place (1920 x 1080 at Jelačić, dark: 1243 px for 1061, so the probe refused it on every turn):
+    // while that fact is at hand the header holds two sentence lines (kiosk.css), for the state's whole span, so the
+    // stage moves once when the state begins and once when it ends, never with a turn of the sentence.
+    const lines = facts.some(fact => fact.id === 'service:zet' || fact.id === 'outage:zet') ? '2' : '1';
+    if (element.dataset.sentenceLines !== lines) element.dataset.sentenceLines = lines;
     // Old answers are never trusted against the facts they were requested with.
     modelSentences = readWrittenSentences(modelSentences, { facts, budget, now: at });
     // Decision 29 holds for the model too (review D2b finding 1): a new answer replaces the set only at

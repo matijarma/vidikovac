@@ -267,6 +267,12 @@ button.k-brand:focus-visible { outline: 3px solid var(--k-focus); outline-offset
 /* Centred, not hung from the top: under a session pill the middle is shorter than the twin's
    line, and a twin hung from the top would stick out below the header's box. */
 .k-sentence-probe { position: absolute; top: 50%; translate: 0 -50%; left: var(--k-gap); right: var(--k-gap); visibility: hidden; pointer-events: none; }
+/* While ZET's state is at hand (kiosk.ts data-sentence-lines: the fleet deviating or no positions), its sentence is
+   said first and is wider than one line beside the place (1920 x 1080 at Jelačić, dark: 1243 px for 1061). The
+   sentence may then take two whole lines: the middle holds their height for the state's whole span, so the stage
+   does not move with a turn, and the twin wraps the same way and refuses a third line (sentenceOverflows). */
+.kiosk[data-phase='invitation'][data-sentence-lines='2'] .k-head-mid { align-items: center; min-height: calc(2.5 * var(--k-sentence-size)); }
+.kiosk[data-phase='invitation'][data-sentence-lines='2'] .k-sentence-text { white-space: normal; max-height: 2.5em; }
 .k-sentence[data-kicker='kultura'] .k-sentence-kicker { color: var(--k-violet); }
 .k-sentence[data-kicker='vrijeme'] .k-sentence-kicker,
 .k-sentence[data-kicker='radovi'] .k-sentence-kicker { color: var(--k-amber); }

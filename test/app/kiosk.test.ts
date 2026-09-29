@@ -3338,7 +3338,80 @@ describe('arrivals on the public screen', () => {
       }
       expect(said.some(Boolean)).toBe(true);
       expect(said.filter(sentence => /polazi/.test(sentence))).toEqual([]);
+      // The outage fact is said, and it holds the header's two sentence lines as the fleet's does (66 characters).
+      expect(said).toContain('ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.');
+      expect(q(k.root, '[data-testid=kiosk]')!.dataset.sentenceLines).toBe('2');
       expect(text(k.root)).not.toMatch(/nedostup/);
+    } finally {
+      k.handle.destroy();
+      resetServiceStateMemory();
+    }
+  });
+
+  // Production, 30 September 2026, 00:43 to 00:53 (observe-du31): the twin published the city silent (seen 0, about 40
+  // by the timetable) and the 1920 x 1080 wall at Jelačić said the fleet in 0 of 300 readings. The fact reached the pool;
+  // the laid-out probe refused it: beside the place chip, in the dark theme's 44 px, one header line holds 1061 px and
+  // "Promet" with "ZET: nijedno vozilo u pokretu, po voznom redu oko 40." needs 1243 (measured on the shipped CSS and
+  // fonts in Chromium). The probe here is that geometry: 21.4 px a character, the kicker and its gap 110 px, one line
+  // 1061 px, a wrapped line 951 px of text, 55 px a line; it wraps only where kiosk.css lets it, under the root's
+  // data-sentence-lines="2" (kiosk-css.test.ts pins that rule), and never past two lines.
+  it('a silent city at night: the header says the fleet first though one line cannot hold it, and the map note is the silent note', async () => {
+    resetServiceStateMemory();
+    const NIGHT = Date.parse('2026-09-29T22:43:00Z'); // 00:43 in Zagreb
+    let now = NIGHT;
+    let state: 'silent' | 'normal' = 'silent';
+    const zet = (): ModuleSnapshot => {
+      const source = new Date(now - 5_000).toISOString();
+      const service = { state, since: '2026-09-29T21:27:18Z', observedAt: source, expected: 38, seen: 0, ratio: 0,
+        confidence: 0, baseline: 'declared' as const, byMode: { tram: [0, 17] as [number, number], bus: [0, 21] as [number, number] } };
+      // The source time rides on sources.zet only, so the teaser poll keeps its fallback tick (k.poll).
+      return { ...snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '0 vozila u pokretu', { data: { vehicles: 0 } })]),
+        fetchedAt: source, sources: { zet: { status: 'live', itemCount: 0, fetchedAt: source, sourceUpdatedAt: source, service } } };
+    };
+    const stored = JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: { ...SCREEN, expiresAt: NIGHT + 20 * 3_600_000 } });
+    const k = mount({ stored, now: () => now, fetchTeaser: async () => ({ modules: MODULES.map(m => m.module === 'zet-rt' ? zet() : m) }) });
+    try {
+      const probe = q(k.root, '.k-sentence-probe')!;
+      const probeText = q(probe, '.k-sentence-text')!;
+      const wraps = () => q(k.root, '[data-testid=kiosk]')!.dataset.sentenceLines === '2';
+      const need = () => (probeText.textContent ?? '').length * 21.4;
+      const lines = () => wraps() ? Math.ceil(need() / 951) : 1;
+      probeText.style.lineHeight = '55px';
+      Object.defineProperty(probe, 'clientWidth', { value: 1061, configurable: true });
+      Object.defineProperty(probe, 'scrollWidth', { value: 1061, configurable: true });
+      Object.defineProperty(probeText, 'clientWidth', { get: () => Math.min(need(), 951), configurable: true });
+      Object.defineProperty(probeText, 'scrollWidth', { get: () => wraps() ? Math.min(need(), 951) : need(), configurable: true });
+      Object.defineProperty(probeText, 'scrollHeight', { get: () => lines() * 55 + 2, configurable: true });
+      Object.defineProperty(probeText, 'clientHeight', { get: () => Math.min(lines(), 2) * 55, configurable: true });
+      await flush();
+      const note = q(k.root, '[data-testid=map-note]')!;
+      expect(note.hidden).toBe(false);
+      expect(text(note)).toBe('ZET: u pokretu 0 vozila, po voznom redu oko 40. Polasci su iz voznog reda, bez potvrde vozila.');
+      // Two minutes of the header, a second at a time, the teaser polled every ten.
+      const said: string[] = [];
+      const modes = new Set<string | undefined>();
+      for (let second = 1; second <= 120; second += 1) {
+        now += 1_000;
+        if (second % 10 === 0) { k.poll(); await flush(); }
+        k.tick(CODE_TICK_MS);
+        const line = painted(k.root);
+        if (line && said.at(-1) !== line) said.push(line);
+        modes.add(q(k.root, '[data-testid=kiosk]')!.dataset.sentenceLines);
+      }
+      // The sun of the cold first paint keeps its turn; the fleet is the first sentence after it.
+      expect(said.slice(0, 2)).toEqual(['Sunce izlazi u 06:52.', 'ZET: nijedno vozilo u pokretu, po voznom redu oko 40.']);
+      // While the state is at hand the header holds two sentence lines, for its whole span.
+      expect([...modes]).toEqual(['2']);
+      expect(said.filter(line => /polazi/.test(line))).toEqual([]);
+      expect(text(note)).toBe('ZET: u pokretu 0 vozila, po voznom redu oko 40. Polasci su iz voznog reda, bez potvrde vozila.');
+      // The state over, the header is one line again and the note leaves.
+      state = 'normal';
+      now += 1_000;
+      k.poll();
+      await flush();
+      k.tick(CODE_TICK_MS);
+      expect(q(k.root, '[data-testid=kiosk]')!.dataset.sentenceLines).toBe('1');
+      expect(note.hidden).toBe(true);
     } finally {
       k.handle.destroy();
       resetServiceStateMemory();
