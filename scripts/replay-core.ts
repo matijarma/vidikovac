@@ -1314,8 +1314,9 @@ export function assertNormalDay(lines: readonly ServiceLogLine[]): NormalDayVerd
   }
   const hours = [...byHour].map(([hour, ratios]) => {
     const sorted = [...ratios].sort((a, b) => a - b);
-    return { hour, minutes: sorted.length, p05: sorted[Math.floor(sorted.length * 0.05)] };
+    return { hour, minutes: sorted.length, p05: sorted[Math.ceil(sorted.length * 0.05) - 1] };
   });
+  if (hours.length === 0) problems.push('no judged hour with at least 20 expected runs');
   for (const h of hours) if (h.p05 < NORMAL_DAY_P05) problems.push(`${h.hour}h: p05 ratio ${h.p05.toFixed(4)} below ${NORMAL_DAY_P05} over ${h.minutes} judged minutes`);
   return { ok: problems.length === 0, problems, hours };
 }

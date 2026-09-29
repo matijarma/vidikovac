@@ -28,6 +28,27 @@ describe('service replay diagnostics', () => {
     if (!ok) expect(verdict.problems[0]).toContain('0.6475 below 0.65');
   });
 
+  it.each([
+    { name: 'empty input', lines: [] as ServiceLogLine[] },
+    { name: 'no-calendar-only input', lines: [line({ state: 'unknown', seen: 0, expected: 0, ratio: null })] },
+  ])('fails $name because it has no judged hour', ({ lines }) => {
+    const verdict = assertNormalDay(lines);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.hours).toEqual([]);
+    expect(verdict.problems).toContain('no judged hour with at least 20 expected runs');
+  });
+
+  it('uses prep-E nearest-rank p05, not the fourth sample of 60', () => {
+    const lines = [
+      ...Array.from({ length: 3 }, () => line({ seen: 60, expected: 100, ratio: 0.6 })),
+      ...Array.from({ length: 57 }, () => line({ seen: 80, expected: 100, ratio: 0.8 })),
+    ];
+    const verdict = assertNormalDay(lines);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.hours).toEqual([{ hour: '2026-10-06 10', minutes: 60, p05: 0.6 }]);
+    expect(verdict.problems[0]).toContain('0.6000 below 0.65');
+  });
+
   it('dates a state change at its entry frame, not the minute last frame', () => {
     const lines = [
       line({ atSec: t0 + 299 }),
