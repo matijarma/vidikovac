@@ -116,8 +116,11 @@ export const DEPARTURE_ROW_MIN_PX = 64;
  * the floor, by one, never under DEPARTURES_MIN, and a full list may hold them beside its departures.
  */
 export const FIT_RAIL_FIRST_KIND = 'rail';
-/** A tram or bus family sentence says a departure ("polazi"): none may stand while ZET's fleet is judged silent (upgrade U2). */
-export const DEPARTURE_SENTENCE_RE = /\bpolazi\b/i;
+/**
+ * A tram or bus family sentence says a departure ("polazi", on the English wall "leaves"): none may stand while ZET's fleet
+ * is judged silent (upgrade U2).
+ */
+export const DEPARTURE_SENTENCE_RE = /\b(?:polazi|leaves)\b/i;
 /** Only the trainAt envelope is exempt: a quoted event title such as "Vlak" can still promise a last tram. */
 export const RAIL_SENTENCE_RE = /^.+: (?:vlak, smjer .+, polazi u|train towards .+ leaves at) \d{2}:\d{2}\.$/i;
 /** The QR SVG's minimum side in CSS px. */

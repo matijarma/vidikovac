@@ -431,6 +431,13 @@ describe('one reading of the wall', () => {
     expect(DEPARTURE_SENTENCE_RE.test('Zadnji tramvaj 12 polazi 23:40.')).toBe(true);
     expect(DEPARTURE_SENTENCE_RE.test('ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.')).toBe(false);
     expect(DEPARTURE_SENTENCE_RE.test('ZET: u pokretu 2 vozila, po voznom redu oko 460.')).toBe(false);
+    // The English wall says the same departures (en.json kiosk.sentence), and the check must see them too.
+    for (const english of ['Tram 12 towards Dubrava leaves at 07:53.', 'Bus 268 towards Velika Gorica leaves in 4 min.', 'The last tram 6 leaves 23:40.', 'After “Vlak” the last tram 6 leaves 23:52.']) {
+      expect(DEPARTURE_SENTENCE_RE.test(english), english).toBe(true);
+      expect(RAIL_SENTENCE_RE.test(english), english).toBe(false);
+    }
+    expect(DEPARTURE_SENTENCE_RE.test('Glavni kolodvor: train towards Savski Marof leaves at 07:53.')).toBe(true);
+    expect(DEPARTURE_SENTENCE_RE.test('ZET is not sending vehicle positions; timetable departures, unconfirmed.')).toBe(false);
     expect(RAIL_SENTENCE_RE.test('Glavni kolodvor: vlak, smjer Savski Marof, polazi u 07:53.')).toBe(true);
     expect(RAIL_SENTENCE_RE.test('Glavni kolodvor: train towards Savski Marof leaves at 07:53.')).toBe(true);
     expect(RAIL_SENTENCE_RE.test('Tramvaj 12, smjer Dubrava, polazi u 07:53.')).toBe(false);
