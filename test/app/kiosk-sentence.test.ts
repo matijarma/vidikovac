@@ -391,7 +391,8 @@ describe('facts and standalone deterministic fallback', () => {
     expect(modelSentenceFacts(facts)).toEqual([]);
     expect(sentenceFacts(input({ rows, outage: true })).some(f => f.id.startsWith('dep:'))).toBe(false);
     const outage = sentenceFacts(input({ rows: rows.map(r => ({ ...r, live: false, arrival: { ...r.arrival!, live: false } })), outage: true }));
-    expect(outage.find(f => f.id === 'dep:trip0')?.text).toBe('Tramvaj 6, smjer Črnomerec, polazi u 12:33.');
+    // No departure at all while positions are unavailable (the voice 'none', upgrade U0 and U2).
+    expect(outage.some(f => f.id.startsWith('dep:'))).toBe(false);
     expect(outage.find(f => f.id === 'outage:zet')?.text).toBe(SENTENCE_COPY_HR.outage);
   });
 
