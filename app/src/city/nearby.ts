@@ -176,6 +176,8 @@ export interface NearbyInput {
   openPlaces?: readonly OpenPlace[];
   /** Where an event with neither a verified venue nor a point of its own takes place (the venue gazetteer), or null. */
   venuePoint?: (item: FeedItem) => { lon: number; lat: number } | null;
+  /** The canonical name of that same resolved venue, never an unmatched source hint. */
+  venueName?: (item: FeedItem) => string | null;
   /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail rows (default 1), `railFirst` puts
    *  them before the departure rows (default false). */
   policy?: { railMax?: number; railFirst?: boolean };
@@ -591,12 +593,14 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     const venue = event.venueIds.length === 1 ? city.places.find((p) => p.id === event.venueIds[0] && located(p)) : undefined;
     // A verified venue, else the item's own point, else the gazetteer's venue point (shared/city/venues.ts).
     const own = pointOf(item);
-    const point = venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : own ?? input.venuePoint?.(item) ?? null;
+    const resolved = !venue && !own ? input.venuePoint?.(item) ?? null : null;
+    const point = venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : own ?? resolved;
     if (!point || distanceM(place, point) > radiusM) continue;
+    const venueLabel = venue?.name ?? (dataText(item, 'venue') || (resolved ? input.venueName?.(item) : null) || '');
     // Before oneLine/trim/shorterLabel: controls or vectors cannot be repaired
     // away by presentation helpers or hidden in a discarded source suffix.
-    if (!vetted(input, [['title', item.title], ['title', item.brief], ['name', venue?.name ?? dataText(item, 'venue')]])) continue;
-    const venueName = (venue?.name ?? dataText(item, 'venue')).trim();
+    if (!vetted(input, [['title', item.title], ['title', item.brief], ['name', venueLabel]])) continue;
+    const venueName = venueLabel.trim();
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
     if (tram && !vetted(input, [['headsign', tram]])) continue;

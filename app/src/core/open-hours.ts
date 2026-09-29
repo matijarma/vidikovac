@@ -7,7 +7,7 @@ import type { FeedSnapshots } from './contracts';
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { Place } from '../../../shared/city/types';
 import { decodeOsmHours, osmVenues, type OsmHoursIndex } from '../../../shared/city/osm-hours';
-import { buildGazetteer, resolveVenuePoint, type Gazetteer } from '../../../shared/city/venues';
+import { buildGazetteer, resolveVenueName, resolveVenuePoint, type Gazetteer } from '../../../shared/city/venues';
 
 export const OPEN_HOURS_URL = '/data/osm-hours.json';
 /** A down answer is asked for again this long after it came (kiosk.ts LASTRUN_DOWN_RETRY_MS's hour). */
@@ -76,4 +76,10 @@ export function venueGazetteer(places: readonly Place[], snapshots: FeedSnapshot
 export function venuePointFor(places: readonly Place[], snapshots: FeedSnapshots, index: OsmHoursIndex | null): (item: FeedItem) => { lon: number; lat: number } | null {
   const gazetteer = venueGazetteer(places, snapshots, index);
   return (item) => resolveVenuePoint(item, gazetteer);
+}
+
+/** The matched gazetteer's own name, not a source hint interpreted as display text. */
+export function venueNameFor(places: readonly Place[], snapshots: FeedSnapshots, index: OsmHoursIndex | null): (item: FeedItem) => string | null {
+  const gazetteer = venueGazetteer(places, snapshots, index);
+  return (item) => resolveVenueName(item, gazetteer);
 }

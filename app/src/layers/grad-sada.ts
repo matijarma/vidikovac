@@ -33,6 +33,14 @@ export const SADA_MAP_SLOT_ID = 'grad-sada-map';
 /** The band as the phone lays it out (mock v2, [O-31]): the frame is fitted to this box. */
 export const SADA_MAP_BAND = Object.freeze({ width: 390, height: 112 });
 
+/** HŽ's catalogue credit; a rail board is reference data, not a feed-module snapshot. */
+const RAIL_TIMETABLE_CREDIT = Object.freeze({
+  key: 'hz-schedule',
+  text: 'Izvor: HŽ Putnički prijevoz',
+  licence: 'Uvjeti ponovne uporabe nisu navedeni; izvor: HŽPP, informativni vozni red',
+  url: 'https://data.gov.hr/ckan/dataset/vozni-red-h-putni-kog-prijevoza-u-gtfs-obliku',
+});
+
 /** The camera each band map was last given, so a redraw moves it only when the place moves. */
 const cameras = new WeakMap<CityMapHandle, string>();
 
@@ -139,9 +147,12 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     ? feed.nearbySectionMarkup(i18n, listed, input!.radiusM, now,
       { cap, id: 'sada', ...(held ? { reserve: cap } : {}) })
     : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
-  // An open row on the list is the OpenStreetMap hours' (ODbL): the sources name that credit while one is shown.
-  const credits = typeof feed === 'object' && feed.nearbyShownRows(listed, cap).some((row) => row.kind === 'open')
-    ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : [];
+  // Static inputs have no module snapshot: credit them while their rows are actually shown.
+  const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap) : [];
+  const credits = [
+    ...(shown.some((row) => row.kind === 'open') ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : []),
+    ...(shown.some((row) => row.kind === 'rail') ? [RAIL_TIMETABLE_CREDIT] : []),
+  ];
   // The band's box stands from the first draw (112 px, its link to Karta); the map inside it once Sada has settled
   // (the list's chunk in hand and its hold over).
   const settling = held || feed === 'loading';

@@ -21,6 +21,7 @@ import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
+import { REFERENCE_SOURCES } from '../../worker/city/sources';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // Friday 14:32 in Zagreb
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -343,5 +344,12 @@ describe('the trains on Sada (docs/upgrade-2026-10-plan/U3.md S3)', () => {
     expect(cache.ensure).toHaveBeenCalledWith('hz', ['HZ-GK'], undefined);
     // The departures block keeps its three trams.
     expect(section.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    const source = REFERENCE_SOURCES.find((entry) => entry.id === 'hz-schedule')!;
+    const credit = section.querySelector('.provenance li[data-key="hz-schedule"]');
+    expect(credit).not.toBeNull();
+    expect(text(credit)).toContain(source.name);
+    expect(text(credit)).toContain(source.licence);
+    expect(credit!.querySelector('a')?.getAttribute('href')).toBe(source.catalogue);
+    expect(renderGradSada(ctx()).querySelector('.provenance li[data-key="hz-schedule"]')).toBeNull();
   });
 });

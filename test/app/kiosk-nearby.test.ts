@@ -11,6 +11,7 @@ import type { ScreenPlace } from '../../shared/city/place';
 import type { OpenPlace } from '../../shared/city/osm-hours';
 import { emptyCity, type CityState, type DepartureBoard, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import { fetchKulturpunkt } from '../../worker/feed/modules/dogadanja/kulturpunkt';
 import {
   ALWAYS_ALTERNATE_MS,
   MAX_DEPARTURES,
@@ -1223,6 +1224,34 @@ describe('the open row (S2): a place open now, by the hour’s kinds', () => {
 });
 
 describe('the events of three modules (S2)', () => {
+  it('renders real Kulturpunkt venue metadata using the gazetteer canonical name', async () => {
+    const now = at('2026-09-19T17:00:00Z');
+    const raw = readFileSync(new URL('../fixtures/dogadanja/kulturpunkt.json', import.meta.url), 'utf8');
+    const parsed = await fetchKulturpunkt({ now: () => new Date(now), fetch: async () => new Response(raw) });
+    const source = parsed.items.find((entry) => entry.id === 'kulturpunkt:85565')!;
+    expect(source.data).not.toHaveProperty('venue');
+    expect(source.data.precision).toBe('time');
+    expect(source.data.venueHint).toContain('Pogona Jedinstvo');
+    const event: FeedItem = { ...source, module: 'dogadanja', kind: 'event', tier: 'session' };
+    const calendar = JSON.parse(readFileSync(new URL('../fixtures/kultura-zagreb-events.json', import.meta.url), 'utf8')) as {
+      events: { address_name: string; longitude: number; latitude: number }[];
+    };
+    const venue = calendar.events.find((entry) => entry.address_name === 'POGON JEDINSTVO')!;
+    const point = { lon: venue.longitude, lat: venue.latitude };
+    const rows = (name: string | null) => selectNearby(input(now, {
+      radiusM: 5000, city: emptyCity(), stops: [],
+      snapshots: { dogadanja: snap('dogadanja', [event]) },
+      venuePoint: (candidate) => candidate.id === event.id ? point : null,
+      venueName: (candidate) => candidate.id === event.id ? name : null,
+    })).filter((row) => row.kind === 'event');
+    expect(rows(venue.address_name)).toMatchObject([{
+      id: 'event:kulturpunkt:85565', title: source.title, sub: venue.address_name,
+      map: { geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
+    }]);
+    expect(rows(null)).toEqual([]);
+    expect(rows('Vidi www.primjer.com')).toEqual([]);
+  });
+
   const NOW_E = at('2026-09-22T15:45:00Z');
   const KULTURA = u3item('kultura-zg', 'kultura-zg:101', 'event', 'Koncert na Zrinjevcu', {
     at: '2026-09-22T17:00:00Z', until: '2026-09-22T19:00:00Z', dateBasis: 'event', geo: { type: 'Point', coordinates: [15.978, 45.8105] },

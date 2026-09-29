@@ -18,3 +18,9 @@ export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: 
   void item; void gazetteer;
   return null;
 }
+
+/** The name of that same matched venue; additive companion to the frozen point-only helper. */
+export function resolveVenueName(item: FeedItem, gazetteer: Gazetteer): string | null {
+  void item; void gazetteer;
+  return null;
+}

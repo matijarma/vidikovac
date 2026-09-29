@@ -57,7 +57,7 @@ import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
 import { liveFixes, railStationsNear } from './city/feed';
-import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venuePointFor } from './core/open-hours';
+import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venueNameFor, venuePointFor } from './core/open-hours';
 import { openPlacesNear, type OsmHoursIndex } from '../../shared/city/osm-hours';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
@@ -501,6 +501,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
         openPlaces: openPlacesNear(openHours, place, radiusM, at, false),
         venuePoint: venuePointFor(city.places, snapshots, openHours),
+        venueName: venueNameFor(city.places, snapshots, openHours),
       });
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);

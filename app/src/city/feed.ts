@@ -21,7 +21,7 @@ import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ScreenPlace } from '../../../shared/city/place';
 import { emptyCity, type DepartureBoard, type Place } from '../../../shared/city/types';
 import type { ScreenStop } from '../core/contracts';
-import { loadOpenHours, openHoursIndex, venuePointFor } from '../core/open-hours';
+import { loadOpenHours, openHoursIndex, venueNameFor, venuePointFor } from '../core/open-hours';
 import { platformIds } from '../kiosk/arrivals';
 import { routeType } from '../kiosk/stops';
 import type { LayerContext } from '../layers/types';
@@ -178,6 +178,7 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
     // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
     openPlaces: openPlacesNear(index, place, radiusM, now, false),
     venuePoint: venuePointFor(city.places, ctx.snapshots, index),
+    venueName: venueNameFor(city.places, ctx.snapshots, index),
   };
 }
 
