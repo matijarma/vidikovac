@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { crc32, deflateRawSync } from 'node:zlib';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -193,6 +193,18 @@ describe('routesFromZip and main', () => {
     const written = JSON.parse(await readFile(join(dir, 'data/zet-routes.json'), 'utf8'));
     expect(written['17'].longName).toBe('Prečko - Borongaj, "Dubrava"');
     expect(logs.join('\n')).toContain('Public dataset by ZET provided under Open license');
+  });
+
+  it('reads a local archive with zipPath and never fetches', async () => {
+    const zip = makeZip([{ name: 'routes.txt', data: ROUTES_TXT, method: 8 }]);
+    const dir = await mkdtemp(join(tmpdir(), 'zet-routes-'));
+    await writeFile(join(dir, 'feed.zip'), zip);
+    const fetchImpl = async () => {
+      throw new Error('no download when a zip is given');
+    };
+    const result = await main({ fetchImpl: fetchImpl as unknown as typeof fetch, zipPath: 'feed.zip', cwd: dir, out: 'data/zet-routes.json', log: () => {} });
+    expect(result.count).toBe(3);
+    expect(JSON.parse(await readFile(join(dir, 'data/zet-routes.json'), 'utf8'))['17'].longName).toBe('Prečko - Borongaj, "Dubrava"');
   });
 
   it('fails on a non-2xx download', async () => {
