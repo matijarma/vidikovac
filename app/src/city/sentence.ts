@@ -265,7 +265,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     // word). Its time is the publish time, already past, so it has to be read before the past-row skip below. A title
     // over 64 characters yields no sentence (copy() refuses the value) and only the row.
     if (row.kind === 'notice') {
-      add(row.id, 'promet', copy(i18n, 'notice', { notice: row.title }),
+      // The template owns the final full stop: a title that ends in one does not double it.
+      add(row.id, 'promet', copy(i18n, 'notice', { notice: row.title.replace(/\.$/, '') }),
         Math.min((row.atMs ?? now) + NOTICE_WINDOW_MS, nextMidnight(now)), { wording: 'notice' });
       continue;
     }

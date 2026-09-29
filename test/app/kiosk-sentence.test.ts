@@ -628,6 +628,10 @@ describe('the notice fact (upgrade U1)', () => {
     }
   });
 
+  it('does not double the full stop of a title that ends in one', () => {
+    expect(noticeFacts([notice({ title: 'Linija 13 ne vozi do Savišća.' })])[0]!.text).toBe('ZET javlja: Linija 13 ne vozi do Savišća.');
+  });
+
   it('accepts a model\'s choice of the family only with the slot copied whole', () => {
     const [fact] = noticeFacts([notice()]);
     const ctx = { facts: [fact!], now: CRO_NOW };

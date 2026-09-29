@@ -24,6 +24,11 @@ import { noServiceTripIds, operatorSummary } from './operator';
 import type { TwinState } from './state';
 import { BUILT_AT } from '../../app/src/motion/network-meta';
 
+// U2's judgement carries the operator's summary beside it (`service.operator`, shared/city/service-wire.ts): the
+// integrator's one line at the `zet` source below is `{ ...service, operator: operatorSummary(state.operator, carried,
+// nowSec) }`, with `carried` and `nowSec` from buildPayload. Exported so that line needs no other import.
+export { operatorSummary };
+
 /** What the trip index says about a realtime trip id. */
 export interface TripJoin {
   direction: 0 | 1;
@@ -224,7 +229,8 @@ export function buildPayload(
   }
 
   const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS;
-  const noServiceTrips = noServiceTripIds(state.operator, carried, Math.floor(nowMs / 1000));
+  const nowSec = Math.floor(nowMs / 1000);
+  const noServiceTrips = noServiceTripIds(state.operator, carried, nowSec);
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,

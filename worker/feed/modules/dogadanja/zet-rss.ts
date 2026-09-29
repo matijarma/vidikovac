@@ -110,7 +110,7 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   bdquo: '„', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', ndash: '–', mdash: '—', hellip: '…', bull: '•', euro: '€',
 };
 /** A sentence ends at . ! ? or : and the next one starts with a capital letter or an opening quote. */
-const SENTENCE_END = /(?<=[.!?:])\s+(?=[\p{Lu}„“"'(])/u;
+const SENTENCE_END = /(?<=[.!?:])\s+(?=[\p{Lu}„“"'‘])/u;
 /** "D. Mandića": a full stop after a single capital letter is an initial, not the end of a sentence. */
 const INITIAL = /(?:^|[^\p{L}])\p{Lu}\.$/u;
 /** A sentence opens with a letter, a digit, a quote or a bracket. */

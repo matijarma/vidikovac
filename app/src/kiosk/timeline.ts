@@ -192,8 +192,8 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
  * observe-d530: at 04:00 on a Sunday the 06:48 sunrise and a 10:00 museum opening on two title lines took the
  * second and third night trams, each the only tram of its line or direction for forty minutes; a sunset within the
  * hour still outlasts them); then the latest timed row that is not a departure; then a second timeless row. The
- * first departure, the closures and the rest keep their order. First/last trams and one timeless row never enter
- * the drop order (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while
+ * first departure, the closures and the rest keep their order. First/last trams, one timeless row and the ZET
+ * notice never enter the drop order (owner decisions 10 and 27; upgrade U1); a closure or solar row that is on the list stays on its node while
  * the list can hold it, and returns under a new identity only when its fact changed. Without `now` (older
  * callers) the later-day step and decision 67's are skipped.
  */
