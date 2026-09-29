@@ -38,6 +38,7 @@ import { parseDwellOverrides, pushDwellRecent, trimDwellRecent } from '../shared
 import { junctionsOnPath } from '../shared/motion/junction';
 import { recordEvidence } from '../shared/motion/learn';
 import { HEADWAY_M } from '../shared/motion/order';
+import { decodeExpectIndex, type ExpectIndex } from '../shared/motion/expect';
 import { decodeNetwork, type GraphNetwork, type Path } from '../shared/motion/network';
 import { emptyPlanCounts, evalFreePlan, evalPathPlan, PLAN_EVENTS, STAND_SCATTER_M, type PlanCounts } from '../shared/motion/plan';
 import { lastFix, type PathKnot, type Plan } from '../shared/motion/track';
@@ -48,9 +49,11 @@ import { nextTickAt } from '../worker/twin/clock';
 import { createEngine, type Engine } from '../worker/twin/engine';
 import { decodeFeed, type DecodedFeed } from '../worker/twin/feed-decode';
 import type { TripJoin } from '../worker/twin/publish';
+import { JUDGE_HEADER_AGE_S, MIN_EXPECTED, type ServiceMemory } from '../worker/twin/service';
 import { emptyState, type TwinState } from '../worker/twin/state';
 import { runTick } from '../worker/twin/tick';
 import type { ZetRoutes } from '../worker/feed/modules/zet-routes';
+import type { ServiceWireState } from '../shared/city/service-wire';
 
 /** Wall-clock offset applied to a frame's header time to get the twin's own
  *  `now`: production fetches a few seconds after ZET publishes (the alarm's
@@ -1162,4 +1165,155 @@ export function formatTable(report: ReplayReport): string {
   lines.push(splitRow('junction within 30 s:', report.aheadSplit.junction.ahead_of_node));
   lines.push(splitRow('no junction within 30 s:', report.aheadSplit.junction.no_node));
   return lines.join('\n');
+}
+
+// ---- the service state over a recorded day (upgrade U2) -----------------------
+
+/** The service state at the end of one Zagreb minute of a replay. */
+export interface ServiceLogLine {
+  /** The header time of the minute's last frame, epoch seconds. */
+  atSec: number;
+  state: ServiceWireState;
+  ratio: number | null;
+  seen: number;
+  expected: number;
+  sinceSec: number | null;
+  /** Why the frame was not judged: the header older than 180 s, or fewer than 20 runs expected. */
+  hold: 'stale' | 'below-min' | null;
+  byMode: { tram: [number, number]; bus: [number, number] };
+}
+
+export interface ReplayServiceOptions {
+  expect: ExpectIndex;
+  routes?: ZetRoutes;
+  /** Keeps every Nth frame of the ordered window (1: every frame). */
+  every?: number;
+  /** Stops after this UTC clock of the file names, `HHMMSS`, inclusive. */
+  to?: string;
+}
+
+const FRAME_NAME = /^(\d{6})-(\d+)\.pb$/i;
+
+/** The decoded expectation artefact from disk, as the twin decodes it through ASSETS. */
+export async function loadExpectIndexFile(path: string): Promise<ExpectIndex> {
+  return decodeExpectIndex(JSON.parse(await readFile(path, 'utf8')) as unknown);
+}
+
+/** The route catalogue (app/src/data/zet-routes.json) from disk: what tells a bus from a tram without an engine. */
+export async function loadZetRoutesFile(path: string): Promise<ZetRoutes> {
+  return JSON.parse(await readFile(path, 'utf8')) as ZetRoutes;
+}
+
+function serviceLine(memory: ServiceMemory, headerSec: number, nowSec: number): ServiceLogLine {
+  return {
+    atSec: headerSec,
+    state: memory.state,
+    ratio: memory.last?.ratio ?? null,
+    seen: memory.last?.seen ?? 0,
+    expected: memory.last?.expected ?? 0,
+    sinceSec: memory.sinceSec,
+    hold: nowSec - headerSec > JUDGE_HEADER_AGE_S ? 'stale' : memory.reason === 'below-min' ? 'below-min' : null,
+    byMode: memory.last ? { tram: [...memory.last.byMode.tram], bus: [...memory.last.byMode.bus] } : { tram: [0, 0], bus: [0, 0] },
+  };
+}
+
+/**
+ * The service state machine over a directory of recorded frames, exactly as
+ * production judges them: the `.pb` files ordered by the header time in
+ * their name (`HHMMSS-<headerTs>.pb`), stopped after `to`, thinned to every
+ * `every`th, decoded one at a time (a decoded day does not fit in memory)
+ * and folded through `runTick` without an engine, so eviction, fleetSeen
+ * and the parked rule read the fixes alone. One line per Zagreb minute, the
+ * state at the minute's last frame. A frame whose bytes carry no header is
+ * skipped, as the twin would skip it.
+ */
+export async function replayServiceDirectory(dir: string, options: ReplayServiceOptions): Promise<ServiceLogLine[]> {
+  const files = (await readdir(dir))
+    .map((name) => ({ name, match: FRAME_NAME.exec(name) }))
+    .filter((f): f is { name: string; match: RegExpExecArray } => f.match !== null)
+    .map((f) => ({ name: f.name, clock: f.match[1], headerTs: Number(f.match[2]) }))
+    .filter((f) => options.to === undefined || f.clock <= options.to)
+    .sort((a, b) => a.headerTs - b.headerTs || a.name.localeCompare(b.name));
+  const every = Math.max(1, Math.floor(options.every ?? 1));
+  const routes = options.routes ?? {};
+  let state: TwinState = emptyState();
+  const lines: ServiceLogLine[] = [];
+  let minute: number | null = null;
+  let current: ServiceLogLine | null = null;
+  for (let i = 0; i < files.length; i += every) {
+    const feed = decodeFeed(new Uint8Array(await readFile(join(dir, files[i].name))));
+    if (feed.headerTs === null) continue;
+    const headerSec = feed.headerTs;
+    const nowMs = (headerSec + REPLAY_NOW_CUSHION_S) * 1000;
+    const result = runTick({ state, feed, nowMs, joins: new Map(), routes, engine: null, validUntilMs: nextTickAt(headerSec, nowMs), expect: options.expect });
+    state = result.state;
+    const key = Math.floor(headerSec / 60);
+    if (minute !== key && current !== null) lines.push(current);
+    minute = key;
+    current = serviceLine(state.service, headerSec, Math.floor(nowMs / 1000));
+  }
+  if (current !== null) lines.push(current);
+  return lines;
+}
+
+const ZAGREB_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zagreb', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+const ZAGREB_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zagreb', year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** `HH:MM:SS` of an instant on Zagreb's clock. */
+export function zagrebClock(sec: number): string {
+  return ZAGREB_CLOCK.format(new Date(sec * 1000));
+}
+
+/** `YYYY-MM-DD` of an instant on Zagreb's calendar. */
+export function zagrebDay(sec: number): string {
+  return ZAGREB_DAY.format(new Date(sec * 1000));
+}
+
+/** The lines where the state differs from the line before. */
+export function serviceChanges(lines: readonly ServiceLogLine[]): { atSec: number; from: ServiceWireState; to: ServiceWireState }[] {
+  const out: { atSec: number; from: ServiceWireState; to: ServiceWireState }[] = [];
+  for (let i = 1; i < lines.length; i++) if (lines[i].state !== lines[i - 1].state) out.push({ atSec: lines[i].atSec, from: lines[i - 1].state, to: lines[i].state });
+  return out;
+}
+
+/** `HH:MM state ratio seen expected since [hold]`, Zagreb time, one line per minute, then the changes. */
+export function formatServiceLog(lines: readonly ServiceLogLine[]): string {
+  const rows = lines.map((l) => {
+    const since = l.sinceSec === null ? '-' : `${zagrebDay(l.sinceSec)} ${zagrebClock(l.sinceSec)}`;
+    const hold = l.hold === null ? '' : ` ${l.hold}`;
+    return `${zagrebClock(l.atSec).slice(0, 5)} ${l.state.padEnd(7)} ${l.ratio === null ? ' -  ' : l.ratio.toFixed(2)} ${String(l.seen).padStart(3)} ${String(l.expected).padStart(3)} ${since}${hold}`;
+  });
+  const changes = serviceChanges(lines).map((c) => `${zagrebDay(c.atSec)} ${zagrebClock(c.atSec)} ${c.from} -> ${c.to}`);
+  return [...rows, '', `${lines.length} minutes, ${changes.length} state change${changes.length === 1 ? '' : 's'}${changes.length ? ': ' + changes.join('; ') : ''}`].join('\n');
+}
+
+export interface NormalDayVerdict {
+  ok: boolean;
+  problems: string[];
+  /** Per Zagreb hour with judged minutes of at least MIN_EXPECTED runs: the 5th percentile of the ratio. */
+  hours: { hour: string; minutes: number; p05: number }[];
+}
+
+/** The p05 floor of acceptance U2-6: on a normal day no judged minute reads
+ *  reduced or silent, and every hour with 20 or more expected keeps a 5th
+ *  percentile ratio of at least this (the Saturday-night pull-in reads 0.68). */
+export const NORMAL_DAY_P05 = 0.65;
+
+/** Whether a replayed day reads as a normal day (acceptance U2-6). */
+export function assertNormalDay(lines: readonly ServiceLogLine[]): NormalDayVerdict {
+  const problems: string[] = [];
+  const byHour = new Map<string, number[]>();
+  for (const l of lines) {
+    if (l.hold !== null) continue;
+    if (l.state === 'reduced' || l.state === 'silent') problems.push(`${zagrebDay(l.atSec)} ${zagrebClock(l.atSec)} reads ${l.state} (${l.seen} of ${l.expected})`);
+    if (l.expected < MIN_EXPECTED || l.ratio === null) continue;
+    const hour = `${zagrebDay(l.atSec)} ${zagrebClock(l.atSec).slice(0, 2)}`;
+    byHour.set(hour, [...(byHour.get(hour) ?? []), l.ratio]);
+  }
+  const hours = [...byHour].map(([hour, ratios]) => {
+    const sorted = [...ratios].sort((a, b) => a - b);
+    return { hour, minutes: sorted.length, p05: sorted[Math.floor(sorted.length * 0.05)] };
+  });
+  for (const h of hours) if (h.p05 < NORMAL_DAY_P05) problems.push(`${h.hour}h: p05 ratio ${h.p05.toFixed(2)} below ${NORMAL_DAY_P05} over ${h.minutes} judged minutes`);
+  return { ok: problems.length === 0, problems, hours };
 }
