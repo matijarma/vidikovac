@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
-import { emptyCity } from '../../shared/city/types';
+import { emptyCity, type CityPath } from '../../shared/city/types';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
 import type { PlaceContext } from '../../app/src/city/place';
 import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameView, markZoomFor } from '../../app/src/map/frame';
@@ -16,7 +16,7 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { renderLayer } from '../../app/src/layers';
 import { coveredFrame } from '../../app/src/transport/workspace';
 import type { LayerContext } from '../../app/src/layers/types';
-import type { CityMapHandle, CityMapOptions, MapSelection, MapStatus, VehicleInfo } from '../../app/src/map/city-map';
+import type { CityMapHandle, CityMapOptions, MapLine, MapSelection, MapStatus, VehicleInfo } from '../../app/src/map/city-map';
 import { createMapSlots, type MapSlots } from '../../app/src/map/map-slots';
 import { decodeNetwork, type Network } from '../../shared/motion/network';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
@@ -78,7 +78,7 @@ function fakeMaps(initial: FakeState = {}) {
     const handle: FakeHandle = {
       options,
       update: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(),
-      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(), setLineFocus: vi.fn(), setMarkZoom: vi.fn(),
+      select: vi.fn(), follow: vi.fn(), fit: vi.fn(), setModes: vi.fn(), setClosuresVisible: vi.fn(), setFeedState: vi.fn(), setStop: vi.fn(), setTheme: vi.fn(), setLocale: vi.fn(), setView: vi.fn(), resize: vi.fn(), setFitPadding: vi.fn(), setLineFocus: vi.fn(), setMarkZoom: vi.fn(), setCityPaths: vi.fn(),
       status: () => status, network: () => net, vehicles: () => vehicles, selection: () => null, following: () => null, camera: () => null,
       set(state) {
         if (state.status) status = state.status;
@@ -1235,6 +1235,41 @@ describe('the frame: Karta opens on the place', () => {
     const board = fakeMaps({ vehicles: VEHICLES, net: NET });
     render(ctx({ maps: board.maps, kiosk: true }).context);
     expect([...(board.last().options.modes ?? [])]).toEqual([0]);
+  });
+
+  it('hands the map the City\'s cycle paths when it is made and again when the city data brings new ones, and asks for them; the kiosk board draws none (owner, 29 Sep)', () => {
+    const SAVSKA: CityPath = { id: 'cp-savska', name: 'Savska cesta', kind: 'cycle', sourceId: 'cycle-paths',
+      lines: [[[15.966, 45.803], [15.9665, 45.799]], [[15.9665, 45.799], [15.967, 45.795]]] };
+    const VUKOVAR: CityPath = { id: 'cp-vukovar', name: 'Ulica grada Vukovara', kind: 'cycle', sourceId: 'cycle-paths', lines: [[[15.95, 45.8], [15.99, 45.8]]] };
+    const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const { context } = ctx({ maps });
+    const ensureCity = vi.fn();
+    context.ensureCity = ensureCity;
+    context.city = { ...emptyCity(), paths: [SAVSKA] };
+    render(context);
+    expect(ensureCity).toHaveBeenCalledWith(expect.arrayContaining(['cycle-paths']));
+    expect(last().setCityPaths).toHaveBeenCalledTimes(1);
+    expect(last().setCityPaths).toHaveBeenLastCalledWith([
+      { id: 'cp-savska-0', title: 'Savska cesta', coordinates: SAVSKA.lines[0] },
+      { id: 'cp-savska-1', title: 'Savska cesta', coordinates: SAVSKA.lines[1] },
+    ]);
+    // A poll over the same city data leaves the map's source alone.
+    render(context);
+    expect(last().setCityPaths).toHaveBeenCalledTimes(1);
+    // The store's update (a chunk landing, a new list): the map gets the new paths.
+    context.city = { ...context.city, paths: [SAVSKA, VUKOVAR] };
+    render(context);
+    expect(last().setCityPaths).toHaveBeenCalledTimes(2);
+    expect((spy(last().setCityPaths).mock.lastCall?.[0] as MapLine[]).map((line) => line.id)).toEqual(['cp-savska-0', 'cp-savska-1', 'cp-vukovar-0']);
+    // The kiosk board keeps the wall's contract: no paths drawn, none asked for.
+    const board = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const kiosk = ctx({ maps: board.maps, kiosk: true }).context;
+    const boardEnsure = vi.fn();
+    kiosk.ensureCity = boardEnsure;
+    kiosk.city = { ...emptyCity(), paths: [SAVSKA] };
+    render(kiosk);
+    expect(board.last().setCityPaths).not.toHaveBeenCalled();
+    expect(boardEnsure.mock.calls.flat(2)).not.toContain('cycle-paths');
   });
 });
 

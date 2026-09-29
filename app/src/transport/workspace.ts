@@ -12,7 +12,8 @@
 // Karta is the timeline's map [O-50]: it opens framed on the place (the same
 // place Sada is titled with, city/place.ts), with every vehicle drawn at once
 // and the city's curated marks (city/curated.ts: BAJS discs with their counts,
-// the venues with a programme tonight), and its sheet opens on the place's
+// the venues with a programme tonight) over the City's cycle paths, dashed in
+// the bike colour (syncCityPaths), and its sheet opens on the place's
 // "U blizini" rows (ctx.nearby, the page's). There is no group, no category and
 // no tools menu: one search field reaches routes, stops, places and streets,
 // and a category (a toilet, water, a market) is a search, drawn on the map
@@ -50,7 +51,7 @@ import { defaultLocation, type LocationContext } from '../city/location';
 import { placeDetail, streetDetail, departuresMarkup } from '../city/markup';
 import { createBoardCache, type BoardCache, type BoardOperator } from '../city/boards';
 import { arrivalsAt } from '../../../shared/city/arrivals';
-import { emptyCity, type DepartureBoard } from '../../../shared/city/types';
+import { emptyCity, type CityPath, type DepartureBoard } from '../../../shared/city/types';
 import { locatedEvents, type ActivityWindow } from '../../../shared/city/events';
 import { DEFAULT_FRAME_STOPS, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../../shared/city/frame';
 import { matchStreet } from '../../../shared/city/geo';
@@ -337,8 +338,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function askCity():void {
     const c=ctx(); if(c.session?.frozen)return;
     // The venues with a programme tonight are on the map from the first render; the BAJS stations come with the
-    // city's live file (core/city-store.ts start()).
-    c.ensureCity?.(['culture']);
+    // city's live file (core/city-store.ts start()). The City's cycle paths are asked for wherever they are drawn.
+    c.ensureCity?.(drawsCityPaths()?['culture','cycle-paths']:['culture']);
     if(query)c.ensureCity?.(['culture','water','toilets','sport','dogs','markets','recycling','wifi','cycle-parking','garages','charging','heritage','streets','hz-schedule']);
   }
   /** The place Karta is framed on and its sheet is titled with: the page's (city/place.ts, the one Sada is
@@ -428,6 +429,25 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     handle?.setModes?.(modesArg());
     const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
     handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
+  }
+  /** Karta draws the City's cycle paths ("Biciklističke staze") as the map's dashed bike-coloured lines
+   *  (map/city-layers.ts city-path-lines) on the phone and the desk; the public screen keeps its own contract (the
+   *  wall's map never drew them), and the lightweight path has no map. */
+  const drawsCityPaths = (): boolean => !kiosk() && !ctx().lightweight;
+  /** The store's paths (core/city-store.ts, one list per chunk change) as map lines, one per polyline. */
+  let pathLines: { paths: readonly CityPath[]; lines: MapLine[] } | null = null;
+  /** The handle and the lines it was last handed, so a poll that changed neither leaves the map's source alone. */
+  let pathsSent: { handle: CityMapHandle; lines: MapLine[] } | null = null;
+  /** Hands the map its cycle paths: once a map is made, and again whenever the city data brings a new list. */
+  function syncCityPaths(): void {
+    if (!handle || !ctx().city || !drawsCityPaths()) return;
+    const paths = cityState().paths;
+    if (pathLines?.paths !== paths) {
+      pathLines = { paths, lines: paths.flatMap((p) => p.lines.map((coordinates, i) => ({ id: `${p.id}-${i}`, title: p.name, coordinates }))) };
+    }
+    if (pathsSent?.handle === handle && pathsSent.lines === pathLines.lines) return;
+    pathsSent = { handle, lines: pathLines.lines };
+    handle.setCityPaths?.(pathLines.lines);
   }
   /** One function, not one per render: the cache keeps its waiting callers in a
    *  Set, and a fresh closure each time would make a stop with eight platforms
@@ -1263,6 +1283,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if(c.city) {
       const selected=selection?.kind==='place'?cityState().places.find(p=>p.id===selection!.id):null;
       handle?.setOutline?.(selected?.polygons?{id:selected.id,polygons:selected.polygons}:null);
+      syncCityPaths();
     }
     // Reference chunks are loaded on explicit discovery, never all on map boot.
     // An outage is no evidence of motion: the map holds every vehicle where it is until the feed is live again.
