@@ -222,6 +222,27 @@ describe('judgeService', () => {
     expect(m).toMatchObject({ state: 'silent', judgedAtSec: at('2026-10-07T01:05') });
   });
 
+  it.each(['reduced', 'silent'] as const)('refreshes missing routes while a below-min hold keeps %s', (state) => {
+    const seen = state === 'silent' ? GONE : LOW;
+    const previous = drive(emptyService(), [[0, NORMAL], [10, seen], [150, seen], [310, seen], [450, seen], [610, seen]]);
+    expect(previous.state).toBe(state);
+    const night = indexOf(() => [15, 10, 5]);
+    night.trips.set('wd', new Map([['T', fill(2)], ['B', fill(2)], ['X', fill(1)], ['Y', fill(0)]]));
+
+    const held = judgeService(previous, observation(T0 + 700, { tram: 0, bus: 1 }, { expect: night }));
+    expect(held).toMatchObject({
+      state, sinceSec: previous.sinceSec, judgedAtSec: previous.judgedAtSec, reason: 'below-min',
+      lowSince: null, silentSince: null, liftSince: null, normalSince: null,
+    });
+    // The city verdict holds, but each current route still supplies its own
+    // confirmation: B has half its trips, Y has none scheduled, T and X lack fixes.
+    expect(serviceOnWire(held)).toMatchObject({
+      state, expected: 15, seen: 1, observedAt: iso(T0 + 700),
+      routes: { T: [0, 2], X: [0, 1] },
+    });
+    expect(held.last?.routes).toEqual({ T: [0, 2], X: [0, 1] });
+  });
+
   it('breaks every dwell between two judged frames more than 180 s apart', () => {
     let m = drive(emptyService(), [[0, NORMAL], [10, LOW], [10 + CONTINUITY_S + 1, LOW]]);
     expect(m).toMatchObject({ state: 'normal', lowSince: T0 + 10 + CONTINUITY_S + 1 });

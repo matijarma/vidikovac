@@ -187,7 +187,13 @@ export function judgeService(prev: ServiceMemory, obs: ServiceObservation): Serv
     const blank: ServiceNumbers = { ...numbers, expected: 0, ratio: null, confidence: 0, byMode: { tram: [seenTram, 0], bus: [seenBus, 0] } };
     return settle({ ...clearTimers(prev), reason: 'no-calendar', last: blank }, 'unknown', t);
   }
-  if (expected < MIN_EXPECTED) return settle({ ...clearTimers(prev), reason: 'below-min', last: numbers }, prev.state, t);
+  if (expected < MIN_EXPECTED) {
+    // The city verdict holds, but its refreshed numbers still include the
+    // current missing routes. Dropping them would confirm every timetable
+    // route while a reduced city waits out the night trough.
+    const last = prev.state === 'reduced' || prev.state === 'silent' ? { ...numbers, routes: routesBelow(expect, t, obs.published) } : numbers;
+    return settle({ ...clearTimers(prev), reason: 'below-min', last }, prev.state, t);
+  }
 
   // Judged. Dwells continue only from a judged frame at most CONTINUITY_S ago.
   const base = prev.judgedAtSec !== null && t - prev.judgedAtSec <= CONTINUITY_S ? prev : clearTimers(prev);
