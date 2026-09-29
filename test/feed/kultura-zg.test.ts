@@ -64,19 +64,27 @@ describe('kultura-zg on the saved response', () => {
     expect(Date.parse(item.until!)).toBeGreaterThan(Date.parse(item.at!));
   });
 
-  it('gives every exhibition day precision, and every other listing the clock unless its window is a day', () => {
+  it('gives a listing day precision when its window is six hours or more, and the clock otherwise, an exhibition too', () => {
     const payload = parseKulturaZg(fixture, NOW);
     const exhibitions = fixture.events.filter((row) => row.type === 'Izložba');
     expect(exhibitions).toHaveLength(104);
+    const hours = (row: Row): number => (Date.parse(row.occurrence_end) - Date.parse(row.occurrence_start)) / 3_600_000;
     for (const row of exhibitions) {
       const item = byId(payload, row.occurrence_id);
-      expect(item.data?.precision, item.title).toBe('day');
+      expect(item.data?.precision, item.title).toBe(hours(row) >= 6 ? 'day' : 'time');
       expect(item.data?.category).toBe('izlozba');
     }
+    // Measured on the saved response: 89 exhibitions open a day or more, 15 shorter (openings, evening hours).
+    expect(exhibitions.filter((row) => hours(row) < 6)).toHaveLength(15);
     const precisions = new Map<string, number>();
     for (const item of payload.items) precisions.set(String(item.data?.precision), (precisions.get(String(item.data?.precision)) ?? 0) + 1);
-    // 104 exhibitions and the one workshop that runs 08:00 to 20:00; the other 45 are on the clock.
-    expect(Object.fromEntries(precisions)).toEqual({ day: 105, time: 45 });
+    // 89 exhibitions and the one workshop that runs 08:00 to 20:00; the other 60 are on the clock.
+    expect(Object.fromEntries(precisions)).toEqual({ day: 90, time: 60 });
+    // Round 1 desktop F4: an opening typed Izložba at 20:00 until 21:00 is at 20:00, not "cijeli dan".
+    const opening = byId(payload, '60e7e54a-d5a1-42c3-ace8-36e10710641a');
+    expect(opening.title).toBe('Otvorenje izložbe Vladimira Novaka: Možda ništa');
+    expect(opening.at).toBe('2026-09-30T18:00:00.000Z');
+    expect(opening.data).toMatchObject({ category: 'izlozba', precision: 'time' });
     const workshop = byId(payload, '6b0f0a0f-15df-40d1-8c6c-6039aebe9b4f');
     expect(workshop.data).toMatchObject({ category: 'radionica', precision: 'day' });
     const play = byId(payload, 'cc9c63cf-c971-4682-83fe-5a0b2b52260c');
@@ -87,6 +95,30 @@ describe('kultura-zg on the saved response', () => {
     const doctored = structuredClone(fixture);
     Object.assign(doctored.events[0]!, { type: 'Razno', occurrence_start: '2026-09-30T00:00:00', occurrence_end: '2026-09-30T23:59:00' });
     expect(byId(parseKulturaZg(doctored, NOW), doctored.events[0]!.occurrence_id).data).toMatchObject({ category: 'ostalo', precision: 'day' });
+    // An exhibition the source gives no end is a day's listing; any other type without an end is on the clock.
+    const open = structuredClone(fixture);
+    Object.assign(open.events[0]!, { type: 'Izložba', occurrence_start: '2026-09-30T20:00:00', occurrence_end: null });
+    Object.assign(open.events[1]!, { type: 'Koncert', occurrence_start: '2026-09-30T20:00:00', occurrence_end: null });
+    const parsed = parseKulturaZg(open, NOW);
+    expect(byId(parsed, open.events[0]!.occurrence_id).data?.precision).toBe('day');
+    expect(byId(parsed, open.events[1]!.occurrence_id).data?.precision).toBe('time');
+  });
+
+  it('names the venue as a reader finds it: the hall the address names, else the organisation, never an entrance or a seat (round 1 desktop F6)', () => {
+    const payload = parseKulturaZg(fixture, NOW);
+    const venues = new Set(payload.items.map((item) => String(item.data?.venue)));
+    for (const label of ['Ulaz za gledatelje', 'Sjedište Organizacije', 'Sjedište Gavelle', 'Muzej', 'Zbirka', 'Trg Narodne zaštite 2', 'Ulica Gjure Čanića 6']) {
+      expect(venues.has(label), label).toBe(false);
+    }
+    // The puppet theatre's entrance label gives way to the theatre's name; a named hall of an organisation stays itself.
+    expect(byId(payload, 'a839db8f-a68d-426f-97c7-e6139af2e827').data).toMatchObject({ venue: 'Zagrebačko kazalište lutaka', organiser: 'Zagrebačko kazalište lutaka' });
+    const kinoteka = payload.items.find((item) => item.data?.organiser === 'Centar za kulturu i film Augusta Cesarca' && item.data?.venue === 'Kino Kinoteka');
+    expect(kinoteka).toBeDefined();
+    expect(venues.has('Knjižnica Prečko')).toBe(true);
+    expect(venues.has('Tehnički muzej Nikola Tesla')).toBe(true);
+    expect(venues.has('Gradsko kazalište Trešnja')).toBe(true);
+    // Every item names a venue: the fixture has an address label or an organisation on every row.
+    for (const item of payload.items) expect(item.data?.venue, item.id).toBeTruthy();
   });
 
   it('carries the venue, the organiser, the district and the kids flag, and the flag only when the source states it', () => {

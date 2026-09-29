@@ -28,6 +28,13 @@ export const KULTURA_ZG_DAYS = 8;
 export const KULTURA_ZG_MAX_ITEMS = 300;
 /** A listing of at least this long is a day's programme, not an hour on the clock. */
 const WINDOW_AS_DAY_MS = 6 * 3_600_000;
+/**
+ * `address_name` is the organisation's own label for the address. Most name the hall ("Kino Kinoteka", "Knjižnica
+ * Prečko"), but some name no place a reader could find: an entrance ("Ulaz za gledatelje", the Zagrebačko kazalište
+ * lutaka's), a seat ("Sjedište Organizacije", "Sjedište Gavelle"), the bare kind ("Muzej", "Zbirka") or the street and
+ * number ("Ulica Gjure Čanića 6"). Those print the organisation's name instead (round 1 desktop F6).
+ */
+const LABEL_NOT_A_PLACE = /^(?:ulaz|sjedi[sš]te)(?:\s|$)|^(?:muzej|zbirka|galerija|kino|knji[zž]nica|kazali[sš]te|dvorana)$|\s\d+[a-z]?$/iu;
 
 /** One occurrence as served: the fields this module reads, local times without a zone. */
 interface KulturaRow {
@@ -67,6 +74,14 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/** The place the occurrence is at, as a reader names it: the address's label, else the organisation's name. */
+function venueName(row: KulturaRow): string | undefined {
+  const label = text(row.address_name);
+  const organiser = text(row.organisation_name);
+  if (label && !LABEL_NOT_A_PLACE.test(label)) return label;
+  return organiser || label || undefined;
+}
+
 /** The shape check: a list of occurrences that each carry an id, a start and a point. Anything else is not this source. */
 function checkRows(body: unknown): KulturaRow[] {
   const events = (body as { events?: unknown } | null)?.events;
@@ -91,9 +106,12 @@ function toItem(row: KulturaRow): ItemInput | null {
   const end = localIso(row.occurrence_end);
   const until = end !== undefined && Date.parse(end) > Date.parse(at) ? end : undefined;
   const type = text(row.type);
-  const day =
-    type === 'Izložba' ||
-    (until !== undefined && Date.parse(until) - Date.parse(at) >= WINDOW_AS_DAY_MS);
+  // A window of six hours or more (00:00 to 23:59 among them) is a day's listing. An exhibition is a day's listing
+  // only when its window says so, or when it has none: an opening at 20:00 until 21:00 is on the clock (round 1
+  // desktop F4, five openings of 29 September typed Izložba printed "cijeli dan").
+  const day = until !== undefined
+    ? Date.parse(until) - Date.parse(at) >= WINDOW_AS_DAY_MS
+    : type === 'Izložba';
   const slug = text(row.occurrence_slug);
   return {
     id: `kultura-zg:${row.occurrence_id}`,
@@ -107,7 +125,7 @@ function toItem(row: KulturaRow): ItemInput | null {
     data: compactData({
       source: 'kultura-zagreb',
       category: CATEGORY_BY_TYPE[type] ?? 'ostalo',
-      venue: text(row.address_name) || undefined,
+      venue: venueName(row),
       organiser: text(row.organisation_name) || undefined,
       precision: day ? 'day' : 'time',
       district: districtOf(row.longitude, row.latitude) ?? undefined,
