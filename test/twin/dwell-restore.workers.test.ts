@@ -18,7 +18,6 @@ const testEnv = env as unknown as Env;
 const NET = syntheticNetwork(corridorSpec());
 const OTHER_GRAPH = { ...NET, graphHash: 'ffffffffffffffff' };
 const INDEX = corridorIndex(NET, [{ tripId: 't1a', pathId: '1_0' }]);
-const T0 = Math.floor(Date.now() / 1000) + 86_400;
 
 let twinSeq = 0;
 const freshTwin = () => twinStub(testEnv, `twin-dwell-${++twinSeq}`);
@@ -64,7 +63,12 @@ describe('TwinDO keeps the F11 tables across an eviction', () => {
     setTwinIndexSourceForTest(async () => INDEX);
     setTwinNetworkSourceForTest(async () => network);
     setTwinOverridesSourceForTest(async () => ({ overrides: parseDwellOverrides([{ stop: 'T600', defaultSec: 45, reason: 'test: an owner number' }]), error: null }));
-    setTwinUpstreamForTest(async () => new Response(frame(T0, [tram(100, T0)], []), { status: 200, headers: { etag: 'W/"g1"' } }));
+    // This fixture exercises dwell restoration, not future-stamp refusal.
+    // Date the frame when requested so it stays fresh even in a queued suite.
+    setTwinUpstreamForTest(async () => {
+      const at = Math.floor(Date.now() / 1000);
+      return new Response(frame(at, [tram(100, at)], []), { status: 200, headers: { etag: 'W/"g1"' } });
+    });
   });
 
   it('restores the recent dwell window inside its own window, loads the junction cells, reads the overrides, and drops the junction cells on a rebuilt graph', async () => {
