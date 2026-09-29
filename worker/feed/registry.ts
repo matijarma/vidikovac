@@ -3,9 +3,14 @@ import type { FeedPayload } from './payload';
 import { fetchCkanGeo } from './modules/ckan-geo';
 import { fetchDhmzCap } from './modules/dhmz-cap';
 import { fetchDhmzForecast } from './modules/dhmz-forecast';
+import { fetchDhmzHourly } from './modules/dhmz-hourly';
 import { fetchDhmzNow } from './modules/dhmz-now';
 import { fetchEmsc } from './modules/emsc';
 import { fetchGlasnik } from './modules/glasnik';
+import { fetchHak } from './modules/hak';
+import { fetchKulturaZg } from './modules/kultura-zg';
+import { fetchPrekidi } from './modules/prekidi';
+import { fetchProgrami } from './modules/programi';
 import { fetchPrometnice } from './modules/prometnice';
 import { fetchZetRt, inTeaserBox } from './modules/zet-rt';
 import { DOGADANJA_ATTRIBUTION, fetchDogadanja } from './modules/dogadanja';
@@ -64,6 +69,33 @@ export const ATTRIBUTION: Record<ModuleId, Attribution> = {
   // the other five) -- see dogadanja/index.ts's own header for why this one
   // row can't state a single licence the way every other module's row does.
   dogadanja: DOGADANJA_ATTRIBUTION,
+  // The October 2026 modules (U3). The three yellow ones (programi, hak, prekidi) carry the label
+  // "neslužbeni prikaz"; hak is the article-8 relay of HAK's terms (docs/izvori.md quotes articles 8 and 10).
+  'kultura-zg': {
+    text: 'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje',
+    url: 'https://kultura.zagreb.hr/',
+    licence: 'Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)',
+  },
+  programi: {
+    text: 'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz',
+    url: 'https://www.kgz.hr/hr/dogadjanja/10',
+    licence: 'Licenca nije navedena',
+  },
+  'dhmz-hourly': {
+    text: 'Izvor: DHMZ, Otvorena dozvola, {vrijeme}',
+    url: 'https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici',
+    licence: OPEN_LICENCE,
+  },
+  hak: {
+    text: 'Izvor: HAK, stanje na cestama, {vrijeme}; neslužbeni prikaz',
+    url: 'https://www.hak.hr/info/stanje-na-cestama/',
+    licence: 'Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu',
+  },
+  prekidi: {
+    text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+    url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
+    licence: 'Licenca nije navedena',
+  },
 };
 
 interface ModuleDefinition {
@@ -129,6 +161,14 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
     attribution: DOGADANJA_ATTRIBUTION,
     fetcher: fetchDogadanja,
   },
+  // One read an hour of 4 MB (kultura-zg, 1,000 rows) and 6.9 MB (dhmz-hourly) is the most the two large
+  // bodies should cost the sources; the last good copy of the City's programme serves for three days.
+  'kultura-zg': defineModule({ id: 'kultura-zg', tier: 'session', ttl: 3600, maxStale: 259200, load: fetchKulturaZg }),
+  programi: defineModule({ id: 'programi', tier: 'session', ttl: 3600, maxStale: 259200, load: fetchProgrami }),
+  'dhmz-hourly': defineModule({ id: 'dhmz-hourly', tier: 'session', ttl: 3600, maxStale: 21600, load: fetchDhmzHourly }),
+  hak: defineModule({ id: 'hak', tier: 'session', ttl: 600, maxStale: 21600, load: fetchHak }),
+  // Its own fetcher reports each publisher in `sources` (hep-ods, vio), so one failing leaves the other live.
+  prekidi: defineModule({ id: 'prekidi', tier: 'session', ttl: 3600, maxStale: 172800, load: fetchPrekidi }),
 };
 
 export const MODULE_IDS = Object.keys(MODULES) as ModuleId[];
@@ -169,14 +209,20 @@ export function clearFetcherOverrides(): void {
 // count; nothing is held back by tier or by source licence. /open/*.json, the
 // machine-readable republication, keeps its own open-tier selection and is a
 // different thing from showing a row on a wall with its credit.
-export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja', 'dhmz-forecast', 'glasnik'];
+export const TEASER_MODULES: readonly ModuleId[] = ['dhmz-now', 'zet-rt', 'dogadanja', 'dhmz-forecast', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'];
 export const TEASER_EMSC_LIMIT = 10;
+/** The teaser carries the City's programme from a little before now to a day and a half ahead, at most this many occurrences. */
+export const TEASER_KULTURA_MAX = 120;
+export const TEASER_KULTURA_BEHIND_MS = 2 * 3_600_000;
+export const TEASER_AHEAD_MS = 36 * 3_600_000;
+/** ... and the hourly forecast from the hour that is running to the same horizon. */
+export const TEASER_HOURLY_BEHIND_MS = 3_600_000;
 
 function vozila(count: number): string {
   return count % 10 === 1 && count % 100 !== 11 ? `${count} vozilo` : `${count} vozila`;
 }
 
-export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; lat: number }): ModuleSnapshot {
+export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; lat: number }, now: number = Date.now()): ModuleSnapshot {
   switch (snapshot.module) {
     case 'dhmz-now':
       return snapshot;
@@ -204,6 +250,20 @@ export function teaserSubset(snapshot: ModuleSnapshot, centre?: { lon: number; l
       };
       return { ...snapshot, items: [count, ...boxed, ...delays] };
     }
+    case 'kultura-zg': {
+      // Not over two hours ago and starting within 36 hours: what the wall can name tonight and tomorrow morning.
+      const kept = snapshot.items
+        .filter((item) => Date.parse(item.until ?? item.at ?? '') >= now - TEASER_KULTURA_BEHIND_MS && Date.parse(item.at ?? '') <= now + TEASER_AHEAD_MS)
+        .sort((a, b) => Date.parse(a.at ?? '') - Date.parse(b.at ?? ''))
+        .slice(0, TEASER_KULTURA_MAX);
+      return limitedSnapshot(snapshot, kept);
+    }
+    case 'dhmz-hourly':
+      // The steps from the hour that is running to a day and a half ahead.
+      return limitedSnapshot(snapshot, snapshot.items.filter((item) => {
+        const at = Date.parse(item.at ?? '');
+        return at >= now - TEASER_HOURLY_BEHIND_MS && at <= now + TEASER_AHEAD_MS;
+      }));
     case 'emsc': {
       const newestFirst = [...snapshot.items].sort((a, b) => Date.parse(b.at ?? '') - Date.parse(a.at ?? ''));
       return limitedSnapshot(snapshot, newestFirst.slice(0, TEASER_EMSC_LIMIT));

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DATA_KEYS } from '../../worker/feed/schema';
 import type { ItemKind, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { MODULES, MODULE_IDS } from '../../worker/feed/registry';
-import { FIXTURE_CONTEXTS, FIXTURE_NOW } from './fixture-contexts';
+import { FIXTURE_CONTEXTS } from './fixture-contexts';
 
 const EXPECTED_KINDS: Record<ModuleId, ItemKind[]> = {
   'zet-rt': ['vehicle'],
@@ -14,6 +14,11 @@ const EXPECTED_KINDS: Record<ModuleId, ItemKind[]> = {
   glasnik: ['act'],
   'ckan-geo': ['poi'],
   dogadanja: ['event'],
+  'kultura-zg': ['event'],
+  programi: ['event'],
+  'dhmz-hourly': ['forecast'],
+  hak: ['road'],
+  prekidi: ['cut'],
 };
 
 describe.each(MODULE_IDS)('module %s against its real upstream sample', (id) => {
@@ -29,7 +34,8 @@ describe.each(MODULE_IDS)('module %s against its real upstream sample', (id) => 
     expect(snapshot.module).toBe(id);
     expect(snapshot.tier).toBe(MODULES[id].tier);
     expect(snapshot.attribution).toEqual(MODULES[id].attribution);
-    expect(snapshot.fetchedAt).toBe(FIXTURE_NOW.toISOString());
+    // Each module is read at the instant of its own fixtures: FIXTURE_NOW, or U3_FIXTURE_NOW for the October modules.
+    expect(snapshot.fetchedAt).toBe(FIXTURE_CONTEXTS[id].now().toISOString());
     for (const item of snapshot.items) {
       expect(item.module, `module of ${item.id}`).toBe(id);
       expect(item.tier, `tier of ${item.id}`).toBe(MODULES[id].tier);

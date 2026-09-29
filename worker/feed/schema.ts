@@ -15,7 +15,14 @@ export type ModuleId =
   | 'emsc'
   | 'glasnik'
   | 'ckan-geo'
-  | 'dogadanja';
+  | 'dogadanja'
+  // The October 2026 modules (U3): the City's culture programme, the libraries' programme, DHMZ's hourly
+  // steps, HAK's road report for the Zagreb area, and planned power and water cuts.
+  | 'kultura-zg'
+  | 'programi'
+  | 'dhmz-hourly'
+  | 'hak'
+  | 'prekidi';
 
 /** open: readable without a session (safety tier, kiosk teaser). session: needs a data token. */
 export type Tier = 'open' | 'session';

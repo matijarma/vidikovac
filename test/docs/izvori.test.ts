@@ -60,8 +60,8 @@ describe('app/src/data/izvori.json carries a dogadanjaSources entry per data.sou
     }
   });
 
-  it('still lists exactly the nine ModuleId rows in "sources" (M owns that count -- test/app/izvori.test.ts)', () => {
-    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(9);
+  it('lists exactly the fourteen ModuleId rows in "sources" (nine and the five of October 2026, U3; the count is test/app/izvori.test.ts\'s too)', () => {
+    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(14);
   });
 });
 
@@ -89,13 +89,22 @@ describe('docs/izvori.md and docs/prijava/prijedlog-projekta.md name every dogad
   });
 });
 
-describe('R-P5: the two dropped sources are named in docs/izvori.md with the robots.txt reason', () => {
+describe('R-P5 and O-70: the two sources a robots.txt bears on are named in docs/izvori.md with their reason', () => {
   const izvori = read('docs/izvori.md');
 
-  it('names Guru za kulturu and the disallowed path', () => {
+  it('names Guru za kulturu, the disallowed path and the ruling that reads it (O-70, 22 September 2026)', () => {
     expect(izvori).toContain('Guru za kulturu');
     expect(izvori).toContain('kultura.zagreb.hr');
     expect(izvori).toMatch(/robots\.txt/);
+    expect(izvori).toContain('O-70');
+    expect(izvori).toContain('22. rujna 2026.');
+    expect(izvori).toContain('Disallow: /api/');
+    // The route that is read, once an hour and identified, and the one exception in the guard's test.
+    expect(izvori).toContain('kultura.zagreb.hr/api/chatbot/events');
+    expect(izvori).toContain('najviše jednom na sat');
+    expect(izvori).toContain('OWNER_OVERRIDES');
+    // It is no longer called left out.
+    expect(izvori).not.toMatch(/Guru za kulturu\*\*[^\n]*isključen/);
   });
 
   it('names the Skupština YouTube Atom feed, the disallowed path, and links the channel instead', () => {
@@ -119,7 +128,7 @@ describe('R-F7: docs point readers to /izvori for the per-source list now that t
     expect(section.slice(0, 400)).toMatch(PAGE_REF);
   });
 
-  it('docs/izvori.md says the two robots-dropped sources are also named on /izvori', () => {
+  it('docs/izvori.md says the two robots.txt cases are also named on /izvori', () => {
     const section = izvori.slice(izvori.indexOf('Dva izvora navedena'));
     expect(section.slice(0, 300)).toMatch(PAGE_REF);
   });
@@ -127,6 +136,52 @@ describe('R-F7: docs point readers to /izvori for the per-source list now that t
   it('section 5 of the proposal says the per-source list is on /izvori, not only in docs/izvori.md', () => {
     const section = prijedlog.slice(prijedlog.indexOf('Redak "Zagrebački događaji"'));
     expect(section.slice(0, 300)).toMatch(PAGE_REF);
+  });
+});
+
+// U3: hak is the article-8 relay of HAK's terms. Article 10 forbids scripted collection without written approval; the row
+// cites 8 and quotes 10, so a reader sees both (owner decision 2 of the preparation phase).
+describe('the October modules are documented as module rows, and hak quotes article 10', () => {
+  const izvori = read('docs/izvori.md');
+  const NL = String.fromCharCode(10);
+  const row = (id: string) => izvori.split(NL).find((line) => line.startsWith('| `' + id + '` |'))!;
+
+  it('has a row for each of the five with the plan\'s windows, under the heading of October 2026', () => {
+    expect(izvori).toContain('## Moduli uvedeni u listopadu 2026.');
+    for (const [id, pair] of [['kultura-zg', '3600 / 259200'], ['programi', '3600 / 259200'], ['dhmz-hourly', '3600 / 21600'], ['hak', '600 / 21600'], ['prekidi', '3600 / 172800']] as const) {
+      expect(row(id), id).toBeDefined();
+      expect(row(id), id).toContain(` ${pair} |`);
+      expect(izvori.indexOf(row(id))).toBeGreaterThan(izvori.indexOf('## Moduli uvedeni u listopadu 2026.'));
+    }
+  });
+
+  it('cites article 8 in the hak row and quotes article 10 beside it', () => {
+    expect(row('hak')).toContain('čl. 8');
+    expect(izvori).toContain('Članak 10');
+    expect(izvori).toContain('automatizirano preuzimati, indeksirati ili prikupljati sadržaje uporabom robota, programskih skripti, alata za scraping ili drugih automatiziranih sredstava, osim uz prethodno pisano odobrenje HAK-a');
+    expect(izvori).toContain('kontinuirano ili automatizirano prenošenje sadržajno ograničenog izbora informacija');
+    expect(izvori).toContain('TEASER_MODULES');
+  });
+
+  it('lists a live source as a module, never as planned (F28)', () => {
+    const planned = izvori.slice(izvori.indexOf('## Izvori planirani za financirano razdoblje'), izvori.indexOf('## Kako navodimo izvore'));
+    expect(planned).not.toContain('HAK, stanje na cestama');
+    expect(planned).not.toContain('HEP ODS');
+    expect(planned).not.toContain('hep.hr/ods/ostalo');
+  });
+
+  it('names the two derived static datasets of the round with their licence', () => {
+    const statics = izvori.slice(izvori.indexOf('### Statički skupovi'), izvori.indexOf('### ZET-ova shema tramvajskih linija'));
+    expect(statics).toContain('Radno vrijeme mjesta');
+    expect(statics).toContain('© OpenStreetMap contributors, ODbL 1.0; izvedena baza podataka (radno vrijeme mjesta)');
+    expect(statics).toContain('Ulice za smještaj prekida i cestovnih obavijesti');
+    expect(statics).toContain('worker/data/street-points.json');
+    expect(statics).toContain('npm run build:street-points');
+  });
+
+  it('uses no em dash in the lines this round added', () => {
+    const october = izvori.slice(izvori.indexOf('## Moduli uvedeni u listopadu 2026.'), izvori.indexOf('### Gradski katalog i uvjeti'));
+    expect(october).not.toContain('\u2014');
   });
 });
 

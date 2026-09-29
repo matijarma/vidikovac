@@ -38,8 +38,9 @@ describe('docs/izvori.md', () => {
     const emsc = izvori.split(NL).find((line) => line.startsWith('| `emsc` |'))!;
     expect(emsc.split('|').map((cell) => cell.trim())[4]).toBe(MODULES.emsc.attribution.licence);
   });
-  it('states TTL and maxStale for the nine modules exactly as the plan does', () => {
-    for (const pair of ['10 / 300', '180 / 1800', '60 / 3600', '300 / 7200', '600 / 7200', '1800 / 86400', '3600 / 604800', '86400 / 2592000']) {
+  it('states TTL and maxStale for the fourteen modules exactly as the plan does', () => {
+    // The last four are the October modules of U3 (kultura-zg and programi share 3600 / 259200).
+    for (const pair of ['10 / 300', '180 / 1800', '60 / 3600', '300 / 7200', '600 / 7200', '1800 / 86400', '3600 / 604800', '86400 / 2592000', '3600 / 259200', '600 / 21600', '3600 / 21600', '3600 / 172800']) {
       expect(izvori, `missing TTL pair ${pair}`).toContain(pair);
     }
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
-import { FIXTURE_CONTEXTS } from './fixture-contexts';
+import { FIXTURE_CONTEXTS, U3_FIXTURE_NOW } from './fixture-contexts';
 import {
   ATTRIBUTION,
 
@@ -24,8 +24,8 @@ describe('module registry', () => {
       expect(Object.values(snapshot.sources!).reduce((sum, source) => sum + source.itemCount, 0)).toBe(snapshot.items.length);
     }
   });
-  it('carries all nine modules with the refresh windows the plan fixes', () => {
-    expect(MODULE_IDS).toHaveLength(9);
+  it('carries all fourteen modules with the refresh windows the plan fixes', () => {
+    expect(MODULE_IDS).toHaveLength(14);
     const windows: Record<ModuleId, [number, number]> = {
       'zet-rt': [10, 300], // R-TE4: the twin's tick; the Cache API entry actually lasts until validUntil
       prometnice: [180, 1800],
@@ -36,6 +36,12 @@ describe('module registry', () => {
       glasnik: [3600, 604800],
       'ckan-geo': [86400, 2592000],
       dogadanja: [900, 86400],
+      // October 2026 (U3): the two large bodies (4 MB, 6.9 MB) are read once an hour; the City's programme keeps three days.
+      'kultura-zg': [3600, 259200],
+      programi: [3600, 259200],
+      'dhmz-hourly': [3600, 21600],
+      hak: [600, 21600],
+      prekidi: [3600, 172800],
     };
     for (const [id, [ttl, maxStale]] of Object.entries(windows) as [ModuleId, [number, number]][]) {
       expect(MODULES[id].ttl, `ttl of ${id}`).toBe(ttl);
@@ -47,10 +53,10 @@ describe('module registry', () => {
   it('puts the safety tier in the open tier and everything else behind a session', () => {
     expect([...OPEN_MODULES].sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
     expect(MODULE_IDS.filter((id) => MODULES[id].tier === 'session').sort()).toEqual(
-      ['dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik', 'zet-rt'].sort(),
+      ['dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi', 'zet-rt'].sort(),
     );
     expect([...WARM_MODULES].sort()).toEqual(
-      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'glasnik'].sort(),
+      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi'].sort(),
     );
     expect(isModuleId('zet-rt')).toBe(true);
     expect(isModuleId('nepostojeci')).toBe(false);
@@ -86,6 +92,48 @@ describe('module registry', () => {
     }
     for (const id of MODULE_IDS) expect(MODULES[id].attribution).toEqual(ATTRIBUTION[id]);
   });
+
+  // U3: the strings of the brief's table (§7 and the Data table of docs/upgrade-2026-10-plan/U3.md), character for character.
+  it('carries the attribution, address and licence of the five October modules verbatim', () => {
+    expect(ATTRIBUTION['kultura-zg']).toEqual({
+      text: 'Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje',
+      url: 'https://kultura.zagreb.hr/',
+      licence: 'Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)',
+    });
+    expect(ATTRIBUTION.programi).toEqual({
+      text: 'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz',
+      url: 'https://www.kgz.hr/hr/dogadjanja/10',
+      licence: 'Licenca nije navedena',
+    });
+    expect(ATTRIBUTION['dhmz-hourly']).toEqual({
+      text: 'Izvor: DHMZ, Otvorena dozvola, {vrijeme}',
+      url: 'https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici',
+      licence: OPEN_LICENCE,
+    });
+    expect(ATTRIBUTION.hak).toEqual({
+      text: 'Izvor: HAK, stanje na cestama, {vrijeme}; neslužbeni prikaz',
+      url: 'https://www.hak.hr/info/stanje-na-cestama/',
+      licence: 'Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu',
+    });
+    expect(ATTRIBUTION.prekidi).toEqual({
+      text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+      url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
+      licence: 'Licenca nije navedena',
+    });
+  });
+
+  it('reads each October module through the registry on its saved response, with items of the kind it declares', async () => {
+    for (const [id, kind] of [['kultura-zg', 'event'], ['programi', 'event'], ['dhmz-hourly', 'forecast'], ['hak', 'road'], ['prekidi', 'cut']] as const) {
+      const snapshot = await MODULES[id].fetcher(FIXTURE_CONTEXTS[id]);
+      expect(snapshot.items.length, id).toBeGreaterThan(0);
+      expect(new Set(snapshot.items.map((item) => item.kind)), id).toEqual(new Set([kind]));
+      // Every one but the hourly forecast (a complete series, no cap) says how much of its list it shows.
+      if (id !== 'dhmz-hourly') expect(snapshot.coverage?.shown, id).toBe(snapshot.items.length);
+    }
+    // The composite one reports each publisher, as dogadanja does.
+    const prekidi = await MODULES.prekidi.fetcher(FIXTURE_CONTEXTS.prekidi);
+    expect(Object.keys(prekidi.sources ?? {}).sort()).toEqual(['hep-ods', 'vio']);
+  });
 });
 
 function snapshot(module: ModuleId, items: FeedItem[]): ModuleSnapshot {
@@ -109,7 +157,62 @@ describe('teaserSubset', () => {
     expect(teaserSubset(missing).items).toEqual([]);
   });
   it('carries every session module to the public screen: nothing the app fetches is held back before the scan', () => {
-    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'dogadanja', 'dhmz-forecast', 'glasnik']);
+    expect([...TEASER_MODULES]).toEqual(['dhmz-now', 'zet-rt', 'dogadanja', 'dhmz-forecast', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi']);
+  });
+
+  // 22 September ruling: every fetched module reaches the public screen with its credit. U3's five are read in full
+  // except the two large ones, which the teaser cuts to the hours the wall can name.
+  it('sends programi, hak and prekidi whole', async () => {
+    for (const id of ['programi', 'hak', 'prekidi'] as const) {
+      const snapshot = { ...(await MODULES[id].fetcher(FIXTURE_CONTEXTS[id])), status: 'live' as const };
+      expect(teaserSubset(snapshot, undefined, U3_FIXTURE_NOW.getTime())).toBe(snapshot);
+    }
+  });
+
+  it('cuts kultura-zg to what is not over two hours ago and starts within 36 hours, at most 120 by start', async () => {
+    const fetched = await MODULES['kultura-zg'].fetcher(FIXTURE_CONTEXTS['kultura-zg']);
+    const snapshot: ModuleSnapshot = { ...fetched, status: 'live' };
+    expect(snapshot.items).toHaveLength(150);
+    const now = U3_FIXTURE_NOW.getTime();
+    const cut = teaserSubset(snapshot, undefined, now);
+    // 17:45 on 29 Sep: the window is from 15:45 to 1 Oct 05:45 (Zagreb), so what starts on 1 Oct at 08:00 or later is out.
+    for (const item of cut.items) {
+      expect(Date.parse(item.until ?? item.at!)).toBeGreaterThanOrEqual(now - 2 * 3_600_000);
+      expect(Date.parse(item.at!)).toBeLessThanOrEqual(now + 36 * 3_600_000);
+    }
+    expect(cut.items.length).toBeGreaterThan(0);
+    expect(cut.items.length).toBeLessThan(snapshot.items.length);
+    const starts = cut.items.map((item) => Date.parse(item.at!));
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    // Everything the window admits is there while it fits the cap.
+    const admitted = snapshot.items.filter((item) => Date.parse(item.until ?? item.at!) >= now - 2 * 3_600_000 && Date.parse(item.at!) <= now + 36 * 3_600_000);
+    expect(admitted.length).toBeLessThanOrEqual(120);
+    expect(cut.items.map((item) => item.id).sort()).toEqual(admitted.map((item) => item.id).sort());
+    expect(cut.coverage).toMatchObject({ shown: cut.items.length, total: 150, limited: true });
+    expect(cut.attribution).toBe(snapshot.attribution);
+    // The cap: 300 admitted occurrences leave the 120 that start first.
+    const many = { ...snapshot, items: Array.from({ length: 300 }, (_, n) => ({ ...snapshot.items[0]!, id: `kultura-zg:${n}`, at: new Date(now + n * 60_000).toISOString(), until: new Date(now + n * 60_000 + 3_600_000).toISOString() })) };
+    const capped = teaserSubset(many, undefined, now);
+    expect(capped.items).toHaveLength(120);
+    expect(capped.items[0]!.id).toBe('kultura-zg:0');
+    expect(capped.items[119]!.id).toBe('kultura-zg:119');
+  });
+
+  it('cuts dhmz-hourly to the steps from an hour ago to 36 hours ahead', async () => {
+    const fetched = await MODULES['dhmz-hourly'].fetcher(FIXTURE_CONTEXTS['dhmz-hourly']);
+    const snapshot: ModuleSnapshot = { ...fetched, status: 'live' };
+    expect(snapshot.items).toHaveLength(168);
+    const now = U3_FIXTURE_NOW.getTime();
+    const cut = teaserSubset(snapshot, undefined, now);
+    // Steps at 16:00Z (the hour before 15:45Z is 14:45Z, so 15:00Z is the first) through 1 Oct 03:00Z: 37 per station.
+    expect(cut.items).toHaveLength(2 * 37);
+    for (const item of cut.items) {
+      expect(Date.parse(item.at!)).toBeGreaterThanOrEqual(now - 3_600_000);
+      expect(Date.parse(item.at!)).toBeLessThanOrEqual(now + 36 * 3_600_000);
+    }
+    expect(cut.items.filter((item) => item.data?.station === 'gric')[0]!.at).toBe('2026-09-29T15:00:00.000Z');
+    expect(cut.items.filter((item) => item.data?.station === 'gric').at(-1)!.at).toBe('2026-10-01T03:00:00.000Z');
+    expect(cut.coverage?.shown).toBe(74);
   });
 
   // R-P1: the whole-fleet count stays (the panorama and the catalogue read

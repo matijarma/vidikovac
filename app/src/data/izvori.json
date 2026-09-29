@@ -71,6 +71,46 @@
       "url": "https://kulturpunkt.hr/wp-json/wp/v2/kp_22_announcement?_fields=id,link,title,excerpt,class_list,date&per_page=40&orderby=date&order=desc",
       "text": "Šest izvora zagrebačkih događanja: Kulturpunkt (CC BY-SA 3.0 HR), Skupština Grada Zagreba, kvartovske novosti, plan komunalnih aktivnosti i ZET (Otvorena dozvola), Etnografski muzej; licenca i poveznica navedeni uz svaku stavku prema polju \"source\"",
       "licence": "Više licenci, vidi izvor uz svaku stavku"
+    },
+    {
+      "module": "kultura-zg",
+      "naziv": "Guru za kulturu, program Grada Zagreba (kultura.zagreb.hr)",
+      "tier": "session",
+      "url": "https://kultura.zagreb.hr/",
+      "text": "Izvor: Guru za kulturu, Grad Zagreb (kultura.zagreb.hr), uz poveznicu na svako događanje",
+      "licence": "Ponovna uporaba uz navođenje izvora i poveznicu (kultura.zagreb.hr/pravila-koristenja)"
+    },
+    {
+      "module": "programi",
+      "naziv": "Knjižnice grada Zagreba, programi knjižnica",
+      "tier": "session",
+      "url": "https://www.kgz.hr/hr/dogadjanja/10",
+      "text": "Izvor: Knjižnice grada Zagreba; neslužbeni prikaz",
+      "licence": "Licenca nije navedena"
+    },
+    {
+      "module": "dhmz-hourly",
+      "naziv": "DHMZ, satna prognoza za Grič i Maksimir",
+      "tier": "session",
+      "url": "https://meteo.hr/proizvodi.php?section=podaci&param=xml_korisnici",
+      "text": "Izvor: DHMZ, Otvorena dozvola, {vrijeme}",
+      "licence": "Otvorena dozvola (NN 67/17)"
+    },
+    {
+      "module": "hak",
+      "naziv": "HAK, stanje na cestama (ograničen izbor za zagrebačko područje)",
+      "tier": "session",
+      "url": "https://www.hak.hr/info/stanje-na-cestama/",
+      "text": "Izvor: HAK, stanje na cestama, {vrijeme}; neslužbeni prikaz",
+      "licence": "Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu"
+    },
+    {
+      "module": "prekidi",
+      "naziv": "HEP ODS i Vodoopskrba i odvodnja, najavljeni prekidi struje i vode",
+      "tier": "session",
+      "url": "https://www.hep.hr/ods/bez-struje/19?dp=zagreb",
+      "text": "Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz",
+      "licence": "Licenca nije navedena"
     }
   ],
   "dogadanjaSources": [
@@ -121,7 +161,7 @@
     {
       "naziv": "Guru za kulturu",
       "url": "https://kultura.zagreb.hr/",
-      "reason": "Isključeno (R-P5): događanja su dostupna samo preko putanje /api/, koju robots.txt te domene izričito zabranjuje."
+      "reason": "Čita se unatoč robots.txt-u, prema odluci vlasnika O-70 od 22. rujna 2026.: domena i program pripadaju Gradu Zagrebu, uvjeti (kultura.zagreb.hr/pravila-koristenja) dopuštaju ponovnu uporabu uz navođenje izvora i poveznicu, a robots.txt te domene zabranjuje putanju /api/ (Disallow: /api/). Aplikacija dohvaća samo tu jednu putanju, najviše jednom na sat, uz oznaku aplikacije u zaglavlju User-Agent; svaka druga putanja te domene ostaje izuzeta. Događanja se prikazuju kao zaseban izvor (modul kultura-zg), uz poveznicu na svako događanje."
     },
     {
       "naziv": "YouTube kanal Skupštine Grada Zagreba (Atom feed)",
@@ -141,6 +181,14 @@
       "text": "© OpenStreetMap contributors · Protomaps",
       "licence": "ODbL 1.0",
       "opis": "Nazivi i osi ulica za polje „Adresa ili stajalište” na javnom zaslonu, izvedeni iz karte koju aplikacija sama poslužuje. Izvedena baza podataka objavljuje se pod istom licencom."
+    },
+    {
+      "id": "osm-hours",
+      "naziv": "Radno vrijeme mjesta u gradu",
+      "url": "https://www.openstreetmap.org/copyright",
+      "text": "© OpenStreetMap contributors, ODbL 1.0; izvedena baza podataka (radno vrijeme mjesta)",
+      "licence": "ODbL 1.0",
+      "opis": "Nazivi, vrste i radno vrijeme ljekarni, pošta, knjižnica, trgovina, ugostiteljskih objekata i drugih mjesta unutar okvira grada, izvedeni pri izgradnji aplikacije iz izvoza podataka OpenStreetMapa za Hrvatsku. Izvedena baza podataka objavljuje se pod istom licencom."
     }
   ]
 }
