@@ -181,7 +181,7 @@ Base commit `170b43a3`, 29 September 2026. Where a sentence above was superseded
 
 - **DU1**, tag DU1 (`72e498c3`), pushed 29 September 2026 at 22:40 (Zagreb) and observed live without a red row over 300 readings. Future stamps are refused, the vehicle count comes from fresh positions, a rolling closure end says "u tijeku", and a frozen feed shows as an unconfirmed state.
 - **DU2**, tag DU2 (`44e8ac14`), pushed the same evening at 22:53. ZET's no-service alerts take departures off the boards, its notices appear as "ZET javlja", and a service state (normal, reduced, silent) is judged against the timetable; the voice follows it and names no cause.
-- **DU3**, the tag DU3, pushed 30 September 2026. Five feed modules (culture calendar, libraries, hourly rain, road state, planned cuts), OpenStreetMap opening hours, rail on the first screen, three joins, the documents and the note on `/prijava/`.
+- **DU3**, the tag DU3, pushed 29 September 2026. Five feed modules (culture calendar, libraries, hourly rain, road state, planned cuts), OpenStreetMap opening hours, rail on the first screen, three joins, the documents and the note on `/prijava/`.
 
 Not built (the §5.4 cuts): the release smoke, observer rows beyond `departures` and `silent-departures`, the scenes `stale0745`, `silence0745` and `notice1230`, the freshness watch, the learned-normal writers and reader, the closure-to-lines and heat-to-water joins.
 

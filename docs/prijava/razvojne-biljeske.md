@@ -26,7 +26,7 @@ Pet promatranja javne inačice prototipa (u jutarnjem i večernjem vršnom satu,
 
 **Četvrti korak: jezik i dokumenti.** Sav tekst sučelja nalazi se u jednom katalogu, a svaki pojam ima jednu riječ (Karta, stajalište, „uvijek”, vozni red). Na javnom zaslonu nema napomena o svježini ni pouzdanosti podataka; izvori i obrada navedeni su na `/izvori`. Uklonjeni su dijelovi koda koji se više nigdje ne koriste, a dokumenti proizvoda prepisani su prema odobrenom planu. U repozitoriju su i alati kojima je krug provjeravan: testovi prihvaćanja za zaslon i telefon, ocjenjivač putova tramvaja na snimljenim danima i alat za promatranje javne inačice koji samo čita. Izmjerene vrijednosti i ručne provjere na uređajima nalaze se u [zapisu provjera](https://github.com/matijarma/vidikovac/blob/main/docs/kaj-verification.md).
 
-## 30. rujna 2026. · Kad grad ne odgovara voznom redu
+## 29. rujna 2026. · Kad grad ne odgovara voznom redu
 
 Kad ZET 28. rujna gotovo nije vozio, svi su izvori prototipa radili, a zaslon je cijeli dan najavljivao polaske po voznom redu. Razvojna bilješka od 27. rujna i promatranja tih dana pretočeni su u nadogradnju u tri isporuke ([plan nadogradnje](https://github.com/matijarma/vidikovac/blob/main/docs/upgrade-2026-10.md), [radne datoteke plana](https://github.com/matijarma/vidikovac/blob/main/docs/history/upgrade-2026-10-plan/README.md)).
 
