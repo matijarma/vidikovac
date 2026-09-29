@@ -47,8 +47,9 @@ upute o pretraživanju dodirom. Ukratko:
   po voznom redu, a zaglavlje ne najavljuje nijedan polazak. Kad ZET šalje
   znatno manje vozila nego što ih predviđa vozni red, zaglavlje to jednom
   kaže brojem (koliko ih je u pokretu i koliko ih predviđa vozni red),
-  rečenicu o polasku po voznom redu zadržavaju samo linije za koje se vozilo
-  vidi, a vlakovi i BAJS idu naprijed. Kad vozila gotovo nema, zaglavlje ne
+  rečenicu o polasku po voznom redu zadržava linija dok je njezin vlastiti
+  udio vozila najmanje pola onoga što predviđa vozni red (linija je
+  „potvrđena”), a vlakovi i BAJS idu naprijed. Kad vozila gotovo nema, zaglavlje ne
   najavljuje nijedan polazak, karta pokazuje mrežu i vozila koja postoje, a
   jedna tiha napomena kaže ista dva broja. Uzrok se ne navodi. Zabrana
   najave polaska odnosi se na ZET; vlakovi zadržavaju svoje najave iz
@@ -286,8 +287,9 @@ cjeloviti naziv iz izvora ili se prelama u cijelosti. Jedine su iznimke naslov
 događanja bez kraćeg naziva i naslov ZET-ove obavijesti, koji se režu na dva
 retka. Kad retci ne stanu, s popisa izlaze cijeli retci: najprije retci za
 sutra (sutrašnje otvaranje ili događanje, sutrašnji izlazak sunca),
-najkasniji prvi; zatim retci vlaka, kiše, prekida struje ili vode, stanja
-ceste i najbližeg otvorenog mjesta, najkasniji prvi; zatim zadnji od drugog i
+najkasniji prvi; zatim retci vlaka (osim vlakova koje stanje usluge stavlja
+ispred polazaka), kiše, prekida struje ili vode, stanja ceste i najbližeg
+otvorenog mjesta, najkasniji prvi; zatim zadnji od drugog i
 trećeg polaska, osim kad je dalje od njega izlazak ili zalazak sunca,
 otvaranje ili događanje za više od sat vremena, koje tada izlazi prije
 polaska, najkasnije prvo; pa današnji retci s vremenom, najkasniji prvi,
@@ -451,7 +453,9 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
   nema praćenih vozila, pa nema ni procjene dolaska. Kad je kolodvor u
   krugu, prvi polazak vlaka stoji i na popisu „U blizini”, kao siv sat, a
-  kad ZET gotovo ne vozi, vlakovi dolaze prije ostalih redaka s vremenom.
+  kad ZET šalje znatno manje vozila nego što ih predviđa vozni red ili
+  gotovo nijedno, vlakovi stoje ispred polazaka (najviše dva u smanjenoj, a
+  najviše tri u tihoj usluzi).
 - „Zadnji polazak” je posljednji polazak po voznom redu ZET-a, ne procjena
   dolaska.
 - Svaka rečenica u zaglavlju odobreni je predložak ispunjen jednom
@@ -580,6 +584,10 @@ npm run accept
 npm run accept:e2e
 E2E_PORT=8797 npm run accept:e2e -- e2e/accept/wall.spec.ts
 npm run replay:grade -- <direktorij-okvira> --out <prefiks> --targets stage1
+node scripts/replay-twin.mjs <direktorij-okvira> --fleet-series --standing
+node scripts/replay-twin.mjs <direktorij-okvira> --service-log --assert-normal
+npm run check:artefacts
+node scripts/thin-spot.mjs <direktorij-uzoraka> --from GGGG-MM-DD --hours 72
 npm run review:visual
 node scripts/review-redesign.mjs
 ```
@@ -592,6 +600,14 @@ na 8798, dok bez varijable ostaju 8787 i 8788.
 `npm run replay:grade` ocjenjuje staze tramvaja nad snimljenim okvirima i uz `--targets stage1`
 završava izlaznim kodom 1 čim ijedan redak ne dosegne prag. Pragovi, izmjerene vrijednosti i
 ručne provjere nalaze se u `docs/kaj-verification.md`, u odjeljku „Prihvaćanje, companion 2026-09”.
+`node scripts/replay-twin.mjs` nad snimljenim okvirima ispisuje broj vozila, položaje s vremenom iz
+budućnosti i vozila koja stoje dulje od granice (`--fleet-series --standing`), a s
+`--service-log --assert-normal` stanje usluge po minuti; završava izlaznim kodom 1 čim običan dan
+ima minutu u stanju smanjene ili nikakve usluge. `npm run check:artefacts` javlja kad je ZET-ov
+feed noviji od datoteka u repozitoriju ili kad su datoteke zadnjih polazaka pred istekom
+(`--offline` preskače jedini zahtjev prema ZET-u). `node scripts/thin-spot.mjs` računa mjerilo
+nadogradnje iz uzoraka javnog prikaza. Pragovi i izmjerene vrijednosti nalaze se u odjeljku
+„Prihvaćanje, nadogradnja 2026-10” istog dokumenta.
 
 Playwright ima zaseban lokalni poslužitelj za 12-sekundni test isteka.
 Za provjeru javne adrese dovoljan je postojeći testni zaslon (`E2E_KIOSK_URL`),
@@ -612,7 +628,12 @@ prikriveni. Izlazni kod je 1 čim ne prođe bilo koji prag iz odjeljaka 16.3 i 1
 dokumenta `docs/companion-2026-09-22.md`. Pragovi su jedna tablica u skripti i
 svaki redak nosi oznaku isporuke: `--stage d1` provjerava samo oznake vozila, na
 kojima ne smije biti „+N”, i greške u pregledniku i na mreži, a bez te zastavice
-primjenjuju se svi pragovi.
+primjenjuju se svi pragovi. Redak `departures` traži od jedan do tri polaska u svakom
+očitanju i barem onoliko polazaka koliko ih uklapanje zadržava od ponuđenih: tri, a dva uz
+prvi, zadnji ili redak obavijesti, za jedan manje za svaki vlak koji stoji ispred polazaka, a
+manje samo kad puni popis ne može više. Popis bez oznake `data-fit-dropped` računa se kao
+neuspjeh. Redak `silent-departures` traži da nijedna rečenica u zaglavlju ne najavi polazak
+(osim vlaka) dok dvojnik javlja da ZET ne šalje položaje; u dan bez takvog stanja ostaje na nuli.
 
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja

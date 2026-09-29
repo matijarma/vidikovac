@@ -18,7 +18,7 @@ import { zagrebIso, type ZagrebDate } from '../time';
 // Zagreb area that say when they end), each line verbatim as the summary, the section's update time as the item's
 // time, the HAK page as the link, the credit "Izvor: HAK, stanje na cestama, {vrijeme}; neslužbeni prikaz". Article 10
 // is quoted beside the row in docs/izvori.md, and a letter to HAK is the owner's to write. Switching the relay off is
-// one line in TEASER_MODULES (worker/feed/registry.ts).
+// removing `hak` from the registry (worker/feed/registry.ts); TEASER_MODULES alone would leave the cron and Sada fetching it.
 
 export const HAK_URL = 'https://www.hak.hr/info/stanje-na-cestama/';
 

@@ -153,10 +153,15 @@ npm run build:network
 npm run build:trips
 node scripts/gtfs-stops.mjs
 npm run build:schema
+npm run build:expect           # zet-expect.json: the expected fleet per five minutes, from the same timetable
+node scripts/gtfs-lastrun.mjs  # last-tram files
 npm run build:city
+npm run build:street-points    # worker/data/street-points.json, from the street index
+node scripts/osm-hours.mjs --fetch   # app/public/data/osm-hours.json from the Geofabrik extract (about 200 MB, ODbL)
+npm run check:artefacts        # Fails when ZET's feed is newer than the committed files or the last-tram files are near expiry
 ```
 
-Keep the network, trip index and schematic on the same GTFS feed version; tests guard compatibility. City catalogue generation reuses cached downloads; `npm run build:city -- --fresh` fetches them again. The ordinary application build does not refresh upstream datasets.
+Keep the network, trip index, schematic and expectation on the same GTFS feed version; tests guard compatibility, and `npm run check:artefacts` names the difference (`--offline` skips its one HEAD request to ZET). City catalogue generation reuses cached downloads; `npm run build:city -- --fresh` fetches them again. The ordinary application build does not refresh upstream datasets.
 
 Manual dwell settings live in [`stop-dwell-overrides.json`](app/public/data/stop-dwell-overrides.json), read directly by the engine without a data-generation step. See [verification and maintenance notes](docs/kaj-verification.md) for their format and network exceptions.
 
@@ -179,13 +184,16 @@ npm run accept                 # Acceptance tier: red until the package it measu
 npm run accept:e2e             # Acceptance tier in the browser: wall and phone scenes
 E2E_PORT=8797 npm run accept:e2e -- e2e/accept/wall.spec.ts   # A second run from another checkout: app 8797, short session 8798 (default 8787/8788)
 npm run replay:grade -- test/fixtures/frames/2026-09-21-1715-1744 --out <prefix> --targets stage1
+node scripts/replay-twin.mjs <frames-dir> --fleet-series --standing   # Vehicle count, future pins and vehicles standing past their limit, frame by frame
+node scripts/replay-twin.mjs <frames-dir> --service-log --assert-normal   # The service state over a day; exit 1 on a reduced or silent minute
+node scripts/thin-spot.mjs <data-calendar dir> --from YYYY-MM-DD --hours 72   # The KPI: local, timely, new and actionable facts per place and hour
 npm run frames:sample -- <recordings>/2026/09/21 --from 151500 --to 154459 --out <dir>
 E2E_KIOSK_URL=<screen setup URL> npm run observe:production -- --minutes 10
 ```
 
 Run build and browser work sequentially: browser tests manage local servers sharing the built app. Coverage includes single-use codes, presentation acknowledgement and takeover, expiry that clears the session, source recovery and lightweight mode. See the [verification record](docs/kaj-verification.md).
 
-The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`; `--readme-only <fixture-dir>` regenerates only the fixture's README) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings.
+The acceptance tier, the tram-path grader (`replay:grade`, exit code 1 while a row misses its target) and the frame sampler (`frames:sample`, never into `recordings/`; `--readme-only <fixture-dir>` regenerates only the fixture's README) are described with their thresholds and measured values in [docs/kaj-verification.md](docs/kaj-verification.md), section "Prihvaćanje, companion 2026-09". The production observer only reads: it needs an existing screen's setup URL in the environment and never creates a screen, presents or opens settings. Since October 2026 its `departures` row expects the fitted count of departures (three, or two beside a first, last or notice row) and it has one more row, `silent-departures`, which stays at zero while the twin reports the fleet silent. `replay-twin.mjs` and `thin-spot.mjs` are described with their thresholds and measured values in the section "Prihvaćanje, nadogradnja 2026-10" of the same document.
 
 Deployment uses **`git push` to `main` → Cloudflare Workers Builds**, not `wrangler deploy`. A production `SESSION_SECRET` is required. Unset `APP_ENV` means production; `E2E_ADMIN_BYPASS` works only with `APP_ENV=test`. The retired `NETWORK_CHECK` cannot enable test mode. Operator routes `/api/admin/*` and `/stats` (the raw counters and the tram model's live tables) require Cloudflare Access; unauthorised requests receive 404. The public report `/statistika/` needs no access. Workers.dev and preview URLs are disabled.
 
