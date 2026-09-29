@@ -11,6 +11,7 @@ import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/tr
 import { emptyOperator } from './operator';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
+import { emptyService } from './service';
 
 /** Tick rows kept: the newest is the restore point, two more survive a row
  *  that was written half-way when the object died. Days of tick rows would
@@ -243,6 +244,9 @@ export function deserializeState(body: string): TwinState {
     dwellRecent: stored.dwellRecent ?? {},
     // A row written before U1 has no statement of ZET's; the next frame writes it.
     operator: stored.operator ?? emptyOperator(),
+    // A row written before upgrade U2 carries no service memory: the state
+    // machine starts unknown and takes its first verdict at the next frame.
+    service: stored.service ?? emptyService(),
   };
 }
 

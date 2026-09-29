@@ -23,6 +23,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { OrderReport } from '../../shared/motion/order';
 import { emptyPlanCountsByKind, FUTURE_TOLERANCE_S, PLAN_EVENTS, type PlanCountsByKind } from '../../shared/motion/plan';
+import type { ExpectIndex } from '../../shared/motion/expect';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
@@ -65,7 +66,7 @@ import {
 } from '../twin/persist';
 import { buildPayload, type TripJoin } from '../twin/publish';
 import { recordFrame, type RecordOutcome } from '../twin/record';
-import { twinIndexSource, twinNetworkSource, twinOverridesSource, twinUpstream } from '../twin/seams';
+import { twinExpectSource, twinIndexSource, twinNetworkSource, twinOverridesSource, twinUpstream } from '../twin/seams';
 import { emptyState, type TwinState } from '../twin/state';
 import { runTick } from '../twin/tick';
 import { TWIN_DO_NAME } from '../twin/twin-name';
@@ -219,6 +220,10 @@ export class TwinDO extends DurableObject<Env> {
   private index: TripIndex | null = null;
   private net: GraphNetwork | null = null;
   private engine: Engine | null = null;
+  /** The declared expectation the service state judges against (upgrade
+   *  U2), read once per life and retried with the hourly asset check;
+   *  independent of the engine, so a twin without geometry still judges. */
+  private expect: ExpectIndex | null = null;
   /** Built on first use from the loaded network, for the SQLite join path. */
   private pathResolver: PatternPathResolver | null = null;
   private coldLoad: ColdLoad | null = null;
@@ -424,11 +429,16 @@ export class TwinDO extends DurableObject<Env> {
       }
       prev = { ...prev, tracks, published: {}, pendingLearned: { ...emptyAggregates(), stops: prev.pendingLearned.stops } };
     }
-    const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs) });
+    const result = runTick({ state: prev, feed, nowMs, joins, routes, engine: this.engine, validUntilMs: nextTickAt(headerTs, nowMs), expect: this.expect });
     // Reports stamped a day ahead (ZET's midnight defect) are a feed fault,
     // not a planner decision, so they stay out of `twin_plan` and its public
     // shares: one line per tick that refused any.
     if (result.rejectedFuture > 0) logInfo('twin_future_fixes', { count: result.rejectedFuture, headerTs: feed?.headerTs ?? undefined });
+    // A change of the city's service state is one log line (U2): the
+    // learned writers that would count it are the next round's.
+    const before = prev.service?.state ?? 'unknown';
+    const after = result.state.service.state;
+    if (after !== before) logInfo('twin_service', { from: before, to: after, seen: result.state.service.last?.seen, expected: result.state.service.last?.expected });
     // What the tick learned joins the live aggregates the planner reads now,
     // and the pending minute in the state row; once a minute the pending
     // minute reaches the tables in one transaction and the row starts over.
@@ -611,6 +621,7 @@ export class TwinDO extends DurableObject<Env> {
   private async loadAssets(now: number, coldStart: boolean): Promise<void> {
     const sql = this.ctx.storage.sql;
     const cold: ColdLoad = { networkMs: 0, indexMs: 0 };
+    if (!this.expect) this.expect = await twinExpectSource(this.env)();
     if (!this.index) {
       const t0 = Date.now();
       const index = await twinIndexSource(this.env)();
@@ -736,6 +747,7 @@ export class TwinDO extends DurableObject<Env> {
     this.index = null;
     this.net = null;
     this.engine = null;
+    this.expect = null;
     this.pathResolver = null;
     this.coldLoad = null;
     this.learned = emptyAggregates();

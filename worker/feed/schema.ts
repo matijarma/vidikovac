@@ -5,6 +5,7 @@
 
 import type { VehicleMotion } from '../../shared/motion/wire';
 import type { FeedPayload } from './payload';
+import type { ZetService } from '../../shared/city/service-wire';
 
 export type ModuleId =
   | 'zet-rt'
@@ -80,6 +81,7 @@ export interface SourceAvailability {
   sourceUpdatedAt?: string;
   /** Number before a documented per-source cap, if known. */
   totalItems?: number;
+  service?: ZetService;
   /** ZET only, U1: trips ZET's no-service alerts name that no tracked vehicle carries. */
   noServiceTrips?: string[];
 }

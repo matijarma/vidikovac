@@ -31,8 +31,10 @@ import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { kindOf, type Engine } from './engine';
 import type { DecodedFeed, RawFix } from './feed-decode';
 import { emptyOperator, foldOperator, type OperatorCounts } from './operator';
-import { buildPayload, type TripJoin } from './publish';
+import { buildPayload, fleetSeen, type TripJoin } from './publish';
+import { emptyService, judgeService } from './service';
 import { ageTripUpdates, nextStopOf, type TwinState } from './state';
+import type { ExpectIndex } from '../../shared/motion/expect';
 
 /** The twin and the client evict from the same report-age limit. */
 const TRACK_STALE_S = EVICT_S;
@@ -48,6 +50,9 @@ export interface TickInput {
   /** The engine, or null when no geometry has loaded: free-plane plans then. */
   engine: Engine | null;
   validUntilMs: number;
+  /** The declared expectation (shared/motion/expect.ts), or null when the
+   *  artefact has not loaded: the service state then reads unknown. */
+  expect?: ExpectIndex | null;
 }
 
 export interface TickResult {
@@ -272,6 +277,17 @@ export function runTick(input: TickInput): TickResult {
     else if (isParked(track)) hidden.parked++;
   }
 
+  // The city's fleet against the timetable (service.ts, upgrade U2): judged
+  // at the header time over the vehicles the payload will pin, once per new
+  // frame; a tick without one only applies the stale hold.
+  const service = judgeService(input.state.service ?? emptyService(), {
+    nowSec,
+    headerTs,
+    newFrame: feed !== null,
+    published: fleetSeen(Object.values(tracks), headerTs ?? nowSec),
+    expect: input.expect ?? null,
+  });
+
   const all = Object.values(tracks);
   let order: OrderReport | null = null;
   const hindsight = emptyCounts();
@@ -362,6 +378,7 @@ export function runTick(input: TickInput): TickResult {
     // is the only place the state is rewritten.
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
     operator,
+    service,
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
   return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture, hidden, operator: operator.counts };

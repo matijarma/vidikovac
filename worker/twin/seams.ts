@@ -1,16 +1,18 @@
-// The three things the twin reaches outside itself for, each behind a test
-// seam in the style of worker/feed/registry.ts's setFetcherForTest: the
-// realtime upstream (a conditional GET of ZET's feed), the static trip index
-// and the network artefact. Production never calls the setters; a test in
+// The things the twin reaches outside itself for, each behind a test seam
+// in the style of worker/feed/registry.ts's setFetcherForTest: the realtime
+// upstream (a conditional GET of ZET's feed), the static trip index, the
+// network artefact, the owner's dwell overrides and the declared expectation
+// (upgrade U2). Production never calls the setters; a test in
 // the workers project runs in the same isolate as the Durable Object, so a
 // module-level override here is what the object sees.
 
+import type { ExpectIndex } from '../../shared/motion/expect';
 import type { GraphNetwork } from '../../shared/motion/network';
 import type { TripIndex } from '../../shared/motion/trips';
 import type { Env } from '../env';
 import { upstreamFetchConditional } from '../feed/http';
 import { ZET_RT_URL } from '../feed/modules/zet-rt';
-import { fetchDwellOverrides, fetchNetwork, fetchTripIndex, type DwellOverridesResult } from './index-load';
+import { fetchDwellOverrides, fetchExpectIndex, fetchNetwork, fetchTripIndex, type DwellOverridesResult } from './index-load';
 
 /** Fetches the feed, sending `If-None-Match` when an ETag is known; resolves
  *  to a 200 with bytes or a 304, throws on anything else. */
@@ -27,10 +29,14 @@ export type TwinNetworkSource = () => Promise<GraphNetwork | null>;
  *  the second case so /stats can say so. */
 export type TwinOverridesSource = () => Promise<DwellOverridesResult>;
 
+/** Resolves to the decoded expectation (upgrade U2), or null when it cannot be read. */
+export type TwinExpectSource = () => Promise<ExpectIndex | null>;
+
 let upstreamOverride: TwinUpstream | null = null;
 let indexOverride: TwinIndexSource | null = null;
 let networkOverride: TwinNetworkSource | null = null;
 let overridesOverride: TwinOverridesSource | null = null;
+let expectOverride: TwinExpectSource | null = null;
 
 export function setTwinUpstreamForTest(upstream: TwinUpstream | null): void {
   upstreamOverride = upstream;
@@ -48,6 +54,10 @@ export function setTwinOverridesSourceForTest(source: TwinOverridesSource | null
   overridesOverride = source;
 }
 
+export function setTwinExpectSourceForTest(source: TwinExpectSource | null): void {
+  expectOverride = source;
+}
+
 export function twinUpstream(): TwinUpstream {
   return upstreamOverride ?? ((etag) => upstreamFetchConditional(ZET_RT_URL, etag));
 }
@@ -62,4 +72,8 @@ export function twinNetworkSource(env: Env): TwinNetworkSource {
 
 export function twinOverridesSource(env: Env): TwinOverridesSource {
   return overridesOverride ?? (() => fetchDwellOverrides(env));
+}
+
+export function twinExpectSource(env: Env): TwinExpectSource {
+  return expectOverride ?? (() => fetchExpectIndex(env));
 }

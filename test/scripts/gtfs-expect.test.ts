@@ -4,15 +4,15 @@ import { crc32, deflateRawSync, gzipSync } from 'node:zlib';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SLOTS, SLOT_SEC, buildExpectIndex, calendarDates, main } from '../../scripts/gtfs-expect.mjs';
+import { RUN_GAP_S, SLOTS, SLOT_SEC, buildExpectIndex, calendarDates, main, mergeRuns } from '../../scripts/gtfs-expect.mjs';
 import { decodeExpectIndex, expectedAt } from '../../shared/motion/expect';
 
 // scripts/gtfs-expect.mjs cuts the declared fleet out of ZET's static GTFS:
 // per service, per five-minute slot of a 31-hour service day, the vehicle runs
-// (blocks) in service by mode and the trips in service per route, plus the
-// services of every date the calendar names. Here on a mini feed with two
-// services, a night trip past 24:00 and a calendar_dates removal, then on the
-// committed artefact.
+// (blocks, split at a pull-in longer than the mode's parked limit) in service
+// by mode and the trips in service per route, plus the services of every date
+// the calendar names. Here on a mini feed with two services, a night trip past
+// 24:00 and a calendar_dates removal, then on the committed artefact.
 
 interface ZipInput {
   name: string;
@@ -125,32 +125,77 @@ describe('the expectation builder on a mini feed', () => {
     expect(artefact.calendar).toEqual({
       '2026-10-05': [0], '2026-10-06': [0], '2026-10-07': [0], '2026-10-08': [1], '2026-10-09': [0], '2026-10-10': [1], '2026-10-11': [1],
     });
-    expect(report).toMatchObject({ trips: 6, services: 2, runs: 5, mixedRuns: 0, firstDate: '2026-10-05', lastDate: '2026-10-11', dates: 7 });
+    expect(report).toMatchObject({ trips: 6, services: 2, blocks: 5, runs: 5, mixedRuns: 0, firstDate: '2026-10-05', lastDate: '2026-10-11', dates: 7 });
     for (const service of artefact.services) {
       for (const mode of ['all', 'tram', 'bus'] as const) expect(artefact.blocks[service][mode]).toHaveLength(SLOTS);
       for (const counts of Object.values(artefact.trips[service])) expect(counts).toHaveLength(SLOTS);
     }
   });
 
-  it('counts a run from its first departure to its last arrival, layover included, by mode, and a trip per route over its own span', async () => {
-    const { artefact } = await buildExpectIndex(miniZip(), { builtAt: '2026-10-01T00:00:00.000Z' });
-    const wd = artefact.blocks.wd;
-    expect([wd.all[slot(6, 55)], wd.all[slot(7)], wd.tram[slot(7)], wd.bus[slot(7)]]).toEqual([0, 2, 1, 1]);
-    // b1 07:02-07:12 meets slots 07:00, 07:05, 07:10; its rows were out of order in the file.
-    expect(wd.bus.slice(slot(7), slot(7, 20))).toEqual([1, 1, 1, 0]);
-    // BT1 from 07:00 to 07:50, through the 07:20-07:30 layover.
-    expect(wd.tram.slice(slot(7), slot(8))).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
-    expect(artefact.trips.wd.T.slice(slot(7), slot(8))).toEqual([1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0]);
-    // The night tram stays on the service day that owns it, past 24:00.
-    expect(wd.tram.slice(slot(24, 25), slot(25, 20))).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
-    expect(artefact.trips.wd.N[slot(24, 30)]).toBe(1);
-    expect(wd.all.reduce((n: number, c: number) => n + c, 0)).toBe(11 + 3 + 9);
-    // A trip without block_id is its own run; a four-minute trip counts in the slot it falls in.
-    const we = artefact.blocks.we;
-    expect(we.bus[slot(10)]).toBe(1);
-    expect(we.bus[slot(10, 5)]).toBe(0);
-    expect(we.tram.slice(slot(9), slot(9, 35))).toEqual([1, 1, 1, 1, 1, 1, 1]);
-    expect(Object.keys(artefact.trips.we)).toEqual(['B', 'T']);
+  // A block is one vehicle, but not one run: a gap between two consecutive
+  // trips longer than the mode's parked limit (RUN_GAP_S: 30 min tram, 46 min
+  // bus, upgrade decision 29) is a pull-in, and the next trip starts a new run.
+  // Trip t2 of tram block BT1 is moved so that the gap after t1 (ends 07:20)
+  // is 29 min, then 31 min; bus block BB1 gets a second trip 45 min after b1.
+  describe('ends a vehicle run at a pull-in, by mode', () => {
+    const t2At = (start: string, end: string) =>
+      STOP_TIMES_TXT.replace(row('t2', '07:30:00', '07:30:00', 'Z', 1), row('t2', start, start, 'Z', 1)).replace(row('t2', '07:50:00', '07:50:00', 'A', 2), row('t2', end, end, 'A', 2));
+
+    it('a tram block whose trips are 29 min apart is one run, layover included, by mode, with a trip per route over its own span', async () => {
+      expect(RUN_GAP_S).toEqual({ tram: 1800, bus: 2760 });
+      const { artefact, report } = await buildExpectIndex(miniZip(t2At('07:49:00', '08:09:00')), { builtAt: '2026-10-01T00:00:00.000Z' });
+      const wd = artefact.blocks.wd;
+      expect(report).toMatchObject({ blocks: 5, runs: 5 });
+      expect([wd.all[slot(6, 55)], wd.all[slot(7)], wd.tram[slot(7)], wd.bus[slot(7)]]).toEqual([0, 2, 1, 1]);
+      // b1 07:02-07:12 meets slots 07:00, 07:05, 07:10; its rows were out of order in the file.
+      expect(wd.bus.slice(slot(7), slot(7, 20))).toEqual([1, 1, 1, 0]);
+      // BT1 from 07:00 to 08:09, through the 07:20-07:49 layover: every slot from 07:00 to 08:05.
+      expect(wd.tram.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+      // The trips count over their own spans: none in service during the layover.
+      expect(artefact.trips.wd.T.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0]);
+      // The night tram stays on the service day that owns it, past 24:00.
+      expect(wd.tram.slice(slot(24, 25), slot(25, 20))).toEqual([0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+      expect(artefact.trips.wd.N[slot(24, 30)]).toBe(1);
+      expect(wd.all.reduce((n: number, c: number) => n + c, 0)).toBe(14 + 3 + 9);
+      // A trip without block_id is its own run; a four-minute trip counts in the slot it falls in.
+      const we = artefact.blocks.we;
+      expect(we.bus[slot(10)]).toBe(1);
+      expect(we.bus[slot(10, 5)]).toBe(0);
+      expect(we.tram.slice(slot(9), slot(9, 35))).toEqual([1, 1, 1, 1, 1, 1, 1]);
+      expect(Object.keys(artefact.trips.we)).toEqual(['B', 'T']);
+    });
+
+    it('a tram block whose trips are 31 min apart is two runs: the pull-in between them is not service', async () => {
+      const { artefact, report } = await buildExpectIndex(miniZip(t2At('07:51:00', '08:11:00')), { builtAt: '2026-10-01T00:00:00.000Z' });
+      const wd = artefact.blocks.wd;
+      expect(report).toMatchObject({ blocks: 5, runs: 6 });
+      // t1 07:00-07:20 meets the slots to 07:20; t2 07:51-08:11 those from 07:50; nothing in between.
+      expect(wd.tram.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1]);
+      expect(wd.all.slice(slot(7, 25), slot(7, 50))).toEqual([0, 0, 0, 0, 0]);
+      expect(wd.all.reduce((n: number, c: number) => n + c, 0)).toBe(10 + 3 + 9);
+      // The trips themselves are unchanged by the split.
+      expect(artefact.trips.wd.T.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1]);
+    });
+
+    it('a bus block whose trips are 45 min apart is one run: a bus may stand 46 min', async () => {
+      const withB2 = STOP_TIMES_TXT + row('b2', '07:57:00', '07:57:00', 'Q', 1) + row('b2', '08:07:00', '08:07:00', 'P', 2);
+      const trips = TRIPS_TXT + 'B,wd,b2,,1,BB1,\n';
+      const zip = makeZip([
+        { name: 'routes.txt', data: ROUTES_TXT },
+        { name: 'trips.txt', data: trips },
+        { name: 'stop_times.txt', data: withB2 },
+        { name: 'calendar.txt', data: CALENDAR_TXT },
+        { name: 'calendar_dates.txt', data: CALENDAR_DATES_TXT },
+        { name: 'feed_info.txt', data: FEED_INFO_TXT },
+      ]);
+      const { artefact, report } = await buildExpectIndex(zip, { builtAt: '2026-10-01T00:00:00.000Z' });
+      expect(report).toMatchObject({ trips: 7, blocks: 5, runs: 5 });
+      // BB1 from 07:02 to 08:07 through the 07:12-07:57 gap: every slot from 07:00 to 08:05.
+      expect(artefact.blocks.wd.bus.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]);
+      expect(artefact.trips.wd.B.slice(slot(7), slot(8, 15))).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0]);
+      // The same two spans 47 min apart are two runs (mergeRuns is what the builder applies per block).
+      expect(mergeRuns([{ start: 7 * 3600 + 120, end: 7 * 3600 + 720 }, { start: 7 * 3600 + 720 + 47 * 60, end: 8 * 3600 + 540 }], RUN_GAP_S.bus)).toHaveLength(2);
+    });
   });
 
   it('refuses a trip that ends at or past 31:00, naming it', async () => {
@@ -183,8 +228,9 @@ describe('the expectation builder on a mini feed', () => {
 
 // The committed artefact, built from the archive the other ZET artefacts were
 // cut from. Budget pins: at most 1 MiB raw and 120 KiB gzipped (upgrade plan
-// P-U2d). Measured on feed 000396 (28 Sep 2026): 761,173 B raw, 37,790 B gzip,
-// seven services, calendar 2026-09-28 to 2026-12-31.
+// P-U2d). Measured on feed 000396 (28 Sep 2026) with the runs split at a
+// pull-in: 761,168 B raw, 38,315 B gzip, seven services, 2,299 blocks as
+// 2,822 runs, calendar 2026-09-28 to 2026-12-31.
 describe('the committed zet-expect.json', () => {
   const rawText = readFileSync(new URL('../../app/public/data/zet-expect.json', import.meta.url), 'utf8');
   const raw = JSON.parse(rawText);

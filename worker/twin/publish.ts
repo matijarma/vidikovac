@@ -23,6 +23,7 @@ import { delayWords, routeLabel, routeShortName, routeType } from '../feed/modul
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { FEED_TICK_MS } from './clock';
 import { noServiceTripIds, operatorSummary } from './operator';
+import { emptyService, serviceOnWire } from './service';
 import type { TwinState } from './state';
 import { BUILT_AT } from '../../app/src/motion/network-meta';
 
@@ -263,12 +264,18 @@ export function buildPayload(
   const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS && headerTs * 1000 <= nowMs + FUTURE_TOLERANCE_S * 1000;
   const nowSec = Math.floor(nowMs / 1000);
   const noServiceTrips = noServiceTripIds(state.operator, carried, nowSec);
+  // The city's fleet against the timetable (service.ts, upgrade U2): additive,
+  // and absent until the twin has taken a state. The module stays live
+  // (R-TE5); a silent city is a verdict, not an outage.
+  const service = serviceOnWire(state.service ?? emptyService());
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,
     ...(state.tickAtMs > 0 ? { fetchedAt: iso(state.tickAtMs) } : {}),
     ...(headerTs !== null ? { sourceUpdatedAt: iso(headerTs * 1000) } : {}),
     ...(noServiceTrips.length > 0 ? { noServiceTrips } : {}),
+    // The operator's own statements ride beside the judgement (U1.md §0.1).
+    ...(service ? { service: { ...service, operator: operatorSummary(state.operator, carried, nowSec) } } : {}),
   };
 
   return {

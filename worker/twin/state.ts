@@ -12,6 +12,7 @@ import { EVICT_S, FUTURE_TOLERANCE_S } from '../../shared/motion/plan';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
 import { emptyOperator, type OperatorState } from './operator';
+import { emptyService, type ServiceMemory } from './service';
 
 /** Silence after which a vehicle leaves the twin, in seconds: the planner's
  *  eviction age itself (plan.ts EVICT_S, 180 s, T8), so the twin drops a
@@ -62,10 +63,15 @@ export interface TwinState {
   /** What ZET's own alerts and markers said in the last frame (U1): about
    *  thirty trip ids on a recorded day, under 2 KB of the row. */
   operator: OperatorState;
+  /** The service state machine's memory (service.ts, upgrade U2): the
+   *  state the wire carries, when it was entered, and the dwell timers,
+   *  so an eviction between two ticks neither forgets a `silent` city nor
+   *  restarts a dwell. A row written before U2 loads emptyService(). */
+  service: ServiceMemory;
 }
 
 export function emptyState(): TwinState {
-  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {}, operator: emptyOperator() };
+  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {}, operator: emptyOperator(), service: emptyService() };
 }
 
 /** The update to keep for a trip: the earliest stop still ahead of the header

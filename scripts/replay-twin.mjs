@@ -26,6 +26,18 @@
 // pinned (vehicle, frame) pairs standing past their mode's limit, and every
 // vehicle ever held back (StandingSummary). Either flag replaces the table.
 //
+// The service state over a day (upgrade U2; worker/twin/service.ts judged
+// exactly as production does, frame by frame, without the engine):
+//   node scripts/replay-twin.mjs <frames-dir> --service-log [--expect <path>] [--every N] [--to HHMMSS]
+//   node scripts/replay-twin.mjs <frames-dir> --assert-normal [--service-log] ...
+// --service-log prints one line per Zagreb minute (HH:MM state ratio seen
+// expected since, plus the hold) and the state changes; --expect names the
+// expectation artefact (default app/public/data/zet-expect.json; the 000395
+// fixture for days before 28 Sep 2026); --every keeps every Nth frame; --to
+// stops after that UTC clock of the file names, inclusive; --assert-normal
+// exits 1 when a judged minute reads reduced or silent, or when an hour with
+// 20 or more expected has a 5th-percentile ratio below 0.65 (acceptance U2-6).
+//
 // The repo's TypeScript uses extensionless imports, which plain `node`
 // cannot resolve; esbuild (already a dependency, pulled in by vite) bundles
 // scripts/replay-core.ts -- and everything it imports from worker/ and
@@ -82,7 +94,7 @@ async function loadCore() {
 }
 
 /** Flags that take a value: their value is never the frames directory. */
-const VALUE_FLAGS = new Set(['limit', 'network', 'trips', 'overrides']);
+const VALUE_FLAGS = new Set(['limit', 'network', 'trips', 'overrides', 'expect', 'every', 'to']);
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -99,6 +111,10 @@ function parseArgs(argv) {
     return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : undefined;
   };
   const limitRaw = flag('limit');
+  const everyRaw = flag('every');
+  const to = flag('to');
+  if (to !== undefined && !/^\d{6}$/.test(to)) throw new Error(`--to takes a UTC clock HHMMSS, got ${to}`);
+  if (everyRaw !== undefined && !/^[1-9]\d*$/.test(everyRaw)) throw new Error(`--every takes a whole number from 1, got ${everyRaw}`);
   return {
     dir,
     limit: limitRaw !== undefined ? Number(limitRaw) : undefined,
@@ -107,17 +123,41 @@ function parseArgs(argv) {
     overridesPath: flag('overrides'),
     fleetSeries: args.includes('--fleet-series'),
     standing: args.includes('--standing'),
+    serviceLog: args.includes('--service-log'),
+    assertNormal: args.includes('--assert-normal'),
+    expectPath: flag('expect'),
+    every: everyRaw !== undefined ? Number(everyRaw) : undefined,
+    to,
   };
 }
 
 async function main() {
-  const { dir, limit, networkPath, tripsPath, overridesPath, fleetSeries, standing } = parseArgs(process.argv);
+  const { dir, limit, networkPath, tripsPath, overridesPath, fleetSeries, standing, serviceLog, assertNormal, expectPath, every, to } = parseArgs(process.argv);
   if (!dir) {
-    console.error('usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path] [--overrides path] [--fleet-series] [--standing]');
+    console.error(
+      'usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path] [--overrides path] [--fleet-series] [--standing]\n' +
+        '       node scripts/replay-twin.mjs <frames-dir> --service-log|--assert-normal [--expect path] [--every N] [--to HHMMSS]',
+    );
     process.exitCode = 1;
     return;
   }
   const core = await loadCore();
+  if (serviceLog || assertNormal) {
+    const expect = await core.loadExpectIndexFile(resolve(repoRoot, expectPath ?? 'app/public/data/zet-expect.json'));
+    const routes = await core.loadZetRoutesFile(resolve(repoRoot, 'app/src/data/zet-routes.json'));
+    const lines = await core.replayServiceDirectory(resolve(dir), { expect, routes, every, to });
+    if (serviceLog) console.log(core.formatServiceLog(lines));
+    if (assertNormal) {
+      const verdict = core.assertNormalDay(lines);
+      for (const h of verdict.hours) console.log(`${h.hour}h p05 ${h.p05.toFixed(2)} over ${h.minutes} judged minutes`);
+      if (verdict.ok) console.log(`normal day: ${lines.length} minutes, no minute outside normal, every hour's p05 at or above ${core.NORMAL_DAY_P05}`);
+      else {
+        for (const problem of verdict.problems) console.error(`not a normal day: ${problem}`);
+        process.exitCode = 1;
+      }
+    }
+    return;
+  }
   const net = resolve(repoRoot, networkPath ?? 'app/public/data/zet-network.json');
   const trips = resolve(repoRoot, tripsPath ?? 'app/public/data/zet-trips.json');
   // The owner's dwell table (F11) reaches the replay from the same file the
