@@ -50,7 +50,9 @@ upute o pretraživanju dodirom. Ukratko:
   rečenicu o polasku po voznom redu zadržavaju samo linije za koje se vozilo
   vidi, a vlakovi i BAJS idu naprijed. Kad vozila gotovo nema, zaglavlje ne
   najavljuje nijedan polazak, karta pokazuje mrežu i vozila koja postoje, a
-  jedna tiha napomena kaže ista dva broja. Uzrok se ne navodi.
+  jedna tiha napomena kaže ista dva broja. Uzrok se ne navodi. Zabrana
+  najave polaska odnosi se na ZET; vlakovi zadržavaju svoje najave iz
+  zasebnog HŽ-ova voznog reda.
 - Na zaslonu s dodirom dodir služi samo za čitanje: dodir na prsten
   stajališta 60 sekundi pokazuje polaske s tog stajališta, dodir na redak
   popisa pokazuje pojedinosti retka, a dodir na dežurnu ljekarnu adresu i
@@ -316,8 +318,8 @@ prezentacija zaustavlja i rečenicu i popis. Rečenica nastaje iz istih
 prognozu, zatvaranja, BAJS stanice u krugu i ZET-ove obavijesti. Kad vozila
 koja se vide i vozni red nisu u skladu, prva je rečenica o broju vozila u
 pokretu, bez navođenja uzroka. Tri spoja povezuju izvore: kiša u iduća dva
-sata, događanje koje završava nakon zadnjeg tramvaja (rečenica kaže koji
-tramvaj još polazi) i prazna BAJS stanica (rečenica kaže i najbližu koja ima
+sata, događanje nakon kojeg zadnji tramvaj polazi unutar 45 minuta
+(nikad prije završetka događanja) i prazna BAJS stanica (rečenica kaže i najbližu koja ima
 bicikala). Rečenica ostaje barem jedan ritam, osim kad činjenica te rečenice
 prestane vrijediti. Kad se ista činjenica ponovno izrekne (sljedeća minuta
 odbrojavanja, pomaknuta procjena, ponovljeni kraj zatvaranja), isti se tekst
