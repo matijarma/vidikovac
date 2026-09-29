@@ -20,7 +20,7 @@ import { CURATED_WALL, curatedCityPoints } from '../city/curated';
 import { feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
 import { departuresBlock } from '../city/next-departures';
 import type { PlaceContext } from '../city/place';
-import { provenanceBlock } from '../experience/status';
+import { provenanceBlock, SADA_CREDITS } from '../experience/status';
 import type { CityMapHandle } from '../map/city-map';
 import { frameView } from '../map/frame';
 import { createElementFromHTML, escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
@@ -149,7 +149,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     + (bandBox ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
     + departuresBlock(ctx, place, { heading: true })
     + nearby
-    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[])
+    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[], 'provenance', SADA_CREDITS)
     + '</section>');
   if (band) section.querySelector('.sada-map')!.prepend(band);
   return section;

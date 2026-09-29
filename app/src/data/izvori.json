@@ -141,6 +141,38 @@
       "text": "© OpenStreetMap contributors · Protomaps",
       "licence": "ODbL 1.0",
       "opis": "Nazivi i osi ulica za polje „Adresa ili stajalište” na javnom zaslonu, izvedeni iz karte koju aplikacija sama poslužuje. Izvedena baza podataka objavljuje se pod istom licencom."
+    },
+    {
+      "id": "zet-gtfs",
+      "naziv": "ZET GTFS, izvedene datoteke",
+      "url": "https://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+      "text": "Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+      "licence": "Otvorena dozvola (NN 67/17)",
+      "opis": "Datoteke koje se grade iz ZET-ova statičnog GTFS-a i poslužuju kao statički resursi: nazivi linija (zet-routes.json), mrežni artefakt (zet-network.json), indeks vožnji (zet-trips.json), stajališta (stops.json), zadnji polasci po stajalištu (lastrun/*.json) i očekivani broj vozila po petominutnom intervalu (zet-expect.json). Služe za polaske po voznom redu, prvi i zadnji polazak, model kretanja i usporedbu vozila koja se vide s onima koja vozni red predviđa. Shema tramvajskih linija (zet-schema.json) nacrtana je prema ZET-ovu nacrtu, za koji Otvorena dozvola nije potvrđena."
+    },
+    {
+      "id": "dezurne-ljekarne",
+      "naziv": "Dežurne ljekarne Grada Zagreba",
+      "url": "https://www.zagreb.hr/dezurne-ljekarne/497",
+      "text": "Izvor: Grad Zagreb, dežurne ljekarne; neslužbeni prikaz",
+      "licence": "Licenca nije navedena",
+      "opis": "Popis se ručno prepisuje sa stranice Grada Zagreba (worker/hitno/ljekarne.ts, s datumom zadnje provjere); aplikacija ga ne osvježava sama, pa nije potvrda da je ljekarna otvorena u trenutku prikaza."
+    },
+    {
+      "id": "hitni-brojevi",
+      "naziv": "Hitni brojevi",
+      "url": "https://civilna-zastita.gov.hr/",
+      "text": "Ravnateljstvo civilne zaštite, Pozivi za žurnu pomoć",
+      "licence": "Licenca nije navedena",
+      "opis": "Brojevi hitnih službi ručno su upisani prema stranici Ravnateljstva civilne zaštite (worker/hitno/brojevi.ts) i provjeravaju se prije svakog izdanja koje taj popis dira."
+    },
+    {
+      "id": "manrope",
+      "naziv": "Manrope, pismo aplikacije",
+      "url": "https://fonts.google.com/specimen/Manrope",
+      "text": "Pismo Manrope, preuzeto s Google Fonts",
+      "licence": "SIL Open Font License 1.1",
+      "opis": "Pismo se poslužuje s naše adrese (app/public/fonts, woff2 za latinicu i latinicu prošireno) i nijedan upit ne ide Google Fontsu ni trećoj strani."
     }
   ]
 }

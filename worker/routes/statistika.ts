@@ -15,6 +15,7 @@ import type { Env } from '../env';
 import type { LiveTables } from '../../shared/statistika';
 import { statistikaWindow } from '../../shared/statistika';
 import { twinStub } from '../do/twin-do';
+import { MODULE_IDS } from '../feed/registry';
 import { json } from '../http';
 import { logError } from '../log';
 import { metricsStub } from '../metrics';
@@ -84,7 +85,7 @@ async function produce(env: Env, url: URL, deps: StatistikaDeps): Promise<Respon
       (deps.loadSystem ?? defaultLoadSystem)(env, since),
       (deps.loadLive ?? defaultLoadLive)(env),
     ]);
-    const body = buildPublicStats({ days, since, today, now, cells, systemTotals: system.totals, tickDaily: system.tickDaily, live });
+    const body = buildPublicStats({ days, since, today, now, cells, systemTotals: system.totals, tickDaily: system.tickDaily, live, modules: MODULE_IDS });
     return json(body, 200, { 'cache-control': cacheControl(STATISTIKA_TTL_SECONDS), ...CORS });
   } catch (error) {
     logError('statistika-failed', error);

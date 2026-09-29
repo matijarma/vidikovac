@@ -17,6 +17,8 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import hr from '../../app/src/i18n/hr.json';
 import en from '../../app/src/i18n/en.json';
 import { renderGradSada } from '../../app/src/layers/grad-sada';
+import { SADA_CREDITS } from '../../app/src/experience/status';
+import { LIVE_SOURCES, REFERENCE_SOURCES } from '../../worker/city/sources';
 import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
@@ -86,6 +88,36 @@ describe('Sada answers before it explains', () => {
       // The sources stay, crediting ZET for every blue time (§15.8 rule 7).
       expect(section.querySelector('details.provenance')).not.toBeNull();
     }
+  });
+
+  it('credits the static data it shows after the module rows: the timetable, BAJS, the on-duty pharmacies and the two registers', () => {
+    const block = renderGradSada(ctx()).querySelector('details.provenance')!;
+    const keys = [...block.querySelectorAll('li')].map((li) => li.getAttribute('data-key'));
+    const modules = Object.keys(SNAPSHOTS);
+    // The feed modules first, in the order they are held; the credits after them, in SADA_CREDITS' order.
+    expect(keys).toEqual([...modules, ...SADA_CREDITS.map((c) => c.key)]);
+    expect(SADA_CREDITS.map((c) => c.key)).toEqual(['zet-gtfs', 'bajs', 'dezurne-ljekarne', 'streets', 'heritage']);
+    const credit = (key: string): Element => block.querySelector(`li[data-key=${key}]`)!;
+    expect(text(credit('dezurne-ljekarne'))).toContain('neslužbeni prikaz');
+    expect(text(credit('bajs'))).toContain('Licenca: CC0-1.0');
+    const link = credit('zet-gtfs').querySelector<HTMLAnchorElement>('a.source-link')!;
+    expect(link.getAttribute('href')).toBe('https://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    // The names, licences and addresses are the catalogue's own (worker/city/sources.ts).
+    const zet = REFERENCE_SOURCES.find((r) => r.id === 'zet-schedule')!;
+    const streets = REFERENCE_SOURCES.find((r) => r.id === 'streets')!;
+    const heritage = REFERENCE_SOURCES.find((r) => r.id === 'heritage')!;
+    expect(SADA_CREDITS.find((c) => c.key === 'zet-gtfs')).toMatchObject({ licence: zet.licence, url: zet.catalogue });
+    expect(SADA_CREDITS.find((c) => c.key === 'zet-gtfs')!.text).toContain(zet.name);
+    expect(SADA_CREDITS.find((c) => c.key === 'streets')).toMatchObject({ licence: streets.licence, url: streets.catalogue });
+    expect(SADA_CREDITS.find((c) => c.key === 'streets')!.text).toContain(streets.name);
+    expect(SADA_CREDITS.find((c) => c.key === 'heritage')).toMatchObject({ licence: heritage.licence, url: heritage.catalogue });
+    expect(SADA_CREDITS.find((c) => c.key === 'heritage')!.text).toContain(heritage.name);
+    expect(SADA_CREDITS.find((c) => c.key === 'bajs')).toMatchObject({ licence: LIVE_SOURCES.bikes.licence, url: LIVE_SOURCES.bikes.url });
+    expect(SADA_CREDITS.find((c) => c.key === 'bajs')!.text).toContain(LIVE_SOURCES.bikes.name);
+    // With no snapshot at all the block still stands, on the credits alone.
+    const bare = renderGradSada(ctx({ snapshots: {} })).querySelector('details.provenance')!;
+    expect([...bare.querySelectorAll('li')].map((li) => li.getAttribute('data-key'))).toEqual(SADA_CREDITS.map((c) => c.key));
   });
 
   it('titles the page with the place: the stop nearest the reference, a tram stop before a nearer bus stop', () => {

@@ -174,6 +174,15 @@ describe('the public report: system', () => {
     expect(stats.system.ticksGood).toEqual([0, 0, 0, 500, 0, 0, 0]);
   });
 
+  it('drops the fetch history of a module that no longer exists when the route names the ones that do; without the list every row stays', () => {
+    const withHistory = [...SYSTEM, total('source_fetch', 'hrt-news', 'ok', 412), total('source_fetch', 'hrt-news', 'error', 6)];
+    const all = buildPublicStats(input({ systemTotals: withHistory }));
+    expect(all.system.sources.map((s) => s.module)).toEqual(['zet-rt', 'dhmz-now', 'hrt-news']);
+    const current = buildPublicStats(input({ systemTotals: withHistory, modules: ['zet-rt', 'dhmz-now'] }));
+    expect(current.system.sources).toEqual(stats.system.sources);
+    expect(buildPublicStats(input({ systemTotals: withHistory, modules: [] })).system.sources).toEqual([]);
+  });
+
   it('reads the hindsight grades, the planner and the timetable', () => {
     const h30 = stats.system.hindsight.find((h) => h.horizon === '30s')!;
     expect(h30.buckets).toEqual({ lt25: 120, lt50: 0, lt100: 0, lt200: 0, ge200: 3 });

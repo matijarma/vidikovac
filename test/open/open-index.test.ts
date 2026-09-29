@@ -61,18 +61,20 @@ describe('renderOpenIndex', () => {
 
   // R-F7: the lede used to say "everything the dashboard shows without
   // scanning is published as a machine-readable dataset too", which is false
-  // for the kiosk's pre-scan "Grad javlja" events card -- it is drawn from
-  // `dogadanja`, a session-tier module, licence-filtered on the way to the
-  // teaser (registry.ts teaserSubset), and never archived or offered at
-  // /open (docs/izvori.md "## Izvedeni podaci"). The lede must claim
-  // republication only for the open-tier modules that OPEN_DATASETS
-  // actually lists, and name the events-card exception plainly.
-  it('claims republication only for open-tier modules and names the events-card exception (R-F7)', () => {
+  // for what the public screen draws before the scan from session-tier
+  // modules (vehicles, weather, events; licence-filtered on the way to the
+  // teaser, registry.ts teaserSubset), never archived or offered at /open
+  // (docs/izvori.md "## Izvedeni podaci"). The lede must claim republication
+  // only for the open-tier modules that OPEN_DATASETS actually lists, and name
+  // the exception plainly. It once named a card, "Grad javlja"; the screen
+  // has no such card any more (upgrade U4), so the name is gone.
+  it('claims republication only for open-tier modules and names the session-tier exception (R-F7)', () => {
     expect(html).not.toMatch(/Sve što (nadzorna ploča|kiosk)[^.]*bez skeniranja[^.]*objavljeno/i);
     expect(html).toMatch(/otvorene? razine[^.]*objavljen/i);
-    expect(html).toContain('Grad javlja');
+    expect(html).not.toContain('Grad javlja');
+    expect(html).toContain('Iznimka su podaci modula sesijske razine koje javni zaslon prikazuje prije skeniranja, poput vozila, vremena i događanja: ovdje se ne objavljuju.');
     expect(html).toMatch(/sesijske razine/i);
-    expect(html).toMatch(/(ne objavljuje|nije objavlj)/i);
+    expect(html).toMatch(/(ne objavljuj[eu]|nije objavlj)/i);
   });
 });
 
