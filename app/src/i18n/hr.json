@@ -875,7 +875,8 @@
       "sunsetTime": "U {time} zalazi sunce.",
       "sunriseAt": "Izlazak sunca je u {time}.",
       "sunriseTime": "U {time} izlazi sunce.",
-      "opening": "{name}: rad počinje {time}."
+      "opening": "{name}: rad počinje {time}.",
+      "notice": "ZET javlja: {notice}."
     },
     "handheld": {
       "info": "Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz."
@@ -939,7 +940,8 @@
       "sunset": "Zalazak sunca",
       "lastTrams": "Zadnji tramvaji",
       "firstTram": "Prvi tramvaj",
-      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu."
+      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu.",
+      "zetSays": "ZET javlja"
     },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",

@@ -8,6 +8,9 @@
 //   - at most three departures at the place: blue when a tracked vehicle times
 //     them inside the countdown horizon, grey timetable times otherwise, all
 //     grey while ZET sends no vehicle positions;
+//   - right after them at most ONE ZET notice ("ZET javlja"), when ZET's own traffic
+//     notice names a line the place's boards serve or its news feed states a service
+//     change (shared/city/notices.ts): no time of its own, ZET's words and its link;
 //   - then the timed rows by their time: closures within the circle by their
 //     end, events within the circle by their start with the venue and the tram
 //     to it, the next solar event only, the evening's last trams as ONE row
@@ -28,6 +31,7 @@
 // reason goes to `onSkip` (the wall's data-skipped-text census, decision 18).
 import { arrivalsAt, type ArrivalRow, type LiveVehicleRef } from '../../../shared/city/arrivals';
 import { locatedEvents } from '../../../shared/city/events';
+import { noticeCandidates, zetNoticeLink } from '../../../shared/city/notices';
 import { pillText } from '../../../shared/city/frame';
 import { externalText, EXTERNAL_TEXT_REJECTIONS, type ExternalTextKind, type ExternalTextRejection } from '../../../shared/kiosk/external-text';
 import { distanceM, inPolygons, located, matchStreet, normalName } from '../../../shared/city/geo';
@@ -47,7 +51,7 @@ import { sunTimes } from '../ui/solar';
 import { cancelledTrips } from './feed';
 import { ct } from './strings';
 
-export type NearbyKind = 'departure' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy';
+export type NearbyKind = 'departure' | 'notice' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy';
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
@@ -96,6 +100,8 @@ export interface NearbyRow {
   liveAt?: number;
   /** A last-trams or first-tram row's lines, soonest first; a line drops out once it has left. */
   services?: readonly NearbyService[];
+  /** A notice row: ZET's own page of the notice (https, zet.hr only). The phone links it, the wall ignores it. */
+  href?: string;
 }
 
 /** Everything the selection reads; the caller owns every clock and cache. */
@@ -189,7 +195,7 @@ const MINUTE_MS = 60_000;
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 /** Ties at one instant: departures, then the timed kinds in the order §11 lists them, then the timeless row. */
 const KIND_ORDER: Readonly<Record<NearbyKind, number>> = {
-  departure: 0, closure: 1, event: 2, solar: 3, last: 4, first: 5, opening: 6, always: 7, pharmacy: 8,
+  departure: 0, notice: 1, closure: 2, event: 3, solar: 4, last: 5, first: 6, opening: 7, always: 8, pharmacy: 9,
 };
 
 /** The rows for a place, in time order with the departures first, within the bounds of §12. */
@@ -205,7 +211,7 @@ export function selectNearby(input: NearbyInput): NearbyRow[] {
     ...firstTramRows(input),
     ...openingRows(input, events),
   ].sort(byTime);
-  return [...departures, ...timed, ...timelessRows(input)];
+  return [...departures, ...noticeRows(input), ...timed, ...timelessRows(input)];
 }
 
 function byTime(a: NearbyRow, b: NearbyRow): number {
@@ -447,6 +453,43 @@ function arrangeDepartures(pool: readonly ArrivalRow[], held: readonly NearbyRow
     chosen = ordered.filter((a) => keep.has(a));
   }
   return chosen;
+}
+
+// --- (a2) ZET's own notice, right after the departures ----------------------------
+
+/** The words a row never carries (the harness reads them as a caveat line, e2e/inventory.ts DISCL): honesty about a timetable lives in the header sentence, the map note and the status line. */
+const CAVEAT = /po voznom redu|nepotvrđen|nije potvrđen|procjena iz|izvor:/i;
+
+/**
+ * At most one ZET notice (upgrade U1): its traffic notice when it names a line the place's boards serve, the news
+ * feed's service statement anywhere (shared/city/notices.ts noticeCandidates), newest first. The title is ZET's own
+ * and passes the row policy or the next candidate stands in; the sub is the start of ZET's description (its whole
+ * sentences, zet-rss.ts noticeSummary) when that passes too and carries no caveat word, else nothing. The row has no
+ * time of its own (the wall prints "ZET javlja" where a time would stand), no selection and no map; the phone links
+ * ZET's page. It stands in every service state: it is ZET's word, not the product's, and no cause is ever added.
+ */
+function noticeRows(input: NearbyInput): NearbyRow[] {
+  const snapshot = input.snapshots.dogadanja;
+  if (!snapshot || snapshot.status === 'down') return [];
+  const lines = new Set<string>();
+  for (const board of input.boards) for (const d of board.departures) if (d.operator === 'zet') lines.add(d.routeName.toUpperCase());
+  for (const item of noticeCandidates(snapshot.items, input.now, lines)) {
+    if (!vetted(input, [['title', item.title]])) continue;
+    const summary = item.summary !== undefined && !CAVEAT.test(item.summary) && externalText('summary', item.summary, { surface: 'row' }).ok ? item.summary : '';
+    const href = zetNoticeLink(item.link);
+    return [{
+      id: `notice:${item.id}`,
+      kind: 'notice',
+      atMs: Date.parse(item.at!),
+      always: false,
+      title: item.title,
+      sub: summary,
+      live: false,
+      source: String(item.data?.source ?? 'dogadanja'),
+      ...(href ? { href } : {}),
+    }];
+  }
+  return [];
 }
 
 // --- (b) closures by their end --------------------------------------------------

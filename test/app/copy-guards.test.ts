@@ -482,6 +482,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     pharmacy: 'Dežurna ljekarna 24/7: {address}.',
     always: '{name}: {text}',
     outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+    notice: 'ZET javlja: {notice}.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -506,6 +507,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     pharmacy: '24/7 duty pharmacy: {address}.',
     always: '{name}: {text}',
     outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+    notice: 'ZET reports: {notice}.',
   };
   const templates = (sentence: Record<string, unknown>): Record<string, unknown> =>
     Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker'));
@@ -530,6 +532,9 @@ describe('the header sentence templates are name-safe and match the sentence cli
       venue: /\(\{venue\}\)/,
       station: /^BAJS \{station\}: /,
       address: /: \{address\}\.$/,
+      // ZET's own headline (upgrade U1): a title that is a sentence's whole predicate needs no agreement, and the
+      // slot is not called `title` because that name is reserved for a quoted „…” one.
+      notice: /^ZET javlja: \{notice\}\.$/,
     };
     for (const [key, template] of Object.entries(HR_TEMPLATES)) {
       for (const [slot, envelope] of Object.entries(envelopes)) {
@@ -548,5 +553,6 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.event, { time: 'U 19:30', title: 'Intersonus', venue: 'Kino Europa' })).toBe('U 19:30 počinje događanje „Intersonus” (Kino Europa).');
     expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
+    expect(fill(s.notice, { notice: 'Linije 5 i 13 u nedjelju mijenjaju trase' })).toBe('ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.');
   });
 });

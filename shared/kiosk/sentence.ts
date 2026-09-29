@@ -159,6 +159,9 @@ export const SENTENCE_FAMILIES = {
   opening: { hr: '{name}: rad počinje {time}.', en: '{name} opens {time}.', slots: { name: 'venue', time: 'time' }, kinds: ['kultura'] },
   pharmacy: { hr: 'Dežurna ljekarna 24/7: {address}.', en: '24/7 duty pharmacy: {address}.', slots: { address: 'street' }, kinds: ['nocas'] },
   outage: { hr: 'ZET ne šalje položaje vozila; polasci su po voznom redu.', en: 'ZET is not sending vehicle positions; departures follow the timetable.', slots: {}, kinds: ['promet'] },
+  // ZET's own headline while the "ZET javlja" row stands (upgrade U1, shared/city/notices.ts). The slot is `notice`,
+  // not `title`, because the copy guard puts every {title} inside „…”; the full stop is the writer's own.
+  notice: { hr: 'ZET javlja: {notice}.', en: 'ZET reports: {notice}.', slots: { notice: 'title' }, kinds: ['promet'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a

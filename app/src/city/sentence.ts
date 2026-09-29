@@ -2,6 +2,7 @@
 // No DOM, network or implicit clock. The template path works without AI.
 import type { ArrivalRow } from '../../../shared/city/arrivals';
 import { distanceM, located } from '../../../shared/city/geo';
+import { NOTICE_WINDOW_MS } from '../../../shared/city/notices';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState } from '../../../shared/city/types';
 import {
@@ -113,6 +114,7 @@ export const SENTENCE_COPY_HR = {
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
   outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+  notice: 'ZET javlja: {notice}.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -137,6 +139,7 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   pharmacy: '24/7 duty pharmacy: {address}.',
   always: '{name}: {text}',
   outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+  notice: 'ZET reports: {notice}.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -258,6 +261,14 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const atNight = hour >= 20 || hour < 5;
   let departures = 0;
   for (const row of input.rows) {
+    // ZET's own headline, said while its row stands (its window, not a day, and in every service state: it is ZET's
+    // word). Its time is the publish time, already past, so it has to be read before the past-row skip below. A title
+    // over 64 characters yields no sentence (copy() refuses the value) and only the row.
+    if (row.kind === 'notice') {
+      add(row.id, 'promet', copy(i18n, 'notice', { notice: row.title }),
+        Math.min((row.atMs ?? now) + NOTICE_WINDOW_MS, nextMidnight(now)), { wording: 'notice' });
+      continue;
+    }
     if (row.kind === 'solar' || (row.kind !== 'last' && row.kind !== 'first'
       && row.atMs !== null && (!Number.isFinite(row.atMs) || row.atMs <= now))) continue;
     if (row.kind === 'departure') {
