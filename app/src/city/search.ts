@@ -1,5 +1,5 @@
 import type { Place, StreetStory } from '../../../shared/city/types';
-import { distanceM, located } from '../../../shared/city/geo';
+import { distanceM, located, normalName } from '../../../shared/city/geo';
 import { fold, searchTransport, type RouteEntry, type StopGroup } from '../transport/search';
 
 export type CitySearchResult =
@@ -20,6 +20,30 @@ export function nameScore(name: string, query: string): number {
   if (value.includes(q)) return 60;
   return q.split(' ').every(word => value.includes(word)) ? 40 : 0;
 }
+/**
+ * Words a place is found by beside its name and address: its kind ("wc" finds a toilet named "Centar"). One table for the
+ * map's discovery (city/discovery.ts) and this list, so what the map draws for a query the list holds too. It lives here
+ * because discovery.ts imports this module.
+ */
+export const CATEGORY_TERMS: Record<string, string> = {
+  water: 'voda cesma pitka drinking water', toilet: 'wc zahod javni toalet toilet',
+  wifi: 'wifi wi fi internet', sport: 'sport igraliste courts', dogs: 'psi pse dog',
+  recycling: 'recikliranje otpad recycling', market: 'trznica market',
+  garage: 'garaza parking', charging: 'punionica charging', 'cycle-parking': 'bicikl stalak bicycle',
+  culture: 'kultura culture muzej museum', heritage: 'bastina heritage', rail: 'vlak train',
+  // An air station is filed under the water category of the catalogue, but it is found by "zrak", not by "voda".
+  air: 'zrak kvaliteta zraka air quality',
+};
+export function categoryTermsOf(place: Pick<Place, 'category' | 'sourceId'>): string {
+  return CATEGORY_TERMS[place.sourceId === 'air' ? 'air' : place.category] ?? '';
+}
+/** The folded text a query's words are looked for in, by discover and by the list alike. */
+export function placeSearchText(place: Place): string {
+  return normalName(`${place.name} ${place.address ?? ''} ${place.subtype ?? ''} ${categoryTermsOf(place)}`);
+}
+/** A place found only by its category words (no name or address match) still belongs in the list the map draws for it, under every name match. */
+export const CATEGORY_MATCH_SCORE = 25;
+
 /** A stop outranks a street or a place of the same name quality: the person searching a transit map at a stop
  *  wants the stop first (round 1 finding F2); a route number keeps its own +20 above that. */
 const STOP_BONUS = 15;
@@ -49,6 +73,13 @@ function incidentalScore(text: string | undefined, query: string, cap: number): 
   return text ? Math.min(cap, nameScore(text, query)) : 0;
 }
 
+/** CATEGORY_MATCH_SCORE for a place discover matched by its category words (every query word in name, address, subtype and terms). */
+function categoryScore(place: Place, query: string): number {
+  const text = placeSearchText(place);
+  const words = normalName(query).split(' ').filter(Boolean);
+  return words.length > 0 && words.every((word) => text.includes(word)) ? CATEGORY_MATCH_SCORE : 0;
+}
+
 export function searchCity(query: string, routes: readonly RouteEntry[], stops: readonly StopGroup[], places: readonly Place[], streets: readonly StreetStory[]): CitySearchResult[] {
   if (!fold(query)) return [];
   const transport = searchTransport(query, routes, stops, { routes: routes.length, stops: stops.length });
@@ -63,7 +94,7 @@ export function searchCity(query: string, routes: readonly RouteEntry[], stops: 
     })),
     ...groupWifi(places).map(record => ({
       kind: 'place' as const, id: record.id, name: record.name, detail: record.address ?? '', record,
-      score: nameScore(record.name, query) || incidentalScore(record.address, query, 30),
+      score: nameScore(record.name, query) || incidentalScore(record.address, query, 30) || categoryScore(record, query),
     })),
     ...streets.map(record => ({
       kind: 'street' as const, id: record.id, name: record.name, detail: record.settlement, record,

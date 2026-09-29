@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {searchCity,groupWifi} from '../../app/src/city/search';
+import {searchCity,groupWifi,CATEGORY_MATCH_SCORE} from '../../app/src/city/search';
 import {discover} from '../../app/src/city/discovery';
 import {emptyCity,type Place} from '../../shared/city/types';
 import {createDefaultI18n} from '../../app/src/i18n/create-default-i18n';
@@ -66,6 +66,25 @@ describe('one ranked city search',()=>{
   it('finds useful categories without requiring the category term in the name',()=>{
     const state={...emptyCity(),places:[{...wifi,category:'toilet' as const,name:'Centar',address:'Ilica'}]};
     expect(discover(state,[],{group:'living',category:'',query:'javni wc',window:'week',center:{lon:15.977,lat:45.813},radius:5000,now}).places).toHaveLength(1);
+  });
+  it('lists every place the map draws for a query: one found only by its category words scores below any name or address match',()=>{
+    const toilet:Place={...wifi,id:'toilet-a',category:'toilet',name:'Centar',address:'Ilica 1'};
+    const named:Place={...wifi,id:'wc-park',category:'toilet',name:'WC Park Zrinjevac',address:undefined};
+    const state={...emptyCity(),places:[toilet,named]};
+    const drawn=discover(state,[],{group:'living',category:'',query:'wc',window:'week',center:{lon:15.977,lat:45.813},radius:5000,now}).places;
+    expect(drawn.map(p=>p.id).sort()).toEqual(['toilet-a','wc-park']);
+    const result=searchCity('wc',[],[],drawn,[{id:'s',name:'Ulica',settlement:'Zagreb',settlementId:'1',description:'wc kod škole'}]);
+    // The named toilet first (a name match), the toilet found by its kind next (25), the street description (20) last.
+    expect(result.map(r=>r.id)).toEqual(['wc-park','toilet-a','s']);
+    expect(result.find(r=>r.id==='toilet-a')?.score).toBe(CATEGORY_MATCH_SCORE);
+    expect(CATEGORY_MATCH_SCORE).toBeGreaterThan(20);
+    // A place whose kind has no such word is still not listed for it.
+    expect(searchCity('wc',[],[],[{...wifi,category:'culture',name:'Galerija'}],[])).toEqual([]);
+    // The air station is not water: "voda" lists the fountain, "zrak" the station.
+    const air:Place={id:'air-a1',category:'water',name:'Zagreb 1',lon:15.97,lat:45.81,sourceId:'air',sourceRecord:'a1',subtype:'air'};
+    const fountain:Place={id:'water-1',category:'water',name:'Zrinjevac',lon:15.98,lat:45.81,sourceId:'water',sourceRecord:'1'};
+    expect(searchCity('voda',[],[],[air,fountain],[]).map(r=>r.id)).toEqual(['water-1']);
+    expect(searchCity('zrak',[],[],[air,fountain],[]).map(r=>r.id)).toEqual(['air-a1']);
   });
 });
 

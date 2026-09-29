@@ -4,14 +4,7 @@ import { distanceM, located, normalName } from '../../../shared/city/geo';
 import type { FeedItem } from '../../../worker/feed/schema';
 import type { MapPoint } from '../map/city-map';
 import {bikeAvailability} from '../../../shared/city/bikes';
-import { groupWifi } from './search';
-const CATEGORY_TERMS: Record<string, string> = {
-  water:'voda cesma pitka drinking water',toilet:'wc zahod javni toalet toilet',
-  wifi:'wifi wi fi internet',sport:'sport igraliste courts',dogs:'psi pse dog',
-  recycling:'recikliranje otpad recycling',market:'trznica market',
-  garage:'garaza parking',charging:'punionica charging','cycle-parking':'bicikl stalak bicycle',
-  culture:'kultura culture muzej museum',heritage:'bastina heritage',rail:'vlak train',
-};
+import { groupWifi, placeSearchText } from './search';
 export type CityGroup = 'living' | 'transport' | 'culture' | 'useful' | 'heritage';
 export interface DiscoveryOptions { group: CityGroup; category: string; window: ActivityWindow; query: string; center: {lon:number;lat:number}; radius: number; now:number;bikeMode?:'rent'|'return' }
 export interface Discovery {
@@ -40,7 +33,7 @@ export function discover(state: CityState, items: readonly FeedItem[], o: Discov
   const all=groupWifi([...state.places,...dynamic]);
   let places=all.filter(p=>{
     if(query) {
-      const text=normalName(`${p.name} ${p.address??''} ${p.subtype??''} ${CATEGORY_TERMS[p.category]??''}`);
+      const text=placeSearchText(p);
       return query.split(' ').every(word=>text.includes(word));
     }
     if(!located(p)||distanceM(o.center,p)>o.radius) return false;
