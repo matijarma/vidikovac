@@ -17,6 +17,8 @@ import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import hr from '../../app/src/i18n/hr.json';
 import en from '../../app/src/i18n/en.json';
 import { renderGradSada } from '../../app/src/layers/grad-sada';
+import { resetServiceStateMemory } from '../../shared/city/service-state';
+import type { ZetService } from '../../shared/city/service-wire';
 import { SADA_CREDITS } from '../../app/src/experience/status';
 import { LIVE_SOURCES, REFERENCE_SOURCES } from '../../worker/city/sources';
 import type { LayerContext } from '../../app/src/layers/types';
@@ -171,6 +173,48 @@ describe('the sentence card', () => {
     expect(renderGradSada(ctx({ sentence: null })).querySelector('[data-testid=sada-sentence]')).toBeNull();
     const english = renderGradSada(ctx({ i18n: createDefaultI18n('en'), sentence }));
     expect(text(english.querySelector('.sada-kicker'))).toBe(en.kiosk.sentence.kicker.kultura);
+  });
+});
+
+// RUN.md D-run-10 (round 1 desktop F2, phone F3): after its one turn in the header's rotation the fleet sentence stays
+// off for ten minutes, so Sada carries the wall's note while the state lasts: at the head of the departures, never
+// inside a row, one note, no cause.
+describe('the state note', () => {
+  const zetWith = (over: Partial<ModuleSnapshot>, service?: Partial<ZetService>): ModuleSnapshot => {
+    const base = SNAPSHOTS['zet-rt']!;
+    return {
+      ...base, sourceUpdatedAt: iso(NOW - 10_000), ...over,
+      sources: { zet: { status: 'live', itemCount: 2, sourceUpdatedAt: iso((over.sourceUpdatedAt ? Date.parse(over.sourceUpdatedAt) : NOW - 10_000)),
+        ...(service ? { service: { state: 'normal', since: iso(NOW - 3_600_000), expected: 460, seen: 2, ratio: 0, confidence: 1, baseline: 'declared', byMode: { tram: [0, 150], bus: [2, 310] }, ...service } as ZetService } : {}) } },
+    };
+  };
+  const notes = (zet: ModuleSnapshot, screen = PHONE) => {
+    resetServiceStateMemory();
+    const root = renderGradSada(ctx({ screen, snapshots: { ...SNAPSHOTS, 'zet-rt': zet } }));
+    return { root, notes: [...root.querySelectorAll('[data-testid=sada-note]')].map(text) };
+  };
+
+  it.each([
+    ['down', zetWith({ status: 'down', items: [] }), hr.kiosk.nearby.outageNote],
+    ['unconfirmed (the feed twelve minutes old)', zetWith({ sourceUpdatedAt: iso(NOW - 12 * 60_000) }), hr.kiosk.nearby.outageNote],
+    ['silent', zetWith({}, { state: 'silent', seen: 2, expected: 460 }), 'ZET: u pokretu 2 vozila, po voznom redu oko 460. Polasci su iz voznog reda, bez potvrde vozila.'],
+    ['reduced (the two numbers alone: a live row stays live)', zetWith({}, { state: 'reduced', seen: 96, expected: 247 }), 'ZET: u pokretu 96 vozila, po voznom redu oko 250'],
+  ])('shows exactly one note while ZET is %s, at the head of the departures and in no row', (_state, zet, want) => {
+    for (const screen of [PHONE, DESK]) {
+      const { root, notes: shown } = notes(zet, screen);
+      expect(shown).toEqual([want]);
+      const note = root.querySelector('[data-testid=sada-note]')!;
+      expect(note.compareDocumentPosition(root.querySelector('[data-testid=day-departures]')!) & FOLLOWING).toBeTruthy();
+      expect(note.closest('li, ol, ul')).toBeNull();
+      expect(text(root.querySelector('[data-testid=nearby]'))).not.toContain(want);
+    }
+  });
+
+  it('shows none while the fleet is normal, unknown or the feed is fresh without a judgement', () => {
+    expect(notes(zetWith({}, { state: 'normal', seen: 380, expected: 460 })).notes).toEqual([]);
+    expect(notes(zetWith({}, { state: 'unknown' })).notes).toEqual([]);
+    expect(notes(zetWith({})).notes).toEqual([]);
+    expect(notes(SNAPSHOTS['zet-rt']!).notes).toEqual([]);
   });
 });
 

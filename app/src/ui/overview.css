@@ -37,6 +37,10 @@
 .sada-map-canvas .maplibregl-ctrl-attrib-button { inline-size: var(--target); block-size: var(--target); background-repeat: no-repeat; background-position: center; }
 @media (min-width: 60rem) { .sada-map { display: none; } }
 
+/* Sada's one quiet note while ZET sends no positions or its fleet deviates (layers/grad-sada.ts sadaStateNote; the
+   wall's .k-map-note): at the head of the departures, muted, in a hairline frame like the band. */
+.sada-note { margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); color: var(--tone-text-muted); font-size: var(--text-sm); line-height: var(--lh-body); }
+
 /* The departures block (city/next-departures.ts) and the stop sheet's rows
    (transport/view.ts departureRow): badge, destination, time. A tracked time
    is blue with its dot, a timetable time a grey tabular clock [O-27]; an

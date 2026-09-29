@@ -14,6 +14,7 @@
 // persistSlot), never detached by a redraw.
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sentence';
+import { aboutExpected, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import { emptyCity } from '../../../shared/city/types';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { CURATED_WALL, curatedCityPoints } from '../city/curated';
@@ -71,6 +72,23 @@ function sentenceMarkup(ctx: LayerContext, sentence: WrittenSentence | 'busy' | 
 function nearbyBusy(ctx: LayerContext, rows: number): string {
   return `<section class="nearby" data-testid="nearby" data-key="nearby" aria-busy="true"><h3 class="nearby-head" data-testid="nearby-head"><span class="nearby-head-title">${e(ctx.i18n.t('kiosk.nearby.title'))}</span></h3>`
     + `<ol class="nearby-rows" data-testid="nearby-rows">${'<li class="nearby-row-empty" aria-hidden="true"><span class="skeleton"></span></li>'.repeat(rows)}</ol></section>`;
+}
+
+/**
+ * Sada's one quiet note while the state lasts (RUN.md D-run-10; the wall's map note, kiosk/invitation.ts wallMapNote):
+ * ZET sends no positions (down, unconfirmed: U0's outage note), its fleet is silent (the silent note with the two
+ * numbers), or reduced (the two numbers alone, the paired blocks' status line: in reduced a live row stays live, so the
+ * silent note's "departures are from the timetable" would not hold). Null otherwise. The header sentence says the
+ * same once in its rotation; this stands at the head of the departures, never inside a row, and names no cause.
+ */
+export function sadaStateNote(ctx: Pick<LayerContext, 'i18n' | 'snapshots'>, now: number): string | null {
+  const zet = ctx.snapshots['zet-rt'];
+  const kind = serviceStateOf(zet, now).kind;
+  if (kind === 'down' || kind === 'unconfirmed') return ctx.i18n.t('kiosk.nearby.outageNote');
+  const numbers = kind === 'silent' || kind === 'reduced' ? serviceNumbers(zet) : null;
+  if (!numbers) return null;
+  const vars = { seen: ctx.i18n.t('kiosk.sentence.vehicles', { count: numbers.seen }), expected: aboutExpected(numbers.expected) };
+  return kind === 'silent' ? ctx.i18n.t('kiosk.nearby.silentNote', vars) : ctx.i18n.t('kiosk.paired.serviceLine', vars);
 }
 
 /**
@@ -161,10 +179,12 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
   // The place's name is the catalogue's or the operator's text: the title carries it only once the row check passes
   // (the boundary refuses everything until the policy chunk, this feed's own, is in hand).
   const name = vetExternal('name', place.name, 'row') ?? '';
+  const note = sadaStateNote(ctx, now);
   const section = createElementFromHTML(`<section class="layer ws ws-sada" id="layer-grad-sada" data-layer="grad-sada" data-reconcile aria-labelledby="layer-title-grad-sada">`
     + `<h2 class="layer-title sada-place" id="layer-title-grad-sada" tabindex="-1" data-testid="sada-place">${e(name)}</h2>`
     + sentenceMarkup(ctx, sentence)
     + (bandBox ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
+    + (note === null ? '' : `<p class="sada-note" data-testid="sada-note" data-key="sada-note">${e(note)}</p>`)
     + departuresBlock(ctx, place, { heading: true })
     + nearby
     + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[], 'provenance', [...SADA_CREDITS, ...credits])
