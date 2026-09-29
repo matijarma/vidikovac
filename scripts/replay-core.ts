@@ -337,6 +337,8 @@ export interface FleetFrame {
   futurePins: number;
   /** Tracks in the state but off the wire: in a depot, else parked. */
   hidden: { depot: string[]; parked: string[] };
+  /** Reports the tick refused for a stamp after the header (TickResult.rejectedFuture). */
+  rejectedFuture: number;
 }
 
 /** The standing census over a run: (vehicle, frame) pairs where a PINNED
@@ -389,7 +391,7 @@ function createStandingCensus() {
 
 /** The fleet frame of one tick: the payload's pins, count and route rows,
  *  and the state's held-back tracks classified as the twin classifies them. */
-function fleetFrameOf(state: TwinState, payload: FeedPayload, headerSec: number): FleetFrame {
+function fleetFrameOf(state: TwinState, payload: FeedPayload, headerSec: number, rejectedFuture: number): FleetFrame {
   const pins = payload.items.filter((item) => item.id.startsWith('vehicle:'));
   const sourceMs = payload.sourceUpdatedAt !== undefined ? Date.parse(payload.sourceUpdatedAt) : null;
   const futurePins = sourceMs === null ? 0 : pins.filter((item) => item.at !== undefined && Date.parse(item.at) > sourceMs + FUTURE_TOLERANCE_S * 1000).length;
@@ -410,6 +412,7 @@ function fleetFrameOf(state: TwinState, payload: FeedPayload, headerSec: number)
     ids: pins.map((item) => item.id.slice('vehicle:'.length)),
     futurePins,
     hidden,
+    rejectedFuture,
   };
 }
 
@@ -933,7 +936,7 @@ export function replay(frames: readonly DecodedFeed[], engine: Engine, routes: Z
     tickMs.push(performance.now() - t0);
     state = result.state;
     if (options.onFrame || census) {
-      const fleet = fleetFrameOf(state, result.payload, headerSec);
+      const fleet = fleetFrameOf(state, result.payload, headerSec, result.rejectedFuture);
       options.onFrame?.(fleet);
       census?.observe(state, fleet);
     }

@@ -19,8 +19,9 @@
 // --fleet-series prints one JSON line per frame instead of the table: the
 // header `h`, the `pins` and the payload's `itemCount`, the `routeRows`, the
 // pinned vehicle `ids`, the `futurePins` stamped more than 30 s after the
-// payload's source time, and the vehicles `hidden` in a depot or parked
-// (scripts/replay-core.ts FleetFrame). --standing keeps the harness's own
+// payload's source time, the vehicles `hidden` in a depot or parked, and the
+// reports the tick refused as `rejectedFuture` (scripts/replay-core.ts
+// FleetFrame). --standing keeps the harness's own
 // stand per vehicle and ends the output with one {"summary": ...} line:
 // pinned (vehicle, frame) pairs standing past their mode's limit, and every
 // vehicle ever held back (StandingSummary). Either flag replaces the table.
