@@ -52,6 +52,8 @@ describe('public-screen design invariants', () => {
   // The read tier for title and time, the walk-up tier for the rest, in every
   // wall composition; one fade for a new row, none where motion is unwanted.
   const timelineRules = cityCss.split('\n').filter((line) => /k-nearby|nearby-(row|title|when|sub)/.test(line) && !line.startsWith('.kiosk[data-size=handheld]')).join('\n');
+  /** The one cut on the wall (U0 step 7): an event title with no shorter form stops at two lines (timeline.ts EVENT_TITLE_MAX_LINES). */
+  const EVENT_CLAMP = ".kiosk .k-nearby .nearby-row[data-kind='event'] .nearby-title";
   it('draws the timeline as whole rows at least 64-92 px tall that are sliced, never hidden', () => {
     const rows = windowRule('.kiosk .k-nearby-rows');
     // The track is min-content, never minmax(<row>, auto) or auto: in a box too short for the words a fixed
@@ -79,8 +81,11 @@ describe('public-screen design invariants', () => {
   });
   it('never cuts a word: no ellipsis, no clipped title, sub or head, no one-line squeeze', () => {
     expect(timelineRules.length).toBeGreaterThan(0);
-    expect(timelineRules).not.toContain('text-overflow');
-    expect(timelineRules).not.toContain('line-clamp');
+    // The event title's two-line clamp is the one exception, and it is exactly that.
+    expect(windowRule(EVENT_CLAMP)).toBe('display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden');
+    const uncut = timelineRules.split('\n').filter((line) => !line.startsWith(`${EVENT_CLAMP}{`)).join('\n');
+    expect(uncut).not.toContain('text-overflow');
+    expect(uncut).not.toContain('line-clamp');
     expect(timelineRules).not.toContain("data-lines");
     for (const selector of ['.kiosk .k-nearby .nearby-title', '.kiosk .k-nearby .nearby-sub', '.kiosk .k-nearby-heading', '.kiosk .k-nearby .nearby-row', '.kiosk .k-nearby-text']) {
       const rule = windowRule(selector);
@@ -215,7 +220,7 @@ describe('public-screen design invariants', () => {
   // phone's tiles (signage.css .tl-*), which the wall loads but no wall renderer draws.
   const operatorField = new Set(['.k-suggest-name', '.k-suggest-meta']);
   const phoneTile = (file: string, sel: string) => file === 'app/src/ui/signage.css' && /\.tl(?:-[\w-]+)?(?![\w-])/.test(sel) && !/\.k-/.test(sel);
-  const excepted = (file: string, sel: string) => operatorField.has(sel) || phoneTile(file, sel);
+  const excepted = (file: string, sel: string) => operatorField.has(sel) || phoneTile(file, sel) || (file === 'app/src/ui/kiosk-city.css' && sel === EVENT_CLAMP);
   it('loads the stylesheets the pin reads: the entry\'s own and the ones shared modules import', () => {
     expect(wallSheets).toEqual([
       'app/src/motion/schema.css', 'app/src/motion/schematic.css', 'app/src/ui/base.css', 'app/src/ui/city.css', 'app/src/ui/fonts.css',

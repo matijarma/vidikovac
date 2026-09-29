@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, GROW_FROM_PX, IMMINENT_ROW_MIN, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -634,8 +634,8 @@ describe('whole rows from the row budget', () => {
     expect(dropCandidate([dep(1), dep(2), closure, solar, always()])?.id).toBe('dep:2');
     // Decision 67 (observe-d530): a sunrise, sunset or opening more than IMMINENT_ROW_MIN away and further away than
     // the second or third departure goes before it, the latest first; one within the hour, one sooner than the
-    // departure, a closure and an event keep their order, and the first departure never yields to one. Without
-    // `now` the step is skipped.
+    // departure and a closure keep their order, and the first departure never yields to one. Without `now` the step
+    // is skipped. U0 step 7 adds the event to decision 67's kinds, and an event yields before any closure.
     const solarSoon = row({ id: 'solar:soon', kind: 'solar', atMs: NOW + 6 * MIN });
     const solarFar = row({ id: 'solar:far', kind: 'solar', atMs: NOW + 90 * MIN });
     const opening = row({ id: 'opening:x', kind: 'opening', atMs: NOW + 75 * MIN });
@@ -648,7 +648,10 @@ describe('whole rows from the row budget', () => {
     expect(dropCandidate([dep(1), dep(2), dep(3), opening, solarFar, always()], NOW)?.id).toBe('solar:far');
     expect(dropCandidate([dep(1), dep(2), dep(3), opening, always()], NOW)?.id).toBe('opening:x');
     expect(dropCandidate([dep(1), dep(2, { atMs: NOW + 120 * MIN }), solarFar, always()], NOW)?.id).toBe('dep:2');
-    expect(dropCandidate([dep(1), dep(2), event, always()], NOW)?.id).toBe('dep:2');
+    // U0 step 7: an event 90 minutes away now yields before the second departure, as a sunset would.
+    expect(dropCandidate([dep(1), dep(2), event, always()], NOW)?.id).toBe('event:x');
+    // U0 step 7 (29 September): an event goes before a closure that ends later, where the latest timed row went before.
+    expect(dropCandidate([dep(1), row({ id: 'event:noon', kind: 'event', atMs: NOW + 10 * MIN }), closure, always()], NOW)?.id).toBe('event:noon');
     expect(dropCandidate([dep(1), closure, solarSoon, always()], NOW)?.id).toBe('solar:soon');
     expect(dropCandidate([dep(1), dep(2), always()])?.id).toBe('dep:2');
     // The next thing that is not a departure outlasts a second departure, and goes before the first one.
@@ -725,8 +728,11 @@ function wrapLines(textIn: string, perLine: number): number {
   }
   return lines;
 }
+/** An event title stops at EVENT_TITLE_MAX_LINES on the wall, as its line-clamp does (kiosk-city.css, U0 step 7). */
+const clampedEvent = (el: Element, lines: number): number =>
+  (el.classList.contains('nearby-title') && el.closest<HTMLElement>('li.nearby-row')?.dataset.kind === 'event' ? Math.min(EVENT_TITLE_MAX_LINES, lines) : lines);
 function simulated(layout: Layout): TimelineMeasure & { rowHeight(li: Element): number; sum(list: Element): number } {
-  const lines = (el: Element): number => wrapLines(el.textContent ?? '', el.classList.contains('nearby-title') ? layout.titleChars : layout.subChars);
+  const lines = (el: Element): number => clampedEvent(el, wrapLines(el.textContent ?? '', el.classList.contains('nearby-title') ? layout.titleChars : layout.subChars));
   const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
   const rowHeight = (li: Element): number => Math.max(rowPx(), 44 * lines(li.querySelector('.nearby-title')!) + 32 * lines(li.querySelector('.nearby-sub')!) + 8);
   const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
@@ -1300,12 +1306,11 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ designHeightPx: 486, measure });
     t.update(longRows(), 2000, NOW);
-    // The later departures go first (D5.16 and D5.19 observers), so the event stays beside the closure in its short twins.
-    expect(ids()).toEqual(['dep:1', 'closure:vukovarska', 'event:gavella', 'last:2026-09-22', 'always:heritage:stedionica']);
-    expect(text(byId('event:gavella').querySelector('.nearby-title'))).toBe('Glembajevi');
-    // "Ulica grada Vukovara" and its three-line sub give way to their complete short twins.
+    // U0 step 7: the event two hours away yields before the second departure, and the closure's sub-line before it (decision 66).
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // "Ulica grada Vukovara" gives way to its complete short twin, and its sub-line to the second departure.
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Vukovarska');
-    expect(text(byId('closure:vukovarska').querySelector('.nearby-sub'))).toBe('Savska – Miramarska');
+    expect(text(byId('closure:vukovarska').querySelector('.nearby-sub'))).toBe('');
     // "Zgrada nekadašnje Gradske štedionice" takes three title lines there; "Gradska štedionica" wraps onto two, whole.
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
     expect(text(byId('last:2026-09-22').querySelector('.nearby-sub'))).toBe(longRows()[6]!.subShort);
@@ -1316,8 +1321,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ designHeightPx: 498, measure });
     t.update(longRows(), 2000, NOW);
-    // One departure fewer than before, the event kept: later departures yield before a timed row.
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'closure:vukovarska', 'event:gavella', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // U0 step 7: the event two hours away yields before the third departure, which then fits.
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
     expect(text(byId('last:2026-09-22').querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
@@ -1327,8 +1332,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
   // The lane W wall check of 22 September at 1920 x 1080 (review.local/companion/run/logs/w-e2e/wall-visual.json):
   // the line counts Chromium measured, a 40 px title line box of 44 px (48.4 px in dark, 44 px type) and a 28 px sub
   // line of 32.2 px. The source gives the long event no shorter name, and the words before its colon are not one
-  // (review W, P2): the whole title wraps onto three lines, and the list makes room with its later departures
-  // (the first one always stays), never by cutting the title or dropping the next thing on it.
+  // (review W, P2): the whole title wraps onto three lines. Since U0 step 7 the wall stops an event title at two lines
+  // (its one line-clamp) and the event yields before the closure, so the later departures come back where it went.
   describe('the long event title of the 22 September wall check', () => {
     const LONG = 'Večer u Kvaterniku: razgovor o gradu i kulturnoj baštini';
     const LINES: Record<'light' | 'dark', Record<string, number>> = {
@@ -1348,7 +1353,7 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     function measured(theme: 'light' | 'dark'): TimelineMeasure & { sum(list: Element): number } {
       const lines = (el: Element): number => {
         const words = (el.textContent ?? '').replace(/^\d+ /, '');
-        return words ? LINES[theme][words] ?? 1 : 0;
+        return words ? clampedEvent(el, LINES[theme][words] ?? 1) : 0;
       };
       const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
       const rowHeight = (li: Element): number => Math.max(rowPx(),
@@ -1373,18 +1378,21 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         always({ id: `always:story:${variant}`, ...story }),
       ];
     }
-    // How many departures stay beside the whole title: all three where the rows fit, else the later ones give way.
-    const DEPARTURES = { kvaternik: { light: 1, dark: 1 }, trg: { light: 1, dark: 1 } } as const;
+    // What stays beside the reserved rows and the closure (U0 step 7, measured): the event at two lines where it fits,
+    // else the second departure in its place.
+    const SHOWN = { kvaternik: { light: ['dep:1', 'event:vis'], dark: ['dep:1', 'dep:2'] }, trg: { light: ['dep:1', 'dep:2'], dark: ['dep:1', 'dep:2'] } } as const;
     for (const variant of ['kvaternik', 'trg'] as const) for (const theme of ['light', 'dark'] as const) {
-      const kept = DEPARTURES[variant][theme];
-      it(`${variant}, ${theme}: the reserved rows stay beside ${kept} departure and the event stays whole only if it fits`, () => {
+      const kept = SHOWN[variant][theme];
+      it(`${variant}, ${theme}: the reserved rows and the closure stay beside ${kept.join(' and ')}, the event title at two lines at most`, () => {
         const measure = measured(theme);
         const t = mount({ designHeightPx: BOX_PX, measure });
         t.update(wall(variant), 2000, T);
-        expect(ids()).toEqual(['dep:1', ...(theme === 'light' ? ['event:vis'] : []), 'last:2026-09-22', `always:story:${variant}`]);
+        expect(ids()).toEqual([...kept, 'closure:vlaska', 'last:2026-09-22', `always:story:${variant}`]);
         expect(ids().at(-1)).toBe(`always:story:${variant}`);
-        if (theme === 'light') {
-          expect(text(byId('event:vis').querySelector('.nearby-title'))).toBe(LONG);
+        if (ids().includes('event:vis')) {
+          const title = byId('event:vis').querySelector('.nearby-title')!;
+          expect(text(title)).toBe(LONG);
+          expect(measure.lines(title)).toBe(EVENT_TITLE_MAX_LINES);
           expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');
         }
         // The story keeps its sentence whole; at Trg in dark its name gives way to the stop's shorter one.
