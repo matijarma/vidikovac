@@ -28,7 +28,8 @@ import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
 import { IMMINENT_ROW_MIN } from '../../app/src/kiosk/timeline';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
-import tripData from '../../app/public/data/zet-trips.json';
+// Feed 000395's trip index, the one the departures fixture reads (e2e/departures-fixture.ts says why).
+import tripData from '../fixtures/frames/2026-09-21-1715-1744/artefacts/zet-trips.json';
 import { decodeTripIndex } from '../../shared/motion/trips';
 import type { FeedItem } from '../../worker/feed/schema';
 

@@ -41,14 +41,24 @@ const DAY_MS = 86_400_000;
 // Node's own module loader, which refuses a bare JSON import ("needs an import attribute"), while
 // vitest accepts it, so a JSON import here passes the unit gate and fails the accept tier. Resolved
 // through node:path, not a `URL` object: under happy-dom the global URL is the DOM's and fs cannot read it.
-const DATA_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../app/public/data');
-const committed = <T>(path: string): T => JSON.parse(readFileSync(resolve(DATA_DIR, path), 'utf8')) as T;
-const east = committed<LastRunFile>('lastrun/106_1.json');
-const west = committed<LastRunFile>('lastrun/106_2.json');
-const busDeparture = committed<LastRunFile>('lastrun/1849_23.json');
-const busArrival = committed<LastRunFile>('lastrun/1849_24.json');
-const network = committed<{ stops: { id: string[]; name: string[] } }>('zet-network.json');
-const trips = committed<unknown>('zet-trips.json');
+//
+// The scenes (e2e/scenes.ts) stand on 21 and 22 September 2026, days of ZET's feed 000395, while
+// app/public/data follows the current feed (000396 from 28 September: other service ids, and a lastrun
+// window that starts on its build day). So the fixture reads feed 000395's own copies: the trip index
+// and network kept beside the 21 September frames, and the four Trg platforms' lastrun files as cut on
+// 22 September (test/fixtures/lastrun-000395/README.md).
+const REPO_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** Feed 000395's trip index and network (the wrong-turn acceptance reads the same copies). */
+export const FIXTURE_FEED_DIR = resolve(REPO_DIR, 'test/fixtures/frames/2026-09-21-1715-1744/artefacts');
+/** Feed 000395's lastrun files of the four Trg platforms. */
+export const FIXTURE_LASTRUN_DIR = resolve(REPO_DIR, 'test/fixtures/lastrun-000395');
+const committed = <T>(dir: string, path: string): T => JSON.parse(readFileSync(resolve(dir, path), 'utf8')) as T;
+const east = committed<LastRunFile>(FIXTURE_LASTRUN_DIR, '106_1.json');
+const west = committed<LastRunFile>(FIXTURE_LASTRUN_DIR, '106_2.json');
+const busDeparture = committed<LastRunFile>(FIXTURE_LASTRUN_DIR, '1849_23.json');
+const busArrival = committed<LastRunFile>(FIXTURE_LASTRUN_DIR, '1849_24.json');
+const network = committed<{ stops: { id: string[]; name: string[] } }>(FIXTURE_FEED_DIR, 'zet-network.json');
+const trips = committed<unknown>(FIXTURE_FEED_DIR, 'zet-trips.json');
 
 /** Trg's four platforms, the stops whose timetable this fixture keeps (the wall's touch board reads them as one stop). */
 export const PLATFORM_IDS = ['106_1', '106_2', '1849_23', '1849_24'] as const;
@@ -63,7 +73,7 @@ const routesAt = (stopId: string): readonly string[] =>
   stopId === '1849_23' ? ['150'] : stopId === '1849_24' ? [] : DAY_ROUTES;
 const timetableAt = (stopId: string): LastRunFile => TIMETABLES[stopId] ?? TIMETABLES[FIXTURE_STOP.id];
 
-/** ZET's last departures from Trg bana Jelačića by line on a weekday (app/public/data/lastrun/106_1.json, 21 September 2026). */
+/** ZET's last departures from Trg bana Jelačića by line on a weekday (feed 000395's lastrun/106_1.json, 21 September 2026). */
 export const FIXTURE_LAST_DEPARTURES: Readonly<Record<string, string>> = Object.freeze(Object.fromEntries(
   DAY_ROUTES.map((route) => [route, TIMETABLES['106_1'].routes[route]['2026-09-21']]),
 ));
