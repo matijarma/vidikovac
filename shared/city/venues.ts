@@ -86,7 +86,10 @@ function entry(name: string, lon: number, lat: number): Entry | null {
 }
 
 export function buildGazetteer(input: { places: readonly Place[]; kultura: readonly FeedItem[]; osm: readonly VenueEntry[] }): Gazetteer {
-  const culture = input.places.filter((p): p is Place & { lon: number; lat: number } => p.category === 'culture' && located(p));
+  // The exact register resolver is a matching strategy, not an exemption from
+  // the same minimum-name/generic-name checks used by the other strategies.
+  const culture = input.places.filter((p): p is Place & { lon: number; lat: number } =>
+    p.category === 'culture' && located(p) && entry(p.name, p.lon, p.lat) !== null);
   const register = culture.map((p) => entry(p.name, p.lon, p.lat));
   const calendar = input.kultura.map((item) => {
     const venue = item.data?.venue;
@@ -97,7 +100,7 @@ export function buildGazetteer(input: { places: readonly Place[]; kultura: reado
   const sources = [register, calendar, osm].map((list) => list.filter((e): e is Entry => e !== null));
   const built: Built = {
     size: sources.reduce((n, s) => n + s.length, 0),
-    places: input.places,
+    places: culture,
     placeById: new Map(culture.map((p) => [p.id, p])),
     sources,
   };
@@ -133,7 +136,7 @@ export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: 
   const texts = [data.venue, data.venueHint, data.venueTags].filter((v): v is string => typeof v === 'string' && v.trim() !== '');
   if (!texts.length || texts.some(namesAnotherCity)) return null;
   const ids = resolveVenues(item, g.places);
-  if (ids.length) return agreed(ids.map((id) => g.placeById!.get(id)).filter((p): p is Place & { lon: number; lat: number } => !!p));
+  const exact = ids.map((id) => g.placeById!.get(id)).filter((p): p is Place & { lon: number; lat: number } => !!p);
   const named = [...phrasesOf(data.venue), ...phrasesOf(data.venueTags)];
   const all = [...named, ...phrasesOf(data.venueHint)];
   const leads = leadsOf(data.venueHint);
@@ -146,8 +149,10 @@ export function resolveVenuePoint(item: FeedItem, gazetteer: Gazetteer): { lon: 
       ? named.some((p) => sameStems(p, e.stems)) || leads.some((p) => sameStems(p, e.stems))
       : all.some((p) => containsStems(p, e.stems)))
     || (e.initials !== '' && abbreviations.has(e.initials));
-  for (const entries of g.sources) {
-    const hits = entries.filter(matches);
+  for (const [source, entries] of g.sources.entries()) {
+    // An exact alias and a stem match in the register are evidence from the
+    // same source. Neither may hide a conflicting point from the other.
+    const hits = [...entries.filter(matches), ...(source === 0 ? exact : [])];
     if (hits.length) return agreed(hits);
   }
   return null;

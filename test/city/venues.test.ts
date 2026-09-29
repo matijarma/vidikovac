@@ -139,4 +139,22 @@ describe('what counts as evidence', () => {
     expect(resolveVenuePoint(hint({ venueHint: 'Tvornici kulture', city: 'Rijeci' }), g)).toBeNull();
     expect(resolveVenuePoint(hint({ venueHint: 'Tvornici kulture u Zadarskoj 80' }), g)).toEqual(at(15.97, 45.8));
   });
+
+  const place = (id: string, name: string, lon: number): Place => ({
+    id, name, lon, lat: 45.81, category: 'culture', sourceId: 'culture', sourceRecord: id,
+  });
+
+  it('applies the minimum-name and generic-name guards to exact register matches', () => {
+    const register = buildGazetteer({ places: [place('1', 'Galerija', 15.97), place('2', 'KIC', 15.98)], kultura: [], osm: [] });
+    expect(resolveVenuePoint(hint({ venue: 'Galerija' }), register)).toBeNull();
+    expect(resolveVenuePoint(hint({ venue: 'KIC' }), register)).toBeNull();
+  });
+
+  it('does not let an exact register hit hide conflicting stem matches in that register', () => {
+    const register = buildGazetteer({
+      places: [place('1', 'Tvornica kulture', 15.97), place('2', 'Dvorana Tvornice kulture', 16.01)],
+      kultura: [], osm: [],
+    });
+    expect(resolveVenuePoint(hint({ venue: 'Tvornica kulture', venueHint: 'Dvorani Tvornice kulture' }), register)).toBeNull();
+  });
 });
