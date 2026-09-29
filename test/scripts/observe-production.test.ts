@@ -976,6 +976,29 @@ describe('a run over a fake browser', () => {
     expect(read(bare.out, 'report.md')).toContain('0 of 3 readings carried the probe');
   });
 
+  it('DU3 (29 Sep): the rotation\'s full list holds; the finding names the portrait reading and the room its list had left', async () => {
+    const seen: number[] = [];
+    const du3 = (n: number, at: number, code: string): WallSample => {
+      seen.push(n);
+      const good = wallReading(n, at, code);
+      const rows = [
+        good.rows.find((r) => r.kind === 'departure')!,
+        row({ id: 'notice:zet-novosti:10166', kind: 'notice', source: 'zet-novosti', when: '2026-09-29T07:56:42.000Z', title: 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)', whenText: 'ZET javlja', text: 'ZET javlja Uspostavljena autobusna linija 228' }),
+        row({ id: 'last:2026-09-29', kind: 'last', when: new Date(at + 900_000).toISOString(), title: 'Zadnji tramvaji', whenText: '23:31', text: 'Zadnji tramvaji 23:31' }),
+        row({ id: 'first:2026-09-30', kind: 'first', when: new Date(at + 18_000_000).toISOString(), title: 'Prvi tramvaj', whenText: '04:13', text: 'Prvi tramvaj 04:13' }),
+        good.rows.find((r) => r.always) ?? row({ id: 'always:pharmacy', kind: 'pharmacy', when: null, always: true, title: '24/7', whenText: 'uvijek', text: 'uvijek 24/7' }),
+      ];
+      // The portrait is the reading after the first and the rotation; only its list had room for a one-line departure.
+      return { ...good, rows, departures: 1, solarRows: 0, hiddenRows: 0, fitDropped: ['rail', 'rail', 'departure', 'departure', 'closure', 'solar'], listRoom: n === 4 ? 73 : 24.5 };
+    };
+    const r = await observe([], { reading: du3 });
+    expect(seen).toEqual([0, 1, 2, 3, 4]);
+    expect(r.lines.join('\n')).toContain('FAIL departures');
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 1 \| \*\*fail\*\* \|/);
+    expect(report).toContain('the portrait (1080 × 1920): 1 visible departure rows: 1 departure rows where the list offered 3 and the fit keeps 2 (left out: rail rail departure departure closure solar); 73 px left in the list');
+  });
+
   it('departures holds on the strike morning: three trains placed before one departure fill the place of the two left out; below it they do not', async () => {
     const silent = (n: number, at: number, code: string): WallSample => {
       const good = wallReading(n, at, code);

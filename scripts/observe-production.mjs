@@ -1526,7 +1526,9 @@ export const METRICS = Object.freeze({
   'kiosk.emptyPlaceReadings': (obs) => countReadings(obs, (s) => !s.place, () => 'kiosk-context empty'),
   // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
   // The verdict is e2e/wall.ts departureFailures: 1 to 3, and the fitted count of those the list offered (data-fit-dropped).
-  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => k.wall.departureFailures(s).length > 0, (s) => `${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}: ${k.wall.departureFailures(s).join('; ')}`),
+  // The finding names the portrait reading, which rotation.jsonl does not hold, and the room the list had left (listRoom),
+  // which decides whether a full list may hold fewer (DU3, 29 Sep: the portrait's finding was read as the rotation's).
+  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => k.wall.departureFailures(s).length > 0, (s) => `${s === obs.kiosk.portrait ? 'the portrait (1080 × 1920): ' : ''}${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}: ${k.wall.departureFailures(s).join('; ')}${typeof s.listRoom === 'number' ? `; ${s.listRoom} px left in the list` : ''}`),
   // While the twin reports the fleet silent (sources.zet.service.state, as the page received it) the header says no departure;
   // a train is the one exception (the promoted alternative).
   'kiosk.silentDepartureSentences': (obs, k) => countReadings(obs, (s) => s.fleet?.service === 'silent' && k.wall.DEPARTURE_SENTENCE_RE.test(s.sentence) && !k.wall.RAIL_SENTENCE_RE.test(s.sentence), (s) => `the twin reports the fleet silent, the header says ${quote(s.sentence, 90)}`),
