@@ -72,6 +72,22 @@
       "httpStatus": 200,
       "robotsTxt": "https://emz.hr/robots.txt disallows only /wp-admin/; unaffected",
       "notes": "Same custom-field shape as dogadjanja, post type 'izlozbe' (exhibitions). Contains several items whose webmz_event_date_end already lies in the past relative to this fetch (e.g. id 22339, 22334, ends 2026-08-16), which is exactly the case E5 must exclude."
+    },
+    {
+      "file": "zet-rss-promet-2026-09-27.xml",
+      "url": "https://www.zet.hr/rss_promet.aspx",
+      "fetchedAt": "2026-09-27T20:07:04Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
+      "notes": "The traffic-notice feed on the Sunday evening before the ZET general strike of 28 to 29 September 2026, copied from the strike session's recorder (review.local/strike/rss/promet/20260927T200704Z.xml, a copy kept whenever the body changed); ZET serves mixed CRLF and LF line ends, which git stores as LF like every text fixture (.gitattributes). 17 items, pubDate 10 Mar 2023 to 25 Sep 2026 09:45 +0200, among them 'Izmjene u prometovanju zbog biciklističke utrke CRO Race' (24 Sep 07:00 +0200); no item about the strike. The feed then shrank to 14 items at 20:40Z, 13 at 22:55Z, 5 at 02:00Z on 28 Sep and 0 from 02:05Z. For the upgrade pass U1 step 3 (the notice row, the description summary) and the external-text corpus. Licence: ZET's Open Licence names the GTFS files; terms for the RSS are not published (docs/izvori.md, question M2)."
+    },
+    {
+      "file": "zet-rss-promet-2026-09-29.xml",
+      "url": "https://www.zet.hr/rss_promet.aspx",
+      "fetchedAt": "2026-09-29T16:05:00Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
+      "notes": "The traffic-notice feed on the second strike day, the last copy the strike session's recorder had kept when the fixture was cut (review.local/strike/rss/promet/20260929T160500Z.xml). One item, 'Uspinjača u srijedu na mjesečnom servisu' (pubDate 29 Sep 2026 11:00 +0200, the funicular's monthly service on 30 September); the feed held no item at all from 28 Sep 02:05Z to 29 Sep 12:00Z and never one about the strike. For U1 acceptance U1-4: the strike-week copy yields no notice row. Licence as for zet-rss-promet-2026-09-27.xml."
     }
   ]
 }
