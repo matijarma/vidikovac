@@ -20,6 +20,7 @@ import { iconMarkup } from '../ui/icons';
 import type { LayerContext } from './types';
 import { eventVenueLinks } from '../city/day';
 import { deduplicateEvents } from '../../../shared/city/events';
+import { distanceM } from '../../../shared/city/geo';
 import { ct } from '../city/strings';
 
 /** One default page of agenda rows; the chips and the search narrow the list first, so a filter always covers every match. */
@@ -147,11 +148,53 @@ function allDayToday(item: FeedItem, now: number): boolean {
   return isAllDay(item) && zagrebDayKey(item.at) === zagrebDayKey(now);
 }
 
-/** The next starts: dated events that have not begun, soonest first, plus today's all-day events. */
+/**
+ * The next starts: dated events that have not begun, plus today's all-day events. Day by day; within a day the timed
+ * events first, soonest first, then the all-day listings: at 17:45 tonight's 18:00 and 20:00 come before the twelve
+ * exhibitions open since the morning (round 1 desktop F5).
+ */
 export function upcomingEvents(items: readonly FeedItem[], now: number): FeedItem[] {
   return items
     .filter((item) => isDated(item) && (startMs(item) >= now || allDayToday(item, now)))
-    .sort((a, b) => startMs(a) - startMs(b));
+    .sort((a, b) => zagrebDayKey(a.at).localeCompare(zagrebDayKey(b.at))
+      || Number(isAllDay(a)) - Number(isAllDay(b))
+      || startMs(a) - startMs(b));
+}
+
+/** Two listings closer than this, with the same title and the same slot, are one place's. */
+const SAME_PLACE_M = 150;
+
+function pointOf(item: FeedItem): { lon: number; lat: number } | null {
+  const geo = item.geo;
+  if (geo?.type !== 'Point') return null;
+  const [lon, lat] = geo.coordinates as number[];
+  return Number.isFinite(lon) && Number.isFinite(lat) ? { lon: lon!, lat: lat! } : null;
+}
+
+/**
+ * One row per listing and day: a source that lists one exhibition twice on a day (two occurrences of the same hours,
+ * "Bilo jednom…" twice under Sutra, round 1 phone F4) shows it once. Two items are one listing when their titles read
+ * the same, they fall in the same slot (an all-day listing: the same Zagreb day; a timed one: the same start) and at
+ * the same place (points within 150 m, else the same venue); the first stands. Two showings of a play on one day and
+ * the same programme at two libraries stay apart.
+ */
+export function foldRepeats(items: readonly FeedItem[]): FeedItem[] {
+  const kept: FeedItem[] = [];
+  const bySlot = new Map<string, FeedItem[]>();
+  for (const item of items) {
+    if (!isDated(item)) { kept.push(item); continue; }
+    const slot = `${normalise(item.title.trim())}|${isAllDay(item) ? zagrebDayKey(item.at) : startMs(item)}`;
+    const here = pointOf(item);
+    const venue = normalise(dataText(item, 'venue').trim());
+    const same = (bySlot.get(slot) ?? []).some((other) => {
+      const there = pointOf(other);
+      return here && there ? distanceM(here, there) < SAME_PLACE_M : venue !== '' && venue === normalise(dataText(other, 'venue').trim());
+    });
+    if (same) continue;
+    bySlot.set(slot, [...(bySlot.get(slot) ?? []), item]);
+    kept.push(item);
+  }
+  return kept;
 }
 
 /** Began earlier and still runs (a multi-day exhibition): shown apart with its end date, soonest end first. */
@@ -341,7 +384,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const dogadanja = ctx.snapshots.dogadanja;
   const more = CULTURE_MODULES.map((id) => ctx.snapshots[id]);
-  const all = deduplicateEvents(cultureItems(dogadanja, more),ctx.city?.places??[]);
+  const all = foldRepeats(deduplicateEvents(cultureItems(dogadanja, more),ctx.city?.places??[]));
   const query = ctx.view?.filters.q ?? '';
   const category = ctx.view?.filters.category ?? '';
   const window = ctx.view?.filters['event-window'] ?? 'week';
@@ -410,7 +453,7 @@ export function eventsCount(
   now: number,
   more: readonly (ModuleSnapshot | undefined)[] = [],
 ): { count: number; ongoing: number } {
-  const inZagreb = deduplicateEvents(cultureItems(snapshot, more), city?.places ?? []).filter((item) => !venueOutsideZagreb(item));
+  const inZagreb = foldRepeats(deduplicateEvents(cultureItems(snapshot, more), city?.places ?? [])).filter((item) => !venueOutsideZagreb(item));
   const count = upcomingEvents(inZagreb, now).filter((item) => {
     const offset = dayOffset(zagrebDayKey(item.at), zagrebDayKey(now));
     return offset !== null && offset >= 0 && offset < 7;

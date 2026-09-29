@@ -622,6 +622,32 @@ describe('kultura with the City\'s programme and the libraries\'', () => {
     expect(renderLayer('kultura', ctx({ snapshots: both })).querySelectorAll(':scope > .sec-note')).toHaveLength(0);
   });
 
+  it('lists the day\'s timed events before its all-day exhibitions, and an exhibition listed twice on a day once (round 1 desktop F5, phone F4)', () => {
+    const exhibition = (id: string, day: string) => zg(id, 'Izložba „Grad”', `${day}T08:00:00Z`, { until: `${day}T16:00:00Z` }, { category: 'izlozba', precision: 'day', venue: 'Muzej grada' });
+    const day = {
+      ...kulturaZg,
+      items: [
+        exhibition('x1', '2026-09-11'), exhibition('x2', '2026-09-11'), exhibition('x3', '2026-09-12'),
+        zg('o1', 'Otvorenje izložbe', '2026-09-11T18:00:00Z', { until: '2026-09-11T19:00:00Z' }, { category: 'izlozba', venue: 'Galerija' }),
+        // Two showings of one play on one day are two rows.
+        zg('p1', 'Hamlet', '2026-09-11T15:00:00Z'), zg('p2', 'Hamlet', '2026-09-11T18:30:00Z'),
+      ],
+    };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...SNAPSHOTS, 'kultura-zg': day }, view: { layer: 'kultura', selection: null, filters: { 'event-window': 'week' } } }));
+    const mine = ['Izložba „Grad”', 'Otvorenje izložbe', 'Hamlet'];
+    const lines = [...section.querySelectorAll('[data-testid=agenda] > li')].map((li) => li.classList.contains('agenda-day')
+      ? `# ${text(li)}` : `${text(li.querySelector('.ev-lead'))} ${text(li.querySelector('.row-title'))}`)
+      .filter((line) => line.startsWith('#') || mine.some((title) => line.endsWith(title)));
+    expect(lines.slice(0, lines.indexOf('# Sutra') + 2)).toEqual([
+      '# Danas', '17:00 Hamlet', '20:00 Otvorenje izložbe', '20:30 Hamlet', 'cijeli dan Izložba „Grad”',
+      '# Sutra', 'cijeli dan Izložba „Grad”',
+    ]);
+    // The folded copy is not counted either.
+    const count = (items: ModuleSnapshot['items']) => eventsCount(undefined, null, NOW, [{ ...kulturaZg, items }]).count;
+    expect(count(day.items)).toBe(5);
+    expect(count(day.items.filter((item) => item.id !== 'kultura-zg:x2'))).toBe(5);
+  });
+
   it('counts the week the way the page lists it, for the directory row', () => {
     const window = Date.parse('2026-09-11T12:32:00Z');
     const alone = eventsCount(SNAPSHOTS.dogadanja, null, window);
