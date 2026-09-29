@@ -29,6 +29,7 @@
     "build:network": "node scripts/gtfs-shapes.mjs",
     "build:schema": "node scripts/zet-schema.mjs",
     "build:trips": "node scripts/gtfs-trips.mjs",
+    "build:expect": "node scripts/gtfs-expect.mjs",
     "check:izvori": "node scripts/check-plan-links.mjs"
   },
   "dependencies": {
