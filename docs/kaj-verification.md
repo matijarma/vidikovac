@@ -2057,7 +2057,7 @@ crven.
 | V2 | WP6 | alati provjere mjere sami sebe | `npm test -- test/e2e test/scripts/grade-branches.test.ts test/app/font-metrics.test.ts` | zeleno | §16.1 | – | `92950b17`: zeleno (dio punog `npm test`) | prolazi |
 | V3 | WP6 | nijedna skripta ne stvara zaslon u produkciji | `AUDIT_KIOSK_URL= node scripts/audit-production.mjs`; `E2E_KIOSK_URL= node scripts/observe-production.mjs` | izlazni kod 2 i rečenica odbijanja prije ijednog zahtjeva; u promatraču nema `setup-create` ni `/api/screens` | §16.7 | odbijanje s izlaznim kodom 2, bez preglednika / – | čuvar nepromijenjen od D1; `test/scripts/observe-production.test.ts` zelen (`92950b17`) | prolazi |
 | V4 | WP6 | promatranje produkcije nakon isporuke, samo čitanjem | `E2E_KIOSK_URL=<adresa postave zaslona> npm run observe:production -- --minutes 10` | izlazni kod 0; najviše 1 iskorišten kod po površini, najmanje 12 s razmaka | §16.7 | još nije pokrenuto: za dan isporuke nije zabilježena adresa zaslona / – | produkcija, izdanje `d52cc47b`, 24. 9. od 02:30 do 02:43: izlazni kod 1, ne prolazi 6 od 56 primijenjenih pragova (`unlabelled`: jedno očitanje bez probe; `pills-drawn`: 2 očitanja bez oznaka vozila uz živi izvor; `legibility`: karta u uspravnom položaju bez popisa oznaka; `karta-pills`: prva oznaka 4.442 ms nakon `ready`; `karta-unlabelled`: 1 od 58 markera; `phone-stop-board`: ploča nakon pretrage nije u prozoru, a 3 od 3 polaska jesu); otisak: 0 stvorenih zaslona, po jedan iskorišten kod na telefonu i na stolnom računalu, najmanje 12 s razmaka; zapisi zahtjeva prazni; produkcija na D5.8 (`ea5439e0`), 24. 9. od 13:36 do 13:50, uz mirno računalo: ne prolazi 1 od 56 primijenjenih pragova, samo `calm-motion` (6 minuta s viškom iznad 2 i jedan ponovno stvoren redak polaska); otisak: 0 stvorenih zaslona, po jedan iskorišten kod na telefonu i na stolnom računalu; zapisi zahtjeva prazni; produkcija, 24. 9. od 14:44 do 14:58, zaslon učitan dok je u produkciji bila isporuka D5.11 (`a5a18195`), a D5.12 do D5.14 isporučeni su tijekom promatranja: ne prolazi 2 od 56 pragova, `calm-motion` (4 minute s viškom iznad 2) i `closure-reentries` (redak zatvaranja u Gundulićevoj ulici napustio je popis i vratio se, ponovno stvoren u tri minute); polasci 1 do 3 u 300 očitanja, oznake vozila u 302 od 302 očitanja, prva oznaka na Karti 345 ms nakon `ready`, `session-ended` 602 s nakon iskorištenja koda; otisak: 0 stvorenih zaslona, po jedan iskorišten kod na telefonu i na stolnom računalu | ne prolazi (na D5.8 1 prag, na D5.11 2 praga: mirno kretanje, čiji je popravak isporučen kao D5.12, i povratak retka zatvaranja, nov nalaz); popravak mirnog kretanja u produkciji još nije promatran; otisak prolazi |
-| V5 | WP6 | ništa osjetljivo ni golemo u gitu | naredbe iz podnaslova „Što nikad ne ulazi u git” | 0 datoteka; `test/fixtures/frames` ≤ 6.500.000 B; 0 adresa postave s tajnom | §16.9 | – | `d52cc47b`: 0; 6.215.622 B; 0 | prolazi |
+| V5 | WP6 | ništa osjetljivo ni golemo u gitu | naredbe iz podnaslova „Što nikad ne ulazi u git” | 0 datoteka; `test/fixtures/frames` ≤ 9.000.000 B (do 29. 9. 2026. 6.500.000 B); 0 adresa postave s tajnom | §16.9 | – | `d52cc47b`: 0; 6.215.622 B; 0 | prolazi |
 | V6 | WP6 | ručne provjere na uređaju | tablica „Ručne provjere na uređaju” niže | prije pilota svaki redak nosi uređaj, preglednik, datum i rezultat | §16.8 | prazno | prazno | na čekanju |
 
 ### Praćene brojke, bez praga
@@ -2128,9 +2128,11 @@ preglednikom i datumom; prazna ćelija znači da provjera još nije provedena.
 - `.dev.vars`, lokalne tajne.
 - Sve pod `review.local/` (pravilo `*.local` u `.gitignore`), uključujući
   `review.local/companion/screen.json` s oznakom i tajnom zaslona, i svaki `screen-<datum>.json`.
-- `recordings/` na bilo kojoj dubini, oko 700 MB snimaka na dan. Jedini uzorak okvira u
-  repozitoriju je `test/fixtures/frames/2026-09-21-1715-1744/`; taj uzorak piše `npm run frames:sample`,
-  a naredba odbija izlaz pod `recordings/`.
+- `recordings/` na bilo kojoj dubini, oko 700 MB snimaka na dan. Uzorci okvira u repozitoriju
+  postoje samo pod `test/fixtures/frames/` (popis je u tamošnjem `README.md`): uzorak za redak U1
+  (`2026-09-21-1715-1744/`), uzorak sa ZET-ovim otkazanim polascima i obavijestima i uzorci štrajka
+  od 28. i 29. rujna, koje prvi redak njihova README-a označava kao odstupanje, nikad kao uzorak
+  običnog dana. Sve ih piše `npm run frames:sample`, a naredba odbija izlaz pod `recordings/`.
 - `test-results/`, `.wrangler/`, `.cache/`.
 - Adrese postave zaslona (`E2E_KIOSK_URL`, `AUDIT_KIOSK_URL`): tajna je u dijelu adrese iza `#`,
   pa su takve adrese samo u varijablama okoline, nikad u specifikacijama, dokumentima,
@@ -2146,5 +2148,7 @@ du -sb test/fixtures/frames | cut -f1
 grep -rn 'kiosk/#[0-9A-HJKMNP-TV-Z]\{8\}\.[A-Za-z0-9_-]\{24,\}' e2e scripts docs test --exclude-dir=superpowers | wc -l
 ```
 
-Prva naredba mora dati 0, druga najviše 6.500.000, treća 0; treću provjerava i redak `e-secret` u
-`test/accept/trust.test.ts`.
+Prva naredba mora dati 0, druga najviše 9.000.000, treća 0; treću provjerava i redak `e-secret` u
+`test/accept/trust.test.ts`. Prag druge naredbe podignut je 29. rujna 2026. sa 6.500.000 prema
+mjerenju: s uzorkom otkazanih polazaka i uzorcima štrajka mapa ima 8.505.615 B, a ostatak je mjesto
+za uzorak jutra 29. rujna.
