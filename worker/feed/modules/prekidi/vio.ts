@@ -20,7 +20,7 @@ const VIO_ORIGIN = 'https://www.vio.hr';
 
 const MONTHS: Record<string, number> = {
   siječnja: 1, veljače: 2, ožujka: 3, travnja: 4, svibnja: 5, lipnja: 6,
-  srpnja: 7, kolovoza: 8, rujna: 9, listopada: 10, studenoga: 11, prosinca: 12,
+  srpnja: 7, kolovoza: 8, rujna: 9, listopada: 10, studenog: 11, studenoga: 11, prosinca: 12,
 };
 
 const NOTICE_LINK = /<a\s+class=['"]naslov-aktualno['"]\s+href=['"]([^'"]*)['"][^>]*>([\s\S]*?)<\/a>/g;

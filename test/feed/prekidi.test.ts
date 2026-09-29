@@ -173,6 +173,16 @@ describe('VIO', () => {
     expect(eve.items.map((item) => item.data?.street)).toEqual(['Aleja Seljačke bune', 'Jagodišće', 'Meglenjak']);
   });
 
+  it('reads November in both genitives, "studenoga" and "studenog"', () => {
+    const november = new Date('2026-11-03T08:00:00Z');
+    for (const month of ['studenoga', 'studenog']) {
+      const page = VIO_PAGE.replace(/Dana 29\. rujna 2026\. godine/g, `Dana 3. ${month} 2026. godine`);
+      const { items } = parseVio(page, november);
+      expect(items.map((item) => item.data?.street), month).toEqual(['Aleja Seljačke bune', 'Jagodišće', 'Meglenjak']);
+      expect(items[0], month).toMatchObject({ id: 'prekidi:vio:2026-11-03:aleja-seljacke-bune', at: '2026-11-02T23:00:00.000Z', until: '2026-11-03T23:00:00.000Z' });
+    }
+  });
+
   it('splits a notice into streets and the place they stand in', () => {
     expect(noticeStreets('Aleja Seljačke bune, Jagodišće i Meglenjak u Podsusedu')).toEqual({
       streets: ['Aleja Seljačke bune', 'Jagodišće', 'Meglenjak'], settlement: 'Podsusedu', area: undefined,
