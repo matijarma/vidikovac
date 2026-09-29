@@ -1390,7 +1390,7 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         expect(ids()).toEqual([...kept, 'closure:vlaska', 'last:2026-09-22', `always:story:${variant}`]);
         expect(ids().at(-1)).toBe(`always:story:${variant}`);
         if (ids().includes('event:vis')) {
-          const title = byId('event:vis').querySelector('.nearby-title')!;
+          const title = byId('event:vis').querySelector<HTMLElement>('.nearby-title')!;
           expect(text(title)).toBe(LONG);
           expect(measure.lines(title)).toBe(EVENT_TITLE_MAX_LINES);
           expect(text(byId('event:vis').querySelector('.nearby-sub'))).toBe(variant === 'kvaternik' ? 'Dom kulture Kvaternik' : 'Gradsko dramsko kazalište Gavella');

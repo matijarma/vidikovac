@@ -148,7 +148,7 @@ describe('the seed\'s scenes C to G', () => {
         // Scene D: with no closure beside it, the event row is shown, its title at most two lines.
         expect(rows.some((r) => r.id === EVENT), when).toBe(true);
         expect(ids, when).toContain(EVENT);
-        const title = host.querySelector(`li[data-id="${EVENT}"] .nearby-title`)!;
+        const title = host.querySelector<HTMLElement>(`li[data-id="${EVENT}"] .nearby-title`)!;
         expect(measure.lines(title), when).toBeLessThanOrEqual(EVENT_TITLE_MAX_LINES);
       }
     });
