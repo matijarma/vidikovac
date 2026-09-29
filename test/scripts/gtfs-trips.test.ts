@@ -272,6 +272,31 @@ describe('buildTripIndex', () => {
   });
 });
 
+// Feed 000396 (28 Sep 2026): a shape whose shape_pt_sequence values repeat is
+// no polyline. scripts/gtfs-shapes.mjs drops it and builds its trips as trips
+// without a shape_id; the trip index must say the same, or a pattern would
+// name a shape the network does not have.
+describe('a shape that repeats a sequence number', () => {
+  it('builds the trips on it as trips without a shape, and leaves the other shapes alone', async () => {
+    const shapes =
+      'shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n' +
+      'shp1,45.80,15.90,1\nshp1,45.81,15.90,2\n' +
+      'shp2,45.80,15.91,1\nshp2,45.81,15.91,2\nshp2,45.82,15.92,2\n';
+    const zip = makeZip([
+      { name: 'trips.txt', data: TRIPS_TXT, method: 8 },
+      { name: 'stop_times.txt', data: STOP_TIMES_TXT, method: 8 },
+      { name: 'shapes.txt', data: shapes, method: 8 },
+      { name: 'feed_info.txt', data: FEED_INFO_TXT, method: 8 },
+    ]);
+    const logs: string[] = [];
+    const { artefact, report } = await buildTripIndex(zip, { now: () => new Date('2026-09-28T06:34:58.000Z'), log: (line: string) => logs.push(line) });
+    expect(artefact.patterns.shape).toEqual(['shp1', '', '']);
+    expect(artefact.patterns.route).toEqual(['10', '10', '20']);
+    expect(report.tripsWithoutShapeByRoute).toEqual({ 10: 1, 20: 3 });
+    expect(logs).toContain('Shapes dropped as no polyline (repeated shape_pt_sequence): shp2; 3 trips built without a shape');
+  });
+});
+
 describe('main', () => {
   it('downloads, builds, and writes the artefact, reporting sizes', async () => {
     const zip = makeFullZip();

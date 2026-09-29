@@ -33,14 +33,18 @@ describe('the timetable over the committed artefacts', () => {
     // patterns of routes 2, 5 and 13 whose stops the 40 m router could not
     // chain counted 6 unmapped and 1 guessed. Line 1's three were trimmed
     // until the Trg dr. F. Tuđmana connector (decision 25) let them be routed
-    // to Zapadni kolodvor; now every pattern has its exact path.
+    // to Zapadni kolodvor; now every pattern has its exact path. On feed
+    // 000395 that was 100 by shape and 52 exact synthetic paths (450 bus
+    // patterns); feed 000396 draws a shape for every tram pattern but line 3's
+    // towards Savišće, whose shape 3_3 is no polyline (repeatedSequences in
+    // scripts/gtfs-shapes.mjs) and runs a synthetic path over its own stops.
     expect(mapping.report).toEqual({
-      byShape: 100,
-      exact: 52,
+      byShape: 140,
+      exact: 1,
       trimmed: 0,
       firstOfRouteAndDirection: 0,
       unmapped: 0,
-      nonTram: 450,
+      nonTram: 428,
     });
     // A pattern and its path must agree on route and direction.
     index.patterns.forEach((pattern, i) => {
@@ -55,12 +59,12 @@ describe('the timetable over the committed artefacts', () => {
     // Terminus loops (direction -1, scripts/gtfs-shapes.mjs) run between two
     // trips, not a timetable of their own: no pattern maps to one.
     const tram = net.paths.map((p, i) => [p, i] as const).filter(([p]) => net.routes.get(p.route)?.type === 0 && p.direction !== -1);
-    expect(tram).toHaveLength(152);
+    expect(tram).toHaveLength(141); // 152 on feed 000395
     const withSegments = tram.filter(([, i]) => hasSegments(times, i));
     const without = tram.filter(([, i]) => !hasSegments(times, i)).map(([p]) => p.id);
-    expect(times.report.pathsWithSegments).toBe(152);
+    expect(times.report.pathsWithSegments).toBe(141);
     expect(without, 'tram paths the timetable says nothing about').toEqual([]);
-    expect(withSegments).toHaveLength(152);
+    expect(withSegments).toHaveLength(141);
     expect(times.report.unusable).toBe(0);
     // No pattern names a stop its path cannot place any more. Line 1's three
     // did until the Trg dr. F. Tuđmana connector (decision 25) routed them to

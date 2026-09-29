@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
-import { departuresBoard, gtfsSeconds, lastRunSnapshot, serviceDays } from '../../e2e/departures-fixture';
+import { FIXTURE_FEED_DIR, FIXTURE_LASTRUN_DIR, departuresBoard, gtfsSeconds, lastRunSnapshot, serviceDays } from '../../e2e/departures-fixture';
 import { FIXTURE_PHARMACY_ADDRESSES, FIXTURE_STOP, installKioskFeedFixture } from '../../e2e/experience-fixtures';
 import { CITY_VENUE } from '../../e2e/city-fixtures';
 import { SCENES, SCENE_IDS } from '../../e2e/scenes';
@@ -18,11 +19,12 @@ import type { FeedItem } from '../../worker/feed/schema';
 const MIN = 60_000;
 const PLATFORMS = ['106_1', '106_2', '1849_23', '1849_24'] as const;
 const DAY_ROUTES = ['1', '6', '11', '12', '13', '14', '17'];
-const data = (path: string) => JSON.parse(readFileSync(new URL(`../../app/public/data/${path}`, import.meta.url), 'utf8'));
-const tables = Object.fromEntries(PLATFORMS.map((id) => [id, data(`lastrun/${id}.json`)]));
-const trips = data('zet-trips.json');
+// The fixture's own data, feed 000395's (e2e/departures-fixture.ts says why), read from the same files.
+const data = (dir: string, path: string) => JSON.parse(readFileSync(join(dir, path), 'utf8'));
+const tables = Object.fromEntries(PLATFORMS.map((id) => [id, data(FIXTURE_LASTRUN_DIR, `${id}.json`)]));
+const trips = data(FIXTURE_FEED_DIR, 'zet-trips.json');
 const tripIndex = decodeTripIndex(trips);
-const network = data('zet-network.json');
+const network = data(FIXTURE_FEED_DIR, 'zet-network.json');
 const i18n = createDefaultI18n('hr');
 // Only register the fixture routes. No browser, server or external request.
 const page = { route: async () => {} } as unknown as Page;

@@ -21,3 +21,29 @@ The three strike samples are deviation fixtures of the ZET general strike of 28 
 ```
 node scripts/frames-sample.mjs <recordings>/2026/09/29 --from 031000 --to 033000 --out test/fixtures/frames/2026-09-29-0310-0330-onebus --all-modes --lead 'Deviation fixture: the ZET general strike of 28 to 29 September 2026. Never a normal-behaviour replay, tuning or fixture day.' --use 'Written for U2 acceptance A4 (`test/accept/service-state.test.ts`, added by U2): the one bus of the second strike night, Tuesday 29 September from 05:10 to 05:30 Zagreb at full cadence. The feed carries no vehicle until bus 330 (Velika Gorica) reports at 05:18:58 Zagreb, and it stays the only one to the end of the window; the service state must stay `silent`. The trips are service 0_30 of feed 000396. The strike cannot be recorded again: never re-cut this window from another day, and keep the artefacts of its feed with the tests that replay it.'
 ```
+
+## zet-expect-000395.json
+
+The declared fleet of ZET's static GTFS feed **000395**, in the format of `app/public/data/zet-expect.json` (`scripts/gtfs-expect.mjs`, decoded by `shared/motion/expect.ts`): per service and five-minute slot of a 31-hour service day, the vehicle runs (blocks) in service by mode and the trips in service per route, and the services of every calendar date.
+
+| | |
+|---|---|
+| source | `zet-gtfs-scheduled-000-000395.zip`, https://www.zet.hr/gtfs-scheduled/latest, Last-Modified Tue 01 Sep 2026 08:50:29 GMT (14,720,190 B), a local copy kept outside the repository |
+| feed version | 000395 (`feed_info.txt`), eight services `0_20` to `0_27` |
+| calendar | 2026-09-01 to 2026-12-31, 122 dates; Sunday 27 September runs `0_25`, Monday 28 September `0_23` |
+| size | 878,731 B raw, 44,869 B gzip |
+| licence | ZET, Otvorena dozvola (Croatian Open Licence, NN 67/17) |
+
+Attribution, verbatim:
+
+> Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669
+
+Why it is here: feed 000396, the one the committed artefacts are cut from, starts its calendar on Monday 28 September 2026, so it cannot say what was expected on the evening of Sunday 27 September or in the small hours of the 28th, when the night runs of Sunday's service are still counted. The replays of the strike days (the collapse from 22:00 on the 27th, the start from 01:00 on the 28th) read this file for those hours.
+
+Built with:
+
+```
+node scripts/gtfs-expect.mjs --zip <zet-gtfs-scheduled-000-000395.zip> --built-at 2026-09-01T08:50:29Z --out test/fixtures/frames/zet-expect-000395.json
+```
+
+The same archive and stamp build the same bytes.

@@ -26,9 +26,11 @@ ZET GTFS-Realtime (https://www.zet.hr/gtfs-rt-protobuf), the `zet-rt` source of 
 
 ## Artefact it belongs to
 
-The frames name trips of ZET's static GTFS feed **000395**: 24,044 of 24,045 tram reports with a trip id (99.996 %) and 308 of 309 distinct tram trip ids are found in `app/public/data/zet-trips.json` (feed 000395). Service prefixes of the tram trip ids: 0_23, 0_25. The network artefact of the same feed is `app/public/data/zet-network.json`, graphHash `7ad4834435980e22`.
+The frames name trips of ZET's static GTFS feed **000395**: 24,044 of 24,045 tram reports with a trip id (99.996 %) and 308 of 309 distinct tram trip ids are found in `test/fixtures/frames/2026-09-21-1715-1744/artefacts/zet-trips.json` (feed 000395). Service prefixes of the tram trip ids: 0_23, 0_25. The network artefact of the same feed is `test/fixtures/frames/2026-09-21-1715-1744/artefacts/zet-network.json`, graphHash `7ad4834435980e22`.
 
-If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.
+The fixture keeps its own copies of that feed's artefacts in `test/fixtures/frames/2026-09-21-1715-1744/artefacts/`: `stops.json` (244,729 B), `zet-network.json` (591,814 B), `zet-trips.json` (2,431,381 B), **3,267,924 B** together. They were copied from `app/public/data/` before the committed artefacts were rebuilt from a newer GTFS feed, and `test/accept/wrong-turn.test.ts` grades the frames on them whenever `FEED_VERSION` in `app/src/motion/network-meta.ts` names another feed than the one above, so the replay still measures the matcher on the trips the frames name. Same source and licence as the frames' static feed: ZET GTFS (https://www.zet.hr/gtfs-scheduled/latest), Otvorena dozvola, attribution as above.
+
+The copies stay as they are: a rail-graph change to the committed network is not measured on them. To measure it on this matcher, re-cut a sample from a fresh recording of the current feed (pull it off R2 within its seven days) and commit frames and artefacts together.
 
 ## How it was cut
 

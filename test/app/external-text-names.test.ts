@@ -45,13 +45,13 @@ function refusals(kind: ExternalTextKind, values: readonly string[]): string[] {
 
 describe('every committed place name passes the name check on both surfaces', () => {
   it('pins the three tables', () => {
-    expect(stopNames).toHaveLength(1_199);
+    expect(stopNames).toHaveLength(1_198); // 1,199 on feed 000395; 000396 dropped Slatinska
     expect(unique(appStops.map(stop => stop.name))).toEqual(unique(workerStops.map(stop => stop.name)));
     expect(streetNames).toHaveLength(4_774);
     expect(schemaLabels).toHaveLength(118);
   });
 
-  it('refuses none of the 1,199 stop names (the stop table of the phone and the Worker)', () => {
+  it('refuses none of the 1,198 stop names (the stop table of the phone and the Worker)', () => {
     expect(refusals('name', stopNames)).toEqual([]);
   }, 30_000);
 

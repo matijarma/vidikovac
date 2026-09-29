@@ -28,6 +28,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GTFS_URL, ZET_ATTRIBUTION, compareRouteIds, extractEntry, localFileDataOffset, parseCsv, readZipEntries } from './gtfs-routes.mjs';
+import { parseShapesTxt, repeatedSequences } from './gtfs-shapes.mjs';
 
 export { GTFS_URL, ZET_ATTRIBUTION };
 export const OUTPUT_PATH = 'app/public/data/zet-trips.json';
@@ -321,6 +322,22 @@ export async function buildTripIndex(zipBuf, opts = {}) {
 
   const trips = parseTripsForIndex(parseCsv(textOf('trips.txt')));
   log(`${trips.size} trips`);
+  // A shape that repeats a shape_pt_sequence is no polyline, and
+  // scripts/gtfs-shapes.mjs drops it and builds its trips as trips without a
+  // shape_id (a tram pattern then runs a synthetic path through its stops).
+  // The same rule here, so every pattern names the path the network has.
+  const shapesEntry = entries.find((x) => x.name === 'shapes.txt' || x.name.endsWith('/shapes.txt'));
+  const invalidShapes = shapesEntry ? repeatedSequences(parseShapesTxt(parseCsv(textOf('shapes.txt')))) : new Map();
+  let unshaped = 0;
+  for (const trip of trips.values()) {
+    if (trip.shape !== '' && invalidShapes.has(trip.shape)) {
+      trip.shape = '';
+      unshaped++;
+    }
+  }
+  if (invalidShapes.size > 0) {
+    log(`Shapes dropped as no polyline (repeated shape_pt_sequence): ${[...invalidShapes.keys()].join(', ')}; ${unshaped} trips built without a shape`);
+  }
 
   log('Streaming stop_times.txt');
   const stopTimesByTrip = await streamStopTimes(zipBuf, findEntry('stop_times.txt'));

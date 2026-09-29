@@ -2,13 +2,15 @@
 // Builds app/src/data/zet-routes.json from ZET's static GTFS feed so the
 // U pokretu layer can name a GTFS-RT routeId ("1" -> "Zap.kol. - Borongaj").
 // Zero dependencies on purpose: the zip is walked from its central directory
-// and inflated with node:zlib. Run locally with `npm run gtfs:routes` and
-// commit the result; the Worker never downloads the 15 MB archive.
+// and inflated with node:zlib. Run locally with `npm run gtfs:routes`
+// (optionally `-- --zip <path-to-local-copy.zip>` to skip the download, so
+// every artefact is cut from one archive) and commit the result; the Worker
+// never downloads the 15 MB archive.
 //
 // Attribution obligation (Otvorena dozvola, ZET): wherever the generated file
 // is used, show ZET_ATTRIBUTION verbatim.
 import { inflateRawSync } from 'node:zlib';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -207,19 +209,26 @@ export function routesFromZip(buf) {
 export async function main({
   fetchImpl = fetch,
   url = GTFS_URL,
+  zipPath = /** @type {string | null} */ (null),
   out = OUTPUT_PATH,
   log = console.log,
   cwd = process.cwd(),
 } = {}) {
-  log(`Fetching ${url}`);
-  const res = await fetchImpl(url, {
-    headers: { 'user-agent': USER_AGENT },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`GTFS download failed: HTTP ${res.status}`);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
+  let buf;
+  if (zipPath) {
+    log(`Reading ${zipPath}`);
+    buf = new Uint8Array(await readFile(resolve(cwd, zipPath)));
+  } else {
+    log(`Fetching ${url}`);
+    const res = await fetchImpl(url, {
+      headers: { 'user-agent': USER_AGENT },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`GTFS download failed: HTTP ${res.status}`);
+    buf = new Uint8Array(await res.arrayBuffer());
+    log(`Downloaded ${(buf.byteLength / 1048576).toFixed(1)} MiB`);
+  }
   const index = routesFromZip(buf);
   const target = resolve(cwd, out);
   await mkdir(dirname(target), { recursive: true });
@@ -233,7 +242,8 @@ export async function main({
 const invokedDirectly =
   typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (invokedDirectly) {
-  main().catch((err) => {
+  const zipFlag = process.argv.indexOf('--zip');
+  main({ zipPath: zipFlag === -1 ? null : process.argv[zipFlag + 1] ?? null }).catch((err) => {
     console.error(err instanceof Error ? err.message : String(err));
     process.exitCode = 1;
   });

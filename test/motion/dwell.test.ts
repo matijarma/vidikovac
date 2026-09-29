@@ -266,18 +266,18 @@ describe('the committed override file', () => {
     const busBays = matched.filter((id) => !servedByTram.has(id));
     expect(busBays, `the seed reached ${busBays.length} platforms no tram path calls at`).toEqual([]);
     // And a second angle on the same question, since "served" is derived
-    // from the artefact the filter itself reads: all but two of the matched
-    // platforms lie on the RAIL GRAPH, which a bus bay never does. The two
-    // exceptions are 317_1 and 317_2, Zapadni kolodvor -- line 1's terminus,
-    // 93 and 168 m west of the Republike Austrije tracks on a stub no shape
-    // draws, so they carry no `onEdge` link while standing in their paths'
-    // served lists as set-back termini (since the Trg dr. F. Tuđmana
-    // connector, both directions reach them). Pinned by name so a third such
-    // platform would fail here rather than pass unnoticed.
+    // from the artefact the filter itself reads: every matched platform lies
+    // on the RAIL GRAPH, which a bus bay never does. On feed 000395 two did
+    // not: 317_1 and 317_2, Zapadni kolodvor -- line 1's terminus, 93 and
+    // 168 m west of the Republike Austrije tracks on a stub no shape drew, so
+    // they carried no `onEdge` link while standing in their paths' served
+    // lists as set-back termini. Feed 000396 draws line 1's shapes to them.
+    // Pinned by name so such a platform would fail here rather than pass
+    // unnoticed.
     const byId = new Map(real.stops.map((stop) => [stop.id, stop] as const));
     const offRail = matched.filter((id) => (byId.get(id)?.onEdge ?? []).length === 0);
-    expect(offRail, `the seed reached ${offRail.length} platforms that lie on no rail edge`).toEqual(['317_1', '317_2']);
-    expect(matched.length).toBe(62);
+    expect(offRail, `the seed reached ${offRail.length} platforms that lie on no rail edge`).toEqual([]);
+    expect(matched.length).toBe(61); // 62 on feed 000395
     // ...which is far fewer than the names alone would have matched.
     expect(matched.length).toBeLessThan(platformsOfSeedNames.length / 2);
 

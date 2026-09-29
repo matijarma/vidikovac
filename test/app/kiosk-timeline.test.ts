@@ -1182,7 +1182,8 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
 describe('whole words: no ellipsis, content selection, then whole rows', () => {
   it.each(['22:40', '04:30'])('%s keeps the real Trg first-tram and pharmacy rows within the 1920 budget', time => {
     const now = at(`2026-09-${time === '22:40' ? '22' : '23'}T${time}:00+02:00`);
-    const file = JSON.parse(readFileSync(join(import.meta.dirname, '../../app/public/data/lastrun/106_1.json'), 'utf8'));
+    // Feed 000395's file as cut on 22 September: the committed one follows the current feed and its window.
+    const file = JSON.parse(readFileSync(join(import.meta.dirname, '../fixtures/lastrun-000395/106_1.json'), 'utf8'));
     const lastRun: LastRunLive = { ...file, status: 'live', fetchedAt: new Date(now).toISOString(), sourceUpdatedAt: file.generatedAt };
     const rows = selectNearby({
       place: { kind: 'tram', stopId: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286 },
