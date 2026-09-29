@@ -144,9 +144,9 @@ describe('arrivalsAt', () => {
   });
 
   it('answers none without a board and down when every board failed', () => {
-    expect(arrivalsAt([], [], NOW, { stopIds: ['100_1'] })).toEqual({ rows: [], status: 'none' });
+    expect(arrivalsAt([], [], NOW, { stopIds: ['100_1'] })).toEqual({ rows: [], status: 'none', cancelledRoutes: [] });
     const downs = [board('100_1', [], 'down'), board('100_2', [], 'down')];
-    expect(arrivalsAt(downs, [], NOW, { stopIds: ['100_1', '100_2'] })).toEqual({ rows: [], status: 'down' });
+    expect(arrivalsAt(downs, [], NOW, { stopIds: ['100_1', '100_2'] })).toEqual({ rows: [], status: 'down', cancelledRoutes: [] });
   });
 
   it('grades a partial answer: live when every board answered live or a live board put a row up, stale otherwise', () => {
@@ -178,5 +178,90 @@ describe('arrivalsAt', () => {
     const boards = [board('100_1', [dep({ tripId: 'T1', at: at(-2) })])];
     expect(arrivalsAt(boards, [], NOW, { stopIds: ['100_1'] }).rows).toEqual([]);
     expect(arrivalsAt(boards, [], NOW, { stopIds: ['100_1'], pastGraceS: 300 }).rows.map((r) => r.minutes)).toEqual([0]);
+  });
+});
+
+// ZET's own no-service alerts (upgrade U1): the twin publishes the trips they
+// name that no tracked vehicle carries, and a ZET departure on one of them is
+// not a departure. The CANCELED marker on a normal day marks trips ZET drives
+// (114 of 143), so it is not an input here at all.
+describe('arrivalsAt and the trips ZET cancelled', () => {
+  const boards = [board('100_1', [
+    dep({ tripId: 'GONE', at: at(2), routeName: '11', routeId: '11', headsign: 'Dubec' }),
+    dep({ tripId: 'RAN', at: at(3) }),
+    dep({ tripId: 'OK', at: at(5), routeName: '14', routeId: '14', headsign: 'Mihaljevac' }),
+  ])];
+  const cancelled = new Set(['GONE', 'RAN']);
+
+  it('leaves a cancelled trip off the list and names its line', () => {
+    const out = arrivalsAt(boards, [], NOW, { stopIds: ['100_1'], cancelled });
+    expect(out.rows.map((r) => r.tripId)).toEqual(['OK']);
+    expect(out.cancelledRoutes).toEqual(['11', '6']);
+  });
+
+  it('keeps the row live when a vehicle carries the cancelled trip, and names no line for it', () => {
+    const out = arrivalsAt(boards, [vehicle({ id: 'vehicle:9', tripId: 'RAN', delaySeconds: 60 })], NOW, { stopIds: ['100_1'], cancelled });
+    expect(out.rows.map((r) => [r.tripId, r.live, r.minutes])).toEqual([['RAN', true, 4], ['OK', false, 5]]);
+    expect(out.cancelledRoutes).toEqual(['11']);
+  });
+
+  it('removes nothing without the set: the CANCELED marker is not an input', () => {
+    const out = arrivalsAt(boards, [], NOW, { stopIds: ['100_1'] });
+    expect(out.rows.map((r) => r.tripId)).toEqual(['GONE', 'RAN', 'OK']);
+    expect(out.cancelledRoutes).toEqual([]);
+    expect(arrivalsAt(boards, [], NOW, { stopIds: ['100_1'], cancelled: new Set() }).rows).toHaveLength(3);
+  });
+
+  it('never touches an HŽ departure whose id collides with a cancelled ZET trip', () => {
+    const hz: DepartureBoard = {
+      operator: 'hz', stopId: 'HZ-GK', stopName: 'Glavni kolodvor', status: 'live', generatedAt: new Date(NOW).toISOString(),
+      departures: [{ operator: 'hz', tripId: 'GONE', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', at: at(9) }],
+    };
+    const out = arrivalsAt([hz], [], NOW, { stopIds: ['HZ-GK'], cancelled });
+    expect(out.rows.map((r) => r.tripId)).toEqual(['GONE']);
+    expect(out.cancelledRoutes).toEqual([]);
+  });
+
+  it('never matches an untripped departure against the set', () => {
+    const untripped = [board('100_1', [dep({ tripId: '', at: at(2) })])];
+    expect(arrivalsAt(untripped, [], NOW, { stopIds: ['100_1'], cancelled: new Set(['']) }).rows).toHaveLength(1);
+  });
+
+  it('folds the sibling platforms: one line named once', () => {
+    const siblings = [board('100_1', [dep({ tripId: 'GONE', at: at(2) })]), board('100_2', [dep({ tripId: 'GONE', at: at(2) }), dep({ tripId: 'RAN', at: at(4) })])];
+    expect(arrivalsAt(siblings, [], NOW, { stopIds: ['100_1', '100_2'], cancelled }).cancelledRoutes).toEqual(['6']);
+  });
+
+  describe('cancelledRoutes only within the window the list shows', () => {
+    const many = (n: number) => board('100_1', Array.from({ length: n }, (_, i) => dep({ tripId: `T${i}`, at: at(i + 1) })));
+    const line = (tripId: string, minutes: number, name: string) => dep({ tripId, at: at(minutes), routeName: name, routeId: name });
+
+    it('drops a cancelled departure later than the last shown row when the list is full, and any time when it is not', () => {
+      const b = [board('100_1', [
+        ...many(3).departures,
+        line('X-EARLY', 0.5, '5'),
+        line('X-INSIDE', 2.5, '7'),
+        line('X-LATE', 30, '9'),
+      ])];
+      const set = new Set(['X-EARLY', 'X-INSIDE', 'X-LATE']);
+      const full = arrivalsAt(b, [], NOW, { stopIds: ['100_1'], rows: 3, cancelled: set });
+      expect(full.rows.map((r) => r.tripId)).toEqual(['T0', 'T1', 'T2']);
+      expect(full.cancelledRoutes).toEqual(['5', '7']);
+      const roomy = arrivalsAt(b, [], NOW, { stopIds: ['100_1'], rows: 6, cancelled: set });
+      expect(roomy.cancelledRoutes).toEqual(['5', '7', '9']);
+    });
+
+    it('skips a cancelled departure past the grace, orders by time, and names at most three lines', () => {
+      const b = [board('100_1', [
+        line('C-OLD', -5, '1'),
+        line('C4', 4, '4'),
+        line('C2', 2, '2'),
+        line('C3', 3, '3'),
+        line('C1', 1, '8'),
+      ])];
+      const out = arrivalsAt(b, [], NOW, { stopIds: ['100_1'], cancelled: new Set(['C-OLD', 'C4', 'C2', 'C3', 'C1']) });
+      expect(out.rows).toEqual([]);
+      expect(out.cancelledRoutes).toEqual(['8', '2', '3']);
+    });
   });
 });

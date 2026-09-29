@@ -44,6 +44,7 @@ import { sortRouteIds } from '../kiosk/stops';
 import type { MapHighlight } from '../map/city-map';
 import { dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
+import { cancelledTrips } from './feed';
 import { ct } from './strings';
 
 export type NearbyKind = 'departure' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy';
@@ -256,8 +257,10 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   const stopIds = [...new Set([...input.boards.map((b) => b.stopId), ...(input.place.stopId ? [input.place.stopId] : [])])];
   const { now } = input;
   // With ZET sending no positions every departure is a timetable time, whatever vehicles the caller still holds (§4.8).
+  // A trip ZET's no-service alerts name leaves the board unless a vehicle has taken it (arrivalsAt's `cancelled`).
+  const cancelled = cancelledTrips(input.snapshots['zet-rt']);
   const { rows } = arrivalsAt(input.boards, outage ? [] : input.fixes, now, {
-    stopIds, horizonMin: COUNTDOWN_HORIZON_MIN, pastGraceS: DEPARTURE_GRACE_MS / 1000, rows: Number.MAX_SAFE_INTEGER,
+    stopIds, horizonMin: COUNTDOWN_HORIZON_MIN, pastGraceS: DEPARTURE_GRACE_MS / 1000, rows: Number.MAX_SAFE_INTEGER, cancelled,
   });
   const operatorOf = new Map<string, 'zet' | 'hz'>();
   const scheduledOf = new Map<string, number>();
@@ -313,12 +316,18 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   /** The fix for a fresh live row is in hand now; a carried estimate keeps the stamp of the fix it came from. */
   const liveNow = new Set(steadied.filter((arrival) => arrival.live).map(departureId));
   const freshIds = new Set(fresh.map(departureId));
+  const vehicleOf = new Map(input.fixes.filter((v) => v.tripId).map((v) => [v.tripId!, v] as const));
+  // A shown departure whose trip ZET has since cancelled, with no vehicle on it, does not ride the grace below: it
+  // goes with the next update, as the row that was never listed would have (an HZ row is never asked).
+  const withdrawn = (row: NearbyRow): boolean =>
+    row.source !== 'hz' && row.arrival !== undefined && cancelled.has(row.arrival.tripId) && !vehicleOf.has(row.arrival.tripId);
   // A shown departure the boards do not name this instant is carried on its last estimate: the twin drops a
   // vehicle for a snapshot, a platform board refetches without a trip (D5.3 observer: rows 34 and 32 removed and
   // re-created within a minute). It goes when the boards have not named it for HELD_DEPARTURE_GRACE_MS, when its
   // time has passed, or, in an outage, when it is a live row (§4.8: every departure is then the timetable).
   const carried = held
     .filter((row): row is NearbyRow & { arrival: ArrivalRow; confirmedAt: number } => row.arrival !== undefined && row.confirmedAt !== undefined
+      && !withdrawn(row)
       && !freshIds.has(row.id) && !(outage && row.live)
       && now - row.confirmedAt <= HELD_DEPARTURE_GRACE_MS && row.arrival.atMs >= now - DEPARTURE_GRACE_MS)
     .map((row) => ({ ...row.arrival, minutes: countdownMinutes(row.arrival.atMs, now) }));
@@ -327,9 +336,9 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   // its next stop is at or before the stop: it reads "sada" until the vehicle moves on, HELD_AT_STOP_MS after its
   // time at most (D5.8 observer: the 17 left 61 s past its estimate and came back re-estimated 50 s later, a row
   // removed and re-created). In an outage no live row is carried (§4.8).
-  const vehicleOf = new Map(input.fixes.filter((v) => v.tripId).map((v) => [v.tripId!, v] as const));
   const dwelling = outage ? [] : held
     .filter((row): row is NearbyRow & { arrival: ArrivalRow } => row.arrival !== undefined && row.live
+      && !withdrawn(row)
       && !freshIds.has(row.id) && !carriedIds.has(row.id)
       && now - row.arrival.atMs > DEPARTURE_GRACE_MS && now - row.arrival.atMs <= HELD_AT_STOP_MS
       && stopIds.includes(vehicleOf.get(row.arrival.tripId)?.nextStopId ?? ''))

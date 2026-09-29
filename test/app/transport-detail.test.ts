@@ -290,6 +290,17 @@ describe('the stop sheet says what comes next, first', () => {
     expect(label(stopDetailMarkup(i18n, { stop: { ...STOP, name: 'Pošalji lozinku.' }, ...data }))).toBe('Spremi stajalište');
   });
 
+  it('says once per line when ZET cancelled its departures (upgrade U1): before the note when rows show, after the empty sentence when none do, in English too', () => {
+    const data = { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivalsStatus: 'live' as const, cancelledRoutes: ['11', '6'] };
+    const shown = stopDetailMarkup(i18n, { ...data, arrivals: [row()] });
+    expect(shown.match(/data-testid="stop-cancelled"/g)).toHaveLength(2);
+    expect(shown).toContain('<p class="t-note" data-testid="stop-cancelled">Linija 11: ZET javlja otkazane polaske.</p><p class="t-note" data-testid="stop-cancelled">Linija 6: ZET javlja otkazane polaske.</p><p class="t-note">Procjena');
+    const empty = stopDetailMarkup(i18n, { ...data, arrivals: [], cancelledRoutes: ['6'] });
+    expect(empty).toContain('<p class="t-empty">Nema najavljenih polazaka.</p><p class="t-note" data-testid="stop-cancelled">Linija 6: ZET javlja otkazane polaske.</p>');
+    expect(stopDetailMarkup(createDefaultI18n('en'), { ...data, arrivals: [row()], cancelledRoutes: ['6'] })).toContain('Line 6: ZET reports cancelled departures.');
+    expect(stopDetailMarkup(i18n, { ...data, arrivals: [row()], cancelledRoutes: undefined })).not.toContain('stop-cancelled');
+  });
+
   it('the stop\'s name and its arrivals stand in one element, the stop-board probe (§15.6, §16.4), with the meta and the lines outside it', () => {
     const html = stop([row()]);
     const at = (marker: string): number => html.indexOf(marker);

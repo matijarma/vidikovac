@@ -402,6 +402,10 @@ export interface StopDetailData {
    *  the schedule and never a live estimate. Absent, the later trips are shown
    *  as their clock. */
   timetable?: readonly ArrivalRow[];
+  /** Lines whose departures ZET cancelled with a no-service alert and that this
+   *  sheet therefore leaves out (arrivalsAt's `cancelledRoutes`, at most three):
+   *  one note each. The sheet says it; the wall never does. */
+  cancelledRoutes?: readonly string[];
 }
 
 /** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
@@ -491,9 +495,15 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const timetable = tail.length
     ? `${sectionHead(i18n.t('arrivals.timetable'), 4)}<ul class="t-list sada-departure-list t-timetable" data-testid="timetable-rows">${tail.map(timetableRow).join('')}</ul>`
     : '';
+  // The line's name is ZET's text too: a note whose name fails the check is not printed.
+  const cancelled = (d.cancelledRoutes ?? [])
+    .map((route) => vetExternal('headsign', route, 'row'))
+    .filter((route): route is string => route !== null && route !== '')
+    .map((route) => `<p class="t-note" data-testid="stop-cancelled">${esc(i18n.t('arrivals.cancelledRoute', { route }))}</p>`)
+    .join('');
   const body = lead.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
-    : `<p class="t-empty">${esc(empty)}</p>`;
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}<p class="t-note">${esc(i18n.t('arrivals.note'))}</p>`
+    : `<p class="t-empty">${esc(empty)}</p>${cancelled}`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
 

@@ -59,7 +59,7 @@ import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameView, markZoomFor 
 import { reconcile } from '../ui/dom/reconcile';
 import { REFIT_SETTLE_MS } from '../ui/canvas';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
-import { externalTextReady, feedLive } from '../city/feed';
+import { cancelledTrips, externalTextReady, feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
@@ -888,12 +888,14 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // Live only while the feed is (city/feed.ts feedLive, the wall's rule): no live time during an outage or once
         // the feed's last word is older than the twin keeps a fix.
         const live = feedLive(c.snapshots['zet-rt'], c.now) ? vehicles : [];
-        const next = arrivalsAt(held, live, c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS });
+        // A trip ZET's no-service alerts name leaves both lists (the twin already left out any a vehicle carries).
+        const cancelled = cancelledTrips(c.snapshots['zet-rt']);
+        const next = arrivalsAt(held, live, c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS, cancelled });
         // "Vozni red" is the timetable: the same boards read without the fleet.
-        const timetable = arrivalsAt(held, [], c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS }).rows;
+        const timetable = arrivalsAt(held, [], c.now, { stopIds: group.ids, rows: STOP_ARRIVAL_ROWS, cancelled }).rows;
         // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
         const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, frozenAt, now: c.now });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, cancelledRoutes: next.cancelledRoutes, frozenAt, now: c.now });
         return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {

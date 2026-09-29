@@ -321,7 +321,8 @@
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
     "down": "The timetable is unavailable right now.",
-    "timetable": "Timetable"
+    "timetable": "Timetable",
+    "cancelledRoute": "Line {route}: ZET reports cancelled departures."
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",

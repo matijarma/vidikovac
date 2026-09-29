@@ -330,7 +330,8 @@
     "none": "Nema najavljenih polazaka.",
     "frozen": "Sesija je završila prije nego što je stigao vozni red.",
     "down": "Vozni red trenutačno nije dostupan.",
-    "timetable": "Vozni red"
+    "timetable": "Vozni red",
+    "cancelledRoute": "Linija {route}: ZET javlja otkazane polaske."
   },
   "transport": {
     "searchHint": "Upiši broj linije ili ime stajališta. Strelicama biraj, Enter otvara, Escape briše.",
