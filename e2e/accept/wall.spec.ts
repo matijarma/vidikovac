@@ -125,7 +125,7 @@ async function firstLook(page: Page, scene: Scene, label: string, surface: 'kios
     const sample = await wallSample(page);
     const headings = await page.evaluate(HEADINGS_IN_PAGE, HEADINGS);
     writeArtefact(`reading-${label}.json`, { sample, headings });
-    softly(sampleFailures(sample), `${label}: one reading against §11 and §16.3 (place, sentence 1–80 characters without overflow or ellipsis, 1–3 departures, every row timed or "uvijek", no control, no retired chrome, data-unlabelled 0, QR ≥ 240 px, footer without HH:MM, ≤ 1 solar row)`).toEqual([]);
+    softly(sampleFailures(sample), `${label}: one reading against §11 and §16.3 (place, sentence 1–80 characters without overflow or ellipsis, 1–3 departures and the fitted count, every row timed or "uvijek", no control, no retired chrome, data-unlabelled 0, QR ≥ 240 px, footer without HH:MM, ≤ 1 solar row)`).toEqual([]);
     softly(sceneReadingFailures(scene, sample, headings), `${label}: what ${scene.id} (${scene.zagreb} Zagreb) shows (e2e/scenes.ts) and the §15.6 rows the reading does not cover`).toEqual([]);
     return sample;
   });
@@ -188,7 +188,7 @@ test.describe('wall at 1920×1080: eight scenes', () => {
         const summary = summariseRotation(rows);
         writeArtefact(`rotation-${label}.json`, { summary, rows });
         softly(rotationFailures(summary, { sentences: 'template-floor', solarMin: scene.expect.solarMin }),
-          `${label}: departures 1–3 in every reading, no caveat row, no closure re-entry, no "+N" pill, ≥ 3 distinct sentences and no consecutive repeat (the wrangler-dev template floor), every turn per fact ≥ 20 s unless its fact expired (a same-fact rewording is a refresh: ${summary.sentenceTurns} turns, ${summary.sentenceRefreshes} refreshes), no overflow, no control, ≤ 1 solar row${scene.expect.solarMin ? ' and ≥ 1 (the next solar event is inside the horizon)' : ''}`).toEqual([]);
+          `${label}: departures 1–3 and the fitted count in every reading, no caveat row, no closure re-entry, no "+N" pill, ≥ 3 distinct sentences and no consecutive repeat (the wrangler-dev template floor), every turn per fact ≥ 20 s unless its fact expired (a same-fact rewording is a refresh: ${summary.sentenceTurns} turns, ${summary.sentenceRefreshes} refreshes), no overflow, no control, ≤ 1 solar row${scene.expect.solarMin ? ' and ≥ 1 (the next solar event is inside the horizon)' : ''}`).toEqual([]);
         softly(rotationSceneFailures(scene, readings(rows), summary), `${label}: what ${scene.id} never shows, over the ten minutes`).toEqual([]);
       });
 

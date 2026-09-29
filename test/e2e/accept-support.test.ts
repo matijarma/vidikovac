@@ -41,7 +41,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
   return {
     at, place: 'Trg bana J. Jelačića', sentence: 'Sunce zalazi u 18:57.', kicker: 'vrijeme', kickerText: 'Vrijeme',
     validUntil: new Date(at + 20_000).toISOString(), sentenceChars: 21, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM,
-    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
+    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, fitDropped: [], fitOverflow: false, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 0, zoom: '14.07', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: 'x', strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
     pharmacy: `${PHARMACY_HOURS} Trg bana J. Jelačića 3`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],

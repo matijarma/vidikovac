@@ -88,6 +88,19 @@ export const SENTENCE_MAX_CHARS = 80;
 /** Departure rows at most (principle 3); at least one in every sample ([O-65]: the whole-city screen has departures too). */
 export const DEPARTURES_MIN = 1;
 export const DEPARTURES_MAX = 3;
+/**
+ * The fitted count (upgrade U4): of the departures the list offered, the fit keeps at least this many. September's
+ * measurements at 1920×1080 and 1366×768 (smoke run 3, review-iter4-kiosk.md): three by day, two at night beside the
+ * reserved first and last rows; U1's reserved notice row costs the third at 1366×768.
+ */
+export const DEPARTURES_FIT_FULL = 3;
+export const DEPARTURES_FIT_RESERVED = 2;
+/** The row kinds the fit never drops; any of them on the wall lowers the floor to DEPARTURES_FIT_RESERVED. */
+export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice'];
+/** A tram or bus family sentence says a departure ("polazi"): none may stand while ZET's fleet is judged silent (upgrade U2). */
+export const DEPARTURE_SENTENCE_RE = /\bpolazi\b/i;
+/** A rail sentence ("trainAt", the promoted alternative while silent) is the one departure a silent header may say. */
+export const RAIL_SENTENCE_RE = /\bvlak\b/i;
 /** The QR SVG's minimum side in CSS px. */
 export const QR_MIN_PX = 240;
 /** Only the next solar event, never both (§12). */
@@ -165,6 +178,13 @@ export interface WallSample {
   /** `.nearby-row` elements in the DOM that are not on the wall (hidden, transparent, zero-size, offscreen or clipped). */
   hiddenRows: number;
   departures: number;
+  /**
+   * `data-fit-dropped` on the list: the kinds of the vetted rows the list did not paint, in list order; `[]` when it
+   * dropped none, null when the probe is missing (a wall before it, or a reading recorded earlier).
+   */
+  fitDropped: string[] | null;
+  /** `data-fit-overflow` on the list: the fit found no room even after dropping (`1`); null when the probe is missing. */
+  fitOverflow: boolean | null;
   solarRows: number;
   liveRows: number;
   pills: string | null;
@@ -209,6 +229,16 @@ const shipped = (re: RegExp): { source: string; flags: string } => ({ source: re
 export const WALL_SAMPLE_SPEC: WallSampleSpec = { probes: WALL_PROBES, discl: shipped(DISCL), clock: shipped(CLOCK_RE), ellipsis: shipped(ELLIPSIS_RE) };
 
 /**
+ * `data-fit-dropped` as a list of kinds: the list's own encoding is space-separated kinds in list order (U0's fitter);
+ * a comma is tolerated and anything from a colon on (an id after the kind) is ignored. Empty means none dropped, undefined
+ * means the list carries no probe. WALL_SAMPLE_IN_PAGE holds a copy of this parser, since it may reference nothing else.
+ */
+export function fitDroppedOf(value: string | undefined): string[] | null {
+  if (value === undefined) return null;
+  return value.split(/[\s,]+/).map((part) => part.split(':')[0]).filter(Boolean);
+}
+
+/**
  * One reading of the wall, run inside the page through `page.evaluate(WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC)`.
  * It references nothing but its argument and the DOM. A missing element reads as empty, never as an error,
  * so a wall that lacks a probe fails on the assertion that names it.
@@ -229,6 +259,8 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     return parts.join(' ').replace(/\s+/g, ' ').trim();
   };
   const num = (v: string | undefined): number | null => (v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  // A copy of fitDroppedOf (this function may reference nothing outside its argument and the DOM).
+  const fitDroppedIn = (v: string | undefined): string[] | null => (v === undefined ? null : v.split(/[\s,]+/).map((part) => part.split(':')[0]).filter(Boolean));
   const shown = (el: Element): boolean => {
     if ((el as HTMLElement).hidden || el.closest('[hidden]')) return false;
     const r = el.getBoundingClientRect();
@@ -283,6 +315,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     };
   });
 
+  const fit = q(p.nearby)?.dataset;
   const mapc = q(p.map);
   const qrEl = q(p.qrSvg);
   const qb = qrEl ? qrEl.getBoundingClientRect() : null;
@@ -309,6 +342,8 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     rows,
     hiddenRows: allRows.length - visibleRows.length,
     departures: rows.filter((r) => r.kind === 'departure').length,
+    fitDropped: fitDroppedIn(fit?.fitDropped),
+    fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
     solarRows: rows.filter((r) => r.kind === 'solar').length,
     liveRows: rows.filter((r) => r.live).length,
     pills: mapc?.dataset.pills ?? null,
@@ -396,6 +431,11 @@ export interface RotationSummary {
   departuresEverySample: boolean;
   minDepartures: number;
   maxDepartures: number;
+  /** Readings whose departure rows fall short of the fitted count, or that carry no data-fit-dropped probe (departureFailures). */
+  departuresUnderFit: number;
+  /** The rows the fit left out over the rotation, by kind (each reading counts its own), and the readings with data-fit-overflow=1. */
+  fitDroppedByKind: Record<string, number>;
+  fitOverflowReadings: number;
   /** Distinct rows (by id, else text) that ever read as a caveat. */
   caveatRows: number;
   distinctSentences: number;
@@ -578,11 +618,13 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
   const kinds: Record<string, number> = {};
   const themes: Record<string, number> = {};
   const reentriesByKind: Record<string, number> = {};
+  const fitDroppedByKind: Record<string, number> = {};
   // Row presence by id: the index of the last reading an id was seen in, and whether it has already come back once.
   const lastSeen = new Map<string, number>();
   const reentered = new Set<string>();
   valid.forEach((s, i) => {
     for (const r of s.rows) if (r.caveat) caveats.add(r.id || r.text);
+    for (const kind of s.fitDropped ?? []) fitDroppedByKind[kind] = (fitDroppedByKind[kind] ?? 0) + 1;
     for (const k of new Set(s.rows.map((r) => r.kind ?? 'none'))) kinds[k] = (kinds[k] ?? 0) + 1;
     themes[String(s.theme)] = (themes[String(s.theme)] ?? 0) + 1;
     for (const r of s.rows) {
@@ -610,6 +652,9 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     departuresEverySample: valid.length > 0 && valid.every((s) => s.departures >= DEPARTURES_MIN),
     minDepartures: min(valid.map((s) => s.departures)),
     maxDepartures: max(valid.map((s) => s.departures)),
+    departuresUnderFit: valid.filter((s) => { const plan = fitPlan(s); return !plan || s.departures < plan.expected; }).length,
+    fitDroppedByKind,
+    fitOverflowReadings: valid.filter((s) => s.fitOverflow === true).length,
     caveatRows: caveats.size,
     distinctSentences: new Set(turns.turns.map((t) => t.fact)).size,
     sentenceTurns: turns.turns.length,
@@ -643,6 +688,29 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
 }
 
 // --- verdicts, shared by the accept spec and the observer -----------------------------------------
+/**
+ * The departures the fit must keep, of those the list offered: null without the `data-fit-dropped` probe. The offer is
+ * the visible departures plus the departures the fit left out (never more than DEPARTURES_MAX); the floor is
+ * DEPARTURES_FIT_FULL, or DEPARTURES_FIT_RESERVED while a row of a FIT_RESERVED_KINDS kind is on the wall.
+ */
+export function fitPlan(s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): { offered: number; expected: number } | null {
+  if (s.fitDropped == null) return null;
+  const offered = Math.min(DEPARTURES_MAX, s.departures + s.fitDropped.filter((kind) => kind === 'departure').length);
+  const reserved = s.rows.some((r) => r.kind !== null && FIT_RESERVED_KINDS.includes(r.kind));
+  return { offered, expected: Math.min(offered, reserved ? DEPARTURES_FIT_RESERVED : DEPARTURES_FIT_FULL) };
+}
+export const fittedDepartures = (s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): number | null => fitPlan(s)?.expected ?? null;
+
+/** The departure rows of one reading: 1 to 3, and at least the fitted count of those the list offered; `[]` means it holds. */
+export function departureFailures(s: Pick<WallSample, 'departures' | 'rows' | 'fitDropped'>): string[] {
+  const out: string[] = [];
+  if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departure rows (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
+  const plan = fitPlan(s);
+  if (!plan) out.push('the list carries no data-fit-dropped probe (the fitted departure count cannot be judged)');
+  else if (s.departures < plan.expected) out.push(`${s.departures} departure rows where the list offered ${plan.offered} and the fit keeps ${plan.expected} (left out: ${(s.fitDropped ?? []).join(' ') || 'nothing'})`);
+  return out;
+}
+
 /** One reading against §11/§16.3 (block B of the wall spec); `[]` means it holds. */
 export function sampleFailures(s: WallSample): string[] {
   const out: string[] = [];
@@ -650,7 +718,7 @@ export function sampleFailures(s: WallSample): string[] {
   if (s.sentenceChars < 1 || s.sentenceChars > SENTENCE_MAX_CHARS) out.push(`the sentence has ${s.sentenceChars} characters (target 1–${SENTENCE_MAX_CHARS}): "${s.sentence}"`);
   if (s.sentenceOverflow) out.push(`the sentence overflows its box: "${s.sentence}"`);
   if (s.sentenceEllipsis) out.push(`the sentence is cut with an ellipsis: "${s.sentence}"`);
-  if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departure rows (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
+  out.push(...departureFailures(s));
   const untimed = s.rows.filter((r) => r.when === null && !r.always);
   if (untimed.length) out.push(`${untimed.length} row(s) with neither data-when nor data-always="1": ${untimed.map((r) => `"${r.text}"`).join(', ')}`);
   if (s.controls > 0) out.push(`${s.controls} control(s) a passer-by can press (target 0): ${s.controlNames.join(', ')}`);
@@ -962,6 +1030,7 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   if (r.errors > 0) out.push(`${r.errors} of ${r.samples + r.errors} readings failed`);
   if (!r.departuresEverySample) out.push(`a reading without a departure row (min ${r.minDepartures} over ${r.samples} readings; target ≥ ${DEPARTURES_MIN} in every one)`);
   if (r.maxDepartures > DEPARTURES_MAX) out.push(`${r.maxDepartures} departure rows at most (target ≤ ${DEPARTURES_MAX})`);
+  if (r.departuresUnderFit > 0) out.push(`${r.departuresUnderFit} reading(s) with fewer departure rows than the fit keeps of those the list offered, or without the data-fit-dropped probe (target 0: ${DEPARTURES_FIT_FULL}, or ${DEPARTURES_FIT_RESERVED} beside a first, last or notice row)`);
   if (r.caveatRows > 0) out.push(`${r.caveatRows} row(s) read as a caveat (target 0)`);
   if (r.closureReentries > 0) out.push(`${r.closureReentries} closure row(s) left the list and came back (target 0)`);
   if (r.plusPills > 0) out.push(`${r.plusPills} reading(s) with a "+N" vehicle pill (target 0)`);

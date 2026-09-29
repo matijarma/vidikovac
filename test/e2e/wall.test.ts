@@ -11,8 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
-  DEPARTURES_MAX, DISTINCT_SENTENCES_MIN, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
-  SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, rotationFailures, sampleFailures,
+  DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURE_SENTENCE_RE, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
+  RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
 } from '../../e2e/wall';
 import { TILE_REQUESTS, attachRecorders, pathOf, summariseBody, type RecorderPage } from '../../e2e/recorders';
@@ -45,7 +45,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
   return {
     at: Date.UTC(2026, 8, 21, 15, 45), place: 'Kvaternikov trg', sentence: 'Tramvaj 6 kreće za dvije minute.', kicker: 'promet', kickerText: 'Promet',
     validUntil: '2026-09-21T15:45:20.000Z', sentenceChars: 32, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM,
-    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
+    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, fitDropped: [], fitOverflow: false, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: LEAD_TEXT, strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
     pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],
@@ -108,7 +108,7 @@ describe('one reading of the wall', () => {
       <div class="kiosk"><header class="k-head"><button data-testid="kiosk-brand">Kaj ima?</button><p data-testid="kiosk-context">Kvaternikov trg</p>
         <p data-testid="kiosk-sentence" data-kicker="promet" data-valid-until="2026-09-21T15:45:20.000Z"><span data-testid="kiosk-sentence-kicker">Promet</span><span data-testid="kiosk-sentence-text">Tramvaj 6 kreće za dvije minute.</span></p></header>
       <section data-testid="kiosk-invitation"><div data-testid="kiosk-map-host" data-frame="6"><div data-testid="kiosk-map" data-map-status="ready" data-zoom="14.20" data-pills="6|12|17" data-bodies="41" data-feed="live" data-unlabelled="0" data-markers="12"></div></div>
-        <aside><section data-testid="nearby"><h2 data-testid="nearby-head">U blizini · 2 km · ~15 min</h2><ol data-testid="nearby-rows">
+        <aside><section data-testid="nearby" data-fit-dropped="" data-fit-overflow="0"><h2 data-testid="nearby-head">U blizini · 2 km · ~15 min</h2><ol data-testid="nearby-rows">
           <li class="nearby-row" data-id="trip-1" data-kind="departure" data-when="2026-09-21T15:47:00.000Z" data-live="1" data-source="zet"><span class="nearby-title">6 Sopot</span><span class="nearby-when"><time>2 min</time></span></li>
           <li class="nearby-row" data-id="sun" data-kind="solar" data-when="2026-09-21T16:57:00.000Z" data-source="solar"><span class="nearby-title">Zalazak sunca</span><span class="nearby-when"><time>18:57</time></span></li>
           <li class="nearby-row" data-id="story" data-kind="always" data-always="1" data-source="city"><span class="nearby-title">Kvaternikov trg</span><span class="nearby-when">uvijek</span><span class="nearby-sub">Podatak iz registra, nije provjera uživo.</span></li>
@@ -122,7 +122,7 @@ describe('one reading of the wall', () => {
       const s = shippedFn(WALL_SAMPLE_SPEC);
       expect(s).toMatchObject({
         place: 'Kvaternikov trg', sentence: 'Tramvaj 6 kreće za dvije minute.', kicker: 'promet', kickerText: 'Promet', validUntil: '2026-09-21T15:45:20.000Z',
-        sentenceChars: 32, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM, departures: 1, solarRows: 1, liveRows: 1,
+        sentenceChars: 32, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM, departures: 1, fitDropped: [], fitOverflow: false, solarRows: 1, liveRows: 1,
         pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
         theme: 'dark', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 250, h: 250 }, lead: LEAD_TEXT, stripHasClock: false, pharmacySymbols: 1,
         settingsOpen: false, stopBoardOpen: false,
@@ -209,6 +209,77 @@ describe('one reading of the wall', () => {
     expect(failures).toContain('0 departure rows (target 1–3)');
     expect(failures).toContain('the map has no data-unlabelled probe ([data-testid=kiosk-map])');
     expect(failures).toContain('the QR SVG is missing (target ≥ 240 × 240 px)');
+  });
+
+  it('the fitted departure count: three by day, two beside a first, last or notice row, of those the list offered', () => {
+    expect([DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, FIT_RESERVED_KINDS]).toEqual([3, 2, ['first', 'last', 'notice']]);
+    const deps = (n: number): WallRow[] => Array.from({ length: n }, (_, i) => row({ id: `trip-${i}`, when: '2026-09-29T10:00:00.000Z' }));
+    const at1200 = Date.UTC(2026, 8, 29, 10, 0);
+    // The Tuesday shape: one departure shown, two dropped with an event, at 12:00 Zagreb.
+    const tuesday = sample({ at: at1200, rows: [...deps(1), row({ id: 'closure-1', kind: 'closure', when: '2026-09-29T14:00:00.000Z' })], fitDropped: ['departure', 'departure', 'event'] });
+    expect(fittedDepartures(tuesday)).toBe(3);
+    expect(departureFailures(tuesday)).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure event)']);
+    expect(sampleFailures(tuesday)).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure event)']);
+    // Two shown beside a last row with one dropped: the reserved row costs the third.
+    const night = sample({ rows: [...deps(2), row({ id: 'last-6', kind: 'last', when: '2026-09-29T22:40:00.000Z' })], fitDropped: ['departure'] });
+    expect(fittedDepartures(night)).toBe(2);
+    expect(departureFailures(night)).toEqual([]);
+    // The same two shown beside a notice, and with nothing reserved they fail.
+    expect(departureFailures(sample({ rows: [...deps(2), row({ id: 'notice-1', kind: 'notice', when: '2026-09-29T22:40:00.000Z' })], fitDropped: ['departure'] }))).toEqual([]);
+    expect(departureFailures(sample({ rows: deps(2), fitDropped: ['departure'] }))).toEqual(['2 departure rows where the list offered 3 and the fit keeps 3 (left out: departure)']);
+    // One shown and nothing dropped: the list offered one.
+    expect(fittedDepartures(sample({ rows: deps(1), fitDropped: [] }))).toBe(1);
+    expect(departureFailures(sample({ rows: deps(1), fitDropped: [] }))).toEqual([]);
+    // One shown beside a last row, two dropped: the floor is two, one is short.
+    expect(departureFailures(sample({ rows: [...deps(1), row({ id: 'last-6', kind: 'last' })], fitDropped: ['departure', 'departure'] }))).toEqual(['1 departure rows where the list offered 3 and the fit keeps 2 (left out: departure departure)']);
+    // Rows other than departures dropped change nothing, and the offer never passes three.
+    expect(departureFailures(sample({ rows: deps(3), fitDropped: ['event', 'departure', 'closure'] }))).toEqual([]);
+  });
+
+  it('a list without the data-fit-dropped probe is a failure of its own, never a pass', () => {
+    const bare = sample({ fitDropped: null, fitOverflow: null });
+    expect(fittedDepartures(bare)).toBeNull();
+    expect(departureFailures(bare)).toEqual(['the list carries no data-fit-dropped probe (the fitted departure count cannot be judged)']);
+    expect(sampleFailures(bare)).toEqual(['the list carries no data-fit-dropped probe (the fitted departure count cannot be judged)']);
+    // A reading recorded before the probe existed has no field at all.
+    const { fitDropped: _d, fitOverflow: _o, ...old } = sample();
+    expect(departureFailures(old as WallSample)).toHaveLength(1);
+    expect(summariseRotation([bare, sample()])).toMatchObject({ departuresUnderFit: 1, fitOverflowReadings: 0 });
+  });
+
+  it('the parser reads the list\'s kinds, a comma or an id after a colon included, and the in-page copy agrees', () => {
+    expect(fitDroppedOf(undefined)).toBeNull();
+    expect(fitDroppedOf('')).toEqual([]);
+    expect(fitDroppedOf('event closure')).toEqual(['event', 'closure']);
+    expect(fitDroppedOf(' departure,departure  event ')).toEqual(['departure', 'departure', 'event']);
+    expect(fitDroppedOf('event:abc closure:x:y')).toEqual(['event', 'closure']);
+    const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+    document.body.innerHTML = '<section data-testid="nearby" data-fit-dropped="event closure" data-fit-overflow="1"><ol data-testid="nearby-rows"></ol></section>';
+    expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ fitDropped: ['event', 'closure'], fitOverflow: true });
+    document.querySelector('[data-testid=nearby]')!.setAttribute('data-fit-dropped', '');
+    document.querySelector('[data-testid=nearby]')!.setAttribute('data-fit-overflow', '0');
+    expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ fitDropped: [], fitOverflow: false });
+    document.querySelector('[data-testid=nearby]')!.removeAttribute('data-fit-dropped');
+    document.querySelector('[data-testid=nearby]')!.removeAttribute('data-fit-overflow');
+    expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ fitDropped: null, fitOverflow: null });
+  });
+
+  it('a rotation counts the readings that fall short of the fit, the rows it left out by kind and the overflow', () => {
+    const short = sample({ fitDropped: ['departure', 'event'], fitOverflow: true });
+    const fine = sample({ fitDropped: ['event'], fitOverflow: false });
+    const r = summariseRotation([short, fine, fine]);
+    expect(r).toMatchObject({ departuresUnderFit: 1, fitDroppedByKind: { departure: 1, event: 3 }, fitOverflowReadings: 1 });
+    expect(rotationFailures(r).some((f) => f.startsWith('1 reading(s) with fewer departure rows than the fit keeps'))).toBe(true);
+    expect(rotationFailures(summariseRotation([fine, fine])).some((f) => /fit keeps/.test(f))).toBe(false);
+  });
+
+  it('the header sentences: a tram or bus departure says "polazi", a train says "vlak"', () => {
+    expect(DEPARTURE_SENTENCE_RE.test('Tramvaj 12, smjer Dubrava, polazi u 07:53.')).toBe(true);
+    expect(DEPARTURE_SENTENCE_RE.test('Zadnji tramvaj 12 polazi 23:40.')).toBe(true);
+    expect(DEPARTURE_SENTENCE_RE.test('ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.')).toBe(false);
+    expect(DEPARTURE_SENTENCE_RE.test('ZET: u pokretu 2 vozila, po voznom redu oko 460.')).toBe(false);
+    expect(RAIL_SENTENCE_RE.test('Glavni kolodvor: vlak, smjer Savski Marof, polazi u 07:53.')).toBe(true);
+    expect(RAIL_SENTENCE_RE.test('Tramvaj 12, smjer Dubrava, polazi u 07:53.')).toBe(false);
   });
 
   it('a good reading has no failures', () => {

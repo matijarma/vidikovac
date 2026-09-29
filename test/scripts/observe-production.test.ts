@@ -284,6 +284,8 @@ describe('the thresholds are one table with a stage per row', () => {
   it('the targets carry the accept specs\' own numbers and strings', () => {
     const target = (id: string): string => fillTarget(THRESHOLDS.find((t) => t.id === id)!.target, instruments);
     expect(target('departures')).toContain(`${wall.DEPARTURES_MIN}–${wall.DEPARTURES_MAX}`);
+    expect(target('departures')).toContain(`the fitted count of those the list offered (${wall.DEPARTURES_FIT_FULL}, or ${wall.DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts)`);
+    expect(target('silent-departures')).toContain(String(wall.DEPARTURE_SENTENCE_RE));
     expect(target('sentence-length')).toContain(`1–${wall.SENTENCE_MAX_CHARS}`);
     expect(target('lead')).toContain('"Skeniraj za 10 minuta grada."');
     expect(target('phone-tabs')).toContain('Sada · Karta · Još');
@@ -546,7 +548,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
   return {
     at, place: 'Trg bana J. Jelačića', sentence, kicker: 'promet', kickerText: 'Promet', validUntil: new Date(at + 1_000).toISOString(),
     sentenceChars: [...sentence].length, sentenceOverflow: false, sentenceEllipsis: false, head: wall.NEARBY_HEAD_2KM, rows, hiddenRows: 0,
-    departures: 1, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
+    departures: 1, fitDropped: [], fitOverflow: false, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
     retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: ['U blizini'],
@@ -577,14 +579,19 @@ const CENSUS_MISSING = {
   map: { ...CANVAS_MAP, markers: null, unlabelled: null, bajs: null, overlaps: null, pills: null, missing: ['markers', 'unlabelled', 'bajs', 'overlaps', 'pills'] },
 };
 /** A zet-rt snapshot as the worker sends it: the teaser's fleet count (`vozila`), `pins` moving vehicles, one route summary. */
-function zetSnapshot(pins: number, teaser: boolean, status = 'live') {
+function zetSnapshot(pins: number, teaser: boolean, status = 'live', service?: string) {
   const vehicles = Array.from({ length: pins }, (_, i) => ({ id: `vehicle:${1000 + i}`, module: 'zet-rt', kind: 'vehicle', title: `${31 + i}`, geo: { type: 'Point', coordinates: [15.97, 45.81] } }));
   const route = { id: 'route:0_31', module: 'zet-rt', kind: 'vehicle', title: '31', data: { routeId: '0_31', vehicles: pins } };
-  return { module: 'zet-rt', status, fetchedAt: new Date(T0).toISOString(), items: [...(teaser ? [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', title: `${pins} vozila u pokretu`, data: { vehicles: pins + 40 } }] : []), ...vehicles, route] };
+  return {
+    module: 'zet-rt', status, fetchedAt: new Date(T0).toISOString(),
+    // The twin's judgement, additive on the wire (sources.zet.service): only its state is read.
+    ...(service ? { sources: { zet: { status, itemCount: pins, service: { state: service, expected: 460, seen: pins, ratio: 0, since: new Date(T0).toISOString() } } } } : {}),
+    items: [...(teaser ? [{ id: 'vozila', module: 'zet-rt', kind: 'vehicle', title: `${pins} vozila u pokretu`, data: { vehicles: pins + 40 } }] : []), ...vehicles, route],
+  };
 }
 /** A data response on the fake page: the recorder and the observer's own watcher both read it. */
-const zetResponse = (path: string, pins: number, teaser: boolean) => {
-  const body = teaser ? { generatedAt: new Date(T0).toISOString(), modules: [zetSnapshot(pins, true)] } : zetSnapshot(pins, false);
+const zetResponse = (path: string, pins: number, teaser: boolean, service?: string) => {
+  const body = teaser ? { generatedAt: new Date(T0).toISOString(), modules: [zetSnapshot(pins, true, 'live', service)] } : zetSnapshot(pins, false, 'live', service);
   return { url: () => `https://zagreb.example${path}`, status: () => 200, request: () => ({ method: () => 'GET' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => body, body: async () => Buffer.from(JSON.stringify(body)) };
 };
 interface FakeOptions {
@@ -634,6 +641,8 @@ interface FakeOptions {
   pillsAfterMs?: Partial<Record<Kind, number>>;
   /** Each wall page reads one /api/teaser whose zet-rt snapshot carries this many vehicle pins (none read without it). */
   teaserPins?: number;
+  /** ... and the twin's service state on it (`sources.zet.service.state`); none without. */
+  teaserService?: string;
   /** The phone reads one /api/data/zet-rt with this many vehicle pins right after its scan answers. */
   phonePins?: number;
   /** A click on this selector reports Playwright's timeout, as the stop search's result did on 24 Sep 03:40 while the board opened. */
@@ -705,7 +714,7 @@ function fakeRuntime(options: FakeOptions = {}) {
           return;
         }
         openedAt ??= t;
-        if (options.teaserPins !== undefined && (kind === 'kiosk' || kind === 'portrait' || kind === 'proxy')) emit('response', zetResponse('/api/teaser?stop=106_1', options.teaserPins, true));
+        if (options.teaserPins !== undefined && (kind === 'kiosk' || kind === 'portrait' || kind === 'proxy')) emit('response', zetResponse('/api/teaser?stop=106_1', options.teaserPins, true, options.teaserService));
         if (kind === 'kiosk' && options.boards && log.gotos.filter((g) => g.kind === 'kiosk').length === 1) {
           for (const b of options.boards) {
             const url = `https://zagreb.example/api/city/departures?operator=zet&stop=${b.stop}`;
@@ -939,6 +948,62 @@ describe('a run over a fake browser', () => {
     expect(r.code).toBe(1);
     expect(r.lines.join('\n')).toContain('FAIL departures');
     expect(read(r.out, 'report.md')).toContain('0 visible departure rows (2 row(s) in the DOM but not on the wall, not counted)');
+  });
+
+  it('the Tuesday shape (one departure shown, two dropped with an event, 09:00) fails departures and names what the fit left out; a list without the probe fails too', async () => {
+    const tuesday = (n: number, at: number, code: string): WallSample => ({ ...wallReading(n, at, code), fitDropped: ['departure', 'departure', 'event'] });
+    const r = await observe([], { reading: tuesday });
+    expect(r.code).toBe(1);
+    expect(r.lines.join('\n')).toContain('FAIL departures');
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 5 \| \*\*fail\*\* \|/);
+    expect(report).toContain('1 visible departure rows: 1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure event)');
+    // The monitored line of the report: the rotation's three readings dropped two departures and one event each.
+    expect(report).toContain('Rows the fit left out of the list (data-fit-dropped, 3 of 3 readings carried the probe; monitored, no threshold): departure 6, event 3, each reading counting its own; readings with data-fit-overflow=1: 0.');
+    // A reserved row beside two shown departures with one dropped holds; the floor is two.
+    const night = (n: number, at: number, code: string): WallSample => {
+      const good = wallReading(n, at, code);
+      return { ...good, rows: [...good.rows, row({ id: 'last-6', kind: 'last', when: new Date(at + 600_000).toISOString(), title: 'Zadnji', whenText: '22:40', text: 'Zadnji 22:40' }), row({ id: `trip-b${n}`, when: new Date(at + 240_000).toISOString(), title: '11 Dubec', whenText: '4 min', text: '11 Dubec 4 min' })], departures: 2, fitDropped: ['departure'], fitOverflow: n === 1 };
+    };
+    const held = await observe([], { reading: night });
+    expect(held.code, held.lines.join('\n')).toBe(0);
+    expect(read(held.out, 'report.md')).toContain('readings with data-fit-overflow=1: 1.');
+    const bare = await observe([], { reading: (n, at, code) => ({ ...wallReading(n, at, code), fitDropped: null, fitOverflow: null }) });
+    expect(bare.code).toBe(1);
+    expect(bare.lines.join('\n')).toContain('FAIL departures');
+    expect(read(bare.out, 'report.md')).toContain('the list carries no data-fit-dropped probe');
+    expect(read(bare.out, 'report.md')).toContain('0 of 3 readings carried the probe');
+  });
+
+  it('while the twin reports its fleet silent no header sentence says a departure; a train is the one exception; a normal twin may say them', async () => {
+    const tram = (n: number, at: number, code: string): WallSample => {
+      const sentence = `Tramvaj 12, smjer Dubrava, polazi u 07:${50 + n}.`;
+      return { ...wallReading(n, at, code), sentence, sentenceChars: [...sentence].length };
+    };
+    const train = (n: number, at: number, code: string): WallSample => {
+      const sentence = `Glavni kolodvor: vlak, smjer Savski Marof, polazi u 07:${50 + n}.`;
+      return { ...wallReading(n, at, code), sentence, sentenceChars: [...sentence].length };
+    };
+    const silentTram = await observe([], { reading: tram, teaserPins: 2, teaserService: 'silent' });
+    expect(silentTram.code).toBe(1);
+    const failed = silentTram.lines.join('\n');
+    expect(failed).toContain('FAIL silent-departures');
+    expect(failed).not.toContain('FAIL departures');
+    const report = read(silentTram.out, 'report.md');
+    expect(report).toMatch(/\| silent-departures \| d2 \| kiosk \| .* \| ≤ 0 \| 5 \| \*\*fail\*\* \|/);
+    expect(report).toContain('the twin reports the fleet silent, the header says "Tramvaj 12, smjer Dubrava, polazi u 07:50."');
+    const rows = read(silentTram.out, 'rotation.jsonl').trim().split('\n').map((l) => JSON.parse(l) as ObservedRotationRow & { fleet?: { service?: string | null } | null });
+    expect(rows.map((r) => r.fleet?.service)).toEqual(['silent', 'silent', 'silent']);
+    const silentTrain = await observe([], { reading: train, teaserPins: 2, teaserService: 'silent' });
+    expect(silentTrain.lines.join('\n')).not.toContain('FAIL silent-departures');
+    expect(read(silentTrain.out, 'report.md')).toMatch(/\| silent-departures \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    for (const service of ['normal', 'reduced', undefined]) {
+      const other = await observe([], { reading: tram, teaserPins: 2, teaserService: service });
+      expect(other.lines.join('\n'), String(service)).not.toContain('FAIL silent-departures');
+    }
+    // No twin report at all: not judged, holds at 0.
+    const unjudged = await observe([], { reading: tram });
+    expect(read(unjudged.out, 'report.md')).toMatch(/\| silent-departures \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
   });
 
   it('a "+N" pill in one reading fails d1', async () => {
@@ -1289,21 +1354,35 @@ describe('a run over a fake browser', () => {
 describe('the first production observation after the release (24 Sep, 02:30 Zagreb)', () => {
   it('the twin\'s vehicles as a data response carries them: pins are moving vehicles, never route summaries or the fleet count', () => {
     const teaser = { generatedAt: 'g', modules: [{ module: 'emsc', status: 'live', items: [{ id: 'vehicle:x' }] }, zetSnapshot(3, true)] };
-    expect(fleetOf('/api/teaser?stop=106_1', teaser)).toEqual({ status: 'live', pins: 3, fleet: 43 });
-    expect(fleetOf('/api/data/zet-rt', zetSnapshot(0, false))).toEqual({ status: 'live', pins: 0, fleet: null });
-    expect(fleetOf('/api/data', { modules: [zetSnapshot(2, false, 'stale')] })).toEqual({ status: 'stale', pins: 2, fleet: null });
-    expect(fleetOf('/api/data', { 'zet-rt': zetSnapshot(1, false) })).toEqual({ status: 'live', pins: 1, fleet: null });
+    expect(fleetOf('/api/teaser?stop=106_1', teaser)).toEqual({ status: 'live', pins: 3, fleet: 43, service: null });
+    expect(fleetOf('/api/data/zet-rt', zetSnapshot(0, false))).toEqual({ status: 'live', pins: 0, fleet: null, service: null });
+    expect(fleetOf('/api/data', { modules: [zetSnapshot(2, false, 'stale')] })).toEqual({ status: 'stale', pins: 2, fleet: null, service: null });
+    expect(fleetOf('/api/data', { 'zet-rt': zetSnapshot(1, false) })).toEqual({ status: 'live', pins: 1, fleet: null, service: null });
     expect(fleetOf('/api/data/emsc', { module: 'emsc', status: 'live', items: [] })).toBeNull();
     expect(fleetOf('/api/scan', { ticket: 't' })).toBeNull();
     expect(fleetOf('/api/teaser', { modules: [] })).toBeNull();
     expect(fleetOf('/api/teaser', null)).toBeNull();
   });
 
+  it('the twin\'s service state rides on the record: sources.zet.service.state as the page received it, null when not judged', () => {
+    const teaser = (service?: string) => ({ generatedAt: 'g', modules: [zetSnapshot(1, true, 'live', service)] });
+    expect(fleetOf('/api/teaser?stop=106_1', teaser('silent'))).toEqual({ status: 'live', pins: 1, fleet: 41, service: 'silent' });
+    expect(fleetOf('/api/teaser?stop=106_1', teaser('normal'))?.service).toBe('normal');
+    expect(fleetOf('/api/teaser?stop=106_1', teaser())?.service).toBeNull();
+    // A service block without a state, or a state that is not a string, reads as not judged.
+    const odd = zetSnapshot(1, true) as Record<string, unknown>;
+    odd.sources = { zet: { service: {} } };
+    expect(fleetOf('/api/teaser', { modules: [odd] })?.service).toBeNull();
+    odd.sources = { zet: { service: { state: 3 } } };
+    expect(fleetOf('/api/teaser', { modules: [odd] })?.service).toBeNull();
+  });
+
   it('what a page held at a moment: the latest snapshot by then, and since when its vehicles have been reported', () => {
     const r = (at: number, pins: number): FleetRecord => ({ at, status: 'live', pins, fleet: null });
     const records = [r(3_000, 2), r(1_000, 0), r(5_000, 3), r(9_000, 0), r(12_000, 1)];
     expect(fleetAt(records, 500)).toBeNull();
-    expect(fleetAt(records, 1_500)).toEqual({ at: 1_000, status: 'live', pins: 0, fleet: null, since: 1_000 });
+    expect(fleetAt(records, 1_500)).toEqual({ at: 1_000, status: 'live', pins: 0, fleet: null, service: null, since: 1_000 });
+    expect(fleetAt([{ ...r(1_000, 0), service: 'silent' }], 1_500)).toMatchObject({ service: 'silent' });
     expect(fleetAt(records, 6_000)).toMatchObject({ at: 5_000, pins: 3, since: 3_000 });
     expect(fleetAt(records, 9_000)).toMatchObject({ at: 9_000, pins: 0 });
     expect(fleetAt(records, 20_000)).toMatchObject({ at: 12_000, pins: 1, since: 12_000 });
