@@ -5,7 +5,7 @@
   "attribution": {
     "text": "Izvor: Čistoća, kalendar odvoza",
     "url": "https://www.zgh.hr/",
-    "licence": "Otvorena dozvola (NN 67/17)"
+    "licence": "Licenca nije navedena; nema otvorenog skupa"
   },
   "pickups": [
     { "district": "trnje", "date": "2026-09-11T00:00:00Z", "kind": "Staklo" },
