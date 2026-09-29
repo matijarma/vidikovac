@@ -241,7 +241,8 @@ export function dayLabel(row: NearbyRow, now: number, i18n: I18n): string {
 /**
  * The row's time as the wall prints it: "uvijek"; a tracked departure inside
  * the horizon "sada" / "za 4 min"; a closure "do 18:00", or "do 25. 9." when
- * it ends on another day; everything else its Zagreb clock time.
+ * it ends on another day, "u tijeku" when its end is a rolling placeholder;
+ * everything else its Zagreb clock time.
  */
 export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   if (isTimeless(row)) return i18n.t('kiosk.nearby.always');
@@ -250,6 +251,8 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
     const minutes = Math.max(0, Math.round((atMs - now) / 60_000));
     return minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: minutes });
   }
+  // A rolling end (shared/city/closures.ts) is no end: the street is closed, "u tijeku".
+  if (row.kind === 'closure' && row.endKnown === false) return i18n.t('kiosk.nearby.ongoing');
   if (row.kind === 'closure') return `${i18n.t('kiosk.nearby.until')} ${daysAhead(atMs, now) === 0 ? clock(atMs) : dayMonth(atMs)}`;
   return clock(atMs);
 }

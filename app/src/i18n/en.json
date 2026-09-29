@@ -524,7 +524,8 @@
       "extreme": "red warning"
     },
     "until": "until {time}",
-    "from": "from {time}"
+    "from": "from {time}",
+    "ongoing": "ongoing"
   },
   "landing": {
     "quickNav": "Quick access",
@@ -913,7 +914,8 @@
       "sunset": "Sunset",
       "lastTrams": "Last trams",
       "firstTram": "First tram",
-      "outageNote": "ZET is not sending vehicle positions right now; departures are from the timetable, unconfirmed."
+      "outageNote": "ZET is not sending vehicle positions right now; departures are from the timetable, unconfirmed.",
+      "ongoing": "ongoing"
     },
     "paired": {
       "warnings": "DHMZ warnings",

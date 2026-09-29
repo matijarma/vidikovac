@@ -290,6 +290,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
         wording, formUntil: live ? at - 30_000 : at,
       });
     } else if (row.kind === 'closure' && row.atMs !== null) {
+      // A rolling end (shared/city/closures.ts) is the City's placeholder, not a fact the header may state.
+      if (row.endKnown === false) continue;
       add(row.id, 'radovi', copy(i18n, 'closureUntil', {
         // The template owns the final full stop, including after a Croatian ordinal date.
         street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),

@@ -538,7 +538,8 @@
       "extreme": "crveno upozorenje"
     },
     "until": "do {time}",
-    "from": "od {time}"
+    "from": "od {time}",
+    "ongoing": "u tijeku"
   },
   "landing": {
     "quickNav": "Brzi pristup",
@@ -938,7 +939,8 @@
       "sunset": "Zalazak sunca",
       "lastTrams": "Zadnji tramvaji",
       "firstTram": "Prvi tramvaj",
-      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde."
+      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde.",
+      "ongoing": "u tijeku"
     },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",

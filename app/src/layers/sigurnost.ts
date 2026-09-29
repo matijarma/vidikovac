@@ -6,6 +6,7 @@
 // the assembly points group by gradska četvrt when the source names one and
 // page when it does not (R-K4). An unavailable source is unknown, never
 // all-clear, and `safetyState` is the one source of the verdict.
+import { closureEndKnown } from '../../../shared/city/closures';
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { EMERGENCY_NUMBERS, EMERGENCY_NUMBERS_SOURCE } from '../../../worker/hitno/brojevi';
 import { LJEKARNE, LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE, type Pharmacy } from '../../../worker/hitno/ljekarne';
@@ -133,11 +134,12 @@ function warningsSection(i18n: I18n, ctx: LayerContext, state: SafetyState): str
 
 // --- Closures ---------------------------------------------------------------
 
-/** The closure mark leads, the street is the title, one line says what kind, which way and until when. */
-function closureRow(i18n: I18n, c: FeedItem): string {
+/** The closure mark leads, the street is the title, one line says what kind, which way and until when ("u tijeku" for a rolling end). */
+function closureRow(i18n: I18n, c: FeedItem, now: number): string {
   const type = i18n.t(`panels.closureType.${dataText(c, 'subtype') || 'ROAD_CLOSED'}`);
   const direction = i18n.t(`panels.direction.${dataText(c, 'direction') || 'BOTH_DIRECTIONS'}`);
-  const end = c.until ? i18n.t('panels.until', { time: zagrebDateTime(c.until) }) : i18n.t('safety.noEnd');
+  const end = !c.until ? i18n.t('safety.noEnd')
+    : closureEndKnown(c, now) ? i18n.t('panels.until', { time: zagrebDateTime(c.until) }) : i18n.t('panels.ongoing');
   return signRow({ lead: '<span class="mark-closure"></span>', title: c.title, sub: `${type} · ${direction} · ${end}`, key: c.id, attrs: { 'data-testid': 'closure-row' } });
 }
 
@@ -148,7 +150,7 @@ function closuresSection(i18n: I18n, ctx: LayerContext, state: SafetyState): str
   // The public selection names one route, stop or item, never "closures on"; Promet shows closures by default, so the link is plain.
   const all = navLink('u-pokretu', i18n.t('safety.allClosures', { count: items.length }), { className: 'link-arrow sf-all' });
   const list = listState(i18n, roads, 'prometnice', items.length, i18n.t('safety.closuresNone'), error)
-    || `<ul class="rows sf-rows" role="list" data-testid="safety-closures">${items.slice(0, CLOSURES_SHOWN).map((c) => closureRow(i18n, c)).join('')}</ul>${all}`;
+    || `<ul class="rows sf-rows" role="list" data-testid="safety-closures">${items.slice(0, CLOSURES_SHOWN).map((c) => closureRow(i18n, c, ctx.now)).join('')}</ul>${all}`;
   return sfSection({
     id: 'sf-closures', tone: 'urgency',
     body: sectionHead(i18n, { title: i18n.t('safety.closures'), snapshot: roads, error, id: 'sf-closures-title' }) + list,
