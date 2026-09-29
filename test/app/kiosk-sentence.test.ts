@@ -1016,7 +1016,7 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 34 owner-reviewed families in both languages, with always carrying register text', () => {
+  it('pins all 33 owner-reviewed families in both languages, with always carrying register text', () => {
     // 22 of the companion round, U1's notice, U2's two service families and the nine facts-breadth families
     // (docs/upgrade-2026-10-plan/U3.md S4).
     expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(33);
