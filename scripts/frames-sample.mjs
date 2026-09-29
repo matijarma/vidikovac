@@ -12,6 +12,12 @@
 // README-only reads the existing frames and cut provenance; it never writes
 // or removes a frame or expectation file and does not need the recordings.
 //
+// A fixture that keeps its own static artefacts (<dir>/artefacts/ with
+// zet-network.json and zet-trips.json, copied there before the committed
+// ones were rebuilt from a newer GTFS feed) is described against those
+// copies: the trip join, the feed and the graphHash in the README are the
+// fixture's own, and the README names the copies and their size.
+//
 // The window is inclusive and in UTC, read from the file names (the recorder
 // derives HHMMSS from the header timestamp, so name and header agree). Each
 // frame is decoded with gtfs-realtime-bindings, reduced to the entities
@@ -49,6 +55,8 @@ const FeedMessage = GtfsRealtimeBindings.transit_realtime.FeedMessage;
 export const ROUTES_PATH = 'app/src/data/zet-routes.json';
 export const TRIPS_PATH = 'app/public/data/zet-trips.json';
 export const NETWORK_PATH = 'app/public/data/zet-network.json';
+/** A fixture's own copies of the static artefacts its frames join, beside the frames. */
+export const OWN_ARTEFACTS_DIR = 'artefacts';
 /** GTFS route_type of a tram. */
 export const TRAM_ROUTE_TYPE = 0;
 /** A recorded frame's file name: UTC time of the header, then the header timestamp itself. */
@@ -271,9 +279,21 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
   const filter = s.allModes
     ? 'none: every entity of every frame, bytes copied unchanged (`--all-modes`).'
     : `tram only. An entity is kept when its \`vehicle.trip.routeId\` or \`tripUpdate.trip.routeId\` is a tram route (\`type === ${TRAM_ROUTE_TYPE}\` in \`${ROUTES_PATH}\`, ${s.tramRoutes.length} ids: ${s.tramRoutes.join(', ')}); buses, alerts and reports without a route are dropped. Each frame is decoded and re-encoded with \`gtfs-realtime-bindings\` from its own header and the kept entities in their original order, so \`worker/twin/feed-decode.ts\` reads it as ZET's own bytes.`;
+  const own = s.artefacts ?? null;
+  const tripsCited = own ? `${own.rel}/zet-trips.json` : TRIPS_PATH;
+  const networkCited = own ? `${own.rel}/zet-network.json` : NETWORK_PATH;
   const join = s.tripReports > 0
-    ? `${thousands(s.tripReportsJoined)} of ${thousands(s.tripReports)} tram reports with a trip id (${(100 * s.tripReportsJoined / s.tripReports).toFixed(3)} %) and ${thousands(s.tripsJoined)} of ${thousands(s.trips)} distinct tram trip ids are found in \`${TRIPS_PATH}\``
+    ? `${thousands(s.tripReportsJoined)} of ${thousands(s.tripReports)} tram reports with a trip id (${(100 * s.tripReportsJoined / s.tripReports).toFixed(3)} %) and ${thousands(s.tripsJoined)} of ${thousands(s.trips)} distinct tram trip ids are found in \`${tripsCited}\``
     : `no tram report in the sample carries a trip id`;
+  const artefactNote = own
+    ? [
+      `The fixture keeps its own copies of that feed's artefacts in \`${own.rel}/\`: ${own.files.map((f) => `\`${f.name}\` (${thousands(f.bytes)} B)`).join(', ')}, **${thousands(own.bytes)} B** together. They were copied from \`app/public/data/\` before the committed artefacts were rebuilt from a newer GTFS feed, and \`test/accept/wrong-turn.test.ts\` grades the frames on them whenever \`FEED_VERSION\` in \`app/src/motion/network-meta.ts\` names another feed than the one above, so the replay still measures the matcher on the trips the frames name. Same source and licence as the frames' static feed: ZET GTFS (https://www.zet.hr/gtfs-scheduled/latest), Otvorena dozvola, attribution as above.`,
+      '',
+      'The copies stay as they are: a rail-graph change to the committed network is not measured on them. To measure it on this matcher, re-cut a sample from a fresh recording of the current feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
+    ]
+    : [
+      'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
+    ];
   const lines = [
     `# ZET GTFS-RT frame sample, ${s.day}, ${localFrom.slice(0, 5)}–${localTo.slice(0, 5)} Zagreb`,
     '',
@@ -303,9 +323,9 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '',
     '## Artefact it belongs to',
     '',
-    `The frames name trips of ZET's static GTFS feed **${s.feedVersion ?? 'unknown'}**: ${join} (feed ${s.feedVersion ?? 'unknown'}). Service prefixes of the tram trip ids: ${s.services.join(', ') || 'none'}. The network artefact of the same feed is \`${NETWORK_PATH}\`, graphHash \`${network.graphHash ?? 'unknown'}\`.`,
+    `The frames name trips of ZET's static GTFS feed **${s.feedVersion ?? 'unknown'}**: ${join} (feed ${s.feedVersion ?? 'unknown'}). Service prefixes of the tram trip ids: ${s.services.join(', ') || 'none'}. The network artefact of the same feed is \`${networkCited}\`, graphHash \`${network.graphHash ?? 'unknown'}\`.`,
     '',
-    'If the artefacts are rebuilt from a newer GTFS feed, the trip ids stop joining and a replay of these frames no longer measures the matcher. Re-cut the sample then from a fresh recording of the new feed (pull it off R2 within its seven days) and commit frames and artefacts together.',
+    ...artefactNote,
     '',
     '## How it was cut',
     '',
@@ -328,6 +348,34 @@ export function renderReadme(s, networkPath = NETWORK_PATH) {
     '',
   ];
   return lines.join('\n');
+}
+
+/**
+ * The fixture's own static artefacts (`<out>/artefacts/`), when it keeps
+ * both the network and the trip index there: every regular file in that
+ * directory with its size, in name order. Null otherwise.
+ */
+async function ownArtefacts(out, cwd) {
+  const dir = resolve(out, OWN_ARTEFACTS_DIR);
+  let names;
+  try {
+    names = (await readdir(dir)).sort();
+  } catch (err) {
+    if (isMissing(err)) return null;
+    throw err;
+  }
+  if (!names.includes('zet-network.json') || !names.includes('zet-trips.json')) return null;
+  const files = [];
+  for (const name of names) {
+    const info = await lstat(resolve(dir, name));
+    if (info.isFile()) files.push({ name, bytes: info.size });
+  }
+  return {
+    dir,
+    rel: relative(cwd, dir).split(sep).join('/') || '.',
+    files,
+    bytes: files.reduce((sum, f) => sum + f.bytes, 0),
+  };
 }
 
 /**
@@ -378,6 +426,11 @@ export async function main({
   const routes = JSON.parse(await readFile(resolve(cwd, routesPath), 'utf8'));
   const trams = tramRouteIds(routes);
   if (trams.size === 0) throw new Error(`${routesPath} lists no tram route`);
+  const artefacts = await ownArtefacts(out, cwd);
+  if (artefacts !== null) {
+    tripsPath = resolve(artefacts.dir, 'zet-trips.json');
+    networkPath = resolve(artefacts.dir, 'zet-network.json');
+  }
   const trips = JSON.parse(await readFile(resolve(cwd, tripsPath), 'utf8'));
   const knownTrips = tripIdsOf(trips);
   const network = JSON.parse(await readFile(resolve(cwd, networkPath), 'utf8'));
@@ -475,6 +528,7 @@ export async function main({
     services: [...services].sort(),
     feedVersion: typeof trips?.feedVersion === 'string' ? trips.feedVersion : null,
     graphHash: typeof network?.graphHash === 'string' ? network.graphHash : null,
+    artefacts: artefacts === null ? null : { rel: artefacts.rel, files: artefacts.files, bytes: artefacts.bytes },
     bytes,
     sourceBytes,
   };
