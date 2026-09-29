@@ -474,7 +474,7 @@ function noticeRows(input: NearbyInput): NearbyRow[] {
   const lines = new Set<string>();
   for (const board of input.boards) for (const d of board.departures) if (d.operator === 'zet') lines.add(d.routeName.toUpperCase());
   for (const item of noticeCandidates(snapshot.items, input.now, lines)) {
-    if (!vetted(input, [['title', item.title]])) continue;
+    if (CAVEAT.test(item.title) || !vetted(input, [['title', item.title]])) continue;
     const summary = item.summary !== undefined && !CAVEAT.test(item.summary) && externalText('summary', item.summary, { surface: 'row' }).ok ? item.summary : '';
     const href = zetNoticeLink(item.link);
     return [{

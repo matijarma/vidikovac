@@ -1203,6 +1203,18 @@ describe('the operator\'s voice: cancelled trips and the ZET notice row (upgrade
       expect(skipped).toEqual(['link']);
     });
 
+    it.each([
+      'Linija 13: polasci po voznom redu',
+      'Linija 13: polazak nije potvrđen',
+      'Linija 13: nepotvrđeno',
+    ])('does not print a caveat in the notice title: %s', (title) => {
+      const rejected = promet('910', title);
+      const fallback = promet('911', 'Linija 13 mijenja trasu', { at: new Date(NOW_ - 2 * 3_600_000).toISOString() });
+      expect(noticeIds(rows([rejected, fallback]))).toEqual(['notice:zet-promet:911']);
+      expect(noticeIds(rows([rejected]))).toEqual([]);
+      expect(rejected.title).toBe(title);
+    });
+
     it('prints no sub where the description carries a caveat word or fails the summary policy, and keeps the title', () => {
       const bad = ['Vozila voze po voznom redu.', 'Nepotvrđeno je hoće li linija 13 voziti.', 'Vidi www.primjer.com za linije 13.'];
       for (const summary of bad) {
