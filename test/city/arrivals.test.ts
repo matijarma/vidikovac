@@ -251,6 +251,21 @@ describe('arrivalsAt and the trips ZET cancelled', () => {
       expect(roomy.cancelledRoutes).toEqual(['5', '7', '9']);
     });
 
+    it('U1 review: includes both window boundaries and uses the final live ETA', () => {
+      const b = [board('100_1', [
+        line('SHOWN', 3, '6'),
+        line('BEFORE', -1 - 1 / 60, '1'),
+        line('CUTOFF', -1, '2'),
+        line('LAST', 5, '3'),
+        line('AFTER', 5 + 1 / 60, '4'),
+      ])];
+      const out = arrivalsAt(b, [vehicle({ id: 'vehicle:1', tripId: 'SHOWN', delaySeconds: 120 })], NOW, {
+        stopIds: ['100_1'], rows: 1, cancelled: new Set(['BEFORE', 'CUTOFF', 'LAST', 'AFTER']),
+      });
+      expect(out.rows[0].atMs).toBe(NOW + 5 * 60_000);
+      expect(out.cancelledRoutes).toEqual(['2', '3']);
+    });
+
     it('skips a cancelled departure past the grace, orders by time, and names at most three lines', () => {
       const b = [board('100_1', [
         line('C-OLD', -5, '1'),

@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { describe, expect, it } from 'vitest';
 import { decodeFeed } from '../../worker/twin/feed-decode';
 import { frame, v, type FrameAlert } from './frames';
@@ -49,6 +50,27 @@ describe('the U1-1 frames of 21 September', () => {
 
 describe('built frames', () => {
   const decode = (alerts: FrameAlert[], extra: Parameters<typeof frame>[1] = []) => decodeFeed(frame(T, extra, [], alerts));
+
+  it('U1 review: requires the NO_SERVICE enum and preserves absent fields and description words', () => {
+    const { FeedMessage, Alert } = GtfsRealtimeBindings.transit_realtime;
+    const feed = decodeFeed(FeedMessage.encode({
+      header: { gtfsRealtimeVersion: '1.0', timestamp: T },
+      entity: [
+        { id: 'absent', alert: { informedEntity: [{ routeId: '', trip: { tripId: '' }, stopId: '' }] } },
+        { id: 'unknown', alert: { effect: Alert.Effect.UNKNOWN_EFFECT } },
+        { id: 'reduced', alert: { effect: Alert.Effect.REDUCED_SERVICE } },
+        { id: 'service', alert: {
+          effect: Alert.Effect.NO_SERVICE,
+          activePeriod: [{ start: T + 60, end: T + 120 }, { start: 0, end: 0 }, {}],
+          descriptionText: { translation: [{ text: 'Linija ne prometuje', language: 'hr' }] },
+        } },
+      ],
+    }).finish());
+    expect(feed.alerts!.map((alert) => alert.noService)).toEqual([false, false, false, true]);
+    expect(feed.alerts![0].informed).toEqual([{}]);
+    expect(feed.alerts![3].periods).toEqual([[T + 60, T + 120], [null, null], [null, null]]);
+    expect(feed.alerts!.map((alert) => alert.text)).toEqual([false, false, false, true]);
+  });
 
   it('reads Croatian words in the header as text, a machine list as none', () => {
     const [words, list] = decode([

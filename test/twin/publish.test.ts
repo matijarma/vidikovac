@@ -184,6 +184,12 @@ describe('buildPayload and the operator\'s statements', () => {
     expect(zet([track({ id: '1', tripId: 'T1' })], { T1: null })).not.toHaveProperty('noServiceTrips');
   });
 
+  it('U1 review: keeps a stationary carrier but ignores a track without a fix', () => {
+    const standing = track({ id: '1', tripId: 'standing', speed: 0, plan: null });
+    const unfixed = newTrack('2', '6', 'unfixed', 'tram');
+    expect(zet([standing, unfixed], { standing: null, unfixed: null }).noServiceTrips).toEqual(['unfixed']);
+  });
+
   it('marks the pin of a CANCELED trip and keeps its headsign, next stop and delay', () => {
     const marked = pin([track({ id: '1' })], { T1: update({ stopId: '244_1', delaySec: 60, canceled: true }) });
     expect(marked.data).toMatchObject({ tripStatus: 'canceled', headsign: 'Sopot', nextStopId: '244_1', delaySeconds: 60 });

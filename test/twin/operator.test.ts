@@ -5,7 +5,7 @@ import { emptyOperator, foldOperator, noServiceTripIds, OPERATOR_STATE_MAX, OPER
 import { deserializeState, serializeState } from '../../worker/twin/persist';
 import { emptyState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
-import { frame, type FrameAlert } from './frames';
+import { frame, v, type FrameAlert } from './frames';
 
 // ZET's own statements folded into the twin (upgrade U1): the trip-level
 // NO_SERVICE alerts remove departures; the CANCELED marker, which on a normal
@@ -45,6 +45,18 @@ describe('the 11 frames of 21 September 17:15 to 17:17', () => {
 });
 
 describe('what enters and what leaves', () => {
+  it('U1 review: counts statements separately from trips and honors all periods of an alert', () => {
+    const feed = built([{ id: 'finite', tripId: 'finite' }, { id: 'open', tripId: 'open' }, { id: 'text', tripId: 'not-cancelled', header: 'Linija prometuje' }]);
+    feed.alerts![0].periods = [[T - 100, T - 1], [T + 60, T + 120]];
+    feed.alerts![0].informed.push({ tripId: 'finite', routeId: '6' }, { tripId: 'finite', stopId: '311_1' }, { routeId: '6' });
+    feed.alerts![1].periods = [[T - 100, T - 1], [T + 60, null]];
+    feed.alerts![2].noService = false;
+    const operator = foldOperator(emptyOperator(), feed);
+    expect(operator.counts).toEqual({ noServiceAlerts: 2, tripEntities: 3, stopEntities: 1, routeEntities: 1, canceledUpdates: 0, skippedStops: 0, textAlerts: 1 });
+    expect(operatorSummary(operator, none, T)).toEqual({ cancelledTrips: 2, noServiceAlerts: 2, noticesAt: new Date(T * 1000).toISOString() });
+    expect(noServiceTripIds(operator, none, T + 120)).toEqual(['open']);
+  });
+
   it('never lets a stop-level or a route-level entity in, and counts them', () => {
     const operator = fold([
       { id: 'a', tripId: 't1', stopId: '311_1' },
@@ -152,6 +164,22 @@ describe('through the tick', () => {
   const tick = (state: ReturnType<typeof emptyState>, feed: DecodedFeed | null, at: number) =>
     runTick({ state, feed, nowMs: at * 1000, joins: new Map(), routes: {}, engine: null, validUntilMs: 0 });
   const ids = (payload: ReturnType<typeof tick>['payload']) => payload.sources?.zet?.noServiceTrips;
+
+  it('U1 review: recomputes carrier fallback through held ticks, restoration and a new fix', () => {
+    const feed = decodeFeed(frame(T, [v('bus', T, 15.98, 45.8, 'ran', '109')], [], [{ id: 'a', tripId: 'ran', end: T + 600 }]));
+    const first = tick(emptyState(), feed, T);
+    expect(ids(first.payload)).toBeUndefined();
+    const held = tick(deserializeState(serializeState(first.state)), null, T + 179);
+    expect(ids(held.payload)).toBeUndefined();
+    expect(held.state.tracks.bus).toBeDefined();
+    const evicted = tick(held.state, null, T + 181);
+    expect(evicted.state.tracks.bus).toBeUndefined();
+    expect(ids(evicted.payload)).toEqual(['ran']);
+    const returnedFeed = decodeFeed(frame(T + 190, [v('bus', T + 190, 15.98, 45.8, 'ran', '109')], [], [{ id: 'a', tripId: 'ran', end: T + 600 }]));
+    const returned = tick(evicted.state, returnedFeed, T + 190);
+    expect(ids(returned.payload)).toBeUndefined();
+    expect(returned.payload.items.some((item) => item.data?.tripId === 'ran')).toBe(true);
+  });
 
   it('keeps the last statement over a frame that did not come, until its period ends, and lets the next frame replace it', () => {
     const first = tick(emptyState(), built([{ id: 'a', tripId: 't1', start: T, end: T + 100 }, { id: 'b', tripId: 't2' }]), T);
