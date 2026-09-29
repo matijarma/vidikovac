@@ -11,6 +11,7 @@
 import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { routeName } from '../data/routes';
 import type { MapLine, MapPoint } from '../map/city-map';
+import { windowOf } from '../kiosk/local';
 import { vehicleFixes } from '../motion/fixes';
 import { createLayerSection, dataNumber, dataText } from '../panels/panel';
 import { workspaceFor } from '../transport/workspace';
@@ -67,9 +68,10 @@ export function vehiclePoints(snapshot: ModuleSnapshot | undefined, now: number)
 /** The points last built per snapshot object; a snapshot the store drops takes its entry with it. */
 const pointsMemo = new WeakMap<ModuleSnapshot, MapPoint[]>();
 
-export function closureLines(snapshot: ModuleSnapshot | undefined): MapLine[] {
+/** Closures with a line geometry whose window holds `now` (windowOf, the rule the list's rows use); a rolling end stays active. */
+export function closureLines(snapshot: ModuleSnapshot | undefined, now: number): MapLine[] {
   return (snapshot?.items ?? [])
-    .filter((i) => i.kind === 'closure' && i.geo?.type === 'LineString')
+    .filter((i) => i.kind === 'closure' && i.geo?.type === 'LineString' && windowOf(i, now) === 'active')
     .map((i) => ({ id: i.id, title: i.title, coordinates: i.geo!.coordinates as [number, number][] }));
 }
 
@@ -81,7 +83,7 @@ export function renderUPokretu(ctx: LayerContext): HTMLElement {
   // an ordinary poll, so its input, focus, scroll, camera and follow survive.
   section.setAttribute('data-reconcile', '');
   const workspace = workspaceFor(ctx);
-  workspace.render({ ctx, points: vehiclePoints(snapshots['zet-rt'], now), lines: closureLines(snapshots.prometnice) });
+  workspace.render({ ctx, points: vehiclePoints(snapshots['zet-rt'], now), lines: closureLines(snapshots.prometnice, now) });
   panels.appendChild(persistSlot(workspace.element));
   return section;
 }

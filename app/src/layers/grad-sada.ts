@@ -21,7 +21,7 @@ import { askNearby, feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace
 import { OSM_HOURS_CREDIT } from '../core/open-hours';
 import { departuresBlock } from '../city/next-departures';
 import type { PlaceContext } from '../city/place';
-import { provenanceBlock } from '../experience/status';
+import { provenanceBlock, SADA_CREDITS } from '../experience/status';
 import type { CityMapHandle } from '../map/city-map';
 import { frameView } from '../map/frame';
 import { createElementFromHTML, escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
@@ -96,7 +96,7 @@ function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLE
       ...vehiclePoints(ctx.snapshots['zet-rt'], now),
       ...curatedCityPoints(ctx.city ?? emptyCity(), ctx.snapshots.dogadanja?.items ?? [], now, CURATED_WALL),
     ],
-    lines: closureLines(ctx.snapshots.prometnice),
+    lines: closureLines(ctx.snapshots.prometnice, now),
     center: camera.center,
     zoom: camera.zoom,
     stop: place.stop ?? place.departuresStop,
@@ -167,7 +167,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
     + (bandBox ? `<div class="sada-map" data-testid="sada-map-band" data-key="sada-map"><a class="sada-map-open" href="#layer=u-pokretu" data-action="nav" data-layer="u-pokretu" aria-label="${a(i18n.t('sada.mapBand', { place: name }))}"></a></div>` : '')
     + departuresBlock(ctx, place, { heading: true })
     + nearby
-    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[], 'provenance', credits)
+    + provenanceBlock(i18n, Object.values(ctx.snapshots) as (ModuleSnapshot | undefined)[], 'provenance', [...SADA_CREDITS, ...credits])
     + '</section>');
   if (band) section.querySelector('.sada-map')!.prepend(band);
   return section;

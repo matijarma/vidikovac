@@ -1086,7 +1086,9 @@ export function fleetOf(path, body) {
   const items = (Array.isArray(zet.items) ? zet.items : []).filter(isObj);
   const count = items.find((i) => i.id === 'vozila');
   const fleet = count && isObj(count.data) && Number.isFinite(Number(count.data.vehicles)) ? Number(count.data.vehicles) : null;
-  return { status: typeof zet.status === 'string' ? zet.status : null, pins: items.filter((i) => String(i.id ?? '').startsWith('vehicle:')).length, fleet };
+  // The twin's service judgement (sources.zet.service, upgrade U2): its state only; absent means "not judged".
+  const judged = isObj(zet.sources) && isObj(zet.sources.zet) && isObj(zet.sources.zet.service) ? zet.sources.zet.service.state : null;
+  return { status: typeof zet.status === 'string' ? zet.status : null, pins: items.filter((i) => String(i.id ?? '').startsWith('vehicle:')).length, fleet, service: typeof judged === 'string' ? judged : null };
 }
 
 /**
@@ -1099,7 +1101,7 @@ export function fleetAt(records, at) {
   const last = seen[seen.length - 1];
   let since = last.at;
   for (let i = seen.length - 1; last.pins > 0 && i >= 0 && seen[i].pins > 0; i--) since = seen[i].at;
-  return { at: last.at, status: last.status, pins: last.pins, fleet: last.fleet, since };
+  return { at: last.at, status: last.status, pins: last.pins, fleet: last.fleet, service: last.service ?? null, since };
 }
 
 /** Every zet-rt snapshot `page` receives from now on, stamped on the observer's clock when its answer came. */
@@ -1308,7 +1310,8 @@ export const THRESHOLDS = Object.freeze([
   T('redemptions', 'd1', 'all', 'all.redemptionsOverBudget', NONE, 'at most one code redemption per surface, at least 12 s apart', '§16.7'),
   // D2: the wall (WP1, WP2, WP3).
   T('place', 'd2', 'kiosk', 'kiosk.emptyPlaceReadings', NONE, 'kiosk-context non-empty in every reading', '§16.3, D2'),
-  T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departure rows in every reading', '§16.3, [O-65]'),
+  T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departure rows in every reading and at least the fitted count of those the list offered ({DEPARTURES_FIT_FULL}, or {DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts)', '§16.3, [O-65], F7'),
+  T('silent-departures', 'd2', 'kiosk', 'kiosk.silentDepartureSentences', NONE, 'while the twin reports its fleet silent, no header sentence says a departure ({DEPARTURE_SENTENCE_RE}; a train excepted)', 'brief §4 U2, F7'),
   T('unlabelled', 'd2', 'kiosk', 'kiosk.unlabelledReadings', NONE, 'data-unlabelled = 0 in every reading (a missing probe counts)', '§16.3, D2'),
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
@@ -1522,7 +1525,11 @@ export const METRICS = Object.freeze({
   },
   'kiosk.emptyPlaceReadings': (obs) => countReadings(obs, (s) => !s.place, () => 'kiosk-context empty'),
   // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
-  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => s.departures < k.wall.DEPARTURES_MIN || s.departures > k.wall.DEPARTURES_MAX, (s) => `${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}`),
+  // The verdict is e2e/wall.ts departureFailures: 1 to 3, and the fitted count of those the list offered (data-fit-dropped).
+  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => k.wall.departureFailures(s).length > 0, (s) => `${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}: ${k.wall.departureFailures(s).join('; ')}`),
+  // While the twin reports the fleet silent (sources.zet.service.state, as the page received it) the header says no departure;
+  // a train is the one exception (the promoted alternative).
+  'kiosk.silentDepartureSentences': (obs, k) => countReadings(obs, (s) => s.fleet?.service === 'silent' && k.wall.DEPARTURE_SENTENCE_RE.test(s.sentence) && !k.wall.RAIL_SENTENCE_RE.test(s.sentence), (s) => `the twin reports the fleet silent, the header says ${quote(s.sentence, 90)}`),
   'kiosk.unlabelledReadings': (obs) => countReadings(obs, (s) => s.unlabelled !== 0, (s) => (s.unlabelled === null ? 'no data-unlabelled probe' : `${s.unlabelled} unlabelled marker(s)`)),
   // Pills are owed while the wall's own data-feed is live (or says nothing) and the twin reports vehicles (pillsOwed).
   'kiosk.pillsEmptyReadings': (obs, k) => {
@@ -1887,6 +1894,8 @@ export function renderReport(observation, verdict, instruments) {
     lines.push(`## Wall rotation (${rot.length} readings, ${instruments.wall.ROTATION_STEP_MS / 1000} s apart, rotation.jsonl)`, '');
     lines.push('| Readings | Failed | Turns (per fact) | Refreshes | Short turns | Distinct | Repeats ≤ 10 min | Departures | Solar max | Live max | "+N" pills | Unlabelled max | Kinds | Themes |', '|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|---|');
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.refreshes} | ${rep.short.length} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
+    const probed = valid(rot).filter((r) => Array.isArray(r.fitDropped)).length;
+    lines.push(`Rows the fit left out of the list (data-fit-dropped, ${probed} of ${s.samples} readings carried the probe; monitored, no threshold): ${Object.entries(s.fitDroppedByKind).map(([kind, n]) => `${kind} ${n}`).join(', ') || 'none'}, each reading counting its own; readings with data-fit-overflow=1: ${s.fitOverflowReadings}.`, '');
     if (rep.dwells.length) {
       lines.push('Sentence turns per fact: the point dwell (first reading to the next fact\'s), its bounds from the actual reading gaps either side, and the verdict (decision 29).', '');
       lines.push('| At (UTC) | Dwell s | Bounds s | Gap before / after s | Refreshes | Verdict | Sentence |', '|---|---:|---|---|---:|---|---|');

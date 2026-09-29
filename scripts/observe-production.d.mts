@@ -108,7 +108,7 @@ export interface PhoneRead {
 }
 export interface KartaRead { status: string | null; pills: string | null; bodies: number | null; unlabelled: number | null; markers: number | null; disclosures: number; pillsAfterMs?: number | null; fleet?: FleetState | null }
 /** One zet-rt snapshot as a data response carried it: its status, the moving vehicles (`vehicle:` ids) and the teaser's fleet count. */
-export interface Fleet { status: string | null; pins: number; fleet: number | null }
+export interface Fleet { status: string | null; pins: number; fleet: number | null; /** `sources.zet.service.state` as the page received it; null when the twin sent none (not judged). */ service?: string | null }
 /** A snapshot a page received, stamped on the observer's clock. */
 export interface FleetRecord extends Fleet { at: number }
 /** What a page held at a moment: its latest snapshot, and since when the run of snapshots with vehicles it belongs to began. */

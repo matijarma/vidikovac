@@ -50,10 +50,11 @@ describe('the rail graph sentences (T-rail, D3 read-through)', () => {
   const izvori = read('docs/izvori.md');
   const arh = read('docs/arhitektura.md');
   it('count the network in the right grammatical number', () => {
-    // Rail round 2 (24 Sep): the Zapruđe connector and the piece its loops cut (347 edges, 591 814 B).
-    expect(izvori).toContain('(tri čvora, 347 bridova)');
-    expect(izvori).toContain('154 linije, 347 bridova, 591 814 bajtova.');
-    expect(izvori).not.toMatch(/347 brida|591 814 bajta\b/);
+    // Feed 000396 (28 Sep 2026, network-meta.ts): 154 lines, 412 edges, 578 118 B; the noded-crossing count of feed 000395 ("tri čvora, 347 bridova") is gone.
+    expect(izvori).toContain('(412 bridova)');
+    expect(izvori).toContain('154 linije, 412 bridova, 578 118 bajtova.');
+    expect(izvori).not.toMatch(/412 brida\b|578 118 bajta\b/);
+    expect(izvori).not.toMatch(/tri čvora|347 bridova|591 814 bajtova/);
   });
   it('name line 1 and the last platform instead of a pronoun standing for them', () => {
     expect(izvori).toContain('bez kojeg se staze linije 1 nisu mogle provesti do Zapadnog kolodvora');

@@ -80,6 +80,12 @@ export interface PublicStatsInput {
   /** twin_tick summed per day. */
   tickDaily: readonly MetricsTotalRow[];
   live: LiveTables | null;
+  /**
+   * The feed modules that exist today (the registry's ids). A `source_fetch` row of a module not in it is history of a
+   * module that was retired (news feeds, 16 September) and is not shown; absent, every row is shown. Passed by the route,
+   * since only the route may import the registry (metrics-do.ts and twin-do.ts import this module).
+   */
+  modules?: readonly string[];
 }
 
 /** Every Zagreb day from since to today, oldest first. */
@@ -183,6 +189,7 @@ function system(input: PublicStatsInput, days: readonly string[]): SystemStats {
   const byModule = new Map<string, SourceStats>();
   for (const r of totals) {
     if (r.event !== 'source_fetch') continue;
+    if (input.modules && !input.modules.includes(r.dim1)) continue;
     let s = byModule.get(r.dim1);
     if (!s) {
       s = { module: r.dim1, ok: 0, partial: 0, stale: 0, error: 0 };

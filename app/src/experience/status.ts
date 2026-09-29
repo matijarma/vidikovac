@@ -111,6 +111,20 @@ export function attributionFoot(i18n: I18n, snapshot: ModuleSnapshot | undefined
  * words. Reference material is named as such; stale names the moment the
  * last good copy stopped being confirmed; down and loading say so.
  */
+/**
+ * What Sada always draws beside the feed modules, and its credits: the timetable behind the departures and the first and
+ * last runs, the bike stations, the on-duty pharmacy of the sentence and the footer, the street register and the heritage
+ * register behind the "uvijek" row. Names, licences and addresses are those of worker/city/sources.ts (a test holds them
+ * equal); the pharmacy list is hand-kept from the City's page (docs/izvori.md "Statički skupovi").
+ */
+export const SADA_CREDITS: readonly ProvenanceCredit[] = [
+  { key: 'zet-gtfs', text: 'Izvor: ZET GTFS, vozni red (polasci, prvi i zadnji polazak)', licence: 'Otvorena dozvola (OD)', url: 'https://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669' },
+  { key: 'bajs', text: 'Izvor: BAJS Zagreb / nextbike (bicikli i mjesta za povrat)', licence: 'CC0-1.0', url: 'https://bajs.zagreb.hr' },
+  { key: 'dezurne-ljekarne', text: 'Izvor: Grad Zagreb, dežurne ljekarne; neslužbeni prikaz', licence: 'Licenca nije navedena', url: 'https://www.zagreb.hr/dezurne-ljekarne/497' },
+  { key: 'streets', text: 'Izvor: Grad Zagreb, Registar naziva ulica', licence: 'Otvorena dozvola (OD)', url: 'https://data.zagreb.hr/dataset/registar-naziva-ulica-adresna-prostorna-jedinica-za-podrucje-grada-zagreba' },
+  { key: 'heritage', text: 'Izvor: Ministarstvo kulture i medija, kulturna dobra', licence: 'Otvorena dozvola (OD); geometrija: Geoportal kulturnih dobara, informativni prikaz', url: 'https://data.gov.hr/ckan/dataset/kulturna-dobra' },
+];
+
 export function statusBadge(i18n: I18n, snapshot: ModuleSnapshot | undefined, error?: string): string {
   const state = snapshot ? snapshot.status : error ? 'down' : 'loading';
   if (snapshot && state === 'live') {
@@ -126,19 +140,21 @@ export function statusBadge(i18n: I18n, snapshot: ModuleSnapshot | undefined, er
   return `<span class="badge status-badge" data-tone="${state === 'loading' ? 'info' : state}" data-testid="panel-status" data-status="${state}">${escapeHtml(word)}</span>`;
 }
 
-/** A credit that is not a feed module's: a static data set shown on the page (the OpenStreetMap hours, U3). */
-export interface StaticCredit { key: string; text: string; url: string; licence: string }
+/** A credit that is not a feed module: a static file or a register the screen shows without a snapshot (upgrade U4). */
+export interface ProvenanceCredit { key: string; text: string; licence: string; url: string }
 
-/** One expandable line of provenance for the modules shown, with the required credits and links inside; `credits`
- *  adds the static data sets the page shows beside them, after the modules. */
-export function provenanceBlock(i18n: I18n, snapshots: readonly (ModuleSnapshot | undefined)[], testid = 'provenance', credits: readonly StaticCredit[] = []): string {
-  const line = (key: string, text: string, licence: string, url: string): string =>
-    `<li data-key="${escapeAttribute(key)}"><span class="source-text">${escapeHtml(text)}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(licence)}</span> <a class="source-link" href="${escapeAttribute(url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`;
+/**
+ * One expandable line of provenance for the modules shown, with the required credits and links inside. `extra` are the
+ * credits of static data the same screen shows (docs/izvori.md "Kako navodimo izvore": the credit stands wherever the
+ * data shows), after the module rows in the same markup.
+ */
+export function provenanceBlock(i18n: I18n, snapshots: readonly (ModuleSnapshot | undefined)[], testid = 'provenance', extra: readonly ProvenanceCredit[] = []): string {
+  const row = (key: string, text: string, licence: string, url: string): string => `<li data-key="${escapeAttribute(key)}"><span class="source-text">${escapeHtml(text)}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(licence)}</span> <a class="source-link" href="${escapeAttribute(url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`;
   const rows = [
     ...snapshots
       .filter((s): s is ModuleSnapshot => Boolean(s))
-      .map((s) => line(s.module, fillAttribution(s.attribution, s, s.items[0]), s.attribution.licence, s.attribution.url)),
-    ...credits.map((c) => line(c.key, c.text, c.licence, c.url)),
+      .map((s) => row(s.module, fillAttribution(s.attribution, s, s.items[0]), s.attribution.licence, s.attribution.url)),
+    ...extra.map((c) => row(c.key, c.text, c.licence, c.url)),
   ];
   if (!rows.length) return '';
   return `<details class="provenance" data-key="${escapeAttribute(testid)}" data-testid="${escapeAttribute(testid)}"><summary>${iconMarkup('chevron-down')}<span>${escapeHtml(i18n.t('attribution.sources'))}</span></summary><ul>${rows.join('')}</ul><p class="meta"><a href="/izvori/">${escapeHtml(i18n.t('common.links.izvori'))}</a></p></details>`;

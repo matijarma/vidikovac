@@ -13,7 +13,7 @@ describe('FLAGS', () => {
   it('every flag is a boolean', () => {
     for (const [name, value] of Object.entries(FLAGS)) expect(typeof value, name).toBe('boolean');
   });
-  it('FEED_LASTRUN is on since T3.1 shipped the GTFS script, the loader and the producer in one; the mobility and waste feeds wait for a confirmed source, PUSH for the notify sheet’s fallback', () => {
+  it('FEED_LASTRUN is on since T3.1 shipped the GTFS script, the loader and the producer in one; FEED_BIKES gates only the retired mobility tile (BAJS is live through worker/city/live.ts), the parking and waste feeds wait for a confirmed source, PUSH for the notify sheet’s fallback', () => {
     expect(FLAGS.FEED_LASTRUN).toBe(true);
     expect(FLAGS.FEED_BIKES).toBe(false);
     expect(FLAGS.FEED_PARKING).toBe(false);

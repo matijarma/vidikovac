@@ -120,6 +120,17 @@ describe('place and time',()=>{
     expect(discover(city,[],o).places).toHaveLength(0);
     expect(discover(city,[],{...o,query:'Gavella'}).places).toHaveLength(1);
   });
+  it('an air station is found by "zrak", never by "voda": the catalogue files it under water but it is not water',()=>{
+    const fountain:Place={id:'water-1',name:'Cesma Zrinjevac',category:'water',lon:15.98,lat:45.81,sourceId:'water',sourceRecord:'1'};
+    const live={schema:1 as const,generatedAt:new Date(now).toISOString(),sources:[{id:'air',status:'live'}],bikes:[],consultations:[],
+      air:[{id:'a1',name:'Zagreb 1',lon:15.97,lat:45.81,index:2,observedAt:new Date(now-600000).toISOString()}]} as unknown as NonNullable<ReturnType<typeof emptyCity>['live']>;
+    const city={...emptyCity(),places:[fountain],live};
+    const o={group:'living' as const,category:'',window:'week' as const,center:{lon:15.97,lat:45.81},radius:5000,now};
+    expect(dynamicPlaces(city,now).map(p=>p.id)).toEqual(['air-a1']);
+    expect(discover(city,[],{...o,query:'voda'}).places.map(p=>p.id)).toEqual(['water-1']);
+    expect(discover(city,[],{...o,query:'zrak'}).places.map(p=>p.id)).toEqual(['air-a1']);
+    expect(discover(city,[],{...o,query:'kvaliteta zraka'}).places.map(p=>p.id)).toEqual(['air-a1']);
+  });
   it('never shows stale bike counts as available now',()=>{
     const city={...emptyCity(),live:{schema:1 as const,generatedAt:new Date(now).toISOString(),sources:[],air:[],consultations:[],bikes:[{id:'1',name:'Trg',lon:15.97,lat:45.81,bikes:3,docks:2,capacity:5,installed:true,renting:true,returning:true,observedAt:new Date(now-900000).toISOString()}]}};
     expect(dynamicPlaces(city,now)[0].facts?.bikes).toBe('?');

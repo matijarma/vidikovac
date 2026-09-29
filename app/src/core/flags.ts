@@ -5,7 +5,7 @@
 // turns its flag on, so nothing is ever polled that does not exist. A flag
 // flips in a commit, never at runtime.
 export const FLAGS = Object.freeze({
-  /** The nearest bike-share station's free bikes: producer and fixtures ship in T3.2, on when the source is confirmed (docs/izvori.md). */
+  /** BAJS reaches the product through worker/city/live.ts since 18 Sep; this flag gates only the retired mobility tile and stays off (docs/izvori.md). */
   FEED_BIKES: false,
   /** The nearest garage's free places: as above. */
   FEED_PARKING: false,

@@ -201,7 +201,7 @@ describe('renderIzvoriHtml', () => {
 describe('static datasets', () => {
   it('names the ODbL street index and the ODbL opening hours in their own section, not as more sources', () => {
     expect(izvori.sources.length).toBe(14);
-    expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo', 'osm-hours']);
+    expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo', 'osm-hours', 'zet-gtfs', 'dezurne-ljekarne', 'hitni-brojevi', 'manrope']);
     const [streets, hours] = STATIC_SOURCES;
     expect(hours).toMatchObject({
       licence: 'ODbL 1.0',
@@ -219,6 +219,17 @@ describe('static datasets', () => {
     expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
     const section = html.slice(html.indexOf('static-sources-title'));
     expect(section).not.toContain('<article');
+  });
+
+  it('credits ZET\'s derived files with its verbatim attribution, the hand-kept lists as unofficial, and the font under its licence', () => {
+    const html = renderIzvoriHtml();
+    const zetGtfs = STATIC_SOURCES.find((s) => s.id === 'zet-gtfs')!;
+    expect(zetGtfs).toMatchObject({ licence: 'Otvorena dozvola (NN 67/17)', text: izvori.sources.find((s) => s.module === 'zet-rt')!.text });
+    for (const file of ['zet-routes.json', 'zet-network.json', 'zet-trips.json', 'stops.json', 'lastrun/*.json', 'zet-expect.json']) expect(zetGtfs.opis, file).toContain(file);
+    expect(STATIC_SOURCES.find((s) => s.id === 'dezurne-ljekarne')).toMatchObject({ url: 'https://www.zagreb.hr/dezurne-ljekarne/497', text: 'Izvor: Grad Zagreb, dežurne ljekarne; neslužbeni prikaz' });
+    expect(STATIC_SOURCES.find((s) => s.id === 'hitni-brojevi')).toMatchObject({ url: 'https://civilna-zastita.gov.hr/' });
+    expect(STATIC_SOURCES.find((s) => s.id === 'manrope')).toMatchObject({ licence: 'SIL Open Font License 1.1' });
+    for (const id of ['zet-gtfs', 'dezurne-ljekarne', 'hitni-brojevi', 'manrope']) expect(html, id).toContain(`id="static-source-${id}"`);
   });
 
   it('escapes the static entries too', () => {
