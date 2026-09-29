@@ -17,9 +17,6 @@ import type { DecodedFeed, RawAlert } from './feed-decode';
 
 /** The wire carries at most this many trip ids (about 30 on a recorded day). */
 export const OPERATOR_TRIPS_MAX = 400;
-/** The state row keeps at most this many (the Durable Object's row is about 2 MB, this is under 200 KB of it): a day
- *  on which ZET names thousands of trips is still counted exactly up to here, and never breaks the row. */
-export const OPERATOR_STATE_MAX = 4000;
 
 /** What one frame said, counted. The trip map below is replaced by every
  *  frame; so are these. They go to the `twin_state_size` log and, for the
@@ -114,11 +111,6 @@ export function foldOperator(prev: OperatorState, feed: DecodedFeed): OperatorSt
     for (const stop of update.stops) if (stop.skipped) counts.skippedStops++;
   }
 
-  const held = Object.keys(noServiceTrips);
-  if (held.length > OPERATOR_STATE_MAX) {
-    const keep = new Set(held.sort().slice(0, OPERATOR_STATE_MAX));
-    for (const tripId of Object.keys(noServiceTrips)) if (!keep.has(tripId)) delete noServiceTrips[tripId];
-  }
   return { noServiceTrips, counts, textAtSec: anyText && feed.headerTs !== null ? feed.headerTs : prev.textAtSec };
 }
 

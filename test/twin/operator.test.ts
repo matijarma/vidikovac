@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeFeed, type DecodedFeed } from '../../worker/twin/feed-decode';
-import { emptyOperator, foldOperator, noServiceTripIds, OPERATOR_STATE_MAX, OPERATOR_TRIPS_MAX, operatorSummary } from '../../worker/twin/operator';
+import { emptyOperator, foldOperator, noServiceTripIds, OPERATOR_TRIPS_MAX, operatorSummary } from '../../worker/twin/operator';
 import { deserializeState, serializeState } from '../../worker/twin/persist';
 import { emptyState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
@@ -129,14 +129,25 @@ describe('what enters and what leaves', () => {
     expect(operatorSummary(operator, none, T).cancelledTrips).toBe(401);
   });
 
-  it('keeps the state row bounded: past the state limit the first trips by id stay, and the wire list is still the first 400', () => {
-    const alerts = Array.from({ length: OPERATOR_STATE_MAX + 1 }, (_, i) => ({ id: `a${i}`, tripId: `t${String(i).padStart(5, '0')}` }));
+  it('keeps all 4001 active trips for the exact summary while capping the wire at 400', () => {
+    const alerts = Array.from({ length: 4001 }, (_, i) => ({ id: `a${i}`, tripId: `t${String(i).padStart(5, '0')}` }));
     const operator = fold(alerts);
-    expect(Object.keys(operator.noServiceTrips)).toHaveLength(OPERATOR_STATE_MAX);
-    expect(operator.noServiceTrips).not.toHaveProperty(`t${String(OPERATOR_STATE_MAX).padStart(5, '0')}`);
-    expect(operator.counts.noServiceAlerts).toBe(OPERATOR_STATE_MAX + 1);
+    expect(Object.keys(operator.noServiceTrips)).toHaveLength(4001);
+    expect(operator.counts.noServiceAlerts).toBe(4001);
     expect(noServiceTripIds(operator, none, T)).toHaveLength(OPERATOR_TRIPS_MAX);
-    expect(operatorSummary(operator, none, T).cancelledTrips).toBe(OPERATOR_STATE_MAX);
+    expect(operatorSummary(operator, none, T).cancelledTrips).toBe(4001);
+  });
+
+  it('keeps the final active uncarried trip when 4000 earlier statements are expired or carried', () => {
+    const earlier = Array.from({ length: 4000 }, (_, i) => ({
+      id: `earlier${i}`,
+      tripId: `t${String(i).padStart(5, '0')}`,
+      ...(i % 2 === 0 ? { start: T - 100, end: T - 1 } : {}),
+    }));
+    const operator = fold([...earlier, { id: 'active', tripId: 'zz-active' }]);
+    const carried = new Set(earlier.filter((_, i) => i % 2 === 1).map((alert) => alert.tripId));
+    expect(noServiceTripIds(operator, carried, T)).toEqual(['zz-active']);
+    expect(operatorSummary(operator, carried, T).cancelledTrips).toBe(1);
   });
 
   it('sets noticesAt to the header of a frame that carried words, and keeps it through frames that did not', () => {
