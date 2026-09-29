@@ -30,6 +30,7 @@ import type { FeedPayload } from '../feed/payload';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { kindOf, type Engine } from './engine';
 import type { DecodedFeed, RawFix } from './feed-decode';
+import { emptyOperator, foldOperator, type OperatorCounts } from './operator';
 import { buildPayload, type TripJoin } from './publish';
 import { ageTripUpdates, nextStopOf, type TwinState } from './state';
 
@@ -76,6 +77,9 @@ export interface TickResult {
    *  inside a tram depot, or parked past their mode's limit elsewhere
    *  (shared/motion/depots.ts). A vehicle in a depot counts as depot only. */
   hidden: { depot: number; parked: number };
+  /** What ZET's alerts and markers said in the frame this state holds (U1);
+   *  the Durable Object logs it once a minute. */
+  operator: OperatorCounts;
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. A report
@@ -174,6 +178,9 @@ export function runTick(input: TickInput): TickResult {
   // Without a new frame (a 304 or a repeated header) the delay rows age out
   // on the same clock as the fixes, so they cannot outlive them in a freeze.
   const tripUpdates = feed ? nextStopOf(feed) : ageTripUpdates(input.state.tripUpdates, nowSec);
+  // ZET's own statements (U1). A 304 or a repeated header keeps the last one;
+  // the announced period, checked at publish, is what expires it.
+  const operator = feed ? foldOperator(input.state.operator ?? emptyOperator(), feed) : input.state.operator ?? emptyOperator();
   const fresh = new Set<string>();
   let newFixes = 0;
   let rejectedFuture = 0;
@@ -354,9 +361,10 @@ export function runTick(input: TickInput): TickResult {
     // Samples that fell out of the window go here, not in an alarm: the tick
     // is the only place the state is rewritten.
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
+    operator,
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture, hidden };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture, hidden, operator: operator.counts };
 }
 
 /**

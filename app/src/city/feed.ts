@@ -56,6 +56,25 @@ export function liveFixes(snapshot: ModuleSnapshot | undefined, now: number): Re
   return vehicleFixes(snapshot, now).filter((fix) => now - fix.at <= LIVE_FIX_MAX_AGE_MS);
 }
 
+/** Per snapshot object: a poll hands the same one to every draw, and the set is built from a list of ids. */
+const cancelledSets = new WeakMap<ModuleSnapshot, ReadonlySet<string>>();
+const NO_TRIPS: ReadonlySet<string> = new Set();
+
+/**
+ * The trips ZET's no-service alerts name that no tracked vehicle carries (the twin's `sources.zet.noServiceTrips`,
+ * upgrade U1), for arrivalsAt's `cancelled` option: none without a snapshot or while the transit feed is down. ZET's
+ * CANCELED marker is not among them: on 21 and 24 Sep it marked 114 of 143 trips its vehicles drove on schedule.
+ */
+export function cancelledTrips(snapshot: ModuleSnapshot | undefined): ReadonlySet<string> {
+  if (!snapshot || snapshot.status === 'down') return NO_TRIPS;
+  const held = cancelledSets.get(snapshot);
+  if (held) return held;
+  const ids = snapshot.sources?.zet?.noServiceTrips ?? [];
+  const set: ReadonlySet<string> = ids.length === 0 ? NO_TRIPS : new Set(ids);
+  cancelledSets.set(snapshot, set);
+  return set;
+}
+
 /**
  * Whether the third-party text policy is in hand. The boundary refuses every string until the
  * chunk that carries the policy (this feed's, or the map's) has loaded, so a renderer that would

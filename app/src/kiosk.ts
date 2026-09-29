@@ -57,7 +57,7 @@ import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './ki
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
-import { liveFixes } from './city/feed';
+import { cancelledTrips, liveFixes } from './city/feed';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
 import type { PairedContext, PairedHandle } from './kiosk/paired';
@@ -886,11 +886,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function arrivalsAtStop(stopIds: readonly string[]): StopArrivals {
     const held = stopIds.map((id) => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
     const at = now();
-    const fleet = vehiclePoints((phase === 'paired' ? mergedSnapshots() : byModule(teaser))['zet-rt'], at);
+    const zetRt = (phase === 'paired' ? mergedSnapshots() : byModule(teaser))['zet-rt'];
+    const fleet = vehiclePoints(zetRt, at);
     // The shared module's own six: what a surface shows is its own business
     // (ARRIVAL_ROWS), but a card that trimmed the list must be able to say how
     // many it trimmed, and that count is this one.
-    return arrivalsAt(held, fleet, at, { stopIds });
+    return arrivalsAt(held, fleet, at, { stopIds, cancelled: cancelledTrips(zetRt) });
   }
 
   // --- The read-only touch (WP2 step 9, [O-58]) ----------------------------------
@@ -948,8 +949,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     const ids = platformIds(current.stop, stops);
     const held = ids.map((id) => boards.get('zet', id)).filter((board): board is DepartureBoard => board !== undefined);
     // Live exactly when Sada and Karta are (city/feed.ts): no live time during an outage or off a fix the twin evicted.
-    const next = arrivalsAt(held, liveFixes(byModule(teaser)['zet-rt'], at), at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS });
-    const timetable = arrivalsAt(held, [], at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS }).rows;
+    const zetRt = byModule(teaser)['zet-rt'];
+    const cancelled = cancelledTrips(zetRt);
+    const next = arrivalsAt(held, liveFixes(zetRt, at), at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS, cancelled });
+    const timetable = arrivalsAt(held, [], at, { stopIds: ids, rows: STOP_BOARD_TIMETABLE_ROWS, cancelled }).rows;
     return stopBoardVariants(i18n, { name: current.stop.name, rows: next.rows, timetable, status: next.status });
   }
   function paintTouch(): void {

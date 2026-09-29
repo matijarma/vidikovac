@@ -456,10 +456,12 @@ export class TwinDO extends DurableObject<Env> {
     // says how many of the vehicles are on the map and how many are held off
     // it (in a depot, or parked), so a group held in service at one place
     // (four trams for 69 to 76 minutes at Sveti Duh on 25 Sep) shows here.
+    // The operator's counts ride along (U1): logInfo takes scalars, so they
+    // are spread, not nested.
     if (learnedFlushed) {
       const pins = result.payload.items.filter((item) => item.id.startsWith('vehicle:')).length;
       const { depot, parked } = result.hidden;
-      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked, depot, parked });
+      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked, depot, parked, ...result.operator });
     }
 
     let hindsightSamples = 0;

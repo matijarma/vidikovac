@@ -122,7 +122,13 @@ export const SUB_MAX_LINES = 2;
  *  still wraps is left out, never a taller row. Release smoke run 5: the feed's summary under every closure wrapped
  *  at 1920 x 1080 (a 116 px row for 66) and the fit took the second and third departures to keep the closures. */
 export const CLOSURE_SUB_MAX_LINES = 1;
-const subMaxLines = (row: NearbyRow): number => (row.kind === 'closure' ? CLOSURE_SUB_MAX_LINES : SUB_MAX_LINES);
+/** A ZET notice's title is two lines at most (upgrade U1; the second exception, beside the event title, to "nothing is
+ *  cut with an ellipsis"): it is ZET's own headline with no shorter form, and a third line would cost the list a
+ *  departure. The stylesheet clamps it (kiosk-city.css); the notice row is reserved (reservedRows). */
+export const NOTICE_TITLE_MAX_LINES = 2;
+const titleMaxLines = (row: NearbyRow): number => (row.kind === 'notice' ? NOTICE_TITLE_MAX_LINES : TITLE_MAX_LINES);
+/** A notice's sub is a closure's rule: one line or none, so the wall shows the title and the phone and the touch detail the summary. */
+const subMaxLines = (row: NearbyRow): number => (row.kind === 'closure' || row.kind === 'notice' ? CLOSURE_SUB_MAX_LINES : SUB_MAX_LINES);
 /** The entrance fade (kiosk-city.css k-nearby-in) and the moment data-enter is cleared if no animationend came. */
 export const ENTER_MS = 220;
 export const ENTER_CLEAR_MS = 260;
@@ -145,7 +151,7 @@ export function isTimeless(row: NearbyRow): boolean {
 
 /** Decision 27: these rows are promises, not overflow candidates. */
 function reservedRows<T extends NearbyRow>(rows: readonly T[]): Set<T> {
-  const keep = new Set(rows.filter(row => row.kind === 'first' || row.kind === 'last'));
+  const keep = new Set(rows.filter(row => row.kind === 'first' || row.kind === 'last' || row.kind === 'notice'));
   const timeless = rows.find(isTimeless);
   if (timeless) keep.add(timeless);
   return keep;
@@ -174,7 +180,7 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
  * trams are promises (decision 27), and a departure is the wall's first answer.
  */
 export function onLaterDay(row: NearbyRow, now: number): boolean {
-  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'closure' || row.kind === 'first' || row.kind === 'last') return false;
+  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'closure' || row.kind === 'first' || row.kind === 'last') return false;
   return daysAhead(row.atMs!, now) >= 1;
 }
 
@@ -190,8 +196,8 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
  * second and third night trams, each the only tram of its line or direction for forty minutes; a sunset within the
  * hour still outlasts them; an event likewise since U0 step 7); then the latest event, before any closure (U0 step 7);
  * then the latest timed row that is not a departure; then a second timeless row. The
- * first departure, the closures and the rest keep their order. First/last trams and one timeless row never enter
- * the drop order (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while
+ * first departure, the closures and the rest keep their order. First/last trams, one timeless row and the ZET
+ * notice never enter the drop order (owner decisions 10 and 27; upgrade U1); a closure or solar row that is on the list stays on its node while
  * the list can hold it, and returns under a new identity only when its fact changed. Without `now` (older
  * callers) the later-day step and decision 67's are skipped.
  */
@@ -207,7 +213,7 @@ export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: num
     if (further.length > 0) return further.reduce((latest, row) => (row.atMs! >= latest.atMs! ? row : latest));
     return departure;
   }
-  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
+  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'notice' && row.kind !== 'first' && row.kind !== 'last');
   // An event yields before any closure (U0 step 7): the closures sort by their ends, often a placeholder later in the
   // day (16:00 and 18:00 on 29 September), so the latest timed row was a closure while a noon event stayed.
   const events = others.filter((row) => row.kind === 'event');
@@ -240,7 +246,7 @@ function daysAhead(atMs: number, now: number): number {
  * carries its own date.
  */
 export function dayLabel(row: NearbyRow, now: number, i18n: I18n): string {
-  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'last' || row.kind === 'closure') return '';
+  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'last' || row.kind === 'closure') return '';
   const days = daysAhead(row.atMs!, now);
   if (days <= 0) return '';
   if (days === 1) return i18n.t('kiosk.say.tomorrow');
@@ -254,6 +260,8 @@ export function dayLabel(row: NearbyRow, now: number, i18n: I18n): string {
  * everything else its Zagreb clock time.
  */
 export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
+  // A notice has no moment: its publish time in the time cell would read as an event then. ZET is credited instead.
+  if (row.kind === 'notice') return i18n.t('kiosk.nearby.zetSays');
   if (isTimeless(row)) return i18n.t('kiosk.nearby.always');
   const atMs = row.atMs!;
   if (row.kind === 'departure' && row.live && atMs - now <= COUNTDOWN_HORIZON_MIN * 60_000) {
@@ -282,6 +290,7 @@ const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.subOff 
 function rowTextKinds(row: TimelineRow): { title: ExternalTextKind; sub: ExternalTextKind } {
   switch (row.kind) {
     case 'departure': return { title: 'headsign', sub: 'summary' };
+    case 'notice': return { title: 'title', sub: 'summary' };
     case 'closure': return { title: 'name', sub: 'summary' };
     case 'event': return { title: 'title', sub: 'name' };
     case 'opening': return { title: 'name', sub: 'summary' };
@@ -473,9 +482,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         short.set(row.id, { ...short.get(row.id), [which]: true });
         return true;
       };
-      /** A closure's sub-line left out: one line or none on the wall (CLOSURE_SUB_MAX_LINES). */
+      /** A closure's or a notice's sub-line left out: one line or none on the wall (CLOSURE_SUB_MAX_LINES). */
       const off = (row: TimelineRow): boolean => {
-        if (row.kind !== 'closure' || short.get(row.id)?.subOff) return false;
+        if ((row.kind !== 'closure' && row.kind !== 'notice') || short.get(row.id)?.subOff) return false;
         short.set(row.id, { ...short.get(row.id), subOff: true });
         return true;
       };
@@ -490,7 +499,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           if (!row) continue;
           const title = li.querySelector<HTMLElement>('.nearby-title');
           const sub = li.querySelector<HTMLElement>('.nearby-sub');
-          if (title && measure.lines(title) > TITLE_MAX_LINES) changed = set(row, 'title') || changed;
+          if (title && measure.lines(title) > titleMaxLines(row)) changed = set(row, 'title') || changed;
           if (sub && measure.lines(sub) > subMaxLines(row)) changed = set(row, 'sub') || off(row) || changed;
         }
         if (!changed) break;

@@ -21,8 +21,8 @@ const input: NearbyInput = {
 };
 
 describe('nearby contract', () => {
-  it('names the nine row kinds', () => {
-    expectTypeOf<NearbyKind>().toEqualTypeOf<'departure' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy'>();
+  it('names the ten row kinds', () => {
+    expectTypeOf<NearbyKind>().toEqualTypeOf<'departure' | 'notice' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy'>();
     const row: NearbyRow = { id: 'dep:1', kind: 'departure', atMs: input.now + 180_000, always: false, title: 'Črnomerec', sub: '', live: true, source: 'zet-rt' };
     const always: NearbyRow = { id: 'always:story:1', kind: 'always', atMs: null, always: true, title: 'Ilica', sub: '', live: false, source: 'city' };
     expect([row.kind, always.kind]).toEqual(['departure', 'always']);

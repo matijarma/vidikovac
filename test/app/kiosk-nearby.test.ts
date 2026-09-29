@@ -31,6 +31,11 @@ import type { LastRunRoutes, LastRunSnapshot } from '../../app/src/core/lastrun'
 import { zagrebDayKey, zagrebHour, zagrebTime } from '../../app/src/format';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { sunTimes } from '../../app/src/ui/solar';
+import { nearbyRowMarkup } from '../../app/src/city/nearby-markup';
+import { rowMarkup } from '../../app/src/kiosk/timeline';
+import { ZET_RSS_NOVOSTI_URL, ZET_RSS_PROMET_URL, fetchZetRss } from '../../worker/feed/modules/dogadanja/zet-rss';
+import { DISCL } from '../../e2e/inventory';
+import { NOVOSTI_NOTICE, noticeDayOver, noticeLines, zetNoticeLink } from '../../shared/city/notices';
 
 const hr = createDefaultI18n('hr');
 const en = createDefaultI18n('en');
@@ -1049,5 +1054,289 @@ describe('the head and the row budget', () => {
     expect(rowBudget(600, 3)).toEqual({ rowPx: 92, rows: 6 });
     expect(rowBudget(600, 12)).toEqual({ rowPx: 64, rows: 9 });
     expect(rowBudget(Number.POSITIVE_INFINITY, 11)).toEqual({ rowPx: 64, rows: 11 });
+  });
+});
+
+// ZET's own voice (upgrade U1): the trips its no-service alerts name leave the boards unless a vehicle has taken
+// them, and its notices stand as one "ZET javlja" row right after the departures. The RSS fixtures go through the
+// real parser (fetchZetRss) and are wrapped as the dogadanja snapshot the wall reads.
+describe('the operator\'s voice: cancelled trips and the ZET notice row (upgrade U1)', () => {
+  const fixture = (name: string): string => readFileSync(new URL(`../fixtures/dogadanja/${name}`, import.meta.url), 'utf8');
+  async function feedOf(promet: string, novosti: string, only?: 'zet-promet' | 'zet-novosti'): Promise<ModuleSnapshot> {
+    const result = await fetchZetRss({
+      now: () => new Date('2026-09-29T00:00:00Z'),
+      fetch: async (url) => new Response(fixture(url === ZET_RSS_NOVOSTI_URL ? novosti : promet)),
+    });
+    return snap('dogadanja', result.items.filter((it) => only === undefined || it.data.source === only)
+      .map((it): FeedItem => ({ ...it, module: 'dogadanja', kind: 'event', tier: 'session' })));
+  }
+  /** A ZET board at the place with one departure per line, minutes apart, trip ids x<line>. */
+  const linesBoard = (now: number, routes: readonly string[]): DepartureBoard => ({
+    operator: 'zet', stopId: '106_1', stopName: 'Trg bana J. Jelačića', status: 'live', generatedAt: new Date(now - MIN).toISOString(),
+    departures: routes.map((route, i) => ({ operator: 'zet', tripId: `x${route}`, routeId: route, routeName: route, headsign: 'Kraj', at: new Date(now + (i + 2) * MIN).toISOString() })),
+  });
+  const rowsAt = (iso: string, routes: readonly string[], feed: ModuleSnapshot | undefined, extra: Partial<NearbyInput> = {}): NearbyRow[] => {
+    const now = at(iso);
+    return selectNearby(input(now, {
+      boards: [linesBoard(now, routes)], fixes: [],
+      snapshots: { 'zet-rt': snap('zet-rt', []), ...(feed ? { dogadanja: feed } : {}) }, ...extra,
+    }));
+  };
+  const notices = (rows: readonly NearbyRow[]): NearbyRow[] => rows.filter((r) => r.kind === 'notice');
+  const noticeIds = (rows: readonly NearbyRow[]): string[] => notices(rows).map((r) => r.id);
+
+  describe('U1-3: the CRO Race copy of Sunday 27 September', () => {
+    const cro = feedOf('zet-rss-promet-2026-09-27.xml', 'zet-rss-novosti.xml');
+
+    it('gives a board with line 13 the notice of lines 5 and 13 with ZET\'s summary as its sub, and only that one', async () => {
+      const rows = rowsAt('2026-09-27T12:30:00+02:00', ['13', '6'], await cro);
+      expect(noticeIds(rows)).toEqual(['notice:zet-promet:10160']);
+      expect(notices(rows)[0]).toEqual({
+        id: 'notice:zet-promet:10160', kind: 'notice', atMs: at('2026-09-24T12:50:29+02:00'), always: false,
+        title: 'Linije 5 i 13 u nedjelju mijenjaju trase',
+        sub: 'U nedjelju, 27. rujna bit će obustavljen tramvajski promet Ulicom grada Vukovara na dijelu od Avenije Marina Držića do Savske ceste, zbog automobilističkog događanja Red Bull Showrun.',
+        live: false, source: 'zet-promet', href: 'https://www.zet.hr/default.aspx?id=10160',
+      });
+    });
+
+    it('gives a board with line 113 the CRO Race notice, whose line is in its description, not its title', async () => {
+      const rows = rowsAt('2026-09-27T12:30:00+02:00', ['113'], await cro);
+      expect(noticeIds(rows)).toEqual(['notice:zet-promet:8134']);
+      expect(notices(rows)[0]!.title).toBe('Izmjene u prometovanju zbog biciklističke utrke CRO Race');
+      expect(notices(rows)[0]!.sub).toMatch(/^U nedjelju, 27\. rujna, od 13 do 16\.45 sati, autobusna linija 113 /);
+    });
+
+    it('gives a board with lines 6 and 11 only none, and a board with line 137 none: the Saturday notice is over on Sunday', async () => {
+      const feed = await cro;
+      expect(noticeIds(rowsAt('2026-09-27T12:30:00+02:00', ['6', '11'], feed))).toEqual([]);
+      expect(noticeIds(rowsAt('2026-09-27T12:30:00+02:00', ['137'], feed))).toEqual([]);
+      // It is the weekday word that ends it, not the window: on the Saturday itself the notice stands.
+      expect(noticeIds(rowsAt('2026-09-26T12:30:00+02:00', ['137'], feed))).toEqual(['notice:zet-promet:10161']);
+    });
+
+    it('takes the notice away on Monday: 96 hours and the day it names are both behind it', async () => {
+      const feed = await cro;
+      expect(noticeIds(rowsAt('2026-09-28T12:30:00+02:00', ['13'], feed))).toEqual([]);
+      // The window alone would have kept the CRO Race notice (published Thursday 07:00) until Monday 07:00.
+      expect(noticeIds(rowsAt('2026-09-28T06:30:00+02:00', ['113'], feed))).toEqual(['notice:zet-promet:8134']);
+      expect(noticeIds(rowsAt('2026-09-28T07:30:00+02:00', ['113'], feed))).toEqual([]);
+    });
+
+    it('is one row only, right after the departures, and the newest of the notices that fit the boards', async () => {
+      const rows = rowsAt('2026-09-27T12:30:00+02:00', ['13', '113'], await cro);
+      expect(notices(rows)).toHaveLength(1);
+      expect(kinds(rows).slice(0, 4)).toEqual(['departure', 'departure', 'notice', 'solar']);
+      expect(rows[2]!.id).toBe('notice:zet-promet:10160');
+    });
+
+    it('is the same row for the wall and for Sada, and only Sada links ZET\'s page', async () => {
+      const [row] = notices(rowsAt('2026-09-27T12:30:00+02:00', ['13'], await cro));
+      const now = at('2026-09-27T12:30:00+02:00');
+      const wall = rowMarkup(row!, now, hr);
+      expect(wall).toContain('data-kind="notice"');
+      expect(wall).toContain('>ZET javlja</time>');
+      expect(wall).not.toContain('k-nearby-day');
+      expect(wall).not.toContain('<a ');
+      const phone = nearbyRowMarkup(hr, row!, now);
+      expect(phone).toContain('<a class="nearby-link" href="https://www.zet.hr/default.aspx?id=10160" rel="noopener noreferrer" target="_blank">');
+      expect(phone).not.toContain('data-action');
+      expect(phone).toContain('Linije 5 i 13 u nedjelju mijenjaju trase');
+      expect(nearbyRowMarkup(en, row!, now)).toContain('>ZET reports</time>');
+    });
+  });
+
+  describe('U1-4: the strike week', () => {
+    const strike = feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml');
+    const LINES = ['1', '6', '11', '12', '13', '14', '17', '31', '34', '5', '113', '137', '228'];
+
+    it('the funicular notice of the 29 Sep promet copy names no line and yields no row on any board', async () => {
+      const promet = await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml', 'zet-promet');
+      expect(promet.items.map((i) => i.id)).toEqual(['zet-promet:1794']);
+      for (const line of LINES) expect(noticeIds(rowsAt('2026-09-29T12:00:00+02:00', [line], promet)), line).toEqual([]);
+      expect(noticeIds(rowsAt('2026-09-29T12:00:00+02:00', LINES, promet))).toEqual([]);
+    });
+
+    it('the news copy yields the strike notice at 09:00 (no sub: its first sentence is over the limit) and line 228 at 12:00, on any board', async () => {
+      const feed = await strike;
+      for (const boardLines of [['6'], ['13'], LINES]) {
+        expect(noticeIds(rowsAt('2026-09-29T09:00:00+02:00', boardLines, feed))).toEqual(['notice:zet-novosti:10164']);
+        expect(noticeIds(rowsAt('2026-09-29T12:00:00+02:00', boardLines, feed))).toEqual(['notice:zet-novosti:10166']);
+      }
+      const early = notices(rowsAt('2026-09-29T09:00:00+02:00', ['6'], feed))[0]!;
+      expect(early).toMatchObject({ title: 'Obavijest građanima, poslodavcima i ustanovama o najavljenom štrajku u ZET-u', sub: '', source: 'zet-novosti', href: 'https://www.zet.hr/default.aspx?id=10164' });
+      const later = notices(rowsAt('2026-09-29T12:00:00+02:00', ['6'], feed))[0]!;
+      expect(later).toMatchObject({ title: 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)', source: 'zet-novosti' });
+      expect(later.sub).toMatch(/^Uprava ZET-a i sindikati su danas ujutro /);
+    });
+
+    it('never shows the Uprava\'s statement, whenever it is asked', async () => {
+      const feed = await strike;
+      for (const iso of ['2026-09-29T09:30:00+02:00', '2026-09-29T10:15:00+02:00', '2026-09-29T12:00:00+02:00', '2026-09-30T12:00:00+02:00', '2026-10-01T10:00:00+02:00']) {
+        expect(noticeIds(rowsAt(iso, LINES, feed)), iso).not.toContain('notice:zet-novosti:10165');
+      }
+    });
+
+    it('lets the strike notice stand for 96 hours from its publication and no longer', async () => {
+      const feed = await strike;
+      expect(noticeIds(rowsAt('2026-09-29T08:00:00+02:00', ['6'], await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml', 'zet-promet')))).toEqual([]);
+      expect(noticeIds(rowsAt('2026-10-01T16:00:00+02:00', ['6'], feed))).toEqual(['notice:zet-novosti:10166']);
+      expect(noticeIds(rowsAt('2026-10-03T10:00:00+02:00', ['6'], feed))).toEqual([]);
+    });
+  });
+
+  describe('what the row is made of', () => {
+    const NOW_ = at('2026-09-30T10:00:00+02:00');
+    const promet = (id: string, title: string, over: Partial<FeedItem> = {}): FeedItem => ({
+      id: `zet-promet:${id}`, module: 'dogadanja', kind: 'event', tier: 'session', title, at: new Date(NOW_ - 3_600_000).toISOString(), dateBasis: 'published',
+      link: `https://www.zet.hr/default.aspx?id=${id}`, data: { source: 'zet-promet', precision: 'time' }, ...over,
+    });
+    const rows = (items: FeedItem[], extra: Partial<NearbyInput> = {}): NearbyRow[] =>
+      selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', []), dogadanja: snap('dogadanja', items) }, ...extra }));
+
+    it('lets the next candidate stand in for a title the row policy refuses, and counts the reason', () => {
+      const skipped: string[] = [];
+      const out = rows([
+        promet('900', 'Linija 13 vozi drukčije, vidi www.primjer.com'),
+        promet('901', 'Linija 13 mijenja trasu', { at: new Date(NOW_ - 2 * 3_600_000).toISOString() }),
+      ], { onSkip: (reason) => skipped.push(reason) });
+      expect(noticeIds(out)).toEqual(['notice:zet-promet:901']);
+      expect(skipped).toEqual(['link']);
+    });
+
+    it.each([
+      'Linija 13: polasci po voznom redu',
+      'Linija 13: polazak nije potvrđen',
+      'Linija 13: nepotvrđeno',
+    ])('does not print a caveat in the notice title: %s', (title) => {
+      const rejected = promet('910', title);
+      const fallback = promet('911', 'Linija 13 mijenja trasu', { at: new Date(NOW_ - 2 * 3_600_000).toISOString() });
+      expect(noticeIds(rows([rejected, fallback]))).toEqual(['notice:zet-promet:911']);
+      expect(noticeIds(rows([rejected]))).toEqual([]);
+      expect(rejected.title).toBe(title);
+    });
+
+    it('prints no sub where the description carries a caveat word or fails the summary policy, and keeps the title', () => {
+      const bad = ['Vozila voze po voznom redu.', 'Nepotvrđeno je hoće li linija 13 voziti.', 'Vidi www.primjer.com za linije 13.'];
+      for (const summary of bad) {
+        const [row] = notices(rows([promet('902', 'Linija 13 ne vozi', { summary })]));
+        expect(row, summary).toMatchObject({ id: 'notice:zet-promet:902', sub: '' });
+      }
+      expect(notices(rows([promet('903', 'Linija 13 ne vozi', { summary: 'Autobusna linija 13 vozi do Savišća.' })]))[0]!.sub).toBe('Autobusna linija 13 vozi do Savišća.');
+    });
+
+    it('carries no text a harness would read as a caveat, whatever ZET wrote', async () => {
+      const cro = await feedOf('zet-rss-promet-2026-09-27.xml', 'zet-rss-novosti.xml');
+      const strike = await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml');
+      const all = [
+        ...['13', '113', '137', '5'].flatMap((line) => notices(rowsAt('2026-09-27T12:30:00+02:00', [line], cro))),
+        ...['2026-09-29T09:00:00+02:00', '2026-09-29T12:00:00+02:00'].flatMap((iso) => notices(rowsAt(iso, ['6'], strike))),
+      ];
+      expect(all.length).toBeGreaterThanOrEqual(4);
+      for (const row of all) {
+        expect(row.title, row.id).not.toMatch(DISCL);
+        expect(row.sub, row.id).not.toMatch(DISCL);
+      }
+    });
+
+    it('stands in every service state, because it is ZET\'s word: an outage of the positions, an unconfirmed feed, a stale module', () => {
+      const item = promet('904', 'Linija 13 ne vozi do Savišća');
+      for (const zet of ['live', 'stale', 'down'] as const) {
+        const out = selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', [], zet), dogadanja: snap('dogadanja', [item]) } }));
+        expect(noticeIds(out), zet).toEqual(['notice:zet-promet:904']);
+      }
+    });
+
+    it('stands nowhere without the events snapshot, or while it is down', () => {
+      const item = promet('905', 'Linija 13 ne vozi do Savišća');
+      expect(noticeIds(rows([]))).toEqual([]);
+      expect(noticeIds(selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', []) } })))).toEqual([]);
+      expect(noticeIds(selectNearby(input(NOW_, { boards: [linesBoard(NOW_, ['13'])], fixes: [], snapshots: { 'zet-rt': snap('zet-rt', []), dogadanja: snap('dogadanja', [item], 'down') } })))).toEqual([]);
+    });
+
+    it('reads a news item as a service statement by its title: the strike notice and line 228 in the news of 27 to 29 Sep, one old funicular item in the 12 Sep copy, nothing else', async () => {
+      const strike = await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml', 'zet-novosti');
+      const old = await feedOf('zet-rss-promet.xml', 'zet-rss-novosti.xml', 'zet-novosti');
+      const hits = (feed: ModuleSnapshot): string[] => feed.items.filter((i) => NOVOSTI_NOTICE.test(i.title)).map((i) => i.id);
+      expect(hits(strike)).toEqual(['zet-novosti:10166', 'zet-novosti:10164', 'zet-novosti:10006']);
+      expect(hits(old)).toEqual(['zet-novosti:10006']); // "Uspinjača svečano puštena u promet", published in May
+      expect(NOVOSTI_NOTICE.test('Predsjednik Uprave ZET-a o stanju u prometu i sudskom postupku')).toBe(false);
+    });
+
+    it('finds the lines a text names, whatever the case and the joining word', () => {
+      expect(noticeLines('Linije 5 i 13 u nedjelju mijenjaju trase')).toEqual(['5', '13']);
+      expect(noticeLines('U subotu izmjene na linijama 111, 112, 132, 164 i 168')).toEqual(['111', '112', '132', '164', '168']);
+      expect(noticeLines('Linija 263 do Kašine, uvodi se linija 263A. Autobusna linija 113 (Ljubljanica - Jarun)')).toEqual(['263', '263A', '113']);
+      expect(noticeLines('Linije 139 te 141')).toEqual(['139', '141']);
+      expect(noticeLines('Autobusi terminala Glavni kolodvor u nedjelju mijenjaju trase')).toEqual([]);
+    });
+
+    it('ends a notice after the weekday its title names, counted from its publication day, and never dates one that names none', () => {
+      const friday = at('2026-09-25T08:15:00+02:00');
+      expect(noticeDayOver('Linija 137 u subotu prometuje skraćenom trasom', friday, at('2026-09-26T23:59:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Linija 137 u subotu prometuje skraćenom trasom', friday, at('2026-09-27T00:01:00+02:00'))).toBe(true);
+      // Published on the day itself: that day.
+      expect(noticeDayOver('Radovi u petak skreću linije 102', friday, at('2026-09-25T20:00:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Radovi u petak skreću linije 102', friday, at('2026-09-26T00:30:00+02:00'))).toBe(true);
+      expect(noticeDayOver('Linije 5 i 13 u nedjelju mijenjaju trase', at('2026-09-24T12:50:00+02:00'), at('2026-09-27T23:00:00+02:00'))).toBe(false);
+      expect(noticeDayOver('Linija 13 prometuje do Savišća', friday, at('2026-10-20T12:00:00+02:00'))).toBe(false);
+    });
+
+    it('links only ZET\'s own pages, over https, and nothing that carries credentials or another host', () => {
+      expect(zetNoticeLink('https://www.zet.hr/default.aspx?id=10160')).toBe('https://www.zet.hr/default.aspx?id=10160');
+      expect(zetNoticeLink('http://www.zet.hr/default.aspx?id=10160')).toBe('https://www.zet.hr/default.aspx?id=10160');
+      expect(zetNoticeLink('https://zet.hr/vijesti/1')).toBe('https://zet.hr/vijesti/1');
+      for (const link of [undefined, '', 'not a url', 'https://www.zet.hr.example.com/x', 'https://example.com/www.zet.hr', 'https://user:pw@www.zet.hr/x', 'https://www.zet.hr:8443/x', 'javascript:alert(1)', 'ftp://www.zet.hr/x']) {
+        expect(zetNoticeLink(link), String(link)).toBeUndefined();
+      }
+    });
+
+    it('names no cause: the row is ZET\'s title, whatever ZET calls the day', async () => {
+      const strike = await feedOf('zet-rss-promet-2026-09-29.xml', 'zet-rss-novosti-2026-09-29.xml');
+      const [row] = notices(rowsAt('2026-09-29T09:00:00+02:00', ['6'], strike));
+      expect(row!.title).toBe('Obavijest građanima, poslodavcima i ustanovama o najavljenom štrajku u ZET-u');
+      expect(hr.t('kiosk.nearby.zetSays')).toBe('ZET javlja');
+      expect(en.t('kiosk.nearby.zetSays')).toBe('ZET reports');
+    });
+  });
+
+  describe('U1-2: only ZET\'s no-service trips leave a board, and a vehicle on one keeps it', () => {
+    const now = at('2026-09-22T15:45:00Z');
+    const zetRt = (trips: readonly string[]): ModuleSnapshot => ({ ...snap('zet-rt', []), sources: { zet: { status: 'live', itemCount: 0, ...(trips.length ? { noServiceTrips: [...trips] } : {}) } } });
+    const run = (extra: Partial<NearbyInput>): NearbyRow[] => selectNearby(input(now, {
+      boards: [board(now, [['6', 3], ['13', 7], ['14', 12], ['1', 18]])], ...extra,
+    }));
+    const deps = (rows: readonly NearbyRow[]): string[] => rows.filter((r) => r.kind === 'departure').map((r) => r.id);
+
+    it('leaves the alert trip off the wall and lets the next departure take its place', () => {
+      expect(deps(run({ fixes: [], snapshots: { ...snapshots(), 'zet-rt': zetRt(['t13']) } }))).toEqual(['dep:t6', 'dep:t14', 'dep:t1']);
+    });
+
+    it('keeps the trip live when a vehicle has taken it, and removes nothing when ZET named none (CANCELED alone is no input)', () => {
+      const v13: LiveVehicleRef[] = [{ id: 'v13', tripId: 't13', routeId: '13', delaySeconds: 0 }];
+      const kept = run({ fixes: v13, snapshots: { ...snapshots(), 'zet-rt': zetRt(['t13']) } });
+      expect(deps(kept)).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+      expect(kept.find((r) => r.id === 'dep:t13')).toMatchObject({ live: true, source: 'zet-rt' });
+      expect(deps(run({ fixes: [], snapshots: { ...snapshots(), 'zet-rt': zetRt([]) } }))).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+    });
+
+    it('does not apply the alerts while the transit feed is down', () => {
+      expect(deps(run({ fixes: [], snapshots: { ...snapshots(), 'zet-rt': { ...zetRt(['t13']), status: 'down' } } }))).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+    });
+
+    it('takes a departure that is already on the wall off at the next update, not after its 60 s grace', () => {
+      const shown = run({ fixes: [], snapshots: snapshots() }).filter((r) => r.kind === 'departure');
+      expect(shown.map((r) => r.id)).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+      // The platform board answers without the 13 (a refetch): with nothing said against it the row rides on its grace ...
+      const gap = board(now, [['6', 3], ['14', 12], ['1', 18]]);
+      const carried = selectNearby(input(now + 10_000, { boards: [gap], fixes: [], heldDepartures: shown }));
+      expect(deps(carried)).toContain('dep:t13');
+      // ... but once ZET has named that trip in a no-service alert it goes at once, and a vehicle on it would have kept it.
+      const withdrawn = selectNearby(input(now + 10_000, { boards: [gap], fixes: [], heldDepartures: shown, snapshots: { ...snapshots(), 'zet-rt': zetRt(['t13']) } }));
+      expect(deps(withdrawn)).toEqual(['dep:t6', 'dep:t14', 'dep:t1']);
+      const driven = selectNearby(input(now + 10_000, {
+        boards: [gap], fixes: [{ id: 'v13', tripId: 't13', routeId: '13', delaySeconds: 0 }], heldDepartures: shown, snapshots: { ...snapshots(), 'zet-rt': zetRt(['t13']) },
+      }));
+      expect(deps(driven)).toContain('dep:t13');
+    });
   });
 });

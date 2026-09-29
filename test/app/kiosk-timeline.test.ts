@@ -22,7 +22,7 @@ import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import {
-  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
+  COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, NOTICE_TITLE_MAX_LINES, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
   FIT_RESTORE_HOLD_MS,
 } from '../../app/src/kiosk/timeline';
@@ -1503,6 +1503,93 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
     expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
     expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
     expect(section().dataset.fitOverflow).toBe('0');
+  });
+});
+
+describe('the ZET notice row on the wall (upgrade U1): "ZET javlja" for a time, reserved, two title lines, a sub of one line or none', () => {
+  // ZET's headline and the start of its description, published three days ago: the row has no moment of its own, so
+  // the time cell says whose word it is, and no day word stands under it.
+  const notice = (over: Partial<TimelineRow> = {}): TimelineRow => row({
+    id: 'notice:zet-promet:10160', kind: 'notice', atMs: NOW - 3 * 24 * 60 * MIN, title: 'Linije 5 i 13 u nedjelju mijenjaju trase',
+    sub: 'Zbog radova na pruzi.', source: 'zet-promet', ...over,
+  });
+  const LONG_SUB = 'U nedjelju, 27. rujna bit će obustavljen tramvajski promet Ulicom grada Vukovara na dijelu od Avenije Marina Držića do Savske ceste, zbog automobilističkog događanja Red Bull Showrun.';
+  const rows = (over: Partial<TimelineRow> = {}): TimelineRow[] => [
+    dep(1, { title: 'Črnomerec', arrival: { routeId: '6', routeName: '6' } }),
+    dep(2, { title: 'Savski most', arrival: { routeId: '13', routeName: '13' } }),
+    dep(3, { title: 'Dubrava', arrival: { routeId: '11', routeName: '11' } }),
+    notice(over),
+    row({ id: 'closure:gunduliceva', kind: 'closure', atMs: at('2026-09-22T16:00:00Z'), title: 'Gundulićeva', sub: 'zatvoreno za promet', source: 'prometnice' }),
+    always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
+  ];
+
+  it('prints ZET\'s name where a time would stand, in both languages, and no day word for a publish time long past or ahead', () => {
+    expect(timeLabel(notice(), NOW, i18n)).toBe('ZET javlja');
+    expect(timeLabel(notice(), NOW, i18nFor('en'))).toBe('ZET reports');
+    for (const atMs of [NOW - 3 * 24 * 60 * MIN, NOW - MIN, NOW + 2 * 24 * 60 * MIN]) {
+      expect(dayLabel(notice({ atMs }), NOW, i18n)).toBe('');
+      expect(onLaterDay(notice({ atMs }), NOW)).toBe(false);
+    }
+    const html = rowsMarkup([notice()], NOW, i18n);
+    expect(html).toContain('data-kind="notice"');
+    expect(html).toContain('>ZET javlja</time>');
+    expect(html).not.toContain('k-nearby-day');
+    expect(html).toContain('<span class="nearby-title">Linije 5 i 13 u nedjelju mijenjaju trase</span><span class="nearby-sub">Zbog radova na pruzi.</span>');
+  });
+
+  it('is a reserved row: a cut list keeps it, and it is never the row to drop', () => {
+    const all = rows();
+    expect(fitRows(all, 4).map((r) => r.id)).toContain('notice:zet-promet:10160');
+    expect(fitRows(all, 3).map((r) => r.id)).toEqual(['dep:1', 'notice:zet-promet:10160', 'always:story:trg']);
+    let list = all;
+    const dropped: string[] = [];
+    for (let guard = 0; guard < 10; guard++) {
+      const drop = dropCandidate(list, NOW);
+      if (!drop) break;
+      dropped.push(drop.id);
+      list = list.filter((r) => r !== drop);
+    }
+    expect(dropped).not.toContain('notice:zet-promet:10160');
+    expect(list.map((r) => r.id)).toEqual(['dep:1', 'notice:zet-promet:10160', 'always:story:trg']);
+    // The lone departure and the notice: nothing left to drop.
+    expect(dropCandidate([dep(1), notice()], NOW)).toBeNull();
+  });
+
+  it('holds its title to two lines (the second exception to "nothing is cut with an ellipsis") and the stylesheet clamps it there', () => {
+    expect(NOTICE_TITLE_MAX_LINES).toBe(2);
+    expect(TITLE_MAX_LINES).toBe(1);
+    const css = readFileSync(join(import.meta.dirname, '../../app/src/ui/kiosk-city.css'), 'utf8');
+    expect(css).toContain('.kiosk .k-nearby .nearby-row[data-kind="notice"] .nearby-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}');
+  });
+
+  it('prints the sub where a line holds it and leaves it out where it would wrap, never growing the row (1920 x 1080, the totem)', () => {
+    const wall = simulated({ boxPx: 700, titleChars: 17, subChars: 26 });
+    mount({ measure: wall, designHeightPx: 700 }).update(rows({ sub: LONG_SUB }), 2200, NOW);
+    expect(ids()).toContain('notice:zet-promet:10160');
+    expect(text(byId('notice:zet-promet:10160').querySelector('.nearby-sub'))).toBe('');
+    expect(text(byId('notice:zet-promet:10160').querySelector('.nearby-title'))).toBe('Linije 5 i 13 u nedjelju mijenjaju trase');
+    handle?.destroy();
+    host.innerHTML = '';
+    const totem = simulated({ boxPx: 700, titleChars: 51, subChars: 200 });
+    mount({ measure: totem, designHeightPx: 700 }).update(rows({ sub: LONG_SUB }), 2200, NOW);
+    expect(text(byId('notice:zet-promet:10160').querySelector('.nearby-sub'))).toBe(LONG_SUB);
+  });
+
+  it('keeps the notice and the promises when the box is too small for everything: a departure or the closure gives way first', () => {
+    // 250 px: the notice, the uvijek row and the first departure are the promises; the rest yields, the notice never.
+    mount({ measure: simulated({ boxPx: 250, titleChars: 17, subChars: 26 }), designHeightPx: 250 }).update(rows(), 2200, NOW);
+    const kept = ids();
+    expect(kept).toContain('notice:zet-promet:10160');
+    expect(kept).toContain('always:story:trg');
+    expect(kept).toContain('dep:1');
+    expect(kept.filter((id) => id.startsWith('dep:')).length).toBeLessThan(3);
+    expect(byId('notice:zet-promet:10160').querySelector('.nearby-when')!.textContent).toBe('ZET javlja');
+  });
+
+  it('vets a notice under its own kinds: a title that fails the policy leaves the row out whole', () => {
+    mount({ measure: simulated(WALL_1920) }).update(rows({ title: 'Linija 13 ne vozi, vidi www.primjer.com' }), 2200, NOW);
+    expect(ids()).not.toContain('notice:zet-promet:10160');
+    expect(section().dataset.skippedText).toBe('1');
   });
 });
 

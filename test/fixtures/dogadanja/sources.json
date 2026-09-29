@@ -88,6 +88,14 @@
       "httpStatus": 200,
       "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
       "notes": "The traffic-notice feed on the second strike day, the last copy the strike session's recorder had kept when the fixture was cut (review.local/strike/rss/promet/20260929T160500Z.xml). One item, 'Uspinjača u srijedu na mjesečnom servisu' (pubDate 29 Sep 2026 11:00 +0200, the funicular's monthly service on 30 September); the feed held no item at all from 28 Sep 02:05Z to 29 Sep 12:00Z and never one about the strike. For U1 acceptance U1-4: the strike-week copy yields no notice row. Licence as for zet-rss-promet-2026-09-27.xml."
+    },
+    {
+      "file": "zet-rss-novosti-2026-09-29.xml",
+      "url": "https://www.zet.hr/rss_novosti.aspx",
+      "fetchedAt": "2026-09-29T16:40:01Z",
+      "httpStatus": 200,
+      "robotsTxt": "https://www.zet.hr/robots.txt does not exist (404) -> no crawl restriction declared",
+      "notes": "The news feed on the second strike day, copied from the strike session's recorder (review.local/strike/rss/novosti/20260929T164001Z.xml); ZET serves mixed CRLF and LF line ends (154 of 493 lines end in CRLF), which git stores as LF like every text fixture (.gitattributes). Among its items the strike notice (pubDate 27 Sep 2026 16:27 +0200), the Uprava's statement (29 Sep 09:23) and the emergency line 228 (29 Sep 09:56). For the upgrade pass U1 acceptance U1-4 (the notice row from the news feed, filtered by the title pattern of shared/city/notices.ts). Licence as for zet-rss-promet-2026-09-27.xml."
     }
   ]
 }

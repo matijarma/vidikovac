@@ -116,7 +116,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1048 Croatian leaves and 1020 English ones', () => {
+  it('the catalogue holds 1051 Croatian leaves and 1023 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -135,9 +135,11 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // (kiosk/invitation.ts): 1,047 hr, 1,019 en; the closure row's sub (kiosk.nearby.closed): 1,048 hr, 1,020 en;
     // U0 step 6 +2 kiosk.nearby.ongoing and panels.ongoing, a rolling closure end (kiosk/timeline.ts, layers/sigurnost.ts):
     // 1,050 hr, 1,022 en.
+    // upgrade U1 +3 arrivals.cancelledRoute (the phone stop sheet's note), kiosk.nearby.zetSays (the notice row's
+    // time cell), kiosk.sentence.notice (its header sentence): 1,053 hr, 1,025 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1050);
-    expect(leafKeys(en).length).toBe(1022);
+    expect(leaves.length).toBe(1053);
+    expect(leafKeys(en).length).toBe(1025);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

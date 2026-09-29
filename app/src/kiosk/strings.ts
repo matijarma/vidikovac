@@ -345,7 +345,7 @@ export interface KioskStrings {
 export type SentenceTemplate =
   | 'departureIn' | 'departureAt' | 'busIn' | 'busAt' | 'closureUntil' | 'weather' | 'weatherNoRange' | 'weatherTemperature'
   | 'bikes' | 'sunset' | 'sunsetAt' | 'sunsetTime' | 'sunrise' | 'sunriseAt' | 'sunriseTime' | 'lastTram' | 'firstTram'
-  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage';
+  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage' | 'notice';
 
 type Kiosk = typeof hr.kiosk;
 type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
@@ -414,7 +414,7 @@ function build(code: SupportedLocale): KioskStrings {
       ...group('sentence', [
         'departureIn', 'departureAt', 'busIn', 'busAt', 'closureUntil', 'weather', 'weatherNoRange', 'weatherTemperature',
         'bikes', 'sunset', 'sunsetAt', 'sunsetTime', 'sunrise', 'sunriseAt', 'sunriseTime', 'lastTram', 'firstTram',
-        'event', 'opening', 'pharmacy', 'always', 'outage',
+        'event', 'opening', 'pharmacy', 'always', 'outage', 'notice',
       ]),
       kicker: record(['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const, (kind) => `kiosk.sentence.kicker.${kind}`),
     },

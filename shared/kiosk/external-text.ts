@@ -46,12 +46,16 @@ const NAME_PUNCTUATION = '.,;:\'’‘"„“”«»()–—-/&+†·';
 const PROSE_PUNCTUATION = `${NAME_PUNCTUATION}!?%°=…`;
 // Lengths bound a flood, not the register: the longest committed heritage name
 // and street description are 170 code points (app/public/data/city, 18 Sep).
+// A summary is the exception (upgrade U1): ZET's notices show the start of the
+// description as whole sentences, and of the 27 distinct traffic notices of 24
+// to 29 Sep 22 keep a summary at 240 characters and 8 at 180; the wall prints
+// the sub on one line or not at all, and every other rule stays.
 export const EXTERNAL_TEXT_RULES: Readonly<Record<ExternalTextKind, ExternalTextRule>> = {
   name: { max: 180, punctuation: NAME_PUNCTUATION },
   address: { max: 120, punctuation: NAME_PUNCTUATION },
   title: { max: 180, punctuation: PROSE_PUNCTUATION },
   // DHMZ writes numeric comparisons such as "> 20 mm", escaped by the DOM.
-  summary: { max: 180, punctuation: `${PROSE_PUNCTUATION}>` },
+  summary: { max: 240, punctuation: `${PROSE_PUNCTUATION}>` },
   'register-text': { max: 180, punctuation: PROSE_PUNCTUATION },
   // Both dash forms occur in the committed GTFS headsigns.
   headsign: { max: 40, punctuation: "–-.,'" },

@@ -321,7 +321,8 @@
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
     "down": "The timetable is unavailable right now.",
-    "timetable": "Timetable"
+    "timetable": "Timetable",
+    "cancelledRoute": "Line {route}: ZET reports cancelled departures."
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
@@ -850,7 +851,8 @@
       "sunsetTime": "At {time} the sun sets.",
       "sunriseAt": "Sunrise is at {time}.",
       "sunriseTime": "At {time} the sun rises.",
-      "opening": "{name} opens {time}."
+      "opening": "{name} opens {time}.",
+      "notice": "ZET reports: {notice}."
     },
     "handheld": {
       "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
@@ -915,7 +917,8 @@
       "lastTrams": "Last trams",
       "firstTram": "First tram",
       "outageNote": "ZET is not sending vehicle positions right now; departures are from the timetable, unconfirmed.",
-      "ongoing": "ongoing"
+      "ongoing": "ongoing",
+      "zetSays": "ZET reports"
     },
     "paired": {
       "warnings": "DHMZ warnings",

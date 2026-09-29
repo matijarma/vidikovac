@@ -575,6 +575,74 @@ describe('facts and standalone deterministic fallback', () => {
   });
 });
 
+// ZET's own headline as the header sentence while its row stands (upgrade U1): "ZET javlja: {notice}." in one family,
+// offered whatever the service state, for ZET's words only, and never for a title longer than a slot holds.
+describe('the notice fact (upgrade U1)', () => {
+  const CRO_NOW = Date.parse('2026-09-27T12:30:00+02:00');
+  const PUBLISHED = Date.parse('2026-09-24T12:50:29+02:00');
+  const notice = (over: Partial<SentenceNearbyRow> = {}): SentenceNearbyRow => row({
+    id: 'notice:zet-promet:10160', kind: 'notice', title: 'Linije 5 i 13 u nedjelju mijenjaju trase', sub: '', atMs: PUBLISHED, source: 'zet-promet', ...over,
+  });
+  const noticeFacts = (rows: SentenceNearbyRow[], over: Partial<SentenceFactsInput> = {}) =>
+    sentenceFacts(input({ now: CRO_NOW, rows, ...over })).filter((f) => f.id.startsWith('notice:'));
+
+  it('offers "ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase." at the first instant, in the promet kicker, and as the written sentence', () => {
+    const [fact] = noticeFacts([notice()]);
+    expect(fact).toMatchObject({ id: 'notice:zet-promet:10160', kind: 'promet', text: 'ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.' });
+    // While the row stands: its window from the publish time, but not past midnight (the facts are rebuilt every update).
+    expect(fact!.validUntil).toBe(Date.parse('2026-09-28T00:00:00+02:00'));
+    expect(typedSentenceFact(fact!).ok).toBe(true);
+    const written = templateSentences([fact!], i18n, 80, CRO_NOW);
+    expect(written.map((s) => s.text)).toEqual(['ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.']);
+    expect(written[0]).toMatchObject({ kicker: 'promet', refs: ['notice:zet-promet:10160'], origin: 'template' });
+    const en = createDefaultI18n('en');
+    expect(noticeFacts([notice()], { locale: 'en', i18n: en })[0]!.text).toBe('ZET reports: Linije 5 i 13 u nedjelju mijenjaju trase.');
+  });
+
+  it('is the same fact in every service state and does not read the notice\'s own time as past', () => {
+    expect(noticeFacts([notice()], { outage: true })).toHaveLength(1);
+    // The publish time is three days behind `now` and the row is still said: the fact is not skipped as a past row.
+    expect(notice().atMs!).toBeLessThan(CRO_NOW);
+    expect(noticeFacts([notice()])).toHaveLength(1);
+  });
+
+  it('ends with the row\'s window when that is nearer than midnight', () => {
+    const late = PUBLISHED + 96 * 3_600_000 - 20 * 60_000;
+    const [fact] = sentenceFacts(input({ now: late, rows: [notice({ title: 'Linija 13 ne vozi do Savišća' })] })).filter((f) => f.id.startsWith('notice:'));
+    expect(fact!.validUntil).toBe(PUBLISHED + 96 * 3_600_000);
+  });
+
+  it('gives a 76-character title a row and no sentence, and a 64-character one its sentence', () => {
+    const strike = 'Obavijest građanima, poslodavcima i ustanovama o najavljenom štrajku u ZET-u';
+    expect(strike).toHaveLength(76);
+    expect(noticeFacts([notice({ id: 'notice:zet-novosti:10164', title: strike, source: 'zet-novosti' })])).toEqual([]);
+    const line = 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)';
+    expect(line).toHaveLength(64);
+    const [fact] = noticeFacts([notice({ id: 'notice:zet-novosti:10166', title: line, source: 'zet-novosti' })]);
+    expect(fact!.text).toBe('ZET javlja: Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj).');
+    expect(templateSentences([fact!], i18n, 80, CRO_NOW).map((s) => s.text)).toEqual([fact!.text]);
+  });
+
+  it('writes nothing for a title the header policy refuses, and nothing for a title carrying a link or an ellipsis', () => {
+    for (const title of ['Linija 13: vidi www.primjer.com', 'Linija 13 ne vozi…', 'Pošalji lozinku na linije 13']) {
+      expect(noticeFacts([notice({ title })]), title).toEqual([]);
+    }
+  });
+
+  it('does not double the full stop of a title that ends in one', () => {
+    expect(noticeFacts([notice({ title: 'Linija 13 ne vozi do Savišća.' })])[0]!.text).toBe('ZET javlja: Linija 13 ne vozi do Savišća.');
+  });
+
+  it('accepts a model\'s choice of the family only with the slot copied whole', () => {
+    const [fact] = noticeFacts([notice()]);
+    const ctx = { facts: [fact!], now: CRO_NOW };
+    const choices = sentenceTemplateChoices(ctx).filter((c) => c.family === 'notice');
+    expect(choices).toEqual([{ factId: 'notice:zet-promet:10160', family: 'notice', slots: { notice: 'Linije 5 i 13 u nedjelju mijenjaju trase' } }]);
+    expect(fillSentenceChoice(choices[0], ctx)?.text).toBe('ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.');
+    expect(fillSentenceChoice({ ...choices[0], slots: { notice: 'Linija 5 ne vozi' } }, ctx)).toBeNull();
+  });
+});
+
 describe('sentence sequence', () => {
   const choices = Array.from({ length: 40 }, (_, n) => sentence(n % 2
     ? `Temperatura u Zagrebu je ${n} °C.` : `U 13:00 počinje događanje „Izložba ${n}” (Muzej).`,
@@ -947,8 +1015,8 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 22 owner-reviewed families in both languages, with always carrying register text', () => {
-    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(21);
+  it('pins all 23 owner-reviewed families in both languages, with always carrying register text', () => {
+    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(22);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
       for (const key of Object.keys(SENTENCE_FAMILIES) as (keyof typeof SENTENCE_FAMILIES)[]) {

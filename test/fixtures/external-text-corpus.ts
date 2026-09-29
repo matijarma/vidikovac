@@ -162,3 +162,39 @@ export const SAMPLED_CLOSURE_TITLES = [
   'Velimira Škorpika', 'Savska cesta', 'Dragutina Domjanića', 'Nova cesta', 'Amruševa', 'Tuškanac', 'Novačka',
   'Nova Ves', 'Gornjodragonoška cesta', 'Jazbina',
 ] as const;
+
+// The start of the description (zet-rss.ts noticeSummary, upgrade U1) of every ZET
+// notice that can stand as the "ZET javlja" row: each traffic-notice item of the
+// three saved promet copies (12, 27 and 29 Sep) and each news item whose title reads
+// as a service statement (shared/city/notices.ts NOVOSTI_NOTICE) in the two saved
+// novosti copies, distinct, in the order of the copies. Source text only, pasted once
+// from the sanitiser's output; test/feed/dogadanja/zet-rss.test.ts checks the promet
+// summaries are all here, test/app/external-text.test.ts that every one passes the
+// row policy at the 240-character summary limit.
+export const SAMPLED_NOTICE_SUMMARIES = [
+  "U subotu, 12. rujna, od 8 do 15 sati, autobusne linije 102 (Britanski trg - Mihaljevac) i 105 (Kaptol - Britanski trg) prometovat će izmijenjenim trasama zbog radova u Ulici Nova Ves i Tuškanac.",
+  "Autobusna linija 269 (Borongaj - Sesvetski Kraljevec - Iver) će u nedjelju, 13. rujna, od 8 do 17 sati, prometovati izmijenjenom trasom u oba smjera, zbog radova na Bjelovarskoj ulici u Sesvetama.",
+  "Autobusna linija 226 (Kaptol - Remete - Svetice) će u subotu, 12. rujna, od 8 do 16 sati, prometovati izmijenjenom trasom u oba smjera, zbog radova na Ulici Barutanski jarak.",
+  "Zbog sanacije kolnika na dijelu Ulice Jazbina, autobusna linija 227 (Svetice - Gornji Bukovac - Gračansko dolje) će od utorka 15. rujna u 9 sati do utorka, 6. listopada, prometovati skraćenom trasom.",
+  "Zbog redovnog mjesečnog servisnog pregleda, žičara Sljeme neće biti u pogonu u ponedjeljak i utorak, 14. i 15. rujna. Za putovanje na Sljeme može se koristiti autobusna linija 140 (Mihaljevac - Sljeme).",
+  "Autobusna linija 230 (Dubrava - Granešinski Novaki) će u subotu, 12. rujna, od 8 do 16 sati, prometovati izmijenjenom trasom zbog radova u Novačkoj ulici.",
+  "U subotu 12. rujna, od 6 do 18 sati i u nedjelju, 13. rujna, od 6 do 15 sati, autobusna linija 113 (Ljubljanica - Jarun) neće prometovati oko Jarunskog jezera, već samo do starog okretišta Jarun, zbog održavanja Europskog kupa u triatlonu.",
+  "Autobusno stajalište Buzin u smjeru sjevera, neće biti u funkciji od srijede, 9. rujna u 7 sati do petka, 18. rujna, zbog radova na dijelu Avenije Većeslava Holjevca, od Buzinskog prilaza do izlaza na autocestu u smjeru Glavnog kolodvora.",
+  "Zbog sanacije kolosijeka na Trgu bana Josipa Jelačića, u noćima od ponedjeljka, 7. rujna do jutarnjeg izlaska tramvaja u ponedjeljak, 14. rujna, umjesto tramvaja noćne linije 31 vozit će autobusi.",
+  "Tramvajska linija 3 (Ljubljanica - Savišće) od ponedjeljka, 7. rujna neće koristiti stajalište Tehnički muzej u smjeru Savišća.",
+  "Autobusne linije 161 (Savski most - Kupinečki Kraljevec - Štrpet) i 162 (Savski most - Ašpergeri) će se od ponedjeljka, 7. rujna zaustavljati i na autobusnom stajalištu Brezovička 28 na Brezovičkoj cesti, u smjeru Štrpeta / Ašpergera.",
+  "Zbog izgradnje vodoopskrbnog cjevovoda u Ulici Lučko, autobusna linija 112 (Savski most - Lučko) će od petka, 19. lipnja do završetka radova prometovati djelomično izmijenjenom trasom.",
+  "Tramvajsko stajalište Trg Republike Hrvatske u smjeru Savskog mosta, izmješteno je 75 metara južnije, na Rooseveltov trg, ispred Muzeja Mimara.",
+  "Autobusne linije 139 (Reljkovićeva - Jelenovac - Reljkovićeva) i 141 (Reljkovićeva - Vinogradi - Reljkovićeva) će od subote, 11. ožujka do završetka radova na obnovi KBC „Sestre Milosrdnice“ prometovati djelomično izmijenjenim trasama.",
+  "Autobusna linija 132 (Savski most - Goli Breg - Brezovica) će do završetka sanacije kolnika Ulice Klanjec, na dijelu od Demerske ulice do Ulice Bedeki, prometovati djelomično izmijenjenom trasom u oba smjera.",
+  "Zbog radova u Ulici Dominika Mandića, u subotu, 26. rujna od 8 do 16 sati, autobusna linija 137 (Črnomerec - Donji Borčec) prometovat će skraćeno, kružnom trasom.",
+  "U nedjelju, 27. rujna, od 8 do 18 sati, autobusne linije terminala Glavni kolodvor prometovat će izmijenjenim ili skraćenim trasama, zbog automobilističkog događanja Red Bull Showrun u Ulici grada Vukovara.",
+  "U nedjelju, 27. rujna bit će obustavljen tramvajski promet Ulicom grada Vukovara na dijelu od Avenije Marina Držića do Savske ceste, zbog automobilističkog događanja Red Bull Showrun.",
+  "U nedjelju, 27. rujna, od 13 do 16.45 sati, autobusna linija 113 (Ljubljanica - Jarun) neće prometovati oko Jarunskog jezera, već će prometovati do starog okretišta Jarun, zbog održavanja međunarodne biciklističke utrke CRO Race.",
+  "Tramvajska linija 13 (Žitnjak - Kvaternikov trg) će do jutarnjeg izlaska tramvaja u srijedu, 30. rujna prometovati do Savišća, zbog radova na zaokretnici Žitnjak.",
+  "Autobusne linije 122 (Črnomerec - Podsused-centar) i 123 (Črnomerec - Podsusedsko dolje) će od srijede, 23. rujna u 8.30 sati do završetka sanacije kolnika na dijelu Podsusedske aleje prometovati djelomično izmijenjenim trasama.",
+  "Zbog sanacije kolosijeka na Trgu bana Josipa Jelačića, u noćima od ponedjeljka, 21. rujna do jutarnjeg izlaska tramvaja u ponedjeljak, 28. rujna, umjesto tramvaja noćne linije 31 vozit će autobusi.",
+  "Zbog redovnog mjesečnog servisa, zagrebačka uspinjača neće prometovati u srijedu, 30. rujna, od 6.30 do 14 sati.",
+  "Zagrebačka uspinjača, jedan od najprepoznatljivijih simbola grada i najstariji oblik javnog prijevoza u metropoli, u utorak je svečano otvorena i puštena u promet nakon sveobuhvatne obnove koja je trajala više od godinu dana.",
+  "Uprava ZET-a i sindikati su danas ujutro stupili u kontakt radi zajedničke inicijative za uspostavu autobusne linije 228 na relaciji Borongaj - Rebro - Borongaj (4 autobusa).",
+] as const;

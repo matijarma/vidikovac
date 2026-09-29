@@ -49,6 +49,15 @@ export interface ArrivalsOptions {
   pastGraceS?: number;
   /** Every platform id of the tapped stop (a named stop has siblings). */
   stopIds: readonly string[];
+  /**
+   * Trips ZET's no-service alerts name that no tracked vehicle carries (the
+   * twin's `sources.zet.noServiceTrips`, U1). A ZET departure on such a trip
+   * is not listed unless a vehicle in `vehicles` carries it: then the row
+   * stays, live. Only ZET's namespace is asked, so an HZ id that collides
+   * with one is never touched. ZET's CANCELED marker is deliberately absent:
+   * 114 of 143 trips so marked were driven on schedule.
+   */
+  cancelled?: ReadonlySet<string>;
 }
 
 /** Ten minutes: past it a countdown is a guess dressed as a fact. */
@@ -58,6 +67,8 @@ const ROWS = 6;
 /** A minute of grace: a tram due at 10:00 is still the tram you are waiting
  *  for at 10:00:45, and dropping it the second it is due empties the list. */
 const PAST_GRACE_S = 60;
+/** The phone sheet names at most this many lines with cancelled departures. */
+const CANCELLED_ROUTES_MAX = 3;
 
 export type ArrivalsStatus = 'live' | 'stale' | 'down' | 'none';
 
@@ -89,11 +100,15 @@ export function arrivalsAt(
   vehicles: readonly LiveVehicleRef[],
   nowMs: number,
   options: ArrivalsOptions,
-): { rows: ArrivalRow[]; status: ArrivalsStatus } {
+): { rows: ArrivalRow[]; status: ArrivalsStatus; cancelledRoutes: string[] } {
   const horizonMs = (options.horizonMin ?? HORIZON_MIN) * 60_000;
   const wanted = options.rows ?? ROWS;
   const cutoff = nowMs - (options.pastGraceS ?? PAST_GRACE_S) * 1000;
   const platforms = new Set(options.stopIds);
+  const cancelled = options.cancelled;
+  // Departures left off because ZET cancelled them, kept for the phone sheet's
+  // note: which line, and when the timetable had it.
+  const skipped: Array<{ routeName: string; scheduledMs: number }> = [];
 
   // First vehicle wins a trip id: the twin publishes one pin per vehicle, and
   // two vehicles claiming one trip is a feed fault, not a choice to make here.
@@ -112,6 +127,13 @@ export function arrivalsAt(
       // its trip ids look like: the two operators number trips in their own
       // namespaces, and a collision must not put a tram on a train's row.
       const vehicle = departure.operator !== 'zet' || departure.tripId === '' ? undefined : byTrip.get(departure.tripId);
+      // ZET said it will not run this trip and no vehicle has taken it: the
+      // departure is not a departure. A vehicle on the trip keeps the row (the
+      // alert trip that ran, 1 in 83, and the vehicle is the better witness).
+      if (cancelled && departure.operator === 'zet' && departure.tripId !== '' && cancelled.has(departure.tripId) && vehicle === undefined) {
+        skipped.push({ routeName: departure.routeName, scheduledMs: scheduled });
+        continue;
+      }
       let atMs = scheduled;
       if (vehicle) {
         atMs = scheduled + (vehicle.delaySeconds ?? 0) * 1000;
@@ -144,5 +166,20 @@ export function arrivalsAt(
 
   const sorted = [...best.values()].sort((a, b) => a.row.atMs - b.row.atMs || a.row.routeName.localeCompare(b.row.routeName));
   const shown = sorted.slice(0, wanted);
-  return { rows: shown.map((c) => c.row), status: statusOf(boards, shown) };
+  return { rows: shown.map((c) => c.row), status: statusOf(boards, shown), cancelledRoutes: cancelledRoutesOf(skipped, cutoff, shown, wanted) };
+}
+
+/** The lines whose cancelled departures fall inside what the list shows: at or
+ *  after the cutoff and no later than the last shown row (any time when the
+ *  list is not full), in time order, each once, at most three. A cancelled
+ *  departure hours past a full list is not news to the rider looking at it. */
+function cancelledRoutesOf(skipped: readonly { routeName: string; scheduledMs: number }[], cutoff: number, shown: readonly Candidate[], wanted: number): string[] {
+  const last = shown.length >= wanted && shown.length > 0 ? shown[shown.length - 1].row.atMs : Infinity;
+  const names: string[] = [];
+  for (const entry of [...skipped].sort((a, b) => a.scheduledMs - b.scheduledMs || a.routeName.localeCompare(b.routeName))) {
+    if (entry.scheduledMs < cutoff || entry.scheduledMs > last) continue;
+    if (!names.includes(entry.routeName)) names.push(entry.routeName);
+    if (names.length === CANCELLED_ROUTES_MAX) break;
+  }
+  return names;
 }

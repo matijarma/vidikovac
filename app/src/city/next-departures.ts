@@ -18,7 +18,7 @@ import { platformIds, vettedArrival } from '../kiosk/arrivals';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { departureRow } from '../transport/view';
 import { escapeHtml as e, escapeAttribute as a } from '../ui/dom/escape';
-import { externalTextReady, liveFixes } from './feed';
+import { cancelledTrips, externalTextReady, liveFixes } from './feed';
 import { resolvePlace, type PlaceContext } from './place';
 
 export { departureRow };
@@ -56,7 +56,9 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
     if (!frozen) ctx.boards?.ensure('zet', ids, ctx.onLocalData);
     const held = ids.map((id) => ctx.boards?.get('zet', id)).filter((b): b is DepartureBoard => Boolean(b));
     // Live only while the feed is (city/feed.ts liveFixes): no live time during an outage or off a stale fix.
-    const answer = arrivalsAt(held, liveFixes(ctx.snapshots['zet-rt'], ctx.now), ctx.now, { stopIds: ids, rows: opts.rows ?? DEPARTURE_ROWS });
+    const answer = arrivalsAt(held, liveFixes(ctx.snapshots['zet-rt'], ctx.now), ctx.now, {
+      stopIds: ids, rows: opts.rows ?? DEPARTURE_ROWS, cancelled: cancelledTrips(ctx.snapshots['zet-rt']),
+    });
     // Every row's line and headsign are ZET's text (kiosk/arrivals.ts vettedArrival): a row that fails the check is
     // left out; until the policy is in hand the rows hold their place rather than say the timetable is missing.
     const rows = answer.rows.filter(vettedArrival);
