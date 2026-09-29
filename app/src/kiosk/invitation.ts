@@ -66,7 +66,9 @@ export function compactArrangement(b: CompactBox): { placement: CompactPlacement
   return map;
 }
 export interface InvitationModel {
-  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops; outage: boolean;
+  items: readonly NearbyRow[]; radiusM: number; frame: FrameStops;
+  /** The one quiet note on the map (kiosk.ts invitationModel): ZET sends no positions, or its fleet is silent; null hides it. */
+  note: string | null;
   modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
   now: number; composition: Composition;
 }
@@ -113,7 +115,6 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   note.className='k-map-note';
   note.dataset.testid='map-note';
   note.hidden=true;
-  note.textContent=s.nearby.outageNote;
   geography.appendChild(note);
   let model:InvitationModel|null=null;
   const timeline=mountTimeline(element.querySelector<HTMLElement>('.k-nearby-host')!,{
@@ -201,7 +202,8 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       model=next;
       field.update({modules:model.modules,stop:model.stop,strings:s,i18n,locale});
       setFrame(model.frame);
-      const hidden=lightweight||!model.outage;
+      const hidden=lightweight||model.note===null;
+      if(model.note!==null&&note.textContent!==model.note)note.textContent=model.note;
       if(note.hidden!==hidden)note.hidden=hidden;
       fit();
     },

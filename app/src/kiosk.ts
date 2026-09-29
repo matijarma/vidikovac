@@ -67,6 +67,8 @@ import { bindLongPress, mountSettings, wallPlaceOf, wallSpanM, type LongPressVia
 import { mountStart, type StartHandle, type StartScreenInput } from './kiosk/start';
 import { CITY_CENTRE, routeType } from './kiosk/stops';
 import { fill, kioskStrings, type KioskStrings } from './kiosk/strings';
+import { railPolicy, serviceNumbers, serviceStateOf } from '../../shared/city/service-state';
+import { serviceVars } from './city/sentence';
 
 export type { KioskPhase } from './kiosk/credentials';
 
@@ -486,9 +488,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // The departures on the wall keep their slots on ETA jitter and ride through a momentary board gap (selectNearby's heldDepartures).
       const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       const departedDepartures = [...departedAt].map(([id, leftAt]) => ({ id, leftAt }));
+      // Upgrade U2: rail moves forward while ZET's fleet deviates (U3's policy field; undefined keeps today's order).
+      const policy = railPolicy(serviceStateOf(snapshots['zet-rt'], at).kind);
       wallItems = selectNearby({
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
+        ...(policy ? { policy } : {}),
       });
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
@@ -1026,8 +1031,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // lines board in place of the map), so it follows the map: the chosen
     // place's stop, or the whole city while Trg is only the read-path default
     // for the list and the departures [O-52], [O-65].
-    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, outage: outage(),
+    return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame, note: mapNote(),
       modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout) };
+  }
+  /** The map's one quiet note: ZET sends no positions (U0's outage, the kinds down and unconfirmed), or its fleet is
+   *  silent and the departures are the timetable's (upgrade U2); otherwise none. Never a cause. */
+  function mapNote(): string | null {
+    if (outage()) return s.nearby.outageNote;
+    const zet = byModule(teaser)['zet-rt'];
+    const numbers = serviceStateOf(zet, now()).kind === 'silent' ? serviceNumbers(zet) : null;
+    return numbers ? fill(s.nearby.silentNote, serviceVars(i18n, numbers)) : null;
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.

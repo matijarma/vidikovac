@@ -137,6 +137,7 @@ export interface NearbyInput {
    * on consecutive readings as the twin's estimate and next stop oscillated).
    */
   departedDepartures?: readonly { id: string; leftAt: number }[];
+  policy?: { railMax?: number; railFirst?: boolean };
 }
 
 /** §12 bounds and the ladder's clock (§4). */
