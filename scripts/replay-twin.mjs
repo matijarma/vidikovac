@@ -14,6 +14,16 @@
 //   node scripts/replay-twin.mjs <frames-dir> [--limit N]
 //   node scripts/replay-twin.mjs <frames-dir> --network <path> --trips <path>
 //   node scripts/replay-twin.mjs <frames-dir> --overrides <path>   (F11's dwell table)
+//   node scripts/replay-twin.mjs <frames-dir> --fleet-series [--standing]
+//
+// --fleet-series prints one JSON line per frame instead of the table: the
+// header `h`, the `pins` and the payload's `itemCount`, the `routeRows`, the
+// pinned vehicle `ids`, the `futurePins` stamped more than 30 s after the
+// payload's source time, and the vehicles `hidden` in a depot or parked
+// (scripts/replay-core.ts FleetFrame). --standing keeps the harness's own
+// stand per vehicle and ends the output with one {"summary": ...} line:
+// pinned (vehicle, frame) pairs standing past their mode's limit, and every
+// vehicle ever held back (StandingSummary). Either flag replaces the table.
 //
 // The repo's TypeScript uses extensionless imports, which plain `node`
 // cannot resolve; esbuild (already a dependency, pulled in by vite) bundles
@@ -70,9 +80,19 @@ async function loadCore() {
   }
 }
 
+/** Flags that take a value: their value is never the frames directory. */
+const VALUE_FLAGS = new Set(['limit', 'network', 'trips', 'overrides']);
+
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const dir = args.find((a) => !a.startsWith('--'));
+  let dir;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('--')) {
+      if (VALUE_FLAGS.has(args[i].slice(2))) i++;
+      continue;
+    }
+    dir ??= args[i];
+  }
   const flag = (name) => {
     const i = args.indexOf(`--${name}`);
     return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : undefined;
@@ -84,13 +104,15 @@ function parseArgs(argv) {
     networkPath: flag('network'),
     tripsPath: flag('trips'),
     overridesPath: flag('overrides'),
+    fleetSeries: args.includes('--fleet-series'),
+    standing: args.includes('--standing'),
   };
 }
 
 async function main() {
-  const { dir, limit, networkPath, tripsPath, overridesPath } = parseArgs(process.argv);
+  const { dir, limit, networkPath, tripsPath, overridesPath, fleetSeries, standing } = parseArgs(process.argv);
   if (!dir) {
-    console.error('usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path] [--overrides path]');
+    console.error('usage: node scripts/replay-twin.mjs <frames-dir> [--limit N] [--network path] [--trips path] [--overrides path] [--fleet-series] [--standing]');
     process.exitCode = 1;
     return;
   }
@@ -101,6 +123,12 @@ async function main() {
   // deployed Worker serves, so the run measures the engine as it ships.
   const overrides = resolve(repoRoot, overridesPath ?? 'app/public/data/stop-dwell-overrides.json');
   const engine = await core.loadRealEngine(net, trips, overrides);
+  if (fleetSeries || standing) {
+    const onFrame = fleetSeries ? (frame) => process.stdout.write(`${JSON.stringify(frame)}\n`) : undefined;
+    const report = await core.replayDirectory(resolve(dir), engine, { limit, onFrame, standing });
+    if (standing) process.stdout.write(`${JSON.stringify({ summary: report.standing })}\n`);
+    return;
+  }
   const report = await core.replayDirectory(resolve(dir), engine, { limit });
   console.log(core.formatTable(report));
 }
