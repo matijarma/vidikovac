@@ -431,7 +431,7 @@ describe('the wall groups kiosk.nearby.*, kiosk.sentence.*, kiosk.handheld.* (WP
     expect(hr.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
     expect(en.kiosk.nearby.pill).toBe('{km} km · ~{min} min');
     expect(hr.kiosk.nearby.always).toBe('uvijek');
-    expect(hr.kiosk.nearby.outageNote).toBe('ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu.');
+    expect(hr.kiosk.nearby.outageNote).toBe('ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde.');
     expect(hr.kiosk.sentence.kicker).toEqual({ promet: 'Promet', kultura: 'Kultura', vrijeme: 'Vrijeme', bicikli: 'Bicikli', nocas: 'Noćas', radovi: 'Radovi' });
     expect(hr.kiosk.sentence.pharmacy).toContain('24/7');
     expect(hr.kiosk.handheld.info).toBe('Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz.');
@@ -481,7 +481,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     opening: '{name}: rad počinje {time}.',
     pharmacy: 'Dežurna ljekarna 24/7: {address}.',
     always: '{name}: {text}',
-    outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+    outage: 'ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -505,7 +505,7 @@ describe('the header sentence templates are name-safe and match the sentence cli
     opening: '{name} opens {time}.',
     pharmacy: '24/7 duty pharmacy: {address}.',
     always: '{name}: {text}',
-    outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+    outage: 'ZET is not sending vehicle positions; timetable departures, unconfirmed.',
   };
   const templates = (sentence: Record<string, unknown>): Record<string, unknown> =>
     Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker'));

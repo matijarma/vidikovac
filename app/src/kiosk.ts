@@ -25,6 +25,7 @@ import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../sh
 import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
 import { vetExternal, type ExternalTextRejection } from '../../shared/kiosk/external-text';
 import { matchStreet } from '../../shared/city/geo';
+import { positionsUnavailable } from '../../shared/city/service-state';
 import { presentationTargetLabel } from './experience/presentation';
 import { FLAGS } from './core/flags';
 import { loadLastRun as loadLastRunImpl, type LastRunSnapshot } from './core/lastrun';
@@ -398,8 +399,9 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function sentenceSuspended(): boolean {
     return phase !== 'invitation' || Boolean(presentation?.target) || sessionLabel !== null || headMid.getAttribute('role') === 'status';
   }
+  /** ZET down or unconfirmed (shared/city/service-state.ts): the list, the touch board and the map note read this one predicate. */
   function outage(): boolean {
-    return feedStateOf(byModule(teaser)['zet-rt']) === 'down';
+    return positionsUnavailable(byModule(teaser)['zet-rt'], now());
   }
   function setText(node: HTMLElement, value: string): void {
     if (node.textContent !== value) node.textContent = value;
@@ -487,7 +489,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       const heldDepartures = wallItems.filter(row => row.kind === 'departure');
       const departedDepartures = [...departedAt].map(([id, leftAt]) => ({ id, leftAt }));
       wallItems = selectNearby({
-        place, radiusM, now: at, boards: held, fixes: outage() ? [] : vehiclePoints(snapshots['zet-rt'], at),
+        place, radiusM, now: at, boards: held, fixes: outage() ? [] : liveFixes(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
       });
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.

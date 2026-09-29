@@ -868,7 +868,7 @@
       "event": "{time} počinje događanje „{title}” ({venue}).",
       "pharmacy": "Dežurna ljekarna 24/7: {address}.",
       "always": "{name}: {text}",
-      "outage": "ZET ne šalje položaje vozila; polasci su po voznom redu.",
+      "outage": "ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.",
       "weatherTemperature": "Temperatura u Zagrebu je {temp}.",
       "sunsetAt": "Zalazak sunca je u {time}.",
       "sunsetTime": "U {time} zalazi sunce.",
@@ -938,7 +938,7 @@
       "sunset": "Zalazak sunca",
       "lastTrams": "Zadnji tramvaji",
       "firstTram": "Prvi tramvaj",
-      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su po voznom redu."
+      "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde."
     },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",

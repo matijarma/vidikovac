@@ -10,6 +10,15 @@ import { isFreeMotion, isPathMotion } from '../../../shared/motion/wire';
 import { dataNumber, dataText } from '../panels/panel';
 import type { Fix, FixPlan } from './integrator';
 
+/**
+ * A pin stamped this far after its own snapshot's source time is no evidence of where the vehicle was: ZET stamps
+ * +24 h at some Zagreb midnights (27 September: 106 stamps, ghosts on the map all day). Equal to
+ * shared/motion/plan.ts FUTURE_TOLERANCE_S × 1000 (the twin refuses the same reports), kept as a number here so this
+ * file does not carry the planner. Measured against the snapshot's source time, never the device clock: a wall whose
+ * clock runs a minute slow must not lose every live fix.
+ */
+const FUTURE_TOLERANCE_MS = 30_000;
+
 function parseTime(iso: string | undefined): number | null {
   if (iso === undefined) return null;
   const t = Date.parse(iso);
@@ -19,8 +28,10 @@ function parseTime(iso: string | undefined): number | null {
 /**
  * Every 'vehicle:' pin with a point, as a Fix. A pin's own `at` is its report
  * time; a pin without one is dated at the snapshot's source time, then its
- * fetch time, then `now`. Plan knot times on the wire are seconds relative to
- * the snapshot's source time (the twin's header); they leave here as absolute
+ * fetch time, then `now`. A pin stamped more than FUTURE_TOLERANCE_MS after
+ * the snapshot's source time is left out, when that time is known. Plan knot
+ * times on the wire are seconds relative to the snapshot's source time (the
+ * twin's header); they leave here as absolute
  * epoch milliseconds, so the integrator evaluates them against its own clock.
  * The next-stop ETA is the exception: the twin publishes a planned arrival in
  * epoch seconds, so it is only scaled, never re-based.
@@ -35,6 +46,8 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
     if (!item.id.startsWith('vehicle:') || item.geo?.type !== 'Point') continue;
     const [lon, lat] = item.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const stamped = parseTime(item.at);
+    if (sourceAt !== null && stamped !== null && stamped > sourceAt + FUTURE_TOLERANCE_MS) continue;
     const type = dataNumber(item, 'routeType');
     const rawDirection = dataNumber(item, 'direction');
     const direction: 0 | 1 | undefined = rawDirection === 0 ? 0 : rawDirection === 1 ? 1 : undefined;
@@ -43,7 +56,7 @@ export function vehicleFixes(snapshot: ModuleSnapshot | undefined, now: number):
       id: item.id,
       lon,
       lat,
-      at: parseTime(item.at) ?? fallbackAt,
+      at: stamped ?? fallbackAt,
       network: item.motion?.network,
       generatedAt: item.motion?.generatedAt,
       tripId: dataText(item, 'tripId') || undefined,

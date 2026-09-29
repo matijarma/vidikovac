@@ -25,6 +25,7 @@ import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameSpanM, frameStopsFrom 
 import { decodeNetwork, type Network } from '../../shared/motion/network';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { nearbyHead } from '../../app/src/city/nearby';
+import { resetServiceStateMemory } from '../../shared/city/service-state';
 import { routeType } from '../../app/src/kiosk/stops';
 import * as pairedRenderer from '../../app/src/kiosk/paired';
 import { frameView } from '../../app/src/map/frame';
@@ -3304,6 +3305,44 @@ describe('arrivals on the public screen', () => {
     expect(q(k.root, '[data-testid=map-note]')!.hidden).toBe(false);
     expect(k.root.querySelectorAll('[data-testid=map-note]')).toHaveLength(1);
     k.handle.destroy();
+  });
+
+  // U0 step 5 (29 September 2026, 06:28 to 07:56): the feed froze, the module stayed live, and the header said
+  // "polazi u 07:53" from the timetable. Past three minutes of source age the wall is unconfirmed: the list is grey
+  // timetable times, the map note says so once, and the header says no departure at all.
+  it('a frozen vehicle feed (source ten minutes old, the module live) leaves three grey departures, one map note and no departure sentence', async () => {
+    resetServiceStateMemory();
+    let now = NOW;
+    const frozen = new Date(NOW - 10 * 60_000).toISOString();
+    const b = fakeBoards(JELACIC_BOARDS);
+    const stale = MODULES.map((m) => (m.module !== 'zet-rt' ? m : {
+      ...snap('zet-rt', [item('zet-rt', 'vozila', 'vehicle', '0 vozila u pokretu', { data: { vehicles: 0 } })]),
+      sourceUpdatedAt: frozen,
+      sources: { zet: { status: 'stale' as const, itemCount: 0, fetchedAt: new Date(NOW - 2_000).toISOString(), sourceUpdatedAt: frozen } },
+    }));
+    const k = mount({ stored: STORED, modules: stale, createBoards: b.create, now: () => now });
+    try {
+      await flush();
+      const rows = departures(k.root);
+      expect(rows).toHaveLength(3);
+      expect(rows.every(row => row.dataset.live === undefined)).toBe(true);
+      const notes = [...k.root.querySelectorAll<HTMLElement>('[data-testid=map-note]')];
+      expect(notes).toHaveLength(1);
+      expect(notes[0]!.hidden).toBe(false);
+      // Three rhythms of the header, a second at a time.
+      const said: string[] = [];
+      for (let second = 0; second < 60; second += 1) {
+        said.push(painted(k.root));
+        now += 1_000;
+        k.tick(CODE_TICK_MS);
+      }
+      expect(said.some(Boolean)).toBe(true);
+      expect(said.filter(sentence => /polazi/.test(sentence))).toEqual([]);
+      expect(text(k.root)).not.toMatch(/nedostup/);
+    } finally {
+      k.handle.destroy();
+      resetServiceStateMemory();
+    }
   });
 });
 
