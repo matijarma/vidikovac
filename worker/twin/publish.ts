@@ -20,6 +20,7 @@ import type { SourceAvailability } from '../feed/schema';
 import { delayWords, routeLabel, routeShortName, routeType } from '../feed/modules/zet-rt';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { FEED_TICK_MS } from './clock';
+import { noServiceTripIds, operatorSummary } from './operator';
 import type { TwinState } from './state';
 import { BUILT_AT } from '../../app/src/motion/network-meta';
 
@@ -129,6 +130,11 @@ export function buildPayload(
   const headerTs = state.headerTs;
 
   const tracks = Object.values(state.tracks).filter((t) => t.fixes.length > 0).sort((a, b) => a.id.localeCompare(b.id));
+  // The trips some tracked vehicle carries (U1): a NO_SERVICE alert names a
+  // trip ZET will not run, and one vehicle in 83 ran it anyway. Read from every
+  // track with a fix, so a parked vehicle holding a trip keeps its departure
+  // (the safe side).
+  const carried = new Set(tracks.map((t) => t.tripId).filter((id): id is string => id !== null));
   for (const track of tracks) {
     const last = lastFix(track)!;
     const routeId = track.routeId;
@@ -182,6 +188,9 @@ export function buildPayload(
         // The ordering register's leader (E3), read fresh at every publish:
         // a relation that ended is off the wire the same tick it ended.
         behind: track.order.leader ?? undefined,
+        // ZET's own CANCELED marker, kept beside the headsign and the next
+        // stop: 114 of 143 trips so marked were driven, so it changes nothing.
+        tripStatus: next?.canceled ? 'canceled' : undefined,
       }),
       ...(placed.motion ? { motion: {
         ...placed.motion,
@@ -215,11 +224,13 @@ export function buildPayload(
   }
 
   const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS;
+  const noServiceTrips = noServiceTripIds(state.operator, carried, Math.floor(nowMs / 1000));
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,
     ...(state.tickAtMs > 0 ? { fetchedAt: iso(state.tickAtMs) } : {}),
     ...(headerTs !== null ? { sourceUpdatedAt: iso(headerTs * 1000) } : {}),
+    ...(noServiceTrips.length > 0 ? { noServiceTrips } : {}),
   };
 
   return {

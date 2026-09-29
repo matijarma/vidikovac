@@ -8,6 +8,7 @@ import { DWELL_RECENT_N, DWELL_RECENT_WINDOW_S, type DwellRecent } from '../../s
 import { toPlane } from '../../shared/motion/geo';
 import { emptyAggregates, emptyHistogram, histogramCount, isEmptyAggregates, mergeHistograms, parseHistogram, parseKey, serializeHistogram, type LearnedAggregates } from '../../shared/motion/learn';
 import { newOrderState, type PlaneFix, type Track } from '../../shared/motion/track';
+import { emptyOperator } from './operator';
 import type { TripJoin } from './publish';
 import type { TwinState } from './state';
 
@@ -235,6 +236,8 @@ export function deserializeState(body: string): TwinState {
     // rolling dwell window; both start empty and fill within a minute.
     pendingLearned: { edges: pendingLearned.edges ?? {}, stops: pendingLearned.stops ?? {}, nodes: pendingLearned.nodes ?? {}, nodePasses: pendingLearned.nodePasses ?? {} },
     dwellRecent: stored.dwellRecent ?? {},
+    // A row written before U1 has no statement of ZET's; the next frame writes it.
+    operator: stored.operator ?? emptyOperator(),
   };
 }
 

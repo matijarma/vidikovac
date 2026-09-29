@@ -29,6 +29,7 @@ import type { FeedPayload } from '../feed/payload';
 import type { ZetRoutes } from '../feed/modules/zet-routes';
 import { kindOf, type Engine } from './engine';
 import type { DecodedFeed, RawFix } from './feed-decode';
+import { emptyOperator, foldOperator, type OperatorCounts } from './operator';
 import { buildPayload, type TripJoin } from './publish';
 import { nextStopOf, type TwinState } from './state';
 
@@ -66,6 +67,9 @@ export interface TickResult {
   /** What the planner had to intervene about this tick, by vehicle kind
    *  (F11): `twin_plan`, dim1 the event, dim2 the kind. */
   plan: PlanCountsByKind;
+  /** What ZET's alerts and markers said in the frame this state holds (U1);
+   *  the Durable Object logs it once a minute. */
+  operator: OperatorCounts;
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. */
@@ -155,6 +159,9 @@ export function runTick(input: TickInput): TickResult {
   const headerTs = feed?.headerTs ?? input.state.headerTs;
   const headerSec = headerTs ?? nowSec;
   const tripUpdates = feed ? nextStopOf(feed) : input.state.tripUpdates;
+  // ZET's own statements (U1). A 304 or a repeated header keeps the last one;
+  // the announced period, checked at publish, is what expires it.
+  const operator = feed ? foldOperator(input.state.operator ?? emptyOperator(), feed) : input.state.operator ?? emptyOperator();
   const fresh = new Set<string>();
   let newFixes = 0;
 
@@ -316,9 +323,10 @@ export function runTick(input: TickInput): TickResult {
     // Samples that fell out of the window go here, not in an alarm: the tick
     // is the only place the state is rewritten.
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
+    operator,
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, operator: operator.counts };
 }
 
 /**

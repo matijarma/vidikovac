@@ -428,7 +428,9 @@ export class TwinDO extends DurableObject<Env> {
     // round's own replay measured 1.42 MB at the morning peak and production
     // has never measured it at all; `published` is the part that grows with
     // the fleet, and shrinking it is the next round's work.
-    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length });
+    // The operator's counts ride along (U1): logInfo takes scalars, so they
+    // are spread, not nested.
+    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, ...result.operator });
 
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);

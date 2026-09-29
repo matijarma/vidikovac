@@ -11,6 +11,7 @@ import { emptyAggregates, type LearnedAggregates } from '../../shared/motion/lea
 import { EVICT_S } from '../../shared/motion/plan';
 import type { Track } from '../../shared/motion/track';
 import type { DecodedFeed } from './feed-decode';
+import { emptyOperator, type OperatorState } from './operator';
 
 /** Silence after which a vehicle leaves the twin, in seconds: the planner's
  *  eviction age itself (plan.ts EVICT_S, 180 s, T8), so the twin drops a
@@ -30,6 +31,9 @@ export interface TripNext {
    *  The planner's "departed by the header" bound needs it to tell a current
    *  update from one naming the platform a tram is still standing at (F11). */
   atSec: number | null;
+  /** The update's trip descriptor says CANCELED. ZET's own marker, carried to
+   *  the pin as `tripStatus` and counted; it removes nothing (U1). */
+  canceled?: boolean;
 }
 
 export interface TwinState {
@@ -55,10 +59,13 @@ export interface TwinState {
    *  wakes up planning from the last ninety minutes rather than from the
    *  timetable while SQLite is read. */
   dwellRecent: DwellRecent;
+  /** What ZET's own alerts and markers said in the last frame (U1): about
+   *  thirty trip ids on a recorded day, under 2 KB of the row. */
+  operator: OperatorState;
 }
 
 export function emptyState(): TwinState {
-  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {} };
+  return { headerTs: null, etag: null, tickAtMs: 0, tracks: {}, tripUpdates: {}, published: {}, learnedUpTo: {}, pendingLearned: emptyAggregates(), dwellRecent: {}, operator: emptyOperator() };
 }
 
 /** The update to keep for a trip: the earliest stop still ahead of the header
@@ -79,6 +86,7 @@ export function nextStopOf(feed: DecodedFeed): Record<string, TripNext> {
       timeSec: chosen?.timeSec ?? null,
       delays: stops.map((s) => s.delaySec).filter((d): d is number => d !== null),
       atSec: update.atSec ?? feed.headerTs ?? null,
+      ...(update.canceled ? { canceled: true } : {}),
     };
   }
   return out;

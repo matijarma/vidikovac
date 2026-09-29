@@ -1,8 +1,12 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { newTrack, type Track } from '../../shared/motion/track';
 import { DATA_KEYS } from '../../worker/feed/schema';
+import { decodeFeed } from '../../worker/twin/feed-decode';
+import { emptyOperator, foldOperator } from '../../worker/twin/operator';
 import { buildPayload, type TripJoin } from '../../worker/twin/publish';
 import { emptyState, type TripNext, type TwinState } from '../../worker/twin/state';
+import { runTick } from '../../worker/twin/tick';
 import { decodeNetwork } from '../../shared/motion/network';
 import graphBefore from '../fixtures/graph-migration/before.json';
 import graphAfter from '../fixtures/graph-migration/after.json';
@@ -162,5 +166,58 @@ describe('buildPayload names no next stop past the last platform of a path (rail
     // 10314 at the Zapruđe stand, 17:43:56: the plan pushed 150 to 239 m in 8 s ahead of a follower; the fix's arc is the evidence.
     const pushed = track({ id: '1', next: null, plan: { on: 'path', pathIdx: 2, knots: [[0, 2380], [2, 2500], [20, 2600]] } });
     expect(pinOn([pushed], { T1: update({ stopId: 'D900' }) }).data?.nextStopId).toBe('D900');
+  });
+});
+
+// ZET's own statements on the wire (upgrade U1): the trips its no-service
+// alerts name that no tracked vehicle carries, and the CANCELED marker as a
+// status on the pin that changes nothing else about it.
+describe('buildPayload and the operator\'s statements', () => {
+  const operatorOf = (trips: Record<string, number | null>) => ({ ...emptyOperator(), noServiceTrips: trips });
+  const zet = (tracks: Track[], trips: Record<string, number | null>) =>
+    buildPayload({ ...state(tracks), operator: operatorOf(trips) }, joins, routes, NOW_MS, NOW_MS + 10_000, null).sources!.zet;
+
+  it('lists the alert trips sorted, without the trips a vehicle carries and those whose period ended, and nothing when none stand', () => {
+    const listed = zet([track({ id: '1', tripId: 'T1' })], { z9: null, T1: null, a1: HEADER_S + 600, over: HEADER_S - 1, m5: null });
+    expect(listed.noServiceTrips).toEqual(['a1', 'm5', 'z9']);
+    expect(zet([], {})).not.toHaveProperty('noServiceTrips');
+    expect(zet([track({ id: '1', tripId: 'T1' })], { T1: null })).not.toHaveProperty('noServiceTrips');
+  });
+
+  it('marks the pin of a CANCELED trip and keeps its headsign, next stop and delay', () => {
+    const marked = pin([track({ id: '1' })], { T1: update({ stopId: '244_1', delaySec: 60, canceled: true }) });
+    expect(marked.data).toMatchObject({ tripStatus: 'canceled', headsign: 'Sopot', nextStopId: '244_1', delaySeconds: 60 });
+    expect(pin([track({ id: '1' })], { T1: update({ stopId: '244_1', delaySec: 60 }) }).data).not.toHaveProperty('tripStatus');
+    expect(DATA_KEYS.vehicle).toContain('tripStatus');
+  });
+});
+
+describe('the 21 September 17:15 cut on the wire', () => {
+  const DIR = new URL('../fixtures/frames/2026-09-21-1715-1717-all/', import.meta.url);
+  const frames = readdirSync(DIR).filter((n) => n.endsWith('.pb')).sort().map((n) => decodeFeed(new Uint8Array(readFileSync(new URL(n, DIR)))));
+
+  it('publishes the same 25 alert trips in every frame, none of the 7 CANCELED, and the CANCELED pins keep their headsign', () => {
+    let st = emptyState();
+    let first: string[] | undefined;
+    for (const feed of frames) {
+      const canceled = new Set(feed.tripUpdates.filter((u) => u.canceled).map((u) => u.tripId!));
+      const headsigns = new Map<string, TripJoin>([...canceled].map((id) => [id, { direction: 0, headsign: `Kraj ${id}`, shapeId: null }]));
+      const at = feed.headerTs!;
+      const result = runTick({ state: st, feed, nowMs: (at + 2) * 1000, joins: headsigns, routes: {}, engine: null, validUntilMs: 0 });
+      st = result.state;
+      const ids = result.payload.sources!.zet.noServiceTrips!;
+      expect(ids).toHaveLength(25);
+      first ??= ids;
+      expect(ids).toEqual(first);
+      expect(ids).toEqual([...ids].sort());
+      for (const id of ids) expect(canceled.has(id)).toBe(false);
+      const marked = result.payload.items.filter((i) => i.kind === 'vehicle' && i.data?.tripStatus === 'canceled');
+      expect(marked.length).toBeGreaterThan(0);
+      for (const item of marked) {
+        expect(canceled.has(String(item.data!.tripId))).toBe(true);
+        expect(item.data!.headsign).toBe(`Kraj ${item.data!.tripId}`);
+      }
+    }
+    expect(foldOperator(emptyOperator(), frames[0]).counts.noServiceAlerts).toBe(25);
   });
 });

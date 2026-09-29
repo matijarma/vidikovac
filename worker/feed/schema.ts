@@ -80,6 +80,8 @@ export interface SourceAvailability {
   sourceUpdatedAt?: string;
   /** Number before a documented per-source cap, if known. */
   totalItems?: number;
+  /** ZET only, U1: trips ZET's no-service alerts name that no tracked vehicle carries. */
+  noServiceTrips?: string[];
 }
 
 export interface Attribution {
@@ -175,7 +177,10 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // about rather than re-deriving one from two plans between polls. It is
   // read off the register at every publish, so it is withdrawn the tick the
   // relation ends, and absent for a tram the register places nowhere.
-  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'nextStopEtaSec', 'delaySeconds', 'speed', 'confidence', 'held', 'behind'],
+  // 'tripStatus' is 'canceled' when ZET's own TripUpdate marks the trip so
+  // (U1): ZET's marker, which on 21 and 24 Sep marked 114 of 143 trips its
+  // vehicles drove on schedule, never a reason to hide or restyle anything.
+  vehicle: ['routeId', 'tripId', 'vehicleId', 'routeShortName', 'routeType', 'medianDelaySeconds', 'vehicles', 'direction', 'headsign', 'shapeId', 'nextStopId', 'nextStopEtaSec', 'delaySeconds', 'speed', 'confidence', 'held', 'behind', 'tripStatus'],
   closure: ['type', 'subtype', 'direction', 'street', 'district'],
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   forecast: ['tmin', 'tmax', 'weather', 'text'],
