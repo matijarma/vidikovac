@@ -1,7 +1,7 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
 import { compactData } from '../payload';
-import { zagrebIso, ZAGREB_TZ } from '../time';
+import { zagrebDate, zagrebIso } from '../time';
 import { districtOf } from '../geo/districts';
 
 // Guru za kulturu (kultura.zagreb.hr), the City of Zagreb's culture programme: one JSON list of the
@@ -63,14 +63,6 @@ function localIso(value: unknown): string | undefined {
   return zagrebIso(year, month, day, hour, minute);
 }
 
-const ZAGREB_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: ZAGREB_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-
-/** Zagreb's calendar day at `now`. */
-function zagrebToday(now: Date): { year: number; month: number; day: number } {
-  const parts = Object.fromEntries(ZAGREB_DAY.formatToParts(now).map((part) => [part.type, part.value]));
-  return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day) };
-}
-
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -126,7 +118,7 @@ function toItem(row: KulturaRow): ItemInput | null {
 
 export function parseKulturaZg(body: unknown, now: Date): FeedPayload {
   const rows = checkRows(body);
-  const today = zagrebToday(now);
+  const today = zagrebDate(now);
   const from = Date.parse(zagrebIso(today.year, today.month, today.day));
   const to = Date.parse(zagrebIso(today.year, today.month, today.day + KULTURA_ZG_DAYS));
   const items: ItemInput[] = [];
