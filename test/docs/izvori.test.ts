@@ -157,6 +157,8 @@ describe('the October modules are documented as module rows, and hak quotes arti
 
   it('cites article 8 in the hak row and quotes article 10 beside it', () => {
     expect(row('hak')).toContain('čl. 8');
+    expect(row('hak')).toContain('Čl. 10');
+    expect(row('hak')).toContain('automatizirano preuzimati, indeksirati ili prikupljati sadržaje uporabom robota, programskih skripti, alata za scraping ili drugih automatiziranih sredstava, osim uz prethodno pisano odobrenje HAK-a');
     expect(izvori).toContain('Članak 10');
     expect(izvori).toContain('automatizirano preuzimati, indeksirati ili prikupljati sadržaje uporabom robota, programskih skripti, alata za scraping ili drugih automatiziranih sredstava, osim uz prethodno pisano odobrenje HAK-a');
     expect(izvori).toContain('kontinuirano ili automatizirano prenošenje sadržajno ograničenog izbora informacija');

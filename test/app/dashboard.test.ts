@@ -632,7 +632,8 @@ describe('polling on the feed store', () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'prometnice', 'zet-rt']);
+    // Sada's modules: the eight of September and the five of October 2026 (U3: kultura-zg, programi, dhmz-hourly, hak, prekidi).
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi', 'prometnice', 'zet-rt']);
     expect(fetchData.mock.calls[0]![1]).toBe('dt1');
     // Kultura is a Još row now: the directory's own refresh is cleared away, the row's switch is what is measured.
     click(root, '[data-testid=tab-more]');
@@ -640,11 +641,12 @@ describe('polling on the feed store', () => {
     fetchData.mockClear();
     click(root, '[data-testid=dir-kultura]');
     await flush();
-    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja']);
+    // Kultura lists the City's programme and the libraries' beside dogadanja (U3).
+    expect(fetchData.mock.calls.map((c) => c[0])).toEqual(['dogadanja', 'kultura-zg', 'programi']);
     fetchData.mockClear();
     tick();
     await flush();
-    expect(fetchData).toHaveBeenCalledTimes(1);
+    expect(fetchData).toHaveBeenCalledTimes(3);
   });
   it('polls transit on its own beat (fallback, source phase or validUntil) and everything else every 30 s, refreshing only the due lane (R-TE4)', async () => {
     const { session, armed, fetchData, ticks } = mount();
