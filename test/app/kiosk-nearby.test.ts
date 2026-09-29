@@ -1261,16 +1261,18 @@ describe('the events of three modules (S2)', () => {
     at: '2026-09-22T16:30:00Z', dateBasis: 'event', data: { source: 'kgz', venue: 'Knjižnica Bogdana Ogrizovića', category: 'program', precision: 'time' },
   });
   const TWIN = item('dogadanja', 'kulturpunkt:zrinjevac', 'event', 'Koncert na Zrinjevcu', {
-    at: '2026-09-22T17:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venue: 'Zrinjevac', precision: 'time' },
+    at: '2026-09-22T17:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venueHint: 'Zrinjevcu', precision: 'time' },
   });
   const venuePoint = (i: FeedItem): { lon: number; lat: number } | null =>
-    i.data?.venue === 'Zrinjevac' ? { lon: 15.9785, lat: 45.8108 } : i.data?.venue === 'Knjižnica Bogdana Ogrizovića' ? { lon: 15.9745, lat: 45.8126 } : null;
+    i.data?.venue === 'Zrinjevac' || i.data?.venueHint === 'Zrinjevcu' ? { lon: 15.9785, lat: 45.8108 } : i.data?.venue === 'Knjižnica Bogdana Ogrizovića' ? { lon: 15.9745, lat: 45.8126 } : null;
+  const venueName = (i: FeedItem): string | null => i.data?.venueHint === 'Zrinjevcu' ? 'Zrinjevac' : null;
   const feeds = (kultura: ModuleSnapshot['status'] = 'live'): FeedSnapshots => u3({ 'zet-rt': snap('zet-rt', []), dogadanja: snap('dogadanja', [TWIN]) }, {
     'kultura-zg': u3snap('kultura-zg', [KULTURA], kultura), programi: u3snap('programi', [PROGRAMI]),
   });
 
   it('reads kultura-zg and programi beside dogadanja, places an event without a point through the gazetteer, and keeps its end', () => {
-    const events = selectNearby(input(NOW_E, { snapshots: feeds(), venuePoint })).filter((r) => r.kind === 'event');
+    expect(TWIN.data).not.toHaveProperty('venue');
+    const events = selectNearby(input(NOW_E, { snapshots: feeds(), venuePoint, venueName })).filter((r) => r.kind === 'event');
     expect(events.map((r) => r.id)).toEqual(['event:programi:kgz:55:2026-09-22', 'event:kultura-zg:101']);
     expect(events[1]).toMatchObject({ source: 'kultura-zg', untilMs: at('2026-09-22T19:00:00Z'), selection: { kind: 'item', module: 'kultura-zg' } });
     expect(events[0]).toMatchObject({ source: 'programi', selection: { kind: 'item', module: 'programi' } });
@@ -1280,7 +1282,7 @@ describe('the events of three modules (S2)', () => {
   });
 
   it('lists one event announced twice once, the announcement with its own point standing; a module that is down leaves the others', () => {
-    const down = selectNearby(input(NOW_E, { snapshots: feeds('down'), venuePoint })).filter((r) => r.kind === 'event');
+    const down = selectNearby(input(NOW_E, { snapshots: feeds('down'), venuePoint, venueName })).filter((r) => r.kind === 'event');
     expect(down.map((r) => r.id)).toEqual(['event:programi:kgz:55:2026-09-22', 'event:kulturpunkt:zrinjevac']);
   });
 });
