@@ -7,7 +7,7 @@ import type { ScreenPlace } from '../../../shared/city/place';
 import { aboutExpected, departureVoice, routeConfirmed, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { CityState } from '../../../shared/city/types';
 import {
-  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, writeSentence,
+  acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, validateSentenceSlot, writeSentence,
   type SentenceFact, type SentenceKicker, type WrittenSentence,
 } from '../../../shared/kiosk/sentence';
 import { zagrebIso } from '../../../worker/feed/time';
@@ -16,11 +16,12 @@ import { zagrebHour } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { clock, dayKey, dayMonth, fmtNumber, sameZagrebDay } from '../kiosk/format';
-import { weatherNow } from '../kiosk/local';
+import { cleanCondition, weatherNow } from '../kiosk/local';
 import { kioskStrings } from '../kiosk/strings';
-import { dataNumber } from '../panels/panel';
+import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
 import { dynamicPlaces } from './discovery';
+import { joinFacts } from './joins';
 import type { NearbyRow } from './nearby';
 import { bikeCount } from './strings';
 
@@ -118,6 +119,15 @@ export const SENTENCE_COPY_HR = {
   notice: 'ZET javlja: {notice}.',
   service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
   serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
+  trainAt: '{station}: vlak, smjer {to}, polazi u {time}.',
+  rainAt: 'Oko {time} {condition}; vjerojatnost {p}.',
+  forecastTomorrow: 'Sutra {condition}, od {min} do {max} °C.',
+  supplyCutToday: '{street}: danas bez {what} od {from} do {until}.',
+  supplyCutTomorrow: '{street}: sutra bez {what} od {from} do {until}.',
+  roadUntil: '{street}: {what} do {until}.',
+  openUntil: '{name}: otvoreno do {time}.',
+  eventLastTram: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.',
+  bikesEmpty: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -145,6 +155,15 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   notice: 'ZET reports: {notice}.',
   service: 'ZET: {seen} moving, about {expected} by the timetable.',
   serviceNone: 'ZET: no vehicle moving, about {expected} by the timetable.',
+  trainAt: '{station}: train towards {to} leaves at {time}.',
+  rainAt: 'Around {time} {condition}; chance {p}.',
+  forecastTomorrow: 'Tomorrow {condition}, {min} to {max} °C.',
+  supplyCutToday: '{street}: no {what} today from {from} to {until}.',
+  supplyCutTomorrow: '{street}: no {what} tomorrow from {from} to {until}.',
+  roadUntil: '{street}: {what} until {until}.',
+  openUntil: '{name}: open until {time}.',
+  eventLastTram: 'After “{title}” the last tram {route} leaves {time}.',
+  bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -177,6 +196,11 @@ export interface SentenceFactsInput {
   radiusM?: number;
   /** The facts of the sentence on screen: never cut by the cap while the rows still produce them, so its dwell and refreshes hold. */
   pinned?: readonly string[];
+}
+
+/** A BAJS station's own name, without the operator's prefix the feed writes before it. */
+function bajsName(name: string): string {
+  return name.replace(/^BAJS\s*[-:·]?\s*/i, '');
 }
 
 function nextMidnight(now: number): number {
@@ -262,14 +286,22 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     }), Math.min(weatherExpiry, nextMidnight(now)), { wording: key });
   }
 
+  // The three joins (U3.md S5), over the rows and the city's dynamic places: J2 below the rows, J3 in the bikes block.
+  const dynamic = input.radiusM !== undefined && input.radiusM > 0 ? dynamicPlaces(input.city, now) : [];
+  const joins = joinFacts({ rows: input.rows, places: dynamic, place: input.place, radiusM: input.radiusM, now });
   if (input.radiusM !== undefined && input.radiusM > 0) {
-    const station = dynamicPlaces(input.city, now).filter(located).filter(place => place.sourceId === 'bajs'
+    const station = dynamic.filter(located).filter(place => place.sourceId === 'bajs'
       && place.facts?.fresh === true && place.facts.operational === true
       && typeof place.facts.bikes === 'number' && Number.isInteger(place.facts.bikes) && place.facts.bikes > 0
       && distanceM(input.place, place) <= input.radiusM!)
       .sort((a, b) => distanceM(input.place, a) - distanceM(input.place, b))[0];
-    if (station) add(station.id, 'bicikli', copy(i18n, 'bikes', {
-      station: station.name.replace(/^BAJS\s*[-:·]?\s*/i, ''), bikes: bikeCount(i18n, station.facts!.bikes),
+    const empty = joins.bikesEmpty;
+    // J3: the nearest station is empty and another has bikes: the sentence names both, and the plain fact waits.
+    if (empty) add(`bikes-empty:${empty.empty.place.id}`, 'bicikli', copy(i18n, 'bikesEmpty', {
+      station: bajsName(empty.empty.place.name), other: bajsName(empty.other.place.name), bikes: bikeCount(i18n, empty.other.bikes),
+    }), Math.min(empty.empty.updatedAt, empty.other.updatedAt) + 180_000, { wording: 'bikesEmpty' });
+    else if (station) add(station.id, 'bicikli', copy(i18n, 'bikes', {
+      station: bajsName(station.name), bikes: bikeCount(i18n, station.facts!.bikes),
     }), Date.parse(station.updatedAt!) + 180_000, { wording: 'bikes' });
   }
   // Upgrade U2: while the fleet deviates, the bikes come right after the service fact (same station, same radius).
@@ -284,6 +316,8 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
 
   const hour = zagrebHour(now) ?? 12;
   const atNight = hour >= 20 || hour < 5;
+  const tomorrow = dayKey(nextMidnight(now) + 12 * 3_600_000);
+  const words = kioskStrings(i18n.getLocale());
   let departures = 0;
   for (const row of input.rows) {
     // ZET's own headline, said while its row stands (its window, not a day, and in every service state: it is ZET's
@@ -355,6 +389,59 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       // Entire source sentence or nothing. No mid-word or mid-sentence trimming.
       add(row.id, 'kultura', copy(i18n, 'always', { name: row.title, text: row.sub }), (Math.floor(now / 1_200_000) + 1) * 1_200_000,
         { wording: 'always' });
+    } else if (row.kind === 'rail' && row.atMs !== null && row.arrival && sameZagrebDay(row.atMs, now)) {
+      // The timetable's train at its clock time (a train is never tracked); the next one towards the same place is
+      // the same fact again, as a tram's next trip is.
+      add(row.id, 'promet', copy(i18n, 'trainAt', { station: row.sub, to: row.title, time: clock(row.atMs) }), row.atMs,
+        { factKey: `train:${row.title}@${row.sub}`, wording: 'trainAt' });
+    } else if (row.kind === 'rain' && row.atMs !== null && row.detail?.kind === 'rain' && row.detail.percent !== null) {
+      // J1: the rain row's step, in the locale's rain word and its chance.
+      add(row.id, 'vrijeme', copy(i18n, 'rainAt', {
+        time: clock(row.atMs), condition: words.nearby.rain[row.detail.word], p: `${row.detail.percent} %`,
+      }), Math.min(row.atMs, nextMidnight(now)), { wording: 'rainAt' });
+    } else if (row.kind === 'cut' && row.detail?.kind === 'cut' && !row.detail.allDay) {
+      // Hours only: a whole-day water notice has no hours to say (the row says it).
+      const { street, utility, fromMs, untilMs } = row.detail;
+      const family = sameZagrebDay(fromMs, now) ? 'supplyCutToday' : dayKey(fromMs) === tomorrow ? 'supplyCutTomorrow' : null;
+      if (family && dayKey(untilMs - 1) === dayKey(fromMs)) add(row.id, 'radovi', copy(i18n, family, {
+        street, what: words.sentence.utility[utility], from: clock(fromMs), until: clock(untilMs),
+      }), Math.min(untilMs, nextMidnight(now)), { wording: family });
+    } else if (row.kind === 'road' && row.atMs !== null && row.detail?.kind === 'road') {
+      add(row.id, 'radovi', copy(i18n, 'roadUntil', {
+        street: row.title, what: words.nearby.road[row.detail.state],
+        until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),
+      }), Math.min(row.atMs, nextMidnight(now)), { wording: 'roadUntil' });
+    } else if (row.kind === 'open' && row.atMs !== null && row.detail?.kind === 'open') {
+      // Only where a kicker fits (no new kicker, U3.md §0.5): noćas for any place at night, kultura for a cinema or a
+      // library; a shop open in the afternoon is the list's, not the header's.
+      const kind = row.detail.openKind;
+      const kicker: SentenceKicker | null = atNight ? 'nocas' : kind === 'kino' || kind === 'knjiznica' ? 'kultura' : null;
+      if (kicker) add(row.id, kicker, copy(i18n, 'openUntil', { name: row.title, time: clock(row.atMs) }),
+        Math.min(row.atMs, atNight ? nightEnd(now) : nextMidnight(now)), { wording: 'openUntil' });
+    }
+  }
+  // J2: the last tram after the soonest event today that has an end. It is a last-tram promise, so it keeps the voice
+  // table's first/last rule (U2.md §0.1 and §0.5): none under 'none', only a confirmed line's under 'live-only'.
+  const lastTram = joins.eventLastTram;
+  if (lastTram && voice !== 'none' && (voice !== 'live-only' || routeConfirmed(zet, lastTram.routeId))) {
+    add(`${lastTram.event.id}:lastTram:${lastTram.routeId}`, atNight ? 'nocas' : 'kultura', copy(i18n, 'eventLastTram', {
+      title: lastTram.event.title, route: lastTram.route, time: timedLabel(lastTram.atMs, input),
+    }), Math.min(lastTram.atMs, atNight ? nightEnd(now) : nextMidnight(now)), { wording: 'eventLastTram' });
+  }
+  // Tomorrow's forecast, from 18:00 to midnight: DHMZ's own word for tomorrow, in Croatian only (as the weather fact);
+  // a symbol code, or a word the condition slot does not know, says nothing.
+  if (hour >= 18 && !locale.startsWith('en')) {
+    const forecast = input.snapshots['dhmz-forecast'];
+    const item = forecast?.status !== 'down' ? forecast?.items.find(entry => entry.kind === 'forecast'
+      && entry.at && dayKey(entry.at) === tomorrow) : undefined;
+    const raw = dataText(item, 'weather');
+    const condition = /^\d+$/.test(raw) ? '' : cleanCondition(raw).toLocaleLowerCase('hr');
+    const min = dataNumber(item, 'tmin');
+    const max = dataNumber(item, 'tmax');
+    if (item && condition && validateSentenceSlot('condition', condition) === null && min !== null && max !== null) {
+      add(`forecast:tomorrow:${tomorrow}`, 'vrijeme', copy(i18n, 'forecastTomorrow', {
+        condition, min: fmtNumber(locale, min), max: fmtNumber(locale, max),
+      }), nextMidnight(now), { wording: 'forecastTomorrow' });
     }
   }
   const pinned = new Set(input.pinned ?? []);

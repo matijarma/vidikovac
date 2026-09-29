@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { DISCL } from '../../e2e/inventory';
+import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import en from '../../app/src/i18n/en.json';
+import hr from '../../app/src/i18n/hr.json';
 
 // Seeded by rg 'escapeHtml|textContent|fillText|text-field' on the kiosk entry,
 // its components and the shared renderers it calls. Parse expressions rather
@@ -311,5 +315,29 @@ describe('every wall text render boundary', () => {
     expect(scene).toContain("deps.externalSelection ? vetExternal('summary', summary, 'row') ?? '' : summary");
     const boundary = readFileSync(resolve(ROOT, 'shared/kiosk/external-text-boundary.ts'), 'utf8');
     expect(boundary).toContain('boundary?.(kind, value, surface) ?? null');
+  });
+});
+
+// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2): every sub they print is an answer, never a caveat,
+// source or freshness line (e2e/inventory.ts DISCL, the class the harness counts against the wall).
+describe('the facts-breadth rows print answers, not disclaimers', () => {
+  it('every new sub, badge and title word, filled as the rows fill it, in both languages', () => {
+    for (const [locale, catalogue] of [['hr', hr], ['en', en]] as const) {
+      const i18n = createDefaultI18n(locale);
+      const nearby = catalogue.kiosk.nearby;
+      const subs = [
+        i18n.t('kiosk.nearby.rainChance', { p: 70 }),
+        i18n.t('kiosk.nearby.cut.struja', { from: '08:00', until: '14:00' }),
+        i18n.t('kiosk.nearby.cut.voda', { from: '08:00', until: '14:00' }),
+        i18n.t('kiosk.nearby.cut.vodaDay'),
+        ...Object.values(nearby.rain), ...Object.values(nearby.openKind), ...Object.values(nearby.road),
+        i18n.t('arrivals.train'),
+      ];
+      expect(subs.length).toBeGreaterThanOrEqual(25);
+      for (const sub of subs) {
+        expect(sub, `${locale}: ${sub}`).not.toMatch(DISCL);
+        expect(sub, `${locale}: ${sub}`).not.toMatch(/nepotvrđeno|nije potvrđen|po voznom redu|unconfirmed|timetable/i);
+      }
+    }
   });
 });

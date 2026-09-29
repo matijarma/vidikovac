@@ -18,6 +18,12 @@
 //     tomorrow's openings from the catalogue's hours when the evening empties;
 //   - last, one timeless row: the place's naming story or a protected building
 //     nearby, alternating every 20 minutes, and the 24/7 pharmacy at night.
+// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2, S3) join the timed
+// rows, one of each at most: the next HŽ train from a station inside the circle
+// (timetable only, never live; before the departures when the response policy
+// asks), the nearest DHMZ station's next rain step, a power or water cut, a road
+// state from HAK, and a place open now (OpenStreetMap hours); the events read
+// the City's programme and the libraries' beside dogadanja.
 // Never a fetch time, a disclaimer, a count without a name or a register
 // caveat (§12 "Never"); a closure stays while its feed is stale (Q7).
 //
@@ -37,9 +43,10 @@ import { closureEndKnown } from '../../../shared/city/closures';
 import { positionsUnavailable } from '../../../shared/city/service-state';
 import { externalText, EXTERNAL_TEXT_REJECTIONS, type ExternalTextKind, type ExternalTextRejection } from '../../../shared/kiosk/external-text';
 import { distanceM, inPolygons, located, matchStreet, normalName } from '../../../shared/city/geo';
+import type { OpenKind, OpenPlace } from '../../../shared/city/osm-hours';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { CityState, DepartureBoard, Place, StreetStory } from '../../../shared/city/types';
-import type { FeedItem } from '../../../worker/feed/schema';
+import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { publicItemKey, type FeedSnapshots, type PublicSelection, type ScreenStop } from '../core/contracts';
 import { firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, nightService, type LastRunSnapshot } from '../core/lastrun';
 import { ZET_ROUTES } from '../data/routes';
@@ -47,13 +54,35 @@ import { zagrebDayKey, zagrebHour, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { closuresByDistance, PHARMACY_POINTS, pharmaciesByDistance } from '../kiosk/local';
 import { sortRouteIds } from '../kiosk/stops';
+import { kioskStrings } from '../kiosk/strings';
 import type { MapHighlight } from '../map/city-map';
-import { dataText } from '../panels/panel';
+import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
 import { cancelledTrips } from './feed';
 import { ct } from './strings';
 
-export type NearbyKind = 'departure' | 'notice' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy';
+export type NearbyKind = 'departure' | 'notice' | 'closure' | 'event' | 'solar' | 'last' | 'first' | 'opening' | 'always' | 'pharmacy'
+  | 'rail' | 'rain' | 'cut' | 'road' | 'open';
+
+/** The facts-breadth modules the rows read by id (U3.md §0.2(d)): the schema that names them is U3-modules'. */
+export type U3ModuleId = 'kultura-zg' | 'programi' | 'dhmz-hourly' | 'hak' | 'prekidi';
+
+/** One of those modules' snapshots, read as data from the feeds in hand. */
+export function u3Snapshot(snapshots: FeedSnapshots, id: U3ModuleId): ModuleSnapshot | undefined {
+  return (snapshots as Readonly<Record<string, ModuleSnapshot | undefined>>)[id];
+}
+
+/** The rain row's word (kiosk.nearby.rain.*), from the Croatian word the worker writes on a wet step. */
+export type RainWord = 'slaba' | 'kisa' | 'jaka';
+/** A HAK road state (kiosk.nearby.road.*). */
+export type RoadState = 'radovi' | 'regulacija' | 'zatvoreno' | 'zastoj';
+/** What a rain, cut, road or open row says, typed, so the header sentence (city/sentence.ts) and the wall's time
+ *  column (kiosk/timeline.ts) never read it back from the row's words. */
+export type NearbyDetail =
+  | { kind: 'rain'; word: RainWord; percent: number | null }
+  | { kind: 'cut'; utility: 'struja' | 'voda'; street: string; fromMs: number; untilMs: number; allDay: boolean }
+  | { kind: 'road'; state: RoadState }
+  | { kind: 'open'; openKind: OpenKind };
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
@@ -107,6 +136,10 @@ export interface NearbyRow {
   endKnown?: boolean;
   /** A notice row: ZET's own page of the notice (https, zet.hr only). The phone links it, the wall ignores it. */
   href?: string;
+  /** When the row's fact ends, epoch ms, where it has an end of its own: an event's close, a cut's restoration, a rain step's end. */
+  untilMs?: number;
+  /** A rain, cut, road or open row's typed facts. */
+  detail?: NearbyDetail;
 }
 
 /** Everything the selection reads; the caller owns every clock and cache. */
@@ -149,6 +182,16 @@ export interface NearbyInput {
    * on consecutive readings as the twin's estimate and next stop oscillated).
    */
   departedDepartures?: readonly { id: string; leftAt: number }[];
+  /** The HŽ boards of the rail stations inside the circle, the two nearest (city/feed.ts railStationsNear). */
+  railBoards?: readonly DepartureBoard[];
+  /** The places open now inside the circle, closing 30 minutes or more from now (shared/city/osm-hours.ts openPlacesNear). */
+  openPlaces?: readonly OpenPlace[];
+  /** Where an event with neither a verified venue nor a point of its own takes place (the venue gazetteer), or null. */
+  venuePoint?: (item: FeedItem) => { lon: number; lat: number } | null;
+  /** The canonical name of that same resolved venue, never an unmatched source hint. */
+  venueName?: (item: FeedItem) => string | null;
+  /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail rows (default 1), `railFirst` puts
+   *  them before the departure rows (default false). */
   policy?: { railMax?: number; railFirst?: boolean };
 }
 
@@ -195,13 +238,40 @@ export const TRAM_TO_VENUE_M = 400;
 /** The story's first sentence: cut after at least this many characters, never beyond the maximum. */
 export const STORY_MIN_CHARS = 40;
 export const STORY_MAX_CHARS = 140;
+/** The rain row: the nearest station's first wet step that has not ended and starts this soon. */
+export const RAIN_AHEAD_MS = 2 * 3_600_000;
+/** A cut that starts this soon, and a road state that ends this soon, is listed. */
+export const CUT_AHEAD_MS = 36 * 3_600_000;
+export const ROAD_AHEAD_MS = 36 * 3_600_000;
+/** A cut's house numbers join its street on the row only while they are shorter than this. */
+export const CUT_NUMBERS_MAX_CHARS = 24;
+/** Two announcements of one event (the same title and start) this close together are one row. */
+export const EVENT_SAME_M = 150;
+/** An HŽ route name the badge prints as it stands (the sentence's route slot); any other reads arrivals.train. */
+const RAIL_SHORT_NAME = /^[A-Za-z0-9]{1,6}$/u;
+/** The worker's Croatian rain words (dhmz-hourly `weather`) and HAK's road states, to their catalogue keys. */
+const RAIN_WORDS: Readonly<Record<string, RainWord>> = { 'slaba kiša': 'slaba', 'kiša': 'kisa', 'jaka kiša': 'jaka' };
+const ROAD_STATES: Readonly<Record<string, RoadState>> = {
+  radovi: 'radovi', 'privremena regulacija': 'regulacija', 'zatvoreno za promet': 'zatvoreno', zastoj: 'zastoj',
+};
+/** Which open kinds the open row names by the Zagreb hour, the first one present winning; none from 02:00 to 06:00. */
+const OPEN_BANDS: readonly { from: number; to: number; kinds: readonly OpenKind[] }[] = [
+  { from: 6, to: 10, kinds: ['pekara', 'kafic', 'ljekarna'] },
+  { from: 10, to: 17, kinds: ['ljekarna', 'posta', 'knjiznica', 'trznica', 'trgovina'] },
+  { from: 17, to: 20, kinds: ['ljekarna', 'trznica', 'trgovina'] },
+  { from: 20, to: 26, kinds: ['kafic', 'bar', 'restoran', 'ljekarna'] },
+];
+/** A sub that ends in our own clock range ("bez struje 08:00–14:00"): the words before it are what a check reads, the
+ *  range is the grammar's (the prose check reads two clock times as a phone number). */
+export const CLOCK_RANGE_TAIL = /\s(?:[01]\d|2[0-3]):[0-5]\d–(?:[01]\d|2[0-3]):[0-5]\d$/u;
 
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 /** Ties at one instant: departures, then the timed kinds in the order §11 lists them, then the timeless row. */
 const KIND_ORDER: Readonly<Record<NearbyKind, number>> = {
-  departure: 0, notice: 1, closure: 2, event: 3, solar: 4, last: 5, first: 6, opening: 7, always: 8, pharmacy: 9,
+  departure: 0, notice: 1, closure: 2, rail: 2.5, event: 3, rain: 3.5, solar: 4, last: 5, first: 6, opening: 7,
+  cut: 7.1, road: 7.2, open: 7.3, always: 8, pharmacy: 9,
 };
 
 /** The rows for a place, in time order with the departures first, within the bounds of §12. */
@@ -217,8 +287,21 @@ export function selectNearby(input: NearbyInput): NearbyRow[] {
     ...lastTramRows(input),
     ...firstTramRows(input),
     ...openingRows(input, events),
-  ].sort(byTime);
-  return [...departures, ...noticeRows(input), ...timed, ...timelessRows(input)];
+  ];
+  const rail = railRows(input);
+  const breadth = [...rainRows(input), ...cutRows(input), ...roadRows(input)];
+  const timeless = timelessRows(input);
+  const open = openRows(input, timeless);
+  // The response policy may put the trains before the trams (U3.md §0.1); by default they are timed rows like the rest.
+  // ZET's notice sits directly after the departures (U1), so no promotion moves it.
+  const railFirst = input.policy?.railFirst === true;
+  return [
+    ...(railFirst ? rail : []),
+    ...departures,
+    ...noticeRows(input),
+    ...[...timed, ...(railFirst ? [] : rail), ...breadth, ...open].sort(byTime),
+    ...timeless,
+  ];
 }
 
 function byTime(a: NearbyRow, b: NearbyRow): number {
@@ -550,24 +633,35 @@ function closureRows(input: NearbyInput): NearbyRow[] {
 
 // --- (c) events by their start, with the venue and the tram to it ---------------
 
+/** The event modules the list reads, each on its own: a module that is down leaves the others standing. */
+function eventItems(input: NearbyInput): FeedItem[] {
+  const snapshots = [input.snapshots.dogadanja, u3Snapshot(input.snapshots, 'kultura-zg'), u3Snapshot(input.snapshots, 'programi')];
+  return snapshots.flatMap((snapshot) => (snapshot && snapshot.status !== 'down' ? snapshot.items : []));
+}
+
 function eventRows(input: NearbyInput): NearbyRow[] {
   const { place, now, radiusM, city } = input;
-  const snapshot = input.snapshots.dogadanja;
-  if (!snapshot || snapshot.status === 'down') return [];
+  const items = eventItems(input);
+  if (items.length === 0) return [];
   const placeTrams = placeTramRoutes(input);
-  const out: NearbyRow[] = [];
-  for (const event of locatedEvents(snapshot.items, city.places, now, 'week')) {
+  /** The rows built so far, each with its point, whether that point is the item's own, and its title and start. */
+  const out: { row: NearbyRow; point: { lon: number; lat: number }; own: boolean; key: string }[] = [];
+  for (const event of locatedEvents(items, city.places, now, 'week')) {
     const item = event.item;
     if (dataText(item, 'precision') !== 'time') continue;
     const start = Date.parse(item.at ?? '');
     if (!(start >= now)) continue;
     const venue = event.venueIds.length === 1 ? city.places.find((p) => p.id === event.venueIds[0] && located(p)) : undefined;
-    const point = venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : pointOf(item);
+    // A verified venue, else the item's own point, else the gazetteer's venue point (shared/city/venues.ts).
+    const own = pointOf(item);
+    const resolved = !venue && !own ? input.venuePoint?.(item) ?? null : null;
+    const point = venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : own ?? resolved;
     if (!point || distanceM(place, point) > radiusM) continue;
+    const venueLabel = venue?.name ?? (dataText(item, 'venue') || (resolved ? input.venueName?.(item) : null) || '');
     // Before oneLine/trim/shorterLabel: controls or vectors cannot be repaired
     // away by presentation helpers or hidden in a discarded source suffix.
-    if (!vetted(input, [['title', item.title], ['title', item.brief], ['name', venue?.name ?? dataText(item, 'venue')]])) continue;
-    const venueName = (venue?.name ?? dataText(item, 'venue')).trim();
+    if (!vetted(input, [['title', item.title], ['title', item.brief], ['name', venueLabel]])) continue;
+    const venueName = venueLabel.trim();
     if (!venueName) continue;
     const tram = distanceM(place, point) > TRAM_TO_VENUE_M ? tramTo(point, placeTrams, input.stops) : null;
     if (tram && !vetted(input, [['headsign', tram]])) continue;
@@ -576,10 +670,12 @@ function eventRows(input: NearbyInput): NearbyRow[] {
     // or a dash are not a name the source gave ("Javno predavanje: Povijest Zagreba" is not "Javno
     // predavanje"), so without one the wall wraps the whole title (app/src/kiosk/timeline.ts).
     const titleShort = shorterLabel(title, [item.brief ? item.title : undefined]);
-    out.push({
+    const until = Date.parse(item.until ?? '');
+    const row: NearbyRow = {
       id: `event:${item.id}`,
       kind: 'event',
       atMs: start,
+      ...(Number.isFinite(until) && until > start ? { untilMs: until } : {}),
       always: false,
       title,
       ...(titleShort ? { titleShort } : {}),
@@ -587,13 +683,20 @@ function eventRows(input: NearbyInput): NearbyRow[] {
       // The venue alone: the tram to it is the part a crowded list can do without.
       ...(tram ? { subShort: venueName } : {}),
       live: false,
-      source: 'dogadanja',
-      selection: { kind: 'item', id: publicItemKey('dogadanja', item.id), module: 'dogadanja' },
+      source: item.module,
+      selection: { kind: 'item', id: publicItemKey(item.module, item.id), module: item.module },
       map: { id: venue?.id ?? item.id, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
-    });
+    };
+    // One event announced by two modules (the same title and start, EVENT_SAME_M apart) is one row: the
+    // announcement that carries its own point stands, else the first.
+    const key = `${normalName(item.title)}|${start}`;
+    const twin = out.findIndex((other) => other.key === key && distanceM(other.point, point) < EVENT_SAME_M);
+    if (twin === -1) out.push({ row, point, own: own !== null, key });
+    else if (!out[twin]!.own && own !== null) out[twin] = { row, point, own: true, key };
   }
   // The title, its shorter twin and the venue alone (the tram line after " · " is the wall's own words).
-  return out.filter((row) => vetted(input, [['title', row.title], ['title', row.titleShort], ['name', row.subShort ?? row.sub]]))
+  return out.map(({ row }) => row)
+    .filter((row) => vetted(input, [['title', row.title], ['title', row.titleShort], ['name', row.subShort ?? row.sub]]))
     .sort(byTime).slice(0, MAX_EVENTS);
 }
 
@@ -836,6 +939,230 @@ function firstOpening(ranges: string): number | undefined {
   const close = Number(m[3]) * 60 + Number(m[4] ?? 0);
   if (Number(m[1]) > 23 || Number(m[2] ?? 0) > 59 || Number(m[4] ?? 0) > 59 || close > 24 * 60 || close <= open) return undefined;
   return open;
+}
+
+// --- (i) the facts-breadth rows, one of each (U3.md S2, S3) ------------------------
+
+/**
+ * The next train from an HŽ station inside the circle (the caller passes the two nearest stations' boards): the
+ * timetable's time, never live, with the HŽ short name on the badge ("Vlak" where there is none) and the station
+ * under the headsign. At most `policy.railMax` rows (one by default); the trams' three are not touched.
+ */
+function railRows(input: NearbyInput): NearbyRow[] {
+  const max = Math.max(0, Math.floor(input.policy?.railMax ?? 1));
+  const boards = (input.railBoards ?? []).filter((board) => board.operator === 'hz');
+  if (max === 0 || boards.length === 0) return [];
+  const { now, place, radiusM } = input;
+  const stations = new Map<string, Place & { lon: number; lat: number }>();
+  for (const p of input.city.places) {
+    if (p.category !== 'rail' || !located(p) || distanceM(place, p) > radiusM) continue;
+    if (boards.some((board) => board.stopId === p.sourceRecord)) stations.set(p.sourceRecord, p);
+  }
+  const held = boards.filter((board) => stations.has(board.stopId));
+  if (held.length === 0) return [];
+  const { rows } = arrivalsAt(held, [], now, { stopIds: held.map((board) => board.stopId), rows: 6 });
+  const out: NearbyRow[] = [];
+  for (const arrival of rows) {
+    if (out.length >= max) break;
+    // A train whose time has come is not one to wait for.
+    if (arrival.atMs < now || !arrival.headsign) continue;
+    const board = held.find((b) => b.departures.some((d) => d.tripId === arrival.tripId && Date.parse(d.at) === arrival.atMs));
+    const station = board ? stations.get(board.stopId) : undefined;
+    if (!station) continue;
+    const routeName = RAIL_SHORT_NAME.test(arrival.routeName) ? arrival.routeName : input.i18n.t('arrivals.train');
+    if (!vetted(input, [['headsign', arrival.headsign], ['name', station.name], ['headsign', routeName]])) continue;
+    out.push({
+      id: `rail:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`,
+      kind: 'rail',
+      atMs: arrival.atMs,
+      always: false,
+      title: oneLine(arrival.headsign),
+      sub: oneLine(station.name),
+      live: false,
+      source: 'hz',
+      ...placeRef(station),
+      map: { id: station.id, geometry: { type: 'Point', coordinates: [station.lon, station.lat] } },
+      arrival: { ...arrival, routeName, live: false, minutes: null },
+    });
+  }
+  return out;
+}
+
+/**
+ * The nearest DHMZ station's first wet step (dhmz-hourly) that has not ended and starts within RAIN_AHEAD_MS: the
+ * weather of the area, so the station is the nearest one whatever the circle (the KPI's rule). Titled by the rain
+ * word the worker wrote, in the locale's words; the chance under it.
+ */
+function rainRows(input: NearbyInput): NearbyRow[] {
+  const snapshot = u3Snapshot(input.snapshots, 'dhmz-hourly');
+  if (!snapshot || snapshot.status === 'down') return [];
+  const { now, place, i18n } = input;
+  let station: string | null = null;
+  let nearest = Infinity;
+  for (const item of snapshot.items) {
+    const name = dataText(item, 'station');
+    const point = pointOf(item);
+    if (!name || !point) continue;
+    const d = distanceM(place, point);
+    if (d < nearest) { nearest = d; station = name; }
+  }
+  if (station === null) return [];
+  const words = kioskStrings(i18n.getLocale()).nearby.rain;
+  const steps = snapshot.items
+    .filter((item) => item.kind === 'forecast' && dataText(item, 'station') === station)
+    .map((item) => ({ item, at: Date.parse(item.at ?? ''), until: Date.parse(item.until ?? '') }))
+    .filter(({ at, until }) => Number.isFinite(at) && until > now && at <= now + RAIN_AHEAD_MS)
+    .sort((a, b) => a.at - b.at || a.item.id.localeCompare(b.item.id));
+  for (const { item, at, until } of steps) {
+    // A wet step carries its word; a step without one (dry, or too near freezing to call it rain) says nothing.
+    const word = RAIN_WORDS[dataText(item, 'weather')];
+    if (!word) continue;
+    const prob = dataNumber(item, 'prob');
+    const percent = prob !== null && Math.round(prob) >= 1 && Math.round(prob) <= 100 ? Math.round(prob) : null;
+    const condition = words[word];
+    const title = condition.charAt(0).toLocaleUpperCase(i18n.getLocale()) + condition.slice(1);
+    const sub = percent === null ? '' : i18n.t('kiosk.nearby.rainChance', { p: percent });
+    if (!vetted(input, [['title', title], ['summary', sub]])) continue;
+    return [{
+      id: `rain:${item.id}`,
+      kind: 'rain',
+      atMs: at,
+      untilMs: until,
+      always: false,
+      title,
+      sub,
+      live: false,
+      source: 'dhmz-hourly',
+      detail: { kind: 'rain', word, percent },
+    }];
+  }
+  return [];
+}
+
+/**
+ * The nearest power or water cut inside the circle (prekidi) that has not ended and starts within CUT_AHEAD_MS: the
+ * street as the index spells it (with its house numbers while they are short), "bez struje 08:00–14:00" under it,
+ * or "bez vode" for a whole day. Before it starts the row stands at its start, once it runs at its end.
+ */
+function cutRows(input: NearbyInput): NearbyRow[] {
+  const snapshot = u3Snapshot(input.snapshots, 'prekidi');
+  if (!snapshot || snapshot.status === 'down') return [];
+  const { now, place, radiusM, i18n } = input;
+  const candidates = nearestItems(snapshot.items.filter((item) => String(item.kind) === 'cut'), place, radiusM)
+    .map((c) => ({ ...c, start: Date.parse(c.item.at ?? ''), until: Date.parse(c.item.until ?? '') }))
+    .filter(({ start, until }) => Number.isFinite(start) && until > start && until > now && start <= now + CUT_AHEAD_MS);
+  for (const { item, point, start, until } of candidates) {
+    const utility = dataText(item, 'utility');
+    if (utility !== 'struja' && utility !== 'voda') continue;
+    const allDay = dataText(item, 'precision') === 'day';
+    // A whole-day notice is the water utility's (VIO); a power cut always has its hours (HEP).
+    if (allDay && utility !== 'voda') continue;
+    if (!vetted(input, [['address', item.title]])) continue;
+    const street = oneLine(item.title);
+    // The house numbers ride on the street while they are short and the street with them still reads as an address
+    // (alone, "12-20" is a phone number to the check); refused, they are simply not carried and the street stands.
+    const numbers = oneLine(dataText(item, 'houseNumbers'));
+    const numbered = numbers && numbers.length < CUT_NUMBERS_MAX_CHARS ? `${street} ${numbers}` : '';
+    const title = numbered && externalText('address', `${item.title} ${dataText(item, 'houseNumbers')}`, { surface: 'row' }).ok ? numbered : street;
+    const range = { from: zagrebTime(start), until: zagrebTime(until) };
+    const sub = allDay ? i18n.t('kiosk.nearby.cut.vodaDay')
+      : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : 'kiosk.nearby.cut.voda', range);
+    if (!vetted(input, [['address', title], ['summary', sub.replace(CLOCK_RANGE_TAIL, '')]])) continue;
+    return [{
+      id: `cut:${item.id}`,
+      kind: 'cut',
+      atMs: now < start ? start : until,
+      untilMs: until,
+      always: false,
+      title,
+      // The street alone, whole: the house numbers are the part a crowded list can do without.
+      ...(title !== street ? { titleShort: street } : {}),
+      sub,
+      live: false,
+      source: 'prekidi',
+      map: { id: item.id, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
+      detail: { kind: 'cut', utility, street, fromMs: start, untilMs: until, allDay },
+    }];
+  }
+  return [];
+}
+
+/** The nearest HAK road state inside the circle (hak) whose end is within ROAD_AHEAD_MS: the row stands at its end, as a closure's does. */
+function roadRows(input: NearbyInput): NearbyRow[] {
+  const snapshot = u3Snapshot(input.snapshots, 'hak');
+  if (!snapshot || snapshot.status === 'down') return [];
+  const { now, place, radiusM } = input;
+  const words = kioskStrings(input.i18n.getLocale()).nearby.road;
+  const candidates = nearestItems(snapshot.items.filter((item) => String(item.kind) === 'road'), place, radiusM)
+    .map((c) => ({ ...c, until: Date.parse(c.item.until ?? '') }))
+    .filter(({ until }) => until > now && until <= now + ROAD_AHEAD_MS);
+  for (const { item, point, until } of candidates) {
+    const state = ROAD_STATES[dataText(item, 'state')];
+    if (!state || !vetted(input, [['name', item.title]])) continue;
+    return [{
+      id: `road:${item.id}`,
+      kind: 'road',
+      atMs: until,
+      always: false,
+      title: oneLine(item.title),
+      sub: words[state],
+      live: false,
+      source: 'hak',
+      map: { id: item.id, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
+      detail: { kind: 'road', state },
+    }];
+  }
+  return [];
+}
+
+/**
+ * A place open now inside the circle (OpenStreetMap hours): the hour's kinds in their order (OPEN_BANDS), the first
+ * kind present, its nearest place, standing at its closing time ("do 22:00"). Never while the night pharmacy row
+ * stands: at night the 24/7 pharmacy is the one place the wall names.
+ */
+function openRows(input: NearbyInput, timeless: readonly NearbyRow[]): NearbyRow[] {
+  const places = input.openPlaces ?? [];
+  if (places.length === 0 || timeless.some((row) => row.kind === 'pharmacy')) return [];
+  const hour = zagrebHour(input.now) ?? 12;
+  const band = OPEN_BANDS.find((b) => (hour >= b.from && hour < b.to) || (hour + 24 >= b.from && hour + 24 < b.to));
+  if (!band) return [];
+  const { now, place, radiusM } = input;
+  const words = kioskStrings(input.i18n.getLocale()).nearby.openKind;
+  for (const kind of band.kinds) {
+    const found = places
+      .filter((p) => p.kind === kind && Number.isFinite(p.lon) && Number.isFinite(p.lat) && Number.isFinite(p.closesAt) && p.closesAt > now)
+      .map((p) => ({ p, d: distanceM(place, p) }))
+      .filter(({ d }) => d <= radiusM)
+      .sort((a, b) => a.d - b.d || a.p.id.localeCompare(b.p.id));
+    for (const { p } of found) {
+      if (!vetted(input, [['name', p.name]])) continue;
+      return [{
+        id: `opennow:${p.id}`,
+        kind: 'open',
+        atMs: p.closesAt,
+        always: false,
+        title: oneLine(p.name),
+        sub: words[kind],
+        live: false,
+        source: 'osm-hours',
+        map: { id: `opennow:${p.id}`, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } },
+        detail: { kind: 'open', openKind: kind },
+      }];
+    }
+  }
+  return [];
+}
+
+/** Items with a point inside the circle, nearest first (ties by id). */
+function nearestItems(items: readonly FeedItem[], place: ScreenPlace, radiusM: number): { item: FeedItem; point: { lon: number; lat: number }; d: number }[] {
+  const out: { item: FeedItem; point: { lon: number; lat: number }; d: number }[] = [];
+  for (const item of items) {
+    const point = pointOf(item);
+    if (!point) continue;
+    const d = distanceM(place, point);
+    if (d <= radiusM) out.push({ item, point, d });
+  }
+  return out.sort((a, b) => a.d - b.d || a.item.id.localeCompare(b.item.id));
 }
 
 // --- (h) the timeless row ---------------------------------------------------------

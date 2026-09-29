@@ -126,11 +126,20 @@ export function statusBadge(i18n: I18n, snapshot: ModuleSnapshot | undefined, er
   return `<span class="badge status-badge" data-tone="${state === 'loading' ? 'info' : state}" data-testid="panel-status" data-status="${state}">${escapeHtml(word)}</span>`;
 }
 
-/** One expandable line of provenance for the modules shown, with the required credits and links inside. */
-export function provenanceBlock(i18n: I18n, snapshots: readonly (ModuleSnapshot | undefined)[], testid = 'provenance'): string {
-  const rows = snapshots
-    .filter((s): s is ModuleSnapshot => Boolean(s))
-    .map((s) => `<li data-key="${escapeAttribute(s.module)}"><span class="source-text">${escapeHtml(fillAttribution(s.attribution, s, s.items[0]))}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(s.attribution.licence)}</span> <a class="source-link" href="${escapeAttribute(s.attribution.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`);
+/** A credit that is not a feed module's: a static data set shown on the page (the OpenStreetMap hours, U3). */
+export interface StaticCredit { key: string; text: string; url: string; licence: string }
+
+/** One expandable line of provenance for the modules shown, with the required credits and links inside; `credits`
+ *  adds the static data sets the page shows beside them, after the modules. */
+export function provenanceBlock(i18n: I18n, snapshots: readonly (ModuleSnapshot | undefined)[], testid = 'provenance', credits: readonly StaticCredit[] = []): string {
+  const line = (key: string, text: string, licence: string, url: string): string =>
+    `<li data-key="${escapeAttribute(key)}"><span class="source-text">${escapeHtml(text)}</span> <span class="source-licence">${escapeHtml(i18n.t('attribution.licence'))}: ${escapeHtml(licence)}</span> <a class="source-link" href="${escapeAttribute(url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(i18n.t('common.openSource'))}</a></li>`;
+  const rows = [
+    ...snapshots
+      .filter((s): s is ModuleSnapshot => Boolean(s))
+      .map((s) => line(s.module, fillAttribution(s.attribution, s, s.items[0]), s.attribution.licence, s.attribution.url)),
+    ...credits.map((c) => line(c.key, c.text, c.licence, c.url)),
+  ];
   if (!rows.length) return '';
   return `<details class="provenance" data-key="${escapeAttribute(testid)}" data-testid="${escapeAttribute(testid)}"><summary>${iconMarkup('chevron-down')}<span>${escapeHtml(i18n.t('attribution.sources'))}</span></summary><ul>${rows.join('')}</ul><p class="meta"><a href="/izvori/">${escapeHtml(i18n.t('common.links.izvori'))}</a></p></details>`;
 }

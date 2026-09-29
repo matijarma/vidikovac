@@ -334,7 +334,8 @@
     "down": "Vozni red trenutačno nije dostupan.",
     "timetable": "Vozni red",
     "cancelledRoute": "Linija {route}: ZET javlja otkazane polaske.",
-    "noteReduced": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Vremena su iz voznog reda, bez potvrde vozila."
+    "noteReduced": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Vremena su iz voznog reda, bez potvrde vozila.",
+    "train": "Vlak"
   },
   "transport": {
     "searchHint": "Upiši broj linije ili ime stajališta. Strelicama biraj, Enter otvara, Escape briše.",
@@ -887,7 +888,20 @@
       "serviceNone": "ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.",
       "vehicles_one": "{count} vozilo",
       "vehicles_few": "{count} vozila",
-      "vehicles_other": "{count} vozila"
+      "vehicles_other": "{count} vozila",
+      "trainAt": "{station}: vlak, smjer {to}, polazi u {time}.",
+      "rainAt": "Oko {time} {condition}; vjerojatnost {p}.",
+      "forecastTomorrow": "Sutra {condition}, od {min} do {max} °C.",
+      "supplyCutToday": "{street}: danas bez {what} od {from} do {until}.",
+      "supplyCutTomorrow": "{street}: sutra bez {what} od {from} do {until}.",
+      "roadUntil": "{street}: {what} do {until}.",
+      "openUntil": "{name}: otvoreno do {time}.",
+      "eventLastTram": "Nakon „{title}” zadnji tramvaj {route} polazi {time}.",
+      "bikesEmpty": "BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.",
+      "utility": {
+        "struja": "struje",
+        "voda": "vode"
+      }
     },
     "handheld": {
       "info": "Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz."
@@ -954,7 +968,39 @@
       "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde.",
       "ongoing": "u tijeku",
       "zetSays": "ZET javlja",
-      "silentNote": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Polasci su iz voznog reda, bez potvrde vozila."
+      "silentNote": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Polasci su iz voznog reda, bez potvrde vozila.",
+      "rainChance": "vjerojatnost {p} %",
+      "rain": {
+        "slaba": "slaba kiša",
+        "kisa": "kiša",
+        "jaka": "jaka kiša"
+      },
+      "cut": {
+        "struja": "bez struje {from}–{until}",
+        "voda": "bez vode {from}–{until}",
+        "vodaDay": "bez vode"
+      },
+      "openKind": {
+        "ljekarna": "ljekarna",
+        "posta": "pošta",
+        "knjiznica": "knjižnica",
+        "trznica": "tržnica",
+        "trgovina": "trgovina",
+        "pekara": "pekara",
+        "kafic": "kafić",
+        "bar": "bar",
+        "restoran": "restoran",
+        "kino": "kino",
+        "banka": "banka",
+        "benzinska": "benzinska",
+        "ordinacija": "ordinacija"
+      },
+      "road": {
+        "radovi": "radovi",
+        "regulacija": "privremena regulacija",
+        "zatvoreno": "zatvoreno za promet",
+        "zastoj": "zastoj"
+      }
     },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",

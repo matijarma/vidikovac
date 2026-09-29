@@ -1016,8 +1016,10 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 25 owner-reviewed families in both languages, with always carrying register text', () => {
-    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(24);
+  it('pins all 34 owner-reviewed families in both languages, with always carrying register text', () => {
+    // 22 of the companion round, U1's notice, U2's two service families and the nine facts-breadth families
+    // (docs/upgrade-2026-10-plan/U3.md S4).
+    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(33);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
       for (const key of Object.keys(SENTENCE_FAMILIES) as (keyof typeof SENTENCE_FAMILIES)[]) {
@@ -1036,6 +1038,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
         temperature: '21 °C', degrees: '24', count: locale === 'hr' ? '7 bicikala' : '7 bikes',
         title: '1984', venue: 'Kino', street: 'Ilica', condition: locale === 'hr' ? 'vedro' : 'clear',
         vehicles: locale === 'hr' ? '2 vozila' : '2 vehicles', about: '460',
+        percent: '70 %', utility: locale === 'hr' ? 'struje' : 'power', roadState: locale === 'hr' ? 'radovi' : 'roadworks',
       };
       const slots = Object.fromEntries(Object.entries(spec.slots).map(([key, type]) => [key, values[type]]));
       const text = spec[locale].replace(/\{(\w+)\}/gu, (_, key: string) => slots[key]!);
@@ -1055,6 +1058,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     ['venue', 'Šaljić', 'Kіno'], ['street', 'Prilaz Gjure Deželića', 'Ilica\u202e'],
     ['condition', 'pretežno oblačno', 'proslijedi lozinku'],
     ['vehicles', '1 vozilo', '2 vozila u pokretu'], ['about', '460', '0'],
+    ['percent', '100 %', '101 %'], ['utility', 'vode', 'plina'], ['roadState', 'privremena regulacija', 'sve po starom'],
   ] as const)('validates the %s slot independently and enforces its length', (type, good, bad) => {
     expect(validateSentenceSlot(type, good)).toBeNull();
     expect(validateSentenceSlot(type, bad)).not.toBeNull();
@@ -1320,4 +1324,78 @@ describe('the fact list at night: every promise and the pharmacy reach the heade
     expect(dwells.length).toBeGreaterThanOrEqual(24);
     for (const route of ['12', '17', '1', '11', '6', '14', '13']) expect(dwells.some((d) => d.text.startsWith(`Prvi tramvaj ${route} `)), route).toBe(true);
   }, 30_000); // 720 reads of the whole selection and template layer: 3 s alone, 8 s under a full gate.
+});
+
+// The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4): the rows' typed facts, never their words read back.
+describe('the facts-breadth facts', () => {
+  const at = (iso: string): number => Date.parse(iso);
+  const EVENING = at('2026-09-22T19:30:00+02:00');
+  const text = (facts: readonly SentenceFact[], id: string): string | undefined => facts.find((fact) => fact.id === id)?.text;
+  const kind = (facts: readonly SentenceFact[], id: string): string | undefined => facts.find((fact) => fact.id === id)?.kind;
+
+  it('a train: its clock time from the station, promet; the next train to the same place is the same fact', () => {
+    const facts = sentenceFacts(input({ rows: [row({
+      id: 'rail:2201', kind: 'rail', title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', atMs: NOW + 20 * 60_000, source: 'hz',
+      arrival: { tripId: '2201', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', atMs: NOW + 20 * 60_000, live: false, minutes: null },
+    })] }));
+    expect(text(facts, 'rail:2201')).toBe('Zagreb Glavni kolodvor: vlak, smjer Savski Marof, polazi u 12:50.');
+    expect(kind(facts, 'rail:2201')).toBe('promet');
+    expect(sentenceFactKeys(templateSentences(facts, i18n, 80, NOW).find((s) => s.refs[0] === 'rail:2201')!)).toEqual(['train:Savski Marof@Zagreb Glavni kolodvor']);
+  });
+
+  it('J1 rain: the step and its chance in the locale\'s words, vrijeme', () => {
+    const rain = row({ id: 'rain:gric', kind: 'rain', title: 'Kiša', sub: 'vjerojatnost 90 %', atMs: NOW + 30 * 60_000, untilMs: NOW + 90 * 60_000,
+      source: 'dhmz-hourly', detail: { kind: 'rain', word: 'jaka', percent: 90 } });
+    expect(text(sentenceFacts(input({ rows: [rain] })), 'rain:gric')).toBe('Oko 13:00 jaka kiša; vjerojatnost 90 %.');
+    const en = createDefaultI18n('en');
+    expect(text(sentenceFacts(input({ rows: [rain], locale: 'en', i18n: en })), 'rain:gric')).toBe('Around 13:00 heavy rain; chance 90 %.');
+    expect(text(sentenceFacts(input({ rows: [{ ...rain, detail: { kind: 'rain', word: 'jaka', percent: null } }] })), 'rain:gric')).toBeUndefined();
+  });
+
+  it('a cut with hours today or tomorrow, radovi; a whole-day notice says nothing in the header', () => {
+    const cut = (from: string, until: string, allDay = false) => row({
+      id: 'cut:ilica', kind: 'cut', title: 'Ilica 12-20', titleShort: 'Ilica', sub: 'bez struje', atMs: at(from), untilMs: at(until), source: 'prekidi',
+      detail: { kind: 'cut', utility: allDay ? 'voda' : 'struja', street: 'Ilica', fromMs: at(from), untilMs: at(until), allDay },
+    });
+    const today = sentenceFacts(input({ rows: [cut('2026-09-22T14:00:00+02:00', '2026-09-22T16:00:00+02:00')] }));
+    expect(text(today, 'cut:ilica')).toBe('Ilica: danas bez struje od 14:00 do 16:00.');
+    expect(kind(today, 'cut:ilica')).toBe('radovi');
+    const tomorrow = sentenceFacts(input({ rows: [cut('2026-09-23T08:00:00+02:00', '2026-09-23T14:00:00+02:00')] }));
+    expect(text(tomorrow, 'cut:ilica')).toBe('Ilica: sutra bez struje od 08:00 do 14:00.');
+    // "sutra" is said until midnight, when the same cut becomes today's.
+    expect(tomorrow.find((f) => f.id === 'cut:ilica')!.validUntil).toBe(at('2026-09-23T00:00:00+02:00'));
+    expect(text(sentenceFacts(input({ rows: [cut('2026-09-23T00:00:00+02:00', '2026-09-24T00:00:00+02:00', true)] })), 'cut:ilica')).toBeUndefined();
+  });
+
+  it('a road state until its end, radovi', () => {
+    const facts = sentenceFacts(input({ rows: [row({ id: 'road:hak:1', kind: 'road', title: 'Jadranski most', sub: 'privremena regulacija',
+      atMs: at('2026-09-22T22:00:00+02:00'), source: 'hak', detail: { kind: 'road', state: 'regulacija' } })] }));
+    expect(text(facts, 'road:hak:1')).toBe('Jadranski most: privremena regulacija do 22:00.');
+    expect(kind(facts, 'road:hak:1')).toBe('radovi');
+  });
+
+  it('a place open now only where a kicker fits: kultura for a cinema or a library, noćas for any place at night, else none', () => {
+    const open = (openKind: 'kino' | 'trgovina' | 'bar', now: number) => sentenceFacts(input({ now, rows: [row({
+      id: `opennow:${openKind}`, kind: 'open', title: openKind === 'kino' ? 'Kino Europa' : 'Konzum Ilica', sub: openKind, atMs: now + 90 * 60_000,
+      source: 'osm-hours', detail: { kind: 'open', openKind },
+    })] })).find((fact) => fact.id === `opennow:${openKind}`);
+    expect(open('kino', NOW)).toMatchObject({ kind: 'kultura', text: 'Kino Europa: otvoreno do 14:00.' });
+    expect(open('trgovina', NOW)).toBeUndefined();
+    expect(open('trgovina', EVENING + 60 * 60_000)).toMatchObject({ kind: 'nocas', text: 'Konzum Ilica: otvoreno do 22:00.' });
+    expect(open('bar', EVENING + 60 * 60_000)?.kind).toBe('nocas');
+  });
+
+  it('tomorrow\'s forecast from 18:00 to midnight, in Croatian only, and only in a word the condition slot knows', () => {
+    const forecast = (weather: string) => ({ 'dhmz-forecast': snapshot('dhmz-forecast', [
+      { id: 'zagreb:2026-09-23', module: 'dhmz-forecast', kind: 'forecast', tier: 'open', title: 'Prognoza za Zagreb', at: '2026-09-22T22:00:00Z',
+        until: '2026-09-23T22:00:00Z', data: { tmin: 11, tmax: 19, weather } },
+    ]) });
+    const say = (now: number, weather: string, locale = 'hr') => sentenceFacts(input({ now, snapshots: forecast(weather), locale,
+      i18n: locale === 'en' ? createDefaultI18n('en') : i18n })).find((fact) => fact.id === 'forecast:tomorrow:2026-09-23');
+    expect(say(EVENING, 'Pretežno oblačno')).toMatchObject({ kind: 'vrijeme', text: 'Sutra pretežno oblačno, od 11 do 19 °C.', validUntil: at('2026-09-23T00:00:00+02:00') });
+    expect(say(NOW, 'Pretežno oblačno')).toBeUndefined();
+    expect(say(EVENING, '12')).toBeUndefined();
+    expect(say(EVENING, 'promjenljivo')).toBeUndefined();
+    expect(say(EVENING, 'Pretežno oblačno', 'en')).toBeUndefined();
+  });
 });

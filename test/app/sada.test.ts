@@ -9,7 +9,7 @@ import '../../shared/kiosk/external-text';
 import { externalText } from '../../shared/kiosk/external-text';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
-import type { DepartureBoard } from '../../shared/city/types';
+import { emptyCity, type DepartureBoard, type Place } from '../../shared/city/types';
 import type { WrittenSentence } from '../../shared/kiosk/sentence';
 import { loadSadaFeed, nearbyInput, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS } from '../../app/src/city/feed';
 import type { ScreenContext, ScreenStop } from '../../app/src/core/contracts';
@@ -21,6 +21,7 @@ import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
+import { REFERENCE_SOURCES } from '../../worker/city/sources';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // Friday 14:32 in Zagreb
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -323,5 +324,32 @@ describe('third-party text on Sada (WP4 review)', () => {
     const rows = [...html.querySelectorAll('[data-testid=day-departures] > li.sada-departure')].map((li) => li.textContent ?? '');
     expect(rows).toHaveLength(2);
     expect(html.textContent).not.toContain('lozinku');
+  });
+});
+
+describe('the trains on Sada (docs/upgrade-2026-10-plan/U3.md S3)', () => {
+  it('lists the next train from the HŽ station inside the circle as a timetable row, never live, and asks for its board', () => {
+    const station: Place = { id: 'rail-hz-gk', category: 'rail', name: 'Zagreb Glavni kolodvor', lon: 15.9784, lat: 45.8046, sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' };
+    const hz: DepartureBoard = {
+      operator: 'hz', stopId: 'HZ-GK', stopName: 'Zagreb Glavni kolodvor', status: 'live', generatedAt: iso(NOW - 60_000),
+      departures: [{ operator: 'hz', tripId: '2201', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', at: iso(NOW + 20 * 60_000) }],
+    };
+    const cache = boards([board(TRG, [3, 9, 16, 24]), board(TRG_2, [6]), hz]);
+    const section = renderGradSada(ctx({ boards: cache, city: { ...emptyCity(), places: [station] } }));
+    const rows = section.querySelectorAll('[data-testid=nearby] li.nearby-row[data-kind=rail][data-source=hz]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.hasAttribute('data-live')).toBe(false);
+    expect(text(rows[0]!.querySelector('.nearby-title'))).toBe('R1 Savski Marof');
+    expect(text(rows[0]!.querySelector('.nearby-sub'))).toBe('Zagreb Glavni kolodvor');
+    expect(cache.ensure).toHaveBeenCalledWith('hz', ['HZ-GK'], undefined);
+    // The departures block keeps its three trams.
+    expect(section.querySelectorAll('[data-testid=day-departures] > li.sada-departure')).toHaveLength(3);
+    const source = REFERENCE_SOURCES.find((entry) => entry.id === 'hz-schedule')!;
+    const credit = section.querySelector('.provenance li[data-key="hz-schedule"]');
+    expect(credit).not.toBeNull();
+    expect(text(credit)).toContain(source.name);
+    expect(text(credit)).toContain(source.licence);
+    expect(credit!.querySelector('a')?.getAttribute('href')).toBe(source.catalogue);
+    expect(renderGradSada(ctx()).querySelector('.provenance li[data-key="hz-schedule"]')).toBeNull();
   });
 });

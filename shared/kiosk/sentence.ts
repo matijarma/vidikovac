@@ -93,7 +93,8 @@ export function sentenceDeadline(text: string, validUntil: number, now: number):
 }
 
 export type SentenceSlotType = 'route' | 'stop' | 'minutes' | 'clock' | 'time' | 'until'
-  | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition' | 'vehicles' | 'about';
+  | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition' | 'vehicles' | 'about'
+  | 'percent' | 'utility' | 'roadState';
 interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // Only the display's supported alphabets, not visually similar Latin letters
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
@@ -115,6 +116,10 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   // The service families (upgrade U2): the vehicles ZET has moving, with their noun, and the timetable's count after "oko".
   vehicles: { max: 16, pattern: /^(?:0|[1-9]\d{0,3}) (?:vozilo|vozila|vehicle|vehicles)$/u },
   about: { max: 4, pattern: /^[1-9]\d{0,3}$/u },
+  // The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4): a chance of rain, what a cut takes away, a road state.
+  percent: { max: 5, pattern: /^(?:[1-9]\d?|100) %$/u },
+  utility: { max: 6, pattern: /^(?:struje|vode|power|water)$/u },
+  roadState: { max: 32, pattern: /^(?:radovi|privremena regulacija|zatvoreno za promet|zastoj|roadworks|temporary traffic regulation|closed to traffic|congestion)$/u },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
   const rule = SENTENCE_SLOT_RULES[type];
@@ -167,6 +172,19 @@ export const SENTENCE_FAMILIES = {
   notice: { hr: 'ZET javlja: {notice}.', en: 'ZET reports: {notice}.', slots: { notice: 'title' }, kinds: ['promet'] },
   service: { hr: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.', en: 'ZET: {seen} moving, about {expected} by the timetable.', slots: { seen: 'vehicles', expected: 'about' }, kinds: ['promet'] },
   serviceNone: { hr: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.', en: 'ZET: no vehicle moving, about {expected} by the timetable.', slots: { expected: 'about' }, kinds: ['promet'] },
+  // The facts-breadth families (U3.md S4, brief §7). A train is the timetable's; rain and tomorrow's forecast are
+  // DHMZ's; a cut is HEP's hours; a road state is HAK's; a place open now is OpenStreetMap's, said only where a kicker
+  // fits (kultura for a cinema or a library, noćas for any place at night). The two joins (S5): the last tram after
+  // an event, and the nearest empty BAJS station beside one with bikes.
+  trainAt: { hr: '{station}: vlak, smjer {to}, polazi u {time}.', en: '{station}: train towards {to} leaves at {time}.', slots: { station: 'stop', to: 'stop', time: 'clock' }, kinds: ['promet'] },
+  rainAt: { hr: 'Oko {time} {condition}; vjerojatnost {p}.', en: 'Around {time} {condition}; chance {p}.', slots: { time: 'clock', condition: 'condition', p: 'percent' }, kinds: ['vrijeme'] },
+  forecastTomorrow: { hr: 'Sutra {condition}, od {min} do {max} °C.', en: 'Tomorrow {condition}, {min} to {max} °C.', slots: { condition: 'condition', min: 'degrees', max: 'degrees' }, kinds: ['vrijeme'] },
+  supplyCutToday: { hr: '{street}: danas bez {what} od {from} do {until}.', en: '{street}: no {what} today from {from} to {until}.', slots: { street: 'street', what: 'utility', from: 'clock', until: 'clock' }, kinds: ['radovi'] },
+  supplyCutTomorrow: { hr: '{street}: sutra bez {what} od {from} do {until}.', en: '{street}: no {what} tomorrow from {from} to {until}.', slots: { street: 'street', what: 'utility', from: 'clock', until: 'clock' }, kinds: ['radovi'] },
+  roadUntil: { hr: '{street}: {what} do {until}.', en: '{street}: {what} until {until}.', slots: { street: 'street', what: 'roadState', until: 'until' }, kinds: ['radovi'] },
+  openUntil: { hr: '{name}: otvoreno do {time}.', en: '{name}: open until {time}.', slots: { name: 'venue', time: 'clock' }, kinds: ['kultura', 'nocas'] },
+  eventLastTram: { hr: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.', en: 'After “{title}” the last tram {route} leaves {time}.', slots: { title: 'title', route: 'route', time: 'time' }, kinds: ['kultura', 'nocas'] },
+  bikesEmpty: { hr: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.', en: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.', slots: { station: 'stop', other: 'stop', bikes: 'count' }, kinds: ['bicikli'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a

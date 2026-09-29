@@ -486,6 +486,16 @@ describe('the header sentence templates are name-safe and match the sentence cli
     notice: 'ZET javlja: {notice}.',
     service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
     serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
+    // The facts-breadth families (docs/upgrade-2026-10-plan/U3.md S4, brief §7).
+    trainAt: '{station}: vlak, smjer {to}, polazi u {time}.',
+    rainAt: 'Oko {time} {condition}; vjerojatnost {p}.',
+    forecastTomorrow: 'Sutra {condition}, od {min} do {max} °C.',
+    supplyCutToday: '{street}: danas bez {what} od {from} do {until}.',
+    supplyCutTomorrow: '{street}: sutra bez {what} od {from} do {until}.',
+    roadUntil: '{street}: {what} do {until}.',
+    openUntil: '{name}: otvoreno do {time}.',
+    eventLastTram: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.',
+    bikesEmpty: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -513,10 +523,20 @@ describe('the header sentence templates are name-safe and match the sentence cli
     notice: 'ZET reports: {notice}.',
     service: 'ZET: {seen} moving, about {expected} by the timetable.',
     serviceNone: 'ZET: no vehicle moving, about {expected} by the timetable.',
+    trainAt: '{station}: train towards {to} leaves at {time}.',
+    rainAt: 'Around {time} {condition}; chance {p}.',
+    forecastTomorrow: 'Tomorrow {condition}, {min} to {max} °C.',
+    supplyCutToday: '{street}: no {what} today from {from} to {until}.',
+    supplyCutTomorrow: '{street}: no {what} tomorrow from {from} to {until}.',
+    roadUntil: '{street}: {what} until {until}.',
+    openUntil: '{name}: open until {time}.',
+    eventLastTram: 'After “{title}” the last tram {route} leaves {time}.',
+    bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
   };
-  /** The templates of kiosk.sentence.*: not the kicker words, nor the plural of the {seen} slot (vehicles_*). */
+  /** The templates of kiosk.sentence.*: not the kicker words, nor the cut's {what} words (kiosk.sentence.utility, a
+   *  group of their own), nor the plural of the {seen} slot (vehicles_*). */
   const templates = (sentence: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker' && !/_(?:one|few|other)$/.test(key)));
+    Object.fromEntries(Object.entries(sentence).filter(([key]) => key !== 'kicker' && key !== 'utility' && !/_(?:one|few|other)$/.test(key)));
 
   it('the catalogues carry the reviewed templates byte-exact, in both languages', () => {
     expect(templates(hr.kiosk.sentence)).toEqual(HR_TEMPLATES);
@@ -536,7 +556,9 @@ describe('the header sentence templates are name-safe and match the sentence cli
       name: /^\{name\}: /,
       title: /„\{title\}”/,
       venue: /\(\{venue\}\)/,
-      station: /^BAJS \{station\}: /,
+      // A BAJS station after the operator's name, an HŽ station at the head of its train's sentence.
+      station: /^(?:BAJS )?\{station\}: /,
+      other: /; BAJS \{other\}: /,
       address: /: \{address\}\.$/,
       // ZET's own headline (upgrade U1): a title that is a sentence's whole predicate needs no agreement, and the
       // slot is not called `title` because that name is reserved for a quoted „…” one.
@@ -560,6 +582,11 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.lastTram, { route: 6, time: 'u 23:52' })).toBe('Zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.firstTram, { route: 6, time: 'sutra u 04:16' })).toBe('Prvi tramvaj 6 polazi sutra u 04:16.');
     expect(fill(s.notice, { notice: 'Linije 5 i 13 u nedjelju mijenjaju trase' })).toBe('ZET javlja: Linije 5 i 13 u nedjelju mijenjaju trase.');
+    expect(fill(s.trainAt, { station: 'Zagreb Glavni kolodvor', to: 'Savski Marof', time: '18:12' })).toBe('Zagreb Glavni kolodvor: vlak, smjer Savski Marof, polazi u 18:12.');
+    expect(fill(s.supplyCutTomorrow, { street: 'Vukovarska avenija', what: s.utility.struja, from: '08:00', until: '14:00' })).toBe('Vukovarska avenija: sutra bez struje od 08:00 do 14:00.');
+    expect(fill(s.roadUntil, { street: 'Jadranski most', what: 'zatvoreno za promet', until: '22:00' })).toBe('Jadranski most: zatvoreno za promet do 22:00.');
+    expect(fill(s.openUntil, { name: 'Kino Europa', time: '23:00' })).toBe('Kino Europa: otvoreno do 23:00.');
+    expect(fill(s.eventLastTram, { title: 'Intersonus', route: 6, time: 'u 23:52' })).toBe('Nakon „Intersonus” zadnji tramvaj 6 polazi u 23:52.');
   });
 });
 

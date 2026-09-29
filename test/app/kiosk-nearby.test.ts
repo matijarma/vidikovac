@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveVehicleRef } from '../../shared/city/arrivals';
 import { distanceM } from '../../shared/city/geo';
 import type { ScreenPlace } from '../../shared/city/place';
+import type { OpenPlace } from '../../shared/city/osm-hours';
 import { emptyCity, type CityState, type DepartureBoard, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
+import { fetchKulturpunkt } from '../../worker/feed/modules/dogadanja/kulturpunkt';
 import {
   ALWAYS_ALTERNATE_MS,
   MAX_DEPARTURES,
@@ -1338,5 +1340,267 @@ describe('the operator\'s voice: cancelled trips and the ZET notice row (upgrade
       }));
       expect(deps(driven)).toContain('dep:t13');
     });
+  });
+});
+
+// --- the facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2, S3) ------------------------------------------------
+// The five modules are read by id (§0.2(d)); their items follow the §0.2(a) wire contract.
+const u3 = (base: FeedSnapshots, extra: Record<string, ModuleSnapshot>): FeedSnapshots => ({ ...base, ...extra } as FeedSnapshots);
+const u3snap = (module: string, items: FeedItem[], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot => snap(module as ModuleId, items, status);
+const u3item = (module: string, id: string, kind: string, title: string, extra: Partial<FeedItem> = {}): FeedItem =>
+  item(module as ModuleId, id, kind as FeedItem['kind'], title, extra);
+const breadthKinds = ['rail', 'rain', 'cut', 'road', 'open'] as const;
+
+describe('the trains (rail, S3): a Glavni kolodvor scene', () => {
+  const NOW_GK = at('2026-09-22T15:45:00Z'); // Tue 17:45
+  const GK: ScreenPlace = { kind: 'tram', name: 'Glavni kolodvor', lon: 15.97928, lat: 45.80521, stopId: '109_1' };
+  const STATION = place('rail-hz-gk', 'rail', 'Zagreb Glavni kolodvor', 15.9784, 45.8046, { sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' });
+  const FAR = place('rail-hz-ses', 'rail', 'Sesvete', 16.11, 45.83, { sourceId: 'hz-schedule', sourceRecord: 'HZ-SES' });
+  const trams: DepartureBoard = {
+    operator: 'zet', stopId: '109_1', stopName: 'Glavni kolodvor', status: 'live', generatedAt: new Date(NOW_GK - MIN).toISOString(),
+    departures: ([['6', 2], ['13', 5], ['2', 9], ['9', 14]] as const).map(([route, m]) => ({
+      operator: 'zet' as const, tripId: `g${route}`, routeId: route, routeName: route, headsign: HEADSIGN[route] ?? 'Črnomerec', at: new Date(NOW_GK + m * MIN).toISOString(),
+    })),
+  };
+  const trains = (stopId: string, rows: readonly [trip: string, route: string, headsign: string, minutes: number][]): DepartureBoard => ({
+    operator: 'hz', stopId, stopName: stopId, status: 'live', generatedAt: new Date(NOW_GK - MIN).toISOString(),
+    departures: rows.map(([tripId, route, headsign, m]) => ({ operator: 'hz' as const, tripId, routeId: route, routeName: route, headsign, at: new Date(NOW_GK + m * MIN).toISOString() })),
+  });
+  const HZ = trains('HZ-GK', [['2201', 'R1', 'Savski Marof', 12], ['2203', 'R1', 'Dugo Selo', 25], ['9001', 'Zagreb GK - Sisak', 'Sisak', 40]]);
+  const gk = (extra: Partial<NearbyInput> = {}): NearbyInput => input(NOW_GK, {
+    place: GK, boards: [trams], fixes: [], railBoards: [HZ], lastRun: null,
+    city: { ...CITY, places: [...PLACES, STATION, FAR] }, snapshots: { 'zet-rt': snap('zet-rt', []) }, ...extra,
+  });
+
+  it('lists one train, from the timetable and never live, and the trams keep their three', () => {
+    const rows = selectNearby(gk());
+    expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(MAX_DEPARTURES);
+    const rail = one(rows, 'rail');
+    expect(rail).toMatchObject({
+      id: 'rail:2201', atMs: NOW_GK + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', live: false, source: 'hz',
+      selection: { kind: 'place', id: 'rail-hz-gk' }, arrival: { routeName: 'R1', live: false, minutes: null },
+    });
+    // By default a timed row like the rest, after the departures.
+    expect(rows.indexOf(rail)).toBeGreaterThanOrEqual(MAX_DEPARTURES);
+  });
+
+  it('puts the trains first under railFirst and lists railMax of them, without touching the trams', () => {
+    const first = selectNearby(gk({ policy: { railFirst: true } }));
+    expect(first[0]).toMatchObject({ id: 'rail:2201', kind: 'rail' });
+    expect(first.slice(1, 4).map((r) => r.kind)).toEqual(['departure', 'departure', 'departure']);
+    const two = selectNearby(gk({ policy: { railMax: 2 } })).filter((r) => r.kind === 'rail');
+    expect(two.map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
+    expect(selectNearby(gk({ policy: { railMax: 0 } })).some((r) => r.kind === 'rail')).toBe(false);
+  });
+
+  it('reads "Vlak" on the badge where HŽ has no short name, and nothing from a station outside the circle', () => {
+    const long = selectNearby(gk({ railBoards: [trains('HZ-GK', [['9001', 'Zagreb GK - Sisak', 'Sisak', 40]])] }));
+    expect(one(long, 'rail').arrival?.routeName).toBe('Vlak');
+    expect(one(selectNearby(gk({ locale: 'en', i18n: en, railBoards: [trains('HZ-GK', [['9001', 'Zagreb GK - Sisak', 'Sisak', 40]])] })), 'rail').arrival?.routeName).toBe('Train');
+    expect(selectNearby(gk({ railBoards: [trains('HZ-SES', [['3001', 'R2', 'Zagreb', 8]])] })).some((r) => r.kind === 'rail')).toBe(false);
+    // A train whose time has come is not one to wait for.
+    expect(selectNearby(gk({ railBoards: [trains('HZ-GK', [['2199', 'R1', 'Savski Marof', -0.5]])] })).some((r) => r.kind === 'rail')).toBe(false);
+  });
+});
+
+describe('the rain row (S2, J1): the nearest station’s next wet step', () => {
+  const NOW_R = at('2026-09-22T15:45:00Z'); // Tue 17:45
+  const step = (station: 'gric' | 'maksimir', from: string, until: string, data: Record<string, string | number>): FeedItem =>
+    u3item('dhmz-hourly', `dhmz-hourly:${station}:${from}`, 'forecast', station === 'gric' ? 'Zagreb-Grič' : 'Zagreb-Maksimir', {
+      at: from, until, geo: { type: 'Point', coordinates: station === 'gric' ? [15.97, 45.81] : [16.034, 45.822] }, data: { station, ...data },
+    });
+  const HOURLY = u3snap('dhmz-hourly', [
+    step('gric', '2026-09-22T15:00:00Z', '2026-09-22T16:00:00Z', { temp: 17, precip: 0, prob: 10 }),
+    step('gric', '2026-09-22T16:00:00Z', '2026-09-22T17:00:00Z', { temp: 16, precip: 2.4, prob: 90, weather: 'kiša' }),
+    step('gric', '2026-09-22T17:00:00Z', '2026-09-22T18:00:00Z', { temp: 16, precip: 0.6, prob: 70, weather: 'slaba kiša' }),
+    step('maksimir', '2026-09-22T16:00:00Z', '2026-09-22T17:00:00Z', { temp: 16, precip: 5, prob: 95, weather: 'jaka kiša' }),
+  ]);
+  const rain = (extra: Partial<NearbyInput> = {}, hourly = HOURLY): NearbyRow[] =>
+    selectNearby(input(NOW_R, { snapshots: u3(snapshots(), { 'dhmz-hourly': hourly }), ...extra }));
+
+  it('titles the step by its rain word, gives its chance, and stands at the step', () => {
+    expect(one(rain(), 'rain')).toMatchObject({
+      id: 'rain:dhmz-hourly:gric:2026-09-22T16:00:00Z', atMs: at('2026-09-22T16:00:00Z'), untilMs: at('2026-09-22T17:00:00Z'),
+      title: 'Kiša', sub: 'vjerojatnost 90 %', live: false, source: 'dhmz-hourly', detail: { kind: 'rain', word: 'kisa', percent: 90 },
+    });
+    expect(one(rain({ locale: 'en', i18n: en }), 'rain')).toMatchObject({ title: 'Rain', sub: 'chance 90 %' });
+  });
+
+  it('reads the station nearest the place, whatever the circle, and says nothing without a wet step inside two hours', () => {
+    const DUBRAVA: ScreenPlace = { kind: 'tram', name: 'Dubrava', lon: 16.03708, lat: 45.82448, stopId: '208_24' };
+    expect(one(rain({ place: DUBRAVA, boards: [], stops: [] }), 'rain')).toMatchObject({ title: 'Jaka kiša', sub: 'vjerojatnost 95 %' });
+    const later = u3snap('dhmz-hourly', [step('gric', '2026-09-22T18:00:00Z', '2026-09-22T19:00:00Z', { temp: 15, precip: 3, prob: 90, weather: 'kiša' })]);
+    expect(rain({}, later).some((r) => r.kind === 'rain')).toBe(false);
+    expect(rain({}, { ...HOURLY, status: 'down' }).some((r) => r.kind === 'rain')).toBe(false);
+  });
+});
+
+describe('the cut row (S2): power and water', () => {
+  const HEP = u3item('prekidi', 'prekidi:hep:2026-09-23:ilica', 'cut', 'Ilica', {
+    at: '2026-09-23T06:00:00Z', until: '2026-09-23T12:00:00Z', geo: { type: 'Point', coordinates: [15.9745, 45.8131] },
+    data: { utility: 'struja', source: 'hep-ods', street: 'ILICA', houseNumbers: '12-20', district: 'Donji grad', precision: 'time' },
+  });
+  const HEP_FAR = u3item('prekidi', 'prekidi:hep:2026-09-23:vlaska', 'cut', 'Vlaška ulica', {
+    at: '2026-09-23T07:00:00Z', until: '2026-09-23T11:00:00Z', geo: { type: 'Point', coordinates: [15.987, 45.814] },
+    data: { utility: 'struja', source: 'hep-ods', street: 'VLAŠKA', precision: 'time' },
+  });
+  const VIO = u3item('prekidi', 'prekidi:vio:2026-09-23:jurisiceva', 'cut', 'Jurišićeva ulica', {
+    at: '2026-09-22T22:00:00Z', until: '2026-09-23T22:00:00Z', geo: { type: 'Point', coordinates: [15.9795, 45.8133] },
+    data: { utility: 'voda', source: 'vio', street: 'Jurišićevoj ulici', precision: 'day' },
+  });
+  const cuts = (now: number, items: FeedItem[]): NearbyRow[] => selectNearby(input(now, { snapshots: u3(snapshots(), { prekidi: u3snap('prekidi', items) }) }));
+
+  it('lists the nearest cut starting within 36 hours at its start, with its street, its short house numbers and its hours', () => {
+    const now = at('2026-09-22T15:45:00Z'); // Tue 17:45, the cut is tomorrow 08:00 to 14:00
+    expect(one(cuts(now, [HEP_FAR, HEP]), 'cut')).toMatchObject({
+      id: 'cut:prekidi:hep:2026-09-23:ilica', atMs: at('2026-09-23T06:00:00Z'), untilMs: at('2026-09-23T12:00:00Z'),
+      title: 'Ilica 12-20', titleShort: 'Ilica', sub: 'bez struje 08:00–14:00', live: false, source: 'prekidi',
+      detail: { kind: 'cut', utility: 'struja', street: 'Ilica', allDay: false },
+    });
+    // Under way it stands at its end; past its end, and more than 36 hours ahead, it is not listed.
+    expect(one(cuts(at('2026-09-23T08:00:00Z'), [HEP]), 'cut').atMs).toBe(at('2026-09-23T12:00:00Z'));
+    expect(cuts(at('2026-09-23T12:00:00Z'), [HEP]).some((r) => r.kind === 'cut')).toBe(false);
+    expect(cuts(at('2026-09-21T15:00:00Z'), [HEP]).some((r) => r.kind === 'cut')).toBe(false);
+    // House numbers the address check refuses, or too long for the row, are not carried: the street stands alone.
+    for (const houseNumbers of ['nazovi 091 234 5678', '1, 3, 5, 7, 9, 11, 13, 15, 17, 19']) {
+      const row = one(cuts(now, [{ ...HEP, data: { ...HEP.data, houseNumbers } }]), 'cut');
+      expect([row.title, row.titleShort]).toEqual(['Ilica', undefined]);
+    }
+  });
+
+  it('a VIO row: a whole day without water, no hours, day precision', () => {
+    const row = one(cuts(at('2026-09-22T15:45:00Z'), [VIO]), 'cut');
+    expect(row).toMatchObject({ title: 'Jurišićeva ulica', sub: 'bez vode', atMs: at('2026-09-22T22:00:00Z'), detail: { kind: 'cut', utility: 'voda', allDay: true } });
+    expect(row.titleShort).toBeUndefined();
+    expect(one(selectNearby(input(at('2026-09-22T15:45:00Z'), { locale: 'en', i18n: en, snapshots: u3(snapshots(), { prekidi: u3snap('prekidi', [HEP]) }) })), 'cut').sub)
+      .toBe('no power 08:00–14:00');
+  });
+});
+
+describe('the road row (S2): a HAK state near the place, by its end', () => {
+  const road = (id: string, until: string, lon: number, lat: number, state = 'privremena regulacija'): FeedItem => u3item('hak', `hak:${id}`, 'road', `Ulica ${id}`, {
+    at: '2026-09-22T14:00:00Z', until, geo: { type: 'Point', coordinates: [lon, lat] }, summary: 'Radovi, promet jednim trakom.',
+    data: { source: 'hak', section: 'Ažurirano', state, street: `Ulica ${id}` },
+  });
+  it('the nearest whose end is within 36 hours, standing at its end', () => {
+    const now = at('2026-09-22T15:45:00Z');
+    const rows = selectNearby(input(now, { snapshots: u3(snapshots(), { hak: u3snap('hak', [
+      road('a', '2026-09-30T20:00:00Z', 15.978, 45.8128), road('b', '2026-09-22T20:00:00Z', 15.98, 45.803, 'zatvoreno za promet'), road('c', '2026-09-22T19:00:00Z', 16.2, 45.9),
+    ]) }) }));
+    expect(one(rows, 'road')).toMatchObject({ id: 'road:hak:b', atMs: at('2026-09-22T20:00:00Z'), title: 'Ulica b', sub: 'zatvoreno za promet', source: 'hak', detail: { kind: 'road', state: 'zatvoreno' } });
+  });
+});
+
+describe('the open row (S2): a place open now, by the hour’s kinds', () => {
+  const places: OpenPlace[] = [
+    { id: 'n1', name: 'Konzum Ilica', kind: 'trgovina', lon: 15.975, lat: 45.8129, closesAt: at('2026-09-22T19:00:00Z') },
+    { id: 'n2', name: 'Ljekarna Centar', kind: 'ljekarna', lon: 15.979, lat: 45.812, closesAt: at('2026-09-22T18:00:00Z') },
+    { id: 'n3', name: 'Ljekarna Sesvete', kind: 'ljekarna', lon: 16.11, lat: 45.83, closesAt: at('2026-09-22T18:00:00Z') },
+    { id: 'n4', name: 'Kavana Lav', kind: 'kafic', lon: 15.977, lat: 45.8129, closesAt: at('2026-09-22T21:30:00Z') },
+  ];
+  const open = (now: number): NearbyRow[] => selectNearby(input(now, { openPlaces: places }));
+  it('at 17:45 the pharmacy before the shop, the nearest inside the circle, standing at its closing time', () => {
+    expect(one(open(at('2026-09-22T15:45:00Z')), 'open')).toMatchObject({
+      id: 'opennow:n2', atMs: at('2026-09-22T18:00:00Z'), title: 'Ljekarna Centar', sub: 'ljekarna', source: 'osm-hours', live: false,
+      detail: { kind: 'open', openKind: 'ljekarna' },
+    });
+  });
+  it('a café from 20:00, nothing while the night pharmacy row stands, nothing from 02:00 to 06:00', () => {
+    expect(one(open(at('2026-09-22T18:30:00Z')), 'open')).toMatchObject({ id: 'opennow:n4', sub: 'kafić' });
+    expect(open(at('2026-09-22T20:30:00Z')).some((r) => r.kind === 'open')).toBe(false); // 22:30: the pharmacy row
+    expect(open(at('2026-09-23T01:00:00Z')).some((r) => r.kind === 'open')).toBe(false); // 03:00
+  });
+});
+
+describe('the events of three modules (S2)', () => {
+  it('renders real Kulturpunkt venue metadata using the gazetteer canonical name', async () => {
+    const now = at('2026-09-19T17:00:00Z');
+    const raw = readFileSync(new URL('../fixtures/dogadanja/kulturpunkt.json', import.meta.url), 'utf8');
+    const parsed = await fetchKulturpunkt({ now: () => new Date(now), fetch: async () => new Response(raw) });
+    const source = parsed.items.find((entry) => entry.id === 'kulturpunkt:85565')!;
+    expect(source.data).not.toHaveProperty('venue');
+    expect(source.data.precision).toBe('time');
+    expect(source.data.venueHint).toContain('Pogona Jedinstvo');
+    const event: FeedItem = { ...source, module: 'dogadanja', kind: 'event', tier: 'session' };
+    const calendar = JSON.parse(readFileSync(new URL('../fixtures/kultura-zagreb-events.json', import.meta.url), 'utf8')) as {
+      events: { address_name: string; longitude: number; latitude: number }[];
+    };
+    const venue = calendar.events.find((entry) => entry.address_name === 'POGON JEDINSTVO')!;
+    const point = { lon: venue.longitude, lat: venue.latitude };
+    const rows = (name: string | null) => selectNearby(input(now, {
+      radiusM: 5000, city: emptyCity(), stops: [],
+      snapshots: { dogadanja: snap('dogadanja', [event]) },
+      venuePoint: (candidate) => candidate.id === event.id ? point : null,
+      venueName: (candidate) => candidate.id === event.id ? name : null,
+    })).filter((row) => row.kind === 'event');
+    expect(rows(venue.address_name)).toMatchObject([{
+      id: 'event:kulturpunkt:85565', title: source.title, sub: venue.address_name,
+      map: { geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
+    }]);
+    expect(rows(null)).toEqual([]);
+    expect(rows('Vidi www.primjer.com')).toEqual([]);
+  });
+
+  const NOW_E = at('2026-09-22T15:45:00Z');
+  const KULTURA = u3item('kultura-zg', 'kultura-zg:101', 'event', 'Koncert na Zrinjevcu', {
+    at: '2026-09-22T17:00:00Z', until: '2026-09-22T19:00:00Z', dateBasis: 'event', geo: { type: 'Point', coordinates: [15.978, 45.8105] },
+    data: { source: 'kultura-zagreb', venue: 'Zrinjevac', precision: 'time', category: 'koncert' },
+  });
+  const PROGRAMI = u3item('programi', 'programi:kgz:55:2026-09-22', 'event', 'Pričaonica', {
+    at: '2026-09-22T16:30:00Z', dateBasis: 'event', data: { source: 'kgz', venue: 'Knjižnica Bogdana Ogrizovića', category: 'program', precision: 'time' },
+  });
+  const TWIN = item('dogadanja', 'kulturpunkt:zrinjevac', 'event', 'Koncert na Zrinjevcu', {
+    at: '2026-09-22T17:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venueHint: 'Zrinjevcu', precision: 'time' },
+  });
+  const venuePoint = (i: FeedItem): { lon: number; lat: number } | null =>
+    i.data?.venue === 'Zrinjevac' || i.data?.venueHint === 'Zrinjevcu' ? { lon: 15.9785, lat: 45.8108 } : i.data?.venue === 'Knjižnica Bogdana Ogrizovića' ? { lon: 15.9745, lat: 45.8126 } : null;
+  const venueName = (i: FeedItem): string | null => i.data?.venueHint === 'Zrinjevcu' ? 'Zrinjevac' : null;
+  const feeds = (kultura: ModuleSnapshot['status'] = 'live'): FeedSnapshots => u3({ 'zet-rt': snap('zet-rt', []), dogadanja: snap('dogadanja', [TWIN]) }, {
+    'kultura-zg': u3snap('kultura-zg', [KULTURA], kultura), programi: u3snap('programi', [PROGRAMI]),
+  });
+
+  it('reads kultura-zg and programi beside dogadanja, places an event without a point through the gazetteer, and keeps its end', () => {
+    expect(TWIN.data).not.toHaveProperty('venue');
+    const events = selectNearby(input(NOW_E, { snapshots: feeds(), venuePoint, venueName })).filter((r) => r.kind === 'event');
+    expect(events.map((r) => r.id)).toEqual(['event:programi:kgz:55:2026-09-22', 'event:kultura-zg:101']);
+    expect(events[1]).toMatchObject({ source: 'kultura-zg', untilMs: at('2026-09-22T19:00:00Z'), selection: { kind: 'item', module: 'kultura-zg' } });
+    expect(events[0]).toMatchObject({ source: 'programi', selection: { kind: 'item', module: 'programi' } });
+    expect(events[0]!.untilMs).toBeUndefined();
+    // Without the gazetteer the unplaced announcements are simply not near.
+    expect(selectNearby(input(NOW_E, { snapshots: feeds() })).filter((r) => r.kind === 'event').map((r) => r.id)).toEqual(['event:kultura-zg:101']);
+  });
+
+  it('lists one event announced twice once, the announcement with its own point standing; a module that is down leaves the others', () => {
+    const down = selectNearby(input(NOW_E, { snapshots: feeds('down'), venuePoint, venueName })).filter((r) => r.kind === 'event');
+    expect(down.map((r) => r.id)).toEqual(['event:programi:kgz:55:2026-09-22', 'event:kulturpunkt:zrinjevac']);
+  });
+});
+
+describe('one row of each new kind, in time order, inside the bounds', () => {
+  it('a scene with every source: at most one row of each kind, and the timed rows still in time order', () => {
+    const now = at('2026-09-22T15:45:00Z');
+    const rows = selectNearby(input(now, {
+      openPlaces: [
+        { id: 'n2', name: 'Ljekarna Centar', kind: 'ljekarna', lon: 15.979, lat: 45.812, closesAt: at('2026-09-22T18:00:00Z') },
+        { id: 'n5', name: 'Ljekarna Dolac', kind: 'ljekarna', lon: 15.977, lat: 45.8145, closesAt: at('2026-09-22T18:30:00Z') },
+      ],
+      snapshots: u3(snapshots(), {
+        'dhmz-hourly': u3snap('dhmz-hourly', [
+          u3item('dhmz-hourly', 'dhmz-hourly:gric:a', 'forecast', 'Zagreb-Grič', { at: '2026-09-22T16:00:00Z', until: '2026-09-22T17:00:00Z', geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { station: 'gric', precip: 1, prob: 80, weather: 'kiša' } }),
+          u3item('dhmz-hourly', 'dhmz-hourly:gric:b', 'forecast', 'Zagreb-Grič', { at: '2026-09-22T17:00:00Z', until: '2026-09-22T18:00:00Z', geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { station: 'gric', precip: 1, prob: 80, weather: 'kiša' } }),
+        ]),
+        prekidi: u3snap('prekidi', ['a', 'b'].map((id) => u3item('prekidi', `prekidi:hep:x:${id}`, 'cut', `Ulica ${id}`, {
+          at: '2026-09-23T06:00:00Z', until: '2026-09-23T12:00:00Z', geo: { type: 'Point', coordinates: [15.975, id === 'a' ? 45.8131 : 45.815] }, data: { utility: 'struja', precision: 'time' },
+        }))),
+        hak: u3snap('hak', ['a', 'b'].map((id) => u3item('hak', `hak:${id}`, 'road', `Cesta ${id}`, {
+          until: '2026-09-22T20:00:00Z', geo: { type: 'Point', coordinates: [15.98, id === 'a' ? 45.803 : 45.806] }, data: { state: 'radovi' },
+        }))),
+      }),
+    }));
+    for (const kind of breadthKinds.filter((k) => k !== 'rail')) expect(rows.filter((r) => r.kind === kind), kind).toHaveLength(1);
+    expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(MAX_DEPARTURES);
+    const timed = rows.filter((r) => r.kind !== 'departure' && !r.always).map((r) => r.atMs!);
+    expect(timed).toEqual([...timed].sort((a, b) => a - b));
+    expect(new Set(ids(rows)).size).toBe(rows.length);
   });
 });

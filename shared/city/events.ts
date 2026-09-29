@@ -95,7 +95,7 @@ export function locatedEvents(items: readonly FeedItem[], places: readonly Place
   const result: LocatedEvent[] = [];
   const byIdentity = new Map<string, LocatedEvent>();
   for (const item of items) {
-    if (!['kulturpunkt', 'etnografski', 'kvartovske'].includes(String(item.data?.source)) || !eventInWindow(item, now, window)) continue;
+    if (!['kulturpunkt', 'etnografski', 'kvartovske', 'kultura-zagreb', 'kgz'].includes(String(item.data?.source)) || !eventInWindow(item, now, window)) continue;
     const venueIds = resolveVenues(item, places);
     // Only collapse independent announcements when title, start and verified
     // venue all agree. Similar names alone are not duplicate evidence.

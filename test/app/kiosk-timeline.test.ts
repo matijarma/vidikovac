@@ -1827,3 +1827,82 @@ describe('lifecycle', () => {
   });
 });
 
+
+// The facts-breadth rows (docs/upgrade-2026-10-plan/U3.md S2): a train, rain, a cut, a road state, a place open now.
+describe('the facts-breadth rows on the wall (U3 S2)', () => {
+  // Route id "6" on purpose: an HŽ id that reads as a ZET tram line in ZET's table still gets no tram badge.
+  const rail = row({ id: 'rail:2201', kind: 'rail', atMs: NOW + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', source: 'hz',
+    arrival: { tripId: '2201', routeId: '6', routeName: 'R1', headsign: 'Savski Marof', atMs: NOW + 12 * MIN, live: false, minutes: null } });
+  const rain = row({ id: 'rain:gric', kind: 'rain', atMs: NOW + 15 * MIN, untilMs: NOW + 75 * MIN, title: 'Kiša', sub: 'vjerojatnost 90 %', source: 'dhmz-hourly',
+    detail: { kind: 'rain', word: 'kisa', percent: 90 } });
+  const open = row({ id: 'opennow:n2', kind: 'open', atMs: at('2026-09-22T16:10:00Z'), title: 'Ljekarna Centar', sub: 'ljekarna', source: 'osm-hours',
+    detail: { kind: 'open', openKind: 'ljekarna' } });
+  const road = row({ id: 'road:hak:b', kind: 'road', atMs: at('2026-09-22T17:00:00Z'), title: 'Ulica grada Vukovara', sub: 'privremena regulacija', source: 'hak',
+    detail: { kind: 'road', state: 'regulacija' } });
+  const cutDetail = { kind: 'cut' as const, utility: 'struja' as const, street: 'Ilica', fromMs: at('2026-09-23T06:00:00Z'), untilMs: at('2026-09-23T12:00:00Z'), allDay: false };
+  const cut = row({ id: 'cut:ilica', kind: 'cut', atMs: cutDetail.fromMs, untilMs: cutDetail.untilMs, title: 'Ilica 12-20', titleShort: 'Ilica', sub: 'bez struje 08:00–14:00',
+    source: 'prekidi', detail: cutDetail });
+  const closure1 = row({ id: 'closure:ilica', kind: 'closure', atMs: at('2026-09-22T16:30:00Z'), title: 'Ilica', sub: 'zatvoreno za promet', source: 'prometnice' });
+  const closure2 = row({ id: 'closure:vlaska', kind: 'closure', atMs: at('2026-09-22T20:00:00Z'), title: 'Vlaška', sub: 'zatvoreno za promet', source: 'prometnice' });
+  const event = row({ id: 'event:gavella', kind: 'event', atMs: at('2026-09-22T17:30:00Z'), title: 'Gospoda Glembajevi', sub: 'Gavella', source: 'dogadanja' });
+  /** selectNearby's order: the departures, then every timed row by its time. */
+  const list = (): TimelineRow[] => [dep(1), dep(2), dep(3), rail, rain, open, closure1, road, event, closure2, cut];
+
+  it('3 departures, 2 closures, an event and the five new kinds in a six-row budget keep the 3 departures and 2 closures', () => {
+    const kept = ['dep:1', 'dep:2', 'dep:3', 'closure:ilica', 'event:gavella', 'closure:vlaska'];
+    expect(fitRows(list(), 6).map((r) => r.id)).toEqual(kept);
+    // The measured pass: a box that holds six rows drops the new kinds before any tram (§0.5).
+    const measure: TimelineMeasure = { box: (el) => ({ height: 480, width: 472, overflow: el.children.length > 6 }), lines: () => 1 };
+    const t = mount({ measure });
+    t.update(list(), 2000, NOW);
+    expect(ids()).toEqual(kept);
+  });
+
+  it('drops a later day’s row first, then the new kinds, the latest first, then the event (U0), then the third tram', () => {
+    const order: string[] = [];
+    for (let left = list(), drop = dropCandidate(left, NOW); drop; left = left.filter((r) => r !== drop), drop = dropCandidate(left, NOW)) order.push(drop.id);
+    // The merged order of U3.md §0.6: later-day rows, the new kinds, U0's event rule (an event further away than the
+    // third tram goes before it, U0 step 7), the departures, the other timed rows, the timeless row.
+    expect(order.slice(0, 7)).toEqual(['cut:ilica', 'road:hak:b', 'opennow:n2', 'rain:gric', 'rail:2201', 'event:gavella', 'dep:3']);
+    // A train the response policy put before the trams (policy.railFirst) is not among the first to go.
+    const promoted = [rail, dep(1), dep(2), closure1];
+    expect(dropCandidate(promoted, NOW)?.id).toBe('dep:2');
+    expect(fitRows([rail, dep(1), dep(2), rain], 3).map((r) => r.id)).toEqual(['rail:2201', 'dep:1', 'dep:2']);
+  });
+
+  it('prints each new kind’s time: a train’s clock, a road state and a cut under way by their end, a place open now by its close, a whole day as such', () => {
+    const late = at('2026-09-22T21:50:00Z'); // 23:50
+    expect([timeLabel(rail, NOW, i18n), dayLabel(rail, NOW, i18n)]).toEqual(['17:57', '']);
+    expect(dayLabel({ ...rail, atMs: at('2026-09-22T22:10:00Z') }, late, i18n)).toBe('');
+    expect(timeLabel(rain, NOW, i18n)).toBe('18:00');
+    expect([timeLabel(road, NOW, i18n), dayLabel(road, NOW, i18n)]).toEqual(['do 19:00', '']);
+    expect(timeLabel({ ...road, atMs: at('2026-09-24T08:00:00Z') }, NOW, i18n)).toBe('do 24. 9.');
+    expect([timeLabel(open, NOW, i18n), dayLabel(open, NOW, i18n)]).toEqual(['do 18:10', '']);
+    expect([timeLabel({ ...open, atMs: at('2026-09-23T00:00:00Z') }, late, i18n), dayLabel({ ...open, atMs: at('2026-09-23T00:00:00Z') }, late, i18n)]).toEqual(['do 02:00', '']);
+    // A cut ahead stands at its start ("sutra 08:00"); under way at its end ("do 14:00", today).
+    expect([timeLabel(cut, NOW, i18n), dayLabel(cut, NOW, i18n)]).toEqual(['08:00', 'sutra']);
+    const running = { ...cut, atMs: cut.untilMs! };
+    const morning = at('2026-09-23T08:00:00Z');
+    expect([timeLabel(running, morning, i18n), dayLabel(running, morning, i18n), onLaterDay(running, morning)]).toEqual(['do 14:00', '', false]);
+    // A whole-day water cut: "cijeli dan", tomorrow's under "sutra", today's with no day word.
+    const allDay = { kind: 'cut' as const, utility: 'voda' as const, street: 'Jurišićeva ulica', fromMs: at('2026-09-22T22:00:00Z'), untilMs: at('2026-09-23T22:00:00Z'), allDay: true };
+    const water = row({ id: 'cut:vio', kind: 'cut', atMs: allDay.fromMs, untilMs: allDay.untilMs, title: 'Jurišićeva ulica', sub: 'bez vode', source: 'prekidi', detail: allDay });
+    expect([timeLabel(water, NOW, i18n), dayLabel(water, NOW, i18n)]).toEqual(['cijeli dan', 'sutra']);
+    expect([timeLabel({ ...water, atMs: allDay.untilMs }, morning, i18n), dayLabel({ ...water, atMs: allDay.untilMs }, morning, i18n)]).toEqual(['cijeli dan', '']);
+    expect(timeLabel(water, NOW, i18nFor('en'))).toBe('all day');
+  });
+
+  it('draws each with the probe markup: a train never live, never a tram’s badge; a cut’s clock range read by its grammar', () => {
+    const t = mount({ designHeightPx: Number.POSITIVE_INFINITY });
+    t.update([dep(1), rail, rain, open, road, cut], 2000, NOW);
+    expect(ids()).toEqual(['dep:1', 'rail:2201', 'rain:gric', 'opennow:n2', 'road:hak:b', 'cut:ilica']);
+    const train = byId('rail:2201');
+    expect([train.dataset.kind, train.dataset.source, train.hasAttribute('data-live')]).toEqual(['rail', 'hz', false]);
+    expect(train.querySelector('.k-line-badge')?.getAttribute('data-kind')).toBe('other');
+    expect(text(train.querySelector('.nearby-title'))).toBe('R1 Savski Marof');
+    expect(text(byId('cut:ilica').querySelector('.nearby-sub'))).toBe('bez struje 08:00–14:00');
+    // Hostile words before a clock range are still read as prose.
+    t.update([dep(1), { ...cut, sub: 'nazovi 091 234 5678 08:00–14:00' }], 2000, NOW);
+    expect(ids()).toEqual(['dep:1']);
+  });
+});

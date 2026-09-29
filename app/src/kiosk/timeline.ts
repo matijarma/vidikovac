@@ -28,7 +28,9 @@
 // selection layer supplies one (titleShort, subShort), and a label without one
 // wraps whole; when the list still overflows its box, every label that takes
 // more than one line gives way to its short one, then whole rows are dropped:
-// a later day's rows first, then a sunrise, sunset or opening more than an hour
+// a later day's rows first, then the facts-breadth rows (a train, rain, a cut,
+// a road state, a place open now: BREADTH_KINDS, the latest first), then a
+// sunrise, sunset or opening more than an hour
 // away and further away than the last departure beyond the first, then that
 // departure, then the next row that is not a departure (so a closure or an
 // event the source cannot shorten keeps its row while a third departure can
@@ -46,7 +48,7 @@
 // .nearby-title and .nearby-sub (present, and empty when the row has none);
 // data-key duplicates data-id for reconcile.ts.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
-import { nearbyHead, rowBudget, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
+import { CLOCK_RANGE_TAIL, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { reconcile } from '../ui/dom/reconcile';
@@ -149,6 +151,29 @@ export function isTimeless(row: NearbyRow): boolean {
   return row.always || row.atMs === null || !Number.isFinite(row.atMs);
 }
 
+/** The facts-breadth kinds (docs/upgrade-2026-10-plan/U3.md S2, S3): the first to give way when the list does not fit,
+ *  right after a later day's rows, and before the second and third tram (§0.5). */
+export const BREADTH_KINDS: readonly NearbyKind[] = ['rail', 'rain', 'cut', 'road', 'open'];
+
+/** A facts-breadth row that yields first: not a train the response policy put before the departures (policy.railFirst). */
+function breadthRow(row: NearbyRow, rows: readonly NearbyRow[]): boolean {
+  if (!BREADTH_KINDS.includes(row.kind)) return false;
+  if (row.kind !== 'rail') return true;
+  const firstDeparture = rows.findIndex((other) => other.kind === 'departure');
+  return firstDeparture === -1 || rows.indexOf(row) > firstDeparture;
+}
+
+/** A cut under way stands at its end (city/nearby.ts cutRows): it is now, not the day its end falls on. */
+function cutUnderWay(row: NearbyRow): boolean {
+  return row.kind === 'cut' && row.untilMs !== undefined && row.atMs === row.untilMs;
+}
+
+/** A row about now, whatever day its time falls on: a train (a departure), a road state and a cut under way (their
+ *  moment is their end, as a closure's), a place open now (its closing time). */
+function aboutNow(row: NearbyRow): boolean {
+  return row.kind === 'rail' || row.kind === 'road' || row.kind === 'open' || cutUnderWay(row);
+}
+
 /** Decision 27: these rows are promises, not overflow candidates. */
 function reservedRows<T extends NearbyRow>(rows: readonly T[]): Set<T> {
   const keep = new Set(rows.filter(row => row.kind === 'first' || row.kind === 'last' || row.kind === 'notice'));
@@ -167,6 +192,11 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
   const keep = reservedRows(rows);
   const departure = rows.find(row => row.kind === 'departure');
   if (n > 0 && departure) keep.add(departure);
+  // The facts-breadth rows fill the estimate last, as they are the first the measured pass drops (dropCandidate).
+  for (const row of rows) {
+    if (keep.size >= n) break;
+    if (!breadthRow(row, rows)) keep.add(row);
+  }
   for (const row of rows) {
     if (keep.size >= n) break;
     keep.add(row);
@@ -180,7 +210,7 @@ export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[]
  * trams are promises (decision 27), and a departure is the wall's first answer.
  */
 export function onLaterDay(row: NearbyRow, now: number): boolean {
-  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'closure' || row.kind === 'first' || row.kind === 'last') return false;
+  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'closure' || row.kind === 'first' || row.kind === 'last' || aboutNow(row)) return false;
   return daysAhead(row.atMs!, now) >= 1;
 }
 
@@ -196,6 +226,8 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
  * second and third night trams, each the only tram of its line or direction for forty minutes; a sunset within the
  * hour still outlasts them; an event likewise since U0 step 7); then the latest event, before any closure (U0 step 7);
  * then the latest timed row that is not a departure; then a second timeless row. The
+ * facts-breadth rows (BREADTH_KINDS) go right after the later-day step, the latest first: a train, rain, a cut, a
+ * road state or a place open now is worth less than the second and third tram (U3.md §0.5). The
  * first departure, the closures and the rest keep their order. First/last trams, one timeless row and the ZET
  * notice never enter the drop order (owner decisions 10 and 27; upgrade U1); a closure or solar row that is on the list stays on its node while
  * the list can hold it, and returns under a new identity only when its fact changed. Without `now` (older
@@ -206,6 +238,8 @@ export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: num
     const later = rows.filter((row) => onLaterDay(row, now));
     if (later.length > 0) return later[later.length - 1]!;
   }
+  const breadth = rows.filter((row) => breadthRow(row, rows) && !isTimeless(row));
+  if (breadth.length > 0) return breadth.reduce((latest, row) => (row.atMs! >= latest.atMs! ? row : latest));
   const departures = rows.filter((row) => row.kind === 'departure');
   if (departures.length > 1) {
     const departure = departures[departures.length - 1]!;
@@ -246,7 +280,7 @@ function daysAhead(atMs: number, now: number): number {
  * carries its own date.
  */
 export function dayLabel(row: NearbyRow, now: number, i18n: I18n): string {
-  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'last' || row.kind === 'closure') return '';
+  if (isTimeless(row) || row.kind === 'departure' || row.kind === 'notice' || row.kind === 'last' || row.kind === 'closure' || aboutNow(row)) return '';
   const days = daysAhead(row.atMs!, now);
   if (days <= 0) return '';
   if (days === 1) return i18n.t('kiosk.say.tomorrow');
@@ -270,7 +304,12 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   }
   // A rolling end (shared/city/closures.ts) is no end: the street is closed, "u tijeku".
   if (row.kind === 'closure' && row.endKnown === false) return i18n.t('kiosk.nearby.ongoing');
-  if (row.kind === 'closure') return `${i18n.t('kiosk.nearby.until')} ${daysAhead(atMs, now) === 0 ? clock(atMs) : dayMonth(atMs)}`;
+  const until = (end: number): string => `${i18n.t('kiosk.nearby.until')} ${daysAhead(end, now) === 0 ? clock(end) : dayMonth(end)}`;
+  if (row.kind === 'closure' || row.kind === 'road') return until(atMs);
+  // A whole-day water cut has no hours to print; a cut under way says when it ends; a place open now when it closes.
+  if (row.kind === 'cut' && row.detail?.kind === 'cut' && row.detail.allDay) return i18n.t('kiosk.say.allDay');
+  if (cutUnderWay(row)) return until(row.untilMs!);
+  if (row.kind === 'open') return `${i18n.t('kiosk.nearby.until')} ${clock(atMs)}`;
   return clock(atMs);
 }
 
@@ -295,6 +334,11 @@ function rowTextKinds(row: TimelineRow): { title: ExternalTextKind; sub: Externa
     case 'event': return { title: 'title', sub: 'name' };
     case 'opening': return { title: 'name', sub: 'summary' };
     case 'pharmacy': return { title: 'title', sub: 'address' };
+    case 'rail': return { title: 'headsign', sub: 'name' };
+    case 'rain': return { title: 'title', sub: 'summary' };
+    case 'cut': return { title: 'address', sub: 'summary' };
+    case 'road': return { title: 'name', sub: 'summary' };
+    case 'open': return { title: 'name', sub: 'summary' };
     case 'always':
       if (row.id.startsWith('always:heritage:')) return { title: 'name', sub: 'address' };
       if (row.id.startsWith('always:story:')) return { title: 'name', sub: 'register-text' };
@@ -313,6 +357,9 @@ export function vettedTimelineRow(row: TimelineRow): boolean {
       && /^(?:[A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)(?: · [A-Za-z0-9]{1,6} (?:[01]\d|2[0-3]):[0-5]\d)*$/u.test(value)) {
       return value.split(' · ').every(pair => vetExternal('headsign', pair.split(' ')[0], 'row') !== null);
     }
+    // A cut's sub is our own words and our own clock range ("bez struje 08:00–14:00"): the words are read as prose,
+    // the range by its grammar, never as a phone number.
+    if (row.kind === 'cut' && value && CLOCK_RANGE_TAIL.test(value)) return optionalExternal(subKind, value.replace(CLOCK_RANGE_TAIL, ''));
     return optionalExternal(subKind, value);
   };
   return vetExternal(kind, row.title, 'row') !== null
@@ -338,7 +385,8 @@ export function rowMarkup(row: TimelineRow, now: number, i18n: I18n, short?: Sho
   ].filter(Boolean).join(' ');
   const when = timeless ? `<span class="nearby-when">${text}</span>` : `<time class="nearby-when" datetime="${iso}">${text}</time>`;
   const day = dayLabel(row, now, i18n);
-  const badge = row.arrival?.routeName ? `${kBadge(row.arrival.routeName, kindOfRoute(row.arrival.routeId))} ` : '';
+  // A train's badge is never a tram's or a bus's colour, whatever its route id reads in ZET's table.
+  const badge = row.arrival?.routeName ? `${kBadge(row.arrival.routeName, row.kind === 'rail' ? 'other' : kindOfRoute(row.arrival.routeId))} ` : '';
   return `<li ${attrs}><span class="k-nearby-at">${when}${day ? `<span class="k-nearby-day">${e(day)}</span>` : ''}</span>`
     + `<span class="k-nearby-mark" aria-hidden="true"></span>`
     + `<span class="k-nearby-text"><span class="nearby-title">${badge}${e(titleOf(row, short))}</span><span class="nearby-sub">${e(subOf(row, short))}</span></span></li>`;

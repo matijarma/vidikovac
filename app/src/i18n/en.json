@@ -325,7 +325,8 @@
     "down": "The timetable is unavailable right now.",
     "timetable": "Timetable",
     "cancelledRoute": "Line {route}: ZET reports cancelled departures.",
-    "noteReduced": "ZET: {seen} moving, about {expected} by the timetable. Times are from the timetable, not confirmed by vehicles."
+    "noteReduced": "ZET: {seen} moving, about {expected} by the timetable. Times are from the timetable, not confirmed by vehicles.",
+    "train": "Train"
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
@@ -861,7 +862,20 @@
       "service": "ZET: {seen} moving, about {expected} by the timetable.",
       "serviceNone": "ZET: no vehicle moving, about {expected} by the timetable.",
       "vehicles_one": "{count} vehicle",
-      "vehicles_other": "{count} vehicles"
+      "vehicles_other": "{count} vehicles",
+      "trainAt": "{station}: train towards {to} leaves at {time}.",
+      "rainAt": "Around {time} {condition}; chance {p}.",
+      "forecastTomorrow": "Tomorrow {condition}, {min} to {max} °C.",
+      "supplyCutToday": "{street}: no {what} today from {from} to {until}.",
+      "supplyCutTomorrow": "{street}: no {what} tomorrow from {from} to {until}.",
+      "roadUntil": "{street}: {what} until {until}.",
+      "openUntil": "{name}: open until {time}.",
+      "eventLastTram": "After “{title}” the last tram {route} leaves {time}.",
+      "bikesEmpty": "BAJS {station}: 0 bikes; BAJS {other}: {bikes}.",
+      "utility": {
+        "struja": "power",
+        "voda": "water"
+      }
     },
     "handheld": {
       "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
@@ -928,7 +942,39 @@
       "outageNote": "ZET is not sending vehicle positions right now; departures are from the timetable, unconfirmed.",
       "ongoing": "ongoing",
       "zetSays": "ZET reports",
-      "silentNote": "ZET: {seen} moving, about {expected} by the timetable. Departures are from the timetable, not confirmed by vehicles."
+      "silentNote": "ZET: {seen} moving, about {expected} by the timetable. Departures are from the timetable, not confirmed by vehicles.",
+      "rainChance": "chance {p} %",
+      "rain": {
+        "slaba": "light rain",
+        "kisa": "rain",
+        "jaka": "heavy rain"
+      },
+      "cut": {
+        "struja": "no power {from}–{until}",
+        "voda": "no water {from}–{until}",
+        "vodaDay": "no water"
+      },
+      "openKind": {
+        "ljekarna": "pharmacy",
+        "posta": "post office",
+        "knjiznica": "library",
+        "trznica": "market",
+        "trgovina": "shop",
+        "pekara": "bakery",
+        "kafic": "café",
+        "bar": "bar",
+        "restoran": "restaurant",
+        "kino": "cinema",
+        "banka": "bank",
+        "benzinska": "petrol station",
+        "ordinacija": "doctor’s office"
+      },
+      "road": {
+        "radovi": "roadworks",
+        "regulacija": "temporary traffic regulation",
+        "zatvoreno": "closed to traffic",
+        "zastoj": "congestion"
+      }
     },
     "paired": {
       "warnings": "DHMZ warnings",
