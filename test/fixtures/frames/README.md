@@ -24,14 +24,14 @@ node scripts/frames-sample.mjs <recordings>/2026/09/29 --from 031000 --to 033000
 
 ## zet-expect-000395.json
 
-The declared fleet of ZET's static GTFS feed **000395**, in the format of `app/public/data/zet-expect.json` (`scripts/gtfs-expect.mjs`, decoded by `shared/motion/expect.ts`): per service and five-minute slot of a 31-hour service day, the vehicle runs (blocks) in service by mode and the trips in service per route, and the services of every calendar date.
+The declared fleet of ZET's static GTFS feed **000395**, in the format of `app/public/data/zet-expect.json` (`scripts/gtfs-expect.mjs`, decoded by `shared/motion/expect.ts`): per service and five-minute slot of a 31-hour service day, the vehicle runs in service by mode and the trips in service per route, and the services of every calendar date. A run is a block's trips up to a gap longer than the parked limit of its mode, 30 min for a tram and 46 min for a bus (upgrade decision 29): a layover counts, a pull-in does not.
 
 | | |
 |---|---|
 | source | `zet-gtfs-scheduled-000-000395.zip`, https://www.zet.hr/gtfs-scheduled/latest, Last-Modified Tue 01 Sep 2026 08:50:29 GMT (14,720,190 B), a local copy kept outside the repository |
-| feed version | 000395 (`feed_info.txt`), eight services `0_20` to `0_27` |
+| feed version | 000395 (`feed_info.txt`), eight services `0_20` to `0_27`, 2,676 blocks as 3,292 runs |
 | calendar | 2026-09-01 to 2026-12-31, 122 dates; Sunday 27 September runs `0_25`, Monday 28 September `0_23` |
-| size | 878,731 B raw, 44,869 B gzip |
+| size | 878,724 B raw, 45,682 B gzip |
 | licence | ZET, Otvorena dozvola (Croatian Open Licence, NN 67/17) |
 
 Attribution, verbatim:
@@ -46,4 +46,4 @@ Built with:
 node scripts/gtfs-expect.mjs --zip <zet-gtfs-scheduled-000-000395.zip> --built-at 2026-09-01T08:50:29Z --out test/fixtures/frames/zet-expect-000395.json
 ```
 
-The same archive and stamp build the same bytes.
+The same archive and stamp build the same bytes. Rebuilt in the October 2026 upgrade pass (U2) when the builder learnt to end a run at a pull-in: on Monday 21 September it declares 460 runs at 07:00 and 384 at 11:00 (462 at both before).

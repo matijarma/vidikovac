@@ -11,15 +11,21 @@
 // "running services" are whatever it sees), and the schedule shards answer per
 // stop, so the expectation is a build-time artefact of its own.
 //
-// A block is in service from its first trip's first departure to its last
-// trip's last arrival, layovers included, because ZET publishes the vehicle
-// throughout. A block or trip counts in a slot when its interval meets the
-// slot: start < slot end and end >= slot start (an instant trip counts in the
-// slot it falls in), so every trip is counted somewhere and a run is never
-// dropped between two slots. The slots start at the service day's start (GTFS
-// noon minus twelve hours, shared/motion/bands.ts serviceDayStartSec) and run
-// 31 hours, so the night trips past 24:00 stay on the service day that owns
-// them; the build refuses a trip that ends at or past 31:00.
+// A block is one vehicle. It is in service from a trip's first departure to
+// the last arrival of the trips that follow it, as long as no gap between two
+// consecutive trips is longer than RUN_GAP_S for its mode: a layover counts,
+// because ZET publishes the vehicle throughout, but a pull-in does not (the
+// hours a block spends in the depot between the peaks are not service, and
+// counting them overstated the midday fleet by a third: upgrade decision 29).
+// A gap longer than that ends the run and the next trip starts another, so a
+// block can be two or more runs. A run or trip counts in a slot when its
+// interval meets the slot: start < slot end and end >= slot start (an instant
+// trip counts in the slot it falls in), so every trip is counted somewhere and
+// a run is never dropped between two slots. The slots start at the service
+// day's start (GTFS noon minus twelve hours, shared/motion/bands.ts
+// serviceDayStartSec) and run 31 hours, so the night trips past 24:00 stay on
+// the service day that owns them; the build refuses a trip that ends at or
+// past 31:00.
 //
 // Reuses the zero-dependency zip reader and CSV parser of gtfs-routes.mjs and
 // the calendar resolution of gtfs-lastrun.mjs (servicesByDate: calendar.txt's
@@ -56,6 +62,12 @@ export const DAY_END_SEC = SLOT_SEC * SLOTS;
 /** GTFS route_type values the artefact splits by; any other type counts in `all` only. */
 export const TRAM_ROUTE_TYPE = 0;
 export const BUS_ROUTE_TYPE = 3;
+/** A gap between two consecutive trips of a block longer than this ends the
+ *  vehicle run (upgrade decision 29): the parked limits of decision 19, a tram
+ *  standing 30 min or a bus 46 min, past which the twin holds the vehicle
+ *  back from the count, so the expectation drops it at the same point. A
+ *  mixed run (a block serving both types) and any other type take the bus value. */
+export const RUN_GAP_S = { tram: 1800, bus: 2760 };
 
 const DOWNLOAD_TIMEOUT_MS = 60_000; // build-time download of a >10 MB archive, not a live request
 const USER_AGENT = 'Vidikovac/0.1 (zagreb.aningfilm.hr; kontakt@aningfilm.hr)';
@@ -181,6 +193,24 @@ function addSpan(slots, start, end) {
   for (let k = first; k <= last; k++) slots[k] += 1;
 }
 
+/**
+ * A block's trip spans as vehicle runs: sorted by start, consecutive spans
+ * merged while the gap between one's end and the next's start is at most
+ * `gapSec` (upgrade decision 29: the parked limits of decision 19, RUN_GAP_S).
+ * A longer gap is a pull-in, and the next trip starts a new run.
+ * @param {{ start: number; end: number }[]} spans
+ * @returns {{ start: number; end: number }[]}
+ */
+export function mergeRuns(spans, gapSec) {
+  const runs = [];
+  for (const span of [...spans].sort((a, b) => a.start - b.start || a.end - b.end)) {
+    const current = runs.at(-1);
+    if (current && span.start - current.end <= gapSec) current.end = Math.max(current.end, span.end);
+    else runs.push({ start: span.start, end: span.end });
+  }
+  return runs;
+}
+
 function feedVersionOf(text) {
   const rows = parseCsv(text);
   const idx = rows[0]?.indexOf('feed_version') ?? -1;
@@ -234,8 +264,9 @@ export async function buildExpectIndex(zipBuf, { builtAt, log = () => {} }) {
   );
   const serviceIndex = new Map(serviceIds.map((id, i) => [id, i]));
 
-  // Per service: blocks (vehicle runs) as spans, trips per route as slot counts.
-  const blockSpans = new Map(); // service -> Map<block, { start, end, types: Set }>
+  // Per service: blocks as their trips' spans (merged into vehicle runs
+  // below), trips per route as slot counts.
+  const blockSpans = new Map(); // service -> Map<block, { spans: { start, end }[], types: Set }>
   const tripSlots = new Map(); // service -> Map<route, number[]>
   let late = null;
   for (const trip of trips) {
@@ -244,12 +275,11 @@ export async function buildExpectIndex(zipBuf, { builtAt, log = () => {} }) {
     if (span.end >= DAY_END_SEC && (late === null || span.end > late.end)) late = { tripId: trip.tripId, end: span.end };
     let byBlock = blockSpans.get(trip.service);
     if (!byBlock) blockSpans.set(trip.service, (byBlock = new Map()));
-    const run = byBlock.get(trip.block);
-    if (!run) byBlock.set(trip.block, { start: span.start, end: span.end, types: new Set([typeOf.get(trip.route)]) });
+    const block = byBlock.get(trip.block);
+    if (!block) byBlock.set(trip.block, { spans: [{ start: span.start, end: span.end }], types: new Set([typeOf.get(trip.route)]) });
     else {
-      run.start = Math.min(run.start, span.start);
-      run.end = Math.max(run.end, span.end);
-      run.types.add(typeOf.get(trip.route));
+      block.spans.push({ start: span.start, end: span.end });
+      block.types.add(typeOf.get(trip.route));
     }
     let byRoute = tripSlots.get(trip.service);
     if (!byRoute) tripSlots.set(trip.service, (byRoute = new Map()));
@@ -269,23 +299,30 @@ export async function buildExpectIndex(zipBuf, { builtAt, log = () => {} }) {
   const tripsOut = {};
   let mixed = 0;
   let longest = 0;
+  let blockCount = 0;
+  let runCount = 0;
   for (const service of serviceIds) {
     const all = new Array(SLOTS).fill(0);
     const tram = new Array(SLOTS).fill(0);
     const bus = new Array(SLOTS).fill(0);
-    for (const run of blockSpans.get(service)?.values() ?? []) {
-      addSpan(all, run.start, run.end);
-      longest = Math.max(longest, run.end);
-      if (run.types.size > 1) mixed += 1;
+    for (const block of blockSpans.get(service)?.values() ?? []) {
+      blockCount += 1;
+      if (block.types.size > 1) mixed += 1;
       // A run is one vehicle: a tram block counts as a tram, a bus block as a bus.
-      if (run.types.size === 1 && run.types.has(TRAM_ROUTE_TYPE)) addSpan(tram, run.start, run.end);
-      else if (run.types.size === 1 && run.types.has(BUS_ROUTE_TYPE)) addSpan(bus, run.start, run.end);
+      const mode = block.types.size === 1 && block.types.has(TRAM_ROUTE_TYPE) ? tram : block.types.size === 1 && block.types.has(BUS_ROUTE_TYPE) ? bus : null;
+      for (const run of mergeRuns(block.spans, mode === tram ? RUN_GAP_S.tram : RUN_GAP_S.bus)) {
+        runCount += 1;
+        addSpan(all, run.start, run.end);
+        if (mode) addSpan(mode, run.start, run.end);
+        longest = Math.max(longest, run.end);
+      }
     }
     blocks[service] = { all, tram, bus };
     const byRoute = tripSlots.get(service) ?? new Map();
     tripsOut[service] = Object.fromEntries([...byRoute.keys()].sort(compareRouteIds).map((route) => [route, byRoute.get(route)]));
   }
-  if (mixed > 0) log(`${mixed} runs mix route types: counted in "all" only`);
+  if (mixed > 0) log(`${mixed} blocks mix route types: counted in "all" only`);
+  if (runCount > blockCount) log(`${runCount - blockCount} pull-ins longer than ${RUN_GAP_S.tram / 60} min (tram) or ${RUN_GAP_S.bus / 60} min (bus) split a block into two runs`);
 
   const artefact = {
     version: ARTEFACT_VERSION,
@@ -304,7 +341,8 @@ export async function buildExpectIndex(zipBuf, { builtAt, log = () => {} }) {
   const report = {
     trips: trips.length,
     services: serviceIds.length,
-    runs: [...blockSpans.values()].reduce((n, m) => n + m.size, 0),
+    blocks: blockCount,
+    runs: runCount,
     mixedRuns: mixed,
     latestEndSec: longest,
     firstDate: days[0] ?? null,
@@ -354,7 +392,7 @@ export async function main({
   const rawBytes = Buffer.byteLength(json, 'utf8');
   const gzipBytes = gzipSync(Buffer.from(json, 'utf8')).length;
   log(
-    `${report.services} services, ${report.runs} runs, ${report.trips} trips; calendar ${report.firstDate} to ${report.lastDate} (${report.dates} dates); ` +
+    `${report.services} services, ${report.blocks} blocks as ${report.runs} runs, ${report.trips} trips; calendar ${report.firstDate} to ${report.lastDate} (${report.dates} dates); ` +
       `feed ${artefact.feedVersion} -> ${out} (${rawBytes} bytes raw, ${gzipBytes} bytes gzip, ${Date.now() - started} ms)`,
   );
   log(`Attribution required wherever this file is used: ${ZET_ATTRIBUTION}`);
