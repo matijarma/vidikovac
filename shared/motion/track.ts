@@ -75,6 +75,16 @@ export interface OrderState {
   witnesses: Record<string, { n: number; at: number; lead: string }>;
 }
 
+/** Where a vehicle has been standing (shared/motion/depots.ts noteStand): the
+ *  plane position of the fix that began the stand and that fix's report
+ *  time, epoch seconds. A later fix within STOP_ZONE_M of it continues the
+ *  stand; one farther away begins a new one. */
+export interface Stand {
+  x: number;
+  y: number;
+  sinceSec: number;
+}
+
 export interface Track {
   id: string;
   routeId: string;
@@ -105,6 +115,11 @@ export interface Track {
   /** The trip's scheduled first departure in epoch seconds, when the join and
    *  the realtime start date give it (R-TE49); null when unknown. */
   tripStartSec: number | null;
+  /** The vehicle's current stand, null before its first fix. It belongs to
+   *  the vehicle, not the trip: a Track re-created on a trip change inherits
+   *  it when the new fix lies within the stand's zone. Null on a state row
+   *  written before October 2026. */
+  stand: Stand | null;
 }
 
 /** As many fixes as the wire's history carries (wire.ts): about three
@@ -135,6 +150,7 @@ export function newTrack(id: string, routeId: string, tripId: string | null, kin
     next: null,
     order: newOrderState(),
     tripStartSec: null,
+    stand: null,
   };
 }
 

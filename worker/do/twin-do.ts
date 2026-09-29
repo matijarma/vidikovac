@@ -408,6 +408,9 @@ export class TwinDO extends DurableObject<Env> {
       for (const old of Object.values(prev.tracks)) {
         const track = newTrack(old.id, old.routeId, old.tripId, old.kind);
         track.tripStartSec = old.tripStartSec;
+        // A stand is plane positions and report times, no graph in it: a
+        // new network must not publish every parked tram for half an hour.
+        track.stand = old.stand ?? null;
         const join = old.tripId === null ? undefined : joins.get(old.tripId);
         const prior = this.engine?.matcher.priorFor(join?.shapeId ?? null, old.routeId, join?.direction ?? null, join?.pathId ?? null);
         for (const report of old.fixes) {
@@ -449,8 +452,15 @@ export class TwinDO extends DurableObject<Env> {
     // row actually is, against the Durable Object's ~2 MB row cap (I5). The
     // round's own replay measured 1.42 MB at the morning peak and production
     // has never measured it at all; `published` is the part that grows with
-    // the fleet, and shrinking it is the next round's work.
-    if (learnedFlushed) logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length });
+    // the fleet, and shrinking it is the next round's work. The same line
+    // says how many of the vehicles are on the map and how many are held off
+    // it (in a depot, or parked), so a group held in service at one place
+    // (four trams for 69 to 76 minutes at Sveti Duh on 25 Sep) shows here.
+    if (learnedFlushed) {
+      const pins = result.payload.items.filter((item) => item.id.startsWith('vehicle:')).length;
+      const { depot, parked } = result.hidden;
+      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked, depot, parked });
+    }
 
     let hindsightSamples = 0;
     const unsigned = hindsightEntries(result.hindsight);

@@ -12,6 +12,7 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
+import { inDepot, isParked, noteStand } from '../../shared/motion/depots';
 import { dist, toPlane, type XY } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
@@ -71,6 +72,10 @@ export interface TickResult {
    *  stamps). A feed defect, not a planner decision: logged by the Durable
    *  Object (`twin_future_fixes`), never counted into `twin_plan`. */
   rejectedFuture: number;
+  /** Tracks kept in the state but not published after this tick: standing
+   *  inside a tram depot, or parked past their mode's limit elsewhere
+   *  (shared/motion/depots.ts). A vehicle in a depot counts as depot only. */
+  hidden: { depot: number; parked: number };
 }
 
 /** One entry per vehicle id, the newest report winning a duplicate. A report
@@ -195,7 +200,12 @@ export function runTick(input: TickInput): TickResult {
       const continues = tripChanged && engine !== null && track!.kind === kindOf(engine, routes, routeId)
         && continuesRun(engine.net, track!, prior?.pathIdx ?? null, plane);
       if (!track || (tripChanged && !continues)) {
+        const oldStand = track?.stand ?? null;
         track = newTrack(raw.vehicleId, routeId, tripId, kindOf(engine, routes, routeId));
+        // A stand belongs to the vehicle, not the trip: a bus that changes
+        // trip while it stands at its terminus has not moved. The new Track
+        // inherits it when its first report lies inside the stand's zone.
+        if (oldStand !== null && dist(oldStand, plane) <= STOP_ZONE_M) track.stand = oldStand;
         tracks[raw.vehicleId] = track;
         if (tripChanged) {
           delete published[raw.vehicleId];
@@ -226,9 +236,11 @@ export function runTick(input: TickInput): TickResult {
       } else {
         pushFix(track, fix);
       }
-      if ((lastFix(track)?.atSec ?? null) !== before) {
+      const newest = lastFix(track);
+      if (newest !== null && newest.atSec !== before) {
         newFixes++;
         fresh.add(raw.vehicleId);
+        noteStand(track, newest);
       }
     }
   }
@@ -242,6 +254,15 @@ export function runTick(input: TickInput): TickResult {
       delete learnedUpTo[id];
       evicted++;
     }
+  }
+  // What stays in the state but off the map (publish.ts fleetSeen): a
+  // vehicle in a tram depot, or one parked past its mode's limit.
+  const hidden = { depot: 0, parked: 0 };
+  for (const track of Object.values(tracks)) {
+    const last = lastFix(track);
+    if (!last) continue;
+    if (inDepot(last.lon, last.lat)) hidden.depot++;
+    else if (isParked(track)) hidden.parked++;
   }
 
   const all = Object.values(tracks);
@@ -335,7 +356,7 @@ export function runTick(input: TickInput): TickResult {
     dwellRecent: trimDwellRecent(dwellRecent, nowSec),
   };
   const payload = buildPayload(state, joins, routes, nowMs, input.validUntilMs, engine?.net ?? null);
-  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture };
+  return { state, payload, newFixes, evicted, order, hindsight, hindsightSign, learned, plan: planCounts, rejectedFuture, hidden };
 }
 
 /**

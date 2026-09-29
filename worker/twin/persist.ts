@@ -195,6 +195,8 @@ export function serializeState(state: TwinState): string {
         if (fix.arc) stored.arc = { key: fix.arc.key, s: Math.round(fix.arc.s * ARC_PRECISION) / ARC_PRECISION, atStop: fix.arc.atStop };
         return stored;
       }),
+      // The stand's plane position to a decimetre: its zone is 40 m wide.
+      stand: track.stand ? { x: Math.round(track.stand.x * ARC_PRECISION) / ARC_PRECISION, y: Math.round(track.stand.y * ARC_PRECISION) / ARC_PRECISION, sinceSec: track.stand.sinceSec } : null,
     };
   }
   const dwellRecent: DwellRecent = {};
@@ -223,6 +225,9 @@ export function deserializeState(body: string): TwinState {
       // Added with the register (shared/motion/match.ts FOLD_FIXES); a row
       // written before it has no such field, and undefined + 1 is NaN.
       againstCount: track.againstCount ?? 0,
+      // Added with the parked rule (shared/motion/depots.ts); a row written
+      // before it starts the stand afresh at the vehicle's next fix.
+      stand: track.stand ?? null,
     };
   }
   const pendingLearned = stored.pendingLearned ?? emptyAggregates();

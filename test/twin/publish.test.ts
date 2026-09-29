@@ -137,6 +137,27 @@ describe('buildPayload prefers the twin\'s next stop on a rail path', () => {
   });
 });
 
+// U0 (October 2026): the count is the vehicles on the map, nothing else. A
+// tram parked past its limit or standing in a depot stays in the state and
+// off the wire; the route row counts the pins on its route, not ZET's trip
+// updates, and keeps ZET's median delay.
+describe('buildPayload publishes the fleet seen now', () => {
+  it('pins the moving tram only: itemCount 1 and one route row with one vehicle', () => {
+    const moving = track({ id: 'M', tripId: 'T1' });
+    const parked = track({ id: 'P', tripId: 'T2', stand: { x: 0, y: 0, sinceSec: HEADER_S - 1800 } });
+    const depot: Track = { ...track({ id: 'D', tripId: 'T3' }), fixes: [{ x: 0, y: 0, lon: 16.03859, lat: 45.82078, atSec: HEADER_S }] };
+    const payload = buildPayload(
+      state([moving, parked, depot], { T1: update({ delays: [60] }), T2: update({ delays: [120] }), T3: update({ delays: [30] }) }),
+      joins, routes, NOW_MS, NOW_MS + 10_000, null,
+    );
+    expect(payload.items.filter((i) => i.id.startsWith('vehicle:')).map((i) => i.id)).toEqual(['vehicle:M']);
+    expect(payload.sources?.zet.itemCount).toBe(1);
+    const rows = payload.items.filter((i) => i.id.startsWith('route:'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].data).toMatchObject({ routeId: '6', vehicles: 1, medianDelaySeconds: 60 });
+  });
+});
+
 describe('buildPayload names no next stop past the last platform of a path (rail round 3)', () => {
   const net = syntheticNetwork(corridorSpec());
   const pinOn = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
