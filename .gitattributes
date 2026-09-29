@@ -4,3 +4,11 @@
 *.woff2 binary
 *.woff binary
 *.geojson text eol=lf
+# U3 source fixtures are saved byte for byte: the live servers answer with CRLF line endings and a parser test must see them.
+test/fixtures/kgz-dogadjanja-p1.html -text
+test/fixtures/kgz-dogadjanja-p2.html -text
+test/fixtures/arena-program.html -text
+test/fixtures/hak-stanje.html -text
+test/fixtures/hep-ods-bez-struje-today.html -text
+test/fixtures/hep-ods-bez-struje-tomorrow.html -text
+test/fixtures/vio-obavijesti.html -text

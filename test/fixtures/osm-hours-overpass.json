@@ -1,0 +1,3604 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-29T15:42:54Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 320799629,
+  "lat": 45.8086433,
+  "lon": 15.9500887,
+  "tags": {
+    "addr:housenumber": "69",
+    "addr:street": "Magazinska cesta",
+    "alt_name": "RBA Magazinska",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Raiffeisen bank",
+    "brand:wikidata": "Q125756787",
+    "check_date": "2024-06-17",
+    "name": "Raiffeisen bank",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa-Su off",
+    "ref:vatin": "HR53056966535",
+    "website": "https://www.rba.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 321498120,
+  "lat": 45.8005093,
+  "lon": 15.9567983,
+  "tags": {
+    "addr:housenumber": "69",
+    "addr:street": "Tratinska ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Zagrebačka banka",
+    "brand:wikidata": "Q140381",
+    "check_date": "2024-09-06",
+    "name": "Zagrebačka banka",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa-Su off",
+    "ref:vatin": "HR92963223473",
+    "short_name": "ZaBa",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321500681,
+  "lat": 45.8026202,
+  "lon": 15.9641363,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "28",
+    "addr:postcode": "10000",
+    "addr:street": "Savska cesta",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Privredna banka Zagreb",
+    "brand:wikidata": "Q7246343",
+    "brand:wikipedia": "en:Privredna banka Zagreb",
+    "check_date": "2024-06-19",
+    "email": "poslovnica.123.kod.cibone@pbz.hr",
+    "name": "Privredna banka Zagreb",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 12:00-19:00; Sa-Su off",
+    "phone": "+385 1 6362 835",
+    "ref": "123",
+    "ref:vatin": "HR02535697732",
+    "short_name": "PBZ"
+  }
+},
+{
+  "type": "node",
+  "id": 321501108,
+  "lat": 45.8082219,
+  "lon": 15.9419022,
+  "tags": {
+    "addr:housenumber": "34",
+    "addr:street": "Selska cesta",
+    "check_date": "2025-08-01",
+    "name": "Gavranović market",
+    "opening_hours": "Mo-Sa 06:30-20:00; Su,PH off",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref": "150",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321502911,
+  "lat": 45.7975806,
+  "lon": 15.9434960,
+  "tags": {
+    "addr:housenumber": "87",
+    "addr:street": "Ozaljska ulica",
+    "check_date": "2025-08-08",
+    "name": "Prosvjeta",
+    "opening_hours": "Mo-Fr 08:00-16:00; Sa,Su off",
+    "shop": "stationery",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 321506529,
+  "lat": 45.7868085,
+  "lon": 15.9495212,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "23",
+    "addr:postcode": "10000",
+    "addr:street": "Horvaćanska cesta",
+    "amenity": "fast_food",
+    "check_date": "2024-10-09",
+    "cuisine": "burger;grill",
+    "name": "Čudesa od mesa",
+    "opening_hours": "Mo-Sa 10:00-23:00; Su 12:00-20:00",
+    "website": "https://www.cudesa-od-mesa.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 321511882,
+  "lat": 45.8000405,
+  "lon": 15.9664253,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "35",
+    "addr:postcode": "10126",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "post_office",
+    "name": "10126 Zagreb",
+    "opening_hours": "Mar-Jun: Mo-Fr 08:00-18:00; Mar-Jun: Sa 08:00-12:00;Jul-Aug: Mo-Fr 10:00-17:00;Sep-Nov: Mo-Fr 08:00-18:00; Sep-Nov: Sa 08:00-12:00;Dec-Feb: Mo-Fr 07:00-17:00; Dec-Feb: Sa 08:00-13:00",
+    "operator": "Hrvatska pošta",
+    "operator:wikidata": "Q507289",
+    "operator:wikipedia": "hr:Hrvatska pošta",
+    "phone": "+385 1 6626 619"
+  }
+},
+{
+  "type": "node",
+  "id": 321511883,
+  "lat": 45.8001367,
+  "lon": 15.9689551,
+  "tags": {
+    "alt_name": "RBA Vukovara",
+    "amenity": "bank",
+    "atm": "yes",
+    "check_date:opening_hours": "2022-10-13",
+    "name": "Raiffeisen Bank",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 08:00-12:00",
+    "ref:vatin": "HR53056966535",
+    "website": "https://rba.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 321511884,
+  "lat": 45.7996687,
+  "lon": 15.9621350,
+  "tags": {
+    "addr:housenumber": "56",
+    "addr:street": "Savska cesta",
+    "amenity": "restaurant",
+    "check_date": "2026-03-30",
+    "contact:email": "merakmakedonski@gmail.com",
+    "contact:facebook": "MakedonskiMerakZg",
+    "contact:instagram": "makedonski_merak_zg",
+    "contact:mobile": "+385 91 524 5462",
+    "contact:phone": "+385 1 4840 836",
+    "cuisine": "macedonian;regional",
+    "indoor_seating": "yes",
+    "microbrewery": "yes",
+    "name": "Makedonski merak",
+    "official_name": "Restoran i noćni bar Makedonski Merak",
+    "old_name": "Zlatni Medo",
+    "opening_hours": "Mo-Tu 10:00-23:00, We-Th 10:00-02:00, Fr 10:00-04:00, Sa 12:00-04:00, Su 12:00-20:00; PH 12:00-20:00",
+    "operator": "Veseli Merak",
+    "outdoor_seating": "yes",
+    "phone": "+385 91 199 1900",
+    "ref:vatin": "HR75283132436",
+    "smoking": "isolated",
+    "smoking:outside": "yes",
+    "takeaway": "yes",
+    "website": "https://makedonski-merak.com/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 321512744,
+  "lat": 45.8079249,
+  "lon": 15.9885742,
+  "tags": {
+    "addr:housenumber": "9",
+    "addr:street": "Ulica Ivana Šveara",
+    "amenity": "restaurant",
+    "check_date": "2024-11-12",
+    "contact:instagram": "trattoriacanzona",
+    "email": "danijela.bucar@gmail.com",
+    "level": "0",
+    "name": "Trattoria Canzona",
+    "opening_hours": "Mo 12:00-16:00; Tu-Sa 12:00-22:00; Su off",
+    "phone": "+385 1 4617 777",
+    "start_date": "1998",
+    "toilets": "yes",
+    "toilets:access": "customers",
+    "toilets:fee": "no",
+    "toilets:gender_segregated": "yes",
+    "website": "https://www.facebook.com/pg/canzonazagreb"
+  }
+},
+{
+  "type": "node",
+  "id": 321513849,
+  "lat": 45.8032614,
+  "lon": 16.0001591,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "154",
+    "addr:street": "RADNIČKA CESTA",
+    "alt_name": "PBZ POSLOVNICA RADNIČKA",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Privredna banka Zagreb",
+    "brand:wikidata": "Q7246343",
+    "name": "Privredna banka Zagreb",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 09:00-12:00",
+    "ref:vatin": "HR02535697732",
+    "short_name": "PBZ",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321535141,
+  "lat": 45.8146962,
+  "lon": 15.9980374,
+  "tags": {
+    "name": "Nama Kvatrić",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-15:00; Su,PH off",
+    "shop": "department_store",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 321535245,
+  "lat": 45.8100297,
+  "lon": 16.0008684,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "13",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica Ivana Banjavčića",
+    "brand": "Spar",
+    "brand:wikidata": "Q610492",
+    "brand:wikipedia": "en:SPAR (retailer)",
+    "name": "Spar",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 07:00-22:00",
+    "payment:american_express": "yes",
+    "payment:cash": "yes",
+    "payment:diners_club": "yes",
+    "payment:maestro": "yes",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes",
+    "payment:visa_debit": "yes",
+    "payment:visa_electron": "yes",
+    "phone": "+385 1 4660 145",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321539672,
+  "lat": 45.8003931,
+  "lon": 15.9715635,
+  "tags": {
+    "addr:housenumber": "39",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "restaurant",
+    "cafe": "yes",
+    "canteen": "yes",
+    "check_date:opening_hours": "2025-03-08",
+    "indoor_seating": "yes",
+    "level": "0",
+    "name": "Cassandra",
+    "opening_hours": "Mo-Fr 09:00-17:00",
+    "outdoor_seating": "yes",
+    "website": "https://www.cassandra.hr/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321540038,
+  "lat": 45.7951732,
+  "lon": 15.9690081,
+  "tags": {
+    "addr:housenumber": "1",
+    "addr:street": "Vrbik XII.",
+    "amenity": "restaurant",
+    "name": "Pri Zvoncu",
+    "opening_hours": "11:00-22:00",
+    "website": "https://prizvoncu.com/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 321540122,
+  "lat": 45.7992653,
+  "lon": 15.9700280,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "name": "Erste",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 09:00-13:00",
+    "ref:vatin": "HR23057039320",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 321540123,
+  "lat": 45.7995505,
+  "lon": 15.9732198,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "check_date": "2022-12-06",
+    "check_date:opening_hours": "2021-12-22",
+    "name": "PBZ",
+    "opening_hours": "Mo-Fr 08:00-19:00",
+    "ref:vatin": "HR02535697732"
+  }
+},
+{
+  "type": "node",
+  "id": 321540781,
+  "lat": 45.8173375,
+  "lon": 15.9369671,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "28",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica dr. Milana Rojca",
+    "amenity": "restaurant",
+    "name": "Buffet Mitnica",
+    "opening_hours": "Mo-Sa 10:00-22:30",
+    "operator": "M. Labus",
+    "phone": "+385 1 377 8643",
+    "website": "http://www.labus.hr/mitnica/index.html"
+  }
+},
+{
+  "type": "node",
+  "id": 322047111,
+  "lat": 45.8184366,
+  "lon": 16.0248684,
+  "tags": {
+    "addr:housenumber": "8",
+    "addr:street": "Aleja Antuna Augustinčića",
+    "amenity": "restaurant",
+    "contact:facebook": "https://www.facebook.com/bistromz/",
+    "cuisine": "grill",
+    "email": "labusravnice@gmail.com",
+    "loc_name": "Kod Srbina",
+    "name": "Bistro MZ",
+    "opening_hours": "Mo-Sa 08:00-23:00; Su 08:00-18:00",
+    "opening_hours:kitchen": "Mo-Sa 10:00-22:00; Su 10:00-17:00",
+    "phone": "+385 1 231 91 79",
+    "website": "http://labus.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 323971703,
+  "lat": 45.8178513,
+  "lon": 16.0015375,
+  "tags": {
+    "amenity": "restaurant",
+    "cuisine": "pizza",
+    "name": "Biggy",
+    "opening_hours": "Mo-Fr 10:00-23:00; Sa 11:00-23:00; Su 11:00-18:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "smoking": "no",
+    "website": "https://pizzeriabigy.com"
+  }
+},
+{
+  "type": "node",
+  "id": 324590949,
+  "lat": 45.7804652,
+  "lon": 15.9869314,
+  "tags": {
+    "addr:housenumber": "20",
+    "addr:street": "Ulica Brune Bušića",
+    "amenity": "pharmacy",
+    "check_date": "2022-11-14",
+    "email": "sredisce@primapharme.hr",
+    "healthcare": "pharmacy",
+    "name": "PrimaPharme",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00",
+    "phone": "+385 1 6608 360",
+    "website": "https://primapharme.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 324598984,
+  "lat": 45.7775137,
+  "lon": 16.0006066,
+  "tags": {
+    "name": "HG Spot",
+    "opening_hours": "Mo-Sa 08:00-20:00",
+    "shop": "computer",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 324599254,
+  "lat": 45.7775775,
+  "lon": 15.9956294,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "3",
+    "addr:postcode": "10010",
+    "addr:street": "Hrastin prilaz",
+    "amenity": "pharmacy",
+    "brand": "Gradska ljekarna Zagreb",
+    "brand:wikidata": "Q132529253",
+    "check_date": "2022-11-13",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 324630122,
+  "lat": 45.7786698,
+  "lon": 15.9959438,
+  "tags": {
+    "amenity": "fast_food",
+    "cuisine": "burger;regional",
+    "diet:meat": "yes",
+    "diet:vegetarian": "yes",
+    "name": "Zdravljak Forino",
+    "opening_hours": "24/7",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 324791027,
+  "lat": 45.7763726,
+  "lon": 15.9784502,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "16",
+    "addr:postcode": "10020",
+    "addr:street": "Avenija Dubrovnik",
+    "amenity": "cinema",
+    "layer": "2",
+    "level": "2",
+    "name": "CineStar Zagreb - Avenue Mall",
+    "opening_hours": "Mo-Fr 13:00-22:00; Sa-Su 10:00-22:00",
+    "operator": "Blitz-Cinestar d.o.o.",
+    "phone": "+38560323233",
+    "screen": "9",
+    "website": "https://www.blitz-cinestar.hr/cinestar-novi-zagreb",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 324793177,
+  "lat": 45.7723533,
+  "lon": 15.9649254,
+  "tags": {
+    "addr:housenumber": "1",
+    "addr:street": "Trg Ane Rukavine",
+    "brand": "Spar",
+    "brand:wikidata": "Q610492",
+    "brand:wikipedia": "en:Spar (retailer)",
+    "name": "Spar",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-18:00",
+    "payment:cash": "yes",
+    "payment:credit_cards": "yes",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 325126998,
+  "lat": 45.8153230,
+  "lon": 15.9973968,
+  "tags": {
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "brand:wikipedia": "hr:Konzum",
+    "check_date": "2024-09-24",
+    "name": "Konzum",
+    "opening_hours": "Mo-Fr 07:00-21:00; Sa 08:00-15:00; Su off",
+    "ref": "37",
+    "ref:vatin": "HR29955634590",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 325718689,
+  "lat": 45.8115866,
+  "lon": 15.9743715,
+  "tags": {
+    "addr:housenumber": "5",
+    "addr:street": "Preradovićeva ulica",
+    "amenity": "library",
+    "check_date": "2025-10-07",
+    "internet_access": "yes",
+    "name": "Knjižnica Bogdan Ogrizović",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-14:00; Su off",
+    "operator": "Knjižnice grada Zagreba",
+    "operator:type": "public",
+    "operator:wikidata": "Q17440978"
+  }
+},
+{
+  "type": "node",
+  "id": 325724815,
+  "lat": 45.8113304,
+  "lon": 15.9740475,
+  "tags": {
+    "amenity": "pharmacy",
+    "brand": "Gradska ljekarna Zagreb",
+    "brand:wikidata": "Q132529253",
+    "check_date:opening_hours": "2024-09-10",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00; Su off",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 326246285,
+  "lat": 45.7793335,
+  "lon": 15.9860113,
+  "tags": {
+    "amenity": "restaurant",
+    "contact:facebook": "https://www.facebook.com/pages/Pizzeria%20Gloria/237658182929843/",
+    "name": "Pizzeria Glorija",
+    "opening_hours": "Tu-Sa 09:00-23:00; Su 10:00-22:00",
+    "smoking": "separated",
+    "smoking:outside": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 332278881,
+  "lat": 45.7989939,
+  "lon": 15.9485225,
+  "tags": {
+    "addr:housenumber": "50",
+    "addr:street": "Ozaljska ulica",
+    "amenity": "pharmacy",
+    "check_date": "2024-10-21",
+    "email": "ozaljska@ljekarne-joukhadar.hr",
+    "healthcare": "pharmacy",
+    "name": "Joukhadar",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su off",
+    "phone": "+385 1 3633 786",
+    "website": "https://www.ljekarne-joukhadar.hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 338794893,
+  "lat": 45.8069594,
+  "lon": 15.9423910,
+  "tags": {
+    "check_date": "2024-05-23",
+    "indoor_seating": "no",
+    "name": "Pekarnica Nessa",
+    "opening_hours": "Mo-Fr 06:00-21:00; Sa 06:00-20:00; Su 07:00-19:30 \"samo neke\"",
+    "outdoor_seating": "no",
+    "shop": "bakery",
+    "takeaway": "only",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 338794896,
+  "lat": 45.8011013,
+  "lon": 15.9388895,
+  "tags": {
+    "addr:floor": "G",
+    "addr:housenumber": "20",
+    "addr:street": "Ulica Matka Baštijana",
+    "check_date": "2026-07-30",
+    "indoor_seating": "no",
+    "internet_access": "no",
+    "level": "0",
+    "name": "Croatia",
+    "opening_hours": "05:00-23:00",
+    "outdoor_seating": "no",
+    "payment:cash": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "shop": "bakery",
+    "takeaway": "only",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 338795785,
+  "lat": 45.8082405,
+  "lon": 15.9927302,
+  "tags": {
+    "indoor_seating": "no",
+    "name": "Posavskog",
+    "opening_hours": "Mo-Sa 06:30-22:00; Su 07:00-22:00",
+    "outdoor_seating": "no",
+    "shop": "bakery",
+    "takeaway": "only"
+  }
+},
+{
+  "type": "node",
+  "id": 338795816,
+  "lat": 45.8076358,
+  "lon": 15.9861515,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:postcode": "10000",
+    "brand": "Pan-pek",
+    "brand:wikidata": "Q125813932",
+    "check_date": "2024-05-21",
+    "name": "Pan-pek",
+    "name:hr": "Pan Pek",
+    "opening_hours": "Mo-Fr 07:00-18:00; Sa 07:00-14:00; Su off",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 338796565,
+  "lat": 45.8076207,
+  "lon": 15.9404818,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "42",
+    "addr:postcode": "10000",
+    "addr:street": "Zagorska ulica",
+    "amenity": "pharmacy",
+    "brand": "Adiva",
+    "check_date": "2025-05-21",
+    "check_date:opening_hours": "2025-05-21",
+    "contact:facebook": "LjekarneJadrankaFilipovic",
+    "dispensing": "yes",
+    "drive_through": "no",
+    "healthcare": "pharmacy",
+    "name": "Ljekarna Filipović",
+    "opening_hours": "Mo-Fr 07:00-20:00, Sa 07:30-15:00",
+    "phone": "+385 1 3692 100",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 338798326,
+  "lat": 45.8066663,
+  "lon": 15.9427116,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "54",
+    "addr:postcode": "10000",
+    "addr:street": "Selska cesta",
+    "amenity": "restaurant",
+    "contact:facebook": "RestoranZlinje",
+    "contact:instagram": "restoran.blato",
+    "name": "Blato (Zlinje)",
+    "opening_hours": "Mo-Sa 11:00-18:00; Su,PH off",
+    "website": "https://restoran-blato.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 338798364,
+  "lat": 45.8062361,
+  "lon": 15.9529638,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Metalčeva ulica",
+    "amenity": "pub",
+    "check_date": "2024-06-10",
+    "contact:instagram": "https://www.instagram.com/markiz_pub/",
+    "name": "Markiz pub",
+    "opening_hours": "Mo-Sa 07:00-24:00; Su 08:00-23:00"
+  }
+},
+{
+  "type": "node",
+  "id": 338798437,
+  "lat": 45.8039437,
+  "lon": 15.9536719,
+  "tags": {
+    "addr:housenumber": "69",
+    "addr:street": "Ulica Silvija Strahimira Kranjčevića",
+    "amenity": "restaurant",
+    "contact:facebook": "https://www.facebook.com/pizzeriaviva",
+    "contact:instagram": "https://www.instagram.com/pizzeriaviva",
+    "cuisine": "italian",
+    "diet:halal": "no",
+    "diet:kosher": "no",
+    "diet:vegan": "no",
+    "diet:vegetarian": "yes",
+    "indoor_seating": "yes",
+    "name": "Pizzeria Viva",
+    "opening_hours": "Jan-Dec Mo-Sa 08:00-23:00; Su 12:00-23:00",
+    "outdoor_seating": "no",
+    "phone": "+385 1 3640 640",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 338798438,
+  "lat": 45.8039094,
+  "lon": 15.9584385,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "18",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica Huga Badalića",
+    "amenity": "restaurant",
+    "check_date": "2024-05-23",
+    "cuisine": "pizza",
+    "name": "Pizzeria Kariola",
+    "opening_hours": "-22:00",
+    "opening_hours:kitchen": "-22:00",
+    "outdoor_seating": "yes",
+    "phone": "+385 1 3667 044",
+    "website": "https://pizzeria-karijola.com/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 338800281,
+  "lat": 45.7985285,
+  "lon": 15.9471744,
+  "tags": {
+    "addr:housenumber": "62",
+    "addr:street": "Ozaljska ulica",
+    "check_date": "2025-08-07",
+    "indoor_seating": "yes",
+    "name": "Dafina",
+    "opening_hours": "Mo-Sa 05:00-01:00; Su 06:00-01:00",
+    "outdoor_seating": "no",
+    "payment:credit_cards": "no",
+    "payment:debit_cards": "no",
+    "shop": "bakery",
+    "smoking": "no",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 352843209,
+  "lat": 45.7949119,
+  "lon": 15.9192572,
+  "tags": {
+    "amenity": "atm",
+    "cash_in": "yes",
+    "check_date": "2025-11-09",
+    "indoor": "no",
+    "name": "Erste",
+    "opening_hours": "24/7",
+    "operator": "Erste",
+    "wikimedia_commons": "File:Uplatno-isplatni bankomat Erste banke, Admiral, Zagreb.jpeg"
+  }
+},
+{
+  "type": "node",
+  "id": 364343808,
+  "lat": 45.7995708,
+  "lon": 15.9618678,
+  "tags": {
+    "addr:housenumber": "56",
+    "addr:street": "Savska cesta",
+    "amenity": "bank",
+    "atm": "yes",
+    "check_date": "2026-03-30",
+    "name": "OTP Banka",
+    "opening_hours": "Mo,We 12:00-19:00; Tu,Th,Fr 09:00-16:00; Sa,Su off",
+    "operator": "OTP Banka",
+    "ref:vatin": "HR52508873833"
+  }
+},
+{
+  "type": "node",
+  "id": 364343814,
+  "lat": 45.8125380,
+  "lon": 15.9793464,
+  "tags": {
+    "alt_name": "McDonald's Jurišićeva",
+    "amenity": "fast_food",
+    "brand": "McDonald's",
+    "brand:wikidata": "Q38076",
+    "brand:wikipedia": "en:McDonald's",
+    "cuisine": "burger",
+    "diet:vegetarian": "yes",
+    "name": "McDonald's",
+    "opening_hours": "Mo-Th 07:00-01:00, Fr,Sa 07:00-03:00, Su,PH 07:00-01:00",
+    "ref:vatin": "HR97492131626",
+    "takeaway": "yes",
+    "toilets:wheelchair": "yes",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 381205588,
+  "lat": 45.7961681,
+  "lon": 15.9784465,
+  "tags": {
+    "alt_name": "bar No.4",
+    "amenity": "pub",
+    "contact:facebook": "https://www.facebook.com/spunk.zagreb",
+    "contact:instagram": "https://www.instagram.com/spunk_zagreb",
+    "indoor_seating": "yes",
+    "name": "Spunk",
+    "official_name": "ProstorDo",
+    "opening_hours": "Mo-Th 07:00-01:00, Su 18:00-01:00; Sa 07:00-04:00,12:00-04:00",
+    "outdoor_seating": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 381245907,
+  "lat": 45.7791150,
+  "lon": 15.9963891,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Zagrebačka banka",
+    "brand:wikidata": "Q140381",
+    "name": "Zagrebačka banka",
+    "opening_hours": "Mo, We, Fr 13:00-19:00; Tu, Th 08:00-14:00",
+    "ref:vatin": "HR92963223473",
+    "short_name": "ZaBa"
+  }
+},
+{
+  "type": "node",
+  "id": 381267525,
+  "lat": 45.7775674,
+  "lon": 15.9953028,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "3",
+    "addr:postcode": "10010",
+    "addr:street": "Hrastin prilaz",
+    "amenity": "cafe",
+    "check_date": "2022-11-13",
+    "name": "Friends",
+    "opening_hours": "Mo-Sa 07:00-24:00; Su 08:00-24:00",
+    "website": "https://caffe-bar-friends-trezor.business.site/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 385960448,
+  "lat": 45.7999335,
+  "lon": 15.9532589,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "PBZ",
+    "brand:wikidata": "Q7246343",
+    "check_date": "2025-05-22",
+    "drive_through": "no",
+    "name": "PBZ",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 08:00-12:00",
+    "operator": "Privredna banka Zagreb",
+    "ref:vatin": "HR02535697732",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 393179823,
+  "lat": 45.7936741,
+  "lon": 15.9183280,
+  "tags": {
+    "amenity": "pharmacy",
+    "check_date:opening_hours": "2024-10-29",
+    "contact:phone": "+385 1 3872 264",
+    "dispensing": "yes",
+    "level": "0",
+    "name": "vaše zdravlje",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00; Su off",
+    "website": "https://www.vasezdravlje.hr/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 393179824,
+  "lat": 45.7939072,
+  "lon": 15.9180366,
+  "tags": {
+    "addr:housenumber": "146",
+    "addr:street": "Rudeška cesta",
+    "amenity": "restaurant",
+    "check_date:opening_hours": "2023-04-26",
+    "contact:facebook": "Bistro-XXL-GRILL-najbolji-ro%C5%A1tilj-304147859603580",
+    "cuisine": "barbecue",
+    "diet:halal": "no",
+    "diet:vegetarian": "no",
+    "email": "xxl.grill@net.hr",
+    "indoor_seating": "yes",
+    "mobile": "+385 99 190 9109",
+    "name": "XXL-grill",
+    "opening_hours": "Mo-Fr 09:00-19:00; Sa-Su 09:00-17:00",
+    "outdoor_seating": "no",
+    "phone": "+385 1 3872 894",
+    "ref:HR:kucni_broj": "22096340",
+    "ref:vatin": "HR06336957761",
+    "website": "https://www.bistro-xxlgrill.hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 393187124,
+  "lat": 45.7917565,
+  "lon": 15.9191697,
+  "tags": {
+    "check_date:opening_hours": "2021-12-20",
+    "indoor_seating": "no",
+    "name": "Feniks",
+    "opening_hours": "Mo-Sa 06:00-22:00; Su 07:00-15:00",
+    "outdoor_seating": "no",
+    "shop": "bakery",
+    "takeaway": "only",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 393187146,
+  "lat": 45.7916306,
+  "lon": 15.9192124,
+  "tags": {
+    "addr:housenumber": "6",
+    "addr:street": "Travanjska ulica",
+    "check_date:opening_hours": "2024-07-30",
+    "name": "Prehrana",
+    "opening_hours": "Mo-Fr 07:00-21:00; Sa 07:00-21:00; Su \"neke 08:00-13:00\"",
+    "operator": "Prehrana trgovina d.d.",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref": "43",
+    "ref:HR:kucni_broj": "22095748",
+    "shop": "convenience",
+    "website": "https://prehrana.hr",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 393188936,
+  "lat": 45.7938088,
+  "lon": 15.9175927,
+  "tags": {
+    "addr:housenumber": "148",
+    "addr:street": "Rudeška cesta",
+    "amenity": "doctors",
+    "check_date": "2025-11-10",
+    "description": "Dom zdravlja Zagreb-zapad; liječnica Maja-Ana Pažur, sestra Radmila; neparni datumi ujutro (7:30-12:30), parni popodne (13:30-18:30);",
+    "fax": "+385 1 4440 237",
+    "healthcare": "doctor",
+    "healthcare:speciality": "general",
+    "level": "0.5",
+    "name": "Ordinacija opće / obiteljske medicine",
+    "old_name": "Ordinacija opće medicine Ruža Frntić (do 11/2019.)",
+    "opening_hours": "Mo-Fr 07:30-12:00 \"neparni dani\", 10:00-10:30 off; Mo-Fr 13:30-18:00 \"parni dani\", 16:00-16:30 off; Sa,Su,PH off",
+    "operator": "Dom zdravlja Zagreb - Zapad",
+    "operator:type": "public",
+    "phone": "+385 1 5999 499",
+    "ref:HR:kucni_broj": "22096339",
+    "website": "https://dzz-zapad.hr/a_personal.php?ordinacija_id=414",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 393195189,
+  "lat": 45.7915738,
+  "lon": 15.9192359,
+  "tags": {
+    "addr:housenumber": "6",
+    "addr:street": "Travanjska ulica",
+    "amenity": "dentist",
+    "email": "info@drparlov.com",
+    "healthcare": "dentist",
+    "name": "Maja Parlov",
+    "opening_hours": "\"prema dogovoru\"",
+    "phone": "+385 1 2097 237",
+    "website": "https://www.drparlov.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 401323411,
+  "lat": 45.7911831,
+  "lon": 15.9193808,
+  "tags": {
+    "amenity": "pub",
+    "indoor_seating": "yes",
+    "name": "Iva",
+    "opening_hours": "Mo-Sa 07:00-23:00; Su 07:00-22:00",
+    "outdoor_seating": "yes",
+    "smoking": "yes",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 410828548,
+  "lat": 45.7910948,
+  "lon": 15.9083608,
+  "tags": {
+    "addr:housenumber": "27",
+    "addr:street": "Mlake",
+    "amenity": "restaurant",
+    "indoor_seating": "yes",
+    "name": "Grana",
+    "opening_hours": "Tu-Fr 09:00-18:00; Sa 12:00-22:00; Su 12:00-17:00",
+    "outdoor_seating": "no",
+    "phone": "+385 1 3880 224",
+    "ref:HR:kucni_broj": "22094898",
+    "website": "http://www.grana-grill-pub.com"
+  }
+},
+{
+  "type": "node",
+  "id": 419207575,
+  "lat": 45.8116261,
+  "lon": 15.9739137,
+  "tags": {
+    "addr:housenumber": "2",
+    "addr:street": "Preradovićeva ulica",
+    "amenity": "pub",
+    "check_date": "2025-10-06",
+    "name": "Caffe bar Golf",
+    "opening_hours": "Mo-Sa 07:00-02:00; Su 08:00-02:00",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 419234439,
+  "lat": 45.8112456,
+  "lon": 15.9759348,
+  "tags": {
+    "amenity": "fast_food",
+    "contact:facebook": "https://www.facebook.com/pages/Pingvin/157348724331429",
+    "cuisine": "sandwich;burger",
+    "diet:gluten_free": "no",
+    "diet:vegetarian": "no",
+    "indoor_seating": "no",
+    "name": "Pingvin",
+    "opening_hours": "Mo-Th 11:00-02:00, Fr,Sa 10:00-04:00",
+    "outdoor_seating": "no",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 420580299,
+  "lat": 45.8992309,
+  "lon": 15.9528531,
+  "tags": {
+    "amenity": "restaurant",
+    "indoor_seating": "yes",
+    "name": "Stara Lugarnica",
+    "opening_hours": "Tu-Su 09:00-21:00",
+    "phone": "+385 1 4580 009;+385 98 664 414;+385 1 5626 282",
+    "website": "https://www.restoran-staralugarnica.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 420772192,
+  "lat": 45.8764737,
+  "lon": 15.9763068,
+  "tags": {
+    "addr:housenumber": "68",
+    "addr:street": "Bliznec",
+    "amenity": "restaurant",
+    "contact:facebook": "https://www.facebook.com/RestoranPilanaBliznec/",
+    "indoor_seating": "yes",
+    "name": "Pilana Bliznec",
+    "opening_hours": "09:00-23:00",
+    "website": "https://pilanabliznec.eatbu.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 428648489,
+  "lat": 45.8114726,
+  "lon": 15.9741597,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Preradovićeva ulica",
+    "amenity": "pub",
+    "check_date": "2025-10-06",
+    "name": "Pif",
+    "opening_hours": "Mo-Th 07:30-01:00; Fr-Sa 07:30-02:00; Su 10:00-01:00",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 443433718,
+  "lat": 45.8127603,
+  "lon": 15.9652537,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "12",
+    "addr:postcode": "10000",
+    "addr:street": "Britanski trg",
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "brand:wikipedia": "hr:Konzum",
+    "check_date": "2023-11-04",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-15:00",
+    "ref": "1",
+    "ref:vatin": "HR29955634590",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 443433733,
+  "lat": 45.8124084,
+  "lon": 15.9630538,
+  "tags": {
+    "addr:housenumber": "102",
+    "addr:street": "Ilica",
+    "brand": "Studenac",
+    "brand:wikidata": "Q65156084",
+    "name": "Studenac",
+    "opening_hours": "Mo-Fr 07:00-21:00",
+    "ref": "1514",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 443433749,
+  "lat": 45.8130397,
+  "lon": 15.9580113,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "117A",
+    "addr:postcode": "10000",
+    "addr:street": "Ilica",
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "check_date:opening_hours": "2024-06-20",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-20:00",
+    "ref": "43",
+    "ref:vatin": "HR29955634590",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 443433756,
+  "lat": 45.8129520,
+  "lon": 15.9652027,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "12",
+    "addr:postcode": "10000",
+    "addr:street": "Britanski trg",
+    "amenity": "bank",
+    "bic": "HPBZHR2X",
+    "brand": "Hrvatska poštanska banka",
+    "brand:wikidata": "Q5923981",
+    "brand:wikipedia": "en:Hrvatska poštanska banka",
+    "contact:fax": "+385 1 4686 009",
+    "contact:phone": "+385 1 4686 001",
+    "name": "Hrvatska poštanska banka",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 08:00-12:00",
+    "ref:vatin": "HR87939104217",
+    "short_name": "HPB"
+  }
+},
+{
+  "type": "node",
+  "id": 443433762,
+  "lat": 45.8122442,
+  "lon": 15.9638887,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "81",
+    "addr:postcode": "10000",
+    "addr:street": "Ilica",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Hrvatska poštanska banka",
+    "brand:wikidata": "Q5923981",
+    "brand:wikipedia": "en:Hrvatska poštanska banka",
+    "name": "Hrvatska poštanska banka",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 12:00-19:00; Sa off",
+    "short_name": "HPB",
+    "website": "https://www.hpb.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 443433799,
+  "lat": 45.8135635,
+  "lon": 15.9762461,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Trg bana Josipa Jelačića",
+    "amenity": "pharmacy",
+    "check_date": "2025-07-30",
+    "healthcare": "pharmacy",
+    "level": "0",
+    "name": "Ljekarna Centar",
+    "opening_hours": "24/7",
+    "operator": "Gradske ljekarne Zagreb",
+    "payment:cash": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "phone": "+38514816198",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 443433809,
+  "lat": 45.8124307,
+  "lon": 15.9784154,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "OTP banka",
+    "brand:wikidata": "Q31198593",
+    "brand:wikipedia": "en:OTP Bank",
+    "name": "OTP banka",
+    "name:hr": "OTP banka",
+    "name:sr": "ОТП банка",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 08:00-12:00",
+    "short_name": "OTP",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 443433812,
+  "lat": 45.8125507,
+  "lon": 15.9791104,
+  "tags": {
+    "amenity": "pharmacy",
+    "check_date": "2023-07-04",
+    "healthcare": "pharmacy",
+    "name": "Farmacia ljekarne",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su off",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 443433820,
+  "lat": 45.8124924,
+  "lon": 15.9802472,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Raiffeisen bank",
+    "brand:wikidata": "Q125756787",
+    "check_date": "2025-09-01",
+    "check_date:opening_hours": "2025-09-01",
+    "name": "Raiffeisen bank",
+    "opening_hours": "Mo-Fr 08:00-19:00; Sa 08:00-12:00; Su off",
+    "ref:vatin": "HR53056966535",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 443433829,
+  "lat": 45.8122995,
+  "lon": 15.9833465,
+  "tags": {
+    "check_date": "2025-09-01",
+    "check_date:opening_hours": "2025-09-01",
+    "level": "0",
+    "name": "Sportline",
+    "opening_hours": "Mo-Fr 08:00-21:00; Sa 08:00-20:30",
+    "organic": "no",
+    "second_hand": "no",
+    "shop": "shoes",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 443433853,
+  "lat": 45.8130164,
+  "lon": 15.9896725,
+  "tags": {
+    "addr:housenumber": "5",
+    "addr:street": "Ulica Antuna Bauera",
+    "check_date": "2023-09-08",
+    "healthcare": "pharmacy",
+    "name": "Kemig4U",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 09:00-14:00; Su off",
+    "shop": "chemist",
+    "website": "https://kemig4u.hr",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 443433859,
+  "lat": 45.8137128,
+  "lon": 15.9891490,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "72B",
+    "addr:postcode": "10000",
+    "addr:street": "Vlaška ulica",
+    "check_date": "2025-08-31",
+    "check_date:opening_hours": "2025-08-31",
+    "email": "info@juicebox.hr",
+    "healthcare": "pharmacy",
+    "name": "Juice box",
+    "opening_hours": "Mo-Fr 07:30-20:00; Sa 08:00-14:00",
+    "phone": "+385 95 478 4789",
+    "shop": "beverages",
+    "website": "https://juicebox.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 443433866,
+  "lat": 45.8142809,
+  "lon": 15.9882882,
+  "tags": {
+    "addr:housenumber": "79",
+    "addr:street": "Vlaška ulica",
+    "amenity": "restaurant",
+    "capacity": "18",
+    "description": "Info@vegehop.hr",
+    "diet:vegan": "only",
+    "diet:vegetarian": "only",
+    "indoor_seating": "yes",
+    "internet_access": "wlan",
+    "name": "Vegehop",
+    "opening_hours": "Mo-Fr 12:00-21:00; Sa 12:00-20:00",
+    "outdoor_seating": "yes",
+    "phone": "+38514649400",
+    "takeaway": "yes",
+    "website": "https://www.vegehop.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 443433891,
+  "lat": 45.8131810,
+  "lon": 15.9811377,
+  "tags": {
+    "addr:housenumber": "26",
+    "addr:street": "Vlaška ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Imex banka",
+    "brand:wikidata": "Q102338225",
+    "check_date": "2025-02-14",
+    "name": "Imex banka",
+    "opening_hours": "Mo-Fr 08:00-16:00; Sa-Su off",
+    "ref:vatin": "HR99326633206",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 454939865,
+  "lat": 45.8085748,
+  "lon": 15.9309662,
+  "tags": {
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "brand:wikipedia": "hr:Konzum",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 08:00-21:00; Su 08:00-13:00",
+    "ref": "3203",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 457349125,
+  "lat": 45.8013552,
+  "lon": 15.9284785,
+  "tags": {
+    "amenity": "cafe",
+    "brewery": "Ožujsko",
+    "check_date": "2026-05-06",
+    "check_date:opening_hours": "2023-01-26",
+    "diet:kosher": "no",
+    "diet:vegetarian": "no",
+    "indoor_seating": "yes",
+    "name": "Super Hrvoje",
+    "opening_hours": "Mo-Su 07:00-24:00",
+    "outdoor_seating": "yes",
+    "smoking": "yes",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 457884706,
+  "lat": 45.8057416,
+  "lon": 15.9363018,
+  "tags": {
+    "amenity": "cafe",
+    "check_date:opening_hours": "2021-09-06",
+    "name": "spin",
+    "opening_hours": "Mo-Sa 07:30-24:00"
+  }
+},
+{
+  "type": "node",
+  "id": 457885655,
+  "lat": 45.8031542,
+  "lon": 15.9299385,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "28",
+    "addr:postcode": "10138",
+    "addr:street": "Ulica Dragutina Golika",
+    "amenity": "post_office",
+    "check_date": "2024-12-04",
+    "name": "10138 Zagreb",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 12:00-19:00; Sa 08:00-12:00",
+    "operator": "Hrvatska pošta",
+    "operator:wikidata": "Q507289",
+    "operator:wikipedia": "hr:Hrvatska pošta",
+    "phone": "+385 1 6626 636",
+    "post_office": "bureau",
+    "ref": "10138",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 457890559,
+  "lat": 45.8022533,
+  "lon": 15.9728571,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Zelinska ulica",
+    "amenity": "cafe",
+    "check_date": "2023-04-18",
+    "indoor_seating": "yes",
+    "name": "Drop in",
+    "opening_hours": "06:00-22:00",
+    "outdoor_seating": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 457891897,
+  "lat": 45.7994127,
+  "lon": 15.9725091,
+  "tags": {
+    "addr:housenumber": "70",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "bank",
+    "check_date:opening_hours": "2021-12-22",
+    "name": "FINA",
+    "opening_hours": "Mo-Fr 07:30-18:30; Sa 08:00-12:00",
+    "operator": "FINA",
+    "website": "http://www.fina.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 457899853,
+  "lat": 45.8037778,
+  "lon": 15.9779887,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "2",
+    "addr:postcode": "10000",
+    "addr:street": "Paromlinska cesta",
+    "air_conditioning": "yes",
+    "alt_name": "McDonald’s Pothodnik;McDonald's Glavni Kolodvor",
+    "amenity": "fast_food",
+    "brand": "McDonald's",
+    "brand:wikidata": "Q38076",
+    "brand:wikipedia": "en:McDonald's",
+    "cuisine": "burger",
+    "drive_through": "no",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "name": "McDonald's",
+    "opening_hours": "Mo-Tu,We,Th,Su 06:00-00:00; Fr-Sa 06:00-01:00",
+    "outdoor_seating": "yes",
+    "phone": "+385 14 573 170",
+    "ref:vatin": "HR97492131626",
+    "takeaway": "yes",
+    "toilets:wheelchair": "yes",
+    "website": "https://mcdonalds.hr/lokacije/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 457904447,
+  "lat": 45.8098130,
+  "lon": 15.9882733,
+  "tags": {
+    "amenity": "pharmacy",
+    "brand": "Gradska ljekarna Zagreb",
+    "brand:wikidata": "Q132529253",
+    "check_date": "2022-09-16",
+    "dispensing": "yes",
+    "drive_through": "no",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 457941466,
+  "lat": 45.8023849,
+  "lon": 15.9730132,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Zelinska ulica",
+    "amenity": "pharmacy",
+    "check_date": "2023-04-18",
+    "healthcare": "pharmacy",
+    "name": "Zu ljekarna Pablo",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 465486574,
+  "lat": 45.7934650,
+  "lon": 16.0049228,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "8C",
+    "addr:postcode": "10121",
+    "addr:street": "Ulica Joze Laurenčića",
+    "amenity": "post_office",
+    "fax": "+385 1 6626 603",
+    "name": "10121 Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00",
+    "operator": "Hrvatska pošta",
+    "operator:wikidata": "Q507289",
+    "operator:wikipedia": "hr:Hrvatska pošta",
+    "phone": "+385 72 303 304",
+    "website": "https://www.posta.hr/pretrazivanje-postanskih-ureda/263?uredi=23"
+  }
+},
+{
+  "type": "node",
+  "id": 465486577,
+  "lat": 45.7933185,
+  "lon": 16.0044422,
+  "tags": {
+    "addr:housenumber": "8",
+    "addr:street": "Laurenčićeva",
+    "alt_name": "KGZ Ivana Brlić Mažuranić",
+    "amenity": "library",
+    "name": "Knjižnica Ivane Brlić Mažuranić",
+    "opening_hours": "Mo, We, Fr, Sa 08:00-14:00; Tu, Th 14:00-20:00",
+    "operator": "Knjižnice grada Zagreba",
+    "operator:type": "public",
+    "operator:wikidata": "Q17440978",
+    "phone": "+385 1 6144 533",
+    "website": "https://www.kgz.hr/hr/knjiznice/knjiznica-ivane-brlic-mazuranic/74"
+  }
+},
+{
+  "type": "node",
+  "id": 470835013,
+  "lat": 45.8294669,
+  "lon": 16.0791430,
+  "tags": {
+    "addr:housenumber": "1",
+    "addr:street": "Trg Antuna Mihanovića",
+    "amenity": "pharmacy",
+    "dispensing": "yes",
+    "drive_through": "no",
+    "email": "dubec@ljekarne-jagatic.hr",
+    "healthcare": "pharmacy",
+    "name": "Ljekarne Jagatić Dubec",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-15:00; PH off",
+    "operator": "Ljekarne Jagatić",
+    "phone": "+385 1 2925 272",
+    "website": "https://ljekarne-jagatic.hr/ws_general.cshtml?id=bcb9ac7c3053"
+  }
+},
+{
+  "type": "node",
+  "id": 492908344,
+  "lat": 45.7808625,
+  "lon": 15.9822927,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "29",
+    "addr:postcode": "10010",
+    "addr:street": "Ulica Nikole Andrića",
+    "air_conditioning": "yes",
+    "amenity": "restaurant",
+    "bar": "yes",
+    "cuisine": "regional;burger",
+    "delivery": "yes",
+    "email": "foodium@foodium.hr",
+    "name": "Foodium",
+    "opening_hours": "Mo-Sa 10:00-24:00; Su 10:00-17:00",
+    "phone": "+385 92 5015190",
+    "website": "https://www.foodium.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 493171153,
+  "lat": 45.8061594,
+  "lon": 15.9909915,
+  "tags": {
+    "addr:housenumber": "65",
+    "addr:street": "Ulica kneza Branimira",
+    "amenity": "pharmacy",
+    "check_date": "2024-07-07",
+    "healthcare": "pharmacy",
+    "name": "Mandis pharm",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "payment:credit_cards": "yes",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 499345143,
+  "lat": 45.8056657,
+  "lon": 15.9662265,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "8",
+    "addr:postcode": "10000",
+    "addr:street": "Savska cesta",
+    "check_date": "2025-10-20",
+    "check_date:opening_hours": "2025-09-01",
+    "email": "mp4@rog-joma.hr",
+    "mobile": "+385 99 712 2532",
+    "name": "Rog-Joma Savska",
+    "opening_hours": "Mo-Fr 09:00-19:00; Sa 09:00-14:00",
+    "phone": "+385 1 481 7341",
+    "ref": "4",
+    "service:bicycle:retail": "yes",
+    "shop": "bicycle",
+    "website": "https://www.rog-joma.hr/hr/prodavaonice/rog-joma-4-zagreb-savska-2/"
+  }
+},
+{
+  "type": "node",
+  "id": 507683385,
+  "lat": 45.7976402,
+  "lon": 15.9762015,
+  "tags": {
+    "addr:housenumber": "7",
+    "addr:street": "Ulica Vladimira Preloga",
+    "amenity": "pub",
+    "check_date": "2024-05-27",
+    "contact:facebook": "https://www.facebook.com/caffebarda",
+    "name": "DA",
+    "opening_hours": "Mo-Sa 07:00-23:00",
+    "phone": "+385 1 6110 610"
+  }
+},
+{
+  "type": "node",
+  "id": 507683397,
+  "lat": 45.7957775,
+  "lon": 15.9751467,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "35",
+    "addr:postcode": "10000",
+    "addr:street": "Lička ulica",
+    "amenity": "pub",
+    "contact:facebook": "https://www.facebook.com/caffebarsova13",
+    "name": "Sova",
+    "opening_hours": "07:00-23:00",
+    "website": "https://caffe-bar-sova.business.site/"
+  }
+},
+{
+  "type": "node",
+  "id": 507878849,
+  "lat": 45.7805336,
+  "lon": 15.9305561,
+  "tags": {
+    "addr:housenumber": "1A",
+    "addr:street": "Županići",
+    "amenity": "bar",
+    "check_date": "2024-01-30",
+    "contact:instagram": "https://www.instagram.com/chiczagreb",
+    "name": "Chic bar & more",
+    "opening_hours": "Mo-Th,Su 09:00-23:00; Fr-Sa 09:00-24:00",
+    "ref:HR:kucni_broj": "2134073269",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 507879003,
+  "lat": 45.7904690,
+  "lon": 15.9139770,
+  "tags": {
+    "addr:housenumber": "19B",
+    "addr:street": "Palinovečka ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "branch": "Vrbani III",
+    "brand": "PBZ",
+    "brand:wikidata": "Q7246343",
+    "check_date": "2023-05-17",
+    "name": "PBZ",
+    "opening_hours": "Mo, We, Fr 12:00-19:00; Tu, Th 08:00-15:00, Sa,Su,PH off",
+    "operator": "Privredna banka Zagreb",
+    "ref": "140",
+    "ref:HR:kucni_broj": "22095232",
+    "ref:vatin": "HR02535697732",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 507879007,
+  "lat": 45.7905770,
+  "lon": 15.9157827,
+  "tags": {
+    "addr:housenumber": "8",
+    "addr:street": "Kutnjački put",
+    "amenity": "pharmacy",
+    "check_date": "2023-05-17",
+    "dispensing": "yes",
+    "drive_through": "no",
+    "healthcare": "pharmacy",
+    "name": "Derjanović",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:00-15:00",
+    "payment:maestro": "yes",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes",
+    "phone": "+385 1 3866 728",
+    "ref:HR:kucni_broj": "22095236",
+    "ref:vatin": "HR97034385711",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 507879023,
+  "lat": 45.7927089,
+  "lon": 15.9155416,
+  "tags": {
+    "addr:housenumber": "95",
+    "addr:street": "Rudeška cesta",
+    "brand": "Plus market",
+    "check_date": "2026-03-13",
+    "check_date:opening_hours": "2026-03-13",
+    "name": "Studenac",
+    "opening_hours": "Mo-Sa 07:00-22:00; Su 08:00-21:00 \"samo neke\"",
+    "ref": "14",
+    "ref:vatin": "HR18432842686",
+    "shop": "convenience",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 507879025,
+  "lat": 45.7931089,
+  "lon": 15.9154978,
+  "tags": {
+    "air_conditioning": "yes",
+    "amenity": "pub",
+    "check_date": "2023-03-04",
+    "indoor_seating": "yes",
+    "name": "Gustav",
+    "opening_hours": "Mo-Sa 07:00-17:00; Su 07:00-14:00",
+    "outdoor_seating": "yes",
+    "smoking": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 507879029,
+  "lat": 45.7933124,
+  "lon": 15.9159762,
+  "tags": {
+    "amenity": "gambling",
+    "check_date": "2023-03-04",
+    "check_date:opening_hours": "2023-03-12",
+    "gambling": "betting",
+    "name": "Prva Sportska Kladionica",
+    "opening_hours": "Mo 10:00-21:00; Tu-Su 09:30-21:00",
+    "shop": "bookmaker",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 511969840,
+  "lat": 45.7948472,
+  "lon": 15.9192341,
+  "tags": {
+    "addr:housenumber": "140",
+    "addr:street": "Rudeška cesta",
+    "amenity": "bank",
+    "brand": "Erste Bank",
+    "brand:wikidata": "Q696867",
+    "check_date": "2025-11-09",
+    "check_date:opening_hours": "2025-11-09",
+    "name": "Erste Bank",
+    "opening_hours": "Mo,Tu 11:00-18:00; We-Fr 08:00-15:00; Sa,Su off",
+    "operator": "Erste",
+    "phone": "+385 800 78 90",
+    "ref:vatin": "HR23057039320",
+    "website": "https://www.erstebank.hr/",
+    "wheelchair": "no",
+    "wheelchair:description": "uska sigurnosna vrata, izgleda da ne mogu invalidska kolica?"
+  }
+},
+{
+  "type": "node",
+  "id": 533972042,
+  "lat": 45.7747373,
+  "lon": 15.9557803,
+  "tags": {
+    "check_date": "2026-04-20",
+    "name": "Union",
+    "opening_hours": "Mo-Sa 06:30-20:00; Su off",
+    "operator": "Union",
+    "ref": "53",
+    "ref:vatin": "HR00716582732",
+    "shop": "convenience",
+    "website": "https://www.ultragros.hr/clanica/union-19"
+  }
+},
+{
+  "type": "node",
+  "id": 533972046,
+  "lat": 45.7748900,
+  "lon": 15.9553579,
+  "tags": {
+    "amenity": "pub",
+    "indoor_seating": "yes",
+    "loc_name": "Baraka",
+    "name": "Gaj",
+    "opening_hours": "Mo-Fr 06:30-23:30; Sa 06:30-15:00; Su,PH 07:00-14:00",
+    "outdoor_seating": "yes",
+    "smoking": "yes",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 546971415,
+  "lat": 45.7893061,
+  "lon": 15.9308259,
+  "tags": {
+    "brand": "Tisak",
+    "brand:wikidata": "Q12643627",
+    "check_date": "2026-02-16",
+    "name": "Tisak",
+    "opening_hours": "Mo-Th 06:00-20:00; Fr 06:00-19:00; Sa 07:00-13:00; Su 07:00-12:00",
+    "shop": "kiosk",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 549077867,
+  "lat": 45.7897810,
+  "lon": 15.9285372,
+  "tags": {
+    "addr:housenumber": "5",
+    "addr:street": "Pakoštanska ulica",
+    "amenity": "pharmacy",
+    "check_date": "2025-10-15",
+    "email": "jarun@primapharme.hr",
+    "level": "0",
+    "name": "PrimaPharme",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su 08:00-12:00; PH off",
+    "phone": "+385 1 3640 582",
+    "website": "https://primapharme.hr/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 549521554,
+  "lat": 45.7876860,
+  "lon": 15.9491122,
+  "tags": {
+    "amenity": "pub",
+    "check_date": "2024-10-09",
+    "name": "Hamper",
+    "opening_hours": "Mo-Fr 07:00-24:00; Sa-Su 08:00-24:00"
+  }
+},
+{
+  "type": "node",
+  "id": 549521573,
+  "lat": 45.7906217,
+  "lon": 15.9493951,
+  "tags": {
+    "brand": "Tisak",
+    "brand:wikidata": "Q12643627",
+    "check_date": "2025-10-22",
+    "name": "Tisak",
+    "name:signed": "no",
+    "opening_hours": "Mo-Sa 07:00-22:00; Su 07:00-21:00",
+    "operator": "Tisak",
+    "shop": "kiosk"
+  }
+},
+{
+  "type": "node",
+  "id": 549521583,
+  "lat": 45.7904538,
+  "lon": 15.9495132,
+  "tags": {
+    "addr:housenumber": "15",
+    "addr:street": "Ulica Tina Ujevića",
+    "check_date": "2025-10-22",
+    "name": "Pekarna Knežija",
+    "opening_hours": "Mo-Su 06:30-21:30",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 549521680,
+  "lat": 45.7910903,
+  "lon": 15.9498982,
+  "tags": {
+    "addr:housenumber": "1",
+    "addr:street": "Albaharijeva ulica",
+    "amenity": "pharmacy",
+    "check_date": "2025-10-22",
+    "healthcare": "pharmacy",
+    "name": "Silva Kovačić Tukec, mag.pharm.",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su off",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 549521734,
+  "lat": 45.7928879,
+  "lon": 15.9693916,
+  "tags": {
+    "amenity": "pharmacy",
+    "dispensing": "yes",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 549521839,
+  "lat": 45.7925346,
+  "lon": 15.9803888,
+  "tags": {
+    "alt_name": "Fini fast food kutak za klopicu",
+    "amenity": "fast_food",
+    "contact:facebook": "kutakzaklopicu",
+    "delivery": "yes",
+    "email": "kutakzaklopicu@gmail.com",
+    "name": "Kutak za klopicu",
+    "opening_hours": "Mo-Fr 09:00-17:00; Sa,Su,PH off",
+    "opening_hours:delivery": "Mo-Fr 09:00-16:15; Sa,Su,PH off",
+    "phone": "+385 1 5801 792",
+    "website": "https://www.kutakzaklopicu.com.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 551655664,
+  "lat": 45.7896733,
+  "lon": 15.9321468,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Našička ulica",
+    "amenity": "cafe",
+    "check_date": "2026-02-16",
+    "name": "Ilcafeto",
+    "opening_hours": "Mo-Sa 07:00-22:00; Su 08:00-16:00",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 552469561,
+  "lat": 45.8145498,
+  "lon": 15.9960862,
+  "tags": {
+    "brand": "Diona",
+    "brand:wikidata": "Q125761272",
+    "name": "Diona",
+    "opening_hours": "Mo-Fr 07:00-14:00; Sa 07:00-12:00",
+    "ref": "P-220",
+    "ref:vatin": "HR41112127430",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 553017089,
+  "lat": 45.8145195,
+  "lon": 15.9959447,
+  "tags": {
+    "amenity": "bank",
+    "name": "Raiffeisen bank",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 12:00-19:00",
+    "ref:vatin": "HR53056966535"
+  }
+},
+{
+  "type": "node",
+  "id": 553035614,
+  "lat": 45.8144597,
+  "lon": 15.9957645,
+  "tags": {
+    "amenity": "bank",
+    "name": "Banka Kovanica",
+    "opening_hours": "Mo-Fr 08:00-17:00; Sa 08:00-12:00",
+    "ref:vatin": "HR33039197637"
+  }
+},
+{
+  "type": "node",
+  "id": 553035616,
+  "lat": 45.8148820,
+  "lon": 15.9962776,
+  "tags": {
+    "addr:housenumber": "1",
+    "addr:street": "Trg Eugena Kvaternika",
+    "check_date": "2024-09-24",
+    "name": "Alpina",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-14:00; Su off",
+    "shop": "shoes"
+  }
+},
+{
+  "type": "node",
+  "id": 553035619,
+  "lat": 45.8150848,
+  "lon": 15.9967036,
+  "tags": {
+    "addr:housenumber": "3",
+    "addr:street": "Trg Eugena Kvaternika",
+    "check_date": "2024-09-24",
+    "name": "Borovo",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-14:00; Su off",
+    "shop": "shoes"
+  }
+},
+{
+  "type": "node",
+  "id": 553035629,
+  "lat": 45.8147010,
+  "lon": 15.9956591,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "129",
+    "addr:postcode": "10000",
+    "addr:street": "Vlaška ulica",
+    "check_date": "2024-09-24",
+    "email": "runninggate@runninggate.hr",
+    "name": "Running Gate",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-13:00; Su off",
+    "ref:vatin": "HR97326283154",
+    "shop": "sports",
+    "website": "https://runninggate.hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 553035633,
+  "lat": 45.8144224,
+  "lon": 15.9964938,
+  "tags": {
+    "name": "Školska Knjiga",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-15:00",
+    "shop": "books"
+  }
+},
+{
+  "type": "node",
+  "id": 553086008,
+  "lat": 45.8146340,
+  "lon": 15.9963150,
+  "tags": {
+    "name": "Argentum",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-15:00",
+    "shop": "jewelry"
+  }
+},
+{
+  "type": "node",
+  "id": 553086013,
+  "lat": 45.8150043,
+  "lon": 15.9965885,
+  "tags": {
+    "addr:housenumber": "2",
+    "addr:street": "Trg Eugena Kvaternika",
+    "amenity": "bank",
+    "check_date": "2024-09-24",
+    "name": "Erste & Steiermärkische Bank",
+    "opening_hours": "Mo-Fr 09:00-18:00; Sa-Su off",
+    "ref:vatin": "HR23057039320"
+  }
+},
+{
+  "type": "node",
+  "id": 553287627,
+  "lat": 45.8141836,
+  "lon": 15.9940075,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "111",
+    "addr:postcode": "10000",
+    "addr:street": "Vlaška ulica",
+    "check_date": "2024-09-24",
+    "name": "Konoplja d.d",
+    "opening_hours": "Mo-Fr 09:00-16:00; Sa 08:00-13:00",
+    "phone": "+385 1 4664347",
+    "shop": "rope",
+    "website": "http://www.konoplja.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 556059870,
+  "lat": 45.7895850,
+  "lon": 15.9293687,
+  "tags": {
+    "brand": "Tisak",
+    "brand:wikidata": "Q12643627",
+    "check_date": "2025-09-22",
+    "name": "Tisak",
+    "opening_hours": "Mo-Fr 07:00-21:00; Sa 07:00-20:00; Su off",
+    "shop": "kiosk"
+  }
+},
+{
+  "type": "node",
+  "id": 556059877,
+  "lat": 45.7904928,
+  "lon": 15.9282757,
+  "tags": {
+    "addr:housenumber": "3A",
+    "addr:street": "Pakoštanska ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Raiffeisen bank",
+    "brand:wikidata": "Q125756787",
+    "check_date": "2025-10-15",
+    "name": "Raiffeisen bank",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 12:00-19:00; Sa-Su off",
+    "operator": "RBA",
+    "ref:HR:kucni_broj": "22118916",
+    "ref:vatin": "HR53056966535"
+  }
+},
+{
+  "type": "node",
+  "id": 558595131,
+  "lat": 45.7965419,
+  "lon": 15.9334387,
+  "tags": {
+    "amenity": "cafe",
+    "indoor_seating": "yes",
+    "name": "M",
+    "opening_hours": "Mo-Su 07:00-23:00",
+    "outdoor_seating": "yes",
+    "smoking": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 558595135,
+  "lat": 45.7967111,
+  "lon": 15.9338961,
+  "tags": {
+    "addr:housenumber": "34",
+    "addr:street": "Dinarska ulica",
+    "amenity": "cafe",
+    "check_date": "2026-09-22",
+    "name": "Volim Kvart",
+    "opening_hours": "Mo-Sa 07:00-24:00; Su 08:00-24:00",
+    "toilets": "yes",
+    "toilets:access": "customers",
+    "toilets:disposal": "flush",
+    "toilets:fee": "no",
+    "toilets:gender_segregated": "yes",
+    "toilets:handwashing": "yes",
+    "toilets:position": "seated;urinal",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 558604462,
+  "lat": 45.7975339,
+  "lon": 15.9370848,
+  "tags": {
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Zagrebačka banka",
+    "brand:wikidata": "Q140381",
+    "brand:wikipedia": "en:Zagrebačka banka",
+    "check_date": "2024-06-05",
+    "name": "Zagrebačka banka",
+    "opening_hours": "Mo,Fr 13:00-19:00; Tu-Th 08:00-14:00",
+    "ref:vatin": "HR92963223473",
+    "short_name": "ZaBa",
+    "source": "survey",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 558615419,
+  "lat": 45.7957129,
+  "lon": 15.9364023,
+  "tags": {
+    "check_date": "2023-12-21",
+    "name": "Alen",
+    "opening_hours": "Mo-Fr 15:00-20:00; Sa 11:00-14:00; Su off",
+    "shop": "hairdresser"
+  }
+},
+{
+  "type": "node",
+  "id": 558615422,
+  "lat": 45.7973843,
+  "lon": 15.9361427,
+  "tags": {
+    "addr:housenumber": "44",
+    "addr:street": "Šetalište Nikole Fallera",
+    "amenity": "pharmacy",
+    "check_date": "2024-06-05",
+    "healthcare": "pharmacy",
+    "name": "Ljekarna Marušić",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su off",
+    "phone": "+385 1 3633 557",
+    "website": "https://www.ljekarna-marusic.hr/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 559994019,
+  "lat": 45.7855088,
+  "lon": 15.9277983,
+  "tags": {
+    "addr:housenumber": "75",
+    "addr:street": "Hrgovići",
+    "amenity": "cafe",
+    "check_date": "2026-02-18",
+    "indoor_seating": "yes",
+    "name": "Lumière",
+    "opening_hours": "07:00-23:00",
+    "outdoor_seating": "yes",
+    "website": "https://facebook.com/Slasti%C4%8Darnica-Kre%C5%A1imir-121388667889796/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 564681872,
+  "lat": 45.7786646,
+  "lon": 15.9954427,
+  "tags": {
+    "addr:postcode": "10010",
+    "addr:street": "Meštrovićev trg",
+    "contact:facebook": "cvjecarnicaljubica",
+    "contact:instagram": "cvjecarnicaljubica",
+    "contact:twitter": "cvjecarljubica",
+    "email": "info@cvjecarnicaljubica.com",
+    "level": "0",
+    "name": "Ljubica",
+    "opening_hours": "Mo-Su 07:00-21:00",
+    "shop": "florist",
+    "website": "https://www.cvjecarnicaljubica.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 567207441,
+  "lat": 45.7902967,
+  "lon": 15.9496313,
+  "tags": {
+    "amenity": "cafe",
+    "check_date": "2025-11-18",
+    "check_date:opening_hours": "2025-11-18",
+    "level": "0",
+    "name": "Angi",
+    "opening_hours": "Mo-Su,PH 07:00-23:00"
+  }
+},
+{
+  "type": "node",
+  "id": 575105604,
+  "lat": 45.8077573,
+  "lon": 16.0408747,
+  "tags": {
+    "addr:housenumber": "25",
+    "addr:street": "Vukomerec",
+    "air_conditioning": "yes",
+    "amenity": "restaurant",
+    "changing_table": "no",
+    "cuisine": "barbecue",
+    "description:payment": "minimalni iznos za plaćanje karticom je 13.28€ (100kn)",
+    "description:payment:en": "to pay via credit or debit card, bill must be 13.28€ (100kn) or above",
+    "indoor_seating": "yes",
+    "name": "Čingač",
+    "opening_hours": "Mo-Su 07:00-23:00",
+    "outdoor_seating": "veranda",
+    "payment:credit_cards": "limited",
+    "payment:debit_cards": "yes",
+    "phone": "+385 1 2370 571",
+    "ref:vatin": "HR41288646911",
+    "smoking": "outside",
+    "website": "https://www.facebook.com/pages/%C4%8Cinga%C4%8D/154758134576565"
+  }
+},
+{
+  "type": "node",
+  "id": 575192108,
+  "lat": 45.7851421,
+  "lon": 15.9276780,
+  "tags": {
+    "addr:housenumber": "77",
+    "addr:street": "Hrgovići",
+    "brand:wikidata": "Q518563",
+    "check_date": "2026-02-18",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su,PH 08:00-15:00",
+    "ref": "41",
+    "ref:HR:kucni_broj": "22097114",
+    "ref:vatin": "HR29955634590",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 575192114,
+  "lat": 45.7867876,
+  "lon": 15.9291737,
+  "tags": {
+    "addr:housenumber": "55",
+    "addr:street": "Hrgovići",
+    "amenity": "cafe",
+    "check_date": "2025-11-19",
+    "name": "Medeni bar",
+    "opening_hours": "Tu-Sa 07:00-24:00, Su 08:00-23:00; Mo 07:00-23:00",
+    "ref:HR:kucni_broj": "22096212",
+    "website": "https://facebook.com/MedeniBar",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 575192115,
+  "lat": 45.7867899,
+  "lon": 15.9277263,
+  "tags": {
+    "amenity": "pharmacy",
+    "check_date": "2025-11-19",
+    "dispensing": "yes",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00; Su off"
+  }
+},
+{
+  "type": "node",
+  "id": 606913727,
+  "lat": 45.7937560,
+  "lon": 15.9174581,
+  "tags": {
+    "addr:housenumber": "148",
+    "addr:street": "Rudeška cesta",
+    "check_date:opening_hours": "2026-05-27",
+    "level": "0",
+    "name": "Planet Obuća",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-15:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "shop": "shoes",
+    "website": "https://www.planet-obuca.com/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 628231346,
+  "lat": 45.8366247,
+  "lon": 16.0461995,
+  "tags": {
+    "brand": "Interspar",
+    "brand:wikidata": "Q15820339",
+    "name": "Interspar",
+    "opening_hours": "Mo-Su 07:00-21:00",
+    "ref:vatin": "HR46108893754",
+    "shop": "supermarket",
+    "website": "https://www.spar.hr/lokacije/interspar-hipermarket-zagreb-10000-kolakova-14-dubrava"
+  }
+},
+{
+  "type": "node",
+  "id": 628231354,
+  "lat": 45.8381173,
+  "lon": 16.0481576,
+  "tags": {
+    "brand:wikidata": "Q518563",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-20:00; Su 08:00-13:00",
+    "ref": "18",
+    "ref:vatin": "HR29955634590",
+    "shop": "supermarket"
+  }
+},
+{
+  "type": "node",
+  "id": 630762469,
+  "lat": 45.8405829,
+  "lon": 16.0616369,
+  "tags": {
+    "amenity": "bar",
+    "internet_access": "no",
+    "name": "Cafe bar \"Gurman Gotivius\"",
+    "opening_hours": "07:30-22:00",
+    "smoking": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 631708725,
+  "lat": 45.7769800,
+  "lon": 15.9753053,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "12",
+    "addr:postcode": "10020",
+    "addr:street": "Avenija Dubrovnik",
+    "amenity": "restaurant",
+    "cuisine": "italian",
+    "delivery": "no",
+    "email": "ilsecondo.restoran@gmail.com",
+    "facebook": "https://www.facebook.com/pg/ilsecondorestaurant/",
+    "name": "Il Secondo",
+    "opening_hours": "Mo-Th 11:00-23:00, Fr 11:00-00:00, Sa 12:00-00:00, Su 12:00-23:00",
+    "outdoor_seating": "yes",
+    "phone": "+38516586609",
+    "website": "http://www.ilsecondo.hr/new/hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 631763810,
+  "lat": 45.8316464,
+  "lon": 16.0096370,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "30A",
+    "addr:postcode": "10000",
+    "addr:street": "Jurja ves",
+    "name": "Ciklo-centar d.o.o.",
+    "opening_hours": "Mo-Fr 09:00-20:00; Sa 09:00-14:00",
+    "phone": "+385 1 2342 224",
+    "shop": "bicycle",
+    "website": "https://ciklo-centar.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 633174927,
+  "lat": 45.8086870,
+  "lon": 15.9966516,
+  "tags": {
+    "addr:housenumber": "34",
+    "addr:street": "Ulica Ljudevita Posavskog",
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "brand:wikipedia": "hr:Konzum",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-14:00",
+    "ref": "3208",
+    "shop": "supermarket",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 651869871,
+  "lat": 45.8303212,
+  "lon": 16.0523963,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Grižanska",
+    "amenity": "pharmacy",
+    "healthcare": "pharmacy",
+    "name": "Gradske ljekarne Dubrava",
+    "opening_hours": "24/7",
+    "operator": "Gradske ljekarne Zagreb",
+    "phone": "+38512992350"
+  }
+},
+{
+  "type": "node",
+  "id": 668565120,
+  "lat": 45.7746221,
+  "lon": 15.9965581,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "4",
+    "addr:postcode": "10010",
+    "addr:street": "Balotin prilaz",
+    "check_date": "2022-10-16",
+    "name": "Pekarnica Utrine",
+    "opening_hours": "06:00-22:00",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 703129165,
+  "lat": 45.7959458,
+  "lon": 15.9699036,
+  "tags": {
+    "amenity": "pharmacy",
+    "check_date:opening_hours": "2025-02-04",
+    "dispensing": "yes",
+    "name": "Vaše zdravlje",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "phone": "+385 1 6198 756",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 718505756,
+  "lat": 45.8137098,
+  "lon": 15.9889273,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "72B",
+    "addr:postcode": "10000",
+    "addr:street": "Vlaška ulica",
+    "check_date": "2024-11-08",
+    "name": "Muzička Trgovina Zagreb",
+    "opening_hours": "Mo-Fr 09:00-20:00, Sa 09:00-14:00",
+    "operator": "Rainbow Music International d.o.o.",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes",
+    "phone": "+385 1 4613 599",
+    "shop": "musical_instrument",
+    "website": "https://rainbow-music.hr/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 719418194,
+  "lat": 45.8092914,
+  "lon": 15.9638317,
+  "tags": {
+    "amenity": "bar",
+    "check_date": "2024-09-20",
+    "name": "Brick",
+    "opening_hours": "Mo-Fr 07:30-15:30; Sa-Su off",
+    "smoking": "yes",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 719418212,
+  "lat": 45.8092968,
+  "lon": 15.9640467,
+  "tags": {
+    "addr:housenumber": "21",
+    "addr:street": "Kačićeva ulica",
+    "brand": "Studenac",
+    "brand:wikidata": "Q65156084",
+    "check_date": "2024-09-20",
+    "name": "Studenac",
+    "opening_hours": "Mo-Sa 06:30-21:00; Su off",
+    "ref": "1136",
+    "shop": "convenience",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 722185501,
+  "lat": 45.8131744,
+  "lon": 15.9691230,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "43",
+    "addr:postcode": "10000",
+    "addr:street": "Ilica",
+    "amenity": "pharmacy",
+    "check_date:opening_hours": "2025-07-20",
+    "healthcare": "pharmacy",
+    "name": "Ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 724359413,
+  "lat": 45.8025508,
+  "lon": 15.9710123,
+  "tags": {
+    "addr:housenumber": "14",
+    "addr:street": "Bednjanska ulica",
+    "amenity": "restaurant",
+    "name": "Pizzeria Strossmayer",
+    "opening_hours": "Mo-Fr 09:00-17:00"
+  }
+},
+{
+  "type": "node",
+  "id": 729530522,
+  "lat": 45.7880920,
+  "lon": 16.0087234,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "1",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica Zdeslava Turića",
+    "amenity": "pharmacy",
+    "check_date:opening_hours": "2025-05-18",
+    "dispensing": "yes",
+    "drive_through": "no",
+    "email": "borovje@gljz.hr",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "operator": "Gradska ljekarna Zagreb",
+    "phone": "+385 1 6137711",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 729535586,
+  "lat": 45.7889668,
+  "lon": 16.0116531,
+  "tags": {
+    "addr:housenumber": "27A",
+    "name": "Prehrana",
+    "opening_hours": "Mo-Sa 07:00-20:00;Su 07:00-13:00",
+    "operator": "Prehrana trgovina d.d.",
+    "ref": "71",
+    "shop": "convenience",
+    "website": "https://prehrana.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 761956668,
+  "lat": 45.8102791,
+  "lon": 15.9978492,
+  "tags": {
+    "addr:housenumber": "38",
+    "addr:street": "Ulica Grge Tuškana",
+    "air_conditioning": "yes",
+    "amenity": "cafe",
+    "internet_access": "wlan",
+    "internet_access:fee": "no",
+    "internet_access:ssid": "PlaviKlub",
+    "name": "Plavi klub",
+    "opening_hours": "Mo-Fr 07:00-21:00, Sa 07:00-15:00, Su closed",
+    "outdoor_seating": "yes",
+    "payment:cash": "yes",
+    "smoking": "separated"
+  }
+},
+{
+  "type": "node",
+  "id": 761956670,
+  "lat": 45.8101665,
+  "lon": 15.9935067,
+  "tags": {
+    "addr:housenumber": "26",
+    "addr:street": "Ulica kralja Zvonimira",
+    "brand": "Studenac",
+    "brand:wikidata": "Q65156084",
+    "name": "Studenac",
+    "opening_hours": "Mo-Sa 06:30-21:00",
+    "ref": "1126",
+    "shop": "convenience",
+    "website": "https://www.studenac.hr/trgovine/955/t1126-zagreb"
+  }
+},
+{
+  "type": "node",
+  "id": 761956671,
+  "lat": 45.8104692,
+  "lon": 15.9930868,
+  "tags": {
+    "addr:housenumber": "29",
+    "addr:street": "Ulica kralja Zvonimira",
+    "check_date": "2025-08-31",
+    "check_date:opening_hours": "2025-08-31",
+    "name": "Dubravica",
+    "opening_hours": "Sa 07:00-13:00; Mo-Fr 07:00-13:00; Su off",
+    "phone": "+385 1 4641 366; +385 99 810 6030",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 769225474,
+  "lat": 45.7951092,
+  "lon": 15.9953930,
+  "tags": {
+    "amenity": "pharmacy",
+    "check_date": "2023-04-08",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00; PH closed",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 775542086,
+  "lat": 45.8003568,
+  "lon": 15.9952641,
+  "tags": {
+    "amenity": "cafe",
+    "name": "A5",
+    "opening_hours": "Mo-Fr 06:30-24:00; Sa 08:00-24:00; Su 11:00-24:00",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 775689930,
+  "lat": 45.7650254,
+  "lon": 16.0030204,
+  "tags": {
+    "amenity": "pharmacy",
+    "healthcare": "pharmacy",
+    "name": "Ljekarna Adiva",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:00-15:00"
+  }
+},
+{
+  "type": "node",
+  "id": 779171123,
+  "lat": 45.7996475,
+  "lon": 16.0018777,
+  "tags": {
+    "addr:housenumber": "33",
+    "addr:street": "Rapska ulica",
+    "check_date": "2022-10-02",
+    "name": "Union",
+    "opening_hours": "Mo-Sa 06:30-21:00",
+    "payment:mastercard": "yes",
+    "payment:visa": "yes",
+    "ref": "31",
+    "ref:vatin": "HR00716582732",
+    "shop": "convenience",
+    "website": "https://www.ultragros.hr/clanica/union-19",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 787109167,
+  "lat": 45.8099645,
+  "lon": 15.9801771,
+  "tags": {
+    "addr:housenumber": "33",
+    "addr:street": "Petrinjska ulica",
+    "amenity": "restaurant",
+    "check_date": "2024-04-16",
+    "cuisine": "regional",
+    "internet_access": "wlan",
+    "name": "Gostionica Purger",
+    "opening_hours": "Mo-Sa 07:00-23:00; Su off",
+    "website": "http://purger.hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 802594705,
+  "lat": 45.7809645,
+  "lon": 15.9341132,
+  "tags": {
+    "amenity": "cafe",
+    "name": "Beach Champ",
+    "opening_hours": "Mo-Su 08:00-22:00"
+  }
+},
+{
+  "type": "node",
+  "id": 802594758,
+  "lat": 45.7800713,
+  "lon": 15.9317330,
+  "tags": {
+    "addr:housenumber": "bb",
+    "addr:street": "Aleja Matije Ljubeka",
+    "amenity": "restaurant",
+    "contact:facebook": "https://www.facebook.com/DalmatinoGrillPizza",
+    "cuisine": "pizza;grill",
+    "name": "Dalmatino",
+    "opening_hours": "Mo-Sa 15:30-21:30",
+    "phone": "+38513698529",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 803763130,
+  "lat": 45.7985501,
+  "lon": 15.9878953,
+  "tags": {
+    "addr:housenumber": "5",
+    "addr:street": "Kruge",
+    "alt_name": "Vivas Bar Kruge",
+    "amenity": "cafe",
+    "check_date": "2025-05-14",
+    "contact:instagram": "https://www.instagram.com/vivasbar/",
+    "internet_access": "wlan",
+    "name": "VivasBar",
+    "opening_hours": "Mo-Sa 07:00-24:00; Su,PH 08:00-24:00",
+    "website": "https://vivasbar.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 810173074,
+  "lat": 45.7933424,
+  "lon": 16.0046961,
+  "tags": {
+    "name": "Mimoza",
+    "opening_hours": "Mo-Su 06:00-22:00",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 810176043,
+  "lat": 45.7941582,
+  "lon": 15.9991015,
+  "tags": {
+    "addr:housenumber": "23",
+    "addr:street": "Lastovska ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "check_date": "2024-05-20",
+    "name": "Privredna Banka Zagreb",
+    "opening_hours": "Mo-Fr 08:00-19:00",
+    "ref:vatin": "HR02535697732",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 810176048,
+  "lat": 45.7934230,
+  "lon": 16.0040824,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "8A",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica Joze Laurenčića",
+    "name": "Market Fiba-prom",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 07:00-13:00",
+    "operator": "Plus Market",
+    "shop": "convenience"
+  }
+},
+{
+  "type": "node",
+  "id": 810176057,
+  "lat": 45.7916378,
+  "lon": 16.0008978,
+  "tags": {
+    "addr:housenumber": "12",
+    "addr:street": "Lastovska ulica",
+    "amenity": "bank",
+    "atm": "yes",
+    "check_date": "2024-05-20",
+    "name": "Splitska Banka",
+    "opening_hours": "Mo,We,Fr 09:00-16:00; Tu,Th 12:00-19:00",
+    "ref:vatin": "HR69326397242"
+  }
+},
+{
+  "type": "node",
+  "id": 810176058,
+  "lat": 45.7922004,
+  "lon": 16.0004621,
+  "tags": {
+    "addr:housenumber": "3A",
+    "addr:street": "Ulica Zinke Kunc",
+    "check_date": "2023-03-12",
+    "name": "Panda",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-15:00",
+    "ref": "10",
+    "shop": "convenience",
+    "website": "https://www.gracin.hr/trgovinepanda/"
+  }
+},
+{
+  "type": "node",
+  "id": 831116765,
+  "lat": 45.7987196,
+  "lon": 15.9568637,
+  "tags": {
+    "addr:housenumber": "2A",
+    "addr:street": "Drenovačka ulica",
+    "amenity": "cafe",
+    "check_date": "2023-01-11",
+    "name": "Aviator",
+    "opening_hours": "Mo-Sa 07:00-24:00"
+  }
+},
+{
+  "type": "node",
+  "id": 831546523,
+  "lat": 45.7941230,
+  "lon": 15.9183151,
+  "tags": {
+    "check_date:opening_hours": "2023-01-28",
+    "name": "Kozmetički studio Z.G.",
+    "opening_hours": "Mo-Fr 12:00-19:00; Sa 10:00-15:00; PH,Su off",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "phone": "+385 1 387 3322",
+    "shop": "beauty",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 835813273,
+  "lat": 45.8111011,
+  "lon": 16.1020149,
+  "tags": {
+    "addr:city": "Sesvete",
+    "addr:housenumber": "27",
+    "addr:postcode": "10360",
+    "addr:street": "Ulica Ljudevita Posavskog",
+    "amenity": "pharmacy",
+    "check_date": "2023-06-03",
+    "healthcare": "pharmacy",
+    "name": "Mandis Pharm Ljekarna",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00",
+    "website": "https://mandispharmljekarne.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 838541575,
+  "lat": 45.8033573,
+  "lon": 15.9935683,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Avenija Marina Držića",
+    "amenity": "cafe",
+    "check_date": "2022-12-01",
+    "internet_access": "wlan",
+    "internet_access:fee": "customers",
+    "name": "Terminal",
+    "opening_hours": "07:00-22:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838557845,
+  "lat": 45.8018868,
+  "lon": 15.9944430,
+  "tags": {
+    "addr:housenumber": "10",
+    "addr:street": "Avenija Marina Držića",
+    "amenity": "library",
+    "check_date": "2024-08-20",
+    "internet_access": "wlan",
+    "internet_access:fee": "customers",
+    "name": "Dječja knjižnica Marina Držića",
+    "opening_hours": "Mo, We, Fr 08:00-14:00; Sa[1,3] 08:00-14:00; Tu, Th 14:00-20:00",
+    "operator": "Knjižnice grada Zagreba",
+    "operator:type": "public",
+    "operator:wikidata": "Q17440978",
+    "website": "https://www.kgz.hr/hr/knjiznice/djecja-knjiznica-marina-drzica/59",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838557851,
+  "lat": 45.8033890,
+  "lon": 15.9934647,
+  "tags": {
+    "brand": "Müller",
+    "brand:wikidata": "Q1958759",
+    "brand:wikipedia": "en:Müller (German trade company)",
+    "check_date": "2023-06-27",
+    "name": "Müller",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-20:00; PH off",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "phone": "+385 1 6040936",
+    "shop": "chemist"
+  }
+},
+{
+  "type": "node",
+  "id": 838557869,
+  "lat": 45.8042377,
+  "lon": 15.9932299,
+  "tags": {
+    "brand": "Tisak",
+    "brand:wikidata": "Q12643627",
+    "check_date": "2022-10-07",
+    "name": "Tisak",
+    "opening_hours": "Mo-Fr 05:00-23:00; Sa-Su 06:00-23:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "shop": "kiosk",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838604426,
+  "lat": 45.8037899,
+  "lon": 15.9935190,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "4",
+    "addr:postcode": "10000",
+    "addr:street": "Avenija Marina Držića",
+    "amenity": "pharmacy",
+    "check_date": "2025-07-11",
+    "check_date:opening_hours": "2025-07-11",
+    "dispensing": "yes",
+    "healthcare": "pharmacy",
+    "level": "0",
+    "name": "Ljekarne Farmacia",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00; Su off",
+    "operator": "Ljekarne Farmacia",
+    "payment:debit_cards": "yes",
+    "phone": "+385 1 6184 913",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838604445,
+  "lat": 45.8039484,
+  "lon": 15.9934368,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Avenija Marina Držića",
+    "changing_table": "no",
+    "check_date": "2026-03-17",
+    "indoor_seating": "yes",
+    "level": "0",
+    "name": "Dubravica",
+    "opening_hours": "24/7",
+    "outdoor_seating": "no",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref": "21",
+    "ref:vatin": "HR35665293024",
+    "shop": "bakery",
+    "smoking": "no",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838604463,
+  "lat": 45.8037091,
+  "lon": 15.9935472,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Avenija Marina Držića",
+    "brand": "Konzum",
+    "brand:wikidata": "Q518563",
+    "check_date": "2025-01-25",
+    "level": "0",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su 08:00-15:00",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref": "19",
+    "shop": "convenience",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 838795353,
+  "lat": 45.8004699,
+  "lon": 15.9948101,
+  "tags": {
+    "addr:housenumber": "238A",
+    "addr:street": "Ulica grada Vukovara",
+    "brand": "Mazda",
+    "brand:wikidata": "Q35996",
+    "check_date": "2022-11-13",
+    "email": "servis@mazda-jurkovic.hr",
+    "name": "Auto Jurković",
+    "opening_hours": "Mo-Fr 07:00-17:00; Sa 08:00-14:00",
+    "phone": "+385 1 6326 420",
+    "ref:HR:kucni_broj": "22117117",
+    "service:vehicle:car_repair": "yes",
+    "service:vehicle:new_car_sales": "yes",
+    "service:vehicle:used_car_sales": "yes",
+    "shop": "car",
+    "website": "https://jurkovic.mazda.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 883087771,
+  "lat": 45.7984701,
+  "lon": 15.9606290,
+  "tags": {
+    "addr:housenumber": "60",
+    "addr:street": "Savska cesta",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "Zagrebačka banka",
+    "brand:wikidata": "Q140381",
+    "check_date": "2024-11-11",
+    "name": "Zagrebačka banka",
+    "opening_hours": "Mo-Fr 09:00-16:00; Sa-Su off",
+    "ref:vatin": "HR92963223473",
+    "short_name": "ZaBa"
+  }
+},
+{
+  "type": "node",
+  "id": 888439659,
+  "lat": 45.7982930,
+  "lon": 15.9019395,
+  "tags": {
+    "amenity": "car_wash",
+    "automated": "no",
+    "name": "Autopraonica Mia",
+    "opening_hours": "Mo-Fr 08:00-17:00",
+    "self_service": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 889221001,
+  "lat": 45.7917542,
+  "lon": 15.9407344,
+  "tags": {
+    "addr:housenumber": "14",
+    "addr:street": "Srednjaci",
+    "brand": "Mlinar",
+    "brand:wikidata": "Q62082464",
+    "check_date": "2025-04-23",
+    "indoor_seating": "no",
+    "name": "Mlinar",
+    "opening_hours": "Mo-Fr 06:00-20:00; Sa 07:00-15:00; Su 07:00-13:00",
+    "outdoor_seating": "no",
+    "ref:HR:kucni_broj": "22098990",
+    "shop": "bakery",
+    "takeaway": "only",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 889221004,
+  "lat": 45.7916922,
+  "lon": 15.9407310,
+  "tags": {
+    "amenity": "pharmacy",
+    "brand": "Adiva",
+    "contact:website": "https://ljekarne-jagatic.hr",
+    "dispensing": "no",
+    "healthcare": "pharmacy",
+    "name": "Ljekarne Jagatić",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-15:00; Su off",
+    "phone": "+385 1 3843 299",
+    "website": "https://www.adiva.hr/ljekarna/ljekarne-jagatic-srednjaci/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 894120296,
+  "lat": 45.8066417,
+  "lon": 15.9019977,
+  "tags": {
+    "amenity": "pharmacy",
+    "dispensing": "yes",
+    "healthcare": "pharmacy",
+    "name": "Joukhandar",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 08:00-13:00",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 900313575,
+  "lat": 45.7994165,
+  "lon": 15.9572416,
+  "tags": {
+    "addr:housenumber": "18",
+    "addr:street": "Garićgradska ulica",
+    "check_date": "2024-06-11",
+    "name": "Elipso",
+    "opening_hours": "Mo-Sa 09:00-20:00; Su off",
+    "payment:cash": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "ref": "19",
+    "shop": "electronics",
+    "website": "https://www.elipso.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 919803676,
+  "lat": 45.7910847,
+  "lon": 15.9555944,
+  "tags": {
+    "addr:housenumber": "150",
+    "addr:street": "Savska cesta",
+    "amenity": "pub",
+    "check_date": "2025-01-25",
+    "check_date:opening_hours": "2025-01-25",
+    "check_date:smoking": "2025-01-25",
+    "email": "bikers.beer.factory@gmail.com",
+    "name": "Bikers Beer Factory",
+    "opening_hours": "Mo-Th 08:00-24:00, Fr,Sa 08:00-02:00, Su 10:00-24:00",
+    "phone": "+385 99 848 5663",
+    "smoking": "yes",
+    "website": "http://bikersbeerfactory.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 920423897,
+  "lat": 45.8000688,
+  "lon": 15.9871667,
+  "tags": {
+    "addr:housenumber": "222",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "library",
+    "check_date": "2026-01-10",
+    "email": "knjiznica.marina.drzica@kgz.hr",
+    "name": "Knjižnica Marina Držića",
+    "opening_hours": "Mo,We-Fr 08:00-20:00; Sa 08:00-14:00",
+    "operator": "Knjižnice grada Zagreba",
+    "operator:type": "public",
+    "operator:wikidata": "Q17440978",
+    "phone": "+385 1 6151 697",
+    "recycling:batteries": "yes",
+    "website": "https://www.kgz.hr/hr/knjiznice/knjiznica-marina-drzica/79"
+  }
+},
+{
+  "type": "node",
+  "id": 920426762,
+  "lat": 45.8001924,
+  "lon": 15.9852372,
+  "tags": {
+    "addr:housenumber": "4",
+    "addr:street": "Kruge",
+    "amenity": "bar",
+    "check_date": "2022-10-12",
+    "contact:facebook": "https://www.facebook.com/profile.php?id=100069324690060",
+    "name": "Šika",
+    "opening_hours": "Mo-Fr 06:00-18:00; Sa-Su 06:00-15:00",
+    "website": "https://bistrosika.eatbu.hr"
+  }
+},
+{
+  "type": "node",
+  "id": 921218033,
+  "lat": 45.8124641,
+  "lon": 15.9837312,
+  "tags": {
+    "amenity": "pharmacy",
+    "brand": "Gradska ljekarna Zagreb",
+    "brand:wikidata": "Q132529253",
+    "check_date": "2024-01-09",
+    "dispensing": "yes",
+    "healthcare": "pharmacy",
+    "name": "Gradska ljekarna Zagreb",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-15:00; Su off",
+    "operator": "Gradska ljekarna Zagreb",
+    "payment:cash": "yes",
+    "payment:credit_cards": "yes",
+    "payment:debit_cards": "yes",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 921628669,
+  "lat": 45.8087826,
+  "lon": 15.9419994,
+  "tags": {
+    "addr:housenumber": "30C",
+    "addr:street": "Selska cesta",
+    "check_date": "2025-08-01",
+    "female": "yes",
+    "male": "yes",
+    "name": "Frizerski salon Tanino",
+    "opening_hours": "Mo,We,Fr 08:00-15:00; Tu,Th 13:00-20:00; Sa 09:00-14:00; Su off",
+    "phone": "+385 91 454 5365",
+    "shop": "hairdresser",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 921628675,
+  "lat": 45.8043509,
+  "lon": 15.9427804,
+  "tags": {
+    "addr:housenumber": "90A",
+    "addr:street": "Selska cesta",
+    "amenity": "bank",
+    "atm": "yes",
+    "brand": "OTP banka",
+    "brand:wikidata": "Q31198593",
+    "name": "OTP banka",
+    "opening_hours": "Mo 09:00-16:00; Tu 12:00-19:00; We 09:00-16:00; Th 12:00-19:00; Fr 09:00-16:00",
+    "operator": "OTP Banka",
+    "ref:vatin": "HR69326397242",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 928177802,
+  "lat": 45.7978935,
+  "lon": 15.9059534,
+  "tags": {
+    "addr:housenumber": "5",
+    "addr:street": "Trg 101. brigade Hrvatske vojske",
+    "check_date": "2024-08-09",
+    "name": "Studenac",
+    "opening_hours": "Mo-Sa 07:00-22:00; Su,PH 07:00-21:00",
+    "ref": "1679",
+    "ref:HR:kucni_broj": "22124629",
+    "ref:vatin": "HR18432842686",
+    "shop": "convenience",
+    "website": "https://www.studenac.hr/trgovine/1530/t1679-zagreb",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 930286250,
+  "lat": 45.8101597,
+  "lon": 15.9883610,
+  "tags": {
+    "amenity": "library",
+    "check_date": "2025-09-24",
+    "check_date:opening_hours": "2025-09-24",
+    "email": "knjiznica.medvescak@kgz.hr",
+    "name": "Knjižnica Medveščak",
+    "opening_hours": "Mo-Fr 08:00-20:00; Sa 08:00-14:00",
+    "operator": "Knjižnice grada Zagreba",
+    "operator:type": "public",
+    "operator:wikidata": "Q17440978",
+    "phone": "+385 1 4611 481",
+    "website": "https://www.kgz.hr/hr/knjiznice/knjiznica-medvescak/80",
+    "wheelchair": "no",
+    "wikidata": "Q109806417",
+    "wikimedia_commons": "Category:Medveščak Library"
+  }
+},
+{
+  "type": "node",
+  "id": 933263452,
+  "lat": 45.8012803,
+  "lon": 15.9556047,
+  "tags": {
+    "addr:housenumber": "89",
+    "addr:street": "Nova cesta",
+    "amenity": "pharmacy",
+    "check_date": "2024-05-15",
+    "name": "Ljekarna Rizk",
+    "opening_hours": "Mo-Fr 07:00-20:00; Sa 07:30-13:00; Su off",
+    "website": "http://ljekarnerizk.com/"
+  }
+},
+{
+  "type": "node",
+  "id": 933264212,
+  "lat": 45.7954553,
+  "lon": 15.9491775,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "59",
+    "addr:postcode": "10000",
+    "addr:street": "Nehajska ulica",
+    "contact:email": "prodaja@protis.hr",
+    "contact:phone": "+38513098490",
+    "name": "Protis",
+    "opening_hours": "Mo-Fr 09:00-20:00; Sa 10:00-15:00",
+    "shop": "computer",
+    "website": "https://www.protis.hr/",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 936358594,
+  "lat": 45.8203357,
+  "lon": 15.9931606,
+  "tags": {
+    "amenity": "restaurant",
+    "contact:facebook": "izletistezelenjak",
+    "loc_name": "Izletište Zelenjak - Kod Mamića since 1967",
+    "name": "Izletište Zelenjak",
+    "opening_hours": "Tu-Su 12:00-18:00; Mo off",
+    "phone": "+385 1 4635 556",
+    "ref:vatin": "HR19974313391",
+    "website": "https://izletistezelenjak-mamic.hr/",
+    "wheelchair": "no"
+  }
+},
+{
+  "type": "node",
+  "id": 940156254,
+  "lat": 45.7986077,
+  "lon": 15.9711239,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:housenumber": "68",
+    "addr:postcode": "10000",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "bar",
+    "email": "info@boogaloozagreb.com",
+    "name": "Boogaloo",
+    "opening_hours": "Mo-Fr 10:00-16:00, Fr,Sa 23:00-07:00",
+    "outdoor_seating": "yes",
+    "phone": "+385 91 622 07 45",
+    "website": "https://www.boogaloozagreb.com/",
+    "wheelchair": "limited"
+  }
+},
+{
+  "type": "node",
+  "id": 940425682,
+  "lat": 45.7991234,
+  "lon": 15.9593002,
+  "tags": {
+    "addr:housenumber": "20",
+    "addr:street": "Ulica grada Vukovara",
+    "amenity": "cafe",
+    "check_date": "2023-01-11",
+    "name": "Tik tak",
+    "opening_hours": "Mo-Sa 07:00-24:00; Su 08:00-24:00",
+    "website": "https://www.tiktakbistro.com.hr",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 940427026,
+  "lat": 45.7988468,
+  "lon": 15.9614312,
+  "tags": {
+    "addr:city": "Zagreb",
+    "addr:country": "HR",
+    "addr:housenumber": "58",
+    "addr:postcode": "10000",
+    "addr:street": "Savska cesta",
+    "amenity": "bank",
+    "atm": "yes",
+    "bic": "HPBZHR2X",
+    "brand": "Hrvatska poštanska banka",
+    "brand:wikidata": "Q5923981",
+    "check_date": "2026-03-30",
+    "contact:fax": "+385 1 5553 506",
+    "contact:phone": "+385 1 5553 501",
+    "level": "0",
+    "name": "Hrvatska poštanska banka",
+    "opening_hours": "Jul-Aug: Mo,We,Fr 08:00-15:00; Jul-Aug: Tu,Th 12:00-19:00; Sep-Jun: Mo-Fr 08:00-19:00; Sep-Jun: Sa 08:00-12:00",
+    "ref:vatin": "HR87939104217",
+    "website": "https://www.hpb.hr/"
+  }
+},
+{
+  "type": "node",
+  "id": 942802573,
+  "lat": 45.8035539,
+  "lon": 15.9944905,
+  "tags": {
+    "addr:housenumber": "1A",
+    "addr:street": "Avenija Marina Držića",
+    "check_date": "2025-12-30",
+    "check_date:opening_hours": "2022-11-03",
+    "name": "Pekarnica Držićeva",
+    "opening_hours": "06:00-18:00,20:00-23:00",
+    "shop": "bakery"
+  }
+},
+{
+  "type": "node",
+  "id": 943818221,
+  "lat": 45.7896375,
+  "lon": 15.9381765,
+  "tags": {
+    "addr:housenumber": "6",
+    "addr:street": "Ulica braće Domany",
+    "brand:wikidata": "Q518563",
+    "check_date": "2023-08-02",
+    "name": "Konzum",
+    "opening_hours": "Mo-Sa 07:00-21:00; Su,PH 08:00-13:00",
+    "ref": "1216",
+    "ref:vatin": "HR29955634590",
+    "shop": "convenience",
+    "wheelchair": "yes"
+  }
+}
+
+  ]
+}
