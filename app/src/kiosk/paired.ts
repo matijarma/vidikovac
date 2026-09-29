@@ -4,6 +4,7 @@
 // each domain has its own arrangement of two or three blocks, big figures
 // first, lists bounded, every block naming its source; no block prints a
 // fetch or update time (companion brief §12, [O-27]).
+import { closureEndKnown } from '../../../shared/city/closures';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import type { PresentationTarget } from '../../../worker/presentation';
@@ -382,7 +383,8 @@ function closureRows(ctx: PairedContext, limit: number): string[] {
     const key = `panels.closureType.${subtype || 'ROAD_CLOSED'}`;
     const translated = i18n.t(key);
     const type = translated === key ? s.paired.closures : translated;
-    const until = item.until ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : '';
+    // A rolling end (shared/city/closures.ts) is no end: "u tijeku".
+    const until = !item.until ? '' : closureEndKnown(item, ctx.now) ? fill(s.paired.untilTime, { time: dayTime(item.until) }) : s.paired.ongoingWord;
     const detail = `${escapeHtml(type)}${until ? ` · ${escapeHtml(until)}` : ''}`;
     // The title is the closed street's name, vetted as one (a house-number range is data).
     return row(externalHtml('name', item.title), detail, distanceM === null ? '' : escapeHtml(fmtDistanceWord(ctx.locale, distanceM)));

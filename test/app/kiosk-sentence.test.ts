@@ -269,7 +269,7 @@ describe('one grounded, time-aware sentence', () => {
       facts: [closure, sunset], refs: [closure.id, sunset.id], now: NOW,
     }).ok).toBe(false);
     const outage: SentenceFact = { id: 'outage:zet', kind: 'promet', text: SENTENCE_COPY_HR.outage, validUntil: NOW + 600_000 };
-    expect(acceptSentence('ZET šalje položaje vozila; polasci su po voznom redu.', { facts: [outage], now: NOW }).ok).toBe(false);
+    expect(acceptSentence('ZET šalje položaje vozila; polasci iz voznog reda, bez potvrde.', { facts: [outage], now: NOW }).ok).toBe(false);
   });
 
   it('rejects last-tram and sunset facts at the deadline, including timeless forged facts', () => {
@@ -390,8 +390,9 @@ describe('facts and standalone deterministic fallback', () => {
     expect(facts[0]!.validUntil).toBe(NOW + 30_000);
     expect(modelSentenceFacts(facts)).toEqual([]);
     expect(sentenceFacts(input({ rows, outage: true })).some(f => f.id.startsWith('dep:'))).toBe(false);
+    // U0 step 5: in an outage the sentence says no departure at all, not even a timetable time; the note says why.
     const outage = sentenceFacts(input({ rows: rows.map(r => ({ ...r, live: false, arrival: { ...r.arrival!, live: false } })), outage: true }));
-    expect(outage.find(f => f.id === 'dep:trip0')?.text).toBe('Tramvaj 6, smjer Črnomerec, polazi u 12:33.');
+    expect(outage.some(f => f.id.startsWith('dep:'))).toBe(false);
     expect(outage.find(f => f.id === 'outage:zet')?.text).toBe(SENTENCE_COPY_HR.outage);
   });
 

@@ -15,6 +15,7 @@
 //   promet   the stop's lines with their state words and vehicles near,
 //            ZET's newest notice
 //   around   closures within 1.5 km by distance, works under way in the city
+import { closureEndKnown } from '../../../shared/city/closures';
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { ScreenStop } from '../core/contracts';
 import { delayTone } from '../experience/delay';
@@ -445,7 +446,9 @@ export function aroundPanel(input: FrontInput): FrontPanel {
   const near = closuresByDistance(prometnice, stop, now).filter((c) => stop === null || (c.distanceM !== null && c.distanceM <= NEARBY_CLOSURE_M)).slice(0, AROUND_CLOSURES);
   for (const { item, distanceM } of near) {
     const untilMs = item.until ? Date.parse(item.until) : NaN;
-    const until = Number.isFinite(untilMs) ? (sameZagrebDay(untilMs, now) ? fill(s.paired.untilTime, { time: clock(untilMs) }) : weekdayDayMonth(locale, untilMs)) : '';
+    // A rolling end (shared/city/closures.ts) is no end: "u tijeku".
+    const until = !Number.isFinite(untilMs) ? '' : !closureEndKnown(item, now) ? s.paired.ongoingWord
+      : sameZagrebDay(untilMs, now) ? fill(s.paired.untilTime, { time: clock(untilMs) }) : weekdayDayMonth(locale, untilMs);
     rows.push({ key: `closure:${item.id}`, lead: distanceM === null ? s.say.closure : fmtDistance(locale, distanceM), title: item.title, sub: [item.summary ?? '', until].filter(Boolean).join(' · ') });
   }
   const works = worksInKvart(input.modules, stop, now);

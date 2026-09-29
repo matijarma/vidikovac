@@ -3,6 +3,7 @@
 import type { ArrivalRow } from '../../../shared/city/arrivals';
 import { distanceM, located } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
+import { departureVoice } from '../../../shared/city/service-state';
 import type { CityState } from '../../../shared/city/types';
 import {
   acceptSentence, sentenceDeadline, sentenceValue, sentenceWithPeriod, stableSentenceFacts, typedSentenceFact, writeSentence,
@@ -112,7 +113,7 @@ export const SENTENCE_COPY_HR = {
   opening: '{name}: rad počinje {time}.',
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
-  outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+  outage: 'ZET ne šalje položaje vozila; polasci iz voznog reda, bez potvrde.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -136,7 +137,7 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   opening: '{name} opens {time}.',
   pharmacy: '24/7 duty pharmacy: {address}.',
   always: '{name}: {text}',
-  outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+  outage: 'ZET is not sending vehicle positions; timetable departures, unconfirmed.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -256,6 +257,9 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
 
   const hour = zagrebHour(now) ?? 12;
   const atNight = hour >= 20 || hour < 5;
+  // Which departures the sentence may say (shared/city/service-state.ts): none while ZET is down or unconfirmed,
+  // whatever the rows hold, and the first and last trams with them (timetable promises of the same kind).
+  const voice = input.outage ? 'none' : departureVoice(input.snapshots['zet-rt'], now);
   let departures = 0;
   for (const row of input.rows) {
     if (row.kind === 'solar' || (row.kind !== 'last' && row.kind !== 'first'
@@ -263,6 +267,7 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     if (row.kind === 'departure') {
       const arrival = row.arrival;
       if (!arrival || ++departures > 3 || !arrival.headsign) continue;
+      if (voice === 'none' || (voice === 'live-only' && !(row.live && arrival.live))) continue;
       // An ETA cannot be made into a timetable by changing its colour or words.
       // The selector must rebuild these rows without fixes during an outage.
       if (input.outage && (row.live || arrival.live)) continue;
@@ -285,11 +290,14 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
         wording, formUntil: live ? at - 30_000 : at,
       });
     } else if (row.kind === 'closure' && row.atMs !== null) {
+      // A rolling end (shared/city/closures.ts) is the City's placeholder, not a fact the header may state.
+      if (row.endKnown === false) continue;
       add(row.id, 'radovi', copy(i18n, 'closureUntil', {
         // The template owns the final full stop, including after a Croatian ordinal date.
         street: row.title, until: sameZagrebDay(row.atMs, now) ? clock(row.atMs) : dayMonth(row.atMs).replace(/\.$/, ''),
       }), Math.min(row.atMs, nextMidnight(now)), { wording: 'closureUntil' });
     } else if ((row.kind === 'last' || row.kind === 'first') && row.services) {
+      if (voice === 'none') continue;
       for (const service of row.services) {
         if (kindOfRoute(service.routeId) !== 'tram' || service.atMs <= now) continue;
         const text = copy(i18n, row.kind === 'last' ? 'lastTram' : 'firstTram', {

@@ -12,6 +12,7 @@
 // This module is the phone's heavy half (the selection, the external-text
 // policy, the kiosk helpers, the sentence templates): city/feed.ts loads it
 // once, after the first paint, so the first screen stays inside its budget.
+import { positionsUnavailable } from '../../../shared/city/service-state';
 import type { LayerId } from '../../../worker/protocol';
 import type { PublicSelection } from '../core/contracts';
 import { selectionHref } from '../experience/blocks';
@@ -108,7 +109,7 @@ export function nearbySectionMarkup(i18n: I18n, rows: readonly NearbyRow[], radi
 export function sadaSentenceFacts(input: NearbyInput, rows: readonly NearbyRow[]): SentenceFact[] {
   return sentenceFacts({
     place: input.place, radiusM: input.radiusM, rows, snapshots: input.snapshots, city: input.city,
-    now: input.now, outage: input.snapshots['zet-rt']?.status === 'down', locale: input.locale, i18n: input.i18n,
+    now: input.now, outage: positionsUnavailable(input.snapshots['zet-rt'], input.now), locale: input.locale, i18n: input.i18n,
   });
 }
 

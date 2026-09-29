@@ -114,6 +114,9 @@ export const GROW_FROM_PX = 80;
 export const TYPE_GROWTH = 0.1;
 /** The longest a full label may run before its short one is printed instead. */
 export const TITLE_MAX_LINES = 1;
+/** An event title with no shorter form is cut at this many lines on the wall (kiosk-city.css line-clamp, U0 step 7):
+ *  the source offers no short form, and on 29 September a nine-line title cost the wall four rows. The phone's list is not clamped. */
+export const EVENT_TITLE_MAX_LINES = 2;
 export const SUB_MAX_LINES = 2;
 /** A closure's sub-line on the wall is one line or none (decision 66): past this it prints its twin, and a twin that
  *  still wraps is left out, never a taller row. Release smoke run 5: the feed's summary under every closure wrapped
@@ -185,7 +188,8 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
  * than IMMINENT_ROW_MIN away and further away than that departure goes before it, the latest first (decision 67,
  * observe-d530: at 04:00 on a Sunday the 06:48 sunrise and a 10:00 museum opening on two title lines took the
  * second and third night trams, each the only tram of its line or direction for forty minutes; a sunset within the
- * hour still outlasts them); then the latest timed row that is not a departure; then a second timeless row. The
+ * hour still outlasts them; an event likewise since U0 step 7); then the latest event, before any closure (U0 step 7);
+ * then the latest timed row that is not a departure; then a second timeless row. The
  * first departure, the closures and the rest keep their order. First/last trams and one timeless row never enter
  * the drop order (owner decisions 10 and 27); a closure or solar row that is on the list stays on its node while
  * the list can hold it, and returns under a new identity only when its fact changed. Without `now` (older
@@ -204,14 +208,19 @@ export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: num
     return departure;
   }
   const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'first' && row.kind !== 'last');
+  // An event yields before any closure (U0 step 7): the closures sort by their ends, often a placeholder later in the
+  // day (16:00 and 18:00 on 29 September), so the latest timed row was a closure while a noon event stayed.
+  const events = others.filter((row) => row.kind === 'event');
+  if (events.length > 0) return events[events.length - 1]!;
   if (others.length > 0) return others[others.length - 1]!;
   const timeless = rows.filter(isTimeless);
   return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
 }
 
-/** A sunrise, sunset or opening row more than IMMINENT_ROW_MIN from `now` and further away than `departure` (decision 67). */
+/** A sunrise, sunset, opening or event row more than IMMINENT_ROW_MIN from `now` and further away than `departure`
+ *  (decision 67; the event since U0 step 7: at 07:45 on 29 September a noon event took the second and third trams). */
 function outlivedBy(row: NearbyRow, departure: NearbyRow, now: number): boolean {
-  if ((row.kind !== 'solar' && row.kind !== 'opening') || isTimeless(row) || isTimeless(departure)) return false;
+  if ((row.kind !== 'solar' && row.kind !== 'opening' && row.kind !== 'event') || isTimeless(row) || isTimeless(departure)) return false;
   return row.atMs! > departure.atMs! && row.atMs! - now > IMMINENT_ROW_MIN * 60_000;
 }
 
@@ -241,7 +250,8 @@ export function dayLabel(row: NearbyRow, now: number, i18n: I18n): string {
 /**
  * The row's time as the wall prints it: "uvijek"; a tracked departure inside
  * the horizon "sada" / "za 4 min"; a closure "do 18:00", or "do 25. 9." when
- * it ends on another day; everything else its Zagreb clock time.
+ * it ends on another day, "u tijeku" when its end is a rolling placeholder;
+ * everything else its Zagreb clock time.
  */
 export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   if (isTimeless(row)) return i18n.t('kiosk.nearby.always');
@@ -250,6 +260,8 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
     const minutes = Math.max(0, Math.round((atMs - now) / 60_000));
     return minutes === 0 ? i18n.t('arrivals.now') : i18n.t('arrivals.inMinutes', { n: minutes });
   }
+  // A rolling end (shared/city/closures.ts) is no end: the street is closed, "u tijeku".
+  if (row.kind === 'closure' && row.endKnown === false) return i18n.t('kiosk.nearby.ongoing');
   if (row.kind === 'closure') return `${i18n.t('kiosk.nearby.until')} ${daysAhead(atMs, now) === 0 ? clock(atMs) : dayMonth(atMs)}`;
   return clock(atMs);
 }
@@ -504,6 +516,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         if (!measure.box(list).overflow) break;
         if (off(row)) { forRoom.add(row.id); draw(); }
       }
+      const dropped: TimelineRow[] = [];
       while (shown.length > 0 && measure.box(list).overflow) {
         const reserved = reservedRows(shown);
         // The wall shows one to three departures in every reading: the first one is a promise too, so a
@@ -515,7 +528,17 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         // No more discretionary content: never silently remove a reserved row.
         if (!drop) break;
         shown = shown.filter((row) => row !== drop);
+        dropped.push(drop);
         draw();
+      }
+      // A row that fits again after a later drop comes back in the same fit (U0 step 7): a short row dropped before a
+      // tall one that went later finds its room again. The most valuable first (reverse drop order), each in its place
+      // in the list and kept only while the list still fits.
+      for (const row of dropped.reverse()) {
+        const was = shown;
+        shown = candidates.filter((candidate) => candidate === row || was.includes(candidate));
+        draw();
+        if (measure.box(list).overflow) { shown = was; draw(); }
       }
       // A sub-line yields to a row, never for nothing: where the rows that went left the room, the sub-lines given
       // up for it come back, in list order, each only while the list still holds every row whole.
@@ -572,11 +595,18 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           // first, down to the minimum, and only then does a row go. Seven rows in a 483 px box are 69 px each, and
           // one row with an address line is 84, so the box overflowed by fifteen pixels and the sunset row left and
           // returned on every turnover that passed through six candidates (D5.8 observer, two records and a
-          // re-created row each time); at 64 px they all fit.
+          // re-created row each time); at 64 px they all fit. As many rows with more departures is more too: the refit
+          // (U0 step 7) can fill a departure's room at the budget's height with a row that yielded to it, such as a
+          // sunset hours away (decision 67), where 64 px keeps the departure.
           if (fitted.shown.length < candidates.length && budget.rowPx > ROW_MIN_PX) {
             rowVars(ROW_MIN_PX);
             const tighter = fit(candidates, now, box);
-            if (tighter.shown.length > fitted.shown.length) { fitted = tighter; rowPx = ROW_MIN_PX; }
+            const departuresIn = (rows: readonly TimelineRow[]): number => rows.filter((row) => row.kind === 'departure').length;
+            if (tighter.shown.length > fitted.shown.length
+              || (tighter.shown.length === fitted.shown.length && departuresIn(tighter.shown) > departuresIn(fitted.shown))) {
+              fitted = tighter;
+              rowPx = ROW_MIN_PX;
+            }
           }
           memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx };
         }
@@ -621,6 +651,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       count = shown.length;
       const skippedFit = String(rows.length - count);
       if (element.dataset.skippedFit !== skippedFit) element.dataset.skippedFit = skippedFit;
+      // The kinds of the vetted rows the list did not paint, in list order (U4's fitted-departures observer row reads it).
+      const paintedIds = new Set(shown.map((row) => row.id));
+      const fitDropped = rows.filter((row) => !paintedIds.has(row.id)).map((row) => row.kind).join(' ');
+      if (element.dataset.fitDropped !== fitDropped) element.dataset.fitDropped = fitDropped;
       const overflow = !unbounded && measure.box(list).overflow ? '1' : '0';
       if (element.dataset.fitOverflow !== overflow) element.dataset.fitOverflow = overflow;
     },

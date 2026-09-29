@@ -29,6 +29,8 @@
 import { arrivalsAt, type ArrivalRow, type LiveVehicleRef } from '../../../shared/city/arrivals';
 import { locatedEvents } from '../../../shared/city/events';
 import { pillText } from '../../../shared/city/frame';
+import { closureEndKnown } from '../../../shared/city/closures';
+import { positionsUnavailable } from '../../../shared/city/service-state';
 import { externalText, EXTERNAL_TEXT_REJECTIONS, type ExternalTextKind, type ExternalTextRejection } from '../../../shared/kiosk/external-text';
 import { distanceM, inPolygons, located, matchStreet, normalName } from '../../../shared/city/geo';
 import type { ScreenPlace } from '../../../shared/city/place';
@@ -95,6 +97,9 @@ export interface NearbyRow {
   liveAt?: number;
   /** A last-trams or first-tram row's lines, soonest first; a line drops out once it has left. */
   services?: readonly NearbyService[];
+  /** A closure row: false when its published end is the City's rolling placeholder (shared/city/closures.ts), so the
+   *  surfaces print "u tijeku" and the header states no end; `atMs` keeps the published end for order and data-when. */
+  endKnown?: boolean;
 }
 
 /** Everything the selection reads; the caller owns every clock and cache. */
@@ -193,7 +198,8 @@ const KIND_ORDER: Readonly<Record<NearbyKind, number>> = {
 
 /** The rows for a place, in time order with the departures first, within the bounds of §12. */
 export function selectNearby(input: NearbyInput): NearbyRow[] {
-  const outage = input.snapshots['zet-rt']?.status === 'down';
+  // ZET down or unconfirmed (its newest word older than three minutes): every departure is a timetable time.
+  const outage = positionsUnavailable(input.snapshots['zet-rt'], input.now);
   const departures = departureRows(input, outage);
   const events = eventRows(input);
   const timed = [
@@ -472,6 +478,7 @@ function closureRows(input: NearbyInput): NearbyRow[] {
         id: `closure:${item.id}`,
         kind: 'closure' as const,
         atMs: until,
+        endKnown: closureEndKnown(item, now),
         always: false,
         title: item.title,
         sub,

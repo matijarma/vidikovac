@@ -50,6 +50,8 @@
 .kiosk .k-nearby .nearby-row[data-kind='pharmacy'] .k-nearby-mark::after{width:.5em;height:.5em;margin:-.25em 0 0 -.25em;border-radius:0;background:linear-gradient(var(--k-green),var(--k-green)) center/100% 34% no-repeat,linear-gradient(var(--k-green),var(--k-green)) center/34% 100% no-repeat,var(--k-surface);box-shadow:0 0 0 .12em var(--k-surface)}
 .kiosk .k-nearby-text{display:flex;flex-direction:column;justify-content:center;min-width:0}
 .kiosk .k-nearby .nearby-title{min-width:0;font-size:calc(var(--k-nearby-title-size) * var(--k-nearby-scale,1));font-weight:700;line-height:1.1;letter-spacing:-.01em;overflow-wrap:break-word;color:var(--k-ink)}
+/* U0 step 7: an event title with no shorter form stops at two lines on the wall (timeline.ts EVENT_TITLE_MAX_LINES); the phone's list is not clamped. */
+.kiosk .k-nearby .nearby-row[data-kind='event'] .nearby-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 .kiosk .k-nearby .nearby-sub{min-width:0;font-size:calc(var(--k-nearby-sub-size) * var(--k-nearby-scale,1));line-height:1.15;overflow-wrap:break-word;color:var(--k-ink-2)}
 .kiosk .k-nearby .nearby-title .k-line-badge{margin-right:.3em;vertical-align:.1em}
 /* Decision 26: the line is read with its destination, including the dark read multiplier. */

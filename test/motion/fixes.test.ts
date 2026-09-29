@@ -17,6 +17,28 @@ const snapshot = (items: ModuleSnapshot['items'], sourceUpdatedAt?: string): Mod
 // next-stop ETA is the one wire time that is absolute already (WP5: the twin
 // plans an arrival, not an offset), so it is only scaled to milliseconds.
 describe('vehicleFixes and routeDelayMap', () => {
+  // U0's client guard uses the snapshot's source time, not the device clock:
+  // small ZET timestamp skew is valid, but a midnight +24 h report is not a pin.
+  it.each([
+    [4_000, true],
+    [30_000, true],
+    [30_001, false],
+    [86_400_000, false],
+  ] as const)('checks a report %i ms after its source time independently of the device clock', (ahead, accepted) => {
+    const at = NOW + ahead;
+    const wire = snapshot([{
+      id: 'vehicle:1', module: 'zet-rt', kind: 'vehicle', tier: 'session', title: '6',
+      at: new Date(at).toISOString(),
+      geo: { type: 'Point', coordinates: [15.98, 45.82] },
+      data: { routeId: '6' },
+    }], new Date(NOW).toISOString());
+    for (const deviceNow of [NOW - 60_000, NOW + 60_000]) {
+      const fixes = vehicleFixes(wire, deviceNow);
+      expect(fixes.map(fix => fix.id)).toEqual(accepted ? ['vehicle:1'] : []);
+      if (accepted) expect(fixes[0]!.at).toBe(at);
+    }
+  });
+
   it.each<VehicleMotion>([
     { path: '6_25', plan: [[0, 1400], [30, 1700]] },
     { plan: [[0, 15.98, 45.82], [20, 15.981, 45.821]] },
