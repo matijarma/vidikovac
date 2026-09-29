@@ -20,10 +20,11 @@
 // What it does. It opens the screen named by AUDIT_KIOSK_URL, or, only with AUDIT_ALLOW_SCREEN_CREATE=1 (or on a
 // local origin), creates ONE temporary self-service screen through the kiosk wizard, the evaluator's own path (the
 // Worker allows SCREEN_QUOTA_PER_HOUR self-service screens per hour per network); without either it refuses and
-// exits 2 before loading anything. Then it walks the journey a person walks: landing, /s/, /hitno, scan, confirm, unlock,
-// all seven domains, the Promet interactions, Još, the session sheet and share, dark, English, landscape,
-// 200% text, a Pixel 7 in dark, a throttled Pixel 7, a 1440 desktop, the 60 s expiry warning and the frozen
-// state, and the kiosk invitation (1366 and 1920) and paired compositions. WebKit (an emulated iPhone 13) is
+// exits 2 before loading anything. Then it walks the journey a person walks: landing, /s/, /hitno, the scan URL that
+// redeems straight through to the live session on /d/ (no confirm card since 68df85f0), all seven domains, the
+// Promet interactions, Još, the session sheet and share, dark, English, landscape, 200% text, a Pixel 7 in dark,
+// a throttled Pixel 7, a 1440 desktop, the 60 s expiry warning and the frozen state, and the kiosk invitation
+// (1366 and 1920) and paired compositions. WebKit (an emulated iPhone 13) is
 // used when the repo's Playwright has it installed; otherwise the iPhone descriptor runs in Chromium and
 // result.json says so (`engine`).
 //
@@ -52,6 +53,10 @@ const EXPIRY_WARNING_LEAD_MS = 50_000;
 const ACTION_TIMEOUT_MS = 20_000;
 /** The /d/ shell's root; its presence says the shell's geometry rules apply to a capture. */
 const SHELL_ROOT = '.ki';
+/** A redeemed session: the live session label (scripts/observe-production.mjs SESSION_LIVE, e2e/helpers.ts unlockOnPhone). */
+const SESSION_LIVE = '[data-testid=session-label][data-state=live]';
+/** A domain's view on /d/: the layer itself, or its half of the desktop's Sada and Karta pair (.ki-desk). */
+const layerView = (layer) => `[data-testid=dash-view] > [data-layer="${layer}"], [data-testid=dash-view] > .ki-desk > [data-layer="${layer}"]`;
 
 // --- environment -------------------------------------------------------------------------
 // A deployment behind Cloudflare Access takes the service token from the environment;
@@ -233,6 +238,9 @@ async function openDomain(page, layer) {
   // The shell's own tab first (a Sada tile also navigates, but carries a route selection); the other
   // domains sit in the directory behind "Još" (the phone's tab bar, the desktop's status line).
   let nav = page.locator(`.ki-tab[data-layer="${layer}"]:visible`).first();
+  // The desk has no tabs: Sada and Karta stand side by side there, and the wordmark is its one way home to them
+  // (app/src/experience/chrome.ts wordmarkMarkup).
+  if (!(await nav.count()) && ['grad-sada', 'u-pokretu'].includes(layer)) nav = page.locator('.ki-wordmark[data-action=nav][data-layer="grad-sada"]:visible').first();
   if (!(await nav.count())) {
     await page.locator('[data-testid=status-more]:visible, [data-testid=tab-more]:visible').first().click();
     await page.waitForTimeout(400);
@@ -242,7 +250,7 @@ async function openDomain(page, layer) {
   // (a frozen tab); the journey goes on through the same handler and says so.
   try { await nav.click({ timeout: 10_000 }); }
   catch (e) { log(`nav ${layer}: pointer click did not land (${String(e.message).split(/\r?\n/)[0]}); DOM click instead`); await nav.evaluate((el) => el.click()); }
-  await page.locator(`[data-testid=dash-view] > [data-layer="${layer}"]`).waitFor({ timeout: 15_000 });
+  await page.locator(layerView(layer)).first().waitFor({ timeout: 15_000 });
   if (layer === 'u-pokretu') await page.waitForFunction(() => ['ready', 'tiles-failed', 'unavailable'].includes(document.querySelector('[data-testid=map-canvas]') && document.querySelector('[data-testid=map-canvas]').getAttribute('data-map-status')), null, { timeout: 30_000 }).catch(() => log('map status not settled in 30 s'));
   await page.waitForTimeout(1500);
 }
@@ -289,24 +297,33 @@ async function publicPages(page, name) {
   await metrics(page, `${name}-hitno`);
 }
 
-/** Scan URL, confirm card, Otključaj, the live session label; returns the session's expiry. */
+/**
+ * The scan URL lands in the session: /s/#<code> redeems (the redemption is the possession check), its status line
+ * names the session during the hand-over and the page moves on to /d/ at once; there is no confirm card and no
+ * Otključaj since 68df85f0. Waits for the live session label with its expiry on /d/ and the Sada view, the waits of
+ * e2e/helpers.ts unlockOnPhone and scripts/observe-production.mjs redeem. Returns the session's expiry.
+ */
+async function redeemed(page, code, timeout = 30_000) {
+  await page.goto(`${ORIGIN}/s/#${code}`);
+  await page.waitForURL((url) => url.pathname.startsWith('/d/'), { timeout });
+  await page.locator(SESSION_LIVE).waitFor({ timeout });
+  await page.locator(layerView('grad-sada')).first().waitFor({ timeout });
+  const expiresAt = Number(await page.getByTestId('session-label').getAttribute('data-expires-at'));
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error(`the live session label carries no future data-expires-at (${expiresAt})`);
+  return expiresAt;
+}
+
+/** Scan URL to the live session on /d/ (the redeemed landing), then the Sada overview once its data came in; returns the session's expiry. */
 async function unlock(page, code, name) {
   const start = Date.now();
-  await page.goto(`${ORIGIN}/s/#${code}`);
-  await page.getByTestId('confirm-card').waitFor({ timeout: 30_000 });
-  await page.waitForTimeout(500);
-  await shot(page, `${name}-confirm`, true);
-  await metrics(page, `${name}-confirm`);
-  await page.getByRole('button', { name: 'Otključaj', exact: true }).click();
-  await page.getByTestId('session-label').waitFor({ timeout: 30_000 });
-  await page.waitForFunction(() => document.querySelector('[data-testid=session-label]') && document.querySelector('[data-testid=session-label]').getAttribute('data-state') === 'live', null, { timeout: 30_000 });
+  const expiresAt = await redeemed(page, code);
   result.timings[`${name}-unlock-ms`] = Date.now() - start;
   await shot(page, `${name}-overview-0s`);
   result.timings[`${name}-data-after-unlock-ms`] = await waitData(page);
   await page.waitForTimeout(1200);
   await shot(page, `${name}-overview`, true);
   await metrics(page, `${name}-overview`);
-  return Number(await page.getByTestId('session-label').getAttribute('data-expires-at'));
+  return expiresAt;
 }
 
 async function clickFirstItem(page, layer, name) {
@@ -453,13 +470,14 @@ try {
   await kiosk.waitForTimeout(800);
   await shot(kiosk, 'kiosk-setup-1');
   await metrics(kiosk, 'kiosk-setup-1');
-  await kiosk.getByTestId('setup-next').click();
-  await kiosk.getByTestId('setup-stops').waitFor();
-  await kiosk.getByTestId('setup-search').fill('Jela');
+  // One place field since the wizard's steps went (e2e/screen-creation.spec.ts): type, pick the stop among the
+  // suggestions (Trg bana J. Jelačića, the stop 106_1 the old wizard ticked), start.
+  await kiosk.getByTestId('setup-place').fill('Jelači');
+  await kiosk.getByTestId('setup-suggestions').waitFor({ timeout: 30_000 });
   await kiosk.waitForTimeout(700);
   await shot(kiosk, 'kiosk-setup-2');
   await metrics(kiosk, 'kiosk-setup-2');
-  await kiosk.locator('input[name=stop][value="106_1"]').check();
+  await kiosk.locator('[data-testid=setup-suggestion][data-kind=stop]').filter({ hasText: 'Trg bana J. Jelačića' }).first().click();
   const created = kiosk.waitForResponse((r) => new URL(r.url()).pathname === '/api/screens' && r.request().method() === 'POST', { timeout: 30_000 });
   await kiosk.getByTestId('setup-create').click();
   const creation = await created;
@@ -533,7 +551,9 @@ try {
     await phone.waitForTimeout(600);
     await shot(phone, 'iphone-session-sheet', true);
     await metrics(phone, 'iphone-session-sheet');
-    const share = phone.getByTestId('share-city');
+    // The sheet's own row (share-city-sheet, e2e/pairing.spec.ts); the chrome's share-city button is hidden on the phone.
+    const inSheet = phone.getByTestId('share-city-sheet').filter({ visible: true });
+    const share = (await inSheet.count()) ? inSheet.first() : phone.getByTestId('share-city').filter({ visible: true }).first();
     if (await share.count()) { await share.click(); await phone.getByTestId('share-code').waitFor({ timeout: 20_000 }).catch(async (e) => { log(`share: no code after 20 s; dialog=${await phone.getByTestId('share-dialog').count()} status=${JSON.stringify(await phone.getByTestId('share-status').textContent().catch(() => null))}`); throw e; }); await phone.waitForTimeout(600); await shot(phone, 'iphone-share', true); await metrics(phone, 'iphone-share'); }
     await phone.keyboard.press('Escape');
     await phone.waitForTimeout(600);
@@ -622,14 +642,10 @@ try {
     await slow.goto(`${ORIGIN}/`);
     result.timings['slow-landing'] = await slow.evaluate(() => { const n = performance.getEntriesByType('navigation')[0]; return { ttfb: Math.round(n.responseStart), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd) }; });
     const code = await freshCode(kiosk);
+    // The scan URL goes straight through to the live session (no confirm card to time since 68df85f0).
     const s = Date.now();
-    await slow.goto(`${ORIGIN}/s/#${code}`);
-    await slow.getByTestId('confirm-card').waitFor({ timeout: 60_000 });
-    result.timings['slow-confirm-visible-ms'] = Date.now() - s;
-    await slow.getByRole('button', { name: 'Otključaj', exact: true }).click();
-    const u = Date.now();
-    await slow.waitForFunction(() => document.querySelector('[data-testid=session-label]') && document.querySelector('[data-testid=session-label]').getAttribute('data-state') === 'live', null, { timeout: 60_000 });
-    result.timings['slow-unlock-ms'] = Date.now() - u;
+    await redeemed(slow, code, 60_000);
+    result.timings['slow-unlock-ms'] = Date.now() - s;
     result.timings['slow-data-ms'] = await waitData(slow, 60_000);
     await shot(slow, 'slow-overview');
     const m = Date.now();
@@ -665,7 +681,8 @@ try {
       if (wait > 0) { log(`waiting ${Math.round(wait / 1000)} s for the expiry warning`); await phone.waitForTimeout(wait); }
       await shot(phone, 'iphone-expiry-warning', true);
       await metrics(phone, 'iphone-expiry-warning');
-      await phone.getByTestId('frozen-line').waitFor({ timeout: Math.max(10_000, expiresAt - Date.now() + 45_000) });
+      // The end of the ten minutes clears the content to the session-ended invitation (e6c6d16a); the frozen line went.
+      await phone.getByTestId('session-ended').waitFor({ timeout: Math.max(10_000, expiresAt - Date.now() + 45_000) });
       await phone.waitForTimeout(1500);
       await shot(phone, 'iphone-frozen', true);
       await metrics(phone, 'iphone-frozen');
