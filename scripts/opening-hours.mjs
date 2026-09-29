@@ -38,7 +38,10 @@ function parsePart(text) {
     const start = TOKEN.lastIndex;
     const m = TOKEN.exec(text);
     if (!m || m.index !== start) return { reason: 'syntax' };
-    if (m[10]) { comma = true; continue; }
+    if (m[10]) {
+      if (!rule || comma) return { reason: 'syntax' };
+      comma = true; continue;
+    }
     const selector = m[2] || m[4];
     if (m[1]) {
       if (rule) return { reason: 'syntax' };
@@ -63,8 +66,9 @@ function parsePart(text) {
       continue;
     }
     rule ??= fresh(false);
+    if (comma && !rule.ranges.length && !rule.off) return { reason: 'syntax' };
     if (m[9]) {
-      if (rule.ranges.length || rule.all) return { reason: 'syntax' };
+      if (rule.ranges.length || rule.off || rule.all) return { reason: 'syntax' };
       rule.off = true;
     } else {
       if (rule.off || rule.all || (rule.ranges.length && !comma)) return { reason: 'syntax' };
@@ -97,14 +101,15 @@ function unsupported(value) {
  * or { reason } when the value is outside the subset.
  */
 export function parseOpeningHours(value) {
-  const text = String(value ?? '').trim();
+  if (typeof value !== 'string') return { reason: 'syntax' };
+  const text = value.trim();
   if (!text) return { reason: 'empty' };
   const early = unsupported(text);
   if (early) return { reason: early };
   const days = Array.from({ length: 7 }, () => null);
   let anyRule = false;
   for (const partText of text.split(';')) {
-    if (!partText.trim()) continue;
+    if (!partText.trim()) return { reason: 'syntax' };
     const part = parsePart(partText);
     if (part.reason) return { reason: part.reason };
     for (const rule of part.rules) {
@@ -112,6 +117,13 @@ export function parseOpeningHours(value) {
       if (rule.selector && !rule.days.length) continue;
       anyRule = true;
       const targets = rule.days.length ? rule.days : [0, 1, 2, 3, 4, 5, 6];
+      // A normal rule owns the whole selected day, including an earlier rule's
+      // spill from yesterday. Do this before adding any of this rule's ranges:
+      // consecutive days in one selector must keep their own overnight spans.
+      if (!rule.additional || rule.off) for (const d of targets) {
+        const previous = (d + 6) % 7;
+        days[previous] = days[previous]?.map(([open, close]) => [open, close < open ? 1440 : close]) ?? null;
+      }
       for (const d of targets) {
         if (rule.off) days[d] = [];
         else if (rule.additional) days[d] = [...(days[d] ?? []), ...rule.ranges];

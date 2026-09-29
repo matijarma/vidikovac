@@ -81,6 +81,21 @@ describe('opening_hours subset parser', () => {
   ])('drops %s', (value, reason) => {
     expect(week(value)).toBe(`dropped: ${reason}`);
   });
+
+  it('overrides yesterday\'s spill only for normal rules and closed days', () => {
+    expect(week('Sa 16:00-03:00; Su 16:00-23:00')).toBe('|||||1600-2400|1600-2300');
+    expect(week('Sa 16:00-03:00, Su 16:00-23:00')).toBe('|||||1600-0300|1600-2300');
+    expect(week('Mo-Su 22:00-02:00; Tu off')).toBe('2200-2400||2200-0200|2200-0200|2200-0200|2200-0200|2200-0200');
+    expect(week('Su 22:00-02:00; Mo 09:00-17:00')).toBe('0900-1700||||||2200-2400');
+  });
+
+  it.each([',Mo 08:00-12:00', 'Mo,,Tu 08:00-12:00', 'Mo, 08:00-12:00', 'Mo 08:00-12:00,,13:00-14:00', 'Mo off off', 'Mo 08:00-12:00;;Tu off'])('refuses malformed separators: %s', (value) => {
+    expect(parseOpeningHours(value)).toHaveProperty('reason');
+  });
+
+  it('does not coerce a non-string source value into hours', () => {
+    expect(parseOpeningHours(['24/7'])).toHaveProperty('reason');
+  });
 });
 
 describe('the Overpass fixture through --input', () => {
