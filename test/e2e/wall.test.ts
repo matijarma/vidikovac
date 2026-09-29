@@ -14,7 +14,7 @@ import {
   CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
-  sampleRotation, sentenceTurns, summariseRotation, wallSample, type RotationRow, type WallPage, type WallRow, type WallSample,
+  sampleRotation, sentenceTurns, summariseRotation, wallSample, type FitReading, type RotationRow, type WallPage, type WallRow, type WallSample,
 } from '../../e2e/wall';
 import { TILE_REQUESTS, attachRecorders, pathOf, summariseBody, type RecorderPage } from '../../e2e/recorders';
 import { PORTRAIT_SCENES, SCENES, SCENE_IDS } from '../../e2e/scenes';
@@ -351,6 +351,34 @@ describe('one reading of the wall', () => {
     expect(departureFailures({ ...full, rows: [...full.rows.slice(0, 4), row({ id: 'event-1', kind: 'event', when: '2026-09-29T17:00:00.000Z' }), pharmacy] })).toEqual([short]);
     // The same train below the departure is no kept row: the day floor of three.
     expect(departureFailures({ ...full, rows: [...deps(1), rail(0), ...full.rows.slice(2)] })).toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure)']);
+  });
+
+  it('the DU3 observation (29 September, 23:15 Zagreb): one departure beside the notice, the last and first trams and the pharmacy, 24.5 px left', () => {
+    // The first rotation reading of review.local/upgrade/observe-du3/rotation.jsonl (1920×1080), its fit fields verbatim.
+    const du3 = {
+      departures: 1,
+      rows: [
+        { id: 'dep:0_30_1206_12_12703', kind: 'departure', when: '2026-09-29T21:15:55.000Z', always: false, live: false, source: 'zet-gtfs', title: '12 Dubrava', whenText: '23:15', sub: '', hasTime: true, text: '23:1512 Dubrava', caveat: false },
+        { id: 'notice:zet-novosti:10166', kind: 'notice', when: '2026-09-29T07:56:42.000Z', always: false, live: false, source: 'zet-novosti', title: 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)', whenText: 'ZET javlja', sub: '', hasTime: true, text: 'ZET javljaUspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)', caveat: false },
+        { id: 'last:2026-09-29', kind: 'last', when: '2026-09-29T21:31:00.000Z', always: false, live: false, source: 'zet-gtfs', title: 'Zadnji tramvaji', whenText: '23:31', sub: '1 23:31 · 12 23:45', hasTime: true, text: '23:31Zadnji tramvaji1 23:31 · 12 23:45', caveat: false },
+        { id: 'first:2026-09-30', kind: 'first', when: '2026-09-30T02:13:00.000Z', always: false, live: false, source: 'zet-gtfs', title: 'Prvi tramvaj', whenText: '04:13', sub: '12 04:13 · 17 04:24', hasTime: true, text: '04:13sutraPrvi tramvaj12 04:13 · 17 04:24', caveat: false },
+        { id: 'always:pharmacy', kind: 'pharmacy', when: null, always: true, live: false, source: 'ljekarne', title: '24/7', whenText: 'uvijek', sub: 'Trg bana J. Jelačića 3', hasTime: false, text: 'uvijek24/7Trg bana J. Jelačića 3', caveat: false },
+      ],
+      fitDropped: ['departure', 'departure', 'rail', 'closure', 'solar', 'opening', 'opening', 'event', 'event', 'event'],
+      fitOverflow: false,
+      listRoom: 24.5,
+      hiddenRows: 0,
+    };
+    const du3Sample: FitReading = du3;
+    expect(fittedDepartures(du3Sample)).toBe(1);
+    expect(departureFailures(du3Sample)).toEqual([]);
+    // From 23:22 the fit also left two trains out ahead of the departures; the same list still holds.
+    const trainsOut = ['rail', 'rail', 'departure', 'departure', 'closure', 'solar', 'opening', 'opening', 'event', 'event', 'event'];
+    expect(departureFailures({ ...du3Sample, fitDropped: trainsOut })).toEqual([]);
+    // The failing row of that observation was the portrait reading (1080×1920, 23:25:58), which rotation.jsonl does not
+    // hold: the same five rows with room for a one-line departure left (its capture puts the list at about 73 px free)
+    // read exactly as the report's finding, so the floor of two stands there and the rule is not the defect.
+    expect(departureFailures({ ...du3Sample, fitDropped: trainsOut, listRoom: DEPARTURE_ROW_MIN_PX })).toEqual(['1 departure rows where the list offered 3 and the fit keeps 2 (left out: rail rail departure departure closure solar opening opening event event event)']);
   });
 
   describe('calm motion: a departure\'s beat that gives a dropped row its room back (lastTrams2240 at 22:51:00)', () => {
