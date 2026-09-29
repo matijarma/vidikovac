@@ -410,6 +410,9 @@ export interface StopDetailData {
   /** While ZET's fleet deviates (upgrade U2): the note under the rows in place of arrivals.note, with the two
    *  numbers and that the times are the timetable's (arrivals.noteReduced, filled by transport/workspace.ts). */
   serviceNote?: string;
+  /** ZET sends no positions (shared/city/service-state.ts positionsUnavailable: down or unconfirmed, upgrade U0): the
+   *  sheet claims no estimate and no vehicle count, and says so once with the wall's own note (kiosk.nearby.outageNote). */
+  positionsUnavailable?: boolean;
 }
 
 /** The mode of a route at this stop: the stop's own list first, else the static route table, so a line the stop
@@ -505,9 +508,12 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
     .filter((route): route is string => route !== null && route !== '')
     .map((route) => `<p class="t-note" data-testid="stop-cancelled">${esc(i18n.t('arrivals.cancelledRoute', { route }))}</p>`)
     .join('');
+  // While ZET sends no positions no row is an estimate, so the note says what the times are instead of naming the
+  // estimate's source ("Procjena iz ZET-ovih podataka…"; round 1 desktop F3, phone F2), with rows or without.
+  const outage = d.positionsUnavailable ? `<p class="t-note" data-testid="stop-outage">${esc(i18n.t('kiosk.nearby.outageNote'))}</p>` : '';
   const body = lead.length > 0
-    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}<p class="t-note">${esc(d.serviceNote ?? i18n.t('arrivals.note'))}</p>`
-    : `<p class="t-empty">${esc(empty)}</p>${cancelled}`;
+    ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}${outage || `<p class="t-note">${esc(d.serviceNote ?? i18n.t('arrivals.note'))}</p>`}`
+    : `<p class="t-empty">${esc(empty)}</p>${cancelled}${outage}`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
 
@@ -520,7 +526,9 @@ export function stopDetailMarkup(i18n: I18n, d: StopDetailData): string {
   // joined with the fleet, the count reads the stop's own route list, and a line the list lacks made the two contradict
   // each other on one board (round 1, desktop F10).
   const liveRows = d.arrivals.filter((r) => r.live).length;
-  const lead = moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : liveRows > 0 ? '' : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
+  // Without positions neither a count nor "no vehicle is moving" can be said: the arrivals' note says why instead.
+  const lead = d.positionsUnavailable ? ''
+    : moving > 0 ? `<p class="t-lead" data-testid="stop-moving">${esc(trPlural(i18n, 'vehiclesNow', moving))}</p>` : liveRows > 0 ? '' : `<p class="t-empty">${esc(tr(i18n, 'noStopVehicles'))}</p>`;
   // The stop's board (probe §15.6 / §16.4 `stop-board`): its name and what comes next, one element a canvas tap
   // lands on; display: contents (map.css), so the sheet's own layout is untouched.
   const name = vetExternal('name', d.stop.name, 'row') ?? '';

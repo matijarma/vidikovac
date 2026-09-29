@@ -62,7 +62,7 @@ import { REFIT_SETTLE_MS } from '../ui/canvas';
 import { routeCatalogue, routeEntry, routeStopSequence, stopGroupById, stopGroupsFromCatalogue, stopGroupsFromNetwork } from './catalogue';
 import { cancelledTrips, externalTextReady, feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
-import { aboutExpected, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
+import { aboutExpected, positionsUnavailable, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
 import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
 import type { StopGroup } from './search';
@@ -147,7 +147,8 @@ const DESK_QUERY = '(min-width: 60rem)';
 const LANDSCAPE_QUERY = '(max-height: 30rem) and (orientation: landscape)';
 
 /** The note under a stop's rows while ZET's fleet deviates (reduced, silent; upgrade U2): the two numbers, and that
- *  the times are the timetable's. Undefined in every other state, where arrivals.note names the estimate's source. */
+ *  the times are the timetable's. Undefined in every other state: arrivals.note names the estimate's source, and while
+ *  ZET sends no positions (down, unconfirmed) the view prints the outage note (StopDetailData.positionsUnavailable). */
 function stopServiceNote(i18n: LayerContext['i18n'], zet: Parameters<typeof serviceNumbers>[0], now: number): string | undefined {
   const kind = serviceStateOf(zet, now).kind;
   const numbers = kind === 'reduced' || kind === 'silent' ? serviceNumbers(zet) : null;
@@ -927,7 +928,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
         const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
         const serviceNote = stopServiceNote(i18n, c.snapshots['zet-rt'], c.now);
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, cancelledRoutes: next.cancelledRoutes, frozenAt, now: c.now, serviceNote });
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, cancelledRoutes: next.cancelledRoutes, frozenAt, now: c.now, serviceNote, positionsUnavailable: positionsUnavailable(c.snapshots['zet-rt'], c.now) });
         return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {

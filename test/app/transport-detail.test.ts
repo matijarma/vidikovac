@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
+import hr from '../../app/src/i18n/hr.json';
 import type { VehicleInfo } from '../../app/src/map/city-map';
 import { decodeNetwork } from '../../shared/motion/network';
 import { fullestShape } from '../../app/src/transport/catalogue';
@@ -152,6 +153,28 @@ describe('the stop sheet says what comes next, first', () => {
     expect(html).not.toContain('data-testid="stop-moving"');
     const quiet = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: [row({ live: false, minutes: null })], arrivalsStatus: 'live' });
     expect(quiet).toContain('nije u pokretu');
+  });
+
+  it('while ZET sends no positions (down, unconfirmed) claims no estimate and no vehicle, and says so once with the outage note (round 1 desktop F3, phone F2)', () => {
+    const outage = hr.kiosk.nearby.outageNote;
+    const count = (html: string, needle: string): number => html.split(needle).length - 1;
+    const sheet = (arrivals: ArrivalRow[], counts: ReadonlyMap<string, number>) => stopDetailMarkup(i18n, {
+      stop: STOP, routes: ROUTES, counts, delays: new Map(), isScreenStop: false, kiosk: false, arrivals, arrivalsStatus: 'live', now: NOW, positionsUnavailable: true,
+    });
+    const timetable = [row({ live: false, minutes: null }), row({ tripId: 't2', atMs: NOW + 9 * 60_000, live: false, minutes: null })];
+    for (const html of [sheet(timetable, new Map()), sheet(timetable, new Map([['11', 2]])), sheet([], new Map())]) {
+      expect(html).not.toContain('Procjena iz ZET-ovih podataka');
+      expect(html).not.toContain('nije u pokretu');
+      expect(html).not.toContain('data-testid="stop-moving"');
+      expect(count(html, outage)).toBe(1);
+    }
+    // The rows stay the timetable's, and the lines list still stands.
+    expect(sheet(timetable, new Map())).toContain('data-testid="arrival-rows"');
+    expect(sheet(timetable, new Map())).toContain('data-testid="stop-routes"');
+    // With positions the sheet is what it was: the estimate's source, no outage note.
+    const live = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: timetable, arrivalsStatus: 'live', now: NOW });
+    expect(live).toContain('Procjena iz ZET-ovih podataka o vozilima; ostalo po voznom redu.');
+    expect(live).not.toContain(outage);
   });
 
   it('counts down for every row inside the horizon, whatever stands behind it, and keeps the clock for the rest', () => {
