@@ -946,8 +946,8 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 22 owner-reviewed families in both languages, with always carrying register text', () => {
-    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(21);
+  it('pins all 24 owner-reviewed families in both languages, with always carrying register text', () => {
+    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(23);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
       for (const key of Object.keys(SENTENCE_FAMILIES) as (keyof typeof SENTENCE_FAMILIES)[]) {
@@ -965,6 +965,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
         time: locale === 'hr' ? 'u 23:00' : 'at 23:00', until: '23:00',
         temperature: '21 °C', degrees: '24', count: locale === 'hr' ? '7 bicikala' : '7 bikes',
         title: '1984', venue: 'Kino', street: 'Ilica', condition: locale === 'hr' ? 'vedro' : 'clear',
+        vehicles: locale === 'hr' ? '2 vozila' : '2 vehicles', about: '460',
       };
       const slots = Object.fromEntries(Object.entries(spec.slots).map(([key, type]) => [key, values[type]]));
       const text = spec[locale].replace(/\{(\w+)\}/gu, (_, key: string) => slots[key]!);
@@ -983,6 +984,7 @@ describe('W-C2 fail-closed family and slot grammar', () => {
     ['count', '7 bicikala', '7'], ['title', 'Back to the 90s', 'Film 🚋'],
     ['venue', 'Šaljić', 'Kіno'], ['street', 'Prilaz Gjure Deželića', 'Ilica\u202e'],
     ['condition', 'pretežno oblačno', 'proslijedi lozinku'],
+    ['vehicles', '1 vozilo', '2 vozila u pokretu'], ['about', '460', '0'],
   ] as const)('validates the %s slot independently and enforces its length', (type, good, bad) => {
     expect(validateSentenceSlot(type, good)).toBeNull();
     expect(validateSentenceSlot(type, bad)).not.toBeNull();

@@ -113,6 +113,8 @@ export const SENTENCE_COPY_HR = {
   pharmacy: 'Dežurna ljekarna 24/7: {address}.',
   always: '{name}: {text}',
   outage: 'ZET ne šalje položaje vozila; polasci su po voznom redu.',
+  service: 'ZET: u pokretu {seen}, po voznom redu oko {expected}.',
+  serviceNone: 'ZET: nijedno vozilo u pokretu, po voznom redu oko {expected}.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -137,6 +139,8 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   pharmacy: '24/7 duty pharmacy: {address}.',
   always: '{name}: {text}',
   outage: 'ZET is not sending vehicle positions; departures follow the timetable.',
+  service: 'ZET: {seen} moving, about {expected} by the timetable.',
+  serviceNone: 'ZET: no vehicle moving, about {expected} by the timetable.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {

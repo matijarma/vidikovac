@@ -113,6 +113,8 @@ export interface KioskStrings {
     unavailable: string;
     loading: string;
     vehiclesMoving: PluralForms;
+    /** "po voznom redu oko {count}": the timetable's count beside the vehicles while ZET deviates (upgrade U2). */
+    usually: string;
   };
   story: {
     city: string;
@@ -164,11 +166,17 @@ export interface KioskStrings {
     lastTrams: string;
     firstTram: string;
     outageNote: string;
+    /** The map note while ZET's fleet is silent (upgrade U2): the two numbers, and that the departures are the timetable's. */
+    silentNote: string;
   };
   /** The header sentence (WP1, kiosk.sentence.*): the six kicker words
    *  (Promet · Kultura · Vrijeme · Bicikli · Noćas · Radovi) and the templates
    *  the deterministic fallback fills, one fact each. */
-  sentence: Record<SentenceTemplate, string> & { kicker: Record<SentenceKicker, string> };
+  sentence: Record<SentenceTemplate, string> & {
+    kicker: Record<SentenceKicker, string>;
+    /** "2 vozila": the vehicles ZET has moving, the {seen} of the service sentence and notes (upgrade U2). */
+    vehicles: PluralForms;
+  };
   /** The handheld invitation's one line: how a public display is started, and that scanning changes nothing on it. */
   handheld: { info: string };
   /** The column's kicker words and filler sentences (kiosk/front.ts reads the shared ones):
@@ -264,6 +272,8 @@ export interface KioskStrings {
     sourcesLabel: string;
     /** Where the full attribution of every source lives. */
     fullSources: string;
+    /** A ZET block's status line while the fleet deviates (upgrade U2): the two numbers. */
+    serviceLine: string;
   };
   notice: {
     expiredTitle: string;
@@ -345,7 +355,7 @@ export interface KioskStrings {
 export type SentenceTemplate =
   | 'departureIn' | 'departureAt' | 'busIn' | 'busAt' | 'closureUntil' | 'weather' | 'weatherNoRange' | 'weatherTemperature'
   | 'bikes' | 'sunset' | 'sunsetAt' | 'sunsetTime' | 'sunrise' | 'sunriseAt' | 'sunriseTime' | 'lastTram' | 'firstTram'
-  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage';
+  | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage' | 'service' | 'serviceNone';
 
 type Kiosk = typeof hr.kiosk;
 type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
@@ -394,7 +404,7 @@ function build(code: SupportedLocale): KioskStrings {
     arrivals: { ...record(['now', 'inMinutes', 'live', 'scheduled', 'none', 'down'] as const, (key) => `arrivals.${key}`), loading: t('kiosk.lines.loading') },
     platforms: { one: t('transport.platforms_one'), few: t('transport.platforms_few'), other: t('transport.platforms_other') },
     lines: {
-      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading']),
+      ...group('lines', ['title', 'nearbyTitle', 'tram', 'bus', 'noneNearby', 'unavailable', 'loading', 'usually']),
       nearby: forms('lines', 'nearby'),
       more: forms('lines', 'more'),
       vehiclesMoving: forms('lines', 'vehiclesMoving'),
@@ -409,13 +419,14 @@ function build(code: SupportedLocale): KioskStrings {
       notices: forms('front', 'notices'),
       moreLate: forms('front', 'moreLate'),
     },
-    nearby: group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote']),
+    nearby: group('nearby', ['title', 'pill', 'always', 'until', 'sunrise', 'sunset', 'lastTrams', 'firstTram', 'outageNote', 'silentNote']),
     sentence: {
       ...group('sentence', [
         'departureIn', 'departureAt', 'busIn', 'busAt', 'closureUntil', 'weather', 'weatherNoRange', 'weatherTemperature',
         'bikes', 'sunset', 'sunsetAt', 'sunsetTime', 'sunrise', 'sunriseAt', 'sunriseTime', 'lastTram', 'firstTram',
-        'event', 'opening', 'pharmacy', 'always', 'outage',
+        'event', 'opening', 'pharmacy', 'always', 'outage', 'service', 'serviceNone',
       ]),
+      vehicles: forms('sentence', 'vehicles'),
       kicker: record(['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const, (kind) => `kiosk.sentence.kicker.${kind}`),
     },
     handheld: group('handheld', ['info']),
@@ -441,7 +452,7 @@ function build(code: SupportedLocale): KioskStrings {
         'acts', 'sessions', 'works', 'notices', 'ongoing', 'ongoingWord', 'overviewTransport', 'allDay',
         'noData', 'sourceDown', 'unconfirmed', 'stale', 'phase', 'amount', 'coverage', 'depth', 'magUnknown',
         'depthUnknown', 'upcomingFrom', 'quakeNone', 'eventsNone', 'actsNone', 'worksNone', 'sessionsNone', 'rangeUnknown',
-        'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources',
+        'untilTime', 'lineWord', 'licence', 'sourceLabel', 'sourcesLabel', 'fullSources', 'serviceLine',
       ]),
       routeVehicles: forms('paired', 'routeVehicles'),
       warningsNone: t('shared.warningsNone'),

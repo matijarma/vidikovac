@@ -321,7 +321,8 @@
     "none": "No announced departures.",
     "frozen": "The session ended before the timetable arrived.",
     "down": "The timetable is unavailable right now.",
-    "timetable": "Timetable"
+    "timetable": "Timetable",
+    "noteReduced": "ZET: {seen} moving, about {expected} by the timetable. Times are from the timetable, not confirmed by vehicles."
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
@@ -618,7 +619,8 @@
       "healthDown": "Source availability is unconfirmed",
       "serverDown": "Server is unavailable",
       "checked": "Checked {time}",
-      "retry": "Refresh data"
+      "retry": "Refresh data",
+      "usually": "about {count} by the timetable"
     },
     "trial": {
       "label": "Try the working prototype",
@@ -769,7 +771,8 @@
       "unavailable": "ZET is not answering right now.",
       "loading": "Loading ZET data",
       "vehiclesMoving_one": "{count} vehicle moving",
-      "vehiclesMoving_other": "{count} vehicles moving"
+      "vehiclesMoving_other": "{count} vehicles moving",
+      "usually": "about {count} by the timetable"
     },
     "story": {
       "city": "From the city",
@@ -849,7 +852,11 @@
       "sunsetTime": "At {time} the sun sets.",
       "sunriseAt": "Sunrise is at {time}.",
       "sunriseTime": "At {time} the sun rises.",
-      "opening": "{name} opens {time}."
+      "opening": "{name} opens {time}.",
+      "service": "ZET: {seen} moving, about {expected} by the timetable.",
+      "serviceNone": "ZET: no vehicle moving, about {expected} by the timetable.",
+      "vehicles_one": "{count} vehicle",
+      "vehicles_other": "{count} vehicles"
     },
     "handheld": {
       "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
@@ -913,7 +920,8 @@
       "sunset": "Sunset",
       "lastTrams": "Last trams",
       "firstTram": "First tram",
-      "outageNote": "ZET is not sending vehicle positions right now; departures follow the timetable."
+      "outageNote": "ZET is not sending vehicle positions right now; departures follow the timetable.",
+      "silentNote": "ZET: {seen} moving, about {expected} by the timetable. Departures are from the timetable, not confirmed by vehicles."
     },
     "paired": {
       "warnings": "DHMZ warnings",
@@ -958,7 +966,8 @@
       "licence": "Licence",
       "sourceLabel": "Source",
       "sourcesLabel": "Sources",
-      "fullSources": "full attribution: /izvori"
+      "fullSources": "full attribution: /izvori",
+      "serviceLine": "ZET: {seen} moving, about {expected} by the timetable"
     },
     "notice": {
       "expiredTitle": "This temporary screen has expired.",
