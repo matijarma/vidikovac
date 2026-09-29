@@ -34,18 +34,19 @@ These share data and a visual language, not an identical layout stretched to thr
 
 ## What is in the city window?
 
-Nine feed modules, a reference catalogue and live city services bring together:
+Fourteen feed modules, a reference catalogue and live city services bring together:
 
 | Explore | What you can find | Sources |
 |---|---|---|
-| Transport | Moving trams and buses, routes, stops, departures, closures, rail timetables | ZET, City, HŽPP |
-| Places | BAJS bikes, drinking water, toilets, markets, Wi-Fi, sports grounds, cycling | BAJS / nextbike, City |
-| Conditions | Weather, forecasts, warnings, air quality, Sava bulletin, sunrise/sunset | DHMZ, national air-quality service |
-| Culture | Events, exhibitions, venues, street histories, protected heritage | Kulturpunkt, Ethnographic Museum, City, Ministry of Culture |
+| Transport | Moving trams and buses, routes, stops, departures, closures, rail timetables; rail departures on the first screen when a station is near, ZET's own notices and cancellations, the fleet against the timetable | ZET, City, HŽPP |
+| Places | BAJS bikes, drinking water, toilets, markets, Wi-Fi, sports grounds, cycling, opening hours | BAJS / nextbike, City, OpenStreetMap contributors |
+| Conditions | Weather, forecasts, rain in the next two hours, tomorrow's range, warnings, air quality, Sava bulletin, sunrise/sunset | DHMZ, national air-quality service |
+| Culture | Events, exhibitions, venues, street histories, protected heritage, the City's culture calendar, library programmes | Kulturpunkt, Guru za kulturu, Ethnographic Museum, Zagreb City Libraries, City, Ministry of Culture |
 | Civic life | Assembly meetings, works, gazette acts and originals, consultations | City, eSavjetovanja |
+| Daily life | Road state, planned power and water cuts, as unofficial relays | HAK, HEP ODS, VIO |
 | Safety | Warnings, earthquakes, assembly points, emergency contacts, pharmacies | DHMZ, EMSC, city and maintained references |
 
-These are different kinds of knowledge. ZET countdowns are **derived estimates** for tracked vehicles, using timetable and delay information with next-stop refinement from the motion model. Other departures retain clock times; HŽ Passenger Transport boards are schedule-only. A mapped garage does not imply available spaces. Heritage boundaries are not entrances. An undated notice is not a calendar event.
+These are different kinds of knowledge. ZET countdowns are **derived estimates** for tracked vehicles, using timetable and delay information with next-stop refinement from the motion model. Other departures retain clock times; HŽ Passenger Transport boards are schedule-only. A mapped garage does not imply available spaces. Heritage boundaries are not entrances. An undated notice is not a calendar event. Yellow sources, the ones without an open licence, carry “neslužbeni prikaz” (unofficial). Opening hours are OpenStreetMap's, not a confirmation that a place is open. A service state never names a cause.
 
 <details>
 <summary>See the desktop and the phone</summary>
@@ -73,13 +74,17 @@ One device is enough: keep the screen in one tab and redeem its code in another.
 
 The server-side transit engine combines each vehicle's sparse, delayed observations with the timetable, a directed rail graph and the stops its trip actually serves. It learns travel and dwell times and publishes motion plans; the browser draws along those plans instead of independently guessing where every tram went.
 
-Trams share track and ordering constraints; buses follow their own route geometry. The bias is conservative: prefer lagging behind to racing ahead and correcting backwards. Recorded ZET frames make real days replayable; hindsight metrics compare plans with later evidence. A tram keeps to its own trip's path and returns to it once it is moving within 60 m of it again; a tram off its route's rails is drawn at its reported positions, never on another line's track. A tram that falls silent holds at its next stop after 30 seconds, fades, and is gone after 180. The grader (`npm run replay:grade`) replays recorded days and counts path changes within a trip, foreign-path adoptions, direction flips and client jumps per 100 tram vehicle-hours; on the two recorded September days, path changes fell from 165.6 and 136.5 to 1.39 and 1.80, with a diverted tram's hops between its own line's rails (Sunday's diversion of line 11) counted apart; what remains is trip timing and short workings, not a wrong track.
+Trams share track and ordering constraints; buses follow their own route geometry. The bias is conservative: prefer lagging behind to racing ahead and correcting backwards. Recorded ZET frames make real days replayable; hindsight metrics compare plans with later evidence. A tram keeps to its own trip's path and returns to it once it is moving within 60 m of it again; a tram off its route's rails is drawn at its reported positions, never on another line's track. A tram that falls silent holds at its next stop after 30 seconds, fades, and is gone after 180. The grader (`npm run replay:grade`) replays recorded days and counts path changes within a trip, foreign-path adoptions, direction flips and client jumps per 100 tram vehicle-hours; on the two recorded September days, path changes fell from 165.6 and 136.5 to 1.39 and 1.80, with a diverted tram's hops between its own line's rails (Sunday's diversion of line 11) counted apart; what remains is trip timing and short workings, not a wrong track. Guards keep the picture honest: a position stamped after its own feed's header is refused, a vehicle parked in a depot or standing with a trip past the longest layover is held back, and the number of vehicles on the move counts fresh positions only.
+
+### Knowing what normal looks like
+
+From ZET's static timetable, with the calendar resolved, the build produces an expectation for every five minutes of every service day: how many vehicle runs are in service and how many trips each line has active. The server compares it with the vehicles it actually sees, with hysteresis and holds so that a gap in the feed is not read as an empty city. It publishes the resulting state (normal, reduced, silent or unknown) beside the source's freshness, with both numbers, the ratio and how long it has held. The screens change their voice by state and never by cause: in a reduced state only lines whose vehicles are seen keep a timetable sentence, in a silent state no departure is announced, and nothing says why, because the product does not know.
 
 ### Data that keeps its meaning
 
 Each source carries attribution, availability and timestamps. Observation, publication, event and retrieval times are distinct. A failed source can retain its last good data within a bounded age; another source's successful refresh must not make those old records look fresh.
 
-Missing is not zero. An unavailable warning feed is not an all-clear.
+Missing is not zero. An unavailable warning feed is not an all-clear. A closure whose end the City moves forward every night is shown as “u tijeku” (ongoing) and never becomes the header sentence. ZET's own no-service alerts are read: a trip they name leaves the boards unless a vehicle is driving it, while its marker for a cancelled trip alone removes nothing, because ZET drives most of those trips. ZET's traffic notices appear, one at a time, as a “ZET javlja” row in ZET's own words.
 
 The city catalogue publishes versioned chunks before its manifest and ships a bundled starting copy. The one written sentence on the wall and the phone comes from approved templates filled with facts already on screen; optional Workers AI may only choose among those checked offers, and without it the template is shown. It writes no free text, generates no vehicle movement and fills no missing observations.
 
@@ -199,7 +204,7 @@ The broader proposal would reuse screens venues already own, bring local publish
 - [Product](PRODUCT.md) and [design](DESIGN.md): governing decisions.
 - [Architecture](docs/arhitektura.md), [public screens](docs/kiosk.md), and [sources and licences](docs/izvori.md): technical and operational detail.
 - [Companion brief](docs/companion-2026-09-22.md): the research, interviews and plan of the September 22 round.
-- [Upgrade brief, October 2026](docs/upgrade-2026-10.md): the round that follows the ZET strike of 28 September and the sources conversation of 27 September: trust fixes, the operator's voice, the expectation layer, facts breadth; its [execution files](docs/upgrade-2026-10-plan/README.md) are a working plan until the round closes.
+- [Upgrade brief, October 2026](docs/upgrade-2026-10.md): the round that added an expectation of the city, the operator's own voice and more local facts.
 - [When the city stops matching the model](docs/unexpected-city-2026-09-27.md): development note of 27 September on the layer the architecture lacks: an expectation of the city, a measure of surprise, and a voice that changes when sources are healthy but the world is not.
 - [Development history](docs/history/README.md): executed plans and dated implementation records, from the [city-data upgrade](docs/history/upgrade-city-2026-09-18.md) and the [readable-city refinement](docs/history/readable-city-2026-09-20.md) to the companion round's execution files.
 - [Submitted proposal](docs/prijava/prijedlog-projekta.md): the public-service vision and funded deliverables. It is a submission record, not a current UI specification; its hosted page, [/prijava/](https://zagreb.aningfilm.hr/prijava/), can show dated [development notes since submission](docs/prijava/razvojne-biljeske.md) as an optional layer.
