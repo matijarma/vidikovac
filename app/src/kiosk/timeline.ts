@@ -257,6 +257,20 @@ export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: num
   return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
 }
 
+/**
+ * `rows` from the most valuable to the least: the rows dropCandidate never gives up first, then its drop order
+ * reversed (the last it would drop comes first). The measured fit tries the rows the estimate left out in this order.
+ */
+export function byValue<T extends NearbyRow>(rows: readonly T[], now: number): T[] {
+  let rest = [...rows];
+  const drops: T[] = [];
+  for (let drop = dropCandidate(rest, now); drop; drop = dropCandidate(rest, now)) {
+    drops.push(drop);
+    rest = rest.filter((row) => row !== drop);
+  }
+  return [...rest, ...drops.reverse()];
+}
+
 /** A sunrise, sunset, opening or event row more than IMMINENT_ROW_MIN from `now` and further away than `departure`
  *  (decision 67; the event since U0 step 7: at 07:45 on 29 September a noon event took the second and third trams). */
 function outlivedBy(row: NearbyRow, departure: NearbyRow, now: number): boolean {
@@ -496,7 +510,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   }
 
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
-  function fit(candidates: readonly TimelineRow[], now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
+  /** Fits `candidates` (the estimate's, fitRows) into the box; `pool` is the whole vetted list they were taken from, in
+   *  list order, whose other rows are tried where the measured rows leave room. */
+  function fit(candidates: readonly TimelineRow[], pool: readonly TimelineRow[], now: number, box: { height: number; width: number }): { shown: TimelineRow[]; short: Map<string, ShortLabels> } {
     // A detached tree has no layout. This hidden sibling inherits the same
     // kiosk/aside styles and variables but is outside the live timeline. Give
     // its list exactly the live content box, then dispose of it before paint.
@@ -523,7 +539,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       let shown = [...candidates];
       const short = new Map<string, ShortLabels>();
       const draw = (): void => { list.innerHTML = rowsMarkup(shown, now, i18n, short); };
-      const byId = new Map(shown.map((row) => [row.id, row] as const));
+      const byId = new Map(pool.map((row) => [row.id, row] as const));
       const set = (row: TimelineRow, which: keyof ShortLabels): boolean => {
         const offered = which === 'title' ? row.titleShort : row.subShort;
         if (offered === undefined || offered === (which === 'title' ? row.title : row.sub) || short.get(row.id)?.[which]) return false;
@@ -591,11 +607,24 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       // A row that fits again after a later drop comes back in the same fit (U0 step 7): a short row dropped before a
       // tall one that went later finds its room again. The most valuable first (reverse drop order), each in its place
       // in the list and kept only while the list still fits.
-      for (const row of dropped.reverse()) {
+      const tryIn = (row: TimelineRow): void => {
         const was = shown;
-        shown = candidates.filter((candidate) => candidate === row || was.includes(candidate));
+        shown = pool.filter((candidate) => candidate === row || was.includes(candidate));
         draw();
         if (measure.box(list).overflow) { shown = was; draw(); }
+      };
+      // The estimate's cap is a count of rows, not of pixels: in reduced and silent the trains the policy puts first
+      // took its last two places, the measured pass dropped both (two lines of headsign over the station, 128 px each),
+      // and the second departure, never a candidate, could not come back: one departure and 74 px empty in portrait
+      // (production 29 Sep 23:25:58, round 1 kiosk F1). So where the drops left places under the cap, the rows the
+      // estimate left out are tried with the dropped ones, the most valuable first (byValue), each kept only while the
+      // list still fits and never past the estimate's count; with no place left the dropped ones return as before.
+      const candidateSet = new Set(candidates);
+      const leftOut = pool.filter((row) => !candidateSet.has(row));
+      const order = leftOut.length > 0 && dropped.length > 0 ? byValue([...dropped, ...leftOut].sort((a, b) => pool.indexOf(a) - pool.indexOf(b)), now) : dropped.reverse();
+      for (const row of order) {
+        if (!candidateSet.has(row) && shown.length >= candidates.length) continue;
+        tryIn(row);
       }
       // A sub-line yields to a row, never for nothing: where the rows that went left the room, the sub-lines given
       // up for it come back, in list order, each only while the list still holds every row whole.
@@ -644,9 +673,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         const style = getComputedStyle(element);
         const typography = [style.fontFamily, '--k-read-scale', '--k-main-size', '--k-sup-size', '--k-zoom']
           .map(value => value.startsWith('--') ? style.getPropertyValue(value) : value).join(';');
-        const sig = fitSignature(candidates, now, i18n, budget.rowPx, box, typography);
+        // The fit reads the whole list (the rows the estimate left out may take the room the measured rows leave).
+        const sig = `${fitSignature(rows, now, i18n, budget.rowPx, box, typography)}|${budget.rows}`;
         if (!memo || memo.sig !== sig) {
-          let fitted = fit(candidates, now, box);
+          let fitted = fit(candidates, rows, now, box);
           let rowPx = budget.rowPx;
           // Content before size: when whole rows would go at the budget's height, the rows give back their growth
           // first, down to the minimum, and only then does a row go. Seven rows in a 483 px box are 69 px each, and
@@ -657,7 +687,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           // sunset hours away (decision 67), where 64 px keeps the departure.
           if (fitted.shown.length < candidates.length && budget.rowPx > ROW_MIN_PX) {
             rowVars(ROW_MIN_PX);
-            const tighter = fit(candidates, now, box);
+            const tighter = fit(candidates, rows, now, box);
             const departuresIn = (rows: readonly TimelineRow[]): number => rows.filter((row) => row.kind === 'departure').length;
             if (tighter.shown.length > fitted.shown.length
               || (tighter.shown.length === fitted.shown.length && departuresIn(tighter.shown) > departuresIn(fitted.shown))) {
@@ -668,7 +698,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           memo = { sig, ids: new Set(fitted.shown.map((row) => row.id)), short: fitted.short, rowPx };
         }
         rowVars(memo.rowPx);
-        shown = candidates.filter((row) => memo!.ids.has(row.id));
+        shown = rows.filter((row) => memo!.ids.has(row.id));
         // Restore hysteresis (FIT_RESTORE_HOLD_MS): a row the fit dropped stays out until it has fitted for a whole
         // minute; reserved rows and departures are never held out, and a row gone from the candidates is forgotten.
         const fits = new Set(shown.map((row) => row.id));

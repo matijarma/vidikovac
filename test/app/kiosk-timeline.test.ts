@@ -705,6 +705,38 @@ describe('whole rows from the row budget', () => {
     tight.update(evening, 2000, NOW);
     expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'last:tonight', 'solar:sunrise', 'always:story:trg']);
   });
+  it('lets the second departure in where the trains placed first were too tall to keep (production 29 Sep 23:25, portrait: one departure, 74 px unused)', () => {
+    // The reduced state puts two trains before the departures (railPolicy). The row budget of a 498 px totem box
+    // holds seven candidates: four reserved rows, the first departure and, because a train placed first is not a
+    // facts-breadth row, the two trains; the second and third departures never enter the measured fit. The trains
+    // (a two-line headsign over the station) are 128 px each and the measured pass drops both, leaving 74 px the
+    // 64 px second departure would fill: the measured fit must try the rows the estimate left out.
+    const NIGHT = at('2026-09-29T21:25:00Z');
+    const H = 60 * MIN;
+    const train = (n: number, headsign: string, atMs: number): TimelineRow =>
+      row({ id: `rail:${n}`, kind: 'rail', atMs, title: headsign, sub: 'Zagreb Glavni kolodvor', source: 'hz', arrival: { routeId: 'i-tr1063', routeName: 'Vlak', tripId: `rail:${n}`, headsign, atMs, live: false, minutes: null } });
+    const rows = [
+      train(1, 'Zagreb Glavni kolodvor - Koprivnica', NIGHT + 13 * MIN), train(2, 'Harmica - Dugo Selo', NIGHT + 31 * MIN),
+      dep(1, { atMs: NIGHT + 2 * MIN, live: false, title: 'Z. kolodvor', arrival: { routeId: '1', routeName: '1' } }),
+      dep(2, { atMs: NIGHT + 4 * MIN, live: false, title: 'Borongaj', arrival: { routeId: '17', routeName: '17' } }),
+      dep(3, { atMs: NIGHT + 5 * MIN, live: false, title: 'Črnomerec', arrival: { routeId: '11', routeName: '11' } }),
+      row({ id: 'notice:zet-novosti:10166', kind: 'notice', atMs: NIGHT - 13 * H, title: 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)', source: 'zet-novosti' }),
+      row({ id: 'last:2026-09-29', kind: 'last', atMs: NIGHT + 6 * MIN, title: 'Zadnji tramvaji', sub: '1 23:31 · 12 23:45' }),
+      row({ id: 'closure:vukovara', kind: 'closure', atMs: NIGHT + 6 * H, title: 'Grada Vukovara', source: 'prometnice', endKnown: false }),
+      row({ id: 'first:2026-09-30', kind: 'first', atMs: NIGHT + 4 * H + 48 * MIN, title: 'Prvi tramvaj', sub: '12 04:13 · 17 04:24' }),
+      row({ id: 'solar:sunrise', kind: 'solar', atMs: NIGHT + 7 * H + 27 * MIN, title: 'Izlazak sunca', source: 'solar' }),
+      row({ id: 'event:putnici', kind: 'event', atMs: NIGHT + 11 * H, title: 'Izložba „Putnici“', sub: 'Etnografski muzej', source: 'kultura-zg' }),
+      row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
+    ];
+    const measure = simulated(TOTEM_1080);
+    const t = mount({ measure, designHeightPx: TOTEM_1080.boxPx });
+    t.update(rows, 2200, NIGHT);
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'notice:zet-novosti:10166', 'last:2026-09-29', 'first:2026-09-30', 'always:pharmacy']);
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(TOTEM_1080.boxPx);
+    expect(section().dataset.fitDropped).toBe('rail rail departure closure solar event');
+    // A third departure would not fit (548 px), so it stays out: nothing is ever cut.
+    expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
+  });
 });
 
 /**
@@ -1321,8 +1353,9 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ designHeightPx: 498, measure });
     t.update(longRows(), 2000, NOW);
-    // U0 step 7: the event two hours away yields before the third departure, which then fits.
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // U0 step 7: the event two hours away yields before the third departure, which then fits; since round 1 kiosk F1
+    // the sunset the estimate's count left out is tried in the room the event left, and fits (the sum is checked below).
+    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'solar:sunset:2026-09-22', 'last:2026-09-22', 'always:heritage:stedionica']);
     expect(text(byId('last:2026-09-22').querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
