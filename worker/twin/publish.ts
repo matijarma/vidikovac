@@ -9,7 +9,7 @@
 
 import { toLonLat } from '../../shared/motion/geo';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { evalFreePlan, evalPathPlan } from '../../shared/motion/plan';
+import { evalFreePlan, evalPathPlan, FUTURE_TOLERANCE_S } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { STOP_ZONE_M } from '../../shared/motion/speed';
 import { lastFix, type FreeKnot, type PathKnot, type Track } from '../../shared/motion/track';
@@ -214,7 +214,10 @@ export function buildPayload(
     });
   }
 
-  const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS;
+  // A header ahead of the clock by more than the tolerance is not fresh
+  // evidence either: the Durable Object refuses such a frame, and a state
+  // that carries one must not read as live.
+  const fresh = headerTs !== null && nowMs - headerTs * 1000 <= SOURCE_STALE_AFTER_MS && headerTs * 1000 <= nowMs + FUTURE_TOLERANCE_S * 1000;
   const zet: SourceAvailability = {
     status: fresh ? 'live' : 'stale',
     itemCount: tracks.length,

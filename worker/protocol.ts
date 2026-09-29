@@ -279,7 +279,7 @@ export const SERVER_EVENTS = [
   'hitno_view',
   'over_cap',
   'evaluation',
-  // R-TE3: the twin's tick outcome (dim1 ok|unchanged|error|stale_index, dim2 cold|warm)
+  // R-TE3: the twin's tick outcome (dim1 ok|unchanged|error|stale_index|regressed|future, dim2 cold|warm)
   // and its hindsight error histogram (dim1 horizon 10s|30s|60s, dim2 bucket
   // lt25|lt50|lt100|lt200|ge200 metres); percentiles on /stats derive from the buckets.
   // dim1 also carries `overrides_unreadable`, written once per attempt to load
@@ -313,12 +313,15 @@ export const SERVER_EVENTS = [
 ] as const;
 export type ServerEvent = (typeof SERVER_EVENTS)[number];
 
-/** Every dim1 the twin writes under `twin_tick`: the four outcomes of a tick
- *  (worker/do/twin-do.ts TickOutcome, which is this list less the last entry)
- *  plus `overrides_unreadable`, which is not an outcome of a tick but a fault
- *  of the same object -- the owner's stop-dwell-overrides.json would not
- *  parse, so every hand-written dwell default is out of the planner (I3). */
-export const TWIN_TICK_DIMS = ['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable'] as const;
+/** Every dim1 the twin writes under `twin_tick`: the outcomes of a tick
+ *  (worker/do/twin-do.ts TickOutcome, which is this list less
+ *  `overrides_unreadable`) plus `overrides_unreadable`, which is not an
+ *  outcome of a tick but a fault of the same object -- the owner's
+ *  stop-dwell-overrides.json would not parse, so every hand-written dwell
+ *  default is out of the planner (I3). `regressed` (a header older than the
+ *  last) and `future` (a header more than 30 s ahead of the clock) were
+ *  appended in October 2026: frames the twin does not take as new. */
+export const TWIN_TICK_DIMS = ['ok', 'unchanged', 'error', 'stale_index', 'overrides_unreadable', 'regressed', 'future'] as const;
 export type TwinTickDim = (typeof TWIN_TICK_DIMS)[number];
 
 // ---- Data token (stateless, verified by the Worker) -------------------------
