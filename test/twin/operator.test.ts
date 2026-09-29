@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeFeed, type DecodedFeed } from '../../worker/twin/feed-decode';
-import { emptyOperator, foldOperator, noServiceTripIds, OPERATOR_TRIPS_MAX, operatorSummary } from '../../worker/twin/operator';
+import { emptyOperator, foldOperator, noServiceTripIds, OPERATOR_STATE_MAX, OPERATOR_TRIPS_MAX, operatorSummary } from '../../worker/twin/operator';
 import { deserializeState, serializeState } from '../../worker/twin/persist';
 import { emptyState } from '../../worker/twin/state';
 import { runTick } from '../../worker/twin/tick';
@@ -100,6 +100,16 @@ describe('what enters and what leaves', () => {
     expect(ids).toEqual([...ids].sort());
     expect(ids[0]).toBe('t000');
     expect(operatorSummary(operator, none, T).cancelledTrips).toBe(401);
+  });
+
+  it('keeps the state row bounded: past the state limit the first trips by id stay, and the wire list is still the first 400', () => {
+    const alerts = Array.from({ length: OPERATOR_STATE_MAX + 1 }, (_, i) => ({ id: `a${i}`, tripId: `t${String(i).padStart(5, '0')}` }));
+    const operator = fold(alerts);
+    expect(Object.keys(operator.noServiceTrips)).toHaveLength(OPERATOR_STATE_MAX);
+    expect(operator.noServiceTrips).not.toHaveProperty(`t${String(OPERATOR_STATE_MAX).padStart(5, '0')}`);
+    expect(operator.counts.noServiceAlerts).toBe(OPERATOR_STATE_MAX + 1);
+    expect(noServiceTripIds(operator, none, T)).toHaveLength(OPERATOR_TRIPS_MAX);
+    expect(operatorSummary(operator, none, T).cancelledTrips).toBe(OPERATOR_STATE_MAX);
   });
 
   it('sets noticesAt to the header of a frame that carried words, and keeps it through frames that did not', () => {
