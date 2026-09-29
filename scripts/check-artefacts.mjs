@@ -116,7 +116,14 @@ export async function checkArtefacts({ root = ROOT, nowMs = Date.now(), offline 
     lines.push(`${status.padEnd(7)} ${text}`);
   };
 
-  const meta = readNetworkMeta(await readFile(join(root, 'app/src/motion/network-meta.ts'), 'utf8'));
+  let metaText = '';
+  try {
+    metaText = await readFile(join(root, 'app/src/motion/network-meta.ts'), 'utf8');
+  } catch {
+    // A missing/unreadable local input needs repair, not a network retry.
+    // Report it below and still run the independent checks.
+  }
+  const meta = readNetworkMeta(metaText);
   if (meta.feedVersion === null || meta.builtAt === null || !Number.isFinite(Date.parse(meta.builtAt))) {
     say('FAIL', 'network-meta.ts: FEED_VERSION or BUILT_AT unreadable');
   } else {
@@ -135,8 +142,13 @@ export async function checkArtefacts({ root = ROOT, nowMs = Date.now(), offline 
     else say('ok', `${name}: feed ${version}`);
   }
 
-  const lastrun = await readLastrun(root);
-  if (lastrun.values.length === 0) {
+  const lastrun = await readLastrun(root).catch((error) => {
+    say('FAIL', `lastrun: cannot read directory (${error instanceof Error ? error.message : String(error)})`);
+    return null;
+  });
+  if (lastrun === null) {
+    // The local failure is already reported; the archive check still runs.
+  } else if (lastrun.values.length === 0) {
     say('FAIL', `lastrun: ${lastrun.count} files, none with a readable validUntil`);
   } else {
     const min = Math.min(...lastrun.values);
