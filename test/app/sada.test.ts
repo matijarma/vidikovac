@@ -23,7 +23,6 @@ import type { LayerContext } from '../../app/src/layers/types';
 import type { CityMapOptions } from '../../app/src/map/city-map';
 import { createMapSlots } from '../../app/src/map/map-slots';
 import { reconcile } from '../../app/src/ui/dom/reconcile';
-import { REFERENCE_SOURCES } from '../../worker/city/sources';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // Friday 14:32 in Zagreb
 const iso = (ms: number): string => new Date(ms).toISOString();
