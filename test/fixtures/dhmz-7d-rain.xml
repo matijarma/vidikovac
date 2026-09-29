@@ -1,0 +1,1507 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Doctored copy of dhmz-7d.xml (U3, M5): in the ZAGREB-GRIČ block the steps of 29.09.2026. at 13 and 14 h carry oborina 0.6 and vjerojatnost 70, and oborina 2.4 and vjerojatnost 90, so that the rain rules have wet steps to read. Every other byte is the saved response. -->
+<sedamdana>
+	<izmjena run="06">Zadnja izmjena 29.09.2026. u 11:22.</izmjena>
+	<grad ime="ZAGREB-GRIČ" code="ZAGREB-GRIČ">
+		<dan datum="29.09.2026." dtj="Utorak" sat="09" leadtime="1">
+			<t_2m>13.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="10" leadtime="2">
+			<t_2m>15.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="11" leadtime="3">
+			<t_2m>18.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="12" leadtime="4">
+			<t_2m>20.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="13" leadtime="5">
+			<t_2m>21.9</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.6</oborina>
+			<vjerojatnost>70</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="14" leadtime="6">
+			<t_2m>23.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>2.4</oborina>
+			<vjerojatnost>90</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="15" leadtime="7">
+			<t_2m>24.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="16" leadtime="8">
+			<t_2m>24.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="17" leadtime="9">
+			<t_2m>24.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="18" leadtime="10">
+			<t_2m>22.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="19" leadtime="11">
+			<t_2m>20.6</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NW1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="20" leadtime="12">
+			<t_2m>18.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="21" leadtime="13">
+			<t_2m>17.0</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="22" leadtime="14">
+			<t_2m>16.0</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="23" leadtime="15">
+			<t_2m>15.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="00" leadtime="16">
+			<t_2m>15.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="01" leadtime="17">
+			<t_2m>15.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="02" leadtime="18">
+			<t_2m>14.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="03" leadtime="19">
+			<t_2m>13.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="04" leadtime="20">
+			<t_2m>13.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="05" leadtime="21">
+			<t_2m>12.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="06" leadtime="22">
+			<t_2m>12.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="07" leadtime="23">
+			<t_2m>12.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="08" leadtime="24">
+			<t_2m>12.9</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="09" leadtime="25">
+			<t_2m>14.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="10" leadtime="26">
+			<t_2m>16.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>S1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="11" leadtime="27">
+			<t_2m>18.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="12" leadtime="28">
+			<t_2m>20.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="13" leadtime="29">
+			<t_2m>21.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="14" leadtime="30">
+			<t_2m>23.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="15" leadtime="31">
+			<t_2m>23.6</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="16" leadtime="32">
+			<t_2m>22.8</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="17" leadtime="33">
+			<t_2m>23.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="18" leadtime="34">
+			<t_2m>22.6</t_2m>
+			<simbol>1</simbol>
+			<vjetar>S1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="19" leadtime="35">
+			<t_2m>22.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NW1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="20" leadtime="36">
+			<t_2m>20.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="21" leadtime="37">
+			<t_2m>18.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="22" leadtime="38">
+			<t_2m>18.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="23" leadtime="39">
+			<t_2m>17.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="00" leadtime="40">
+			<t_2m>16.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="01" leadtime="41">
+			<t_2m>15.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="02" leadtime="42">
+			<t_2m>15.0</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="03" leadtime="43">
+			<t_2m>14.3</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="04" leadtime="44">
+			<t_2m>13.7</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="05" leadtime="45">
+			<t_2m>13.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="06" leadtime="46">
+			<t_2m>12.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="07" leadtime="47">
+			<t_2m>12.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="08" leadtime="48">
+			<t_2m>12.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="09" leadtime="49">
+			<t_2m>13.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="10" leadtime="50">
+			<t_2m>15.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="11" leadtime="51">
+			<t_2m>16.8</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="12" leadtime="52">
+			<t_2m>18.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="13" leadtime="53">
+			<t_2m>19.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="14" leadtime="54">
+			<t_2m>20.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="15" leadtime="55">
+			<t_2m>21.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="16" leadtime="56">
+			<t_2m>21.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="17" leadtime="57">
+			<t_2m>21.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="18" leadtime="58">
+			<t_2m>20.6</t_2m>
+			<simbol>1</simbol>
+			<vjetar>S1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="19" leadtime="59">
+			<t_2m>19.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NW1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="20" leadtime="60">
+			<t_2m>17.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NW1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="21" leadtime="61">
+			<t_2m>16.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>N1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="22" leadtime="62">
+			<t_2m>15.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="23" leadtime="63">
+			<t_2m>14.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="00" leadtime="64">
+			<t_2m>14.7</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="01" leadtime="65">
+			<t_2m>13.8</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>NE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="02" leadtime="66">
+			<t_2m>13.0</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="03" leadtime="67">
+			<t_2m>13.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="04" leadtime="68">
+			<t_2m>12.6</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="05" leadtime="69">
+			<t_2m>12.3</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="06" leadtime="70">
+			<t_2m>12.2</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="07" leadtime="71">
+			<t_2m>11.4</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="08" leadtime="72">
+			<t_2m>11.8</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="09" leadtime="73">
+			<t_2m>14.2</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="10" leadtime="74">
+			<t_2m>16.2</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="11" leadtime="75">
+			<t_2m>17.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="12" leadtime="76">
+			<t_2m>18.8</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="13" leadtime="77">
+			<t_2m>19.7</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="14" leadtime="78">
+			<t_2m>20.3</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="15" leadtime="79">
+			<t_2m>20.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="16" leadtime="80">
+			<t_2m>20.5</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="17" leadtime="81">
+			<t_2m>19.9</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="18" leadtime="82">
+			<t_2m>18.0</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="19" leadtime="83">
+			<t_2m>16.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="20" leadtime="84">
+			<t_2m>15.4</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="23" leadtime="87">
+			<t_2m>13.6</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="02" leadtime="90">
+			<t_2m>12.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="05" leadtime="93">
+			<t_2m>11.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="08" leadtime="96">
+			<t_2m>11.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="11" leadtime="99">
+			<t_2m>17.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="14" leadtime="102">
+			<t_2m>20.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="17" leadtime="105">
+			<t_2m>19.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="20" leadtime="108">
+			<t_2m>15.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="23" leadtime="111">
+			<t_2m>14.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="02" leadtime="114">
+			<t_2m>12.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="05" leadtime="117">
+			<t_2m>9.8</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="08" leadtime="120">
+			<t_2m>10.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="11" leadtime="123">
+			<t_2m>16.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="14" leadtime="126">
+			<t_2m>19.3</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="17" leadtime="129">
+			<t_2m>18.9</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="20" leadtime="132">
+			<t_2m>15.0</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="23" leadtime="135">
+			<t_2m>14.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="02" leadtime="138">
+			<t_2m>12.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="08" leadtime="144">
+			<t_2m>10.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>10</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="14" leadtime="150">
+			<t_2m>21.4</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="20" leadtime="156">
+			<t_2m>17.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="06.10.2026." dtj="Utorak" sat="02" leadtime="162">
+			<t_2m>13.5</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>10</vjerojatnost>
+		</dan>
+		<dan datum="06.10.2026." dtj="Utorak" sat="08" leadtime="168">
+			<t_2m>12.4</t_2m>
+			<simbol>3</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>10</vjerojatnost>
+		</dan>
+	</grad>
+	<grad ime="ZAGREB-MAKSIMIR" code="ZAGREB-MAKSIMIR">
+		<dan datum="29.09.2026." dtj="Utorak" sat="09" leadtime="1">
+			<t_2m>12.8</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="10" leadtime="2">
+			<t_2m>15.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="11" leadtime="3">
+			<t_2m>18.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="12" leadtime="4">
+			<t_2m>21.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="13" leadtime="5">
+			<t_2m>22.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="14" leadtime="6">
+			<t_2m>23.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="15" leadtime="7">
+			<t_2m>24.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="16" leadtime="8">
+			<t_2m>24.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="17" leadtime="9">
+			<t_2m>24.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="18" leadtime="10">
+			<t_2m>23.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="19" leadtime="11">
+			<t_2m>20.6</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="20" leadtime="12">
+			<t_2m>17.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="21" leadtime="13">
+			<t_2m>15.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="22" leadtime="14">
+			<t_2m>13.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="29.09.2026." dtj="Utorak" sat="23" leadtime="15">
+			<t_2m>12.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="00" leadtime="16">
+			<t_2m>12.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="01" leadtime="17">
+			<t_2m>11.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="02" leadtime="18">
+			<t_2m>10.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="03" leadtime="19">
+			<t_2m>9.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="04" leadtime="20">
+			<t_2m>9.6</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="05" leadtime="21">
+			<t_2m>9.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="06" leadtime="22">
+			<t_2m>9.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="07" leadtime="23">
+			<t_2m>9.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="08" leadtime="24">
+			<t_2m>11.2</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="09" leadtime="25">
+			<t_2m>13.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="10" leadtime="26">
+			<t_2m>15.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="11" leadtime="27">
+			<t_2m>19.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="12" leadtime="28">
+			<t_2m>21.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="13" leadtime="29">
+			<t_2m>22.8</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="14" leadtime="30">
+			<t_2m>23.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="15" leadtime="31">
+			<t_2m>24.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="16" leadtime="32">
+			<t_2m>24.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="17" leadtime="33">
+			<t_2m>23.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="18" leadtime="34">
+			<t_2m>23.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="19" leadtime="35">
+			<t_2m>20.7</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="20" leadtime="36">
+			<t_2m>17.7</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="21" leadtime="37">
+			<t_2m>15.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="22" leadtime="38">
+			<t_2m>14.7</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="30.09.2026." dtj="Srijeda" sat="23" leadtime="39">
+			<t_2m>14.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="00" leadtime="40">
+			<t_2m>13.3</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="01" leadtime="41">
+			<t_2m>12.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="02" leadtime="42">
+			<t_2m>11.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="03" leadtime="43">
+			<t_2m>11.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="04" leadtime="44">
+			<t_2m>10.8</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="05" leadtime="45">
+			<t_2m>9.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="06" leadtime="46">
+			<t_2m>9.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="07" leadtime="47">
+			<t_2m>9.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="08" leadtime="48">
+			<t_2m>11.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="09" leadtime="49">
+			<t_2m>13.6</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="10" leadtime="50">
+			<t_2m>16.0</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="11" leadtime="51">
+			<t_2m>17.8</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="12" leadtime="52">
+			<t_2m>19.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="13" leadtime="53">
+			<t_2m>20.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="14" leadtime="54">
+			<t_2m>21.9</t_2m>
+			<simbol>1</simbol>
+			<vjetar>SE1</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="15" leadtime="55">
+			<t_2m>22.5</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="16" leadtime="56">
+			<t_2m>21.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="17" leadtime="57">
+			<t_2m>21.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="18" leadtime="58">
+			<t_2m>20.7</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="19" leadtime="59">
+			<t_2m>18.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="20" leadtime="60">
+			<t_2m>15.9</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="21" leadtime="61">
+			<t_2m>13.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="22" leadtime="62">
+			<t_2m>12.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="01.10.2026." dtj="Cetvrtak" sat="23" leadtime="63">
+			<t_2m>11.5</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="00" leadtime="64">
+			<t_2m>11.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="01" leadtime="65">
+			<t_2m>11.5</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="02" leadtime="66">
+			<t_2m>10.5</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="03" leadtime="67">
+			<t_2m>10.3</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="04" leadtime="68">
+			<t_2m>10.0</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="05" leadtime="69">
+			<t_2m>9.8</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="06" leadtime="70">
+			<t_2m>9.0</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="07" leadtime="71">
+			<t_2m>9.0</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="08" leadtime="72">
+			<t_2m>10.1</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="09" leadtime="73">
+			<t_2m>14.2</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="10" leadtime="74">
+			<t_2m>16.2</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="11" leadtime="75">
+			<t_2m>17.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="12" leadtime="76">
+			<t_2m>18.8</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="13" leadtime="77">
+			<t_2m>19.7</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="14" leadtime="78">
+			<t_2m>20.3</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="15" leadtime="79">
+			<t_2m>20.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="16" leadtime="80">
+			<t_2m>20.5</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="17" leadtime="81">
+			<t_2m>19.9</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="18" leadtime="82">
+			<t_2m>18.0</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="19" leadtime="83">
+			<t_2m>16.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="20" leadtime="84">
+			<t_2m>15.4</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="02.10.2026." dtj="Petak" sat="23" leadtime="87">
+			<t_2m>13.6</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="02" leadtime="90">
+			<t_2m>12.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="05" leadtime="93">
+			<t_2m>11.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="08" leadtime="96">
+			<t_2m>11.3</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="11" leadtime="99">
+			<t_2m>17.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="14" leadtime="102">
+			<t_2m>20.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="17" leadtime="105">
+			<t_2m>19.4</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="20" leadtime="108">
+			<t_2m>15.2</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="03.10.2026." dtj="Subota" sat="23" leadtime="111">
+			<t_2m>14.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="02" leadtime="114">
+			<t_2m>12.4</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="05" leadtime="117">
+			<t_2m>9.8</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="08" leadtime="120">
+			<t_2m>10.1</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="11" leadtime="123">
+			<t_2m>16.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="14" leadtime="126">
+			<t_2m>19.3</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="17" leadtime="129">
+			<t_2m>18.9</t_2m>
+			<simbol>1</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="20" leadtime="132">
+			<t_2m>15.0</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="04.10.2026." dtj="Nedjelja" sat="23" leadtime="135">
+			<t_2m>14.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="02" leadtime="138">
+			<t_2m>12.1</t_2m>
+			<simbol>1n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="08" leadtime="144">
+			<t_2m>10.6</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>10</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="14" leadtime="150">
+			<t_2m>21.4</t_2m>
+			<simbol>2</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="05.10.2026." dtj="Ponedjeljak" sat="20" leadtime="156">
+			<t_2m>17.1</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="06.10.2026." dtj="Utorak" sat="02" leadtime="162">
+			<t_2m>13.5</t_2m>
+			<simbol>2n</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>0</vjerojatnost>
+		</dan>
+		<dan datum="06.10.2026." dtj="Utorak" sat="08" leadtime="168">
+			<t_2m>12.4</t_2m>
+			<simbol>3</simbol>
+			<vjetar>C0</vjetar>
+			<oborina>0.0</oborina>
+			<vjerojatnost>10</vjerojatnost>
+		</dan>
+	</grad>
+</sedamdana>
