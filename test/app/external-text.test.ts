@@ -397,7 +397,7 @@ describe('the sampled source and GTFS corpus', () => {
     const dir = join(CITY_DIR, '..');
     const { headsigns } = JSON.parse(readFileSync(join(dir, 'zet-trips.json'), 'utf8')) as { headsigns: string[] };
     const { routes } = JSON.parse(readFileSync(join(dir, 'zet-network.json'), 'utf8')) as { routes: { short: string[] } };
-    expect(headsigns).toHaveLength(153);
+    expect(headsigns).toHaveLength(151); // 153 on feed 000395
     expect(routes.short).toHaveLength(154);
     for (const value of [...headsigns, ...routes.short]) expect(rowText('headsign', value), value).toEqual({ ok: true });
   });
