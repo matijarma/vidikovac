@@ -44,6 +44,15 @@
 // Before any plan exists (the artefact not yet loaded, a test feeding bare
 // fixes, a twin that only knows the position), a fix is a point to converge
 // towards in the free plane and hold at -- still never a jump.
+//
+// The one exception is a return (lane tab-return, 30 Sep; motion/loop.ts
+// RESYNC_GAP_MS): after the page was away, what is on screen is minutes old,
+// and converging from it at catch-up speed drew the trams crawling after
+// their own positions for about as long again as the page had been hidden.
+// `resync()` re-seeds instead: every mark stands where its plan puts it on
+// the next frame, and again where the next fresh report's plan puts it,
+// because the snapshot in hand at the return may itself be the one from
+// before the page left. From that report on the rules above hold again.
 
 import { dist, toPlane, type XY } from '../../../shared/motion/geo';
 import { ARC_PRIOR_WEIGHT, BACK_WINDOW_M, OFF_GRAPH_M, REACH_SLACK_M } from '../../../shared/motion/match';
@@ -151,6 +160,9 @@ export interface Model {
   update(fixes: readonly Fix[], now: number): void;
   /** Advance to wall-clock `now` and return what to draw. Called once per frame. */
   step(now: number): Drawn[];
+  /** The page was away (motion/loop.ts RESYNC_GAP_MS): every mark on screen follows its plan exactly, without
+   *  converging, until its next fresh report re-seeds it there once more. Vehicles that arrive later are new. */
+  resync(): void;
   size(): number;
 }
 
@@ -248,6 +260,9 @@ interface VehicleState {
   lastFixAt: number;
   lastStepAt: number;
   lastSnapAt?: number;
+  /** Set by resync(): the mark is drawn exactly at its plan, not converged onto it, until its next fresh report
+   *  (applyFix) re-seeds it at that report's plan and clears this. */
+  reseed: boolean;
   /** This frame's plan target arc and integration step: scratch the order
    *  clamp reads, written once a frame before anything converges. */
   targetS: number;
@@ -413,6 +428,7 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         leader: fix.behind ?? null,
         lastFixAt: fix.at,
         lastStepAt: now,
+        reseed: false,
         targetS: target.s,
         stepDt: 0,
         edgeK: 0,
@@ -442,6 +458,20 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     v.evidenceKey = evidenceKey;
     v.silenceCeiling = silenceCeiling;
     v.plan = fix.plan ?? null;
+    if (v.reseed) {
+      // The first fresh report after a return: the mark stands where this report's plan puts it now, whatever
+      // geometry it was on and wherever it was drawn. The page was away; nothing drawn before it is evidence.
+      v.reseed = false;
+      v.holding = false;
+      v.moveDir = null;
+      v.lastSnapAt = now;
+      v.lastStepAt = now;
+      v.geom = onPath ? geom : null;
+      v.s = target.s;
+      v.p = target.p;
+      v.targetP = target.p;
+      return v;
+    }
     if (onPath) {
       if (!v.geom || v.geom.key !== geom!.key) {
         // A new geometry: the arc is re-seeded from wherever the mark is
@@ -715,7 +745,8 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
     v.sweep = 1;
     for (const leader of v.aheadOf) convergeInOrder(leader);
     v.sweep = 2;
-    v.s = convergeArc(v, v.targetS, v.stepDt, v.aheadOf.length > 0 ? ceilingFor(v) : Number.POSITIVE_INFINITY);
+    // A mark re-seeded after a return stands on its plan: the twin's plans keep the order themselves.
+    v.s = v.reseed ? v.targetS : convergeArc(v, v.targetS, v.stepDt, v.aheadOf.length > 0 ? ceilingFor(v) : Number.POSITIVE_INFINITY);
   }
 
   function evict(now: number): void {
@@ -765,7 +796,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
           const [lon1, lat1] = evalFree(v.plan.knots, now + 1000);
           const ahead = toPlane(lon1, lat1);
           v.moveDir = unit(ahead.x - target.x, ahead.y - target.y) ?? v.moveDir;
-          convergePoint(v, target, dt);
+          if (v.reseed) v.p = target;
+          else convergePoint(v, target, dt);
+        } else if (v.reseed) {
+          v.p = v.targetP;
         } else {
           convergePoint(v, v.targetP, dt);
         }
@@ -825,6 +859,10 @@ export function createIntegrator(net: Network | GraphNetwork | null): Model {
         out.push(drawn);
       }
       return out;
+    },
+
+    resync() {
+      for (const v of vehicles.values()) v.reseed = true;
     },
 
     size() {

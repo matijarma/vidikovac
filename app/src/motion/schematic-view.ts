@@ -786,7 +786,8 @@ export function mountSchematicView(container: HTMLElement, deps: SchematicViewDe
 
   let lastMarksSignature = '';
 
-  function draw(t: number): boolean {
+  function draw(t: number, resync = false): boolean {
+    if (resync) model.resync(); // back after the page was away (motion/loop.ts RESYNC_GAP_MS)
     // A view whose element left the document (the dashboard swapped to
     // another layer and took the panel with it) paints nothing and reports
     // no change, so the loop parks after its usual streak instead of
