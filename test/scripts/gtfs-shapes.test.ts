@@ -40,6 +40,7 @@ import {
   main,
   parseShapesTxt,
   parseTripsTxt,
+  normalShapes,
   pathThroughStops,
   placeStops,
   repeatedSequences,
@@ -438,6 +439,25 @@ const TRIMMED_CASES: string[] = [];
 // 236_10 at 74.19 N). A repeating shape is dropped and its trips are built as
 // trips without a shape; a platform outside SERVICE_AREA fails by name unless
 // the overrides file gives its position.
+describe('normalShapes: a route\'s normal route', () => {
+  it('keeps, per direction, the one shape most trips run: never a depot run or a short turn', () => {
+    const rows = parseCsv('route_id,service_id,trip_id,shape_id,direction_id\n' + [
+      '6,wd,a,6_2,1', '6,wd,b,6_2,1', '6,wd,c,6_2,1', '6,wd,d,6_12,1',
+      '6,wd,e,6_25,0', '6,wd,f,6_25,0', '6,wd,g,6_22,0',
+    ].join('\n') + '\n');
+    const { tripCountByShape, shapeDirection } = parseTripsTxt(rows);
+    expect(Object.fromEntries(tripCountByShape)).toEqual({ '6_2': 3, '6_12': 1, '6_25': 2, '6_22': 1 });
+    const shapes = ['6_12', '6_2', '6_22', '6_25'].map((id, idx) => ({ idx, id, direction: shapeDirection.get(id)!, trips: tripCountByShape.get(id)! }));
+    expect(normalShapes(shapes)).toEqual([1, 3]);
+  });
+
+  it('breaks a tie by the lower shape id and keeps a one-shape loop line', () => {
+    expect(normalShapes([{ idx: 4, id: 'B', direction: 0, trips: 5 }, { idx: 2, id: 'A', direction: 0, trips: 5 }])).toEqual([2]);
+    expect(normalShapes([{ idx: 0, id: 'L', direction: 0, trips: 9 }])).toEqual([0]);
+    expect(normalShapes([])).toEqual([]);
+  });
+});
+
 describe('feed defects: a shape that is no polyline, a platform outside the service area', () => {
   const shapeRows = (rows: string) => parseShapesTxt(parseCsv('shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n' + rows));
 

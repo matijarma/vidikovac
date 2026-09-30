@@ -1,7 +1,7 @@
 // Named static sources belong to the lazy map renderer. The public API is
 // re-exported by city-map for pure callers, but startup imports no renderer.
 import { toLonLat } from '../../../shared/motion/geo';
-import type { Network } from '../../../shared/motion/network';
+import { mainShapes, type Network } from '../../../shared/motion/network';
 import { vetExternal, vetExternalMap } from '../../../shared/kiosk/external-text-boundary';
 import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { vehicleKind } from './vehicle-mark';
@@ -69,17 +69,25 @@ export function linesToGeoJson(lines: readonly MapLine[], publicDisplay = true):
   };
 }
 
+/** Every shape index on some route's normal route (mainShapes). */
+function mainShapeSet(net: Network): Set<number> {
+  const set = new Set<number>();
+  for (const id of net.routes.keys()) for (const idx of mainShapes(net, id)) set.add(idx);
+  return set;
+}
+
 export function networkToGeoJson(net: Network): NetworkFeatureCollection {
   const known = NETWORK_FEATURES.get(net);
   if (known) return known;
+  const main = mainShapeSet(net);
   const built: NetworkFeatureCollection = {
     type: 'FeatureCollection',
-    features: net.shapes.filter(shape => shape.pts.length >= 2).map((shape, i) => {
+    features: net.shapes.map((shape, idx) => ({ shape, idx })).filter(({ shape }) => shape.pts.length >= 2).map(({ shape, idx }, i) => {
       const route = net.routes.get(shape.route);
       return {
         type: 'Feature' as const,
         geometry: { type: 'LineString' as const, coordinates: shape.pts.map(toLonLat) },
-        properties: { shape: i, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1) },
+        properties: { shape: i, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1), main: main.has(idx) },
       };
     }),
   };
@@ -92,11 +100,13 @@ export function networkToGeoJson(net: Network): NetworkFeatureCollection {
 export function stopsToGeoJson(net: Network): StopFeatureCollection {
   const known = STOP_FEATURES.get(net);
   if (known) return known;
+  const main = mainShapeSet(net);
   const rows = net.stops.map(stop => {
     const routes = [...new Set(stop.on.map(on => net.shapes[on.shape]?.route).filter((r): r is string => Boolean(r)))]
       .sort(ROUTE_ORDER.compare);
+    const lines = routes.filter(r => stop.on.some(on => main.has(on.shape) && net.shapes[on.shape]?.route === r));
     const types = routes.map(r => net.routes.get(r)?.type);
-    return { stop, routes, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
+    return { stop, routes, lines, tram: types.includes(ROUTE_TYPE_TRAM), bus: types.includes(ROUTE_TYPE_BUS) };
   });
   const labelled = new Map<string, { id: string; rank: number }>();
   const interchange = new Map<string, { tram: boolean; terminal: boolean }>();
@@ -108,13 +118,13 @@ export function stopsToGeoJson(net: Network): StopFeatureCollection {
   }
   const built: StopFeatureCollection = {
     type: 'FeatureCollection',
-    features: rows.map(({ stop, routes, tram, bus }) => {
+    features: rows.map(({ stop, routes, lines, tram, bus }) => {
       const hub = interchange.get(stop.name)!;
       return {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: toLonLat(stop.p) },
         properties: {
-          id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '', routes, rank: routes.length, tram, bus,
+          id: stop.id, name: vetExternal('name', stop.name, 'row') ?? '', routes, lines, rank: routes.length, tram, bus,
           label: labelled.get(stop.name)?.id === stop.id, tramInterchange: hub.tram && hub.terminal,
         },
       };

@@ -496,12 +496,14 @@ function stopLabelFilter(stops: Expr): Expr {
 export const DESK_FRAME_UNTIL_ZOOM = 14;
 
 /** Stops called at by one of `routes` (the features carry their route ids);
- *  null is every stop, an empty list none. */
-export function routeStopsFilter(modes: ReadonlySet<number> | null | undefined, routes: readonly string[] | null): Expr {
+ *  null is every stop, an empty list none. `by` is the property read:
+ *  `routes`, every shape the route runs, or `lines`, its normal route alone
+ *  (a selected line's stops, never a depot run's). */
+export function routeStopsFilter(modes: ReadonlySet<number> | null | undefined, routes: readonly string[] | null, by: 'routes' | 'lines' = 'routes'): Expr {
   const byMode = stopFilter(modes);
   if (routes === null) return byMode;
   if (routes.length === 0) return NEVER;
-  return ['all', byMode, ['any', ...routes.map((id): Expr => ['in', id, ['get', 'routes']])]];
+  return ['all', byMode, ['any', ...routes.map((id): Expr => ['in', id, ['get', by]])]];
 }
 
 /** A closure's width, the selected one three pixels heavier. */
@@ -540,17 +542,20 @@ export function pillInks(p: OverlayPalette, selectedRoute: string | null): PillI
 /** The filters the selection layers carry for `selection`: NEVER on every layer
  *  while nothing is selected. The two network layers are the one pair
  *  `overlayLayers` may widen past this: under line focus they carry the
- *  focused route, which a vehicle selection names and this function cannot. */
+ *  focused route, which a vehicle selection names and this function cannot.
+ *  A selected route lights its normal route alone (the features' `main`,
+ *  its stops' `lines`): the depot runs and short turns it also runs are not
+ *  the line. */
 export function selectionFilters(selection: MapSelection | null): Record<string, Expr> {
   const routeId = selection?.kind === 'route' ? selection.id : null;
   const stopIds = selection?.kind === 'stop' ? [...new Set([selection.id, ...(selection.ids ?? [])])] : [];
   const vehicleId = selection?.kind === 'vehicle' ? selection.id : null;
-  const route: Expr = routeId ? ['==', ['get', 'route'], routeId] : NEVER;
+  const route: Expr = routeId ? ['all', ['==', ['get', 'route'], routeId], ['get', 'main']] : NEVER;
   const vehicle: Expr = vehicleId ? ['==', ['get', 'id'], vehicleId] : NEVER;
   return {
     [LAYERS.networkSelectedCasing]: route,
     [LAYERS.networkSelected]: route,
-    [LAYERS.stopsRoute]: routeId ? ['in', routeId, ['get', 'routes']] : NEVER,
+    [LAYERS.stopsRoute]: routeId ? ['in', routeId, ['get', 'lines']] : NEVER,
     [LAYERS.stopsSelected]: stopIds.length > 0 ? ['in', ['get', 'id'], ['literal', stopIds]] : NEVER,
     [LAYERS.vehicleSelectedNose]: vehicleId ? ['all', vehicle, ['get', 'hasHeading']] : NEVER,
     [LAYERS.vehicleSelected]: vehicle,
@@ -785,7 +790,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const inks = pillInks(p, litRoute);
   const filters = selectionFilters(sel);
   /** The lit line's own geometry: the selection's, or the focused route's under a vehicle. */
-  const litLine: Expr = litRoute ? ['==', ['get', 'route'], litRoute] : NEVER;
+  const litLine: Expr = litRoute ? ['all', ['==', ['get', 'route'], litRoute], ['get', 'main']] : NEVER;
   /** The colour it is drawn in: ZET's own where the build's table knows the route, the mode's ink otherwise. */
   const litColour: string | Expr = options.focus && options.focus.routeId === litRoute
     ? options.focus.colour
@@ -828,15 +833,17 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
    *  screen's own stop draws from its own source whatever this says. The ranked
    *  names follow the rings, because a name over a platform with neither ring
    *  nor line under it is the same clutter by another means. Focus off, every
-   *  stop the modes admit, exactly as before. */
+   *  stop the modes admit, exactly as before. The focused line's stops are
+   *  those of its normal route (`lines`), never a depot run's. */
   const stopRoutes = focus ? [focus.routeId] : prozor ? prozor.stopRoutes : null;
+  const stopsBy = focus ? 'lines' : 'routes';
   const inFrame: Expr = ['in', ['get', 'id'], ['literal', [...(options.frameStopIds ?? [])]]];
   const stops: Expr = prozor?.frame
-    ? ['all', routeStopsFilter(modes, stopRoutes), inFrame]
+    ? ['all', routeStopsFilter(modes, stopRoutes, stopsBy), inFrame]
     : prozor === null && options.frameStopIds !== undefined
       // The desk's presented frame (DESK_FRAME_UNTIL_ZOOM): the frame's stops below it, every stop from it.
-      ? ['step', ['zoom'], ['all', routeStopsFilter(modes, stopRoutes), inFrame], DESK_FRAME_UNTIL_ZOOM, routeStopsFilter(modes, stopRoutes)]
-      : routeStopsFilter(modes, stopRoutes);
+      ? ['step', ['zoom'], ['all', routeStopsFilter(modes, stopRoutes, stopsBy), inFrame], DESK_FRAME_UNTIL_ZOOM, routeStopsFilter(modes, stopRoutes, stopsBy)]
+      : routeStopsFilter(modes, stopRoutes, stopsBy);
   const labelInk = { 'text-color': p.label, 'text-halo-color': p.halo };
   const circle = (id: string, source: string, paint: Record<string, unknown>, extra: Partial<StyleLayerLike> = {}): StyleLayerLike => ({ id, type: 'circle', source, paint, ...extra });
   // The seat of the quarter is never lit on the public screen (R-KP9): a register address is not a thing to walk to from a café.

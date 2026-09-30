@@ -23,7 +23,7 @@ import type { VisibleMarks } from './vehicle-features';
 import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
 import { pillLabel } from '../motion/pill-label';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
-import { loadNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
+import { loadNetwork, mainShapes, type GraphNetwork, type Network } from '../../../shared/motion/network';
 import type { MotionMetadata } from '../../../shared/motion/wire';
 import { ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { vehicleKind, type VehicleKind } from './vehicle-mark';
@@ -247,7 +247,8 @@ export interface NetworkFeatureCollection {
   features: {
     type: 'Feature';
     geometry: { type: 'LineString'; coordinates: [number, number][] };
-    properties: { shape: number; route: string; short: string; kind: VehicleKind };
+    /** `main`: the shape is on its route's normal route (network.ts mainShapes), what a selection lights. */
+    properties: { shape: number; route: string; short: string; kind: VehicleKind; main: boolean };
   }[];
 }
 
@@ -261,6 +262,9 @@ export interface StopFeatureCollection {
       name: string;
       /** Routes whose shapes call here, in reading order. */
       routes: string[];
+      /** The routes whose normal route (network.ts mainShapes) calls here:
+       *  the stops a selected line lights, never a depot run's. */
+      lines: string[];
       /** How many: decides whose name wins a crowded corner. */
       rank: number;
       tram: boolean;
@@ -1833,7 +1837,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       case 'route': {
         if (!net) return;
         const coords: [number, number][] = [];
-        for (const idx of net.routes.get(sel.id)?.shapes ?? []) for (const p of net.shapes[idx]?.pts ?? []) coords.push(toLonLat(p));
+        // The normal route alone: a depot run is not what the reader asked to see.
+        for (const idx of mainShapes(net, sel.id)) for (const p of net.shapes[idx]?.pts ?? []) coords.push(toLonLat(p));
         fitCoordinates(coords, 15, padding);
         return;
       }

@@ -10,7 +10,7 @@ import * as cityPlaces from '../../app/src/map/city-layers';
 import { NOSE_LENGTH_PX, noseCentrePx, PILL_MAX_CHARS_CLUSTER } from '../../app/src/motion/pills';
 import { toPlane } from '../../shared/motion/geo';
 import type { Drawn } from '../../app/src/motion/integrator';
-import { decodeNetwork } from '../../shared/motion/network';
+import { decodeNetwork, mainShapes } from '../../shared/motion/network';
 import { readFileSync } from 'node:fs';
 import { CENSUS_COUNT_HALF_PX, CENSUS_LAYERS, markerCensus, pillBox, PROBE_SETTLE_MS, type RenderedFeature } from '../../app/src/map/name-census';
 import * as nameCensus from '../../app/src/map/name-census';
@@ -1407,7 +1407,7 @@ describe('selection and status', () => {
   it('select() lights exactly the selected thing through filters and fits the camera; a tap picks a vehicle over a stop, a stop over nothing, and reports each', async () => {
     const { map, handle, selections } = await harness({ loadNetwork: async () => NET });
     handle.select!({ kind: 'route', id: '6' }, { fit: true });
-    expect(map.filters['network-selected']).toEqual(['==', ['get', 'route'], '6']);
+    expect(map.filters['network-selected']).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
     expect(map.paint['network-tram']?.['line-opacity']).toBe(0.14);
     expect(map.cameraCalls.at(-1)?.kind).toBe('fitBounds');
     map.rendered = [{ layer: { id: 'stops' }, properties: { id: 'S1', name: 'Črnomerec' } }, { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1' } }];
@@ -1577,7 +1577,7 @@ describe('without WebGL, following, the kiosk view and an outage', () => {
     expect(handle.selection!()).toEqual({ kind: 'route', id: '6' });
     expect(handle.following!()).toBe(true);
     expect(filterOf(map, 'vehicle-selected')).toEqual(overlays.NEVER); // the route, not a vehicle called "6"
-    expect(filterOf(map, 'network-selected')).toEqual(['==', ['get', 'route'], '6']);
+    expect(filterOf(map, 'network-selected')).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
     handle.update([B], [CLOSURE]);
     const before = map.cameraCalls.length;
     for (let i = 0; i < 6; i++) frame();
@@ -1646,8 +1646,8 @@ describe('selection and status', () => {
   it('a selection reaches the map as filters through one styleDiff: the route lit, its stops marked, the rest dimmed, the camera on it; clearing puts NEVER back', async () => {
     const { map, handle } = await harness({ loadNetwork: async () => NET });
     handle.select!({ kind: 'route', id: '6' }, { fit: true });
-    expect(map.filters['network-selected']).toEqual(['==', ['get', 'route'], '6']);
-    expect(map.filters['stops-route']).toEqual(['in', '6', ['get', 'routes']]);
+    expect(map.filters['network-selected']).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
+    expect(map.filters['stops-route']).toEqual(['in', '6', ['get', 'lines']]);
     expect(map.paint['network-tram']?.['line-opacity']).toBe(0.14);
     expect(map.cameraCalls.at(-1)?.kind).toBe('fitBounds'); // the route's whole geometry
     expect(handle.selection!()).toEqual({ kind: 'route', id: '6' });
@@ -1667,7 +1667,7 @@ describe('selection and status', () => {
     handle.select!({ kind: 'vehicle', id: 'vehicle:1' });
     expect(map.layout['network-tram']?.visibility).toBe('none');
     expect(map.layout['network-bus']?.visibility).toBe('none');
-    expect(map.filters['network-selected']).toEqual(['==', ['get', 'route'], '6']);
+    expect(map.filters['network-selected']).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
     expect(map.paint['network-selected']?.['line-color']).toBe(LINE_COLOURS['6']);
     // Off again: the whole network is back, and nothing but a route selection lights a line.
     handle.setLineFocus!(false);
@@ -1916,6 +1916,23 @@ describe('the named sources of the artefact (round 4 kiosk lane, handoff A1)', (
     expect(mixed).toBeDefined();
     const numbers = mixed!.properties.routes.map((r) => Number.parseInt(r, 10)).filter((n) => Number.isFinite(n));
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
+  });
+});
+
+// A selected line lights its normal route alone: the feed's line 6 runs
+// fourteen shapes (depot runs to Ravnice and Mandlova, short turns, a weekend
+// variant), and only the two most of its trips run are the 6.
+describe('a selected line is its normal route, never its depot runs', () => {
+  it('flags only the normal shapes and lists a stop under `lines` only where the normal route calls', () => {
+    const lit = networkToGeoJson(NET).features.filter((f) => f.properties.route === '6' && f.properties.main);
+    expect(mainShapes(NET, '6').map((i) => NET.shapes[i]!.id).sort()).toEqual(['6_2', '6_25']);
+    expect(lit.length).toBe(2);
+    expect(networkToGeoJson(NET).features.filter((f) => f.properties.route === '6').length).toBe(14);
+    const stops = stopsToGeoJson(NET).features;
+    for (const f of stops) for (const line of f.properties.lines) expect(f.properties.routes, f.properties.id).toContain(line);
+    // Some platform only a depot run of the 6 passes: on the 6's shapes, not on its normal route.
+    expect(stops.some((f) => f.properties.routes.includes('6') && !f.properties.lines.includes('6'))).toBe(true);
+    expect(stops.filter((f) => f.properties.lines.includes('6')).map((f) => f.properties.name)).toEqual(expect.arrayContaining(['Črnomerec', 'Sopot']));
   });
 });
 

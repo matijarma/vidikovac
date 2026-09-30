@@ -1,12 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import { toPlane } from '../../shared/motion/geo';
 import { cumulative } from '../../shared/motion/polyline';
-import { decodeNetwork, loadNetwork, NetworkVersionError } from '../../shared/motion/network';
+import { decodeNetwork, loadNetwork, mainShapes, NetworkVersionError } from '../../shared/motion/network';
 
 import { B1_LONLAT, E0_LONLAT, E1_LONLAT, rawArtefactV3, unitLonLat } from './network-fixture';
 
 const plane = (lonlat: [number, number][]) => lonlat.map(([lon, lat]) => toPlane(lon, lat));
 const lenOf = (pts: { x: number; y: number }[]) => cumulative(pts)[pts.length - 1];
+
+describe('mainShapes: a route\'s normal route', () => {
+  it('reads the artefact\'s `main` column, and falls back to every shape without it', () => {
+    const raw = rawArtefactV3();
+    (raw.routes as { main?: number[][] }).main = [[0], []];
+    const net = decodeNetwork(raw);
+    expect(net.routes.get('R1')!.main).toEqual([0]);
+    expect(mainShapes(net, 'R1')).toEqual([0]);
+    expect(mainShapes(net, 'RB')).toEqual([1]); // an empty list names nothing: every shape
+    expect(mainShapes(decodeNetwork(rawArtefactV3()), 'R1')).toEqual([0]);
+    expect(mainShapes(net, 'nope')).toEqual([]);
+  });
+});
 
 describe('decodeNetwork', () => {
   it('decodes version 3 into the superset the client reads: edges, tram shapes rebuilt from them, bus polylines, paths with offsets and their served stops, terminal stops, the graph hash, stops at exact arcs on every shape through their edges, nextStop; rejects a version 2 artefact; loads only outside lightweight mode', async () => {

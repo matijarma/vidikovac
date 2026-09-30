@@ -96,7 +96,11 @@ export interface Stop {
 export interface Network {
   version: number;
   feedVersion: string;
-  routes: Map<string, { short: string; type: number; rank: number; shapes: number[] }>;
+  /** `main` is the route's normal route (scripts/gtfs-shapes.mjs
+   *  normalShapes): per direction, the one shape most of its trips run --
+   *  never a depot run or a short turn. Absent on an artefact built before
+   *  it; read it through mainShapes(). */
+  routes: Map<string, { short: string; type: number; rank: number; shapes: number[]; main?: number[] }>;
   shapes: Shape[];
   stops: Stop[];
   diagram: { lines: { route: string; pts: XY[] }[]; box: [number, number] };
@@ -145,7 +149,7 @@ interface RawNetworkArtefact {
   graphHash?: string;
   origin: [number, number];
   scale: number;
-  routes: { id: string[]; short: string[]; type: number[]; rank: number[]; shapes: number[][] };
+  routes: { id: string[]; short: string[]; type: number[]; rank: number[]; shapes: number[][]; main?: number[][] };
   edges: { from: number[]; to: number[]; d: number[][] };
   shapes: { id: string[]; route: string[]; dir: number[]; d: number[][]; e: number[][]; len: number[]; served: [number, number][][] };
   paths: { id: string[]; route: string[]; dir: number[]; e: number[][]; stops: string[][]; served: [number, number][][] };
@@ -221,9 +225,10 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
   const scale = r.scale;
   const toPoint = (ux: number, uy: number): XY => toPlane(originLon + ux * scale, originLat + uy * scale);
 
-  const routes = new Map<string, { short: string; type: number; rank: number; shapes: number[] }>();
+  const routes = new Map<string, { short: string; type: number; rank: number; shapes: number[]; main?: number[] }>();
   for (let i = 0; i < r.routes.id.length; i++) {
-    routes.set(r.routes.id[i], { short: r.routes.short[i], type: r.routes.type[i], rank: r.routes.rank[i], shapes: r.routes.shapes[i] });
+    const main = r.routes.main?.[i];
+    routes.set(r.routes.id[i], { short: r.routes.short[i], type: r.routes.type[i], rank: r.routes.rank[i], shapes: r.routes.shapes[i], ...(main ? { main } : {}) });
   }
 
   const edges: Edge[] = decodeEdgeChain(r.edges.d).map((units, i) => {
@@ -349,6 +354,15 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
     paths,
     ...graphMethods(edges, paths, stops, pathOfShapeIdx),
   };
+}
+
+/** The shapes of a route's normal route (Network.routes `main`): what the map
+ *  lights and frames for a selected line or vehicle. An artefact without
+ *  the column falls back to every shape the route runs. */
+export function mainShapes(net: Pick<Network, 'routes'>, routeId: string): number[] {
+  const route = net.routes.get(routeId);
+  if (!route) return [];
+  return route.main && route.main.length > 0 ? route.main : route.shapes;
 }
 
 const NETWORK_URL = '/data/zet-network.json';

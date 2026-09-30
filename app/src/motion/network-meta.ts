@@ -5,4 +5,4 @@ export const FEED_VERSION = "000396";
 export const BUILT_AT = "2026-09-28T06:34:58.000Z";
 export const ROUTE_COUNT = 154;
 export const EDGE_COUNT = 412;
-export const BYTE_SIZE = 578118;
+export const BYTE_SIZE = 579543;

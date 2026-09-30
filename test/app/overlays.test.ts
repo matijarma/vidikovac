@@ -653,8 +653,8 @@ describe('filters and the selection', () => {
   it('carries NEVER on every selection layer while nothing is selected, and lights exactly the selected thing otherwise', () => {
     for (const f of Object.values(selectionFilters(null))) expect(f).toEqual(NEVER);
     const route = selectionFilters({ kind: 'route', id: '6' });
-    expect(route[LAYERS.networkSelected]).toEqual(['==', ['get', 'route'], '6']);
-    expect(route[LAYERS.stopsRoute]).toEqual(['in', '6', ['get', 'routes']]);
+    expect(route[LAYERS.networkSelected]).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
+    expect(route[LAYERS.stopsRoute]).toEqual(['in', '6', ['get', 'lines']]);
     expect(route[LAYERS.vehicleSelected]).toEqual(NEVER);
     const stop = selectionFilters({ kind: 'stop', id: '1_21', ids: ['1_21', '1_22'] });
     expect(stop[LAYERS.stopsSelected]).toEqual(['in', ['get', 'id'], ['literal', ['1_21', '1_22']]]);
@@ -701,9 +701,9 @@ describe('filters and the selection', () => {
     const on = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: true });
     for (const id of [LAYERS.networkTram, LAYERS.networkBus]) expect(on.find((l) => l.id === id)!.layout!.visibility, id).toBe('none');
     const selected = on.find((l) => l.id === LAYERS.networkSelected)!;
-    expect(selected.filter).toEqual(['==', ['get', 'route'], '6']);
+    expect(selected.filter).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
     expect(selected.paint!['line-color']).toBe('#cc706f');
-    expect(on.find((l) => l.id === LAYERS.networkSelectedCasing)!.filter).toEqual(['==', ['get', 'route'], '6']);
+    expect(on.find((l) => l.id === LAYERS.networkSelectedCasing)!.filter).toEqual(['all', ['==', ['get', 'route'], '6'], ['get', 'main']]);
     // Every pill still draws; the ones off the line invert, as under a route selection.
     expect(on.find((l) => l.id === LAYERS.vehicles)!.paint!['icon-color']).toEqual(pillInks(OVERLAY_LIGHT, '6').fill);
     expect(on.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, VEHICLE_OPACITY_DIMMED]]);
@@ -724,14 +724,14 @@ describe('filters and the selection', () => {
     // Hiding every other line and keeping every other line’s rings left the
     // F6 capture a field of grey circles with no line under them.
     expect(stopsOf({ selection: { kind: 'vehicle', id: 'v1' }, focus, lineFocus: true }).filter)
-      .toEqual(routeStopsFilter(null, ['6']));
+      .toEqual(routeStopsFilter(null, ['6'], 'lines'));
     // The switch off is the whole network again, rings and all.
     expect(stopsOf({ selection: { kind: 'route', id: '6' }, focus, lineFocus: false }).filter).toEqual(stopFilter(null));
     expect(stopsOf({}).filter).toEqual(stopFilter(null));
     // The selection layer still lights the route’s platforms, and the
     // screen’s own stop is its own source and draws under focus too.
     const on = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'route', id: '6' }, focus, lineFocus: true });
-    expect(on.find((l) => l.id === LAYERS.stopsRoute)!.filter).toEqual(['in', '6', ['get', 'routes']]);
+    expect(on.find((l) => l.id === LAYERS.stopsRoute)!.filter).toEqual(['in', '6', ['get', 'lines']]);
     expect(on.find((l) => l.id === LAYERS.screenStop)!.filter).toBeUndefined();
   });
 });

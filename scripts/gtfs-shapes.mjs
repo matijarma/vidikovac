@@ -283,7 +283,7 @@ export const SNAP_MIN_RUN_METRES = 30;
 export const BUS_ON_FRAC_SCALE = 500;
 
 // Column order for the struct-of-arrays wire format (see toColumnar).
-export const ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes'];
+export const ROUTE_KEYS = ['id', 'short', 'type', 'rank', 'shapes', 'main'];
 export const EDGE_KEYS = ['from', 'to', 'd'];
 export const SHAPE_KEYS = ['id', 'route', 'dir', 'd', 'e', 'len', 'served'];
 export const PATH_KEYS = ['id', 'route', 'dir', 'e', 'stops', 'served'];
@@ -1327,8 +1327,9 @@ export function parseRoutesTxt(rows) {
  *  shared between routes), a sample trip per shape for the terminus override,
  *  trip counts per route, the majority direction_id per shape, the shape each
  *  shaped trip runs (the served lists are the union over a shape's trips,
- *  F8), and the trips that carry no shape_id at all (route and direction),
- *  which the synthetic paths are built for. */
+ *  F8), the trip count per shape (which of a route's shapes is its normal
+ *  route, `normalShapes`), and the trips that carry no shape_id at all
+ *  (route and direction), which the synthetic paths are built for. */
 export function parseTripsTxt(rows, invalidShapes = new Set()) {
   if (rows.length === 0) throw new Error('trips.txt is empty');
   const col = columnIndexer(rows[0], 'trips.txt');
@@ -1365,8 +1366,12 @@ export function parseTripsTxt(rows, invalidShapes = new Set()) {
     directionVotes.set(shapeId, votes);
   }
   const shapeDirection = new Map();
-  for (const [shapeId, [zero, one]] of directionVotes) shapeDirection.set(shapeId, one > zero ? 1 : 0);
-  return { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip };
+  const tripCountByShape = new Map();
+  for (const [shapeId, [zero, one]] of directionVotes) {
+    shapeDirection.set(shapeId, one > zero ? 1 : 0);
+    tripCountByShape.set(shapeId, zero + one);
+  }
+  return { tripCountByRoute, tripCountByShape, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip };
 }
 
 export function parseShapesTxt(rows) {
@@ -1577,6 +1582,25 @@ export async function streamStopTimes(buf, entry, sequenceTrips = new Set(), sha
   return { endpoints, sequences, shapeStops };
 }
 
+/**
+ * A route's normal route: per GTFS direction_id, the one shape most of its
+ * trips run, ties to the lower shape id. The rest -- depot runs in and out
+ * of the garages, short turns, the odd variant -- are real shapes the route
+ * runs, but not the line a person means by "the 6", which is what the map
+ * lights for a selected line or vehicle. Direction is the shape's majority
+ * direction_id for buses too (their wire `dir` is -1).
+ * @param {{ idx: number, id: string, direction: number, trips: number }[]} shapes
+ * @returns {number[]} shape indices, ascending
+ */
+export function normalShapes(shapes) {
+  const best = new Map();
+  for (const s of shapes) {
+    const held = best.get(s.direction);
+    if (!held || s.trips > held.trips || (s.trips === held.trips && s.id < held.id)) best.set(s.direction, s);
+  }
+  return [...best.values()].map((s) => s.idx).sort((a, b) => a - b);
+}
+
 /** Kept for callers that only want the endpoints (task A1's script imports it). */
 export async function streamTripEndpoints(buf, entry) {
   return (await streamStopTimes(buf, entry)).endpoints;
@@ -1610,7 +1634,7 @@ export async function buildNetwork(zipBuf, opts = {}) {
   const rawShapesByShapeId = parseShapesTxt(parseCsv(textOf('shapes.txt')));
   const invalidShapes = repeatedSequences(rawShapesByShapeId);
   for (const id of invalidShapes.keys()) rawShapesByShapeId.delete(id);
-  const { tripCountByRoute, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip } = parseTripsTxt(
+  const { tripCountByRoute, tripCountByShape, shapeToRoute, shapeSampleTrip, shapeDirection, shapelessTrips, shapeOfTrip } = parseTripsTxt(
     parseCsv(textOf('trips.txt')),
     new Set(invalidShapes.keys()),
   );
@@ -1737,6 +1761,9 @@ export async function buildNetwork(zipBuf, opts = {}) {
     type: r.type,
     rank: i + 1,
     shapes: (shapeIdxByRoute.get(r.id) ?? []).slice().sort((a, b) => a - b),
+    main: normalShapes(
+      (shapeIdxByRoute.get(r.id) ?? []).map((i) => ({ idx: i, id: shapeRows[i].id, direction: shapeDirection.get(shapeRows[i].id) ?? 0, trips: tripCountByShape.get(shapeRows[i].id) ?? 0 })),
+    ),
   }));
   const diagramRouteIds = new Set(routes.filter((r) => r.rank <= diagramCutRank).map((r) => r.id));
 
