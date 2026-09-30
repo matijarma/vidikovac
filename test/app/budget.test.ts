@@ -26,6 +26,8 @@ const GZIP_LEVEL = 6;
 /** The two screens a lightweight device loads: the public screen and the phone. */
 const ENTRIES = ['kiosk/index.html', 'd/index.html'] as const;
 const LIGHTWEIGHT_ENTRIES = ['index.html', ...ENTRIES] as const;
+/** Optional map runtime still counted in the full-map budget after the lightweight split. */
+const MAP_RUNTIME_ENTRIES = ['src/motion/integrator.ts', '../shared/motion/network.ts'] as const;
 /** Manifest keys of the chunks the lightweight path must never reference. */
 const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts', 'src/motion/schema-map.ts'] as const;
 const NETWORK_ARTEFACT = 'zet-network.json';
@@ -124,7 +126,7 @@ function print(entry: string, rows: Measured[], total: number): void {
 
 describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', () => {
   it('keeps optional sentence HTTP and presented-view code out of the initial screen graphs', () => {
-    for (const module of ['src/city/sentence-api.ts', 'src/kiosk/paired.ts']) {
+    for (const module of ['src/city/sentence-api.ts', 'src/kiosk/paired.ts', ...MAP_RUNTIME_ENTRIES]) {
       expect(manifest[module]?.isDynamicEntry, module).toBe(true);
       for (const entry of LIGHTWEIGHT_ENTRIES) expect(staticGraph(entry), entry).not.toContain(module);
     }
@@ -195,7 +197,8 @@ describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', (
 describe('full map JavaScript budget, including the separate MapLibre v6 worker', () => {
   for (const entry of ENTRIES) {
     it(`/${entry.replace('index.html', '')} stays under 600 kB compressed when the map opens`, () => {
-      const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts')]);
+      const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts'),
+        ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module))]);
       const files = new Set([...keys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
       // Vite emits ?worker&url as an asset, not as a manifest import.
       // Omitting this file would undercount the real initial map payload.

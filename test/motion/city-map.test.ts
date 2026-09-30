@@ -143,7 +143,10 @@ const QUAKE: MapPoint = { id: 'q1', lon: 14.36, lat: 45.45, title: 'M 1.6' };
 const CLOSURE: MapLine = { id: 'c1', title: 'Grada Vukovara', coordinates: [[15.959, 45.799], [15.957, 45.799]] };
 const NET = decodeNetwork(JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/public/data/zet-network.json'), 'utf8')));
 
-const flush = async (): Promise<void> => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+const flush = async (): Promise<void> => {
+  await vi.dynamicImportSettled();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+};
 /** A layer's live filter: what setFilter last set, else what it was added with. */
 const filterOf = (map: FakeMap, id: string): unknown => map.filters[id] ?? map.layers.find((l) => l.id === id)?.filter;
 type FC = { features: { geometry: { coordinates: [number, number] }; properties: Record<string, unknown> }[] };

@@ -191,6 +191,8 @@ it('reconciles an open phone Karta and refreshes the shared network loader after
     d.session.join();
     d.handle.selectLayer('u-pokretu');
     await flush();
+    await vi.dynamicImportSettled();
+    await flush();
     const index = factory.mock.calls.findIndex(([o]) => o.container.dataset.testid === 'map-canvas');
     expect(index).toBeGreaterThanOrEqual(0);
     const map = factory.mock.results[index].value;

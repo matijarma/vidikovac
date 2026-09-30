@@ -359,11 +359,7 @@ export function decodeNetwork(raw: unknown): GraphNetwork {
 /** The shapes of a route's normal route (Network.routes `main`): what the map
  *  lights and frames for a selected line or vehicle. An artefact without
  *  the column falls back to every shape the route runs. */
-export function mainShapes(net: Pick<Network, 'routes'>, routeId: string): number[] {
-  const route = net.routes.get(routeId);
-  if (!route) return [];
-  return route.main && route.main.length > 0 ? route.main : route.shapes;
-}
+export { mainShapes } from './network-client';
 
 const NETWORK_URL = '/data/zet-network.json';
 

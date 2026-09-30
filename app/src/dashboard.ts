@@ -37,7 +37,7 @@ import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay, RESYNC_GAP_MS } from './motion/loop';
 import { watchPageReturn } from './core/page-return';
-import { loadNetwork, type Network } from '../../shared/motion/network';
+import { loadNetwork, type Network } from '../../shared/motion/network-client';
 import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
 import { createRotation, slotProgress, type Rotation } from './rotation';

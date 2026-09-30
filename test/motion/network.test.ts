@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { toPlane } from '../../shared/motion/geo';
 import { cumulative } from '../../shared/motion/polyline';
 import { decodeNetwork, loadNetwork, mainShapes, NetworkVersionError } from '../../shared/motion/network';
+import { loadNetwork as loadClientNetwork } from '../../shared/motion/network-client';
 
 import { B1_LONLAT, E0_LONLAT, E1_LONLAT, rawArtefactV3, unitLonLat } from './network-fixture';
 
@@ -22,6 +23,14 @@ describe('mainShapes: a route\'s normal route', () => {
 });
 
 describe('decodeNetwork', () => {
+  it('keeps the lazy client loader silent in lightweight mode and preserves decode and failure behavior', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(rawArtefactV3())));
+    expect(await loadClientNetwork(fetcher, true)).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect((await loadClientNetwork(fetcher))?.feedVersion).toBe('000123');
+    expect(await loadClientNetwork(async () => { throw new Error('offline'); })).toBeNull();
+  });
+
   it('decodes version 3 into the superset the client reads: edges, tram shapes rebuilt from them, bus polylines, paths with offsets and their served stops, terminal stops, the graph hash, stops at exact arcs on every shape through their edges, nextStop; rejects a version 2 artefact; loads only outside lightweight mode', async () => {
     const net = decodeNetwork(rawArtefactV3());
     expect(net.version).toBe(3);

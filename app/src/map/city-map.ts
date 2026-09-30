@@ -20,10 +20,10 @@ import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import type { VisibleMarks } from './vehicle-features';
-import { createIntegrator, type Drawn, type Fix, type Model } from '../motion/integrator';
+import type { Drawn, Fix, Model } from '../motion/integrator';
 import { pillLabel } from '../motion/pill-label';
 import { MAP_PRESENTATIONS, type MapPresentation } from './presentation';
-import { loadNetwork, mainShapes, type GraphNetwork, type Network } from '../../../shared/motion/network';
+import { loadNetwork, mainShapes, type GraphNetwork, type Network } from '../../../shared/motion/network-client';
 import type { MotionMetadata } from '../../../shared/motion/wire';
 import { ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { vehicleKind, type VehicleKind } from './vehicle-mark';
@@ -789,6 +789,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   let networkRequest: Promise<void> | null = null;
   let networkBlocked = false;
   let model: Model | null = null;
+  let createIntegrator: ((network: Network | null) => Model) | null = null;
   let lib: MaplibreModule | null = null;
   let map: MapApi | null = null;
   /** True once the overlays sit on the style: the point from which state changes reach the map directly. */
@@ -1153,7 +1154,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
    *  it; the stops, the network, the places and the city's own marks are
    *  other sources and stay. The census follows at the next idle. */
   function clearVehicles(): void {
-    if (model) model = createIntegrator(net);
+    if (model) model = createIntegrator?.(net) ?? null;
     lastDrawn = [];
     lastPushedSignature = '';
     const m = map;
@@ -1293,7 +1294,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   function installNetwork(network: Network | null): void {
     net = network;
     graph = network && 'paths' in network ? network as GraphNetwork : null;
-    model = createIntegrator(net);
+    model = createIntegrator?.(net) ?? null;
     lastDrawn = [];
     lastPushedSignature = '';
     nextPushAt = -Infinity;
@@ -1360,12 +1361,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // degrades to the same honest state (free-plane motion), not a crash.
     // The library failing to load (an old browser, a blocked chunk) leaves
     // the model and the network for the lists: the page's plain alternative.
-    const [loaded, network] = await Promise.all([
+    const [loaded, network, factory] = await Promise.all([
       loadMaplibre().then((m) => m, () => null),
       options.loadNetwork ? options.loadNetwork().catch(() => null) : Promise.resolve(null),
+      import('../motion/integrator').then((m) => m.createIntegrator, () => null),
     ]);
     if (disposed) return;
+    // Load the model independently of MapLibre: a missing WebGL renderer still leaves motion for the plain lists.
+    createIntegrator = factory;
     installNetwork(network);
+    if (!factory) {
+      setStatus('unavailable');
+      return;
+    }
     const fixes = pointsToFixes(points);
     if (still) stillAt = now();
     if (acceptNetwork(fixes)) model!.update(fixes, now());

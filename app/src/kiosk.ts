@@ -38,7 +38,7 @@ import { withNetwork, withTimers, type MapFactory, type MapHighlight } from './m
 import { createMapSlots } from './map/map-slots';
 import { continuePoll, nextPollDelay, RESYNC_GAP_MS } from './motion/loop';
 import { watchPageReturn } from './core/page-return';
-import { loadNetwork, type Network } from '../../shared/motion/network';
+import { loadNetwork, type Network } from '../../shared/motion/network-client';
 import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../shared/city/frame';
 import { createRotation, slotProgress, type Rotation } from './rotation';
 import { createSessionClient, type SessionClient } from './session';
