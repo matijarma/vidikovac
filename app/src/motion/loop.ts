@@ -16,6 +16,19 @@
 // that waste -- the same "redundant traffic" objection Matija has raised
 // before. kiosk.ts's teaser poll and dashboard.ts's session poll both run
 // on it as a one-shot chain re-armed after every fetch.
+//
+// One thing the loop does watch for itself is the page coming back (lane
+// tab-return, 30 Sep): a hidden tab runs no animation frame and a locked
+// phone runs nothing, so the first frame after a return would otherwise ease
+// every mark from where it stood minutes ago, at catch-up speed, for about as
+// long again as the page was away (the owner's "frozen trams"). A gap over
+// RESYNC_GAP_MS between two frames, a return to view after that long, and a
+// start() that long after the last drawn frame all hand `draw` its second
+// argument, `resync`: this frame re-seeds the motion from the evidence
+// instead of stepping it. Calm motion is a rule for steps within a live
+// session; a gap is not a step.
+
+import { watchPageReturn, type PageLifecycle } from '../core/page-return';
 
 export interface LoopDeps {
   /** Defaults to `requestAnimationFrame`. */
@@ -35,6 +48,8 @@ export interface LoopDeps {
   clearTimer?: (handle: unknown) => void;
   reducedMotion?: boolean;
   lightweight?: boolean;
+  /** Where the page's leaving and returning are heard (core/page-return.ts); the page's own document by default. */
+  lifecycle?: PageLifecycle;
 }
 
 export interface Loop {
@@ -79,8 +94,15 @@ const PARK_AFTER_UNCHANGED = 8;
  *  is not woken sixty times a second to decide, fifty-nine times, to do
  *  nothing. */
 export const REDUCED_MOTION_INTERVAL_MS = 1000;
+/** A gap longer than this between two frames of a running loop is the page having been away (a hidden tab, a locked
+ *  phone, a sleeping laptop), never a slow frame: the next drawn frame is a resync, and it is not counted against the
+ *  frame rate either. Five times the reduced-motion tick and several times the slowest frame a loaded wall has been
+ *  measured to draw (about a second, SLOW_GAP_MS above), so neither path ever resyncs by itself; and short enough
+ *  that a mark left behind by the gap is still a glide's worth of metres, not a crawl. */
+export const RESYNC_GAP_MS = 5_000;
 
-export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}): Loop {
+/** `resync` is true on the one frame after the page was away (RESYNC_GAP_MS): re-seed, do not step. */
+export function createLoop(draw: (now: number, resync: boolean) => boolean, deps: LoopDeps = {}): Loop {
   const rafFn = deps.raf ?? ((cb: (t: number) => void) => requestAnimationFrame(cb));
   const cancelFn = deps.cancel ?? ((h: number) => cancelAnimationFrame(h));
   const clockNow = deps.now ?? (() => Date.now());
@@ -106,6 +128,29 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
   // last tick actually drew (null before the first).
   let timer: unknown = null;
   let lastReducedDrawAt: number | null = null;
+
+  // The return (RESYNC_GAP_MS). The last tick of a running, unparked loop (null after a park or a start: a parked
+  // loop waits on purpose), the last drawn frame whatever came after it, and the resync the next drawn frame owes.
+  let lastTickAt: number | null = null;
+  let lastFrameAt: number | null = null;
+  let resyncNext = false;
+  let unwatch: (() => void) | null = null;
+
+  /** Reads the gap since the last tick of a running loop; a long one owes the next drawn frame a resync. */
+  function measureGap(at: number): boolean {
+    const gap = lastTickAt !== null && at - lastTickAt > RESYNC_GAP_MS;
+    lastTickAt = at;
+    if (gap) resyncNext = true;
+    return gap;
+  }
+
+  /** One call of `draw`, handing it the resync owed and settling that debt whatever `draw` does. */
+  function drawFrame(at: number): boolean {
+    const resync = resyncNext;
+    resyncNext = false;
+    lastFrameAt = at;
+    return draw(at, resync);
+  }
 
   function scheduleFull(): void {
     handle = rafFn(onFullFrame);
@@ -133,12 +178,14 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     if (!running || parked) return; // stop()/park raced a callback already in flight
 
     tick++;
+    // A gap over RESYNC_GAP_MS is the page having been away: a resync, and no verdict on the device's pace.
+    const away = measureGap(clockNow());
     // The gap after the last drawn frame is what that frame cost the device
     // beyond `draw` itself (SLOW_GAP_MS). Read once, on the first tick after
     // it, whether or not this tick draws, so a skipped tick measures too.
     let late = false;
     if (lastDrawnAt !== null) {
-      late = clockNow() - lastDrawnAt > SLOW_GAP_MS * rateDivisor;
+      late = !away && clockNow() - lastDrawnAt > SLOW_GAP_MS * rateDivisor;
       lastDrawnAt = null;
     }
     if (tick % rateDivisor !== 0) {
@@ -151,7 +198,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     lastDrawnAt = before;
     let changed = false;
     try {
-      changed = draw(before);
+      changed = drawFrame(before);
       frameCount++;
     } catch (err) {
       // A throwing `draw` (a bug reacting to a malformed snapshot, say) must
@@ -177,6 +224,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       if (unchangedStreak >= PARK_AFTER_UNCHANGED) {
         parked = true;
         lastDrawnAt = null; // the gap across a park is the park's, not the frame's
+        lastTickAt = null; // and it is no page gone away either
         return; // no scheduleFull(): parked means no further frame is requested
       }
     }
@@ -199,9 +247,10 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     if (!running || parked) return; // stop()/park raced a tick already due
     const now = clockNow();
     lastReducedDrawAt = now;
+    measureGap(now); // a timer held back by a hidden tab owes a resync too
     let changed = false;
     try {
-      changed = draw(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
+      changed = drawFrame(now); // no interpolation: a plain jump to whatever `draw` computes for `now`
       frameCount++;
     } catch (err) {
       // Same reasoning as onFullFrame's catch: an uncaught throw here would
@@ -218,13 +267,14 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       unchangedStreak++;
       if (unchangedStreak >= PARK_AFTER_UNCHANGED) {
         parked = true;
+        lastTickAt = null;
         return;
       }
     }
     scheduleReduced();
   }
 
-  return {
+  const loop: Loop = {
     start() {
       if (running) return; // idempotent: already going
       running = true;
@@ -235,7 +285,18 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       unchangedStreak = 0;
       lastDrawnAt = null;
       lastReducedDrawAt = null;
+      lastTickAt = null;
+      // A loop stopped for longer than a gap (a paused map, a feed that was down) comes back to evidence that moved
+      // on without it: its first frame re-seeds. A first start has nothing drawn to re-seed from.
+      if (lastFrameAt !== null && clockNow() - lastFrameAt > RESYNC_GAP_MS) resyncNext = true;
       frameCount = 0; // frames() is documented as "since the last start()" -- a restart is a fresh count
+      unwatch ??= watchPageReturn({
+        show: (awayMs) => {
+          if (awayMs <= RESYNC_GAP_MS) return;
+          resyncNext = true;
+          loop.nudge(); // a parked loop draws the resync at once; a running one on its next frame
+        },
+      }, { now: clockNow, ...deps.lifecycle });
       if (reduced) scheduleReduced();
       else scheduleFull();
     },
@@ -243,6 +304,8 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
     stop() {
       running = false;
       parked = false;
+      unwatch?.();
+      unwatch = null;
       if (handle !== null) {
         cancelFn(handle);
         handle = null;
@@ -267,6 +330,7 @@ export function createLoop(draw: (now: number) => boolean, deps: LoopDeps = {}):
       return frameCount;
     },
   };
+  return loop;
 }
 
 // --- The tick-aligned poller ---

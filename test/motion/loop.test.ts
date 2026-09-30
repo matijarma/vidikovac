@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { continuePoll, createLoop, nextPollDelay, POLL_FALLBACK_MS } from '../../app/src/motion/loop';
+import { continuePoll, createLoop, nextPollDelay, POLL_FALLBACK_MS, RESYNC_GAP_MS } from '../../app/src/motion/loop';
 
 /**
  * A raf/cancel double the loop can be driven by hand: `fire()` invokes
@@ -313,6 +313,145 @@ describe('createLoop', () => {
     expect(errorSpy).toHaveBeenCalledTimes(1);
 
     errorSpy.mockRestore();
+  });
+});
+
+/** A page's document and window the loop listens to: `leave()` and `come(back)` flip visibility and dispatch the event. */
+function fakePage(now: () => number) {
+  const docListeners = new Set<() => void>();
+  const winListeners = new Set<(event: { persisted?: boolean }) => void>();
+  const doc = {
+    visibilityState: 'visible',
+    addEventListener: (_type: string, fn: () => void) => { docListeners.add(fn); },
+    removeEventListener: (_type: string, fn: () => void) => { docListeners.delete(fn); },
+  };
+  const win = {
+    addEventListener: (_type: string, fn: (event: { persisted?: boolean }) => void) => { winListeners.add(fn); },
+    removeEventListener: (_type: string, fn: (event: { persisted?: boolean }) => void) => { winListeners.delete(fn); },
+  };
+  const flip = (state: 'visible' | 'hidden') => { doc.visibilityState = state; for (const fn of [...docListeners]) fn(); };
+  return {
+    lifecycle: { doc, win, now },
+    leave: () => flip('hidden'),
+    come: () => flip('visible'),
+    restore: () => { for (const fn of [...winListeners]) fn({ persisted: true }); },
+    listening: () => docListeners.size + winListeners.size,
+  };
+}
+
+describe('the page coming back (lane tab-return: a hidden tab, a locked phone)', () => {
+  it('draws the first frame after a gap of five minutes as a resync, once, and does not count the gap against the pace', () => {
+    const { raf, cancel, fire } = fakeRaf();
+    let t = 0;
+    const draw = vi.fn((_now: number, _resync: boolean) => true);
+    const loop = createLoop(draw, { raf, cancel, now: () => t, lifecycle: { doc: null, win: null } });
+    loop.start();
+    for (let i = 0; i < 3; i++) { fire(); t += 16; }
+    expect(draw.mock.calls.map((call) => call[1])).toEqual([false, false, false]);
+    t += 5 * 60_000; // no frame at all while the tab was hidden
+    fire();
+    expect(draw.mock.calls.at(-1)).toEqual([t, true]);
+    for (let i = 0; i < 4; i++) { t += 16; fire(); }
+    // Once: the frames after it step again, and every one of them draws (the gap halved nothing).
+    expect(draw.mock.calls.slice(-4).map((call) => call[1])).toEqual([false, false, false, false]);
+    expect(draw).toHaveBeenCalledTimes(8);
+  });
+
+  it(`keeps a gap up to ${RESYNC_GAP_MS} ms a step: a slow frame is not a return`, () => {
+    const { raf, cancel, fire } = fakeRaf();
+    let t = 0;
+    const draw = vi.fn((_now: number, _resync: boolean) => true);
+    const loop = createLoop(draw, { raf, cancel, now: () => t, lifecycle: { doc: null, win: null } });
+    loop.start();
+    fire();
+    t += RESYNC_GAP_MS;
+    fire();
+    expect(draw.mock.calls.map((call) => call[1])).toEqual([false, false]);
+  });
+
+  it('wakes a parked loop with a resync when the page is seen again after more than the gap, and not after a glance away', () => {
+    const { raf, cancel, fire, hasScheduled } = fakeRaf();
+    let t = 0;
+    const page = fakePage(() => t);
+    const draw = vi.fn((_now: number, _resync: boolean) => false);
+    const loop = createLoop(draw, { raf, cancel, now: () => t, lifecycle: page.lifecycle });
+    loop.start();
+    for (let i = 0; i < 8; i++) { fire(); t += 16; }
+    expect(hasScheduled()).toBe(false); // parked: nothing moved
+    page.leave();
+    t += 3_000;
+    page.come(); // a glance at another tab: nothing to re-seed
+    expect(hasScheduled()).toBe(false);
+    page.leave();
+    t += 90_000;
+    page.come();
+    expect(hasScheduled()).toBe(true); // the resync is drawn at once, parked or not
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(true);
+    page.restore(); // a page back from the back-forward cache was away for as long as nobody knows
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(true);
+  });
+
+  it('stops listening for the page when stopped, and listens once however often it is started', () => {
+    const { raf, cancel } = fakeRaf();
+    const page = fakePage(() => 0);
+    const loop = createLoop(() => true, { raf, cancel, now: () => 0, lifecycle: page.lifecycle });
+    loop.start();
+    loop.start();
+    expect(page.listening()).toBe(2); // visibilitychange and pageshow
+    loop.stop();
+    expect(page.listening()).toBe(0);
+  });
+
+  it('never resyncs across a park: the frame after a nudge ten minutes on is a step (calm motion within a live session)', () => {
+    const { raf, cancel, fire } = fakeRaf();
+    let t = 0;
+    const draw = vi.fn((_now: number, _resync: boolean) => false);
+    const loop = createLoop(draw, { raf, cancel, now: () => t, lifecycle: { doc: null, win: null } });
+    loop.start();
+    for (let i = 0; i < 8; i++) { fire(); t += 16; }
+    t += 600_000;
+    loop.nudge(); // a new snapshot for a city that stood still
+    fire();
+    expect(draw.mock.calls.at(-1)).toEqual([t, false]);
+  });
+
+  it('resyncs the first frame of a start long after the last drawn frame (a paused map), never a first start', () => {
+    const { raf, cancel, fire } = fakeRaf();
+    let t = 0;
+    const draw = vi.fn((_now: number, _resync: boolean) => true);
+    const loop = createLoop(draw, { raf, cancel, now: () => t, lifecycle: { doc: null, win: null } });
+    loop.start();
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(false);
+    loop.stop();
+    t += 1_000;
+    loop.start();
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(false); // a second's pause is still the same session on screen
+    loop.stop();
+    t += 120_000;
+    loop.start();
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(true);
+    t += 16;
+    fire();
+    expect(draw.mock.calls.at(-1)?.[1]).toBe(false);
+  });
+
+  it('resyncs the once-a-second tick a hidden tab held back, on the reduced-motion path too', () => {
+    const { raf, cancel } = fakeRaf();
+    const { setTimer, clearTimer, advance, clock } = fakeTimers();
+    const draw = vi.fn((_now: number, _resync: boolean) => true);
+    const loop = createLoop(draw, { raf, cancel, now: clock, setTimer, clearTimer, reducedMotion: true, lifecycle: { doc: null, win: null } });
+    loop.start();
+    advance(0);
+    advance(1_000);
+    advance(62_000); // an intensively throttled background tab: the tick came a minute late
+    advance(63_000);
+    expect(draw.mock.calls.map((call) => call[1])).toEqual([false, false, true, false]);
+    expect(raf).not.toHaveBeenCalled();
   });
 });
 
