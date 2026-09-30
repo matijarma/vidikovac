@@ -190,7 +190,10 @@ class FakeControl { constructor(public readonly options: Record<string, unknown>
 const lib = { ...basemap, ...overlays, ...nameCensus, ...mapPointer, Map: FakeMap, AttributionControl: FakeControl, NavigationControl: FakeControl, ScaleControl: FakeControl, LngLatBounds: class {} };
 const CLOSURE: MapLine = { id: 'c1', title: 'Grada Vukovara', coordinates: [[15.959, 45.799], [15.957, 45.799]] };
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.977, lat: 45.813, routes: ['6', '11'] };
-const flush = async (): Promise<void> => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
+const flush = async (): Promise<void> => {
+  await vi.dynamicImportSettled();
+  for (let i = 0; i < 8; i += 1) await Promise.resolve();
+};
 
 async function stageMap(extra: Partial<CityMapOptions> = {}, box?: { width: number; height: number }) {
   const container = document.createElement('div');
