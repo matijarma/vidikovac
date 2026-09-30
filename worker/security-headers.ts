@@ -31,10 +31,12 @@
 // THE PAGE POLICY (/hitno, /open/): server-rendered, zero JS, one inline
 // <style>, no fetch of any kind, so `default-src 'none'` holds.
 // THE STATS POLICY adds noindex and no-store: the page sits behind Access.
-// THE ONE FRAMEABLE PAGE: /statistika/, the public report, is served with the
+// THE FRAMEABLE PAGES: /statistika/, the public report, is served with the
 // app policy above except `frame-ancestors 'self'` and X-Frame-Options
 // SAMEORIGIN (worker/routes/statistika.ts allowSameOriginFrame), so /prijava/
-// can open it in a dialog. Every other page stays 'none' / DENY.
+// can open it in a dialog; /kiosk/, /d/, /s/ (the same way, worker/routes/dev.ts)
+// and /hitno (HITNO_SECURITY_HEADERS) likewise, so the /dev/ grid can show them
+// side by side. Every other page stays 'none' / DENY.
 // THE DATA POLICY (/open/*.json, .geojson): nothing executes, nothing frames.
 
 export const TILE_HOST = 'https://tile.openstreetmap.org';
@@ -86,6 +88,19 @@ export const PAGE_SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'X-Frame-Options': 'DENY',
   'Permissions-Policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=(), browsing-topics=()',
 };
+
+/** A header set that lets a page of this origin frame the page: frame-ancestors 'self', X-Frame-Options SAMEORIGIN. */
+export function sameOriginFramed(set: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  const csp = set['Content-Security-Policy'];
+  return {
+    ...set,
+    ...(csp === undefined ? {} : { 'Content-Security-Policy': csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'") }),
+    'X-Frame-Options': 'SAMEORIGIN',
+  };
+}
+
+/** /hitno: the page set, frameable by this origin (the /dev/ grid, worker/routes/dev.ts). /open/ keeps PAGE_SECURITY_HEADERS. */
+export const HITNO_SECURITY_HEADERS: Readonly<Record<string, string>> = sameOriginFramed(PAGE_SECURITY_HEADERS);
 
 /** /open/*.json and .geojson. CORS is set by the route, not here. */
 export const DATA_SECURITY_HEADERS: Readonly<Record<string, string>> = {

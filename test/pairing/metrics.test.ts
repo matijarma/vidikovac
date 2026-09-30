@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import { EXPORT_KINDS, LAYERS, TWIN_TICK_DIMS } from '../../worker/protocol';
-import { METRIC_EVENTS, isMetricEvent, recordMetric, zagrebDayHour } from '../../worker/metrics';
+import { METRIC_EVENTS, isMetricEvent, metricScope, recordMetric, zagrebDayHour } from '../../worker/metrics';
 
 describe('metric vocabulary', () => {
   it('lists every server and client event exactly once', () => {
@@ -87,5 +87,17 @@ describe('recordMetric', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+});
+
+describe('metricScope: where a screen\'s person-events are counted', () => {
+  it('a venue screen under its own names, a temporary one under evaluation, a DEV screen nowhere (worker/routes/dev.ts)', () => {
+    expect(metricScope({ kind: 'venue' })).toBe('venue');
+    expect(metricScope(undefined)).toBe('venue');
+    expect(metricScope(null)).toBe('venue');
+    expect(metricScope({ kind: 'temporary' })).toBe('evaluation');
+    // A DEV screen is a temporary screen by kind; the flag wins, so it never lands under evaluation either.
+    expect(metricScope({ kind: 'temporary', dev: true })).toBe('dev');
+    expect(metricScope({ kind: 'venue', dev: true })).toBe('dev');
   });
 });

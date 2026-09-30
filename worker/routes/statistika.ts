@@ -1,10 +1,10 @@
 // /statistika/ and /api/statistika: the public report over the counters.
 //
 // The page is a static Vite entry (app/statistika/index.html) served from the
-// asset store; it passes through here only so it can be the one page another
-// page of this site may frame (/prijava/ opens it in a dialog): its CSP says
-// `frame-ancestors 'self'` and X-Frame-Options SAMEORIGIN, where every other
-// page says 'none' and DENY.
+// asset store; it passes through here only so another page of this site may
+// frame it (/prijava/ opens it in a dialog): its CSP says `frame-ancestors
+// 'self'` and X-Frame-Options SAMEORIGIN, where every other page, but the four
+// the /dev/ grid frames (worker/routes/dev.ts), says 'none' and DENY.
 //
 // The JSON is public, rate-limited per IP on RL_OPEN like the other open
 // routes, and edge-cached for five minutes per window, so a busy day costs the
@@ -59,7 +59,7 @@ async function defaultLoadLive(env: Env): Promise<LiveTables | null> {
   }
 }
 
-/** The one page this site lets itself frame: CSP frame-ancestors 'self', X-Frame-Options SAMEORIGIN. */
+/** A page this site lets itself frame (this one; /kiosk/, /d/ and /s/ in worker/routes/dev.ts): CSP frame-ancestors 'self', X-Frame-Options SAMEORIGIN. */
 export function allowSameOriginFrame(response: Response): Response {
   const out = new Response(response.body, response);
   const csp = out.headers.get('content-security-policy');

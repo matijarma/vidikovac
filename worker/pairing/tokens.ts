@@ -126,7 +126,11 @@ export function randomBytes(n: number): Uint8Array {
 /** `bytes` random bytes as Crockford base32 with full 5-bit packing (no bias, no entropy loss). */
 export function randomId(bytes: number): string {
   if (!Number.isInteger(bytes) || bytes <= 0) throw new Error('randomId: bytes must be a positive integer');
-  const data = randomBytes(bytes);
+  return crockford(randomBytes(bytes));
+}
+
+/** Bytes as Crockford base32 with full 5-bit packing: randomId's alphabet, for ids derived rather than drawn (worker/routes/dev.ts). */
+export function crockford(data: Uint8Array): string {
   let out = '';
   let buffer = 0;
   let bits = 0;

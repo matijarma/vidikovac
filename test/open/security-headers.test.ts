@@ -6,9 +6,11 @@ import {
   APP_SECURITY_HEADERS,
   withoutEdgeTransforms,
   DATA_SECURITY_HEADERS,
+  HITNO_SECURITY_HEADERS,
   PAGE_SECURITY_HEADERS,
   STATS_SECURITY_HEADERS,
   TILE_HOST,
+  sameOriginFramed,
 } from '../../worker/security-headers';
 
 /** Parses the Workers static-assets `_headers` format: a path rule line, then indented `Name: value` lines. */
@@ -71,6 +73,17 @@ describe('security header policy', () => {
     expect(STATS_SECURITY_HEADERS['X-Robots-Tag']).toBe('noindex');
     expect(STATS_SECURITY_HEADERS['Cache-Control']).toBe('no-store');
     expect(PAGE_SECURITY_HEADERS['Cache-Control']).toBeUndefined(); // /hitno keeps its own s-maxage
+  });
+
+  it('/hitno keeps the page set but for its own origin as a frame ancestor (the DEV grid); nothing else widens', () => {
+    expect(HITNO_SECURITY_HEADERS).toEqual({
+      ...PAGE_SECURITY_HEADERS,
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      'X-Frame-Options': 'SAMEORIGIN',
+    });
+    expect(PAGE_SECURITY_HEADERS['X-Frame-Options']).toBe('DENY');
+    expect(sameOriginFramed(APP_SECURITY_HEADERS)['Content-Security-Policy']).toBe(APP_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"));
+    expect(sameOriginFramed(APP_SECURITY_HEADERS)['X-Frame-Options']).toBe('SAMEORIGIN');
   });
 
   it('keeps data responses framing-proof and sniff-proof without touching CORS', () => {

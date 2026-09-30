@@ -21,7 +21,7 @@ import type { Env } from './env';
 import type { MetricsDO } from './metrics-do';
 import { logError } from './log';
 import { CLIENT_EVENTS, SERVER_EVENTS } from './protocol';
-import type { ClientEvent, ServerEvent } from './protocol';
+import type { ClientEvent, ScreenMetadata, ServerEvent } from './protocol';
 
 import { METRICS_DO_NAME } from './metrics-do-name';
 export { METRICS_DO_NAME };
@@ -44,6 +44,20 @@ const ZAGREB = new Intl.DateTimeFormat('en-CA', {
   hour: '2-digit',
   hourCycle: 'h23',
 });
+
+/**
+ * Where the person-events of a screen, and of every session opened on it, are counted: under
+ * their own names for a venue screen (the City's set, grad.csv, /statistika/), under `evaluation`
+ * for a temporary one, and nowhere at all for a DEV screen (worker/routes/dev.ts), because
+ * /privatnost/ and /statistika/ describe real use. The Durable Objects and the scan route ask
+ * this before every write, so a DEV event never reaches MetricsDO.
+ */
+export type MetricScope = 'venue' | 'evaluation' | 'dev';
+
+export function metricScope(screen: Pick<ScreenMetadata, 'kind' | 'dev'> | null | undefined): MetricScope {
+  if (screen?.dev === true) return 'dev';
+  return screen?.kind === 'temporary' ? 'evaluation' : 'venue';
+}
 
 /** Calendar day and hour in Europe/Zagreb, the grain the City dataset is counted at. */
 export function zagrebDayHour(at: Date): { day: string; hour: number } {

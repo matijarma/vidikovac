@@ -8,7 +8,7 @@ import type { Env, RateLimiter } from '../env';
 import { clientIp, json } from '../http';
 import type { RouteHandler } from '../index';
 import { logError } from '../log';
-import { recordMetric } from '../metrics';
+import { metricScope, recordMetric } from '../metrics';
 import { normalizeCode } from '../pairing/codes';
 import { SCAN_MESSAGES_HR, type ScanError, type ScanFail, type ScanOk, type ScanRequest } from '../protocol';
 
@@ -141,12 +141,16 @@ async function handleScan(request: Request, env: Env, _ctx: ExecutionContext, ur
       ? await beaconStub(env, owner.ownerId).redeem(code)
       : await roomStub(env, owner.ownerId).redeemPeer(code);
   if (!result.ok) {
-    // Resolve provenance only on failure; no extra RPC on successful pairing.
-    const evaluation = owner.kind === 'kiosk'
-      ? (await beaconStub(env, owner.ownerId).screenMetadata()).kind === 'temporary'
-      : await roomStub(env, owner.ownerId).isEvaluation();
-    recordMetric(env, evaluation ? 'evaluation' : 'scan_fail', evaluation ? 'scan_fail' : result.error,
-      evaluation ? result.error : owner.kind);
+    // Resolve provenance only on failure; no extra RPC on successful pairing. A DEV
+    // screen's failures are counted nowhere (worker/metrics.ts metricScope).
+    const scope = owner.kind === 'kiosk'
+      ? metricScope(await beaconStub(env, owner.ownerId).screenMetadata())
+      : await roomStub(env, owner.ownerId).scope();
+    const evaluation = scope === 'evaluation';
+    if (scope !== 'dev') {
+      recordMetric(env, evaluation ? 'evaluation' : 'scan_fail', evaluation ? 'scan_fail' : result.error,
+        evaluation ? result.error : owner.kind);
+    }
     return scanFail(result.error);
   }
   const ok: ScanOk = result.scan;

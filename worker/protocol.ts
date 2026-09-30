@@ -57,6 +57,11 @@ export interface ScreenMetadata {
   placeSet?: boolean;
   /** How many tram stops around the place the wall frames (Kadar 4 / 6 / 8; shared/city/frame.ts). */
   frame?: FrameStops;
+  /**
+   * A DEV screen (worker/routes/dev.ts): opened with ?DEV, never paired with a code, counted
+   * nowhere. Absent on every other screen, so their records and frames keep their shape.
+   */
+  dev?: true;
 }
 
 /** Capabilities a kiosk socket may announce in its 'auth' frame; the DO keeps only these. */

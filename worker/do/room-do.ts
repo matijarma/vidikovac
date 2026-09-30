@@ -17,7 +17,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { codeRotateSeconds, peerMinutes } from '../config';
 import type { Env } from '../env';
 import { logError } from '../log';
-import { recordMetric } from '../metrics';
+import { metricScope, recordMetric, type MetricScope } from '../metrics';
 import { alignSlotStart, codeWindow, mintBatch } from '../pairing/codes';
 import { withDistrict } from '../pairing/stops';
 import { randomId, signDataToken } from '../pairing/tokens';
@@ -57,6 +57,14 @@ const TICKET_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 export const EVENTS_PER_SOCKET_MAX = 60;
 export const WARN_60_MS = 60_000;
 export const WARN_20_MS = 20_000;
+/**
+ * DEV (worker/routes/dev.ts): a session on a DEV screen lasts a day, renewed on every join and
+ * resume, and renewed by the room itself while a socket still holds it (alarm below), so the
+ * session-end card never shows in DEV. A room nobody holds runs out like any other.
+ */
+export const DEV_SESSION_MS = 24 * 60 * 60_000;
+/** How long before a DEV session's end the room renews it for the sockets still holding it. */
+export const DEV_RENEW_MS = 5 * 60_000;
 
 const PARAMS_MAX_KEYS = 8;
 const PARAMS_MAX_CHARS = 64;
@@ -266,10 +274,15 @@ export class RoomDO extends DurableObject<Env> {
     return parsed.stop ? { ...parsed, stop: withDistrict(parsed.stop) } : parsed;
   }
 
-  isEvaluation(): boolean { return this.screenMetadata()?.kind === 'temporary'; }
+  /** Where this room's events are counted (worker/metrics.ts metricScope): a DEV room's nowhere. */
+  scope(): MetricScope { return metricScope(this.screenMetadata()); }
+
+  private isDev(): boolean { return this.scope() === 'dev'; }
 
   private metric(event: ServerEvent | ClientEvent, dim1 = '', dim2 = ''): void {
-    if (this.screenMetadata()?.kind === 'temporary') {
+    const scope = this.scope();
+    if (scope === 'dev') return;
+    if (scope === 'evaluation') {
       recordMetric(this.env, 'evaluation', event, dim1);
     } else {
       recordMetric(this.env, event, dim1, dim2);
@@ -336,7 +349,8 @@ export class RoomDO extends DurableObject<Env> {
         );
       }
     });
-    await this.ctx.storage.setAlarm(Math.max(input.expiresAt - WARN_60_MS, this.now() + 1000));
+    // A DEV room's first alarm is its renewal point, not the one-minute warning.
+    await this.ctx.storage.setAlarm(Math.max(input.expiresAt - (input.screen?.dev ? DEV_RENEW_MS : WARN_60_MS), this.now() + 1000));
     return { participants: this.joinedSockets().length };
   }
 
@@ -363,7 +377,8 @@ export class RoomDO extends DurableObject<Env> {
 
     const roomId = randomId(10);
     const ticket = randomId(16);
-    const expiresAt = now + Math.round(peerMinutes(this.env) * 60_000);
+    // A code shared from a DEV session opens a DEV session: its day, not the peer's five minutes.
+    const expiresAt = now + (this.isDev() ? DEV_SESSION_MS : Math.round(peerMinutes(this.env) * 60_000));
     const opened = await roomStub(this.env, roomId).open({
       roomId,
       expiresAt,
@@ -528,6 +543,7 @@ export class RoomDO extends DurableObject<Env> {
       participant.role,
       participant.joined_at,
     );
+    if (this.isDev()) await this.renewDev();
     await this.sendJoined(ws, participant, []);
   }
 
@@ -558,7 +574,34 @@ export class RoomDO extends DurableObject<Env> {
         logError('room-replace-close-failed', error);
       }
     }
+    if (this.isDev()) await this.renewDev();
     await this.sendJoined(ws, participant, replaced);
+  }
+
+  /**
+   * DEV: the session's day starts again from now, the alarm moves to the new renewal point, and
+   * the screen's grant to present follows (BeaconDO.renewBinding). Only a live room gets here.
+   */
+  private async renewDev(): Promise<void> {
+    const expiresAt = this.now() + DEV_SESSION_MS;
+    this.setMeta('expiresAt', String(expiresAt));
+    this.setMeta('phase', 'live');
+    await this.ctx.storage.setAlarm(expiresAt - DEV_RENEW_MS);
+    const beaconId = this.meta('beaconId');
+    if (beaconId) {
+      this.ctx.waitUntil(beaconStub(this.env, beaconId).renewBinding(this.meta('roomId')!, expiresAt)
+        .catch((error) => logError('dev-binding-renew-failed', error)));
+    }
+  }
+
+  /** DEV: a fresh 'joined' to a socket that holds the room, so the client carries the renewed expiry and data token. */
+  private async refreshJoined(ws: WebSocket): Promise<void> {
+    const attachment = ws.deserializeAttachment() as RoomAttachment | null;
+    if (attachment === null) return;
+    const participant = this.ctx.storage.sql
+      .exec<ParticipantRow>(`SELECT resume_token, role, joined_at, events FROM participants WHERE resume_token = ?`, attachment.resumeToken)
+      .toArray()[0];
+    if (participant) await this.sendJoined(ws, participant, []);
   }
 
   private async sendJoined(
@@ -723,6 +766,20 @@ export class RoomDO extends DurableObject<Env> {
       return;
     }
     const remaining = this.expiresAt() - this.now();
+    // DEV: a room a socket still holds renews its day instead of running out; one nobody holds
+    // goes on down the ordinary chain below (a join or resume on the way renews it after all).
+    if (this.isDev() && remaining > WARN_60_MS) {
+      if (remaining > DEV_RENEW_MS) {
+        await this.ctx.storage.setAlarm(this.expiresAt() - DEV_RENEW_MS);
+        return;
+      }
+      const held = this.joinedSockets();
+      if (held.length > 0) {
+        await this.renewDev();
+        for (const ws of held) await this.refreshJoined(ws);
+        return;
+      }
+    }
     if (remaining <= 0) {
       await this.closeRoom('expired');
       return;

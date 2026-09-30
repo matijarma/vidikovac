@@ -9,7 +9,7 @@ import type { Env } from '../../worker/env';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import worker from '../../worker/index';
 import { handleOpen } from '../../worker/routes/open';
-import { DATA_SECURITY_HEADERS, PAGE_SECURITY_HEADERS, STATS_SECURITY_HEADERS } from '../../worker/security-headers';
+import { DATA_SECURITY_HEADERS, HITNO_SECURITY_HEADERS, PAGE_SECURITY_HEADERS, STATS_SECURITY_HEADERS } from '../../worker/security-headers';
 
 const testEnv = env as unknown as Env;
 
@@ -46,7 +46,8 @@ describe('Area D through the Worker', () => {
     expect(html).toContain('Crveno upozorenje za obilnu kišu');
     expect(html).toContain('<span class="sev sev-extreme">crveno upozorenje</span>');
     expect(html).toContain('href="tel:112"');
-    for (const [k, v] of Object.entries(PAGE_SECURITY_HEADERS)) expect(response!.headers.get(k)).toBe(v);
+    // The page set, frameable by this origin: /hitno is one of the four pages the DEV grid frames (worker/routes/dev.ts).
+    for (const [k, v] of Object.entries(HITNO_SECURITY_HEADERS)) expect(response!.headers.get(k)).toBe(v);
   });
 
   it('the dispatcher routes /hitno to Area D (405 for POST arrives before any feed call)', async () => {

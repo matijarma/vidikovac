@@ -7,7 +7,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { codeRotateSeconds, sessionMinutes, type NetworkCheck } from '../config';
 import type { Env } from '../env';
 import { logError } from '../log';
-import { recordMetric, zagrebDayHour } from '../metrics';
+import { metricScope, recordMetric, zagrebDayHour } from '../metrics';
 import { DEFAULT_FRAME_STOPS, type FrameStops } from '../../shared/city/frame';
 import { placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { districtOf } from '../feed/geo/districts';
@@ -35,7 +35,7 @@ import {
   type ScreenStop,
 } from '../protocol';
 import { indexStub } from './index-do';
-import { roomStub, type RoomOpenInput } from './room-do';
+import { DEV_SESSION_MS, roomStub, type RoomOpenInput } from './room-do';
 
 export const BEACON_ID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{8}$/;
 // B6's own close codes. Same values as protocol.ts's CLOSE_AUTH_EXHAUSTED /
@@ -98,6 +98,8 @@ export interface BeaconCreateInput {
   place?: ScreenPlace | null;
   /** Kadar 4 / 6 / 8; omitted reads back as DEFAULT_FRAME_STOPS. */
   frame?: FrameStops;
+  /** A DEV screen (worker/routes/dev.ts): sessions without a code, no caps, no counts. */
+  dev?: true;
 }
 
 export type RedeemResult = { ok: true; scan: ScanOk } | { ok: false; error: ScanError };
@@ -214,6 +216,11 @@ export class BeaconDO extends DurableObject<Env> {
     return this.meta('beaconId') !== null;
   }
 
+  /** A DEV screen (worker/routes/dev.ts). */
+  private isDev(): boolean {
+    return this.meta('dev') === '1';
+  }
+
   private isRevoked(): boolean {
     const expiry = Number(this.meta('screenExpiresAt') ?? '0');
     return this.meta('revoked') === '1' || (expiry > 0 && this.now() >= expiry);
@@ -241,6 +248,7 @@ export class BeaconDO extends DurableObject<Env> {
       place,
       placeSet,
       frame: parseFrame(Number(this.meta('frame'))) ?? DEFAULT_FRAME_STOPS,
+      ...(this.isDev() ? { dev: true as const } : {}),
     };
   }
 
@@ -422,6 +430,7 @@ export class BeaconDO extends DurableObject<Env> {
       !SECRET_SHAPE.test(input.secret)
       || (input.kind !== undefined && input.kind !== 'temporary' && input.kind !== 'venue')
       || (input.kind === 'temporary' && (!Number.isFinite(input.screenExpiresAt) || input.screenExpiresAt! <= this.now()))
+      || (input.dev !== undefined && input.dev !== true)
     ) {
       throw new Error('beacon-create-invalid');
     }
@@ -442,6 +451,7 @@ export class BeaconDO extends DurableObject<Env> {
       // way a record from before place-v2 is (screenMetadata()).
       if (input.place !== undefined) this.setMeta('place', input.place ? JSON.stringify(canonicalPlace(input.place)) : '');
       if (input.frame !== undefined) this.setMeta('frame', String(input.frame));
+      if (input.dev) this.setMeta('dev', '1');
     });
     if (input.screenExpiresAt) await this.ctx.storage.setAlarm(input.screenExpiresAt);
     return { created: true };
@@ -596,8 +606,10 @@ export class BeaconDO extends DurableObject<Env> {
     await this.sendBatch(ws);
     if (presentationVersion === 1) {
       // A provisioned screen is a single physical display. A reload replaces
-      // the old connection, preventing acknowledgements from a ghost tab.
-      for (const previous of this.authenticatedSockets()) {
+      // the old connection, preventing acknowledgements from a ghost tab. A
+      // DEV screen is shown in as many tabs as its builders open (the /dev/
+      // grid and a wall beside it), so none replaces another.
+      for (const previous of this.isDev() ? [] : this.authenticatedSockets()) {
         if (previous === ws) continue;
         this.socketsGone.add(previous);
         try { previous.close(4004, 'screen-replaced'); } catch { /* already closed */ }
@@ -631,7 +643,9 @@ export class BeaconDO extends DurableObject<Env> {
     const today = zagrebDayHour(new Date(this.now())).day;
     if (this.meta('lastOnlineDay') === today) return;
     this.setMeta('lastOnlineDay', today);
-    if (this.screenMetadata().kind === 'temporary') {
+    const scope = metricScope(this.screenMetadata());
+    if (scope === 'dev') return;
+    if (scope === 'evaluation') {
       void recordMetric(this.env, 'evaluation', 'kiosk_online', this.meta('area') ?? '');
     } else {
       void recordMetric(this.env, 'kiosk_online', this.meta('area') ?? '');
@@ -780,7 +794,8 @@ export class BeaconDO extends DurableObject<Env> {
     const now = this.now();
     if (!this.exists()) return { ok: false, error: 'code-unknown' };
     if (this.isRevoked()) return { ok: false, error: 'revoked' };
-    const slowUntil = Number(this.meta('slowUntil') ?? '0');
+    // DEV: no per-screen slow-down (worker/routes/dev.ts); the Worker's own rate limits still stand.
+    const slowUntil = this.isDev() ? 0 : Number(this.meta('slowUntil') ?? '0');
     if (slowUntil > now) return { ok: false, error: 'slow-down' };
 
     const row = this.ctx.storage.sql.exec<CodeRow>(`SELECT * FROM codes WHERE code = ?`, code).toArray()[0];
@@ -788,14 +803,44 @@ export class BeaconDO extends DurableObject<Env> {
     if (row.used === 1) return this.fail(now, 'code-used');
     if (codeWindow({ slotStart: row.slot_start, slotEnd: row.slot_end }, now) !== 'open') return this.fail(now, 'code-expired');
 
-    const kioskSockets = this.authenticatedSockets();
-    if (kioskSockets.length === 0) return this.fail(now, 'screen-offline');
+    if (this.authenticatedSockets().length === 0) return this.fail(now, 'screen-offline');
 
     // Flip the code atomically; a concurrent redeem of the same code sees used = 1.
     const flipped = this.ctx.storage.sql.exec(`UPDATE codes SET used = 1 WHERE code = ? AND used = 0`, code).rowsWritten;
     if (flipped === 0) return this.fail(now, 'code-used');
+    return await this.grant(now);
+  }
 
-    const expiresAt = now + Math.round(sessionMinutes(this.env) * 60_000);
+  /**
+   * DEV (worker/routes/dev.ts): a session on this DEV screen without a code. It opens whether
+   * or not a wall is showing the screen; the phone's Zaslon control says which.
+   */
+  async devSession(): Promise<RedeemResult> {
+    if (!this.exists() || !this.isDev()) return { ok: false, error: 'code-unknown' };
+    if (this.isRevoked()) return { ok: false, error: 'revoked' };
+    return await this.grant(this.now());
+  }
+
+  /**
+   * DEV: a DEV room renewed its day (room-do.ts renewDev), and its grant to present here follows.
+   * A presentation it holds takes the new end under a new revision, which the wall paints and
+   * confirms again, the way it does after a fresh screen connection (handleAuth).
+   */
+  async renewBinding(roomId: string, expiresAt: number): Promise<void> {
+    if (!this.isDev() || !Number.isSafeInteger(expiresAt)) return;
+    this.ctx.storage.sql.exec('UPDATE presentation_rooms SET expires_at = ? WHERE room_id = ?', expiresAt, roomId);
+    const p = this.presentationRecord();
+    if (p.roomId === roomId && p.target) {
+      this.setMeta('presentation', JSON.stringify({ ...p, revision: p.revision + 1, status: 'pending', expiresAt } satisfies StoredPresentation));
+      this.publishPresentation();
+      return;
+    }
+    await this.armPresentationAlarm();
+  }
+
+  /** The room a redeemed code (or a DEV session) opens: both tickets, the grant to present here, the count, the wall told. */
+  private async grant(now: number): Promise<Extract<RedeemResult, { ok: true }>> {
+    const expiresAt = now + (this.isDev() ? DEV_SESSION_MS : Math.round(sessionMinutes(this.env) * 60_000));
     const roomId = randomId(10);
     const scannerTicket = randomId(16);
     const kioskTicket = randomId(16);
@@ -823,7 +868,7 @@ export class BeaconDO extends DurableObject<Env> {
 
     this.countSession(now, areaSlug);
 
-    for (const ws of kioskSockets) {
+    for (const ws of this.authenticatedSockets()) {
       try {
         if ((ws.deserializeAttachment() as AuthedAttachment).presentationVersion === 1) {
           ws.send(frame({ t: 'paired', expiresAt }));
@@ -882,6 +927,8 @@ export class BeaconDO extends DurableObject<Env> {
    * temporary evaluation screen is counted under `evaluation` instead.
    */
   private countSession(now: number, areaSlug: string): void {
+    // DEV: neither capped nor counted (worker/metrics.ts metricScope).
+    if (metricScope(this.screenMetadata()) === 'dev') return;
     const sql = this.ctx.storage.sql;
     const venueType = this.meta('venueType') ?? 'ostalo';
     sql.exec(`DELETE FROM sessions WHERE started_at <= ?`, now - DAY_MS);

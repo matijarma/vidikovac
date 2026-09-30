@@ -6,6 +6,7 @@ import { handleOpen } from '../../worker/routes/open';
 import { handleStats } from '../../worker/routes/stats';
 import {
   DATA_SECURITY_HEADERS,
+  HITNO_SECURITY_HEADERS,
   PAGE_SECURITY_HEADERS,
   STATS_SECURITY_HEADERS,
 } from '../../worker/security-headers';
@@ -35,10 +36,10 @@ function expectHeaders(response: Response, set: Readonly<Record<string, string>>
 }
 
 describe('security headers on Worker responses', () => {
-  it('/hitno carries the page set and keeps its own cache-control', async () => {
+  it('/hitno carries the page set, frameable by its own origin (the DEV grid), and keeps its own cache-control', async () => {
     const response = await open('sec-hitno.test', '/hitno');
     expect(response.status).toBe(200);
-    expectHeaders(response, PAGE_SECURITY_HEADERS);
+    expectHeaders(response, HITNO_SECURITY_HEADERS);
     expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60');
   });
 

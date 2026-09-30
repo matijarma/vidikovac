@@ -2,7 +2,7 @@ import type { Env } from '../env';
 import { handleHitno } from '../hitno/route';
 import type { OpenDeps } from '../open/deps';
 import { handleOpenData } from '../open/route';
-import { securityHeadersFor, withSecurityHeaders } from '../security-headers';
+import { HITNO_SECURITY_HEADERS, PAGE_SECURITY_HEADERS, securityHeadersFor, withSecurityHeaders } from '../security-headers';
 
 /**
  * Open-tier dispatcher: /hitno and /open/* (Task D2). Returns null for any
@@ -19,10 +19,14 @@ export async function handleOpen(
   deps: OpenDeps = {},
 ): Promise<Response | null> {
   let response: Response | null = null;
-  if (url.pathname === '/hitno' || url.pathname === '/hitno/') {
+  const hitno = url.pathname === '/hitno' || url.pathname === '/hitno/';
+  if (hitno) {
     response = await handleHitno(request, env, ctx, url, deps);
   } else if (url.pathname === '/open' || url.pathname.startsWith('/open/')) {
     response = await handleOpenData(request, env, ctx, url, deps);
   }
-  return response === null ? null : withSecurityHeaders(response, securityHeadersFor(response));
+  if (response === null) return null;
+  const set = securityHeadersFor(response);
+  // The /hitno page is one of the four the /dev/ grid frames (worker/routes/dev.ts).
+  return withSecurityHeaders(response, hitno && set === PAGE_SECURITY_HEADERS ? HITNO_SECURITY_HEADERS : set);
 }
