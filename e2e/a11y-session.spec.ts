@@ -5,7 +5,9 @@
 // surface of its own, D9; the desk audits the same body in its aside beside
 // every layer). e2e/a11y.spec.ts sweeps the public pages without a session;
 // this file is the session half the plan adds. Serious and critical violations
-// fail the run; moderate and minor ones are printed for the record.
+// fail the run; moderate and minor ones are printed for the record. Još, the
+// one place of the personal settings (owner, 30 Sep 2026), and the session
+// sheet it opens are audited the same way at both sizes and in both schemes.
 //
 // Then a Tab walk: every element a Tab reaches must lie inside the viewport
 // minus the sticky header and the fixed tab bar, so the focus is never parked
@@ -154,6 +156,31 @@ for (const viewport of SIZES) {
         await openLayer(page, layer);
         await auditSurface(page, `/d/ ${layer} @${viewport.width} (${scheme})`, `layer-${layer}`);
       }
+    });
+  }
+}
+
+for (const viewport of SIZES) {
+  for (const scheme of SCHEMES) {
+    test(`axe /d/ in a session @${viewport.width} (${scheme}): Još with its settings rows and the session sheet have no serious or critical violations, and every Tab stop in Još lies clear of the chrome`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ colorScheme: scheme });
+      await installExperienceFixture(page, await experienceSnapshots());
+      await page.goto(FIXTURE_DASHBOARD);
+      await expect(page.getByTestId('sada-place'), 'Sada must paint from the fixture').toBeVisible();
+      await expect(page.getByTestId('session-label')).toBeVisible();
+
+      await page.locator('[data-testid="status-more"]:visible, [data-testid="tab-more"]:visible').first().click();
+      await expect(page.getByTestId('dir-language'), 'Još lists the settings').toBeVisible();
+      await page.waitForTimeout(400);
+      await auditSurface(page, `/d/ Još @${viewport.width} (${scheme})`, 'layer-directory');
+
+      await page.getByTestId('session-label').click();
+      await expect(page.getByTestId('session-sheet')).toBeVisible();
+      await page.waitForTimeout(400);
+      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      const blocking = results.violations.filter((v) => v.impact && BLOCKING.has(v.impact));
+      expect(blocking.map(describeViolation), `/d/ session sheet @${viewport.width} (${scheme}): no serious or critical violations`).toEqual([]);
     });
   }
 }
