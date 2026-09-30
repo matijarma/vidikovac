@@ -320,14 +320,14 @@ const LINE_LAYOUT_IN_PAGE = (probes: { depLine: string; nearbyRows: string }): L
 test.describe('the departures line (R1)', () => {
   const scene = SCENES.peak1745;
   const read = (page: Page): Promise<LineLayout> => page.evaluate(LINE_LAYOUT_IN_PAGE, { depLine: WALL_PROBES.depLine, nearbyRows: WALL_PROBES.nearbyRows });
-  const artefact = (size: string, line: LineLayout): void => writeArtefact(`departures-line-${size}.json`, {
+  const artefact = (size: string, line: LineLayout): void => { writeArtefact(`departures-line-${size}.json`, {
     height: line.height, cellWidths: line.cells.map((c) => Math.round(c.width * 10) / 10),
     headsigns: line.cells.map((c) => ({ cell: c.cell, state: c.headsignState ?? 'shown', text: c.headsign, lines: c.headsignLines })),
     // The box's time form (0.5 item 3): a live cell printing a clock means the box took the clock form.
     liveTimes: line.cells.filter((c) => c.live).map((c) => c.timeText),
     clocks: line.cells.some((c) => c.live && CLOCK_RE.test(c.timeText)),
     cells: line.cells,
-  });
+  }); };
 
   test(`1920×1080 (${scene.zagreb} Zagreb): three cells on one row, badge, time and a one-line destination each, and a tap on cell 2 opens the board`, async ({ page, request }) => {
     test.setTimeout(SCENE_TIMEOUT_MS);
