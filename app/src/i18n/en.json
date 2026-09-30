@@ -175,7 +175,8 @@
     "onFigure": "{shown} of {total} on the figure",
     "magnitude": "M {mag}",
     "depth": "depth {depth} km",
-    "reference": "Measurements, sun, air and the Sava bulletin"
+    "reference": "Measurements, sun, air and the Sava bulletin",
+    "hourly": "By the hour"
   },
   "safety": {
     "hitnoSame": "The same page without a scan: Safety",
@@ -207,7 +208,11 @@
     "districtUnknown": "District not given",
     "places_one": "{count} place",
     "places_other": "{count} places",
-    "mapLink": "map"
+    "mapLink": "map",
+    "cuts": "Planned outages",
+    "cutsNone": "No power or water outages announced.",
+    "roads": "Road conditions (HAK)",
+    "roadsNone": "HAK reports nothing for the Zagreb area."
   },
   "events": {
     "agenda": "Upcoming",
@@ -882,6 +887,8 @@
       "openUntil": "{name}: open until {time}.",
       "eventLastTram": "After “{title}” the last tram {route} leaves {time}.",
       "bikesEmpty": "BAJS {station}: 0 bikes; BAJS {other}: {bikes}.",
+      "airIndex": "Air quality: {word}, index {index}; station {station}.",
+      "warningUntil": "DHMZ: {event} until {until}.",
       "utility": {
         "struja": "power",
         "voda": "water"

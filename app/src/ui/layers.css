@@ -227,6 +227,12 @@
 /* Today: the range bar full width with its numbers at the head role, the sentence, the DHMZ prose, the validity line. */
 .wx-range .g-labels { font-size: var(--type-head); font-weight: var(--weight-bold); color: var(--tone-text-primary); }
 .wx-range-text { margin: 0; font-size: var(--type-body); line-height: var(--lh-body); }
+/* The hourly strip (R0): DHMZ's steps as cells in one scrolling row, text only. */
+.wx-hourly { display: flex; gap: var(--sp-2); overflow-x: auto; list-style: none; padding: 0; margin: 0; }
+.wx-hour { display: grid; min-inline-size: 4.5rem; justify-items: center; gap: var(--sp-1); font-variant-numeric: tabular-nums; }
+.wx-hour time { font-size: var(--type-secondary); color: var(--tone-text-muted); }
+.wx-hour-temp { font-size: var(--type-body); font-weight: var(--weight-bold); }
+.wx-hour-rain { font-size: var(--type-secondary); }
 .wx-prose { margin: 0; max-inline-size: 68ch; font-size: var(--type-body); font-weight: var(--weight-normal); line-height: var(--lh-prose); }
 /* The sun: a 20rem box for the arc with its axis words under it; the numbers once, in the line below. */
 .wx-sun .g-wrap-sun { inline-size: min(100%, 20rem); }

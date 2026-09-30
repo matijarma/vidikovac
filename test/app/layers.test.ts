@@ -111,6 +111,9 @@ describe('layer registry', () => {
     expect(LAYER_MODULES['uprava-i-pravo']).toEqual(['glasnik', 'dogadanja']);
     expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
     expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
+    // R0: Vrijeme's hourly strip reads DHMZ's hourly steps; Sigurnost lists HAK's road states and the planned cuts.
+    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly']);
+    expect(LAYER_MODULES.sigurnost).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi']);
     expect(ALL_LAYER_MODULES).toContain('glasnik');
     expect(new Set(ALL_LAYER_MODULES).size).toBe(ALL_LAYER_MODULES.length);
   });

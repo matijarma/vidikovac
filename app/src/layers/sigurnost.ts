@@ -30,6 +30,14 @@ const ASSEMBLY_PAGE = 12;
 const ASSEMBLY_STEP = 24;
 /** Five closures here; every one of them is on the map in Promet. */
 const CLOSURES_SHOWN = 5;
+/** Five HAK road states, the soonest to end first (R0). */
+const ROADS_SHOWN = 5;
+/** Eight planned cuts, then 16 more at a time (the quakes' paging). */
+const CUTS_PAGE = 8;
+const CUTS_STEP = 16;
+/** A cut's house numbers join its street only while they are shorter than this: city/nearby.ts CUT_NUMBERS_MAX_CHARS,
+ *  copied so the wall's selection layer stays off the phone's first chunk. */
+const CUT_NUMBERS_MAX_CHARS = 24;
 /** Five quakes of the 72 hours; the week with its figure is Vrijeme's. */
 const QUAKES_SHOWN = 5;
 /** A view filter key is at most 32 characters (view-store.ts); the prefix leaves a district slug 28. */
@@ -141,6 +149,79 @@ function closureRow(i18n: I18n, c: FeedItem, now: number): string {
   const end = !c.until ? i18n.t('safety.noEnd')
     : closureEndKnown(c, now) ? i18n.t('panels.until', { time: zagrebDateTime(c.until) }) : i18n.t('panels.ongoing');
   return signRow({ lead: '<span class="mark-closure"></span>', title: c.title, sub: `${type} · ${direction} · ${end}`, key: c.id, attrs: { 'data-testid': 'closure-row' } });
+}
+
+/** HAK's state word for a road (kiosk.nearby.road.*), literal keys for the scanner; '' for a state it has no word for. */
+function roadWord(i18n: I18n, item: FeedItem): string {
+  switch (dataText(item, 'state')) {
+    case 'radovi': return i18n.t('kiosk.nearby.road.radovi');
+    case 'privremena regulacija': return i18n.t('kiosk.nearby.road.regulacija');
+    case 'zatvoreno za promet': return i18n.t('kiosk.nearby.road.zatvoreno');
+    case 'zastoj': return i18n.t('kiosk.nearby.road.zastoj');
+    default: return '';
+  }
+}
+
+/** HAK's road states for the Zagreb area that have not ended, the soonest to end first (R0). */
+function roadsSection(i18n: I18n, ctx: LayerContext): string {
+  const hak = ctx.snapshots.hak;
+  const error = ctx.errors?.hak;
+  const until = (item: FeedItem): number => Date.parse(item.until ?? '');
+  const items = (hak?.items ?? [])
+    .filter((item) => String(item.kind) === 'road' && until(item) > ctx.now && item.title.trim() !== '')
+    .sort((a, b) => until(a) - until(b) || a.id.localeCompare(b.id));
+  const rows = items.slice(0, ROADS_SHOWN).map((item) => {
+    const end = i18n.t('panels.until', { time: zagrebDateTime(item.until!) });
+    const word = roadWord(i18n, item);
+    return signRow({ lead: '<span class="mark-closure"></span>', title: item.title, sub: word ? `${word} · ${end}` : end, key: item.id, attrs: { 'data-testid': 'road-row' } });
+  });
+  const list = listState(i18n, hak, 'hak', items.length, i18n.t('safety.roadsNone'), error)
+    || `<ul class="rows sf-rows" role="list" data-testid="safety-roads">${rows.join('')}</ul>`;
+  return sfSection({
+    id: 'sf-roads', tone: 'urgency',
+    body: sectionHead(i18n, { title: i18n.t('safety.roads'), snapshot: hak, error, id: 'sf-roads-title' }) + list,
+  });
+}
+
+/** One planned cut: the street with its house numbers while they are short, the day and the hours, the district.
+ *  The texts are escaped as the closures' are (signRow); the wall's row policy is the wall's. */
+function cutRow(i18n: I18n, item: FeedItem): string | null {
+  const utility = dataText(item, 'utility');
+  if (utility !== 'struja' && utility !== 'voda') return null;
+  const street = item.title.replace(/\s+/g, ' ').trim();
+  if (!street) return null;
+  const numbers = dataText(item, 'houseNumbers').replace(/\s+/g, ' ').trim();
+  const numbered = numbers && numbers.length < CUT_NUMBERS_MAX_CHARS ? `${street} ${numbers}` : undefined;
+  const day = dataText(item, 'precision') === 'day';
+  const hours = day && utility === 'voda' ? i18n.t('kiosk.nearby.cut.vodaDay')
+    : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : 'kiosk.nearby.cut.voda', { from: zagrebTime(item.at!), until: zagrebTime(item.until!) });
+  const district = dataText(item, 'district');
+  const sub = [zagrebWeekdayDate(item.at!), hours, district].filter(Boolean).join(' · ');
+  return signRow({ lead: '<span class="mark-closure"></span>', title: numbered ?? street, sub, key: item.id, attrs: { 'data-testid': 'cut-row' } });
+}
+
+/** The planned power and water cuts that have not ended, by start then street (R0): eight, then a "Prikaži još". */
+function cutsSection(i18n: I18n, ctx: LayerContext): string {
+  const prekidi = ctx.snapshots.prekidi;
+  const error = ctx.errors?.prekidi;
+  const time = (value: string | undefined): number => Date.parse(value ?? '');
+  const rows = (prekidi?.items ?? [])
+    .filter((item) => String(item.kind) === 'cut' && Number.isFinite(time(item.at)) && time(item.until) > ctx.now)
+    .sort((a, b) => time(a.at) - time(b.at) || a.title.localeCompare(b.title, 'hr'))
+    .map((item) => cutRow(i18n, item))
+    .filter((row): row is string => row !== null);
+  let list = listState(i18n, prekidi, 'prekidi', rows.length, i18n.t('safety.cutsNone'), error);
+  if (!list) {
+    const shownCount = Math.min(rows.length, Number(ctx.view?.filters.cuts) || CUTS_PAGE);
+    const more = shownCount < rows.length
+      ? actionButton('filter', i18n.t('common.showMore', { count: Math.min(CUTS_STEP, rows.length - shownCount) }), { className: 'btn-ghost sf-more', extra: { 'filter-key': 'cuts', 'filter-value': shownCount + CUTS_STEP } })
+      : '';
+    list = `<ul class="rows sf-rows" role="list" data-testid="safety-cuts">${rows.slice(0, shownCount).join('')}</ul>${more}`;
+  }
+  return sfSection({
+    id: 'sf-cuts', tone: 'urgency',
+    body: sectionHead(i18n, { title: i18n.t('safety.cuts'), snapshot: prekidi, error, id: 'sf-cuts-title' }) + list,
+  });
 }
 
 function closuresSection(i18n: I18n, ctx: LayerContext, state: SafetyState): string {
@@ -340,7 +421,7 @@ export function renderSigurnost(ctx: LayerContext): HTMLElement {
   return createElementFromHTML(`<section class="layer ws ws-safety" id="layer-sigurnost" data-layer="sigurnost" data-reconcile aria-labelledby="layer-title-sigurnost" data-level="${state.level}">
 <header class="ws-head sf-head"><h2 class="layer-title" id="layer-title-sigurnost" tabindex="-1">${escapeHtml(i18n.t('layers.sigurnost'))}</h2></header>
 ${verdictBand(i18n, state, ctx.now)}
-<div class="sf-grid">${numbersSection(i18n)}${warningsSection(i18n, ctx, state)}${pharmaciesSection(i18n, ctx)}${closuresSection(i18n, ctx, state)}${quakesSection(i18n, ctx, state)}${assemblySection(i18n, ctx)}</div>
-${provenanceBlock(i18n, [ctx.snapshots['dhmz-cap'], ctx.snapshots.prometnice, ctx.snapshots.emsc, ctx.snapshots['ckan-geo']])}
+<div class="sf-grid">${numbersSection(i18n)}${warningsSection(i18n, ctx, state)}${pharmaciesSection(i18n, ctx)}${closuresSection(i18n, ctx, state)}${roadsSection(i18n, ctx)}${cutsSection(i18n, ctx)}${quakesSection(i18n, ctx, state)}${assemblySection(i18n, ctx)}</div>
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-cap'], ctx.snapshots.prometnice, ctx.snapshots.hak, ctx.snapshots.prekidi, ctx.snapshots.emsc, ctx.snapshots['ckan-geo']])}
 </section>`);
 }
