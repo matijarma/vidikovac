@@ -64,12 +64,12 @@ export function cityLayers(p:OverlayPalette, selected:string|null,scale=1,labels
   const spent=['all',isBike,['!',empty],['any',['==',['get','spent'],true],['in',['get','badge'],['literal',SPENT_BADGES]]]];
   // Every city place is drawn at full strength at every zoom: a station with
   // nothing to give is grey, never faded, and no mark is a merged cluster.
-  const color=['case',spent,p.bikeSpent,['match',['get','category'],'bikes',p.bike,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
+  const color=['case',spent,p.bikeSpent,small,p.bike,['match',['get','category'],'bikes',p.bikeDisc,'culture',p.event,'heritage',p.other,'air',p.other,p.place]];
   const radius=['*',scale,['case',small,BIKE_FAR_RADIUS_PX,isBike,BIKE_DISC_RADIUS_PX,['>',['get','eventCount'],0],['min',18,['+',11,['sqrt',['get','eventCount']]]],8]];
   return [
     {id:'city-path-lines',type:'line',source:CITY_PATHS,paint:{'line-color':p.bike,'line-width':2*scale,'line-dasharray':[2,2]}},
     {id:'city-place-dots',type:'circle',source:CITY_POINTS,paint:{
-      'circle-radius':radius,'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',isBike,1,2]}},
+      'circle-radius':radius,'circle-color':color,'circle-stroke-color':p.halo,'circle-stroke-width':['case',small,1,2]}},
     // A count is never dropped by a collision (text-allow-overlap takes no
     // per-feature value, so it holds for every badge): each disc keeps its number.
     {id:'city-place-badges',type:'symbol',source:CITY_POINTS,layout:{

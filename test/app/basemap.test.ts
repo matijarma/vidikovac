@@ -150,7 +150,8 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_LIGHT.routeBus).toBe('#34465c');
     expect(OVERLAY_LIGHT.rail).toBe('#8d99a8');
     expect(OVERLAY_LIGHT.bike).toBe('#178f7f');
-    expect(OVERLAY_LIGHT.bikeText).toBe('#08131f');
+    expect(OVERLAY_LIGHT.bikeDisc).toBe('#0b6b5e');
+    expect(OVERLAY_LIGHT.bikeText).toBe('#fbfcfe');
     expect(OVERLAY_LIGHT.closure).toBe('#b72d39');
     expect(OVERLAY_LIGHT.stopFill).toBe('#f1f4f7');
     expect(OVERLAY_LIGHT.label).toBe('#142334');
@@ -165,7 +166,8 @@ describe('the same-origin Protomaps v4 basemap', () => {
     expect(OVERLAY_DARK.routeBus).toBe('#b8c9dc');
     expect(OVERLAY_DARK.rail).toBe('#5b6a7c');
     expect(OVERLAY_DARK.bike).toBe('#178f7f');
-    expect(OVERLAY_DARK.bikeText).toBe('#08131f');
+    expect(OVERLAY_DARK.bikeDisc).toBe('#0b6b5e');
+    expect(OVERLAY_DARK.bikeText).toBe('#fbfcfe');
     expect(OVERLAY_DARK.closure).toBe('#ff9aa5');
     expect(OVERLAY_DARK.label).toBe('#f1f4f7');
     expect(OVERLAY_DARK.halo).toBe('#111922');

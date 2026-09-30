@@ -403,8 +403,12 @@ export interface OverlayPalette {
   /** BAJS bike-share: one teal for the station dot and the cycle path, the
    *  same in both faces (city-layers.ts's cityLayers()). */
   bike: string;
-  /** The count badge's ink over a bike dot (city-layers.ts's badges layer);
-   *  dark enough to read against `bike` in both faces. */
+  /** The disc under a station's count: a deeper teal than `bike`, so the
+   *  paper-white count reads at 6:1 on it in both faces (owner, 30 Sep: the
+   *  near-black digit on the lighter teal was unreadable by day and by night).
+   *  The path lines and the small empty dots keep `bike`. */
+  bikeDisc: string;
+  /** The count's ink over `bikeDisc`: the paper white (city-layers.ts's badges layer). */
   bikeText: string;
   /** A station with nothing to give: its "0", or its disc without a number
    *  when the count is not known (city/curated.ts). It recedes behind the
@@ -445,8 +449,9 @@ export interface OverlayPalette {
  * light, #b8c9dc dark); a closure the urgency role (#b72d39, #ff9aa5). The
  * tram network's own line is the new rail role, one neutral grey in both
  * faces (#8d99a8 light, #5b6a7c dark), well under the plate it carries; BAJS
- * bike-share is the new bike role, one teal in both faces (#178f7f), its
- * count badge read in bikeText (#08131f). The stop fill and every halo take
+ * bike-share is the new bike role, one teal in both faces (#178f7f); a
+ * station's count sits on the deeper bikeDisc (#0b6b5e) in paper-white
+ * bikeText (#fbfcfe), 6.2:1. The stop fill and every halo take
  * the canvas or its brighter paper-white sibling; the selection and the
  * screen stop pin take the ink and accent roles. One Zagreb blue and one ink
  * across the map, the badges (ui/signage.css) and the mode chips
@@ -458,7 +463,8 @@ export const OVERLAY_LIGHT: Readonly<OverlayPalette> = Object.freeze({
   routeBus: '#34465c',
   rail: '#8d99a8',
   bike: '#178f7f',
-  bikeText: '#08131f',
+  bikeDisc: '#0b6b5e',
+  bikeText: '#fbfcfe',
   bikeSpent: '#b8c9dc', // --palette-dark-transit
   bikeSpentText: '#34465c', // --palette-light-transit
   figure: '#142334', // --palette-light-text-primary, the ink
@@ -482,7 +488,8 @@ export const OVERLAY_DARK: Readonly<OverlayPalette> = Object.freeze({
   routeBus: '#b8c9dc',
   rail: '#5b6a7c',
   bike: '#178f7f',
-  bikeText: '#08131f',
+  bikeDisc: '#0b6b5e',
+  bikeText: '#fbfcfe',
   bikeSpent: '#34465c', // --palette-light-transit
   bikeSpentText: '#b8c5d5', // --palette-dark-text-muted
   figure: '#b8c5d5', // --palette-dark-text-muted: the screen's own stop dots, a step under the paper the plates are cut from

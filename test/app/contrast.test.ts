@@ -74,9 +74,9 @@ describe.each(['dark', 'light'] as const)('BAJS bike-share teal (WP1)', (theme) 
     expect(Number(ratio.toFixed(2)), `${theme} bike on canvas = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
   });
 });
-it('the count badge ink reads at 4.5:1 on the bike teal, in both faces', () => {
+it('the count badge ink reads at 4.5:1 on the count disc, in both faces (6:1 since 30 Sep)', () => {
   for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
-    expect(contrastRatio(p.bikeText, p.bike)).toBeGreaterThanOrEqual(AA_TEXT);
+    expect(contrastRatio(p.bikeText, p.bikeDisc)).toBeGreaterThanOrEqual(6);
   }
 });
 // A station with nothing to give (a real "0", or a disc without a number when

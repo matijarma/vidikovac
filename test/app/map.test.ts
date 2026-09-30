@@ -347,13 +347,13 @@ describe('the city places’ marks', () => {
     // A count is never dropped by a collision.
     expect(badges.layout!['text-allow-overlap']).toBe(true);
     // A station's ring is a hairline; every other mark keeps its 2 px stroke.
-    expect(evaluate(dots.paint!['circle-stroke-width'], bike('7'), 14)).toBe(1);
+    expect(evaluate(dots.paint!['circle-stroke-width'], bike('7'), 14)).toBe(2);
     expect(evaluate(dots.paint!['circle-stroke-width'], venue, 14)).toBe(2);
   });
 
   it('greys a station with nothing to give instead of fading it: a "0", a blank disc, and the phone’s older badges', () => {
     const color = byId('city-place-dots').paint!['circle-color'], ink = byId('city-place-badges').paint!['text-color'];
-    expect(evaluate(color, bike('7'), 14)).toBe(palette.bike);
+    expect(evaluate(color, bike('7'), 14)).toBe(palette.bikeDisc);
     expect(evaluate(ink, bike('7'), 14)).toBe(palette.bikeText);
     // The station's own grey, not the pill's "other" ink: in the dark face that ink is near-white,
     // and a frame of empty stations at night read as white "0" discs (owner, 24 Sep; contrast.test.ts).
@@ -389,7 +389,7 @@ describe('the city places’ marks', () => {
         expect(evaluate(badges.layout!['text-field'], zero, 14), `${face} zero text`).toBe('');
       }
       expect(evaluate(dots.paint!['circle-radius'], bike('7'), 14)).toBe(20);
-      expect(evaluate(dots.paint!['circle-color'], bike('7'), 14)).toBe(p.bike);
+      expect(evaluate(dots.paint!['circle-color'], bike('7'), 14)).toBe(p.bikeDisc);
       expect(evaluate(badges.layout!['text-field'], bike('7'), 14)).toBe('7');
       expect(evaluate(badges.paint!['text-color'], bike('7'), 14)).toBe(p.bikeText);
       expect(evaluate(badges.layout!['text-size'], bike('7'), 14)).toBe(24);
