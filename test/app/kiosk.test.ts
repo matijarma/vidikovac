@@ -173,7 +173,8 @@ function mount(opts: MountOptions = {}) {
 const flush = async () => { for (let i = 0; i < 24; i += 1) await Promise.resolve(); };
 const text = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 const q = (root: ParentNode, sel: string): HTMLElement | null => root.querySelector<HTMLElement>(sel);
-const departures = (root: ParentNode): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('[data-testid=nearby-rows] [data-kind=departure]')];
+/** The departures on the list: the cells of the wall's departures line (R1), or a handheld's departure rows. */
+const departures = (root: ParentNode): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('[data-testid=nearby-rows] [data-kind=departures] [data-cell], [data-testid=nearby-rows] > [data-kind=departure]')];
 const sentenceText = (root: ParentNode): string => text(q(root, '[data-testid=kiosk-sentence-text]'));
 /** The header sentence as a passer-by sees it: '' while the sentence element is hidden. */
 const painted = (root: ParentNode): string => (q(root, '[data-testid=kiosk-sentence]')?.hidden ? '' : sentenceText(root));
@@ -2717,7 +2718,8 @@ describe('the field, the column and the one map', () => {
     height = 128;
     k.repaint();
     expect(list.children).toHaveLength(2);
-    expect(departures(k.root)).toHaveLength(1);
+    // R1: the departures line is one of the two rows and keeps its three cells.
+    expect(departures(k.root)).toHaveLength(3);
     expect(q(list, '[data-always="1"]')).toBe(always);
     // The box grows (a resize): every row comes back.
     height = 600;
@@ -3204,7 +3206,8 @@ describe('arrivals on the public screen', () => {
     const rows = departures(k.root);
     expect(b.asked).toEqual(['106_1', '106_2']);
     expect(rows).toHaveLength(3);
-    expect(rows.map(row => text(q(row, '.nearby-title')))).toEqual(['6 Črnomerec', '11 Velika Gorica', '13 Žitnjak']);
+    // R1: each departure a cell of the line: its badge, its time, its destination.
+    expect(rows.map(row => `${text(q(row, '.k-line-badge'))} ${text(q(row, '.k-dep-headsign'))}`)).toEqual(['6 Črnomerec', '11 Velika Gorica', '13 Žitnjak']);
     expect(rows.map(row => text(q(row, '.nearby-when')))).toEqual(['za 3 min', '14:38', '14:45']);
     expect(rows.map(row => row.dataset.live)).toEqual(['1', undefined, undefined]);
     expect(text(q(k.root, '[data-testid=nearby]'))).not.toMatch(/Procjena|vozni red|ZET|Dohvaćeno/);

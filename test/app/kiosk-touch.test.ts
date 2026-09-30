@@ -644,11 +644,20 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     expect(text(detail.querySelector('.k-touch-title'))).toBe('Koncert u kinu');
     expect([...detail.querySelectorAll('.k-touch-line')].map(text)).toEqual(['Kino Europa', 'Varšavska 3']);
     expect(k.nearbyHost().dataset.touch).toBe('row');
-    const departure = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=departure]');
+    // R1: the wall's departures are the cells of one line; a tap on any cell opens the place's board.
+    const departures = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=departures]');
+    expect(departures).not.toBeNull();
+    expect(k.q('[data-testid=nearby-rows] > .nearby-row[data-kind=departure]')).toBeNull();
     // The list sits under the panel now; a touch on the list itself reaches it once the panel is gone.
     k.timers.find((t) => t.ms === TOUCH_MS && !t.cleared)!.fn();
     expect(k.detail()).toBeNull();
-    departure!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    departures!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(text(k.board()!.querySelector('.k-touch-title'))).toBe('Trg bana J. Jelačića');
+    k.timers.find((t) => t.ms === TOUCH_MS && !t.cleared)!.fn();
+    expect(k.board()).toBeNull();
+    const second = departures!.querySelector<HTMLElement>('.k-dep-cell[data-cell="2"]');
+    expect(second).not.toBeNull();
+    (second!.querySelector('.nearby-when') ?? second)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(text(k.board()!.querySelector('.k-touch-title'))).toBe('Trg bana J. Jelačića');
     k.handle.destroy();
   });
@@ -722,6 +731,9 @@ describe('the wall answers a touch (kiosk.ts)', () => {
     schema.handle.destroy();
     const phone = mount({ viewport: { width: 390, height: 844 } });
     await flush();
+    // The handheld keeps one row per departure (R1: no departures line there).
+    expect(phone.q('[data-testid=nearby-rows] > .nearby-row[data-kind=departure]')).not.toBeNull();
+    expect(phone.q('[data-testid=nearby-rows] > .nearby-row[data-kind=departures]')).toBeNull();
     phone.q('[data-testid=strip-pharmacy]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     phone.q('[data-testid=nearby-rows] > .nearby-row')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(phone.q('.k-touch')).toBeNull();

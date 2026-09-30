@@ -1046,6 +1046,11 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return hit?.kind === 'pharmacy' ? { kind: 'pharmacy', pharmacy: nearestPharmacy(stop) } : null;
   }
   function touchOnRow(li: HTMLElement): Touch | null {
+    // The departures line (R1): a tap on any of its cells opens the place's board, as a departure row's did.
+    if (li.dataset.kind === 'departures') {
+      const subject = stopForNearby();
+      return subject ? { kind: 'stop', stop: subject } : null;
+    }
     const row = wallItems.find((item) => item.id === li.dataset.id);
     if (!row) return null;
     if (row.kind === 'departure' || row.kind === 'last' || row.kind === 'first') {
