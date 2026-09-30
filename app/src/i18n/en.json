@@ -1248,7 +1248,7 @@
     "viewMap": "Map"
   },
   "dev": {
-    "chip": "DEV",
+    "chip": "dev",
     "menu": "Developer mode",
     "off": "Turn developer mode off",
     "screen": "Screen",

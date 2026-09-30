@@ -8,6 +8,7 @@
 // screen this tab held) and loads the page again without it. <html data-dev="1"> while it is on.
 import type { CreateBeaconResponse, ScanOk } from '../../../worker/protocol';
 import type { DevSurface } from '../../../shared/dev-chip';
+import type { DevChipHandle } from '../experience/dev-chip';
 import type { I18n } from '../i18n/i18n';
 import { DATA_TOKEN_KEY, RESUME_KEY } from '../session';
 import { SCREEN_LABEL_KEY } from './screen-label';
@@ -79,26 +80,54 @@ export function withoutDevFlag(url: string): string {
   return `${base}${kept.length ? `?${kept.join('&')}` : ''}${hash}`;
 }
 
+/** The id of the DEV mark once mounted: the reconciled status line keeps it in place by it (ui/dom/reconcile.ts data-persist-for). */
+export const DEV_MARK_ID = 'dev-mark';
+
+/** Set by showDev when this page draws the mark, so a header that carries the wordmark leaves the mark its place. */
+let markSlot = false;
+
+/**
+ * Where a header puts the DEV mark: right after its wordmark, so the header reads "Kaj ima?dev". ''
+ * unless this page shows the mark. A hidden placeholder that the mark replaces when it mounts
+ * (experience/dev-chip.ts) and that the dashboard's reconciler fills with the live mark on every
+ * later paint; a page without one gets the mark floating at the top instead.
+ */
+export function devMarkSlot(): string {
+  return markSlot ? `<span data-persist-for="${DEV_MARK_ID}" hidden></span>` : '';
+}
+
 /** Whether this page is shown inside another page (the /dev/ grid): it is in DEV, but draws no chip of its own. */
 export function isFramed(win: Window = window): boolean {
   try { return win.self !== win.top; } catch { return true; }
 }
 
-/** <html data-dev="1">, and data-dev-chip while the page shows the chip (a page framed by /dev/ does not). */
+/**
+ * <html data-dev="1">, and data-dev-chip while the page shows the chip. A page framed by /dev/ shows
+ * none and draws no scrollbar either (it still scrolls), so the grid's cells show the page alone.
+ */
 export function markDev(root: HTMLElement, chip: boolean): void {
   root.dataset.dev = '1';
   if (chip) root.dataset.devChip = '1';
-  else delete root.dataset.devChip;
+  else {
+    delete root.dataset.devChip;
+    root.style.setProperty('scrollbar-width', 'none');
+  }
 }
 
 /**
- * A page in DEV: <html data-dev>, and the chip at the top unless the page is framed by /dev/. The
- * chip's code and style are a chunk of their own, loaded here and nowhere else.
+ * A page in DEV: <html data-dev>, and the mark unless the page is framed by /dev/: after the
+ * wordmark where the page's header leaves it a place (devMarkSlot), floating at the top where it
+ * does not. The mark's code and style are a chunk of their own, loaded here and nowhere else.
+ * `offHref` is where the × goes (by default the page itself without the flag). Resolves to the
+ * mounted mark (null when framed); the pages keep it for their life.
  */
-export function showDev(i18n: I18n, current: DevSurface | null, doc: Document = document): void {
+export function showDev(i18n: I18n, current: DevSurface | null, options: { doc?: Document; offHref?: string } = {}): Promise<DevChipHandle | null> {
+  const doc = options.doc ?? document;
   const framed = isFramed(doc.defaultView ?? window);
   markDev(doc.documentElement, !framed);
-  if (!framed) void import('../experience/dev-chip').then(({ mountDevChip }) => mountDevChip({ i18n, current, doc }));
+  if (framed) return Promise.resolve(null);
+  markSlot = true;
+  return import('../experience/dev-chip').then(({ mountDevChip }) => mountDevChip({ i18n, current, doc, ...(options.offHref ? { offHref: options.offHref } : {}) }));
 }
 
 async function post<T>(path: string, fetchImpl: typeof fetch): Promise<T> {

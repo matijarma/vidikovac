@@ -1,9 +1,11 @@
-// DEV mode's chip on a scripted page: shared/dev-chip.ts draws it, this mounts it (worker/routes/dev.ts
-// describes DEV). Loaded only in DEV, as its own chunk, so no ordinary page carries it. The chip
-// opens its menu by itself (a <details>); the script adds the ×'s clean exit, Telefon's phone-sized
+// DEV mode's mark on a scripted page: shared/dev-chip.ts draws it, this mounts it (worker/routes/dev.ts
+// describes DEV). Loaded only in DEV, as its own chunk, so no ordinary page carries it. The mark
+// takes the place its page's header leaves after the wordmark (core/dev-mode.ts devMarkSlot), now
+// or once that header is drawn, and floats at the top until then or on a page without one. The
+// menu opens by itself (a <details>); the script adds the ×'s clean exit, Telefon's phone-sized
 // window at a desk, and Escape or a press elsewhere to close the menu.
 import { DEV_CHIP_CSS, devChipMarkup, type DevLabels, type DevSurface } from '../../../shared/dev-chip';
-import { turnDevOff, withoutDevFlag } from '../core/dev-mode';
+import { DEV_MARK_ID, turnDevOff, withoutDevFlag } from '../core/dev-mode';
 import type { I18n } from '../i18n/i18n';
 
 export function devLabels(i18n: I18n): DevLabels {
@@ -50,13 +52,24 @@ export function mountDevChip(options: DevChipOptions): DevChipHandle {
   const host = doc.createElement('div');
   host.innerHTML = devChipMarkup(devLabels(options.i18n), { current: options.current, offHref });
   const element = host.firstElementChild as HTMLElement;
-  doc.body.prepend(element);
+  // The header's place for the mark, when there is one: the wall's is drawn once, the dashboard's
+  // reconciler keeps the live mark in its place by id from then on. A mark whose header went (the
+  // wall set up again) floats until the next header leaves it a place.
+  const settle = (): void => {
+    const slot = doc.querySelector(`[data-persist-for="${DEV_MARK_ID}"]`);
+    if (slot) slot.replaceWith(element);
+    else if (!element.isConnected) doc.body.prepend(element);
+  };
+  settle();
+  const view = doc.defaultView;
+  const observer = view && typeof view.MutationObserver === 'function' ? new view.MutationObserver(settle) : null;
+  observer?.observe(doc.body, { childList: true, subtree: true });
   const details = element.querySelector<HTMLDetailsElement>('details')!;
   const summary = element.querySelector<HTMLElement>('summary')!;
 
   const onClick = (event: MouseEvent): void => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('[data-testid=dev-off]')) {
+    if (target?.closest('[data-dev-off]')) {
       event.preventDefault();
       turnDevOff(storage(() => win.sessionStorage), storage(() => win.localStorage));
       win.location.replace(offHref);
@@ -87,6 +100,7 @@ export function mountDevChip(options: DevChipOptions): DevChipHandle {
   return {
     element,
     destroy() {
+      observer?.disconnect();
       element.removeEventListener('click', onClick);
       doc.removeEventListener('keydown', onKey);
       doc.removeEventListener('pointerdown', onPointer);
