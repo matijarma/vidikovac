@@ -101,6 +101,9 @@ const DEAD_KEYS = [
   // WP5 A1: city/strings.ts is the adapter over city.*; its unread words never entered the catalogue.
   'city.map', 'city.movement', 'city.network', 'city.all', 'city.city', 'city.useful', 'city.layers', 'city.list', 'city.here',
   'city.locate', 'city.legend', 'city.streetBrowse', 'city.cluster', 'city.allVenues', 'city.activeVenues', 'city.schedule', 'city.quiet', 'city.inactive', 'city.closed', 'city.start', 'city.next',
+  // lane/settings (30 Sep 2026): the session sheet's action toggles; refreshing and the countdown are Još switches now
+  // (directory.refresh*, directory.countdown*). session.resumeRefresh stays: the paused banner's button reads it.
+  'session.pauseRefresh', 'session.hideCountdown', 'session.showCountdown',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';

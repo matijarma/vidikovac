@@ -26,7 +26,7 @@ import { askBoards, loadSadaFeed, NEARBY_HOLD_MS, nearbyInput, sadaFeed, type Sa
 import { defaultLocation, type LocationContext } from './city/location';
 import { resolvePlace } from './city/place';
 import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
-import { directoryModules, renderDirectory } from './experience/directory';
+import { directoryModules, nextLocale, nextTheme, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
 import { createSessionSheet, type SheetAction } from './experience/session-sheet';
 import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
@@ -46,7 +46,7 @@ import { createElementFromHTML, escapeAttribute, escapeHtml } from './ui/dom/esc
 import { reconcile, reconcileChildren } from './ui/dom/reconcile';
 import { iconMarkup } from './ui/icons';
 import { createQr } from './ui/qr';
-import type { ThemeController, ThemePreference } from './ui/theme';
+import type { ThemeController } from './ui/theme';
 import { PRESENTATION_ACK_MS, type PresentationCommand, type PresentationState, type PresentationTarget } from '../../worker/presentation';
 import { presentationPanel, presentationTargetLabel } from './experience/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
@@ -462,7 +462,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
       lineFocus: lightweight ? undefined : lineFocus, bikeLanes: lightweight ? undefined : bikeLanes, reducedMotion: deps.reducedMotion, lightweight,
-      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live' },
+      frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live', role: session.snapshot().role, label: deps.label ?? null },
+      settings: { theme: deps.theme?.getPreference() ?? null, paused, countdownHidden },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
       // The screen's Kadar and the network's lines, so the phone's circle is the wall's measured one (seam S2).
@@ -846,10 +847,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const sheet = createSessionSheet({
     i18n, now,
     state: () => ({
-      session: session.snapshot(), frozen, paused, countdownHidden, canShare: session.snapshot().role === 'scanner' && !shareDenied,
-      label: deps.label ?? null, themePreference: deps.theme?.getPreference() ?? null,
+      session: session.snapshot(), frozen, paused, canShare: session.snapshot().role === 'scanner' && !shareDenied,
+      label: deps.label ?? null,
     }),
-    onAction: (action, value) => handleSheetAction(action, value),
+    onAction: (action) => handleSheetAction(action),
   });
   const notifySheet = createNotifySheet({
     i18n,
@@ -862,6 +863,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     paused = value;
     store.pause(value);
     paintShell();
+    render();
     if (!value) continuePoll(refresh(), rearmPoll, 'dashboard resume refresh');
   }
 
@@ -879,16 +881,10 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     render();
   }
 
-  function handleSheetAction(action: SheetAction, value?: string): void {
+  function handleSheetAction(action: SheetAction): void {
     switch (action) {
       case 'share-city': session.share(); sheet.close(); return;
-      case 'pause': setPaused(true); return;
-      case 'resume': setPaused(false); return;
-      case 'hide-countdown': countdownHidden = true; paintShell(); return;
-      case 'show-countdown': countdownHidden = false; paintShell(); return;
       case 'refresh': continuePoll(refresh(), rearmPoll, 'dashboard manual refresh'); return;
-      case 'lang': if (value) setLocale(value); return;
-      case 'theme': if (value) deps.theme?.setPreference(value as ThemePreference); render(); return;
       default: return;
     }
   }
@@ -1276,6 +1272,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       }
       case 'notify': notifySheet.open(); return;
       case 'bike-lanes-toggle': bikeLanes.set(bikeLanes.snapshot() === 'always' ? 'bajs' : 'always'); return;
+      // Još's settings rows (experience/directory.ts): each tap moves its setting to the next state.
+      case 'lang-next': setLocale(nextLocale(i18n.getLocale())); return;
+      case 'theme-next': if (deps.theme) { deps.theme.setPreference(nextTheme(deps.theme.getPreference())); render(); } return;
+      case 'refresh-toggle': setPaused(!paused); return;
+      case 'countdown-toggle': if (!frozen) { countdownHidden = !countdownHidden; paintShell(); render(); } return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;

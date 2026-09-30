@@ -227,9 +227,10 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
 
 /* The session sheet (dialog.css .dialog-sheet gives it the bottom-sheet box):
    the remaining time at display size, plain sentences at body, 48 px action
-   rows with a peacock icon and a sentence-case label, two segmented controls
-   under a quiet label, the four pages as 44 px links. Every block is keyed for
-   the reconciler, so nothing here depends on being rebuilt. */
+   rows with a peacock icon and a sentence-case label. The settings and the
+   four pages are rows and links of Još (layers.css, "Directory"); the quiet
+   label below is the notify sheet's note. Every block is keyed for the
+   reconciler, so nothing here depends on being rebuilt. */
 .dialog-session .dialog-body { display: grid; gap: var(--sp-5); touch-action: pan-y; }
 .sheet-sec { display: grid; gap: var(--sp-2); }
 .sheet-status { gap: var(--sp-3); }
@@ -247,11 +248,6 @@ html:has(.ki) { scroll-padding-block: calc(3.25rem + env(safe-area-inset-top, 0p
   .sheet-btn:active { background-color: var(--tone-surface-2); transition: none; }
 }
 .sheet-label { margin: 0; font-size: var(--type-secondary); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
-.segmented { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-md); background: var(--tone-surface-2); }
-.segment { flex: 1 1 auto; min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); cursor: pointer; touch-action: manipulation; }
-.segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
-.sheet-links { display: flex; flex-wrap: wrap; gap: 0 var(--sp-4); font-size: var(--type-control); font-weight: var(--weight-medium); }
-.sheet-links a { display: inline-flex; align-items: center; min-block-size: var(--target); }
 
 /* Share the city: the QR plate is an object (R-D3) at 200 px, the code at
    numeral mono, a 4 px bar that fills over the slot (smoothly between the 1 s

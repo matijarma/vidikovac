@@ -2,7 +2,8 @@
 // in the regression tier: what the ten-minute visit shows before any tap, Karta's
 // cold open, a stop's departures above the fold, the three tabs and the week's
 // agenda in Još, the header's "Podijeli grad", the desktop at 1440×900 and the end
-// of the session. e2e/accept/phone.spec.ts measures the same surfaces as soft
+// of the session, and Još as the one place of the personal settings (owner, 30 Sep
+// 2026) on both. e2e/accept/phone.spec.ts measures the same surfaces as soft
 // findings against the production observer's verdicts; this spec holds them as
 // ordinary assertions once D3 has landed.
 //
@@ -48,6 +49,10 @@ const PHONE = Object.freeze({ width: 390, height: 844 });
 const DESK = Object.freeze({ width: 1440, height: 900 });
 /** Text sizes the desktop must hold without a sideways scroll (plan acceptance A6). */
 const TEXT_ZOOMS: readonly number[] = [100, 125, 200];
+/** Još's "Osobne postavke" (experience/directory.ts): every personal setting in the owner's order, then the session row. */
+const SETTINGS_ORDER: readonly string[] = ['language', 'theme', 'notify', 'bike-lanes', 'refresh', 'countdown', 'session'];
+/** Još on either surface: the tab bar's on the phone, the status line's at the desk. */
+const MORE_BUTTON = '[data-testid="tab-more"]:visible, [data-testid="status-more"]:visible';
 /** The header button that opens the share code (probe §15.6: both attributes). */
 const SHARE_BUTTON = `${PHONE_PROBES.shareCity}[data-action=share-city]`;
 /** A stop's sheet after a search: its departures lead, then "Vozni red" (WP4 step 6). */
@@ -92,6 +97,72 @@ async function openSession(page: Page): Promise<FixtureSession> {
   await page.goto(FIXTURE_DASHBOARD);
   await expect(page.getByTestId('session-label'), 'the fixture session joins and goes live').toHaveAttribute('data-state', 'live', { timeout: JOIN_MS });
   return fixture;
+}
+
+/** The data-testid of the focused element, read in the page. */
+const focusedTestId = (page: Page): Promise<string | null> => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.testid ?? null);
+
+/**
+ * Još's settings, driven from the keyboard as a person would: every setting is one row in the owner's order, the
+ * theme row re-themes the page on Enter and on Space at once, the language row says the whole client again in
+ * English with the focus kept on the row, the refresh row is a switch, and the session sheet carries no setting.
+ */
+async function settingsFollowTheRow(page: Page): Promise<void> {
+  await page.locator(MORE_BUTTON).first().click();
+  const section = page.locator('#layer-directory section').filter({ has: page.getByRole('heading', { name: 'Osobne postavke' }) });
+  await expect(section, 'Još carries "Osobne postavke"').toHaveCount(1);
+  expect(await section.locator('li.row-dir').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-key'))), 'every setting in one place, in order').toEqual([...SETTINGS_ORDER]);
+  await expect(page.locator('#layer-directory [aria-pressed], #layer-directory .segmented'), 'no option list in Još').toHaveCount(0);
+
+  const html = page.locator('html');
+  const canvas = (): Promise<string> => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const theme = page.getByTestId('dir-theme');
+  await expect(html).toHaveAttribute('data-theme', 'auto');
+  await expect(theme).toHaveAccessibleName('Tema: Automatski. Sljedeća: Svijetla.');
+  const lightCanvas = await canvas();
+  await theme.focus();
+  await page.keyboard.press('Enter');
+  await expect(html, 'Enter moves the theme on at once').toHaveAttribute('data-theme', 'light');
+  await expect(theme.locator('.row-sub')).toHaveText('Svijetla');
+  await page.keyboard.press('Space');
+  await expect(html, 'Space moves it on again').toHaveAttribute('data-theme', 'dark');
+  await expect(html).toHaveAttribute('data-theme-resolved', 'dark');
+  await expect(theme.locator('.row-sub')).toHaveText('Tamna');
+  await expect(theme).toHaveAccessibleName('Tema: Tamna. Sljedeća: Po suncu.');
+  expect(await canvas(), 'the page itself takes the dark theme').not.toBe(lightCanvas);
+  expect(await focusedTestId(page), 'the focus stays on the theme row').toBe('dir-theme');
+
+  const language = page.getByTestId('dir-language');
+  await expect(language).toHaveAccessibleName('Jezik: Hrvatski. Sljedeći: English.');
+  await language.focus();
+  await page.keyboard.press('Enter');
+  await expect(html, 'the language row switches the page at once').toHaveAttribute('lang', 'en');
+  await expect(language).toHaveText(/Language\s*English/);
+  await expect(language).toHaveAccessibleName('Language: English. Next: Hrvatski.');
+  await expect(page.getByRole('heading', { name: 'Preferences' }), 'the whole client is said again in English').toBeVisible();
+  await expect(page.getByTestId('dir-theme').locator('.row-sub')).toHaveText('Dark');
+  expect(await focusedTestId(page), 'the focus stays on the language row').toBe('dir-language');
+  await page.keyboard.press('Enter');
+  await expect(html).toHaveAttribute('lang', 'hr');
+  expect(await focusedTestId(page)).toBe('dir-language');
+
+  const refresh = page.getByTestId('dir-refresh');
+  await expect(refresh).toHaveAttribute('role', 'switch');
+  await expect(refresh).toHaveAttribute('aria-checked', 'true');
+  await refresh.focus();
+  await page.keyboard.press('Space');
+  await expect(refresh).toHaveAttribute('aria-checked', 'false');
+  await expect(refresh.locator('.row-sub')).toHaveText('Zaustavljeno');
+  await expect(page.getByTestId('paused-banner'), 'paused, the banner says so').toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(refresh).toHaveAttribute('aria-checked', 'true');
+
+  await page.getByTestId('session-label').click();
+  const sheet = page.getByTestId('session-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator('[aria-pressed], [role=switch], .segmented'), 'the session sheet carries no setting').toHaveCount(0);
+  await expect(sheet.getByText('Jezik', { exact: true }), 'no language control in the sheet').toHaveCount(0);
+  await expect(sheet.getByTestId('refresh-now')).toBeVisible();
 }
 
 /** What ROWS_IN_VIEW reads: the rows the selector matches in all, and why each of the first `count` is not whole. */
@@ -231,6 +302,11 @@ test.describe(`phone (Pixel 7 at ${PHONE.width}×${PHONE.height})`, () => {
     await expect(row.locator('.row-sub'), 'the row carries its count line').toHaveText(/\d+ događanj/);
   });
 
+  test('Još is the one place of the settings: one row each, the theme and the language change the page at once from the keyboard with the focus kept, the sheet has none', async ({ page }) => {
+    await openSession(page);
+    await settingsFollowTheRow(page);
+  });
+
   test('share: "Podijeli grad" in the header at rest, one tap to the share code', async ({ page }) => {
     await openSession(page);
     const share = page.locator(`${SHARE_BUTTON}:visible`);
@@ -361,5 +437,10 @@ test.describe(`desktop at ${DESK.width}×${DESK.height}`, () => {
       const width = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(width, `no sideways scroll at ${zoom} % text (scrollWidth ${width} px)`).toBeLessThanOrEqual(DESK.width + 1);
     }
+  });
+
+  test('desktop: the same Još settings rows from the status line, and the same sheet without a setting', async ({ page }) => {
+    await openSession(page);
+    await settingsFollowTheRow(page);
   });
 });
