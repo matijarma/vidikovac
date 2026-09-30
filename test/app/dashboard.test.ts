@@ -447,14 +447,22 @@ describe('session states', () => {
     expect(text(countdown.querySelector('.row-sub'))).toBe('Skriveno');
     expect(scanner.handle.element.dataset.countdown).toBe('hidden');
     expect(text(scanner.root.querySelector('[data-testid=countdown]'))).toBe('Sesija');
-    // The language: one row, the current language as its sub-line, a tap to the next one; the whole client follows.
+    // The language: one row that speaks the language a tap moves to (owner, 30 Sep 2026), so a reader who does not
+    // understand the page finds it in their own words; the sub-line says the current one in the page's language.
     const language = scanner.root.querySelector<HTMLElement>('[data-testid=dir-language]')!;
     expect(language.hasAttribute('role')).toBe(false);
-    expect(text(language)).toBe('Jezik Hrvatski');
-    expect(language.getAttribute('aria-label')).toBe('Jezik: Hrvatski. Sljedeći: English.');
+    expect(text(language.querySelector('.row-title'))).toBe('Language: English');
+    expect(text(language.querySelector('.row-sub'))).toBe('Trenutno: hrvatski');
+    expect(language.getAttribute('aria-label')).toBe('Language: English. Change the language to English.');
+    expect(language.getAttribute('lang'), 'the name is read in the voice of the language it names').toBe('en');
+    expect(language.querySelector('.row-title')?.getAttribute('lang')).toBe('en');
+    expect(language.querySelector('.row-sub')?.getAttribute('lang')).toBe('hr');
     language.click();
-    expect(text(language)).toBe('Language English');
-    expect(language.getAttribute('aria-label')).toBe('Language: English. Next: Hrvatski.');
+    expect(text(language.querySelector('.row-title'))).toBe('Jezik: hrvatski');
+    expect(text(language.querySelector('.row-sub'))).toBe('Currently: English');
+    expect(language.getAttribute('aria-label')).toBe('Jezik: hrvatski. Promijeni jezik u hrvatski.');
+    expect(language.getAttribute('lang')).toBe('hr');
+    expect(language.querySelector('.row-title')?.getAttribute('lang')).toBe('hr');
     expect(language.querySelector('.row-sub')?.getAttribute('lang')).toBe('en');
     expect(text(scanner.root.querySelector('[data-testid=dir-countdown]'))).toBe('Countdown in the header Hidden');
     click(scanner.root, '[data-testid=session-label]');
@@ -465,7 +473,7 @@ describe('session states', () => {
     expect(text(scanner.root.querySelector('[data-testid=share-city]'))).toBe('Share the city');
     expect(localStorage.getItem('vidikovac-locale')).toBe('en');
     language.click();
-    expect(text(language)).toBe('Jezik Hrvatski');
+    expect(text(language)).toBe('Language: English Trenutno: hrvatski');
     scanner.handle.destroy();
 
     const peer = mount();

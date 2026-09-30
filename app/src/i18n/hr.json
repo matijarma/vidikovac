@@ -446,14 +446,16 @@
     "bikeLanes": "Biciklističke staze na karti",
     "bikeLanesBajs": "Prikazuju se kad odabereš BAJS stanicu",
     "bikeLanesAlways": "Uvijek prikazane",
-    "languageNext": "Jezik: {current}. Sljedeći: {next}.",
     "themeNext": "Tema: {current}. Sljedeća: {next}.",
     "refresh": "Osvježavanje podataka",
     "refreshOn": "Uključeno",
     "refreshOff": "Zaustavljeno",
     "countdown": "Odbrojavanje u zaglavlju",
     "countdownOn": "Prikazano",
-    "countdownOff": "Skriveno"
+    "countdownOff": "Skriveno",
+    "languageName": "hrvatski",
+    "languageAction": "Promijeni jezik u {name}.",
+    "languageCurrent": "Trenutno: {name}"
   },
   "session": {
     "unlocked": "Otključano · {label} · do {time}",

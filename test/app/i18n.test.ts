@@ -104,6 +104,8 @@ const DEAD_KEYS = [
   // lane/settings (30 Sep 2026): the session sheet's action toggles; refreshing and the countdown are Još switches now
   // (directory.refresh*, directory.countdown*). session.resumeRefresh stays: the paused banner's button reads it.
   'session.pauseRefresh', 'session.hideCountdown', 'session.showCountdown',
+  // lane/settings-lang: the language row's name is said in the language a tap moves to (directory.languageAction).
+  'directory.languageNext',
 ];
 function has(catalog: unknown, key: string): boolean {
   return typeof key.split('.').reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), catalog) === 'string';

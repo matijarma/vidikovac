@@ -116,7 +116,7 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     expect(onlyHandedOn).toEqual(['panels.cityWorkEmpty', 'panels.eventsEmpty']);
   });
 
-  it('the catalogue holds 1117 Croatian leaves and 1088 English ones', () => {
+  it('the catalogue holds 1119 Croatian leaves and 1090 English ones', () => {
     // 1,056 flat hr leaves once lane P, A3, A6, A2 and A5 were merged (lane/c-A1 4a57a61; en 1,020).
     // A1: +56 city words moved out of app/src/city/strings.ts, +21 city.fact-* labels moved out
     // of app/src/city/markup.ts, +2 time.at / time.dateAt (the sentence's time label): 1,135; then
@@ -149,9 +149,11 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // lane/settings (owner, 30 Sep 2026: every personal setting in Još) on 1,112 hr / 1,083 en +8 directory.languageNext, themeNext, refresh,
     // refreshOn, refreshOff, countdown, countdownOn, countdownOff, -3 session.pauseRefresh, hideCountdown, showCountdown
     // (the sheet's retired toggles): 1,117 hr, 1,088 en.
+    // lane/settings-lang (owner, 30 Sep 2026: the language row speaks the language a tap moves to) +3
+    // directory.languageName, languageAction, languageCurrent, -1 directory.languageNext: 1,119 hr, 1,090 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1117);
-    expect(leafKeys(en).length).toBe(1088);
+    expect(leaves.length).toBe(1119);
+    expect(leafKeys(en).length).toBe(1090);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

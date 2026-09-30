@@ -436,14 +436,16 @@
     "bikeLanes": "Cycle paths on the map",
     "bikeLanesBajs": "Shown when you pick a BAJS station",
     "bikeLanesAlways": "Always shown",
-    "languageNext": "Language: {current}. Next: {next}.",
     "themeNext": "Theme: {current}. Next: {next}.",
     "refresh": "Data refresh",
     "refreshOn": "On",
     "refreshOff": "Paused",
     "countdown": "Countdown in the header",
     "countdownOn": "Shown",
-    "countdownOff": "Hidden"
+    "countdownOff": "Hidden",
+    "languageName": "English",
+    "languageAction": "Change the language to {name}.",
+    "languageCurrent": "Currently: {name}"
   },
   "session": {
     "unlocked": "Unlocked · {label} · until {time}",

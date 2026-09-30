@@ -132,13 +132,19 @@ async function settingsFollowTheRow(page: Page): Promise<void> {
   expect(await canvas(), 'the page itself takes the dark theme').not.toBe(lightCanvas);
   expect(await focusedTestId(page), 'the focus stays on the theme row').toBe('dir-theme');
 
+  // The language row speaks the language a tap moves to, so a reader who does not understand the page finds it.
   const language = page.getByTestId('dir-language');
-  await expect(language).toHaveAccessibleName('Jezik: Hrvatski. Sljedeći: English.');
+  await expect(language.locator('.row-title'), 'the Croatian page names the switch in English').toHaveText('Language: English');
+  await expect(language.locator('.row-title')).toHaveAttribute('lang', 'en');
+  await expect(language.locator('.row-sub')).toHaveText('Trenutno: hrvatski');
+  await expect(language).toHaveAccessibleName('Language: English. Change the language to English.');
   await language.focus();
   await page.keyboard.press('Enter');
   await expect(html, 'the language row switches the page at once').toHaveAttribute('lang', 'en');
-  await expect(language).toHaveText(/Language\s*English/);
-  await expect(language).toHaveAccessibleName('Language: English. Next: Hrvatski.');
+  await expect(language.locator('.row-title'), 'the English page names the switch in Croatian').toHaveText('Jezik: hrvatski');
+  await expect(language.locator('.row-title')).toHaveAttribute('lang', 'hr');
+  await expect(language.locator('.row-sub')).toHaveText('Currently: English');
+  await expect(language).toHaveAccessibleName('Jezik: hrvatski. Promijeni jezik u hrvatski.');
   await expect(page.getByRole('heading', { name: 'Preferences' }), 'the whole client is said again in English').toBeVisible();
   await expect(page.getByTestId('dir-theme').locator('.row-sub')).toHaveText('Dark');
   expect(await focusedTestId(page), 'the focus stays on the language row').toBe('dir-language');

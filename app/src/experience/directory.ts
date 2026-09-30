@@ -14,7 +14,7 @@ import type { ModuleId } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import { activeCount, NOTIFY_KEYS } from '../core/notify-store';
 import { zagrebTime } from '../format';
-import { LOCALE_LABELS, SUPPORTED_LOCALES, catalogueLocale } from '../i18n/create-default-i18n';
+import { SUPPORTED_LOCALES, catalogueLocale, createDefaultI18n, type SupportedLocale } from '../i18n/create-default-i18n';
 import type { I18n, LocaleCode } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
 import { CULTURE_MODULES, eventsCount } from '../layers/kultura';
@@ -99,13 +99,23 @@ export function nextTheme(current: ThemePreference): ThemePreference {
   return THEME_PREFERENCES[(THEME_PREFERENCES.indexOf(current) + 1) % THEME_PREFERENCES.length]!;
 }
 
+/** One reader per catalogue, for the language row: it speaks the language a tap moves to, in that language's words. */
+const LOCALE_READERS = new Map<SupportedLocale, I18n>();
+function readerOf(locale: SupportedLocale): I18n {
+  let reader = LOCALE_READERS.get(locale);
+  if (!reader) { reader = createDefaultI18n(locale); LOCALE_READERS.set(locale, reader); }
+  return reader;
+}
+
 interface SettingRow { key: string; action: string; testid: string; icon: IconName; title: string; sub: string }
 
-/** The row's two lines; `subAttrs` lets a cycle row announce its new value and a language say its own tongue. The
- *  space between the two keeps the name and the state two words apart in a name read from the content (a switch's). */
-function rowText(title: string, sub: string, subAttrs = ''): string {
-  return `<span class="row-main"><span class="row-title">${escapeHtml(title)}</span> <span class="row-sub"${subAttrs}>${escapeHtml(sub)}</span></span>`;
+/** The row's two lines; the attributes let a cycle row announce its new value and a line say which language it is in.
+ *  The space between the two keeps the name and the state two words apart in a name read from the content (a switch's). */
+function rowText(title: string, sub: string, subAttrs = '', titleAttrs = ''): string {
+  return `<span class="row-main"><span class="row-title"${titleAttrs}>${escapeHtml(title)}</span> <span class="row-sub"${subAttrs}>${escapeHtml(sub)}</span></span>`;
 }
+
+const langAttr = (lang: string | undefined): string => (lang ? ` lang="${escapeAttribute(lang)}"` : '');
 
 /** A two-state setting: the shared switch semantics (role=switch, aria-checked) and its track at the end of the row. */
 function switchRow(r: SettingRow, on: boolean): string {
@@ -113,10 +123,11 @@ function switchRow(r: SettingRow, on: boolean): string {
 }
 
 /** A setting with more than two values: a plain button whose sub-line is the current value, said again when a tap
- *  changes it (aria-live on the sub-line), and whose name says the value a tap moves to (`label`). */
-function cycleRow(r: SettingRow, label: string, lang?: string): string {
-  const subAttrs = ` aria-live="polite"${lang ? ` lang="${escapeAttribute(lang)}"` : ''}`;
-  return `<li class="row row-dir" data-key="${r.key}"><button type="button" class="dir-item" data-action="${r.action}" data-testid="${r.testid}" aria-label="${escapeAttribute(label)}">${iconMarkup(r.icon, undefined, 'icon dir-icon')}${rowText(r.title, r.sub, subAttrs)}</button></li>`;
+ *  changes it (aria-live on the sub-line), and whose name says the value a tap moves to (`label`). `langs` marks a
+ *  row that speaks two languages: the name and the title in the one a tap moves to, the sub-line in the page's. */
+function cycleRow(r: SettingRow, label: string, langs?: { to: string; sub: string }): string {
+  const subAttrs = ` aria-live="polite"${langAttr(langs?.sub)}`;
+  return `<li class="row row-dir" data-key="${r.key}"><button type="button" class="dir-item" data-action="${r.action}" data-testid="${r.testid}" aria-label="${escapeAttribute(label)}"${langAttr(langs?.to)}>${iconMarkup(r.icon, undefined, 'icon dir-icon')}${rowText(r.title, r.sub, subAttrs, langAttr(langs?.to))}</button></li>`;
 }
 
 /** A row that opens a sheet (the alert switches, the session): the chevron at the end, and a name that says so. */
@@ -162,12 +173,18 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
       : i18n.t('session.connecting');
   const origin = originSentence(i18n, { role: live?.role ?? null, label: live?.label ?? null, stop: ctx.screen?.stop?.name ?? null }, true);
   const sessionRow = sheetRow({ key: 'session', action: 'session', testid: 'dir-session', icon: 'clock', title: sessionTitle, sub: origin || i18n.t('directory.sessionSub') }, chevron);
-  // The language row: the current language in its own words, a tap moves to the next one (LOCALE_LABELS, SUPPORTED_LOCALES).
+  // The language row speaks the language a tap moves to (owner, 30 Sep 2026): a reader who does not understand the
+  // page finds "Language: English" in their own words. The word and the name come from that language's catalogue
+  // (common.language, directory.languageName), so a new locale brings its own; the name adds what a tap does, in
+  // that language too. The sub-line is for those who read the page: the language it is in now, in its own words.
   const locale = catalogueLocale(i18n.getLocale());
   const nextLang = catalogueLocale(nextLocale(locale));
+  const target = readerOf(nextLang);
+  const targetName = target.t('directory.languageName');
+  const languageTitle = `${target.t('common.language')}: ${targetName}`;
   const languageRow = cycleRow(
-    { key: 'language', action: 'lang-next', testid: 'dir-language', icon: 'languages', title: i18n.t('common.language'), sub: LOCALE_LABELS[locale] },
-    i18n.t('directory.languageNext', { current: LOCALE_LABELS[locale], next: LOCALE_LABELS[nextLang] }), locale,
+    { key: 'language', action: 'lang-next', testid: 'dir-language', icon: 'languages', title: languageTitle, sub: i18n.t('directory.languageCurrent', { name: i18n.t('directory.languageName') }) },
+    `${languageTitle}. ${target.t('directory.languageAction', { name: targetName })}`, { to: nextLang, sub: locale },
   );
   // The theme row, while the page has a theme controller: its preference in the catalogue's words (common.theme.*).
   const theme = ctx.settings?.theme ?? null;
