@@ -1002,8 +1002,15 @@ function exhibitTiming(
     if (open) return { atMs: open.closesAt, openNow: true, opensAt: now };
   }
   // (ii) The verified venue's catalogue hours for that weekday.
-  const spans = at.venue?.hours ? openingSpans(at.venue.hours)?.get(at.weekday) : undefined;
-  if (!spans) return null;
+  const ranges = at.venue?.hours ? openingSpans(at.venue.hours)?.get(at.weekday) : undefined;
+  if (!ranges) return null;
+  // Source order is not clock order; touching or overlapping ranges describe one uninterrupted opening.
+  const spans: { open: number; close: number }[] = [];
+  for (const range of [...ranges].sort((a, b) => a.open - b.open || a.close - b.close)) {
+    const previous = spans.at(-1);
+    if (previous && range.open <= previous.close) previous.close = Math.max(previous.close, range.close);
+    else spans.push({ ...range });
+  }
   const instant = (minutes: number): number => localInstant(at.day, Math.floor(minutes / 60), minutes % 60);
   if (at.evening) {
     const first = spans[0]!;

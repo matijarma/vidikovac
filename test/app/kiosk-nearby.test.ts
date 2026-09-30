@@ -1690,6 +1690,17 @@ describe('exhibitions as openings (R0)', () => {
     expect([...openingSpans('pon-pet 10h-13:30h i 16h-19:30h, sub 10h-14h')!.entries()].find(([d]) => d === 3)).toEqual([3, [{ open: 600, close: 810 }, { open: 960, close: 1170 }]]);
     expect(openingSpans('pon-pet 10h-16h, 17h-25h')).toBeNull();
   });
+
+  it('R0 review: resolves an exhibition’s active opening stretch before promising its closing time', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    for (const hours of ['pon-ned 10h-13h i 13h-19h', 'pon-ned 10h-17h i 16h-19h', 'pon-ned 16h-19h i 10h-17h']) {
+      const venue = { ...G1, hours };
+      const rows = openings(scene(noon, [E1], { city: { ...city, places: [venue] } }));
+      expect(rows, hours).toHaveLength(1);
+      expect(rows[0], hours).toMatchObject({ atMs: at('2026-09-22T17:00:00Z'), detail: { kind: 'exhibit', openNow: true } });
+      expect(timeLabel(rows[0]!, noon, hr), hours).toBe('do 19:00');
+    }
+  });
 });
 
 describe('the notice headline’s own shorter words (R0, vis1 F2)', () => {
