@@ -24,6 +24,11 @@ const NOTICE_TITLE_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"] .nea
 // R0 (vis1 F2): the same clamp at three lines, taken only from room the fitter has left (timeline.ts lines3).
 const NOTICE_TITLE_3_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"][data-title-lines="3"] .nearby-title';
 
+it('keeps the measured dark compact departures glyph spill inside the row', () => {
+  expect(windowRule(":root[data-theme-resolved='dark'] .kiosk[data-size=compact]:not([data-portrait='1']) .k-nearby .nearby-row[data-kind='departures']"))
+    .toBe('padding-block-end:calc(var(--k-gap) * .2 + 4px * var(--k-zoom,1))');
+});
+
 describe('the start screen (round 2, F16)', () => {
   it('keeps the place field\u2019s suggestion box and its status in the flow, so Pokreni is never covered', () => {
     // The wall's settings row and the handheld already have it so; the start screen's absolute box lay over Pokreni.

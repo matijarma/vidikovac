@@ -118,6 +118,9 @@ async function wallState(page:Page){
       cutRows:rows.filter(row=>row.getBoundingClientRect().bottom>listBox.bottom+1).length,
       // A row's words stay inside its own row: a squeezed track spills them over the next row, unseen by the list's edge.
       spilledRows:rows.filter(row=>row.scrollHeight>row.clientHeight+1).length,
+      spilledRowDetails:rows.filter(row=>row.scrollHeight>row.clientHeight+1).map(row=>({
+        kind:row.dataset.kind,id:row.dataset.id,height:row.clientHeight,scrollHeight:row.scrollHeight,
+      })),
       rowPx:rows.map(row=>Math.round(Number.parseFloat(getComputedStyle(row).minHeight)/zoom)),
       // R1: the departures line's cells (a departure row only where the list has no line).
       departures:rows.reduce((n,row)=>n+(row.dataset.kind==='departures'?row.querySelectorAll('[data-cell]').length:row.dataset.kind==='departure'?1:0),0),
