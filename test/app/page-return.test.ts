@@ -125,7 +125,7 @@ describe('the BAJS counts across a return (city store and dynamicPlaces)', () =>
     expect(page.listening()).toBe(0);
   });
 
-  it('keeps unknown for the genuinely unknown: an old count with nothing awaited, and every count once the return\'s request failed', async () => {
+  it('keeps unknown for the genuinely unknown: an old count with nothing awaited, and a five-minute-old count once the return\'s request failed', async () => {
     vi.useFakeTimers({ now: NOW });
     const page = fakePage();
     vi.stubGlobal('document', page.doc);
@@ -143,6 +143,29 @@ describe('the BAJS counts across a return (city store and dynamicPlaces)', () =>
     await vi.advanceTimersByTimeAsync(0);
     expect(store.snapshot().liveAwaited).toBe(false);
     expect(count(store)).toBe('?');
+    store.destroy();
+  });
+
+  it('a failed poll blanks nothing at once: the counts in hand stand until their own reading is three minutes old', async () => {
+    vi.useFakeTimers({ now: NOW });
+    const page = fakePage();
+    vi.stubGlobal('document', page.doc);
+    const live = scripted();
+    const store = createCityStore(live.fetcher as typeof fetch, page.lifecycle);
+    await store.start();
+    expect(count(store)).toBe(4);
+    await vi.advanceTimersByTimeAsync(59_000);
+    live.hold();
+    await vi.advanceTimersByTimeAsync(1_000); // the minute's poll goes out
+    live.fail(); // and fails: the network dropped, the Worker did not answer
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.snapshot().errors).toContain('live');
+    expect(store.snapshot().live!.sources.find((s) => s.id === 'bajs')!.status).toBe('stale'); // said as it is
+    expect(count(store)).toBe(4); // the last reading, a minute old, still stands
+    // Only its own three minutes blank it: the reading was taken at NOW.
+    const at = (t: number) => dynamicPlaces(store.snapshot(), t).find((p) => p.sourceId === 'bajs')!.facts!.bikes;
+    expect(at(NOW + BIKE_COUNT_TTL_MS)).toBe(4);
+    expect(at(NOW + BIKE_COUNT_TTL_MS + 1)).toBe('?');
     store.destroy();
   });
 

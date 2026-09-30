@@ -92,11 +92,17 @@ describe('the wall’s curated city points', () => {
     }
   });
 
-  it('greys and blanks every station when the BAJS source is not live, and draws no venue without a programme', () => {
-    const stale: CityState = { ...CITY, live: { ...CITY.live!, sources: CITY.live!.sources.map((s) => s.id === 'bajs' ? { ...s, status: 'stale' as const } : s) } };
-    const bikes = curatedCityPoints(stale, EVENTS, NOW).filter((p) => p.props!.category === 'bikes');
-    expect(bikes).toHaveLength(4);
-    expect(bikes.every((p) => p.props!.badge === '' && p.props!.spent === true)).toBe(true);
+  it('greys and blanks every station when the BAJS source is down, keeps a stale copy\'s counts for their three minutes, and draws no venue without a programme', () => {
+    const withStatus = (status: 'stale' | 'down'): CityState => ({ ...CITY, live: { ...CITY.live!, sources: CITY.live!.sources.map((s) => s.id === 'bajs' ? { ...s, status } : s) } });
+    const down = curatedCityPoints(withStatus('down'), EVENTS, NOW).filter((p) => p.props!.category === 'bikes');
+    expect(down).toHaveLength(4);
+    expect(down.every((p) => p.props!.badge === '' && p.props!.spent === true)).toBe(true);
+    // A stale source is the last good copy (a failed request, lane tab-return): each count stands until its own
+    // reading is three minutes old, and not a moment longer.
+    const stale = (at: number) => curatedCityPoints(withStatus('stale'), EVENTS, at).filter((p) => p.props!.category === 'bikes').map((p) => p.props!.badge);
+    expect(stale(NOW)).toEqual(['7', '0', '', '']);
+    expect(stale(NOW - 60_000 + 180_000)).toEqual(['7', '0', '', '']);
+    expect(stale(NOW - 60_000 + 181_000)).toEqual(['', '', '', '']);
     expect(curatedCityPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'bajs-b3', 'bajs-b4']);
   });
 
