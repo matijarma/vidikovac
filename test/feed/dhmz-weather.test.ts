@@ -56,7 +56,16 @@ describe('parseDhmzForecast', () => {
       'Pretežno oblačno, na širem području grada moguće je malo kiše. Vjetar slab do umjeren sjeverni i sjeveroistočni. Najviša temperatura zraka oko 19 °C.',
     );
     expect(item.geo).toEqual({ type: 'Point', coordinates: [16.03, 45.82] });
-    expect(item.data).toEqual({ tmin: 14, tmax: 19, weather: '6', text: item.summary });
+    // R0: the `vrijeme` code 6 in DHMZ's own words (shared/city/dhmz-symbols.ts).
+    expect(item.data).toEqual({ tmin: 14, tmax: 19, weather: 'Oblačno', text: item.summary });
+  });
+
+  it('writes tomorrow\'s code in DHMZ\'s words, leaves out a code outside the legend, passes words as they stand', () => {
+    const tomorrow = parseDhmzForecast(readFileSync(new URL('../fixtures/prognoza_sutra.xml', import.meta.url), 'utf8'));
+    expect(tomorrow.items[0]!.data?.weather).toBe('Promjenljivo oblačno uz malu količinu kiše');
+    const coded = (value: string) => parseDhmzForecast(forecastXml.replace(/(name="vrijeme"[^>]*value=")[^"]*"/g, `$1${value}"`)).items[0]!.data ?? {};
+    expect(coded('99')).not.toHaveProperty('weather');
+    expect(coded('kiša').weather).toBe('kiša');
   });
 
   it('covers the whole Zagreb day', () => {

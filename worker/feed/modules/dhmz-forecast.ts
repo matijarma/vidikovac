@@ -3,6 +3,13 @@ import type { FeedPayload } from '../payload';
 import { compactData } from '../payload';
 import { parseXml, xmlArray, xmlText } from '../xml';
 import { zagrebIso } from '../time';
+import { dhmzSymbolWords } from '../../../shared/city/dhmz-symbols';
+
+/** The forecast's `vrijeme` as DHMZ's own words (shared/city/dhmz-symbols.ts): a code of the legend becomes its
+ *  description, a number outside it is left out, any other text passes as it stands. */
+export function forecastWeather(raw: string): string | undefined {
+  return dhmzSymbolWords(raw) ?? (raw === '' || /^\d+$/.test(raw) ? undefined : raw);
+}
 
 // prognoza_danas.xml holds one <station> per forecast region plus a Zagreb row,
 // with the city narrative in the section-level param `zg_text`. The date is
@@ -74,7 +81,7 @@ export function parseDhmzForecast(xml: string): FeedPayload {
         data: compactData({
           tmin: num(paramValue(station.param, 'Tmn')),
           tmax: num(paramValue(station.param, 'Tmx')),
-          weather: paramValue(station.param, 'vrijeme') || undefined,
+          weather: forecastWeather(paramValue(station.param, 'vrijeme')),
           text: summary || undefined,
         }),
       },
