@@ -472,9 +472,10 @@ function departureRows(input: NearbyInput, outage: boolean, mode: 'shown' | 'nex
     ? [steadyMinute(due, heldById.get(departureId(due)), now)]
     : [...fresh, ...carried, ...dwelling];
   // 'next' (nextDepartures, brief §5.2 (d)): the departures after the shown ones, in the same order, never one of them.
-  const order = orderDepartures(pool, held, displayedMinute(now));
   const heldIds = new Set(held.map((row) => row.id));
-  const shown = mode === 'shown' ? order.chosen : pool.length > MAX_DEPARTURES ? order.ordered.filter((a) => !heldIds.has(departureId(a))).slice(0, MAX_DEPARTURES) : [];
+  const minute = displayedMinute(now);
+  const shown = mode === 'shown' ? arrangeDepartures(pool, held, minute)
+    : pool.length > MAX_DEPARTURES ? orderDepartures(pool, held, minute).ordered.filter((a) => !heldIds.has(departureId(a))).slice(0, MAX_DEPARTURES) : [];
   return shown.map((arrival) => {
     const live = arrival.live;
     const id = departureId(arrival);
