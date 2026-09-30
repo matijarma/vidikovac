@@ -286,6 +286,11 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
    *  but the one request that carries new evidence (R-TE4). */
   const SLOW_POLL_MS = 30_000;
   let slowTimer: unknown = null;
+  /** A fetch that has been on its way this long is slow, and the header's hairline says so (dashboard.css
+   *  data-slow); a poll that answers inside it never shows a line (owner, 30 Sep: it blinked on every poll). Timed
+   *  here rather than by a CSS delay: under load a style recalc lands late and a CSS delay then blinks anyway. */
+  const SLOW_FETCH_MS = 1_200;
+  let slowFetchTimer: unknown = null;
   let tickTimer: unknown = null;
   let disposed = false;
   let shareDenied = false;
@@ -298,6 +303,30 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   let lastWorkspaceKey: string = view.snapshot().layer;
   /** The 200 ms fallback that clears data-enter for an engine that never fires animationend. */
   let enterTimer: unknown = null;
+  /** True while a draw runs inside the document's own view transition (personDraw), which crossfades the old view
+   *  into the new one; the layer's enter fade then stays off, since fading the new view in from nothing on top of a
+   *  crossfade is the blink the transition is there to remove. */
+  let inViewTransition = false;
+  /**
+   * A person's own move (a tab, a row, Jos, history) draws as one crossfade where the document can (View
+   * Transitions: Chromium, WebKit and Gecko today), so the old view never cuts to blank before the new one; where it
+   * cannot, or under reduced motion and lagano, `draw` runs at once, as it always did. The whole move runs inside the
+   * transition's callback, so the history entry, the title, the focus and the poll that follow the draw see the same
+   * view the draw made. Never for a poll: a poll changes words inside the view the reader is looking at, and the
+   * reconciler settles those on their own (ui/dom/reconcile.ts data-changed).
+   */
+  function personDraw(draw: () => void): void {
+    type Transition = { ready?: Promise<void>; finished?: Promise<void>; updateCallbackDone?: Promise<void> };
+    const start = (doc as Document & { startViewTransition?: (cb: () => void) => Transition }).startViewTransition;
+    if (typeof start !== 'function' || deps.reducedMotion || lightweight || disposed) { draw(); return; }
+    const transition = start.call(doc, () => {
+      inViewTransition = true;
+      try { draw(); } finally { inViewTransition = false; }
+    });
+    // A second move before the first has finished skips the first ("Transition was skipped"): its promises reject,
+    // which is the document's own bookkeeping and no error of the page's.
+    for (const settled of [transition?.ready, transition?.finished, transition?.updateCallbackDone]) settled?.catch(() => {});
+  }
   /** One draw after the list's hold limit once the room refused the ticket (round 1 finding F16). */
   let holdTimer: unknown = null;
 
@@ -357,8 +386,23 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     };
   }
 
+  /** Arms the slow-fetch mark while something is loading, and drops it the moment nothing is. */
+  function markSlowFetch(loading: boolean): void {
+    if (!loading) {
+      if (slowFetchTimer !== null) { clearTimer(slowFetchTimer); slowFetchTimer = null; }
+      delete element.dataset.slow;
+      return;
+    }
+    if (slowFetchTimer !== null || element.dataset.slow === 'true') return;
+    slowFetchTimer = setTimer(() => {
+      clearTimer(slowFetchTimer);
+      slowFetchTimer = null;
+      if (!disposed && store.snapshot().loading.size > 0) element.dataset.slow = 'true';
+    }, SLOW_FETCH_MS);
+  }
+
   function paintRegion(target: HTMLElement, markup: string): void {
-    reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`));
+    reconcileChildren(target, createElementFromHTML(`<div>${markup}</div>`), 0, { settle: true });
   }
 
   /** The layer and its selection; Sada has no time filter any more, so no `time` rides along (the wire still accepts one). */
@@ -409,6 +453,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     element.dataset.state = frozen ? 'frozen' : reconnecting ? 'reconnecting' : s.phase;
     element.dataset.countdown = countdownHidden ? 'hidden' : 'shown';
     element.dataset.loading = String(s.loading);
+    markSlowFetch(s.loading);
     // One status row on both surfaces: no clock, so no weather here; weather is a row of the feed [O-56].
     paintRegion(regions.status, statusLineMarkup(i18n, s));
     paintRegion(regions.banners, bannersMarkup(i18n, s, scanUrl));
@@ -632,7 +677,8 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (directory || pair || RECONCILED_LAYERS.has(layer) || next.hasAttribute('data-reconcile')) {
       const wrapper = doc.createElement('div');
       wrapper.appendChild(next);
-      reconcile(main, wrapper);
+      // A poll's changes inside the view settle in (ui/dom/reconcile.ts data-changed); a person's move crossfades (personDraw).
+      reconcile(main, wrapper, { settle: true });
     } else {
       main.replaceChildren(next);
     }
@@ -643,7 +689,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     const workspaceKey = directory ? 'directory' : pair ? 'desk' : layer;
     if (workspaceKey !== lastWorkspaceKey) {
       lastWorkspaceKey = workspaceKey;
-      if (!deps.reducedMotion && !lightweight) {
+      if (!deps.reducedMotion && !lightweight && !inViewTransition) {
         if (enterTimer !== null) { clearTimer(enterTimer); enterTimer = null; }
         main.dataset.enter = '1';
         const layerEl = next;
@@ -746,23 +792,31 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     if (layer !== 'u-pokretu' && mapFull) { mapFull = false; element.dataset.view = 'layers'; }
     // One history entry per distinct place: repeating the same selection replaces instead of pushing.
     const same = layer === previous && JSON.stringify(selection) === JSON.stringify(view.snapshot().selection);
-    view.navigate(layer, selection, !fromUser || same);
-    updateTitle();
-    paintShell();
-    if (!fromUser) return;
-    if (layer !== previous || wasDirectory) {
-      session.event('panel_open', layer);
-      scrollToTop();
-      focusWorkspace(layer);
-      continuePoll(refresh(), rearmPoll, 'dashboard layer refresh');
-    } else if (selection) {
-      doc.getElementById('ws-detail-title')?.focus();
-      scrollToTop();
-    } else {
-      focusWorkspace(layer);
-      const position=agendaScroll.get(layer);
-      if(position){globalThis.scrollTo?.({top:position.top});if(position.focus)doc.getElementById(position.focus)?.focus({preventScroll:true});}
-    }
+    const move = (): void => {
+      view.navigate(layer, selection, !fromUser || same);
+      updateTitle();
+      paintShell();
+      if (!fromUser) return;
+      if (layer !== previous || wasDirectory) {
+        session.event('panel_open', layer);
+        scrollToTop();
+        focusWorkspace(layer);
+        continuePoll(refresh(), rearmPoll, 'dashboard layer refresh');
+      } else if (selection) {
+        doc.getElementById('ws-detail-title')?.focus();
+        scrollToTop();
+      } else {
+        focusWorkspace(layer);
+        const position=agendaScroll.get(layer);
+        if(position){globalThis.scrollTo?.({top:position.top});if(position.focus)doc.getElementById(position.focus)?.focus({preventScroll:true});}
+      }
+    };
+    // A person's move crossfades only when it changes the picture: another workspace on the phone, out of Jos. On the
+    // desk a stop chosen in the sheet is relayed as a move to u-pokretu, but the pair stays where it is (render()'s
+    // workspaceKey), so it draws at once -- inside a transition the move's own focusWorkspace() would land a frame
+    // after the sheet has focused the stop's title and take the focus off it (desk F7). History's moves draw at once.
+    const key = surface() === 'desktop' && (layer === 'grad-sada' || layer === 'u-pokretu') ? 'desk' : layer;
+    if (fromUser && key !== lastWorkspaceKey) personDraw(move); else move();
   }
 
   /** The fragment with or without Jos's own mark (`jos=1`), so Back and Escape leave Jos instead of the session. */
@@ -787,13 +841,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       else if (marked && josPushed && deps.history.back) { josPushed = false; deps.history.back(); }
       else deps.history.replaceState(null, '', directoryHash(false));
     }
-    updateTitle();
-    paintShell();
-    render();
-    if (open) {
-      focusWorkspace('directory');
-      continuePoll(refresh(), rearmPoll, 'dashboard directory refresh');
-    }
+    const draw = (): void => {
+      updateTitle();
+      paintShell();
+      render();
+      if (open) {
+        focusWorkspace('directory');
+        continuePoll(refresh(), rearmPoll, 'dashboard directory refresh');
+      }
+    };
+    if (open !== was && !fromHistory) personDraw(draw); else draw();
   }
 
   /** Closes the Zaslon panel (its x, Escape, a move to another layer or to Jos: round 2, desktop F6); `focus` returns
@@ -1412,6 +1469,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
       if (holdTimer !== null) { clearTimer(holdTimer); holdTimer = null; }
+      if (slowFetchTimer !== null) { clearTimer(slowFetchTimer); slowFetchTimer = null; }
         stopView();
       stopCity();
       stopStore();

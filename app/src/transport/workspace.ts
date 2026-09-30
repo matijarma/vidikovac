@@ -564,6 +564,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
       searchInput.value = '';
     }
     activeOption = null;
+    // The choice's own swap settles the detail in; a return to the search (browseReturn below) is the list as it was.
+    swapAsChoice = !(!next && browseReturn);
     renderSheet();
     if (!next && browseReturn) {
       const back = browseReturn;
@@ -732,9 +734,11 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     element.dataset.mapMode = mapMode;
     toolbar.hidden = k;
     // One name for the one field, and the same words as its placeholder: it finds places, streets, lines and stops.
-    searchLabel.textContent = ct(i18n, 'search');
+    // Written only when the words change: a poll's render used to set every one of these again, and a text node set
+    // to its own value is still a node replaced (round 3 observation, 30 Sep).
+    setText(searchLabel, ct(i18n, 'search'));
     searchInput.placeholder = ct(i18n, 'search');
-    searchHint.textContent = tr(i18n, 'searchHint');
+    setText(searchHint, tr(i18n, 'searchHint'));
     clearButton.setAttribute('aria-label', tr(i18n, 'clearSearch'));
     clearButton.hidden = query === '';
     // The map/schema switch [O-72]: one small control that names where it goes ("Shema" on the map, "Karta" on the
@@ -742,7 +746,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // the answer and there is a map to switch: not on a public screen, not on the lightweight path.
     mapModeButton.hidden = k || c.lightweight === true || !c.mapMode || !c.maps;
     mapModeButton.dataset.mode = mapMode;
-    mapModeButton.innerHTML = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(i18n.t(schema ? 'sada.viewMap' : 'sada.viewSchema'))}</span>`;
+    const modeHtml = `${iconMarkup(schema ? 'map' : 'route')}<span>${esc(i18n.t(schema ? 'sada.viewMap' : 'sada.viewSchema'))}</span>`;
+    if (modeHtml !== lastModeHtml) { lastModeHtml = modeHtml; mapModeButton.innerHTML = modeHtml; }
     mapModeButton.setAttribute('aria-label', tr(i18n, schema ? 'mapModeMap' : 'mapModeSchema'));
     sheetEl.setAttribute('aria-label', tr(i18n, 'sheetLabel'));
     sheetToggle.hidden = k;
@@ -751,17 +756,25 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // A public display prints no caveat (companion brief §12 "Never"). On the
     // phone the schema owns this note beside its canvas; the sheet keeps its
     // copy only for geography or a failed renderer, where that note is absent.
-    note.textContent = k ? '' : i18n.t('motion.note');
+    setText(note, k ? '' : i18n.t('motion.note'));
     note.hidden = k || (schema && status !== 'unavailable');
+  }
+  /** The map/schema button's last markup, so a render that changes nothing leaves its icon alone. */
+  let lastModeHtml = '';
+  /** Sets a text node only when the words differ: the same words again would still replace the node. */
+  function setText(el: HTMLElement, text: string): void {
+    if (el.textContent !== text) el.textContent = text;
   }
 
   function renderStatus(): void {
     const line = statusLine(ctx().i18n, status);
     element.dataset.status = status;
     statusEl.hidden = line === null;
-    statusEl.textContent = line ?? '';
+    setText(statusEl, line ?? '');
   }
 
+  /** True for the one swap that follows a person's own choice (select): the new detail settles in. */
+  let swapAsChoice = false;
   /** Sets the body's content, keeping focus on the control of the same id when the render replaced it. */
   function swapBody(html: string): void {
     const active = document.activeElement;
@@ -772,7 +785,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     // the reconciler takes the attribute away and the browser drops the focus to <body> (round 2, desktop F7). The
     // same heading, kept by the reconciler, takes it back.
     const heldHeading = active instanceof HTMLElement && content.contains(active) && !focusId && /^H[1-6]$/.test(active.tagName) ? active : null;
-    reconcile(content,next);
+    const choice = swapAsChoice;
+    swapAsChoice = false;
+    // A poll's change settles in; a search result list, redrawn on every keystroke, lands at once (a fade per key
+    // would flicker the list under the person's own typing).
+    reconcile(content,next,{settle:query===''});
+    // A person's choice settles its whole detail in (the reconciler's own mark, ui/dom/reconcile.ts data-changed,
+    // on the blocks the swap put at the top), where a poll's swap settles only the words that changed. In place and
+    // at once -- a document view transition here would defer the swap past the focus that follows it (desk F7).
+    if (choice && !kiosk()) for (const block of content.children) block.setAttribute('data-changed', '');
     body.scrollTop = scroll;
     if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
     else if (heldHeading?.isConnected && document.activeElement !== heldHeading) {

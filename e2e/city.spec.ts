@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import {experienceSnapshots,installExperienceFixture,FIXTURE_DASHBOARD} from './experience-fixtures';
 import {cityEvents,installCityFixture,CITY_VENUE} from './city-fixtures';
 import {fulfillPublicMap} from '../scripts/review-maps.mjs';
@@ -29,7 +30,7 @@ for(const light of [false,true])test(`city discovery: accessible venue, event, h
   await expect(page.getByTestId('city-detail')).toContainText('BAJS Trg');
   await expect(page.getByTestId('city-detail').locator('.city-bike-count')).toHaveText(['4','0']);
   await expect(page.getByTestId('city-detail')).toContainText('mjesta za povrat');
-  const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations;
+  const violations=(await analyzeAtRest(page,()=>new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze())).violations;
   expect(violations.filter(v=>v.impact==='serious'||v.impact==='critical').map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
   if(light)expect(await page.locator('canvas').count()).toBe(0);

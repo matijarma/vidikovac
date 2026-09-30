@@ -1278,8 +1278,13 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   }
 
   /** Places and closures do not move: re-set at once on every update. */
+  /** What the three static sources were last set from: a poll that moved only the vehicles re-tiles none of them. */
+  let staticSignature = '';
   function applyStatic(): void {
     if (!styled || !lib) return;
+    const signature = JSON.stringify([points.filter((p) => p.at === undefined), lines, wallLabels]);
+    if (signature === staticSignature) return;
+    staticSignature = signature;
     setData(lib.SOURCES.places, lib.pointsToGeoJson(points.filter(p=>p.place!=='city'), wallLabels));
     if (lib.CITY_POINTS) setData(lib.CITY_POINTS, lib.pointsToGeoJson(points.filter(p=>p.place==='city'), wallLabels));
     setData(lib.SOURCES.closures, lib.linesToGeoJson(lines, wallLabels));
@@ -1783,11 +1788,42 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const l = lib;
     if (!map || !styled || !l) return;
     const palette = l.overlayPalette(theme);
-    const next = l.overlayLayers(palette, overlayOptions(l, palette));
+    const options = overlayOptions(l, palette);
+    const next = l.overlayLayers(palette, options);
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
     focusedApplied = focusRouteId();
+    fadeInLit(map, l, litRouteOf(options));
     writeFocusProbe(map, l);
+  }
+
+  /** The route the lit layers draw for these options: the focused one under line focus, else the selected route. */
+  function litRouteOf(options: OverlayOptions): string | null {
+    return (options.lineFocus === true ? options.focus?.routeId : undefined) ?? (options.selection?.kind === 'route' ? options.selection.id : null);
+  }
+  /** The lit route the map last drew, so only a change fades. */
+  let litApplied: string | null = null;
+  /** A frame primitive for the fade's second step (the injected pair under a fake clock, rAF otherwise). */
+  const nextFrame = (fn: () => void): void => {
+    if (typeof globalThis.requestAnimationFrame === 'function') globalThis.requestAnimationFrame(() => fn());
+    else setTimeout(fn, 0);
+  };
+  /**
+   * A newly lit line settles in over LIT_FADE_MS instead of appearing at once: its layers already carry the route
+   * (a filter, which MapLibre cannot ease), so they are put at 0 without a transition and brought back to 1 a
+   * frame later under the transition overlays.ts gave them (LIT_FADE). A lit route that only goes away needs
+   * nothing: its layers' filter is NEVER and draws nothing. Skipped under reduced motion.
+   */
+  function fadeInLit(m: MapApi, l: MaplibreModule, lit: string | null): void {
+    const changed = lit !== litApplied;
+    litApplied = lit;
+    if (!changed || lit === null || reduced || !l.LIT_FADE_LAYERS) return;
+    const instant = { duration: 0, delay: 0 };
+    for (const { id, keys } of l.LIT_FADE_LAYERS) for (const key of keys) applyOps(m, [{ id, kind: 'paint', key: `${key}-transition`, value: instant }, { id, kind: 'paint', key, value: 0 }]);
+    nextFrame(() => {
+      if (disposed || map !== m || litApplied !== lit) return;
+      for (const { id, keys } of l.LIT_FADE_LAYERS) for (const key of keys) applyOps(m, [{ id, kind: 'paint', key: `${key}-transition`, value: l.LIT_FADE }, { id, kind: 'paint', key, value: 1 }]);
+    });
   }
 
   /** Re-derives the city-place layers for the current theme, selection and

@@ -51,9 +51,11 @@
 .present-confirm p, .present-feedback { font-size: var(--type-control); }
 .present-feedback { color: var(--tone-action-brand); }
 .present-private { font-size: var(--type-secondary); color: var(--tone-text-muted); max-width: var(--measure-prose); }
-/* Polling: a 2 px peacock hairline along the header's bottom edge while data is on its way. */
+/* Polling: a 2 px peacock hairline along the header's bottom edge, but only once a fetch has been on its way for
+   longer than a poll normally takes (dashboard.ts SLOW_FETCH_MS writes data-slow; owner, 30 Sep: the line blinked on
+   every 10 s poll). A fetch that answers inside that never shows; a slow one lights the line and drops it when it lands. */
 .ki-head::after { content: ''; position: absolute; inset-inline: 0; inset-block-end: -1px; block-size: 2px; background: var(--tone-action-brand); opacity: 0; transition: opacity var(--dur-fast) var(--ease); pointer-events: none; }
-.ki[data-loading='true'] .ki-head::after { opacity: 1; }
+.ki[data-slow='true'] .ki-head::after { opacity: 1; }
 /* Banners sit in flow between the header and the workspace; nothing overlays content. */
 .ki-banners { grid-area: banners; display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) 0; }
 .ki-banners:empty { display: none; }

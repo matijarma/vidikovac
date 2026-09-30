@@ -58,6 +58,29 @@ describe('reconcileChildren', () => {
     expect(live.querySelector('circle')).not.toBeNull();
   });
 
+  it('marks words that changed and rows that entered a live list for the settle animation, never the root\u2019s own children, a replaced figure, or a node under data-motion="none"', () => {
+    const live = el('<div><ul><li data-key="a"><span>1</span></li></ul><p data-motion="none"><span>10:00</span></p><svg data-replace data-sig="1"></svg></div>');
+    document.body.replaceChildren(live);
+    reconcile(live, el('<div><ul><li data-key="a"><span>2</span></li><li data-key="b"><span>3</span></li></ul><p data-motion="none"><span>10:01</span></p><svg data-replace data-sig="2"></svg><section>new view</section></div>'), { settle: true });
+    const [a, b] = [...live.querySelectorAll('li')];
+    expect(a!.querySelector('span')!.hasAttribute('data-changed')).toBe(true); // the words changed
+    expect(a!.hasAttribute('data-changed')).toBe(false); // the row itself was kept
+    expect(b!.hasAttribute('data-changed')).toBe(true); // entered the live list
+    expect(live.querySelector('p span')!.hasAttribute('data-changed')).toBe(false); // opted out
+    expect(live.querySelector('svg')!.hasAttribute('data-changed')).toBe(false); // a figure has its own fade
+    expect(live.querySelector('section')!.hasAttribute('data-changed')).toBe(false); // a child of the reconciled root is a new view
+    // The same words again mark nothing, and a run that did not ask (the public screen) marks nothing at all.
+    for (const n of live.querySelectorAll('[data-changed]')) n.removeAttribute('data-changed');
+    reconcile(live, el('<div><ul><li data-key="a"><span>2</span></li><li data-key="b"><span>3</span></li></ul><p data-motion="none"><span>10:01</span></p><svg data-replace data-sig="2"></svg><section>new view</section></div>'), { settle: true });
+    expect(live.querySelectorAll('[data-changed]').length).toBe(0);
+    reconcile(live, el('<div><ul><li data-key="a"><span>9</span></li><li data-key="b"><span>3</span></li><li data-key="c"><span>4</span></li></ul><p data-motion="none"><span>10:01</span></p><svg data-replace data-sig="2"></svg><section>new view</section></div>'));
+    expect(live.querySelectorAll('[data-changed]').length).toBe(0);
+    // The mark clears when its animation ends.
+    a!.querySelector('span')!.setAttribute('data-changed', '');
+    a!.querySelector('span')!.dispatchEvent(new AnimationEvent('animationend', { animationName: 'ki-changed', bubbles: true }));
+    expect(a!.querySelector('span')!.hasAttribute('data-changed')).toBe(false);
+  });
+
   it('preserves an open <details> the user opened', () => {
     const live = el('<div><details><summary>x</summary>y</details></div>');
     live.querySelector('details')!.open = true;

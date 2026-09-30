@@ -88,7 +88,7 @@ describe('the stop sheet says what comes next, first', () => {
     stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map([['11', 2]]), delays: new Map(), isScreenStop: false, kiosk: false, arrivals, arrivalsStatus, frozenAt });
 
   /** One row's own markup, by its trip id. */
-  const rowOf = (html: string, tripId: string): string => html.split(`data-key="${tripId}|`)[1]!.split('</li>')[0]!;
+  const rowOf = (html: string, tripId: string): string => html.split(`data-key="${tripId}"`)[1]!.split('</li>')[0]!;
 
   it('puts the arrivals section above the platform count and the lines, with a live countdown, a clock row and one note', () => {
     const html = stop([
@@ -252,7 +252,7 @@ describe('the stop sheet says what comes next, first', () => {
     expect(rowsIn('arrival-rows').every((li) => li.startsWith('class="sada-departure"'))).toBe(true);
     // Rows four to twelve under the one timetable word; the thirteenth is not on the sheet.
     expect(rowsIn('timetable-rows')).toHaveLength(9);
-    expect(html).not.toContain('data-key="r12|');
+    expect(html).not.toContain('data-key="r12"');
     expect(html).toContain('<h4 class="t-head">Vozni red</h4>');
     expect(html.indexOf('data-testid="arrival-rows"')).toBeLessThan(html.indexOf('Vozni red'));
     expect(html.indexOf('Vozni red')).toBeLessThan(html.indexOf('data-testid="timetable-rows"'));
@@ -284,10 +284,10 @@ describe('the stop sheet says what comes next, first', () => {
     const timetable = [row({ tripId: 'v0', atMs: NOW + 60_000, live: false, minutes: null }), row({ tripId: 'p1', atMs: NOW + 9 * 60_000, live: false, minutes: null }), row({ tripId: 'p2', atMs: NOW + 40 * 60_000, live: false, minutes: null })];
     const given = stopDetailMarkup(i18n, { stop: STOP, routes: ROUTES, counts: new Map(), delays: new Map(), isScreenStop: false, kiosk: false, arrivals: tracked, timetable, arrivalsStatus: 'live' });
     const givenTail = given.split('data-testid="timetable-rows"')[1]!.split('</ul>')[0]!;
-    expect(givenTail).toContain('data-key="p1|');
-    expect(givenTail).toContain('data-key="p2|');
-    expect(givenTail).not.toContain('data-key="v0|');
-    expect(givenTail).not.toContain('data-key="v3|');
+    expect(givenTail).toContain('data-key="p1"');
+    expect(givenTail).toContain('data-key="p2"');
+    expect(givenTail).not.toContain('data-key="v0"');
+    expect(givenTail).not.toContain('data-key="v3"');
     expect(givenTail).not.toContain('data-live="true"');
   });
 

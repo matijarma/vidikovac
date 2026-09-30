@@ -10,6 +10,42 @@ const REPLACE = 'data-replace';
 const SIG = 'data-sig';
 const KEY = 'data-key';
 const PERSIST_FOR = 'data-persist-for';
+/** The mark a changed node carries until its settle animation ends (signage.css `[data-changed]`). */
+const CHANGED = 'data-changed';
+/** `data-motion="none"` on a node or an ancestor keeps a change quiet: the countdown ticks every second. */
+const MOTION = 'data-motion';
+const CHANGED_ANIMATION = 'ki-changed';
+
+/** The documents whose animationend already clears the mark. */
+const CLEARING = new WeakSet<Document>();
+/** True while a run that asked for the marks (ReconcileOptions.settle) is under way; every other run marks nothing. */
+let settling = false;
+
+export interface ReconcileOptions {
+  /** Mark words that changed and rows that entered a live list with `data-changed` (the session page asks; the
+   *  public screen, whose DOM budget counts every attribute, does not). */
+  settle?: boolean;
+}
+
+/**
+ * Marks a node whose words changed, or that just entered a live list, so the
+ * page's CSS can settle it in over a moment instead of cutting: a poll's
+ * change draws the eye softly, a reader's own tap draws the whole view at
+ * once (dashboard.ts's view transition) and never passes through here with
+ * a live parent. The mark clears itself when its animation ends; where no
+ * animation runs (reduced motion, lagano, a test DOM) it stays, harmless.
+ */
+function markChanged(el: Element): void {
+  if (!settling || el.hasAttribute(REPLACE) || el.closest(`[${MOTION}="none"]`)) return;
+  const doc = el.ownerDocument;
+  if (!CLEARING.has(doc)) {
+    CLEARING.add(doc);
+    doc.addEventListener('animationend', (event) => {
+      if (event.animationName === CHANGED_ANIMATION && event.target instanceof Element) event.target.removeAttribute(CHANGED);
+    });
+  }
+  el.setAttribute(CHANGED, '');
+}
 
 function keyOf(node: Node): string | null {
   if (!(node instanceof Element)) return null;
@@ -52,10 +88,11 @@ export function syncAttributes(from: Element, to: Element): void {
 }
 
 /** Morphs `from` into the shape of `to`; `to` is consumed and must not be reused. */
-export function morph(from: Element, to: Element): Element {
+export function morph(from: Element, to: Element, depth = 0): Element {
   if (from === to) return from;
   if (!sameKind(from, to) || to.hasAttribute(PERSIST)) {
     from.replaceWith(to);
+    if (depth > 0 && !to.hasAttribute(PERSIST)) markChanged(to);
     return to;
   }
   if (to.hasAttribute(REPLACE)) {
@@ -67,7 +104,7 @@ export function morph(from: Element, to: Element): Element {
     return to;
   }
   syncAttributes(from, to);
-  reconcileChildren(from, to);
+  reconcileChildren(from, to, depth + 1);
   return from;
 }
 
@@ -91,8 +128,19 @@ function place(parent: Element, node: Node, before: Node | null): void {
   }
 }
 
-/** Reconciles the children of `from` against the children of `to`, in place. */
-export function reconcileChildren(from: Element, to: Element): void {
+/**
+ * Reconciles the children of `from` against the children of `to`, in place.
+ * `depth` is how far below the reconciled root this runs: a node entering the
+ * root itself (a whole workspace, a whole detail) is a new view and draws at
+ * once; one entering deeper is a change inside a view the reader is looking
+ * at, and is marked for the settle animation.
+ */
+export function reconcileChildren(from: Element, to: Element, depth = 0, options?: ReconcileOptions): void {
+  if (options?.settle && !settling) {
+    settling = true;
+    try { reconcileChildren(from, to, depth); } finally { settling = false; }
+    return;
+  }
   const keyed = new Map<string, Element>();
   for (const child of from.children) {
     const key = keyOf(child);
@@ -120,18 +168,23 @@ export function reconcileChildren(from: Element, to: Element): void {
       if (match && sameKind(match, next as Element)) {
         keyed.delete(key);
         if (match !== current) place(from, match, current);
-        morph(match, next as Element);
+        morph(match, next as Element, depth);
         continue;
       }
       from.insertBefore(next, current);
+      if (depth > 0) markChanged(next as Element);
       continue;
     }
     if (current && sameKind(current, next) && keyOf(current) === null) {
-      if (current instanceof Element) morph(current, next as Element);
-      else if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+      if (current instanceof Element) morph(current, next as Element, depth);
+      else if (current.nodeValue !== next.nodeValue) {
+        current.nodeValue = next.nodeValue;
+        markChanged(from);
+      }
       continue;
     }
     from.insertBefore(next, current);
+    if (depth > 0 && next instanceof Element) markChanged(next);
   }
   while (from.childNodes.length > wanted.length) from.removeChild(from.lastChild!);
 }
@@ -140,11 +193,11 @@ export function reconcileChildren(from: Element, to: Element): void {
  * Renders `next` into `live` by reconciliation and returns whether the
  * previously focused element is still in the document.
  */
-export function reconcile(live: Element, next: Element): boolean {
+export function reconcile(live: Element, next: Element, options?: ReconcileOptions): boolean {
   const doc = live.ownerDocument;
   const focused = doc.activeElement;
   const focusId = focused instanceof HTMLElement ? focused.id : '';
-  reconcileChildren(live, next);
+  reconcileChildren(live, next, 0, options);
   if (focused && !doc.contains(focused) && focusId) {
     doc.getElementById(focusId)?.focus();
     return false;

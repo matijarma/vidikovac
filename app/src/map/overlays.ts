@@ -517,6 +517,16 @@ export const NETWORK_OPACITY: Expr = zoomInterpolate(10, 0.4, 14, 0.55, 17, 0.7)
 export const NETWORK_OPACITY_DIMMED = 0.14;
 /** The other routes' vehicles while one line is lit: still there, stepped back like their lines. */
 export const VEHICLE_OPACITY_DIMMED = 0.35;
+/** How long a lit line, its stops and the step back behind them take to settle: the page's own --dur-base. */
+export const LIT_FADE_MS = 180;
+/** The paint transition the lit layers carry (MapLibre eases a constant paint value under it, never a data-driven one). */
+export const LIT_FADE = Object.freeze({ duration: LIT_FADE_MS, delay: 0 });
+/** The layers fadeInLit (city-map.ts) sets to 0 and back to 1 when the lit route changes, with the opacity key each eases. */
+export const LIT_FADE_LAYERS: readonly { id: string; keys: readonly string[] }[] = Object.freeze([
+  { id: LAYERS.networkSelectedCasing, keys: ['line-opacity'] },
+  { id: LAYERS.networkSelected, keys: ['line-opacity'] },
+  { id: LAYERS.stopsRoute, keys: ['circle-opacity', 'circle-stroke-opacity'] },
+]);
 
 /** A vehicle's opacity: its confidence, and a step back for every other route while one line is lit. */
 export function vehicleOpacity(selectedRoute: string | null): Expr {
@@ -816,7 +826,8 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     source: SOURCES.network,
     filter: ['==', ['get', 'kind'], kind],
     layout: { ...round, ...visible(drawn(kind)) },
-    paint: { 'line-color': color, 'line-width': width, 'line-opacity': dimmed ? NETWORK_OPACITY_DIMMED : opacity },
+    // The step back behind a selected line eases (LIT_FADE_MS) rather than cuts.
+    paint: { 'line-color': color, 'line-width': width, 'line-opacity': dimmed ? NETWORK_OPACITY_DIMMED : opacity, 'line-opacity-transition': LIT_FADE },
   });
   // The tram network's own line, one neutral grey well below the marks it
   // carries (owner ruling, round F "kiosk window"): on the public screen 1.2
@@ -942,8 +953,10 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
     },
     network(LAYERS.networkBus, 'bus', p.routeBus, zoomInterpolate(10, 0.45, 13, 0.85, 16, 1.9)),
     tramNetwork,
-    { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11) } },
-    { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': litColour, 'line-width': zoomInterpolate(10, 2.5, 16, 6.5) } },
+    // The lit line and its casing carry an opacity the map can ease: city-map.ts fades a newly lit line in
+    // (fadeInLit) by setting it to 0 and back to 1 under LIT_FADE, since a filter change itself cannot ease.
+    { id: LAYERS.networkSelectedCasing, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': p.selectionHalo, 'line-width': zoomInterpolate(10, 5, 16, 11), 'line-opacity': 1, 'line-opacity-transition': LIT_FADE } },
+    { id: LAYERS.networkSelected, type: 'line', source: SOURCES.network, filter: litLine, layout: round, paint: { 'line-color': litColour, 'line-width': zoomInterpolate(10, 2.5, 16, 6.5), 'line-opacity': 1, 'line-opacity-transition': LIT_FADE } },
     { id: LAYERS.closuresCasing, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closureCasing, 'line-width': closureWidth(selectedClosure, 7) } },
     { id: LAYERS.closures, type: 'line', source: SOURCES.closures, layout: { ...round, ...closures }, paint: { 'line-color': p.closure, 'line-width': closureWidth(selectedClosure, 4) } },
     // A point with no `place` is the plain circle this map has always drawn:
@@ -964,7 +977,7 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
       },
       { filter: PLACE_FILTERS[LAYERS.placeQuakes]!, layout: visible(lit('quake')) },
     ),
-    circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5 }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
+    circle(LAYERS.stopsRoute, SOURCES.stops, { 'circle-radius': zoomInterpolate(11, 2 * s, 14, 3.5 * s, 16, 5.5 * s), 'circle-color': p.selection, 'circle-stroke-color': p.selectionHalo, 'circle-stroke-width': 1.5, 'circle-opacity': 1, 'circle-opacity-transition': LIT_FADE, 'circle-stroke-opacity': 1, 'circle-stroke-opacity-transition': LIT_FADE }, { minzoom: 11, filter: filters[LAYERS.stopsRoute] }),
     // On the public screen the stops of the screen's own routes are filled
     // dots in the figure colour: beads on the rails, not rings competing with
     // the screen's stop. With stopRadius they grow with the camera instead of

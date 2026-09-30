@@ -14,6 +14,7 @@
 // under the chrome (WCAG 2.2 focus not obscured). The walk has the same shape
 // as a11y.spec.ts's, measuring boxes instead of names.
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import { expect, test, type Page } from '@playwright/test';
 import type { LayerId } from '../worker/protocol';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
@@ -129,7 +130,7 @@ async function tabWalkClearOfChrome(page: Page, limit = TAB_LIMIT): Promise<Focu
  * controls a Tab never reaches is a finding too.
  */
 async function auditSurface(page: Page, surface: string, within: string): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+  const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).withTags(TAGS).analyze());
   const advisory = results.violations.filter((v) => !v.impact || !BLOCKING.has(v.impact));
   if (advisory.length > 0) console.log(`[axe advisory] ${surface}\n${advisory.map(describeViolation).join('\n')}`);
   const blocking = results.violations.filter((v) => v.impact && BLOCKING.has(v.impact));
@@ -178,7 +179,7 @@ for (const viewport of SIZES) {
       await page.getByTestId('session-label').click();
       await expect(page.getByTestId('session-sheet')).toBeVisible();
       await page.waitForTimeout(400);
-      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).withTags(TAGS).analyze());
       const blocking = results.violations.filter((v) => v.impact && BLOCKING.has(v.impact));
       expect(blocking.map(describeViolation), `/d/ session sheet @${viewport.width} (${scheme}): no serious or critical violations`).toEqual([]);
     });

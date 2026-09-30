@@ -31,6 +31,7 @@
 // `// needs lane/p integrator`: they are written to the contract and run with the
 // rest once lane/p is merged.
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import { devices, expect, test, type Locator, type Page } from '@playwright/test';
 import { SENTENCE_KICKERS } from '../shared/kiosk/sentence';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
@@ -221,7 +222,7 @@ async function rowsWhole(page: Page, selector: string, count: number): Promise<s
 
 /** axe's serious and critical violations on the page as it stands, one line each. */
 async function axeBlocking(page: Page): Promise<string[]> {
-  const results = await new AxeBuilder({ page }).withTags([...AXE_TAGS]).analyze();
+  const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).withTags([...AXE_TAGS]).analyze());
   return results.violations
     .filter((v) => v.impact && AXE_BLOCKING.includes(v.impact))
     .map((v) => `${v.impact} ${v.id}: ${v.help} (${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join('; ')})`);

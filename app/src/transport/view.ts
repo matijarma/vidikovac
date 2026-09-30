@@ -467,7 +467,9 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
 export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
-  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(`${row.tripId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
+  // Keyed by the trip, so a poll that moves its estimate by a few seconds changes the time in place instead of drawing
+  // the row again (a trip passes a stop once; a row without a trip id falls back to its line and time).
+  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(row.tripId || `${row.routeId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as
@@ -511,9 +513,15 @@ function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   // While ZET sends no positions no row is an estimate, so the note says what the times are instead of naming the
   // estimate's source ("Procjena iz ZET-ovih podataka…"; round 1 desktop F3, phone F2), with rows or without.
   const outage = d.positionsUnavailable ? `<p class="t-note" data-testid="stop-outage">${esc(i18n.t('kiosk.nearby.outageNote'))}</p>` : '';
+  // A board still on its way holds the room its three lead rows will take (Sada's held list does the same,
+  // city/nearby-markup.ts RESERVED_NEARBY_ROW), so the routes under it stand still when the rows land instead of
+  // being pushed down by them; the loading word stays for a reader who cannot see the reserved rows.
+  const held = d.arrivals.length === 0 && d.arrivalsStatus === 'none' && d.frozenAt === undefined;
   const body = lead.length > 0
     ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows">${lead.map(row).join('')}</ul>${timetable}${cancelled}${outage || `<p class="t-note">${esc(d.serviceNote ?? i18n.t('arrivals.note'))}</p>`}`
-    : `<p class="t-empty">${esc(empty)}</p>${cancelled}${outage}`;
+    : held
+      ? `<ul class="t-list sada-departure-list" data-testid="arrival-rows-held" aria-busy="true">${'<li class="sada-departure-empty" aria-hidden="true"><span class="skeleton"></span></li>'.repeat(STOP_DEPARTURES_FIRST)}</ul><p class="t-empty visually-hidden" role="status">${esc(empty)}</p>${cancelled}${outage}`
+      : `<p class="t-empty">${esc(empty)}</p>${cancelled}${outage}`;
   return `<section class="t-block" data-testid="stop-arrivals">${body}</section>`;
 }
 

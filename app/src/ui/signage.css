@@ -81,9 +81,18 @@
    fresh node enters the tree then; reconcile.ts leaves the node alone on a
    poll that keeps the same signature, so nothing replays. */
 .ki-main[data-enter='1'] > .layer { animation: ki-enter var(--dur-fast) var(--ease-enter) both; }
+/* A person's move between workspaces, or into a detail, crossfades old into new over the page's base duration
+   (dashboard.ts personDraw, workspace.ts swapBody); the enter fade above is the fallback where the document has no
+   view transitions. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-base); }
 @keyframes ki-enter { from { opacity: 0; } to { opacity: 1; } }
 .g-wrap { animation: ki-fade var(--dur-base) var(--ease) both; }
 @keyframes ki-fade { from { opacity: 0; } to { opacity: 1; } }
+/* A change inside a view the reader is looking at (ui/dom/reconcile.ts data-changed: words that changed, a row that
+   entered a live list) settles in over a moment instead of cutting; the reconciler clears the mark on animationend.
+   Scoped to the session page: the public screen has its own motion (kiosk.css). */
+.ki [data-changed] { animation: ki-changed var(--dur-base) var(--ease) both; }
+@keyframes ki-changed { from { opacity: 0.3; } to { opacity: 1; } }
 
 /* Press release: base.css's and layers.css's own :active rules answer at
    once (transition: none); this eases the surface back open afterwards. */
@@ -91,3 +100,5 @@
 
 @media (prefers-reduced-motion: reduce) { .ki-main[data-enter='1'] > .layer, .g-wrap { animation: none; } }
 :root[data-lagano='1'] .ki-main > .layer, :root[data-lagano='1'] .g-wrap { animation: none; }
+@media (prefers-reduced-motion: reduce) { .ki [data-changed] { animation: none; } }
+:root[data-lagano='1'] .ki [data-changed] { animation: none; }

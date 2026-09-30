@@ -95,7 +95,9 @@ describe('dashboard.css phone shell', () => {
     // Up to five keyed controls on the phone: wordmark, then Zaslon, Podijeli grad, session and safety, with a flexible gap pushing them right.
     expect(head).toContain('grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;');
     expect(rule('.ki-head::after')).toContain('block-size: 2px');
-    expect(rule(".ki[data-loading='true'] .ki-head::after")).toContain('opacity: 1');
+    // Lit by the slow-fetch mark alone (dashboard.ts SLOW_FETCH_MS), never by data-loading: a poll that answers in time shows no line.
+    expect(rule(".ki[data-slow='true'] .ki-head::after")).toContain('opacity: 1');
+    expect(CSS).not.toContain("[data-loading='true'] .ki-head::after");
   });
   it('places banners in flow between the header and main; only .ki-main takes the main area', () => {
     expect(rule('.ki-banners')).toContain('grid-area: banners');

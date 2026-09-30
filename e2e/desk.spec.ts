@@ -7,6 +7,7 @@
 // (F6), and the focus dropped to <body> after a stop chosen from the search with the keyboard (F7).
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
 import { DESKTOP_MIN_PX } from './lib';
 
@@ -94,7 +95,7 @@ test.describe('desk 1440×900 keyboard', () => {
     await search.click();
     await search.fill('Trg bana');
     await expect(page.locator('[data-testid=transport-results] [role=option][data-action=select-stop]').first()).toBeVisible({ timeout: 20_000 });
-    const results = await new AxeBuilder({ page }).include('[data-testid=transport-workspace]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice']).analyze();
+    const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).include('[data-testid=transport-workspace]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice']).analyze());
     expect(results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([]);
     await page.keyboard.press('ArrowDown');
     const chosen = await search.getAttribute('aria-activedescendant');

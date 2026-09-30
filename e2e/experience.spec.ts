@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import { experienceSnapshots, FIXTURE_DASHBOARD, installExperienceFixture } from './experience-fixtures';
 import type { LayerId } from '../worker/protocol';
 import { FIXTURE_NOW } from '../test/feed/fixture-contexts';
@@ -201,7 +202,7 @@ test('phone overview gives the city the first viewport and passes accessibility 
     const boxes = await rows.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON() as { top: number; bottom: number }));
     return boxes.filter((box) => box.top < SADA_FOLD_PX && box.bottom > 0).length;
   }, { message: `at least ${SADA_DEPARTURES_IN_FOLD} departures (${SADA_DEPARTURES}) must reach into the first ${SADA_FOLD_PX} px` }).toBeGreaterThanOrEqual(SADA_DEPARTURES_IN_FOLD);
-  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze());
   expect(results.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')).toEqual([]);
 });
 

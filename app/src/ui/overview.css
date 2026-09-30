@@ -26,7 +26,9 @@
    map, and over it one link that opens Karta. The map's credit stays above
    the link so it can be opened. */
 .sada-map { position: relative; display: block; block-size: 112px; overflow: hidden; border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-2); }
-.sada-map-canvas { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+.sada-map-canvas { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; view-transition-name: sada-map; }
+::view-transition-old(sada-map) { display: none; }
+::view-transition-new(sada-map) { animation: none; }
 .sada-map-open { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
 .sada-map-open:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: -3px; }
 .sada-map-canvas .maplibregl-ctrl-bottom-left, .sada-map-canvas .maplibregl-ctrl-bottom-right { z-index: 2; }

@@ -3,6 +3,7 @@
 // ones are printed for the record. The pages are loaded without a session, which
 // is exactly how a person without a phone meets them.
 import AxeBuilder from '@axe-core/playwright';
+import { analyzeAtRest } from './axe-at-rest';
 import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { APP_URL, E2E_STOP_ID, health, localContext, provisionKiosk, readPairing, unlockOnPhone } from './helpers';
 import { DESKTOP_MIN_PX } from './lib';
@@ -61,7 +62,7 @@ for (const { path, viewport } of PAGES) {
       const h1Count = await page.locator('h1').count();
       expect(h1Count, `${path} @${viewport.width} must have exactly one h1`).toBe(1);
 
-      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      const results = await analyzeAtRest(page, () => new AxeBuilder({ page }).withTags(TAGS).analyze());
 
       const advisory = results.violations.filter((v) => !v.impact || !BLOCKING.has(v.impact));
       if (advisory.length > 0) console.log(`[axe advisory] ${path} (${scheme})\n${advisory.map(describeViolation).join('\n')}`);

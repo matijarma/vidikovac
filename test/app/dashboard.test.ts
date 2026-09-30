@@ -1222,11 +1222,21 @@ describe('the sticky header and notices in flow', () => {
     pending.session.join();
     await flush();
     expect(pending.handle.element.dataset.loading).toBe('true');
+    // The header's hairline is for a slow fetch alone (SLOW_FETCH_MS): armed with the fetch, lit only once it fires
+    // with the fetch still out, so a poll that answers in time never shows a line (owner, 30 Sep).
+    expect(pending.handle.element.dataset.slow).toBeUndefined();
+    const slow = pending.ticks.filter((t) => !t.cleared && t.ms === 1_200);
+    expect(slow).toHaveLength(1);
+    slow[0]!.fn();
+    expect(pending.handle.element.dataset.slow).toBe('true');
     pending.handle.destroy();
+    expect(pending.ticks.filter((t) => !t.cleared && t.ms === 1_200)).toHaveLength(0);
     const landed = mount();
     landed.session.join();
     await flush();
     expect(landed.handle.element.dataset.loading).toBe('false');
+    expect(landed.handle.element.dataset.slow).toBeUndefined();
+    expect(landed.ticks.filter((t) => !t.cleared && t.ms === 1_200)).toHaveLength(0);
   });
   it('confirms the unlock in the polite region and the pill alone: no in-flow notice (kajimafix 01.1; the banners row is for the session\'s troubles and the two expiry marks)', () => {
     const time = clock();
