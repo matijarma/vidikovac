@@ -6,9 +6,10 @@
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { fetchData } from '../api';
 import { bootPage } from '../boot';
+import { readDevMode, requestDevSession, showDev, withDevFlag } from '../core/dev-mode';
 import { createMapModeStore } from '../core/map-mode-store';
 import { rememberScreenLabel } from '../core/screen-label';
-import { mountDashboard, parseSessionHash, type DashboardHandle } from '../dashboard';
+import { mountDashboard, parseSessionHash, type DashboardHandle, type SessionHashParams } from '../dashboard';
 import { canExportCalendarItem, copyWithAttribution, geojsonFile, icsFile, icsForItem, itemExportText, printAct, shareLink } from '../export';
 import { fillAttribution } from '../attribution';
 import { wordmarkMarkup } from '../experience/chrome';
@@ -36,6 +37,10 @@ import '../ui/map.css';
 const { i18n, theme, toasts } = bootPage({ page: 'dashboard' });
 const root = document.querySelector<HTMLElement>('#dash')!;
 const params = parseSessionHash(location.hash);
+// DEV (core/dev-mode.ts): no code is needed. A page in DEV without a room in its fragment asks
+// the Worker for a session on this network's DEV screen and runs it like any scanned one.
+const dev = readDevMode(location.search, safeSessionStorage());
+if (dev) showDev(i18n, globalThis.matchMedia?.('(min-width: 60rem)').matches ? 'desktop' : 'phone');
 
 // Collapsed on screen, complete on paper: native printing (including Ctrl+P)
 // must retain attribution and licence text, not only the disclosure heading.
@@ -81,7 +86,16 @@ const mapMode = createMapModeStore({ storage: safeLocalStorage() });
 // makes Vite emit fonts.css as its own chunk, loaded only on the modern path.
 if (!lightweight) void import('../ui/fonts.css');
 
-if (!params) {
+if (params) startSession(params, false);
+else if (!dev) showEmpty();
+else {
+  void requestDevSession().then(
+    (ok) => startSession({ roomId: ok.roomId, ticket: ok.ticket, label: ok.screenLabel }, true),
+    () => showEmpty(),
+  );
+}
+
+function showEmpty(): void {
   // Reached with no room in the fragment (a bookmark, a stray share): the
   // composed page of the plan's "Entry", in the shell's own roles. The
   // wordmark with its one brand gesture, the title at display size, one
@@ -101,8 +115,16 @@ if (!params) {
 <a class="btn-ghost" href="/hitno">${escapeHtml(i18n.t('landing.actions.safety'))}</a>
 </div>`;
   root.appendChild(empty);
-} else {
+}
+
+/** The session the fragment names, or a DEV session just issued (`fresh`). */
+function startSession(params: SessionHashParams, fresh: boolean): void {
   const session = createSessionClient({ roomId: params.roomId, ticket: params.ticket });
+  // DEV: a room this tab kept that the Worker no longer knows gives way to a new DEV session, once
+  // (the new one is fresh, so a refusal of it stays on the page as any refused session does).
+  if (dev && !fresh) {
+    session.onError((code) => { if (code === 'no-ticket') location.replace(withDevFlag(`${location.pathname}${location.search}`)); });
+  }
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const snapshots = new Map<string, ModuleSnapshot>();
   const toast = (key: string, variant: 'info' | 'success' | 'danger' = 'success'): void => {

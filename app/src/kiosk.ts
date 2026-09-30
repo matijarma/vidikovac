@@ -12,6 +12,7 @@ import { createBeaconClient, parseProvisionHash, readBeacon, reloadBeacon, store
 import { BUILT_AT } from './motion/network-meta';
 import type { MotionMetadata } from '../../shared/motion/wire';
 import { codeUrl, formatCode, speakableCode } from './code';
+import { withDevFlag } from './core/dev-mode';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
@@ -112,6 +113,8 @@ export interface KioskDeps {
   storage?: StorageLike | null;
   now?: () => number;
   codeBase?: string;
+  /** DEV (core/dev-mode.ts): the QR's link carries ?DEV, so a phone that scans this wall opens in DEV too. */
+  devQr?: boolean;
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;
@@ -1150,7 +1153,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       return;
     }
     const display = formatCode(slot.code);
-    const payload = codeUrl(slot.code, deps.codeBase);
+    const payload = deps.devQr ? withDevFlag(codeUrl(slot.code, deps.codeBase)) : codeUrl(slot.code, deps.codeBase);
     const label = fill(s.invitation.qrLabel, { code: speakableCode(slot.code) });
     // A slot change (a live code giving way to a different one) crossfades; the first code, a re-sent batch and a fresh mount paint at once.
     const previous = codeEl?.dataset.state === 'live' ? (codeEl.textContent ?? '').trim() : null;

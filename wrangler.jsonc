@@ -16,11 +16,12 @@
     // Only these paths reach the Worker; every other GET is served straight from
     // the static-asset store (free and off the request meter). /hitno is
     // server-rendered (open safety tier), /open/* is derived data, /stats is the
-    // Access-gated operator page, /statistika/ the public report (the one page
-    // allowed in a same-origin frame, worker/routes/statistika.ts). The HTML pages pass through the Worker too, only
+    // Access-gated operator page, /statistika/ the public report (allowed in a
+    // same-origin frame, worker/routes/statistika.ts, as /kiosk/, /d/ and /s/ are for
+    // the DEV grid, worker/routes/dev.ts). The HTML pages pass through the Worker too, only
     // so their response can carry Cache-Control: no-transform (the edge would
     // otherwise inject the zone's Web Analytics beacon, which the CSP blocks).
-    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*", "/", "/d", "/d/", "/s", "/s/", "/kiosk", "/kiosk/", "/izvori", "/izvori/", "/privatnost", "/privatnost/", "/pristupacnost", "/pristupacnost/", "/prijava", "/prijava/", "/statistika", "/statistika/"],
+    "run_worker_first": ["/api/*", "/ws/*", "/maps/*", "/hitno", "/hitno/*", "/open", "/open/*", "/stats", "/stats/*", "/", "/d", "/d/", "/s", "/s/", "/kiosk", "/kiosk/", "/izvori", "/izvori/", "/privatnost", "/privatnost/", "/pristupacnost", "/pristupacnost/", "/prijava", "/prijava/", "/statistika", "/statistika/", "/dev", "/dev/"],
     "not_found_handling": "404-page",
     "html_handling": "auto-trailing-slash"
   },
@@ -58,6 +59,6 @@
   "observability": { "enabled": true, "head_sampling_rate": 0.05 },
   "build": {
     "command": "npm run build",
-    "watch_dir": ["worker", "app/src", "app/index.html", "app/d", "app/s", "app/kiosk", "app/izvori", "app/privatnost", "app/pristupacnost", "app/prijava", "app/statistika"]
+    "watch_dir": ["worker", "app/src", "app/index.html", "app/d", "app/s", "app/kiosk", "app/izvori", "app/privatnost", "app/pristupacnost", "app/prijava", "app/statistika", "app/dev"]
   }
 }

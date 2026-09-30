@@ -1,16 +1,18 @@
 // DEV mode's Worker side (worker/routes/dev.ts): the network's DEV screen for the day, a session
 // on it without a code (a day long, renewed on use and while held), the wall shown in several tabs
-// at once, and the pages the /dev/ grid frames. What DEV counts is
+// at once, the four pages the /dev/ grid frames, and /hitno with the chip. What DEV counts is
 // test/pairing/dev-metrics.workers.test.ts.
-import { SELF, createExecutionContext, env, runInDurableObject } from 'cloudflare:test';
+import { SELF, createExecutionContext, env, runInDurableObject, waitOnExecutionContext } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import { beaconStub, type BeaconDO } from '../../worker/do/beacon-do';
 import { indexStub, type IndexDO } from '../../worker/do/index-do';
 import { DEV_RENEW_MS, DEV_SESSION_MS, WARN_60_MS, roomStub, type RoomDO } from '../../worker/do/room-do';
+import type { ModuleSnapshot } from '../../worker/feed/schema';
 import type { CodeSlot, CreateBeaconResponse, ScanOk } from '../../worker/protocol';
 import { FRAMED_PAGES, devCredentials, handleDev } from '../../worker/routes/dev';
-import { APP_CSP } from '../../worker/security-headers';
+import { handleOpen } from '../../worker/routes/open';
+import { APP_CSP, HITNO_SECURITY_HEADERS } from '../../worker/security-headers';
 import { connectWs, kioskAnswer, type Conn } from './helpers';
 
 const testEnv = env as unknown as Env;
@@ -183,5 +185,43 @@ describe('the pages the /dev/ grid frames', () => {
       const other = new URL(`https://vidikovac.test${path}`);
       expect(await handleDev(new Request(other), assets(page), createExecutionContext(), other), path).toBeNull();
     }
+  });
+});
+
+describe('/hitno?DEV', () => {
+  const CAP: ModuleSnapshot = {
+    module: 'dhmz-cap', tier: 'open', status: 'live', fetchedAt: new Date().toISOString(),
+    attribution: { text: 'Izvor: DHMZ', url: 'https://meteo.hr', licence: 'Otvorena dozvola' }, items: [],
+  };
+  /** The page and its headers; the body is read before the context settles, as a client reads it (the edge cache's copy is a branch of the same stream). */
+  const hitno = async (host: string, search: string, headers: Record<string, string> = {}) => {
+    const request = new Request(`https://${host}/hitno${search}`, { headers });
+    const ctx = createExecutionContext();
+    const response = (await handleOpen(request, { ...testEnv, RL_OPEN: { limit: async () => ({ success: true }) } } as Env, ctx, new URL(request.url), { getModules: async () => [CAP] }))!;
+    const html = await response.text();
+    await waitOnExecutionContext(ctx);
+    return { headers: response.headers, html };
+  };
+
+  it('is the same page with the chip written in, no script, never cached as the public copy', async () => {
+    expect((await hitno('dev-hitno.test', '')).html).not.toContain('data-dev');
+    const { headers, html } = await hitno('dev-hitno.test', '?DEV');
+    expect(headers.get('cache-control')).toBe('private, no-store');
+    for (const [k, v] of Object.entries(HITNO_SECURITY_HEADERS)) expect(headers.get(k), k).toBe(v);
+    expect(html).toContain('<html lang="hr" data-dev="1" data-page="hitno" data-dev-chip="1">');
+    expect(html).toContain('data-testid="dev-chip"');
+    expect(html).not.toMatch(/<script/i);
+    const links = [...html.matchAll(/data-dev-surface="([a-z]+)"[^>]*>([^<]+)</g)].map((m) => [m[1], m[2]]);
+    expect(links).toEqual([['screen', 'Zaslon'], ['phone', 'Telefon'], ['desktop', 'Računalo'], ['hitno', 'Hitno'], ['all', 'Sve zajedno']]);
+    expect(html).toContain('<a class="dev-off" data-testid="dev-off" href="/hitno" aria-label="Isključi razvojni način rada"');
+    expect(html).toContain('href="/hitno?DEV" data-dev-surface="hitno" aria-current="page"');
+    // The public copy in the edge cache is still the plain page.
+    expect((await hitno('dev-hitno.test', '')).html).not.toContain('data-dev');
+  });
+
+  it('framed by the /dev/ grid, is marked DEV but draws no chip', async () => {
+    const { html } = await hitno('dev-hitno-frame.test', '?DEV', { 'sec-fetch-dest': 'iframe' });
+    expect(html).toContain('<html lang="hr" data-dev="1" data-page="hitno">');
+    expect(html).not.toContain('dev-chip');
   });
 });

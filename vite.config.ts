@@ -78,6 +78,8 @@ export default defineConfig({
         pristupacnost: page('app/pristupacnost/index.html'),
         prijava: page('app/prijava/index.html'),
         statistika: page('app/statistika/index.html'),
+        // DEV mode's grid (worker/routes/dev.ts): built like every page, linked from none.
+        dev: page('app/dev/index.html'),
       },
     },
   },

@@ -2,7 +2,7 @@
 // /statistika/ describe real use, so a DEV screen and every session on it must never reach the
 // rows /statistika/ and grad.csv are built from. This file drives a DEV session through every
 // counting path there is (the wall coming online, a session without a code, one from the wall's
-// code, a refused code, a shared code, panel_open and export, the end of a session),
+// code, a refused code, a shared code, panel_open and export, the end of a session, /hitno?DEV),
 // then the same few steps on an ordinary temporary screen and one plain /hitno as the control that
 // the counters are live, and asserts that the counted rows hold the control's rows and nothing
 // else: the public cells and the City's rows are exactly the control's. Its own file, so MetricsDO
@@ -88,6 +88,7 @@ describe('a DEV session never reaches the counted rows', () => {
     expect(peer.beaconType).toBe('phone');
     const c = await join(peer, ip);
     for (const viewer of [a, b, c]) use(viewer);
+    await hitno('?DEV');
     await end(noCode, a);
     await end(fromCode, b);
     await end(peer, c);

@@ -1,0 +1,14 @@
+/* The /dev/ grid (app/src/entries/dev.ts; worker/routes/dev.ts describes DEV): the wall, the phone,
+   the desk and Hitno side by side, each drawn at its own size and scaled to its cell. The cells'
+   columns stand in the ratio of the frames' aspect ratios (--cols, set by the entry), so the four
+   share one height; a narrow window stacks them. The chip's own style is shared/dev-chip.ts. */
+.dev-grid { box-sizing: border-box; min-block-size: calc(100vh - var(--dev-strip, 0px)); padding: var(--sp-3, 12px); background: var(--tone-surface-canvas); }
+.dev-cells { display: grid; grid-template-columns: var(--cols, 1fr); gap: var(--sp-3, 12px); align-items: start; }
+.dev-cell { margin: 0; min-inline-size: 0; }
+.dev-cell figcaption { margin-block-end: var(--sp-1, 4px); font-size: var(--text-sm, 0.875rem); color: var(--tone-text-muted); }
+.dev-frame-box { position: relative; overflow: hidden; aspect-ratio: var(--w) / var(--h); border: 1px solid var(--tone-stroke); border-radius: var(--r-md, 12px); background: var(--tone-surface-1); }
+.dev-frame-box iframe { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 1px); block-size: calc(var(--h) * 1px); border: 0; transform: scale(var(--k, 1)); transform-origin: 0 0; }
+@media (max-width: 59.99rem) {
+  .dev-cells { grid-template-columns: minmax(0, 1fr); }
+  .dev-cell { max-inline-size: calc(var(--w) * 1px); }
+}

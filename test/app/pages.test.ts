@@ -9,7 +9,7 @@ const DEVIATION =
 describe('vite multi-page inputs', () => {
   it('builds every page of the product', () => {
     const input = (config as { build?: { rollupOptions?: { input?: Record<string, string> } } }).build!.rollupOptions!.input!;
-    expect(Object.keys(input).sort()).toEqual(['d', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's', 'statistika'].sort());
+    expect(Object.keys(input).sort()).toEqual(['d', 'dev', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's', 'statistika'].sort());
     for (const path of Object.values(input)) expect(path.endsWith('index.html')).toBe(true);
   });
   it('injects the source list into /izvori at build time', () => {

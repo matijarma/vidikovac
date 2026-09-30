@@ -6,7 +6,9 @@
 // (or the stored credentials, or nothing: then the self-service setup shows),
 // mounts the kiosk, and strips the secret from the address bar so a reload
 // never re-provisions from history.
+import { BEACON_STORAGE_KEY } from '../beacon';
 import { bootPage } from '../boot';
+import { devScopedStorage, readDevMode, requestDevScreen, showDev, withDevFlag } from '../core/dev-mode';
 import { createMapModeStore } from '../core/map-mode-store';
 import { mountKiosk } from '../kiosk';
 import { parseKioskMapMode } from '../core/map-mode-store';
@@ -75,19 +77,36 @@ if (!lightweight) void import('../ui/fonts.css');
 const mapOverride = parseKioskMapMode(location.search);
 const mapMode = mapOverride ?? createMapModeStore({ storage: safeLocalStorage() }).snapshot();
 
-mountKiosk(root, {
-  i18n,
-  hash: location.hash,
-  theme,
-  reducedMotion,
-  lightweight,
-  mapMode,
-  // A resize, a fullscreen change or a turn of the screen refits the wall's frame once it has settled (lane p-map).
-  onRepaint: repaintOn(theme, window, { doc: document, settleMs: REFIT_SETTLE_MS, setTimeout: (fn, ms) => window.setTimeout(fn, ms), clearTimeout: (t) => window.clearTimeout(t as number) }),
-  mapFactory: createMapRenderer,
-  raf: (fn) => window.requestAnimationFrame(fn),
-  cancelRaf: (handle) => window.cancelAnimationFrame(handle as number),
-});
+// DEV (core/dev-mode.ts): the wall runs on this network's DEV screen for the day, whatever screen
+// this browser keeps (its credentials stay apart, under their own key); its QR carries ?DEV, so a
+// phone that scans it opens in DEV too. Should the DEV screen not come, the wall starts from the
+// DEV screen it kept, or from the start screen, whose Pokreni asks for the DEV screen again.
+const dev = readDevMode(location.search, safeSessionStorage());
+if (dev) showDev(i18n, 'screen');
+const local = safeLocalStorage();
+if (!dev) mount(location.hash);
+else void requestDevScreen().then((screen) => mount(`#${screen.beaconId}.${screen.secret}`), () => mount(''));
+
+function safeSessionStorage(): Storage | undefined {
+  try { return window.sessionStorage; } catch { return undefined; }
+}
+
+function mount(hash: string): void {
+  mountKiosk(root, {
+    i18n,
+    hash,
+    theme,
+    reducedMotion,
+    lightweight,
+    mapMode,
+    // A resize, a fullscreen change or a turn of the screen refits the wall's frame once it has settled (lane p-map).
+    onRepaint: repaintOn(theme, window, { doc: document, settleMs: REFIT_SETTLE_MS, setTimeout: (fn, ms) => window.setTimeout(fn, ms), clearTimeout: (t) => window.clearTimeout(t as number) }),
+    mapFactory: createMapRenderer,
+    raf: (fn) => window.requestAnimationFrame(fn),
+    cancelRaf: (handle) => window.cancelAnimationFrame(handle as number),
+    ...(dev ? { storage: local ? devScopedStorage(local, BEACON_STORAGE_KEY) : null, createScreen: () => requestDevScreen(), devQr: true } : {}),
+  });
+}
 // The secret is in localStorage now, and ?tema= only ever needed to land
 // once: keep both out of the address bar and history, the same way as before.
 // The renderer override must survive a reload without changing the preference.
@@ -95,5 +114,6 @@ if (location.hash || temaParam) {
   const kept = new URLSearchParams();
   if (mapOverride) kept.set('prikaz', mapOverride === 'schema' ? 'shema' : 'karta');
   const search = kept.toString();
-  history.replaceState(null, '', `/kiosk/${search ? `?${search}` : ''}`);
+  const url = `/kiosk/${search ? `?${search}` : ''}`;
+  history.replaceState(null, '', dev ? withDevFlag(url) : url);
 }

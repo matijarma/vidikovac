@@ -1239,5 +1239,15 @@
     "mapBand": "Map around {place}. Open the map.",
     "viewSchema": "Diagram",
     "viewMap": "Map"
+  },
+  "dev": {
+    "chip": "DEV",
+    "menu": "Developer mode",
+    "off": "Turn developer mode off",
+    "screen": "Screen",
+    "phone": "Phone",
+    "desktop": "Computer",
+    "hitno": "Emergency",
+    "all": "All together"
   }
 }

@@ -7,6 +7,7 @@ import { getModules } from '../feed/cache';
 import { recordMetric } from '../metrics';
 import type { OpenDeps } from '../open/deps';
 import { cacheControl, edgeCached, isBot, openRateLimited } from '../open/http';
+import { isDevRequest, withDevChip } from './dev';
 import { renderHitnoPage, renderTooManyRequests } from './render';
 import { HITNO_MODULES, selectHitno } from './select';
 
@@ -56,7 +57,9 @@ export async function handleHitno(
     }
   });
 
-  if (!isBot(request)) recordMetric(env, 'hitno_view', 'page');
+  // DEV (worker/hitno/dev.ts): the chip on the same page, and no count.
+  const dev = isDevRequest(url);
+  if (!isBot(request) && !dev) recordMetric(env, 'hitno_view', 'page');
   if (request.method === 'HEAD') return new Response(null, response);
-  return response;
+  return dev ? withDevChip(response, request) : response;
 }

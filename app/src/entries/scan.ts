@@ -13,6 +13,7 @@
 // are the page's only two scripts, both external (R-16).
 import { scan as scanRequest } from '../api';
 import { bootPage } from '../boot';
+import { readDevMode, showDev, withDevFlag } from '../core/dev-mode';
 import { activateDashboardGraph } from '../prefetch-dashboard';
 import { codeFromHash, createScanPage, type ScanPageHandle } from '../scan';
 import { isQrScanSupported } from '../ui/qrScanner';
@@ -29,6 +30,11 @@ const { i18n } = bootPage({ page: 'scan', onLocaleChange: () => remount() });
 // Read before mount() spends the fragment: a code on its way is posted at mount, and the page hands over to /d/
 // the moment the room answers.
 const codeOnItsWay = codeFromHash(hash) !== null;
+// DEV (core/dev-mode.ts): nothing to type. A code on its way (a phone that scanned a DEV wall) is
+// redeemed as ever and /d/ opens in DEV; without one the page goes straight on to /d/ in DEV.
+const dev = readDevMode(location.search, safeSessionStorage());
+if (dev && !codeOnItsWay) location.replace(withDevFlag('/d/'));
+if (dev) showDev(i18n, null);
 let page = mount();
 // The one Manrope family, at once: a slow link never finishes it before the hop and the hop cancels it, a fast link
 // has it cached for /d/, which then never swaps its fonts (round 3 review, N3).
@@ -44,7 +50,7 @@ function mount(): ScanPageHandle {
     i18n,
     hash,
     navigate: (url) => {
-      location.assign(url);
+      location.assign(dev ? withDevFlag(url) : url);
     },
     scannerSupported: isQrScanSupported(),
     scan: async (code) => {
@@ -55,6 +61,10 @@ function mount(): ScanPageHandle {
   });
   hash = '';
   return handle;
+}
+
+function safeSessionStorage(): Storage | null {
+  try { return window.sessionStorage; } catch { return null; }
 }
 
 function remount(): void {
