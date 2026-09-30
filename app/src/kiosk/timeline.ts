@@ -541,8 +541,12 @@ function headMarkup(head: string): string {
 /** The layout as a browser lays it out: the list's box, and a text's lines from its height over its line height. */
 export const DOM_MEASURE: TimelineMeasure = {
   box(list) {
+    // A departures cell or its destination (R1) runs past its box only sideways: its text at line-height 1.1 overflows
+    // its own line box upwards and downwards in Chromium (the glyphs' ascent), which is no overflow of the cell. The
+    // accept scene of 30 September read every cell as overflowing: clock times and no destination at 1920 x 1080.
+    const sideways = list.classList.contains('k-dep-cell') || list.classList.contains('k-dep-headsign');
     return { height: list.clientHeight, width: list.clientWidth,
-      overflow: list.scrollHeight > list.clientHeight + 1 || list.scrollWidth > list.clientWidth + 1 };
+      overflow: (!sideways && list.scrollHeight > list.clientHeight + 1) || list.scrollWidth > list.clientWidth + 1 };
   },
   lines(el) {
     const height = el.offsetHeight;
