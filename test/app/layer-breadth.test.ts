@@ -59,6 +59,19 @@ describe('Sigurnost: HAK road states and the planned cuts (R0)', () => {
     expect(text(down.querySelector('#sf-roads'))).toContain(hr.t('status.unknown'));
     expect(text(down.querySelector('#sf-cuts'))).toContain(hr.t('status.unknown'));
   });
+
+  it('R0 review: never confirms no power or water cuts while one publisher is down', () => {
+    const partial: ModuleSnapshot = {
+      ...snap('prekidi', []),
+      sources: { 'hep-ods': { status: 'live', itemCount: 0 }, vio: { status: 'down', itemCount: 0 } },
+    };
+    const section = renderLayer('sigurnost', ctx({ prekidi: partial }));
+    expect(text(section.querySelector('#sf-cuts'))).not.toContain(hr.t('safety.cutsNone'));
+    expect(text(section.querySelector('#sf-cuts'))).toContain(hr.t('status.unknown'));
+    expect(section.querySelector('#sf-cuts [data-action=retry]')).not.toBeNull();
+    const available = renderLayer('sigurnost', ctx({ prekidi: { ...partial, items: CUTS.items } }));
+    expect(available.querySelectorAll('[data-testid=cut-row]')).toHaveLength(8);
+  });
 });
 
 describe('Vrijeme: the hourly strip (R0)', () => {
@@ -95,5 +108,12 @@ describe('Vrijeme: the hourly strip (R0)', () => {
     expect([...cells].map((c) => text(c.querySelector('time')))).toEqual(['12:00', '14:00']);
     expect(renderLayer('zrak-i-nebo', ctx({})).querySelector('[data-testid=weather-hourly]')).toBeNull();
     expect(text(renderLayer('zrak-i-nebo', ctx({})).querySelector('#wx-hourly'))).toContain(hr.t('status.loading'));
+  });
+
+  it('R0 review: starts the hourly strip at the current step on an exact hour boundary', () => {
+    const section = renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': HOURLY }, { now: Date.parse('2026-09-22T10:00:00Z') }));
+    const cells = section.querySelectorAll('[data-testid=weather-hourly] > li.wx-hour');
+    expect(cells).toHaveLength(12);
+    expect(text(cells[0]!.querySelector('time'))).toBe('12:00');
   });
 });

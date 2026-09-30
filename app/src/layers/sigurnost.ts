@@ -210,7 +210,11 @@ function cutsSection(i18n: I18n, ctx: LayerContext): string {
     .sort((a, b) => time(a.at) - time(b.at) || a.title.localeCompare(b.title, 'hr'))
     .map((item) => cutRow(i18n, item))
     .filter((row): row is string => row !== null);
-  let list = listState(i18n, prekidi, 'prekidi', rows.length, i18n.t('safety.cutsNone'), error);
+  // The module can be live while one publisher is down: an empty surviving list cannot confirm both utilities.
+  const incomplete = Object.values(prekidi?.sources ?? {}).some((source) => source.status !== 'live');
+  let list = rows.length === 0 && incomplete
+    ? stateBlock(i18n, 'down', i18n.t('status.unknown'), { retry: 'prekidi' })
+    : listState(i18n, prekidi, 'prekidi', rows.length, i18n.t('safety.cutsNone'), error);
   if (!list) {
     const shownCount = Math.min(rows.length, Number(ctx.view?.filters.cuts) || CUTS_PAGE);
     const more = shownCount < rows.length

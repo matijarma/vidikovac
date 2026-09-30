@@ -45,7 +45,8 @@ function hourlySection(i18n: I18n, ctx: LayerContext): string {
   const at = (item: FeedItem): number => Date.parse(item.at ?? '');
   const from = ctx.now - 3_600_000;
   const steps = (station: string): FeedItem[] => (hourly?.items ?? [])
-    .filter((item) => dataText(item, 'station') === station && at(item) >= from && Number.isFinite(dataNumber(item, 'temp') ?? Number.NaN))
+    .filter((item) => dataText(item, 'station') === station && at(item) >= from && Date.parse(item.until ?? '') > ctx.now
+      && Number.isFinite(dataNumber(item, 'temp') ?? Number.NaN))
     .sort((a, b) => at(a) - at(b));
   const gric = steps('gric');
   const shown = (gric.length > 0 ? gric : steps('maksimir')).slice(0, HOURLY_STEPS);
