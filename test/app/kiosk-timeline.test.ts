@@ -1151,6 +1151,39 @@ function nightRows(): TimelineRow[] {
 /** Decision 50: the compact list takes the whole 513 px aside less its heading and padding, 451 px measured. */
 const COMPACT_1366_D50: Layout = { boxPx: 451, titleChars: 16, subChars: 25, ...LINE_1366 };
 
+describe('R1 review: reserved-only overflow still gives back row growth', () => {
+  const NIGHT = at('2026-09-21T22:40:00+02:00');
+  const promises = (): TimelineRow[] => {
+    const rows = nightRows();
+    const notice = row({
+      id: 'notice:reserved', kind: 'notice', atMs: NIGHT - MIN, title: 'Linije 5 i 13 u nedjelju',
+      sub: '', source: 'zet-promet',
+    });
+    return [...rows.slice(0, 3), notice, ...rows.slice(3)];
+  };
+
+  it.each([
+    { boxPx: 451, overflow: false, rowPx: '64px' },
+    { boxPx: 435, overflow: true, rowPx: '87px' },
+    { boxPx: 470, overflow: false, rowPx: '92px' },
+  ])('R1 review: keeps every promise in a $boxPx px box and reports overflow $overflow', ({ boxPx, overflow, rowPx }) => {
+    const layout = { ...COMPACT_1366_D50, boxPx };
+    const measure = simulated(layout);
+    const lines = vi.fn(measure.lines);
+    const timeline = mount({ measure: { ...measure, lines }, designHeightPx: boxPx, reduced: true });
+    timeline.update(promises(), 2182, NIGHT);
+    expect(ids()).toEqual(['departures', 'notice:reserved', 'last:2026-09-21', 'first:2026-09-22', 'always:pharmacy']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(section().dataset.fitOverflow).toBe(overflow ? '1' : '0');
+    expect(section().style.getPropertyValue('--k-nearby-row')).toBe(rowPx);
+    const nodes = [...items(), ...cells()];
+    lines.mockClear();
+    timeline.update(promises(), 2182, NIGHT);
+    expect(lines).not.toHaveBeenCalled();
+    expect([...items(), ...cells()]).toEqual(nodes);
+  });
+});
+
 /**
  * The compact wall's column as the accept night scenes measured it at 1366 x 768 (dark; lane w-labels2): the
  * window 513 px, the gap 14, the QR card 284, the list's head and padding 61, and the legend 56: Trg's frame

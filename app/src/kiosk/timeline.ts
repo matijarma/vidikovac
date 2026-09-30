@@ -658,7 +658,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
   /** Fits `candidates` (the estimate's, fitRows) into the box; `pool` is the whole vetted list they were taken from, in
    *  list order, whose other rows are tried where the measured rows leave room. */
-  function fit(candidates: readonly WallRow[], pool: readonly WallRow[], now: number, box: { height: number; width: number }): { shown: WallRow[]; short: Map<string, ShortLabels> } {
+  function fit(candidates: readonly WallRow[], pool: readonly WallRow[], now: number, box: { height: number; width: number }): { shown: WallRow[]; short: Map<string, ShortLabels>; overflow: boolean } {
     // A detached tree has no layout. This hidden sibling inherits the same
     // kiosk/aside styles and variables but is outside the live timeline. Give
     // its list exactly the live content box, then dispose of it before paint.
@@ -681,7 +681,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       measuring.remove();
     }
 
-    function fitIn(list: HTMLOListElement): { shown: WallRow[]; short: Map<string, ShortLabels> } {
+    function fitIn(list: HTMLOListElement): { shown: WallRow[]; short: Map<string, ShortLabels>; overflow: boolean } {
       let shown = [...candidates];
       const short = new Map<string, ShortLabels>();
       const draw = (): void => { list.innerHTML = rowsMarkup(shown, now, i18n, short); };
@@ -828,7 +828,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         }
         break;
       }
-      return { shown, short };
+      return { shown, short, overflow: measure.box(list).overflow };
     }
   }
 
@@ -892,13 +892,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           // re-created row each time); at 64 px they all fit. As many rows with more departures is more too: the refit
           // (U0 step 7) can fill a departure's room at the budget's height with a row that yielded to it, such as a
           // sunset hours away (decision 67), where 64 px keeps the departure.
-          if (fitted.shown.length < candidates.length && budget.rowPx > ROW_MIN_PX) {
+          if ((fitted.shown.length < candidates.length || fitted.overflow) && budget.rowPx > ROW_MIN_PX) {
             rowVars(ROW_MIN_PX);
             const tighter = fit(candidates, wall, now, box);
             // The departures on the list: the line's cells, or the departure rows of an ungrouped list.
             const departuresIn = (rows: readonly WallRow[]): number => rows.reduce((n, r) => n + (isDeparturesLine(r) ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0);
             if (tighter.shown.length > fitted.shown.length
-              || (tighter.shown.length === fitted.shown.length && departuresIn(tighter.shown) > departuresIn(fitted.shown))) {
+              || (tighter.shown.length === fitted.shown.length && (departuresIn(tighter.shown) > departuresIn(fitted.shown)
+                || (fitted.overflow && !tighter.overflow)))) {
               fitted = tighter;
               rowPx = ROW_MIN_PX;
             }
