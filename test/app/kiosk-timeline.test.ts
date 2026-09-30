@@ -459,6 +459,44 @@ describe('the time words', () => {
 });
 
 describe('calm motion (principle 7)', () => {
+  describe('R1 review: atomic multi-cell turnover (run decision 3)', () => {
+    for (const reduced of [false, true]) {
+      it.each([[3, 4, 5], [1, 4, 5], [4, 2, 5], [4, 5, 6]])(
+        `keeps trip and node identity for %j,%j,%j, reduced=${reduced}`,
+        (...nextIds: number[]) => {
+          const make = (id: number): TimelineRow => dep(id, {
+            title: 'Dubrava', live: false, atMs: NOW + id * MIN,
+            arrival: { routeId: String(id), routeName: String(id) },
+          });
+          const timeline = mount({ measure: simulated(WALL_1920), reduced });
+          timeline.update([make(1), make(2), make(3), always()], 2000, NOW);
+          const line = byId('departures');
+          const before = new Map(cells().map((cell) => [cell.dataset.id, cell]));
+          const replace = vi.spyOn(line, 'replaceChildren');
+          const rows = [...nextIds.map(make), always()];
+          timeline.update(rows, 2000, NOW + 1000);
+          expect(replace).toHaveBeenCalledTimes(1);
+          expect(byId('departures')).toBe(line);
+          expect(cellIds()).toEqual(nextIds.map((id) => `dep:${id}`));
+          cells().forEach((cell, index) => {
+            const id = `dep:${nextIds[index]}`;
+            expect(cell.dataset.key).toBe(id);
+            expect(cell.dataset.cell).toBe(String(index + 1));
+            expect(cell.dataset.route).toBe(String(nextIds[index]));
+            expect(cell.querySelector('time')?.dateTime).toBe(new Date(NOW + nextIds[index]! * MIN).toISOString());
+            if (before.has(id)) expect(cell).toBe(before.get(id));
+            expect(cell.hasAttribute('data-enter')).toBe(!reduced && !before.has(id));
+          });
+          // happy-dom emits per-child records for replaceChildren. Native record counts remain an unweakened
+          // browser assertion in lastTrams2240; this unit check pins the operation and exact surviving objects.
+          replace.mockClear();
+          timeline.update(rows, 2000, NOW + 1000);
+          expect(replace).not.toHaveBeenCalled();
+        },
+      );
+    }
+  });
+
   it('keeps ten idle minutes within the recorder budget when rejected rows change on every poll', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ measure });

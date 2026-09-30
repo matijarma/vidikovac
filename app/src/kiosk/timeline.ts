@@ -14,6 +14,8 @@
 // departures stand as one line of up to three cells (R1, groupDepartures): the
 // line keeps its node, and a departure leaves and enters as a cell, reconciled
 // the same way one level down (a cell leaving, a cell entering: two records).
+// Two or more departing cells use an atomic replacement (reveal run decision 3):
+// the sole possible survivor keeps its exact node, briefly detached in that step.
 // Nothing is appended elsewhere
 // and moved later: a node move is two childList records to a MutationObserver
 // (removed, then added), so the D2 recorder (e2e/wall.ts CALM_MOTION_*) would
@@ -636,9 +638,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       if (live.get(key)?.hasAttribute('data-enter')) li.setAttribute('data-enter', '1');
     }
     for (const [key, li] of live) if (!wanted.has(key)) li.remove();
-    // The departures line the same way, one level down: the cells that left go first, so the cells that stay are
-    // matched where they stand (never moved), and a new cell is inserted once at its place; a cell still fading in
-    // keeps its fade. The line itself keeps its node.
+    // A single departing cell uses the keyed path. Multiple departures use the approved atomic batch below.
     const liveLine = live.get(DEPARTURES_LINE_ID);
     const nextLine = wanted.get(DEPARTURES_LINE_ID);
     if (liveLine && nextLine) {
@@ -650,7 +650,21 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         nextCells.add(key);
         if (liveCells.get(key)?.hasAttribute('data-enter')) cell.setAttribute('data-enter', '1');
       }
-      for (const [key, cell] of liveCells) if (!nextCells.has(key)) cell.remove();
+      const departing = [...liveCells].filter(([key]) => !nextCells.has(key));
+      if (departing.length > 1) {
+        // At most one of three cells survives. Keep that exact object and trip identity; never recycle a departed
+        // cell as another trip. Native replaceChildren batches the change, while a single turnover stays unchanged.
+        const replacement = [...nextLine.children].map((cell) => {
+          const survivor = liveCells.get(cell.getAttribute('data-key') ?? '');
+          if (!survivor) return cell.cloneNode(true);
+          survivor.removeAttribute('data-enter');
+          cell.removeAttribute('data-enter');
+          return survivor;
+        });
+        liveLine.replaceChildren(...replacement);
+      } else {
+        for (const [, cell] of departing) cell.remove();
+      }
     }
     reconcile(list, next);
   }
