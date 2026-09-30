@@ -28,14 +28,10 @@
 // selection layer supplies one (titleShort, subShort), and a label without one
 // wraps whole; when the list still overflows its box, every label that takes
 // more than one line gives way to its short one, then whole rows are dropped:
-// a later day's rows first, then the facts-breadth rows (a train, rain, a cut,
-// a road state, a place open now: BREADTH_KINDS, the latest first), then a
-// sunrise, sunset or opening more than an hour
-// away and further away than the last departure beyond the first, then that
-// departure, then the next row that is not a departure (so a closure or an
-// event the source cannot shorten keeps its row while a third departure can
-// make room). First/last trams and one
-// "uvijek" row are reserved (decision 27). The fit is measured once
+// a later day's rows first, then the row of the lowest value (shared/kiosk/takt.ts,
+// brief §5.2(a): its kind's base value times how near its moment is). First/last
+// trams, the ZET notice, the first departure and one "uvijek" row are reserved
+// (decision 27). The fit is measured once
 // per change of content or box and remembered, so a steady wall does not
 // re-measure or re-insert anything.
 //
@@ -49,6 +45,7 @@
 // data-key duplicates data-id for reconcile.ts.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import { CLOCK_RANGE_TAIL, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
+import { candidateValue, type TaktCandidate, type TaktKind } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { reconcile } from '../ui/dom/reconcile';
@@ -143,35 +140,69 @@ export const ENTER_CLEAR_MS = 260;
 export const FIT_RESTORE_HOLD_MS = 60_000;
 
 const ROW_MAX = 92;
-/** A sunrise, sunset or opening this many minutes away or closer keeps its row against the second and third departures (decision 67). */
+/** Decision 67's bound; the value order (shared/kiosk/takt.ts) subsumes it. */
 export const IMMINENT_ROW_MIN = 60;
 
 /** A row with no moment: the "uvijek" row, the pharmacy at night. */
-export function isTimeless(row: NearbyRow): boolean {
+export function isTimeless(row: Valued): boolean {
   return row.always || row.atMs === null || !Number.isFinite(row.atMs);
 }
 
-/** The facts-breadth kinds (docs/history/upgrade-2026-10-plan/U3.md S2, S3): the first to give way when the list does not fit,
- *  right after a later day's rows, and before the second and third tram (§0.5). */
-export const BREADTH_KINDS: readonly NearbyKind[] = ['rail', 'rain', 'cut', 'road', 'open'];
+/** A row as the value order reads it: structural, so a row of any wall type with a takt kind is one. */
+type Valued = Pick<NearbyRow, 'id' | 'atMs' | 'always'> & { kind: TaktKind; untilMs?: number; detail?: NearbyRow['detail'] };
 
-/** A facts-breadth row that yields first: not a train the response policy put before the departures (policy.railFirst). */
-function breadthRow(row: NearbyRow, rows: readonly NearbyRow[]): boolean {
-  if (!BREADTH_KINDS.includes(row.kind)) return false;
-  if (row.kind !== 'rail') return true;
-  const firstDeparture = rows.findIndex((other) => other.kind === 'departure');
-  return firstDeparture === -1 || rows.indexOf(row) > firstDeparture;
+/** A row this close to its moment (or under way) is imminent. */
+const IMMINENT_MS = 30 * 60_000;
+
+/** Each row as a takt candidate (shared/kiosk/takt.ts, brief §5.2(a)): reserved are the first and last trams, the ZET
+ *  notice, a departures line, the first timeless row and the first departure; a fact under way (a closure, a road
+ *  state, a cut under way, a place or an exhibition open now) stands by its end, a timeless row by nothing. */
+export function rowCandidates<T extends Valued>(rows: readonly T[], now: number): Map<T, TaktCandidate> {
+  const reserved = new Set<T>(rows.filter((row) => row.kind === 'first' || row.kind === 'last' || row.kind === 'notice' || row.kind === 'departures'));
+  const timeless = rows.find(isTimeless);
+  if (timeless) reserved.add(timeless);
+  const departure = rows.find((row) => row.kind === 'departure');
+  if (departure) reserved.add(departure);
+  const out = new Map<T, TaktCandidate>();
+  for (const row of rows) {
+    let atMs: number | undefined;
+    let untilMs: number | undefined;
+    if (isTimeless(row)) {
+      atMs = undefined;
+      untilMs = undefined;
+    } else if (row.kind === 'closure' || row.kind === 'road' || cutUnderWay(row) || openNow(row)) {
+      untilMs = row.atMs!;
+    } else {
+      atMs = row.atMs!;
+      untilMs = row.untilMs;
+    }
+    const moment = atMs ?? untilMs;
+    out.set(row, {
+      id: row.id,
+      kind: row.kind,
+      ...(atMs !== undefined ? { atMs } : {}),
+      ...(untilMs !== undefined ? { untilMs } : {}),
+      reserved: reserved.has(row),
+      imminent: moment !== undefined && moment <= now + IMMINENT_MS,
+    });
+  }
+  return out;
 }
 
 /** A cut under way stands at its end (city/nearby.ts cutRows): it is now, not the day its end falls on. */
-function cutUnderWay(row: NearbyRow): boolean {
+function cutUnderWay(row: Valued): boolean {
   return row.kind === 'cut' && row.untilMs !== undefined && row.atMs === row.untilMs;
 }
 
+/** A place open now, or an exhibition whose venue is open now: the row stands at its closing time. */
+function openNow(row: Valued): boolean {
+  return row.kind === 'open' || (row.kind === 'opening' && row.detail?.kind === 'exhibit' && row.detail.openNow);
+}
+
 /** A row about now, whatever day its time falls on: a train (a departure), a road state and a cut under way (their
- *  moment is their end, as a closure's), a place open now (its closing time). */
+ *  moment is their end, as a closure's), a place or an exhibition open now (its closing time). */
 function aboutNow(row: NearbyRow): boolean {
-  return row.kind === 'rail' || row.kind === 'road' || row.kind === 'open' || cutUnderWay(row);
+  return row.kind === 'rail' || row.kind === 'road' || openNow(row) || cutUnderWay(row);
 }
 
 /** Decision 27: these rows are promises, not overflow candidates. */
@@ -183,21 +214,16 @@ function reservedRows<T extends NearbyRow>(rows: readonly T[]): Set<T> {
 }
 
 /**
- * The first `n` rows in order, reserving first/last trams and one timeless
- * row before filling the rest. The initial estimate cannot remove these
- * promises; the hidden measurement pass makes other whole rows yield.
+ * The rows the estimate keeps, in their order: the reserved rows (rowCandidates; the first departure only when
+ * `n > 0`), then the most valuable (byValue) up to `n`. The initial estimate cannot remove the promises; the hidden
+ * measurement pass makes other whole rows yield.
  */
-export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number): T[] {
+export function fitRows<T extends NearbyRow>(rows: readonly T[], n: number, now?: number): T[] {
   if (rows.length <= n) return [...rows];
-  const keep = reservedRows(rows);
-  const departure = rows.find(row => row.kind === 'departure');
-  if (n > 0 && departure) keep.add(departure);
-  // The facts-breadth rows fill the estimate last, as they are the first the measured pass drops (dropCandidate).
-  for (const row of rows) {
-    if (keep.size >= n) break;
-    if (!breadthRow(row, rows)) keep.add(row);
-  }
-  for (const row of rows) {
+  const candidates = rowCandidates(rows, now ?? Number.NaN);
+  const departure = rows.find((row) => row.kind === 'departure');
+  const keep = new Set(rows.filter((row) => candidates.get(row)!.reserved && (row !== departure || n > 0)));
+  for (const row of byValue(rows, now)) {
     if (keep.size >= n) break;
     keep.add(row);
   }
@@ -215,53 +241,42 @@ export function onLaterDay(row: NearbyRow, now: number): boolean {
 }
 
 /**
- * The row to drop when the rows do not fit, or null. Tomorrow before today (round 1, 24 Sep): the latest row
- * for a later day (onLaterDay) goes first, because at 20:35 the live wall showed one tram and two museums
- * opening at 08:00 tomorrow, its second and third trams dropped for them, while §11 lists the departures
- * first and tomorrow's openings last. Then the latest departure while more than one is left (the wall
- * promises one to three, and a third tram is worth less than a closure or the sunset that would otherwise
- * leave and return with the trams, D5.16 and D5.19 observers), except that a sunrise, sunset or opening more
- * than IMMINENT_ROW_MIN away and further away than that departure goes before it, the latest first (decision 67,
- * observe-d530: at 04:00 on a Sunday the 06:48 sunrise and a 10:00 museum opening on two title lines took the
- * second and third night trams, each the only tram of its line or direction for forty minutes; a sunset within the
- * hour still outlasts them; an event likewise since U0 step 7); then the latest event, before any closure (U0 step 7);
- * then the latest timed row that is not a departure; then a second timeless row. The
- * facts-breadth rows (BREADTH_KINDS) go right after the later-day step, the latest first: a train, rain, a cut, a
- * road state or a place open now is worth less than the second and third tram (U3.md §0.5). The
- * first departure, the closures and the rest keep their order. First/last trams, one timeless row and the ZET
- * notice never enter the drop order (owner decisions 10 and 27; upgrade U1); a closure or solar row that is on the list stays on its node while
- * the list can hold it, and returns under a new identity only when its fact changed. Without `now` (older
- * callers) the later-day step and decision 67's are skipped.
+ * The row to drop when the rows do not fit, or null. Tomorrow before today (round 1, 24 Sep): the latest row for a
+ * later day (onLaterDay) goes first, because at 20:35 the live wall showed one tram and two museums opening at 08:00
+ * tomorrow while §11 lists the departures first and tomorrow's openings last. Then the value order (brief §5.2(a),
+ * docs/reveal-2026-10-plan/R0.md §0.5 item 1): among the rows that are not reserved (rowCandidates: first/last
+ * trams, the ZET notice, a departures line, one timeless row and the first departure, owner decisions 10 and 27,
+ * upgrade U1), the one with the lowest candidateValue (shared/kiosk/takt.ts: its kind's base value times how near its
+ * moment is), a tie going to the row later in the list. Null when every row is reserved. Without `now` (older
+ * callers) the later-day step is skipped and every row counts its base value.
  */
 export function dropCandidate<T extends NearbyRow>(rows: readonly T[], now?: number): T | null {
   if (now !== undefined) {
     const later = rows.filter((row) => onLaterDay(row, now));
     if (later.length > 0) return later[later.length - 1]!;
   }
-  const breadth = rows.filter((row) => breadthRow(row, rows) && !isTimeless(row));
-  if (breadth.length > 0) return breadth.reduce((latest, row) => (row.atMs! >= latest.atMs! ? row : latest));
-  const departures = rows.filter((row) => row.kind === 'departure');
-  if (departures.length > 1) {
-    const departure = departures[departures.length - 1]!;
-    const further = now === undefined ? [] : rows.filter((row) => outlivedBy(row, departure, now));
-    if (further.length > 0) return further.reduce((latest, row) => (row.atMs! >= latest.atMs! ? row : latest));
-    return departure;
+  const at = now ?? Number.NaN;
+  const candidates = rowCandidates(rows, at);
+  let drop: T | null = null;
+  let lowest = Infinity;
+  for (const row of rows) {
+    const c = candidates.get(row)!;
+    if (c.reserved) continue;
+    const value = candidateValue(c, at, null);
+    // A tie (within rounding) goes to the later row.
+    if (value <= lowest + 1e-9) {
+      drop = row;
+      lowest = Math.min(lowest, value);
+    }
   }
-  const others = rows.filter((row) => !isTimeless(row) && row.kind !== 'departure' && row.kind !== 'notice' && row.kind !== 'first' && row.kind !== 'last');
-  // An event yields before any closure (U0 step 7): the closures sort by their ends, often a placeholder later in the
-  // day (16:00 and 18:00 on 29 September), so the latest timed row was a closure while a noon event stayed.
-  const events = others.filter((row) => row.kind === 'event');
-  if (events.length > 0) return events[events.length - 1]!;
-  if (others.length > 0) return others[others.length - 1]!;
-  const timeless = rows.filter(isTimeless);
-  return timeless.length > 1 ? timeless[timeless.length - 1]! : null;
+  return drop;
 }
 
 /**
- * `rows` from the most valuable to the least: the rows dropCandidate never gives up first, then its drop order
- * reversed (the last it would drop comes first). The measured fit tries the rows the estimate left out in this order.
+ * `rows` from the most valuable to the least: the reserved rows first, then by value, the later-day rows last
+ * (dropCandidate's order reversed). The estimate and the measured fit take the rows in this order.
  */
-export function byValue<T extends NearbyRow>(rows: readonly T[], now: number): T[] {
+export function byValue<T extends NearbyRow>(rows: readonly T[], now?: number): T[] {
   let rest = [...rows];
   const drops: T[] = [];
   for (let drop = dropCandidate(rest, now); drop; drop = dropCandidate(rest, now)) {
@@ -269,13 +284,6 @@ export function byValue<T extends NearbyRow>(rows: readonly T[], now: number): T
     rest = rest.filter((row) => row !== drop);
   }
   return [...rest, ...drops.reverse()];
-}
-
-/** A sunrise, sunset, opening or event row more than IMMINENT_ROW_MIN from `now` and further away than `departure`
- *  (decision 67; the event since U0 step 7: at 07:45 on 29 September a noon event took the second and third trams). */
-function outlivedBy(row: NearbyRow, departure: NearbyRow, now: number): boolean {
-  if ((row.kind !== 'solar' && row.kind !== 'opening' && row.kind !== 'event') || isTimeless(row) || isTimeless(departure)) return false;
-  return row.atMs! > departure.atMs! && row.atMs! - now > IMMINENT_ROW_MIN * 60_000;
 }
 
 const WEEKDAY_HR = new Intl.DateTimeFormat('hr-HR', { timeZone: 'Europe/Zagreb', weekday: 'short' });
@@ -323,12 +331,13 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   // A whole-day water cut has no hours to print; a cut under way says when it ends; a place open now when it closes.
   if (row.kind === 'cut' && row.detail?.kind === 'cut' && row.detail.allDay) return i18n.t('kiosk.say.allDay');
   if (cutUnderWay(row)) return until(row.untilMs!);
-  if (row.kind === 'open') return `${i18n.t('kiosk.nearby.until')} ${clock(atMs)}`;
+  if (openNow(row)) return `${i18n.t('kiosk.nearby.until')} ${clock(atMs)}`;
   return clock(atMs);
 }
 
-/** Which of a row's labels print short (only where the row offers a short one), and a sub-line left out (a closure's, decision 66). */
-export interface ShortLabels { title?: boolean; sub?: boolean; subOff?: boolean }
+/** Which of a row's labels print short (only where the row offers a short one), a sub-line left out (a closure's,
+ *  decision 66), and a notice title given a third line from room that is left (lines3). */
+export interface ShortLabels { title?: boolean; sub?: boolean; subOff?: boolean; lines3?: boolean }
 
 const titleOf = (row: TimelineRow, short?: ShortLabels): string => (short?.title && row.titleShort ? row.titleShort : row.title);
 const subOf = (row: TimelineRow, short?: ShortLabels): string => (short?.subOff ? '' : short?.sub && row.subShort !== undefined ? row.subShort : row.sub);
@@ -346,7 +355,7 @@ function rowTextKinds(row: TimelineRow): { title: ExternalTextKind; sub: Externa
     case 'notice': return { title: 'title', sub: 'summary' };
     case 'closure': return { title: 'name', sub: 'summary' };
     case 'event': return { title: 'title', sub: 'name' };
-    case 'opening': return { title: 'name', sub: 'summary' };
+    case 'opening': return row.detail?.kind === 'exhibit' ? { title: 'title', sub: 'name' } : { title: 'name', sub: 'summary' };
     case 'pharmacy': return { title: 'title', sub: 'address' };
     case 'rail': return { title: 'headsign', sub: 'name' };
     case 'rain': return { title: 'title', sub: 'summary' };
@@ -396,6 +405,7 @@ export function rowMarkup(row: TimelineRow, now: number, i18n: I18n, short?: Sho
     timeless ? 'data-always="1"' : `data-when="${iso}"`,
     row.live ? 'data-live="1"' : '',
     `data-source="${a(row.source)}"`,
+    short?.lines3 ? 'data-title-lines="3"' : '',
   ].filter(Boolean).join(' ');
   const when = timeless ? `<span class="nearby-when">${text}</span>` : `<time class="nearby-when" datetime="${iso}">${text}</time>`;
   const day = dayLabel(row, now, i18n);
@@ -431,7 +441,9 @@ export const DOM_MEASURE: TimelineMeasure = {
       overflow: list.scrollHeight > list.clientHeight + 1 || list.scrollWidth > list.clientWidth + 1 };
   },
   lines(el) {
-    const height = el.offsetHeight;
+    // A block clamped by CSS (the notice title, -webkit-line-clamp) reports its whole text in scrollHeight while its
+    // offsetHeight stops at the clamp; an inline span reports 0 there and keeps offsetHeight.
+    const height = Math.max(el.offsetHeight, el.scrollHeight);
     if (!(height > 0)) return 0;
     const style = getComputedStyle(el);
     let line = Number.parseFloat(style.lineHeight);
@@ -635,6 +647,21 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         draw();
         if (measure.box(list).overflow) { short.set(row.id, was); draw(); }
       }
+      // A notice headline still longer than its two lines, short or full as printed, takes a third line from room
+      // that is left; it never costs a row or a sub-line (vis1 F2).
+      for (const li of list.children) {
+        const row = byId.get(li.getAttribute('data-key') ?? '');
+        const title = li.querySelector<HTMLElement>('.nearby-title');
+        if (!row || row.kind !== 'notice' || !title || measure.lines(title) <= NOTICE_TITLE_MAX_LINES) continue;
+        const was = short.get(row.id);
+        short.set(row.id, { ...was, lines3: true });
+        draw();
+        if (measure.box(list).overflow) {
+          if (was) short.set(row.id, was); else short.delete(row.id);
+          draw();
+        }
+        break;
+      }
       return { shown, short };
     }
   }
@@ -657,7 +684,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       const box = unbounded ? { height: 0, width: 0, overflow: false } : measure.box(list);
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
       const budget = rowBudget(available, rows.length);
-      const candidates = fitRows(rows, budget.rows);
+      const candidates = fitRows(rows, budget.rows, now);
       const rowVars = (rowPx: number): void => {
         setVar('--k-nearby-row', `${rowPx}px`);
         setVar('--k-nearby-scale', unbounded ? '1' : String(Math.round(typeScale(rowPx) * 1000) / 1000));

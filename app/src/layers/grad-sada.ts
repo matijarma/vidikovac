@@ -166,7 +166,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
       { cap, id: 'sada', ...(held ? { reserve: cap } : {}) })
     : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
   // Static inputs have no module snapshot: credit them while their rows are actually shown.
-  const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap) : [];
+  const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap, now) : [];
   const credits = [
     ...(shown.some((row) => row.kind === 'open') ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : []),
     ...(shown.some((row) => row.kind === 'rail') ? [RAIL_TIMETABLE_CREDIT] : []),
