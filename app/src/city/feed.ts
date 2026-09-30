@@ -17,6 +17,7 @@ import type { ModuleSnapshot } from '../../../worker/feed/schema';
 import { DEFAULT_FRAME_STOPS, frameRadiusM, frameStopsFrom, type FrameLine, type FrameStop } from '../../../shared/city/frame';
 import { distanceM, located } from '../../../shared/city/geo';
 import { openPlacesNear } from '../../../shared/city/osm-hours';
+import { isPublicHoliday } from '../../../shared/city/holidays';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { ScreenPlace } from '../../../shared/city/place';
 import { emptyCity, type DepartureBoard, type Place } from '../../../shared/city/types';
@@ -26,6 +27,7 @@ import { platformIds } from '../kiosk/arrivals';
 import { routeType } from '../kiosk/stops';
 import type { LayerContext } from '../layers/types';
 import { vehicleFixes } from '../motion/fixes';
+import { zagrebDayKey } from '../format';
 import type { NearbyInput } from './nearby';
 import { railPolicy, serviceStateOf } from '../../../shared/city/service-state';
 import { resolvePlace, type PlaceContext } from './place';
@@ -198,8 +200,8 @@ export function nearbyInput(ctx: LayerContext, placeContext: PlaceContext = feed
     ...(ctx.stops ? { stops: ctx.stops } : {}),
     ...(policy ? { policy } : {}),
     ...(railBoards.length > 0 ? { railBoards } : {}),
-    // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
-    openPlaces: openPlacesNear(index, place, radiusM, now, false),
+    // A public holiday (shared/city/holidays.ts): OSM's hours do not say holiday hours, so no place is open.
+    openPlaces: openPlacesNear(index, place, radiusM, now, isPublicHoliday(zagrebDayKey(now))),
     venuePoint: venuePointFor(city.places, ctx.snapshots, index),
     venueName: venueNameFor(city.places, ctx.snapshots, index),
   };
