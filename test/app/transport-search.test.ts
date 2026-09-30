@@ -79,6 +79,13 @@ describe('the network artefact as a catalogue', () => {
     expect(seq.map((s) => s.name)).toContain('Trg bana J. Jelačića');
     expect(routeStopSequence(net, 'no-such-route')).toEqual([]);
   });
+  it('follows the normal route, never a longer variant or depot run', () => {
+    // Longest of all the 6's shapes is the weekend variant that ends at Zapruđe; the 17's a 41-stop loop from Prečko.
+    const six = routeStopSequence(net, '6').map((s) => s.name);
+    expect([six[0], six.at(-1)]).toEqual(['Črnomerec', 'Sopot']);
+    const seventeen = routeStopSequence(net, '17').map((s) => s.name);
+    expect(new Set([seventeen[0], seventeen.at(-1)])).toEqual(new Set(['Prečko', 'Borongaj']));
+  });
   it('groups the artefact\u2019s platforms by name with the routes that call there', () => {
     const groups = stopGroupsFromNetwork(net);
     expect(groups.length).toBeGreaterThan(1000);

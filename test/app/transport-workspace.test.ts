@@ -461,9 +461,9 @@ describe('search and selection', () => {
     const stops = all<HTMLElement>('[data-testid=route-stops] li');
     expect(stops.length).toBeGreaterThan(15);
     expect(visible('[data-testid=route-stops] li')).toHaveLength(12);
-    // The stops of the route's longest shape (catalogue.ts fullestShape): on feed 000396 that is 6_68, Zapruđe to
-    // Črnomerec, 12.4 km (the Sopot branch's 6_2 is 10.0 km); on feed 000395 it was 6_25 from Črnomerec.
-    expect(text(q('[data-testid=route-stops] li'))).toBe('Zapruđe');
+    // The stops of the route's normal route, its longer direction (catalogue.ts fullestShape): on feed 000396
+    // that is 6_25, Črnomerec to Sopot, 10.1 km -- never 6_68, the 12.4 km weekend variant from Zapruđe.
+    expect(text(q('[data-testid=route-stops] li'))).toBe('Črnomerec');
     expect(stops[0]!.classList.contains('row-dense')).toBe(true); // the sequence keeps its counter, in a dense row
     expect(q<HTMLElement>('[data-testid=route-stops] button').id).toMatch(/^t-row-stop-/);
     const allStops = q<HTMLButtonElement>('[data-testid=toggle-stops]');

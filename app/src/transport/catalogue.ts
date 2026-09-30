@@ -7,7 +7,7 @@
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
 import { toLonLat } from '../../../shared/motion/geo';
-import type { Network } from '../../../shared/motion/network';
+import { mainShapes, type Network } from '../../../shared/motion/network';
 import { compareRouteShort, sortRoutes, type RouteEntry, type StopGroup } from './search';
 
 let routes: RouteEntry[] | null = null;
@@ -104,18 +104,20 @@ export interface RouteStop {
   name: string;
   lon: number;
   lat: number;
-  /** Arc length along the route's fullest shape, metres. */
+  /** Arc length along the shape the list follows (fullestShape), metres. */
   s: number;
 }
 
-/** The shape index with the greatest length among a route's variants: the
- *  fullest run, which is what a person means by "the stops on the 6". */
+/** The longer direction of the route's normal route (network.ts mainShapes):
+ *  what a person means by "the stops on the 6". Never a depot run or a
+ *  variant, however long -- the longest of all the 6's shapes is a weekend
+ *  variant to Zapruđe, and the 17's a 41-stop loop. */
 export function fullestShape(net: Network, routeId: string): number | null {
-  const route = net.routes.get(routeId);
-  if (!route || route.shapes.length === 0) return null;
+  const shapes = mainShapes(net, routeId);
+  if (shapes.length === 0) return null;
   let best: number | null = null;
   let bestLen = -1;
-  for (const idx of route.shapes) {
+  for (const idx of shapes) {
     const shape = net.shapes[idx];
     const len = shape ? shape.cum[shape.cum.length - 1] ?? 0 : -1;
     if (len > bestLen) {
@@ -126,7 +128,7 @@ export function fullestShape(net: Network, routeId: string): number | null {
   return best;
 }
 
-/** Stops along the route's fullest shape in travel order, one per name. */
+/** Stops along the route's normal route (fullestShape) in travel order, one per name. */
 export function routeStopSequence(net: Network, routeId: string): RouteStop[] {
   const idx = fullestShape(net, routeId);
   if (idx === null) return [];
