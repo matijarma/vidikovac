@@ -9,6 +9,7 @@ import { SCENES, SCENE_IDS } from '../../e2e/scenes';
 import { scheduleInstant } from '../../worker/city/schedules';
 import { emptyCity } from '../../shared/city/types';
 import { selectNearby } from '../../app/src/city/nearby';
+import { groupDepartures } from '../../app/src/kiosk/timeline';
 import { loadLastRun } from '../../app/src/core/lastrun';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { vehicleFixes } from '../../app/src/motion/fixes';
@@ -120,7 +121,9 @@ describe('departures fixture realism', () => {
     expect(departures.length).toBeGreaterThanOrEqual(1);
     expect(departures.length).toBeLessThanOrEqual(3);
     expect(new Set(departures.map((r) => `${r.arrival!.routeId}/${r.title}/${r.atMs}`)).size).toBe(departures.length);
-    for (const kind of scene.expect.requiredKinds) expect(rows.some((r) => r.kind === kind), kind).toBe(true);
+    const wallRows = groupDepartures(rows);
+    expect(wallRows.find((r) => r.kind === 'departures')?.cells).toEqual(departures);
+    for (const kind of scene.expect.requiredKinds) expect(wallRows.some((r) => r.kind === kind), kind).toBe(true);
     for (const kind of scene.expect.noPastKinds) expect(rows.filter((r) => r.kind === kind).every((r) => r.atMs! >= now), kind).toBe(true);
     expect(rows.filter((r) => r.kind === 'solar').length).toBeGreaterThanOrEqual(scene.expect.solarMin);
     expect(rows.filter((r) => r.kind === 'solar').length).toBeLessThanOrEqual(1);
