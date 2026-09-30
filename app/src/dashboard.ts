@@ -14,6 +14,7 @@ import { createFeedStore } from './core/feed-store';
 import { FLAGS } from './core/flags';
 import { loadLastRun, type LastRunSnapshot } from './core/lastrun';
 import { createLineFocusStore } from './core/line-focus-store';
+import { createBikeLanesStore } from './core/bike-lanes-store';
 import { createMapModeStore, type MapModeStore } from './core/map-mode-store';
 import { activeCount, createNotifyStore, NOTIFY_KEYS, type NotifyKey } from './core/notify-store';
 import { createSavedStore, type SavedKind } from './core/saved-store';
@@ -193,6 +194,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const notifyStore = createNotifyStore({ storage: local });
   const mapMode = deps.mapMode ?? createMapModeStore({ storage: local });
   const lineFocus = createLineFocusStore({ storage: local });
+  const bikeLanes = createBikeLanesStore({ storage: local });
   const boards = deps.createBoards?.() ?? createBoardCache({now});
   let locationContext: LocationContext | undefined;
   const notifyKeys: readonly NotifyKey[] = deps.flags?.waste ? NOTIFY_KEYS : NOTIFY_KEYS.filter((key) => key !== 'waste');
@@ -459,7 +461,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       onItemCopy: deps.onItemCopy, onItemShare: deps.onItemShare, onItemExport: deps.onItemExport,
       navigate: navigateAction, setFilter: setFilterAction, onRetry: retryAction,
       maps, mapView: lightweight ? undefined : mapView, mapMode: lightweight ? undefined : mapMode,
-      lineFocus: lightweight ? undefined : lineFocus, reducedMotion: deps.reducedMotion, lightweight,
+      lineFocus: lightweight ? undefined : lineFocus, bikeLanes: lightweight ? undefined : bikeLanes, reducedMotion: deps.reducedMotion, lightweight,
       frozenAt, session: { expiresAt: session.snapshot().expiresAt, frozen, live: !frozen && error !== 'no-ticket' && session.snapshot().phase === 'live' },
       notify: notifyStore.snapshot(),
       saved: { list: () => saved.list(), has: (kind, id) => saved.has(kind, id) }, stops: stops ?? undefined, stopsDown, lastRun,
@@ -1273,6 +1275,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
         return;
       }
       case 'notify': notifySheet.open(); return;
+      case 'bike-lanes-toggle': bikeLanes.set(bikeLanes.snapshot() === 'always' ? 'bajs' : 'always'); return;
       case 'select':
         if (d.module) navigate(view.snapshot().layer, { kind: 'item', id: publicItemKey(d.module as ModuleId, d.itemId ?? ''), module: d.module as ModuleId }, true);
         return;
@@ -1341,6 +1344,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   const stopNotify = onChange(notifyStore.subscribe, () => { render(); paintShell(); });
   const stopMapMode = onChange(mapMode.subscribe, () => { if (!disposed) render(); });
   const stopLineFocus = onChange(lineFocus.subscribe, () => { if (!disposed) render(); });
+  const stopBikeLanes = onChange(bikeLanes.subscribe, () => { if (!disposed) render(); });
   const onMedia = (): void => {
     paintShell();
     render();
@@ -1403,6 +1407,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       stopNotify();
       stopMapMode();
       stopLineFocus();
+      stopBikeLanes();
       media?.removeEventListener?.('change', onMedia);
       win.removeEventListener?.('popstate', onPopState);
       closeShare();

@@ -435,6 +435,15 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
    *  (map/city-layers.ts city-path-lines) on the phone and the desk; the public screen keeps its own contract (the
    *  wall's map never drew them), and the lightweight path has no map. */
   const drawsCityPaths = (): boolean => !kiosk() && !ctx().lightweight;
+  /** The paths show while a BAJS station is selected; the "always" setting in Još (core/bike-lanes-store.ts) keeps them on. */
+  function showsCityPaths(): boolean {
+    if (ctx().bikeLanes?.snapshot() === 'always') return true;
+    if (selection?.kind !== 'place') return false;
+    const id = selection.id;
+    const place = cityState().places.find((p) => p.id === id);
+    return place ? place.sourceId === 'bajs' : id.startsWith('bajs-');
+  }
+  const NO_LINES: MapLine[] = [];
   /** The store's paths (core/city-store.ts, one list per chunk change) as map lines, one per polyline. */
   let pathLines: { paths: readonly CityPath[]; lines: MapLine[] } | null = null;
   /** The handle and the lines it was last handed, so a poll that changed neither leaves the map's source alone. */
@@ -446,9 +455,10 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (pathLines?.paths !== paths) {
       pathLines = { paths, lines: paths.flatMap((p) => p.lines.map((coordinates, i) => ({ id: `${p.id}-${i}`, title: p.name, coordinates }))) };
     }
-    if (pathsSent?.handle === handle && pathsSent.lines === pathLines.lines) return;
-    pathsSent = { handle, lines: pathLines.lines };
-    handle.setCityPaths?.(pathLines.lines);
+    const lines = showsCityPaths() ? pathLines.lines : NO_LINES;
+    if (pathsSent?.handle === handle && pathsSent.lines === lines) return;
+    pathsSent = { handle, lines };
+    handle.setCityPaths?.(lines);
   }
   /** One function, not one per render: the cache keeps its waiting callers in a
    *  Set, and a fresh closure each time would make a stop with eight platforms
@@ -536,6 +546,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
     if (next?.kind === 'stop' && !next.ids) next = { ...next, ids: groupFor(next.id)?.ids };
     selection = next;
     updateCityMap();
+    syncCityPaths();
     folds.delete('stops');
     if (next?.kind !== 'vehicle' && following) {
       following = null;

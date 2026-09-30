@@ -265,6 +265,8 @@
 .dir-item[data-layer='zrak-i-nebo'] .dir-icon { color: var(--tone-weather); }
 .dir-item[data-layer='sigurnost'] .dir-icon { color: var(--tone-urgency); }
 .dir-item[data-layer='uprava-i-pravo'] .dir-icon { color: var(--tone-action-brand); }
+.dir-item[role='switch'][aria-checked='true'] .switch-track { background: var(--tone-action-brand); }
+.dir-item[role='switch'][aria-checked='true'] .switch-track::after { transform: translateX(1rem); }
 .dir-pages { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); font-size: var(--text-sm); }
 .dir-pages a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--target); min-inline-size: var(--target); }
 /* Events: the search and one chip row first, a count line under them, then a

@@ -7,8 +7,9 @@ import { resolve } from 'node:path';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import { closureWords } from '../../worker/feed/modules/prometnice';
 import { publicItemKey, type CastState, type PublicSelection } from '../../app/src/core/contracts';
-import { emptyCity, type CityPath } from '../../shared/city/types';
+import { emptyCity, type CityPath, type Place } from '../../shared/city/types';
 import { createMapModeStore } from '../../app/src/core/map-mode-store';
+import { createBikeLanesStore } from '../../app/src/core/bike-lanes-store';
 import type { PlaceContext } from '../../app/src/city/place';
 import { FIT_MIN_ZOOM, FRAME_MIN_ZOOM, FRAME_PADDING_PX, frameView, markZoomFor } from '../../app/src/map/frame';
 import type { SavedRef } from '../../app/src/core/saved-store';
@@ -1243,6 +1244,9 @@ describe('the frame: Karta opens on the place', () => {
     const VUKOVAR: CityPath = { id: 'cp-vukovar', name: 'Ulica grada Vukovara', kind: 'cycle', sourceId: 'cycle-paths', lines: [[[15.95, 45.8], [15.99, 45.8]]] };
     const { maps, last } = fakeMaps({ vehicles: VEHICLES, net: NET });
     const { context } = ctx({ maps });
+    // The owner's "always" setting (Još); the default draws them only for a selected BAJS station (next test).
+    context.bikeLanes = createBikeLanesStore({ storage: memoryStorage().storage });
+    context.bikeLanes.set('always');
     const ensureCity = vi.fn();
     context.ensureCity = ensureCity;
     context.city = { ...emptyCity(), paths: [SAVSKA] };
@@ -1270,6 +1274,40 @@ describe('the frame: Karta opens on the place', () => {
     render(kiosk);
     expect(board.last().setCityPaths).not.toHaveBeenCalled();
     expect(boardEnsure.mock.calls.flat(2)).not.toContain('cycle-paths');
+  });
+
+  it('by default draws the cycle paths only while a BAJS station is selected, and always once the Još switch says so (owner, 30 Sep)', () => {
+    const SAVSKA: CityPath = { id: 'cp-savska', name: 'Savska cesta', kind: 'cycle', sourceId: 'cycle-paths', lines: [[[15.966, 45.803], [15.967, 45.795]]] };
+    const places: Place[] = [
+      { id: 'bajs-trg', name: 'Trg bana Jelačića', category: 'cycle-parking', sourceId: 'bajs', sourceRecord: 'trg', lon: 15.977, lat: 45.813 },
+      { id: 'gavella', name: 'Gavella', category: 'culture', sourceId: 'culture', sourceRecord: 'g', lon: 15.971, lat: 45.811 },
+    ];
+    const lastLines = (h: ReturnType<typeof fakeMaps>['last']) => (spy(h().setCityPaths).mock.lastCall?.[0] as MapLine[] | undefined) ?? [];
+    // Nothing selected: no paths.
+    const plain = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const a = ctx({ maps: plain.maps }).context;
+    a.bikeLanes = createBikeLanesStore({ storage: memoryStorage().storage });
+    a.city = { ...emptyCity(), paths: [SAVSKA], places };
+    render(a);
+    expect(lastLines(plain.last)).toEqual([]);
+    // A venue selected: still none.
+    const venue = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const b = ctx({ maps: venue.maps, selection: { kind: 'place', id: 'gavella' } }).context;
+    b.bikeLanes = createBikeLanesStore({ storage: memoryStorage().storage });
+    b.city = { ...emptyCity(), paths: [SAVSKA], places };
+    render(b);
+    expect(lastLines(venue.last)).toEqual([]);
+    // A BAJS station selected: the paths are drawn.
+    const station = fakeMaps({ vehicles: VEHICLES, net: NET });
+    const c = ctx({ maps: station.maps, selection: { kind: 'place', id: 'bajs-trg' } }).context;
+    c.bikeLanes = createBikeLanesStore({ storage: memoryStorage().storage });
+    c.city = { ...emptyCity(), paths: [SAVSKA], places };
+    render(c);
+    expect(lastLines(station.last).map((line) => line.id)).toEqual(['cp-savska-0']);
+    // The switch set to always: drawn with nothing selected.
+    a.bikeLanes.set('always');
+    render(a);
+    expect(lastLines(plain.last).map((line) => line.id)).toEqual(['cp-savska-0']);
   });
 });
 

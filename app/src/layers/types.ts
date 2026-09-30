@@ -4,6 +4,7 @@ import type { SchematicHost } from '../motion/schematic-host';
 import type { I18n } from '../i18n/i18n';
 import type { ExperienceActions } from '../core/contracts';
 import type { LineFocusStore } from '../core/line-focus-store';
+import type { BikeLanesStore } from '../core/bike-lanes-store';
 import type { MapModeStore } from '../core/map-mode-store';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
@@ -57,6 +58,8 @@ export interface LayerContext extends ExperienceActions {
    *  tram is selected (F5). Absent on the lightweight path and in unit
    *  contexts; the workspace then keeps the choice for the tab alone. */
   lineFocus?: LineFocusStore;
+  /** When Karta draws the cycle paths: while a BAJS station is selected, or always (core/bike-lanes-store.ts). */
+  bikeLanes?: BikeLanesStore;
   reducedMotion?: boolean;
   /** R-L1: decided once at the entry and passed down, exactly like `reducedMotion`. */
   lightweight?: boolean;

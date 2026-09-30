@@ -119,6 +119,9 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   const notifyCount = ctx.notify ? activeCount(ctx.notify, NOTIFY_KEYS) : 0;
   const notifyState = notifyCount > 0 ? i18n.t('kvart.notifyOn', { count: notifyCount }) : i18n.t('kvart.notifyOff');
   const notifyRow = `<li class="row row-dir" data-key="notify"><button type="button" class="dir-item" data-action="notify" data-testid="dir-notify">${iconMarkup('bell', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('notify.bellLabel', { state: notifyState }))}</span><span class="row-sub">${escapeHtml(i18n.t('notify.note'))}</span></span>${chevron}</button></li>`;
+  // Karta's cycle paths: drawn while a BAJS station is selected, or always when this switch is on.
+  const lanesAlways = ctx.bikeLanes?.snapshot() === 'always';
+  const bikeLanesRow = ctx.bikeLanes ? `<li class="row row-dir" data-key="bike-lanes"><button type="button" class="dir-item" role="switch" aria-checked="${lanesAlways ? 'true' : 'false'}" data-action="bike-lanes-toggle" data-testid="dir-bike-lanes">${iconMarkup('bike', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('directory.bikeLanes'))}</span><span class="row-sub">${escapeHtml(i18n.t(lanesAlways ? 'directory.bikeLanesAlways' : 'directory.bikeLanesBajs'))}</span></span><span class="switch-track" aria-hidden="true"></span></button></li>` : '';
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
     ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],
@@ -127,7 +130,7 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
 <header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
 ${savedSection}
 ${items?`<section><h3>${escapeHtml(i18n.t('directory.destinations'))}</h3><ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}</ul></section>`:''}
-<section><h3>${escapeHtml(i18n.t('directory.preferences'))}</h3><ul class="dir-list rows" role="list">${notifyRow}${sessionRow}</ul></section>
+<section><h3>${escapeHtml(i18n.t('directory.preferences'))}</h3><ul class="dir-list rows" role="list">${notifyRow}${bikeLanesRow}${sessionRow}</ul></section>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }

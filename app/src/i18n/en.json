@@ -432,7 +432,10 @@
     "stop": "Stop",
     "remove": "Remove",
     "destinations": "Destinations",
-    "preferences": "Preferences"
+    "preferences": "Preferences",
+    "bikeLanes": "Cycle paths on the map",
+    "bikeLanesBajs": "Shown when you pick a BAJS station",
+    "bikeLanesAlways": "Always shown"
   },
   "session": {
     "unlocked": "Unlocked · {label} · until {time}",
