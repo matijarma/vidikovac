@@ -3,20 +3,30 @@
 // as "Događanja ovaj tjedan" with its count line, Vrijeme, Grad, Sigurnost),
 // each with one line of real current data, then the personal settings and the
 // open pages. Not a layer: a view of the shell.
+//
+// "Osobne postavke" is the one place of every personal setting (owner, 30 Sep
+// 2026): language, theme, in-app highlighting, cycle paths, refresh, countdown,
+// then the session row into the session sheet. Every row is the same shape: an
+// icon, the setting's name, its current state as the sub-line, and a tap that
+// moves to the next state. A two-state setting is a switch; language and theme
+// cycle through their values, and their accessible name says what a tap does.
 import type { ModuleId } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import { activeCount, NOTIFY_KEYS } from '../core/notify-store';
 import { zagrebTime } from '../format';
-import type { I18n } from '../i18n/i18n';
+import { LOCALE_LABELS, SUPPORTED_LOCALES, catalogueLocale } from '../i18n/create-default-i18n';
+import type { I18n, LocaleCode } from '../i18n/i18n';
 import { LAYER_MODULES } from '../layers';
 import { CULTURE_MODULES, eventsCount } from '../layers/kultura';
 import type { LayerContext } from '../layers/types';
 import { dataNumber, dataText } from '../panels/panel';
 import { createElementFromHTML, escapeAttribute, escapeHtml } from '../ui/dom/escape';
-import { iconMarkup } from '../ui/icons';
+import { iconMarkup, type IconName } from '../ui/icons';
+import { THEME_PREFERENCES, type ThemePreference } from '../ui/theme';
 import { LAYER_ICONS, MORE_LAYERS, type Surface } from './chrome';
 import { safetyState } from './safety-state';
 import { unusable } from './status';
+import { originSentence } from './session-sheet';
 import { conditionText } from './text';
 import { sourceForPlaceId, dynamicPlaces } from '../city/discovery';
 import { routeEntry } from '../transport/catalogue';
@@ -78,6 +88,42 @@ const LINES: Record<string, (i18n: I18n, ctx: LayerContext) => string> = {
   'uprava-i-pravo': civicLine,
 };
 
+/** The language a tap on the language row moves to: the next supported one, in the catalogue's order. */
+export function nextLocale(current: LocaleCode): LocaleCode {
+  const at = SUPPORTED_LOCALES.indexOf(catalogueLocale(current));
+  return SUPPORTED_LOCALES[(at + 1) % SUPPORTED_LOCALES.length]!;
+}
+
+/** The theme a tap on the theme row moves to: the next preference in THEME_PREFERENCES' order. */
+export function nextTheme(current: ThemePreference): ThemePreference {
+  return THEME_PREFERENCES[(THEME_PREFERENCES.indexOf(current) + 1) % THEME_PREFERENCES.length]!;
+}
+
+interface SettingRow { key: string; action: string; testid: string; icon: IconName; title: string; sub: string }
+
+/** The row's two lines; `subAttrs` lets a cycle row announce its new value and a language say its own tongue. The
+ *  space between the two keeps the name and the state two words apart in a name read from the content (a switch's). */
+function rowText(title: string, sub: string, subAttrs = ''): string {
+  return `<span class="row-main"><span class="row-title">${escapeHtml(title)}</span> <span class="row-sub"${subAttrs}>${escapeHtml(sub)}</span></span>`;
+}
+
+/** A two-state setting: the shared switch semantics (role=switch, aria-checked) and its track at the end of the row. */
+function switchRow(r: SettingRow, on: boolean): string {
+  return `<li class="row row-dir" data-key="${r.key}"><button type="button" class="dir-item" role="switch" aria-checked="${on ? 'true' : 'false'}" data-action="${r.action}" data-testid="${r.testid}">${iconMarkup(r.icon, undefined, 'icon dir-icon')}${rowText(r.title, r.sub)}<span class="switch-track" aria-hidden="true"></span></button></li>`;
+}
+
+/** A setting with more than two values: a plain button whose sub-line is the current value, said again when a tap
+ *  changes it (aria-live on the sub-line), and whose name says the value a tap moves to (`label`). */
+function cycleRow(r: SettingRow, label: string, lang?: string): string {
+  const subAttrs = ` aria-live="polite"${lang ? ` lang="${escapeAttribute(lang)}"` : ''}`;
+  return `<li class="row row-dir" data-key="${r.key}"><button type="button" class="dir-item" data-action="${r.action}" data-testid="${r.testid}" aria-label="${escapeAttribute(label)}">${iconMarkup(r.icon, undefined, 'icon dir-icon')}${rowText(r.title, r.sub, subAttrs)}</button></li>`;
+}
+
+/** A row that opens a sheet (the alert switches, the session): the chevron at the end, and a name that says so. */
+function sheetRow(r: SettingRow, chevron: string): string {
+  return `<li class="row row-dir" data-key="${r.key}"><button type="button" class="dir-item" data-action="${r.action}" data-testid="${r.testid}" aria-haspopup="dialog">${iconMarkup(r.icon, undefined, 'icon dir-icon')}${rowText(r.title, r.sub)}${chevron}</button></li>`;
+}
+
 export function renderDirectory(ctx: LayerContext): HTMLElement {
   const { i18n } = ctx;
   const surface: Surface = ctx.screen?.surface === 'desktop' ? 'desktop' : 'phone';
@@ -106,22 +152,45 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
   }).join('');
   // The session row tells the truth (T4.1, the T2.4 follow-up): the real expiry while unlocked,
   // the end once frozen, connecting before the join. The pill and the sheet this row opens read
-  // the same shell state, so the three never disagree.
+  // the same shell state, so the three never disagree. Its sub-line is where the session came
+  // from, said short (the screen's label, else its stop); before the join, what the row opens.
   const live = ctx.session;
   const sessionTitle = live?.frozen
     ? i18n.t('directory.sessionFrozen')
     : live?.expiresAt != null
       ? i18n.t('session.unlockedAnnounce', { time: zagrebTime(live.expiresAt) })
       : i18n.t('session.connecting');
-  const sessionRow = `<li class="row row-dir" data-key="session"><button type="button" class="dir-item" data-action="session" data-testid="dir-session">${iconMarkup('sliders-horizontal', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(sessionTitle)}</span><span class="row-sub">${escapeHtml(i18n.t('directory.sessionSub'))}</span></span>${chevron}</button></li>`;
-  // The bell's own row (D7): the Kvart panel used to be the only way to reach the notify
-  // sheet; now Još carries it, reusing the bell's own label key and note (no new copy).
+  const origin = originSentence(i18n, { role: live?.role ?? null, label: live?.label ?? null, stop: ctx.screen?.stop?.name ?? null }, true);
+  const sessionRow = sheetRow({ key: 'session', action: 'session', testid: 'dir-session', icon: 'clock', title: sessionTitle, sub: origin || i18n.t('directory.sessionSub') }, chevron);
+  // The language row: the current language in its own words, a tap moves to the next one (LOCALE_LABELS, SUPPORTED_LOCALES).
+  const locale = catalogueLocale(i18n.getLocale());
+  const nextLang = catalogueLocale(nextLocale(locale));
+  const languageRow = cycleRow(
+    { key: 'language', action: 'lang-next', testid: 'dir-language', icon: 'languages', title: i18n.t('common.language'), sub: LOCALE_LABELS[locale] },
+    i18n.t('directory.languageNext', { current: LOCALE_LABELS[locale], next: LOCALE_LABELS[nextLang] }), locale,
+  );
+  // The theme row, while the page has a theme controller: its preference in the catalogue's words (common.theme.*).
+  const theme = ctx.settings?.theme ?? null;
+  const themeRow = theme ? cycleRow(
+    { key: 'theme', action: 'theme-next', testid: 'dir-theme', icon: 'sun-moon', title: i18n.t('common.theme.label'), sub: i18n.t(`common.theme.${theme}`) },
+    i18n.t('directory.themeNext', { current: i18n.t(`common.theme.${theme}`), next: i18n.t(`common.theme.${nextTheme(theme)}`) }),
+  ) : '';
+  // The bell's own row (D7): the Kvart panel used to be the only way to reach the notify sheet; now
+  // Još carries it. Several switches stand behind it (NOTIFY_KEYS), so the row opens their sheet and
+  // says how many are on; the sheet's note says nothing is sent.
   const notifyCount = ctx.notify ? activeCount(ctx.notify, NOTIFY_KEYS) : 0;
-  const notifyState = notifyCount > 0 ? i18n.t('kvart.notifyOn', { count: notifyCount }) : i18n.t('kvart.notifyOff');
-  const notifyRow = `<li class="row row-dir" data-key="notify"><button type="button" class="dir-item" data-action="notify" data-testid="dir-notify">${iconMarkup('bell', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('notify.bellLabel', { state: notifyState }))}</span><span class="row-sub">${escapeHtml(i18n.t('notify.note'))}</span></span>${chevron}</button></li>`;
+  // "isključeno" follows a colon elsewhere; as the row's whole sub-line it opens the line, capitalised.
+  const notifyOff = i18n.t('kvart.notifyOff');
+  const notifyState = notifyCount > 0 ? i18n.t('kvart.notifyOn', { count: notifyCount }) : notifyOff.charAt(0).toLocaleUpperCase(locale) + notifyOff.slice(1);
+  const notifyRow = sheetRow({ key: 'notify', action: 'notify', testid: 'dir-notify', icon: 'bell', title: i18n.t('notify.title'), sub: notifyState }, chevron);
   // Karta's cycle paths: drawn while a BAJS station is selected, or always when this switch is on.
   const lanesAlways = ctx.bikeLanes?.snapshot() === 'always';
-  const bikeLanesRow = ctx.bikeLanes ? `<li class="row row-dir" data-key="bike-lanes"><button type="button" class="dir-item" role="switch" aria-checked="${lanesAlways ? 'true' : 'false'}" data-action="bike-lanes-toggle" data-testid="dir-bike-lanes">${iconMarkup('bike', undefined, 'icon dir-icon')}<span class="row-main"><span class="row-title">${escapeHtml(i18n.t('directory.bikeLanes'))}</span><span class="row-sub">${escapeHtml(i18n.t(lanesAlways ? 'directory.bikeLanesAlways' : 'directory.bikeLanesBajs'))}</span></span><span class="switch-track" aria-hidden="true"></span></button></li>` : '';
+  const bikeLanesRow = ctx.bikeLanes ? switchRow({ key: 'bike-lanes', action: 'bike-lanes-toggle', testid: 'dir-bike-lanes', icon: 'bike', title: i18n.t('directory.bikeLanes'), sub: i18n.t(lanesAlways ? 'directory.bikeLanesAlways' : 'directory.bikeLanesBajs') }, lanesAlways) : '';
+  // Refreshing and the header's countdown, this page's own two switches, while the session lasts.
+  const settings = ctx.settings;
+  const running = settings && !live?.frozen;
+  const refreshRow = running ? switchRow({ key: 'refresh', action: 'refresh-toggle', testid: 'dir-refresh', icon: 'refresh-cw', title: i18n.t('directory.refresh'), sub: i18n.t(settings.paused ? 'directory.refreshOff' : 'directory.refreshOn') }, !settings.paused) : '';
+  const countdownRow = running ? switchRow({ key: 'countdown', action: 'countdown-toggle', testid: 'dir-countdown', icon: 'eye', title: i18n.t('directory.countdown'), sub: i18n.t(settings.countdownHidden ? 'directory.countdownOff' : 'directory.countdownOn') }, !settings.countdownHidden) : '';
   const pages: [string, string][] = [
     ['/hitno', i18n.t('common.links.hitno')], ['/izvori/', i18n.t('common.links.izvori')],
     ['/privatnost/', i18n.t('common.links.privatnost')], ['/pristupacnost/', i18n.t('common.links.pristupacnost')],
@@ -130,7 +199,7 @@ export function renderDirectory(ctx: LayerContext): HTMLElement {
 <header class="ws-head"><h2 class="layer-title visually-hidden" id="layer-title-directory" tabindex="-1">${escapeHtml(i18n.t('nav.moreTitle'))}</h2></header>
 ${savedSection}
 ${items?`<section><h3>${escapeHtml(i18n.t('directory.destinations'))}</h3><ul class="dir-list rows" role="list" aria-label="${escapeAttribute(i18n.t('directory.domains'))}">${items}</ul></section>`:''}
-<section><h3>${escapeHtml(i18n.t('directory.preferences'))}</h3><ul class="dir-list rows" role="list">${notifyRow}${bikeLanesRow}${sessionRow}</ul></section>
+<section><h3>${escapeHtml(i18n.t('directory.preferences'))}</h3><ul class="dir-list rows" role="list">${languageRow}${themeRow}${notifyRow}${bikeLanesRow}${refreshRow}${countdownRow}${sessionRow}</ul></section>
 <nav class="dir-pages" aria-label="${escapeAttribute(i18n.t('directory.pages'))}">${pages.map(([href, label]) => `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`).join('')}</nav>
 </section>`);
 }

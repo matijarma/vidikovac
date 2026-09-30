@@ -6,6 +6,8 @@ import type { ExperienceActions } from '../core/contracts';
 import type { LineFocusStore } from '../core/line-focus-store';
 import type { BikeLanesStore } from '../core/bike-lanes-store';
 import type { MapModeStore } from '../core/map-mode-store';
+import type { Role } from '../../../worker/protocol';
+import type { ThemePreference } from '../ui/theme';
 
 export type ExportKind = 'ics' | 'geojson' | 'print';
 
@@ -72,8 +74,12 @@ export interface LayerContext extends ExperienceActions {
    */
   frozenAt?: number;
   /** The session as the shell knows it, for the views that name it (the directory's session row). */
-  /** The session's end and state; `live` false while the page polls nothing (before the join, a refused ticket, the end). */
-  session?: { expiresAt: number | null; frozen: boolean; live?: boolean };
+  /** The session's end and state; `live` false while the page polls nothing (before the join, a refused ticket, the end).
+   *  `role` and `label` say where it came from, as the session sheet does (experience/session-sheet.ts originSentence). */
+  session?: { expiresAt: number | null; frozen: boolean; live?: boolean; role?: Role | null; label?: string | null };
+  /** The page's settings Još lists under "Osobne postavke" (experience/directory.ts): the theme preference while the page
+   *  has a theme controller, whether refreshing is paused and whether the header hides the countdown. Absent on the kiosk. */
+  settings?: { theme: ThemePreference | null; paused: boolean; countdownHidden: boolean };
 }
 
 export type LayerRenderer = (ctx: LayerContext) => HTMLElement;
