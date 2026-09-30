@@ -734,16 +734,17 @@ describe('versioned explicit public presentation', () => {
   it('a repeated pending frame neither restarts loading nor certifies an unfinished render', async () => {
     const k = mount({ stored: STORED });
     await flush();
-    let finish!: (snapshot: ModuleSnapshot) => void;
-    k.fetchData.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const finish: (() => void)[] = [];
+    k.fetchData.mockImplementation((module: ModuleSnapshot['module']) => new Promise(resolve => { finish.push(() => resolve(snap(module, []))); }));
     const request = { version: 1 as const, revision: 1, target: { layer: 'kultura' as const }, expiresAt: NOW + 600_000, dataToken: 'dt' };
     k.handlers.onPresentation?.(request);
     const first = q(k.root, '[data-testid=kiosk-layer]');
     k.handlers.onPresentation?.(request);
     expect(q(k.root, '[data-testid=kiosk-layer]')).toBe(first);
-    expect(k.fetchData).toHaveBeenCalledTimes(1);
+    // Kultura fetches the City's whole programme (R0): dogadanja, kultura-zg and programi, each once.
+    expect(k.fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['dogadanja', 'kultura-zg', 'programi']);
     expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
-    finish(snap('dogadanja', []));
+    for (const done of finish) done();
     await flush();
     expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'displayed']]);
   });

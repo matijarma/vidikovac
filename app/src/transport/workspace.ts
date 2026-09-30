@@ -42,7 +42,7 @@ import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { discover, dynamicPlaces, type Discovery } from '../city/discovery';
-import { CURATED_WALL, curatedCityPoints } from '../city/curated';
+import { CURATED_WALL, curatedCityPoints, programmeItems } from '../city/curated';
 import { resolvePlace, type PlaceContext } from '../city/place';
 import { ct } from '../city/strings';
 import { searchCity, type CitySearchResult } from '../city/search';
@@ -410,13 +410,19 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function cityMapPoints():MapPoint[] {
     if(!input||!ctx().city)return [];
     const c=ctx(),now=c.frozenAt??c.now;
-    const curated=curatedCityPoints(cityState(),c.snapshots.dogadanja?.items??[],now,CURATED_WALL);
+    const curated=curatedCityPoints(cityState(),programmeItems(c.snapshots),now,CURATED_WALL);
     const searched=query?(cityData=discovery()).points:[];
     const selected=selection?.kind==='place'?[...cityState().places,...dynamicPlaces(cityState(),now)].find(p=>p.id===selection!.id):null;
     const seen=new Set<string>(),points:MapPoint[]=[];
     for(const point of [...curated,...searched]){
       if(point.id===selected?.id||seen.has(point.id))continue;
       seen.add(point.id);points.push(point);
+    }
+    // The breadth rows' points of the "U blizini" list (R0): an 8 px dot in the place colour, never twice.
+    for(const mark of nearbyList()?.marks??[]){
+      if(mark.id===selected?.id||seen.has(mark.id))continue;
+      seen.add(mark.id);
+      points.push({id:mark.id,title:mark.title,lon:mark.lon,lat:mark.lat,place:'city',props:{category:'nearby',badge:'',eventCount:0,priority:1,kind:mark.kind}});
     }
     if(selected&&Number.isFinite(selected.lon)&&Number.isFinite(selected.lat)){
       points.push(curated.find(p=>p.id===selected.id)??searched.find(p=>p.id===selected.id)
@@ -1197,7 +1203,8 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         center: renderer === 'map' ? camera?.center : undefined,
         zoom: renderer === 'map' ? camera?.zoom : undefined,
         markZoom: renderer === 'map' ? frameMarks : null,
-        onSelect: (sel) => { if (epoch === mapEpoch) setSelection(sel); },
+        // A breadth mark (R0) has no record of its own to open: its tap opens no sheet.
+        onSelect: (sel) => { if (epoch === mapEpoch && !(sel?.kind === 'place' && sel.id.startsWith('nearby:'))) setSelection(sel); },
         resolveStreet:(name,point)=>matchStreet(name,point,cityState().streets,cityState().settlements)?.id??null,
         onStatus: (next) => {
           if (epoch !== mapEpoch) return;

@@ -73,14 +73,15 @@ export function nearbyRowMarkup(i18n: I18n, row: NearbyRow, now: number): string
   return `${html.slice(0, open)}${link}${html.slice(open, html.length - '</li>'.length)}</a></li>`;
 }
 
-/** The rows the list shows: selectNearby's order, at most `cap`, the timeless row kept, a row whose text fails the check left out whole. */
-export function nearbyShownRows(rows: readonly NearbyRow[], cap: number): NearbyRow[] {
-  return fitRows(rows.filter(vettedTimelineRow), cap);
+/** The rows the list shows: selectNearby's order, at most `cap`, the reserved rows kept and then the most valuable
+ *  (kiosk/timeline.ts fitRows, the value order), a row whose text fails the check left out whole. */
+export function nearbyShownRows(rows: readonly NearbyRow[], cap: number, now?: number): NearbyRow[] {
+  return fitRows(rows.filter(vettedTimelineRow), cap, now);
 }
 
 /** The rows in selectNearby's order, at most `cap`, the timeless row kept; a row whose text fails the check is left out whole. */
 export function nearbyRowsMarkup(i18n: I18n, rows: readonly NearbyRow[], cap: number, now: number): string {
-  return nearbyShownRows(rows, cap).map((row) => nearbyRowMarkup(i18n, row, now)).join('');
+  return nearbyShownRows(rows, cap, now).map((row) => nearbyRowMarkup(i18n, row, now)).join('');
 }
 
 export interface NearbySectionOptions {

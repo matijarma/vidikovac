@@ -30,8 +30,10 @@ export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'],
   // Transport notices (ZET's two feeds) ride in the dogadanja module.
   'u-pokretu': ['zet-rt', 'prometnice', 'dogadanja'],
-  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc'],
-  sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo'],
+  // DHMZ's hourly steps are Vrijeme's strip (R0).
+  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly'],
+  // HAK's road states and the planned cuts are listed in Sigurnost (R0).
+  sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi'],
   // dogadanja is one module, session tier, shared by both layers below: each
   // reads the same merged snapshot and filters to its own subset of the six
   // sources (kultura.ts, uprava-i-pravo.ts), so it is listed for both. Kultura

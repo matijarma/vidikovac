@@ -41,7 +41,7 @@ import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import type { CityState } from '../../../shared/city/types';
 import { discover,dynamicPlaces,type CityGroup } from '../city/discovery';
 import { matchStreet } from '../../../shared/city/geo';
-import { CURATED_WALL, curatedCityPoints, type CuratedOptions } from '../city/curated';
+import { CURATED_WALL, curatedCityPoints, programmeItems, type CuratedOptions } from '../city/curated';
 import { DEFAULT_FRAME_STOPS, FRAME_RADIUS_M, frameSpanM, type FrameStops } from '../../../shared/city/frame';
 import type { ScreenPlace } from '../../../shared/city/place';
 import type { MapSelection } from '../map/city-map';
@@ -968,9 +968,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
   const squares = !cityWindow || framed || placeTitles(field.zoom);
   points.push(...cityPoints(input.snapshots, input.stop, input.now, input.locale ?? 'hr', closeUp).filter((p) => p.place !== 'event' || (!strip && squares && inside(p))));
   if(input.city){
-    if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,input.snapshots.dogadanja?.items??[],input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}
+    if(cityWindow){if(!strip)points.push(...curatedCityPoints(input.city,programmeItems(input.snapshots),input.now,framed?CURATED_WALL:CURATED_FAR).filter(inside));}
     else{
-      const result=discover(input.city,input.snapshots.dogadanja?.items??[],{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
+      const result=discover(input.city,programmeItems(input.snapshots),{group:input.localGroup??'living',category:input.localCategory??'',window:'week',query:input.localQuery??'',
         center:input.stop??{lon:15.97726,lat:45.81286},radius:5000,now:input.now});
       points.push(...result.points);
     }

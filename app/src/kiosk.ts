@@ -62,6 +62,8 @@ import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVa
 import { cancelledTrips, liveFixes, railStationsNear } from './city/feed';
 import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venueNameFor, venuePointFor } from './core/open-hours';
 import { openPlacesNear, type OsmHoursIndex } from '../../shared/city/osm-hours';
+import { isPublicHoliday } from '../../shared/city/holidays';
+import { zagrebDayKey } from './format';
 import { platformIds, type StopArrivals } from './kiosk/arrivals';
 import { KIOSK_LAYER_MODULES } from './kiosk/layer-modules';
 import type { PairedContext, PairedHandle } from './kiosk/paired';
@@ -511,8 +513,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
         ...(policy ? { policy } : {}),
         railBoards,
-        // U3.md §0.6 I-1: `false` becomes isHoliday(<Zagreb day key>) once shared/motion/bands.ts ships it.
-        openPlaces: openPlacesNear(openHours, place, radiusM, at, false),
+        // A public holiday (shared/city/holidays.ts): OSM's hours do not say holiday hours, so no place is open.
+        openPlaces: openPlacesNear(openHours, place, radiusM, at, isPublicHoliday(zagrebDayKey(at))),
         venuePoint: venuePointFor(city.places, snapshots, openHours),
         venueName: venueNameFor(city.places, snapshots, openHours),
       });

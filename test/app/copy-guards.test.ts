@@ -497,6 +497,9 @@ describe('the header sentence templates are name-safe and match the sentence cli
     openUntil: '{name}: otvoreno do {time}.',
     eventLastTram: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.',
     bikesEmpty: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.',
+    // R0's deviation families (docs/reveal-2026-10.md §7).
+    airIndex: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.',
+    warningUntil: 'DHMZ: {event} do {until}.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -533,6 +536,8 @@ describe('the header sentence templates are name-safe and match the sentence cli
     openUntil: '{name}: open until {time}.',
     eventLastTram: 'After “{title}” the last tram {route} leaves {time}.',
     bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
+    airIndex: 'Air quality: {word}, index {index}; station {station}.',
+    warningUntil: 'DHMZ: {event} until {until}.',
   };
   /** The templates of kiosk.sentence.*: not the kicker words, nor the cut's {what} words (kiosk.sentence.utility, a
    *  group of their own), nor the plural of the {seen} slot (vehicles_*). */
@@ -557,8 +562,9 @@ describe('the header sentence templates are name-safe and match the sentence cli
       name: /^\{name\}: /,
       title: /„\{title\}”/,
       venue: /\(\{venue\}\)/,
-      // A BAJS station after the operator's name, an HŽ station at the head of its train's sentence.
-      station: /^(?:BAJS )?\{station\}: /,
+      // A BAJS station after the operator's name, an HŽ station at the head of its train's sentence; an air station
+      // in apposition after "postaja", which needs no case or gender agreement either (R0 §0.5 item 8).
+      station: /^(?:BAJS )?\{station\}: |; postaja \{station\}\.$/,
       other: /; BAJS \{other\}: /,
       address: /: \{address\}\.$/,
       // ZET's own headline (upgrade U1): a title that is a sentence's whole predicate needs no agreement, and the
@@ -588,6 +594,8 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.roadUntil, { street: 'Jadranski most', what: 'zatvoreno za promet', until: '22:00' })).toBe('Jadranski most: zatvoreno za promet do 22:00.');
     expect(fill(s.openUntil, { name: 'Kino Europa', time: '23:00' })).toBe('Kino Europa: otvoreno do 23:00.');
     expect(fill(s.eventLastTram, { title: 'Intersonus', route: 6, time: 'u 23:52' })).toBe('Nakon „Intersonus” zadnji tramvaj 6 polazi u 23:52.');
+    expect(fill(s.airIndex, { index: 4, word: 'loša', station: 'Zagreb-1' })).toBe('Kvaliteta zraka: loša, indeks 4; postaja Zagreb-1.');
+    expect(fill(s.warningUntil, { event: 'Žuto upozorenje za vjetar', until: '17:00' })).toBe('DHMZ: Žuto upozorenje za vjetar do 17:00.');
   });
 });
 

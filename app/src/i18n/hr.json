@@ -179,7 +179,8 @@
     "onFigure": "na slici {shown} od {total}",
     "magnitude": "M {mag}",
     "depth": "dubina {depth} km",
-    "reference": "Mjerenja, sunce, zrak i bilten Save"
+    "reference": "Mjerenja, sunce, zrak i bilten Save",
+    "hourly": "Po satima"
   },
   "safety": {
     "hitnoSame": "Ista stranica bez skeniranja: Sigurnost",
@@ -212,7 +213,11 @@
     "places_one": "{count} mjesto",
     "places_few": "{count} mjesta",
     "places_other": "{count} mjesta",
-    "mapLink": "karta"
+    "mapLink": "karta",
+    "cuts": "Planirani prekidi",
+    "cutsNone": "Nema najavljenih prekida struje ni vode.",
+    "roads": "Stanje na cestama (HAK)",
+    "roadsNone": "HAK ne javlja ništa za područje Zagreba."
   },
   "events": {
     "agenda": "Najave",
@@ -908,6 +913,8 @@
       "openUntil": "{name}: otvoreno do {time}.",
       "eventLastTram": "Nakon „{title}” zadnji tramvaj {route} polazi {time}.",
       "bikesEmpty": "BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.",
+      "airIndex": "Kvaliteta zraka: {word}, indeks {index}; postaja {station}.",
+      "warningUntil": "DHMZ: {event} do {until}.",
       "utility": {
         "struja": "struje",
         "voda": "vode"

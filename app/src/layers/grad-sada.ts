@@ -17,7 +17,7 @@ import type { SentenceKicker, WrittenSentence } from '../../../shared/kiosk/sent
 import { aboutExpected, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import { emptyCity } from '../../../shared/city/types';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
-import { CURATED_WALL, curatedCityPoints } from '../city/curated';
+import { CURATED_WALL, curatedCityPoints, programmeItems } from '../city/curated';
 import { askNearby, feedPlace, feedRadiusM, nearbyHeld, nearbyInput, nearbyPlace, NEARBY_DESK_ROWS, NEARBY_PHONE_ROWS, sadaFeed } from '../city/feed';
 import { OSM_HOURS_CREDIT } from '../core/open-hours';
 import { departuresBlock } from '../city/next-departures';
@@ -112,7 +112,7 @@ function mapBand(ctx: LayerContext, place: PlaceContext, radiusM: number): HTMLE
     ariaLabel: ctx.i18n.t('sada.mapBand', { place: vetExternal('name', place.name, 'row') ?? '' }),
     points: [
       ...vehiclePoints(ctx.snapshots['zet-rt'], now),
-      ...curatedCityPoints(ctx.city ?? emptyCity(), ctx.snapshots.dogadanja?.items ?? [], now, CURATED_WALL),
+      ...curatedCityPoints(ctx.city ?? emptyCity(), programmeItems(ctx.snapshots), now, CURATED_WALL),
     ],
     lines: closureLines(ctx.snapshots.prometnice, now),
     center: camera.center,
@@ -166,7 +166,7 @@ export function renderGradSada(ctx: LayerContext): HTMLElement {
       { cap, id: 'sada', ...(held ? { reserve: cap } : {}) })
     : feed === 'loading' ? nearbyBusy(ctx, cap) : '';
   // Static inputs have no module snapshot: credit them while their rows are actually shown.
-  const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap) : [];
+  const shown = typeof feed === 'object' ? feed.nearbyShownRows(listed, cap, now) : [];
   const credits = [
     ...(shown.some((row) => row.kind === 'open') ? [{ key: 'osm-hours', ...OSM_HOURS_CREDIT }] : []),
     ...(shown.some((row) => row.kind === 'rail') ? [RAIL_TIMETABLE_CREDIT] : []),

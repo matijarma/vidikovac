@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LiveVehicleRef } from '../../shared/city/arrivals';
 import { distanceM } from '../../shared/city/geo';
 import type { ScreenPlace } from '../../shared/city/place';
-import type { OpenPlace } from '../../shared/city/osm-hours';
+import { decodeOsmHours, openPlacesNear, type OpenPlace, type OsmHoursFile } from '../../shared/city/osm-hours';
+import { isPublicHoliday } from '../../shared/city/holidays';
 import { emptyCity, type CityState, type DepartureBoard, type Place, type Settlement, type StreetStory } from '../../shared/city/types';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { fetchKulturpunkt } from '../../worker/feed/modules/dogadanja/kulturpunkt';
@@ -19,6 +20,9 @@ import {
   nearbyHead,
   nearbyPill,
   openingTimes,
+  openingSpans,
+  noticeShortTitle,
+  RAIL_MAX_DEFAULT,
   placeStory,
   rowBudget,
   selectNearby,
@@ -34,7 +38,7 @@ import { zagrebDayKey, zagrebHour, zagrebTime } from '../../app/src/format';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
 import { sunTimes } from '../../app/src/ui/solar';
 import { nearbyRowMarkup } from '../../app/src/city/nearby-markup';
-import { rowMarkup } from '../../app/src/kiosk/timeline';
+import { onLaterDay, rowMarkup, timeLabel } from '../../app/src/kiosk/timeline';
 import { ZET_RSS_NOVOSTI_URL, ZET_RSS_PROMET_URL, fetchZetRss } from '../../worker/feed/modules/dogadanja/zet-rss';
 import { DISCL } from '../../e2e/inventory';
 import { NOVOSTI_NOTICE, noticeDayOver, noticeLines, zetNoticeLink } from '../../shared/city/notices';
@@ -1372,24 +1376,29 @@ describe('the trains (rail, S3): a Glavni kolodvor scene', () => {
     city: { ...CITY, places: [...PLACES, STATION, FAR] }, snapshots: { 'zet-rt': snap('zet-rt', []) }, ...extra,
   });
 
-  it('lists one train, from the timetable and never live, and the trams keep their three', () => {
+  it('lists two trains (RAIL_MAX_DEFAULT, brief §3), from the timetable and never live, and the trams keep their three', () => {
     const rows = selectNearby(gk());
+    expect(RAIL_MAX_DEFAULT).toBe(2);
     expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(MAX_DEPARTURES);
-    const rail = one(rows, 'rail');
-    expect(rail).toMatchObject({
+    const rails = rows.filter((r) => r.kind === 'rail');
+    expect(rails.map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
+    expect(rails.every((r) => !r.live && r.arrival?.live === false)).toBe(true);
+    expect(rails[0]).toMatchObject({
       id: 'rail:2201', atMs: NOW_GK + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', live: false, source: 'hz',
       selection: { kind: 'place', id: 'rail-hz-gk' }, arrival: { routeName: 'R1', live: false, minutes: null },
     });
-    // By default a timed row like the rest, after the departures.
-    expect(rows.indexOf(rail)).toBeGreaterThanOrEqual(MAX_DEPARTURES);
+    // By default timed rows like the rest, after the departures.
+    for (const rail of rails) expect(rows.indexOf(rail)).toBeGreaterThanOrEqual(MAX_DEPARTURES);
   });
 
   it('puts the trains first under railFirst and lists railMax of them, without touching the trams', () => {
     const first = selectNearby(gk({ policy: { railFirst: true } }));
-    expect(first[0]).toMatchObject({ id: 'rail:2201', kind: 'rail' });
-    expect(first.slice(1, 4).map((r) => r.kind)).toEqual(['departure', 'departure', 'departure']);
+    expect(first.slice(0, 2).map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
+    expect(first.slice(2, 5).map((r) => r.kind)).toEqual(['departure', 'departure', 'departure']);
     const two = selectNearby(gk({ policy: { railMax: 2 } })).filter((r) => r.kind === 'rail');
     expect(two.map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
+    const single = selectNearby(gk({ policy: { railMax: 1 } })).filter((r) => r.kind === 'rail');
+    expect(single.map((r) => r.id)).toEqual(['rail:2201']);
     expect(selectNearby(gk({ policy: { railMax: 0 } })).some((r) => r.kind === 'rail')).toBe(false);
   });
 
@@ -1491,24 +1500,37 @@ describe('the road row (S2): a HAK state near the place, by its end', () => {
   });
 });
 
-describe('the open row (S2): a place open now, by the hour’s kinds', () => {
+describe('the open rows (R0): one useful and one leisure place open now, by the hour’s band', () => {
   const places: OpenPlace[] = [
     { id: 'n1', name: 'Konzum Ilica', kind: 'trgovina', lon: 15.975, lat: 45.8129, closesAt: at('2026-09-22T19:00:00Z') },
     { id: 'n2', name: 'Ljekarna Centar', kind: 'ljekarna', lon: 15.979, lat: 45.812, closesAt: at('2026-09-22T18:00:00Z') },
     { id: 'n3', name: 'Ljekarna Sesvete', kind: 'ljekarna', lon: 16.11, lat: 45.83, closesAt: at('2026-09-22T18:00:00Z') },
     { id: 'n4', name: 'Kavana Lav', kind: 'kafic', lon: 15.977, lat: 45.8129, closesAt: at('2026-09-22T21:30:00Z') },
+    { id: 'n5', name: 'Bar Kolaž', kind: 'bar', lon: 15.9768, lat: 45.8131, closesAt: at('2026-09-23T02:00:00Z') },
   ];
-  const open = (now: number): NearbyRow[] => selectNearby(input(now, { openPlaces: places }));
-  it('at 17:45 the pharmacy before the shop, the nearest inside the circle, standing at its closing time', () => {
-    expect(one(open(at('2026-09-22T15:45:00Z')), 'open')).toMatchObject({
+  const open = (now: number): NearbyRow[] => selectNearby(input(now, { openPlaces: places })).filter((r) => r.kind === 'open');
+  it('at 17:45 the nearest pharmacy (useful) and the café (leisure), each standing at its closing time', () => {
+    const rows = open(at('2026-09-22T15:45:00Z'));
+    expect(rows.map((r) => r.id)).toEqual(['opennow:n2', 'opennow:n4']);
+    expect(rows[0]).toMatchObject({
       id: 'opennow:n2', atMs: at('2026-09-22T18:00:00Z'), title: 'Ljekarna Centar', sub: 'ljekarna', source: 'osm-hours', live: false,
       detail: { kind: 'open', openKind: 'ljekarna' },
     });
+    expect(rows[1]).toMatchObject({ source: 'osm-hours', sub: 'kafić', detail: { kind: 'open', openKind: 'kafic' } });
   });
-  it('a café from 20:00, nothing while the night pharmacy row stands, nothing from 02:00 to 06:00', () => {
-    expect(one(open(at('2026-09-22T18:30:00Z')), 'open')).toMatchObject({ id: 'opennow:n4', sub: 'kafić' });
-    expect(open(at('2026-09-22T20:30:00Z')).some((r) => r.kind === 'open')).toBe(false); // 22:30: the pharmacy row
-    expect(open(at('2026-09-23T01:00:00Z')).some((r) => r.kind === 'open')).toBe(false); // 03:00
+  it('the shop and the bar at 20:30; beside the night pharmacy row only the leisure place; a bar until 02:00 by its band; none at 03:00', () => {
+    expect(open(at('2026-09-22T18:30:00Z')).map((r) => r.id)).toEqual(['opennow:n1', 'opennow:n5']);
+    // 22:30: the useful list skips pharmacies beside the duty pharmacy row, and the shop has closed.
+    const late = selectNearby(input(at('2026-09-22T20:30:00Z'), { openPlaces: places }));
+    expect(late.some((r) => r.kind === 'pharmacy')).toBe(true);
+    expect(late.filter((r) => r.kind === 'open').map((r) => r.id)).toEqual(['opennow:n5']);
+    // 01:30: a bar closing at 04:00 is listed, "do 04:00".
+    const night = at('2026-09-22T23:30:00Z');
+    const bar: OpenPlace = { id: 'n6', name: 'Bar Noć', kind: 'bar', lon: 15.9772, lat: 45.813, closesAt: at('2026-09-23T02:00:00Z') };
+    const rows = selectNearby(input(night, { openPlaces: [bar] })).filter((r) => r.kind === 'open');
+    expect(rows.map((r) => r.id)).toEqual(['opennow:n6']);
+    expect(timeLabel(rows[0]!, night, hr)).toBe('do 04:00');
+    expect(open(at('2026-09-23T01:00:00Z'))).toEqual([]); // 03:00
   });
 });
 
@@ -1576,6 +1598,133 @@ describe('the events of three modules (S2)', () => {
   });
 });
 
+describe('a public holiday (R0): nothing claims a place is open', () => {
+  it('lists no open row on 1 November 2026 and no catalogue opening for it, while a normal day keeps both', () => {
+    const osm = decodeOsmHours(JSON.parse(readFileSync(new URL('../../app/public/data/osm-hours.json', import.meta.url), 'utf8')) as OsmHoursFile);
+    const openAt = (now: number): NearbyRow[] => selectNearby(input(now, {
+      openPlaces: openPlacesNear(osm, PLACE, 2000, now, isPublicHoliday(zagrebDayKey(now))),
+    })).filter((r) => r.kind === 'open');
+    expect(openAt(at('2026-11-01T09:30:00Z'))).toEqual([]); // Sunday 1 November, 10:30, Svi sveti
+    expect(openPlacesNear(osm, PLACE, 2000, at('2026-11-01T09:30:00Z'), false).length).toBeGreaterThan(0);
+    const openings = (now: number): string[] => selectNearby(input(now, { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', []) } }))
+      .filter((r) => r.kind === 'opening').map((r) => r.id);
+    expect(openings(at('2026-10-31T19:30:00Z'))).toEqual([]); // Saturday 31 October, 20:30: tomorrow is a holiday
+    expect(openings(at('2026-11-07T19:30:00Z'))).toEqual(['open:culture-moderna:2026-11-08']); // Saturday 7 November: Sunday opens
+  });
+});
+
+describe('exhibitions as openings (R0)', () => {
+  const gallery = (id: string, name: string, lon: number, lat: number, hours?: string): Place =>
+    place(`culture-${id}`, 'culture', name, lon, lat, hours ? { hours } : {});
+  const G1 = gallery('prsten', 'Galerija Prsten', 15.978, 45.8135, 'pon-ned 10h-19h');
+  const G2 = gallery('kranjcar', 'Galerija Kranjčar', 15.975, 45.815, 'pon-ned 10h-19h');
+  const G3 = gallery('greta', 'Galerija Greta', 15.97, 45.816, 'pon-ned 10h-19h');
+  const FAR = gallery('sesvete', 'Galerija Sesvete', 16.11, 45.83, 'pon-ned 10h-19h');
+  const BARE = gallery('bare', 'Galerija Bez Rasporeda', 15.9765, 45.8125);
+  const exhibit = (id: string, venue: Place | { name: string; lon: number; lat: number }, title: string, until = '2026-10-15T23:59:00+02:00'): FeedItem =>
+    u3item('kultura-zg', `kultura-zg:${id}`, 'event', title, {
+      at: '2026-09-01T00:00:00+02:00', until, dateBasis: 'event', geo: { type: 'Point', coordinates: [venue.lon!, venue.lat!] },
+      data: { precision: 'day', venue: venue.name, source: 'kultura-zagreb', category: 'izlozba' },
+    });
+  const city = { ...CITY, places: [...PLACES, G1, G2, G3, FAR, BARE] };
+  const scene = (now: number, items: readonly FeedItem[], extra: Partial<NearbyInput> = {}): NearbyRow[] => {
+    const rows = selectNearby(input(now, { city, snapshots: { ...snapshots(), 'kultura-zg': u3snap('kultura-zg', [...items]) }, ...extra }));
+    checkBounds(rows);
+    return rows;
+  };
+  const openings = (rows: readonly NearbyRow[]): NearbyRow[] => rows.filter((r) => r.kind === 'opening');
+  const E1 = exhibit('e1', G1, 'Svjetlo i sjena');
+
+  it('stands at the closing time while the venue is open, at the opening time before it opens, and not in its last half hour', () => {
+    const noon = at('2026-09-22T10:30:00Z'); // Tue 12:30
+    const [row] = openings(scene(noon, [E1]));
+    expect(row).toMatchObject({
+      id: 'open:exhibit:kultura-zg:e1:2026-09-22', kind: 'opening', atMs: at('2026-09-22T17:00:00Z'), untilMs: at('2026-09-22T17:00:00Z'),
+      always: false, title: 'Svjetlo i sjena', sub: 'Galerija Prsten', live: false, source: 'kultura-zg',
+      selection: { kind: 'item', module: 'kultura-zg' }, detail: { kind: 'exhibit', venue: 'Galerija Prsten', openNow: true },
+    });
+    expect(row!.map?.geometry).toEqual({ type: 'Point', coordinates: [15.978, 45.8135] });
+    expect(timeLabel(row!, noon, hr)).toBe('do 19:00');
+    const morning = openings(scene(at('2026-09-22T06:30:00Z'), [E1])); // 08:30
+    expect(morning.map((r) => [r.atMs, r.detail])).toEqual([[at('2026-09-22T08:00:00Z'), { kind: 'exhibit', venue: 'Galerija Prsten', openNow: false }]]);
+    expect(morning[0]!.untilMs).toBeUndefined();
+    expect(openings(scene(at('2026-09-22T16:40:00Z'), [E1]))).toEqual([]); // 18:40, closing at 19:00
+  });
+
+  it('from 20:00 stands at tomorrow’s opening, a later-day row; the catalogue opening of the same venue is not listed twice', () => {
+    const rows = openings(scene(at('2026-09-22T19:00:00Z'), [E1], { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', []), 'kultura-zg': u3snap('kultura-zg', [E1]) } }));
+    // The two nearest: the exhibition at Galerija Prsten and the catalogue's Galerija Kranjčar, both at 10:00 tomorrow.
+    expect(rows.map((r) => r.id)).toEqual(['open:culture-kranjcar:2026-09-23', 'open:exhibit:kultura-zg:e1:2026-09-23']);
+    const row = rows.find((r) => r.detail?.kind === 'exhibit')!;
+    expect(row.atMs).toBe(at('2026-09-23T08:00:00Z'));
+    expect(onLaterDay(row, at('2026-09-22T19:00:00Z'))).toBe(true);
+    expect(rows.some((r) => r.id.startsWith('open:culture-prsten:'))).toBe(false);
+  });
+
+  it('lists the two nearest of three, and nothing outside the circle, without hours, on a holiday or beside a timed event of that title', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    const three = [exhibit('e3', G3, 'Grafike'), exhibit('e2', G2, 'Portreti'), E1];
+    expect(openings(scene(noon, three)).map((r) => r.id)).toEqual(['open:exhibit:kultura-zg:e1:2026-09-22', 'open:exhibit:kultura-zg:e2:2026-09-22']);
+    expect(openings(scene(noon, [exhibit('far', FAR, 'Daleko')]))).toEqual([]);
+    expect(openings(scene(noon, [exhibit('bare', BARE, 'Bez sati')]))).toEqual([]);
+    expect(openings(scene(at('2026-11-01T11:30:00Z'), [exhibit('nov', G1, 'Studeni', '2026-11-15T23:59:00+01:00')]))).toEqual([]);
+    const timed = item('dogadanja', 'ev-sjena', 'event', 'Svjetlo i sjena', { at: '2026-09-22T16:00:00Z', dateBasis: 'event', data: { source: 'kulturpunkt', venue: 'Galerija Prsten', precision: 'time' } });
+    const rows = scene(noon, [E1], { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [...EVENTS, timed]), 'kultura-zg': u3snap('kultura-zg', [E1]) } });
+    expect(rows.some((r) => r.id === 'event:ev-sjena')).toBe(true);
+    expect(openings(rows)).toEqual([]);
+  });
+
+  it('is timed by an open library of the venue’s name beside it (OSM hours), until it closes', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    const venue = { name: 'Knjižnica Bogdana Ogrizovića', lon: 15.9745, lat: 45.8126 };
+    const library: OpenPlace = { id: 'k1', name: 'Knjižnica Bogdana Ogrizovića', kind: 'knjiznica', lon: 15.9746, lat: 45.8126, closesAt: at('2026-09-22T18:00:00Z') };
+    const rows = openings(scene(noon, [exhibit('k', venue, 'Zagrebački plakati')], { openPlaces: [library] }));
+    expect(rows.map((r) => [r.id, r.atMs, r.detail])).toEqual([
+      ['open:exhibit:kultura-zg:k:2026-09-22', at('2026-09-22T18:00:00Z'), { kind: 'exhibit', venue: 'Knjižnica Bogdana Ogrizovića', openNow: true }],
+    ]);
+    // Without the open place the venue has no hours of its own here: no row.
+    expect(openings(scene(noon, [exhibit('k', venue, 'Zagrebački plakati')]))).toEqual([]);
+  });
+
+  it('reads every range of a day (openingSpans), and the first opening per day stays openingTimes’', () => {
+    expect([...openingSpans('pon-pet 10h-13:30h i 16h-19:30h, sub 10h-14h')!.entries()].find(([d]) => d === 3)).toEqual([3, [{ open: 600, close: 810 }, { open: 960, close: 1170 }]]);
+    expect(openingSpans('pon-pet 10h-16h, 17h-25h')).toBeNull();
+  });
+
+  it('R0 review: resolves an exhibition’s active opening stretch before promising its closing time', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    for (const hours of ['pon-ned 10h-13h i 13h-19h', 'pon-ned 10h-17h i 16h-19h', 'pon-ned 16h-19h i 10h-17h']) {
+      const venue = { ...G1, hours };
+      const rows = openings(scene(noon, [E1], { city: { ...city, places: [venue] } }));
+      expect(rows, hours).toHaveLength(1);
+      expect(rows[0], hours).toMatchObject({ atMs: at('2026-09-22T17:00:00Z'), detail: { kind: 'exhibit', openNow: true } });
+      expect(timeLabel(rows[0]!, noon, hr), hours).toBe('do 19:00');
+    }
+  });
+
+  it('R0 review: checks an exhibition’s external venue name before collapsing whitespace', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    const venue = { ...G1, name: 'Galerija\nPrsten' };
+    expect(openings(scene(noon, [E1], { city: { ...city, places: [venue] } }))).toEqual([]);
+  });
+});
+
+describe('the notice headline’s own shorter words (R0, vis1 F2)', () => {
+  it('takes the words before the first separator, whole, or nothing', () => {
+    expect(noticeShortTitle('Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)')).toBe('Uspostavljena autobusna linija 228');
+    expect(noticeShortTitle('Linije 5 i 13: izmjena trase')).toBe('Linije 5 i 13');
+    expect(noticeShortTitle('Tramvaj 6 – privremeno do Sopota')).toBe('Tramvaj 6');
+    expect(noticeShortTitle('Linije 5 i 13 u nedjelju mijenjaju trase')).toBeUndefined();
+  });
+  it('gives the ZET notice row its shorter words', () => {
+    const now = at('2026-09-22T15:45:00Z');
+    const title = 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)';
+    const news = item('dogadanja', 'zet-novosti:228', 'event', title, { at: '2026-09-22T08:00:00Z', data: { source: 'zet-novosti' } });
+    const rows = selectNearby(input(now, { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [...EVENTS, news]) } }));
+    expect(one(rows, 'notice')).toMatchObject({ id: 'notice:zet-novosti:228', title, titleShort: 'Uspostavljena autobusna linija 228' });
+  });
+});
+
 describe('one row of each new kind, in time order, inside the bounds', () => {
   it('a scene with every source: at most one row of each kind, and the timed rows still in time order', () => {
     const now = at('2026-09-22T15:45:00Z');
@@ -1597,7 +1746,10 @@ describe('one row of each new kind, in time order, inside the bounds', () => {
         }))),
       }),
     }));
-    for (const kind of breadthKinds.filter((k) => k !== 'rail')) expect(rows.filter((r) => r.kind === kind), kind).toHaveLength(1);
+    for (const kind of breadthKinds.filter((k) => k !== 'rail' && k !== 'open')) expect(rows.filter((r) => r.kind === kind), kind).toHaveLength(1);
+    // Two open rows at most (one useful, one leisure, R0); this fixture's open places are pharmacies only, so one.
+    expect(rows.filter((r) => r.kind === 'open').length).toBeLessThanOrEqual(2);
+    expect(rows.filter((r) => r.kind === 'open')).toHaveLength(1);
     expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(MAX_DEPARTURES);
     const timed = rows.filter((r) => r.kind !== 'departure' && !r.always).map((r) => r.atMs!);
     expect(timed).toEqual([...timed].sort((a, b) => a - b));

@@ -21,6 +21,7 @@ import { pillOverlaps, pillsClipped } from '../../app/src/map/name-census';
 import { LAYERS, NEVER, overlayLayers, type ProzorOptions } from '../../app/src/map/overlays';
 import { OVERLAY_DARK } from '../../app/src/map/basemap';
 import { emptyCity, type CityState } from '../../shared/city/types';
+import { CURATED_WALL, curatedCityPoints, programmeItems } from '../../app/src/city/curated';
 
 const NOW = Date.parse('2026-09-24T10:00:00Z');
 const STOP = { id: '106_1', name: 'Trg bana J. Jelačića', lon: 15.97726, lat: 45.81286, routes: ['6', '11', '13'] };
@@ -189,6 +190,13 @@ describe('the legend follows what the map draws', () => {
     // A communal work is a square in the works ink, not culture; the pharmacy and a vehicle are neither.
     expect(legendKinds([{ id: 'event:2', title: 'Radovi', lon: 0, lat: 0, place: 'event', props: { source: 'komunalne' } },
       { id: 'pharmacy:x', title: '', lon: 0, lat: 0, place: 'pharmacy' }])).toEqual(['tram']);
+    // R0: a framed wall whose only programme is the City's calendar (kultura-zg) still names "Kultura večeras".
+    const now = Date.parse('2026-09-22T15:45:00Z');
+    const city: CityState = { ...emptyCity(), places: [{ id: 'culture-gavella', category: 'culture', name: 'Gavella', lon: 15.97, lat: 45.81, sourceId: 'culture', sourceRecord: 'g' }] };
+    const show = { id: 'kultura-zg:1', module: 'kultura-zg' as const, tier: 'open' as const, kind: 'event' as const, title: 'Glembajevi', at: '2026-09-22T18:00:00Z', dateBasis: 'event' as const,
+      data: { source: 'kultura-zagreb', venue: 'Gavella', precision: 'time' } };
+    const snapshots = { 'kultura-zg': { module: 'kultura-zg' as const, tier: 'open' as const, status: 'live' as const, fetchedAt: '2026-09-22T15:00:00Z', attribution: { text: 'x', url: 'https://example.test/', licence: 'x' }, items: [show] } };
+    expect(legendKinds(curatedCityPoints(city, programmeItems(snapshots), now, CURATED_WALL))).toEqual(['tram', 'culture']);
   });
 
   it('writes them on the map for the wall: a strip lists the tram line alone, the frame its stations too', () => {

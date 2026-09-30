@@ -264,3 +264,19 @@ describe('a multi-day event says until when, never "cijeli dan" [O-53]', () => {
     expect(enCatalogue.kiosk.paired).not.toHaveProperty('ongoingUntil');
   });
 });
+
+describe('tonightPanel reads the City’s whole programme (R0)', () => {
+  it('lists a kultura-zg item tonight once beside a dogadanja twin of the same title and start, and credits the shown sources', () => {
+    const twin = event('d1', '2026-09-11T18:00:00Z', 'Noć u muzeju');
+    const city = item('kultura-zg', 'kultura-zg:9', 'event', 'Noć u muzeju', { at: '2026-09-11T18:00:00Z', dateBasis: 'event', data: { source: 'kultura-zagreb', precision: 'time', venue: 'Etnografski muzej' } });
+    const own = item('kultura-zg', 'kultura-zg:10', 'event', 'Koncert u parku', { at: '2026-09-11T19:00:00Z', dateBasis: 'event', data: { source: 'kultura-zagreb', precision: 'time', venue: 'Zrinjevac' } });
+    const panel = tonightPanel(input([snap('dogadanja', [twin]), snap('kultura-zg', [city, own])]));
+    expect(panel.rows.map((row) => row.key)).toEqual(['event:d1', 'event:kultura-zg:10']);
+    expect(panel.credit).toBe('Etnografski muzej · Guru za kulturu');
+    expect(panel.state).toBe('live');
+    // dogadanja down: the City's calendar still answers, and the panel is live.
+    const down = tonightPanel(input([snap('dogadanja', [], 'down'), snap('kultura-zg', [own])]));
+    expect(down.rows.map((row) => row.key)).toEqual(['event:kultura-zg:10']);
+    expect(down.state).toBe('live');
+  });
+});

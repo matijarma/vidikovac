@@ -2,8 +2,9 @@
 // three facts on one strip, today's forecast range with the measured value
 // placed on it and the DHMZ narrative as prose, the sun path computed on the
 // device, DHMZ warnings as rows, and the week's quakes as rows first, then
-// placed by their own distance and bearing. No hourly curve: DHMZ publishes
-// none. No dial and no gauge: a number a person reads is text, and the only
+// placed by their own distance and bearing. The hourly strip reads DHMZ's
+// hourly steps for Grič (dhmz-hourly), as text in cells, never a curve.
+// No dial and no gauge: a number a person reads is text, and the only
 // figures are the range bar, the sun path and the radar (plan "Vrijeme").
 import type { FeedItem, ModuleSnapshot } from '../../../worker/feed/schema';
 import { actionButton, section, sectionHead, signRow, type Tone } from '../experience/blocks';
@@ -29,7 +30,42 @@ const QUAKES_STEP = 10;
 const DAY_MS = 86_400_000;
 const COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
-type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc';
+type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc' | 'dhmz-hourly';
+
+/** Twelve hourly steps from the current hour (R0). */
+const HOURLY_STEPS = 12;
+/** A step's chance of rain is printed from this percentage. */
+const HOURLY_RAIN_FROM = 30;
+
+/** DHMZ's hourly steps for Grič (Maksimir where Grič has none), from the current hour: the time, the temperature, and
+ *  the chance of rain where it is 30 % or more. A step without a temperature is left out. */
+function hourlySection(i18n: I18n, ctx: LayerContext): string {
+  const hourly = ctx.snapshots['dhmz-hourly'];
+  const error = ctx.errors?.['dhmz-hourly'];
+  const at = (item: FeedItem): number => Date.parse(item.at ?? '');
+  const from = ctx.now - 3_600_000;
+  const steps = (station: string): FeedItem[] => (hourly?.items ?? [])
+    .filter((item) => dataText(item, 'station') === station && at(item) >= from && Date.parse(item.until ?? '') > ctx.now
+      && Number.isFinite(dataNumber(item, 'temp') ?? Number.NaN))
+    .sort((a, b) => at(a) - at(b));
+  const gric = steps('gric');
+  const shown = (gric.length > 0 ? gric : steps('maksimir')).slice(0, HOURLY_STEPS);
+  let body = hourly ? listState(i18n, hourly, 'dhmz-hourly', shown.length, i18n.t('status.unknown'), error) : loadingOrDown(i18n, ctx, 'dhmz-hourly');
+  if (!body) {
+    const cells = shown.map((item) => {
+      const temp = dataNumber(item, 'temp')!;
+      const prob = dataNumber(item, 'prob');
+      const rain = prob !== null && prob >= HOURLY_RAIN_FROM ? `<span class="wx-hour-rain">${escapeHtml(i18n.t('kiosk.nearby.rainChance', { p: Math.round(prob) }))}</span>` : '';
+      return `<li class="wx-hour" data-key="${escapeAttribute(item.id)}"><time datetime="${escapeAttribute(item.at!)}">${escapeHtml(zagrebTime(item.at!))}</time>`
+        + `<span class="wx-hour-temp">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 0) }))}</span>${rain}</li>`;
+    });
+    body = `<ol class="wx-hourly" role="list" data-testid="weather-hourly">${cells.join('')}</ol>`;
+  }
+  return wxSection({
+    id: 'wx-hourly', tone: 'weather', wide: true,
+    body: sectionHead(i18n, { title: i18n.t('weather.hourly'), snapshot: hourly, error, id: 'wx-hourly-title' }) + body,
+  });
+}
 
 function loadingOrDown(i18n: I18n, ctx: LayerContext, module: WeatherModule): string {
   const error = ctx.errors?.[module];
@@ -258,8 +294,8 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   const headObs = o ? `<p class="wx-head-obs">${observed(i18n, o, observation, ctx.errors?.['dhmz-now'])}</p>` : '';
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
-<div class="wx-grid">${nowSection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}</div>
+<div class="wx-grid">${nowSection(i18n, ctx)}${hourlySection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}</div>
 <details class="wx-reference"><summary>${escapeHtml(i18n.t('weather.reference'))}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
-${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-hourly'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
 </section>`);
 }

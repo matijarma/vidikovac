@@ -367,7 +367,7 @@ export type SentenceTemplate =
   | 'bikes' | 'sunset' | 'sunsetAt' | 'sunsetTime' | 'sunrise' | 'sunriseAt' | 'sunriseTime' | 'lastTram' | 'firstTram'
   | 'event' | 'opening' | 'pharmacy' | 'always' | 'outage' | 'notice' | 'service' | 'serviceNone'
   | 'trainAt' | 'rainAt' | 'forecastTomorrow' | 'supplyCutToday' | 'supplyCutTomorrow' | 'roadUntil' | 'openUntil'
-  | 'eventLastTram' | 'bikesEmpty';
+  | 'eventLastTram' | 'bikesEmpty' | 'airIndex' | 'warningUntil';
 
 type Kiosk = typeof hr.kiosk;
 type Group = { [G in keyof Kiosk]: Kiosk[G] extends string ? never : G }[keyof Kiosk];
@@ -446,7 +446,7 @@ function build(code: SupportedLocale): KioskStrings {
         'bikes', 'sunset', 'sunsetAt', 'sunsetTime', 'sunrise', 'sunriseAt', 'sunriseTime', 'lastTram', 'firstTram',
         'event', 'opening', 'pharmacy', 'always', 'outage', 'notice', 'service', 'serviceNone',
         'trainAt', 'rainAt', 'forecastTomorrow', 'supplyCutToday', 'supplyCutTomorrow', 'roadUntil', 'openUntil',
-        'eventLastTram', 'bikesEmpty',
+        'eventLastTram', 'bikesEmpty', 'airIndex', 'warningUntil',
       ]),
       vehicles: forms('sentence', 'vehicles'),
       kicker: record(['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const, (kind) => `kiosk.sentence.kicker.${kind}`),

@@ -1020,7 +1020,8 @@ describe('the full map view (transport)', () => {
     fetchData.mockClear();
     handle.restore('#room=r1&layer=sigurnost&q=private-text');
     await flush();
-    expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
+    // Sigurnost reads HAK's road states and the planned cuts too (R0).
+    expect(fetchData.mock.calls.map((call) => call[0]).sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'hak', 'prekidi', 'prometnice']);
     expect(session.sent).toEqual([]);
     fetchData.mockClear();
     session.expire();

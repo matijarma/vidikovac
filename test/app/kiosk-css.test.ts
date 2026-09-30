@@ -21,6 +21,8 @@ const windowRule = (selector: string) => ruleIn(cityCss, selector);
 // The one line clamp on the wall (upgrade U1): a ZET notice's title, held to two lines. It is ZET's own headline with
 // no shorter form, and timeline.ts reserves the row (NOTICE_TITLE_MAX_LINES); every other rule here stays whole.
 const NOTICE_TITLE_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"] .nearby-title';
+// R0 (vis1 F2): the same clamp at three lines, taken only from room the fitter has left (timeline.ts lines3).
+const NOTICE_TITLE_3_RULE = '.kiosk .k-nearby .nearby-row[data-kind="notice"][data-title-lines="3"] .nearby-title';
 
 describe('the start screen (round 2, F16)', () => {
   it('keeps the place field\u2019s suggestion box and its status in the flow, so Pokreni is never covered', () => {
@@ -88,8 +90,9 @@ describe('public-screen design invariants', () => {
     // ZET notice title (U1).
     expect(windowRule(EVENT_CLAMP)).toBe('display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden');
     expect(windowRule(NOTICE_TITLE_RULE)).toContain('-webkit-line-clamp:2;line-clamp:2;overflow:hidden');
+    expect(windowRule(NOTICE_TITLE_3_RULE)).toBe('-webkit-line-clamp:3;line-clamp:3');
     expect(timelineRules).not.toContain('text-overflow');
-    const uncut = timelineRules.split('\n').filter((line) => !line.startsWith(`${EVENT_CLAMP}{`) && !line.startsWith(NOTICE_TITLE_RULE)).join('\n');
+    const uncut = timelineRules.split('\n').filter((line) => !line.startsWith(`${EVENT_CLAMP}{`) && !line.startsWith(NOTICE_TITLE_RULE) && !line.startsWith(NOTICE_TITLE_3_RULE)).join('\n');
     expect(uncut).not.toContain('line-clamp');
     expect(timelineRules).not.toContain("data-lines");
     for (const selector of ['.kiosk .k-nearby .nearby-title', '.kiosk .k-nearby .nearby-sub', '.kiosk .k-nearby-heading', '.kiosk .k-nearby .nearby-row', '.kiosk .k-nearby-text']) {
@@ -233,7 +236,7 @@ describe('public-screen design invariants', () => {
   const operatorField = new Set(['.k-suggest-name', '.k-suggest-meta']);
   const phoneTile = (file: string, sel: string) => file === 'app/src/ui/signage.css' && /\.tl(?:-[\w-]+)?(?![\w-])/.test(sel) && !/\.k-/.test(sel);
   const excepted = (file: string, sel: string) => operatorField.has(sel) || phoneTile(file, sel)
-    || (file === 'app/src/ui/kiosk-city.css' && (sel === EVENT_CLAMP || sel === NOTICE_TITLE_RULE));
+    || (file === 'app/src/ui/kiosk-city.css' && (sel === EVENT_CLAMP || sel === NOTICE_TITLE_RULE || sel === NOTICE_TITLE_3_RULE));
   it('loads the stylesheets the pin reads: the entry\'s own and the ones shared modules import', () => {
     expect(wallSheets).toEqual([
       'app/src/motion/schema.css', 'app/src/motion/schematic.css', 'app/src/ui/base.css', 'app/src/ui/city.css', 'app/src/ui/fonts.css',

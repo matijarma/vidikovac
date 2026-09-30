@@ -6,6 +6,7 @@
 // fetch or update time (companion brief §12, [O-27]).
 import { closureEndKnown } from '../../../shared/city/closures';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
+import { PROGRAMME_MODULES, programmeItems, uniqueByTitleStart } from '../city/curated';
 import type { LayerId } from '../../../worker/protocol';
 import type { PresentationTarget } from '../../../worker/presentation';
 import { LJEKARNE_CHECKED_ON, LJEKARNE_SOURCE } from '../../../worker/hitno/ljekarne';
@@ -414,7 +415,7 @@ function renderSada(ctx: PairedContext): PairedMarkup {
   let modules = modulesOf(ctx);
   if (ctx.target?.time && ctx.target.time !== 'sada') {
     const window = columnsFor(ctx.i18n, ctx.now).find(column => column.id === ctx.target!.time);
-    if (window) modules = modules.map(module => module.module !== 'dogadanja' ? module : {
+    if (window) modules = modules.map(module => !(PROGRAMME_MODULES as readonly string[]).includes(module.module) ? module : {
       ...module, items: module.items.filter(item => item.dateBasis !== 'event' || (item.at && Date.parse(item.at) >= window.start && Date.parse(item.at) < window.end)),
     });
   }
@@ -818,8 +819,14 @@ function eventRow(item: FeedItem, ctx: PairedContext, withDay: boolean): string 
   return row(externalHtml('title', item.title), escapeHtml(sub), escapeHtml(when));
 }
 
+/** The snapshot whose state an empty programme list reports: the first of the programme modules that answers
+ *  (dogadanja first), else dogadanja's own absence or outage. */
+function programmeSnapshot(ctx: PairedContext): ModuleSnapshot | undefined {
+  return PROGRAMME_MODULES.map((id) => ctx.snapshots[id]).find(isLive) ?? ctx.snapshots.dogadanja;
+}
+
 function eventsBlock(ctx: PairedContext, title: string, items: readonly FeedItem[], limit: number, testid: string, withDay: boolean): string {
-  const dog = ctx.snapshots.dogadanja;
+  const dog = programmeSnapshot(ctx);
   const rows = items.slice(0, limit).map((item) => eventRow(item, ctx, withDay));
   return block(title, listBody(dog, rows, ctx.strings.paired.eventsNone, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, testid, grow: true, noSource: true });
 }
@@ -841,7 +848,7 @@ function ongoingRow(item: FeedItem, ctx: PairedContext): string {
 }
 
 function ongoingBlock(ctx: PairedContext, items: readonly FeedItem[], limit: number): string {
-  const dog = ctx.snapshots.dogadanja;
+  const dog = programmeSnapshot(ctx);
   const rows = items.slice(0, limit).map((item) => ongoingRow(item, ctx));
   return block(ctx.strings.paired.ongoing, listBody(dog, rows, ctx.strings.paired.eventsNone, ctx.strings, items.length), { s: ctx.strings, snapshot: dog, testid: 'k-ongoing', grow: true, noSource: true });
 }
@@ -849,11 +856,17 @@ function ongoingBlock(ctx: PairedContext, items: readonly FeedItem[], limit: num
 function renderKultura(ctx: PairedContext): PairedMarkup {
   const { strings: s } = ctx;
   const dog = ctx.snapshots.dogadanja;
-  const groups = eventGroups(isLive(dog) ? dog.items : [], ctx.now);
+  // The City's whole programme (R0): dogadanja, the City's calendar and the libraries', an event announced twice once.
+  const groups = eventGroups(uniqueByTitleStart(programmeItems(ctx.snapshots)), ctx.now);
   const half = ctx.size === 'wide' ? 4 : 3;
-  // One credit for the whole layer, naming the sources of the rows it can show -- the notices included, so no second copy sits under them.
+  // One credit per module with rows on show, naming the sources of the rows it can show -- the notices included, so no
+  // second copy sits under them.
   const shown = [...groups.today, ...groups.ongoing, ...groups.tomorrow, ...groups.later, ...groups.notices];
-  const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${mainSource(dog, shown, s)}`;
+  const credited = PROGRAMME_MODULES.filter((id) => shown.some((item) => item.module === id));
+  const credits = credited.length > 0
+    ? credited.map((id) => mainSource(ctx.snapshots[id], shown.filter((item) => item.module === id), s)).join('')
+    : mainSource(dog, shown, s);
+  const main = `<div class="k-stack">${eventsBlock(ctx, s.paired.today, groups.today, half, 'k-today', false)}${ongoingBlock(ctx, groups.ongoing, half)}</div><div class="k-stack">${eventsBlock(ctx, s.paired.tomorrow, groups.tomorrow, half, 'k-tomorrow', false)}${eventsBlock(ctx, s.paired.later, groups.later, half, 'k-later', true)}</div>${credits}`;
   const notices = block(s.paired.notices, listBody(dog, noticeRows(ctx, groups.notices, 1), s.paired.noData, s, groups.notices.length), { s, snapshot: dog, testid: 'k-notices', grow: true, noSource: true });
   return { lines: '', main, side: notices };
 }
