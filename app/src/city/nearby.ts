@@ -15,14 +15,15 @@
 //     end, events within the circle by their start with the venue and the tram
 //     to it, the next solar event only, the evening's last trams as ONE row
 //     from four hours ahead, the next line to start from 22:00 until all have started (or 06:00),
-//     tomorrow's openings from the catalogue's hours when the evening empties;
+//     tomorrow's openings from the catalogue's hours when the evening empties, and
+//     the City's exhibitions by their venue's hours (at most two openings);
 //   - last, one timeless row: the place's naming story or a protected building
 //     nearby, alternating every 20 minutes, and the 24/7 pharmacy at night.
 // The facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2, S3) join the timed
-// rows, one of each at most: the next HŽ train from a station inside the circle
-// (timetable only, never live; before the departures when the response policy
-// asks), the nearest DHMZ station's next rain step, a power or water cut, a road
-// state from HAK, and a place open now (OpenStreetMap hours); the events read
+// rows: the next two HŽ trains from a station inside the circle (timetable only,
+// never live; before the departures when the response policy asks), the nearest
+// DHMZ station's next rain step, a power or water cut, a road state from HAK, and
+// two places open now, one useful, one for leisure (OpenStreetMap hours); the events read
 // the City's programme and the libraries' beside dogadanja.
 // Never a fetch time, a disclaimer, a count without a name or a register
 // caveat (§12 "Never"); a closure stays while its feed is stale (Q7).
@@ -37,6 +38,8 @@
 // reason goes to `onSkip` (the wall's data-skipped-text census, decision 18).
 import { arrivalsAt, type ArrivalRow, type LiveVehicleRef } from '../../../shared/city/arrivals';
 import { locatedEvents } from '../../../shared/city/events';
+import { isPublicHoliday } from '../../../shared/city/holidays';
+import { containsStems, stemWords } from '../../../shared/city/stems';
 import { noticeCandidates, zetNoticeLink } from '../../../shared/city/notices';
 import { pillText } from '../../../shared/city/frame';
 import { closureEndKnown } from '../../../shared/city/closures';
@@ -76,13 +79,14 @@ export function u3Snapshot(snapshots: FeedSnapshots, id: U3ModuleId): ModuleSnap
 export type RainWord = 'slaba' | 'kisa' | 'jaka';
 /** A HAK road state (kiosk.nearby.road.*). */
 export type RoadState = 'radovi' | 'regulacija' | 'zatvoreno' | 'zastoj';
-/** What a rain, cut, road or open row says, typed, so the header sentence (city/sentence.ts) and the wall's time
+/** What a rain, cut, road, open or exhibition row says, typed, so the header sentence (city/sentence.ts) and the wall's time
  *  column (kiosk/timeline.ts) never read it back from the row's words. */
 export type NearbyDetail =
   | { kind: 'rain'; word: RainWord; percent: number | null }
   | { kind: 'cut'; utility: 'struja' | 'voda'; street: string; fromMs: number; untilMs: number; allDay: boolean }
   | { kind: 'road'; state: RoadState }
-  | { kind: 'open'; openKind: OpenKind };
+  | { kind: 'open'; openKind: OpenKind }
+  | { kind: 'exhibit'; venue: string; openNow: boolean };
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
@@ -190,7 +194,7 @@ export interface NearbyInput {
   venuePoint?: (item: FeedItem) => { lon: number; lat: number } | null;
   /** The canonical name of that same resolved venue, never an unmatched source hint. */
   venueName?: (item: FeedItem) => string | null;
-  /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail rows (default 1), `railFirst` puts
+  /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail rows (default 2), `railFirst` puts
    *  them before the departure rows (default false). */
   policy?: { railMax?: number; railFirst?: boolean };
 }
@@ -233,6 +237,12 @@ export const ALWAYS_ALTERNATE_MS = 20 * 60_000;
 export const MAX_CLOSURES = 2;
 export const MAX_EVENTS = 3;
 export const MAX_OPENINGS = 2;
+/** Brief §3: two trains where a station is inside the circle; railRows emits none without one. */
+export const RAIL_MAX_DEFAULT = 2;
+/** An exhibition's venue and an open library or cinema this close are one place (the open place times it). */
+const EXHIBIT_OPEN_PLACE_M = 60;
+/** An exhibition open now stands at its closing time only while at least this much of the day is left. */
+const EXHIBIT_OPEN_MIN_MS = 30 * 60_000;
 /** A tram stop this close to a venue is "the tram to it"; a venue this close to the place needs none. */
 export const TRAM_TO_VENUE_M = 400;
 /** The story's first sentence: cut after at least this many characters, never beyond the maximum. */
@@ -254,12 +264,13 @@ const RAIN_WORDS: Readonly<Record<string, RainWord>> = { 'slaba kiša': 'slaba',
 const ROAD_STATES: Readonly<Record<string, RoadState>> = {
   radovi: 'radovi', 'privremena regulacija': 'regulacija', 'zatvoreno za promet': 'zatvoreno', zastoj: 'zastoj',
 };
-/** Which open kinds the open row names by the Zagreb hour, the first one present winning; none from 02:00 to 06:00. */
-const OPEN_BANDS: readonly { from: number; to: number; kinds: readonly OpenKind[] }[] = [
-  { from: 6, to: 10, kinds: ['pekara', 'kafic', 'ljekarna'] },
-  { from: 10, to: 17, kinds: ['ljekarna', 'posta', 'knjiznica', 'trznica', 'trgovina'] },
-  { from: 17, to: 20, kinds: ['ljekarna', 'trznica', 'trgovina'] },
-  { from: 20, to: 26, kinds: ['kafic', 'bar', 'restoran', 'ljekarna'] },
+/** The open rows by the Zagreb hour: one useful kind and one leisure kind, the first kind present in each list winning,
+ *  its nearest place; none from 02:00 to 06:00 (brief §3: two rows per band). */
+const OPEN_BANDS: readonly { from: number; to: number; useful: readonly OpenKind[]; leisure: readonly OpenKind[] }[] = [
+  { from: 6, to: 10, useful: ['ljekarna', 'trgovina', 'trznica', 'posta'], leisure: ['pekara', 'kafic'] },
+  { from: 10, to: 17, useful: ['ljekarna', 'posta', 'knjiznica', 'trznica', 'trgovina'], leisure: ['kafic', 'pekara', 'restoran'] },
+  { from: 17, to: 20, useful: ['ljekarna', 'knjiznica', 'trznica', 'trgovina'], leisure: ['restoran', 'kafic', 'bar'] },
+  { from: 20, to: 26, useful: ['ljekarna', 'trgovina'], leisure: ['bar', 'kafic', 'restoran'] },
 ];
 /** A sub that ends in our own clock range ("bez struje 08:00–14:00"): the words before it are what a check reads, the
  *  range is the grammar's (the prose check reads two clock times as a phone number). */
@@ -567,12 +578,17 @@ function noticeRows(input: NearbyInput): NearbyRow[] {
     if (CAVEAT.test(item.title) || !vetted(input, [['title', item.title]])) continue;
     const summary = item.summary !== undefined && !CAVEAT.test(item.summary) && externalText('summary', item.summary, { surface: 'row' }).ok ? item.summary : '';
     const href = zetNoticeLink(item.link);
+    // The words before ZET's own separator, whole: the wall prints them where the full headline runs past its lines.
+    // A short form the row policy refuses is not carried; the row stands on its full headline (and counts no skip).
+    const short = noticeShortTitle(item.title);
+    const titleShort = short !== undefined && externalText('title', short, { surface: 'row' }).ok ? short : undefined;
     return [{
       id: `notice:${item.id}`,
       kind: 'notice',
       atMs: Date.parse(item.at!),
       always: false,
       title: item.title,
+      ...(titleShort ? { titleShort } : {}),
       sub: summary,
       live: false,
       source: String(item.data?.source ?? 'dogadanja'),
@@ -580,6 +596,17 @@ function noticeRows(input: NearbyInput): NearbyRow[] {
     }];
   }
   return [];
+}
+
+/**
+ * A notice headline's own shorter form: the words before its first separator (" (", " – " or ": ") after the
+ * first character, trimmed, when they are whole, shorter and non-empty (shorterLabel); else undefined.
+ * "Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)" is "Uspostavljena autobusna linija 228".
+ */
+export function noticeShortTitle(title: string): string | undefined {
+  const cuts = [' (', ' – ', ': '].map((sep) => title.indexOf(sep)).filter((i) => i > 0);
+  if (cuts.length === 0) return undefined;
+  return shorterLabel(title, [title.slice(0, Math.min(...cuts)).trim()]);
 }
 
 // --- (b) closures by their end --------------------------------------------------
@@ -834,14 +861,34 @@ function firstTramRows(input: NearbyInput): NearbyRow[] {
   }];
 }
 
-// --- (g) tomorrow's openings, when the evening empties ---------------------------
+// --- (g) openings: exhibitions by their venue's hours, tomorrow's openings when the evening empties ---------
 
+/**
+ * The opening rows: the exhibitions of the City's programme and the libraries' (exhibitionRows) and the catalogue's
+ * openings of tomorrow (from 20:00 to 06:00, only when no event is left tonight, never on a holiday morning), a
+ * catalogue row left out where an exhibition row stands at the same verified venue; nearest first, then by time,
+ * at most MAX_OPENINGS.
+ */
 function openingRows(input: NearbyInput, events: readonly NearbyRow[]): NearbyRow[] {
+  const exhibits = exhibitionRows(input, events);
+  const venues = new Set(exhibits.map((e) => e.venueId).filter((id): id is string => id !== undefined));
+  const catalogue = catalogueOpenings(input, events).filter((o) => !venues.has(o.venueId!));
+  return [...exhibits, ...catalogue]
+    .sort((a, b) => a.d - b.d || (a.row.atMs ?? 0) - (b.row.atMs ?? 0) || a.row.id.localeCompare(b.row.id))
+    .slice(0, MAX_OPENINGS)
+    .map(({ row }) => row);
+}
+
+interface OpeningCandidate { row: NearbyRow; d: number; venueId?: string }
+
+function catalogueOpenings(input: NearbyInput, events: readonly NearbyRow[]): OpeningCandidate[] {
   const { now, place, radiusM, city, i18n } = input;
   const hour = zagrebHour(now) ?? 12;
   if (!(hour >= OPENINGS_FROM_HOUR || hour < NIGHT_UNTIL_HOUR)) return [];
   const today = zagrebDayKey(now);
   const morning = hour >= OPENINGS_FROM_HOUR ? shiftDay(today, 1) : today;
+  // OSM and the catalogue do not say holiday hours: nothing opens on a public holiday (shared/city/holidays.ts).
+  if (isPublicHoliday(morning)) return [];
   // The horizon reaches into the morning only when nothing is left tonight.
   const morningStart = localInstant(morning, NIGHT_UNTIL_HOUR, 0);
   if (events.some((e) => e.atMs !== null && e.atMs < morningStart)) return [];
@@ -859,18 +906,116 @@ function openingRows(input: NearbyInput, events: readonly NearbyRow[]): NearbyRo
   return found
     .sort((a, b) => a.d - b.d || a.at - b.at || a.place.id.localeCompare(b.place.id))
     .slice(0, MAX_OPENINGS)
-    .map(({ place: p, at }) => ({
-      id: `open:${p.id}:${morning}`,
-      kind: 'opening' as const,
-      atMs: at,
-      always: false,
-      title: p.name,
-      sub: ct(i18n, p.category === 'market' ? 'market' : 'culture'),
-      live: false,
-      source: p.sourceId,
-      ...placeRef(p),
-      map: { id: p.id, geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] } },
+    .map(({ place: p, at, d }) => ({
+      d,
+      venueId: p.id,
+      row: {
+        id: `open:${p.id}:${morning}`,
+        kind: 'opening' as const,
+        atMs: at,
+        always: false,
+        title: p.name,
+        sub: ct(i18n, p.category === 'market' ? 'market' : 'culture'),
+        live: false,
+        source: p.sourceId,
+        ...placeRef(p),
+        map: { id: p.id, geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] as [number, number] } },
+      },
     }));
+}
+
+/**
+ * The exhibitions (a day's listing of kultura-zg or programi) inside the circle, timed by their venue's hours and
+ * never by a guess: an open library or cinema of the same name beside the point (OSM hours, until it closes), else
+ * the verified venue's catalogue hours (openingSpans). Open now with 30 minutes or more left, a row stands at the
+ * closing time ("do 19:00"); before the venue opens today, at the opening time; from 20:00, at tomorrow's first
+ * opening. Nothing on a public holiday, nothing for an exhibition a timed event row already names.
+ */
+function exhibitionRows(input: NearbyInput, events: readonly NearbyRow[]): OpeningCandidate[] {
+  const { now, place, radiusM, city } = input;
+  const items = eventItems(input).filter((item) => (item.module === 'kultura-zg' || item.module === 'programi')
+    && dataText(item, 'precision') === 'day' && item.until !== undefined);
+  if (items.length === 0) return [];
+  const hour = zagrebHour(now) ?? 12;
+  const today = zagrebDayKey(now);
+  const evening = hour >= OPENINGS_FROM_HOUR;
+  const day = evening ? shiftDay(today, 1) : today;
+  if (isPublicHoliday(day)) return [];
+  const weekday = weekdayOf(day);
+  const timedTitles = new Set(events.map((e) => normalName(e.title)));
+  const out: OpeningCandidate[] = [];
+  const seen = new Set<string>();
+  for (const event of locatedEvents(items, city.places, now, 'week')) {
+    const item = event.item;
+    const start = Date.parse(item.at ?? '');
+    const end = Date.parse(item.until ?? '');
+    if (!Number.isFinite(start) || !Number.isFinite(end) || zagrebDayKey(start) > day) continue;
+    const venue = event.venueIds.length === 1 ? city.places.find((p) => p.id === event.venueIds[0] && located(p)) : undefined;
+    const point = pointOf(item) ?? (venue && located(venue) ? { lon: venue.lon, lat: venue.lat } : null) ?? input.venuePoint?.(item) ?? null;
+    if (!point) continue;
+    const d = distanceM(place, point);
+    if (d > radiusM) continue;
+    const venueName = oneLine(venue?.name ?? (dataText(item, 'venue') || input.venueName?.(item) || ''));
+    if (!venueName || !vetted(input, [['title', item.title], ['name', venueName]])) continue;
+    if (timedTitles.has(normalName(item.title))) continue;
+    const timing = exhibitTiming(input, { point, venueName, venue, day, weekday, evening });
+    // An exhibition that has ended before the venue's opening that day is not on show.
+    if (!timing || end <= Math.max(now, timing.opensAt)) continue;
+    const id = `open:exhibit:${item.id}:${day}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      d,
+      ...(venue ? { venueId: venue.id } : {}),
+      row: {
+        id,
+        kind: 'opening',
+        atMs: timing.atMs,
+        ...(timing.openNow ? { untilMs: timing.atMs } : {}),
+        always: false,
+        title: oneLine(item.title),
+        sub: venueName,
+        live: false,
+        source: item.module,
+        selection: { kind: 'item', id: publicItemKey(item.module, item.id), module: item.module },
+        map: { id: venue?.id ?? item.id, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } },
+        detail: { kind: 'exhibit', venue: venueName, openNow: timing.openNow },
+      },
+    });
+  }
+  return out;
+}
+
+/** When an exhibition's row stands: open now until `atMs`, or opening at `atMs`; `opensAt` is that day's opening. */
+function exhibitTiming(
+  input: NearbyInput,
+  at: { point: { lon: number; lat: number }; venueName: string; venue: Place | undefined; day: string; weekday: number; evening: boolean },
+): { atMs: number; openNow: boolean; opensAt: number } | null {
+  const { now } = input;
+  if (!at.evening) {
+    // (i) An open library or cinema of that name beside the point: OSM's hours, open now until it closes.
+    const stems = stemWords(at.venueName);
+    const open = (input.openPlaces ?? [])
+      .filter((p) => (p.kind === 'knjiznica' || p.kind === 'kino') && Number.isFinite(p.closesAt) && p.closesAt - now >= EXHIBIT_OPEN_MIN_MS
+        && distanceM(at.point, p) <= EXHIBIT_OPEN_PLACE_M && containsStems(stemWords(p.name), stems))
+      .sort((a, b) => distanceM(at.point, a) - distanceM(at.point, b) || a.id.localeCompare(b.id))[0];
+    if (open) return { atMs: open.closesAt, openNow: true, opensAt: now };
+  }
+  // (ii) The verified venue's catalogue hours for that weekday.
+  const spans = at.venue?.hours ? openingSpans(at.venue.hours)?.get(at.weekday) : undefined;
+  if (!spans) return null;
+  const instant = (minutes: number): number => localInstant(at.day, Math.floor(minutes / 60), minutes % 60);
+  if (at.evening) {
+    const first = spans[0]!;
+    return { atMs: instant(first.open), openNow: false, opensAt: instant(first.open) };
+  }
+  for (const span of spans) {
+    const open = instant(span.open);
+    const close = instant(span.close);
+    if (open <= now && now < close) return close - now >= EXHIBIT_OPEN_MIN_MS ? { atMs: close, openNow: true, opensAt: open } : null;
+    if (open > now) return { atMs: open, openNow: false, opensAt: open };
+  }
+  return null;
 }
 
 const DAY_NUMBER: Readonly<Record<string, number>> = { pon: 1, uto: 2, sri: 3, čet: 4, cet: 4, pet: 5, sub: 6, ned: 0 };
@@ -884,19 +1029,34 @@ const RANGES_RE = `${RANGE_RE}(?:\\s*(?:,|\\si)\\s*${RANGE_RE})*`;
 /** A catalogue phrase this parser does not trust: box offices, seasons, "every other", holidays, appointments, notes. */
 const DOUBT = /[()]|blagajn|prije|poslije|zimsk|ljetn|svak|praznik|blagdan|dogovor|ovisno|najav|osim|\bod\b|\bdo\b|http|www/;
 
+type Spans = readonly { open: number; close: number }[] | null;
+
 /**
- * The first opening per weekday (0 Sunday … 6 Saturday, minutes after midnight; null for a day
- * the text calls closed) from a catalogue `hours` text such as "pon-pet 08h-20h, sub 08h-14h" or
- * "uto-pet 11h-19h, sub i ned 11h-14h, pon zatvoreno". Conservative on purpose: any phrase it
- * cannot read whole, a range without a day ("08h-16h" says nothing about Saturday), and a day
- * given two different openings make it answer null, and no row is shown.
+ * The opening hours per weekday (0 Sunday … 6 Saturday; each range in minutes after midnight, in the text's order;
+ * null for a day the text calls closed) from a catalogue `hours` text such as "pon-pet 08h-20h, sub 08h-14h" or
+ * "uto-pet 11h-19h, sub i ned 11h-14h, pon zatvoreno". Conservative on purpose: any phrase it cannot read whole, a
+ * range without a day ("08h-16h" says nothing about Saturday) and a range that is not a clock range running forwards
+ * make it answer null; a day given two different sets of hours is left out.
+ */
+export function openingSpans(hours: string): Map<number, Spans> | null {
+  return byDay(parseHours(hours), spansKey);
+}
+
+/**
+ * The first opening per weekday (minutes after midnight; null for a day the text calls closed), as conservative as
+ * openingSpans; a day given two different first openings is left out.
  */
 export function openingTimes(hours: string): Map<number, number | null> | null {
+  const firsts = byDay(parseHours(hours), (spans) => (spans === null ? 'closed' : String(spans[0]!.open)));
+  return firsts ? new Map([...firsts].map(([day, spans]) => [day, spans === null ? null : spans[0]!.open])) : null;
+}
+
+/** Each day's hours as the text assigns them, in order; null when the text is not read whole. */
+function parseHours(hours: string): { day: number; spans: Spans }[] | null {
   const text = hours.toLocaleLowerCase('hr').replace(/\s+/g, ' ').trim();
   if (!text || DOUBT.test(text)) return null;
   const segment = new RegExp(`\\s*[,.]?\\s*(${DAYS_RE})\\s+(${RANGES_RE}|zatvoreno)`, 'y');
-  const out = new Map<number, number | null>();
-  const doubtful = new Set<number>();
+  const out: { day: number; spans: Spans }[] = [];
   let pos = 0;
   while (pos < text.length) {
     segment.lastIndex = pos;
@@ -908,15 +1068,28 @@ export function openingTimes(hours: string): Map<number, number | null> | null {
     pos = segment.lastIndex;
     const days = expandDays(m[1]!);
     if (!days) return null;
-    const opening = m[2] === 'zatvoreno' ? null : firstOpening(m[2]!);
-    if (opening === undefined) return null;
-    for (const day of days) {
-      if (out.has(day) && out.get(day) !== opening) doubtful.add(day);
-      out.set(day, opening);
-    }
+    const spans = m[2] === 'zatvoreno' ? null : rangeSpans(m[2]!);
+    if (spans === undefined) return null;
+    for (const day of days) out.push({ day, spans });
+  }
+  return out;
+}
+
+/** The assignments per day, a day whose assignments disagree (by `key`) left out; null when none is left. */
+function byDay(assigned: readonly { day: number; spans: Spans }[] | null, key: (spans: Spans) => string): Map<number, Spans> | null {
+  if (!assigned) return null;
+  const out = new Map<number, Spans>();
+  const doubtful = new Set<number>();
+  for (const { day, spans } of assigned) {
+    if (out.has(day) && key(out.get(day)!) !== key(spans)) doubtful.add(day);
+    out.set(day, spans);
   }
   for (const day of doubtful) out.delete(day);
   return out.size > 0 ? out : null;
+}
+
+function spansKey(spans: Spans): string {
+  return spans === null ? 'closed' : spans.map((r) => `${r.open}-${r.close}`).join(',');
 }
 
 function expandDays(spec: string): number[] | null {
@@ -931,14 +1104,18 @@ function expandDays(spec: string): number[] | null {
   return days;
 }
 
-/** The first range's opening in minutes; undefined when a time is not a clock time or the range runs backwards. */
-function firstOpening(ranges: string): number | undefined {
-  const m = /^(\d{1,2})(?:[.:](\d{2}))?h?\s*[-–]\s*(\d{1,2})(?:[.:](\d{2}))?h?/.exec(ranges);
-  if (!m) return undefined;
-  const open = Number(m[1]) * 60 + Number(m[2] ?? 0);
-  const close = Number(m[3]) * 60 + Number(m[4] ?? 0);
-  if (Number(m[1]) > 23 || Number(m[2] ?? 0) > 59 || Number(m[4] ?? 0) > 59 || close > 24 * 60 || close <= open) return undefined;
-  return open;
+/** Every range of a segment in minutes; undefined when a time is not a clock time or a range runs backwards. */
+function rangeSpans(ranges: string): { open: number; close: number }[] | undefined {
+  const out: { open: number; close: number }[] = [];
+  for (const range of ranges.split(/\s*(?:,|\si)\s*/)) {
+    const m = /^(\d{1,2})(?:[.:](\d{2}))?h?\s*[-–]\s*(\d{1,2})(?:[.:](\d{2}))?h?$/.exec(range);
+    if (!m) return undefined;
+    const open = Number(m[1]) * 60 + Number(m[2] ?? 0);
+    const close = Number(m[3]) * 60 + Number(m[4] ?? 0);
+    if (Number(m[1]) > 23 || Number(m[2] ?? 0) > 59 || Number(m[4] ?? 0) > 59 || close > 24 * 60 || close <= open) return undefined;
+    out.push({ open, close });
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 // --- (i) the facts-breadth rows, one of each (U3.md S2, S3) ------------------------
@@ -946,10 +1123,10 @@ function firstOpening(ranges: string): number | undefined {
 /**
  * The next train from an HŽ station inside the circle (the caller passes the two nearest stations' boards): the
  * timetable's time, never live, with the HŽ short name on the badge ("Vlak" where there is none) and the station
- * under the headsign. At most `policy.railMax` rows (one by default); the trams' three are not touched.
+ * under the headsign. At most `policy.railMax` rows (RAIL_MAX_DEFAULT, two, by default); the trams' three are not touched.
  */
 function railRows(input: NearbyInput): NearbyRow[] {
-  const max = Math.max(0, Math.floor(input.policy?.railMax ?? 1));
+  const max = Math.max(0, Math.floor(input.policy?.railMax ?? RAIL_MAX_DEFAULT));
   const boards = (input.railBoards ?? []).filter((board) => board.operator === 'hz');
   if (max === 0 || boards.length === 0) return [];
   const { now, place, radiusM } = input;
@@ -1116,41 +1293,56 @@ function roadRows(input: NearbyInput): NearbyRow[] {
 }
 
 /**
- * A place open now inside the circle (OpenStreetMap hours): the hour's kinds in their order (OPEN_BANDS), the first
- * kind present, its nearest place, standing at its closing time ("do 22:00"). Never while the night pharmacy row
- * stands: at night the 24/7 pharmacy is the one place the wall names.
+ * The places open now inside the circle (OpenStreetMap hours), at most two: by the Zagreb hour's band (OPEN_BANDS),
+ * one of a useful kind and one of a leisure kind, in each list the first kind present, its nearest place (ties by
+ * id), standing at its closing time ("do 22:00"). Beside the night pharmacy row the useful list skips pharmacies
+ * (the duty pharmacy row names one); the last band runs to 02:00, so a bar open until 04:00 is a fact until 02:00.
+ * Never the same place twice.
  */
 function openRows(input: NearbyInput, timeless: readonly NearbyRow[]): NearbyRow[] {
   const places = input.openPlaces ?? [];
-  if (places.length === 0 || timeless.some((row) => row.kind === 'pharmacy')) return [];
+  if (places.length === 0) return [];
   const hour = zagrebHour(input.now) ?? 12;
   const band = OPEN_BANDS.find((b) => (hour >= b.from && hour < b.to) || (hour + 24 >= b.from && hour + 24 < b.to));
   if (!band) return [];
   const { now, place, radiusM } = input;
   const words = kioskStrings(input.i18n.getLocale()).nearby.openKind;
-  for (const kind of band.kinds) {
-    const found = places
-      .filter((p) => p.kind === kind && Number.isFinite(p.lon) && Number.isFinite(p.lat) && Number.isFinite(p.closesAt) && p.closesAt > now)
-      .map((p) => ({ p, d: distanceM(place, p) }))
-      .filter(({ d }) => d <= radiusM)
-      .sort((a, b) => a.d - b.d || a.p.id.localeCompare(b.p.id));
-    for (const { p } of found) {
-      if (!vetted(input, [['name', p.name]])) continue;
-      return [{
-        id: `opennow:${p.id}`,
-        kind: 'open',
-        atMs: p.closesAt,
-        always: false,
-        title: oneLine(p.name),
-        sub: words[kind],
-        live: false,
-        source: 'osm-hours',
-        map: { id: `opennow:${p.id}`, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } },
-        detail: { kind: 'open', openKind: kind },
-      }];
-    }
+  const nightPharmacy = timeless.some((row) => row.kind === 'pharmacy');
+  const useful = nightPharmacy ? band.useful.filter((kind) => kind !== 'ljekarna') : band.useful;
+  const out: NearbyRow[] = [];
+  const taken = new Set<string>();
+  for (const kinds of [useful, band.leisure]) {
+    const row = firstOpen(kinds);
+    if (row) out.push(row);
   }
-  return [];
+  return out;
+
+  function firstOpen(kinds: readonly OpenKind[]): NearbyRow | null {
+    for (const kind of kinds) {
+      const found = places
+        .filter((p) => p.kind === kind && !taken.has(p.id) && Number.isFinite(p.lon) && Number.isFinite(p.lat) && Number.isFinite(p.closesAt) && p.closesAt > now)
+        .map((p) => ({ p, d: distanceM(place, p) }))
+        .filter(({ d }) => d <= radiusM)
+        .sort((a, b) => a.d - b.d || a.p.id.localeCompare(b.p.id));
+      for (const { p } of found) {
+        if (!vetted(input, [['name', p.name]])) continue;
+        taken.add(p.id);
+        return {
+          id: `opennow:${p.id}`,
+          kind: 'open',
+          atMs: p.closesAt,
+          always: false,
+          title: oneLine(p.name),
+          sub: words[kind],
+          live: false,
+          source: 'osm-hours',
+          map: { id: `opennow:${p.id}`, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } },
+          detail: { kind: 'open', openKind: kind },
+        };
+      }
+    }
+    return null;
+  }
 }
 
 /** Items with a point inside the circle, nearest first (ties by id). */
