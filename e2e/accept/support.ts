@@ -23,7 +23,7 @@ import { FIXTURE_PHARMACY_ADDRESSES, FIXTURE_STOP } from '../experience-fixtures
 import { PHONE_PROBES } from '../inventory';
 import type { Scene } from '../scenes';
 import {
-  CLOCK_RE, ELLIPSIS_RE, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, PHARMACY_HOURS, pharmacyFailures, SENTENCE_MAX_CHARS, WALL_PROBES, type RotationSummary, type WallSample,
+  CLOCK_RE, departureReads, ELLIPSIS_RE, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, PHARMACY_HOURS, pharmacyFailures, SENTENCE_MAX_CHARS, WALL_PROBES, type RotationSummary, type WallSample,
 } from '../wall';
 
 // The phone's shared verdicts live beside its probes (e2e/inventory.ts), where the production observer reads them too.
@@ -210,7 +210,6 @@ export const HEADINGS = WALL_PROBES.headings;
 
 const kindsOf = (s: WallSample): string => [...new Set(s.rows.map((r) => r.kind ?? 'none'))].join(', ') || 'none';
 const isPast = (when: string | null, at: number): boolean => when !== null && Number.isFinite(Date.parse(when)) && Date.parse(when) < at;
-const clockTime = (r: WallSample['rows'][number]): boolean => r.hasTime && CLOCK_RE.test(r.whenText);
 const drawsVehicles = (s: WallSample): boolean => Boolean((s.pills ?? '').trim()) || (s.bodies ?? 0) > 0;
 
 /**
@@ -241,8 +240,9 @@ export function sceneReadingFailures(scene: Scene, s: WallSample, headings: read
   if (x.pills === 'none' && (s.pills ?? '').trim()) out.push(`vehicle pills "${s.pills}" drawn while ZET's feed is down (target none)`);
   if (!x.feedLive && !((s.markers ?? 0) > 0)) out.push(`data-markers is ${s.markers} (target > 0: BAJS, closures and places stay on the map without the live feed)`);
   if (x.departuresAsClockTimes) {
-    const bad = s.rows.filter((r) => r.kind === 'departure' && !clockTime(r));
-    if (bad.length) out.push(`${bad.length} departure row(s) without a clock time in a <time>: ${bad.map((r) => `"${r.whenText || r.text}"`).join(', ')} (target every departure a timetable time)`);
+    // The line's cells and any departure row (R1: e2e/wall.ts departureReads).
+    const bad = departureReads(s.rows).filter((d) => !(d.hasTime && CLOCK_RE.test(d.whenText)));
+    if (bad.length) out.push(`${bad.length} departure(s) without a clock time in a <time>: ${bad.map((d) => `"${d.whenText}"`).join(', ')} (target every departure a timetable time)`);
   }
   if (x.sentenceNot && x.sentenceNot.test(s.sentence)) out.push(`the sentence "${s.sentence}" matches ${String(x.sentenceNot)} at ${scene.zagreb} (target no match)`);
   if (x.headingNot) {
@@ -281,8 +281,8 @@ export function rotationSceneFailures(scene: Scene, samples: readonly WallSample
     const n = count((s) => x.headingNot!.test(s.sentence));
     if (n) out.push(`${n} ${of} with a sentence matching ${String(x.headingNot)} (target 0, principle 9)`);
   }
-  if (summary.minDepartures < x.departuresMin) out.push(`a reading with ${summary.minDepartures} departure row(s) (target ${x.departuresMin} in every reading: three are due, decision 67)`);
-  if (summary.solarRowsMax > x.solarMax) out.push(`up to ${summary.solarRowsMax} solar row(s) in a reading (target ≤ ${x.solarMax}: the next solar event is more than an hour away and its row goes to the third departure, decision 67)`);
+  if (summary.minDepartures < x.departuresMin) out.push(`a reading with ${summary.minDepartures} departure(s) (target ${x.departuresMin} in every reading: three are due)`);
+  if (summary.solarRowsMax > x.solarMax) out.push(`up to ${summary.solarRowsMax} solar row(s) in a reading (target ≤ ${x.solarMax}, e2e/scenes.ts)`);
   if (x.liveMax !== null && summary.liveRowsMax > x.liveMax) out.push(`up to ${summary.liveRowsMax} live countdown row(s) in a reading (target ≤ ${x.liveMax})`);
   if (x.pills === 'none') {
     const n = count((s) => Boolean((s.pills ?? '').trim()));
@@ -293,7 +293,7 @@ export function rotationSceneFailures(scene: Scene, samples: readonly WallSample
     if (n) out.push(`${n} ${of} read data-feed "live" while ZET's feed is down (target 0)`);
   }
   if (x.departuresAsClockTimes) {
-    const n = count((s) => s.rows.some((r) => r.kind === 'departure' && !clockTime(r)));
+    const n = count((s) => departureReads(s.rows).filter((d) => !(d.hasTime && CLOCK_RE.test(d.whenText))).length > 0);
     if (n) out.push(`${n} ${of} show a departure without a clock time (target 0)`);
   }
   const unworded = count((s) => s.rows.some((r) => r.always && r.kind !== 'pharmacy' && r.whenText !== ALWAYS_WORD));

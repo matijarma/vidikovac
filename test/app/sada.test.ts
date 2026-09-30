@@ -144,6 +144,16 @@ describe('Sada answers before it explains', () => {
     expect(rows).toHaveLength(3);
   });
 
+  // R1 (D1): the desk draws the three departures as one row of cells; the phone keeps its three rows.
+  it('draws the desk\u2019s departures as one line of the same three rows, and the phone\u2019s as rows', () => {
+    const desk = renderGradSada(ctx({ screen: DESK })).querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(desk.dataset.line).toBe('1');
+    expect(desk.querySelectorAll(':scope > li.sada-departure[data-kind=departure]')).toHaveLength(3);
+    const phone = renderGradSada(ctx()).querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(phone.hasAttribute('data-line')).toBe(false);
+    expect(phone.querySelectorAll(':scope > li.sada-departure[data-kind=departure]')).toHaveLength(3);
+  });
+
   it('reads in the owner’s order: place, sentence, departures, U blizini, sources; the phone without a map has no band', () => {
     const section = renderGradSada(ctx());
     const order = ['[data-testid=sada-place]', '[data-testid=sada-sentence]', '[data-testid=day-departures]', '[data-testid=nearby]', '[data-testid=provenance]']

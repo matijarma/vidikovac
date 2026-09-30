@@ -94,6 +94,8 @@ export const WALL_1920: LegibilitySpec = Object.freeze({
     '.nearby-row .nearby-title',
     '.nearby-row .nearby-when',
     '.nearby-row time',
+    // R1: the departures line's badge is read with its time (decision 26).
+    '.nearby-row .k-dep-cell .k-line-badge',
     '[data-testid=kiosk-code]',
     '[data-testid=pair-code]',
     '[data-testid=strip-verdict]',
@@ -101,6 +103,8 @@ export const WALL_1920: LegibilitySpec = Object.freeze({
   ]),
   walkUpTier: Object.freeze([
     '.nearby-row .nearby-sub',
+    // R1: the departures line's destinations (its badge and time are read tier through the badge's own check and `time`).
+    '.nearby-row .k-dep-headsign',
     '[data-testid=kiosk-date]',
     '.k-map-legend',
     '[data-testid=kiosk-sentence-kicker]',

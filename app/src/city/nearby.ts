@@ -315,6 +315,16 @@ export function selectNearby(input: NearbyInput): NearbyRow[] {
   ];
 }
 
+/**
+ * The next departures (brief §5.2 (d), R2 reads it for the line's advance): the three departures after the shown
+ * ones, in arrangeDepartures order, `kind: 'departure'`, ids distinct from the shown; empty when fewer than four
+ * exist. Pure: the shown rows are read as the held ones, nothing is remembered.
+ */
+export function nextDepartures(input: NearbyInput, shown: readonly NearbyRow[]): NearbyRow[] {
+  const outage = positionsUnavailable(input.snapshots['zet-rt'], input.now);
+  return departureRows({ ...input, heldDepartures: shown.filter((row) => row.kind === 'departure') }, outage, 'next');
+}
+
 function byTime(a: NearbyRow, b: NearbyRow): number {
   return (a.atMs ?? Infinity) - (b.atMs ?? Infinity) || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.id.localeCompare(b.id);
 }
@@ -356,7 +366,7 @@ export function rowBudget(availablePx: number, count: number): { rowPx: number; 
 
 // --- (a) departures -----------------------------------------------------------
 
-function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
+function departureRows(input: NearbyInput, outage: boolean, mode: 'shown' | 'next' = 'shown'): NearbyRow[] {
   // No board in hand is a moment, not a verdict: the shown departures ride through it on their grace below
   // (observe-d521b, item 2: the wall listed no departure for 25 to 46 s while the trams ran). Without held rows
   // there is nothing to carry, and nothing is invented.
@@ -461,7 +471,10 @@ function departureRows(input: NearbyInput, outage: boolean): NearbyRow[] {
   const pool = fresh.length === 0 && carried.length === 0 && dwelling.length === 0 && due
     ? [steadyMinute(due, heldById.get(departureId(due)), now)]
     : [...fresh, ...carried, ...dwelling];
-  const shown = arrangeDepartures(pool, held, displayedMinute(now));
+  // 'next' (nextDepartures, brief §5.2 (d)): the departures after the shown ones, in the same order, never one of them.
+  const order = orderDepartures(pool, held, displayedMinute(now));
+  const heldIds = new Set(held.map((row) => row.id));
+  const shown = mode === 'shown' ? order.chosen : pool.length > MAX_DEPARTURES ? order.ordered.filter((a) => !heldIds.has(departureId(a))).slice(0, MAX_DEPARTURES) : [];
   return shown.map((arrival) => {
     const live = arrival.live;
     const id = departureId(arrival);
@@ -529,6 +542,12 @@ function displayedMinute(now: number): (row: ArrivalRow) => number {
  * A tram due now or a whole minute earlier still enters at once; a departed one has already left the pool.
  */
 function arrangeDepartures(pool: readonly ArrivalRow[], held: readonly NearbyRow[], minute: (row: ArrivalRow) => number): ArrivalRow[] {
+  return orderDepartures(pool, held, minute).chosen;
+}
+
+/** arrangeDepartures' body: `chosen` is what the wall prints, `ordered` the whole pool in that order before the cap
+ *  (the shown trams, then the newcomers inserted by minute), which nextDepartures reads past the shown ones. */
+function orderDepartures(pool: readonly ArrivalRow[], held: readonly NearbyRow[], minute: (row: ArrivalRow) => number): { chosen: ArrivalRow[]; ordered: ArrivalRow[] } {
   const byId = new Map(pool.map((a) => [departureId(a), a] as const));
   const shownIds = new Set(held.map((row) => row.id));
   const shown: ArrivalRow[] = [];
@@ -553,7 +572,7 @@ function arrangeDepartures(pool: readonly ArrivalRow[], held: readonly NearbyRow
     keep.add(heldOut);
     chosen = ordered.filter((a) => keep.has(a));
   }
-  return chosen;
+  return { chosen, ordered };
 }
 
 // --- (a2) ZET's own notice, right after the departures ----------------------------

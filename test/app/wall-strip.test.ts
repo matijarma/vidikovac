@@ -37,22 +37,30 @@ describe('the map pane’s legible minimum', () => {
   // Lane w-labels2, measured in the accept night scenes at 1366 x 768 (dark): the window 513 px, the gap
   // 14, the card 284 (the QR at its 240 px floor on a 12 px plate), the legend 56 (one entry) to 95 (three,
   // two lines), the list's head and padding 61; the promises at night are 86 px a row (first, last, the
-  // pharmacy) and 64 a departure.
+  // pharmacy) and about 98 px for the departures line (R1: the stacked cell, badge and destination over the
+  // time, docs/reveal-2026-10-plan/R1.md §0.2(e)), which holds every departure on offer, so fullPx is floorPx.
   const NIGHT_1366 = { windowPx: 513, gapPx: 14, cardPx: 284, legendPx: 95, listOverheadPx: 61, minMapPx: MAP_MIN_HEIGHT_PX };
-  it('moves the card under the list by day, when the list keeps its promises in the smaller box', () => {
-    const day = compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64 });
-    expect(day).toEqual({ placement: 'aside', mapPx: 513 - 95, listPx: 513 - 14 - 284 - 61 });
+  const LINE_PX = 98;
+  it('by day keeps the card under the map and the legend under the list: the line and the place row do not fit under the card', () => {
+    // The line and the timeless row are 162 px, and the card under the list leaves it 154: the legend moves instead,
+    // as it did with three departures on offer before the line (lane w-labels3).
+    const floorPx = LINE_PX + 64;
+    const day = compactArrangement({ ...NIGHT_1366, floorPx, fullPx: floorPx });
+    expect(day).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 95 });
+    // A line that fits under the card (a box without the timeless row's height) takes the whole map.
+    expect(compactArrangement({ ...NIGHT_1366, floorPx: LINE_PX, fullPx: LINE_PX })).toEqual({ placement: 'aside', mapPx: 513 - 95, listPx: 513 - 14 - 284 - 61 });
   });
   it('at night keeps the card under the map and moves the legend under the list, so the map is never a strip', () => {
-    // night0430: the first tram, the pharmacy and a departure; lastTrams2240: the last and first trams too.
-    for (const floorPx of [86 + 86 + 64, 86 + 86 + 86 + 64]) {
-      const night = compactArrangement({ ...NIGHT_1366, floorPx });
+    // night0430: the first tram, the pharmacy and the line; lastTrams2240: the last and first trams too.
+    for (const floorPx of [86 + 86 + LINE_PX, 86 + 86 + 86 + LINE_PX]) {
+      const night = compactArrangement({ ...NIGHT_1366, floorPx, fullPx: floorPx });
       expect(night, String(floorPx)).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 95 });
       expect(night.mapPx).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
       expect(night.listPx).toBeGreaterThanOrEqual(floorPx);
     }
   });
-  // Lane w-labels3: by day three departures on offer come before map height past its minimum.
+  // Lane w-labels3: an ungrouped list's second and third departures on offer came before map height past its minimum
+  // (the function still weighs fullPx above floorPx; the wall's line makes them equal).
   it('gives the second and third departures the room before more map, and holds to one only when nothing else fits', () => {
     const three = compactArrangement({ ...NIGHT_1366, floorPx: 64 + 64, fullPx: 64 * 3 + 64 });
     expect(three).toEqual({ placement: 'legend', mapPx: 513 - 14 - 284, listPx: 513 - 61 - 95 });

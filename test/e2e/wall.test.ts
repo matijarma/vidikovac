@@ -13,7 +13,7 @@ import type { Page } from '@playwright/test';
 import {
   CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
-  RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
+  RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, departureReads, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type FitReading, type RotationRow, type WallPage, type WallRow, type WallSample,
 } from '../../e2e/wall';
 import { TILE_REQUESTS, attachRecorders, pathOf, summariseBody, type RecorderPage } from '../../e2e/recorders';
@@ -381,6 +381,77 @@ describe('one reading of the wall', () => {
     expect(departureFailures({ ...du3Sample, fitDropped: trainsOut, listRoom: DEPARTURE_ROW_MIN_PX })).toEqual(['1 departure rows where the list offered 3 and the fit keeps 2 (left out: rail rail departure departure closure solar opening opening event event event)']);
   });
 
+  // R1 (docs/reveal-2026-10-plan/R1.md §0.2(f)): the wall's departures are the cells of one departures line.
+  describe('the departures line (R1): departures are its cells', () => {
+    type Cell = NonNullable<WallRow['cells']>[number];
+    const cell = (n: number, over: Partial<Cell> = {}): Cell => ({ id: `dep:${n}`, route: '6', live: false, whenText: `17:4${n}`, hasTime: true, headsign: 'Črnomerec', ...over });
+    const line = (cells: Cell[]): WallRow => row({ id: 'departures', kind: 'departures', when: '2026-09-21T15:47:00.000Z', whenText: cells[0]?.whenText ?? '', live: cells.some((c) => c.live), cells });
+    const closure = row({ id: 'closure-1', kind: 'closure', when: '2026-09-21T16:00:00.000Z' });
+    const withLine = (cells: Cell[], offered = cells.length, extra: WallRow[] = [closure]): WallSample =>
+      sample({ rows: [line(cells), ...extra], departures: cells.length, departuresOffered: offered, liveRows: cells.filter((c) => c.live).length });
+
+    it('a line of three cells, every one on the wall, holds; the fitted-count plan is not consulted', () => {
+      const s = withLine([cell(1, { live: true, whenText: 'za 4 min' }), cell(2), cell(3)]);
+      expect(departureFailures(s)).toEqual([]);
+      expect(sampleFailures(s).filter((f) => /departure/.test(f))).toEqual([]);
+      // No data-fit-dropped probe is needed with the line: the fit never drops a cell.
+      expect(departureFailures({ ...s, fitDropped: null })).toEqual([]);
+    });
+
+    it('two cells on the wall of the line\'s three fail, a departure row beside the line fails, and 0 or 4 cells fail', () => {
+      expect(departureFailures(withLine([cell(1), cell(2)], 3))).toEqual(["2 of the line's 3 cells on the wall (target: every cell the line drew)"]);
+      expect(departureFailures(withLine([cell(1), cell(2)], 2, [row({ id: 'dep:9', when: '2026-09-21T15:50:00.000Z' })]))).toEqual([
+        "1 departure row(s) beside the departures line (target 0: the wall's departures are the line's cells)",
+      ]);
+      expect(departureFailures(withLine([], 0))).toEqual(['0 departures in the line (target 1–3)']);
+      expect(departureFailures(withLine([cell(1), cell(2), cell(3), cell(4)]))).toEqual(['4 departures in the line (target 1–3)']);
+      // A reading without the line (a handheld, a reading recorded before DR1) keeps the fitted-count path.
+      expect(departureFailures(sample({ rows: [row({ id: 'dep:1', when: '2026-09-21T15:47:00.000Z' })], departures: 1, fitDropped: ['departure', 'departure'] })))
+        .toEqual(['1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure)']);
+      expect(summariseRotation([withLine([cell(1), cell(2)], 3)]).departuresUnderFit).toBe(1);
+      expect(summariseRotation([withLine([cell(1), cell(2), cell(3)])]).departuresUnderFit).toBe(0);
+    });
+
+    it('finds the trains placed first above the line, and reads the departures in order: the cells, then any departure row', () => {
+      const rail = row({ id: 'rail:hz:0', kind: FIT_RAIL_FIRST_KIND, when: '2026-09-21T15:50:00.000Z' });
+      expect(railsFirst([rail, line([cell(1)]), closure]).map((r) => r.id)).toEqual(['rail:hz:0']);
+      expect(railsFirst([line([cell(1)]), rail])).toEqual([]);
+      const reads = departureReads([rail, line([cell(1, { live: true, whenText: 'za 4 min' }), cell(2, { hasTime: false, whenText: 'sada' })]), row({ id: 'dep:7', whenText: '18:01', live: false })]);
+      expect(reads).toEqual([{ whenText: 'za 4 min', hasTime: true, live: true }, { whenText: 'sada', hasTime: false, live: false }, { whenText: '18:01', hasTime: true, live: false }]);
+    });
+
+    it('the calm-motion recorder follows the line\'s cells as rows', () => {
+      expect(WALL_PROBES.depLine).toBe('[data-testid=nearby] .nearby-row[data-kind="departures"]');
+      expect(WALL_PROBES.depCell).toBe('[data-testid=nearby] .nearby-row[data-kind="departures"] [data-cell]');
+      expect(CALM_MOTION_SPEC.row).toBe(`${WALL_PROBES.row}, ${WALL_PROBES.depCell}`);
+    });
+
+    it('the in-page sampler counts the visible cells, reads the line\'s offer and counts live cells, not the line', () => {
+      const shippedFn = new Function(`return (${String(WALL_SAMPLE_IN_PAGE)});`)() as typeof WALL_SAMPLE_IN_PAGE;
+      const at = (left: number, top: number, width = 200, height = 90): DOMRect => ({ x: left, y: top, left, top, right: left + width, bottom: top + height, width, height, toJSON: () => ({}) }) as DOMRect;
+      const cellMarkup = (n: number, live: boolean): string => `<span class="k-dep-cell" data-key="dep:${n}" data-id="dep:${n}" data-cell="${n}" data-route="6"${live ? ' data-live="1"' : ''}><span class="k-line-badge">6</span><time class="nearby-when">${live ? 'za 4 min' : `17:5${n}`}</time><span class="k-dep-headsign">Črnomerec</span></span>`;
+      document.body.innerHTML = `<section data-testid="nearby"><ol data-testid="nearby-rows" style="overflow: hidden"><li class="nearby-row" data-id="departures" data-key="departures" data-kind="departures" data-cells="3" data-when="2026-09-21T15:47:00.000Z" data-live="1">${[1, 2, 3].map((n) => cellMarkup(n, n === 1)).join('')}</li></ol></section>`;
+      document.querySelector<HTMLElement>('[data-id=departures]')!.getBoundingClientRect = () => at(0, 0, 640);
+      const boxes = [at(0, 0), at(210, 0), at(420, 0)];
+      document.querySelectorAll<HTMLElement>('[data-cell]').forEach((el, i) => { el.getBoundingClientRect = () => boxes[i]!; });
+      const list = document.querySelector<HTMLElement>('[data-testid=nearby-rows]')!;
+      list.getBoundingClientRect = () => at(0, 0, 640, 400);
+      const s = shippedFn(WALL_SAMPLE_SPEC);
+      expect(s.rows.map((r) => r.kind)).toEqual(['departures']);
+      expect(s.rows[0]!.cells).toEqual([
+        { id: 'dep:1', route: '6', live: true, whenText: 'za 4 min', hasTime: true, headsign: 'Črnomerec' },
+        { id: 'dep:2', route: '6', live: false, whenText: '17:52', hasTime: true, headsign: 'Črnomerec' },
+        { id: 'dep:3', route: '6', live: false, whenText: '17:53', hasTime: true, headsign: 'Črnomerec' },
+      ]);
+      expect(s).toMatchObject({ departures: 3, departuresOffered: 3, liveRows: 1 });
+      // The third cell pushed past the list's clipping box: two on the wall of the line's three.
+      boxes[2] = at(700, 0);
+      const cut = shippedFn(WALL_SAMPLE_SPEC);
+      expect(cut).toMatchObject({ departures: 2, departuresOffered: 3 });
+      expect(departureFailures(cut)).toEqual(["2 of the line's 3 cells on the wall (target: every cell the line drew)"]);
+    });
+  });
+
   describe('calm motion: a departure\'s beat that gives a dropped row its room back (lastTrams2240 at 22:51:00)', () => {
     const start = new Function(`return (${String(CALM_MOTION_START_IN_PAGE)});`)() as typeof CALM_MOTION_START_IN_PAGE;
     const read = new Function(`return (${String(CALM_MOTION_READ_IN_PAGE)});`)() as typeof CALM_MOTION_READ_IN_PAGE;
@@ -679,26 +750,30 @@ describe('the eight scenes', () => {
       const today = sunTimes(new Date(s.now));
       const tomorrow = sunTimes(new Date(s.now + 86_400_000));
       const next = [today.sunrise, today.sunset, tomorrow.sunrise].map((d) => d.getTime()).filter((t) => t > s.now).sort((a, b) => a - b)[0];
-      // A sunrise or sunset within IMMINENT_ROW_MIN keeps its row; one further away gives it to the third departure
-      // where three are due (the scene's departuresMin), and is shown otherwise inside the three hours.
+      // A sunrise or sunset within IMMINENT_ROW_MIN keeps its row, and is shown otherwise inside the three hours. R1: the
+      // departures line holds the three due in one row, so no solar row yields to a third departure any more (solarMax
+      // 1 in every scene); where three are due and the sunrise is further than the hour (night0430) the scene does not
+      // require it, the room beside the line and the promises being the browser's to measure.
       const ahead = next - s.now;
-      const yields = ahead > IMMINENT_ROW_MIN * MIN && s.expect.departuresMin === 3;
-      expect(s.expect.solarMin, id).toBe(ahead <= 3 * 3_600_000 && !yields ? 1 : 0);
-      expect(s.expect.solarMax, id).toBe(yields ? 0 : 1);
+      const unpinned = ahead > IMMINENT_ROW_MIN * MIN && s.expect.departuresMin === 3;
+      expect(s.expect.solarMin, id).toBe(ahead <= 3 * 3_600_000 && !unpinned ? 1 : 0);
+      expect(s.expect.solarMax, id).toBe(1);
     }
-    // night0430: the 04:38 tram is the third departure due and the 06:42 sunrise 2 h 12 min away: three departures, no
-    // sunrise row. peak1745: the 18:57 sunset 72 minutes away, with the wall's floor of one departure, keeps solarMin 1.
-    expect(SCENES.night0430.expect).toMatchObject({ departuresMin: 3, solarMin: 0, solarMax: 0 });
+    // night0430: the 04:38 tram is the third departure due and the 06:42 sunrise 2 h 12 min away: three departures in
+    // the line, the sunrise row allowed (before R1 it gave its row to the third departure, solarMax 0). peak1745: the
+    // 18:57 sunset 72 minutes away keeps solarMin 1.
+    expect(SCENES.night0430.expect).toMatchObject({ departuresMin: 3, solarMin: 0, solarMax: 1 });
     expect(SCENES.peak1745.expect).toMatchObject({ departuresMin: 1, solarMin: 1, solarMax: 1 });
     expect(SCENE_IDS.filter((id) => SCENES[id].expect.departuresMin === 3)).toEqual(['night0430']);
   });
 
   it('every scene requires departures; the night scenes their first tram; the outage is ZET down with timetable times and one map note', () => {
-    for (const id of SCENE_IDS) expect(SCENES[id].expect.requiredKinds).toContain('departure');
-    expect(SCENES.lastTrams2240.expect.requiredKinds).toEqual(['departure', 'last', 'first']);
-    expect(SCENES.afterLast0045.expect).toMatchObject({ requiredKinds: ['departure', 'first'], noPastKinds: ['last'] });
+    // R1: on the wall the departures are the departures line.
+    for (const id of SCENE_IDS) expect(SCENES[id].expect.requiredKinds).toContain('departures');
+    expect(SCENES.lastTrams2240.expect.requiredKinds).toEqual(['departures', 'last', 'first']);
+    expect(SCENES.afterLast0045.expect).toMatchObject({ requiredKinds: ['departures', 'first'], noPastKinds: ['last'] });
     expect(SCENES.afterLast0045.expect.sentenceNot?.test('Zadnji tramvaj 14 u 00:31')).toBe(true);
-    expect(SCENES.night0430.expect.requiredKinds).toEqual(['departure', 'first', 'pharmacy']);
+    expect(SCENES.night0430.expect.requiredKinds).toEqual(['departures', 'first', 'pharmacy']);
     expect(SCENES.morning0745.expect.liveMin).toBe(1);
     expect(SCENES.outage0800).toMatchObject({ feedState: 'down', expect: { liveMax: 0, feedLive: false, mapNotes: 1, pills: 'none', departuresAsClockTimes: true } });
     expect(SCENES.outage0800.expect.headingNot?.test('Podaci nedostupni')).toBe(true);

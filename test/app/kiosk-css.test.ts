@@ -132,8 +132,39 @@ describe('public-screen design invariants', () => {
     expect(windowRule(".k-nearby .nearby-row[data-enter='1']")).toContain('animation:k-nearby-in 220ms var(--ease-enter) both');
     expect(cityCss).toContain('@keyframes k-nearby-in{from{opacity:0}}');
     const reduced = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
-    expect(reduced).toContain(".kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
-    expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'] { animation: none; }");
+    expect(reduced).toContain(".kiosk .k-nearby .nearby-row[data-enter='1'], .kiosk .k-nearby .k-dep-cell[data-enter='1'] { animation: none; }");
+    expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'], :root[data-lagano='1'] .kiosk .k-nearby .k-dep-cell[data-enter='1'] { animation: none; }");
+    // R1: a new departure fades in its cell of the line, with the same fade.
+    expect(windowRule(".k-nearby .k-dep-cell[data-enter='1']")).toContain('animation:k-nearby-in 220ms var(--ease-enter) both');
+  });
+  // R1 (docs/reveal-2026-10-plan/R1.md §0.2(e)): the wall's one departures line, three equal cells, drawn per composition.
+  it('draws the departures line as three equal cells of whole words: no ellipsis, no clamp, no clipping', () => {
+    const lineRules = cityCss.split('\n').filter((line) => line.includes('k-dep-') || line.includes("[data-kind='departures']"));
+    expect(lineRules.length).toBeGreaterThanOrEqual(10);
+    for (const line of lineRules) {
+      expect(timelineRules, line).toContain(line);
+      expect(line).not.toContain('text-overflow');
+      expect(line).not.toContain('line-clamp');
+      expect(line).not.toContain('overflow:hidden');
+    }
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-kind='departures']")).toContain('grid-template-columns:repeat(3,minmax(0,1fr))');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-kind='departures']")).toContain('column-gap:calc(16px * var(--k-zoom,1))');
+    const headsign = windowRule('.kiosk .k-nearby .k-dep-headsign');
+    expect(headsign).toContain('overflow-wrap:normal');
+    expect(headsign).not.toContain('nowrap');
+    expect(headsign).toContain('font-size:calc(var(--k-nearby-sub-size))');
+    const when = windowRule(".kiosk .k-nearby .nearby-row[data-kind='departures'] .k-dep-cell .nearby-when");
+    expect(when).toContain('white-space:nowrap');
+    expect(when).toContain('font-size:calc(var(--k-nearby-title-size))');
+    expect(when).toContain('color:var(--k-ink-2)');
+    expect(windowRule(".kiosk .k-nearby .nearby-row[data-kind='departures'] .k-dep-cell[data-live='1'] .nearby-when")).toContain('color:var(--k-action)');
+    expect(windowRule('.kiosk .k-nearby .k-dep-cell .k-line-badge')).toContain('font-size:calc(var(--k-nearby-title-size))');
+    // Stacked on the landscape walls, inline on the totem.
+    expect(windowRule('.kiosk .k-nearby .k-dep-cell')).toContain("grid-template-areas:'badge head' 'time time'");
+    expect(windowRule(".kiosk[data-portrait='1'] .k-nearby .k-dep-cell")).toContain("grid-template-areas:'badge time' 'head head'");
+    expect(windowRule(".kiosk .k-nearby .k-dep-cell[data-headsign='0'] .k-dep-headsign")).toBe('display:none');
+    // The cells never grow with the row budget's type scale: growth would push a countdown past its cell.
+    for (const line of lineRules) expect(line).not.toContain('--k-nearby-scale');
   });
   // Postavke's suggestion list stays an exact number of whole control rows.
   it('bounds the settings suggestion list to whole rows', () => {

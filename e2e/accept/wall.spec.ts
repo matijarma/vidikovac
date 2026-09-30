@@ -31,7 +31,7 @@ import { legibilityReport, WALL_1920 } from '../legibility';
 import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
 import { PORTRAIT_SCENES, PROXY_DEVICE_SCALE_FACTOR, SCENE_IDS, SCENES, WALL_LANDSCAPE, WALL_PORTRAIT, type Scene } from '../scenes';
 import {
-  isSampleError, LEAD_TEXT, ROTATION_SETTLE_MS, ROTATION_STEP_MS, rotationFailures, sampleFailures, sampleRotation, SETTINGS_HOLD_MS,
+  CLOCK_RE, ELLIPSIS_RE, isSampleError, LEAD_TEXT, ROTATION_SETTLE_MS, ROTATION_STEP_MS, rotationFailures, sampleFailures, sampleRotation, SETTINGS_HOLD_MS,
   summariseRotation, WALL_PROBES, wallSample, type WallSample,
 } from '../wall';
 import {
@@ -61,8 +61,8 @@ const softly = expect.configure({ soft: true });
 
 interface OpenWall { clock: SceneClock; recorder: Recorder | null }
 
-/** The scene's screen, fixtures and clock, then the wall's own URL. */
-async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean): Promise<OpenWall> {
+/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns. */
+async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>> }): Promise<OpenWall> {
   await isolateLocalNetwork(page.context());
   await page.clock.install({ time: scene.now });
   const clock = sceneClock(scene.now);
@@ -71,7 +71,7 @@ async function openWall(page: Page, request: APIRequestContext, scene: Scene, la
   const vehicles = snapshots['zet-rt']?.items ?? [];
   const days = serviceDays(scene.now);
   await installCityFixture(page, scene.now, {
-    departures: (stopId) => departuresBoard({ now: clock.now(), stopId, vehicles }),
+    departures: (stopId) => departuresBoard({ now: clock.now(), stopId, vehicles, ...(board?.headsigns ? { headsigns: board.headsigns } : {}) }),
     lastRun: (stopId) => lastRunSnapshot(stopId, days),
   });
   await routeTiles(page);
@@ -273,6 +273,120 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       expect(zoomAfter, `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
     });
   }
+});
+
+/** Every line's destination the same words (the departures fixture keys its headsigns by route). */
+const everyRoute = (headsign: string): Readonly<Record<string, string>> => new Proxy({}, { get: () => headsign });
+
+/** What the departures line draws, as the browser laid it out (docs/reveal-2026-10-plan/R1.md §0.2(e)). */
+interface LineLayout {
+  lines: number;
+  dataCells: string | null;
+  departureRows: number;
+  height: number;
+  cells: {
+    cell: string | null; left: number; top: number; width: number; height: number; badge: boolean; time: boolean; live: boolean;
+    timeText: string; headsign: string; headsignState: string | null; headsignLines: number; headsignInside: boolean; overflow: boolean; text: string;
+  }[];
+}
+const LINE_LAYOUT_IN_PAGE = (probes: { depLine: string; nearbyRows: string }): LineLayout => {
+  const lineEls = Array.from(document.querySelectorAll<HTMLElement>(probes.depLine));
+  const line = lineEls[0] ?? null;
+  const inside = (r: DOMRect, c: DOMRect): boolean => r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1;
+  const cells = line ? Array.from(line.querySelectorAll<HTMLElement>('[data-cell]')).map((cell) => {
+    const box = cell.getBoundingClientRect();
+    const head = cell.querySelector<HTMLElement>('.k-dep-headsign');
+    const headBox = head?.getBoundingClientRect();
+    const lineHeight = head ? Number.parseFloat(getComputedStyle(head).lineHeight) || Number.parseFloat(getComputedStyle(head).fontSize) * 1.15 : 0;
+    const descendants = Array.from(cell.querySelectorAll<HTMLElement>('*')).filter((el) => el.getBoundingClientRect().width > 0);
+    return {
+      cell: cell.dataset.cell ?? null, left: box.left, top: box.top, width: box.width, height: box.height,
+      badge: Boolean(cell.querySelector('.k-line-badge')), time: Boolean(cell.querySelector('time.nearby-when')), live: cell.dataset.live === '1',
+      timeText: (cell.querySelector('.nearby-when')?.textContent ?? '').trim(), headsign: (head?.textContent ?? '').trim(),
+      headsignState: cell.dataset.headsign ?? null,
+      headsignLines: head && headBox && headBox.height > 0 && lineHeight > 0 ? Math.round(headBox.height / lineHeight) : 0,
+      headsignInside: !headBox || headBox.width === 0 || inside(headBox, box),
+      overflow: cell.scrollWidth > cell.clientWidth + 1 || descendants.some((el) => !inside(el.getBoundingClientRect(), box)),
+      text: (cell.textContent ?? '').trim(),
+    };
+  }) : [];
+  return {
+    lines: lineEls.length, dataCells: line?.dataset.cells ?? null, height: line ? line.getBoundingClientRect().height : 0, cells,
+    departureRows: document.querySelectorAll(`${probes.nearbyRows} > .nearby-row[data-kind="departure"]`).length,
+  };
+};
+
+// R1 (docs/reveal-2026-10-plan/R1.md, Step 14): the three departures as one row of cells, drawn per composition.
+test.describe('the departures line (R1)', () => {
+  const scene = SCENES.peak1745;
+  const read = (page: Page): Promise<LineLayout> => page.evaluate(LINE_LAYOUT_IN_PAGE, { depLine: WALL_PROBES.depLine, nearbyRows: WALL_PROBES.nearbyRows });
+  const artefact = (size: string, line: LineLayout): void => { writeArtefact(`departures-line-${size}.json`, {
+    height: line.height, cellWidths: line.cells.map((c) => Math.round(c.width * 10) / 10),
+    headsigns: line.cells.map((c) => ({ cell: c.cell, state: c.headsignState ?? 'shown', text: c.headsign, lines: c.headsignLines })),
+    // The box's time form (0.5 item 3): a live cell printing a clock means the box took the clock form.
+    liveTimes: line.cells.filter((c) => c.live).map((c) => c.timeText),
+    clocks: line.cells.some((c) => c.live && CLOCK_RE.test(c.timeText)),
+    cells: line.cells,
+  }); };
+
+  test(`1920×1080 (${scene.zagreb} Zagreb): three cells on one row, badge, time and a one-line destination each, and a tap on cell 2 opens the board`, async ({ page, request }) => {
+    test.setTimeout(SCENE_TIMEOUT_MS);
+    await page.setViewportSize({ ...WALL_LANDSCAPE });
+    await openWall(page, request, scene, 'departures-line-1920', false, { headsigns: everyRoute('Dubrava') });
+    await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: LOAD_MS });
+    await settle(page, scene, SETTLE_MS, true);
+    await expect.poll(async () => (await read(page)).cells.length, { timeout: SETTLE_MS, message: 'the line draws its three cells' }).toBe(3);
+    const line = await read(page);
+    artefact('1920', line);
+    softly(line.lines, 'one departures line').toBe(1);
+    softly(line.dataCells, 'data-cells of the line').toBe('3');
+    softly(line.departureRows, 'no departure row beside the line').toBe(0);
+    const tops = line.cells.map((c) => c.top);
+    softly(Math.max(...tops) - Math.min(...tops), 'the three cells stand on one row').toBeLessThanOrEqual(2);
+    for (const c of line.cells) {
+      softly(c.badge, `cell ${c.cell}: a line badge`).toBe(true);
+      softly(c.time, `cell ${c.cell}: a <time>`).toBe(true);
+      softly(c.headsign, `cell ${c.cell}: its destination`).toBe('Dubrava');
+      softly(c.headsignLines, `cell ${c.cell}: the destination on one line`).toBe(1);
+      softly(c.headsignInside, `cell ${c.cell}: the destination inside its cell`).toBe(true);
+      softly(c.overflow, `cell ${c.cell}: nothing runs past its cell`).toBe(false);
+      softly(ELLIPSIS_RE.test(c.text), `cell ${c.cell}: no ellipsis`).toBe(false);
+    }
+    softly(line.height, 'the line is at most 110 px tall').toBeLessThanOrEqual(110);
+    softly(sampleFailures(await wallSample(page)), 'one reading against §11 and §16.3 with the line').toEqual([]);
+    // A tap on the second cell opens the place's board; it closes by itself.
+    await page.locator(`${WALL_PROBES.depLine} [data-cell="2"]`).click();
+    const board = page.locator(WALL_PROBES.stopBoard);
+    await expect(board, 'a tap on cell 2 opens the stop board').toBeVisible({ timeout: 5_000 });
+    for (let t = 0; t <= TOUCH_BOARD_MS; t += ROTATION_STEP_MS) {
+      await page.clock.runFor(ROTATION_STEP_MS);
+      await page.waitForTimeout(ROTATION_SETTLE_MS);
+    }
+    await expect(board, `the stop board closes by itself within ${TOUCH_BOARD_MS / 1000} s`).toBeHidden({ timeout: 5_000 });
+  });
+
+  test(`1366×768 (${scene.zagreb} Zagreb): a destination that does not fit leaves cells 2 and 3, the first is whole or gone, nothing overflows its cell`, async ({ page, request }) => {
+    test.setTimeout(SCENE_TIMEOUT_MS);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await openWall(page, request, scene, 'departures-line-1366', false, { headsigns: everyRoute('Kvaternikov trg') });
+    await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: LOAD_MS });
+    await settle(page, scene, SETTLE_MS, true);
+    await expect.poll(async () => (await read(page)).cells.length, { timeout: SETTLE_MS, message: 'the line draws its three cells' }).toBe(3);
+    const line = await read(page);
+    artefact('1366', line);
+    softly(line.dataCells, 'data-cells of the line').toBe('3');
+    softly(line.departureRows, 'no departure row beside the line').toBe(0);
+    for (const c of line.cells.slice(1)) {
+      softly(c.headsignState, `cell ${c.cell}: its destination left out (data-headsign="0")`).toBe('0');
+      softly(c.headsign, `cell ${c.cell}: no destination text`).toBe('');
+    }
+    const first = line.cells[0]!;
+    softly(first.headsign === '' || (first.headsignLines === 1 && first.headsignInside), `cell 1: its destination empty, or one line inside its cell (read "${first.headsign}", ${first.headsignLines} line(s))`).toBe(true);
+    for (const c of line.cells) {
+      softly(c.overflow, `cell ${c.cell}: nothing runs past its cell (${Math.round(c.width)} px, "${c.timeText}")`).toBe(false);
+      softly(ELLIPSIS_RE.test(c.text), `cell ${c.cell}: no ellipsis`).toBe(false);
+    }
+  });
 });
 
 test.describe('wall at 1080×1920: portrait', () => {

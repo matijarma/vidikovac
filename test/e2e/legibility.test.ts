@@ -55,12 +55,12 @@ describe('the tiers fixed in lane S (brief §15.2)', () => {
     expect(WALL_1920.mmPerPx).toBe(DISPLAY_43IN_1080P_MM_PER_PX);
     expect(WALL_1920.readTier).toEqual([
       '[data-testid=kiosk-context]', '[data-testid=kiosk-sentence]', '.nearby-row .nearby-title', '.nearby-row .nearby-when',
-      '.nearby-row time', '[data-testid=kiosk-code]', '[data-testid=pair-code]', '[data-testid=strip-verdict]', '[data-testid=strip-pharmacy]',
+      '.nearby-row time', '.nearby-row .k-dep-cell .k-line-badge', '[data-testid=kiosk-code]', '[data-testid=pair-code]', '[data-testid=strip-verdict]', '[data-testid=strip-pharmacy]',
     ]);
   });
   it('walk-up tier: sub-line, date, legend, kicker, the QR card\'s lead, hint and typed address; the map attribution is exempt', () => {
     expect(WALL_1920.walkUpTier).toEqual([
-      '.nearby-row .nearby-sub', '[data-testid=kiosk-date]', '.k-map-legend', '[data-testid=kiosk-sentence-kicker]', '.k-lead', '.k-hint', '.k-hint-host',
+      '.nearby-row .nearby-sub', '.nearby-row .k-dep-headsign', '[data-testid=kiosk-date]', '.k-map-legend', '[data-testid=kiosk-sentence-kicker]', '.k-lead', '.k-hint', '.k-hint-host',
     ]);
     expect(WALL_1920.exempt).toBe('.maplibregl-ctrl-attrib');
     expect(WALL_1920.symbols).toContain('[data-testid=kiosk-map] [data-symbol=bajs]');

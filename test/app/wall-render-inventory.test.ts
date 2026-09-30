@@ -35,6 +35,8 @@ const EXTERNAL_FIELD = /\b(?:item|row|act|p|s|strip|weather|observed|panel|stop|
 const INDIRECT_GUARDS: Record<string, string> = {
   'app/src/kiosk/arrival-cells.ts#arrivalCells': 'if (!vettedArrival(row)) return',
   'app/src/kiosk/timeline.ts#rowMarkup': 'if (!vettedTimelineRow(row)) return',
+  // R1: a cell of the departures line is its departure row, under the same row check.
+  'app/src/kiosk/timeline.ts#departureCellMarkup': 'if (!vettedTimelineRow(row)) return',
   'app/src/transport/view.ts#departureRow': 'if (!vettedArrival(row)) return',
 };
 // This renderer is used by phone discovery only. The wall calls placeDetail

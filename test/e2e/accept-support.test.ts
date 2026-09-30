@@ -30,18 +30,28 @@ const PEAK = SCENES.peak1745;
 function row(over: Partial<WallRow>): WallRow {
   return { id: null, kind: 'departure', when: null, always: false, live: false, source: 'zet', title: '', whenText: '', sub: '', hasTime: true, text: '', caveat: false, ...over };
 }
+/** The departures line (R1) as the sampler reads it: one row of kind departures whose cells are the departures. */
+function line(when: string, ...cells: { id: string; whenText?: string; live?: boolean; hasTime?: boolean }[]): WallRow {
+  const read = cells.map((c) => ({ id: c.id, route: '6', live: c.live ?? false, whenText: c.whenText ?? '', hasTime: c.hasTime ?? true, headsign: 'Sopot' }));
+  return row({ id: 'departures', kind: 'departures', when, whenText: read[0]?.whenText ?? '', live: read.some((c) => c.live), text: '6 Sopot', cells: read });
+}
 /** A reading that holds for peak1745 (17:45, light, trams on the frame, a solar row). */
 function sample(over: Partial<WallSample> = {}): WallSample {
   const at = over.at ?? PEAK.now;
+  // R1: the wall's departures are the cells of the departures line.
   const rows = over.rows ?? [
-    row({ id: 'trip-1', when: new Date(at + 2 * MIN).toISOString(), title: '6 Sopot', whenText: '2 min', text: '6 Sopot 2 min', live: true }),
+    row({ id: 'departures', kind: 'departures', when: new Date(at + 2 * MIN).toISOString(), whenText: 'za 2 min', text: '6za 2 minSopot', live: true,
+      cells: [{ id: 'trip-1', route: '6', live: true, whenText: 'za 2 min', hasTime: true, headsign: 'Sopot' }] }),
     row({ id: 'sun', kind: 'solar', when: new Date(at + 72 * MIN).toISOString(), whenText: '18:57', text: 'Zalazak sunca 18:57', source: 'solar' }),
     row({ id: 'story', kind: 'always', always: true, hasTime: false, whenText: ALWAYS_WORD, text: `Trg ${ALWAYS_WORD}`, source: 'city' }),
   ];
   return {
     at, place: 'Trg bana J. Jelačića', sentence: 'Sunce zalazi u 18:57.', kicker: 'vrijeme', kickerText: 'Vrijeme',
     validUntil: new Date(at + 20_000).toISOString(), sentenceChars: 21, sentenceOverflow: false, sentenceEllipsis: false, head: NEARBY_HEAD_2KM,
-    hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, fitDropped: [], fitOverflow: false, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
+    hiddenRows: 0, departures: rows.reduce((n, r) => n + (r.cells ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0),
+    departuresOffered: rows.find((r) => r.kind === 'departures')?.cells?.length ?? null,
+    fitDropped: [], fitOverflow: false, solarRows: rows.filter((r) => r.kind === 'solar').length,
+    liveRows: rows.reduce((n, r) => n + (r.cells ? r.cells.filter((c) => c.live).length : r.live ? 1 : 0), 0),
     pills: '6|12|17', bodies: 0, zoom: '14.07', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: 'x', strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
     pharmacy: `${PHARMACY_HOURS} Trg bana J. Jelačića 3`, pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],
@@ -81,7 +91,8 @@ describe('the numbers the specs hold', () => {
 
   it('counts the Sada block and the shared timeline as departure rows, from PHONE_PROBES only', () => {
     expect(PHONE_DEPARTURE_ROWS).toBe(`${PHONE_PROBES.sadaDepartures}, ${PHONE_PROBES.departureRows}`);
-    expect(CALM_MOTION_SPEC).toMatchObject({ root: WALL_PROBES.nearby, row: WALL_PROBES.row });
+    // R1: the rows and the departures line's cells.
+    expect(CALM_MOTION_SPEC).toMatchObject({ root: WALL_PROBES.nearby, row: `${WALL_PROBES.row}, ${WALL_PROBES.depCell}` });
     expect(HEADINGS).toBe('h1, h2');
   });
 });
@@ -245,17 +256,20 @@ describe('one reading against its scene', () => {
 
   it('lastTrams2240 needs its last-trams and first-tram rows', () => {
     const scene = SCENES.lastTrams2240;
-    const f = sceneReadingFailures(scene, sample({ at: scene.now, theme: 'dark', rows: [row({ id: 't', when: new Date(scene.now + 2 * MIN).toISOString(), text: '6 Sopot' })] }));
+    const f = sceneReadingFailures(scene, sample({ at: scene.now, theme: 'dark', rows: [line(new Date(scene.now + 2 * MIN).toISOString(), { id: 't' })] }));
     expect(f).toEqual([
-      'no "last" row on the list at 2026-09-21 22:40 (target ≥ 1; kinds shown: departure)',
-      'no "first" row on the list at 2026-09-21 22:40 (target ≥ 1; kinds shown: departure)',
+      'no "last" row on the list at 2026-09-21 22:40 (target ≥ 1; kinds shown: departures)',
+      'no "first" row on the list at 2026-09-21 22:40 (target ≥ 1; kinds shown: departures)',
     ]);
+    // A reading of departure rows (a wall before R1) has no departures line.
+    expect(sceneReadingFailures(scene, sample({ at: scene.now, theme: 'dark', rows: [row({ id: 't', when: new Date(scene.now + 2 * MIN).toISOString(), text: '6 Sopot' })] }))[0])
+      .toBe('no "departures" row on the list at 2026-09-21 22:40 (target ≥ 1; kinds shown: departure)');
   });
 
   it('afterLast0045 refuses a last-trams row that has left and a "zadnji" sentence', () => {
     const scene = SCENES.afterLast0045;
     const rows = [
-      row({ id: 't', when: new Date(scene.now + 2 * MIN).toISOString(), text: '6 Sopot' }),
+      line(new Date(scene.now + 2 * MIN).toISOString(), { id: 't' }),
       row({ id: 'first', kind: 'first', when: new Date(scene.now + 211 * MIN).toISOString(), text: 'Prvi tramvaj 04:16' }),
       row({ id: 'last', kind: 'last', when: new Date(scene.now - 14 * MIN).toISOString(), text: 'Zadnji tramvaji 24:31' }),
     ];
@@ -269,7 +283,7 @@ describe('one reading against its scene', () => {
   it('night0430 needs the first tram and the pharmacy with its 24/7; timeless rows print "uvijek"', () => {
     const scene = SCENES.night0430;
     const rows = [
-      row({ id: 't', when: new Date(scene.now + 3 * MIN).toISOString(), text: '6 Sopot' }),
+      line(new Date(scene.now + 3 * MIN).toISOString(), { id: 't' }),
       row({ id: 'first', kind: 'first', when: new Date(scene.now + 20 * MIN).toISOString(), text: 'Prvi tramvaj' }),
       row({ id: 'sun', kind: 'solar', when: new Date(scene.now + 132 * MIN).toISOString(), text: 'Izlazak sunca' }),
       row({ id: 'ph', kind: 'pharmacy', always: true, hasTime: false, whenText: '', text: 'Ljekarna Ilica 1' }),
@@ -283,7 +297,7 @@ describe('one reading against its scene', () => {
 
   it('morning0745 needs a live countdown', () => {
     const scene = SCENES.morning0745;
-    const rows = [row({ id: 't', when: new Date(scene.now + 2 * MIN).toISOString(), text: '6 Sopot', live: false })];
+    const rows = [line(new Date(scene.now + 2 * MIN).toISOString(), { id: 't', live: false })];
     expect(sceneReadingFailures(scene, sample({ at: scene.now, rows }))).toEqual(['0 live countdown row(s) (target ≥ 1: the fixture tracks two trips on the stop\'s lines)']);
   });
 
@@ -291,12 +305,12 @@ describe('one reading against its scene', () => {
     const scene = SCENES.outage0800;
     const good = sample({
       at: scene.now, feed: 'down', pills: '', mapNotes: 1, markers: 9,
-      rows: [row({ id: 't', when: new Date(scene.now + 4 * MIN).toISOString(), whenText: '08:04', text: '6 Sopot 08:04' })],
+      rows: [line(new Date(scene.now + 4 * MIN).toISOString(), { id: 't', whenText: '08:04' })],
     });
     expect(sceneReadingFailures(scene, good, ['U blizini'])).toEqual([]);
     const bad = sample({
       at: scene.now, feed: 'live', pills: '6', mapNotes: 0, markers: 0, sentence: 'Podaci nedostupni.',
-      rows: [row({ id: 't', when: new Date(scene.now + 2 * MIN).toISOString(), whenText: 'za 2 min', text: '6 Sopot za 2 min', live: true })],
+      rows: [line(new Date(scene.now + 2 * MIN).toISOString(), { id: 't', whenText: 'za 2 min', live: true })],
     });
     expect(sceneReadingFailures(scene, bad, ['Promet nedostupan'])).toEqual([
       '1 live countdown row(s) (target ≤ 0)',
@@ -304,7 +318,7 @@ describe('one reading against its scene', () => {
       '0 map note(s) ([data-testid=map-note]) (target 1)',
       'vehicle pills "6" drawn while ZET\'s feed is down (target none)',
       'data-markers is 0 (target > 0: BAJS, closures and places stay on the map without the live feed)',
-      '1 departure row(s) without a clock time in a <time>: "za 2 min" (target every departure a timetable time)',
+      '1 departure(s) without a clock time in a <time>: "za 2 min" (target every departure a timetable time)',
       'a headline matches /nedostup/i: "Promet nedostupan", "Podaci nedostupni." (target none, principle 9)',
     ]);
   });
@@ -362,19 +376,19 @@ describe('the ten minutes against the scene', () => {
     ]);
   });
 
-  it('afterLast0045 names every "zadnji" sentence; night0430 counts an event that has ended, a reading short of its three departures and a sunrise row (decision 67)', () => {
+  it('afterLast0045 names every "zadnji" sentence; night0430 counts an event that has ended and a reading short of its three departures, and allows a sunrise row beside the line (R1)', () => {
     const after = SCENES.afterLast0045;
     const rows = readings(after, 20, (i) => ({ theme: 'dark', sentence: i === 3 ? 'Zadnji tramvaj je otišao.' : `S${Math.floor(i / 10)}.` }));
     expect(rotationSceneFailures(after, rows, summariseRotation(rows))).toEqual(['1 of 20 readings with a sentence matching /zadnji/i: "Zadnji tramvaj je otišao."']);
     const night = SCENES.night0430;
-    const trams = [3, 8, 12].map((m) => row({ id: `t${m}`, when: new Date(night.now + m * MIN).toISOString(), text: '6' }));
+    const cells = [3, 8, 12].map((m) => ({ id: `t${m}`, whenText: `04:${30 + m}` }));
+    const trams = [line(new Date(night.now + 3 * MIN).toISOString(), ...cells)];
     const nightRows = readings(night, 10, (i) => ({ theme: 'dark', rows: [...trams, ...(i === 2 ? [row({ id: 'ev', kind: 'event', when: new Date(night.now - MIN).toISOString(), text: 'Koncert' })] : [])] }));
     expect(rotationSceneFailures(night, nightRows, summariseRotation(nightRows))).toEqual(['1 of 10 readings with a "event" row whose time has passed (target 0)']);
     const sunrise = row({ id: 'sun', kind: 'solar', when: new Date(night.now + 132 * MIN).toISOString(), whenText: '06:42', text: 'Izlazak sunca 06:42', source: 'solar' });
-    const shortRows = readings(night, 10, (i) => ({ theme: 'dark', rows: i === 4 ? [...trams.slice(0, 2), sunrise] : trams }));
+    const shortRows = readings(night, 10, (i) => ({ theme: 'dark', rows: i === 4 ? [line(new Date(night.now + 3 * MIN).toISOString(), ...cells.slice(0, 2)), sunrise] : [...trams, sunrise] }));
     expect(rotationSceneFailures(night, shortRows, summariseRotation(shortRows))).toEqual([
-      'a reading with 2 departure row(s) (target 3 in every reading: three are due, decision 67)',
-      'up to 1 solar row(s) in a reading (target ≤ 0: the next solar event is more than an hour away and its row goes to the third departure, decision 67)',
+      'a reading with 2 departure(s) (target 3 in every reading: three are due)',
     ]);
   });
 });
@@ -434,7 +448,7 @@ describe('calm motion, run from the shipped text', () => {
     expect(none.rootFound).toBe(false);
     expect(calmMotionFailures(none)).toEqual(['the timeline ([data-testid=nearby]) is missing, so calm motion cannot be measured']);
     const empty: CalmMotionReading = { ...none, rootFound: true };
-    expect(calmMotionFailures(empty)).toEqual(['the timeline had no rows ([data-testid=nearby] .nearby-row) to follow through the idle minute']);
+    expect(calmMotionFailures(empty)).toEqual([`the timeline had no rows (${CALM_MOTION_SPEC.row}) to follow through the idle minute`]);
     expect(read(CALM_MOTION_SPEC)).toMatchObject({ rootFound: false, before: 0 });
   });
 });

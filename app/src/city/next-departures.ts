@@ -30,6 +30,9 @@ export interface DeparturesOptions {
   rows?: number;
   /** Name the stop above its rows; the block leaves it out when the stop is the place itself. */
   heading?: boolean;
+  /** One row of cells: the desk (R1, the wall's departures line in the desk's type); omitted, the desktop surface draws
+   *  it and the phone keeps its three rows. */
+  line?: boolean;
 }
 
 /** One row in the rows' own box: a placeholder while the board is on its way, else one short sentence. */
@@ -40,6 +43,8 @@ const emptyRow = (text: string | null): string => text === null
 export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: DeparturesOptions = {}): string {
   const { i18n } = ctx;
   const stop = place.departuresStop;
+  // The desk's Sada (the same test as layers/grad-sada.ts): the rows stand side by side as one line (overview.css).
+  const line = opts.line ?? ctx.screen?.surface === 'desktop';
   // The catalogue is in hand and no platform is within reach of the place: nothing to board.
   if (!stop && ctx.stops) return '';
   // One frozen moment for the whole block: the shell's own, else now when only the session flag says so.
@@ -80,7 +85,7 @@ export function departuresBlock(ctx: LayerContext, place: PlaceContext, opts: De
   const label = stopName !== null ? i18n.t('sada.departuresAt', { stop: stopName }) : i18n.t('arrivals.title');
   const heading = opts.heading && stopName !== null && stopName.trim() !== place.name.trim()
     ? `<h3 class="sada-departures-title">${e(stopName)}</h3>` : '';
-  return `<section class="sada-departures" aria-label="${a(label)}">${heading}<ul class="sada-departure-list" data-testid="day-departures"${busy ? ' aria-busy="true"' : ''}>${body}</ul></section>`;
+  return `<section class="sada-departures" aria-label="${a(label)}">${heading}<ul class="sada-departure-list" data-testid="day-departures"${line ? ' data-line="1"' : ''}${busy ? ' aria-busy="true"' : ''}>${body}</ul></section>`;
 }
 
 /** The old entry point, kept until Sada calls departuresBlock itself (WP4 chunk B): the page's place, else one resolved from the context. */

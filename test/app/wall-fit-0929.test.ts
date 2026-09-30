@@ -84,7 +84,10 @@ function loop({ inputs, fullAt, zetFrom, edit }: Loop, times: readonly number[],
       const substituted = wallItems.map((r) => (r.always && r.kind === 'always' ? { ...r, ...WALL_HERITAGE } : r));
       const rows = edit ? edit(substituted) : substituted;
       t.update(rows, 2200, at);
-      onPaint({ at, ids: [...host.querySelectorAll<HTMLElement>('li.nearby-row')].map((li) => li.dataset.id!), rows, host, measure });
+      // R1: the departures line stands for its cells, in order (the ids the wall shows, departure by departure).
+      const ids = [...host.querySelectorAll<HTMLElement>('li.nearby-row')].flatMap((li) => (li.dataset.kind === 'departures'
+        ? [...li.querySelectorAll<HTMLElement>('[data-cell]')].map((cell) => cell.dataset.id!) : [li.dataset.id!]));
+      onPaint({ at, ids, rows, host, measure });
     }
   } finally {
     t.destroy();
@@ -92,7 +95,8 @@ function loop({ inputs, fullAt, zetFrom, edit }: Loop, times: readonly number[],
   }
 }
 
-const departuresOf = (ids: readonly string[]): number => ids.filter((id) => id.startsWith('dep:')).length;
+/** The departures on the wall: the cells of the departures line (R1). */
+const departuresOf = (host: ParentNode): number => host.querySelectorAll('li[data-kind=departures] [data-cell]').length;
 
 afterEach(() => resetServiceStateMemory());
 
@@ -100,19 +104,22 @@ describe('the recorded slots, 07:45 to 07:56 Zagreb', () => {
   it('Tuesday 29 September: three departures and both closures at every one of the 300 reading instants', () => {
     const recorded = readings(TUE);
     expect(recorded).toHaveLength(300);
-    const shown: string[][] = [];
-    loop({ inputs: fixture(TUE), fullAt: FULL_AT[TUE] }, [FULL_AT[TUE] - 200, ...recorded.map((r) => r.at)], ({ ids }) => shown.push(ids));
+    const shown: { ids: string[]; departures: number }[] = [];
+    loop({ inputs: fixture(TUE), fullAt: FULL_AT[TUE] }, [FULL_AT[TUE] - 200, ...recorded.map((r) => r.at)], ({ ids, host }) => shown.push({ ids, departures: departuresOf(host) }));
     const atReadings = shown.slice(1);
-    const good = atReadings.filter((ids) => departuresOf(ids) === 3 && CLOSURES.every((id) => ids.includes(id)));
+    const good = atReadings.filter(({ ids, departures }) => departures === 3 && CLOSURES.every((id) => ids.includes(id)));
     expect(good.length).toBe(300);
   });
 
-  it('Monday 28 September (the control): the replayed wall equals the recorded row ids in at least 294 of 300 readings', () => {
+  it('Monday 28 September (the control): every recorded row id is on the replayed wall in at least 294 of 300 readings', () => {
+    // R1: the line gives the list room the recorded wall did not have, so the replay holds the recorded rows and may
+    // hold more: equality becomes containment (the line's cells stand for the recorded departure rows). Measured at
+    // R1: equal in 0 of 300 (the sunset row joins the recorded wall), containing in 299.
     const recorded = readings(MON);
     const shown: string[][] = [];
     loop({ inputs: fixture(MON), fullAt: FULL_AT[MON] }, [FULL_AT[MON] - 200, ...recorded.map((r) => r.at)], ({ ids }) => shown.push(ids));
-    const equal = shown.slice(1).filter((ids, i) => ids.join(' ') === recorded[i]!.rowIds.join(' ')).length;
-    expect(equal).toBeGreaterThanOrEqual(294);
+    const containing = shown.slice(1).filter((ids, i) => recorded[i]!.rowIds.every((id) => ids.includes(id))).length;
+    expect(containing).toBeGreaterThanOrEqual(294);
   });
 });
 
@@ -142,7 +149,8 @@ describe('the seed\'s scenes C to G', () => {
     loop({ inputs: fixture(day), fullAt: FULL_AT[day], ...(zetFrom ? { zetFrom: fixture(zetFrom).modules } : {}), ...(edit ? { edit } : {}) }, times, ({ at, ids, rows, host, measure }) => {
       instants += 1;
       const when = new Date(at).toISOString();
-      expect(departuresOf(ids), when).toBe(3);
+      // R1: three cells of the departures line at every instant.
+      expect(departuresOf(host), when).toBe(3);
       if (closures) expect(CLOSURES.filter((id) => ids.includes(id)), when).toEqual(CLOSURES);
       if (event) {
         // Scene D: with no closure beside it, the event row is shown, its title at most two lines.

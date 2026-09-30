@@ -61,6 +61,18 @@
 /* Below the specificity of kiosk.css's reduced-motion and lagano rules, which load first and still win. */
 .k-nearby .nearby-row[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
 @keyframes k-nearby-in{from{opacity:0}}
+/* R1 (docs/reveal-2026-10-plan/R1.md §0.2(e)): the wall's one departures line, three equal cells drawn per composition.
+   The sizes are calc()-wrapped as the heading's are: a bare var() of a max() is dropped by happy-dom's cascade. */
+.kiosk .k-nearby .nearby-row[data-kind='departures']{grid-template-columns:repeat(3,minmax(0,1fr));column-gap:calc(16px * var(--k-zoom,1));align-items:start}
+.kiosk .k-nearby .k-dep-cell{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-areas:'badge head' 'time time';column-gap:calc(var(--k-gap) * .4);align-items:center;min-width:0}
+.kiosk .k-nearby .k-dep-cell .k-line-badge{grid-area:badge;margin:0;font-size:calc(var(--k-nearby-title-size));height:auto;min-height:1.1em;line-height:1.1}
+.kiosk .k-nearby .nearby-row[data-kind='departures'] .k-dep-cell .nearby-when{grid-area:time;font-size:calc(var(--k-nearby-title-size));line-height:1.1;letter-spacing:-.01em;white-space:nowrap;color:var(--k-ink-2)}
+.kiosk .k-nearby .nearby-row[data-kind='departures'] .k-dep-cell[data-live='1'] .nearby-when{color:var(--k-action)}
+.kiosk .k-nearby .k-dep-headsign{grid-area:head;min-width:0;font-size:calc(var(--k-nearby-sub-size));font-weight:500;line-height:1.15;overflow-wrap:normal;color:var(--k-ink)}
+.kiosk .k-nearby .k-dep-cell[data-headsign='0'] .k-dep-headsign{display:none}
+.kiosk[data-portrait='1'] .k-nearby .k-dep-cell{grid-template-areas:'badge time' 'head head'}
+.kiosk .k-nearby .nearby-row[data-kind='departures']+.nearby-row .k-nearby-mark::before{top:50%}
+.k-nearby .k-dep-cell[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
 .kiosk .k-map-canvas{pointer-events:none}
 .kiosk .k-map-canvas .maplibregl-ctrl-group{display:none}
 .kiosk .k-present-board .city-detail{padding:var(--k-pad);font-size:var(--k-hint-size);max-height:100%;overflow:auto}

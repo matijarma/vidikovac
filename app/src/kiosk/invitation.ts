@@ -133,18 +133,21 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     i18n,
     reduced:deps.reducedMotion||lightweight,
     designHeightPx:()=>NEARBY_DESIGN_HEIGHT[model?.composition??'wide'],
+    // The wall's three compositions draw the departures as one line (R1); the handheld keeps one row per departure.
+    departuresLine:()=>(model?.composition??'wide')!=='handheld',
   });
   const setFrame=(frame:FrameStops):void=>field.setFrame(frame);
   const card=element.querySelector<HTMLElement>('.k-panel--card')!;
   /** A window box and promise set for which the card was tried under the list and the promises did not fit. */
   let refused:string|null=null;
   /** The height the rows the fit never drops need in a smaller box: each at its content, never under the
-   *  smallest row (ROW_MIN_PX), whatever the larger box's budget grew it to. */
+   *  smallest row (ROW_MIN_PX), whatever the larger box's budget grew it to. The departures line (R1) is one of
+   *  them and holds every departure; without it (never on a wall) the lead departure row. */
   function promisesPx(rows:HTMLElement):number{
     const lis=[...rows.children] as HTMLElement[];
     const kept=new Set<HTMLElement>(lis.filter(li=>li.dataset.kind==='first'||li.dataset.kind==='last'));
     const always=lis.find(li=>li.dataset.always==='1');if(always)kept.add(always);
-    const departure=lis.find(li=>li.dataset.kind==='departure');if(departure)kept.add(departure);
+    const departure=lis.find(li=>li.dataset.kind==='departures')??lis.find(li=>li.dataset.kind==='departure');if(departure)kept.add(departure);
     if(kept.size===0)return 0;
     const gap=Number.parseFloat(getComputedStyle(rows).rowGap)||0;
     const zoom=Number.parseFloat(getComputedStyle(element).getPropertyValue('--k-zoom'))||1;
@@ -187,9 +190,11 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       legendPx:legend?.offsetHeight??0,listOverheadPx:Math.max(0,timeline.element.offsetHeight-rows.clientHeight),
       floorPx:promisesPx(rows),minMapPx:MAP_MIN_HEIGHT_PX*zoom,
     };
-    // The second and third departures on offer (the model's, not the ones this box happened to show), at the smallest row.
+    // The second and third departures on offer (the model's, not the ones this box happened to show), at the smallest
+    // row; the departures line holds them all already (R1), so the promises are the whole need.
+    const line=[...rows.children].some(li=>(li as HTMLElement).dataset.kind==='departures');
     const offered=Math.min(3,model?.items.filter(row=>row.kind==='departure').length??0);
-    const fullPx=box.floorPx+Math.max(0,offered-1)*ROW_MIN_PX*zoom;
+    const fullPx=line?box.floorPx:box.floorPx+Math.max(0,offered-1)*ROW_MIN_PX*zoom;
     const next=refused===promiseKey(rows)?'map':compactArrangement({...box,fullPx}).placement;
     element.dataset.mapFloor=String(Math.round(box.minMapPx));
     return set(next);

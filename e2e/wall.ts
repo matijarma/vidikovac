@@ -34,8 +34,13 @@ export const WALL_PROBES = Object.freeze({
   nearby: '[data-testid=nearby]',
   nearbyHead: '[data-testid=nearby-head]',
   nearbyRows: '[data-testid=nearby-rows]',
-  /** `li.nearby-row[data-id][data-kind][data-when=<ISO> | data-always="1"][data-live="1"?][data-source]` (WP1). */
+  /** `li.nearby-row[data-id][data-kind][data-when=<ISO> | data-always="1"][data-live="1"?][data-source]` (WP1); the
+   *  departures line (R1) is one of them, `[data-kind=departures][data-cells=N]`, its departures its cells (depCell). */
   row: '[data-testid=nearby] .nearby-row',
+  /** The wall's one departures row (R1, docs/reveal-2026-10-plan/R1.md §0.2(d)). */
+  depLine: '[data-testid=nearby] .nearby-row[data-kind="departures"]',
+  /** `span.k-dep-cell[data-id][data-cell=1..3][data-when][data-live="1"?][data-route][data-source][data-headsign="0"?]`. */
+  depCell: '[data-testid=nearby] .nearby-row[data-kind="departures"] [data-cell]',
   rowTitle: '.nearby-title',
   rowWhen: '.nearby-when',
   rowSub: '.nearby-sub',
@@ -107,7 +112,8 @@ export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice']
  * with one-line departure titles.
  */
 export const FIT_FULL_KEEPS_KINDS: readonly string[] = [...FIT_RESERVED_KINDS, 'closure'];
-/** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts). */
+/** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts); the
+ *  departures line's least height is one row too (R1). It serves the path without the line (a handheld, older readings). */
 export const DEPARTURE_ROW_MIN_PX = 64;
 /**
  * The trains the response policy puts before the departures (U2.md §0.1 railPolicy: at most three in silent, two in
@@ -177,6 +183,12 @@ export interface WallRow {
   text: string;
   /** Any part of the row reads as a caveat (inventory DISCL). */
   caveat: boolean;
+  /**
+   * The departures line's cells on the wall (R1), in order, each one a passer-by can see; present on the line's row
+   * only: the cell's row id, its route (`data-route`), live, the words of its time, whether that is a `<time>`, and
+   * its destination ('' where it prints none).
+   */
+  cells?: { id: string | null; route: string | null; live: boolean; whenText: string; hasTime: boolean; headsign: string }[];
 }
 export interface WallSample {
   /** The page's own clock (the fake clock under test), epoch ms. */
@@ -199,7 +211,11 @@ export interface WallSample {
   rows: WallRow[];
   /** `.nearby-row` elements in the DOM that are not on the wall (hidden, transparent, zero-size, offscreen or clipped). */
   hiddenRows: number;
+  /** The departures a passer-by can see: the cells of the departures line (R1), plus any row of kind `departure` (a
+   *  handheld, or a reading recorded before DR1). */
   departures: number;
+  /** The departures line's `data-cells`: the cells it drew; null without a line (absent in a reading recorded before DR1). */
+  departuresOffered?: number | null;
   /**
    * `data-fit-dropped` on the list: the kinds of the vetted rows the list did not paint, in list order; `[]` when it
    * dropped none, null when the probe is missing (a wall before it, or a reading recorded earlier).
@@ -340,8 +356,20 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
       hasTime: Boolean(q(p.rowTime, li)),
       text,
       caveat: [title, whenText, sub, text].some((part) => part !== '' && discl.test(part)),
+      ...(li.dataset.kind === 'departures' ? {
+        cells: Array.from(li.querySelectorAll<HTMLElement>('[data-cell]')).filter(onWall).map((cell) => ({
+          id: cell.dataset.id ?? null,
+          route: cell.dataset.route ?? null,
+          live: cell.dataset.live === '1',
+          whenText: words(q(p.rowWhen, cell)),
+          hasTime: Boolean(q(p.rowTime, cell)),
+          headsign: words(q('.k-dep-headsign', cell)),
+        })),
+      } : {}),
     };
   });
+  const lineEl = q(p.depLine);
+  const offered = lineEl ? num(lineEl.dataset.cells) : null;
 
   const fit = q(p.nearby)?.dataset;
   const listEl = q(p.nearbyRows);
@@ -379,12 +407,13 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     head: words(q(p.nearbyHead)),
     rows,
     hiddenRows: allRows.length - visibleRows.length,
-    departures: rows.filter((r) => r.kind === 'departure').length,
+    departures: rows.reduce((n, r) => n + (r.cells ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0),
+    departuresOffered: offered,
     fitDropped: fitDroppedIn(fit?.fitDropped),
     fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
     listRoom,
     solarRows: rows.filter((r) => r.kind === 'solar').length,
-    liveRows: rows.filter((r) => r.live).length,
+    liveRows: rows.reduce((n, r) => n + (r.cells ? r.cells.filter((c) => c.live).length : r.live ? 1 : 0), 0),
     pills: mapc?.dataset.pills ?? null,
     bodies: num(mapc?.dataset.bodies),
     zoom: mapc?.dataset.zoom ?? null,
@@ -691,7 +720,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     departuresEverySample: valid.length > 0 && valid.every((s) => s.departures >= DEPARTURES_MIN),
     minDepartures: min(valid.map((s) => s.departures)),
     maxDepartures: max(valid.map((s) => s.departures)),
-    departuresUnderFit: valid.filter((s) => { const plan = fitPlan(s); return !plan || s.departures < plan.expected; }).length,
+    departuresUnderFit: valid.filter(underFit).length,
     fitDroppedByKind,
     fitOverflowReadings: valid.filter((s) => s.fitOverflow === true).length,
     caveatRows: caveats.size,
@@ -727,14 +756,27 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
 }
 
 // --- verdicts, shared by the accept spec and the observer -----------------------------------------
-/** What the fitted count reads of a reading; the list's room and hidden rows are absent in readings recorded before them. */
-export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> & Partial<Pick<WallSample, 'listRoom' | 'hiddenRows'>>;
+/** What the fitted count reads of a reading; the list's room and hidden rows are absent in readings recorded before them,
+ *  the line's offer (departuresOffered) in readings recorded before DR1. */
+export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> & Partial<Pick<WallSample, 'listRoom' | 'hiddenRows' | 'departuresOffered'>>;
+
+/** The departures line's row of a reading (R1), if the wall drew one. */
+const lineRow = (rows: readonly WallRow[]): WallRow | undefined => rows.find((r) => r.kind === 'departures');
+
+/**
+ * The departures of one reading as a passer-by reads them, in order: the cells of the departures line, and any row of
+ * kind `departure` (a handheld, a reading recorded before DR1). Every "each departure a clock time" check reads it.
+ */
+export function departureReads(rows: readonly WallRow[]): { whenText: string; hasTime: boolean; live: boolean }[] {
+  return rows.flatMap((r) => (r.cells ? r.cells.map((c) => ({ whenText: c.whenText, hasTime: c.hasTime, live: c.live }))
+    : r.kind === 'departure' ? [{ whenText: r.whenText, hasTime: r.hasTime, live: r.live }] : []));
+}
 
 const timelessRow = (r: WallRow): boolean => r.always || r.when === null;
 
 /** The train rows above the first departure row (FIT_RAIL_FIRST_KIND); none without a departure row, as in timeline.ts. */
 export function railsFirst(rows: readonly WallRow[]): WallRow[] {
-  const first = rows.findIndex((r) => r.kind === 'departure');
+  const first = rows.findIndex((r) => r.kind === 'departure' || r.kind === 'departures');
   return first < 0 ? [] : rows.slice(0, first).filter((r) => r.kind === FIT_RAIL_FIRST_KIND);
 }
 
@@ -768,14 +810,33 @@ export function fitPlan(s: FitReading): { offered: number; expected: number; ful
 }
 export const fittedDepartures = (s: FitReading): number | null => fitPlan(s)?.expected ?? null;
 
-/** The departure rows of one reading: 1 to 3, and at least the fitted count of those the list offered; `[]` means it holds. */
+/**
+ * The departures of one reading: 1 to 3; with the departures line (R1) every cell it drew on the wall (the fit never
+ * drops a cell, so the fitted-count plan is not consulted) and no departure row beside it; without it (a handheld, a
+ * reading recorded before DR1) at least the fitted count of those the list offered. `[]` means it holds.
+ */
 export function departureFailures(s: FitReading): string[] {
   const out: string[] = [];
+  const line = lineRow(s.rows);
+  if (line) {
+    if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departures in the line (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
+    if (s.departuresOffered != null && s.departures !== s.departuresOffered) out.push(`${s.departures} of the line's ${s.departuresOffered} cells on the wall (target: every cell the line drew)`);
+    const rows = s.rows.filter((r) => r.kind === 'departure').length;
+    if (rows > 0) out.push(`${rows} departure row(s) beside the departures line (target 0: the wall's departures are the line's cells)`);
+    return out;
+  }
   if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departure rows (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
   const plan = fitPlan(s);
   if (!plan) out.push('the list carries no data-fit-dropped probe (the fitted departure count cannot be judged)');
   else if (s.departures < plan.expected) out.push(`${s.departures} departure rows where the list offered ${plan.offered} and the fit keeps ${plan.expected} (left out: ${(s.fitDropped ?? []).join(' ') || 'nothing'})`);
   return out;
+}
+
+/** A reading whose departures fall short: of the line's cells (R1), or of the fitted count, or without the probe. */
+function underFit(s: FitReading): boolean {
+  if (lineRow(s.rows)) return s.departuresOffered != null && s.departures < s.departuresOffered;
+  const plan = fitPlan(s);
+  return !plan || s.departures < plan.expected;
 }
 
 /** One reading against §11/§16.3 (block B of the wall spec); `[]` means it holds. */
@@ -892,7 +953,9 @@ export interface CalmMotionDetail {
 }
 /** A runaway minute (a list rebuilt every frame) keeps its first records only: enough to read, never a huge file. */
 export const CALM_DETAIL_RECORDS_MAX = 400;
-export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
+/** The rows and the departures line's cells (R1): a cell leaving and one entering are a turnover, not churn, and a
+ *  staying cell re-created is caught. A cell has no data-kind, so its key is `|<id>`. */
+export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: `${WALL_PROBES.row}, ${WALL_PROBES.depCell}`, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
 
 /** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
 export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
@@ -1049,6 +1112,8 @@ function calmMotionBasics(r: CalmMotionReading): { unmeasurable: string | null; 
 }
 
 const kindOfKey = (key: string | null): string => (key ?? '').split('|')[0] ?? '';
+/** A departure's key: a row of kind departure, or a cell of the departures line (R1: a cell carries no kind, `|<id>`). */
+const departureKey = (key: string | null): boolean => kindOfKey(key) === 'departure' || (key !== null && key.startsWith('|'));
 const kindCount = (fitDropped: string | null | undefined, kind: string): number => (fitDroppedOf(fitDropped ?? undefined) ?? []).filter((k) => k === kind).length;
 
 /**
@@ -1067,10 +1132,10 @@ export function calmRestoreBeat(r: CalmMotionReading): boolean {
   const adds = d.records.filter((x) => x.adds.length > 0);
   if (removes.length !== 1 || adds.length !== 2 || removes.some((x) => x.adds.length > 0 || x.removes.length !== 1) || adds.some((x) => x.removes.length > 0 || x.adds.length !== 1)) return false;
   const left = removes[0]!.removes[0]!;
-  if (left.kind !== 'remove' || kindOfKey(left.key) !== 'departure' || !from.keys.includes(left.key ?? '') || to.keys.includes(left.key ?? '')) return false;
+  if (left.kind !== 'remove' || !departureKey(left.key) || !from.keys.includes(left.key ?? '') || to.keys.includes(left.key ?? '')) return false;
   const entered = adds.map((x) => x.adds[0]!);
   if (entered.some((n) => n.kind !== 'add' || n.key === null || from.keys.includes(n.key) || !to.keys.includes(n.key)) || entered[0]!.key === entered[1]!.key) return false;
-  if (!entered.some((n) => kindOfKey(n.key) === 'departure')) return false;
+  if (!entered.some((n) => departureKey(n.key))) return false;
   return entered.some((n) => {
     const kind = kindOfKey(n.key);
     return kindCount(from.fitDropped, kind) > 0 && kindCount(to.fitDropped, kind) < kindCount(from.fitDropped, kind);

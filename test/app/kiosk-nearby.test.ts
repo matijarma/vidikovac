@@ -26,6 +26,7 @@ import {
   placeStory,
   rowBudget,
   selectNearby,
+  nextDepartures,
   shorterLabel,
   type NearbyInput,
   type NearbyKind,
@@ -1754,5 +1755,55 @@ describe('one row of each new kind, in time order, inside the bounds', () => {
     const timed = rows.filter((r) => r.kind !== 'departure' && !r.always).map((r) => r.atMs!);
     expect(timed).toEqual([...timed].sort((a, b) => a - b));
     expect(new Set(ids(rows)).size).toBe(rows.length);
+  });
+});
+
+describe('nextDepartures (brief §5.2 (d), R2 reads it)', () => {
+  const now = at('2026-09-22T15:45:00Z');
+  const SIX: readonly [string, number][] = [['6', 2], ['13', 4], ['14', 6], ['1', 8], ['17', 10], ['11', 12]];
+  const deps = (rows: readonly NearbyRow[]): NearbyRow[] => rows.filter((r) => r.kind === 'departure');
+
+  it('six on the board: the wall shows the first three and the next three follow them, in time order', () => {
+    const scene = input(now, { boards: [board(now, SIX)], fixes: [] });
+    const shown = deps(selectNearby(scene));
+    expect(ids(shown)).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+    const next = nextDepartures(scene, shown);
+    expect(ids(next)).toEqual(['dep:t1', 'dep:t17', 'dep:t11']);
+    expect(next.every((r) => r.kind === 'departure')).toBe(true);
+    const times = next.map((r) => r.atMs!);
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    expect(ids(next).some((id) => ids(shown).includes(id))).toBe(false);
+  });
+
+  it('four on the board: exactly one next departure', () => {
+    const scene = input(now, { boards: [board(now, SIX.slice(0, 4))], fixes: [] });
+    const shown = deps(selectNearby(scene));
+    expect(ids(nextDepartures(scene, shown))).toEqual(['dep:t1']);
+  });
+
+  it('three on the board: none', () => {
+    const scene = input(now, { boards: [board(now, SIX.slice(0, 3))], fixes: [] });
+    expect(nextDepartures(scene, deps(selectNearby(scene)))).toEqual([]);
+  });
+
+  it('a newcomer a minute earlier than the third shown keeps out of the shown order and leads the next', () => {
+    const first = input(now, { boards: [board(now, [['6', 2], ['13', 4], ['14', 6]])], fixes: [] });
+    const shown = deps(selectNearby(first));
+    expect(ids(shown)).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+    // The 17 appears at 5 minutes, one displayed minute before the shown 14: inside DISPLACE_MINUTES, so the 14 stays.
+    const later = input(now, { boards: [board(now, [['6', 2], ['13', 4], ['14', 6], ['17', 5], ['1', 9]])], fixes: [], heldDepartures: shown });
+    expect(DISPLACE_MINUTES).toBe(2);
+    expect(ids(deps(selectNearby(later)))).toEqual(['dep:t6', 'dep:t13', 'dep:t14']);
+    expect(ids(nextDepartures(later, shown))).toEqual(['dep:t17', 'dep:t1']);
+  });
+
+  it('holds no state: a following selectNearby with the same held rows is unchanged', () => {
+    const scene = input(now, { boards: [board(now, SIX)], fixes: [] });
+    const shown = deps(selectNearby(scene));
+    const held = { ...scene, heldDepartures: shown };
+    const before = JSON.stringify(selectNearby(held));
+    nextDepartures(held, shown);
+    nextDepartures(held, shown);
+    expect(JSON.stringify(selectNearby(held))).toBe(before);
   });
 });
