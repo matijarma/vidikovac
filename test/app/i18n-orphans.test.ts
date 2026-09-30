@@ -151,9 +151,11 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // (the sheet's retired toggles): 1,117 hr, 1,088 en.
     // lane/settings-lang (owner, 30 Sep 2026: the language row speaks the language a tap moves to) +3
     // directory.languageName, languageAction, languageCurrent, -1 directory.languageNext: 1,119 hr, 1,090 en.
+    // The reveal pass R0 +7: kiosk.sentence.airIndex, warningUntil, safety.cuts, cutsNone, roads, roadsNone,
+    // weather.hourly: 1,126 hr, 1,097 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1119);
-    expect(leafKeys(en).length).toBe(1090);
+    expect(leaves.length).toBe(1126);
+    expect(leafKeys(en).length).toBe(1097);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

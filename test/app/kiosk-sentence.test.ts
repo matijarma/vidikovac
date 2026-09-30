@@ -1018,10 +1018,10 @@ describe('fetchSentences validates the response', () => {
 });
 
 describe('W-C2 fail-closed family and slot grammar', () => {
-  it('pins all 33 owner-reviewed families in both languages, with always carrying register text', () => {
-    // 22 of the companion round, U1's notice, U2's two service families and the nine facts-breadth families
-    // (docs/history/upgrade-2026-10-plan/U3.md S4).
-    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(33);
+  it('pins all 35 owner-reviewed families in both languages, with always carrying register text', () => {
+    // 22 of the companion round, U1's notice, U2's two service families, the nine facts-breadth families
+    // (docs/history/upgrade-2026-10-plan/U3.md S4) and R0's two deviation families (docs/reveal-2026-10.md §7).
+    expect(Object.keys(SENTENCE_FAMILIES)).toHaveLength(35);
     for (const [locale, copy] of [['hr', SENTENCE_COPY_HR], ['en', SENTENCE_COPY_EN]] as const) {
       expect(Object.keys(copy).sort()).toEqual([...Object.keys(SENTENCE_FAMILIES), 'always'].sort());
       for (const key of Object.keys(SENTENCE_FAMILIES) as (keyof typeof SENTENCE_FAMILIES)[]) {
@@ -1041,6 +1041,8 @@ describe('W-C2 fail-closed family and slot grammar', () => {
         title: '1984', venue: 'Kino', street: 'Ilica', condition: locale === 'hr' ? 'vedro' : 'clear',
         vehicles: locale === 'hr' ? '2 vozila' : '2 vehicles', about: '460',
         percent: '70 %', utility: locale === 'hr' ? 'struje' : 'power', roadState: locale === 'hr' ? 'radovi' : 'roadworks',
+        airIndex: '4', airWord: locale === 'hr' ? 'loša' : 'poor',
+        forecastCondition: locale === 'hr' ? 'promjenljivo oblačno uz malu količinu kiše' : 'cloudy',
       };
       const slots = Object.fromEntries(Object.entries(spec.slots).map(([key, type]) => [key, values[type]]));
       const text = spec[locale].replace(/\{(\w+)\}/gu, (_, key: string) => slots[key]!);
@@ -1399,5 +1401,65 @@ describe('the facts-breadth facts', () => {
     expect(say(EVENING, '12')).toBeUndefined();
     expect(say(EVENING, 'promjenljivo')).toBeUndefined();
     expect(say(EVENING, 'Pretežno oblačno', 'en')).toBeUndefined();
+  });
+
+  it('says tomorrow in DHMZ\'s own legend words (R0), not an old snapshot\'s code, and only where the budget holds it', () => {
+    const snaps = (weather: string) => ({ 'dhmz-forecast': snapshot('dhmz-forecast', [
+      { id: 'zagreb:2026-09-23', module: 'dhmz-forecast', kind: 'forecast', tier: 'open', title: 'Prognoza za Zagreb', at: '2026-09-22T22:00:00Z',
+        until: '2026-09-23T22:00:00Z', data: { tmin: 13, tmax: 22, weather } },
+    ]) });
+    const at19 = at('2026-09-22T19:00:00+02:00');
+    const facts = (weather: string) => sentenceFacts(input({ now: at19, snapshots: snaps(weather) }));
+    const long = facts('Promjenljivo oblačno uz malu količinu kiše');
+    const tomorrow = long.find((fact) => fact.id === 'forecast:tomorrow:2026-09-23');
+    expect(tomorrow).toMatchObject({ kind: 'vrijeme', text: 'Sutra promjenljivo oblačno uz malu količinu kiše, od 13 do 22 °C.' });
+    expect(tomorrow!.text).toHaveLength(65);
+    expect(facts('12').some((fact) => fact.id.startsWith('forecast:tomorrow:'))).toBe(false);
+    // The compact and portrait budget of 64 cannot hold it: the chooser offers the other facts, never a cut one.
+    const wide = templateSentences(long, i18n, 80, at19);
+    const compact = templateSentences(long, i18n, 64, at19);
+    expect(wide.some((sentence) => sentence.refs.includes(tomorrow!.id))).toBe(true);
+    expect(compact.some((sentence) => sentence.refs.includes(tomorrow!.id))).toBe(false);
+    expect(compact.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the air and a warning\'s end in the header (R0)', () => {
+  const at = (iso: string): number => Date.parse(iso);
+  const at14 = at('2026-09-22T14:00:00+02:00');
+  const cityWith = (air: { id: string; index: number; observedAt: string; lon?: number; lat?: number }[]): CityState => ({
+    ...emptyCity(),
+    live: {
+      schema: 1 as never, generatedAt: new Date(at14).toISOString(), consultations: [], bikes: [],
+      sources: [{ id: 'air', name: 'Zrak', url: 'https://example.test/', licence: 'x', status: 'live', count: air.length }],
+      air: air.map((s) => ({ id: s.id, name: s.id === 'z1' ? 'Zagreb-1' : 'Zagreb-2', lon: s.lon ?? 15.978, lat: s.lat ?? 45.812, index: s.index, observedAt: s.observedAt })),
+    },
+  });
+  const airFact = (air: Parameters<typeof cityWith>[0], radiusM = 2200) => sentenceFacts(input({ now: at14, city: cityWith(air), radiusM }))
+    .find((fact) => fact.id.startsWith('air:'));
+  const fresh = new Date(at14 - 30 * 60_000).toISOString();
+
+  it('says a fresh station inside the circle at index 4 or worse, in the phone\'s word, and nothing else', () => {
+    expect(airFact([{ id: 'z1', index: 4, observedAt: fresh }])).toMatchObject({
+      id: 'air:z1', kind: 'vrijeme', text: 'Kvaliteta zraka: loša, indeks 4; postaja Zagreb-1.', validUntil: at14 - 30 * 60_000 + 2 * 3_600_000,
+    });
+    expect(airFact([{ id: 'z1', index: 3, observedAt: fresh }])).toBeUndefined();
+    expect(airFact([{ id: 'z1', index: 5, observedAt: new Date(at14 - 7 * 3_600_000).toISOString() }])).toBeUndefined();
+    expect(airFact([{ id: 'z1', index: 5, observedAt: fresh, lon: 16.2, lat: 45.9 }])).toBeUndefined();
+  });
+
+  it('says the DHMZ warning under way until its end (cap_hr_today.xml), in Croatian only, and not a minor one', async () => {
+    const { parseDhmzCap } = await import('../../worker/feed/modules/dhmz-cap');
+    const { readFileSync } = await import('node:fs');
+    const cap = parseDhmzCap(readFileSync(new URL('../fixtures/cap_hr_today.xml', import.meta.url), 'utf8'));
+    const items = cap.items.map((entry) => ({ ...entry, module: 'dhmz-cap', tier: 'open' }) as FeedItem);
+    const at5 = at('2026-09-11T05:00:00+02:00');
+    const warning = (items: FeedItem[], locale = 'hr') => sentenceFacts(input({ now: at5, snapshots: { 'dhmz-cap': snapshot('dhmz-cap', items) },
+      locale, i18n: locale === 'en' ? createDefaultI18n('en') : i18n })).find((fact) => fact.id.startsWith('warning:'));
+    expect(warning(items)).toMatchObject({
+      kind: 'vrijeme', text: 'DHMZ: Žuto upozorenje za grmljavinsku oluju do 08:00.', validUntil: at('2026-09-11T08:00:00+02:00'),
+    });
+    expect(warning(items, 'en')).toBeUndefined();
+    expect(warning(items.map((entry) => ({ ...entry, severity: 'minor' as const })))).toBeUndefined();
   });
 });

@@ -16,7 +16,8 @@ import { zagrebHour } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { clock, dayKey, dayMonth, fmtNumber, sameZagrebDay } from '../kiosk/format';
-import { cleanCondition, weatherNow } from '../kiosk/local';
+import { activeWarnings, cleanCondition, weatherNow } from '../kiosk/local';
+import { airIndexLabel } from './air';
 import { kioskStrings } from '../kiosk/strings';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
@@ -30,6 +31,9 @@ export { acceptSentence } from '../../../shared/kiosk/sentence';
 
 export const SENTENCE_NO_REPEAT_MS = 600_000;
 export const SENTENCE_REFRESH_MS = 600_000;
+/** The air is said from this index up (city.airIndex-4, "loša"), from a reading at most six hours old (city/conditions.ts). */
+export const AIR_DEVIATION_INDEX = 4;
+const AIR_FRESH_MS = 6 * 3_600_000;
 export const SENTENCE_HOLD_MS = 20_000;
 /**
  * The header's fact list. Sixteen starved the night: the last and first rows carry seven lines each and
@@ -128,6 +132,8 @@ export const SENTENCE_COPY_HR = {
   openUntil: '{name}: otvoreno do {time}.',
   eventLastTram: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.',
   bikesEmpty: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.',
+  airIndex: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.',
+  warningUntil: 'DHMZ: {event} do {until}.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -164,6 +170,8 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   openUntil: '{name}: open until {time}.',
   eventLastTram: 'After “{title}” the last tram {route} leaves {time}.',
   bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
+  airIndex: 'Air quality: {word}, index {index}; station {station}.',
+  warningUntil: 'DHMZ: {event} until {until}.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -287,6 +295,34 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     add('weather:now', 'vrijeme', copy(i18n, key, {
       temp: observation.temperature, condition, max: max === null ? '' : fmtNumber(locale, max),
     }), Math.min(weatherExpiry, nextMidnight(now)), { wording: key });
+  }
+
+  // R0: the air where it deviates (index AIR_DEVIATION_INDEX or worse), the nearest fresh station inside the circle, in
+  // the phone's own word for the index; valid two hours from its reading, never past midnight.
+  const live = input.city.live;
+  if (live && live.sources.find((source) => source.id === 'air')?.status === 'live' && input.radiusM !== undefined && input.radiusM > 0) {
+    const station = live.air
+      .filter((s) => typeof s.index === 'number' && s.index >= AIR_DEVIATION_INDEX && s.index <= 6 && s.observedAt
+        && Date.parse(s.observedAt) <= now && now - Date.parse(s.observedAt) <= AIR_FRESH_MS
+        && Number.isFinite(s.lon) && Number.isFinite(s.lat) && distanceM(input.place, s) <= input.radiusM!)
+      .sort((a, b) => distanceM(input.place, a) - distanceM(input.place, b))[0];
+    if (station) {
+      add(`air:${station.id}`, 'vrijeme', copy(i18n, 'airIndex', {
+        index: station.index!, word: airIndexLabel(i18n, station.index).toLocaleLowerCase(locale), station: station.name,
+      }), Math.min(Date.parse(station.observedAt!) + 2 * 3_600_000, nextMidnight(now)), { wording: 'airIndex' });
+    }
+  }
+  // R0: a DHMZ warning under way of moderate severity or above, with its end (Croatian only: the CAP text the module
+  // keeps is Croatian, as the weather fact's condition).
+  if (!locale.startsWith('en')) {
+    const warning = activeWarnings(input.snapshots['dhmz-cap'], now)
+      .find((w) => (w.severity === 'moderate' || w.severity === 'severe' || w.severity === 'extreme') && Date.parse(w.until ?? '') > now);
+    if (warning) {
+      const until = Date.parse(warning.until!);
+      add(`warning:${warning.id}`, 'vrijeme', copy(i18n, 'warningUntil', {
+        event: warning.title, until: sameZagrebDay(until, now) ? clock(until) : dayMonth(until).replace(/\.$/, ''),
+      }), until, { wording: 'warningUntil' });
+    }
   }
 
   // The three joins (U3.md S5), over the rows and the city's dynamic places: J2 below the rows, J3 in the bikes block.
@@ -446,10 +482,11 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     const item = forecast?.status !== 'down' ? forecast?.items.find(entry => entry.kind === 'forecast'
       && entry.at && dayKey(entry.at) === tomorrow) : undefined;
     const raw = dataText(item, 'weather');
+    // An old snapshot may still carry a code: it says nothing. DHMZ's legend words are the worker's (R0).
     const condition = /^\d+$/.test(raw) ? '' : cleanCondition(raw).toLocaleLowerCase('hr');
     const min = dataNumber(item, 'tmin');
     const max = dataNumber(item, 'tmax');
-    if (item && condition && validateSentenceSlot('condition', condition) === null && min !== null && max !== null) {
+    if (item && condition && validateSentenceSlot('forecastCondition', condition) === null && min !== null && max !== null) {
       add(`forecast:tomorrow:${tomorrow}`, 'vrijeme', copy(i18n, 'forecastTomorrow', {
         condition, min: fmtNumber(locale, min), max: fmtNumber(locale, max),
       }), nextMidnight(now), { wording: 'forecastTomorrow' });

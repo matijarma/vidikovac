@@ -4,6 +4,7 @@
 // `register-text`. Every external slot uses the strict header surface, never
 // the contextual row surface (./external-text.ts, decision 21).
 import { externalText, type ExternalTextKind } from './external-text';
+import { DHMZ_SYMBOL_CONDITIONS } from '../city/dhmz-symbols';
 export { SENTENCE_INSTRUCTION_PATTERNS, SENTENCE_SPLIT_COMMANDS, sentenceInstruction } from './external-text';
 
 export const SENTENCE_KICKERS = ['promet', 'kultura', 'vrijeme', 'bicikli', 'nocas', 'radovi'] as const;
@@ -92,9 +93,18 @@ export function sentenceDeadline(text: string, validUntil: number, now: number):
   return DATE_RELATIVE.test(text) ? Math.min(validUntil, sentenceMidnight(now)) : validUntil;
 }
 
+/** The short condition words of the weather families (the observation's words, Croatian and English). */
+const CONDITION_WORDS: readonly string[] = [
+  'vedro', 'pretežno vedro', 'sunčano', 'pretežno sunčano', 'malo oblačno', 'umjereno oblačno', 'pretežno oblačno', 'oblačno',
+  'naoblaka', 'kiša', 'slaba kiša', 'jaka kiša', 'rosulja', 'pljusak', 'pljuskovi', 'grmljavina', 'snijeg', 'slab snijeg',
+  'susnježica', 'magla', 'sumaglica', 'clear', 'sunny', 'partly cloudy', 'mostly cloudy', 'cloudy', 'overcast', 'rain',
+  'light rain', 'heavy rain', 'drizzle', 'showers', 'thunderstorm', 'snow', 'sleet', 'fog', 'mist',
+];
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export type SentenceSlotType = 'route' | 'stop' | 'minutes' | 'clock' | 'time' | 'until'
   | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition' | 'vehicles' | 'about'
-  | 'percent' | 'utility' | 'roadState';
+  | 'percent' | 'utility' | 'roadState' | 'airIndex' | 'airWord' | 'forecastCondition';
 interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // Only the display's supported alphabets, not visually similar Latin letters
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
@@ -112,7 +122,7 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   title: { max: 64, pattern: nameChars, names: 'title' },
   venue: { max: 48, pattern: nameChars, names: 'name' },
   street: { max: 64, pattern: nameChars, names: 'address' },
-  condition: { max: 32, pattern: /^(?:vedro|pretežno vedro|sunčano|pretežno sunčano|malo oblačno|umjereno oblačno|pretežno oblačno|oblačno|naoblaka|kiša|slaba kiša|jaka kiša|rosulja|pljusak|pljuskovi|grmljavina|snijeg|slab snijeg|susnježica|magla|sumaglica|clear|sunny|partly cloudy|mostly cloudy|cloudy|overcast|rain|light rain|heavy rain|drizzle|showers|thunderstorm|snow|sleet|fog|mist)$/u },
+  condition: { max: 32, pattern: new RegExp(`^(?:${CONDITION_WORDS.join('|')})$`, 'u') },
   // The service families (upgrade U2): the vehicles ZET has moving, with their noun, and the timetable's count after "oko".
   vehicles: { max: 16, pattern: /^(?:0|[1-9]\d{0,3}) (?:vozilo|vozila|vehicle|vehicles)$/u },
   about: { max: 4, pattern: /^[1-9]\d{0,3}$/u },
@@ -120,6 +130,11 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   percent: { max: 5, pattern: /^(?:[1-9]\d?|100) %$/u },
   utility: { max: 6, pattern: /^(?:struje|vode|power|water)$/u },
   roadState: { max: 32, pattern: /^(?:radovi|privremena regulacija|zatvoreno za promet|zastoj|roadworks|temporary traffic regulation|closed to traffic|congestion)$/u },
+  // R0's deviation families: the air index and its word (the phone's, city/air.ts, lower-cased), and tomorrow's
+  // forecast in DHMZ's own legend words (shared/city/dhmz-symbols.ts) beside the short condition words.
+  airIndex: { max: 1, pattern: /^[1-6]$/u },
+  airWord: { max: 14, pattern: /^(?:dobra|prihvatljiva|umjerena|loša|vrlo loša|izrazito loša|good|fair|moderate|poor|very poor|extremely poor)$/u },
+  forecastCondition: { max: 72, pattern: new RegExp(`^(?:${[...CONDITION_WORDS, ...DHMZ_SYMBOL_CONDITIONS.map(escapeRegExp)].join('|')})$`, 'u') },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
   const rule = SENTENCE_SLOT_RULES[type];
@@ -175,16 +190,20 @@ export const SENTENCE_FAMILIES = {
   // The facts-breadth families (U3.md S4, brief §7). A train is the timetable's; rain and tomorrow's forecast are
   // DHMZ's; a cut is HEP's hours; a road state is HAK's; a place open now is OpenStreetMap's, said only where a kicker
   // fits (kultura for a cinema or a library, noćas for any place at night). The two joins (S5): the last tram after
-  // an event, and the nearest empty BAJS station beside one with bikes.
+  // an event, and the nearest empty BAJS station beside one with bikes. R0's two deviation families: the air where its
+  // index is poor or worse, with the phone's word and the station; a DHMZ warning of moderate severity or above with
+  // its end.
   trainAt: { hr: '{station}: vlak, smjer {to}, polazi u {time}.', en: '{station}: train towards {to} leaves at {time}.', slots: { station: 'stop', to: 'stop', time: 'clock' }, kinds: ['promet'] },
   rainAt: { hr: 'Oko {time} {condition}; vjerojatnost {p}.', en: 'Around {time} {condition}; chance {p}.', slots: { time: 'clock', condition: 'condition', p: 'percent' }, kinds: ['vrijeme'] },
-  forecastTomorrow: { hr: 'Sutra {condition}, od {min} do {max} °C.', en: 'Tomorrow {condition}, {min} to {max} °C.', slots: { condition: 'condition', min: 'degrees', max: 'degrees' }, kinds: ['vrijeme'] },
+  forecastTomorrow: { hr: 'Sutra {condition}, od {min} do {max} °C.', en: 'Tomorrow {condition}, {min} to {max} °C.', slots: { condition: 'forecastCondition', min: 'degrees', max: 'degrees' }, kinds: ['vrijeme'] },
   supplyCutToday: { hr: '{street}: danas bez {what} od {from} do {until}.', en: '{street}: no {what} today from {from} to {until}.', slots: { street: 'street', what: 'utility', from: 'clock', until: 'clock' }, kinds: ['radovi'] },
   supplyCutTomorrow: { hr: '{street}: sutra bez {what} od {from} do {until}.', en: '{street}: no {what} tomorrow from {from} to {until}.', slots: { street: 'street', what: 'utility', from: 'clock', until: 'clock' }, kinds: ['radovi'] },
   roadUntil: { hr: '{street}: {what} do {until}.', en: '{street}: {what} until {until}.', slots: { street: 'street', what: 'roadState', until: 'until' }, kinds: ['radovi'] },
   openUntil: { hr: '{name}: otvoreno do {time}.', en: '{name}: open until {time}.', slots: { name: 'venue', time: 'clock' }, kinds: ['kultura', 'nocas'] },
   eventLastTram: { hr: 'Nakon „{title}” zadnji tramvaj {route} polazi {time}.', en: 'After “{title}” the last tram {route} leaves {time}.', slots: { title: 'title', route: 'route', time: 'time' }, kinds: ['kultura', 'nocas'] },
   bikesEmpty: { hr: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.', en: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.', slots: { station: 'stop', other: 'stop', bikes: 'count' }, kinds: ['bicikli'] },
+  airIndex: { hr: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.', en: 'Air quality: {word}, index {index}; station {station}.', slots: { index: 'airIndex', word: 'airWord', station: 'stop' }, kinds: ['vrijeme'] },
+  warningUntil: { hr: 'DHMZ: {event} do {until}.', en: 'DHMZ: {event} until {until}.', slots: { event: 'title', until: 'until' }, kinds: ['vrijeme'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a
