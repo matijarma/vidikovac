@@ -34,8 +34,13 @@ export const WALL_PROBES = Object.freeze({
   nearby: '[data-testid=nearby]',
   nearbyHead: '[data-testid=nearby-head]',
   nearbyRows: '[data-testid=nearby-rows]',
-  /** `li.nearby-row[data-id][data-kind][data-when=<ISO> | data-always="1"][data-live="1"?][data-source]` (WP1). */
+  /** `li.nearby-row[data-id][data-kind][data-when=<ISO> | data-always="1"][data-live="1"?][data-source]` (WP1); the
+   *  departures line (R1) is one of them, `[data-kind=departures][data-cells=N]`, its departures its cells (depCell). */
   row: '[data-testid=nearby] .nearby-row',
+  /** The wall's one departures row (R1, docs/reveal-2026-10-plan/R1.md §0.2(d)). */
+  depLine: '[data-testid=nearby] .nearby-row[data-kind="departures"]',
+  /** `span.k-dep-cell[data-id][data-cell=1..3][data-when][data-live="1"?][data-route][data-source][data-headsign="0"?]`. */
+  depCell: '[data-testid=nearby] .nearby-row[data-kind="departures"] [data-cell]',
   rowTitle: '.nearby-title',
   rowWhen: '.nearby-when',
   rowSub: '.nearby-sub',
@@ -892,7 +897,9 @@ export interface CalmMotionDetail {
 }
 /** A runaway minute (a list rebuilt every frame) keeps its first records only: enough to read, never a huge file. */
 export const CALM_DETAIL_RECORDS_MAX = 400;
-export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: WALL_PROBES.row, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
+/** The rows and the departures line's cells (R1): a cell leaving and one entering are a turnover, not churn, and a
+ *  staying cell re-created is caught. A cell has no data-kind, so its key is `|<id>`. */
+export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: `${WALL_PROBES.row}, ${WALL_PROBES.depCell}`, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
 
 /** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
 export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
@@ -1049,6 +1056,8 @@ function calmMotionBasics(r: CalmMotionReading): { unmeasurable: string | null; 
 }
 
 const kindOfKey = (key: string | null): string => (key ?? '').split('|')[0] ?? '';
+/** A departure's key: a row of kind departure, or a cell of the departures line (R1: a cell carries no kind, `|<id>`). */
+const departureKey = (key: string | null): boolean => kindOfKey(key) === 'departure' || (key !== null && key.startsWith('|'));
 const kindCount = (fitDropped: string | null | undefined, kind: string): number => (fitDroppedOf(fitDropped ?? undefined) ?? []).filter((k) => k === kind).length;
 
 /**
@@ -1067,10 +1076,10 @@ export function calmRestoreBeat(r: CalmMotionReading): boolean {
   const adds = d.records.filter((x) => x.adds.length > 0);
   if (removes.length !== 1 || adds.length !== 2 || removes.some((x) => x.adds.length > 0 || x.removes.length !== 1) || adds.some((x) => x.removes.length > 0 || x.adds.length !== 1)) return false;
   const left = removes[0]!.removes[0]!;
-  if (left.kind !== 'remove' || kindOfKey(left.key) !== 'departure' || !from.keys.includes(left.key ?? '') || to.keys.includes(left.key ?? '')) return false;
+  if (left.kind !== 'remove' || !departureKey(left.key) || !from.keys.includes(left.key ?? '') || to.keys.includes(left.key ?? '')) return false;
   const entered = adds.map((x) => x.adds[0]!);
   if (entered.some((n) => n.kind !== 'add' || n.key === null || from.keys.includes(n.key) || !to.keys.includes(n.key)) || entered[0]!.key === entered[1]!.key) return false;
-  if (!entered.some((n) => kindOfKey(n.key) === 'departure')) return false;
+  if (!entered.some((n) => departureKey(n.key))) return false;
   return entered.some((n) => {
     const kind = kindOfKey(n.key);
     return kindCount(from.fitDropped, kind) > 0 && kindCount(to.fitDropped, kind) < kindCount(from.fitDropped, kind);

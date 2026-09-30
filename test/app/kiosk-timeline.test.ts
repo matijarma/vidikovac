@@ -21,10 +21,11 @@ import { emptyCity } from '../../shared/city/types';
 import { departuresBoard } from '../../e2e/departures-fixture';
 import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
+import { cellLines, cellOverflow, lineHeight, LINE_1366, LINE_1920, LINE_PORTRAIT, type Layout as MeasureLayout } from './timeline-measure';
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, NOTICE_TITLE_MAX_LINES, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
-  FIT_RESTORE_HOLD_MS,
+  FIT_RESTORE_HOLD_MS, byValue, departuresLineMarkup, groupDepartures, isDeparturesLine, type DeparturesLine, type WallRow,
 } from '../../app/src/kiosk/timeline';
 
 // kiosk.nearby.* is WP1-D's key group (WP1-A adds it too); until it lands the
@@ -83,6 +84,15 @@ function mount(over: Partial<Parameters<typeof mountTimeline>[1]> = {}): Timelin
 const items = (): HTMLLIElement[] => [...host.querySelectorAll<HTMLLIElement>('li.nearby-row')];
 const ids = (): string[] => items().map((li) => li.dataset.id ?? '');
 const byId = (id: string): HTMLLIElement => host.querySelector<HTMLLIElement>(`li[data-id="${id}"]`)!;
+/** The departures line's li (R1) and its cells. */
+const line = (): HTMLLIElement | null => host.querySelector<HTMLLIElement>('li.nearby-row[data-kind="departures"]');
+const cells = (): HTMLElement[] => [...(line()?.querySelectorAll<HTMLElement>(':scope > .k-dep-cell') ?? [])];
+const cellIds = (): string[] => cells().map((cell) => cell.dataset.id ?? '');
+const cell = (id: string): HTMLElement => host.querySelector<HTMLElement>(`.k-dep-cell[data-id="${id}"]`)!;
+/** The list's ids with the line replaced by its cells' ids, in order: what the wall shows, departure by departure. */
+const expanded = (): string[] => items().flatMap((li) => (li.dataset.kind === 'departures' ? [...li.querySelectorAll<HTMLElement>('.k-dep-cell')].map((c) => c.dataset.id ?? '') : [li.dataset.id ?? '']));
+/** The departures the wall shows: the line's cells, or the departure rows of an ungrouped list. */
+const shownDepartures = (): string[] => expanded().filter((id) => id.startsWith('dep:'));
 const text = (el: Element | null | undefined): string => el?.textContent ?? '';
 const section = (): HTMLElement => host.querySelector<HTMLElement>('[data-testid=nearby]')!;
 
@@ -119,24 +129,27 @@ describe('the probe markup (§15.6)', () => {
     expect(text(host.querySelector('[data-testid=nearby-head]'))).toBe('U blizini · 2 km · ~15 min');
     const rows = items();
     expect(host.querySelectorAll('ol[data-testid=nearby-rows] > li.nearby-row')).toHaveLength(rows.length);
-    expect(rows.map((li) => li.dataset.kind)).toEqual(['departure', 'departure', 'departure', 'closure', 'event', 'solar', 'always']);
+    // R1: the three departures are one row, the line, at the top.
+    expect(rows.map((li) => li.dataset.kind)).toEqual(['departures', 'closure', 'event', 'solar', 'always']);
     for (const li of rows) {
       expect(li.dataset.id).toBeTruthy();
       expect(li.dataset.key).toBe(li.dataset.id);
       expect(li.dataset.source).toBeTruthy();
+      expect(li.hasAttribute('hidden')).toBe(false);
+      // Exactly one of the two time attributes.
+      expect(li.hasAttribute('data-when') !== li.hasAttribute('data-always')).toBe(true);
+      if (li.dataset.kind === 'departures') continue;
       // The per-row structure is always the same three probes.
       expect(li.querySelectorAll('.nearby-when')).toHaveLength(1);
       expect(li.querySelectorAll('.nearby-title')).toHaveLength(1);
       expect(li.querySelectorAll('.nearby-sub')).toHaveLength(1);
-      expect(li.hasAttribute('hidden')).toBe(false);
-      // Exactly one of the two time attributes.
-      expect(li.hasAttribute('data-when') !== li.hasAttribute('data-always')).toBe(true);
     }
-    const first = byId('dep:1');
+    const first = cell('dep:1');
     expect(first.dataset.when).toBe(new Date(NOW + 4 * MIN).toISOString());
     expect(first.dataset.live).toBe('1');
     expect(first.querySelector('time.nearby-when')!.getAttribute('datetime')).toBe(first.dataset.when);
-    expect(byId('dep:2').hasAttribute('data-live')).toBe(false);
+    expect(cell('dep:2').hasAttribute('data-live')).toBe(false);
+    expect(line()!.dataset.when).toBe(first.dataset.when);
     const story = byId('always:story:trg');
     expect(story.dataset.always).toBe('1');
     expect(story.querySelector('time')).toBeNull();
@@ -144,20 +157,20 @@ describe('the probe markup (§15.6)', () => {
     expect(section().getAttribute('aria-labelledby')).toBe(host.querySelector('[data-testid=nearby-head]')!.id);
   });
 
-  it('keeps an empty, stable .nearby-sub on a departure and a solar row', () => {
+  it('keeps an empty, stable .nearby-sub on a solar row, and a stable destination span in a departure cell', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
-    for (const id of ['dep:1', 'dep:2', 'solar:sunset:2026-09-22']) {
-      const li = byId(id);
-      const sub = li.querySelector('.k-nearby-text > .nearby-sub');
-      expect(sub, id).not.toBeNull();
-      expect(text(sub), id).toBe('');
-      expect(li.querySelector('.k-nearby-at > .nearby-when'), id).not.toBeNull();
-      expect(li.querySelector('.k-nearby-text > .nearby-title'), id).not.toBeNull();
-    }
-    const sub = byId('solar:sunset:2026-09-22').querySelector('.nearby-sub');
+    const li = byId('solar:sunset:2026-09-22');
+    const sub = li.querySelector('.k-nearby-text > .nearby-sub');
+    expect(sub).not.toBeNull();
+    expect(text(sub)).toBe('');
+    expect(li.querySelector('.k-nearby-at > .nearby-when')).not.toBeNull();
+    expect(li.querySelector('.k-nearby-text > .nearby-title')).not.toBeNull();
+    const head = cell('dep:2').querySelector('.k-dep-headsign');
+    expect(text(head)).toBe('Sopot');
     t.update(scene(), 2000, NOW + 20_000);
     expect(byId('solar:sunset:2026-09-22').querySelector('.nearby-sub')).toBe(sub);
+    expect(cell('dep:2').querySelector('.k-dep-headsign')).toBe(head);
   });
 
   it('prints the measured radius with a decimal comma and repaints the head only when it changes', () => {
@@ -173,15 +186,210 @@ describe('the probe markup (§15.6)', () => {
     expect(text(head)).toMatch(/^U blizini · 1,3 km · ~\d+ min$/);
   });
 
-  it('leads a departure that carries its arrival with the line badge', () => {
+  it('leads a departure cell that carries its arrival with the line badge', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
-    const title = byId('dep:1').querySelector('.nearby-title')!;
-    const badge = title.querySelector('.k-line-badge')!;
+    const first = cell('dep:1');
+    const badge = first.querySelector('.k-line-badge')!;
     expect(text(badge)).toBe('6');
     expect(badge.getAttribute('data-kind')).toBe('tram');
-    expect(text(title)).toBe('6 Črnomerec');
-    expect(byId('dep:2').querySelector('.k-line-badge')).toBeNull();
+    expect(first.dataset.route).toBe('6');
+    expect(text(first)).toBe('6za 4 minČrnomerec');
+    expect(cell('dep:2').querySelector('.k-line-badge')).toBeNull();
+    expect(cell('dep:2').hasAttribute('data-route')).toBe(false);
+  });
+
+  it('keeps one row per departure where the design height is unbounded (a handheld) or the deps say so', () => {
+    const t = mount({ designHeightPx: Number.POSITIVE_INFINITY });
+    t.update(scene(), 2000, NOW);
+    expect(items().map((li) => li.dataset.kind)).toEqual(['departure', 'departure', 'departure', 'closure', 'event', 'solar', 'always']);
+    expect(line()).toBeNull();
+    t.destroy();
+    handle = null;
+    let grouped = false;
+    const u = mount({ departuresLine: () => grouped });
+    u.update(scene(), 2000, NOW);
+    expect(items().filter((li) => li.dataset.kind === 'departure')).toHaveLength(3);
+    // Read on every update: the composition may change without a remount.
+    grouped = true;
+    u.update(scene(), 2000, NOW);
+    expect(items().map((li) => li.dataset.kind)).toEqual(['departures', 'closure', 'event', 'solar', 'always']);
+  });
+});
+
+// R1 (docs/reveal-2026-10-plan/R1.md): the wall's three departure rows become one row of up to three cells.
+describe('the departures line (R1)', () => {
+  const lineOf = (rows: readonly WallRow[]): DeparturesLine => rows.find(isDeparturesLine)!;
+
+  it('groups the first run of departures into one line of three cells, live when a cell is', () => {
+    const grouped = groupDepartures(scene());
+    expect(grouped.map((r) => r.id)).toEqual(['departures', 'closure:ilica', 'event:gavella', 'solar:sunset:2026-09-22', 'always:story:trg']);
+    const l = lineOf(grouped);
+    expect(l.cells.map((c) => c.id)).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(l).toMatchObject({ kind: 'departures', id: 'departures', atMs: NOW + 4 * MIN, always: false, live: true });
+    expect(lineOf(groupDepartures([dep(2, { live: false }), always()])).live).toBe(false);
+  });
+
+  it('leaves a list without departures as it is, keeps a train the policy put first above the line, and keeps three cells of a longer run', () => {
+    const rows = scene().filter((r) => r.kind !== 'departure');
+    expect(groupDepartures(rows)).toEqual(rows);
+    const rail = row({ id: 'rail:2201', kind: 'rail', atMs: NOW + 12 * MIN, title: 'Savski Marof', source: 'hz' });
+    expect(groupDepartures([rail, dep(1), dep(2), always()]).map((r) => r.id)).toEqual(['rail:2201', 'departures', 'always:story:trg']);
+    const four = groupDepartures([dep(1), dep(2), dep(3), dep(4), always()]);
+    expect(lineOf(four).cells.map((c) => c.id)).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    // A departure after another kind (never produced today) stays a row.
+    expect(groupDepartures([dep(1), always(), dep(2)]).map((r) => r.id)).toEqual(['departures', 'always:story:trg', 'dep:2']);
+  });
+
+  it('never gives the line up: dropCandidate never returns it and byValue keeps it first among the kept', () => {
+    const lists: WallRow[][] = [groupDepartures(scene()), groupDepartures(longRows()), groupDepartures(nightList0400())];
+    for (const list of lists) {
+      let left = list;
+      for (let drop = dropCandidate(left, NOW); drop; drop = dropCandidate(left, NOW)) {
+        expect(isDeparturesLine(drop)).toBe(false);
+        left = left.filter((r) => r !== drop);
+      }
+      expect(left.some(isDeparturesLine)).toBe(true);
+      expect(byValue(list, NOW)[0]!.kind).toBe('departures');
+      expect(fitRows(list, 1).map((r) => r.id)).toContain('departures');
+    }
+  });
+
+  it('at 04:00 the far museum and the sunrise still go before the closures: decision 67 compares against the line’s last cell (04:22)', () => {
+    const night4 = at('2026-09-27T04:00:00+02:00');
+    const order: string[] = [];
+    for (let left = groupDepartures(nightList0400()), drop = dropCandidate(left, night4); drop; left = left.filter((r) => r !== drop), drop = dropCandidate(left, night4)) order.push(drop.id);
+    // R1: the line holds the three departures; the room goes to the first tram and the pharmacy, then the closures.
+    expect(order).toEqual(['open:culture-karas:2026-09-27', 'open:culture-d62358d5d2fc659f:2026-09-27', 'solar:sunrise:2026-09-27', 'closure:gunduliceva', 'closure:amruseva']);
+    // With one cell there is no "beyond the first" to compare with: the last timed row of the list goes first, as it
+    // did beside one departure row.
+    const one = groupDepartures([nightList0400()[0]!, ...nightList0400().slice(3)]);
+    expect(dropCandidate(one, night4)?.id).toBe('closure:gunduliceva');
+  });
+
+  it('draws the probe attributes: the li counts its cells, each cell carries its row’s id, route and time, and no data-kind', () => {
+    const html = departuresLineMarkup(lineOf(groupDepartures(scene())), NOW, i18n);
+    const box = document.createElement('ol');
+    box.innerHTML = html;
+    const li = box.querySelector<HTMLElement>('li')!;
+    expect(li.className).toBe('nearby-row');
+    expect(li.dataset).toMatchObject({ id: 'departures', key: 'departures', kind: 'departures', cells: '3', when: new Date(NOW + 4 * MIN).toISOString(), live: '1', source: 'zet' });
+    const spans = [...li.children] as HTMLElement[];
+    expect(spans.map((c) => c.className)).toEqual(['k-dep-cell', 'k-dep-cell', 'k-dep-cell']);
+    spans.forEach((c, i) => {
+      expect(c.dataset.cell).toBe(String(i + 1));
+      expect(c.dataset.key).toBe(`dep:${i + 1}`);
+      expect(c.dataset.id).toBe(c.dataset.key);
+      expect(c.hasAttribute('data-kind')).toBe(false);
+      expect(c.querySelector('time.nearby-when')!.getAttribute('datetime')).toBe(c.dataset.when);
+      expect(c.querySelectorAll('.k-dep-headsign')).toHaveLength(1);
+    });
+    expect(spans[0]!.dataset.route).toBe('6');
+    // A live countdown, blue ("za 4 min", data-live); a timetable clock, grey (no data-live).
+    expect(text(spans[0]!.querySelector('.nearby-when'))).toBe('za 4 min');
+    expect(text(spans[1]!.querySelector('.nearby-when'))).toBe('17:53');
+    expect(spans[1]!.hasAttribute('data-live')).toBe(false);
+    // No whitespace between the elements (reconcile.ts matches text nodes by position).
+    expect(html).not.toMatch(/>\s+</);
+    // No live cell, no data-live on the li.
+    const grey = document.createElement('ol');
+    grey.innerHTML = departuresLineMarkup(lineOf(groupDepartures([dep(2, { live: false }), dep(3, { live: false })])), NOW, i18n);
+    expect(grey.querySelector('li')!.hasAttribute('data-live')).toBe(false);
+    expect(grey.querySelector('li')!.dataset.cells).toBe('2');
+    for (const markup of [html, grey.innerHTML]) expect(markup).not.toMatch(/…|\.\.\./);
+  });
+
+  it('prints a departure without a destination of its own as an empty span with data-headsign="0"', () => {
+    const noHeadsign = dep(1, { title: '6', arrival: { routeId: '6', routeName: '6' } });
+    const box = document.createElement('ol');
+    box.innerHTML = departuresLineMarkup(lineOf(groupDepartures([noHeadsign, dep(2, { title: 'Sopot' })])), NOW, i18n);
+    const [first, second] = [...box.querySelectorAll<HTMLElement>('.k-dep-cell')];
+    expect(first!.dataset.headsign).toBe('0');
+    expect(text(first!.querySelector('.k-dep-headsign'))).toBe('');
+    expect(second!.hasAttribute('data-headsign')).toBe(false);
+    expect(text(second!.querySelector('.k-dep-headsign'))).toBe('Sopot');
+  });
+
+  it('prints the clock of a live countdown where the box took the clock form, still blue, and leaves out cells 2 and 3’s destinations on "first"', () => {
+    const l = lineOf(groupDepartures(scene()));
+    const box = document.createElement('ol');
+    box.innerHTML = departuresLineMarkup(l, NOW, i18n, { clocks: true, headsigns: 'first' });
+    const [first, second, third] = [...box.querySelectorAll<HTMLElement>('.k-dep-cell')];
+    expect(text(first!.querySelector('.nearby-when'))).toBe('17:49');
+    expect(first!.dataset.live).toBe('1');
+    // Past the horizon a live row is a clock anyway.
+    expect(text(third!.querySelector('.nearby-when'))).toBe('18:10');
+    expect(text(first!.querySelector('.k-dep-headsign'))).toBe('Črnomerec');
+    for (const c of [second!, third!]) {
+      expect(c.dataset.headsign).toBe('0');
+      expect(text(c.querySelector('.k-dep-headsign'))).toBe('');
+    }
+    box.innerHTML = departuresLineMarkup(l, NOW, i18n, { headsigns: 'none' });
+    expect([...box.querySelectorAll<HTMLElement>('.k-dep-cell')].map((c) => c.dataset.headsign)).toEqual(['0', '0', '0']);
+    // The fit's probe: every cell prints the widest countdown.
+    box.innerHTML = departuresLineMarkup(l, NOW, i18n, { probe: true });
+    expect([...box.querySelectorAll('.nearby-when')].map(text)).toEqual(['za 10 min', 'za 10 min', 'za 10 min']);
+  });
+
+  it('draws no cell whose row fails the text check, and counts the drawn cells', () => {
+    const l = lineOf(groupDepartures([dep(1, { title: 'Submit passcode' }), dep(2), dep(3)]));
+    const box = document.createElement('ol');
+    box.innerHTML = departuresLineMarkup(l, NOW, i18n);
+    const li = box.querySelector<HTMLElement>('li')!;
+    expect(li.dataset.cells).toBe('2');
+    expect([...li.children].map((c) => (c as HTMLElement).dataset.cell)).toEqual(['1', '2']);
+    expect(li.dataset.when).toBe(new Date(NOW + 8 * MIN).toISOString());
+    expect(box.textContent).not.toContain('passcode');
+    expect(departuresLineMarkup(lineOf(groupDepartures([dep(1, { title: 'Submit passcode' })])), NOW, i18n)).toBe('');
+  });
+
+  describe('the fit pass (1b): the destinations and the countdown form, per box', () => {
+    const board = (heads: readonly string[], over: Partial<TimelineRow>[] = []): TimelineRow[] => [
+      ...heads.map((title, i) => dep(i + 1, { title, atMs: NOW + (3 + 3 * i) * MIN, arrival: { routeId: ['6', '13', '17'][i]!, routeName: ['6', '13', '17'][i]! }, ...over[i] })),
+      row({ id: 'closure:ilica', kind: 'closure', atMs: at('2026-09-22T16:00:00Z'), title: 'Ilica', source: 'prometnice' }),
+      always(),
+    ];
+    const heads = (): string[] => cells().map((c) => text(c.querySelector('.k-dep-headsign')));
+
+    it('keeps three destinations of at most nine characters at 1920 x 1080', () => {
+      mount({ measure: simulated(WALL_1920) }).update(board(['Črnomerec', 'Dubrava', 'Prečko']), 2000, NOW);
+      expect(heads()).toEqual(['Črnomerec', 'Dubrava', 'Prečko']);
+      expect(cells().some((c) => c.hasAttribute('data-headsign'))).toBe(false);
+    });
+
+    it('leaves out cells 2 and 3’s destinations when one of them runs long, and every cell’s when the first’s does', () => {
+      mount({ measure: simulated(WALL_1920) }).update(board(['Črnomerec', 'Savski most', 'Prečko']), 2000, NOW);
+      expect(heads()).toEqual(['Črnomerec', '', '']);
+      expect(cells().map((c) => c.dataset.headsign ?? '')).toEqual(['', '0', '0']);
+      handle?.destroy();
+      host.innerHTML = '';
+      mount({ measure: simulated(WALL_1920) }).update(board(['Kvaternikov trg', 'Dubrava', 'Prečko']), 2000, NOW);
+      expect(heads()).toEqual(['', '', '']);
+      expect(cells().map((c) => c.dataset.headsign)).toEqual(['0', '0', '0']);
+    });
+
+    it('prints the countdowns as clock times, still blue, in a box whose cell does not hold "za 10 min", and as countdowns where it does', () => {
+      const compact = (cellTimeChars: number): Layout => ({ boxPx: 451, titleChars: 16, subChars: 25, ...LINE_1366, cellTimeChars });
+      mount({ measure: simulated(compact(8)) }).update(board(['Dubrava', 'Prečko', 'Dubec']), 2000, NOW);
+      expect(cells().map((c) => text(c.querySelector('.nearby-when')))).toEqual(['17:48', '17:51', '17:54']);
+      expect(cells().map((c) => c.dataset.live)).toEqual(['1', '1', '1']);
+      handle?.destroy();
+      host.innerHTML = '';
+      mount({ measure: simulated(compact(9)) }).update(board(['Dubrava', 'Prečko', 'Dubec'], [{}, {}, { atMs: NOW + 10 * MIN }]), 2000, NOW);
+      expect(cells().map((c) => text(c.querySelector('.nearby-when')))).toEqual(['za 3 min', 'za 6 min', 'za 10 min']);
+    });
+
+    it('remembers the result: a second identical update measures nothing', () => {
+      const measure = simulated(WALL_1920);
+      const lines = vi.fn(measure.lines);
+      const t = mount({ measure: { ...measure, lines } });
+      t.update(board(['Črnomerec', 'Savski most', 'Prečko']), 2000, NOW);
+      expect(lines).toHaveBeenCalled();
+      lines.mockClear();
+      t.update(board(['Črnomerec', 'Savski most', 'Prečko']), 2000, NOW);
+      expect(lines).not.toHaveBeenCalled();
+      expect(heads()).toEqual(['Črnomerec', '', '']);
+    });
   });
 });
 
@@ -322,25 +530,28 @@ describe('calm motion (principle 7)', () => {
       // A departure whose moment has passed leaves the board; the next one takes the third row.
       const rows = (now: number): TimelineRow[] => [...board.filter((d) => d.atMs! >= now).slice(0, 3), ...timed()];
       t.update(rows(NOW), 2200, NOW);
-      expect(ids().slice(0, 3)).toEqual(['dep:1', 'dep:2', 'dep:3']);
-      const nodes = new Map(items().map((li) => [li.dataset.id, li]));
+      expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+      const nodes = new Map([...items(), ...cells()].map((el) => [el.dataset.id, el]));
       const w = structure();
-      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+      // The line, its three cells and the four timed rows.
+      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(8);
       for (let s = 1; s <= 60; s++) t.update(rows(NOW + s * 1000), 2200, NOW + s * 1000);
       const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
       const records = w.records();
       w.stop();
-      expect(reading.left).toEqual(['departure|dep:1']);
-      expect(reading.entered).toEqual(['departure|dep:4']);
+      // A cell carries no data-kind (R1): its recorder key is "|id".
+      expect(reading.left).toEqual(['|dep:1']);
+      expect(reading.entered).toEqual(['|dep:4']);
       expect(reading.rebuilt).toEqual([]);
-      expect(reading.kept).toBe(6);
+      expect(reading.kept).toBe(7);
       // Exactly the two content changes, one record each; no node is taken out and put back (a move is two records).
-      expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['li[dep:1]'] }, { added: ['li[dep:4]'], removed: [] }]);
+      expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['span[dep:1]'] }, { added: ['span[dep:4]'], removed: [] }]);
       expect(reading.mutations).toBe(2);
       expect(calmMotionFailures(reading)).toEqual([]);
-      // The entering row sits at its time position from its first paint, and the rows that stayed are the same nodes in the same order.
-      expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']);
-      for (const id of ['dep:2', 'dep:3', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']) expect(byId(id)).toBe(nodes.get(id));
+      // The entering cell sits at its time position from its first paint, and the rows and cells that stayed are the same nodes in the same order.
+      expect(ids()).toEqual(['departures', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']);
+      expect(cellIds()).toEqual(['dep:2', 'dep:3', 'dep:4']);
+      for (const id of ['departures', 'dep:2', 'dep:3', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:palmoticeva', 'always:heritage:zgrada']) expect(host.querySelector(`[data-id="${id}"]`), id).toBe(nodes.get(id));
     });
 
     it('spends two records per identity change of the third departure, so four platform boards landing cost eight, never sixteen', () => {
@@ -365,12 +576,12 @@ describe('calm motion (principle 7)', () => {
         ].sort((a, b) => a.atMs! - b.atMs!).slice(0, 3);
         return [...departures, ...timed()];
       };
-      /** The fixture row on the list, wherever the paint put it. */
-      const third = (): string | undefined => ids().find((id) => id.startsWith('dep:fixture-'));
+      /** The fixture cell on the line, wherever the paint put it. */
+      const third = (): string | undefined => cellIds().find((id) => id.startsWith('dep:fixture-'));
       t.update(rows(), 2200, NOW);
-      expect(ids()[2]).toBe('dep:fixture-106_1-12-2026-09-22T15:58');
+      expect(cellIds()[2]).toBe('dep:fixture-106_1-12-2026-09-22T15:58');
       const w = structure();
-      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(8);
       let flips = 0;
       for (let s = 1; s <= 60; s++) {
         const now = NOW + s * 1000;
@@ -388,12 +599,12 @@ describe('calm motion (principle 7)', () => {
       const records = w.records();
       w.stop();
       expect(flips).toBe(4);
-      expect(reading.left).toEqual(['departure|dep:fixture-106_1-12-2026-09-22T15:58']);
-      expect(reading.entered).toEqual(['departure|dep:fixture-106_1-12-2026-09-22T15:59']);
+      expect(reading.left).toEqual(['|dep:fixture-106_1-12-2026-09-22T15:58']);
+      expect(reading.entered).toEqual(['|dep:fixture-106_1-12-2026-09-22T15:59']);
       expect(reading.rebuilt).toEqual([]);
-      expect(reading.kept).toBe(6);
+      expect(reading.kept).toBe(7);
       // One removal and one insertion per identity change, in landing order, and no node taken out and put back.
-      const key = (platform: number, minute: string): string => `li[dep:fixture-106_${platform}-12-2026-09-22T${minute}]`;
+      const key = (platform: number, minute: string): string => `span[dep:fixture-106_${platform}-12-2026-09-22T${minute}]`;
       expect(records).toEqual([
         { added: [], removed: [key(1, '15:58')] }, { added: [key(2, '15:58')], removed: [] },
         { added: [], removed: [key(2, '15:58')] }, { added: [key(3, '15:58')], removed: [] },
@@ -407,13 +618,13 @@ describe('calm motion (principle 7)', () => {
   it('keeps every node across updates with the same rows and fades nothing in', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
-    const before = items();
-    expect(before.some((li) => li.hasAttribute('data-enter'))).toBe(false);
+    const before = [...items(), ...cells()];
+    expect(before.some((el) => el.hasAttribute('data-enter'))).toBe(false);
     t.update(scene(), 2000, NOW + 20_000);
-    const after = items();
+    const after = [...items(), ...cells()];
     expect(after).toHaveLength(before.length);
-    after.forEach((li, i) => expect(li).toBe(before[i]));
-    expect(after.some((li) => li.hasAttribute('data-enter'))).toBe(false);
+    after.forEach((el, i) => expect(el).toBe(before[i]));
+    expect(after.some((el) => el.hasAttribute('data-enter'))).toBe(false);
   });
 
   it('lets a new row enter at its time position in one insertion, fade in once there, and never move afterwards', () => {
@@ -428,7 +639,7 @@ describe('calm motion (principle 7)', () => {
     t.update(next, 2000, NOW);
     const records = first.structural().filter((r) => r.type === 'childList');
     first.stop();
-    expect(ids()).toEqual(next.map((r) => r.id));
+    expect(ids()).toEqual(groupDepartures(next).map((r) => r.id));
     expect(items().filter((li) => li !== byId('opening:dolac'))).toEqual(kept);
     expect(records.map((r) => [[...r.addedNodes].length, [...r.removedNodes].length])).toEqual([[1, 0]]);
     expect(items().filter((li) => li.dataset.enter === '1').map((li) => li.dataset.id)).toEqual(['opening:dolac']);
@@ -448,44 +659,126 @@ describe('calm motion (principle 7)', () => {
     w.stop();
   });
 
-  it('lets a departed row leave at the top without moving the rows that stay', () => {
+  it('lets a departed departure leave the line at the start without moving the cells or the rows that stay', () => {
     const t = mount();
     t.update(scene(), 2000, NOW);
-    const [, ...stay] = items();
+    const rows = items();
+    const [, ...stay] = cells();
     const w = watch();
     t.update(scene().slice(1), 2000, NOW);
     const records = w.structural();
     w.stop();
-    expect(items()).toEqual(stay);
-    // One removal at the top; the rows below keep their place.
-    expect(records.filter((r) => r.type === 'childList' && r.removedNodes.length > 0)).toHaveLength(1);
-    expect(records.filter((r) => r.type === 'childList' && r.addedNodes.length > 0)).toHaveLength(0);
+    // The line keeps its node; its first cell leaves, the others keep their place.
+    expect(items()).toEqual(rows);
+    expect(cells()).toEqual(stay);
+    expect(line()!.dataset.cells).toBe('2');
+    const childList = records.filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1));
+    expect(childList.filter((r) => r.removedNodes.length > 0)).toHaveLength(1);
+    expect(childList.filter((r) => r.addedNodes.length > 0)).toHaveLength(0);
   });
 
-  it('runs a departure sequence: the top leaves, the next one enters under the departures that stay, nodes survive throughout', () => {
+  it('runs a departure sequence: the first cell leaves, the next one enters after the cells that stay, nodes survive throughout', () => {
     const t = mount();
     const rows = (first: number): TimelineRow[] => [dep(first), dep(first + 1), dep(first + 2), always()];
     t.update(rows(1), 2000, NOW);
-    const node2 = byId('dep:2');
-    const node3 = byId('dep:3');
+    const li = line()!;
+    const node2 = cell('dep:2');
+    const node3 = cell('dep:3');
     const nodeAlways = byId('always:story:trg');
-    // dep:1 has left, dep:4 is the next one: it enters at the bottom of the departures, above "uvijek", in the same update.
+    // dep:1 has left, dep:4 is the next one: it enters as the last cell of the line, in the same update.
     const w = watch();
     t.update(rows(2), 2000, NOW + 5 * MIN);
     const records = w.structural().filter((r) => r.type === 'childList');
-    expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'always:story:trg']);
-    expect(byId('dep:2')).toBe(node2);
-    expect(byId('dep:3')).toBe(node3);
+    expect(ids()).toEqual(['departures', 'always:story:trg']);
+    expect(cellIds()).toEqual(['dep:2', 'dep:3', 'dep:4']);
+    expect(line()).toBe(li);
+    expect(cell('dep:2')).toBe(node2);
+    expect(cell('dep:3')).toBe(node3);
     expect(byId('always:story:trg')).toBe(nodeAlways);
     // One removal, one insertion: the two content changes and nothing else.
     expect(records.map((r) => [[...r.addedNodes].length, [...r.removedNodes].length])).toEqual([[0, 1], [1, 0]]);
+    expect(cells().map((c) => c.dataset.cell)).toEqual(['1', '2', '3']);
     w.stop();
     const later = watch();
     t.update(rows(2), 2000, NOW + 5 * MIN + 20_000);
     expect(later.structural().filter((r) => r.type === 'childList')).toHaveLength(0);
     later.stop();
-    expect(ids()).toEqual(['dep:2', 'dep:3', 'dep:4', 'always:story:trg']);
-    expect(byId('dep:2')).toBe(node2);
+    expect(cellIds()).toEqual(['dep:2', 'dep:3', 'dep:4']);
+    expect(cell('dep:2')).toBe(node2);
+  });
+
+  it('inserts a newcomer earlier than a staying cell before it in one record', () => {
+    const t = mount();
+    t.update([dep(1), dep(3), always()], 2000, NOW);
+    const [one, three] = cells();
+    const w = watch();
+    t.update([dep(1), dep(2), dep(3), always()], 2000, NOW);
+    const records = w.structural().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1));
+    w.stop();
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(cell('dep:1')).toBe(one);
+    expect(cell('dep:3')).toBe(three);
+    expect(records.map((r) => [[...r.addedNodes].map((n) => (n as HTMLElement).dataset.id), r.removedNodes.length])).toEqual([[['dep:2'], 0]]);
+  });
+
+  it('changes the destinations the fit leaves out without an element record: the span stays, only its words change', () => {
+    const layout: Layout = { ...WALL_1920 };
+    const measure = simulated(layout);
+    const t = mount({ measure });
+    t.element.style.setProperty('--k-read-scale', '1');
+    const rows = [
+      dep(1, { title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+      dep(2, { title: 'Prečko', arrival: { routeId: '17', routeName: '17' } }),
+      dep(3, { title: 'Borongaj', arrival: { routeId: '17', routeName: '17' } }),
+      always(),
+    ];
+    t.update(rows, 2000, NOW);
+    const heads = (): string[] => cells().map((c) => text(c.querySelector('.k-dep-headsign')));
+    expect(heads()).toEqual(['Dubrava', 'Prečko', 'Borongaj']);
+    const spans = cells().map((c) => c.querySelector('.k-dep-headsign'));
+    const w = watch();
+    // The dark read tier narrows the cell's destination line: "Borongaj" no longer fits, cells 2 and 3 leave theirs out.
+    layout.cellHeadChars = 7;
+    t.element.style.setProperty('--k-read-scale', '1.1');
+    t.update(rows, 2000, NOW + 1000);
+    expect(heads()).toEqual(['Dubrava', '', '']);
+    expect(cells().map((c) => c.dataset.headsign ?? '')).toEqual(['', '0', '0']);
+    layout.cellHeadChars = 9;
+    t.element.style.setProperty('--k-read-scale', '1');
+    t.update(rows, 2000, NOW + 2000);
+    expect(heads()).toEqual(['Dubrava', 'Prečko', 'Borongaj']);
+    const elements = w.structural().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1));
+    w.stop();
+    expect(elements).toEqual([]);
+    expect(cells().map((c) => c.querySelector('.k-dep-headsign'))).toEqual(spans);
+  });
+
+  it('fades a new departure in its cell, never the line, never on the first paint, and not under reduced motion', () => {
+    vi.useFakeTimers();
+    const t = mount();
+    t.update([dep(1), dep(2), always()], 2000, NOW);
+    expect([...items(), ...cells()].some((el) => el.hasAttribute('data-enter'))).toBe(false);
+    t.update([dep(1), dep(2), dep(3), always()], 2000, NOW);
+    expect(cells().filter((c) => c.dataset.enter === '1').map((c) => c.dataset.id)).toEqual(['dep:3']);
+    expect(line()!.hasAttribute('data-enter')).toBe(false);
+    // A repaint while it fades keeps the fade; animationend on the cell clears it.
+    t.update([dep(1), dep(2), dep(3), always()], 2000, NOW + 1000);
+    expect(cell('dep:3').dataset.enter).toBe('1');
+    cell('dep:3').dispatchEvent(new Event('animationend', { bubbles: true }));
+    expect(cell('dep:3').hasAttribute('data-enter')).toBe(false);
+    // A line that enters fades as a row, its cells with it.
+    t.update([always()], 2000, NOW + 2000);
+    t.update([dep(4), always()], 2000, NOW + 3000);
+    expect(line()!.dataset.enter).toBe('1');
+    expect(cell('dep:4').hasAttribute('data-enter')).toBe(false);
+    vi.advanceTimersByTime(ENTER_CLEAR_MS);
+    expect(line()!.hasAttribute('data-enter')).toBe(false);
+    t.destroy();
+    handle = null;
+    const u = mount({ reduced: true });
+    u.update([dep(1), always()], 2000, NOW);
+    u.update([dep(1), dep(2), always()], 2000, NOW);
+    expect(cells().some((c) => c.hasAttribute('data-enter'))).toBe(false);
   });
 
   it('clears the fade on animationend', () => {
@@ -523,7 +816,7 @@ describe('calm motion (principle 7)', () => {
     expect(w.structural()).toHaveLength(0);
     expect(w.text()).toHaveLength(0);
     t.update(scene(), 2000, NOW + MIN);
-    expect(text(byId('dep:1').querySelector('.nearby-when'))).toBe('za 3 min');
+    expect(text(cell('dep:1').querySelector('.nearby-when'))).toBe('za 3 min');
     expect(w.structural().length).toBeLessThanOrEqual(2);
     expect(w.structural()).toHaveLength(0);
     expect(w.text()).toHaveLength(1);
@@ -534,21 +827,23 @@ describe('calm motion (principle 7)', () => {
     const t = mount();
     const rows = [dep(1, { atMs: NOW + 3 * MIN }), dep(2, { atMs: NOW + 6 * MIN }), dep(3, { atMs: NOW + 9 * MIN }), always()];
     t.update(rows, 2000, NOW);
-    const nodes = items();
+    const nodes = [...items(), ...cells()];
     const w = watch();
     for (let s = 20; s <= 60; s += 20) t.update(rows, 2000, NOW + s * 1000);
-    expect(items().map((li) => text(li.querySelector('.nearby-when')))).toEqual(['za 2 min', 'za 5 min', 'za 8 min', 'uvijek']);
+    expect(cells().map((c) => text(c.querySelector('.nearby-when')))).toEqual(['za 2 min', 'za 5 min', 'za 8 min']);
+    expect(text(byId('always:story:trg').querySelector('.nearby-when'))).toBe('uvijek');
     expect(w.structural().length).toBeLessThanOrEqual(2);
     expect(w.structural()).toHaveLength(0);
     expect(w.text()).toHaveLength(3);
     for (const r of w.text()) expect((r.target.parentElement as Element).matches('time.nearby-when')).toBe(true);
-    expect(items()).toEqual(nodes);
+    expect([...items(), ...cells()]).toEqual(nodes);
     w.stop();
   });
 });
 
 describe('whole rows from the row budget', () => {
-  const many = (n: number): TimelineRow[] => [...Array.from({ length: n - 1 }, (_, i) => dep(i + 1)), always()];
+  /** n wall rows: the departures line (one departure, R1), n - 2 events and the place row. */
+  const many = (n: number): TimelineRow[] => [dep(1), ...Array.from({ length: n - 2 }, (_, i) => row({ id: `event:${i + 2}`, kind: 'event', atMs: NOW + (i + 2) * 4 * MIN, title: 'Koncert' })), always()];
 
   it('re-fits the same rows when the dark read multiplier changes without a resize', () => {
     const measure: TimelineMeasure = {
@@ -565,6 +860,9 @@ describe('whole rows from the row budget', () => {
     expect(section().dataset.fitOverflow).toBe('0');
     t.element.style.setProperty('--k-read-scale', '1');
     t.update(many(5), 2000, NOW);
+    // R1: the row that went is an event (the departures are the line), so it returns after the restore hold.
+    expect(t.shown()).toBe(4);
+    t.update(many(5), 2000, NOW + FIT_RESTORE_HOLD_MS);
     expect(t.shown()).toBe(5);
   });
   it('reserves first, last and uvijek before both the initial row cap and the measured drop pass (decision 27)', () => {
@@ -572,6 +870,7 @@ describe('whole rows from the row budget', () => {
     const first = row({ id: 'first:morning', kind: 'first', title: 'Prvi tramvaj' });
     const rows = [dep(1), dep(2), dep(3), row({ id: 'event:next', kind: 'event', title: 'Koncert' }), last, first, always()];
     const required = ['dep:1', last.id, first.id, always().id];
+    // An ungrouped list (a handheld's, the phone's cap) reserves its first departure.
     expect(fitRows(rows, 4).map(r => r.id)).toEqual(required);
     const measure: TimelineMeasure = {
       box: list => ({ height: 400, width: 472, overflow: list.children.length > 4 }),
@@ -579,7 +878,9 @@ describe('whole rows from the row budget', () => {
     };
     const t = mount({ measure });
     t.update(rows, 2000, NOW);
-    expect(ids()).toEqual(required);
+    // R1: on the wall the line is the reserved row and holds the three departures; the event gives way.
+    expect(ids()).toEqual(['departures', last.id, first.id, always().id]);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
     expect(dropCandidate([last, first, always()])).toBeNull();
   });
@@ -602,7 +903,7 @@ describe('whole rows from the row budget', () => {
     const t = mount({ designHeightPx: 520 });
     t.update(many(12), 2000, NOW);
     expect(ids().at(-1)).toBe('always:story:trg');
-    expect(ids().slice(0, 7)).toEqual(['dep:1', 'dep:2', 'dep:3', 'dep:4', 'dep:5', 'dep:6', 'dep:7']);
+    expect(ids().slice(0, 7)).toEqual(['departures', 'event:2', 'event:3', 'event:4', 'event:5', 'event:6', 'event:7']);
   });
 
   it('shows every row of an unbounded list (a handheld) and never measures it', () => {
@@ -683,17 +984,18 @@ describe('whole rows from the row budget', () => {
     for (let px = GROW_FROM_PX; px <= 92; px += 1) expect((40 * 1.1 + 28 * 1.15) * typeScale(px)).toBeLessThanOrEqual(px - 1);
   });
 
-  it('keeps three departures over tomorrow\u2019s openings when the box holds five rows (round 1, 24 Sep)', () => {
+  it('keeps three departures over tomorrow\u2019s openings when the box holds three rows (round 1, 24 Sep; R1: the line is one row)', () => {
     const DAY = 24 * 60 * MIN;
     const rows = [dep(1), dep(2), dep(3), row({ id: 'opening:a', kind: 'opening', atMs: NOW + DAY, title: 'Galerija Harmica' }),
       row({ id: 'opening:b', kind: 'opening', atMs: NOW + DAY, title: 'Hrvatski športski muzej' }), always()];
     const measure: TimelineMeasure = {
-      box: list => ({ height: 400, width: 472, overflow: list.children.length > 5 }),
+      box: list => ({ height: 400, width: 472, overflow: list.children.length > 3 }),
       lines: () => 1,
     };
     const t = mount({ measure });
     t.update(rows, 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'opening:a', 'always:story:trg']);
+    expect(ids()).toEqual(['departures', 'opening:a', 'always:story:trg']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     // The evening of 24 Sep on the live wall: eleven candidates in a box for eight, the last, sunrise and two openings tomorrow.
     const evening = [dep(1), dep(2), dep(3), row({ id: 'last:tonight', kind: 'last', atMs: NOW + 3 * 60 * MIN, title: 'Zadnji tramvaji' }),
       row({ id: 'solar:sunrise', kind: 'solar', atMs: NOW + 13 * 60 * MIN, title: 'Izlazak sunca' }),
@@ -701,9 +1003,11 @@ describe('whole rows from the row budget', () => {
       row({ id: 'opening:b', kind: 'opening', atMs: NOW + DAY, title: 'Hrvatski športski muzej' }), always()];
     t.destroy();
     host.innerHTML = '';
-    const tight = mount({ measure: { box: list => ({ height: 400, width: 472, overflow: list.children.length > 6 }), lines: () => 1 } });
+    // R1: eight candidates, six wall rows, in a box for four.
+    const tight = mount({ measure: { box: list => ({ height: 400, width: 472, overflow: list.children.length > 4 }), lines: () => 1 } });
     tight.update(evening, 2000, NOW);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'last:tonight', 'solar:sunrise', 'always:story:trg']);
+    expect(ids()).toEqual(['departures', 'last:tonight', 'solar:sunrise', 'always:story:trg']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
   });
   it('lets the second departure in where the trains placed first were too tall to keep (production 29 Sep 23:25, portrait: one departure, 74 px unused)', () => {
     // The reduced state puts two trains before the departures (railPolicy). The row budget of a 498 px totem box
@@ -731,10 +1035,12 @@ describe('whole rows from the row budget', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ measure, designHeightPx: TOTEM_1080.boxPx });
     t.update(rows, 2200, NIGHT);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'notice:zet-novosti:10166', 'last:2026-09-29', 'first:2026-09-30', 'always:pharmacy']);
+    // R1: the line holds the three departures in one 84 px row (the totem's inline cell and its destination line), so
+    // the trains' room goes to the closure; the sunrise and the event yield as before (496 px of 498).
+    expect(ids()).toEqual(['departures', 'notice:zet-novosti:10166', 'last:2026-09-29', 'closure:vukovara', 'first:2026-09-30', 'always:pharmacy']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(TOTEM_1080.boxPx);
-    expect(section().dataset.fitDropped).toBe('rail rail departure closure solar event');
-    // A third departure would not fit (548 px), so it stays out: nothing is ever cut.
+    expect(section().dataset.fitDropped).toBe('rail rail solar event');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
   });
 });
@@ -746,9 +1052,9 @@ describe('whole rows from the row budget', () => {
  * The widths are the wall's text column at 40/28 px Manrope: about 408 px at
  * 1920 x 1080 (the 680 px aside) and 790 px on the 1080 x 1920 totem.
  */
-interface Layout { boxPx: number; titleChars: number; subChars: number }
-const WALL_1920: Layout = { boxPx: 486, titleChars: 17, subChars: 26 };
-const TOTEM_1080: Layout = { boxPx: 498, titleChars: 34, subChars: 51 };
+type Layout = MeasureLayout;
+const WALL_1920: Layout = { boxPx: 486, titleChars: 17, subChars: 26, ...LINE_1920 };
+const TOTEM_1080: Layout = { boxPx: 498, titleChars: 34, subChars: 51, ...LINE_PORTRAIT };
 function wrapLines(textIn: string, perLine: number): number {
   if (!textIn) return 0;
   let lines = 1;
@@ -764,18 +1070,46 @@ function wrapLines(textIn: string, perLine: number): number {
 const clampedEvent = (el: Element, lines: number): number =>
   (el.classList.contains('nearby-title') && el.closest<HTMLElement>('li.nearby-row')?.dataset.kind === 'event' ? Math.min(EVENT_TITLE_MAX_LINES, lines) : lines);
 function simulated(layout: Layout): TimelineMeasure & { rowHeight(li: Element): number; sum(list: Element): number } {
-  const lines = (el: Element): number => clampedEvent(el, wrapLines(el.textContent ?? '', el.classList.contains('nearby-title') ? layout.titleChars : layout.subChars));
+  // The departures line's cells (R1) as timeline-measure.ts models them: the destination's lines, the cell's and the
+  // destination's overflow, the line's height stacked or inline.
+  const lines = (el: Element): number => cellLines(el, layout) ?? clampedEvent(el, wrapLines(el.textContent ?? '', el.classList.contains('nearby-title') ? layout.titleChars : layout.subChars));
   const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
-  const rowHeight = (li: Element): number => Math.max(rowPx(), 44 * lines(li.querySelector('.nearby-title')!) + 32 * lines(li.querySelector('.nearby-sub')!) + 8);
+  const rowHeight = (li: Element): number => lineHeight(li, layout, rowPx())
+    ?? Math.max(rowPx(), 44 * lines(li.querySelector('.nearby-title')!) + 32 * lines(li.querySelector('.nearby-sub')!) + 8);
   const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
   // The measuring list carries the box it is fitted in as its own height (timeline.ts fit), as the DOM measure reads it.
   const heightOf = (list: Element): number => Number.parseFloat((list as HTMLElement).style?.height ?? '') || layout.boxPx;
   return {
-    box: (list) => ({ height: heightOf(list), width: layout.titleChars, overflow: sum(list) > heightOf(list) }),
+    box: (el) => {
+      const cell = cellOverflow(el, layout);
+      if (cell !== null) return { height: 0, width: 0, overflow: cell };
+      return { height: heightOf(el), width: layout.titleChars, overflow: sum(el) > heightOf(el) };
+    },
     lines: (el) => lines(el),
     rowHeight,
     sum,
   };
+}
+
+/** The night list of Sunday 27 September at 04:00 (decision 67, observe-d530): the ten rows the selection gave. */
+function nightList0400(): TimelineRow[] {
+  const night = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
+  const closure = (id: string, title: string, until: string): TimelineRow => row({ id: `closure:${id}`, kind: 'closure', atMs: night(until), title,
+    sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' });
+  const opening = (id: string, title: string): TimelineRow => row({ id: `open:culture-${id}:2026-09-27`, kind: 'opening', atMs: night('10:00'), title, sub: 'Kultura', source: 'culture' });
+  return [
+    dep(1, { atMs: night('04:04'), live: false, title: 'Prečko', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+    dep(2, { atMs: night('04:06'), title: 'Črnomerec', source: 'zet-rt', arrival: { routeId: '31', routeName: '31' } }),
+    dep(3, { atMs: night('04:22'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
+    row({ id: 'first:2026-09-27', kind: 'first', atMs: night('05:19'), title: 'Prvi tramvaj',
+      sub: '11 05:19 · 12 05:20 · 17 05:31 · 6 05:59 · 14 06:16 · 13 06:21', subShort: '11 05:19 · 12 05:20', source: 'zet-gtfs' }),
+    row({ id: 'solar:sunrise:2026-09-27', kind: 'solar', atMs: night('06:48'), title: 'Izlazak sunca', source: 'solar' }),
+    opening('d62358d5d2fc659f', 'Arheološki muzej u Zagrebu'),
+    opening('karas', 'Galerija Karas'),
+    closure('amruseva', 'Amruševa', '16:00'),
+    closure('gunduliceva', 'Gundulićeva', '18:00'),
+    row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
+  ];
 }
 
 /** Real rows from the fixtures of 22 September, the long ones with the shorter complete labels the selection layer may offer. */
@@ -797,7 +1131,7 @@ function longRows(): TimelineRow[] {
  * (16 read-tier title characters, 25 walk-up sub characters a line); a row is 44 px a title line, 32 px a sub
  * line, 8 px of padding, never below the row budget. The night promises are the rows of lastTrams2240.
  */
-const COMPACT_1366: Layout = { boxPx: 154, titleChars: 16, subChars: 25 };
+const COMPACT_1366: Layout = { boxPx: 154, titleChars: 16, subChars: 25, ...LINE_1366 };
 function nightRows(): TimelineRow[] {
   const night = (hhmm: string, day = '22'): number => at(`2026-09-${day}T${hhmm}:00+02:00`);
   return [
@@ -813,7 +1147,7 @@ function nightRows(): TimelineRow[] {
 }
 
 /** Decision 50: the compact list takes the whole 513 px aside less its heading and padding, 451 px measured. */
-const COMPACT_1366_D50: Layout = { boxPx: 451, titleChars: 16, subChars: 25 };
+const COMPACT_1366_D50: Layout = { boxPx: 451, titleChars: 16, subChars: 25, ...LINE_1366 };
 
 /**
  * The compact wall's column as the accept night scenes measured it at 1366 x 768 (dark; lane w-labels2): the
@@ -838,23 +1172,24 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
         const measure = simulated(layout);
         const t = mount({ measure, designHeightPx: layout.boxPx });
         t.update(rows, 2182, now);
-        const shown = ids();
+        const shown = expanded();
         const label = `${name} on the ${day}th at ${String(hour % 24).padStart(2, '0')}:20: ${shown.join(', ')}`;
         expect(section().dataset.fitOverflow, label).toBe('0');
         if (rows.some((r) => r.kind === 'departure')) expect(shown.some((id) => id.startsWith('dep:')), label).toBe(true);
+        // R1: the line holds every departure the selection offered.
+        expect(shownDepartures(), label).toEqual(rows.filter((r) => r.kind === 'departure').map((r) => r.id));
         for (const promise of rows.filter((r) => r.kind === 'first' || r.kind === 'last' || r.always)) expect(shown, label).toContain(promise.id);
-        for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!), label).toBeLessThanOrEqual(SUB_MAX_LINES);
+        for (const li of items()) if (li.dataset.kind !== 'departures') expect(measure.lines(li.querySelector('.nearby-sub')!), label).toBeLessThanOrEqual(SUB_MAX_LINES);
         if (layout === COMPACT_1366_D50) {
           // Lane w-labels2: the rows the fit never drops, as tall as this layout draws them, and the arrangement
           // the wall picks for them (invitation.ts compactArrangement): the list holds them and the map is legible.
-          const lead = items().find((li) => li.dataset.kind === 'departure');
+          const lead = line();
           const kept = items().filter((li) => li.dataset.kind === 'first' || li.dataset.kind === 'last' || li.dataset.always === '1' || li === lead);
           // Each at its content, never under the smallest row: the height it keeps in a smaller box.
-          const floorPx = kept.reduce((sum, li) => sum + Math.max(64, 44 * measure.lines(li.querySelector('.nearby-title')!) + 32 * measure.lines(li.querySelector('.nearby-sub')!) + 8), 0);
-          // Lane w-labels3 (decision 50 refined): the second and third departures come before map height beyond
-          // its minimum, at the smallest row (64 px).
-          const offered = rows.filter((r) => r.kind === 'departure').length;
-          const fullPx = floorPx + Math.max(0, Math.min(3, offered) - 1) * 64;
+          const floorPx = kept.reduce((sum, li) => sum + (lineHeight(li, layout, 64) ?? Math.max(64, 44 * measure.lines(li.querySelector('.nearby-title')!) + 32 * measure.lines(li.querySelector('.nearby-sub')!) + 8)), 0);
+          // Lane w-labels3 (decision 50 refined) with R1: the line holds the second and third departures already
+          // (invitation.ts: fullPx is floorPx with the line on the wall).
+          const fullPx = floorPx;
           const box = compactArrangement({ ...COMPACT_1366_WINDOW, floorPx, fullPx });
           expect(box.mapPx, `${label}: the map (${box.placement})`).toBeGreaterThanOrEqual(MAP_MIN_HEIGHT_PX);
           expect(box.listPx, `${label}: the list holds its promises (${box.placement})`).toBeGreaterThanOrEqual(floorPx);
@@ -864,7 +1199,7 @@ describe('every hour of the real Trg timetable fits both wall sizes (decision 50
           const inBox = simulated({ ...layout, boxPx: box.listPx });
           const t2 = mount({ measure: inBox, designHeightPx: box.listPx });
           t2.update(rows, 2182, now);
-          const departures = ids().filter((id) => id.startsWith('dep:')).length;
+          const departures = shownDepartures().length;
           // At least two wherever decision 50's whole-aside list (ea5439e) showed two or more and the arrangement's box
           // has the room for a second departure at the smallest row beside the promises. Round 1 (24 Sep): with tomorrow's
           // sunrise no longer outliving the second tram, the whole-aside list at 22:20 shows two departures where it showed
@@ -893,18 +1228,20 @@ describe('the compact wall and the night promises (decision 27, D2 full run at 1
     const t = mount({ measure, designHeightPx: COMPACT_1366.boxPx });
     t.update(nightRows(), 2182, NIGHT);
     const kinds = items().map((li) => li.dataset.kind);
-    // The promises stay (decision 27) and the wall never shows zero departures (1 to 3 in every reading).
-    expect(kinds.filter((k) => k === 'departure')).toHaveLength(1);
-    expect(kinds).toEqual(['departure', 'last', 'first', 'pharmacy']);
-    expect(ids()[0]).toBe('dep:1');
+    // The promises stay (decision 27) and the wall never shows zero departures (1 to 3 in every reading). R1: the
+    // line is reserved and holds the three; "Borongaj" does not fit the 1366 cell's destination line (7 characters),
+    // so cells 2 and 3 print the line and the time only.
+    expect(kinds).toEqual(['departures', 'last', 'first', 'pharmacy']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(cells().map((c) => c.dataset.headsign ?? '')).toEqual(['', '0', '0']);
     // Every shown sub is its shorter complete twin, never a wrapped three-line list.
-    for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
+    for (const li of items()) if (li !== line()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
     expect(text(byId('last:2026-09-21').querySelector('.nearby-sub'))).toBe('1 23:31 · 12 23:45');
     expect(text(byId('first:2026-09-22').querySelector('.nearby-sub'))).toBe('12 04:13 · 17 04:24');
-    // An impossible box is reported, not hidden by deleting a row: 64 + 3 x 84 = 316 px in 154.
+    // An impossible box is reported, not hidden by deleting a row: the line's 96 + 3 x 84 = 348 px in 154.
     expect(section().dataset.fitOverflow).toBe('1');
-    expect(section().dataset.skippedFit).toBe('2');
-    expect(measure.sum(host.querySelector('ol')!)).toBe(316);
+    expect(section().dataset.skippedFit).toBe('0');
+    expect(measure.sum(host.querySelector('ol')!)).toBe(348);
   });
 
   it('at 1920 x 1080 shows the three promises with two-line subs at most and all three departures', () => {
@@ -912,10 +1249,10 @@ describe('the compact wall and the night promises (decision 27, D2 full run at 1
     const t = mount({ measure });
     t.update(nightRows(), 2182, NIGHT);
     const kinds = items().map((li) => li.dataset.kind);
-    // The row budget (81 px rows for six) lets five whole rows in: two departures beside the three promises.
-    expect(kinds.filter((k) => k === 'departure').length).toBeGreaterThanOrEqual(2);
-    expect(kinds.slice(-3)).toEqual(['last', 'first', 'pharmacy']);
-    for (const li of items()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
+    // R1: the line and the three promises, four rows; the three departures in the line.
+    expect(shownDepartures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(kinds).toEqual(['departures', 'last', 'first', 'pharmacy']);
+    for (const li of items()) if (li !== line()) expect(measure.lines(li.querySelector('.nearby-sub')!)).toBeLessThanOrEqual(SUB_MAX_LINES);
     expect(section().dataset.fitOverflow).toBe('0');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
   });
@@ -953,10 +1290,15 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
     const t = mount({ measure, designHeightPx: DAY.boxPx });
     const NOW0 = day('13:44');
     const board = departures(NOW0 + 15_000);
-    t.update([...board.slice(0, 3), ...timed()], 2200, NOW0);
-    // Seven candidates: the budget says 69 px a row; six at 69 and the 84 px heritage row are 498 px, over the box. The
-    // fitter dropped the sunset row (the latest timed row) instead of giving the rows back their minimum height.
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    // R1: the three departures are one 96 px row, so the list stands at the edge with one more timed row than the
+    // observer's: six wall rows, the budget says 80 px a row; the line, four rows at 80 and the 84 px heritage row are
+    // 500 px, over the box. The fitter would drop the event (the latest timed row) instead of giving the rows back
+    // their minimum height; at 64 px they are 436.
+    const event = row({ id: 'event:koncert', kind: 'event', atMs: day('19:30'), title: 'Koncert', source: 'dogadanja' });
+    const [amruseva, gunduliceva, solar, zakladni] = timed();
+    t.update([...board.slice(0, 3), amruseva!, gunduliceva!, solar!, event, zakladni!], 2200, NOW0);
+    expect(ids()).toEqual(['departures', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'event:koncert', 'always:heritage:zakladni']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     expect(section().style.getPropertyValue('--k-nearby-row')).toBe('64px');
     expect(section().dataset.skippedFit).toBe('0');
     expect(section().dataset.fitOverflow).toBe('0');
@@ -974,16 +1316,19 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
     t.update(rows(NOW0, false), 2200, NOW0);
     const solar = byId('solar:sunset:2026-09-24');
     const w = structure();
-    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
-    // The first departure leaves at 13:45:16 (its grace over); for a poll's few seconds the list has six candidates
-    // (the budget says 80 px a row: five at 80 and the 84 px row are 484 px, one over the box); then the fourth enters.
+    // The line, its three cells and the four timed rows.
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(8);
+    // The first departure leaves at 13:45:16 (its grace over); for a poll's few seconds the line has two cells (R1: the
+    // list keeps its five rows, so no row is at stake); then the fourth enters as the third cell.
     for (let s = 1; s <= 80; s++) t.update(rows(NOW0 + s * 1000, false), 2200, NOW0 + s * 1000);
-    expect(ids()).toEqual(['dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    expect(ids()).toEqual(['departures', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    expect(cellIds()).toEqual(['dep:2', 'dep:3']);
     for (let s = 81; s <= 90; s++) t.update(rows(NOW0 + s * 1000, true), 2200, NOW0 + s * 1000);
+    expect(cellIds()).toEqual(['dep:2', 'dep:3', 'dep:4']);
     const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
     const records = w.records();
     w.stop();
-    expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['li[dep:1]'] }, { added: ['li[dep:4]'], removed: [] }]);
+    expect(records, JSON.stringify(records)).toEqual([{ added: [], removed: ['span[dep:1]'] }, { added: ['span[dep:4]'], removed: [] }]);
     expect(reading.turnovers).toBe(1);
     expect(reading.churn).toBe(0);
     expect(reading.rebuilt).toEqual([]);
@@ -999,7 +1344,8 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
     const story = row({ id: 'always:story:721503305', kind: 'always', atMs: null, always: true, title: 'Jelačićev trg', sub: 'hrvatski ban', source: 'streets' });
     const [amruseva, gunduliceva, solar, zakladni] = timed();
     t.update([...board, amruseva!, gunduliceva!, story], 2200, NOW0);
-    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(6);
+    // The line, its three cells, two closures and the story row.
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
     // 13:40:01: the twenty-minute alternation brings the heritage row for the story, and the sunset row enters.
     t.update([...board, amruseva!, gunduliceva!, solar!, zakladni!], 2200, NOW0 + 61_000);
     let reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
@@ -1010,7 +1356,7 @@ describe('the daytime wall (D5.8 production observer): rows shrink before a row 
     expect(reading.churn).toBe(0);
     expect(calmChurnFailures(reading)).toEqual([]);
     // A row that leaves and comes back inside the minute is churn, and a re-created row, whatever entered or left.
-    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(7);
+    expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(8);
     t.update([...board, amruseva!, gunduliceva!, zakladni!], 2200, NOW0 + 62_000);
     t.update([...board, amruseva!, gunduliceva!, solar!, zakladni!], 2200, NOW0 + 63_000);
     reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
@@ -1091,54 +1437,60 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     };
   }
 
-  it('keeps the third departure, never drops a closure, when a two-line bus makes seven rows too tall: the sunset row three and a half hours away yields once and stays out while the slot turns over, zero records for the closure rows', () => {
+  it('keeps the third departure and every row, when a bus with a long destination takes the third cell: the line keeps its height, the sunset row keeps its node, zero records for the closure rows (R1)', () => {
     const measure = simulated(DAY);
     const t = mount({ measure, designHeightPx: DAY.boxPx });
     t.update([tram(1), tram(2), tram(3), ...timed()], 2200, NOW0);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    expect(ids()).toEqual(['departures', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     const nodes = new Map(items().map((li) => [li.dataset.id, li]));
     const w = structure();
     // The third slot alternates between a bus (a different trip) and a tram every five seconds for a minute and a half.
-    // The bus's three title lines leave no room for the sunset at 18:51, more than an hour away and further away than
-    // the bus (decision 67): the sunset goes at the first bus, and the tram's room never lasts the restore hold, so it
-    // stays out.
+    // Before R1 the bus's three title lines left no room for the sunset at 18:51 (decision 67). On the line the bus's
+    // destination does not fit its cell's line, so cells 2 and 3 print the line and the time only, and the line is as
+    // tall with the bus as with the tram: the sunset keeps its row and its node.
     for (let s = 1; s <= 90; s++) {
       const third = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(3);
       t.update([tram(1), tram(2), third, ...timed()], 2200, NOW0 + s * 1000);
-      for (const id of ['closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']) expect(byId(id), `${s} s ${id}`).toBe(nodes.get(id));
-      expect(ids(), `${s} s`).toEqual(['dep:1', 'dep:2', third.id, 'closure:amruseva', 'closure:gunduliceva', 'always:heritage:zakladni']);
+      for (const id of ['departures', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']) expect(byId(id), `${s} s ${id}`).toBe(nodes.get(id));
+      expect(cellIds(), `${s} s`).toEqual(['dep:1', 'dep:2', third.id]);
+      expect(cells().map((c) => c.dataset.headsign ?? ''), `${s} s`).toEqual(third.id === 'dep:3' ? ['', '', ''] : ['', '0', '0']);
       expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
     }
     const records = w.records();
     w.stop();
-    // Every record is the third slot's trip entering or leaving, and the sunset row leaving once.
-    expect(records.every((r) => [...r.added, ...r.removed].every((k) => k === 'li[dep:3]' || k === 'li[dep:5]' || k === 'li[solar:sunset:2026-09-24]')), JSON.stringify(records)).toBe(true);
-    expect(records.filter((r) => [...r.added, ...r.removed].some((k) => k.includes('solar')))).toEqual([{ added: [], removed: ['li[solar:sunset:2026-09-24]'] }]);
-    expect(records.some((r) => [...r.added, ...r.removed].some((k) => k.includes('closure') || k.includes('always')))).toBe(false);
+    // Every record is the third cell's trip entering or leaving.
+    expect(records.length).toBeGreaterThan(0);
+    expect(records.every((r) => [...r.added, ...r.removed].every((k) => k === 'span[dep:3]' || k === 'span[dep:5]')), JSON.stringify(records)).toBe(true);
+    expect(records.some((r) => [...r.added, ...r.removed].some((k) => k.includes('closure') || k.includes('always') || k.includes('solar')))).toBe(false);
   });
 
   it('holds a dropped discretionary row out until the list has fitted with it for a minute, and never holds a reserved row or a departure out', () => {
-    // A box for the six rows with a tram (64 + 128 + 64 + 84 = 340 px) but not with the bus, whose badge and destination wrap to three lines (140 px): the sunset row, the latest timed row, must go.
-    const SMALL: Layout = { boxPx: 360, titleChars: 17, subChars: 26 };
+    // R1: on the totem the line is the badge and the time over the destination: 84 px with a destination, 64 without
+    // (a departure whose line names none of its own). A 350 px box holds the five rows with the bare departure
+    // (64 + 3 x 64 + 84 = 340 px) but not with the named one (360): the sunset row, the latest timed row, must go.
+    const SMALL: Layout = { boxPx: 350, titleChars: 17, subChars: 26, ...LINE_PORTRAIT };
+    const bare = (n: number): TimelineRow => dep(n, { atMs: NOW0 + n * 30_000, title: '150', arrival: { routeId: '150', routeName: '150' } });
     const measure = simulated(SMALL);
     const t = mount({ measure, designHeightPx: SMALL.boxPx });
-    t.update([tram(1), ...timed()], 2200, NOW0);
-    expect(ids()).toEqual(['dep:1', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
+    t.update([bare(1), ...timed()], 2200, NOW0);
+    expect(ids()).toEqual(['departures', 'closure:amruseva', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:heritage:zakladni']);
     const w = structure();
-    // The one departure alternates between a bus and a tram: the sunset row (the latest timed row) is dropped at once and stays out.
+    // The one departure alternates between the named tram and the bare bus: the sunset row is dropped at once and stays out.
     let s = 1;
     for (; s <= 90; s++) {
-      const only = Math.floor(s / 5) % 2 === 0 ? bus(5) : tram(1);
+      const only = Math.floor(s / 5) % 2 === 0 ? tram(5) : bare(1);
       t.update([only, ...timed()], 2200, NOW0 + s * 1000);
       expect(ids(), `${s} s`).not.toContain('solar:sunset:2026-09-24');
       expect(ids(), `${s} s`).toContain('closure:gunduliceva');
+      expect(cellIds(), `${s} s`).toEqual([only.id]);
       expect(section().dataset.fitOverflow, `${s} s`).toBe('0');
       expect(section().dataset.skippedFit, `${s} s`).toBe('1');
     }
-    // The tram stays: the sunset row is back after FIT_RESTORE_HOLD_MS of steady room, not before.
+    // The bare bus stays: the sunset row is back after FIT_RESTORE_HOLD_MS of steady room, not before.
     const steadyFrom = s;
     for (; s <= steadyFrom + 70; s++) {
-      t.update([tram(1), ...timed()], 2200, NOW0 + s * 1000);
+      t.update([bare(1), ...timed()], 2200, NOW0 + s * 1000);
       expect(ids().includes('solar:sunset:2026-09-24'), `${s - steadyFrom} s of room`).toBe((s - steadyFrom) * 1000 >= FIT_RESTORE_HOLD_MS);
     }
     const records = w.records();
@@ -1174,18 +1526,21 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
       row({ id: 'closure:amruseva', kind: 'closure', atMs: at('2026-09-26T20:00:00+02:00'), title: 'Amruševa', source: 'prometnice' }),
       always({ title: 'Trg bana J. Jelačića', sub: 'hrvatski ban, 1848-1859; 1801-1859' }),
     ];
-    const all = ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'closure:amruseva', 'always:story:trg'];
-    const kept = ['dep:13', 'dep:11', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg'];
+    // R1: the two departures are the line's cells, one row.
+    const all = ['departures', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'closure:amruseva', 'always:story:trg'];
+    const kept = ['departures', 'closure:gunduliceva', 'solar:sunset:2026-09-24', 'always:story:trg'];
     t.update(rows(), 2200, T);
     expect(ids()).toEqual(all);
+    expect(cellIds()).toEqual(['dep:13', 'dep:11']);
     const nodes = new Map(items().map((li) => [li.dataset.id!, li]));
     const w = structure();
-    // The box is 380 px (five rows of 64 px at most) and the observer fires: the last discretionary row goes at
-    // once, in the observer's own callback, nothing overflows the box, every other row keeps its node.
-    layout.boxPx = 380;
+    // The box is 319 px (four rows of 64 px at most; R1: the line is one of five rows, where the six rows before it
+    // were cut at 380) and the observer fires: the last discretionary row goes at once, in the observer's own
+    // callback, nothing overflows the box, every other row keeps its node.
+    layout.boxPx = 319;
     resized();
     expect(ids()).toEqual(kept);
-    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(380);
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(319);
     expect(section().dataset.fitOverflow).toBe('0');
     for (const id of kept) expect(byId(id), id).toBe(nodes.get(id));
     // The box back: the row returns at once (re-created: the residual), the others on their nodes.
@@ -1195,7 +1550,7 @@ describe('a list at the edge of its box (D5.16 and D5.19 production observers): 
     for (const id of kept) expect(byId(id), id).toBe(nodes.get(id));
     expect(w.records()).toEqual([{ added: [], removed: ['li[closure:amruseva]'] }, { added: ['li[closure:amruseva]'], removed: [] }]);
     // A box that grows past the fitted one refits at once too: the rows a taller box holds come back.
-    layout.boxPx = 380;
+    layout.boxPx = 319;
     resized();
     expect(ids()).toEqual(kept);
     layout.boxPx = 600;
@@ -1236,8 +1591,9 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ measure });
     t.update(rows, 2182, now);
-    expect(items().filter(li => li.dataset.kind === 'departure').length).toBeGreaterThanOrEqual(1);
-    expect(items().filter(li => li.dataset.kind === 'departure').length).toBeLessThanOrEqual(3);
+    // R1: the departures are the line's cells.
+    expect(shownDepartures().length).toBeGreaterThanOrEqual(1);
+    expect(shownDepartures().length).toBeLessThanOrEqual(3);
     expect(items().filter(li => li.dataset.kind === 'first')).toHaveLength(1);
     expect(items().filter(li => li.dataset.kind === 'pharmacy')).toHaveLength(1);
     expect(items().filter(li => li.dataset.kind === 'last')).toHaveLength(time === '22:40' ? 1 : 0);
@@ -1254,22 +1610,24 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const t = mount({ designHeightPx: 80, measure });
     const candidate = row({ id: 'oversized', kind, title: 'Črnomerec', always: kind === 'always' });
     t.update([candidate], 2000, NOW);
-    // The first departure and the timeless row are promises; an event yields to the box.
+    // The departures line (R1: the departure is its one cell) and the timeless row are promises; an event yields to the box.
     const reserved = kind !== 'event';
-    expect(ids()).toEqual(reserved ? ['oversized'] : []);
+    const shownId = kind === 'departure' ? 'departures' : 'oversized';
+    expect(ids()).toEqual(reserved ? [shownId] : []);
+    if (kind === 'departure') expect(cellIds()).toEqual(['oversized']);
     expect(t.shown()).toBe(reserved ? 1 : 0);
     expect(section().dataset.skippedFit).toBe(reserved ? '0' : '1');
     expect(section().dataset.fitOverflow).toBe(reserved ? '1' : '0');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(reserved);
     t.update([candidate], 2000, NOW + 1000);
-    expect(ids()).toEqual(reserved ? ['oversized'] : []);
+    expect(ids()).toEqual(reserved ? [shownId] : []);
     room = 300;
     t.update([candidate], 2000, NOW + 2000);
     // Room returns: a promise was never out; a dropped discretionary row waits FIT_RESTORE_HOLD_MS of steady room.
-    expect(ids()).toEqual(reserved ? ['oversized'] : []);
+    expect(ids()).toEqual(reserved ? [shownId] : []);
     expect(section().dataset.skippedFit).toBe(reserved ? '0' : '1');
     t.update([candidate], 2000, NOW + 2000 + FIT_RESTORE_HOLD_MS);
-    expect(ids()).toEqual(['oversized']);
+    expect(ids()).toEqual([shownId]);
     expect(section().dataset.skippedFit).toBe('0');
     expect(section().dataset.fitOverflow).toBe('0');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(false);
@@ -1282,8 +1640,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     };
     const t = mount({ measure, designHeightPx: 64 });
     t.update([dep(1), dep(2), always()], 2000, NOW);
-    expect(ids()).toEqual(['dep:1', always().id]);
-    expect(section().dataset.skippedFit).toBe('1');
+    // R1: the line is reserved with both its cells; nothing else is left to drop.
+    expect(ids()).toEqual(['departures', always().id]);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2']);
+    expect(section().dataset.skippedFit).toBe('0');
     expect(section().dataset.fitOverflow).toBe('1');
     expect(measure.box(host.querySelector('ol')!).overflow).toBe(true);
   });
@@ -1308,9 +1668,12 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
       t.update(rows, 2000, NOW);
       const list = host.querySelector('ol')!;
       expect(measure.sum(list)).toBeLessThanOrEqual(layout.boxPx);
-      // A departure row always exists, and the first one is never dropped.
-      expect(ids()[0]).toBe('dep:1');
+      // The departures line always exists (R1), and holds the three departures, each destination whole or left out.
+      expect(ids()[0]).toBe('departures');
+      expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+      for (const c of cells()) expect(['', rows.find((x) => x.id === c.dataset.id)!.title]).toContain(text(c.querySelector('.k-dep-headsign')));
       for (const li of items()) {
+        if (li === line()) continue;
         const r = rows.find((x) => x.id === li.dataset.id)!;
         const title = text(li.querySelector('.nearby-title')).replace(/^\d+ /, '');
         const sub = text(li.querySelector('.nearby-sub'));
@@ -1324,8 +1687,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         expect(text(li)).not.toMatch(/…|\.\.\./);
       }
       // The rows kept are the earliest in time and the order is the selection's.
-      const order = rows.map((r) => r.id).filter((id) => ids().includes(id));
-      expect(ids()).toEqual(order);
+      const order = rows.map((r) => r.id).filter((id) => expanded().includes(id));
+      expect(expanded()).toEqual(order);
       // A steady wall does not refit: the next update changes no structure.
       const w = watch();
       t.update(rows, 2000, NOW + 20_000);
@@ -1334,12 +1697,16 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     });
   }
 
-  it('at 1920 x 1080 shortens the long labels and gives later departures to the reserved last-tram row', () => {
+  it('at 1920 x 1080 shortens the long labels and keeps the line of three beside the reserved last-tram row', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ designHeightPx: 486, measure });
     t.update(longRows(), 2000, NOW);
-    // U0 step 7: the event two hours away yields before the second departure, and the closure's sub-line before it (decision 66).
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'closure:vukovarska', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // U0 step 7: the event two hours away yields, and the closure's sub-line before it (decision 66). R1: the line
+    // holds the three departures in one row; the room the second and third took goes to the sunset.
+    expect(ids()).toEqual(['departures', 'closure:vukovarska', 'solar:sunset:2026-09-22', 'last:2026-09-22', 'always:heritage:stedionica']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    // "Zapadni kolodvor" and "Savski most" do not fit a cell's destination line: cells 2 and 3 print the line and the time.
+    expect(cells().map((c) => text(c.querySelector('.k-dep-headsign')))).toEqual(['Črnomerec', '', '']);
     // "Ulica grada Vukovara" gives way to its complete short twin, and its sub-line to the second departure.
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Vukovarska');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-sub'))).toBe('');
@@ -1353,9 +1720,10 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     const measure = simulated(TOTEM_1080);
     const t = mount({ designHeightPx: 498, measure });
     t.update(longRows(), 2000, NOW);
-    // U0 step 7: the event two hours away yields before the third departure, which then fits; since round 1 kiosk F1
-    // the sunset the estimate's count left out is tried in the room the event left, and fits (the sum is checked below).
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:vukovarska', 'solar:sunset:2026-09-22', 'last:2026-09-22', 'always:heritage:stedionica']);
+    // R1: the line holds the three departures, their destinations under them (84 px), so the event two hours away
+    // keeps its row too (U0 step 7 let it yield before the third departure row).
+    expect(ids()).toEqual(['departures', 'closure:vukovarska', 'event:gavella', 'solar:sunset:2026-09-22', 'last:2026-09-22', 'always:heritage:stedionica']);
+    expect(cells().map((c) => text(c.querySelector('.k-dep-headsign')))).toEqual(['Črnomerec', 'Zapadni kolodvor', 'Savski most']);
     expect(text(byId('last:2026-09-22').querySelector('.nearby-title'))).toBe('Zadnji tramvaji');
     expect(text(byId('closure:vukovarska').querySelector('.nearby-title'))).toBe('Ulica grada Vukovara');
     expect(text(byId('always:heritage:stedionica').querySelector('.nearby-title'))).toBe('Gradska štedionica');
@@ -1389,10 +1757,13 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         return words ? clampedEvent(el, LINES[theme][words] ?? 1) : 0;
       };
       const rowPx = (): number => Number.parseFloat(section().style.getPropertyValue('--k-nearby-row')) || 64;
-      const rowHeight = (li: Element): number => Math.max(rowPx(),
-        LINE_PX[theme].title * lines(li.querySelector('.nearby-title')!) + LINE_PX[theme].sub * lines(li.querySelector('.nearby-sub')!) + 8);
+      // R1: the departures line on the landscape wall is two read-tier lines, the badge and destination over the time
+      // (each destination here fits its cell's line).
+      const rowHeight = (li: Element): number => Math.max(rowPx(), (li as HTMLElement).dataset.kind === 'departures' ? 2 * LINE_PX[theme].title + 8
+        : LINE_PX[theme].title * lines(li.querySelector('.nearby-title')!) + LINE_PX[theme].sub * lines(li.querySelector('.nearby-sub')!) + 8);
       const sum = (list: Element): number => [...list.children].reduce((acc, li) => acc + rowHeight(li), 0);
-      return { box: (list) => ({ height: BOX_PX, width: 472, overflow: sum(list) > BOX_PX }), lines, sum };
+      const cell = (el: Element): boolean => el.classList.contains('k-dep-cell') || el.classList.contains('k-dep-headsign');
+      return { box: (el) => ({ height: BOX_PX, width: 472, overflow: !cell(el) && sum(el) > BOX_PX }), lines, sum };
     }
     const T = at('2026-09-22T17:30:00Z'); // Tue 19:30
     function wall(variant: 'kvaternik' | 'trg'): TimelineRow[] {
@@ -1411,16 +1782,20 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
         always({ id: `always:story:${variant}`, ...story }),
       ];
     }
-    // What stays beside the reserved rows and the closure (U0 step 7, measured): the event at two lines where it fits,
-    // else the second departure in its place.
-    const SHOWN = { kvaternik: { light: ['dep:1', 'event:vis'], dark: ['dep:1', 'dep:2'] }, trg: { light: ['dep:1', 'dep:2'], dark: ['dep:1', 'dep:2'] } } as const;
+    // What stays beside the reserved rows and the closure (U0 step 7, measured; re-measured for R1 below).
+    // R1: the line holds the three departures in two read-tier lines (96 px, 105 in dark), more than the one departure
+    // row it stands for where one was all the room held (kvaternik, light: 64 px beside the event); the event's two
+    // lines no longer fit beside it in any theme, and the sunrise the estimate kept takes the room the event left
+    // (the U0 step 7 retry). Before: kvaternik light dep:1 and the event, every other dep:1 and dep:2.
+    const SHOWN = { kvaternik: { light: ['departures'], dark: ['departures'] }, trg: { light: ['departures'], dark: ['departures'] } } as const;
     for (const variant of ['kvaternik', 'trg'] as const) for (const theme of ['light', 'dark'] as const) {
       const kept = SHOWN[variant][theme];
-      it(`${variant}, ${theme}: the reserved rows and the closure stay beside ${kept.join(' and ')}, the event title at two lines at most`, () => {
+      it(`${variant}, ${theme}: the reserved rows and the closure stay beside the line of three, the event title at two lines at most`, () => {
         const measure = measured(theme);
         const t = mount({ designHeightPx: BOX_PX, measure });
         t.update(wall(variant), 2000, T);
-        expect(ids()).toEqual([...kept, 'closure:vlaska', 'last:2026-09-22', `always:story:${variant}`]);
+        expect(ids()).toEqual([...kept, 'closure:vlaska', 'last:2026-09-22', 'solar:sunrise:2026-09-23', `always:story:${variant}`]);
+        expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
         expect(ids().at(-1)).toBe(`always:story:${variant}`);
         if (ids().includes('event:vis')) {
           const title = byId('event:vis').querySelector<HTMLElement>('.nearby-title')!;
@@ -1451,6 +1826,8 @@ describe('whole words: no ellipsis, content selection, then whole rows', () => {
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(300);
     layout.boxPx = 498;
     t.update(longRows(), 2000, NOW + 40_000);
+    // R1: the rows that went are discretionary (the departures are the line), so they return after the restore hold.
+    t.update(longRows(), 2000, NOW + 40_000 + FIT_RESTORE_HOLD_MS);
     expect(t.shown()).toBe(roomy);
   });
 });
@@ -1477,7 +1854,7 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
     closure('amruseva', 'Amruševa'),
     always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
   ];
-  const departures = (): number => items().filter((li) => li.dataset.kind === 'departure').length;
+  const departures = (): number => shownDepartures().length;
   const closureSubs = (): string[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => li.querySelector('.nearby-sub')!.textContent ?? '');
   const fitted = (layout: Layout, sunsetAt?: number): ReturnType<typeof simulated> => {
     const measure = simulated(layout);
@@ -1487,12 +1864,16 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
   const subLines = (measure: ReturnType<typeof simulated>): number[] => items().filter((li) => li.dataset.kind === 'closure').map((li) => measure.lines(li.querySelector('.nearby-sub')!));
 
   it('prints the wall\u2019s own words where the summary would wrap (1920 x 1080): three departures, every closure row one line under its title', () => {
-    // 600 px holds the seven rows at one sub line each (7 x 85); with the summary's two lines the two closures are 116.
+    // 600 px holds the rows at one sub line each; with the summary's two lines the two closures are 116.
     const measure = fitted({ boxPx: 600, titleChars: 17, subChars: 26 });
     expect(departures()).toBe(3);
     expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
     expect(subLines(measure)).toEqual([1, 1]);
-    for (const li of items()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(85);
+    // R1: the line is its two read-tier lines (96 px); every other row the budget's (five rows: 92 px), never grown.
+    expect(measure.rowHeight(line()!)).toBe(96);
+    const budget = Number.parseFloat(section().style.getPropertyValue('--k-nearby-row'));
+    expect(budget).toBe(92);
+    for (const li of items()) if (li !== line()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(budget);
     expect(section().dataset.fitOverflow).toBe('0');
   });
   it('prints the summary whole where a line holds it (the totem)', () => {
@@ -1506,35 +1887,37 @@ describe('a closure\u2019s sub-line on the wall (decision 66, release smoke run 
     expect(departures()).toBe(3);
     expect(closureSubs()).toEqual(['', '']);
     expect(subLines(measure)).toEqual([0, 0]);
-    for (const li of items()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(85);
+    const budget = Number.parseFloat(section().style.getPropertyValue('--k-nearby-row'));
+    for (const li of items()) if (li !== line()) expect(measure.rowHeight(li)).toBeLessThanOrEqual(budget);
   });
-  it('gives up the closure sub-lines before the third departure, and the departure only after them', () => {
-    // 566 px: the budget's row is 80; the three rows with a sub-line are 84, so the seven rows are 572 with the
-    // closures' words under them and 564 without: the sub-lines go, every row stays.
-    fitted({ boxPx: 566, titleChars: 17, subChars: 26 });
+  it('gives up the closure sub-lines before a row, and a row only after them', () => {
+    // R1: five wall rows, the line (96 px) among them. 380 px: the budget's row is 76, and the rows are 408 px there
+    // even without the closures' words; at the smallest row they are 412 with them and 372 without: the sub-lines go,
+    // every row stays.
+    fitted({ boxPx: 380, titleChars: 17, subChars: 26 });
     expect(departures()).toBe(3);
-    expect(ids()).toHaveLength(7);
+    expect(ids()).toHaveLength(5);
     expect(closureSubs()).toEqual(['', '']);
     expect(section().dataset.fitOverflow).toBe('0');
   });
   it('drops a row after the sub-lines, in dropCandidate\u2019s order, and gives the closures their sub-lines back in its room', () => {
-    // 460 px holds the seven rows neither with the sub-lines (512) nor without (474), not even at the smallest row
-    // (468): a whole row goes, and the room it leaves holds the two sub-lines again (409 with none, 447 with both): a
-    // sub-line yields to a row, never for nothing. The sunset at 19:07 is 82 minutes away and further away than the
-    // third departure at 17:57, so the sunset goes (decision 67) and the three departures stay.
-    fitted({ boxPx: 460, titleChars: 17, subChars: 26 });
+    // R1: 360 px holds the five wall rows neither with the sub-lines (420 at the budget's 72 px) nor without (396), not
+    // even at the smallest row (372): a whole row goes, and the room it leaves holds the two sub-lines again (324 with
+    // none, 348 with both): a sub-line yields to a row, never for nothing. The sunset at 19:07 is 82 minutes away and
+    // further away than the line's third cell at 17:57, so the sunset goes (decision 67) and the line stays.
+    fitted({ boxPx: 360, titleChars: 17, subChars: 26 });
     expect(departures()).toBe(3);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
+    expect(ids()).toEqual(['departures', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
     expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
     expect(section().dataset.fitOverflow).toBe('0');
-    // A sunset at 17:55, within the hour and sooner than the third departure, keeps its row and the third departure
-    // goes (the yield order of decision 50 and fix11 for a row that comes first).
+    // A sunset at 17:55, within the hour and sooner than the third cell, keeps its row; the line never yields a cell,
+    // so the last closure goes (R1: the drop order without its departure step; before, the third departure went).
     handle?.destroy();
     host.innerHTML = '';
-    fitted({ boxPx: 460, titleChars: 17, subChars: 26 }, NOW + 10 * MIN);
-    expect(departures()).toBe(2);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'closure:amruseva', 'always:story:trg']);
-    expect(closureSubs()).toEqual(['zatvoreno za promet', 'zatvoreno za promet']);
+    fitted({ boxPx: 360, titleChars: 17, subChars: 26 }, NOW + 10 * MIN);
+    expect(departures()).toBe(3);
+    expect(ids()).toEqual(['departures', 'solar:sunset:2026-09-22', 'closure:gunduliceva', 'always:story:trg']);
+    expect(closureSubs()).toEqual(['zatvoreno za promet']);
     expect(section().dataset.fitOverflow).toBe('0');
   });
 });
@@ -1611,11 +1994,13 @@ describe('the ZET notice row on the wall (upgrade U1): "ZET javlja" for a time, 
   it('keeps the notice and the promises when the box is too small for everything: a departure or the closure gives way first', () => {
     // 250 px: the notice, the uvijek row and the first departure are the promises; the rest yields, the notice never.
     mount({ measure: simulated({ boxPx: 250, titleChars: 17, subChars: 26 }), designHeightPx: 250 }).update(rows(), 2200, NOW);
-    const kept = ids();
+    const kept = expanded();
     expect(kept).toContain('notice:zet-promet:10160');
     expect(kept).toContain('always:story:trg');
     expect(kept).toContain('dep:1');
-    expect(kept.filter((id) => id.startsWith('dep:')).length).toBeLessThan(3);
+    // R1: the line is reserved with its three cells, so the closure gives way.
+    expect(kept.filter((id) => id.startsWith('dep:'))).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(kept).not.toContain('closure:gunduliceva');
     expect(byId('notice:zet-promet:10160').querySelector('.nearby-when')!.textContent).toBe('ZET javlja');
   });
 
@@ -1635,59 +2020,52 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
   // selection gave, in its order (departures, then the timed rows by time, then the timeless row).
   const night = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
   const NOW4 = night('04:00');
-  const closure = (id: string, title: string, until: string): TimelineRow => row({ id: `closure:${id}`, kind: 'closure', atMs: night(until), title,
-    sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' });
-  const opening = (id: string, title: string): TimelineRow => row({ id: `open:culture-${id}:2026-09-27`, kind: 'opening', atMs: night('10:00'), title, sub: 'Kultura', source: 'culture' });
   const MUSEUM = 'open:culture-d62358d5d2fc659f:2026-09-27';
   const SUNRISE = 'solar:sunrise:2026-09-27';
-  const rows = (): TimelineRow[] => [
-    dep(1, { atMs: night('04:04'), live: false, title: 'Prečko', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
-    dep(2, { atMs: night('04:06'), title: 'Črnomerec', source: 'zet-rt', arrival: { routeId: '31', routeName: '31' } }),
-    dep(3, { atMs: night('04:22'), live: false, title: 'Borongaj', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
-    row({ id: 'first:2026-09-27', kind: 'first', atMs: night('05:19'), title: 'Prvi tramvaj',
-      sub: '11 05:19 · 12 05:20 · 17 05:31 · 6 05:59 · 14 06:16 · 13 06:21', subShort: '11 05:19 · 12 05:20', source: 'zet-gtfs' }),
-    row({ id: SUNRISE, kind: 'solar', atMs: night('06:48'), title: 'Izlazak sunca', source: 'solar' }),
-    opening('d62358d5d2fc659f', 'Arheološki muzej u Zagrebu'),
-    opening('karas', 'Galerija Karas'),
-    closure('amruseva', 'Amruševa', '16:00'),
-    closure('gunduliceva', 'Gundulićeva', '18:00'),
-    row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
-  ];
-  const departures = (): string[] => ids().filter((id) => id.startsWith('dep:'));
+  const rows = nightList0400;
+  const departures = (): string[] => shownDepartures();
 
   it('at 1920 x 1080 shows the three due departures: the two-line opening goes first, and the sunrise stays', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ measure, designHeightPx: WALL_1920.boxPx });
     const all = rows();
     t.update(all, 2182, NOW4);
-    // The row budget's estimate (64 px rows, seven of ten) is what D5.30 fitted: the three departures, the first tram,
-    // the sunrise, the museum and the pharmacy, 552 px in 486. D5.30 then dropped the third departure (488 px, still
-    // over) and the second; now the museum, whose 10:00 is further away than the 04:22 tram, goes first (424 px).
-    const estimate = fitRows(all, 7);
-    expect(estimate.map((r) => r.id)).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', SUNRISE, MUSEUM, 'always:pharmacy']);
+    // R1: the three departures are the line, one 96 px row, so the budget's estimate (64 px rows, seven of eight wall
+    // rows) holds the line, the first tram, the sunrise, both openings, a closure and the pharmacy, 604 px in 486 with
+    // the closure's sub-line given up. The openings at 10:00 are further away than the line's last cell at 04:22 and
+    // more than an hour away (decision 67): Galerija Karas goes, then the two-line museum (392 px); Karas then comes
+    // back in the room the museum left (476 px, U0 step 7's retry), and Gundulićeva, which the estimate left out,
+    // does not fit after it. Before R1: the three departure rows, the first tram, the sunrise and the pharmacy.
+    const estimate = fitRows(groupDepartures(all), 7);
+    expect(estimate.map((r) => r.id)).toEqual(['departures', 'first:2026-09-27', SUNRISE, MUSEUM, 'open:culture-karas:2026-09-27', 'closure:amruseva', 'always:pharmacy']);
     expect(wrapLines('Arheološki muzej u Zagrebu', WALL_1920.titleChars)).toBe(2);
     expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', SUNRISE, 'always:pharmacy']);
+    expect(ids()).toEqual(['departures', 'first:2026-09-27', SUNRISE, 'open:culture-karas:2026-09-27', 'closure:amruseva', 'always:pharmacy']);
     expect(text(byId('first:2026-09-27').querySelector('.nearby-sub'))).toBe('11 05:19 · 12 05:20');
     expect(section().dataset.fitOverflow).toBe('0');
-    expect(section().dataset.skippedFit).toBe('4');
+    expect(section().dataset.skippedFit).toBe('2');
     expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(WALL_1920.boxPx);
-    // The whole yield order from that estimate: the opening, then the sunrise, then the later departures; the first
-    // departure, the first tram and the pharmacy never.
+    // The whole yield order from that estimate: the openings, then the sunrise, then the closure; the line, the first
+    // tram and the pharmacy never (R1: the line yields no cell, where the third and second departures went next).
     const order: string[] = [];
-    for (let left: TimelineRow[] = estimate, drop = dropCandidate(left, NOW4); drop; left = left.filter((r) => r !== drop), drop = dropCandidate(left, NOW4)) order.push(drop.id);
-    expect(order).toEqual([MUSEUM, SUNRISE, 'dep:3', 'dep:2']);
+    for (let left: WallRow[] = estimate, drop = dropCandidate(left, NOW4); drop; left = left.filter((r) => r !== drop), drop = dropCandidate(left, NOW4)) order.push(drop.id);
+    expect(order).toEqual(['open:culture-karas:2026-09-27', MUSEUM, SUNRISE, 'closure:amruseva']);
   });
 
-  it('in a box that holds five rows the sunrise goes too, before a departure does', () => {
-    const measure = simulated({ ...WALL_1920, boxPx: 400 });
-    mount({ measure, designHeightPx: 400 }).update(rows(), 2182, NOW4);
-    expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-27', 'always:pharmacy']);
-    expect(section().dataset.fitOverflow).toBe('0');
-    // At 05:50 the same sunrise is 58 minutes away (IMMINENT_ROW_MIN): it keeps its row and the third departure goes.
+  it('in a smaller box the sunrise goes too, never a departure: the line keeps its three cells, the sunrise within the hour and further away alike', () => {
+    // R1: 400 px holds the line, the first tram, the sunrise and the pharmacy (328 px): nothing is at stake.
+    mount({ measure: simulated({ ...WALL_1920, boxPx: 400 }), designHeightPx: 400 }).update(rows(), 2182, NOW4);
+    expect(ids()).toEqual(['departures', 'first:2026-09-27', SUNRISE, 'always:pharmacy']);
+    // 300 px: the sunrise goes (decision 67 against the line's last cell), and the line keeps its three.
     handle?.destroy();
     host.innerHTML = '';
+    mount({ measure: simulated({ ...WALL_1920, boxPx: 300 }), designHeightPx: 300 }).update(rows(), 2182, NOW4);
+    expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(ids()).toEqual(['departures', 'first:2026-09-27', 'always:pharmacy']);
+    expect(section().dataset.fitOverflow).toBe('0');
+    // At 05:50 the same sunrise is 58 minutes away (IMMINENT_ROW_MIN): before R1 it kept its row and the third
+    // departure went; the line yields no cell, so in 300 px the sunrise, the one row left to yield, goes, and in
+    // 400 px it stays.
     const dawn = [
       dep(1, { atMs: night('05:52'), live: false, title: 'Prečko', source: 'zet-gtfs', arrival: { routeId: '32', routeName: '32' } }),
       dep(2, { atMs: night('05:58'), title: 'Črnomerec', source: 'zet-rt', arrival: { routeId: '31', routeName: '31' } }),
@@ -1696,12 +2074,17 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
       row({ id: SUNRISE, kind: 'solar', atMs: night('06:48'), title: 'Izlazak sunca', source: 'solar' }),
       rows().at(-1)!,
     ];
-    mount({ measure: simulated({ ...WALL_1920, boxPx: 400 }), designHeightPx: 400 }).update(dawn, 2182, night('05:50'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'first:2026-09-27', SUNRISE, 'always:pharmacy']);
-    expect(section().dataset.fitOverflow).toBe('0');
+    for (const [boxPx, kept] of [[300, ['departures', 'first:2026-09-27', 'always:pharmacy']], [400, ['departures', 'first:2026-09-27', SUNRISE, 'always:pharmacy']]] as const) {
+      handle?.destroy();
+      host.innerHTML = '';
+      mount({ measure: simulated({ ...WALL_1920, boxPx }), designHeightPx: boxPx }).update(dawn, 2182, night('05:50'));
+      expect(ids(), String(boxPx)).toEqual(kept);
+      expect(departures(), String(boxPx)).toEqual(['dep:1', 'dep:2', 'dep:3']);
+      expect(section().dataset.fitOverflow).toBe('0');
+    }
   });
 
-  it('the night0430 scene\u2019s list at its 459 px box (e2e/scenes.ts): three departures due, the sunrise 2 h 12 min away gives its row to the third; with two due, the sunrise is shown', () => {
+  it('the night0430 scene’s list at its 459 px box (e2e/scenes.ts): the line holds the departures due, and the sunrise 2 h 12 min away keeps its row beside them (R1)', () => {
     // The fit probe's first reading of night0430 at 1920 x 1080: 12 Dubrava in 2 minutes, 1 Borongaj 04:33, 17 Borongaj
     // 04:38, the first tram, the sunrise at 06:42, the closure until 08:30, the pharmacy.
     const scene = (hhmm: string): number => at(`2026-09-22T${hhmm}:00+02:00`);
@@ -1716,19 +2099,21 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
       row({ id: 'always:pharmacy', kind: 'pharmacy', atMs: null, always: true, title: '24/7', sub: 'Trg bana J. Jelačića 3', source: 'ljekarne' }),
     ]);
     const BOX: Layout = { boxPx: 459, titleChars: 17, subChars: 26 };
-    mount({ measure: simulated(BOX), designHeightPx: BOX.boxPx }).update(list(3), 2182, scene('04:30'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'first:2026-09-22', 'closure:gunduliceva', 'always:pharmacy']);
-    expect(section().dataset.fitOverflow).toBe('0');
-    handle?.destroy();
-    host.innerHTML = '';
-    mount({ measure: simulated(BOX), designHeightPx: BOX.boxPx }).update(list(2), 2182, scene('04:30'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'first:2026-09-22', 'solar:sunrise:2026-09-22', 'closure:gunduliceva', 'always:pharmacy']);
-    expect(section().dataset.fitOverflow).toBe('0');
+    // Before R1, with three due the sunrise gave its row to the third departure; the line takes one row for all three.
+    for (const due of [3, 2]) {
+      handle?.destroy();
+      host.innerHTML = '';
+      mount({ measure: simulated(BOX), designHeightPx: BOX.boxPx }).update(list(due), 2182, scene('04:30'));
+      expect(ids(), String(due)).toEqual(['departures', 'first:2026-09-22', 'solar:sunrise:2026-09-22', 'closure:gunduliceva', 'always:pharmacy']);
+      expect(departures(), String(due)).toEqual(['dep:1', 'dep:2', 'dep:3'].slice(0, due));
+      expect(section().dataset.fitOverflow).toBe('0');
+    }
   });
 
-  it('by day a sunset within the hour keeps its row against a departure forty minutes away, and one more than an hour away yields', () => {
-    // A list one row too tall for its 390 px box (65 px rows; the closure and the place row 84 px with their sub-lines).
-    const DAY: Layout = { boxPx: 390, titleChars: 17, subChars: 26 };
+  it('by day a sunset within the hour keeps its row against a closure, and one more than an hour away and later than the line’s last departure yields first (R1: the line yields no cell)', () => {
+    // R1: a list one row too tall for its 300 px box (the budget's 75 px rows; the line 96, the closure and the place
+    // row 84 px with their sub-lines): the line, the sunset, the closure and the place row are 339 px.
+    const DAY: Layout = { boxPx: 300, titleChars: 17, subChars: 26 };
     const evening = (hhmm: string): number => at(`2026-09-27T${hhmm}:00+02:00`);
     const list = (departuresAt: readonly string[]): TimelineRow[] => [
       ...departuresAt.map((hhmm, i) => dep(i + 1, { atMs: evening(hhmm), title: ['Črnomerec', 'Dubrava', 'Borongaj'][i]!, arrival: { routeId: ['6', '12', '17'][i]!, routeName: ['6', '12', '17'][i]! } })),
@@ -1736,24 +2121,25 @@ describe('the night list at 04:00 (decision 67, observe-d530): the second and th
       row({ id: 'closure:gunduliceva', kind: 'closure', atMs: evening('21:45'), title: 'Gundulićeva', sub: 'zatvoreno zbog radova, oba smjera', subShort: 'zatvoreno za promet', source: 'prometnice' }),
       always({ title: 'Trg bana Jelačića', sub: 'hrvatski ban' }),
     ];
-    // 18:31: the sunset in 20 minutes, the third departure in 40 (19:11): the departure goes, the sunset and the
-    // closure (further away still, its order unchanged) stay.
+    // 18:31: the sunset in 20 minutes, the third departure in 40 (19:11): the sunset stays and the closure goes, where
+    // before R1 the third departure went.
     mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['18:34', '18:40', '19:11']), 2200, evening('18:31'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-27', 'closure:gunduliceva', 'always:story:trg']);
-    expect(text(byId('closure:gunduliceva').querySelector('.nearby-sub'))).toBe('zatvoreno za promet');
+    expect(ids()).toEqual(['departures', 'solar:sunset:2026-09-27', 'always:story:trg']);
+    expect(departures()).toEqual(['dep:1', 'dep:2', 'dep:3']);
     expect(section().dataset.fitOverflow).toBe('0');
     // 18:01: the sunset in 50 minutes, further away than the third departure in 40 (18:41) but within the hour
-    // (IMMINENT_ROW_MIN): it keeps its row and the departure goes.
+    // (IMMINENT_ROW_MIN): it keeps its row, and the closure goes.
     handle?.destroy();
     host.innerHTML = '';
     mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['18:04', '18:10', '18:41']), 2200, evening('18:01'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'solar:sunset:2026-09-27', 'closure:gunduliceva', 'always:story:trg']);
+    expect(ids()).toEqual(['departures', 'solar:sunset:2026-09-27', 'always:story:trg']);
     expect(section().dataset.fitOverflow).toBe('0');
-    // 17:41: the sunset in 70 minutes, the third departure in 40 (18:21): the sunset goes, the three departures stay.
+    // 17:41: the sunset in 70 minutes, the third departure in 40 (18:21): the sunset goes, the closure stays with its words.
     handle?.destroy();
     host.innerHTML = '';
     mount({ measure: simulated(DAY), designHeightPx: DAY.boxPx }).update(list(['17:44', '17:50', '18:21']), 2200, evening('17:41'));
-    expect(ids()).toEqual(['dep:1', 'dep:2', 'dep:3', 'closure:gunduliceva', 'always:story:trg']);
+    expect(ids()).toEqual(['departures', 'closure:gunduliceva', 'always:story:trg']);
+    expect(text(byId('closure:gunduliceva').querySelector('.nearby-sub'))).toBe('zatvoreno za promet');
     expect(section().dataset.fitOverflow).toBe('0');
   });
 });
@@ -1779,28 +2165,36 @@ describe('the 3-metre floors in every wall composition (computed from the real s
     root.style.setProperty('--kiosk-zoom', String(zoom));
     document.body.replaceChildren(root);
     const t = mountTimeline(root, { i18n, reduced: true, designHeightPx: 486 });
-    // Eight rows in the 486 px box: 64 px rows, so the type is at its base (no growth) and the floors are what is measured.
-    t.update([row({ id: 'first:x', kind: 'first', atMs: at('2026-09-23T02:16:00Z'), title: 'Prvi tramvaj', sub: '4 04:16' }), ...[1, 2, 3, 4, 5, 6].map((n) => dep(n, { arrival: { routeId: '6', routeName: '6' } })), always()], 2000, NOW);
+    // Nine rows in the 486 px box: 64 px rows, so the type is at its base (no growth) and the floors are what is measured.
+    // R1: the first tram, a train (a row's badge), the departures line (the cells' badge, time and destination), five
+    // events and the place row.
+    const train = row({ id: 'rail:2201', kind: 'rail', atMs: NOW + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', source: 'hz',
+      arrival: { tripId: '2201', routeId: 'R1', routeName: 'R1', headsign: 'Savski Marof', atMs: NOW + 12 * MIN, live: false, minutes: null } });
+    const events = [1, 2, 3, 4, 5].map((n) => row({ id: `event:${n}`, kind: 'event', atMs: NOW + (20 + n) * MIN, title: 'Koncert', source: 'dogadanja' }));
+    t.update([row({ id: 'first:x', kind: 'first', atMs: at('2026-09-23T02:16:00Z'), title: 'Prvi tramvaj', sub: '4 04:16' }), train, ...[1, 2, 3].map((n) => dep(n, { arrival: { routeId: '6', routeName: '6' } })), ...events, always()], 2000, NOW);
     const out: Record<string, number> = {};
-    for (const sel of ['.nearby-title', '.nearby-when', '.nearby-sub', '.k-nearby-day', '.k-nearby-heading', '.k-line-badge']) out[sel] = px(getComputedStyle(root.querySelector(sel)!).fontSize);
+    for (const sel of ['.nearby-title', '.nearby-when', '.nearby-sub', '.k-nearby-day', '.k-nearby-heading', '.nearby-title .k-line-badge', '.k-dep-cell .k-line-badge', '.k-dep-cell .nearby-when', '.k-dep-headsign']) out[sel] = px(getComputedStyle(root.querySelector(sel)!).fontSize);
     t.destroy();
     delete document.documentElement.dataset.themeResolved;
     return out;
   }
   it.each(['light', 'dark'])('puts departure badges in the read tier in %s, with the same floor as their titles (decision 26)', theme => {
     const s = sizes('wide', false, 1, theme);
-    expect(s['.k-line-badge']).toBe(s['.nearby-title']);
-    expect(s['.k-line-badge']).toBeGreaterThanOrEqual(theme === 'dark' ? 44 : 40);
+    expect(s['.nearby-title .k-line-badge']).toBe(s['.nearby-title']);
+    expect(s['.nearby-title .k-line-badge']).toBeGreaterThanOrEqual(theme === 'dark' ? 44 : 40);
+    // R1: the line's badge and time are at the row title's size, the read tier.
+    expect(s['.k-dep-cell .k-line-badge']).toBeCloseTo(s['.nearby-title']!);
+    expect(s['.k-dep-cell .nearby-when']).toBeCloseTo(s['.nearby-title']!);
     document.head.innerHTML = '';
     document.documentElement.dataset.themeResolved = theme;
-    document.body.innerHTML = `<li class="nearby-row"><span class="nearby-title"><span class="k-line-badge" style="font-size:${s['.k-line-badge']}px">6</span></span></li>`;
+    document.body.innerHTML = `<li class="nearby-row"><span class="nearby-title"><span class="k-line-badge" style="font-size:${s['.nearby-title .k-line-badge']}px">6</span></span></li>`;
     const rect = new DOMRect(0, 0, 60, 60);
     const measure = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(rect);
     try {
       const spec = pageSpec({ ...LEGIBILITY_WALL, map: undefined });
       const report = LEGIBILITY_IN_PAGE(spec);
       expect(report.violations).toEqual([]);
-      expect(report.warnings).toEqual([expect.objectContaining({ tier: 'read', text: '6', px: s['.k-line-badge'] })]);
+      expect(report.warnings).toEqual([expect.objectContaining({ tier: 'read', text: '6', px: s['.nearby-title .k-line-badge'] })]);
       (document.querySelector('.k-line-badge') as HTMLElement).style.fontSize = '28px';
       expect(LEGIBILITY_IN_PAGE(spec).violations).toEqual([expect.objectContaining({ tier: 'read', text: '6', px: 28 })]);
     } finally {
@@ -1816,15 +2210,27 @@ describe('the 3-metre floors in every wall composition (computed from the real s
       expect(s['.nearby-sub']).toBeGreaterThanOrEqual(28);
       expect(s['.k-nearby-day']).toBeGreaterThanOrEqual(28);
       expect(s['.k-nearby-heading']).toBeGreaterThanOrEqual(28);
+      // R1: the line's time and badge on the read tier, its destination on the walk-up tier, in light and dark.
+      const dark = sizes(size, portrait, 1, 'dark');
+      for (const [t, floor] of [[s, 40], [dark, 44]] as const) {
+        expect(t['.k-dep-cell .nearby-when']).toBeGreaterThanOrEqual(floor - 0.01);
+        expect(t['.k-dep-cell .k-line-badge']).toBeGreaterThanOrEqual(floor - 0.01);
+        expect(t['.k-dep-headsign']).toBeGreaterThanOrEqual(28);
+      }
     });
   }
   it('holds the floors below the design size (zoom 0.8) and grows above it (zoom 2)', () => {
     const small = sizes('compact', false, 0.8);
     expect(small['.nearby-title']).toBe(40);
     expect(small['.nearby-sub']).toBe(28);
+    expect(small['.k-dep-cell .nearby-when']).toBe(40);
+    expect(small['.k-dep-headsign']).toBe(28);
     const big = sizes('wide', false, 2);
     expect(big['.nearby-title']).toBe(80);
     expect(big['.nearby-sub']).toBe(56);
+    expect(big['.k-dep-cell .nearby-when']).toBe(80);
+    expect(big['.k-dep-cell .k-line-badge']).toBe(80);
+    expect(big['.k-dep-headsign']).toBe(56);
   });
   it.each(['wide', 'compact'])('scales the dark read tier by 1.1 for %s while keeping the walk-up floor', size => {
     const light = sizes(size, false);
@@ -1884,11 +2290,14 @@ describe('the facts-breadth rows on the wall (U3 S2)', () => {
   it('3 departures, 2 closures, an event and the five new kinds in a six-row budget keep the 3 departures and 2 closures', () => {
     const kept = ['dep:1', 'dep:2', 'dep:3', 'closure:ilica', 'event:gavella', 'closure:vlaska'];
     expect(fitRows(list(), 6).map((r) => r.id)).toEqual(kept);
-    // The measured pass: a box that holds six rows drops the new kinds before any tram (§0.5).
+    // The measured pass: a box that holds six rows drops the new kinds before any tram (§0.5). R1: the three
+    // departures are one row, so the room of the second and third goes to the new kinds in their drop order (the
+    // latest first: the place open now, the road, the cut go; the train and the rain stay).
     const measure: TimelineMeasure = { box: (el) => ({ height: 480, width: 472, overflow: el.children.length > 6 }), lines: () => 1 };
     const t = mount({ measure });
     t.update(list(), 2000, NOW);
-    expect(ids()).toEqual(kept);
+    expect(ids()).toEqual(['departures', 'rail:2201', 'rain:gric', 'closure:ilica', 'event:gavella', 'closure:vlaska']);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
   });
 
   it('drops a later day’s row first, then the new kinds, the latest first, then the event (U0), then the third tram', () => {
