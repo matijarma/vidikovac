@@ -119,7 +119,8 @@ async function wallState(page:Page){
       // A row's words stay inside its own row: a squeezed track spills them over the next row, unseen by the list's edge.
       spilledRows:rows.filter(row=>row.scrollHeight>row.clientHeight+1).length,
       rowPx:rows.map(row=>Math.round(Number.parseFloat(getComputedStyle(row).minHeight)/zoom)),
-      departures:rows.filter(row=>row.dataset.kind==='departure').length,
+      // R1: the departures line's cells (a departure row only where the list has no line).
+      departures:rows.reduce((n,row)=>n+(row.dataset.kind==='departures'?row.querySelectorAll('[data-cell]').length:row.dataset.kind==='departure'?1:0),0),
       // The list stands over the card only where the card is under it (decision 50 puts the compact wall's card under the map).
       order:{listOverCard:nearbyBox.right>cardBox.left&&cardBox.right>nearbyBox.left?nearbyBox.bottom-cardBox.top:0,cardOverFooter:cardBox.bottom-footer.top},
       qr:qr?Math.floor(Math.min(qr.width,qr.height)):0,
@@ -156,7 +157,7 @@ function expectWall(state:Awaited<ReturnType<typeof wallState>>,label:string){
 /** Every departure on the list is a grey timetable time: no row claims a tracked vehicle. */
 async function expectTimetableOnly(page:Page){
   await expect(page.locator('[data-testid=nearby] .nearby-row[data-live]')).toHaveCount(0);
-  for(const when of await page.locator('[data-testid=nearby] .nearby-row[data-kind=departure] .nearby-when').allInnerTexts())expect(when.trim()).toMatch(/^\d{2}:\d{2}$/);
+  for(const when of await page.locator('[data-testid=nearby] [data-kind=departures] [data-cell] .nearby-when').allInnerTexts())expect(when.trim()).toMatch(/^\d{2}:\d{2}$/);
 }
 
 test('passive kiosk keeps whole rows, one short sentence and a scannable QR through QR cycles, a warning and an outage',async({page,request})=>{
@@ -272,7 +273,7 @@ test('the wall at night: the dark palette at 21:30 under ?tema=tamna, 1920×1080
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status','ready',{timeout:30000});
   await page.evaluate(()=>document.fonts.ready);
   await expect(page.getByTestId('kiosk-sentence-text')).not.toBeEmpty();
-  await expect.poll(()=>page.locator('[data-testid=nearby] .nearby-row[data-kind=departure]').count(),{timeout:30000}).toBeGreaterThanOrEqual(1);
+  await expect.poll(()=>page.locator('[data-testid=nearby] [data-kind=departures] [data-cell]').count(),{timeout:30000}).toBeGreaterThanOrEqual(1);
   expectWall(await wallState(page),'night 1920');
   await expectTimetableOnly(page);
   await page.screenshot({path:'test-results/readable-city/kiosk-night-2130.png'});

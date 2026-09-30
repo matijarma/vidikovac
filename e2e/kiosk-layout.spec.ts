@@ -87,7 +87,8 @@ test('stale transit keeps its timetable rows and never captions them', async ({ 
   await installWallFixture(page);
   const { kioskUrl } = await provisionKiosk(request, APP_URL, { stopId: E2E_STOP_ID });
   await page.goto(kioskUrl);
-  const departures = page.locator('[data-testid=nearby] .nearby-row[data-kind=departure]');
+  // R1: the wall's departures are the cells of the departures line.
+  const departures = page.locator('[data-testid=nearby] [data-kind=departures] [data-cell]');
   const assertRows = async () => {
     await expect.poll(() => departures.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
     expect(await departures.count()).toBeLessThanOrEqual(3);

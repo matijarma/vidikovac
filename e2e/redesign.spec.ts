@@ -97,7 +97,8 @@ for (const theme of ['light', 'dark'] as const) {
           if (rows.length === 0) out.push('U blizini: no row');
           if (list.scrollHeight > list.clientHeight + 1) out.push('U blizini: rows overflow the list');
           if (rows.some(row => row.getBoundingClientRect().bottom > bottom + 1)) out.push('U blizini: a row cut by the list');
-          if (rows.filter(row => row.dataset.kind === 'departure').length > 3) out.push('U blizini: more than three departures');
+          // R1: the departures are the cells of the departures line.
+          if (list.querySelectorAll('[data-kind=departures] [data-cell], :scope > [data-kind=departure]').length > 3) out.push('U blizini: more than three departures');
         }
         if (document.querySelectorAll('.nearby-row[hidden]').length) out.push('hidden rows');
         for (const panel of document.querySelectorAll<HTMLElement>('.k-panel[data-panel]')) {
