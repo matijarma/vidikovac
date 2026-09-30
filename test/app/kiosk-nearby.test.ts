@@ -1623,7 +1623,7 @@ describe('exhibitions as openings (R0)', () => {
   const BARE = gallery('bare', 'Galerija Bez Rasporeda', 15.9765, 45.8125);
   const exhibit = (id: string, venue: Place | { name: string; lon: number; lat: number }, title: string, until = '2026-10-15T23:59:00+02:00'): FeedItem =>
     u3item('kultura-zg', `kultura-zg:${id}`, 'event', title, {
-      at: '2026-09-01T00:00:00+02:00', until, dateBasis: 'event', geo: { type: 'Point', coordinates: [venue.lon, venue.lat] },
+      at: '2026-09-01T00:00:00+02:00', until, dateBasis: 'event', geo: { type: 'Point', coordinates: [venue.lon!, venue.lat!] },
       data: { precision: 'day', venue: venue.name, source: 'kultura-zagreb', category: 'izlozba' },
     });
   const city = { ...CITY, places: [...PLACES, G1, G2, G3, FAR, BARE] };
@@ -1702,7 +1702,7 @@ describe('the notice headline’s own shorter words (R0, vis1 F2)', () => {
   it('gives the ZET notice row its shorter words', () => {
     const now = at('2026-09-22T15:45:00Z');
     const title = 'Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj)';
-    const news = item('dogadanja', 'zet-novosti:228', 'notice', title, { at: '2026-09-22T08:00:00Z', data: { source: 'zet-novosti' } });
+    const news = item('dogadanja', 'zet-novosti:228', 'event', title, { at: '2026-09-22T08:00:00Z', data: { source: 'zet-novosti' } });
     const rows = selectNearby(input(now, { snapshots: { ...snapshots(), dogadanja: snap('dogadanja', [...EVENTS, news]) } }));
     expect(one(rows, 'notice')).toMatchObject({ id: 'notice:zet-novosti:228', title, titleShort: 'Uspostavljena autobusna linija 228' });
   });
