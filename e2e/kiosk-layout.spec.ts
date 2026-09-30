@@ -9,10 +9,12 @@ const layers = ['grad-sada', 'u-pokretu', 'zrak-i-nebo', 'sigurnost', 'uprava-i-
 async function openLayer(phone: Page, layer: (typeof layers)[number]): Promise<void> {
   if (layer === 'grad-sada' || layer === 'u-pokretu') {
     await phone.locator(`.ki-tabs [data-action=nav][data-layer="${layer}"]`).click();
-    return;
+  } else {
+    await phone.getByTestId('tab-more').click();
+    await phone.getByTestId(`dir-${layer}`).click();
   }
-  await phone.getByTestId('tab-more').click();
-  await phone.getByTestId(`dir-${layer}`).click();
+  // Navigation commits inside a view-transition callback, which also closes the previous Zaslon panel.
+  await expect(phone.locator(`[data-testid=dash-view] .layer[data-layer="${layer}"]`)).toBeVisible();
 }
 
 async function geometry(page: Page) {
@@ -54,15 +56,19 @@ for (const size of sizes) for (const theme of ['light', 'dark'] as const) {
       await unlockOnPhone(phone, scanUrl, '10 minuta');
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();
       for (const layer of layers) {
-        await openLayer(phone, layer);
-        if (await phone.getByTestId('presentation-panel').count() === 0) await phone.getByTestId('screen-control').click();
-        await phone.getByTestId('present-view').click();
-        await expect(phone.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 20_000 });
-        await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', layer);
-        await kiosk.evaluate(() => document.fonts.ready);
-        await kiosk.waitForTimeout(300);
-        expect(await geometry(kiosk), layer).toEqual([]);
-        await kiosk.screenshot({ path: `test-results/kiosk-${size.width}-${theme}-${layer}.png` });
+        await test.step(`present ${layer}`, async () => {
+          await openLayer(phone, layer);
+          const panel = phone.getByTestId('presentation-panel');
+          if (!(await panel.isVisible())) await phone.getByTestId('screen-control').click();
+          await expect(panel).toBeVisible();
+          await phone.getByTestId('present-view').click();
+          await expect(phone.getByTestId('presentation-feedback')).toContainText('Prikazano', { timeout: 20_000 });
+          await expect(kiosk.getByTestId('kiosk-layer')).toHaveAttribute('data-layer', layer);
+          await kiosk.evaluate(() => document.fonts.ready);
+          await kiosk.waitForTimeout(300);
+          expect(await geometry(kiosk), layer).toEqual([]);
+          await kiosk.screenshot({ path: `test-results/kiosk-${size.width}-${theme}-${layer}.png` });
+        });
       }
       await phone.getByTestId('stop-presentation').click();
       await expect(kiosk.getByTestId('kiosk-invitation')).toBeVisible();

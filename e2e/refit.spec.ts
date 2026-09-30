@@ -108,6 +108,8 @@ test('the placed wall keeps its frame’s stops inside the canvas at 1280×800, 
   expect(stops.length).toBeGreaterThan(6);
   const small = await inside(page, map, stops, '1280x800');
   await page.setViewportSize(LARGE);
+  // The old wide frame already fits the larger canvas; wait for the resize callback's closer camera too.
+  await expect.poll(async () => (await cameraOf(map))?.zoom ?? -Infinity, { timeout: REFIT_MS }).toBeGreaterThan(small.zoom);
   const large = await inside(page, map, stops, '1920x1080');
   expect(large.zoom).toBeGreaterThan(small.zoom);
   await page.setViewportSize(SMALL);
