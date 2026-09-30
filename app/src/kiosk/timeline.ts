@@ -633,7 +633,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       // list still fits and never past the estimate's count; with no place left the dropped ones return as before.
       const candidateSet = new Set(candidates);
       const leftOut = pool.filter((row) => !candidateSet.has(row));
-      const order = leftOut.length > 0 && dropped.length > 0 ? byValue([...dropped, ...leftOut].sort((a, b) => pool.indexOf(a) - pool.indexOf(b)), now) : dropped.reverse();
+      // Rank the whole pool before filtering: a restoration subset must not reserve its own second timeless row.
+      const restore = new Set([...dropped, ...leftOut]);
+      const order = leftOut.length > 0 && dropped.length > 0 ? byValue(pool, now).filter((row) => restore.has(row)) : dropped.reverse();
       for (const row of order) {
         if (!candidateSet.has(row) && shown.length >= candidates.length) continue;
         tryIn(row);
@@ -701,7 +703,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         const typography = [style.fontFamily, '--k-read-scale', '--k-main-size', '--k-sup-size', '--k-zoom']
           .map(value => value.startsWith('--') ? style.getPropertyValue(value) : value).join(';');
         // The fit reads the whole list (the rows the estimate left out may take the room the measured rows leave).
-        const sig = `${fitSignature(rows, now, i18n, budget.rowPx, box, typography)}|${budget.rows}`;
+        // An imminence boundary can change which rows deserve room without changing any printed time or label.
+        // Remember the order, not the clock, so unchanged priority still reuses the measured fit.
+        const valueOrder = byValue(rows, now).map((row) => row.id).join('\u0002');
+        const sig = `${fitSignature(rows, now, i18n, budget.rowPx, box, typography)}|${budget.rows}|${valueOrder}`;
         if (!memo || memo.sig !== sig) {
           let fitted = fit(candidates, rows, now, box);
           let rowPx = budget.rowPx;

@@ -1912,6 +1912,47 @@ describe('lifecycle', () => {
   });
 });
 
+describe('R0 review: measured fit keeps the value order', () => {
+  const threeRows = (tallId?: string): TimelineMeasure => ({
+    box: (list) => ({
+      height: 210, width: 500,
+      overflow: [...list.children].reduce((height, li) => height + (li.getAttribute('data-id') === tallId ? 140 : 64), 0) > 210,
+    }),
+    lines: vi.fn(() => 1),
+  });
+
+  it('R0 review: invalidates the memo when imminence changes the selected order, not on every clock tick', () => {
+    const measure = threeRows();
+    const rows = [
+      dep(1, { live: false, atMs: NOW + 10 * MIN }),
+      row({ id: 'rail:boundary', kind: 'rail', title: 'Savski Marof', atMs: NOW + 20 * MIN, source: 'hz' }),
+      row({ id: 'event:boundary', kind: 'event', title: 'Koncert', sub: 'Gavella', atMs: NOW + 31 * MIN, source: 'dogadanja' }),
+      always(),
+    ];
+    const timeline = mount({ measure, designHeightPx: 210 });
+    timeline.update(rows, 2000, NOW);
+    expect(ids()).toEqual(['dep:1', 'rail:boundary', 'always:story:trg']);
+    const calls = (measure.lines as ReturnType<typeof vi.fn>).mock.calls.length;
+    timeline.update(rows, 2000, NOW + 30_000);
+    expect((measure.lines as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(calls);
+    timeline.update(rows, 2000, NOW + MIN);
+    expect(ids()).toEqual(fitRows(rows, 3, NOW + MIN).map((r) => r.id));
+    expect(ids()).toEqual(['dep:1', 'event:boundary', 'always:story:trg']);
+  });
+
+  it('R0 review: restores from the full pool’s order without reserving a second timeless row', () => {
+    const rows = [
+      dep(1, { live: false }),
+      row({ id: 'solar:restore', kind: 'solar', title: 'Zalazak sunca', atMs: NOW + 20 * MIN, source: 'solar' }),
+      row({ id: 'closure:tall', kind: 'closure', title: 'Ilica', atMs: NOW + 60 * MIN, source: 'prometnice' }),
+      always({ id: 'always:a', title: 'Kamenita vrata', sub: '' }),
+      always({ id: 'always:b', title: 'Grički top', sub: '' }),
+    ];
+    mount({ measure: threeRows('closure:tall'), designHeightPx: 210 }).update(rows, 2000, NOW);
+    expect(ids()).toEqual(['dep:1', 'solar:restore', 'always:a']);
+  });
+});
+
 
 // The facts-breadth rows (docs/history/upgrade-2026-10-plan/U3.md S2): a train, rain, a cut, a road state, a place open now.
 describe('the facts-breadth rows on the wall (U3 S2)', () => {
