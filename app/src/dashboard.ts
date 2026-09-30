@@ -66,6 +66,8 @@ const STOPS_ATTEMPTS = 3;
 export const LAYER_STORAGE_KEY = 'vidikovac.layer';
 
 /** Layers whose renderers declare interactions as data-action and are safe to reconcile in place. */
+/** The "U blizini" kinds whose points Karta marks (R0): the breadth rows with a place of their own. */
+const MARKED_KINDS: ReadonlySet<string> = new Set(['open', 'opening', 'cut', 'road', 'rail']);
 const RECONCILED_LAYERS: ReadonlySet<LayerId> = new Set<LayerId>(['grad-sada', 'zrak-i-nebo', 'sigurnost', 'uprava-i-pravo', 'kultura']);
 
 function safeSessionStorage(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
@@ -526,10 +528,17 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       askBoards(ctx);
       const input = nearbyInput(ctx);
       const rows = feed.selectNearby(input);
+      // Karta marks the points of the breadth rows it lists (R0): the vetted row's own title, a place by its id.
+      const marks = feed.nearbyShownRows(rows, cap, input.now).flatMap((row) => {
+        if (!MARKED_KINDS.has(row.kind) || row.map?.geometry.type !== 'Point') return [];
+        const [lon, lat] = row.map.geometry.coordinates as [number, number];
+        return [{ id: row.selection?.kind === 'place' ? row.selection.id : `nearby:${row.id}`, title: row.title, lon, lat, kind: row.kind }];
+      });
       return {
         html: feed.nearbySectionMarkup(i18n, rows, input.radiusM, input.now, { cap, id: 'karta' }),
         pill: feed.nearbyPill(i18n, input.radiusM),
         radiusM: input.radiusM,
+        marks,
       };
     };
     // Sada's sentence, the page's pick (step 12), only while Sada is drawn; absent, Sada holds its own place. The

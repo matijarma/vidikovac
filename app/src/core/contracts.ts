@@ -60,7 +60,13 @@ export interface NearbyList {
   pill: string;
   /** The measured circle, metres (shared/city/frame.ts frameRadiusM): what the map frames around the place. */
   radiusM: number;
+  /** The points of the shown rows of kinds open, opening, cut, road and rail, for Karta's marks (R0; a rain row's
+   *  point is a station, not the rain). */
+  marks?: readonly NearbyMark[];
 }
+
+/** One breadth row's point on Karta: a catalogue place or a rail station by its own id, any other `nearby:<row id>`. */
+export interface NearbyMark { id: string; title: string; lon: number; lat: number; kind: string }
 
 /** Additive controller hooks used by all new surfaces; no global browser dependency. */
 export interface ExperienceActions {
