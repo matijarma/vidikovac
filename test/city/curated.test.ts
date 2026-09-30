@@ -3,11 +3,11 @@
 // known, never "?"), a venue only with a programme tonight and named, the air
 // stations only on request, and no geographic cluster anywhere.
 import { describe, expect, it } from 'vitest';
-import { bikeDisc, CURATED_WALL, curatedCityPoints } from '../../app/src/city/curated';
+import { bikeDisc, CURATED_WALL, curatedCityPoints, programmeItems, uniqueByTitleStart } from '../../app/src/city/curated';
 import { clusterPlaces, dynamicPlaces } from '../../app/src/city/discovery';
 import { MAP_PRESENTATIONS } from '../../app/src/map/presentation';
 import { emptyCity, type BikeStation, type CityState, type Place } from '../../shared/city/types';
-import type { FeedItem } from '../../worker/feed/schema';
+import type { FeedItem, ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 
 const NOW = Date.parse('2026-09-11T12:32:00Z'); // 14:32 in Zagreb
 const ISO = new Date(NOW - 60_000).toISOString();
@@ -133,5 +133,36 @@ describe('the wall’s curated city points', () => {
     const points = curatedCityPoints(CITY, EVENTS, NOW, { venues: 'week', air: true });
     const crowded = [...points, ...points.map((p) => ({ ...p, id: `${p.id}-twin` }))];
     expect(clusterPlaces(crowded, 12)).toEqual(crowded);
+  });
+});
+
+describe('the City’s programme on the wall map’s venue badges (R0)', () => {
+  const snapOf = (module: ModuleId, items: FeedItem[], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot =>
+    ({ module, tier: 'open', status, fetchedAt: ISO, attribution: { text: 'x', url: 'https://example.test/', licence: 'x' }, items });
+  const city = (id: string, title: string, at: string, precision: 'time' | 'day', until?: string): FeedItem => ({
+    id: `kultura-zg:${id}`, module: 'kultura-zg', tier: 'open', kind: 'event', title, at, ...(until ? { until } : {}), dateBasis: 'event',
+    data: { source: 'kultura-zagreb', venue: 'Kino Europa', precision },
+  });
+  const library: FeedItem = { id: 'programi:kgz:1', module: 'programi', tier: 'open', kind: 'event', title: 'Pričaonica', at: zagreb('18:00'), dateBasis: 'event', data: { source: 'kgz', venue: 'Kino Europa', precision: 'time' } };
+
+  it('reads the three programme modules in order, a down one adding nothing', () => {
+    const koncert = EVENTS[0]!;
+    const film = city('film', 'Film večeras', zagreb('21:00'), 'time');
+    expect(programmeItems({ dogadanja: snapOf('dogadanja', [koncert]), 'kultura-zg': snapOf('kultura-zg', [film]), programi: snapOf('programi', [library]) })
+      .map((i) => i.id)).toEqual(['kvartovske:koncert', 'kultura-zg:film', 'programi:kgz:1']);
+    expect(programmeItems({ dogadanja: snapOf('dogadanja', [koncert], 'down'), 'kultura-zg': snapOf('kultura-zg', [film]) }).map((i) => i.id)).toEqual(['kultura-zg:film']);
+    expect(programmeItems({})).toEqual([]);
+    // An event announced twice (the same title and start) once, the first announcer standing.
+    const twin = city('koncert', 'koncert', koncert.at!, 'time');
+    expect(uniqueByTitleStart([koncert, twin, film]).map((i) => i.id)).toEqual(['kvartovske:koncert', 'kultura-zg:film']);
+  });
+
+  it('counts a timed item of the City’s calendar tonight on its verified venue, and never an all-day exhibition', () => {
+    const film = city('film', 'Film večeras', zagreb('21:00'), 'time');
+    const izlozba = city('izlozba', 'Izložba', zagreb('00:00'), 'day', zagreb('23:59'));
+    const snaps = { dogadanja: snapOf('dogadanja', [EVENTS[0]!]), 'kultura-zg': snapOf('kultura-zg', [film, izlozba]) };
+    const venue = curatedCityPoints(CITY, programmeItems(snaps), NOW, CURATED_WALL).find((p) => p.id === 'culture-1')!;
+    expect(venue.props).toMatchObject({ badge: '2', eventCount: 2 });
+    expect(curatedCityPoints(CITY, EVENTS, NOW, CURATED_WALL).find((p) => p.id === 'culture-1')!.props).toMatchObject({ eventCount: 1 });
   });
 });

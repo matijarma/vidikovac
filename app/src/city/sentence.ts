@@ -382,6 +382,15 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       const time = timedLabel(row.atMs, input);
       add(row.id, 'kultura', copy(i18n, 'event', { time: time[0]!.toLocaleUpperCase(locale) + time.slice(1), title: row.title, venue }),
         Math.min(row.atMs, nextMidnight(now)), { wording: 'event' });
+    } else if (row.kind === 'opening' && row.atMs !== null && row.detail?.kind === 'exhibit') {
+      // An exhibition: its venue open now until its closing time, else the venue's opening (R0).
+      if (row.detail.openNow) {
+        add(row.id, 'kultura', copy(i18n, 'openUntil', { name: row.detail.venue, time: clock(row.atMs) }),
+          Math.min(row.atMs, nextMidnight(now)), { wording: 'openUntil' });
+      } else {
+        add(row.id, 'kultura', copy(i18n, 'opening', { name: row.detail.venue, time: timedLabel(row.atMs, input) }),
+          Math.min(row.atMs, nextMidnight(now)), { wording: 'opening' });
+      }
     } else if (row.kind === 'opening' && row.atMs !== null) {
       add(row.id, 'kultura', copy(i18n, 'opening', { name: row.title, time: timedLabel(row.atMs, input) }),
         Math.min(row.atMs, nextMidnight(now)), { wording: 'opening' });

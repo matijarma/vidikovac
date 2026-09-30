@@ -1270,6 +1270,17 @@ describe('credits and rows on a screen read from steps away', () => {
     expect(creditText(MODULES.find((m) => m.module === 'prometnice')!, [], hr)).toBe('Izvor: Grad Zagreb (data.zagreb.hr) · Licenca: Otvorena dozvola (NN 67/17) · potpuna atribucija: /izvori');
     expect(creditText(downPlaceholder('emsc', '2026-09-11T12:33:00Z'), [], kioskStrings('en'))).toBe('Source: EMSC, seismicportal.eu · full attribution: /izvori');
   });
+  it('the paired Kultura lists the City\u2019s calendar and the libraries\u2019 beside dogadanja, each credited (R0)', () => {
+    const city = item('kultura-zg', 'kultura-zg:77', 'event', 'Koncert na Strossu', { at: '2026-09-11T18:00:00Z', dateBasis: 'event', data: { source: 'kultura-zagreb', precision: 'time', venue: 'Strossmayerovo šetalište' } });
+    const library = item('programi', 'programi:kgz:5', 'event', 'Pričaonica za djecu', { at: '2026-09-12T09:00:00Z', dateBasis: 'event', data: { source: 'kgz', precision: 'time', venue: 'Knjižnica Bogdana Ogrizovića' } });
+    const kultura = ctx('kultura', { snapshots: { ...all(), 'kultura-zg': snap('kultura-zg', [city]), programi: snap('programi', [library]) } });
+    const today = kultura.main.slice(kultura.main.indexOf('data-testid="k-today"'), kultura.main.indexOf('data-testid="k-ongoing"'));
+    expect(today).toContain('Koncert na Strossu');
+    const tomorrow = kultura.main.slice(kultura.main.indexOf('data-testid="k-tomorrow"'), kultura.main.indexOf('data-testid="k-later"'));
+    expect(tomorrow).toContain('Pričaonica za djecu');
+    expect(kultura.main).toContain('Izvor: Guru za kulturu, program Grada Zagreba (kultura.zagreb.hr)');
+    expect(kultura.main).toContain('Izvor: Knjižnice grada Zagreba, programi knjižnica');
+  });
   it('a row keeps its whole title with the aside inside it; the selected item grows to main size; an observation without a reading says so in a word', () => {
     expect(row('Naslov', 'detalj', '20:00', ' data-x="1"')).toBe('<span class="k-row-main" data-x="1"><span class="k-row-aside">20:00</span>Naslov</span><span class="k-row-sub">detalj</span>');
     expect(row('Naslov')).toBe('<span class="k-row-main">Naslov</span>');

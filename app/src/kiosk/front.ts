@@ -37,6 +37,7 @@ import { districtLabel } from './districts';
 import type { Composition } from './layout';
 import type { ActiveVenue } from '../../../shared/city/events';
 import { venueOutsideZagreb, cultureEvents as clientCultureEvents, upcomingEvents, ongoingEvents } from '../layers/kultura';
+import { uniqueByTitleStart } from '../city/curated';
 import { weatherMarkup } from './markup';
 import { weatherNow } from './local';
 import { weatherIcon } from '../experience/weather-icon';
@@ -180,16 +181,23 @@ function eventCredit(items: readonly FeedItem[], i18n: I18n): string {
 
 // --- tonight -------------------------------------------------------------------------
 
-/** Culture and community events: every dated row that is not the Assembly's (the city panel has those). */
-function cultureEvents(dogadanja: ModuleSnapshot | undefined): FeedItem[] {
-  return clientCultureEvents(dogadanja).filter(item => !venueOutsideZagreb(item) && isDatedEvent(item));
+/** The live items of a programme module (the City's calendar, the libraries'); none while it is absent or down. */
+function liveItems(snapshot: ModuleSnapshot | undefined): FeedItem[] {
+  return snapshot && snapshot.status !== 'down' ? snapshot.items : [];
 }
 
 export function tonightPanel(input: FrontInput): FrontPanel {
   const { strings: s, i18n, now } = input;
-  const dogadanja = byModule(input.modules).dogadanja;
-  const state = sourceState(dogadanja);
-  const all = cultureEvents(dogadanja);
+  const modules = byModule(input.modules);
+  const dogadanja = modules.dogadanja;
+  // Culture and community events, every dated row that is not the Assembly's (the city panel has those): the City's
+  // whole programme (R0), dogadanja's culture rows, then the City's calendar and the libraries'; an event
+  // announced twice (the same title and start) is listed once, the first announcer standing.
+  const programme = [modules['kultura-zg'], modules.programi];
+  const states = [dogadanja, ...programme].map(sourceState);
+  const state = states.find((st) => st !== 'loading' && st !== 'down') ?? states[0]!;
+  const all = uniqueByTitleStart([...clientCultureEvents(dogadanja), ...programme.flatMap(liveItems)])
+    .filter((item) => !venueOutsideZagreb(item) && isDatedEvent(item));
   const today = all.filter((item) => sameZagrebDay(item.at!, now) && !hasEnded(item, now));
   // What is still to come tonight first, then what is running (an exhibition opened at 19:00 that has not closed).
   const upcoming = today.filter((item) => startOf(item) >= now).sort((a, b) => startOf(a) - startOf(b));

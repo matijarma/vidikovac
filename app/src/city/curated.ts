@@ -9,8 +9,8 @@
 // Pure: no DOM, no clock of its own.
 import type { CityState, Place } from '../../../shared/city/types';
 import { activeVenues, locatedEvents, type EventWindow } from '../../../shared/city/events';
-import { located } from '../../../shared/city/geo';
-import type { FeedItem } from '../../../worker/feed/schema';
+import { located, normalName } from '../../../shared/city/geo';
+import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { MapPoint } from '../map/city-map';
 import { dynamicPlaces } from './discovery';
 
@@ -29,6 +29,29 @@ export interface CuratedOptions {
    *  disc can say so (owner, 24 Sep: the grey dots read as empty white
    *  circles). Default false. */
   far?: boolean;
+}
+
+/** The City's programme on every culture surface (R0): the event aggregator, the City's calendar and the libraries'. */
+export const PROGRAMME_MODULES = ['dogadanja', 'kultura-zg', 'programi'] as const;
+
+/** Every item of the programme modules that are present and not down, in PROGRAMME_MODULES order: a module that is
+ *  down leaves the others standing (city/nearby.ts eventItems' rule). */
+export function programmeItems(snapshots: Readonly<Partial<Record<ModuleId, ModuleSnapshot>>>): FeedItem[] {
+  return PROGRAMME_MODULES.flatMap((id) => {
+    const snapshot = snapshots[id];
+    return snapshot && snapshot.status !== 'down' ? snapshot.items : [];
+  });
+}
+
+/** The first of each programme announced twice (the same title and start), in order. */
+export function uniqueByTitleStart(items: readonly FeedItem[]): FeedItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${normalName(item.title)}|${item.at ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** The wall's curation: tonight's venues, no air stations, counted discs. */

@@ -42,7 +42,7 @@ import { ROUTE_TYPE_BUS, ROUTE_TYPE_TRAM } from '../motion/schematic';
 import { escapeHtml as esc } from '../ui/dom/escape';
 import { iconMarkup } from '../ui/icons';
 import { discover, dynamicPlaces, type Discovery } from '../city/discovery';
-import { CURATED_WALL, curatedCityPoints } from '../city/curated';
+import { CURATED_WALL, curatedCityPoints, programmeItems } from '../city/curated';
 import { resolvePlace, type PlaceContext } from '../city/place';
 import { ct } from '../city/strings';
 import { searchCity, type CitySearchResult } from '../city/search';
@@ -410,7 +410,7 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
   function cityMapPoints():MapPoint[] {
     if(!input||!ctx().city)return [];
     const c=ctx(),now=c.frozenAt??c.now;
-    const curated=curatedCityPoints(cityState(),c.snapshots.dogadanja?.items??[],now,CURATED_WALL);
+    const curated=curatedCityPoints(cityState(),programmeItems(c.snapshots),now,CURATED_WALL);
     const searched=query?(cityData=discovery()).points:[];
     const selected=selection?.kind==='place'?[...cityState().places,...dynamicPlaces(cityState(),now)].find(p=>p.id===selection!.id):null;
     const seen=new Set<string>(),points:MapPoint[]=[];
