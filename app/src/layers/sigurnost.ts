@@ -211,7 +211,8 @@ function cutsSection(i18n: I18n, ctx: LayerContext): string {
     .map((item) => cutRow(i18n, item))
     .filter((row): row is string => row !== null);
   // The module can be live while one publisher is down: an empty surviving list cannot confirm both utilities.
-  const incomplete = Object.values(prekidi?.sources ?? {}).some((source) => source.status !== 'live');
+  const incomplete = prekidi?.coverage?.limited === true
+    || Object.values(prekidi?.sources ?? {}).some((source) => source.status !== 'live');
   let list = rows.length === 0 && incomplete
     ? stateBlock(i18n, 'down', i18n.t('status.unknown'), { retry: 'prekidi' })
     : listState(i18n, prekidi, 'prekidi', rows.length, i18n.t('safety.cutsNone'), error);

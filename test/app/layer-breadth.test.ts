@@ -72,6 +72,13 @@ describe('Sigurnost: HAK road states and the planned cuts (R0)', () => {
     const available = renderLayer('sigurnost', ctx({ prekidi: { ...partial, items: CUTS.items } }));
     expect(available.querySelectorAll('[data-testid=cut-row]')).toHaveLength(8);
   });
+
+  it('R0 review: never confirms an empty cut list when source coverage is incomplete', () => {
+    const limited: ModuleSnapshot = { ...snap('prekidi', []), coverage: { shown: 0, total: 1, limited: true } };
+    const section = renderLayer('sigurnost', ctx({ prekidi: limited }));
+    expect(text(section.querySelector('#sf-cuts'))).not.toContain(hr.t('safety.cutsNone'));
+    expect(text(section.querySelector('#sf-cuts'))).toContain(hr.t('status.unknown'));
+  });
 });
 
 describe('Vrijeme: the hourly strip (R0)', () => {

@@ -955,8 +955,10 @@ function exhibitionRows(input: NearbyInput, events: readonly NearbyRow[]): Openi
     if (!point) continue;
     const d = distanceM(place, point);
     if (d > radiusM) continue;
-    const venueName = oneLine(venue?.name ?? (dataText(item, 'venue') || input.venueName?.(item) || ''));
-    if (!venueName || !vetted(input, [['title', item.title], ['name', venueName]])) continue;
+    const venueLabel = venue?.name ?? (dataText(item, 'venue') || input.venueName?.(item) || '');
+    // Check the external bytes first: collapsing whitespace must not repair a refused source name.
+    if (!venueLabel || !vetted(input, [['title', item.title], ['name', venueLabel]])) continue;
+    const venueName = oneLine(venueLabel);
     if (timedTitles.has(normalName(item.title))) continue;
     const timing = exhibitTiming(input, { point, venueName, venue, day, weekday, evening });
     // An exhibition that has ended before the venue's opening that day is not on show.

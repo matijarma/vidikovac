@@ -1701,6 +1701,12 @@ describe('exhibitions as openings (R0)', () => {
       expect(timeLabel(rows[0]!, noon, hr), hours).toBe('do 19:00');
     }
   });
+
+  it('R0 review: checks an exhibition’s external venue name before collapsing whitespace', () => {
+    const noon = at('2026-09-22T10:30:00Z');
+    const venue = { ...G1, name: 'Galerija\nPrsten' };
+    expect(openings(scene(noon, [E1], { city: { ...city, places: [venue] } }))).toEqual([]);
+  });
 });
 
 describe('the notice headline’s own shorter words (R0, vis1 F2)', () => {
