@@ -986,9 +986,11 @@ describe('the kiosk\u2019s whole-city window', () => {
   it('curatedCityPoints reads the live BAJS rows and tonight\u2019s venues, and nothing a source did not place', () => {
     expect(curatedCityPoints(CITY, EVENTS, NOW, CURATED_WALL).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2', 'culture-1']);
     expect(curatedCityPoints(CITY, EVENTS, NOW).find((p) => p.id === 'culture-1')!.title).toBe('Kino Europa');
-    // A station whose own source is not live cannot claim a count: a grey disc without a number, never "?".
-    const stale: CityState = { ...CITY, live: { ...CITY.live!, sources: [{ ...CITY.live!.sources[0]!, status: 'stale' }] } };
-    expect(curatedCityPoints(stale, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ badge: '', spent: true });
+    // A station whose own source is down cannot claim a count: a grey disc without a number, never "?". A stale
+    // source is the last good copy (lane tab-return): its count stands for as long as the reading is fresh.
+    const withStatus = (status: 'stale' | 'down'): CityState => ({ ...CITY, live: { ...CITY.live!, sources: [{ ...CITY.live!.sources[0]!, status }] } });
+    expect(curatedCityPoints(withStatus('down'), EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props).toMatchObject({ badge: '', spent: true });
+    expect(curatedCityPoints(withStatus('stale'), EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props).toEqual(curatedCityPoints(CITY, EVENTS, NOW).find((p) => p.id === 'bajs-b1')!.props);
     // No events, no venue marks: a venue is on the map because something is on there tonight.
     expect(curatedCityPoints(CITY, [], NOW).map((p) => p.id)).toEqual(['bajs-b1', 'bajs-b2']);
     // A 15:32 matinee is this week's, not this evening's.

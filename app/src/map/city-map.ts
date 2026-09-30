@@ -1081,7 +1081,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     return { discs: l.discObstacles(points, project, scale), unproject: (p) => { const ll = back.call(m, p); return [ll.lng, ll.lat]; } };
   }
   /** One frame: the model stepped to `t`, the source pushed at 12 Hz when it changed, the camera kept on a followed vehicle. */
-  function draw(t: number): boolean {
+  function draw(t: number, resync = false): boolean {
+    // Back after the page was away (motion/loop.ts RESYNC_GAP_MS): the marks re-seed on their plans, whether or not
+    // this frame paints.
+    if (resync) model?.resync();
     // Detached (the dashboard swapped layers and took the workspace along):
     // paint nothing, report no change, let the loop park; the next render's
     // update() nudges it awake.

@@ -11,10 +11,20 @@ export interface Discovery {
   places: Place[]; events: LocatedEvent[]; count: number;
   points: MapPoint[]; streets: StreetStory[];
 }
+/** A BAJS count older than this is not shown: the station may have emptied since. */
+export const BIKE_COUNT_TTL_MS = 180_000;
+/** The live places at `now`. A count is aged at `now`, except while the next reading is awaited (a request in flight,
+ *  or a hidden page that asks on its return: CityState.liveAwaited): then at the moment the reading in hand arrived,
+ *  so a count stands until the answer that replaces it comes (lane tab-return: every disc turned blank for up to a
+ *  minute after a return), and unknown is kept for a station that is genuinely unknown. A source that is `stale` is
+ *  the last good copy (a request of this page that failed, or the Worker serving its previous answer): its counts stand
+ *  too, and each blanks only when its own reading is BIKE_COUNT_TTL_MS old; only a source that is down blanks at once. */
 export function dynamicPlaces(state: CityState, now: number): Place[] {
   const source = state.live?.sources.find(s=>s.id==='bajs');
+  const readAt = state.liveAwaited && state.liveAt !== undefined ? Math.min(now, state.liveAt) : now;
+  const counting = source?.status === 'live' || source?.status === 'stale';
   const bikes: Place[] = (state.live?.bikes ?? []).map(b => {
-    const fresh = source?.status === 'live' && b.observedAt && now - Date.parse(b.observedAt) <= 180_000 && now >= Date.parse(b.observedAt) - 30_000;
+    const fresh = counting && b.observedAt && readAt - Date.parse(b.observedAt) <= BIKE_COUNT_TTL_MS && readAt >= Date.parse(b.observedAt) - 30_000;
     return { id: `bajs-${b.id}`, category:'cycle-parking',name:b.name,lon:b.lon,lat:b.lat,sourceId:'bajs',sourceRecord:b.id,
       subtype:'BAJS',website:b.rentalUrl,updatedAt:b.observedAt,
       facts:{bikes:fresh && b.bikes!==null?b.bikes:'?',docks:fresh && b.docks!==null?b.docks:'?',operational:b.installed&&b.renting,returning:b.installed&&b.returning,fresh:Boolean(fresh)} };

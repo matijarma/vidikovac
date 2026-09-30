@@ -6,7 +6,7 @@ import { buildPlan, evalPathPlan } from '../../shared/motion/plan';
 import { estimateSpeed } from '../../shared/motion/speed';
 import type { TimesProvider } from '../../shared/motion/times';
 import { lastFix, newTrack, type Track } from '../../shared/motion/track';
-import { createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
+import { catchUpCap, createIntegrator, type Drawn, type Fix } from '../../app/src/motion/integrator';
 import { simulate } from './simulator';
 import { corridorSpec, straight, syntheticNetwork, type SynthSpec } from './synthetic-network';
 import { createLoop } from '../../app/src/motion/loop';
@@ -907,5 +907,118 @@ describe('the integrator never draws a tram backwards, nor two trams across each
     expect(after.s).toBe(2810);
     expect(after.p).toEqual({ x: 200, y: 6 });
     expect(after.heading).toEqual(before.heading);
+  });
+});
+
+describe('a return after the page was away (lane tab-return, 30 Sep)', () => {
+  // A tram on the synthetic corridor at 8 m/s: the twin's evidence every 10 s, each report with a 90 s plan from
+  // where the tram truly is. The owner's report: after a hidden tab, the marks resumed from where they had been left.
+  const net = syntheticNetwork(corridorSpec());
+  const pathIdx = net.paths.findIndex((p) => p.id === '1_0');
+  const T = 1_800_000_000_000;
+  const SPEED = 8;
+  const truth = (t: number): number => 100 + (SPEED * (t - T)) / 1000;
+  const report = (at: number, id = 'tram:1'): Fix => {
+    const s = truth(at);
+    const [lon, lat] = toLonLat(net.toPathPoint(pathIdx, s));
+    return {
+      id, lon, lat, at, generatedAt: at, routeId: '1', type: 0, path: '1_0', speed: SPEED, confidence: 0.9,
+      plan: { on: 'path', knots: [[at, s], [at + 90_000, s + SPEED * 90]] },
+    };
+  };
+  /** The model as a page left it: one minute of live frames at 60 Hz with a report every 10 s, then `awayMs` with no
+   *  frame at all, while reports keep landing when `polls` (a wall's timers, a desktop tab) or none (a locked phone). */
+  function leftFor(awayMs: number, polls: boolean) {
+    const model = createIntegrator(net);
+    let t = T;
+    let last = report(T);
+    let drawn: Drawn[] = [];
+    for (let frame = 0; frame <= 3_600; frame++) {
+      t = T + (frame * 1000) / 60;
+      if (frame % 600 === 0) { last = report(t); model.update([last], t); }
+      drawn = model.step(t);
+    }
+    const left = drawn[0]!.s!;
+    const back = t + awayMs;
+    if (polls) for (let at = t + 10_000; at < back; at += 10_000) { last = report(at); model.update([last], at); }
+    return { model, left, back, last };
+  }
+  /** Frames at 60 Hz from `from` to `to`, the last drawn list back. */
+  const frames = (model: ReturnType<typeof createIntegrator>, from: number, to: number): Drawn[] => {
+    let drawn: Drawn[] = [];
+    for (let t = from; t <= to; t += 1000 / 60) drawn = model.step(t);
+    return drawn;
+  };
+
+  it('a fake clock hidden for five minutes: without a resync the frame after the return is one bounded step from where the mark was left', () => {
+    const { model, left, back } = leftFor(300_000, true);
+    const after = model.step(back)[0]!;
+    expect(after.s! - left).toBeLessThanOrEqual(catchUpCap(truth(back) - left, SPEED) * 1 + 1e-6); // one second's catch-up, at most
+    expect(truth(back) - after.s!).toBeGreaterThan(2_000); // the owner's frozen tram: kilometres behind
+  });
+
+  it('a fake clock hidden for five minutes: after resync() the frame after the return stands on the fresh plan', () => {
+    const { model, back } = leftFor(300_000, true);
+    model.resync();
+    const after = model.step(back)[0]!;
+    expect(Math.abs(after.s! - truth(back))).toBeLessThan(1);
+    expect(after.holding).toBeUndefined();
+    // From there it is a live session again: the frames glide with the plan, never a step past what a frame allows.
+    let previous = after.s!;
+    for (let t = back + 1000 / 60; t < back + 5_000; t += 1000 / 60) {
+      const s = model.step(t)[0]!.s!;
+      expect(s).toBeGreaterThanOrEqual(previous);
+      expect(s - previous).toBeLessThan(SPEED * (1000 / 60) / 1000 * 2);
+      previous = s;
+    }
+  });
+
+  it('re-seeds once more on the first fresh report, and then the calm rules hold: a re-plan behind the mark is a hold, not a step back', () => {
+    const { model, back } = leftFor(120_000, true);
+    model.resync();
+    model.step(back);
+    const behind = (f: Fix, metres: number): Fix => ({ ...f, plan: { on: 'path', knots: (f.plan as { knots: readonly (readonly [number, number])[] }).knots.map(([k, s]) => [k, s - metres] as const) } });
+    // The first fresh report after the return re-seeds the mark on its plan, even 30 m behind the plan before it.
+    model.update([behind(report(back + 1_000), 30)], back + 1_000);
+    expect(Math.abs(model.step(back + 1_000)[0]!.s! - (truth(back + 1_000) - 30))).toBeLessThan(1);
+    // The next one is a report inside a live session again: a plan 30 m further behind is held, never drawn backwards.
+    const drawnBefore = frames(model, back + 1_000, back + 11_000)[0]!.s!;
+    model.update([behind(report(back + 11_000), 60)], back + 11_000);
+    const held = model.step(back + 11_000 + 1000 / 60)[0]!;
+    expect(held.s!).toBeGreaterThanOrEqual(drawnBefore);
+    expect(held.holding).toBe(true);
+  });
+
+  it('a locked phone: the snapshot re-applied at the return is not a fresh report; the mark takes its old plan\'s word until the fresh one lands on it', () => {
+    const { model, back: lockedAt, last } = leftFor(0, false);
+    const back = lockedAt + 100_000;
+    model.resync();
+    model.update([structuredClone(last)], back); // the render at the return hands the model the store's old copy
+    const onOldPlan = model.step(back)[0]!;
+    // Exactly where a model that only ever had that old report draws it now (its plan, with the twin's silence hold).
+    const alone = createIntegrator(net);
+    alone.update([structuredClone(last)], back);
+    expect(onOldPlan.s).toBeCloseTo(alone.step(back)[0]!.s!, 6);
+    model.update([report(back + 400)], back + 400); // the refresh the return asked for
+    expect(Math.abs(model.step(back + 400)[0]!.s! - truth(back + 400))).toBeLessThan(1);
+  });
+
+  it('re-seeds a free-plane plan and a bare fix too, and leaves a vehicle that arrives after the resync to its own start', () => {
+    const model = createIntegrator(net);
+    const bus = (at: number, x: number): Fix => {
+      const [lon, lat] = toLonLat({ x, y: 500 });
+      const [lon1, lat1] = toLonLat({ x: x + SPEED * 90, y: 500 });
+      return { id: 'bus:1', lon, lat, at, generatedAt: at, speed: SPEED, confidence: 0.9, plan: { on: 'free', knots: [[at, lon, lat], [at + 90_000, lon1, lat1]] } };
+    };
+    const bare = (at: number, x: number): Fix => { const [lon, lat] = toLonLat({ x, y: 900 }); return { id: 'bare:1', lon, lat, at }; };
+    model.update([bus(T, 0), bare(T, 0)], T);
+    model.step(T);
+    model.step(T + 16);
+    model.update([bus(T + 200_000, 1_600), bare(T + 200_000, 1_000)], T + 200_000);
+    model.resync();
+    const drawn = model.step(T + 200_000);
+    const at = (id: string) => drawn.find((d) => d.id === id)!.p;
+    expect(Math.hypot(at('bus:1').x - toPlane(...toLonLat({ x: 1_600, y: 500 })).x, at('bus:1').y - toPlane(...toLonLat({ x: 1_600, y: 500 })).y)).toBeLessThan(1);
+    expect(Math.hypot(at('bare:1').x - toPlane(...toLonLat({ x: 1_000, y: 900 })).x, at('bare:1').y - toPlane(...toLonLat({ x: 1_000, y: 900 })).y)).toBeLessThan(1);
   });
 });

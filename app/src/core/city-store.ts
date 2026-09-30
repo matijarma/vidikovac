@@ -1,5 +1,6 @@
 import { emptyCity, type CityState, type CatalogueManifest, type CatalogueChunk, type CityLive } from '../../../shared/city/types';
 import { canonicalPlaces } from '../../../shared/city/events';
+import { watchPageReturn, type PageLifecycle } from './page-return';
 export interface CityStore {
   snapshot(): CityState;
   start(): Promise<void>;
@@ -23,6 +24,12 @@ const EARLY_RETRY_MS: readonly number[] = [5_000, 15_000, 30_000];
 /** A good manifest is fresh for five minutes; a failed one is asked again by the next poll a minute after the attempt,
  * never by the early retries (they ask for the live stations alone, review N1) and never before Retry-After. */
 const MANIFEST_FRESH_MS = 300_000, MANIFEST_RETRY_MS = 60_000;
+/** The live stations' own beat. */
+const LIVE_POLL_MS = 60_000;
+/** A page seen again asks for the live stations at once (lane tab-return: a hidden page skips the minute's poll, and
+ * the BAJS counts aged past their three minutes before the next tick came, up to a minute after the return), unless
+ * it asked this recently: a quick look at another tab costs no request. The interval restarts from that answer. */
+const RETURN_ASK_AFTER_MS = 10_000;
 class CityHttpError extends Error {
   constructor(readonly retryAfterMs: number | null) { super('city-unavailable'); }
 }
@@ -34,8 +41,13 @@ function retryAfterMs(response: Response): number | null {
   const at = Date.parse(value);
   return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
 }
-export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
+export function createCityStore(fetcher: typeof fetch = fetch, lifecycle?: PageLifecycle): CityStore {
   let state = emptyCity(), stopped = false, paused = false, started = false, refreshing = false;
+  /** When the live stations were last asked for, and whether the page is out of view (it asks again on its return). */
+  let liveAskedAt = -Infinity, away = false;
+  /** The next live answer is awaited while one is in flight or the page is away: the counts in hand stand until it comes. */
+  const markAwaited = (): void => { const next = refreshing || away; if (Boolean(state.liveAwaited) !== next) state = { ...state, liveAwaited: next }; };
+  let unwatch: (() => void) | null = null;
   const listeners = new Set<() => void>(), pending = new Map<string, Promise<void>>();
   const chunks = new Map<string, CatalogueChunk>();
   const retryAt = new Map<string, number>(), failures = new Map<string, number>();
@@ -119,17 +131,19 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
   async function refresh(): Promise<void> {
     if (stopped || paused || refreshing || Date.now() < notBefore) return;
     refreshing = true;
+    liveAskedAt = Date.now();
+    markAwaited();
     let failed = false;
     try {
       const live = await request<CityLive>('/api/city/live');
       if (live.schema !== 1 || !Array.isArray(live.bikes) || !Array.isArray(live.sources)) throw new Error('city-invalid-live');
-      if (!stopped && !paused) state = { ...state, live, errors: state.errors.filter(e=>e !== 'live') };
+      if (!stopped && !paused) state = { ...state, live, liveAt: Date.now(), errors: state.errors.filter(e=>e !== 'live') };
     } catch (error) {
       failed = true;
       noteRetryAfter(error);
       if (!stopped && !paused) state = { ...state, errors: [...new Set([...state.errors, 'live'])],
         live: state.live ? { ...state.live, sources: state.live.sources.map(s=>({...s,status:s.status==='down'?'down':'stale'})) } : null };
-    } finally { refreshing = false; emit(); }
+    } finally { refreshing = false; markAwaited(); emit(); }
     if (manifestDue()) await manifest();
     if (failed) scheduleEarly(); else earlyRetries = 0;
   }
@@ -160,16 +174,29 @@ export function createCityStore(fetcher: typeof fetch = fetch): CityStore {
     })();
     return manifestPending;
   }
+  const armInterval = (): void => {
+    if (timer) clearInterval(timer);
+    timer = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) void refresh(); }, LIVE_POLL_MS);
+  };
+  /** Seen again: the stations at once (their counts stand while the answer is on its way), the minute's beat from here. */
+  const onReturn = (): void => {
+    away = false;
+    if (stopped || paused || !started) { markAwaited(); return; }
+    if (Date.now() - liveAskedAt >= RETURN_ASK_AFTER_MS && !refreshing) { if (timer) armInterval(); void refresh(); return; }
+    markAwaited();
+    emit();
+  };
   return {
     snapshot: () => state, ensure, refresh,
     async start() {
       if (started || stopped) return;
       started = true; state = { ...state, loading: true };
+      unwatch ??= watchPageReturn({ hide: () => { away = true; markAwaited(); }, show: onReturn }, lifecycle);
       await Promise.all([manifest(), refresh()]);
-      if (!stopped && !paused) timer = setInterval(() => { if (typeof document === 'undefined' || !document.hidden) void refresh(); }, 60_000);
+      if (!stopped && !paused) armInterval();
     },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-    pause() { paused = true; if (timer) clearInterval(timer); clearRetries(); clearEarly(); },
-    destroy() { stopped = true; if (timer) clearInterval(timer); clearRetries(); clearEarly(); listeners.clear(); },
+    pause() { paused = true; if (timer) clearInterval(timer); clearRetries(); clearEarly(); unwatch?.(); unwatch = null; },
+    destroy() { stopped = true; if (timer) clearInterval(timer); clearRetries(); clearEarly(); unwatch?.(); unwatch = null; listeners.clear(); },
   };
 }

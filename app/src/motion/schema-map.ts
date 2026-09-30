@@ -350,7 +350,8 @@ export function createSchemaMap(options: CityMapOptions, deps: SchemaMapDeps = {
     if (!targets.length) return;
     centreOn({ x: targets.reduce((sum, p) => sum + p.x, 0) / targets.length, y: targets.reduce((sum, p) => sum + p.y, 0) / targets.length });
   }
-  const loop = createLoop((time) => {
+  const loop = createLoop((time, resync) => {
+    if (resync) model?.resync(); // back after the page was away (motion/loop.ts RESYNC_GAP_MS)
     if (!active() || !model || !element.isConnected) return false;
     lastDrawn = model.step(time);
     if (lineFocus && focusedRoute() !== focusedPainted) paintStatic();

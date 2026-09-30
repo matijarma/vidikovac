@@ -2394,6 +2394,40 @@ describe('alerts, polling, the first tap and disposal', () => {
     // The one that fired cleared itself; exactly one fresh poll is armed (still the fallback: the fixture has no source timestamp).
     expect(k.timers.slice(armedAtMount).filter((t) => t.ms === POLL_FALLBACK_MS && !t.cleared)).toHaveLength(1);
   });
+  it('asks for the teaser at once when the wall\'s page is seen again after a while away, and its beat restarts from that answer (lane tab-return)', async () => {
+    let t = NOW;
+    let state = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    const flip = (next: string): void => { state = next; document.dispatchEvent(new Event('visibilitychange')); };
+    try {
+      const fetchTeaser = vi.fn(async () => ({ modules: MODULES }));
+      const k = mount({ stored: STORED, now: () => t, fetchTeaser });
+      await flush();
+      expect(fetchTeaser).toHaveBeenCalledTimes(1);
+      const armedBefore = k.timers.filter((x) => x.ms === POLL_FALLBACK_MS && !x.cleared);
+      expect(armedBefore).toHaveLength(1);
+      flip('hidden');
+      t += 2_000;
+      flip('visible');
+      await flush();
+      expect(fetchTeaser).toHaveBeenCalledTimes(1); // a glance away: the poll's own beat carries on
+      flip('hidden');
+      t += 180_000; // three minutes: a browser that hid the tab, a laptop lid
+      flip('visible');
+      await flush();
+      expect(fetchTeaser).toHaveBeenCalledTimes(2);
+      expect(armedBefore[0]!.cleared).toBe(true); // the old beat is dropped, one new one armed from the answer
+      expect(k.timers.filter((x) => x.ms === POLL_FALLBACK_MS && !x.cleared)).toHaveLength(1);
+      k.handle.destroy();
+      flip('hidden');
+      t += 180_000;
+      flip('visible');
+      await flush();
+      expect(fetchTeaser).toHaveBeenCalledTimes(2);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
   it('a reconnect after a healthy stretch is said as such, then cleared', () => {
     const k = mount({ stored: STORED });
     k.handlers.onStatus('connecting');

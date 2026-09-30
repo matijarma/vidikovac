@@ -46,42 +46,42 @@ app/src/city/markup.ts:119 #departuresMarkup → e(d.headsign||d.routeName)
 app/src/city/next-departures.ts:38 #<module> → e(text)
 app/src/city/next-departures.ts:79 #departuresBlock → vetExternal('name', stop.name, 'row')
 app/src/city/next-departures.ts:82 #departuresBlock → e(stopName)
-app/src/kiosk.ts:179 #shellMarkup → escapeHtml(s.appName)
-app/src/kiosk.ts:190 #shellMarkup → escapeHtml(s.basics.title)
-app/src/kiosk.ts:190 #shellMarkup → escapeHtml(s.basics.hint)
-app/src/kiosk.ts:191 #shellMarkup → escapeHtml(s.basics.close)
-app/src/kiosk.ts:202 #noticeMarkup → escapeHtml(s.appName)
-app/src/kiosk.ts:202 #noticeMarkup → escapeHtml(title)
-app/src/kiosk.ts:202 #noticeMarkup → escapeHtml(body)
-app/src/kiosk.ts:202 #noticeMarkup → escapeHtml(s.notice.setupAgain)
-app/src/kiosk.ts:378 #renderAlert → alertBox.textContent = text ?? ''
-app/src/kiosk.ts:388 #paintClock → dateEl.textContent = date
-app/src/kiosk.ts:391 #paintClock → clockEl.textContent = time
-app/src/kiosk.ts:404 #clearPairingNotice → pairingNote.textContent = ''
-app/src/kiosk.ts:416 #setText → node.textContent = value
-app/src/kiosk.ts:422 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
-app/src/kiosk.ts:423 #sentenceOverflows → setText(probeText, sentence.text)
-app/src/kiosk.ts:456 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
-app/src/kiosk.ts:457 #paintSentence → setText(sentenceText, next.text)
-app/src/kiosk.ts:603 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
-app/src/kiosk.ts:603 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
-app/src/kiosk.ts:627 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
-app/src/kiosk.ts:628 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
-app/src/kiosk.ts:632 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
-app/src/kiosk.ts:793 #paintMap → vetExternal('name', stop.name, 'row')
-app/src/kiosk.ts:1147 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1148 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1149 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1151 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1161 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1162 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1166 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1184 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1185 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1185 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1274 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1281 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1459 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:180 #shellMarkup → escapeHtml(s.appName)
+app/src/kiosk.ts:191 #shellMarkup → escapeHtml(s.basics.title)
+app/src/kiosk.ts:191 #shellMarkup → escapeHtml(s.basics.hint)
+app/src/kiosk.ts:192 #shellMarkup → escapeHtml(s.basics.close)
+app/src/kiosk.ts:203 #noticeMarkup → escapeHtml(s.appName)
+app/src/kiosk.ts:203 #noticeMarkup → escapeHtml(title)
+app/src/kiosk.ts:203 #noticeMarkup → escapeHtml(body)
+app/src/kiosk.ts:203 #noticeMarkup → escapeHtml(s.notice.setupAgain)
+app/src/kiosk.ts:379 #renderAlert → alertBox.textContent = text ?? ''
+app/src/kiosk.ts:389 #paintClock → dateEl.textContent = date
+app/src/kiosk.ts:392 #paintClock → clockEl.textContent = time
+app/src/kiosk.ts:405 #clearPairingNotice → pairingNote.textContent = ''
+app/src/kiosk.ts:417 #setText → node.textContent = value
+app/src/kiosk.ts:423 #sentenceOverflows → setText(probeKicker, s.sentence.kicker[sentence.kicker])
+app/src/kiosk.ts:424 #sentenceOverflows → setText(probeText, sentence.text)
+app/src/kiosk.ts:457 #paintSentence → setText(sentenceKicker, s.sentence.kicker[next.kicker])
+app/src/kiosk.ts:458 #paintSentence → setText(sentenceText, next.text)
+app/src/kiosk.ts:604 #paintContext → contextEl.textContent = !credentials ? '' : vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row') ?? ''
+app/src/kiosk.ts:604 #paintContext → vetExternal('name', wall.place?.name ?? CITY_AREA.name, 'row')
+app/src/kiosk.ts:628 #paintSessionLabel → until.textContent = presentation?.target ? i18n.t('presentation.showing', { name: vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row') ?? '' }) : fill(s.header.unlockedUntil, { time: clock(sessionExpiresAt) })
+app/src/kiosk.ts:629 #paintSessionLabel → vetExternal(presentationLabelKind(presentation.target), presentationTargetLabel(i18n, presentation.target,mergedSnapshots(),stops??[],cityStore.snapshot()), 'row')
+app/src/kiosk.ts:633 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
+app/src/kiosk.ts:794 #paintMap → vetExternal('name', stop.name, 'row')
+app/src/kiosk.ts:1148 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1149 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1150 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1152 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1162 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1163 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1167 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1185 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1186 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1186 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1275 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1282 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1460 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -325,9 +325,9 @@ app/src/map/city-map.ts:239 #vehicleLabel → vetExternal('headsign', v.short, '
 app/src/map/city-map.ts:242 #vehicleLabel → vetExternal('headsign', text, 'row')
 app/src/map/city-map.ts:862 #labelRegion → container.setAttribute('aria-label', vetExternal('summary', options.ariaLabel, 'row') ?? '')
 app/src/map/city-map.ts:862 #labelRegion → vetExternal('summary', options.ariaLabel, 'row')
-app/src/map/city-map.ts:1919 #relabelControls → vetExternal('summary', label, 'row')
-app/src/map/city-map.ts:1920 #relabelControls → el.setAttribute('aria-label', controlLabel)
-app/src/map/city-map.ts:1921 #relabelControls → el.title = controlLabel
+app/src/map/city-map.ts:1922 #relabelControls → vetExternal('summary', label, 'row')
+app/src/map/city-map.ts:1923 #relabelControls → el.setAttribute('aria-label', controlLabel)
+app/src/map/city-map.ts:1924 #relabelControls → el.title = controlLabel
 app/src/map/external-features.ts:34 #screenStopGeoJson → vetExternal('name', stop.name, 'row')
 app/src/map/external-features.ts:43 #pointsToGeoJson → vetExternalMap('name', p.title, publicDisplay)
 app/src/map/external-features.ts:53 #pointsToGeoJson → vetExternalMap(key === 'address' ? 'address' : 'name', value, publicDisplay)
