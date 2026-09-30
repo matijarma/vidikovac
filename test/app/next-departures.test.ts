@@ -4,6 +4,8 @@
 // no word per row and no prompt; one empty rule, one row in the rows' own box.
 // The phone's renderers vet third-party text through the boundary, which refuses everything until the policy is installed: load it here as the page's chunks do.
 import '../../shared/kiosk/external-text';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModuleSnapshot } from '../../worker/feed/schema';
 import type { DepartureBoard } from '../../shared/city/types';
@@ -143,6 +145,32 @@ describe('departuresBlock', () => {
     expect(rows[0]!.querySelector('.t-live')?.getAttribute('aria-label')).toBe('podaci od 17:20');
     expect(html).not.toContain('data-live="true"');
     expect(html).not.toContain('uživo');
+  });
+});
+
+// R1 (docs/reveal-2026-10-plan/R1.md, D1): the desk's Sada draws its departures as one row of three cells; the phone keeps its rows.
+describe('the desk\u2019s departures line', () => {
+  it('marks the list data-line="1" when asked, or on a desktop context, and keeps the rows the phone draws', () => {
+    const cache = boards([board('106_1', 'live', [4, 12, 25]), board('106_2', 'live', [7, 18])]);
+    const lined = dom(departuresBlock(ctx({ boards: cache }), place(STOP), { line: true }));
+    const list = lined.querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(list.dataset.line).toBe('1');
+    expect(list.querySelectorAll(':scope > li.sada-departure[data-kind=departure]')).toHaveLength(3);
+    const desk = { surface: 'desktop', locale: 'hr', theme: 'light', themePreference: 'light', lightweight: false, reducedMotion: false } as const;
+    expect(dom(departuresBlock(ctx({ boards: cache, screen: desk }), place(STOP))).querySelector<HTMLElement>('[data-testid=day-departures]')!.dataset.line).toBe('1');
+    // Asked not to, a desktop context keeps the rows; a phone context never draws the line by itself.
+    expect(dom(departuresBlock(ctx({ boards: cache, screen: desk }), place(STOP), { line: false })).querySelector('[data-testid=day-departures]')!.hasAttribute('data-line')).toBe(false);
+    expect(dom(departuresBlock(ctx({ boards: cache, screen: { ...desk, surface: 'phone' } }), place(STOP))).querySelector('[data-testid=day-departures]')!.hasAttribute('data-line')).toBe(false);
+  });
+  it('holds one busy row under the line, not three, and the stylesheet says so', () => {
+    const waiting = dom(departuresBlock(ctx({ boards: boards([]) }), place(STOP), { line: true }));
+    const list = waiting.querySelector<HTMLElement>('[data-testid=day-departures]')!;
+    expect(list.getAttribute('aria-busy')).toBe('true');
+    expect(list.dataset.line).toBe('1');
+    expect(list.querySelectorAll('li')).toHaveLength(1);
+    const css = readFileSync(join(import.meta.dirname, '../../app/src/ui/overview.css'), 'utf8');
+    expect(css).toContain(".sada-departure-list[data-line='1'][aria-busy='true'] > .sada-departure-empty { min-block-size: 3.5rem; }");
+    expect(css).toContain(".sada-departure-list[data-line='1'] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));");
   });
 });
 

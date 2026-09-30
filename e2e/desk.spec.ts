@@ -65,6 +65,12 @@ for (const window of WINDOWS) for (const zoom of ZOOMS) {
       // One "U blizini" on the page: Sada's (F3).
       await expect(page.locator('[data-testid=nearby]')).toHaveCount(1);
       await expect(page.locator('[data-testid=transport-workspace] [data-kind=departure]')).toHaveCount(0);
+      // R1 (D1): the desk's Sada draws its departures as one row of up to three cells, side by side.
+      const cells = page.locator('[data-testid=day-departures][data-line="1"] > li.sada-departure');
+      await expect.poll(() => cells.count(), { message: 'the desk\'s departures line holds 1 to 3 cells' }).toBeGreaterThanOrEqual(1);
+      const tops = await cells.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+      expect(tops.length).toBeLessThanOrEqual(3);
+      expect(Math.max(...tops) - Math.min(...tops), 'the cells stand on one row').toBeLessThanOrEqual(2);
     });
   });
 }

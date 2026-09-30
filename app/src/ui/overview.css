@@ -61,6 +61,15 @@
 /* A block on its way holds the three rows its board will fill (city/next-departures.ts DEPARTURE_ROWS), so the
    departures landing move nothing below them; a source that cannot answer says so in one ordinary row. */
 .sada-departure-list[aria-busy='true'] > .sada-departure-empty { min-block-size: calc(3 * 3.5rem); }
+/* R1: the desk's Sada draws its departures as one row of three cells (city/next-departures.ts, data-line), the wall's line
+   in the desk's type; the phone keeps its three rows. */
+.sada-departure-list[data-line='1'] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--sp-4); border-block-end: 1px solid var(--tone-stroke); }
+.sada-departure-list[data-line='1'] > .sada-departure { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'badge eta' 'dest dest'; row-gap: var(--sp-1); align-content: center; padding-block: var(--sp-2); border-block-end: 0; }
+.sada-departure-list[data-line='1'] > .sada-departure > .line { grid-area: badge; }
+.sada-departure-list[data-line='1'] > .sada-departure > .t-eta { grid-area: eta; justify-self: start; }
+.sada-departure-list[data-line='1'] > .sada-departure > .sada-dest { grid-area: dest; overflow-wrap: normal; }
+.sada-departure-list[data-line='1'] > .sada-departure-empty { grid-column: 1 / -1; border-block-end: 0; }
+.sada-departure-list[data-line='1'][aria-busy='true'] > .sada-departure-empty { min-block-size: 3.5rem; }
 /* "U blizini · 2 km · ~15 min" (city/nearby-markup.ts): the wall's rows
    (kiosk/timeline.ts rowMarkup) in the phone's type, time in the first
    column; the pill a chip whose words stay the head's. A blue time is a
