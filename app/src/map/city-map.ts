@@ -1690,7 +1690,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     }
     basemapFailing = true;
     if (!styled) setStatus('unavailable');
-    else if (status === 'ready') setStatus('tiles-failed');
+    else if (status === 'ready' || status === 'loading') setStatus('tiles-failed');
   }
 
   /** A basemap tile arriving after a failure: the basemap is back. */

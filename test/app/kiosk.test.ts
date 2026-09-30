@@ -551,6 +551,25 @@ describe('the integrated companion sentence', () => {
 });
 
 describe('versioned explicit public presentation', () => {
+  it('DR1 review: a loading presentation waits, then acknowledges a rendered tiles-failed map exactly once', async () => {
+    let status: 'loading' | 'tiles-failed' = 'loading';
+    const mapFactory = () => ({ update: () => {}, destroy: () => {}, pause: () => {}, resume: () => {}, status: () => status });
+    const k = mount({ stored: STORED, mapFactory: mapFactory as never });
+    await flush();
+    k.handlers.onPresentation?.({
+      version: 1, revision: 1, target: { layer: 'u-pokretu', selection: { kind: 'route', id: '6' } },
+      expiresAt: NOW + 600_000, dataToken: 'dt',
+    });
+    await flush();
+    expect(k.beacon.acknowledgePresentation).not.toHaveBeenCalled();
+    status = 'tiles-failed';
+    k.tick(1000);
+    expect(k.beacon.acknowledgePresentation.mock.calls).toEqual([[1, 'displayed']]);
+    k.tick(1000);
+    expect(k.beacon.acknowledgePresentation).toHaveBeenCalledTimes(1);
+    k.handle.destroy();
+  });
+
   it('loads presented-view code only on an explicit request and acknowledges after the renderer arrives', async () => {
     let deliver!: (renderer: typeof pairedRenderer) => void;
     const pending = new Promise<typeof pairedRenderer>(resolve => { deliver = resolve; });

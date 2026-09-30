@@ -1333,6 +1333,27 @@ describe('the marker census of the city layers', () => {
 describe('the first pills depend on the vehicle data alone', () => {
   const pill = { layer: { id: 'vehicles' }, properties: { id: 'vehicle:1', short: '6' } };
 
+  it('DR1 review: a basemap failure after style load exits loading without discarding visible overlays', async () => {
+    const { map, handle, statuses } = await harness({ load: false });
+    map.basemapLoaded = false;
+    map.fire('style.load');
+    const vehicles = map.getSource('vehicles');
+    expect(handle.status!()).toBe('loading');
+    map.fire('error', { sourceId: basemap.BASEMAP_SOURCE, tile: {}, error: { url: 'https://zagreb.example/maps/tile.pbf' } });
+    expect(handle.status!()).toBe('tiles-failed');
+    expect(map.getSource('vehicles')).toBe(vehicles);
+    expect((vehicles!.data as FC).features).toHaveLength(1);
+    map.basemapLoaded = true;
+    map.fire('sourcedata', { sourceId: basemap.BASEMAP_SOURCE, tile: {} });
+    expect(handle.status!()).toBe('ready');
+    expect(statuses).toEqual(['tiles-failed', 'ready']);
+    // A lost WebGL context is genuinely unavailable, not merely a missing basemap.
+    map.fire('webglcontextlost');
+    map.fire('error', { sourceId: basemap.BASEMAP_SOURCE, tile: {} });
+    expect(handle.status!()).toBe('unavailable');
+    handle.destroy();
+  });
+
   it('puts the overlays and the first vehicles on with the style, before the basemap tiles; ready once they are in', async () => {
     const { map, container, handle, statuses } = await harness({ load: false });
     map.basemapLoaded = false;
