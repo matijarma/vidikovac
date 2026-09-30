@@ -90,11 +90,31 @@ function recordersClean(recorder: Recorder, label: string, teardownSince?: strin
   softly(problems, `${label}: no console error, page error, failed request or HTTP ≥ 400 (map tiles excepted; ${tolerated.length} static asset(s) the session's end cancelled are listed, never an /api/ request)`).toEqual([]);
 }
 
-async function axeBlocking(page: Page): Promise<string[]> {
+async function axeBlocking(page: Page, surface: string): Promise<string[]> {
   const results = await new AxeBuilder({ page }).withTags([...AXE_TAGS]).analyze();
+  writeArtefact(`axe-${surface}.json`, results.violations);
   return results.violations
     .filter((v) => v.impact && AXE_BLOCKING.includes(v.impact))
     .map((v) => `${v.impact} ${v.id}: ${v.help} (${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join('; ')})`);
+}
+
+/** The fixture clock must let the 180 ms settle animation finish before a stable contrast reading. */
+async function settledNearbyHeader(page: Page): Promise<void> {
+  const pill = page.locator('.nearby-pill');
+  await expect(pill).toBeVisible({ timeout: PAINT_MS });
+  const opacity = () => pill.evaluate((element) => {
+    let result = 1;
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      result *= Number(getComputedStyle(node).opacity);
+    }
+    return result;
+  });
+  const before = await opacity();
+  await softly.poll(async () => {
+    await page.clock.runFor(250);
+    return opacity();
+  }, { timeout: PAINT_MS, message: 'the nearby header finishes its entry animation before axe reads contrast' }).toBe(1);
+  writeArtefact('axe-nearby-opacity.json', { before, after: await opacity() });
 }
 
 /** Open Karta by its tab and wait for its map; false when either is missing (already reported). */
@@ -249,9 +269,10 @@ test.describe('phone (Pixel 7 at 390×844)', () => {
     const label = 'phone-axe';
     const { recorder } = await openPhone(page, label);
     await present(page, PHONE_PROBES.sadaPlace, `${label}: Sada names its place (${PHONE_PROBES.sadaPlace}) before axe runs`);
-    softly(await axeBlocking(page), `${label}: axe (${AXE_TAGS.join(', ')}) on Sada, ${AXE_BLOCKING.join(' and ')} violations`).toEqual([]);
+    await settledNearbyHeader(page);
+    softly(await axeBlocking(page, 'sada'), `${label}: axe (${AXE_TAGS.join(', ')}) on Sada, ${AXE_BLOCKING.join(' and ')} violations`).toEqual([]);
     if (await openKarta(page, label)) {
-      softly(await axeBlocking(page), `${label}: axe (${AXE_TAGS.join(', ')}) on Karta, ${AXE_BLOCKING.join(' and ')} violations`).toEqual([]);
+      softly(await axeBlocking(page, 'karta'), `${label}: axe (${AXE_TAGS.join(', ')}) on Karta, ${AXE_BLOCKING.join(' and ')} violations`).toEqual([]);
     }
     recordersClean(recorder, label);
   });
