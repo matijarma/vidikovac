@@ -59,6 +59,27 @@ function sample(over: Partial<WallSample> = {}): WallSample {
     rows,
   };
 }
+
+describe('DR1 peak breadth (run decision 4)', () => {
+  it('allows the offered solar row to yield but requires two distinct non-transit rows in every reading', () => {
+    expect(PEAK.expect.solarMin).toBe(0);
+    expect(PEAK.expect.solarMax).toBe(1);
+    expect(PEAK.expect.nonTransitMin).toBe(2);
+    const [departure, , story] = sample().rows;
+    const open = row({ id: 'open:one', kind: 'open', when: new Date(PEAK.now + MIN).toISOString(), whenText: 'do 20:00', text: 'Ljekarna' });
+    const good = sample({ rows: [departure!, open, story!] });
+    const poor = sample({ rows: [departure!, story!] });
+    expect(sceneReadingFailures(PEAK, good)).toEqual([]);
+    expect(sceneReadingFailures(PEAK, poor)).toEqual(['1 distinct non-transit rows (target ≥ 2)']);
+    expect(sceneReadingFailures(PEAK, sample({ rows: [departure!, story!, { ...story! }] }))).toEqual([
+      '1 distinct non-transit rows (target ≥ 2)',
+    ]);
+    const readings = [good, poor];
+    expect(rotationSceneFailures(PEAK, readings, summariseRotation(readings))).toEqual([
+      '1 of 2 readings with fewer than 2 distinct non-transit rows',
+    ]);
+  });
+});
 /** A fake page whose evaluate runs the shipped function text in this happy-dom document, as Playwright does in the page. */
 function domPage(): Pick<Page, 'evaluate'> {
   return {

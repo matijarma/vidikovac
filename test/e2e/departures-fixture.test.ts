@@ -126,6 +126,8 @@ describe('departures fixture realism', () => {
     for (const kind of scene.expect.requiredKinds) expect(wallRows.some((r) => r.kind === kind), kind).toBe(true);
     for (const kind of scene.expect.noPastKinds) expect(rows.filter((r) => r.kind === kind).every((r) => r.atMs! >= now), kind).toBe(true);
     expect(rows.filter((r) => r.kind === 'solar').length).toBeGreaterThanOrEqual(scene.expect.solarMin);
+    // The peak fixture still offers the sunset; only the measured fitter may prefer higher-value city rows.
+    if (id === 'peak1745') expect(rows.filter((r) => r.kind === 'solar')).toHaveLength(1);
     expect(rows.filter((r) => r.kind === 'solar').length).toBeLessThanOrEqual(1);
     expect(departures.filter((r) => r.live).length).toBeGreaterThanOrEqual(scene.expect.liveMin);
     if (scene.expect.liveMax !== null) expect(rows.filter((r) => r.live).length).toBeLessThanOrEqual(scene.expect.liveMax);

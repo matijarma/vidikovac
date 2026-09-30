@@ -743,7 +743,7 @@ describe('the eight scenes', () => {
     expect(PORTRAIT_SCENES).toEqual(['peak1745']);
   });
 
-  it('carry the solar theme the wall resolves (sunset 18:57, sunrise 06:42), and a solar row where the next one is within the hour, or within three hours unless three departures are due (decision 67)', () => {
+  it('carry the solar theme and keep its maximum, with the DR1 breadth floor replacing the peak solar minimum', () => {
     for (const id of SCENE_IDS) {
       const s = SCENES[id];
       expect(s.theme, id).toBe(isDaylight(new Date(s.now)) ? 'light' : 'dark');
@@ -755,15 +755,16 @@ describe('the eight scenes', () => {
       // 1 in every scene); where three are due and the sunrise is further than the hour (night0430) the scene does not
       // require it, the room beside the line and the promises being the browser's to measure.
       const ahead = next - s.now;
-      const unpinned = ahead > IMMINENT_ROW_MIN * MIN && s.expect.departuresMin === 3;
+      const unpinned = s.expect.nonTransitMin !== undefined
+        || (ahead > IMMINENT_ROW_MIN * MIN && s.expect.departuresMin === 3);
       expect(s.expect.solarMin, id).toBe(ahead <= 3 * 3_600_000 && !unpinned ? 1 : 0);
       expect(s.expect.solarMax, id).toBe(1);
     }
     // night0430: the 04:38 tram is the third departure due and the 06:42 sunrise 2 h 12 min away: three departures in
     // the line, the sunrise row allowed (before R1 it gave its row to the third departure, solarMax 0). peak1745: the
-    // 18:57 sunset 72 minutes away keeps solarMin 1.
+    // 18:57 sunset 72 minutes away may yield to higher-value city rows, whose minimum is now pinned (decision 4).
     expect(SCENES.night0430.expect).toMatchObject({ departuresMin: 3, solarMin: 0, solarMax: 1 });
-    expect(SCENES.peak1745.expect).toMatchObject({ departuresMin: 1, solarMin: 1, solarMax: 1 });
+    expect(SCENES.peak1745.expect).toMatchObject({ departuresMin: 1, solarMin: 0, solarMax: 1, nonTransitMin: 2 });
     expect(SCENE_IDS.filter((id) => SCENES[id].expect.departuresMin === 3)).toEqual(['night0430']);
   });
 

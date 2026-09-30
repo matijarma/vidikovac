@@ -209,6 +209,9 @@ export const HEADINGS_IN_PAGE = (selector: string): string[] =>
 export const HEADINGS = WALL_PROBES.headings;
 
 const kindsOf = (s: WallSample): string => [...new Set(s.rows.map((r) => r.kind ?? 'none'))].join(', ') || 'none';
+const nonTransitRows = (s: WallSample): number => new Set(s.rows
+  .filter((r) => r.id && r.kind && r.kind !== 'departure' && r.kind !== 'departures')
+  .map((r) => r.id)).size;
 const isPast = (when: string | null, at: number): boolean => when !== null && Number.isFinite(Date.parse(when)) && Date.parse(when) < at;
 const drawsVehicles = (s: WallSample): boolean => Boolean((s.pills ?? '').trim()) || (s.bodies ?? 0) > 0;
 
@@ -226,6 +229,9 @@ export function sceneReadingFailures(scene: Scene, s: WallSample, headings: read
   if (!s.validUntil) out.push(`the sentence (${WALL_PROBES.sentence}) carries no data-valid-until`);
   for (const kind of x.requiredKinds) {
     if (!s.rows.some((r) => r.kind === kind)) out.push(`no "${kind}" row on the list at ${scene.zagreb} (target ≥ 1; kinds shown: ${kindsOf(s)})`);
+  }
+  if (x.nonTransitMin !== undefined && nonTransitRows(s) < x.nonTransitMin) {
+    out.push(`${nonTransitRows(s)} distinct non-transit rows (target ≥ ${x.nonTransitMin})`);
   }
   for (const kind of x.noPastKinds) {
     const past = s.rows.filter((r) => r.kind === kind && isPast(r.when, s.at));
@@ -265,6 +271,10 @@ export function rotationSceneFailures(scene: Scene, samples: readonly WallSample
   const out: string[] = [];
   const count = (pred: (s: WallSample) => boolean): number => samples.filter(pred).length;
   const of = `of ${samples.length} readings`;
+  if (x.nonTransitMin !== undefined) {
+    const short = count((s) => nonTransitRows(s) < x.nonTransitMin!);
+    if (short) out.push(`${short} ${of} with fewer than ${x.nonTransitMin} distinct non-transit rows`);
+  }
   if (summary.emptyPlaceSamples > 0) out.push(`${summary.emptyPlaceSamples} ${of} with an empty place (target 0)`);
   const themes = Object.keys(summary.themes).filter((t) => t !== scene.theme);
   if (themes.length) out.push(`the theme left "${scene.theme}" during the ten minutes: ${themes.map((t) => `${t} × ${summary.themes[t]}`).join(', ')}`);

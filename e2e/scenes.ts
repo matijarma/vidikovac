@@ -26,6 +26,8 @@ export interface SceneExpect {
   solarMax: 0 | 1;
   /** Departures in every reading (the line's cells, R1): the wall's floor of 1, or 3 where three are due. */
   departuresMin: 1 | 3;
+  /** DR1 breadth floor: distinct visible non-transit rows in every reading. */
+  nonTransitMin?: number;
   /** Rows with `data-live="1"`: at least this many (morning0745: the fixture tracks two trips). */
   liveMin: number;
   /** At most this many live rows; null when unbounded. The outage allows none. */
@@ -77,8 +79,9 @@ const scene = (id: SceneId, now: number, zagreb: string, theme: 'light' | 'dark'
   Object.freeze({ id, now, zagreb, feedState, theme, expect: Object.freeze({ ...base, ...expect }) });
 
 export const SCENES: Readonly<Record<SceneId, Scene>> = Object.freeze({
-  /** Monday evening peak; sunset at 18:57 is the next solar event. */
-  peak1745: scene('peak1745', Date.UTC(2026, 8, 21, 15, 45), '2026-09-21 17:45', 'light', { solarMin: 1 }),
+  /** R0's value order may give the sunset's room to higher-value city facts (run decision 4).
+   *  The measured 300-reading run held five non-transit rows; the brief requires at least two. */
+  peak1745: scene('peak1745', Date.UTC(2026, 8, 21, 15, 45), '2026-09-21 17:45', 'light', { solarMin: 0, nonTransitMin: 2 }),
   /** Late evening, after sunset. */
   late2130: scene('late2130', Date.UTC(2026, 8, 21, 19, 30), '2026-09-21 21:30', 'dark'),
   /** Last trams tonight (one row listing the lines, from T−4 h) and the first tram (from 22:00). */
