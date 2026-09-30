@@ -59,7 +59,7 @@ function hourlySection(i18n: I18n, ctx: LayerContext): string {
       return `<li class="wx-hour" data-key="${escapeAttribute(item.id)}"><time datetime="${escapeAttribute(item.at!)}">${escapeHtml(zagrebTime(item.at!))}</time>`
         + `<span class="wx-hour-temp">${escapeHtml(i18n.t('panels.temperature', { value: numberText(i18n, temp, 0) }))}</span>${rain}</li>`;
     });
-    body = `<ol class="wx-hourly" role="list" data-testid="weather-hourly">${cells.join('')}</ol>`;
+    body = `<ol class="wx-hourly" role="list" tabindex="0" aria-labelledby="wx-hourly-title" data-testid="weather-hourly">${cells.join('')}</ol>`;
   }
   return wxSection({
     id: 'wx-hourly', tone: 'weather', wide: true,

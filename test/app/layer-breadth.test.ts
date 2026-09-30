@@ -94,6 +94,13 @@ describe('Vrijeme: the hourly strip (R0)', () => {
     ...Array.from({ length: 20 }, (_, i) => step('maksimir', i - 2, 30, 90)),
   ]);
 
+  it('DR1 review: the scrolling hourly list has a named keyboard focus target', () => {
+    const section = renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': HOURLY }));
+    const strip = section.querySelector<HTMLElement>('[data-testid=weather-hourly]')!;
+    expect(strip.tabIndex).toBe(0);
+    expect(strip.getAttribute('aria-labelledby')).toBe('wx-hourly-title');
+  });
+
   it('prints twelve cells from the current hour, Grič before Maksimir, the chance of rain from 30 %', () => {
     const section = renderLayer('zrak-i-nebo', ctx({ 'dhmz-hourly': HOURLY }));
     const cells = section.querySelectorAll('[data-testid=weather-hourly] > li.wx-hour');
