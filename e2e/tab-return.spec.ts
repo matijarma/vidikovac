@@ -66,6 +66,9 @@ function scene(t: number): ModuleSnapshot {
 function pageHooks(): void {
   const w = window as unknown as Record<string, unknown>;
   w.__marks = {};
+  /** Every vehicles push with the page's time it was made at, the last few hundred. */
+  const posts: { at: number; marks: Record<string, number[]> }[] = [];
+  w.__posts = posts;
   const features = (value: unknown, depth: number): unknown[] | null => {
     if (!value || typeof value !== 'object' || depth > 6) return null;
     const o = value as Record<string, unknown>;
@@ -81,6 +84,8 @@ function pageHooks(): void {
         const marks: Record<string, number[]> = {};
         for (const f of list) marks[String(f.properties!.id)] = f.geometry!.coordinates!;
         w.__marks = marks;
+        posts.push({ at: Date.now(), marks });
+        if (posts.length > 400) posts.shift();
       }
     } catch { /* a probe never breaks the page */ }
     return (post as (...args: unknown[]) => void).call(this, message, ...rest);
@@ -99,6 +104,7 @@ function pageHooks(): void {
     document.dispatchEvent(new Event('visibilitychange'));
   };
   w.__show = () => {
+    w.__returnedAt = Date.now();
     delete (document as unknown as Record<string, unknown>).visibilityState;
     delete (document as unknown as Record<string, unknown>).hidden;
     window.requestAnimationFrame = raf!;
@@ -136,10 +142,12 @@ async function read(page: Page): Promise<{ errors: (number | null)[]; bajs: stri
     marks: (window as unknown as { __marks: Record<string, number[]> }).__marks,
     bajs: document.querySelector<HTMLElement>(sel)?.dataset.bajs ?? null,
   }), MAP);
-  return {
-    errors: TRAMS.map(({ id, s0 }) => (got.marks[id] ? metres(got.marks[id]!, lonLatAt(trueArc(s0, got.now))) : null)),
-    bajs: got.bajs,
-  };
+  return { errors: errorsAt(got.marks, got.now), bajs: got.bajs };
+}
+
+/** Each tram's drawn mark against where the fixture has the tram at the page's time `at` (null: not drawn). */
+function errorsAt(marks: Record<string, number[]>, at: number): (number | null)[] {
+  return TRAMS.map(({ id, s0 }) => (marks[id] ? metres(marks[id]!, lonLatAt(trueArc(s0, at))) : null));
 }
 
 type Absence = 'background' | 'frozen';
@@ -173,21 +181,31 @@ async function away(page: Page, clock: PageClock, mode: Absence, ms: number): Pr
   await page.evaluate(() => (window as unknown as { __show(): void }).__show());
 }
 
-/** After a return: every mark at its tram within FRESH_WITHIN_MS, and no BAJS count blank while WATCH_BAJS_MS lasts. */
+/**
+ * After a return: every mark at its tram within FRESH_WITHIN_MS and at it in every push from then on, and no BAJS
+ * count blank while WATCH_BAJS_MS lasts. The marks are judged push by push, each at the page's own time it was made
+ * (the hook's record), so what is measured is what the screen was handed and when, not how fast this test can ask.
+ */
 async function expectFreshReturn(page: Page, label: string): Promise<void> {
-  const returnedAt = Date.now();
+  const started = Date.now();
   const censuses: string[] = [];
-  let fresh = false;
-  let last: (number | null)[] = [];
-  while (Date.now() - returnedAt < WATCH_BAJS_MS) {
+  while (Date.now() - started < WATCH_BAJS_MS) {
     const now = await read(page);
     if (now.bajs) censuses.push(now.bajs);
-    last = now.errors;
-    if (!fresh && Date.now() - returnedAt <= FRESH_WITHIN_MS) fresh = now.errors.every((e) => e !== null && e <= AT_TRAM_M);
     await page.waitForTimeout(150);
   }
-  expect(fresh, `${label}: every mark within ${AT_TRAM_M} m of its tram within ${FRESH_WITHIN_MS / 1000} s of the return (errors at the end: ${last.map((e) => (e === null ? '-' : Math.round(e))).join(' / ')} m)`).toBe(true);
-  expect(last.every((e) => e !== null && e <= AT_TRAM_M), `${label}: and still there ${WATCH_BAJS_MS / 1000} s on`).toBe(true);
+  const { returnedAt, posts } = await page.evaluate(() => {
+    const w = window as unknown as { __returnedAt: number; __posts: { at: number; marks: Record<string, number[]> }[] };
+    return { returnedAt: w.__returnedAt, posts: w.__posts.filter((p) => p.at >= w.__returnedAt) };
+  });
+  const judged = posts.map((p) => ({ after: p.at - returnedAt, errors: errorsAt(p.marks, p.at) }));
+  const atTram = (errors: (number | null)[]): boolean => errors.every((e) => e !== null && e <= AT_TRAM_M);
+  const first = judged.findIndex((p) => atTram(p.errors));
+  const series = judged.slice(0, 12).map((p) => `${p.after}:${p.errors.map((e) => (e === null ? '-' : Math.round(e))).join('/')}`).join(' ');
+  expect(first >= 0 && judged[first]!.after <= FRESH_WITHIN_MS, `${label}: every mark within ${AT_TRAM_M} m of its tram within ${FRESH_WITHIN_MS / 1000} s of the return (pushes, ms after the return:metres ${series})`).toBe(true);
+  console.log(`${label}: the first push with every mark at its tram came ${judged[first]!.after} ms after the return`);
+  const strays = judged.slice(first).filter((p) => !atTram(p.errors));
+  expect(strays.map((p) => `${p.after}:${p.errors.map((e) => (e === null ? '-' : Math.round(e))).join('/')}`), `${label}: and at its tram in every push after that, ${WATCH_BAJS_MS / 1000} s on`).toEqual([]);
   expect([...new Set(censuses)], `${label}: the BAJS discs keep their counts through the return (the census read every 150 ms)`).toEqual([HEALTHY_BAJS]);
 }
 
