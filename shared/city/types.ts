@@ -131,6 +131,11 @@ export interface CityState extends CatalogueData {
   loading: boolean;
   errors: string[];
   loaded: string[];
+  /** When `live` last answered, epoch ms on the page's clock (app/src/core/city-store.ts). */
+  liveAt?: number;
+  /** True while the next live answer is awaited: a request in flight, or a hidden page that asks again when it is
+   *  seen. The last reading's counts stand meanwhile, aged at `liveAt` (app/src/city/discovery.ts dynamicPlaces). */
+  liveAwaited?: boolean;
 }
 export const emptyCatalogue = (): CatalogueData => ({ places: [], streets: [], paths: [], settlements: [] });
 export const emptyCity = (): CityState => ({ ...emptyCatalogue(), manifest: null, live: null, loading: false, errors: [], loaded: [] });
