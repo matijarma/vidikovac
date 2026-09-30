@@ -35,7 +35,8 @@ import { loadStreets as loadStreetsImpl } from './core/streets';
 import type { I18n } from './i18n/i18n';
 import { withNetwork, withTimers, type MapFactory, type MapHighlight } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
-import { continuePoll, nextPollDelay } from './motion/loop';
+import { continuePoll, nextPollDelay, RESYNC_GAP_MS } from './motion/loop';
+import { watchPageReturn } from './core/page-return';
 import { loadNetwork, type Network } from '../../shared/motion/network';
 import { FRAME_RADIUS_M, frameLinesOf, frameRadiusM, frameStopsFrom, type FrameStop } from '../../shared/city/frame';
 import { createRotation, slotProgress, type Rotation } from './rotation';
@@ -1806,6 +1807,20 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     else void refreshSessionData();
   }, REFRESH_MS);
   const stopCity=cityStore.subscribe(()=>{if(!disposed)paintLocal();});
+  // Seen again after a while away (lane tab-return: a browser that hid the wall's tab, a laptop lid): the teaser is
+  // asked at once and its beat starts again from the answer, and a paired screen asks for its session's data; the map
+  // re-seeds on its own (motion/loop.ts) and the city store asks for itself (core/city-store.ts).
+  const stopReturn = watchPageReturn({
+    show: (awayMs) => {
+      if (disposed || !pollingStarted || awayMs <= RESYNC_GAP_MS) return;
+      if (teaserTimer !== null) { clearTimer(teaserTimer); teaserTimer = null; }
+      continuePoll(loadTeaser(), armTeaserPoll, 'kiosk return teaser');
+      if (phase !== 'paired') return;
+      const live = session;
+      if (live && live.snapshot().expiresAt !== null && live.secondsLeft() === 0) endSession();
+      else void refreshSessionData();
+    },
+  }, { now });
 
   return {
     element,
@@ -1813,6 +1828,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     destroy() {
       stopCity();cityStore.destroy();
       disposed = true;
+      stopReturn();
       rotation.stop();
       clearTimer(refreshTimer);
       clearTimer(codeTimer);

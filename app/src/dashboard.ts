@@ -35,7 +35,8 @@ import { LAYER_MODULES, renderLayer } from './layers';
 import type { ExportKind, LayerContext } from './layers/types';
 import { withNetwork, withTimers, type MapFactory } from './map/city-map';
 import { createMapSlots } from './map/map-slots';
-import { continuePoll, nextPollDelay } from './motion/loop';
+import { continuePoll, nextPollDelay, RESYNC_GAP_MS } from './motion/loop';
+import { watchPageReturn } from './core/page-return';
 import { loadNetwork, type Network } from '../../shared/motion/network';
 import { frameLinesOf, type FrameLine } from '../../shared/city/frame';
 import type { SentenceRequest, WrittenSentence } from '../../shared/kiosk/sentence';
@@ -1380,6 +1381,16 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
   ensureFrameLines();
   armPoll();
   armSlowPoll();
+  // Seen again after a while away (lane tab-return): every feed is asked at once instead of on its next beat, which a
+  // hidden tab throttles and a locked phone never reaches; the maps re-seed on their own (motion/loop.ts) and the city
+  // store asks for itself (core/city-store.ts).
+  const stopReturn = watchPageReturn({
+    show: (awayMs) => {
+      if (disposed || frozen || awayMs <= RESYNC_GAP_MS) return;
+      if (expiredByClock()) { freeze(); return; }
+      continuePoll(refresh(), rearmPoll, 'dashboard return refresh');
+    },
+  }, { now });
   tickTimer = setTimer(() => {
     if (expiredByClock()) { freeze(); return; }
     if (notice && notice.until !== null && now() >= notice.until) notice = null;
@@ -1396,6 +1407,7 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
       workspaceDisposals.forEach(fn=>fn());workspaceDisposals.clear();
       cityStore.destroy();
       disposed = true;
+      stopReturn();
       stopPolls();
       if (tickTimer !== null) { clearTimer(tickTimer); tickTimer = null; }
       if (holdTimer !== null) { clearTimer(holdTimer); holdTimer = null; }

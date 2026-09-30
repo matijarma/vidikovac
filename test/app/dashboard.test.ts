@@ -675,6 +675,41 @@ describe('polling on the feed store', () => {
   });
 });
 
+describe('the page seen again (lane tab-return)', () => {
+  it('asks every feed at once after a while away, not on the next beat, and nothing after a glance at another tab', async () => {
+    let t = NOW;
+    let state = 'visible';
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    const flip = (next: string): void => { state = next; document.dispatchEvent(new Event('visibilitychange')); };
+    try {
+      const { session, fetchData, handle } = mount({ now: () => t });
+      session.join();
+      await flush();
+      const active = [...new Set(fetchData.mock.calls.map((c) => c[0]))].sort();
+      fetchData.mockClear();
+      flip('hidden');
+      t += 3_000;
+      flip('visible');
+      await flush();
+      expect(fetchData).not.toHaveBeenCalled(); // a glance away: the beats carry on
+      flip('hidden');
+      t += 120_000; // two minutes in another tab, or a locked phone
+      flip('visible');
+      await flush();
+      expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(active);
+      handle.destroy();
+      fetchData.mockClear();
+      flip('hidden');
+      t += 120_000;
+      flip('visible');
+      await flush();
+      expect(fetchData).not.toHaveBeenCalled(); // a destroyed page listens to nothing
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+});
+
 describe('reconciliation across polls', () => {
   it('preserves a transport search and its caret before a renderer can reparent the controller', async () => {
     const { root, session, tick, handle } = mount();
