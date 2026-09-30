@@ -112,7 +112,8 @@ export const FIT_RESERVED_KINDS: readonly string[] = ['first', 'last', 'notice']
  * with one-line departure titles.
  */
 export const FIT_FULL_KEEPS_KINDS: readonly string[] = [...FIT_RESERVED_KINDS, 'closure'];
-/** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts). */
+/** A departure row's least height on the wall (app/src/city/nearby.ts ROW_MIN_PX, pinned by test/e2e/wall.test.ts); the
+ *  departures line's least height is one row too (R1). It serves the path without the line (a handheld, older readings). */
 export const DEPARTURE_ROW_MIN_PX = 64;
 /**
  * The trains the response policy puts before the departures (U2.md §0.1 railPolicy: at most three in silent, two in
@@ -182,6 +183,12 @@ export interface WallRow {
   text: string;
   /** Any part of the row reads as a caveat (inventory DISCL). */
   caveat: boolean;
+  /**
+   * The departures line's cells on the wall (R1), in order, each one a passer-by can see; present on the line's row
+   * only: the cell's row id, its route (`data-route`), live, the words of its time, whether that is a `<time>`, and
+   * its destination ('' where it prints none).
+   */
+  cells?: { id: string | null; route: string | null; live: boolean; whenText: string; hasTime: boolean; headsign: string }[];
 }
 export interface WallSample {
   /** The page's own clock (the fake clock under test), epoch ms. */
@@ -204,7 +211,11 @@ export interface WallSample {
   rows: WallRow[];
   /** `.nearby-row` elements in the DOM that are not on the wall (hidden, transparent, zero-size, offscreen or clipped). */
   hiddenRows: number;
+  /** The departures a passer-by can see: the cells of the departures line (R1), plus any row of kind `departure` (a
+   *  handheld, or a reading recorded before DR1). */
   departures: number;
+  /** The departures line's `data-cells`: the cells it drew; null without a line (absent in a reading recorded before DR1). */
+  departuresOffered?: number | null;
   /**
    * `data-fit-dropped` on the list: the kinds of the vetted rows the list did not paint, in list order; `[]` when it
    * dropped none, null when the probe is missing (a wall before it, or a reading recorded earlier).
@@ -345,8 +356,20 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
       hasTime: Boolean(q(p.rowTime, li)),
       text,
       caveat: [title, whenText, sub, text].some((part) => part !== '' && discl.test(part)),
+      ...(li.dataset.kind === 'departures' ? {
+        cells: Array.from(li.querySelectorAll<HTMLElement>('[data-cell]')).filter(onWall).map((cell) => ({
+          id: cell.dataset.id ?? null,
+          route: cell.dataset.route ?? null,
+          live: cell.dataset.live === '1',
+          whenText: words(q(p.rowWhen, cell)),
+          hasTime: Boolean(q(p.rowTime, cell)),
+          headsign: words(q('.k-dep-headsign', cell)),
+        })),
+      } : {}),
     };
   });
+  const lineEl = q(p.depLine);
+  const offered = lineEl ? num(lineEl.dataset.cells) : null;
 
   const fit = q(p.nearby)?.dataset;
   const listEl = q(p.nearbyRows);
@@ -384,12 +407,13 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     head: words(q(p.nearbyHead)),
     rows,
     hiddenRows: allRows.length - visibleRows.length,
-    departures: rows.filter((r) => r.kind === 'departure').length,
+    departures: rows.reduce((n, r) => n + (r.cells ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0),
+    departuresOffered: offered,
     fitDropped: fitDroppedIn(fit?.fitDropped),
     fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
     listRoom,
     solarRows: rows.filter((r) => r.kind === 'solar').length,
-    liveRows: rows.filter((r) => r.live).length,
+    liveRows: rows.reduce((n, r) => n + (r.cells ? r.cells.filter((c) => c.live).length : r.live ? 1 : 0), 0),
     pills: mapc?.dataset.pills ?? null,
     bodies: num(mapc?.dataset.bodies),
     zoom: mapc?.dataset.zoom ?? null,
@@ -696,7 +720,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     departuresEverySample: valid.length > 0 && valid.every((s) => s.departures >= DEPARTURES_MIN),
     minDepartures: min(valid.map((s) => s.departures)),
     maxDepartures: max(valid.map((s) => s.departures)),
-    departuresUnderFit: valid.filter((s) => { const plan = fitPlan(s); return !plan || s.departures < plan.expected; }).length,
+    departuresUnderFit: valid.filter(underFit).length,
     fitDroppedByKind,
     fitOverflowReadings: valid.filter((s) => s.fitOverflow === true).length,
     caveatRows: caveats.size,
@@ -732,14 +756,27 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
 }
 
 // --- verdicts, shared by the accept spec and the observer -----------------------------------------
-/** What the fitted count reads of a reading; the list's room and hidden rows are absent in readings recorded before them. */
-export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> & Partial<Pick<WallSample, 'listRoom' | 'hiddenRows'>>;
+/** What the fitted count reads of a reading; the list's room and hidden rows are absent in readings recorded before them,
+ *  the line's offer (departuresOffered) in readings recorded before DR1. */
+export type FitReading = Pick<WallSample, 'departures' | 'rows' | 'fitDropped'> & Partial<Pick<WallSample, 'listRoom' | 'hiddenRows' | 'departuresOffered'>>;
+
+/** The departures line's row of a reading (R1), if the wall drew one. */
+const lineRow = (rows: readonly WallRow[]): WallRow | undefined => rows.find((r) => r.kind === 'departures');
+
+/**
+ * The departures of one reading as a passer-by reads them, in order: the cells of the departures line, and any row of
+ * kind `departure` (a handheld, a reading recorded before DR1). Every "each departure a clock time" check reads it.
+ */
+export function departureReads(rows: readonly WallRow[]): { whenText: string; hasTime: boolean; live: boolean }[] {
+  return rows.flatMap((r) => (r.cells ? r.cells.map((c) => ({ whenText: c.whenText, hasTime: c.hasTime, live: c.live }))
+    : r.kind === 'departure' ? [{ whenText: r.whenText, hasTime: r.hasTime, live: r.live }] : []));
+}
 
 const timelessRow = (r: WallRow): boolean => r.always || r.when === null;
 
 /** The train rows above the first departure row (FIT_RAIL_FIRST_KIND); none without a departure row, as in timeline.ts. */
 export function railsFirst(rows: readonly WallRow[]): WallRow[] {
-  const first = rows.findIndex((r) => r.kind === 'departure');
+  const first = rows.findIndex((r) => r.kind === 'departure' || r.kind === 'departures');
   return first < 0 ? [] : rows.slice(0, first).filter((r) => r.kind === FIT_RAIL_FIRST_KIND);
 }
 
@@ -773,14 +810,33 @@ export function fitPlan(s: FitReading): { offered: number; expected: number; ful
 }
 export const fittedDepartures = (s: FitReading): number | null => fitPlan(s)?.expected ?? null;
 
-/** The departure rows of one reading: 1 to 3, and at least the fitted count of those the list offered; `[]` means it holds. */
+/**
+ * The departures of one reading: 1 to 3; with the departures line (R1) every cell it drew on the wall (the fit never
+ * drops a cell, so the fitted-count plan is not consulted) and no departure row beside it; without it (a handheld, a
+ * reading recorded before DR1) at least the fitted count of those the list offered. `[]` means it holds.
+ */
 export function departureFailures(s: FitReading): string[] {
   const out: string[] = [];
+  const line = lineRow(s.rows);
+  if (line) {
+    if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departures in the line (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
+    if (s.departuresOffered != null && s.departures !== s.departuresOffered) out.push(`${s.departures} of the line's ${s.departuresOffered} cells on the wall (target: every cell the line drew)`);
+    const rows = s.rows.filter((r) => r.kind === 'departure').length;
+    if (rows > 0) out.push(`${rows} departure row(s) beside the departures line (target 0: the wall's departures are the line's cells)`);
+    return out;
+  }
   if (s.departures < DEPARTURES_MIN || s.departures > DEPARTURES_MAX) out.push(`${s.departures} departure rows (target ${DEPARTURES_MIN}–${DEPARTURES_MAX})`);
   const plan = fitPlan(s);
   if (!plan) out.push('the list carries no data-fit-dropped probe (the fitted departure count cannot be judged)');
   else if (s.departures < plan.expected) out.push(`${s.departures} departure rows where the list offered ${plan.offered} and the fit keeps ${plan.expected} (left out: ${(s.fitDropped ?? []).join(' ') || 'nothing'})`);
   return out;
+}
+
+/** A reading whose departures fall short: of the line's cells (R1), or of the fitted count, or without the probe. */
+function underFit(s: FitReading): boolean {
+  if (lineRow(s.rows)) return s.departuresOffered != null && s.departures < s.departuresOffered;
+  const plan = fitPlan(s);
+  return !plan || s.departures < plan.expected;
 }
 
 /** One reading against §11/§16.3 (block B of the wall spec); `[]` means it holds. */

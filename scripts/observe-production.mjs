@@ -1310,7 +1310,7 @@ export const THRESHOLDS = Object.freeze([
   T('redemptions', 'd1', 'all', 'all.redemptionsOverBudget', NONE, 'at most one code redemption per surface, at least 12 s apart', '§16.7'),
   // D2: the wall (WP1, WP2, WP3).
   T('place', 'd2', 'kiosk', 'kiosk.emptyPlaceReadings', NONE, 'kiosk-context non-empty in every reading', '§16.3, D2'),
-  T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departure rows in every reading and at least the fitted count of those the list offered ({DEPARTURES_FIT_FULL}, or {DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts), one fewer for each train placed before the departures (never under {DEPARTURES_MIN}), fewer beside such a row or train only as many as a full list holds (under {DEPARTURE_ROW_MIN_PX} px left, every other row a reserved one, a train placed first, a closure or the one timeless row)', '§16.3, [O-65], F7'),
+  T('departures', 'd2', 'kiosk', 'kiosk.departuresOutOfRange', NONE, '{DEPARTURES_MIN}–{DEPARTURES_MAX} departures in every reading as the cells of the one departures line, every cell of the line on the wall (data-cells); without the line (a handheld, a reading recorded before DR1) at least the fitted count of those the list offered ({DEPARTURES_FIT_FULL}, or {DEPARTURES_FIT_RESERVED} beside a first, last or notice row; a missing data-fit-dropped probe counts), one fewer for each train placed before the departures (never under {DEPARTURES_MIN}), fewer beside such a row or train only as many as a full list holds (under {DEPARTURE_ROW_MIN_PX} px left, every other row a reserved one, a train placed first, a closure or the one timeless row)', '§16.3, [O-65], F7'),
   T('silent-departures', 'd2', 'kiosk', 'kiosk.silentDepartureSentences', NONE, 'while the twin reports its fleet silent, no header sentence says a departure ({DEPARTURE_SENTENCE_RE}; a train excepted)', 'brief §4 U2, F7'),
   T('unlabelled', 'd2', 'kiosk', 'kiosk.unlabelledReadings', NONE, 'data-unlabelled = 0 in every reading (a missing probe counts)', '§16.3, D2'),
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
@@ -1399,7 +1399,8 @@ function outageIssues(s, k) {
   if (k.wall.pillLabels(s.pills).length) out.push(`vehicle pills ${quote(s.pills, 40)}`);
   if (s.liveRows > 0) out.push(`${s.liveRows} live countdown row(s)`);
   if (!((s.markers ?? 0) > 0)) out.push(`data-markers ${s.markers ?? 'missing'}`);
-  const untimed = s.rows.filter((r) => r.kind === 'departure' && !(r.hasTime && k.wall.CLOCK_RE.test(r.whenText)));
+  // The departures line's cells, or the departure rows of a reading recorded before DR1 (e2e/wall.ts departureReads).
+  const untimed = k.wall.departureReads(s.rows).filter((d) => !(d.hasTime && k.wall.CLOCK_RE.test(d.whenText)));
   if (untimed.length) out.push(`${untimed.length} departure(s) without a clock time`);
   return out;
 }
@@ -1524,11 +1525,13 @@ export const METRICS = Object.freeze({
     return { value: over + close, detail: [`redemptions ${Object.entries(per).map(([s, n]) => `${s} ${n}`).join(' · ') || 'none'}${gaps.length ? `; gaps ${gaps.map((g) => `${(g / 1000).toFixed(1)} s`).join(', ')}` : ''}${failed.length ? `; failed (no /api/scan answer, the scan cancelled): ${failed.map((f) => f.surface).join(', ')}` : ''}`] };
   },
   'kiosk.emptyPlaceReadings': (obs) => countReadings(obs, (s) => !s.place, () => 'kiosk-context empty'),
-  // `departures` counts only rows a passer-by can see (e2e/wall.ts); rows hidden, offscreen or clipped are hiddenRows.
-  // The verdict is e2e/wall.ts departureFailures: 1 to 3, and the fitted count of those the list offered (data-fit-dropped).
+  // `departures` counts only departures a passer-by can see (e2e/wall.ts): the line's cells (R1), or the departure rows of
+  // a reading recorded before DR1; rows hidden, offscreen or clipped are hiddenRows. The verdict is e2e/wall.ts
+  // departureFailures: 1 to 3, every cell of the line on the wall, or without the line the fitted count of those the
+  // list offered (data-fit-dropped).
   // The finding names the portrait reading, which rotation.jsonl does not hold, and the room the list had left (listRoom),
   // which decides whether a full list may hold fewer (DU3, 29 Sep: the portrait's finding was read as the rotation's).
-  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => k.wall.departureFailures(s).length > 0, (s) => `${s === obs.kiosk.portrait ? 'the portrait (1080 × 1920): ' : ''}${s.departures} visible departure rows${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}: ${k.wall.departureFailures(s).join('; ')}${typeof s.listRoom === 'number' ? `; ${s.listRoom} px left in the list` : ''}`),
+  'kiosk.departuresOutOfRange': (obs, k) => countReadings(obs, (s) => k.wall.departureFailures(s).length > 0, (s) => `${s === obs.kiosk.portrait ? 'the portrait (1080 × 1920): ' : ''}${s.departures} visible departures${typeof s.departuresOffered === 'number' ? ` of ${s.departuresOffered} in the line` : ''}${s.hiddenRows ? ` (${s.hiddenRows} row(s) in the DOM but not on the wall, not counted)` : ''}: ${k.wall.departureFailures(s).join('; ')}${typeof s.listRoom === 'number' ? `; ${s.listRoom} px left in the list` : ''}`),
   // While the twin reports the fleet silent (sources.zet.service.state, as the page received it) the header says no departure;
   // a train is the one exception (the promoted alternative).
   'kiosk.silentDepartureSentences': (obs, k) => countReadings(obs, (s) => s.fleet?.service === 'silent' && k.wall.DEPARTURE_SENTENCE_RE.test(s.sentence) && !k.wall.RAIL_SENTENCE_RE.test(s.sentence), (s) => `the twin reports the fleet silent, the header says ${quote(s.sentence, 90)}`),

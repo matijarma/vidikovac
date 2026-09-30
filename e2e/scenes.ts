@@ -16,16 +16,15 @@ import type { FixtureState } from './experience-fixtures';
 export type SceneId = 'peak1745' | 'late2130' | 'lastTrams2240' | 'afterLast0045' | 'night0430' | 'morning0745' | 'midday1230' | 'outage0800';
 
 export interface SceneExpect {
-  /** Kinds that must be on the list (departures in every scene, [O-65]). */
-  requiredKinds: readonly NearbyKind[];
+  /** Kinds that must be on the list (departures in every scene, [O-65]; on the wall the departures line, R1). */
+  requiredKinds: readonly (NearbyKind | 'departures')[];
   /** Kinds whose `data-when` must not lie before the scene's now (a last tram that has left, an event that is over). */
   noPastKinds: readonly NearbyKind[];
   /** Solar rows per reading: at most 1 always (only the next event); at least 1 where the next sunset or sunrise lies inside the shown horizon. */
   solarMin: 0 | 1;
-  /** Solar rows per reading at most: 1, or 0 where the next solar event is more than an hour away (timeline.ts IMMINENT_ROW_MIN)
-   *  and three departures are due, so the row goes to the third departure (decision 67, observe-d530). */
+  /** Solar rows per reading at most: 1 (only the next event), or 0 where a scene pins that the row yields. */
   solarMax: 0 | 1;
-  /** Departure rows in every reading: the wall's floor of 1, or 3 where three are due and a solar row gives them its room (decision 67). */
+  /** Departures in every reading (the line's cells, R1): the wall's floor of 1, or 3 where three are due. */
   departuresMin: 1 | 3;
   /** Rows with `data-live="1"`: at least this many (morning0745: the fixture tracks two trips). */
   liveMin: number;
@@ -59,7 +58,7 @@ export interface Scene {
 }
 
 const base: SceneExpect = {
-  requiredKinds: ['departure'],
+  requiredKinds: ['departures'],
   noPastKinds: [],
   solarMin: 0,
   solarMax: 1,
@@ -83,12 +82,13 @@ export const SCENES: Readonly<Record<SceneId, Scene>> = Object.freeze({
   /** Late evening, after sunset. */
   late2130: scene('late2130', Date.UTC(2026, 8, 21, 19, 30), '2026-09-21 21:30', 'dark'),
   /** Last trams tonight (one row listing the lines, from T−4 h) and the first tram (from 22:00). */
-  lastTrams2240: scene('lastTrams2240', Date.UTC(2026, 8, 21, 20, 40), '2026-09-21 22:40', 'dark', { requiredKinds: ['departure', 'last', 'first'] }),
+  lastTrams2240: scene('lastTrams2240', Date.UTC(2026, 8, 21, 20, 40), '2026-09-21 22:40', 'dark', { requiredKinds: ['departures', 'last', 'first'] }),
   /** 00:45, after the last departure at 24:31: no last-tram row whose time has passed, no "zadnji" in the sentence [O-41]; the first tram stays. */
-  afterLast0045: scene('afterLast0045', Date.UTC(2026, 8, 21, 22, 45), '2026-09-22 00:45', 'dark', { requiredKinds: ['departure', 'first'], noPastKinds: ['last'], sentenceNot: /zadnji/i }),
+  afterLast0045: scene('afterLast0045', Date.UTC(2026, 8, 21, 22, 45), '2026-09-22 00:45', 'dark', { requiredKinds: ['departures', 'first'], noPastKinds: ['last'], sentenceNot: /zadnji/i }),
   /** Quiet hour: dark palette, the first tram, the pharmacy on duty; sunrise at 06:42 is the next solar event, 2 h 12 min away
-   *  with three departures due (the 04:38 tram the third), so at 1920 x 1080 its row goes to the third departure (decision 67). */
-  night0430: scene('night0430', Date.UTC(2026, 8, 22, 2, 30), '2026-09-22 04:30', 'dark', { requiredKinds: ['departure', 'first', 'pharmacy'], noPastKinds: ['event'], solarMin: 0, solarMax: 0, departuresMin: 3 }),
+   *  with three departures due (the 04:38 tram the third). Before R1 the sunrise's row went to the third departure at
+   *  1920 x 1080 (decision 67, solarMax 0); the line holds the three in one row, so the sunrise may keep its row. */
+  night0430: scene('night0430', Date.UTC(2026, 8, 22, 2, 30), '2026-09-22 04:30', 'dark', { requiredKinds: ['departures', 'first', 'pharmacy'], noPastKinds: ['event'], solarMin: 0, solarMax: 1, departuresMin: 3 }),
   /** Morning peak: at least one tracked countdown (the departures fixture joins two vehicles by trip id). */
   morning0745: scene('morning0745', Date.UTC(2026, 8, 22, 5, 45), '2026-09-22 07:45', 'light', { liveMin: 1 }),
   /** Midday. */

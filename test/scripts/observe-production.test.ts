@@ -948,7 +948,23 @@ describe('a run over a fake browser', () => {
     const r = await observe([], { reading: (n, at, code) => ({ ...wallReading(n, at, code), ...(n === 1 ? { rows: [], departures: 0, solarRows: 0, hiddenRows: 2 } : {}) }) });
     expect(r.code).toBe(1);
     expect(r.lines.join('\n')).toContain('FAIL departures');
-    expect(read(r.out, 'report.md')).toContain('0 visible departure rows (2 row(s) in the DOM but not on the wall, not counted)');
+    expect(read(r.out, 'report.md')).toContain('0 visible departures (2 row(s) in the DOM but not on the wall, not counted)');
+  });
+
+  // R1: with the departures line on the wall the verdict is its cells: 1 to 3, every cell the line drew on the wall.
+  it('the departures line: every cell on the wall holds, a cell off the wall fails and the finding says of how many', async () => {
+    const lined = (visible: number) => (n: number, at: number, code: string): WallSample => {
+      const good = wallReading(n, at, code);
+      const cells = [1, 2, 3].slice(0, visible).map((i) => ({ id: `trip-${n}-${i}`, route: '6', live: false, whenText: `17:4${i}`, hasTime: true, headsign: 'Sopot' }));
+      const line = row({ id: 'departures', kind: 'departures', when: new Date(at + 120_000).toISOString(), whenText: '17:41', text: '6 17:41 Sopot', cells });
+      // No data-fit-dropped probe needed with the line: the fit never drops a cell.
+      return { ...good, rows: [line, ...good.rows.slice(1)], departures: visible, departuresOffered: 3, fitDropped: null };
+    };
+    const whole = await observe([], { reading: lined(3) });
+    expect(read(whole.out, 'report.md')).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    const cut = await observe([], { reading: lined(2) });
+    expect(cut.lines.join('\n')).toContain('FAIL departures');
+    expect(read(cut.out, 'report.md')).toContain("2 visible departures of 3 in the line: 2 of the line's 3 cells on the wall (target: every cell the line drew)");
   });
 
   it('the Tuesday shape (one departure shown, two dropped with an event, 09:00) fails departures and names what the fit left out; a list without the probe fails too', async () => {
@@ -958,7 +974,7 @@ describe('a run over a fake browser', () => {
     expect(r.lines.join('\n')).toContain('FAIL departures');
     const report = read(r.out, 'report.md');
     expect(report).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 5 \| \*\*fail\*\* \|/);
-    expect(report).toContain('1 visible departure rows: 1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure event)');
+    expect(report).toContain('1 visible departures: 1 departure rows where the list offered 3 and the fit keeps 3 (left out: departure departure event)');
     // The monitored line of the report: the rotation's three readings dropped two departures and one event each.
     expect(report).toContain('Rows the fit left out of the list (data-fit-dropped, 3 of 3 readings carried the probe; monitored, no threshold): departure 6, event 3, each reading counting its own; readings with data-fit-overflow=1: 0.');
     // A reserved row beside two shown departures with one dropped holds; the floor is two.
@@ -996,7 +1012,7 @@ describe('a run over a fake browser', () => {
     expect(r.lines.join('\n')).toContain('FAIL departures');
     const report = read(r.out, 'report.md');
     expect(report).toMatch(/\| departures \| d2 \| kiosk \| .* \| ≤ 0 \| 1 \| \*\*fail\*\* \|/);
-    expect(report).toContain('the portrait (1080 × 1920): 1 visible departure rows: 1 departure rows where the list offered 3 and the fit keeps 2 (left out: rail rail departure departure closure solar); 73 px left in the list');
+    expect(report).toContain('the portrait (1080 × 1920): 1 visible departures: 1 departure rows where the list offered 3 and the fit keeps 2 (left out: rail rail departure departure closure solar); 73 px left in the list');
   });
 
   it('departures holds on the strike morning: three trains placed before one departure fill the place of the two left out; below it they do not', async () => {
@@ -1142,6 +1158,21 @@ describe('a run over a fake browser', () => {
     expect(live.lines.join('\n')).toContain('FAIL outage');
     const countdown = await observe(['--stage', 'd2'], { reading: (n, at, code) => ({ ...outage({})(n, at, code), rows: wallReading(n, at, code).rows }) });
     expect(read(countdown.out, 'report.md')).toContain('data-feed down: 1 departure(s) without a clock time');
+    // R1: the departures line's cells are read as the departures (e2e/wall.ts departureReads): a countdown cell in an
+    // outage is one departure without a clock time, a line of clocks is none.
+    const cells = (whenText: string): NonNullable<WallRow['cells']> => [
+      { id: 'trip-a', route: '6', live: false, whenText, hasTime: true, headsign: 'Sopot' },
+      { id: 'trip-b', route: '13', live: false, whenText: '17:52', hasTime: true, headsign: 'Žitnjak' },
+    ];
+    const lineReading = (whenText: string) => (n: number, at: number, code: string): WallSample => {
+      const base = outage({})(n, at, code);
+      const line = row({ id: 'departures', kind: 'departures', when: new Date(at + 180_000).toISOString(), whenText, text: `6 ${whenText} Sopot`, cells: cells(whenText) });
+      return { ...base, rows: [line, ...base.rows.slice(1)], departures: 2, departuresOffered: 2 };
+    };
+    const lineCountdown = await observe(['--stage', 'd2'], { reading: lineReading('za 2 min') });
+    expect(read(lineCountdown.out, 'report.md')).toContain('data-feed down: 1 departure(s) without a clock time');
+    const lineClocks = await observe(['--stage', 'd2'], { reading: lineReading('17:48') });
+    expect(read(lineClocks.out, 'report.md')).not.toContain('without a clock time');
     const noNote = await observe(['--stage', 'd2'], { reading: outage({ mapNotes: 0, markers: 0 }) });
     expect(read(noNote.out, 'report.md')).toContain('data-feed down: data-markers 0');
     expect(read(noNote.out, 'report.md')).toContain('data-feed down: 0 map note(s), not 1');
