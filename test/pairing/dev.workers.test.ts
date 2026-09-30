@@ -203,25 +203,28 @@ describe('/hitno?DEV', () => {
     return { headers: response.headers, html };
   };
 
-  it('is the same page with the chip written in, no script, never cached as the public copy', async () => {
+  it('is the same page with the mark written in after the wordmark, no script, never cached as the public copy', async () => {
     expect((await hitno('dev-hitno.test', '')).html).not.toContain('data-dev');
     const { headers, html } = await hitno('dev-hitno.test', '?DEV');
     expect(headers.get('cache-control')).toBe('private, no-store');
     for (const [k, v] of Object.entries(HITNO_SECURITY_HEADERS)) expect(headers.get(k), k).toBe(v);
     expect(html).toContain('<html lang="hr" data-dev="1" data-page="hitno" data-dev-chip="1">');
     expect(html).toContain('data-testid="dev-chip"');
+    // The header reads "Kaj ima?dev": the mark follows the wordmark on its line.
+    expect(html).toContain('<a class="brand" href="/">Kaj ima<span class="mark">?</span></a><nav class="dev" id="dev-mark" data-testid="dev"');
     expect(html).not.toMatch(/<script/i);
     const links = [...html.matchAll(/data-dev-surface="([a-z]+)"[^>]*>([^<]+)</g)].map((m) => [m[1], m[2]]);
     expect(links).toEqual([['screen', 'Zaslon'], ['phone', 'Telefon'], ['desktop', 'Računalo'], ['hitno', 'Hitno'], ['all', 'Sve zajedno']]);
-    expect(html).toContain('<a class="dev-off" data-testid="dev-off" href="/hitno" aria-label="Isključi razvojni način rada"');
+    expect(html).toContain('<a class="dev-off" data-testid="dev-off" data-dev-off href="/hitno" aria-label="Isključi razvojni način rada"');
     expect(html).toContain('href="/hitno?DEV" data-dev-surface="hitno" aria-current="page"');
     // The public copy in the edge cache is still the plain page.
     expect((await hitno('dev-hitno.test', '')).html).not.toContain('data-dev');
   });
 
-  it('framed by the /dev/ grid, is marked DEV but draws no chip', async () => {
+  it('framed by the /dev/ grid, is marked DEV but draws no mark and no scrollbar', async () => {
     const { html } = await hitno('dev-hitno-frame.test', '?DEV', { 'sec-fetch-dest': 'iframe' });
     expect(html).toContain('<html lang="hr" data-dev="1" data-page="hitno">');
     expect(html).not.toContain('dev-chip');
+    expect(html).toContain('<style>html{scrollbar-width:none}</style></head>');
   });
 });

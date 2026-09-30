@@ -1270,7 +1270,7 @@
     "viewMap": "Karta"
   },
   "dev": {
-    "chip": "DEV",
+    "chip": "dev",
     "menu": "Razvojni način rada",
     "off": "Isključi razvojni način rada",
     "screen": "Zaslon",

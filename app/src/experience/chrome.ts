@@ -6,6 +6,7 @@
 // desk's six-domain bar are gone (plan D4, D10; companion WP4).
 import type { LayerId, Role } from '../../../worker/protocol';
 import type { CastReason } from '../core/contracts';
+import { devMarkSlot } from '../core/dev-mode';
 import type { NotifyFlags, NotifyKey } from '../core/notify-store';
 import { countdown, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
@@ -113,8 +114,9 @@ function frozenAttrs(s: ShellState): string {
  */
 export function statusLineMarkup(i18n: I18n, s: ShellState): string {
   // Frozen: a plain `#layer=` link would replace the fragment and lose `room=`, so the wordmark
-  // becomes the way home instead (the session is over), as on the empty page.
-  const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' });
+  // becomes the way home instead (the session is over), as on the empty page. In DEV the mark
+  // follows it, so the header reads "Kaj ima?dev" (core/dev-mode.ts).
+  const wordmark = wordmarkMarkup(i18n, s.frozen ? { href: '/' } : { href: '#layer=grad-sada', layer: 'grad-sada' }) + devMarkSlot();
   const session = sessionMarkup(i18n, s);
   const safety = safetyMarkup(i18n, s);
   const display = s.hasScreen && s.role === 'scanner' ? presentationButton(i18n, Boolean(s.presentationOpen), s.presentation) : '';

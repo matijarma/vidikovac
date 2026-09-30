@@ -34,7 +34,7 @@ const codeOnItsWay = codeFromHash(hash) !== null;
 // redeemed as ever and /d/ opens in DEV; without one the page goes straight on to /d/ in DEV.
 const dev = readDevMode(location.search, safeSessionStorage());
 if (dev && !codeOnItsWay) location.replace(withDevFlag('/d/'));
-if (dev) showDev(i18n, null);
+if (dev) void showDev(i18n, null);
 let page = mount();
 // The one Manrope family, at once: a slow link never finishes it before the hop and the hop cancels it, a fast link
 // has it cached for /d/, which then never swaps its fonts (round 3 review, N3).

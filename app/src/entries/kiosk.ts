@@ -82,7 +82,7 @@ const mapMode = mapOverride ?? createMapModeStore({ storage: safeLocalStorage() 
 // phone that scans it opens in DEV too. Should the DEV screen not come, the wall starts from the
 // DEV screen it kept, or from the start screen, whose Pokreni asks for the DEV screen again.
 const dev = readDevMode(location.search, safeSessionStorage());
-if (dev) showDev(i18n, 'screen');
+if (dev) void showDev(i18n, 'screen');
 const local = safeLocalStorage();
 if (!dev) mount(location.hash);
 else void requestDevScreen().then((screen) => mount(`#${screen.beaconId}.${screen.secret}`), () => mount(''));

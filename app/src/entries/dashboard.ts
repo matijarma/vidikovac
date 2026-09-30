@@ -40,7 +40,7 @@ const params = parseSessionHash(location.hash);
 // DEV (core/dev-mode.ts): no code is needed. A page in DEV without a room in its fragment asks
 // the Worker for a session on this network's DEV screen and runs it like any scanned one.
 const dev = readDevMode(location.search, safeSessionStorage());
-if (dev) showDev(i18n, globalThis.matchMedia?.('(min-width: 60rem)').matches ? 'desktop' : 'phone');
+if (dev) void showDev(i18n, globalThis.matchMedia?.('(min-width: 60rem)').matches ? 'desktop' : 'phone');
 
 // Collapsed on screen, complete on paper: native printing (including Ctrl+P)
 // must retain attribution and licence text, not only the disclosure heading.

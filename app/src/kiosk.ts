@@ -12,7 +12,7 @@ import { createBeaconClient, parseProvisionHash, readBeacon, reloadBeacon, store
 import { BUILT_AT } from './motion/network-meta';
 import type { MotionMetadata } from '../../shared/motion/wire';
 import { codeUrl, formatCode, speakableCode } from './code';
-import { withDevFlag } from './core/dev-mode';
+import { devMarkSlot, withDevFlag } from './core/dev-mode';
 import { parseSelection, type PublicSelection, type ScreenStop } from './core/contracts';
 import type { ScreenPresentation } from '../../worker/presentation';
 import { createCityStore, type CityStore } from './core/city-store';
@@ -176,7 +176,7 @@ function safeLocalStorage(): StorageLike | null {
 function shellMarkup(s: KioskStrings): string {
   return `<p class="k-alert" role="alert" data-testid="kiosk-alert" hidden></p>
     <header class="k-head">
-      <div class="k-head-brand"><button type="button" class="k-brand" data-testid="kiosk-brand" aria-label="${escapeAttribute(`${s.appName} · ${s.settings.open}`)}">${escapeHtml(s.appName)}</button><p class="k-context" data-testid="kiosk-context"></p></div>
+      <div class="k-head-brand"><button type="button" class="k-brand" data-testid="kiosk-brand" aria-label="${escapeAttribute(`${s.appName} · ${s.settings.open}`)}">${escapeHtml(s.appName)}</button>${devMarkSlot()}<p class="k-context" data-testid="kiosk-context"></p></div>
       <div class="k-head-mid" data-testid="kiosk-head-mid">
         <p class="k-sentence" data-testid="kiosk-sentence" hidden><span class="k-sentence-kicker" data-testid="kiosk-sentence-kicker"></span><span class="k-sentence-text" data-testid="kiosk-sentence-text"></span></p>
         <span class="k-sentence k-sentence-probe" aria-hidden="true"><span class="k-sentence-kicker"></span><span class="k-sentence-text"></span></span>
@@ -1075,7 +1075,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     if (disposed || layout.size === 'handheld' || phase !== 'invitation') return false;
     const target = event.target;
     if (!(target instanceof Element)) return false;
-    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials]')) return false;
+    if (target.closest('[data-testid=kiosk-brand], [data-testid=kiosk-settings-panel], [data-testid=kiosk-essentials], [data-testid=dev]')) return false;
     if (!touchable()) return true;
     if (target.closest('[data-testid=nearby-rows] > .nearby-row, [data-testid=strip-pharmacy]')) return false;
     return !(target.closest('[data-testid=kiosk-map-host]') && touchOnMap(event));

@@ -1,14 +1,39 @@
-/* The /dev/ grid (app/src/entries/dev.ts; worker/routes/dev.ts describes DEV): the wall, the phone,
-   the desk and Hitno side by side, each drawn at its own size and scaled to its cell. The cells'
-   columns stand in the ratio of the frames' aspect ratios (--cols, set by the entry), so the four
-   share one height; a narrow window stacks them. The chip's own style is shared/dev-chip.ts. */
-.dev-grid { box-sizing: border-box; min-block-size: calc(100vh - var(--dev-strip, 0px)); padding: var(--sp-3, 12px); background: var(--tone-surface-canvas); }
-.dev-cells { display: grid; grid-template-columns: var(--cols, 1fr); gap: var(--sp-3, 12px); align-items: start; }
-.dev-cell { margin: 0; min-inline-size: 0; }
-.dev-cell figcaption { margin-block-end: var(--sp-1, 4px); font-size: var(--text-sm, 0.875rem); color: var(--tone-text-muted); }
-.dev-frame-box { position: relative; overflow: hidden; aspect-ratio: var(--w) / var(--h); border: 1px solid var(--tone-stroke); border-radius: var(--r-md, 12px); background: var(--tone-surface-1); }
-.dev-frame-box iframe { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 1px); block-size: calc(var(--h) * 1px); border: 0; transform: scale(var(--k, 1)); transform-origin: 0 0; }
-@media (max-width: 59.99rem) {
-  .dev-cells { grid-template-columns: minmax(0, 1fr); }
-  .dev-cell { max-inline-size: calc(var(--w) * 1px); }
+/* The /dev/ page (app/src/entries/dev.ts; worker/routes/dev.ts describes DEV): a header with the
+   wordmark and its DEV mark, then the wall, the phone, Hitno and the desk, each drawn at its own
+   size and scaled to its cell. The mark's own style is shared/dev-chip.ts.
+
+   From 900 px the four stand two by two and fill the window without a scroll: the wall (wide) and
+   the phone (narrow) in the first row, Hitno (narrow) and the desk (wide) in the second, so the
+   wide cells alternate. Three columns carry them: the wall spans the first two, the desk the last
+   two, and the rows' heights are chosen so the two rows are exactly as wide (--r1 and --r2 from
+   the frames' aspect ratios --rw, --rp and --rd, set by the entry): the largest pair that fits the
+   grid's width and its height, centred. A narrower window stacks them in the same order and scrolls. */
+html[data-page='dev'] body { display: flex; flex-direction: column; min-block-size: 100vh; min-block-size: 100dvh; margin: 0; background: var(--tone-surface-canvas); }
+.dev-head { flex: none; display: flex; align-items: center; min-block-size: 3.5rem; box-sizing: border-box; padding-inline: var(--sp-6); border-block-end: 1px solid var(--tone-stroke); background: var(--tone-surface-1); }
+.dev-brand { display: inline-flex; align-items: center; min-block-size: var(--target); color: var(--tone-text-primary); font-size: var(--type-title); font-weight: var(--weight-bold); letter-spacing: -0.04em; text-decoration: none; white-space: nowrap; }
+.dev-brand-mark { color: var(--tone-action-brand); }
+.dev-head > .dev { --dev-strut: var(--type-title); }
+.dev-grid { flex: 1 1 auto; box-sizing: border-box; min-block-size: 0; padding: var(--sp-3); }
+.dev-cells { --g: var(--sp-3); --cap: 1.75rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--g); justify-content: center; align-content: start; }
+.dev-cell { display: grid; grid-template-rows: var(--cap) auto; margin: 0; min-inline-size: 0; }
+.dev-cell figcaption { overflow: hidden; font-size: var(--text-sm, 0.875rem); line-height: 1.25rem; color: var(--tone-text-muted); white-space: nowrap; text-overflow: ellipsis; }
+.dev-frame-box { position: relative; overflow: hidden; box-sizing: border-box; inline-size: min(100%, calc(var(--w) * 1px)); aspect-ratio: var(--w) / var(--h); border: 1px solid var(--tone-stroke); border-radius: var(--r-md, 12px); background: var(--tone-surface-1); }
+.dev-frame-box iframe { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 1px); block-size: calc(var(--h) * 1px); border: 0; transform: scale(var(--scale, 1)); transform-origin: 0 0; }
+@media (min-width: 56.25rem) {
+  html[data-page='dev'] body { block-size: 100vh; block-size: 100dvh; }
+  .dev-grid { container-type: size; }
+  .dev-cells {
+    --kr: calc((var(--rw) + var(--rp)) / (var(--rp) + var(--rd)));
+    --r1: min(calc((100cqw - var(--g)) / (var(--rw) + var(--rp))), calc((100cqh - 2 * var(--cap) - var(--g)) / (1 + var(--kr))));
+    --r2: calc(var(--r1) * var(--kr));
+    grid-template-columns: calc(var(--rp) * var(--r2)) calc(var(--rw) * var(--r1) - var(--rp) * var(--r2) - var(--g)) calc(var(--rp) * var(--r1));
+    grid-template-areas: 'screen screen phone' 'hitno desktop desktop';
+    block-size: 100%;
+    align-content: center;
+  }
+  .dev-cell[data-surface='screen'] { grid-area: screen; }
+  .dev-cell[data-surface='phone'] { grid-area: phone; }
+  .dev-cell[data-surface='hitno'] { grid-area: hitno; }
+  .dev-cell[data-surface='desktop'] { grid-area: desktop; }
+  .dev-frame-box { inline-size: 100%; }
 }
