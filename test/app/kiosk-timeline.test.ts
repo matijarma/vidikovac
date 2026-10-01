@@ -2595,16 +2595,20 @@ describe('reveals on beats (R2)', () => {
   const nodes = (): Map<string, Element> => new Map([...items(), ...cells()].map((el) => [el.dataset.id!, el]));
   const marked = (attr: string): string[] => [...host.querySelectorAll<HTMLElement>(`[${attr}]`)].map((el) => el.dataset.id ?? el.className);
   it('R2 review: cached pages paint current timestamps and live state on the same nodes', () => {
-    const t = mount({ measure: simulated(WALL_1920), reduced: true });
+    const measure = simulated(WALL_1920);
+    const measurements = vi.spyOn(measure, 'lines');
+    const t = mount({ measure, reduced: true });
     const rows = pageRows();
     t.update(rows, 2200, NOW);
     t.update(rows, 2200, NOW, { reveal: PAGE, next: [] });
     const node = byId('event:b');
+    measurements.mockClear();
     const changed = rows.map((r) => r.id === 'event:b' ? { ...r, atMs: r.atMs! + 1000, live: true } : r);
     t.update(changed, 2200, NOW + 1000, { reveal: PAGE, next: [] });
     expect(byId('event:b')).toBe(node);
     expect(node.dataset.when).toBe(new Date(NOW + H + 1000).toISOString());
     expect(node.dataset.live).toBe('1');
+    expect(measurements).not.toHaveBeenCalled();
   });
 
   it('R2 review: cancelling a revealed row restores its paired replacement immediately', () => {
@@ -2702,6 +2706,80 @@ describe('reveals on beats (R2)', () => {
     t.update(pageRows().slice(0, 4), 2200, NOW);
     t.update(pageRows().slice(0, 4), 2200, NOW, { reveal: ADVANCE, next: nextTrams() });
     expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+  });
+
+  it('R2 review: the narrower advanced line uses fitting blue clocks and never animates its label', () => {
+    const measure = simulated(WALL_1920);
+    const box = measure.box;
+    measure.box = (el) => el.classList.contains('k-dep-cell') && el.closest('[data-reveal]')
+      ? { height: 96, width: 100, overflow: text(el.querySelector('.nearby-when')).startsWith('za ') } : box(el);
+    const t = mount({ measure });
+    const next = nextTrams().map((r, i) => ({ ...r, atMs: NOW + (6 + i) * MIN }));
+    t.update(pageRows(), 2200, NOW);
+    t.update(pageRows(), 2200, NOW, { reveal: ADVANCE, next });
+    expect(line()!.dataset.reveal).toBe('advance:8');
+    expect(cells().map((c) => text(c.querySelector('.nearby-when')))).toEqual(['17:51', '17:52', '17:53']);
+    expect(cells().every((c) => c.dataset.live === '1' && c.dataset.enter === '1')).toBe(true);
+    expect(line()!.querySelector('.k-dep-then')!.hasAttribute('data-enter')).toBe(false);
+    expect(marked('data-slide')).toEqual([]);
+  });
+
+  it('R2 review: advanced headsigns yield from the later cells without losing trip identity', () => {
+    const t = mount({ measure: simulated(WALL_1920), reduced: true });
+    const next = nextTrams().map((r, i) => i === 1 ? { ...r, title: 'Velika Gorica' } : r);
+    t.update(pageRows(), 2200, NOW);
+    t.update(pageRows(), 2200, NOW, { reveal: ADVANCE, next });
+    const before = cells();
+    expect(cells().map((c) => text(c.querySelector('.k-dep-headsign')))).toEqual(['Sopot', '', '']);
+    t.update(pageRows(), 2200, NOW + 1000, { reveal: ADVANCE, next });
+    cells().forEach((cell, i) => expect(cell).toBe(before[i]));
+    expect(marked('data-enter')).toEqual([]);
+  });
+
+  it('R2 review: a shrink refits the active overlay without painting an overflowing list', () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} disconnect(): void {} });
+    const layout = { ...WALL_1920 };
+    const measure = simulated(layout);
+    const t = mount({ measure, reduced: true });
+    t.update(pageRows(), 2200, NOW);
+    const departures = cells();
+    t.update(pageRows(), 2200, NOW, { reveal: PAGE, next: [] });
+    layout.boxPx = 400;
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    expect(measure.sum(host.querySelector('ol')!)).toBeLessThanOrEqual(400);
+    expect(section().dataset.fitOverflow).toBe('0');
+    cells().forEach((cell, i) => expect(cell).toBe(departures[i]));
+    expect(byId('closure:ilica')).not.toBeNull();
+    expect(byId('always:story:trg')).not.toBeNull();
+  });
+
+  it('R2 review: repeated pages retain recent parked nodes and evict older ones at the bounded cache', () => {
+    const extras = Array.from({ length: 10 }, (_, n) => row({
+      id: `opening:extra:${n}`, kind: 'opening', atMs: NOW + 4 * H + n * MIN,
+      title: 'Galerija', source: 'dogadanja',
+    }));
+    const rows = [...pageRows().filter((r) => r.kind !== 'opening' && r.kind !== 'solar'), ...extras];
+    const t = mount({ measure: simulated(WALL_1920), reduced: true });
+    t.update(rows, 2200, NOW);
+    const bakery = byId('opennow:pekara');
+    const road = byId('road:savska');
+    const remembered: Element[] = [];
+    for (let turn = 0; turn < 5; turn++) {
+      const reveal = { ...PAGE, beat: 9 + turn * 3, ids: extras.slice(turn * 2, turn * 2 + 2).map((r) => r.id) };
+      t.update(rows, 2200, NOW + turn * MIN, { reveal, next: [] });
+      remembered.push(byId(reveal.ids[0]!));
+      expect(remembered.at(-1)).not.toBeNull();
+      t.update(rows, 2200, NOW + turn * MIN + 20_000);
+      expect(byId('opennow:pekara')).toBe(bakery);
+      expect(byId('road:savska')).toBe(road);
+    }
+    t.update(rows, 2200, NOW + 5 * MIN, { reveal: { ...PAGE, beat: 24, ids: extras.slice(8).map((r) => r.id) }, next: [] });
+    expect(byId(extras[8]!.id)).toBe(remembered[4]);
+    t.update(rows, 2200, NOW + 5 * MIN + 20_000);
+    t.update(rows, 2200, NOW + 6 * MIN, { reveal: { ...PAGE, beat: 27, ids: extras.slice(0, 2).map((r) => r.id) }, next: [] });
+    expect(byId(extras[0]!.id)).not.toBe(remembered[0]);
+    expect(byId(extras[0]!.id)).not.toBeNull();
   });
 
   /** childList records under the section that add or remove an element: what the recorder counts, node by node. */
