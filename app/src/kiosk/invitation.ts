@@ -76,6 +76,8 @@ export interface InvitationModel {
   now: number; composition: Composition;
   /** R2: the beat's reveal the list draws over its fit (kiosk.ts takt), and the rows an advance draws in the line. */
   reveal: TaktReveal | null; next: readonly NearbyRow[];
+  /** R3: DHMZ's radar crop around Zagreb in the map's lower left (kiosk/local.ts radarNow, radarInsetShown); null without a fresh radar item or under lagano. */
+  radar: { src: string; shown: boolean } | null;
 }
 export interface InvitationHandle {
   element: HTMLElement; readonly mapHost: HTMLElement | null;
@@ -127,6 +129,22 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       +`<span data-legend="bikesFar"><b class="k-legend-bike k-legend-dot" aria-hidden="true"></b> ${e(s.legend.bikesFar)}</span>`
       +`<span data-legend="culture"><b class="k-legend-culture">●</b> ${e(s.legend.culture)}</span>`;
     geography.appendChild(legend);
+  }
+  // R3: DHMZ's radar around Zagreb, made once and only toggled (calm motion: no node comes or goes after mount; no fade).
+  // It does not exist under lagano. Its credit carries k-legend so the inventory reads it as the map's chrome.
+  let radar:{figure:HTMLElement;img:HTMLImageElement}|null=null;
+  /** A src whose image failed to load: not tried again until a new composite names another. */
+  let radarFailed:string|null=null;
+  if(!lightweight){
+    const figure=document.createElement('figure');
+    figure.className='k-radar';
+    figure.dataset.testid='radar-inset';
+    figure.hidden=true;
+    figure.innerHTML=`<img alt="" width="240" height="240" decoding="async"><figcaption class="k-legend k-radar-credit">${e(s.map.radarCredit)}</figcaption>`;
+    const img=figure.querySelector('img')!;
+    img.addEventListener('error',()=>{radarFailed=img.getAttribute('src');figure.hidden=true;});
+    geography.appendChild(figure);
+    radar={figure,img};
   }
   const note=document.createElement('p');
   note.className='k-map-note';
@@ -228,6 +246,13 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       const hidden=lightweight||model.note===null;
       if(model.note!==null&&note.textContent!==model.note)note.textContent=model.note;
       if(note.hidden!==hidden)note.hidden=hidden;
+      if(radar){
+        const want=model.radar&&model.radar.shown&&model.radar.src!==radarFailed?model.radar.src:null;
+        // The image loads only while it is shown, and only when a new composite names a new src.
+        if(want!==null&&radar.img.getAttribute('src')!==want)radar.img.setAttribute('src',want);
+        const off=want===null;
+        if(radar.figure.hidden!==off)radar.figure.hidden=off;
+      }
       fit();
     },
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),

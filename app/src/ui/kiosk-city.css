@@ -7,6 +7,12 @@
 .k-map-legend{display:flex;flex-wrap:wrap;gap:calc(var(--k-gap) * .5) var(--k-gap);padding:calc(var(--k-gap) * .65);background:var(--k-surface);font-size:var(--k-sub-size)}
 .k-map-note{position:absolute;left:var(--k-gap);right:var(--k-gap);top:var(--k-gap);padding:calc(var(--k-gap) * .6);border-radius:var(--k-radius-s);background:var(--k-surface);color:var(--k-ink-2);font-size:var(--k-sub-size);line-height:1.25;pointer-events:none}
 .k-map-note[hidden]{display:none}
+/* R3: DHMZ's radar around Zagreb in the map's lower left (the note is on top, the map's credit lower right), 240 px at
+   zoom 1, native pixels; it only toggles [hidden], never fades. */
+.k-radar{grid-area:1/1;align-self:end;justify-self:start;z-index:1;margin:var(--k-gap);padding:calc(var(--k-gap) * .35);width:calc(240px * var(--k-zoom));background:var(--k-surface);border-radius:var(--k-radius-s);pointer-events:none}
+.k-radar[hidden]{display:none}
+.k-radar img{display:block;width:100%;height:auto;image-rendering:pixelated}
+.k-radar figcaption{margin-top:.25em;font-size:var(--k-sub-size);color:var(--k-ink-2)}
 .k-map-legend span{display:inline-flex;align-items:center;gap:.4em}
 .k-map-legend span[hidden]{display:none}
 .k-legend-tram{padding:.05em .3em;border-radius:3px;color:var(--k-action-ink);background:var(--k-action)}

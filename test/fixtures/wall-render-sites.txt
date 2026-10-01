@@ -70,19 +70,19 @@ app/src/kiosk.ts:711 #paintSessionLabel → vetExternal(presentationLabelKind(pr
 app/src/kiosk.ts:715 #paintSessionLabel → layer.textContent = presentation?.target ? ` · ${i18n.t('presentation.until', { time: clock(sessionExpiresAt) })}` : ` · ${s.layers[activeLayer]}`
 app/src/kiosk.ts:876 #paintMap → vetExternal('name', stop.name, 'row')
 app/src/kiosk.ts:1107 #touchVariants → escapeHtml(i18n.t(touchContentFailed ? 'presentation.unavailable' : 'status.loading'))
-app/src/kiosk.ts:1265 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
-app/src/kiosk.ts:1266 #paintCode → codeA.textContent = '····'
-app/src/kiosk.ts:1267 #paintCode → codeB.textContent = '····'
-app/src/kiosk.ts:1269 #paintCode → link.textContent = ''
-app/src/kiosk.ts:1279 #paintCode → codeA.textContent = display.slice(0, 4)
-app/src/kiosk.ts:1280 #paintCode → codeB.textContent = display.slice(5)
-app/src/kiosk.ts:1284 #paintCode → link.textContent = payload
-app/src/kiosk.ts:1302 #swapCode → escapeHtml(previous)
-app/src/kiosk.ts:1303 #swapCode → escapeHtml(previous.slice(0, dash))
-app/src/kiosk.ts:1303 #swapCode → escapeHtml(previous.slice(dash + 1))
-app/src/kiosk.ts:1392 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
-app/src/kiosk.ts:1399 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
-app/src/kiosk.ts:1583 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
+app/src/kiosk.ts:1272 #paintCode → escapeHtml(screenDead ? s.notice.endsAfterSession : s.invitation.qrWaiting)
+app/src/kiosk.ts:1273 #paintCode → codeA.textContent = '····'
+app/src/kiosk.ts:1274 #paintCode → codeB.textContent = '····'
+app/src/kiosk.ts:1276 #paintCode → link.textContent = ''
+app/src/kiosk.ts:1286 #paintCode → codeA.textContent = display.slice(0, 4)
+app/src/kiosk.ts:1287 #paintCode → codeB.textContent = display.slice(5)
+app/src/kiosk.ts:1291 #paintCode → link.textContent = payload
+app/src/kiosk.ts:1309 #swapCode → escapeHtml(previous)
+app/src/kiosk.ts:1310 #swapCode → escapeHtml(previous.slice(0, dash))
+app/src/kiosk.ts:1310 #swapCode → escapeHtml(previous.slice(dash + 1))
+app/src/kiosk.ts:1399 #mountPairedPhase → escapeHtml(i18n.t('status.loading'))
+app/src/kiosk.ts:1406 #mountPairedPhase → setText(placeholder.querySelector<HTMLElement>('[role=status]')!, i18n.t('presentation.unavailable'))
+app/src/kiosk.ts:1590 #startBeacon → pairingNote.textContent = i18n.t('presentation.connected')
 app/src/kiosk/arrival-cells.ts:34 #etaMarkup → escapeHtml(clock(row.atMs))
 app/src/kiosk/arrival-cells.ts:35 #etaMarkup → escapeHtml(row.minutes === 0 ? s.arrivals.now : fill(s.arrivals.inMinutes, { n: row.minutes }))
 app/src/kiosk/arrival-cells.ts:37 #etaMarkup → escapeHtml(row.live?s.arrivals.live:s.arrivals.scheduled)
@@ -122,15 +122,16 @@ app/src/kiosk/front.ts:549 #panelMarkup → escapeHtml(panel.kicker)
 app/src/kiosk/front.ts:549 #panelMarkup → externalHtml('summary', panel.meta)
 app/src/kiosk/front.ts:552 #panelMarkup → escapeHtml(panel.note)
 app/src/kiosk/front.ts:553 #panelMarkup → escapeHtml(panel.credit)
-app/src/kiosk/invitation.ts:104 #cardMarkup → e(s.invitation.lead)
-app/src/kiosk/invitation.ts:105 #cardMarkup → e(s.invitation.qrWaiting)
-app/src/kiosk/invitation.ts:112 #mountInvitation → e(s.handheld.info)
-app/src/kiosk/invitation.ts:124 #mountInvitation → e(s.legend.tram)
-app/src/kiosk/invitation.ts:125 #mountInvitation → e(s.legend.bikes)
-app/src/kiosk/invitation.ts:126 #mountInvitation → e(s.legend.bikesEmpty)
-app/src/kiosk/invitation.ts:127 #mountInvitation → e(s.legend.bikesFar)
-app/src/kiosk/invitation.ts:128 #mountInvitation → e(s.legend.culture)
-app/src/kiosk/invitation.ts:229 #mountInvitation → note.textContent=model.note
+app/src/kiosk/invitation.ts:106 #cardMarkup → e(s.invitation.lead)
+app/src/kiosk/invitation.ts:107 #cardMarkup → e(s.invitation.qrWaiting)
+app/src/kiosk/invitation.ts:114 #mountInvitation → e(s.handheld.info)
+app/src/kiosk/invitation.ts:126 #mountInvitation → e(s.legend.tram)
+app/src/kiosk/invitation.ts:127 #mountInvitation → e(s.legend.bikes)
+app/src/kiosk/invitation.ts:128 #mountInvitation → e(s.legend.bikesEmpty)
+app/src/kiosk/invitation.ts:129 #mountInvitation → e(s.legend.bikesFar)
+app/src/kiosk/invitation.ts:130 #mountInvitation → e(s.legend.culture)
+app/src/kiosk/invitation.ts:143 #mountInvitation → e(s.map.radarCredit)
+app/src/kiosk/invitation.ts:247 #mountInvitation → note.textContent=model.note
 app/src/kiosk/mapview.ts:1059 #requestKioskMap → ariaLabel: vetExternal('summary', input.ariaLabel, 'row') ?? ''
 app/src/kiosk/mapview.ts:1059 #requestKioskMap → vetExternal('summary', input.ariaLabel, 'row')
 app/src/kiosk/mapview.ts:1060 #requestKioskMap → vetExternal('name', point.title, 'row')
@@ -281,19 +282,19 @@ app/src/kiosk/start.ts:167 #tick → retryBtn.textContent = s.setup.retry
 app/src/kiosk/start.ts:171 #tick → retryBtn.textContent = fill(s.setup.retryIn, { time: mmss(left) })
 app/src/kiosk/start.ts:184 #create → startBtn.textContent = s.setup.creating
 app/src/kiosk/start.ts:205 #create → startBtn.textContent = s.setup.create
-app/src/kiosk/timeline.ts:475 #vettedTimelineRow → vetExternal('headsign', pair.split(' ')[0], 'row')
-app/src/kiosk/timeline.ts:482 #vettedTimelineRow → vetExternal(kind, row.title, 'row')
-app/src/kiosk/timeline.ts:485 #vettedTimelineRow → vetExternal('headsign', row.arrival.routeName, 'row')
-app/src/kiosk/timeline.ts:523 #departureCellMarkup → e(cellTime(row, now, i18n, short))
-app/src/kiosk/timeline.ts:523 #departureCellMarkup → e(headsign)
-app/src/kiosk/timeline.ts:553 #departuresLineMarkup → e(i18n.t('kiosk.nearby.zatim'))
-app/src/kiosk/timeline.ts:562 #rowMarkup → e(timeLabel(row, now, i18n))
-app/src/kiosk/timeline.ts:578 #rowMarkup → e(day)
-app/src/kiosk/timeline.ts:580 #rowMarkup → e(titleOf(row, short))
-app/src/kiosk/timeline.ts:580 #rowMarkup → e(subOf(row, short))
-app/src/kiosk/timeline.ts:597 #headMarkup → e(head)
-app/src/kiosk/timeline.ts:598 #headMarkup → e(head.slice(0, cut))
-app/src/kiosk/timeline.ts:598 #headMarkup → e(head.slice(cut))
+app/src/kiosk/timeline.ts:477 #vettedTimelineRow → vetExternal('headsign', pair.split(' ')[0], 'row')
+app/src/kiosk/timeline.ts:484 #vettedTimelineRow → vetExternal(kind, row.title, 'row')
+app/src/kiosk/timeline.ts:487 #vettedTimelineRow → vetExternal('headsign', row.arrival.routeName, 'row')
+app/src/kiosk/timeline.ts:525 #departureCellMarkup → e(cellTime(row, now, i18n, short))
+app/src/kiosk/timeline.ts:525 #departureCellMarkup → e(headsign)
+app/src/kiosk/timeline.ts:555 #departuresLineMarkup → e(i18n.t('kiosk.nearby.zatim'))
+app/src/kiosk/timeline.ts:564 #rowMarkup → e(timeLabel(row, now, i18n))
+app/src/kiosk/timeline.ts:580 #rowMarkup → e(day)
+app/src/kiosk/timeline.ts:582 #rowMarkup → e(titleOf(row, short))
+app/src/kiosk/timeline.ts:582 #rowMarkup → e(subOf(row, short))
+app/src/kiosk/timeline.ts:599 #headMarkup → e(head)
+app/src/kiosk/timeline.ts:600 #headMarkup → e(head.slice(0, cut))
+app/src/kiosk/timeline.ts:600 #headMarkup → e(head.slice(cut))
 app/src/kiosk/touch-content.ts:48 #timetableLine → vetExternal('headsign', trip.routeName, 'row')
 app/src/kiosk/touch-content.ts:49 #timetableLine → e(route)
 app/src/kiosk/touch-content.ts:49 #timetableLine → e(clock(trip.atMs))
@@ -418,6 +419,6 @@ app/src/transport/workspace.ts:911 #resultTexts → vetExternal(kind, value ?? '
 app/src/transport/workspace.ts:1023 #clearSearch → searchInput.value = ''
 app/src/transport/workspace.ts:1268 #render → searchInput.value=query
 app/src/transport/workspace.ts:1309 #render → searchInput.value=query
-shared/kiosk/sentence.ts:145 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
-shared/kiosk/sentence.ts:269 #decodeTyped → externalText('headsign', value, { surface: 'header' })
-shared/kiosk/sentence.ts:294 #decodeRegister → externalText(type, value, { surface: 'header' })
+shared/kiosk/sentence.ts:151 #validateSentenceSlot → externalText(rule.names, value, { surface: 'header' })
+shared/kiosk/sentence.ts:282 #decodeTyped → externalText('headsign', value, { surface: 'header' })
+shared/kiosk/sentence.ts:307 #decodeRegister → externalText(type, value, { surface: 'header' })

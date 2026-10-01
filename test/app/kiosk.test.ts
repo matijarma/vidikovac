@@ -3552,3 +3552,44 @@ describe('the wall carries no disclaimer, caveat or fetch time', () => {
     k.handle.destroy();
   });
 });
+
+// R3: DHMZ's radar inset in the map's lower left (docs/reveal-2026-10-plan/R3.md step 13): made once, then only toggled.
+describe('the radar inset', () => {
+  it('mounts one hidden figure, shows it with its credit, and does not reassign an unchanged src', async () => {
+    const { mountInvitation } = await import('../../app/src/kiosk/invitation');
+    const { kioskStrings } = await import('../../app/src/kiosk/strings');
+    const { DEFAULT_FRAME_STOPS } = await import('../../shared/city/frame');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const invitation = mountInvitation(host, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: false, reducedMotion: true });
+    const figures = host.querySelectorAll<HTMLElement>('[data-testid=radar-inset]');
+    expect(figures).toHaveLength(1);
+    const figure = figures[0]!;
+    expect(figure.hidden).toBe(true);
+    const img = figure.querySelector('img')!;
+    expect(img.getAttribute('src')).toBeNull();
+    const model = { items: [], radiusM: 2200, frame: DEFAULT_FRAME_STOPS, note: null, modules: [], stop: null, now: Date.now(), composition: 'wide' as const, reveal: null, next: [] };
+    invitation.update({ ...model, radar: { src: '/api/radar/zagreb.png?v=1790820250', shown: false } });
+    expect(figure.hidden).toBe(true);
+    expect(img.getAttribute('src')).toBeNull();
+    invitation.update({ ...model, radar: { src: '/api/radar/zagreb.png?v=1790820250', shown: true } });
+    expect(figure.hidden).toBe(false);
+    expect(img.getAttribute('src')).toBe('/api/radar/zagreb.png?v=1790820250');
+    expect(figure.querySelector('figcaption')?.textContent).toBe('Radar · Izvor: DHMZ');
+    const set = vi.spyOn(img, 'setAttribute');
+    invitation.update({ ...model, radar: { src: '/api/radar/zagreb.png?v=1790820250', shown: true } });
+    expect(set).not.toHaveBeenCalled();
+    invitation.update({ ...model, radar: null });
+    expect(figure.hidden).toBe(true);
+    expect(host.querySelectorAll('[data-testid=radar-inset]')).toHaveLength(1);
+    invitation.destroy();
+    host.remove();
+    // Under lagano there is no figure at all.
+    const quiet = document.createElement('div');
+    document.body.appendChild(quiet);
+    const lagano = mountInvitation(quiet, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: true, reducedMotion: true });
+    expect(quiet.querySelector('[data-testid=radar-inset]')).toBeNull();
+    lagano.destroy();
+    quiet.remove();
+  });
+});

@@ -86,7 +86,7 @@ describe('the strike Monday wall at Jelačić, 05:47:00Z', () => {
     document.body.appendChild(host);
     const invitation = mountInvitation(host, { strings, i18n: hr, locale: 'hr', lightweight: false, reducedMotion: true });
     const mapNote = () => host.querySelector<HTMLElement>('[data-testid=map-note]')!;
-    const model = { items: silent.rows, radiusM: 2200, frame: DEFAULT_FRAME_STOPS, modules: withService(judgement({})), stop: null, now: NOW, composition: 'wide' as const, reveal: null, next: [] };
+    const model = { items: silent.rows, radiusM: 2200, frame: DEFAULT_FRAME_STOPS, modules: withService(judgement({})), stop: null, now: NOW, composition: 'wide' as const, reveal: null, next: [], radar: null };
     invitation.update({ ...model, note });
     expect(mapNote().hidden).toBe(false);
     expect(mapNote().textContent).toBe(note);
