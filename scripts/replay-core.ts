@@ -1433,3 +1433,81 @@ export function assertNormalDay(lines: readonly ServiceLogLine[]): NormalDayVerd
   for (const h of hours) if (h.p05 < NORMAL_DAY_P05) problems.push(`${h.hour}h: p05 ratio ${h.p05.toFixed(4)} below ${NORMAL_DAY_P05} over ${h.minutes} judged minutes`);
   return { ok: problems.length === 0, problems, hours };
 }
+
+// ---- the published state over recorded days (snimka pass, lane S1) -----------
+
+/** What the twin published after one recorded frame: the payload a client
+ *  would have polled, the service memory it carried, and the frame's own
+ *  counts the payload does not show. */
+export interface PublishedTick {
+  /** The frame's own header time, epoch seconds. */
+  headerSec: number;
+  payload: FeedPayload;
+  service: ServiceMemory;
+  /** Reports refused this tick for a stamp past the header plus FUTURE_TOLERANCE_S. */
+  rejectedFuture: number;
+  /** Tracks kept in the state but off the wire: in a tram depot, or parked. */
+  hidden: { depot: number; parked: number };
+  /** Positioned vehicle entities in the frame (an empty feed is a real 0). */
+  entities: number;
+}
+
+export interface ReplayPublishedOptions {
+  expect: ExpectIndex | null;
+  routes: ZetRoutes;
+  /** First header replayed, epoch seconds, inclusive (read from the file name). */
+  fromSec?: number;
+  /** Header at which the replay stops, epoch seconds, exclusive. */
+  toSec?: number;
+  onTick(tick: PublishedTick): void;
+}
+
+/**
+ * The twin's published state over recorded days, one tick per frame: the
+ * `HHMMSS-<headerTs>.pb` files of every directory (no other name is read),
+ * ordered by the header time in their name across the directories, decoded
+ * one at a time (a recorded day does not fit in memory decoded), folded
+ * through the real `runTick` with the engine AND the expectation in one pass,
+ * and the learned evidence fed back exactly as `replay()` does. A frame that
+ * carries no header, or one not newer than the last folded (a repeat, which
+ * production reads as a 304), is dropped and counted.
+ */
+export async function replayPublished(dirs: readonly string[], engine: Engine, o: ReplayPublishedOptions): Promise<{ frames: number; dropped: number }> {
+  const files: { path: string; headerTs: number }[] = [];
+  for (const dir of dirs) {
+    for (const name of await readdir(dir)) {
+      const match = FRAME_NAME.exec(name);
+      if (!match) continue;
+      const headerTs = Number(match[2]);
+      if (o.fromSec !== undefined && headerTs < o.fromSec) continue;
+      if (o.toSec !== undefined && headerTs >= o.toSec) continue;
+      files.push({ path: join(dir, name), headerTs });
+    }
+  }
+  files.sort((a, b) => a.headerTs - b.headerTs || a.path.localeCompare(b.path));
+  let state: TwinState = emptyState();
+  let frames = 0;
+  let dropped = 0;
+  for (const file of files) {
+    const feed = decodeFeed(new Uint8Array(await readFile(file.path)));
+    if (feed.headerTs === null || (state.headerTs !== null && feed.headerTs <= state.headerTs)) {
+      dropped++;
+      continue;
+    }
+    const headerSec = feed.headerTs;
+    const nowMs = (headerSec + REPLAY_NOW_CUSHION_S) * 1000;
+    const tripIds = new Set<string>();
+    for (const track of Object.values(state.tracks)) if (track.tripId !== null) tripIds.add(track.tripId);
+    for (const vehicle of feed.vehicles) if (vehicle.tripId) tripIds.add(vehicle.tripId);
+    const joins = joinsFor(engine.index, tripIds, engine.patternPathIds);
+    const result = runTick({ state, feed, nowMs, joins, routes: o.routes, engine, validUntilMs: nextTickAt(headerSec, nowMs), expect: o.expect });
+    state = result.state;
+    // The Durable Object's evidence feedback, as replay() does it.
+    recordEvidence(engine.learned, result.learned);
+    for (const dwell of result.learned.dwells) pushDwellRecent(engine.dwellRecent, dwell.stopId, dwell.atSec, dwell.seconds);
+    trimDwellRecent(engine.dwellRecent, headerSec);
+    frames++;
+    o.onTick({ headerSec, payload: result.payload, service: state.service, rejectedFuture: result.rejectedFuture, hidden: result.hidden, entities: feed.vehicles.length });
+  }
+  return { frames, dropped };
+}
