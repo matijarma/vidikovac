@@ -9,7 +9,7 @@ const DEVIATION =
 describe('vite multi-page inputs', () => {
   it('builds every page of the product', () => {
     const input = (config as { build?: { rollupOptions?: { input?: Record<string, string> } } }).build!.rollupOptions!.input!;
-    expect(Object.keys(input).sort()).toEqual(['d', 'dev', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's', 'statistika'].sort());
+    expect(Object.keys(input).sort()).toEqual(['d', 'dev', 'index', 'izvori', 'kiosk', 'prijava', 'pristupacnost', 'privatnost', 's', 'snimka', 'statistika'].sort());
     for (const path of Object.values(input)) expect(path.endsWith('index.html')).toBe(true);
   });
   it('injects the source list into /izvori at build time', () => {
@@ -132,6 +132,35 @@ describe('static pages', () => {
     }
     // Counting what is shown here would be a counter the privacy page does not list: the page makes no beacon call.
     expect(read('app/src/entries/statistika.ts')).not.toMatch(/sendBeacon|\/api\/(?!statistika)/);
+  });
+  it('/snimka follows /statistika: skip link, wordmark, one h1, the six-link footer, the six sections, prose and sources that stand without JS', () => {
+    const html = read('app/snimka/index.html');
+    expect(html).toContain('<html lang="hr">');
+    expect(html).not.toContain('<style>');
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)/);
+    expect((html.match(/<h1\b/g) ?? []).length).toBe(1);
+    expect(html).toContain('<a class="skip-link" href="#sadrzaj">');
+    expect(html).toContain('id="sadrzaj"');
+    expect(html).toContain('Kaj ima<span class="mark">?</span>');
+    for (const href of ['/src/ui/tokens.css', '/src/ui/base.css', '/src/ui/statistika.css', '/src/ui/snimka.css', '/src/ui/snimka-stage.css', '/src/ui/snimka-report.css']) {
+      expect(html, href).toContain(`<link rel="stylesheet" href="${href}">`);
+    }
+    expect(html).toContain('src="/src/entries/theme-init.ts"');
+    expect(html).toContain('src="/src/entries/snimka.ts"');
+    for (const href of ['/hitno', '/s/', '/izvori/', '/open/', '/privatnost/', '/pristupacnost/', '/statistika/', '/prijava/']) expect(html, href).toContain(`href="${href}"`);
+    expect(html).toContain('<noscript>');
+    for (const id of ['ukratko', 'snimka', 'zaslon', 'tijek', 'vidjelo', 'izvori']) {
+      expect(html, id).toContain(`id="${id}"`);
+      expect(html, id).toContain(`href="#${id}"`);
+    }
+    // The slots the scripts fill, each busy until its lane draws into it.
+    for (const mount of ['stage', 'screen', 'strip', 'reckoning']) expect(html, mount).toContain(`data-sn-mount="${mount}" aria-busy="true"`);
+    for (const kpi of ['kpi-silent', 'kpi-peak', 'kpi-bikes', 'kpi-return']) expect(html, kpi).toContain(`data-sn="${kpi}"`);
+    expect(html).toContain('data-sn="attribution" aria-busy="true"');
+    // The page never calls a live API and never references the map library statically.
+    const entry = read('app/src/entries/snimka.ts');
+    expect(entry).not.toMatch(/sendBeacon|\/api\/(?!snimka)/);
+    expect(entry).not.toMatch(/maplibre|city-map|zet-network\.json/);
   });
   it('/privatnost lists the ten privacy points and no inline script', () => {
     const html = read('app/privatnost/index.html');

@@ -27,6 +27,8 @@ const PAGES: { path: string; viewport: typeof KIOSK }[] = [
   { path: '/prijava/', viewport: KIOSK },
   { path: '/statistika/', viewport: PHONE },
   { path: '/statistika/', viewport: KIOSK },
+  { path: '/snimka/', viewport: PHONE },
+  { path: '/snimka/', viewport: KIOSK },
   { path: '/izvori/', viewport: PHONE },
   { path: '/izvori/', viewport: KIOSK },
   { path: '/privatnost/', viewport: PHONE },
