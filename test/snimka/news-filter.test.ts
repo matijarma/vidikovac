@@ -40,6 +40,7 @@ describe('the press filter', () => {
     expect(beatOf(item({ title: 'Uber i Bolt: potražnja skočila', pubSec: z(28, 10) }))).toBe('taksi');
     expect(beatOf(item({ title: 'Volonteri voze pacijente do bolnica', pubSec: z(28, 11) }))).toBe('volonteri');
     expect(beatOf(item({ title: 'Učenici kasne u škole', pubSec: z(28, 8) }))).toBe('skole');
+    expect(beatOf(item({ title: 'Nastava se održava normalno', pubSec: z(28, 8) }))).toBe('skole');
     expect(beatOf(item({ title: 'Sud odbio privremenu zabranu štrajka', pubSec: z(29, 12) }))).toBe('sud-privremeno');
     expect(beatOf(item({ title: 'Uspostavljena linija 228 do Rebra', pubSec: z(29, 10) }))).toBe('linija-228');
     expect(beatOf(item({ title: 'Sud: štrajk u ZET-u je nezakonit', pubSec: z(30, 11, 15) }))).toBe('presuda');

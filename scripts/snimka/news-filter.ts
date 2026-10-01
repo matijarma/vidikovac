@@ -94,7 +94,7 @@ export const BEATS: readonly Beat[] = [
   { key: 'bajs', test: /bajs|bicikl|nextbike|romobil|pedal/ },
   { key: 'taksi', test: /taksi|taxi|\buber\b|\bbolt\b|prijevoznik|dijeljen|cijen\w* voznj/ },
   { key: 'volonteri', test: /volonter|dobrovolj|besplatan prijevoz|besplatno (vozi|prevozi)|do bolnic|do kb|solidarn|pomoc gradanima/ },
-  { key: 'skole', test: /skol|ucenic|nastav|vrtic|student/ },
+  { key: 'skole', test: /skol|ucenic|\bnastav(a|e|u|om)\b|vrtic|student/ },
   { key: 'drugi-dan', test: /strajk/, also: /drugi dan|utorak|nastavlja|i dalje|drugog dana/, from: z(29, 0), to: z(30, 0) },
   { key: 'treci-dan', test: /strajk/, also: /treci dan|srijed|treceg dana|nastavlja|i dalje/, from: z(30, 0), to: z(30, 13) },
   { key: 'holding', test: /holding|cistoc|smece|otpad|odvoz/ },
