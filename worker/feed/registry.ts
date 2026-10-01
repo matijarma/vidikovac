@@ -5,6 +5,9 @@ import { fetchDhmzCap } from './modules/dhmz-cap';
 import { fetchDhmzForecast } from './modules/dhmz-forecast';
 import { fetchDhmzHourly } from './modules/dhmz-hourly';
 import { fetchDhmzNow } from './modules/dhmz-now';
+import { fetchDhmzRadar } from './modules/dhmz-radar';
+import { fetchDhmzBio } from './modules/dhmz-bio';
+import { fetchDhmzWaves } from './modules/dhmz-waves';
 import { fetchEmsc } from './modules/emsc';
 import { fetchGlasnik } from './modules/glasnik';
 import { fetchHak } from './modules/hak';
@@ -92,9 +95,25 @@ export const ATTRIBUTION: Record<ModuleId, Attribution> = {
     licence: 'Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu',
   },
   prekidi: {
-    text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+    text: 'Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz',
     url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
     licence: 'Licenca nije navedena',
+  },
+  // The more-city modules (R3): DHMZ's products under its open licence, credited "Izvor: DHMZ" (NN 66/19, art. 17).
+  'dhmz-radar': {
+    text: 'Izvor: DHMZ, radarski kompozit',
+    url: 'https://meteo.hr/podaci.php?section=podaci_mjerenja&param=radari',
+    licence: OPEN_LICENCE,
+  },
+  'dhmz-bio': {
+    text: 'Izvor: DHMZ, biometeorološka prognoza',
+    url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=bio',
+    licence: OPEN_LICENCE,
+  },
+  'dhmz-waves': {
+    text: 'Izvor: DHMZ, upozorenja na toplinske i hladne valove',
+    url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=toplinskival_5',
+    licence: OPEN_LICENCE,
   },
 };
 
@@ -167,10 +186,16 @@ export const MODULES: Record<ModuleId, ModuleSpec> = {
   programi: defineModule({ id: 'programi', tier: 'session', ttl: 3600, maxStale: 259200, load: fetchProgrami }),
   'dhmz-hourly': defineModule({ id: 'dhmz-hourly', tier: 'session', ttl: 3600, maxStale: 21600, load: fetchDhmzHourly }),
   hak: defineModule({ id: 'hak', tier: 'session', ttl: 600, maxStale: 21600, load: fetchHak }),
-  // Its own fetcher reports each publisher in `sources` (hep-ods, vio), so one failing leaves the other live.
-  // M4: one failing source leaves the other live. The module is live while HEP or VIO answers, the failed one 'down' in
-  // `sources`; only when both fail does fetchPrekidi throw and the last good copy serve as 'stale' (or 'down').
+  // Its own fetcher reports each publisher in `sources` (hep-ods, vio, gpz), so one failing leaves the others live.
+  // The module is live while any publisher answers, the failed ones 'down' in `sources`;
+  // only when all three fail does fetchPrekidi throw and the last good copy serve as 'stale' (or 'down').
   prekidi: defineModule({ id: 'prekidi', tier: 'session', ttl: 3600, maxStale: 172800, load: fetchPrekidi, degradeOnSources: false }),
+  // DHMZ's radar around Zagreb, the biometeorological forecast and the heat and cold waves (R3): open, like the warnings.
+  // Every ttl is at least 300 s, so the five-minute cron warms all three. The two wave files fail one at a time, as
+  // prekidi's publishers do: one failing leaves the other's item live.
+  'dhmz-radar': defineModule({ id: 'dhmz-radar', tier: 'open', ttl: 300, maxStale: 1800, load: fetchDhmzRadar }),
+  'dhmz-bio': defineModule({ id: 'dhmz-bio', tier: 'open', ttl: 3600, maxStale: 86400, load: fetchDhmzBio }),
+  'dhmz-waves': defineModule({ id: 'dhmz-waves', tier: 'open', ttl: 3600, maxStale: 86400, load: fetchDhmzWaves, degradeOnSources: false }),
 };
 
 export const MODULE_IDS = Object.keys(MODULES) as ModuleId[];

@@ -12,6 +12,12 @@ export const FIXTURE_NOW = new Date('2026-09-11T12:00:00.000Z');
 /** The instant of the U3 fixtures (test/fixtures/README-u3.md, saved 29 Sep 2026 between 15:42 and 15:47 UTC); the modules of
  *  that package are read at 17:45 Zagreb time, when the pages they were cut from were true. */
 export const U3_FIXTURE_NOW = new Date('2026-09-29T15:45:00Z');
+/** The instant of the R3 fixtures (test/fixtures/README-r3.md, saved 1 Oct 2026 at 02:07 UTC): six minutes after the radar
+ *  fixture's Last-Modified (02:04:10Z), so the composite is fresh; the bio file's first day and the hand-filled wave files'
+ *  second day. */
+export const R3_FIXTURE_NOW = new Date('2026-10-01T02:10:00Z');
+/** The radar fixture's Last-Modified, as the server sent it. */
+export const R3_RADAR_LAST_MODIFIED = 'Thu, 01 Oct 2026 02:04:10 GMT';
 
 // Resolved through node:path, not `new URL(..., import.meta.url)`: under
 // happy-dom the global URL resolves a relative path against the document's
@@ -20,14 +26,15 @@ const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixture
 const text = (name: string) => readFileSync(join(FIXTURE_DIR, name), 'utf8');
 const bytes = (name: string) => new Uint8Array(readFileSync(join(FIXTURE_DIR, name)));
 
-/** Answers each upstream from the first fixture whose key the URL contains, at `now` (the U3 modules: their fixtures are of 29 Sep). */
-function fixtureContext(routes: [string, () => BodyInit][], now: Date = FIXTURE_NOW): FetchContext {
+/** Answers each upstream from the first fixture whose key the URL contains, at `now` (the U3 modules: their fixtures are of 29 Sep),
+ *  with the route's response headers when it names any (the radar's Last-Modified, R3). */
+function fixtureContext(routes: [string, () => BodyInit, Record<string, string>?][], now: Date = FIXTURE_NOW): FetchContext {
   return {
     now: () => now,
     fetch: async (url) => {
       const match = routes.find(([needle]) => url.includes(needle));
       if (!match) throw new Error(`no fixture for ${url}`);
-      return new Response(match[1]());
+      return new Response(match[1](), match[2] ? { headers: match[2] } : undefined);
     },
   };
 }
@@ -85,5 +92,17 @@ export const FIXTURE_CONTEXTS: Record<ModuleId, FetchContext> = {
     ['datum=29.09.2026', () => text('hep-ods-bez-struje-today.html')],
     ['datum=30.09.2026', () => text('hep-ods-bez-struje-tomorrow.html')],
     ['obavijesti/1832', () => text('vio-obavijesti.html')],
+    // GPZ (R3): the list of 1 Oct and its notices; at U3_FIXTURE_NOW the newest notice (26 Aug) is more than 30 days old.
+    ['novosti/50', () => text('gpz-novosti.html')],
+    ['/1576', () => text('gpz-obavijest-1576.html')],
+    ['/1577', () => text('gpz-obavijest-1577.html')],
+    ['/1579', () => text('gpz-obavijest-1579.html')],
   ], U3_FIXTURE_NOW),
+  // The more-city modules (R3), each from the response saved on 1 Oct 2026 (test/fixtures/README-r3.md), read at R3_FIXTURE_NOW.
+  'dhmz-radar': fixtureContext([['kompozit-stat.png', () => bytes('radar/kompozit-20261001T020410Z.png'), { 'last-modified': R3_RADAR_LAST_MODIFIED }]], R3_FIXTURE_NOW),
+  'dhmz-bio': fixtureContext([['bio_novo.xml', () => text('bio_novo.xml')]], R3_FIXTURE_NOW),
+  'dhmz-waves': fixtureContext([
+    ['toplinskival_5.xml', () => bytes('toplinskival_5.xml')],
+    ['hladnival.xml', () => bytes('hladnival.xml')],
+  ], R3_FIXTURE_NOW),
 };

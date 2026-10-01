@@ -23,7 +23,12 @@ export type ModuleId =
   | 'programi'
   | 'dhmz-hourly'
   | 'hak'
-  | 'prekidi';
+  | 'prekidi'
+  // The more-city modules (R3): DHMZ's radar composite around Zagreb, its biometeorological forecast and its heat
+  // and cold wave warnings.
+  | 'dhmz-radar'
+  | 'dhmz-bio'
+  | 'dhmz-waves';
 
 /** open: readable without a session (safety tier, kiosk teaser). session: needs a data token. */
 export type Tier = 'open' | 'session';
@@ -38,17 +43,19 @@ export type ItemKind =
   | 'act'
   | 'poi'
   | 'event'
-  /** A planned power or water cut on a street (prekidi, U3). */
+  /** A planned power, water or gas cut on a street (prekidi). */
   | 'cut'
   /** A state of the road network outside the City's own closures (hak, U3). */
-  | 'road';
+  | 'road'
+  /** DHMZ's radar composite around Zagreb (dhmz-radar, R3). */
+  | 'radar';
 
 export type Severity = 'info' | 'minor' | 'moderate' | 'severe' | 'extreme';
 
 export interface Geo {
-  type: 'Point' | 'LineString';
-  /** [lon, lat] for Point; [[lon, lat], ...] for LineString (GeoJSON order). */
-  coordinates: number[] | number[][];
+  type: 'Point' | 'LineString' | 'Polygon';
+  /** [lon, lat] for Point; [[lon, lat], ...] for LineString; [[[lon, lat], ...]] for Polygon, the outer ring closed (GeoJSON order). */
+  coordinates: number[] | number[][] | number[][][];
 }
 
 export interface FeedItem {
@@ -198,7 +205,8 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   observation: ['temp', 'humidity', 'pressure', 'windDir', 'windSpeed', 'weather'],
   // 'tmin', 'tmax' and 'text' are the daily forecast; 'temp', 'precip' (mm), 'prob' (%) and
   // 'station' are one hourly step of the dhmz-hourly module (U3), 'weather' there only on a wet step.
-  forecast: ['tmin', 'tmax', 'weather', 'text', 'temp', 'precip', 'prob', 'station'],
+  // bio: region, level, text; waves: wave, levels, level, station (R3).
+  forecast: ['tmin', 'tmax', 'weather', 'text', 'temp', 'precip', 'prob', 'station', 'region', 'level', 'wave', 'levels'],
   warning: ['event', 'certainty', 'urgency'],
   quake: ['mag', 'depth', 'magType', 'region'],
   act: ['broj', 'godina', 'category'],
@@ -211,9 +219,11 @@ export const DATA_KEYS: Record<ItemKind, readonly string[]> = {
   // coordinates, never guessed for an item without one.
   // 'kids' is kultura-zg's own flag (the programme is for children), true or false, absent when the source has none.
   event: ['source', 'category', 'venue', 'venueHint', 'venueTags', 'city', 'organiser', 'live', 'phase', 'status', 'amount', 'precision', 'district', 'kids'],
-  // A planned cut (prekidi): 'utility' struja or voda, 'source' hep-ods or vio, 'street' as the source writes it,
-  // 'houseNumbers' the source's own text, 'precision' time (HEP) or day (VIO).
+  // A planned cut (prekidi): 'utility' struja, voda or plin, 'source' hep-ods, vio or gpz, 'street' as the source
+  // writes it, 'houseNumbers' the source's own text, 'precision' time (HEP, GPZ with hours) or day (VIO, GPZ).
   cut: ['utility', 'source', 'street', 'houseNumbers', 'district', 'precision'],
   // A HAK line about the Zagreb area (hak): the HAK section it stands in, its state and the street or junction.
   road: ['source', 'section', 'state', 'street', 'district'],
+  // DHMZ's composite around Zagreb (dhmz-radar, R3): whether rain is near, the rain pixels counted, the crop and its route.
+  radar: ['rainNear', 'rainCells', 'crop', 'image'],
 };

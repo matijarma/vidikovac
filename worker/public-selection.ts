@@ -14,6 +14,7 @@ const KEY = /^[0-9a-f]{16}$/;
 const MODULE_IDS: readonly ModuleId[] = [
   'zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap',
   'emsc', 'glasnik', 'ckan-geo', 'dogadanja', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi',
+  'dhmz-radar', 'dhmz-bio', 'dhmz-waves',
 ];
 
 /** Stable, bounded identity for UI reconciliation and relay, NOT a security hash. */

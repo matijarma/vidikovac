@@ -44,3 +44,29 @@ export function isPublicHoliday(dayKey: string): boolean {
   const easter = easterSunday(year);
   return [0, 1, 60].some((offset) => dayKeyAfter(easter, offset) === dayKey);
 }
+
+/**
+ * The school year 2026/27 (R3): Odluka o početku i završetku nastavne godine, broju radnih dana i trajanju odmora
+ * učenika osnovnih i srednjih škola za školsku godinu 2026./2027., NN 58/2026
+ * (https://narodne-novine.nn.hr/clanci/sluzbeni/2026_06_58_724.html, read 30 September 2026). Lessons run from 7 Sep to
+ * 23 Dec 2026 and from 7 Jan to 15 Jun 2027; the breaks are below, every day of each inclusive. 6 Jan 2027 lies between
+ * the winter break and the first school day; summer runs from 16 Jun to the end of the school year, 31 Aug 2027. The next
+ * decision is published in June 2027 and is added here then; outside this school year the table decides nothing.
+ */
+const SCHOOL_YEAR: { first: string; last: string } = { first: '2026-09-07', last: '2027-08-31' };
+const SCHOOL_BREAKS: readonly (readonly [string, string])[] = [
+  ['2026-12-24', '2027-01-06'], // winter break, 24 Dec to 5 Jan, and 6 Jan before the first school day
+  ['2027-02-22', '2027-02-26'], // winter break, second part
+  ['2027-03-25', '2027-04-02'], // spring break
+  ['2027-06-16', '2027-08-31'], // summer
+];
+
+/**
+ * True on a day without lessons by the school calendar: inside a break, or a public holiday on a day of the school year.
+ * A weekend is not a holiday (false); outside 2026-09-07..2027-08-31 the table has no decision (false).
+ */
+export function isSchoolHoliday(dayKey: string): boolean {   // R3
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || dayKey < SCHOOL_YEAR.first || dayKey > SCHOOL_YEAR.last) return false;
+  if (SCHOOL_BREAKS.some(([first, last]) => dayKey >= first && dayKey <= last)) return true;
+  return isPublicHoliday(dayKey);
+}

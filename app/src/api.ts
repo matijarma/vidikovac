@@ -67,7 +67,7 @@ export function dataPriority(module: ModuleId): 'high' | 'low' | 'auto' {
   if (module === 'zet-rt') return 'high';
   return LATER_MODULES.has(module) ? 'low' : 'auto';
 }
-const LATER_MODULES: ReadonlySet<ModuleId> = new Set<ModuleId>(['dogadanja', 'glasnik', 'emsc', 'dhmz-forecast', 'dhmz-cap', 'ckan-geo', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi']);
+const LATER_MODULES: ReadonlySet<ModuleId> = new Set<ModuleId>(['dogadanja', 'glasnik', 'emsc', 'dhmz-forecast', 'dhmz-cap', 'ckan-geo', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi', 'dhmz-bio', 'dhmz-waves']);
 
 export async function fetchData(module: ModuleId, token: DataToken, fetchImpl: typeof fetch = fetch): Promise<ModuleSnapshot> {
   // The priority hint is the browser's (lib.dom); the Worker's own RequestInit does not name it.

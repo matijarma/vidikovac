@@ -187,20 +187,20 @@ function roadsSection(i18n: I18n, ctx: LayerContext): string {
  *  The texts are escaped as the closures' are (signRow); the wall's row policy is the wall's. */
 function cutRow(i18n: I18n, item: FeedItem): string | null {
   const utility = dataText(item, 'utility');
-  if (utility !== 'struja' && utility !== 'voda') return null;
+  if (utility !== 'struja' && utility !== 'voda' && utility !== 'plin') return null;
   const street = item.title.replace(/\s+/g, ' ').trim();
   if (!street) return null;
   const numbers = dataText(item, 'houseNumbers').replace(/\s+/g, ' ').trim();
   const numbered = numbers && numbers.length < CUT_NUMBERS_MAX_CHARS ? `${street} ${numbers}` : undefined;
   const day = dataText(item, 'precision') === 'day';
-  const hours = day && utility === 'voda' ? i18n.t('kiosk.nearby.cut.vodaDay')
-    : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : 'kiosk.nearby.cut.voda', { from: zagrebTime(item.at!), until: zagrebTime(item.until!) });
+  const hours = day && utility !== 'struja' ? i18n.t(utility === 'plin' ? 'kiosk.nearby.cut.plinDay' : 'kiosk.nearby.cut.vodaDay')
+    : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : utility === 'plin' ? 'kiosk.nearby.cut.plin' : 'kiosk.nearby.cut.voda', { from: zagrebTime(item.at!), until: zagrebTime(item.until!) });
   const district = dataText(item, 'district');
   const sub = [zagrebWeekdayDate(item.at!), hours, district].filter(Boolean).join(' · ');
   return signRow({ lead: '<span class="mark-closure"></span>', title: numbered ?? street, sub, key: item.id, attrs: { 'data-testid': 'cut-row' } });
 }
 
-/** The planned power and water cuts that have not ended, by start then street (R0): eight, then a "Prikaži još". */
+/** The planned power, water and gas cuts that have not ended, by start then street: eight, then a "Prikaži još". */
 function cutsSection(i18n: I18n, ctx: LayerContext): string {
   const prekidi = ctx.snapshots.prekidi;
   const error = ctx.errors?.prekidi;
@@ -210,7 +210,7 @@ function cutsSection(i18n: I18n, ctx: LayerContext): string {
     .sort((a, b) => time(a.at) - time(b.at) || a.title.localeCompare(b.title, 'hr'))
     .map((item) => cutRow(i18n, item))
     .filter((row): row is string => row !== null);
-  // The module can be live while one publisher is down: an empty surviving list cannot confirm both utilities.
+  // The module can be live while one publisher is down: an empty surviving list cannot confirm every utility.
   const incomplete = prekidi?.coverage?.limited === true
     || Object.values(prekidi?.sources ?? {}).some((source) => source.status !== 'live');
   let list = rows.length === 0 && incomplete

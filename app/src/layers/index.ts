@@ -27,11 +27,12 @@ export const LAYER_MODULES: Record<LayerId, ModuleId[]> = {
   // dated events and the gazette issue.
   // The five October 2026 modules (U3) are read by Sada's list beside the rest: the City's and the libraries' programmes,
   // DHMZ's hourly steps, HAK's road report and the planned power and water cuts.
-  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'],
+  // R3 adds DHMZ's radar (the rain row), its biometeorological forecast and its wave warnings (the header's facts).
+  'grad-sada': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'zet-rt', 'prometnice', 'emsc', 'dogadanja', 'glasnik', 'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi', 'dhmz-radar', 'dhmz-bio', 'dhmz-waves'],
   // Transport notices (ZET's two feeds) ride in the dogadanja module.
   'u-pokretu': ['zet-rt', 'prometnice', 'dogadanja'],
-  // DHMZ's hourly steps are Vrijeme's strip (R0).
-  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly'],
+  // DHMZ's hourly steps are Vrijeme's strip (R0); the bio forecast and the waves its two sections (R3).
+  'zrak-i-nebo': ['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves'],
   // HAK's road states and the planned cuts are listed in Sigurnost (R0).
   sigurnost: ['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi'],
   // dogadanja is one module, session tier, shared by both layers below: each

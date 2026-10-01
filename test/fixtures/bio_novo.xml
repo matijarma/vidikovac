@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Saved for the dhmz-bio parser test: https://prognoza.hr/bio_novo.xml as served on 1 Oct 2026 at 02:07:22 UTC (Last-Modified Thu, 01 Oct 2026 00:58:16 GMT, 1,262 bytes, sha256 c53f7bd70c4d61e4f9482922b64146ddaf434c398747a98a94a1b1d3e2d36771), fetched once with the product User-Agent. Only this comment is added; nothing else is changed. The file holds two days (01.10 and 02.10.2026). -->
+<Bioprognoza>
+<Prognozirano>29.09.2026 u 09:34</Prognozirano>
+	<Podaci>
+		<Datum>01.10.2026</Datum>
+		<Tekst>U cijeloj će zemlji biometeorološke prilike i dalje biti povoljne. Boravak na otvorenom uz ugodne temperature zraka može povoljno djelovati na opće stanje meteoropata i kroničnih bolesnika, no tijekom svježijeg jutra, uz mogućnost lokalne magle, potrebna je dodatna zaštita i primjereno odijevanje.</Tekst>
+		<station name="istocna">3</station>
+		<station name="sredisnja">3</station>
+		<station name="gorska">3</station>
+		<station name="sjevernijadran">3</station>
+		<station name="juznijadran">3</station>
+
+	</Podaci>
+	<Podaci>
+		<Datum>02.10.2026</Datum>
+		<Tekst>Stabilne vremenske prilike povoljno će djelovati na većinu ljudi pa ni meteoropati neće imati dodatnih tegoba sa zdravljem. Preporučuje se slojevito odijevanje, tijekom dana lagane aktivnosti na otvorenom, a ujutro za srčane i plućne bolesnike te astmatičare dodatna zaštita od hladnog zraka.</Tekst>
+		<station name="istocna">3</station>
+		<station name="sredisnja">3</station>
+		<station name="gorska">3</station>
+		<station name="sjevernijadran">3</station>
+		<station name="juznijadran">3</station>
+
+	</Podaci>
+</Bioprognoza>

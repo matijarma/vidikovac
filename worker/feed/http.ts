@@ -19,11 +19,19 @@ async function identifiedFetch(url: string, init: RequestInit, extraHeaders: Rec
   });
 }
 
+/** Whether the caller sent a conditional header itself (the radar's If-Modified-Since, R3). */
+function conditional(init: RequestInit): boolean {
+  const headers = new Headers(init.headers as HeadersInit | undefined);
+  return Boolean(headers.get('if-modified-since')?.trim() || headers.get('if-none-match')?.trim());
+}
+
 export async function upstreamFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const response = await identifiedFetch(url, init, {});
   // A module fetcher must throw on any upstream failure (worker/feed/schema.ts),
-  // so the cache layer can fall back to the KV last-good copy.
-  if (!response.ok) {
+  // so the cache layer can fall back to the KV last-good copy. A 304 is the
+  // answer to a conditional request the caller made, not a failure: the caller
+  // holds the body it names.
+  if (!response.ok && !(response.status === 304 && conditional(init))) {
     throw new Error(`upstream ${response.status} ${response.statusText} for ${url}`);
   }
   return response;

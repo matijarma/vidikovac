@@ -30,6 +30,20 @@ const CUTS = snap('prekidi', Array.from({ length: 10 }, (_, i) => item('prekidi'
 })));
 
 describe('Sigurnost: HAK road states and the planned cuts (R0)', () => {
+  it('R3 review: includes whole-day and timed gas notices in the safety list', () => {
+    const gas = snap('prekidi', [
+      item('prekidi', 'gpz:day', 'cut', 'Dunjevac', { at: '2026-09-22T22:00:00Z', until: '2026-09-23T22:00:00Z', data: { utility: 'plin', precision: 'day', houseNumbers: '17' } }),
+      item('prekidi', 'gpz:time', 'cut', 'Zagorska ulica', { at: '2026-09-24T06:00:00Z', until: '2026-09-24T12:00:00Z', data: { utility: 'plin', precision: 'time', houseNumbers: '18' } }),
+    ]);
+    const section = renderLayer('sigurnost', ctx({ prekidi: gas }));
+    const rows = [...section.querySelectorAll('[data-testid=cut-row]')];
+    expect(rows).toHaveLength(2);
+    expect(text(rows[0]!)).toContain('bez plina');
+    expect(text(rows[0]!)).not.toContain('00:00');
+    expect(text(rows[1]!)).toContain('bez plina 08:00–14:00');
+    expect(text(section)).not.toContain(hr.t('safety.cutsNone'));
+    for (const row of rows) expect(text(row)).not.toMatch(FORBIDDEN);
+  });
   it('lists the road state that has not ended with its word and end, eight cuts and a show-more, both credited', () => {
     const section = renderLayer('sigurnost', ctx({ hak: ROADS, prekidi: CUTS }));
     const roads = section.querySelectorAll('[data-testid=road-row]');

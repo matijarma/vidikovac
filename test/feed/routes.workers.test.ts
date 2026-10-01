@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Env } from '../../worker/env';
 import type { ModuleId, ModuleSnapshot } from '../../worker/feed/schema';
 import { MODULES } from '../../worker/feed/registry';
-import { TEASER_CACHE_CONTROL, handleFeed, readDataToken } from '../../worker/routes/feed';
+import { RADAR_CACHE_KEY, TEASER_CACHE_CONTROL, handleFeed, readDataToken } from '../../worker/routes/feed';
+import { CALIBRATION, resetRadarMemo } from '../../worker/feed/modules/dhmz-radar';
+import { decodePng, encodePng } from '../../worker/feed/png';
 import { handleKiosk, SENTENCE_BODY_MAX_BYTES } from '../../worker/routes/kiosk';
 import worker from '../../worker/index';
 
@@ -142,6 +144,10 @@ describe('GET /api/teaser', () => {
       'dhmz-cap',
       'emsc',
       'ckan-geo',
+      // R3: open, so they ride OPEN_MODULES, not TEASER_MODULES.
+      'dhmz-radar',
+      'dhmz-bio',
+      'dhmz-waves',
       'dhmz-now',
       'zet-rt',
       'dogadanja',
@@ -198,12 +204,12 @@ describe('GET /api/data', () => {
     expect(wrong.status).toBe(401);
   });
 
-  it('serves all fourteen modules for a valid token and never caches them', async () => {
+  it('serves all seventeen modules for a valid token and never caches them', async () => {
     const response = await call('/api/data?token=dobar-token');
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
     const body = (await response.json()) as { modules: ModuleSnapshot[] };
-    expect(body.modules).toHaveLength(14);
+    expect(body.modules).toHaveLength(17);
     expect(body.modules.find((m) => m.module === 'zet-rt')?.items).toHaveLength(2);
   });
 
@@ -270,5 +276,96 @@ describe('GET /api/data/:module', () => {
     });
     expect(response.status).toBe(200);
     expect(((await response.json()) as ModuleSnapshot).status).toBe('down');
+  });
+});
+
+// R3: DHMZ's composite around Zagreb. The composite here is built in the test (720 × 751, the calibration's size, one
+// marked pixel at the inset's top-left corner): workerd reads no file of the host, and the codec has its own tests on the
+// saved composite (test/feed/png.test.ts, test/feed/dhmz-radar.test.ts).
+describe('GET /api/radar/zagreb.png', () => {
+  const LAST_MODIFIED = new Date(NOW.getTime() - 4 * 60_000).toUTCString();
+  async function composite(): Promise<Uint8Array> {
+    const [width, height] = CALIBRATION.imageSize;
+    const data = new Uint8Array(width * height * 3).fill(0xd6);
+    const [x0, y0] = CALIBRATION.inset.rect;
+    data.set([255, 0, 0], (y0 * width + x0) * 3);
+    return encodePng({ width, height, data });
+  }
+  async function radarCall(fetchImpl: () => Promise<Response>, init: RequestInit = {}) {
+    resetRadarMemo();
+    await caches.default.delete(new Request(RADAR_CACHE_KEY));
+    const url = new URL('https://vidikovac.test/api/radar/zagreb.png?v=1790820250');
+    const ctx = createExecutionContext();
+    const response = await handleFeed(new Request(url, init), testEnv, ctx, url, deps({
+      radarContext: () => ({ now: () => NOW, fetch: fetchImpl }),
+    }));
+    await waitOnExecutionContext(ctx);
+    return response!;
+  }
+
+  it('serves the 120-pixel crop around Zagreb as a PNG, cached five minutes, with the DHMZ credit', async () => {
+    const body = await composite();
+    const response = await radarCall(async () => new Response(body, { headers: { 'last-modified': LAST_MODIFIED } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(response.headers.get('x-attribution')).toBe('Izvor: DHMZ');
+    expect(response.headers.get('last-modified')).toBe(LAST_MODIFIED);
+    const crop = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    expect([crop.width, crop.height]).toEqual([120, 120]);
+    expect([...crop.data.subarray(0, 6)]).toEqual([255, 0, 0, 0xd6, 0xd6, 0xd6]);
+  });
+
+  it('answers 503 that nothing caches when the composite cannot be had or is old', async () => {
+    const down = await radarCall(async () => { throw new Error('upstream 500'); });
+    expect(down.status).toBe(503);
+    expect(down.headers.get('cache-control')).toBe('no-store');
+    expect(await down.json()).toEqual({ error: 'radar-unavailable' });
+    const body = await composite();
+    const old = await radarCall(async () => new Response(body, { headers: { 'last-modified': new Date(NOW.getTime() - 31 * 60_000).toUTCString() } }));
+    expect(old.status).toBe(503);
+  });
+
+  it('answers 405 to anything but GET', async () => {
+    const response = await radarCall(async () => new Response(null), { method: 'POST' });
+    expect(response.status).toBe(405);
+  });
+
+  it('R3 review: rejects an over-age edge image and refetches instead of returning the cached body', async () => {
+    resetRadarMemo();
+    const key = new Request(RADAR_CACHE_KEY);
+    await caches.default.put(key, new Response('old image', { headers: {
+      'content-type': 'image/png', 'cache-control': 'public, max-age=300',
+      'last-modified': new Date(NOW.getTime() - 31 * 60_000).toUTCString(),
+    } }));
+    const body = await composite();
+    const fetch = vi.fn(async () => new Response(body, { headers: { 'last-modified': LAST_MODIFIED } }));
+    const url = new URL('https://vidikovac.test/api/radar/zagreb.png');
+    const ctx = createExecutionContext();
+    const response = await handleFeed(new Request(url), testEnv, ctx, url, deps({ radarContext: () => ({ now: () => NOW, fetch }) }));
+    await waitOnExecutionContext(ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get('last-modified')).toBe(LAST_MODIFIED);
+    expect((await decodePng(new Uint8Array(await response!.arrayBuffer()))).width).toBe(120);
+  });
+
+  it('R3 review: never caches a near-expiry composite past the existing thirty-minute limit', async () => {
+    const body = await composite();
+    const response = await radarCall(async () => new Response(body, { headers: {
+      'last-modified': new Date(NOW.getTime() - 29 * 60_000).toUTCString(),
+    } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=60');
+  });
+
+  it('R3 review: does not store an edge response with no freshness lifetime remaining', async () => {
+    const body = await composite();
+    const response = await radarCall(async () => new Response(body, { headers: {
+      'last-modified': new Date(NOW.getTime() - 30 * 60_000).toUTCString(),
+    } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0');
+    expect(await caches.default.match(new Request(RADAR_CACHE_KEY))).toBeUndefined();
   });
 });

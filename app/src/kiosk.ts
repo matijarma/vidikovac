@@ -55,7 +55,7 @@ import { clock, weekdayDayMonth } from './kiosk/format';
 import { frameStrip, PHARMACY_HOURS, stripMarkup } from './kiosk/frame';
 import { cardMarkup, mountInvitation, wallMapNote, type InvitationHandle, type InvitationModel } from './kiosk/invitation';
 import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, measureViewport, type LayoutDecision, type Viewport } from './kiosk/layout';
-import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
+import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, radarInsetShown, radarNow, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { groupDepartures, mountTouchPanel, taktCandidates, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
@@ -1206,7 +1206,14 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame,
       note: wallMapNote({ zet: byModule(teaser)['zet-rt'], now: now(), outage: outage(), strings: s, i18n }),
       modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout),
-      reveal: taktReveal, next: taktNext };
+      reveal: taktReveal, next: taktNext, radar: radarState() };
+  }
+  /** R3: DHMZ's radar inset: none under lagano or without a fresh radar item; shown while rain is near or two hours off. */
+  function radarState(): InvitationModel['radar'] {
+    if (lightweight || compositionOf(layout) === 'handheld') return null;
+    const at = now();
+    const radar = radarNow(teaser, at);
+    return radar ? { src: radar.src, shown: radarInsetShown(teaser, placeForNearby(), at, lightweight) } : null;
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.

@@ -16,7 +16,7 @@ import { zagrebHour } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { clock, dayKey, dayMonth, fmtNumber, sameZagrebDay } from '../kiosk/format';
-import { activeWarnings, cleanCondition, weatherNow } from '../kiosk/local';
+import { activeWarnings, bioForecastToday, cleanCondition, forecastDayStart, forecastDayWord, isWetStep, nearestHourlySteps, radarNow, waveDays, weatherNow } from '../kiosk/local';
 import { airIndexLabel } from './air';
 import { kioskStrings } from '../kiosk/strings';
 import { dataNumber, dataText } from '../panels/panel';
@@ -134,6 +134,12 @@ export const SENTENCE_COPY_HR = {
   bikesEmpty: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.',
   airIndex: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.',
   warningUntil: 'DHMZ: {event} do {until}.',
+  rainNow: 'Radar DHMZ: kiša u blizini Zagreba.',
+  bioToday: 'DHMZ: {text}',
+  heatWave: 'Toplinski val: {level}. stupanj, {day}.',
+  coldWave: 'Hladni val: {level}. stupanj, {day}.',
+  dryUntil: 'Suho do {time}.',
+  hourlyTemp: 'Oko {time} {temp} °C.',
 } as const;
 export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -172,6 +178,12 @@ export const SENTENCE_COPY_EN: Record<keyof typeof SENTENCE_COPY_HR, string> = {
   bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
   airIndex: 'Air quality: {word}, index {index}; station {station}.',
   warningUntil: 'DHMZ: {event} until {until}.',
+  rainNow: 'DHMZ radar: rain near Zagreb.',
+  bioToday: 'DHMZ: {text}',
+  heatWave: 'Heat wave: level {level}, {day}.',
+  coldWave: 'Cold wave: level {level}, {day}.',
+  dryUntil: 'Dry until {time}.',
+  hourlyTemp: 'Around {time} {temp} °C.',
 };
 
 function copy(i18n: I18n, key: keyof typeof SENTENCE_COPY_HR, vars: Record<string, string | number> = {}): string {
@@ -240,6 +252,71 @@ function timedLabel(at: number, input: SentenceFactsInput): string {
   return input.i18n.t('time.dateAt', { date: dayMonth(at), time });
 }
 
+interface ComputedFact { id: string; text: string; validUntil: number; wording: SentenceWording }
+
+/**
+ * The heat and cold wave facts (R3): the fresh dhmz-waves item of each wave (not down; its first day today or yesterday),
+ * the first day from today to the item's end whose level is 1 to 3. The fact lasts to the next midnight (the day word
+ * changes then); its id names the wave and that day.
+ */
+function waveFacts(input: SentenceFactsInput): ComputedFact[] {
+  const { now, i18n } = input;
+  const days = waveDays(input.snapshots['dhmz-waves'], now);
+  const out: ComputedFact[] = [];
+  for (const wave of ['heat', 'cold'] as const) {
+    const day = days.find(day => day.wave === wave);
+    if (!day) continue;
+    const wording = wave === 'heat' ? 'heatWave' : 'coldWave';
+    out.push({ id: day.id, text: copy(i18n, wording, { level: day.level, day: forecastDayWord(i18n, day.at, now) }),
+      validUntil: Math.min(day.until, nextMidnight(now)), wording });
+  }
+  return out;
+}
+
+/** The clock hours of the hourly temperature fact, Zagreb time. */
+const HOURLY_TEMP_HOURS = [8, 14, 20] as const;
+const HOUR_MS = 3_600_000;
+
+/**
+ * The dry spell and the temperature later in the day (R3), from the nearest station's dhmz-hourly steps (the rain row's
+ * station). Dry: the step running now and every step up to the first wet one are dry by the strict rule (no rain, a
+ * chance under 30 %), the first wet step starts more than 2 h and at most 12 h from now, and no fresh radar item says
+ * rain is near. The temperature: the step at the next of 08:00, 14:00 and 20:00 that is 2 to 12 hours ahead.
+ */
+function hourlyFacts(input: SentenceFactsInput): ComputedFact[] {
+  const { now, i18n, locale } = input;
+  const hourly = nearestHourlySteps(input.snapshots['dhmz-hourly'], input.place);
+  if (!hourly) return [];
+  const out: ComputedFact[] = [];
+  const ahead = hourly.steps.filter(step => step.until > now);
+  const running = ahead[0];
+  const radar = radarNow(Object.values(input.snapshots).filter((s): s is NonNullable<typeof s> => s !== undefined), now);
+  if (running && running.at <= now && !radar?.rainNear) {
+    const wetAt = ahead.findIndex(step => isWetStep(step.item));
+    const wet = wetAt > 0 ? ahead[wetAt]! : undefined;
+    let coveredUntil = now;
+    const dryBefore = wet !== undefined && ahead.slice(0, wetAt).every(step => {
+      if (step.at > coveredUntil || dataNumber(step.item, 'precip') !== 0 || (dataNumber(step.item, 'prob') ?? 100) >= 30) return false;
+      // These are hourly forecast steps: a missing hour cannot be filled by stretching its predecessor to the next one.
+      coveredUntil = Math.max(coveredUntil, Math.min(step.until, step.at + HOUR_MS));
+      return true;
+    }) && coveredUntil >= wet.at;
+    if (wet && dryBefore && wet.at - now > 2 * HOUR_MS && wet.at - now <= 12 * HOUR_MS) {
+      out.push({ id: `dry:${hourly.station}:${new Date(wet.at).toISOString()}`, text: copy(i18n, 'dryUntil', { time: clock(wet.at) }),
+        validUntil: Math.min(wet.at, now + 6 * HOUR_MS), wording: 'dryUntil' });
+    }
+  }
+  const target = [0, 1].flatMap(days => HOURLY_TEMP_HOURS.map(hour => forecastDayStart(now, days, hour)))
+    .find(at => at - now >= 2 * HOUR_MS && at - now <= 12 * HOUR_MS);
+  const step = target === undefined ? undefined : hourly.steps.find(entry => entry.at === target);
+  const temp = step ? dataNumber(step.item, 'temp') : null;
+  if (step && temp !== null) {
+    out.push({ id: `hourly:${hourly.station}:${new Date(step.at).toISOString()}`,
+      text: copy(i18n, 'hourlyTemp', { time: clock(step.at), temp: fmtNumber(locale, Math.round(temp) || 0) }), validUntil: step.at, wording: 'hourlyTemp' });
+  }
+  return out;
+}
+
 /** At most MAX_FACTS fact records, plus the pinned facts of the sentence on screen; solar is reserved even with a full timeline. */
 export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   const { now, i18n, locale } = input;
@@ -298,6 +375,10 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       temp: observation.temperature, condition, max: max === null ? '' : fmtNumber(locale, max),
     }), Math.min(weatherExpiry, nextMidnight(now)), { wording: key });
   }
+
+  // R3: DHMZ's heat, then cold, wave warning for Zagreb: the first day from today to the item's end whose level is 1 to 3,
+  // said with "danas", "sutra" or the weekday. DHMZ's levels, not its words: "2. stupanj" is the rank of "velika opasnost".
+  for (const fact of waveFacts(input)) add(fact.id, 'vrijeme', fact.text, fact.validUntil, { wording: fact.wording });
 
   // R0: the air where it deviates (index AIR_DEVIATION_INDEX or worse), the nearest fresh station inside the circle, in
   // the phone's own word for the index; valid two hours from its reading, never past midnight.
@@ -367,6 +448,12 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       // The template owns the final full stop: a title that ends in one does not double it.
       add(row.id, 'promet', copy(i18n, 'notice', { notice: row.title.replace(/\.$/, '') }),
         Math.min((row.atMs ?? now) + NOTICE_WINDOW_MS, nextMidnight(now)), { wording: 'notice' });
+      continue;
+    }
+    // R3: DHMZ's radar shows rain near Zagreb. The row stands at the image's time, already past, so it is read before
+    // the past-row skip; it lasts as long as the radar item (ten minutes from the image).
+    if (row.kind === 'rain' && row.detail?.kind === 'radar') {
+      if (row.untilMs !== undefined && row.untilMs > now) add(row.id, 'vrijeme', copy(i18n, 'rainNow'), row.untilMs, { factKey: 'radar:zagreb', wording: 'rainNow' });
       continue;
     }
     if (row.kind === 'solar' || (row.kind !== 'last' && row.kind !== 'first'
@@ -494,6 +581,18 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       }), nextMidnight(now), { wording: 'forecastTomorrow' });
     }
   }
+  // R3: DHMZ's biometeorological forecast for today, its own first sentence, Croatian only (DHMZ's words). The slot's 74
+  // characters are the contract ("DHMZ: " + text within 80), so the text goes in after the slot check rather than through
+  // copy(), whose generic value cap of 64 would cut the slot short.
+  if (!locale.startsWith('en')) {
+    const today = bioForecastToday(input.snapshots['dhmz-bio'], now);
+    const text = dataText(today, 'text');
+    if (today && text && validateSentenceSlot('dhmzText', text) === null) {
+      add(today.id, 'vrijeme', copy(i18n, 'bioToday').replace('{text}', text), Math.min(Date.parse(today.until!), nextMidnight(now)), { wording: 'bioToday' });
+    }
+  }
+  // R3: how long it stays dry and the temperature later in the day, from the nearest station's hourly steps.
+  for (const fact of hourlyFacts(input)) add(fact.id, 'vrijeme', fact.text, fact.validUntil, { wording: fact.wording, formUntil: fact.validUntil });
   // R2: the rows a page turn reveals are said on the beat, in the row's own words (its family and slots: no new
   // family), as a copy of the row's fact that lasts exactly the beat (validUntil and formUntil at the beat's end, so
   // the lasting rule takes it and the beat's end ends it) and keeps the row's fact key (one fact to the no-repeat

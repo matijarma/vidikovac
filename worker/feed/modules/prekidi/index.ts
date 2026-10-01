@@ -3,19 +3,20 @@ import { sourceCoverage, type FeedPayload, type ItemInput } from '../../payload'
 import { fetchHepOds } from './hep';
 import type { CutsResult } from './common';
 import { fetchVio } from './vio';
+import { fetchGpz } from './gpz';
 
-// Planned power and water cuts on a street, two publishers read independently (the shape of
-// dogadanja/index.ts): HEP ODS Elektra Zagreb (electricity, with hours) and Vodoopskrba i odvodnja
-// (water, whole days). Each has its own 6 s race; one that fails leaves the other live (U3 M4): the module
-// stays 'live' (the registry's `degradeOnSources: false`) and the failed source reports itself 'down' in
-// `sources`, where the Još pages read it. Only when both fail does this throw, so the last good copy serves
-// as 'stale'. (A 'stale' module for one failed source put "1 izvor ne odgovara." over the phone's first
-// viewport every night VIO refused the Worker's requests: round 1 phone F1, 29 September 2026.)
-// Both are unofficial views of a page that states no terms ("neslužbeni prikaz").
+// Planned power, water and gas cuts on a street, three publishers read independently (the shape of
+// dogadanja/index.ts): HEP ODS Elektra Zagreb (electricity, with hours), Vodoopskrba i odvodnja (water, whole
+// days) and Gradska plinara Zagreb (gas, whole days unless a notice gives hours; R3). Each has its own 6 s race;
+// one that fails leaves the others live (U3 M4): the module stays 'live' (the registry's `degradeOnSources: false`)
+// and the failed source reports itself 'down' in `sources`, where the Još pages read it. Only when every source
+// fails does this throw, so the last good copy serves as 'stale'. (A 'stale' module for one failed source put
+// "1 izvor ne odgovara." over the phone's first viewport every night VIO refused the Worker's requests: round 1
+// phone F1, 29 September 2026.) All three are unofficial views of a page that states no terms ("neslužbeni prikaz").
 
 export const PREKIDI_SOURCE_TIMEOUT_MS = 6000;
 
-export type PrekidiSourceId = 'hep-ods' | 'vio';
+export type PrekidiSourceId = 'hep-ods' | 'vio' | 'gpz';
 
 interface SourceJob {
   id: PrekidiSourceId;
@@ -25,6 +26,7 @@ interface SourceJob {
 const SOURCES: readonly SourceJob[] = [
   { id: 'hep-ods', run: fetchHepOds },
   { id: 'vio', run: fetchVio },
+  { id: 'gpz', run: fetchGpz },
 ];
 
 /** Bounds a source's whole run, not just each request of it. */
@@ -49,7 +51,7 @@ function raceTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 export async function fetchPrekidi(ctx: FetchContext): Promise<FeedPayload> {
   const fetchedAt = ctx.now().toISOString();
   const settled = await Promise.allSettled(SOURCES.map((source) => raceTimeout(source.run(ctx), PREKIDI_SOURCE_TIMEOUT_MS, source.id)));
-  if (settled.every((result) => result.status === 'rejected')) throw new Error('prekidi: both sources failed');
+  if (settled.every((result) => result.status === 'rejected')) throw new Error('prekidi: every source failed');
   const sources: Record<string, SourceAvailability> = {};
   const items: ItemInput[] = [];
   settled.forEach((result, index) => {

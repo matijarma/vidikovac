@@ -15,6 +15,8 @@ import { essentialsRows, fitEssentials } from '../../app/src/kiosk/essentials';
 import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../app/src/kiosk/format';
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
+import { RAIN_AHEAD_MS } from '../../app/src/city/nearby';
+import { nearestHourlySteps, radarInsetShown, radarNow, RADAR_WET_AHEAD_MS } from '../../app/src/kiosk/local';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { busesVisible, CITY_DETAIL_ZOOM, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
@@ -1349,5 +1351,61 @@ describe('T5.2 markup shapes: the two-line lockup, the departure board, badges a
     expect(hr.invitation.typeCode).toBe('ili upiši kod na {host}');
     expect(kioskStrings('en').invitation.typeCode).toBe('or type the code at {host}');
     expect(JSON.stringify(hr)).not.toContain('zagreb.aningfilm.hr');
+  });
+});
+
+// R3: the radar inset's rule and the radar row's reading of the teaser (docs/reveal-2026-10-plan/R3.md §0.2 (d)).
+describe('radarNow and radarInsetShown (R3)', () => {
+  const NOW_R = Date.parse('2026-09-22T15:45:00Z');
+  const PLACE = { lon: 15.97726, lat: 45.81286 };
+  const base = (module: ModuleId, items: ModuleSnapshot['items'], status: ModuleSnapshot['status'] = 'live'): ModuleSnapshot => ({
+    module, tier: 'open', status, fetchedAt: new Date(NOW_R).toISOString(), attribution: { text: 'Izvor: DHMZ', url: 'https://meteo.hr', licence: 'x' }, items,
+  });
+  const radar = (ageMin: number, rainNear: boolean, status: ModuleSnapshot['status'] = 'live') => base('dhmz-radar', [{
+    id: 'dhmz-radar:1790091600', module: 'dhmz-radar', kind: 'radar', tier: 'open', title: 'Radar DHMZ, Zagreb',
+    at: new Date(NOW_R - ageMin * 60_000).toISOString(), until: new Date(NOW_R - ageMin * 60_000 + 600_000).toISOString(),
+    data: { rainNear, rainCells: rainNear ? 40 : 0, crop: 'zagreb', image: '/api/radar/zagreb.png' },
+  }], status);
+  const wetIn = (minutes: number) => base('dhmz-hourly', [{
+    id: 'dhmz-hourly:gric:x', module: 'dhmz-hourly', kind: 'forecast', tier: 'session', title: 'Zagreb-Grič',
+    at: new Date(NOW_R + minutes * 60_000).toISOString(), until: new Date(NOW_R + (minutes + 60) * 60_000).toISOString(),
+    geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { station: 'gric', temp: 16, precip: 2.4, prob: 90, weather: 'kiša' },
+  }]);
+
+  it('shows the inset for rain near, or a wet step within two hours, never otherwise', () => {
+    expect(RADAR_WET_AHEAD_MS).toBe(RAIN_AHEAD_MS);
+    expect(radarInsetShown([radar(4, true)], PLACE, NOW_R, false)).toBe(true);
+    expect(radarInsetShown([radar(4, false), wetIn(90)], PLACE, NOW_R, false)).toBe(true);
+    expect(radarInsetShown([radar(4, false), wetIn(130)], PLACE, NOW_R, false)).toBe(false);
+    expect(radarInsetShown([radar(11, true)], PLACE, NOW_R, false)).toBe(false);
+    expect(radarInsetShown([radar(4, true, 'down')], PLACE, NOW_R, false)).toBe(false);
+    expect(radarInsetShown([radar(4, true)], PLACE, NOW_R, true)).toBe(false);
+  });
+
+  it('names the image by its composite, so it reloads only for a new one', () => {
+    expect(radarNow([radar(4, true)], NOW_R)).toEqual({
+      src: '/api/radar/zagreb.png?v=1790091600', rainNear: true, atMs: NOW_R - 240_000, untilMs: NOW_R + 360_000,
+    });
+    expect(radarNow([radar(11, true)], NOW_R)).toBeNull();
+  });
+
+  it('R3 review: invalid intervals and non-forecast items cannot choose the hourly station or show the inset', () => {
+    const source = wetIn(90);
+    const bad = { ...source.items[0]!, until: source.items[0]!.at };
+    expect(nearestHourlySteps({ ...source, items: [bad] }, PLACE)?.steps ?? []).toEqual([]);
+    expect(radarInsetShown([radar(4, false), { ...source, items: [bad] }], PLACE, NOW_R, false)).toBe(false);
+    const noise = { ...source.items[0]!, id: 'not-a-step', kind: 'warning' as const,
+      geo: { type: 'Point' as const, coordinates: [PLACE.lon, PLACE.lat] }, data: { station: 'not-a-station' } };
+    expect(nearestHourlySteps({ ...source, items: [noise, ...source.items] }, PLACE)?.station).toBe('gric');
+  });
+
+  it('R3 review: the radar predicate is deterministic and expires on the exact item boundary', () => {
+    const source = radar(4, true, 'stale');
+    const copy = JSON.stringify(source);
+    expect(radarNow([source], NOW_R)).toEqual(radarNow([source], NOW_R));
+    expect(radarNow([source], NOW_R + 360_000)).toBeNull();
+    expect(radarNow([source], NOW_R - 300_000)).toBeNull();
+    expect(radarNow([source], Number.NaN)).toBeNull();
+    expect(JSON.stringify(source)).toBe(copy);
   });
 });

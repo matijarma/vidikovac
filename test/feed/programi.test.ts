@@ -22,19 +22,35 @@ function listing(over: { date?: string; when?: string | null; id?: number; title
 const page = (...listings: string[]) => `<html><body><div class='dogadanje_holder2'>Rezultata: 286</div><div class='clear'></div>${listings.join('')}</body></html>`;
 
 describe('programi on the saved pages', () => {
-  it('keeps the listings of one day with one start time and counts the others out', () => {
+  it('keeps timed listings, day items for short ranges and untimed days, and counts the others out', () => {
     const one = parseKgzPage(PAGE_1, NOW);
     const two = parseKgzPage(PAGE_2, NOW);
     expect([one.listings, two.listings]).toEqual([20, 20]);
     expect([one.results, two.results]).toEqual([286, 286]);
-    // Page 1: 11 events; 5 listings run over several days, 4 repeat every week or fortnight.
-    expect(one.items).toHaveLength(11);
-    expect(one.dropped).toEqual({ multiDay: 5, recurring: 4, noTime: 0 });
-    // Page 2: 10 events; 9 multi-day (an exhibition, a season of workshops), 1 weekly.
-    expect(two.items).toHaveLength(10);
-    expect(two.dropped).toEqual({ multiDay: 9, recurring: 1, noTime: 0 });
-    expect(one.items.length + one.dropped.multiDay + one.dropped.recurring + one.dropped.noTime).toBe(20);
-    expect(two.items.length + two.dropped.multiDay + two.dropped.recurring + two.dropped.noTime).toBe(20);
+    // Page 1: 11 timed events and 3 day items (R3 D-J); 4 listings repeat every week or fortnight, 2 run for months.
+    expect(one.items).toHaveLength(14);
+    expect(one.dropped).toEqual({ recurring: 4, season: 2, noTime: 0 });
+    // Page 2: 10 timed events and 3 day items; 6 seasons of workshops, 1 weekly. (Before R3: 11 and 10 items.)
+    expect(two.items).toHaveLength(13);
+    expect(two.dropped).toEqual({ recurring: 1, season: 6, noTime: 0 });
+    for (const page of [one, two]) expect(page.items.length + page.dropped.recurring + page.dropped.season + page.dropped.noTime).toBe(20);
+  });
+
+  it('makes a range of at most 31 days a day item from its first day to 23:59 of its last, Zagreb', () => {
+    const items = [...parseKgzPage(PAGE_1, NOW).items, ...parseKgzPage(PAGE_2, NOW).items].filter((item) => item.data?.precision === 'day');
+    expect(items.map((item) => [item.title, item.at, item.until])).toEqual([
+      ['Marko Gutić Mižimakov i Stefa Govaart: 2009', '2026-09-28T22:00:00.000Z', '2026-09-30T21:59:00.000Z'],
+      ['Jesenski plodovi', '2026-09-28T22:00:00.000Z', '2026-10-30T22:59:00.000Z'],
+      ['Jesensko lišće', '2026-09-28T22:00:00.000Z', '2026-10-30T22:59:00.000Z'],
+      ['STEM radionice programiranja i robotike', '2026-09-30T22:00:00.000Z', '2026-10-29T22:59:00.000Z'],
+      ['Dječji tjedan na krilima bajke', '2026-10-04T22:00:00.000Z', '2026-10-09T21:59:00.000Z'],
+      ['Dječji tjedan u Zaprešiću', '2026-10-04T22:00:00.000Z', '2026-10-09T21:59:00.000Z'],
+    ]);
+    for (const item of items) expect(item.id).toMatch(/^programi:kgz:\d+:\d{4}-\d{2}-\d{2}$/);
+    // "Pričaonica i kreativna radionica" (utorkom) repeats; "Raznobojni četvrtak" runs seven months: neither is an item.
+    const titles = [...parseKgzPage(PAGE_1, NOW).items, ...parseKgzPage(PAGE_2, NOW).items].map((item) => item.title);
+    expect(titles).not.toContain('Pričaonica i kreativna radionica');
+    expect(titles).not.toContain('Raznobojni četvrtak');
   });
 
   it('reads the free-text start time in every form the pages use, in Zagreb time', () => {
@@ -63,7 +79,8 @@ describe('programi on the saved pages', () => {
     });
     for (const item of [...items, ...parseKgzPage(PAGE_2, NOW).items]) {
       expect(item.geo).toBeUndefined();
-      expect(item.until).toBeUndefined();
+      // A timed event has no end; a day item ends with its last day.
+      expect(item.until === undefined).toBe(item.data?.precision === 'time');
       expect(item.summary).toBeUndefined();
       for (const key of Object.keys(item.data!)) expect(DATA_KEYS.event, key).toContain(key);
     }
@@ -77,7 +94,7 @@ describe('programi on the saved pages', () => {
     expect(parseKgzPage(PAGE_1.replace(/\r\n/g, '\n'), NOW)).toEqual(parseKgzPage(PAGE_1, NOW));
   });
 
-  it('asks for pages 1 and 2 of the listing and nothing else, and returns 21 events sorted like every dogadanja source', async () => {
+  it('asks for pages 1 and 2 of the listing and nothing else, and returns 27 events sorted like every dogadanja source', async () => {
     const requested: string[] = [];
     const payload = await fetchProgrami({
       now: () => NOW,
@@ -88,13 +105,13 @@ describe('programi on the saved pages', () => {
     });
     expect(requested.sort()).toEqual(['https://www.kgz.hr/hr/dogadjanja/10?page=1', 'https://www.kgz.hr/hr/dogadjanja/10?page=2']);
     expect(KGZ_URL).toBe('https://www.kgz.hr/hr/dogadjanja/10');
-    expect(payload.items).toHaveLength(21);
-    // Not over yet, soonest first; what began before 17:45 comes last.
+    expect(payload.items).toHaveLength(27);
+    // Not over yet, soonest first (the day items under way today lead); what began before 17:45 comes last.
     const ids = payload.items.map((item) => item.id);
-    expect(ids[0]).toBe('programi:kgz:74738:2026-09-29');
+    expect(ids.slice(0, 4)).toEqual(['programi:kgz:74815:2026-09-29', 'programi:kgz:74925:2026-09-29', 'programi:kgz:74951:2026-09-29', 'programi:kgz:74738:2026-09-29']);
     expect(ids.slice(-2)).toEqual(['programi:kgz:74912:2026-09-29', 'programi:kgz:74633:2026-09-29']);
     // Only the first two of 15 pages are read: the coverage says so, and how many listings the site holds.
-    expect(payload.coverage).toEqual({ shown: 21, total: 286, limited: true });
+    expect(payload.coverage).toEqual({ shown: 27, total: 286, limited: true });
   });
 });
 
@@ -121,25 +138,30 @@ describe('the start time of a listing', () => {
 });
 
 describe('listings that are not an hour to go to', () => {
-  it('drops a weekly or fortnightly programme, a listing over several days and one without a time, and counts each', () => {
+  it('drops a weekly or fortnightly programme and a season, keeps a short range and an untimed day as day items', () => {
     const result = parseKgzPage(page(
       listing({ id: 1, when: 'utorkom u 18:00' }),
       listing({ id: 2, when: 'srijedom od 17 do 18:30' }),
       listing({ id: 3, when: 'svakog drugog četvrtka od 18 do 19:30' }),
-      listing({ id: 4, date: '30.09.2026. - 02.10.2026.', when: '20 sati' }),
-      listing({ id: 5, when: null }),
-      listing({ id: 6, when: 'od 17 do 18 sati' }),
+      listing({ id: 4, date: '30.09.2026. - 02.10.2026.', when: '20 sati', title: 'Tri dana' }),
+      listing({ id: 5, when: null, title: 'Bez sata' }),
+      listing({ id: 6, when: 'od 17 do 18 sati', title: 'Dva sata' }),
       listing({ id: 7, when: 'srijeda, 30. 9. 2026. u 19 sati', title: 'Ostaje' }),
+      listing({ id: 8, date: '30.09.2026. - 31.10.2026.', when: null, title: 'Mjesec i dan' }),
+      listing({ id: 9, date: '30.09.2026. - 01.11.2026.', when: null, title: 'Predugo' }),
     ), NOW);
-    expect(result.dropped).toEqual({ multiDay: 1, recurring: 3, noTime: 2 });
-    expect(result.items.map((item) => item.title)).toEqual(['Ostaje']);
+    expect(result.dropped).toEqual({ recurring: 3, season: 1, noTime: 0 });
+    expect(result.items.map((item) => [item.title, item.data?.precision])).toEqual([
+      ['Tri dana', 'day'], ['Bez sata', 'day'], ['Dva sata', 'day'], ['Ostaje', 'time'], ['Mjesec i dan', 'day'],
+    ]);
+    expect(result.items[0]).toMatchObject({ id: 'programi:kgz:4:2026-09-30', at: '2026-09-29T22:00:00.000Z', until: '2026-10-02T21:59:00.000Z' });
     expect(JSON.stringify(result)).not.toContain('OPIS-NE-SMIJE-PROCI');
   });
 
   it('refuses a date that is not on the calendar', () => {
-    const result = parseKgzPage(page(listing({ date: '31.09.2026.', when: '18 sati' })), NOW);
+    const result = parseKgzPage(page(listing({ date: '31.09.2026.', when: '18 sati' }), listing({ id: 2, date: '30.09.2026. - 31.09.2026.' })), NOW);
     expect(result.items).toEqual([]);
-    expect(result.dropped.noTime).toBe(1);
+    expect(result.dropped.noTime).toBe(2);
   });
 });
 

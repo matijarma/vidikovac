@@ -176,7 +176,9 @@
     "magnitude": "M {mag}",
     "depth": "depth {depth} km",
     "reference": "Measurements, sun, air and the Sava bulletin",
-    "hourly": "By the hour"
+    "hourly": "By the hour",
+    "bio": "Biometeorological forecast",
+    "waves": "Heat and cold waves"
   },
   "safety": {
     "hitnoSame": "The same page without a scan: Safety",
@@ -271,7 +273,10 @@
       "kultura-zagreb": "Guru za kulturu",
       "kgz": "Zagreb City Libraries"
     },
-    "timeUnknown": "time not given"
+    "timeUnknown": "time not given",
+    "filter": {
+      "kids": "For children"
+    }
   },
   "civic": {
     "assembly": "City Assembly",
@@ -891,8 +896,15 @@
       "warningUntil": "DHMZ: {event} until {until}.",
       "utility": {
         "struja": "power",
-        "voda": "water"
-      }
+        "voda": "water",
+        "plin": "gas"
+      },
+      "rainNow": "DHMZ radar: rain near Zagreb.",
+      "bioToday": "DHMZ: {text}",
+      "heatWave": "Heat wave: level {level}, {day}.",
+      "coldWave": "Cold wave: level {level}, {day}.",
+      "dryUntil": "Dry until {time}.",
+      "hourlyTemp": "Around {time} {temp} °C."
     },
     "handheld": {
       "info": "For a public display, open /kiosk/ on that device and choose Start. This code opens a personal session; scanning does not change the public display."
@@ -970,7 +982,9 @@
       "cut": {
         "struja": "no power {from}–{until}",
         "voda": "no water {from}–{until}",
-        "vodaDay": "no water"
+        "vodaDay": "no water",
+        "plin": "no gas {from}–{until}",
+        "plinDay": "no gas"
       },
       "openKind": {
         "ljekarna": "pharmacy",
@@ -992,7 +1006,8 @@
         "regulacija": "temporary traffic regulation",
         "zatvoreno": "closed to traffic",
         "zastoj": "congestion"
-      }
+      },
+      "rainRadar": "rain nearby"
     },
     "paired": {
       "warnings": "DHMZ warnings",
@@ -1096,6 +1111,9 @@
       "viewSchema": "View: network diagram",
       "rhythm": "Rhythm",
       "rhythmValue": "Rhythm: {seconds} s"
+    },
+    "map": {
+      "radarCredit": "Radar · Source: DHMZ"
     }
   },
   "presentation": {

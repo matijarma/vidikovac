@@ -19,6 +19,9 @@ const EXPECTED_KINDS: Record<ModuleId, ItemKind[]> = {
   'dhmz-hourly': ['forecast'],
   hak: ['road'],
   prekidi: ['cut'],
+  'dhmz-radar': ['radar'],
+  'dhmz-bio': ['forecast'],
+  'dhmz-waves': ['forecast'],
 };
 
 describe.each(MODULE_IDS)('module %s against its real upstream sample', (id) => {
@@ -66,7 +69,9 @@ describe.each(MODULE_IDS)('module %s against its real upstream sample', (id) => 
     snapshot ??= await MODULES[id].fetcher(FIXTURE_CONTEXTS[id]);
     for (const item of snapshot.items) {
       if (!item.geo) continue;
-      const points = item.geo.type === 'Point' ? [item.geo.coordinates as number[]] : (item.geo.coordinates as number[][]);
+      // A Polygon (the radar's square, R3) is read by its outer ring.
+      const points = item.geo.type === 'Point' ? [item.geo.coordinates as number[]]
+        : item.geo.type === 'Polygon' ? (item.geo.coordinates as number[][][])[0]! : (item.geo.coordinates as number[][]);
       for (const [lon, lat] of points) {
         expect(Number.isFinite(lon) && Number.isFinite(lat), `bad point in ${item.id}`).toBe(true);
         expect(lon).toBeGreaterThan(10);

@@ -18,7 +18,7 @@ export function streetSlug(street: string): string {
  * street at different hours) keeps both under ids that stay the same from one read to the next: the second is
  * `-2`, the third `-3`, in the source's own order.
  */
-export function cutId(source: 'hep' | 'vio', day: string, street: string, taken: Set<string>): string {
+export function cutId(source: 'hep' | 'vio' | 'gpz', day: string, street: string, taken: Set<string>): string {
   const base = `prekidi:${source}:${day}:${streetSlug(street)}`;
   let id = base;
   for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;

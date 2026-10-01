@@ -500,6 +500,13 @@ describe('the header sentence templates are name-safe and match the sentence cli
     // R0's deviation families (docs/reveal-2026-10.md §7).
     airIndex: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.',
     warningUntil: 'DHMZ: {event} do {until}.',
+    // R3's more-city families (docs/reveal-2026-10.md §7 R3).
+    rainNow: 'Radar DHMZ: kiša u blizini Zagreba.',
+    bioToday: 'DHMZ: {text}',
+    heatWave: 'Toplinski val: {level}. stupanj, {day}.',
+    coldWave: 'Hladni val: {level}. stupanj, {day}.',
+    dryUntil: 'Suho do {time}.',
+    hourlyTemp: 'Oko {time} {temp} °C.',
   };
   const EN_TEMPLATES: Record<keyof typeof HR_TEMPLATES, string> = {
     departureIn: 'Tram {route} towards {to} leaves in {n} min.',
@@ -538,6 +545,12 @@ describe('the header sentence templates are name-safe and match the sentence cli
     bikesEmpty: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.',
     airIndex: 'Air quality: {word}, index {index}; station {station}.',
     warningUntil: 'DHMZ: {event} until {until}.',
+    rainNow: 'DHMZ radar: rain near Zagreb.',
+    bioToday: 'DHMZ: {text}',
+    heatWave: 'Heat wave: level {level}, {day}.',
+    coldWave: 'Cold wave: level {level}, {day}.',
+    dryUntil: 'Dry until {time}.',
+    hourlyTemp: 'Around {time} {temp} °C.',
   };
   /** The templates of kiosk.sentence.*: not the kicker words, nor the cut's {what} words (kiosk.sentence.utility, a
    *  group of their own), nor the plural of the {seen} slot (vehicles_*). */
@@ -596,6 +609,8 @@ describe('the header sentence templates are name-safe and match the sentence cli
     expect(fill(s.eventLastTram, { title: 'Intersonus', route: 6, time: 'u 23:52' })).toBe('Nakon „Intersonus” zadnji tramvaj 6 polazi u 23:52.');
     expect(fill(s.airIndex, { index: 4, word: 'loša', station: 'Zagreb-1' })).toBe('Kvaliteta zraka: loša, indeks 4; postaja Zagreb-1.');
     expect(fill(s.warningUntil, { event: 'Žuto upozorenje za vjetar', until: '17:00' })).toBe('DHMZ: Žuto upozorenje za vjetar do 17:00.');
+    expect(fill(s.supplyCutToday, { street: 'Zagorska ulica', what: s.utility.plin, from: '08:00', until: '14:00' })).toBe('Zagorska ulica: danas bez plina od 08:00 do 14:00.');
+    expect(fill(s.heatWave, { level: 2, day: 'srijeda' })).toBe('Toplinski val: 2. stupanj, srijeda.');
   });
 });
 

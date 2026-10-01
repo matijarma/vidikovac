@@ -74,13 +74,29 @@ const EXPECTED: Record<string, { url: string; text: string; licence: string }> =
   },
   prekidi: {
     url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
-    text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+    text: 'Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz',
     licence: 'Licenca nije navedena',
+  },
+  // The more-city modules (R3).
+  'dhmz-radar': {
+    url: 'https://meteo.hr/podaci.php?section=podaci_mjerenja&param=radari',
+    text: 'Izvor: DHMZ, radarski kompozit',
+    licence: 'Otvorena dozvola (NN 67/17)',
+  },
+  'dhmz-bio': {
+    url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=bio',
+    text: 'Izvor: DHMZ, biometeorološka prognoza',
+    licence: 'Otvorena dozvola (NN 67/17)',
+  },
+  'dhmz-waves': {
+    url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=toplinskival_5',
+    text: 'Izvor: DHMZ, upozorenja na toplinske i hladne valove',
+    licence: 'Otvorena dozvola (NN 67/17)',
   },
 };
 
 describe('app/src/data/izvori.json', () => {
-  it('lists exactly the fourteen modules, once each', () => {
+  it('lists exactly the seventeen modules, once each', () => {
     const ids = izvori.sources.map((s) => s.module);
     expect([...ids].sort()).toEqual(Object.keys(EXPECTED).sort());
   });
@@ -116,7 +132,7 @@ describe.skipIf(registryMissing)('parity with worker/feed/registry.ts', () => {
 describe('renderIzvoriHtml', () => {
   it('renders one article per source with the text, link and licence', () => {
     const html = renderIzvoriHtml();
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(17);
     expect(html).toContain('Public dataset by ZET provided under Open license');
     expect(html).toContain('href="https://www.seismicportal.eu/"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -133,8 +149,8 @@ describe('renderIzvoriHtml', () => {
     expect(OBRADA.tekst).toMatch(/predložak|predložaka|predloške/);
     expect(OBRADA.tekst).toMatch(/ne piše slobodan tekst/);
     expect(`${OBRADA.naslov} ${OBRADA.tekst}`).not.toMatch(/saže|sažim|sažet|traku|traka/i);
-    // Still fourteen source articles: the note is a section, not a fifteenth source.
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
+    // Still seventeen source articles: the note is a section, not an eighteenth source.
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(17);
   });
 
   it('escapes the values instead of trusting the JSON', () => {
@@ -200,7 +216,7 @@ describe('renderIzvoriHtml', () => {
 // it in a section of its own and `sources` stays the feed modules; the opening hours of places (U3) are the second.
 describe('static datasets', () => {
   it('names the ODbL street index and the ODbL opening hours in their own section, not as more sources', () => {
-    expect(izvori.sources.length).toBe(14);
+    expect(izvori.sources.length).toBe(17);
     expect(STATIC_SOURCES.map((s) => s.id)).toEqual(['streets-geo', 'osm-hours', 'zet-gtfs', 'dezurne-ljekarne', 'hitni-brojevi', 'manrope']);
     const [streets, hours] = STATIC_SOURCES;
     expect(hours).toMatchObject({
@@ -216,7 +232,7 @@ describe('static datasets', () => {
     expect(html).toContain('© OpenStreetMap contributors · Protomaps');
     expect(html).toContain('© OpenStreetMap contributors, ODbL 1.0; izvedena baza podataka (radno vrijeme mjesta)');
     expect(html).toContain('ODbL 1.0');
-    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(14);
+    expect((html.match(/<article class="izvor"/g) ?? []).length).toBe(17);
     const section = html.slice(html.indexOf('static-sources-title'));
     expect(section).not.toContain('<article');
   });

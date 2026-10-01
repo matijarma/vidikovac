@@ -145,14 +145,14 @@ export function districtOf(lon: number, lat: number, snapM = DISTRICT_SNAP_M): A
   return nearestSlug;
 }
 
-/** Point: itself. LineString: its first vertex (a closure is filed where it starts). */
+/** Point: itself. LineString: its first vertex (a closure is filed where it starts). Polygon: its outer ring's first vertex. */
 export function districtOfGeo(geo: Geo | undefined): AreaSlug | null {
   if (!geo) return null;
   if (geo.type === 'Point') {
     const [lon, lat] = geo.coordinates as [number, number];
     return districtOf(lon, lat);
   }
-  const first = (geo.coordinates as number[][])[0];
+  const first = geo.type === 'Polygon' ? (geo.coordinates as number[][][])[0]?.[0] : (geo.coordinates as number[][])[0];
   if (!first) return null;
   return districtOf(first[0]!, first[1]!);
 }

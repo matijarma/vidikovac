@@ -55,7 +55,7 @@ import { firstDepartureOn, gtfsMinutes, lastDeparture, lastDepartureOn, nightSer
 import { ZET_ROUTES } from '../data/routes';
 import { zagrebDayKey, zagrebHour, zagrebTime } from '../format';
 import type { I18n } from '../i18n/i18n';
-import { closuresByDistance, PHARMACY_POINTS, pharmaciesByDistance } from '../kiosk/local';
+import { closuresByDistance, nearestHourlySteps, PHARMACY_POINTS, pharmaciesByDistance, radarNow } from '../kiosk/local';
 import { sortRouteIds } from '../kiosk/stops';
 import { kioskStrings } from '../kiosk/strings';
 import type { MapHighlight } from '../map/city-map';
@@ -83,10 +83,12 @@ export type RoadState = 'radovi' | 'regulacija' | 'zatvoreno' | 'zastoj';
  *  column (kiosk/timeline.ts) never read it back from the row's words. */
 export type NearbyDetail =
   | { kind: 'rain'; word: RainWord; percent: number | null }
-  | { kind: 'cut'; utility: 'struja' | 'voda'; street: string; fromMs: number; untilMs: number; allDay: boolean }
+  | { kind: 'cut'; utility: 'struja' | 'voda' | 'plin'; street: string; fromMs: number; untilMs: number; allDay: boolean }
   | { kind: 'road'; state: RoadState }
   | { kind: 'open'; openKind: OpenKind }
-  | { kind: 'exhibit'; venue: string; openNow: boolean };
+  | { kind: 'exhibit'; venue: string; openNow: boolean }
+  /** DHMZ's radar composite shows rain near Zagreb (R3). */
+  | { kind: 'radar' };
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
@@ -1201,52 +1203,60 @@ function railRows(input: NearbyInput): NearbyRow[] {
  */
 function rainRows(input: NearbyInput): NearbyRow[] {
   const snapshot = u3Snapshot(input.snapshots, 'dhmz-hourly');
-  if (!snapshot || snapshot.status === 'down') return [];
   const { now, place, i18n } = input;
-  let station: string | null = null;
-  let nearest = Infinity;
-  for (const item of snapshot.items) {
-    const name = dataText(item, 'station');
-    const point = pointOf(item);
-    if (!name || !point) continue;
-    const d = distanceM(place, point);
-    if (d < nearest) { nearest = d; station = name; }
+  // The station is chosen as the inset and the dry-spell fact choose it (kiosk/local.ts nearestHourlySteps).
+  const hourly = snapshot ? nearestHourlySteps(snapshot, place) : null;
+  if (hourly) {
+    const words = kioskStrings(i18n.getLocale()).nearby.rain;
+    const steps = hourly.steps.filter(({ at, until }) => until > now && at <= now + RAIN_AHEAD_MS);
+    for (const { item, at, until } of steps) {
+      // A wet step carries its word; a step without one (dry, or too near freezing to call it rain) says nothing.
+      const word = RAIN_WORDS[dataText(item, 'weather')];
+      if (!word) continue;
+      const prob = dataNumber(item, 'prob');
+      const percent = prob !== null && Math.round(prob) >= 1 && Math.round(prob) <= 100 ? Math.round(prob) : null;
+      const condition = words[word];
+      const title = condition.charAt(0).toLocaleUpperCase(i18n.getLocale()) + condition.slice(1);
+      const sub = percent === null ? '' : i18n.t('kiosk.nearby.rainChance', { p: percent });
+      if (!vetted(input, [['title', title], ['summary', sub]])) continue;
+      return [{
+        id: `rain:${item.id}`,
+        kind: 'rain',
+        atMs: at,
+        untilMs: until,
+        always: false,
+        title,
+        sub,
+        live: false,
+        source: 'dhmz-hourly',
+        detail: { kind: 'rain', word, percent },
+      }];
+    }
   }
-  if (station === null) return [];
-  const words = kioskStrings(i18n.getLocale()).nearby.rain;
-  const steps = snapshot.items
-    .filter((item) => item.kind === 'forecast' && dataText(item, 'station') === station)
-    .map((item) => ({ item, at: Date.parse(item.at ?? ''), until: Date.parse(item.until ?? '') }))
-    .filter(({ at, until }) => Number.isFinite(at) && until > now && at <= now + RAIN_AHEAD_MS)
-    .sort((a, b) => a.at - b.at || a.item.id.localeCompare(b.item.id));
-  for (const { item, at, until } of steps) {
-    // A wet step carries its word; a step without one (dry, or too near freezing to call it rain) says nothing.
-    const word = RAIN_WORDS[dataText(item, 'weather')];
-    if (!word) continue;
-    const prob = dataNumber(item, 'prob');
-    const percent = prob !== null && Math.round(prob) >= 1 && Math.round(prob) <= 100 ? Math.round(prob) : null;
-    const condition = words[word];
-    const title = condition.charAt(0).toLocaleUpperCase(i18n.getLocale()) + condition.slice(1);
-    const sub = percent === null ? '' : i18n.t('kiosk.nearby.rainChance', { p: percent });
-    if (!vetted(input, [['title', title], ['summary', sub]])) continue;
-    return [{
-      id: `rain:${item.id}`,
-      kind: 'rain',
-      atMs: at,
-      untilMs: until,
-      always: false,
-      title,
-      sub,
-      live: false,
-      source: 'dhmz-hourly',
-      detail: { kind: 'rain', word, percent },
-    }];
-  }
-  return [];
+  // R3: no wet step within two hours, but DHMZ's radar shows rain near Zagreb now: one row at the image's time (stable
+  // between paints) for as long as the radar item stands. A wet step keeps the forecast row (it has the time and the
+  // chance); there is one rain row either way.
+  const radar = radarNow(Object.values(input.snapshots).filter((s): s is ModuleSnapshot => s !== undefined), now);
+  if (!radar?.rainNear) return [];
+  const radarWord = kioskStrings(i18n.getLocale()).nearby.rainRadar;
+  const title = radarWord.charAt(0).toLocaleUpperCase(i18n.getLocale()) + radarWord.slice(1);
+  if (!vetted(input, [['title', title]])) return [];
+  return [{
+    id: `rain:radar:dhmz-radar:${radar.src.split('?v=')[1]}`,
+    kind: 'rain',
+    atMs: radar.atMs,
+    untilMs: radar.untilMs,
+    always: false,
+    title,
+    sub: '',
+    live: false,
+    source: 'dhmz-radar',
+    detail: { kind: 'radar' },
+  }];
 }
 
 /**
- * The nearest power or water cut inside the circle (prekidi) that has not ended and starts within CUT_AHEAD_MS: the
+ * The nearest power, water or gas cut inside the circle (prekidi) that has not ended and starts within CUT_AHEAD_MS: the
  * street as the index spells it (with its house numbers while they are short), "bez struje 08:00–14:00" under it,
  * or "bez vode" for a whole day. Before it starts the row stands at its start, once it runs at its end.
  */
@@ -1259,10 +1269,10 @@ function cutRows(input: NearbyInput): NearbyRow[] {
     .filter(({ start, until }) => Number.isFinite(start) && until > start && until > now && start <= now + CUT_AHEAD_MS);
   for (const { item, point, start, until } of candidates) {
     const utility = dataText(item, 'utility');
-    if (utility !== 'struja' && utility !== 'voda') continue;
+    if (utility !== 'struja' && utility !== 'voda' && utility !== 'plin') continue;
     const allDay = dataText(item, 'precision') === 'day';
-    // A whole-day notice is the water utility's (VIO); a power cut always has its hours (HEP).
-    if (allDay && utility !== 'voda') continue;
+    // A whole-day notice is the water or gas utility's (VIO, GPZ); a power cut always has its hours (HEP).
+    if (allDay && utility === 'struja') continue;
     if (!vetted(input, [['address', item.title]])) continue;
     const street = oneLine(item.title);
     // The house numbers ride on the street while they are short and the street with them still reads as an address
@@ -1271,8 +1281,8 @@ function cutRows(input: NearbyInput): NearbyRow[] {
     const numbered = numbers && numbers.length < CUT_NUMBERS_MAX_CHARS ? `${street} ${numbers}` : '';
     const title = numbered && externalText('address', `${item.title} ${dataText(item, 'houseNumbers')}`, { surface: 'row' }).ok ? numbered : street;
     const range = { from: zagrebTime(start), until: zagrebTime(until) };
-    const sub = allDay ? i18n.t('kiosk.nearby.cut.vodaDay')
-      : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : 'kiosk.nearby.cut.voda', range);
+    const sub = allDay ? i18n.t(utility === 'plin' ? 'kiosk.nearby.cut.plinDay' : 'kiosk.nearby.cut.vodaDay')
+      : i18n.t(utility === 'struja' ? 'kiosk.nearby.cut.struja' : utility === 'plin' ? 'kiosk.nearby.cut.plin' : 'kiosk.nearby.cut.voda', range);
     if (!vetted(input, [['address', title], ['summary', sub.replace(CLOCK_RANGE_TAIL, '')]])) continue;
     return [{
       id: `cut:${item.id}`,

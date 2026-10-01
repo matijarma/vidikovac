@@ -1487,6 +1487,52 @@ describe('the cut row (S2): power and water', () => {
   });
 });
 
+// R3: DHMZ's radar near Zagreb, and Gradska plinara Zagreb's gas cuts (docs/reveal-2026-10-plan/R3.md step 12).
+describe('the radar row and the gas cut (R3)', () => {
+  const NOW_R = at('2026-09-22T15:45:00Z'); // Tue 17:45
+  const radar = (ageMin: number, rainNear: boolean): ModuleSnapshot => u3snap('dhmz-radar', [u3item('dhmz-radar', 'dhmz-radar:1790091600', 'radar', 'Radar DHMZ, Zagreb', {
+    at: new Date(NOW_R - ageMin * 60_000).toISOString(), until: new Date(NOW_R - ageMin * 60_000 + 10 * 60_000).toISOString(),
+    data: { rainNear, rainCells: rainNear ? 40 : 0, crop: 'zagreb', image: '/api/radar/zagreb.png' },
+  })]);
+  const wetSoon = u3snap('dhmz-hourly', [u3item('dhmz-hourly', 'dhmz-hourly:gric:2026-09-22T16:25:00Z', 'forecast', 'Zagreb-Grič', {
+    at: '2026-09-22T16:25:00Z', until: '2026-09-22T17:25:00Z', geo: { type: 'Point', coordinates: [15.97, 45.81] },
+    data: { station: 'gric', temp: 16, precip: 2.4, prob: 90, weather: 'kiša' },
+  })]);
+  const rows = (extra: Record<string, ModuleSnapshot>, over: Partial<NearbyInput> = {}) => selectNearby(input(NOW_R, { snapshots: u3(snapshots(), extra), ...over }));
+
+  it('a fresh radar item that sees rain near and no wet step: one row, "Kiša u blizini", at the image time, the column "sada"', () => {
+    const row = one(rows({ 'dhmz-radar': radar(4, true) }), 'rain');
+    expect(row).toMatchObject({
+      id: 'rain:radar:dhmz-radar:1790091600', title: 'Kiša u blizini', sub: '', atMs: NOW_R - 4 * 60_000, untilMs: NOW_R + 6 * 60_000,
+      live: false, source: 'dhmz-radar', detail: { kind: 'radar' },
+    });
+    expect(row.map).toBeUndefined();
+    expect(timeLabel(row, NOW_R, hr)).toBe('sada');
+    expect(one(rows({ 'dhmz-radar': radar(4, true) }, { locale: 'en', i18n: en }), 'rain').title).toBe('Rain nearby');
+  });
+
+  it('a wet step 40 minutes ahead keeps the forecast row; an old or a dry radar item gives none', () => {
+    const both = rows({ 'dhmz-radar': radar(4, true), 'dhmz-hourly': wetSoon }).filter((r) => r.kind === 'rain');
+    expect(both.map((r) => r.id)).toEqual(['rain:dhmz-hourly:gric:2026-09-22T16:25:00Z']);
+    expect(rows({ 'dhmz-radar': radar(11, true) }).some((r) => r.kind === 'rain')).toBe(false);
+    expect(rows({ 'dhmz-radar': radar(4, false) }).some((r) => r.kind === 'rain')).toBe(false);
+  });
+
+  const GPZ = (precision: 'day' | 'time') => u3item('prekidi', 'prekidi:gpz:2026-09-23:jurisiceva', 'cut', 'Jurišićeva ulica', {
+    at: precision === 'day' ? '2026-09-22T22:00:00Z' : '2026-09-23T06:00:00Z', until: precision === 'day' ? '2026-09-23T22:00:00Z' : '2026-09-23T12:00:00Z',
+    geo: { type: 'Point', coordinates: [15.9795, 45.8133] },
+    data: { utility: 'plin', source: 'gpz', street: 'JURIŠIĆEVA', houseNumbers: '4', precision },
+  });
+
+  it('a GPZ day cut inside the circle is a cut row, "bez plina", all day; a timed one prints its hours', () => {
+    const day = one(rows({ prekidi: u3snap('prekidi', [GPZ('day')]) }), 'cut');
+    expect(day).toMatchObject({ sub: 'bez plina', detail: { kind: 'cut', utility: 'plin', allDay: true } });
+    expect(timeLabel(day, NOW_R, hr)).toBe('cijeli dan');
+    expect(one(rows({ prekidi: u3snap('prekidi', [GPZ('time')]) }), 'cut').sub).toBe('bez plina 08:00–14:00');
+    expect(one(rows({ prekidi: u3snap('prekidi', [GPZ('day')]) }, { locale: 'en', i18n: en }), 'cut').sub).toBe('no gas');
+  });
+});
+
 describe('the road row (S2): a HAK state near the place, by its end', () => {
   const road = (id: string, until: string, lon: number, lat: number, state = 'privremena regulacija'): FeedItem => u3item('hak', `hak:${id}`, 'road', `Ulica ${id}`, {
     at: '2026-09-22T14:00:00Z', until, geo: { type: 'Point', coordinates: [lon, lat] }, summary: 'Radovi, promet jednim trakom.',

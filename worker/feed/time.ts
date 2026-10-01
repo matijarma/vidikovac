@@ -54,6 +54,14 @@ export interface ZagrebDate {
   day: number;
 }
 
+/** Source calendar parts must name a real day; Date.UTC alone would normalize 31 September into October. */
+export function isCalendarDate(date: ZagrebDate): boolean {
+  const { year, month, day } = date;
+  if (!Number.isInteger(year) || year < 1000 || year > 9999 || !Number.isInteger(month) || !Number.isInteger(day)) return false;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
 const ZAGREB_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: ZAGREB_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 
 /** Zagreb's calendar day at an instant. */
