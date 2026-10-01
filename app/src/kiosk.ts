@@ -310,8 +310,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let taktHistory: TaktHistory = EMPTY_HISTORY;
   let taktReveal: TaktReveal | null = null;
   let taktNext: NearbyRow[] = [];
+  let taktPageBase: ReadonlySet<string> = new Set();
   let beatAt = -Infinity;
   let revealAt = -Infinity;
+  let taktPaintAt = -Infinity;
   let facts: SentenceFact[] = [];
   let modelSentences: WrittenSentence[] = [];
   /** A model answer waiting for the rhythm's end (decision 29): never swapped in mid-dwell. */
@@ -475,11 +477,22 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       sentenceSwapTimer = oneShot(() => { sentenceSwapTimer = null; delete sentenceEl.dataset.swap; }, SENTENCE_SWAP_MS);
     }
   }
+  function paintedRowIds(): Set<string> {
+    const list = invitation?.element.querySelector('[data-testid=nearby-rows]');
+    return new Set([...list?.children ?? []].map(row => row.getAttribute('data-id') ?? ''));
+  }
+  /** The measured overlay may decline some or all proposed rows; only actual incoming rows are reveal facts. */
+  function drawnRevealIds(): string[] {
+    if (taktReveal?.kind !== 'page'
+      || invitation?.element.querySelector<HTMLElement>('[data-testid=nearby-rows]')?.dataset.reveal !== `page:${taktReveal.beat}`) return [];
+    const painted = paintedRowIds();
+    return taktReveal.ids.filter(id => !taktPageBase.has(id) && painted.has(id));
+  }
   /** R2: a page turn's revealed row takes the map's emphasis for its beat (an advance keeps the sentence's: the next
    *  departures belong to the wall's own stop). Data only, as setHighlight is: the camera never moves. */
   function revealHighlight(): MapHighlight | null {
     if (sentenceSuspended() || taktReveal?.kind !== 'page') return null;
-    for (const id of taktReveal.ids) {
+    for (const id of drawnRevealIds()) {
       const row = wallItems.find(item => item.id === id);
       if (row?.map) return row.map;
     }
@@ -510,6 +523,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    * without live fixes during an outage; grey never means a relabelled ETA. */
   function paintWall(): void {
     const at = now();
+    if (at < taktPaintAt) {
+      // Keep elapsed history on a clock correction, rather than waiting for a reveal beat now in the future.
+      const shift = at - taktPaintAt;
+      beatAt += shift;
+      revealAt += shift;
+      taktHistory = { ...taktHistory, beat: beatIndex(beatAt, rhythm * 1000),
+        shownAt: Object.fromEntries(Object.entries(taktHistory.shownAt).map(([id, shownAt]) => [id, shownAt + shift])),
+        lastReveal: taktHistory.lastReveal && { ...taktHistory.lastReveal, beat: beatIndex(revealAt, rhythm * 1000) } };
+      taktReveal = null;
+      taktNext = [];
+    }
+    taktPaintAt = at;
     const budget = SENTENCE_BUDGET[compositionOf(layout)];
     if (phase === 'invitation' && !presentation?.target) {
       const place = placeForNearby();
@@ -544,16 +569,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
       for (const [id, leftAt] of departedAt) if (at - leftAt > DEPARTED_HOLD_MS) departedAt.delete(id);
+      // Read this paint's service facts before scheduling: a previous DOM flag lags an outage by one paint.
+      const factInput = { place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
+        ...(currentSentence ? { pinned: currentSentence.refs } : {}) };
+      facts = sentenceFacts(factInput);
       // R2 (docs/reveal-2026-10-plan/R2.md): the reveal scheduler runs once per beat, on the paint at which the header
       // may turn; the 1 s paint between beats only counts down. One region moves per beat; a quiet wall moves none.
-      // Quiet: a touch open, ZET's state pinning the header (the previous paint's data-sentence-lines; sentenceFacts
-      // covers the one-paint lag itself), the sentence suspended, the handheld composition, the list not yet painted.
+      // Quiet: a touch open, ZET's current state pinning the header, the sentence suspended, the handheld composition,
+      // the list not yet painted.
       const rhythmMs = rhythm * 1000;
       const capacity = invitation?.shown() ?? 0;
-      const quiet = at < touchUntil || element.dataset.sentenceLines === '2' || sentenceSuspended()
+      const quiet = at < touchUntil || facts.some(fact => fact.id === 'service:zet' || fact.id === 'outage:zet') || sentenceSuspended()
         || compositionOf(layout) === 'handheld' || capacity === 0;
       if (quiet) { taktReveal = null; taktNext = []; }
-      if (at < beatAt) beatAt = -Infinity;
       const due = taktReveal ? beatAt + rhythmMs : Math.max(sentenceSequence.turnAt(), beatAt + rhythmMs);
       if (at >= due) {
         const shownDepartures = wallItems.filter((row) => row.kind === 'departure');
@@ -562,16 +590,17 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
           { capacity, rhythmMs, quiet, reduced: reducedMotion || lightweight });
         taktHistory = result.history;
         beatAt = at;
+        if (result.reveal?.kind === 'page') taktPageBase = paintedRowIds();
         taktReveal = result.reveal;
         taktNext = result.reveal?.kind === 'advance' ? next : [];
         if (result.reveal) revealAt = at;
       }
       paintSkippedText(skipped);
-      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
-      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
-        ...(currentSentence ? { pinned: currentSentence.refs } : {}),
-        ...(taktReveal?.kind === 'page' ? { reveal: { ids: taktReveal.ids, until: beatAt + rhythmMs } } : {}) });
       invitation?.update(invitationModel());
+      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
+      const revealed = drawnRevealIds();
+      if (revealed.length > 0) facts = sentenceFacts({ ...factInput,
+        reveal: { ids: revealed, until: beatAt + rhythmMs } });
     } else {
       wallItems = [];
       facts = [];
@@ -1040,7 +1069,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       boards.ensure('zet', platformIds(next.stop, stops), onBoardSettled);
       void loadStopBoardRows().then(() => { if (!disposed) paintTouch(); });
     }
-    paintTouch();
+    // A touch makes the wall quiet immediately, including an already active reveal and its map emphasis.
+    paintWall();
   }
   function touchVariants(current: Touch): string[] {
     const at = now();
@@ -1621,10 +1651,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function applyScreen(screen: ScreenMetadata): void {
     if (!credentials) return;
     const before = stop?.id;
+    const beforePlace = placeForNearby();
+    const beforeFrame = wall.frame;
     credentials = withScreen(credentials, screen);
     storeBeacon(storage, credentials);
     stop = screen.stop;
     wall = wallPlaceOf(screen, isTram);
+    const place = placeForNearby();
+    if (before !== stop?.id || beforeFrame !== wall.frame || beforePlace.stopId !== place.stopId
+      || beforePlace.lon !== place.lon || beforePlace.lat !== place.lat) {
+      // The operator's new context cannot inherit next departures or a page overlay from the old place.
+      taktReveal = null;
+      taktNext = [];
+    }
     paintContext();
     settings?.paint();
     // The panel may be waiting for exactly this: the frame it sent has landed. It stays open.

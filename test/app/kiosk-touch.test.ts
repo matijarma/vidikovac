@@ -15,6 +15,8 @@ import type { ScreenMetadata } from '../../worker/protocol';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { emptyCity, type DepartureBoard, type ScheduledDeparture } from '../../shared/city/types';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
+import * as scheduler from '../../shared/kiosk/takt';
+import * as sentenceRuntime from '../../app/src/city/sentence';
 import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
 import type { ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -821,6 +823,170 @@ describe('a touch quiets the reveals (R2)', () => {
     }
     return [...seen];
   };
+
+  const serviceZet = (state: 'silent' | 'reduced'): ModuleSnapshot => ({
+    ...ZET_LIVE,
+    sources: { zet: { status: 'live', itemCount: 1, fetchedAt: iso(NOW), sourceUpdatedAt: iso(NOW),
+      service: { state, since: iso(NOW), observedAt: iso(NOW), expected: 38, seen: state === 'silent' ? 0 : 8,
+        ratio: state === 'silent' ? 0 : 8 / 38, confidence: 1, baseline: 'declared', byMode: { tram: [0, 17], bus: [0, 21] } } } },
+  });
+
+  it.each(['down', 'silent', 'reduced'] as const)('R2 review: the first paint of %s service is already quiet', async state => {
+    let zet = ZET_LIVE;
+    const k = mount({ boards: evening, modules: () => [zet, ...MODULES.slice(1)] });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      zet = state === 'down' ? { ...ZET_LIVE, status: 'down', items: [] } : serviceZet(state);
+      k.setNow(NOW + 80_000); // An advance-eligible beat, before the next tick.
+      k.poll();
+      await flush();
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls.every(args => args[3].quiet)).toBe(true);
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a recovered service does not lose its first eligible beat to the old header flag', async () => {
+    let zet = serviceZet('silent');
+    const k = mount({ boards: evening, modules: () => [zet, ...MODULES.slice(1)] });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      expect(k.q('[data-testid=kiosk]')?.dataset.sentenceLines).toBe('2');
+      zet = ZET_LIVE;
+      k.setNow(NOW + 80_000);
+      k.poll();
+      await flush();
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls[0]![3].quiet).toBe(false);
+      expect(reveals(k).some(v => v.startsWith('advance:'))).toBe(true);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: opening a touch cancels an active reveal on that paint', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    try {
+      let found = false;
+      for (let s = 1; s <= 100 && !found; s++) {
+        k.setNow(NOW + s * 1000);
+        k.tick(CODE_TICK_MS);
+        found = reveals(k).length > 0;
+      }
+      expect(found).toBe(true);
+      k.q('[data-testid=strip-pharmacy]')!.click();
+      expect(k.detail()).not.toBeNull();
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: changing the screen place cancels the old stop advance immediately', async () => {
+    const k = mount({ boards: { ...evening, '107_1': BOARDS['107_1']! } });
+    await flush();
+    try {
+      let found = false;
+      for (let s = 1; s <= 100 && !found; s++) {
+        k.setNow(NOW + s * 1000);
+        k.tick(CODE_TICK_MS);
+        found = reveals(k).length > 0;
+      }
+      expect(found).toBe(true);
+      k.handlers.onContext?.({ ...SCREEN, stop: ZRINJEVAC });
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a page proposal the fitter cannot draw produces no reveal sentence fact', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    const realTakt = scheduler.takt;
+    const eventId = k.q('[data-testid=nearby-rows] > [data-kind=event]')!.dataset.id!;
+    const calls = vi.spyOn(sentenceRuntime, 'sentenceFacts');
+    // The scheduler and measured fit may disagree (R2 §0.5(14)): the proposed incoming row is already painted.
+    const proposal = vi.spyOn(scheduler, 'takt').mockImplementation((candidates, history, at, options) => ({
+      ...realTakt(candidates, history, at, options),
+      reveal: { kind: 'page', ids: [eventId], replaces: [candidates.find(c => c.kind === 'solar')!.id],
+        beat: scheduler.beatIndex(at, options.rhythmMs) },
+    }));
+    try {
+      k.setNow(NOW + 20_000);
+      k.tick(CODE_TICK_MS);
+      expect(proposal).toHaveBeenCalled();
+      expect(reveals(k)).toEqual([]);
+      expect(calls.mock.results.flatMap(result => result.value as sentenceRuntime.SentenceFact[])
+        .some(fact => fact.id.startsWith('reveal:'))).toBe(false);
+    } finally {
+      proposal.mockRestore();
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: an advance dwells for one rhythm and a Ritam change reindexes its gap', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      let start = NOW;
+      for (let s = 1; s <= 100 && reveals(k).length === 0; s++) {
+        start = NOW + s * 1000;
+        k.setNow(start);
+        k.tick(CODE_TICK_MS);
+      }
+      const active = reveals(k);
+      expect(active).toHaveLength(1);
+      k.setNow(start + 19_999);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual(active);
+      k.setNow(start + 20_000);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual([]);
+      k.q('[data-testid=kiosk]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      k.q('[data-testid=toggle-rhythm]')!.click();
+      expect(k.q('[data-testid=kiosk]')?.dataset.rhythm).toBe('30');
+      calls.mockClear();
+      k.setNow(start + 50_000);
+      k.tick(CODE_TICK_MS);
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls[0]![1].lastReveal?.beat).toBe(scheduler.beatIndex(start, 30_000));
+      expect(calls.mock.calls[0]![3].rhythmMs).toBe(30_000);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a backwards clock rebases the reveal gap instead of waiting for the old future beat', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    try {
+      expect(run(k, 80).some(v => v.startsWith('advance:'))).toBe(true);
+      const back = NOW - 3_600_000;
+      k.setNow(back);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual([]);
+      const seen = new Set<string>();
+      for (let s = 1; s <= 120; s++) {
+        k.setNow(back + s * 1000);
+        k.tick(CODE_TICK_MS);
+        for (const v of reveals(k)) seen.add(v);
+      }
+      expect([...seen].some(v => v.startsWith('advance:'))).toBe(true);
+    } finally {
+      k.handle.destroy();
+    }
+  });
 
   it('without a touch the line advances on a beat within 100 s; with a row\'s detail open nothing is revealed for its 60 s', async () => {
     const loud = mount({ boards: evening });
