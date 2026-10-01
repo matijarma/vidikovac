@@ -65,7 +65,7 @@ describe('Sigurnost: HAK road states and the planned cuts (R0)', () => {
 
   it('says so when nothing is announced, and waits or says unknown when a module is absent or down', () => {
     const empty = renderLayer('sigurnost', ctx({ hak: snap('hak', []), prekidi: snap('prekidi', []) }));
-    expect(text(empty.querySelector('#sf-cuts'))).toContain('Nema najavljenih prekida struje ni vode.');
+    expect(text(empty.querySelector('#sf-cuts'))).toContain('Nema najavljenih prekida struje, vode ni plina.');
     expect(text(empty.querySelector('#sf-roads'))).toContain('HAK ne javlja ništa za područje Zagreba.');
     const absent = renderLayer('sigurnost', ctx({}));
     expect(text(absent.querySelector('#sf-cuts'))).toContain(hr.t('status.loading'));

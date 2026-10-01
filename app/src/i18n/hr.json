@@ -217,7 +217,7 @@
     "places_other": "{count} mjesta",
     "mapLink": "karta",
     "cuts": "Planirani prekidi",
-    "cutsNone": "Nema najavljenih prekida struje ni vode.",
+    "cutsNone": "Nema najavljenih prekida struje, vode ni plina.",
     "roads": "Stanje na cestama (HAK)",
     "roadsNone": "HAK ne javlja ništa za područje Zagreba."
   },
