@@ -112,7 +112,8 @@ describe('layer registry', () => {
     expect(LAYER_MODULES['u-pokretu']).toEqual(['zet-rt', 'prometnice', 'dogadanja']);
     expect(LAYER_MODULES['zrak-i-nebo']).toContain('dhmz-now');
     // R0: Vrijeme's hourly strip reads DHMZ's hourly steps; Sigurnost lists HAK's road states and the planned cuts.
-    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly']);
+    expect(LAYER_MODULES['zrak-i-nebo']).toEqual(['dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'dhmz-hourly', 'dhmz-bio', 'dhmz-waves']);
+    expect(LAYER_MODULES['grad-sada']).toEqual(expect.arrayContaining(['dhmz-radar', 'dhmz-bio', 'dhmz-waves']));
     expect(LAYER_MODULES.sigurnost).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo', 'hak', 'prekidi']);
     expect(ALL_LAYER_MODULES).toContain('glasnik');
     expect(new Set(ALL_LAYER_MODULES).size).toBe(ALL_LAYER_MODULES.length);
@@ -1410,5 +1411,63 @@ describe('Događanja: search and one chip row, a dated agenda without cards, ong
     expect(text(controls.at(-1)!)).toBe('Otvori izvornik');
     const withVenue = renderLayer('kultura', select('etnografski:2')).querySelector('[data-testid=event-detail]')!;
     expect([...withVenue.querySelectorAll('.detail-facts dt')].map(text)).toEqual(['Mjesto', 'Kategorija', 'Izvor']);
+  });
+});
+
+// R3: the phone's Vrijeme gains DHMZ's biometeorological forecast and the heat and cold waves; Kultura a "Za djecu" chip.
+describe('Vrijeme and Kultura with the more-city sources (R3)', () => {
+  // 11 September 2026 is a Friday; NOW is 14:32 in Zagreb.
+  const BIO = base('dhmz-bio', [{
+    id: 'dhmz-bio:2026-09-11', module: 'dhmz-bio', kind: 'forecast', tier: 'open', title: 'Biometeorološka prognoza',
+    summary: 'Nastavlja se razdoblje povoljnih biometeoroloških prilika. Ujutro je moguća magla.',
+    at: '2026-09-10T22:00:00.000Z', until: '2026-09-11T22:00:00.000Z', data: { region: 'sredisnja', level: 3, text: 'Nastavlja se razdoblje povoljnih biometeoroloških prilika.' },
+  }]);
+  const WAVES = (levels: string) => base('dhmz-waves', [{
+    id: 'dhmz-waves:heat:2026-09-11', module: 'dhmz-waves', kind: 'forecast', tier: 'open', title: 'Toplinski val',
+    at: '2026-09-10T22:00:00.000Z', until: new Date(Date.parse('2026-09-10T22:00:00.000Z') + levels.split(',').length * 86_400_000).toISOString(),
+    data: { wave: 'heat', levels, level: Number(levels.split(',')[0]), station: 'Zagreb' },
+  }]);
+  const weather = (extra: Partial<LayerContext['snapshots']>) => renderLayer('zrak-i-nebo', ctx({ snapshots: { ...SNAPSHOTS, ...extra } }));
+
+  it('shows the biometeorological forecast in DHMZ\'s words and no waves block out of season', () => {
+    const page = weather({ 'dhmz-bio': BIO, 'dhmz-waves': WAVES('0,0,0,0,0') });
+    const bio = page.querySelector('[data-testid=wx-bio]')!;
+    expect(text(bio)).toContain('Biometeorološka prognoza');
+    expect(text(bio)).toContain('Nastavlja se razdoblje povoljnih biometeoroloških prilika. Ujutro je moguća magla.');
+    expect(bio.querySelector('.wx-prose')?.getAttribute('lang')).toBe('hr');
+    expect(page.querySelector('[data-testid=wx-waves]')).toBeNull();
+    expect(weather({}).querySelector('[data-testid=wx-bio]')).toBeNull();
+  });
+
+  it('shows a heat wave of level 2 tomorrow in the header sentence\'s own words', () => {
+    const waves = weather({ 'dhmz-waves': WAVES('0,2,0,0,0') }).querySelector('[data-testid=wx-waves]')!;
+    expect(text(waves)).toContain('Toplinski i hladni valovi');
+    expect(text(waves)).toContain('Toplinski val: 2. stupanj, sutra.');
+  });
+
+  const kidsItem = (id: string, title: string, kids: boolean) => ({
+    id: `kultura-zg:${id}`, module: 'kultura-zg', kind: 'event', tier: 'session', title, at: '2026-09-12T08:00:00Z', dateBasis: 'event',
+    link: `https://kultura.zagreb.hr/dogadanja/${id}`, geo: { type: 'Point', coordinates: [15.98, 45.81] },
+    data: { source: 'kultura-zagreb', category: 'izvedba', venue: 'Gavella', precision: 'time', district: 'donji-grad', kids },
+  }) as ModuleSnapshot['items'][number];
+  const culture = (items: ModuleSnapshot['items'], filters: Record<string, string> = {}) => renderLayer('kultura', ctx({
+    snapshots: { ...SNAPSHOTS, 'kultura-zg': { ...base('kultura-zg', items), tier: 'session' } },
+    view: { layer: 'kultura', selection: null, filters: { 'event-window': 'week', ...filters } },
+  }));
+
+  it('offers "Za djecu" only when an item is for children, and pressed it leaves only those', () => {
+    const chip = (page: HTMLElement) => page.querySelector<HTMLElement>('[data-filter-key=kids]');
+    expect(chip(culture([kidsItem('a', 'Hamlet', false)]))).toBeNull();
+    const both = [kidsItem('a', 'Hamlet', false), kidsItem('b', 'Crvenkapica', true)];
+    const offered = chip(culture(both))!;
+    expect(text(offered)).toBe('Za djecu');
+    expect(offered.getAttribute('aria-pressed')).toBe('false');
+    expect(offered.getAttribute('data-filter-value')).toBe('1');
+    const pressed = culture(both, { kids: '1' });
+    const titles = [...pressed.querySelectorAll('[data-testid=event-row] .row-title')].map(text);
+    expect(titles).toContain('Crvenkapica');
+    expect(titles).not.toContain('Hamlet');
+    expect(chip(pressed)!.getAttribute('aria-pressed')).toBe('true');
+    expect(chip(pressed)!.getAttribute('data-filter-value')).toBe('');
   });
 });

@@ -30,7 +30,7 @@ const QUAKES_STEP = 10;
 const DAY_MS = 86_400_000;
 const COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 
-type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc' | 'dhmz-hourly';
+type WeatherModule = 'dhmz-now' | 'dhmz-forecast' | 'dhmz-cap' | 'emsc' | 'dhmz-hourly' | 'dhmz-bio' | 'dhmz-waves';
 
 /** Twelve hourly steps from the current hour (R0). */
 const HOURLY_STEPS = 12;
@@ -230,6 +230,57 @@ function warningsSection(i18n: I18n, ctx: LayerContext): string {
   });
 }
 
+/** R3: DHMZ's biometeorological forecast for today, its own text in Croatian, with the day it is for; absent without one. */
+function bioSection(i18n: I18n, ctx: LayerContext): string {
+  const bio = ctx.snapshots['dhmz-bio'];
+  const today = bio && bio.status !== 'down'
+    ? bio.items.find((item) => item.kind === 'forecast' && item.summary && zagrebDayKey(item.at) === zagrebDayKey(ctx.now))
+    : undefined;
+  if (!today) return '';
+  return wxSection({
+    id: 'wx-bio', tone: 'weather',
+    body: sectionHead(i18n, { title: i18n.t('weather.bio'), snapshot: bio, error: ctx.errors?.['dhmz-bio'], id: 'wx-bio-title' })
+      + `<p class="wx-prose" lang="hr">${escapeHtml(today.summary!)}</p><p class="sec-note">${escapeHtml(zagrebWeekdayDate(today.at))}</p>`,
+  });
+}
+
+/** "danas", "sutra" or the weekday, as the wave sentences say the day (city/sentence.ts dayWord). */
+function waveDayWord(i18n: I18n, at: number, now: number): string {
+  if (zagrebDayKey(at) === zagrebDayKey(now)) return i18n.t('kiosk.say.today');
+  if (zagrebDayKey(at) === zagrebDayKey(now + DAY_MS)) return i18n.t('kiosk.say.tomorrow');
+  const weekday = new Intl.DateTimeFormat(i18n.getLocale(), { weekday: 'long', timeZone: 'Europe/Zagreb' }).format(at + 12 * 3_600_000);
+  return i18n.getLocale().startsWith('en') ? weekday : weekday.toLocaleLowerCase('hr');
+}
+
+/**
+ * R3: DHMZ's heat and cold waves for Zagreb, only while a fresh item has a level of 1 to 3 on a day from today: one line
+ * per wave and day, in the header sentence's own words (kiosk.sentence.heatWave / coldWave), so the phone and the wall
+ * say the same thing.
+ */
+function wavesSection(i18n: I18n, ctx: LayerContext): string {
+  const waves = ctx.snapshots['dhmz-waves'];
+  if (!waves || waves.status === 'down') return '';
+  const today = Date.parse(`${zagrebDayKey(ctx.now)}T12:00:00Z`);
+  const lines: string[] = [];
+  for (const wave of ['heat', 'cold'] as const) {
+    const item = waves.items.find((entry) => entry.kind === 'forecast' && dataText(entry, 'wave') === wave);
+    const first = Date.parse(item?.at ?? '');
+    if (!item || !Number.isFinite(first) || !(Date.parse(item.until ?? '') > ctx.now)) continue;
+    dataText(item, 'levels').split(',').map(Number).forEach((level, i) => {
+      const at = first + i * DAY_MS + 3 * 3_600_000;
+      if (!Number.isInteger(level) || level < 1 || level > 3 || zagrebDayKey(at) < zagrebDayKey(today)) return;
+      const key = wave === 'heat' ? 'kiosk.sentence.heatWave' : 'kiosk.sentence.coldWave';
+      lines.push(`<li class="wx-wave" data-key="${escapeAttribute(`${item.id}:${i}`)}">${escapeHtml(i18n.t(key, { level, day: waveDayWord(i18n, at, ctx.now) }))}</li>`);
+    });
+  }
+  if (lines.length === 0) return '';
+  return wxSection({
+    id: 'wx-waves', tone: 'urgency',
+    body: sectionHead(i18n, { title: i18n.t('weather.waves'), snapshot: waves, error: ctx.errors?.['dhmz-waves'], id: 'wx-waves-title' })
+      + `<ul class="rows wx-waves" role="list" data-testid="waves">${lines.join('')}</ul>`,
+  });
+}
+
 export interface PlacedQuake { q: FeedItem; mag: number | null; km: number | null; bearing: number | null }
 
 /** Each quake with its magnitude, and its distance and bearing from Zagreb when it has coordinates. */
@@ -294,8 +345,8 @@ export function renderZrakINebo(ctx: LayerContext): HTMLElement {
   const headObs = o ? `<p class="wx-head-obs">${observed(i18n, o, observation, ctx.errors?.['dhmz-now'])}</p>` : '';
   return createElementFromHTML(`<section class="layer ws ws-weather" id="layer-zrak-i-nebo" data-layer="zrak-i-nebo" data-reconcile aria-labelledby="layer-title-zrak-i-nebo">
 <header class="ws-head wx-head"><h2 class="layer-title" id="layer-title-zrak-i-nebo" tabindex="-1">${escapeHtml(i18n.t('layers.zrak-i-nebo'))}</h2>${headObs}</header>
-<div class="wx-grid">${nowSection(i18n, ctx)}${hourlySection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}</div>
+<div class="wx-grid">${nowSection(i18n, ctx)}${hourlySection(i18n, ctx)}${rangeSection(i18n, ctx)}${rangeSection(i18n,ctx,1)}${warningsSection(i18n, ctx)}${wavesSection(i18n, ctx)}${bioSection(i18n, ctx)}</div>
 <details class="wx-reference"><summary>${escapeHtml(i18n.t('weather.reference'))}</summary><div class="wx-grid">${o?facts(i18n,o):''}${sunSection(i18n, ctx)}${conditionsMarkup(ctx)}${quakesSection(i18n, ctx)}</div></details>
-${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-hourly'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc])}
+${provenanceBlock(i18n, [ctx.snapshots['dhmz-now'], ctx.snapshots['dhmz-forecast'], ctx.snapshots['dhmz-hourly'], ctx.snapshots['dhmz-cap'], ctx.snapshots.emsc, ctx.snapshots['dhmz-bio'], ctx.snapshots['dhmz-waves']])}
 </section>`);
 }

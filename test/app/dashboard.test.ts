@@ -739,8 +739,9 @@ describe('polling on the feed store', () => {
     const { root, session, fetchData, tick } = mount();
     session.join();
     await flush();
-    // Sada's modules: the eight of September and the five of October 2026 (U3: kultura-zg, programi, dhmz-hourly, hak, prekidi).
-    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'emsc', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi', 'prometnice', 'zet-rt']);
+    // Sada's modules: the eight of September, the five of October 2026 (U3: kultura-zg, programi, dhmz-hourly, hak, prekidi)
+    // and R3's three DHMZ modules (dhmz-radar, dhmz-bio, dhmz-waves).
+    expect(fetchData.mock.calls.map((c) => c[0]).sort()).toEqual(['dhmz-bio', 'dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dhmz-radar', 'dhmz-waves', 'dogadanja', 'emsc', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi', 'prometnice', 'zet-rt']);
     expect(fetchData.mock.calls[0]![1]).toBe('dt1');
     // Kultura is a Još row now: the directory's own refresh is cleared away, the row's switch is what is measured.
     click(root, '[data-testid=tab-more]');
