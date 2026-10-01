@@ -258,9 +258,11 @@ Isječak DHMZ-ova radarskog kompozita prikazuje se kad radar pokazuje kišu
 unutar kvadrata od 30 km oko Zagreba ili satna prognoza najbliže postaje
 najavljuje kišu unutar dva sata, a postoji svježa slika radara. Stoji u donjem
 lijevom kutu karte, kvadratnog je oblika, širok 240 piksela, s navodom „Radar ·
-Izvor: DHMZ”. Isječak se osvježava kad DHMZ objavi novu sliku; kad slika nije
-svježa (starija od pola sata) ili se ne može pročitati, isječka nema, a zaslon
-ne tvrdi da kiše nema. U laganom prikazu i na telefonu isječka nema.
+Izvor: DHMZ”. Isječak se osvježava kad DHMZ objavi novu sliku. Isječak je
+vidljiv samo dok vrijedi stavka radara: deset minuta od vrijednosti zaglavlja
+`Last-Modified`. Poslužitelj zasebno odbija sliku stariju od trideset minuta.
+Kad slika nije svježa ili se ne može pročitati, isječka nema, a zaslon ne
+tvrdi da kiše nema. U laganom prikazu i na telefonu isječka nema.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
@@ -661,7 +663,10 @@ manje samo kad puni popis ne može više. Popis bez oznake `data-fit-dropped` ra
 neuspjeh. Redak `silent-departures` traži da nijedna rečenica u zaglavlju ne najavi polazak
 (osim vlaka) dok dvojnik javlja da ZET ne šalje položaje; u dan bez takvog stanja ostaje na nuli.
 Redak `reveal-cadence` traži najviše jedno otkrivanje u tri takta i da svako stoji barem jedan
-takt, a mirno kretanje na taktu s otkrivanjem dopušta do šest strukturnih promjena. Redak
+takt, a mirno kretanje na taktu s otkrivanjem dopušta do šest strukturnih promjena. Pri
+ocjeni se najviše dva dokazana preslagivanja istih ćelija polazaka u jednom prozoru
+mjerenja tretiraju poput izmjene polazaka; ostala preslagivanja troše redovni
+proračun. Sirovi broj zapisa ostaje neizmijenjen. Redak
 `shown-facts` samo se prati i ne mijenja izlazni kod: bilježi koliko je različitih redaka koji
 nisu polasci zaslon pokazao tijekom promatranja, a isto po satima ispisuje
 `node scripts/shown-facts.mjs <mapa promatranja> [--json <datoteka>]`. Promatranje nakon
