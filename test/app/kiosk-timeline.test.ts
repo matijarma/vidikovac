@@ -20,7 +20,7 @@ import type { LastRunLive } from '../../app/src/core/lastrun';
 import { emptyCity } from '../../shared/city/types';
 import { BASE_VALUE, imminence } from '../../shared/kiosk/takt';
 import { departuresBoard } from '../../e2e/departures-fixture';
-import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures } from '../../e2e/wall';
+import { CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, calmMotionFailures, calmChurnFailures, type CalmMotionReading } from '../../e2e/wall';
 import { LEGIBILITY_IN_PAGE, pageSpec, WALL_1920 as LEGIBILITY_WALL } from '../../e2e/legibility';
 import { cellLines, cellOverflow, lineHeight, LINE_1366, LINE_1920, LINE_PORTRAIT, type Layout as MeasureLayout } from './timeline-measure';
 import {
@@ -2809,6 +2809,41 @@ describe('reveals on beats (R2)', () => {
       t.update(rows(), 2200, NOW + 40_000 + s * 1000);
       expect(byId('opening:harmica'), `${s} s`).toBe(node);
     }
+  });
+
+  it('the budget on a beat: a minute holding one page turn and its return passes the recorder; a seventh record in the start\'s pair fails it by the reveal budget; three records without a reveal fail as before', () => {
+    // The accept recorder as the "calm motion credited per reading pair" block drives it: a mark every 2 s, one second per update.
+    const minute = (reveal: boolean, extra: (s: number, list: HTMLElement) => void): CalmMotionReading => {
+      const t = mount({ measure: simulated(WALL_1920) });
+      t.update(pageRows(), 2200, NOW);
+      expect(CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC)).toBe(10);
+      // Extra records go under the recorded root but outside the list (its heading), where the measure never reads.
+      const heading = host.querySelector<HTMLElement>('[data-testid=nearby-head]')!;
+      for (let s = 1; s <= 60; s++) {
+        const view = reveal && s >= 20 && s < 40 ? { reveal: { ...PAGE, beat: 12 }, next: [] } : undefined;
+        t.update(pageRows(), 2200, NOW + s * 1000, view);
+        extra(s, heading);
+        if (s % 2 === 0) CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
+      }
+      const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+      t.destroy();
+      handle = null;
+      return reading;
+    };
+    const clean = minute(true, () => undefined);
+    expect(clean.mutations).toBe(8);
+    expect(clean.rebuilt).toEqual([]);
+    expect(clean.detail!.marks.map((m) => m.reveal)).toContain('page:12|');
+    expect(clean.recordsBySeg!.filter((n) => n > 0)).toEqual([4, 4]);
+    expect(calmMotionFailures(clean)).toEqual([]);
+    expect(calmChurnFailures(clean)).toEqual([]);
+    const seventh = minute(true, (s, heading) => { if (s === 20) for (let i = 0; i < 3; i++) heading.appendChild(document.createElement('span')); });
+    expect(seventh.mutations).toBe(11);
+    expect(calmMotionFailures(seventh)).toEqual([expect.stringContaining('7 structural mutations under the timeline across the reveal at reading pair')]);
+    expect(calmMotionFailures(seventh)[0]).toContain('target ≤ 6 on a beat that carries a reveal');
+    const idle = minute(false, (s, heading) => { if (s === 20) for (let i = 0; i < 3; i++) heading.appendChild(document.createElement('span')); });
+    expect(idle.mutations).toBe(3);
+    expect(calmMotionFailures(idle)).toEqual([expect.stringContaining('3 structural mutations under the timeline in an idle minute (target ≤ 2')]);
   });
 
   it('taktCandidates: the line, a stray departure, the notice, first, last and the first timeless row reserved, imminence at 30 minutes, the next departures only when they are at least the cells', () => {
