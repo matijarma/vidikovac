@@ -10,6 +10,7 @@ import { DATA_KEYS } from '../../worker/feed/schema';
 import { fetchPrekidi } from '../../worker/feed/modules/prekidi';
 import { HEP_URL, hepUrl, parseHep, splitStreets } from '../../worker/feed/modules/prekidi/hep';
 import { VIO_URL, noticeStreets, parseVio } from '../../worker/feed/modules/prekidi/vio';
+import { GPZ_URL } from '../../worker/feed/modules/prekidi/gpz';
 import { U3_FIXTURE_NOW } from './fixture-contexts';
 
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8');
@@ -31,7 +32,9 @@ function context(pages: Record<string, string | Error>): FetchContext {
     },
   };
 }
-const PAGES = { 'datum=29.09.2026': TODAY_PAGE, 'datum=30.09.2026': TOMORROW_PAGE, 'vio.hr': VIO_PAGE };
+// GPZ's list of 1 Oct 2026 (R3): its newest notice is of 26 August, more than 30 days before NOW, so GPZ is live and names no cut.
+const GPZ_LIST = fixture('gpz-novosti.html');
+const PAGES = { 'datum=29.09.2026': TODAY_PAGE, 'datum=30.09.2026': TOMORROW_PAGE, 'vio.hr': VIO_PAGE, 'plinara-zagreb.hr/novosti/50': GPZ_LIST };
 
 describe('the fixtures are the servers\' bodies', () => {
   it('keep their CRLF line endings, which the parsers must cope with', () => {
@@ -214,25 +217,27 @@ describe('fetchPrekidi', () => {
     expect(payload.sources).toEqual({
       'hep-ods': { status: 'live', itemCount: 28, fetchedAt: NOW.toISOString(), totalItems: 30 },
       vio: { status: 'live', itemCount: 4, fetchedAt: NOW.toISOString(), totalItems: 4 },
+      gpz: { status: 'live', itemCount: 0, fetchedAt: NOW.toISOString(), totalItems: 0 },
     });
     // Two streets of the lists could not be placed: the coverage says the shown is not the whole.
     expect(payload.coverage).toEqual({ shown: 32, total: 34, limited: true });
     expect(payload.sourceUpdatedAt).toBeUndefined();
   });
 
-  it('asks HEP for the two Zagreb days and VIO for its list, and nothing else', async () => {
+  it('asks HEP for the two Zagreb days, VIO and GPZ for their lists, and nothing else', async () => {
     const requested: string[] = [];
     await fetchPrekidi({
       now: () => NOW,
       fetch: async (url) => {
         requested.push(url);
-        return new Response(url.includes('vio.hr') ? VIO_PAGE : url.includes('30.09') ? TOMORROW_PAGE : TODAY_PAGE);
+        return new Response(url.includes('vio.hr') ? VIO_PAGE : url.includes('plinara') ? GPZ_LIST : url.includes('30.09') ? TOMORROW_PAGE : TODAY_PAGE);
       },
     });
     expect(requested.sort()).toEqual([
       'https://www.hep.hr/ods/bez-struje/19?dp=zagreb&datum=29.09.2026',
       'https://www.hep.hr/ods/bez-struje/19?dp=zagreb&datum=30.09.2026',
       VIO_URL,
+      GPZ_URL,
     ].sort());
   });
 
@@ -248,8 +253,14 @@ describe('fetchPrekidi', () => {
     expect(changed.sources?.vio?.status).toBe('down');
   });
 
-  it('throws when neither source answers, so the last good copy serves', async () => {
-    await expect(fetchPrekidi(context({ 'datum=29.09.2026': new Error('a'), 'datum=30.09.2026': new Error('b'), 'vio.hr': new Error('c') }))).rejects.toThrow(/both sources failed/);
+  it('leaves HEP and VIO live when GPZ rejects', async () => {
+    const gpzDown = await fetchPrekidi(context({ ...PAGES, 'plinara-zagreb.hr/novosti/50': new Error('upstream 503') }));
+    expect(gpzDown.sources).toMatchObject({ 'hep-ods': { status: 'live', itemCount: 28 }, vio: { status: 'live', itemCount: 4 }, gpz: { status: 'down', itemCount: 0 } });
+    expect(gpzDown.items).toHaveLength(32);
+  });
+
+  it('throws when no source answers, so the last good copy serves', async () => {
+    await expect(fetchPrekidi(context({ 'datum=29.09.2026': new Error('a'), 'datum=30.09.2026': new Error('b'), 'vio.hr': new Error('c'), 'plinara-zagreb.hr': new Error('d') }))).rejects.toThrow(/every source failed/);
   });
 });
 

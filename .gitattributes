@@ -12,3 +12,7 @@ test/fixtures/hak-stanje.html -text
 test/fixtures/hep-ods-bez-struje-today.html -text
 test/fixtures/hep-ods-bez-struje-tomorrow.html -text
 test/fixtures/vio-obavijesti.html -text
+test/fixtures/gpz-novosti.html -text
+test/fixtures/gpz-obavijest-1576.html -text
+test/fixtures/gpz-obavijest-1577.html -text
+test/fixtures/gpz-obavijest-1579.html -text
