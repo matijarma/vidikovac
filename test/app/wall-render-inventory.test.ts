@@ -332,6 +332,10 @@ describe('the facts-breadth rows print answers, not disclaimers', () => {
         i18n.t('kiosk.nearby.cut.struja', { from: '08:00', until: '14:00' }),
         i18n.t('kiosk.nearby.cut.voda', { from: '08:00', until: '14:00' }),
         i18n.t('kiosk.nearby.cut.vodaDay'),
+        // R3: the gas cut's two subs, the radar row's title and the inset's credit.
+        i18n.t('kiosk.nearby.cut.plin', { from: '08:00', until: '14:00' }),
+        i18n.t('kiosk.nearby.cut.plinDay'),
+        i18n.t('kiosk.nearby.rainRadar'),
         ...Object.values(nearby.rain), ...Object.values(nearby.openKind), ...Object.values(nearby.road),
         i18n.t('arrivals.train'),
       ];

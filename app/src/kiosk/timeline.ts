@@ -413,6 +413,8 @@ export function timeLabel(row: NearbyRow, now: number, i18n: I18n): string {
   // A rolling end (shared/city/closures.ts) is no end: the street is closed, "u tijeku".
   if (row.kind === 'closure' && row.endKnown === false) return i18n.t('kiosk.nearby.ongoing');
   const until = (end: number): string => `${i18n.t('kiosk.nearby.until')} ${daysAhead(end, now) === 0 ? clock(end) : dayMonth(end)}`;
+  // DHMZ's radar sees rain near Zagreb now (R3): the row's moment is the image's, so the column says "sada".
+  if (row.kind === 'rain' && row.detail?.kind === 'radar') return i18n.t('arrivals.now');
   if (row.kind === 'closure' || row.kind === 'road') return until(atMs);
   // A whole-day water cut has no hours to print; a cut under way says when it ends; a place open now when it closes.
   if (row.kind === 'cut' && row.detail?.kind === 'cut' && row.detail.allDay) return i18n.t('kiosk.say.allDay');
