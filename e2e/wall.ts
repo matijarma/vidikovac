@@ -140,6 +140,8 @@ export const ROTATION_STEPS = 300;
 export const ROTATION_STEP_MS = 2000;
 /** Real time left to rAF work after each fake-clock step: MapLibre and the motion loop do not run on the fake clock. */
 export const ROTATION_SETTLE_MS = 30;
+/** One bounded reread after a departure enters (timeline ENTER_CLEAR_MS, pinned in the unit tier). */
+export const DEPARTURE_ENTRY_SETTLE_MS = 260;
 /** Decision 29: a header sentence dwells at least this long unless its own fact expires (app SENTENCE_HOLD_MS). */
 export const SENTENCE_DWELL_MIN_MS = 20_000;
 /** §12: no wording is shown again verbatim within ten minutes. */
@@ -216,6 +218,8 @@ export interface WallSample {
   departures: number;
   /** The departures line's `data-cells`: the cells it drew; null without a line (absent in a reading recorded before DR1). */
   departuresOffered?: number | null;
+  /** A departure cell is in its short entrance fade; never makes an invisible cell count as visible. */
+  departuresEntering?: boolean;
   /**
    * `data-fit-dropped` on the list: the kinds of the vetted rows the list did not paint, in list order; `[]` when it
    * dropped none, null when the probe is missing (a wall before it, or a reading recorded earlier).
@@ -409,6 +413,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     hiddenRows: allRows.length - visibleRows.length,
     departures: rows.reduce((n, r) => n + (r.cells ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0),
     departuresOffered: offered,
+    departuresEntering: Boolean(lineEl?.querySelector('[data-cell][data-enter="1"]')),
     fitDropped: fitDroppedIn(fit?.fitDropped),
     fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
     listRoom,
@@ -466,7 +471,7 @@ export interface RotationOptions {
   onSample?: (row: RotationRow) => void | Promise<void>;
 }
 
-/** The ten-minute rotation: `steps` readings `stepMs` apart. */
+/** The ten-minute rotation: `steps` readings `stepMs` apart, allowing one bounded departure-entry settle. */
 export async function sampleRotation(page: WallPage, options: RotationOptions = {}): Promise<RotationRow[]> {
   const steps = options.steps ?? ROTATION_STEPS;
   const stepMs = options.stepMs ?? ROTATION_STEP_MS;
@@ -481,7 +486,21 @@ export async function sampleRotation(page: WallPage, options: RotationOptions = 
     }
     let row: RotationRow;
     try {
-      row = { ...(await wallSample(page)), n };
+      let reading = await wallSample(page);
+      // DR1 n186 landed on the zero-opacity start of a 220 ms cell entrance.
+      // Read after that transition once, without accepting hidden/clipped cells
+      // or retrying a persistent deficit. Keep the reread's actual timestamp.
+      if (reading.departuresEntering && reading.departuresOffered != null
+        && reading.departures < reading.departuresOffered) {
+        if ((options.clock ?? 'fake') === 'fake') {
+          await page.clock.runFor(DEPARTURE_ENTRY_SETTLE_MS);
+          await page.waitForTimeout(settle);
+        } else {
+          await page.waitForTimeout(DEPARTURE_ENTRY_SETTLE_MS);
+        }
+        reading = await wallSample(page);
+      }
+      row = { ...reading, n };
     } catch (error) {
       row = { at: Date.now(), error: String(error).slice(0, 200), n };
     }

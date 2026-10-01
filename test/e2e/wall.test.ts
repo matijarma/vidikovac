@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
-  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
+  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ENTRY_SETTLE_MS, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, departureReads, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type FitReading, type RotationRow, type WallPage, type WallRow, type WallSample,
@@ -27,7 +27,7 @@ import { scheduleInstant } from '../../worker/city/schedules';
 import { arrivalsAt, type LiveVehicleRef } from '../../shared/city/arrivals';
 import { lastDeparture, loadLastRun } from '../../app/src/core/lastrun';
 import { isDaylight, sunTimes } from '../../app/src/ui/solar';
-import { IMMINENT_ROW_MIN } from '../../app/src/kiosk/timeline';
+import { ENTER_CLEAR_MS, IMMINENT_ROW_MIN } from '../../app/src/kiosk/timeline';
 import { ROW_MIN_PX } from '../../app/src/city/nearby';
 import { FIXTURE_NOW } from '../feed/fixture-contexts';
 // Feed 000395's trip index, the one the departures fixture reads (e2e/departures-fixture.ts says why).
@@ -443,7 +443,13 @@ describe('one reading of the wall', () => {
         { id: 'dep:2', route: '6', live: false, whenText: '17:52', hasTime: true, headsign: 'Črnomerec' },
         { id: 'dep:3', route: '6', live: false, whenText: '17:53', hasTime: true, headsign: 'Črnomerec' },
       ]);
-      expect(s).toMatchObject({ departures: 3, departuresOffered: 3, liveRows: 1 });
+      expect(s).toMatchObject({ departures: 3, departuresOffered: 3, departuresEntering: false, liveRows: 1 });
+      const entering = document.querySelector<HTMLElement>('[data-cell="3"]')!;
+      entering.dataset.enter = '1';
+      entering.style.opacity = '0';
+      expect(shippedFn(WALL_SAMPLE_SPEC)).toMatchObject({ departures: 2, departuresOffered: 3, departuresEntering: true });
+      entering.style.opacity = '1';
+      delete entering.dataset.enter;
       // The third cell pushed past the list's clipping box: two on the wall of the line's three.
       boxes[2] = at(700, 0);
       const cut = shippedFn(WALL_SAMPLE_SPEC);
@@ -725,6 +731,60 @@ describe('the ten-minute rotation', () => {
     calls.length = 0;
     await sampleRotation(page, { steps: 2, clock: 'real', stepMs: 500 });
     expect(calls).toEqual(['wait 500', 'read', 'wait 500', 'read']);
+  });
+
+  it.each(['fake', 'real'] as const)('sampleRotation settles an entering departure once with the %s clock', async (clock) => {
+    expect(DEPARTURE_ENTRY_SETTLE_MS).toBe(ENTER_CLEAR_MS);
+    const calls: string[] = [];
+    const initial = sample({ departures: 2, departuresOffered: 3, departuresEntering: true });
+    const settled = sample({ at: initial.at + DEPARTURE_ENTRY_SETTLE_MS, departures: 3, departuresOffered: 3, departuresEntering: false });
+    let reads = 0;
+    const page = {
+      evaluate: async () => { calls.push('read'); return reads++ === 0 ? initial : settled; },
+      waitForTimeout: async (ms: number) => { calls.push(`wait ${ms}`); },
+      clock: { runFor: async (ms: number) => { calls.push(`run ${ms}`); } },
+    } as unknown as WallPage;
+    const seen: RotationRow[] = [];
+    const rows = await sampleRotation(page, { steps: 1, clock, onSample: (r) => { seen.push(r); } });
+    expect(calls).toEqual(clock === 'fake'
+      ? ['run 2000', 'wait 30', 'read', 'run 260', 'wait 30', 'read']
+      : ['wait 2000', 'read', 'wait 260', 'read']);
+    expect(rows).toEqual([{ ...settled, n: 0 }]);
+    expect(seen).toEqual(rows);
+  });
+
+  it.each([
+    { departures: 2, departuresOffered: 3, departuresEntering: false },
+    { departures: 2, departuresOffered: 3 },
+    { departures: 3, departuresOffered: 3, departuresEntering: true },
+    { departures: 2, departuresOffered: null, departuresEntering: true },
+  ])('sampleRotation does not retry without an entering deficit: %j', async (over) => {
+    const calls: string[] = [];
+    const reading = sample(over);
+    const page = {
+      evaluate: async () => { calls.push('read'); return reading; },
+      waitForTimeout: async (ms: number) => { calls.push(`wait ${ms}`); },
+    } as unknown as WallPage;
+    expect(await sampleRotation(page, { steps: 1, clock: 'real' })).toEqual([{ ...reading, n: 0 }]);
+    expect(calls).toEqual(['wait 2000', 'read']);
+  });
+
+  it('sampleRotation keeps a persistent entering deficit red after its one reread', async () => {
+    const reading = sample({
+      rows: [row({ id: 'departures', kind: 'departures' })],
+      departures: 2, departuresOffered: 3, departuresEntering: true,
+    });
+    let reads = 0;
+    const waits: number[] = [];
+    const page = {
+      evaluate: async () => { reads++; return reading; },
+      waitForTimeout: async (ms: number) => { waits.push(ms); },
+    } as unknown as WallPage;
+    const rows = await sampleRotation(page, { steps: 1, clock: 'real' });
+    expect(reads).toBe(2);
+    expect(waits).toEqual([2000, 260]);
+    expect(rows).toEqual([{ ...reading, n: 0 }]);
+    expect(departureFailures(rows[0] as WallSample)).toEqual(["2 of the line's 3 cells on the wall (target: every cell the line drew)"]);
   });
 });
 
