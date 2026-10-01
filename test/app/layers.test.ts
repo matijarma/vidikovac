@@ -1470,4 +1470,12 @@ describe('Vrijeme and Kultura with the more-city sources (R3)', () => {
     expect(chip(pressed)!.getAttribute('aria-pressed')).toBe('true');
     expect(chip(pressed)!.getAttribute('data-filter-value')).toBe('');
   });
+
+  it('R3 review: an empty children filter does not claim there are no upcoming events', () => {
+    const page = culture([kidsItem('a', 'Hamlet', false)], { kids: '1' });
+    const i18n = createDefaultI18n('hr');
+    expect(text(page)).toContain(i18n.t('events.emptyFiltered'));
+    expect(text(page)).not.toContain(i18n.t('events.upcomingNone'));
+    expect(page.querySelector('[data-filter-key=kids]')?.getAttribute('data-filter-value')).toBe('');
+  });
 });

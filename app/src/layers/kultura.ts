@@ -416,7 +416,7 @@ export function renderKultura(ctx: LayerContext): HTMLElement {
   // Filters only when there is something to filter; the empty state speaks for itself.
   const days=`<div class="ev-days" role="group" aria-label="${escapeAttribute(ct(i18n,'program'))}">${(['today','tomorrow','week'] as const).map(day=>`<button type="button" class="day-time" data-action="filter" data-filter-key="event-window" data-filter-value="${day}" aria-pressed="${window===day}">${ct(i18n,day)}</button>`).join('')}${anyKids||kids?`<button type="button" class="day-time" data-action="filter" data-filter-key="kids" data-filter-value="${kids ? '' : '1'}" aria-pressed="${kids}">${escapeHtml(i18n.t('events.filter.kids'))}</button>`:''}</div>`;
   const toolbar = `${days}<div class="ws-toolbar ev-toolbar">${searchField({ id: 'events-search', key: 'q', label: i18n.t('events.search'), placeholder: i18n.t('events.searchPlaceholder'), value: query })}${upcoming.length ? categories : ''}${countLine}</div>`;
-  const emptyText = query || category ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
+  const emptyText = query || category || kids ? i18n.t('events.emptyFiltered') : all.length ? i18n.t('events.upcomingNone') : cultureEventsEmptyText(i18n, dogadanja);
   const state = listState(i18n, dogadanja, 'dogadanja', filtered.length, emptyText, ctx.errors?.dogadanja);
   const shown = shownCount(ctx, 'events', AGENDA_PAGE, filtered.length);
   // The agenda has no visible head: the day heads structure it, the hidden one names the region for assistive technology.
