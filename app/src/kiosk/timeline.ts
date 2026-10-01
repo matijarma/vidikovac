@@ -61,7 +61,7 @@
 // data-kind, so no [data-kind=departure] probe ever matches one.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
-import { candidateValue, type TaktCandidate, type TaktKind } from '../../../shared/kiosk/takt';
+import { candidateValue, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { reconcile } from '../ui/dom/reconcile';
@@ -189,8 +189,8 @@ export function isTimeless(row: Valued): boolean {
 /** A row as the value order reads it: structural, so a row of any wall type with a takt kind is one. */
 type Valued = Pick<NearbyRow, 'id' | 'atMs' | 'always'> & { kind: TaktKind; untilMs?: number; detail?: NearbyRow['detail'] };
 
-/** A row this close to its moment (or under way) is imminent. */
-const IMMINENT_MS = 30 * 60_000;
+/** A row this close to its moment (or under way) is imminent: the scheduler's own number (shared/kiosk/takt.ts, R2). */
+const IMMINENT_MS = REVEAL_IMMINENT_MS;
 
 /** Each row as a takt candidate (shared/kiosk/takt.ts, brief §5.2(a)): reserved are the first and last trams, the ZET
  *  notice, a departures line, the first timeless row and the first departure; a fact under way (a closure, a road
@@ -223,6 +223,29 @@ export function rowCandidates<T extends Valued>(rows: readonly T[], now: number)
       reserved: reserved.has(row),
       imminent: moment !== undefined && moment <= now + IMMINENT_MS,
     });
+  }
+  return out;
+}
+
+/**
+ * The scheduler's candidates (shared/kiosk/takt.ts takt(), reveal pass R2; docs/reveal-2026-10-plan/R2.md §0.2): every
+ * row of the wall through R0's mapper (rowCandidates: its id, kind, moment and imminence as the value order reads
+ * them), with every stray departure row reserved beside the line, the notice, the first and last trams and the first
+ * timeless row; then the next departures (city/nearby.ts nextDepartures, seam (d)) as `next-departures` candidates,
+ * in their order, only where the line exists and they are at least as many as its cells (an advance never shows
+ * fewer departures than the line). Pure.
+ */
+export function taktCandidates(rows: readonly WallRow[], next: readonly NearbyRow[], now: number): TaktCandidate[] {
+  const mapped = rowCandidates(rows, now);
+  const out = rows.map((row) => {
+    const candidate = mapped.get(row)!;
+    return row.kind === 'departure' && !candidate.reserved ? { ...candidate, reserved: true } : candidate;
+  });
+  const line = rows.find(isDeparturesLine);
+  if (line && next.length >= line.cells.length) {
+    for (const row of next) {
+      out.push({ id: row.id, kind: 'next-departures', ...(row.atMs !== null && Number.isFinite(row.atMs) ? { atMs: row.atMs } : {}), reserved: false, imminent: false });
+    }
   }
   return out;
 }

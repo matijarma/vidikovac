@@ -1,11 +1,17 @@
 // The reveal scheduler (shared/kiosk/takt.ts, reveal pass R2; docs/reveal-2026-10-plan/R2.md §0.2 is the rule text):
 // the beat grid, page 1 by the static value, the quiet rule, the advance and page-turn cadences with their lead,
-// row and imminence rules, the gap, freshness on page 2 only, the history and determinism.
+// row and imminence rules, the gap, freshness on page 2 only, the history and determinism; then the fixture day
+// (test/fixtures/takt/day-2026-09-30.json) replayed through the real candidate builder into the committed beat log.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ADVANCE_EVERY_BEATS, ADVANCE_LEAD_MS, beatIndex, candidateValue, EMPTY_HISTORY, FRESH_AFTER_MS, FRESH_MS, PAGE_EVERY_BEATS, PAGE_MAX_ROWS,
   REVEAL_EXEMPT_KINDS, REVEAL_GAP_BEATS, REVEAL_IMMINENT_MS, SOON_MS, takt, type TaktCandidate, type TaktHistory, type TaktKind, type TaktOptions,
 } from '../../shared/kiosk/takt';
+import { groupDepartures, taktCandidates } from '../../app/src/kiosk/timeline';
+import type { NearbyRow } from '../../app/src/city/nearby';
+import { sunTimes } from '../../app/src/ui/solar';
 
 const MIN = 60_000;
 const RHYTHM = 20_000;
@@ -352,5 +358,198 @@ describe('determinism', () => {
     expect(takt(rows, history, at(B0 + 3), options({ capacity: 8, reduced: true }))).toStrictEqual(a);
     const adv = takt(rows.map((x) => (x.id === 'departures' ? c('departures', 'departures', { at: NOW + 30 * MIN, reserved: true }) : x)), EMPTY_HISTORY, at(B0 + 4), options({ capacity: 8, reduced: true }));
     expect(adv).toStrictEqual(takt(rows.map((x) => (x.id === 'departures' ? c('departures', 'departures', { at: NOW + 30 * MIN, reserved: true }) : x)), EMPTY_HISTORY, at(B0 + 4), options({ capacity: 8, reduced: false })));
+  });
+});
+
+// --- The fixture day and the beat log (R2.md step 2) ---------------------------------------------------------------
+
+interface FixtureItem { id: string; kind: TaktKind; at?: string; until?: string; offered?: [string, string]; always?: boolean; every?: [string, string, number]; offeredBefore?: number }
+interface FixtureDay {
+  date: string; place: string; utcOffset: string; from: string; to: string; rhythmMs: number;
+  capacity: [string, number][]; headway: [string, number][]; departuresUntil: string;
+  quiet: [string, string, string][]; items: FixtureItem[];
+}
+const DAY: FixtureDay = JSON.parse(readFileSync(join(__dirname, '../fixtures/takt/day-2026-09-30.json'), 'utf8'));
+const ZAGREB_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Zagreb', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+
+/** A Zagreb clock of the fixture day ("HH:MM", "HH:MM:SS", "+1 HH:MM" for tomorrow, "24:00:00" for midnight) as epoch ms. */
+function zagreb(day: FixtureDay, text: string): number {
+  const tomorrow = text.startsWith('+1 ');
+  const clock = tomorrow ? text.slice(3) : text;
+  const [h, m, s = 0] = clock.split(':').map(Number) as [number, number, number?];
+  const base = Date.parse(`${day.date}T00:00:00${day.utcOffset}`);
+  return base + ((tomorrow ? 24 : 0) + h) * 3_600_000 + m * 60_000 + (s ?? 0) * 1000;
+}
+const hhmm = (ms: number): string => ZAGREB_CLOCK.format(new Date(ms)).slice(0, 5).replace(':', '');
+
+/** The timetable: each headway band from its own start, every `headway` minutes, until the next band's start or departuresUntil. */
+function timetable(day: FixtureDay): number[] {
+  const out: number[] = [];
+  const end = zagreb(day, day.departuresUntil);
+  day.headway.forEach(([start, minutes], i) => {
+    const next = day.headway[i + 1];
+    const until = next ? zagreb(day, next[0]) : end + 1;
+    for (let t = zagreb(day, start); t < until && t <= end; t += minutes * 60_000) out.push(t);
+  });
+  return out;
+}
+
+/** The rows the wall would list at `t` (the departures first, then the items offered, by their moment, timeless last, ties by id). */
+function rowsAt(day: FixtureDay, t: number): { rows: NearbyRow[]; next: NearbyRow[] } {
+  const base = (id: string, kind: NearbyRow['kind'], atMs: number | null, always = false): NearbyRow =>
+    ({ id, kind, atMs, always, title: id, sub: '', live: false, source: 'fixture' });
+  const due = timetable(day).filter((at) => at > t);
+  const departure = (at: number): NearbyRow => {
+    const dayAfter = at >= zagreb(day, '24:00:00');
+    const id = `dep:${dayAfter ? String(24 + Number(hhmm(at).slice(0, 2))).padStart(2, '0') + hhmm(at).slice(2) : hhmm(at)}`;
+    return base(id, 'departure', at);
+  };
+  const cells = due.slice(0, 3).map(departure);
+  const next = due.slice(3, 6).map(departure);
+  const items: NearbyRow[] = [];
+  for (const item of day.items) {
+    if (item.every) {
+      const [first, last, step] = item.every;
+      for (let at = zagreb(day, first); at <= zagreb(day, last); at += step * 60_000) {
+        if (t >= at - (item.offeredBefore ?? 0) * 60_000 && t < at) items.push(base(item.id.replace('<HHMM>', hhmm(at)), item.kind as NearbyRow['kind'], at));
+      }
+      continue;
+    }
+    const [from, to] = item.offered!;
+    if (!(t >= zagreb(day, from) && t < zagreb(day, to))) continue;
+    const row = base(item.id, item.kind as NearbyRow['kind'], item.always ? null : zagreb(day, item.at!), Boolean(item.always));
+    if (item.until) row.untilMs = zagreb(day, item.until);
+    items.push(row);
+  }
+  items.sort((a, b) => (a.atMs ?? Infinity) - (b.atMs ?? Infinity) || a.id.localeCompare(b.id));
+  return { rows: [...cells, ...items], next };
+}
+
+interface BeatLine { t: string; b: number; page1?: readonly string[]; reveal?: { kind: string; ids: readonly string[]; replaces: readonly string[] }; quiet?: true }
+interface BeatRecord { line: BeatLine | null; t: number; quiet: boolean; candidates: TaktCandidate[]; reveal: ReturnType<typeof takt>['reveal']; page1: readonly string[]; before: TaktHistory }
+
+/** The day replayed beat by beat: the log lines, and every beat's record for the rule pins. */
+function beatLog(day: FixtureDay, options: { reduced?: boolean } = {}): { lines: string[]; beats: BeatRecord[] } {
+  const bandAt = <T>(bands: [string, T][], t: number): T => bands.filter(([start]) => zagreb(day, start) <= t).map(([, v]) => v).pop()!;
+  const quietAt = (t: number): boolean => day.quiet.some(([from, to]) => t >= zagreb(day, from) && t < zagreb(day, to));
+  let history: TaktHistory = EMPTY_HISTORY;
+  let lastPage1 = '';
+  let lastQuiet = false;
+  const lines: string[] = [];
+  const beats: BeatRecord[] = [];
+  for (let t = zagreb(day, day.from); t < zagreb(day, day.to); t += day.rhythmMs) {
+    const { rows, next } = rowsAt(day, t);
+    const candidates = taktCandidates(groupDepartures(rows), next, t);
+    const quiet = quietAt(t);
+    const before = history;
+    const result = takt(candidates, history, t, { capacity: bandAt(day.capacity, t), rhythmMs: day.rhythmMs, quiet, reduced: options.reduced ?? false });
+    history = result.history;
+    const line: BeatLine = { t: ZAGREB_CLOCK.format(new Date(t)), b: beatIndex(t, day.rhythmMs) };
+    const page1 = result.page1.join('\u0001');
+    if (page1 !== lastPage1 || lines.length === 0) { line.page1 = result.page1; lastPage1 = page1; }
+    if (result.reveal) line.reveal = { kind: result.reveal.kind, ids: result.reveal.ids, replaces: result.reveal.replaces };
+    if (quiet && !lastQuiet) line.quiet = true;
+    lastQuiet = quiet;
+    const written = line.page1 !== undefined || line.reveal !== undefined || line.quiet !== undefined;
+    if (written) lines.push(JSON.stringify(line));
+    beats.push({ line: written ? line : null, t, quiet, candidates, reveal: result.reveal, page1: result.page1, before });
+  }
+  return { lines, beats };
+}
+
+describe('taktCandidates over the fixture day', () => {
+  it('reserves the line, the notice, the last tram and the first timeless row, never a rail or an event, and marks the imminent ones', () => {
+    const t = zagreb(DAY, '21:30:00');
+    const { rows, next } = rowsAt(DAY, t);
+    const candidates = taktCandidates(groupDepartures(rows), next, t);
+    const by = (id: string): TaktCandidate => candidates.find((c) => c.id === id)!;
+    expect(by('departures')).toMatchObject({ kind: 'departures', reserved: true, imminent: true });
+    expect(by('last:2026-09-30')).toMatchObject({ reserved: true, imminent: false });
+    expect(by('always:heritage:heritage-9cae1bf25c9ce440')).toMatchObject({ reserved: true, imminent: false });
+    expect(by('rail:fixture-hz-2145')).toMatchObject({ reserved: false, imminent: true });
+    expect(by('rail:fixture-hz-2215')).toMatchObject({ reserved: false, imminent: false });
+    expect(by('cut:fixture-hep-ods-2026-10-01')).toMatchObject({ reserved: false, imminent: false });
+    expect(candidates.filter((c) => c.kind === 'next-departures').map((c) => c.id)).toEqual(['dep:2212', 'dep:2224', 'dep:2236']);
+  });
+  it('the sunset of the day is the solar module\'s, written as HH:MM', () => {
+    const sunset = sunTimes(new Date(`${DAY.date}T12:00:00Z`)).sunset.getTime();
+    expect(ZAGREB_CLOCK.format(new Date(sunset)).slice(0, 5)).toBe(DAY.items.find((i) => i.kind === 'solar')!.at);
+  });
+});
+
+describe('the beat log of the fixture day', () => {
+  const { lines, beats } = beatLog(DAY);
+  const movable = (cand: TaktCandidate): boolean => !cand.reserved && cand.kind !== 'departure' && cand.kind !== 'departures' && !REVEAL_EXEMPT_KINDS.includes(cand.kind);
+  it('equals the committed snapshot (regenerate with -u only with a reason in the commit body)', async () => {
+    await expect(lines.join('\n') + '\n').toMatchFileSnapshot('../fixtures/takt/beat-log.jsonl');
+  });
+  it('obeys the rules, independent of the snapshot', () => {
+    const reveals = beats.filter((x) => x.reveal);
+    expect(reveals.length).toBeGreaterThan(0);
+    // No reveal inside a quiet window; consecutive reveal beats at least REVEAL_GAP_BEATS apart.
+    for (const x of reveals) expect(x.quiet, x.line!.t).toBe(false);
+    for (let i = 1; i < reveals.length; i++) expect(reveals[i]!.reveal!.beat - reveals[i - 1]!.reveal!.beat, reveals[i]!.line!.t).toBeGreaterThanOrEqual(REVEAL_GAP_BEATS);
+    for (const x of reveals) {
+      const r = x.reveal!;
+      expect(r.replaces.length, x.line!.t).toBeLessThanOrEqual(PAGE_MAX_ROWS);
+      const by = new Map(x.candidates.map((c) => [c.id, c] as const));
+      for (const id of r.replaces) {
+        const c = by.get(id)!;
+        if (r.kind === 'page') {
+          expect(c.reserved, `${x.line!.t} ${id} reserved`).toBe(false);
+          expect(c.imminent, `${x.line!.t} ${id} imminent`).toBe(false);
+          expect(c.kind, `${x.line!.t} ${id} closure`).not.toBe('closure');
+        }
+      }
+      for (const id of r.ids) expect(by.get(id)!.kind, `${x.line!.t} ${id}`).not.toBe('closure');
+      if (r.kind === 'advance') {
+        const line = by.get('departures')!;
+        expect(line.atMs! - x.t, x.line!.t).toBeGreaterThan(ADVANCE_LEAD_MS);
+        expect(x.line!.t >= '21:00:00', `${x.line!.t}: an advance before 21:00`).toBe(true);
+      }
+    }
+    expect(reveals.some((x) => x.reveal!.kind === 'advance' && x.line!.t >= '21:00:00')).toBe(true);
+    // Every beat where an advance was possible by the lead and the cadence (and not in the gap) carried one.
+    for (const x of beats) {
+      const line = x.candidates.find((c) => c.id === 'departures')!;
+      const b = beatIndex(x.t, DAY.rhythmMs);
+      const nextCount = x.candidates.filter((c) => c.kind === 'next-departures').length;
+      const previous = beats.filter((y) => y.reveal && y.t < x.t).pop();
+      const gap = !previous || b - previous.reveal!.beat >= REVEAL_GAP_BEATS;
+      if (!x.quiet && gap && b % ADVANCE_EVERY_BEATS === 0 && line.atMs! - x.t > ADVANCE_LEAD_MS && nextCount > 0) expect(x.reveal?.kind, x.line?.t ?? String(x.t)).toBe('advance');
+    }
+    // Every page beat that could carry a page turn (not quiet, the gap met, no advance, a page-1 row that may move
+    // and a page-2 row to show) carried one: the log is complete against the eligibility, not only within it.
+    for (const x of beats) {
+      const b = beatIndex(x.t, DAY.rhythmMs);
+      const previous = beats.filter((y) => y.reveal && y.t < x.t).pop();
+      const gap = !previous || b - previous.reveal!.beat >= REVEAL_GAP_BEATS;
+      const page1 = new Set(x.page1);
+      const out = x.candidates.some((cand) => page1.has(cand.id) && movable(cand) && !cand.imminent);
+      const seenAt = (id: string): boolean => { const s = x.before.shownAt[id]; return s !== undefined && x.t - s <= FRESH_MS; };
+      const page2All = x.candidates.filter((cand) => !page1.has(cand.id) && cand.kind !== 'next-departures' && movable(cand) && candidateValue(cand, x.t, null) > 0);
+      const page2 = page2All.length > 1 ? page2All.some((cand) => !seenAt(cand.id)) : page2All.length === 1;
+      if (!x.quiet && gap && b % PAGE_EVERY_BEATS === 0 && x.reveal?.kind !== 'advance' && out && page2) expect(x.reveal?.kind, x.line?.t ?? String(x.t)).toBe('page');
+    }
+    // The hours with a page turn on this day: from the rain step at 13:20 to the last train at 23:15. Before 13:20 the
+    // wall's five rows beside the line are the notice and the heritage row (reserved), the two closures (exempt) and
+    // the train within the hour (imminent from the moment it takes the row): no page-1 row may move, by the rules.
+    const hours = new Set(reveals.filter((x) => x.reveal!.kind === 'page').map((x) => x.line!.t.slice(0, 2)));
+    expect([...hours].sort()).toEqual(['13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']);
+    expect(beats.filter((x) => x.line?.t !== undefined && x.line.t < '13:20:00' && x.reveal)).toEqual([]);
+    // The repeat gate: a page-2 row seen in the last ten minutes is revealed only as the lone page-2 row.
+    for (const x of reveals.filter((y) => y.reveal!.kind === 'page')) {
+      const page1 = new Set(x.page1);
+      const page2 = x.candidates.filter((cand) => !page1.has(cand.id) && cand.kind !== 'next-departures' && movable(cand) && candidateValue(cand, x.t, x.before) > 0);
+      for (const id of x.reveal!.ids) {
+        const s = x.before.shownAt[id];
+        if (s !== undefined && x.t - s <= FRESH_MS) expect(page2.map((cand) => cand.id), `${x.line!.t}: ${id} revealed again within ten minutes`).toEqual([id]);
+      }
+    }
+    expect(lines.join('\n').length).toBeLessThanOrEqual(200 * 1024);
+  });
+  it('is deterministic over the day, and reduced changes nothing', () => {
+    expect(beatLog(DAY).lines).toEqual(lines);
+    expect(beatLog(DAY, { reduced: true }).lines).toEqual(lines);
   });
 });
