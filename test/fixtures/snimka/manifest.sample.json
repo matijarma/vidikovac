@@ -1,0 +1,177 @@
+{
+ "version": 1,
+ "builtAt": "2026-10-01T16:12:45.123Z",
+ "title": "Tri dana bez tramvaja",
+ "build": {
+  "commit": "b07d1c1a77f0e02758aad4de5dc640491a7d0b07",
+  "inputs": {
+   "frames-window": "7ce84765bf6459e4bce74fb59f558cf9f36af1d2e942b1929363d4581c55dda2",
+   "frames-day": "9b8b314dbc2087249199cb2cd067a936b755c674a17f0dfd10dfe68c7c62caa7",
+   "bajs": "07e4533073829ba49f740b2a618652d5f92415bbc1c45e538d0188fa60397ffe",
+   "closures": "8beacb4e4b19ecfc4eb69a6aaff5f36e2762fa98739dffc3f8ecd38b7e345fcb",
+   "news": "0882172bf003d42c1cf251867dfc984027ffa2701aa14fd6c400857647f16b17",
+   "series": "bedad951f752f87622138fae2c0efe67d3cea42d1a779b11f9fe545ed577bc9a",
+   "events": "7efc666dc8c7849d7685c030ebe435e19935a4354d1d87a2c5c7db87a83014a8",
+   "screen": "e224b1889deb513d734d7937e55a149524e26612df6943044aebccb1b9981054",
+   "captures": "b76065888da62543600bdd7e3e5f63f9905a537fc55b1eafbcd36a5fd34b6c4c",
+   "manifest": "20079e74cee2b3aeb33572dc2c1d2b625939d9c8fefdcc1887018091520c9ae3"
+  }
+ },
+ "window": {
+  "fromSec": 1790532000,
+  "toSec": 1790834400,
+  "minutes": 5040,
+  "tz": "Europe/Zagreb",
+  "utcOffsetMin": 120
+ },
+ "comparison": {
+  "day": "2026-09-24",
+  "fromSec": 1790200800,
+  "minutes": 1440
+ },
+ "serviceLiveFromSec": 1790716680,
+ "networks": {
+  "395": {
+   "path": "network/395.2c63a6688642f0fd.json",
+   "bytes": 591814,
+   "sha256": "2c63a6688642f0fd15eb890ddf5c338aa44acee8b32d63b8080fadc779c37302",
+   "feedVersion": "000395",
+   "graphHash": "7ad4834435980e22",
+   "paths": 227,
+   "shapes": 524
+  },
+  "396": {
+   "path": "network/396.aba7637f4483bc82.json",
+   "bytes": 579543,
+   "sha256": "aba7637f4483bc821128bbd44594371d16321029fa8b8defbbf7e3767b0f2624",
+   "feedVersion": "000396",
+   "graphHash": "b0ac946be55f8f79",
+   "paths": 207,
+   "shapes": 561
+  }
+ },
+ "files": {
+  "series": {
+   "path": "series/window.cabaf69e3d982374.json",
+   "bytes": 482717,
+   "sha256": "cabaf69e3d9823746fe6a72052b5ab9d3a8e787ad1688721db462d4cd4d1cb06"
+  },
+  "comparisonSeries": {
+   "path": "series/day.3e663aadd135e41d.json",
+   "bytes": 95302,
+   "sha256": "3e663aadd135e41d35fc9c3994ce956830389d60bafbddecea72a6cbebb96f05"
+  },
+  "motionIndex": {
+   "path": "motion/index.902ac3957504d01c.json",
+   "bytes": 115018,
+   "sha256": "902ac3957504d01c356338901625fdd773b218bb67af7fec139172c6b64f4d44"
+  },
+  "stations": {
+   "path": "bajs/stations.757c7db70844b9cf.json",
+   "bytes": 19239,
+   "sha256": "757c7db70844b9cfb90496635e7717d55d16a6f8cf9e1546f49c2b887b91a341"
+  },
+  "bajs": {
+   "path": "bajs/window.e018c25271676eb5.json",
+   "bytes": 271866,
+   "sha256": "e018c25271676eb5d749b7d37320fcbad66f0fbad2dc8f18c487fa05d8d8076b"
+  },
+  "closures": {
+   "path": "closures/window.06daf4a5fdacae6b.json",
+   "bytes": 29731,
+   "sha256": "06daf4a5fdacae6b39af30e321c84b36f673ca772a84bb2045db57ef067e27ae"
+  },
+  "events": {
+   "path": "events/window.5cb39ec16f7109ed.json",
+   "bytes": 6074,
+   "sha256": "5cb39ec16f7109ed64cf0e2716b52f39d9bff5f2088ac02b3d9c9b830086a773"
+  },
+  "notices": {
+   "path": "notices/window.bb92c280be32bd05.json",
+   "bytes": 850,
+   "sha256": "bb92c280be32bd05cbab86345e8b34dfb333ff966ffff618739ddb30087f78f6"
+  },
+  "news": {
+   "path": "news/window.bc3a9636b903f7ff.json",
+   "bytes": 19781,
+   "sha256": "bc3a9636b903f7ffe2cd3310086e278bdbe4eea41a402c3d2c6e2181516fdb79"
+  },
+  "screenIndex": {
+   "path": "screen/index.1b149155065b6fba.json",
+   "bytes": 37672,
+   "sha256": "1b149155065b6fba4268c03f4d394b8d14a2d297cc9598a07971085dfd72e772"
+  },
+  "board106": {
+   "path": "screen/board-106_1.509b444750a5bf4a.json",
+   "bytes": 125435,
+   "sha256": "509b444750a5bf4a2d7f7929ac50e131c3235d2fe8691fb3dc7eb6cb6dcbe7c2"
+  },
+  "grid": null
+ },
+ "attribution": [
+  {
+   "id": "zet",
+   "text": "Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+   "url": "http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669",
+   "licence": "Otvorena dozvola (NN 67/17)",
+   "adaptation": "položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, 10-sekundni korak; sirovi okviri se ne objavljuju"
+  },
+  {
+   "id": "zet-rss",
+   "text": "ZET, obavijesti: naslov, vrijeme objave i poveznica na obavijest",
+   "url": "https://www.zet.hr/",
+   "licence": "uvjeti ponovne uporabe nisu objavljeni; upit ZET-u je otvoren",
+   "adaptation": null
+  },
+  {
+   "id": "nextbike",
+   "text": "nextbike (BAJS), GBFS: stanje stanica svake minute",
+   "url": "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_hd/hr/",
+   "licence": "CC0 1.0",
+   "adaptation": "brojevi bicikala po stanici svakih pet minuta; zbroj bicikala i praznih stanica po minuti"
+  },
+  {
+   "id": "zagreb-closures",
+   "text": "Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom; skup 'Zatvaranje prometnica na području Grada Zagreba'",
+   "url": "https://data.zagreb.hr/",
+   "licence": "Otvorena dozvola (OD), http://data.gov.hr/otvorena-dozvola",
+   "adaptation": "svaka snimljena inačica skupa, s krajem zatvaranja kako ga je ta inačica objavila"
+  },
+  {
+   "id": "dhmz",
+   "text": "Izvor: DHMZ, Otvorena dozvola; postaja Zagreb-Maksimir",
+   "url": "https://vrijeme.hr/hrvatska1_n.xml",
+   "licence": "Otvorena dozvola (NN 67/17)",
+   "adaptation": "temperatura i vrijeme po satu"
+  },
+  {
+   "id": "news",
+   "text": "Jutarnji list, Večernji list i N1: naslovi i poveznice uz atribuciju, bez teksta članaka",
+   "url": null,
+   "licence": "navod naslova s poveznicom na izvorni članak",
+   "adaptation": null
+  },
+  {
+   "id": "osm",
+   "text": "© OpenStreetMap contributors",
+   "url": "https://www.openstreetmap.org/copyright",
+   "licence": "ODbL 1.0",
+   "adaptation": "podloga karte i karta u snimkama zaslona"
+  },
+  {
+   "id": "kajima",
+   "text": "Kaj ima?: snimke javnog zaslona, objavljeni brojevi i stanje usluge izračunano istim pravilima nad snimljenim podacima",
+   "url": "https://github.com/matijarma/vidikovac",
+   "licence": "AGPL-3.0 (izvorni kod)",
+   "adaptation": null
+  }
+ ],
+ "notes": [
+  "Lokalni snimači rade od nedjelje 27. rujna u 22:07: za ranije minute brojevi koje je aplikacija objavila, bicikli i zatvorene ulice nemaju podatka.",
+  "U srijedu 30. rujna od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.",
+  "Aplikacija objavljuje stanje usluge od utorka 29. rujna u 23:17; za ranije minute stanje je izračunano naknadno, istim pravilima, iz snimljenih podataka.",
+  "Od nedjelje u 20:00 do ponoći vozila su snimljena prema starom voznom redu ZET-a, a smještena na mrežu novoga; na dionicama s dva kolosijeka smjer vozila zato može biti pogrešan.",
+  "Običan dan, četvrtak 24. rujna, nema snimljenih ZET-ovih podataka od ponoći do 02:00.",
+  "Snimka završava u četvrtak 1. listopada u 08:00."
+ ]
+}
