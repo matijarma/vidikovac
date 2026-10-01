@@ -34,7 +34,6 @@ import {
   CLOCK_RE, departureFailures, ELLIPSIS_RE, isSampleError, LEAD_TEXT, revealCadenceFailures, revealEpisodes, ROTATION_SETTLE_MS, ROTATION_STEP_MS, rotationFailures,
   sampleFailures, sampleRotation, SETTINGS_HOLD_MS, summariseRotation, WALL_PROBES, wallSample, type WallSample,
 } from '../wall';
-import type { FeedItem } from '../../worker/feed/schema';
 import {
   ACCEPT_ARTEFACTS, attrOf, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, HEADINGS, HEADINGS_IN_PAGE,
   IDLE_MINUTE_MS, nearbyHeadFailures, pageNow, rotationSceneFailures, routeSceneTeaser, routeTiles, sceneClock, sceneReadingFailures,
@@ -62,14 +61,12 @@ const softly = expect.configure({ soft: true });
 
 interface OpenWall { clock: SceneClock; recorder: Recorder | null }
 
-/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns,
- *  and `events` adds items to the scene's dogadanja snapshot before the teaser is routed (the reveal scene, R2). */
-async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>>; events?: readonly FeedItem[] }): Promise<OpenWall> {
+/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns. */
+async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>> }): Promise<OpenWall> {
   await isolateLocalNetwork(page.context());
   await page.clock.install({ time: scene.now });
   const clock = sceneClock(scene.now);
   const snapshots = await installKioskFeedFixture(page, scene.feedState, { now: scene.now });
-  if (board?.events?.length) snapshots.dogadanja.items.unshift(...board.events);
   await routeSceneTeaser(page, snapshots, scene.now, clock);
   const vehicles = snapshots['zet-rt']?.items ?? [];
   const days = serviceDays(scene.now);
@@ -279,19 +276,14 @@ test.describe('wall at 1920×1080: eight scenes', () => {
 
   // R2 (docs/reveal-2026-10-plan/R2.md, step 11): on the header's beat the list swaps its least valuable rows for the
   // ones it had no room for, for exactly one beat, then they return; one region per beat, within the beat budget.
-  // Two located events inside the circle make sure the midday wall has a page 2 whatever the fixture's rows are.
+  // The existing midday fixture supplies page 2; assert that measured precondition below.
   test('reveal (midday1230, Ritam 20 s): one page turn and its return over four beats', async ({ page, request }) => {
     test.setTimeout(SCENE_TIMEOUT_MS);
     const scene = SCENES.midday1230;
     const label = 'reveal-midday1230';
     const RHYTHM_S = 20;
     const BEATS = 5;
-    const event = (id: string, title: string, hours: number, lon: number, lat: number): FeedItem => ({
-      id, module: 'dogadanja', kind: 'event', tier: 'open', title, at: new Date(scene.now + hours * 3_600_000).toISOString(), dateBasis: 'event',
-      geo: { type: 'Point', coordinates: [lon, lat] }, data: { source: 'kulturpunkt', precision: 'time' },
-    });
-    const events = [event('reveal:zrinjevac', 'Koncert na Zrinjevcu', 3, 15.9778, 45.8097), event('reveal:kavana', 'Razgovor u Gradskoj kavani', 4, 15.9769, 45.8135)];
-    const { clock } = await openWall(page, request, scene, label, false, { events });
+    const { clock } = await openWall(page, request, scene, label, false);
     await expect(page.getByTestId('kiosk-invitation'), `${label}: the wall paints its invitation within ${LOAD_MS / 1000} s`).toBeVisible({ timeout: LOAD_MS });
     await settle(page, scene, SETTLE_MS, true);
     softly(await attrOf(page, WALL_PROBES.kioskRoot, 'data-rhythm'), `${label}: the wall runs at the default Ritam (${WALL_PROBES.kioskRoot} data-rhythm)`).toBe(String(RHYTHM_S));
