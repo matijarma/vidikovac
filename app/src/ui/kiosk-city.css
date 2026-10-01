@@ -80,6 +80,20 @@
 .kiosk .k-nearby .k-dep-cell[data-headsign='0'] .k-dep-headsign{display:none}
 .kiosk[data-portrait='1'] .k-nearby .k-dep-cell{grid-template-areas:'badge time' 'head head'}
 .kiosk .k-nearby .nearby-row[data-kind='departures']+.nearby-row .k-nearby-mark::before{top:50%}
+/* The rail line (one row for every train, kiosk/timeline.ts railLineMarkup): the train badge over the station in the
+   time column, the station as narrow as its longest word (so "Glavni kolodvor" stacks and never widens the column every
+   row shares), the spine's mark as on any row, then one cell per train, its destination (whole words, at most two
+   lines) over its time, both at the sub size: quieter than the trams. As the departures line's cells, none of it grows
+   with the row's type scale (a grown destination would wrap). */
+.kiosk .k-nearby .k-nearby-at .k-line-badge{margin:0;font-size:calc(var(--k-nearby-sub-size));height:auto;min-height:1.1em;line-height:1.1}
+.kiosk .k-nearby .k-rail-station{width:min-content;font-size:calc(var(--k-nearby-sub-size));font-weight:500;line-height:1.15;text-align:end;white-space:normal;overflow-wrap:normal;color:var(--k-ink-2)}
+.kiosk .k-nearby .k-rail-cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:calc(16px * var(--k-zoom,1));align-items:start;min-width:0}
+.kiosk .k-nearby .nearby-row[data-cells='2'] .k-rail-cells{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kiosk .k-nearby .nearby-row[data-cells='1'] .k-rail-cells{grid-template-columns:minmax(0,1fr)}
+.kiosk .k-nearby .k-rail-cells .k-dep-cell{grid-template-columns:minmax(0,1fr);grid-template-areas:'head' 'time'}
+.kiosk .k-nearby .k-rail-cells .k-dep-cell .nearby-when{grid-area:time;font-size:calc(var(--k-nearby-sub-size));line-height:1.15;white-space:nowrap;color:var(--k-ink-2)}
+.kiosk .k-nearby .k-rail-cells .k-dep-headsign{font-size:calc(var(--k-nearby-sub-size))}
+.kiosk .k-nearby .nearby-row[data-kind='rail'] .k-nearby-mark::after{background:var(--k-ink-3)}
 .k-nearby .k-dep-cell[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
 /* R2: a page turn's rows slide in from one row below under the fade's own 220 ms (ENTER_MS); cells fade in place (above). */
 .k-nearby .nearby-row[data-enter='1'][data-slide='1']{animation:k-nearby-slide 220ms var(--ease-enter) both}

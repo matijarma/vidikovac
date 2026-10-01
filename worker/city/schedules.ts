@@ -108,10 +108,10 @@ export async function buildSchedule(bytes: Uint8Array, operator: 'zet' | 'hz', n
   if (![...services.values()].some(Boolean)) throw new Error('gtfs-no-current-service');
   const route = new Map<string, { name: string; short: string }>();
   for await (const r of read('routes.txt')) route.set(r.route_id, { name: clean(r.route_long_name), short: clean(r.route_short_name) });
-  const trips = new Map<string, { id:string;mask: number; route: string; label: string; headsign: string }>();
+  const trips = new Map<string, { id:string;mask: number; route: string; label: string; headsign: string; explicit: boolean }>();
   for await (const r of read('trips.txt')) {
     const mask = services.get(r.service_id);
-    if (mask) trips.set(r.trip_id, { id:r.trip_id,mask, route: r.route_id, label: route.get(r.route_id)?.short || route.get(r.route_id)?.name || r.route_id, headsign: clean(r.trip_headsign) || route.get(r.route_id)?.name || '' });
+    if (mask) trips.set(r.trip_id, { id:r.trip_id,mask, route: r.route_id, label: route.get(r.route_id)?.short || route.get(r.route_id)?.name || r.route_id, headsign: clean(r.trip_headsign) || route.get(r.route_id)?.name || '', explicit: Boolean(clean(r.trip_headsign)) });
   }
   const lastActive=days.reduce((last,_,i)=>[...services.values()].some(mask=>mask&(1<<i))?i:last,0);
   const generatedAt = new Date(now).toISOString();
@@ -120,8 +120,11 @@ export async function buildSchedule(bytes: Uint8Array, operator: 'zet' | 'hz', n
   const validUntil=new Date(validUntilMs).toISOString();
   const parts = Array.from({ length: 32 }, (): SchedulePart => ({ schema: 1, operator, generatedAt, days, validUntil, stops: {} }));
   const stopMap = new Map<string, ScheduleStop>();
+  /** Every stop's name, also the ones outside Zagreb: a train's destination (Tovarnik) is one. */
+  const stopNames = new Map<string, string>();
   const places: Place[] = [];
   for await (const s of read('stops.txt')) {
+    if (s.stop_id && s.stop_name) stopNames.set(s.stop_id, clean(s.stop_name));
     const lon = Number(s.stop_lon), lat = Number(s.stop_lat);
     if (!s.stop_id || !s.stop_name || lon < 15.7 || lon > 16.3 || lat < 45.5 || lat > 46.02 || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     const stop: ScheduleStop = { name: clean(s.stop_name), lon, lat, runs: [] };
@@ -130,11 +133,14 @@ export async function buildSchedule(bytes: Uint8Array, operator: 'zet' | 'hz', n
     if (operator === 'hz') places.push({ id: cityId('rail', s.stop_id), name: stop.name, lon, lat, category: 'rail', sourceId: 'hz-schedule', sourceRecord: s.stop_id });
   }
   const endpoints=new Map<string,number>();
+  const lastStops=new Map<string,string>();
   for await(const r of read('stop_times.txt')){
     if(!trips.has(r.trip_id))continue;
     const sequence=Number(r.stop_sequence);
-    if(Number.isFinite(sequence))endpoints.set(r.trip_id,Math.max(endpoints.get(r.trip_id)??-1,sequence));
+    if(Number.isFinite(sequence)&&sequence>(endpoints.get(r.trip_id)??-1)){endpoints.set(r.trip_id,sequence);lastStops.set(r.trip_id,r.stop_id);}
   }
+  // HŽ leaves trip_headsign empty: the train goes to its last stop, not to its route's long name ("A - B").
+  for(const [id,trip] of trips)if(!trip.explicit){const to=stopNames.get(lastStops.get(id)??'');if(to)trip.headsign=to;}
   for await (const r of read('stop_times.txt')) {
     const trip = trips.get(r.trip_id), stop = stopMap.get(r.stop_id);
     if (!trip || !stop || r.pickup_type === '1' || Number(r.stop_sequence)===endpoints.get(r.trip_id)) continue;

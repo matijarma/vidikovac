@@ -70,7 +70,7 @@
 // and .k-dep-headsign (present, and empty when left out); a cell carries no
 // data-kind, so no [data-kind=departure] probe ever matches one.
 import type { ArrivalRow } from '../../../shared/city/arrivals';
-import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
+import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, type NearbyKind, type NearbyRow, type NearbyTrain, railPlaceName, rowBudget, ROW_MIN_PX } from '../city/nearby';
 import { candidateValue, PAGE_FIT_CANDIDATES, PAGE_MAX_ROWS, REVEAL_EXEMPT_KINDS, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
@@ -111,6 +111,15 @@ export function groupDepartures(rows: readonly NearbyRow[]): WallRow[] {
   const cells = rows.slice(start, end).slice(0, MAX_DEPARTURES);
   const line: DeparturesLine = { kind: 'departures', id: 'departures', cells, atMs: cells[0]!.atMs!, always: false, live: cells.some((c) => c.live) };
   return [...rows.slice(0, start), line, ...rows.slice(end)];
+}
+
+/** The rail row drawn as the wall's line of cells (asLine): the trains of its one station, one row however many. */
+export function groupRail(rows: readonly WallRow[]): WallRow[] {
+  return rows.map((row) => (row.kind === 'rail' && row.detail?.kind === 'rail' ? { ...row, asLine: true } : row));
+}
+/** The trains a rail row carries, the first being the row's own; none on any other row. */
+export function railTrains(row: WallRow): readonly NearbyTrain[] {
+  return row.kind === 'rail' && row.detail?.kind === 'rail' ? row.detail.trains : [];
 }
 
 /** What the fit reads from the layout; the DOM by default, a fake in tests (happy-dom lays nothing out). */
@@ -439,6 +448,8 @@ export interface ShortLabels {
   clocks?: boolean;
   /** Measurement only (fit()): every cell prints the widest countdown, arrivals.inMinutes with n = COUNTDOWN_HORIZON_MIN. */
   probe?: boolean;
+  /** The rail line's cells: fewer trains where a destination does not fit its cell (RAIL_DESTINATION_LINES; never a cut word). */
+  cells?: number;
 }
 
 const titleOf = (row: TimelineRow, short?: ShortLabels): string => (short?.title && row.titleShort ? row.titleShort : row.title);
@@ -490,7 +501,9 @@ export function vettedTimelineRow(row: TimelineRow): boolean {
   return vetExternal(kind, row.title, 'row') !== null
     && optionalExternal(kind, row.titleShort)
     && sub(row.sub) && sub(row.subShort)
-    && (!row.arrival || vetExternal('headsign', row.arrival.routeName, 'row') !== null);
+    && (!row.arrival || vetExternal('headsign', row.arrival.routeName, 'row') !== null)
+    // The rail row's later trains print their destinations too (the line's cells, the phone's "zatim").
+    && railTrains(row).every((train) => vetExternal('headsign', train.to, 'row') !== null);
 }
 
 /**
@@ -562,10 +575,62 @@ export function departuresLineMarkup(line: DeparturesLine, now: number, i18n: I1
   return `<li ${attrs}>${then}${cells.join('')}</li>`;
 }
 
+/**
+ * The rail line (asLine): the train badge over the station's name in the time column, the spine's mark, then one cell
+ * per train, its destination over its timetable time (never live, never blue), in the text column. The li keeps the
+ * row's kind and id, so every probe and tap of a rail row reads it as before.
+ */
+export function railLineMarkup(row: NearbyRow, now: number, i18n: I18n, short?: ShortLabels): string {
+  if (!vettedTimelineRow(row)) return '';
+  const trains = railTrains(row).slice(0, Math.max(1, short?.cells ?? MAX_DEPARTURES));
+  if (trains.length === 0) return '';
+  const cells = trains.map((train, index) => {
+    const iso = new Date(train.atMs).toISOString();
+    const attrs = [
+      'class="k-dep-cell"',
+      `data-key="${a(`rail:${train.id}`)}"`,
+      `data-id="${a(`rail:${train.id}`)}"`,
+      `data-cell="${index + 1}"`,
+      `data-when="${iso}"`,
+      `data-source="${a(row.source)}"`,
+    ].join(' ');
+    return `<span ${attrs}><span class="k-dep-headsign">${e(railPlaceName(train.to))}</span>`
+      + `<time class="nearby-when" datetime="${iso}">${e(timeLabel({ ...row, atMs: train.atMs }, now, i18n))}</time></span>`;
+  });
+  const iso = new Date(trains[0]!.atMs).toISOString();
+  const attrs = [
+    'class="nearby-row"',
+    `data-id="${a(row.id)}"`,
+    `data-key="${a(row.id)}"`,
+    'data-kind="rail"',
+    `data-cells="${cells.length}"`,
+    `data-when="${iso}"`,
+    `data-source="${a(row.source)}"`,
+  ].join(' ');
+  const badge = kBadge(row.arrival?.routeName || i18n.t('arrivals.train'), 'other');
+  return `<li ${attrs}><span class="k-nearby-at">${badge}<span class="k-rail-station">${e(railPlaceName(subOf(row, short) || row.sub))}</span></span>`
+    + `<span class="k-nearby-mark" aria-hidden="true"></span><span class="k-rail-cells">${cells.join('')}</span></li>`;
+}
+/** A rail cell's destination wraps to at most this many lines (whole words) before the line takes a train off. */
+export const RAIL_DESTINATION_LINES = 2;
+/** Where a line's cells stand: the departures line's li itself, the rail line's text column. */
+function cellsBox(li: Element): Element {
+  return [...li.children].find((child) => child.classList.contains('k-rail-cells')) ?? li;
+}
+
+/** A rail row drawn as a row: its later trains after "zatim" on the sub-line, "Glavni kolodvor · zatim 14:12 Dugo Selo, 14:20 Harmica". */
+function railSub(row: NearbyRow, sub: string, i18n: I18n): string {
+  const later = railTrains(row).slice(1);
+  if (later.length === 0) return sub;
+  const then = later.map((train) => `${clock(train.atMs)} ${railPlaceName(train.to)}`).join(', ');
+  return `${sub ? `${sub} · ` : ''}${i18n.t('kiosk.nearby.zatim')} ${then}`;
+}
+
 /** One row's markup: time cell (the time, the day word under it), the spine mark, title and sub (always present, empty when there is none). */
 export function rowMarkup(row: WallRow, now: number, i18n: I18n, short?: ShortLabels, advance?: LineAdvance): string {
   if (isDeparturesLine(row)) return departuresLineMarkup(row, now, i18n, short, advance);
   if (!vettedTimelineRow(row)) return '';
+  if (row.asLine && railTrains(row).length > 0) return railLineMarkup(row, now, i18n, short);
   const timeless = isTimeless(row);
   const text = e(timeLabel(row, now, i18n));
   const iso = timeless ? '' : new Date(row.atMs!).toISOString();
@@ -585,7 +650,7 @@ export function rowMarkup(row: WallRow, now: number, i18n: I18n, short?: ShortLa
   const badge = row.arrival?.routeName ? `${kBadge(row.arrival.routeName, row.kind === 'rail' ? 'other' : kindOfRoute(row.arrival.routeId))} ` : '';
   return `<li ${attrs}><span class="k-nearby-at">${when}${day ? `<span class="k-nearby-day">${e(day)}</span>` : ''}</span>`
     + `<span class="k-nearby-mark" aria-hidden="true"></span>`
-    + `<span class="k-nearby-text"><span class="nearby-title">${badge}${e(titleOf(row, short))}</span><span class="nearby-sub">${e(subOf(row, short))}</span></span></li>`;
+    + `<span class="k-nearby-text"><span class="nearby-title">${badge}${e(titleOf(row, short))}</span><span class="nearby-sub">${e(row.kind === 'rail' ? railSub(row, subOf(row, short), i18n) : subOf(row, short))}</span></span></li>`;
 }
 
 /** The rows' markup in order; the phone (WP4) can draw the same list with its own sheet. */
@@ -635,7 +700,8 @@ export const DOM_MEASURE: TimelineMeasure = {
 function fitSignature(rows: readonly WallRow[], now: number, i18n: I18n, rowPx: number, box: { height: number; width: number }, typography: string): string {
   const parts = rows.map((r) => isDeparturesLine(r)
     ? ['departures', 'departures', ...r.cells.map((c) => [c.id, c.title, c.arrival?.routeName ?? '', c.live ? '1' : '0', timeLabel(c, now, i18n)].join('\u0003'))].join('\u0001')
-    : [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n), timeLabel(r, now, i18n)].join('\u0001'));
+    : [r.id, r.kind, r.title, r.titleShort ?? '', r.sub, r.subShort ?? '', r.arrival?.routeName ?? '', dayLabel(r, now, i18n), timeLabel(r, now, i18n),
+      r.asLine ? '1' : '0', ...railTrains(r).map((t) => [t.id, t.to, clock(t.atMs)].join('\u0003'))].join('\u0001'));
   return `${parts.join('\u0002')}|${rowPx}|${typography}|${box.height}|${box.width}`;
 }
 
@@ -724,26 +790,30 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     // A row a reveal takes off the wall is kept aside (R2) and comes back on its own node at the reveal's edge.
     for (const [key, li] of live) if (!wanted.has(key)) { if (reveal.park.has(key)) parked.set(key, li); li.remove(); }
     restoreParked(list, [...wanted.keys()]);
-    // A single departing cell uses the keyed path. Multiple departures use the approved atomic batch below.
-    const liveLine = live.get(DEPARTURES_LINE_ID);
-    const nextLine = wanted.get(DEPARTURES_LINE_ID);
-    if (liveLine && nextLine) {
+    // A line's cells (the departures line, the rail line) are keyed as rows are: a single departing cell uses the keyed
+    // path, several use the approved atomic batch below.
+    for (const [lineKey, nextLine] of wanted) {
+      const liveLine = live.get(lineKey);
+      if (!liveLine || !nextLine.hasAttribute('data-cells')) continue;
+      const liveBox = cellsBox(liveLine);
+      const nextBox = cellsBox(nextLine);
       const liveCells = new Map<string, Element>();
-      for (const cell of liveLine.children) liveCells.set(cell.getAttribute('data-key') ?? '', cell);
+      for (const cell of liveBox.children) liveCells.set(cell.getAttribute('data-key') ?? '', cell);
       const nextCells = new Set<string>();
-      for (const cell of nextLine.children) {
+      for (const cell of nextBox.children) {
         const key = cell.getAttribute('data-key') ?? '';
         nextCells.add(key);
         if (liveCells.get(key)?.hasAttribute('data-enter')) cell.setAttribute('data-enter', '1');
       }
       const departing = [...liveCells].filter(([key]) => !nextCells.has(key));
-      const park = (key: string, cell: Element): void => { if (reveal.parkCells) parked.set(key, cell); };
+      // An advance (R2) takes cells off the departures line only.
+      const park = (key: string, cell: Element): void => { if (reveal.parkCells && lineKey === DEPARTURES_LINE_ID) parked.set(key, cell); };
       if (departing.filter(([key]) => key !== THEN_KEY).length > 1) {
         // At most one of three cells survives. Keep that exact object and trip identity; never recycle a departed
         // cell as another trip. Native replaceChildren batches the change, while a single turnover stays unchanged.
         // A cell an advance took off the line (R2) returns on its own node, morphed to its words of now.
         for (const [key, cell] of departing) park(key, cell);
-        const replacement = [...nextLine.children].map((cell) => {
+        const replacement = [...nextBox.children].map((cell) => {
           const key = cell.getAttribute('data-key') ?? '';
           const survivor = liveCells.get(key);
           if (!survivor) {
@@ -756,10 +826,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           cell.removeAttribute('data-enter');
           return survivor;
         });
-        liveLine.replaceChildren(...replacement);
+        liveBox.replaceChildren(...replacement);
       } else {
         for (const [key, cell] of departing) { park(key, cell); cell.remove(); }
-        restoreParked(liveLine, [...nextCells]);
+        restoreParked(liveBox, [...nextCells]);
       }
     }
     reconcile(list, next);
@@ -877,6 +947,24 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
             short.set(line.id, { ...short.get(line.id), headsigns: 'none' });
             draw();
           }
+        }
+      }
+      // (1c) The rail line: where a destination takes more than RAIL_DESTINATION_LINES in its cell, or a word of it runs
+      // past the cell, the line's last train leaves it (the cells left are wider), never a word of the destination; one
+      // train left wraps as a row's title does.
+      for (const rail of shown) {
+        if (isDeparturesLine(rail) || !rail.asLine) continue;
+        const cells = (): HTMLElement[] => {
+          const li = [...list.children].find((el) => el.getAttribute('data-key') === rail.id);
+          return li ? [...li.querySelectorAll<HTMLElement>('.k-dep-cell')] : [];
+        };
+        const long = (cell: HTMLElement): boolean => {
+          const head = cell.querySelector<HTMLElement>('.k-dep-headsign');
+          return measure.box(cell).overflow || Boolean(head && (measure.lines(head) > RAIL_DESTINATION_LINES || measure.box(head).overflow));
+        };
+        for (let n = cells().length - 1; n >= 1 && cells().some(long); n--) {
+          short.set(rail.id, { ...short.get(rail.id), cells: n });
+          draw();
         }
       }
       if (measure.box(list).overflow) {
@@ -1111,7 +1199,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       const unbounded = design === Number.POSITIVE_INFINITY;
       // The wall's compositions draw the departures as one line (R1), a row the budget and the fit count once.
       const grouped = deps.departuresLine ? deps.departuresLine() : Number.isFinite(design);
-      const wall: readonly WallRow[] = grouped ? groupDepartures(rows) : rows;
+      const wall: readonly WallRow[] = grouped ? groupRail(groupDepartures(rows)) : rows;
       const box = unbounded ? { height: 0, width: 0, overflow: false } : measure.box(list);
       const available = unbounded ? design : box.height > 0 ? box.height / zoom() : design;
       const budget = rowBudget(available, wall.length);
@@ -1126,7 +1214,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       for (const li of list.children) {
         const key = li.getAttribute('data-key') ?? '';
         before.add(key);
-        if (key === DEPARTURES_LINE_ID) for (const cell of li.children) beforeCells.add(cell.getAttribute('data-key') ?? '');
+        if (li.hasAttribute('data-cells')) for (const cell of cellsBox(li).children) beforeCells.add(cell.getAttribute('data-key') ?? '');
       }
       let shown: WallRow[] = candidates;
       /** The reveal drawn this update (R2), none on a handheld or without a view. */
@@ -1255,9 +1343,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
             li.setAttribute('data-enter', '1');
             if (slides.has(key)) li.setAttribute('data-slide', '1');
             entered.push(li);
-          } else if (key === DEPARTURES_LINE_ID) {
-            // A line that was there: a new departure fades in its own cell, and the line never fades.
-            for (const cell of li.children) {
+          } else if (li.hasAttribute('data-cells')) {
+            // A line that was there (the departures, the trains): a new one fades in its own cell, the line never fades.
+            for (const cell of cellsBox(li).children) {
               if (!cell.classList.contains('k-dep-cell')) continue;
               if (beforeCells.has(cell.getAttribute('data-key') ?? '')) continue;
               cell.setAttribute('data-enter', '1');

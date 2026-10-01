@@ -41,7 +41,7 @@ import { locatedEvents } from '../../../shared/city/events';
 import { isPublicHoliday } from '../../../shared/city/holidays';
 import { containsStems, stemWords } from '../../../shared/city/stems';
 import { noticeCandidates, zetNoticeLink } from '../../../shared/city/notices';
-import { pillText } from '../../../shared/city/frame';
+import { pillText, WALK_MIN_PER_KM } from '../../../shared/city/frame';
 import { closureEndKnown } from '../../../shared/city/closures';
 import { positionsUnavailable } from '../../../shared/city/service-state';
 import { externalText, EXTERNAL_TEXT_REJECTIONS, type ExternalTextKind, type ExternalTextRejection } from '../../../shared/kiosk/external-text';
@@ -88,7 +88,12 @@ export type NearbyDetail =
   | { kind: 'open'; openKind: OpenKind }
   | { kind: 'exhibit'; venue: string; openNow: boolean }
   /** DHMZ's radar composite shows rain near Zagreb (R3). */
-  | { kind: 'radar' };
+  | { kind: 'radar' }
+  /** The rail row's trains from its one station, soonest first (the first is the row's own time and title). */
+  | { kind: 'rail'; trains: readonly NearbyTrain[] };
+
+/** One train of the rail row: its trip, its timetable time and where it goes (the headsign as HŽ's data names it). */
+export interface NearbyTrain { id: string; atMs: number; to: string }
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
@@ -144,8 +149,11 @@ export interface NearbyRow {
   href?: string;
   /** When the row's fact ends, epoch ms, where it has an end of its own: an event's close, a cut's restoration, a rain step's end. */
   untilMs?: number;
-  /** A rain, cut, road or open row's typed facts. */
+  /** A rain, cut, road, open or rail row's typed facts. */
   detail?: NearbyDetail;
+  /** The wall's compositions draw this rail row as a line of cells (kiosk/timeline.ts groupRail sets it); the phone
+   *  and the handheld wall draw the same row as a row, its later trains after "zatim". */
+  asLine?: boolean;
 }
 
 /** Everything the selection reads; the caller owns every clock and cache. */
@@ -196,8 +204,8 @@ export interface NearbyInput {
   venuePoint?: (item: FeedItem) => { lon: number; lat: number } | null;
   /** The canonical name of that same resolved venue, never an unmatched source hint. */
   venueName?: (item: FeedItem) => string | null;
-  /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail rows (default 2), `railFirst` puts
-   *  them before the departure rows (default false). */
+  /** The response policy's seam (U3.md §0.1; U2 sets it): `railMax` caps the rail row's trains (default 3), `railFirst`
+   *  puts the row before the departure rows (default false). */
   policy?: { railMax?: number; railFirst?: boolean };
 }
 
@@ -239,8 +247,8 @@ export const ALWAYS_ALTERNATE_MS = 20 * 60_000;
 export const MAX_CLOSURES = 2;
 export const MAX_EVENTS = 3;
 export const MAX_OPENINGS = 2;
-/** Brief §3: two trains where a station is inside the circle; railRows emits none without one. */
-export const RAIL_MAX_DEFAULT = 2;
+/** One rail row of up to three trains where a station is inside the circle; railRows emits none without one. */
+export const RAIL_MAX_DEFAULT = 3;
 /** An exhibition's venue and an open library or cinema this close are one place (the open place times it). */
 const EXHIBIT_OPEN_PLACE_M = 60;
 /** An exhibition open now stands at its closing time only while at least this much of the day is left. */
@@ -1151,49 +1159,72 @@ function rangeSpans(ranges: string): { open: number; close: number }[] | undefin
 
 // --- (i) the facts-breadth rows, one of each (U3.md S2, S3) ------------------------
 
+/** A Zagreb station or destination as the city reads it: "Zagreb Glavni kolodvor" is "Glavni kolodvor". */
+export function railPlaceName(name: string): string {
+  const rest = name.replace(/^Zagreb\s+/u, '');
+  return rest === '' ? name : rest;
+}
+
 /**
- * The next train from an HŽ station inside the circle (the caller passes the two nearest stations' boards): the
- * timetable's time, never live, with the HŽ short name on the badge ("Vlak" where there is none) and the station
- * under the headsign. At most `policy.railMax` rows (RAIL_MAX_DEFAULT, two, by default); the trams' three are not touched.
+ * The trains from the nearest HŽ station inside the circle (the caller passes the two nearest stations' boards), as
+ * ONE row: most people in the city rarely take a train, and Glavni kolodvor has one every few minutes, so the trains
+ * take a single row however many there are (the wall draws it as a line of cells, the phone as a row with "zatim").
+ * Only the trains still reachable on foot (WALK_MIN_PER_KM from the place to the station), at most `policy.railMax`
+ * (RAIL_MAX_DEFAULT, three), the timetable's times, never live. The row is the first train's (time, headsign, badge:
+ * the HŽ short name, "Vlak" where there is none) with the station under it; its id is the station's, so a train
+ * leaving changes the row and does not replace it. A farther station is read only when the nearest has no train left.
  */
 function railRows(input: NearbyInput): NearbyRow[] {
   const max = Math.max(0, Math.floor(input.policy?.railMax ?? RAIL_MAX_DEFAULT));
   const boards = (input.railBoards ?? []).filter((board) => board.operator === 'hz');
   if (max === 0 || boards.length === 0) return [];
   const { now, place, radiusM } = input;
-  const stations = new Map<string, Place & { lon: number; lat: number }>();
+  const stations: { station: Place & { lon: number; lat: number }; board: DepartureBoard; distance: number }[] = [];
   for (const p of input.city.places) {
-    if (p.category !== 'rail' || !located(p) || distanceM(place, p) > radiusM) continue;
-    if (boards.some((board) => board.stopId === p.sourceRecord)) stations.set(p.sourceRecord, p);
+    if (p.category !== 'rail' || !located(p)) continue;
+    const distance = distanceM(place, p);
+    const board = boards.find((b) => b.stopId === p.sourceRecord);
+    if (distance <= radiusM && board && !stations.some((s) => s.station.sourceRecord === p.sourceRecord)) stations.push({ station: p, board, distance });
   }
-  const held = boards.filter((board) => stations.has(board.stopId));
-  if (held.length === 0) return [];
-  const { rows } = arrivalsAt(held, [], now, { stopIds: held.map((board) => board.stopId), rows: 6 });
-  const out: NearbyRow[] = [];
-  for (const arrival of rows) {
-    if (out.length >= max) break;
-    // A train whose time has come is not one to wait for.
-    if (arrival.atMs < now || !arrival.headsign) continue;
-    const board = held.find((b) => b.departures.some((d) => d.tripId === arrival.tripId && Date.parse(d.at) === arrival.atMs));
-    const station = board ? stations.get(board.stopId) : undefined;
-    if (!station) continue;
-    const routeName = RAIL_SHORT_NAME.test(arrival.routeName) ? arrival.routeName : input.i18n.t('arrivals.train');
-    if (!vetted(input, [['headsign', arrival.headsign], ['name', station.name], ['headsign', routeName]])) continue;
-    out.push({
-      id: `rail:${arrival.tripId || `${arrival.routeId}:${arrival.atMs}`}`,
+  stations.sort((a, b) => a.distance - b.distance || a.station.id.localeCompare(b.station.id));
+  for (const { station, board, distance } of stations) {
+    if (!vetted(input, [['name', station.name]])) continue;
+    // A train that leaves before the walk to its station is over is not one to wait for.
+    const reachableAt = now + (distance / 1000) * WALK_MIN_PER_KM * MINUTE_MS;
+    const { rows } = arrivalsAt([board], [], now, { stopIds: [board.stopId], rows: 12 });
+    const trains: ArrivalRow[] = [];
+    for (const arrival of rows) {
+      if (trains.length >= max) break;
+      if (arrival.atMs < reachableAt || !arrival.headsign) continue;
+      if (!vetted(input, [['headsign', arrival.headsign]])) continue;
+      trains.push(arrival);
+    }
+    const first = trains[0];
+    if (!first) continue;
+    const routeName = RAIL_SHORT_NAME.test(first.routeName) ? first.routeName : input.i18n.t('arrivals.train');
+    if (!vetted(input, [['headsign', routeName]])) continue;
+    const title = oneLine(first.headsign);
+    const sub = oneLine(station.name);
+    const titleShort = railPlaceName(title);
+    const subShort = railPlaceName(sub);
+    return [{
+      id: `rail:${station.sourceRecord}`,
       kind: 'rail',
-      atMs: arrival.atMs,
+      atMs: first.atMs,
       always: false,
-      title: oneLine(arrival.headsign),
-      sub: oneLine(station.name),
+      title,
+      sub,
+      ...(titleShort !== title ? { titleShort } : {}),
+      ...(subShort !== sub ? { subShort } : {}),
       live: false,
       source: 'hz',
       ...placeRef(station),
       map: { id: station.id, geometry: { type: 'Point', coordinates: [station.lon, station.lat] } },
-      arrival: { ...arrival, routeName, live: false, minutes: null },
-    });
+      arrival: { ...first, routeName, live: false, minutes: null },
+      detail: { kind: 'rail', trains: trains.map((t) => ({ id: t.tripId || `${t.routeId}:${t.atMs}`, atMs: t.atMs, to: oneLine(t.headsign) })) },
+    }];
   }
-  return out;
+  return [];
 }
 
 /**

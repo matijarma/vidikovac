@@ -96,7 +96,7 @@ describe('the numbers and the promotion', () => {
   });
   it('moves rail forward while ZET deviates, and leaves today\'s order otherwise', () => {
     expect(railPolicy('silent')).toEqual({ railMax: 3, railFirst: true });
-    expect(railPolicy('reduced')).toEqual({ railMax: 2, railFirst: true });
+    expect(railPolicy('reduced')).toEqual({ railMax: 3, railFirst: true });
     for (const kind of ['loading', 'down', 'unconfirmed', 'normal', 'unknown'] as const) expect(railPolicy(kind)).toBeUndefined();
   });
 });

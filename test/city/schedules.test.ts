@@ -31,6 +31,18 @@ describe('rolling GTFS import',()=>{
     const board=departuresFrom(part,'hz','a',Date.parse('2026-09-18T23:00:00Z'));
     expect(board.status).toBe('live');expect(board.departures[0].at).toBe('2026-09-18T23:30:00.000Z');
   });
+  it('names a train without a trip headsign by its last stop, even one outside Zagreb, never by its route long name',async()=>{
+    const hz={...files,
+      'routes.txt':'route_id,route_short_name,route_long_name\nr,,"Zagreb Glavni kolodvor - Tovarnik"\n',
+      'trips.txt':'route_id,service_id,trip_id,trip_headsign\nr,s,t,\n',
+      'stops.txt':'stop_id,stop_name,stop_lat,stop_lon\na,Zagreb Glavni kolodvor,45.80,15.98\nb,Drugi,45.82,15.98\nc,Tovarnik,45.16,19.15\n',
+    };
+    const result=await buildSchedule(zip(hz),'hz',NOW);
+    expect(result.parts[Number(stopShard('a'))].stops.a.runs[0]![5]).toBe('Tovarnik');
+    // A trip that names its own headsign keeps it.
+    const named=await buildSchedule(zip(files),'zet',NOW);
+    expect(named.parts[Number(stopShard('a'))].stops.a.runs[0]![5]).toBe('Sesvete');
+  });
   // A board of nothing but future departures drops a trip the moment its
   // scheduled minute passes -- which is exactly when a late tram is closest
   // and the rider most wants it (WP5, the join-rate probe's largest miss).

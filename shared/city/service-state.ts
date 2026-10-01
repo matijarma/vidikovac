@@ -157,11 +157,11 @@ export function aboutExpected(expected: number): number {
 }
 
 /**
- * Rail and bikes move forward while ZET deviates (NearbyInput.policy, U3's field): three train
- * rows fill the departures' place when no tram is confirmed, two leave room for confirmed trams.
+ * Rail and bikes move forward while ZET deviates (NearbyInput.policy, U3's field): the one train
+ * row, with its three trains, stands before the departures when no tram is confirmed and when
+ * only some are. It stays one row either way, so it never takes a confirmed tram's room.
  */
 export function railPolicy(kind: Kind): { railMax: number; railFirst: boolean } | undefined {
-  if (kind === 'silent') return { railMax: 3, railFirst: true };
-  if (kind === 'reduced') return { railMax: 2, railFirst: true };
+  if (kind === 'silent' || kind === 'reduced') return { railMax: 3, railFirst: true };
   return undefined;
 }

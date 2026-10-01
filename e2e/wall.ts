@@ -122,8 +122,8 @@ export const FIT_FULL_KEEPS_KINDS: readonly string[] = [...FIT_RESERVED_KINDS, '
  *  departures line's least height is one row too (R1). It serves the path without the line (a handheld, older readings). */
 export const DEPARTURE_ROW_MIN_PX = 64;
 /**
- * The trains the response policy puts before the departures (U2.md §0.1 railPolicy: at most three in silent, two in
- * reduced, `data-kind="rail"` above the first departure row). They fill the departures' place: the fit keeps them before
+ * The train row the response policy puts before the departures (U2.md §0.1 railPolicy, silent and reduced: one row of
+ * up to three trains since 1 Oct, `data-kind="rail"` above the first departure row). They fill the departures' place: the fit keeps them before
  * a second or third departure (app/src/kiosk/timeline.ts breadthRow, dropCandidate), so like a reserved row each lowers
  * the floor, by one, never under DEPARTURES_MIN, and a full list may hold them beside its departures.
  */
