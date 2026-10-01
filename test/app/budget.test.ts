@@ -246,6 +246,56 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
   }
 });
 
+// /snimka/ (docs/snimka-2026-10.md section 8): the entry graph under 200,000 bytes gzipped with no static
+// reference to the map library, the fonts or the network file; the open-map graph (the entry, the map layer the
+// stage imports on demand, MapLibre and its worker) under 620,000. The replay model replaces the integrator
+// (city-map.ts CityMapDeps.createModel), so the integrator chunk is on neither graph.
+describe('/snimka/: the replay page', () => {
+  const ENTRY = 'snimka/index.html';
+  const MAP_LAYER = 'src/snimka/map-layer.ts';
+  const SNIMKA_MAP_BUDGET_BYTES = 620_000;
+
+  it('transfers its entry graph under 200 kB gzipped and never statically references the map library, the fonts or the network file', () => {
+    expect(existsSync(join(outDir, ENTRY)), `${ENTRY} must be built`).toBe(true);
+    const { rows, total } = breakdown(ENTRY);
+    print(ENTRY, rows, total, BUDGET_BYTES);
+    expect(total, `the entry graph of ${ENTRY} is ${total} bytes gzipped`).toBeLessThan(BUDGET_BYTES);
+    const graph = staticGraph(ENTRY);
+    for (const forbidden of FORBIDDEN_CHUNKS) expect(graph, `${ENTRY} statically imports ${forbidden}`).not.toContain(forbidden);
+    expect(manifest[MAP_LAYER]?.isDynamicEntry, 'the map layer is loaded on demand').toBe(true);
+    expect(graph).not.toContain(MAP_LAYER);
+    expect(graph).not.toContain('src/map/city-map.ts');
+    expect(graph).not.toContain('src/motion/integrator.ts');
+    expect(graph).not.toContain('../shared/motion/network.ts');
+    const html = readFileSync(join(outDir, ENTRY), 'utf8');
+    for (const forbidden of FORBIDDEN_CHUNKS) {
+      const file = manifest[forbidden]?.file;
+      if (file) expect(html, `${ENTRY} links ${file}`).not.toContain(file);
+    }
+    expect(html).not.toContain(NETWORK_ARTEFACT);
+    expect(html).not.toContain('.woff2');
+    for (const key of graph) {
+      const js = readFileSync(join(outDir, manifest[key]!.file), 'utf8');
+      expect(js, `${key} names the network artefact`).not.toContain(NETWORK_ARTEFACT);
+      expect(js, `${key} names the schema artefact`).not.toContain(SCHEMA_ARTEFACT);
+    }
+  });
+
+  it('stays under 620 kB compressed when the map opens, without the integrator', () => {
+    const mapGraph = staticGraph(MAP_LAYER);
+    expect(mapGraph, 'the replay model stands in for the integrator').not.toContain('src/motion/integrator.ts');
+    const keys = new Set([...staticGraph(ENTRY), ...mapGraph, ...staticGraph('src/map/maplibre-entry.ts')]);
+    const files = new Set([...keys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
+    const workers = readdirSync(join(outDir, 'assets')).filter((file) => /^maplibre-gl-worker-.*\.js$/.test(file));
+    expect(workers.length, 'the real map worker must be measured').toBeGreaterThan(0);
+    for (const worker of workers) files.add(`assets/${worker}`);
+    const rows = [...files].map(measure);
+    const total = rows.reduce((sum, row) => sum + row.gzip, 0);
+    console.log(`[budget] /snimka/ open-map JS + worker: ${total} gzip bytes`);
+    expect(total, 'the entry, the map layer, MapLibre, the shared chunks and the worker together').toBeLessThan(SNIMKA_MAP_BUDGET_BYTES);
+  });
+});
+
 // ui/print.css is nothing but `@media print`: the build links it with media="print" (vite.config.ts,
 // app/src/print-media.ts), so it is still on the wire (and counted above) but never blocks the first render.
 describe('the print sheet never blocks rendering', () => {

@@ -547,6 +547,10 @@ export interface CityMapHandle {
   /** The district outline to draw, dashed; null clears it. */
   setOutline?(outline: MapOutline | null): void;
   setCityPaths?(lines: MapLine[]): void;
+  /** /snimka/'s comparison day: [lon, lat] points drawn as plain grey discs under the vehicle marks
+   *  (overlays.ts ghostLayer). The source and the layer exist only once a page has called this; a
+   *  surface that never does draws exactly what it drew before. [] clears them. */
+  setGhosts?(points: readonly (readonly [number, number])[]): void;
   /** Ambient emphasis never changes personal selection, camera or follow. */
   setHighlight?(highlight: MapHighlight | null): void;
   setPresentationProfile?(profile: MapPresentation, symbolScale?: number): void;
@@ -608,6 +612,11 @@ export interface CityMapDeps {
   now?: () => number;
   origin?: string;
   documentRef?: Document;
+  /** The motion model for the network the map loads. Absent, the map imports the integrator
+   *  (motion/integrator.ts) as every live surface does. /snimka/ hands in a stateless replay model
+   *  whose step() reads its own clock, so the integrator chunk is never loaded there. `net` is null
+   *  when the artefact did not load. */
+  createModel?: (net: Network | null) => Model;
 }
 
 // --- The marker census (WP2, the probe contract of the companion plan §15.6)
@@ -845,6 +854,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** The stops the map's `stops` source was built with (the census reads them for the names it would draw). */
   let stopsData: { features: readonly SourcePoint[] } = { features: [] };
   let cityPaths: MapLine[] = [];
+  /** setGhosts: null until a page asks for ghosts; from then on what the ghost source is set from. */
+  let ghosts: readonly (readonly [number, number])[] | null = null;
+  let ghostsOnStyle = false;
   let lastDrawn: Drawn[] = [];
   let lastPushedSignature = '';
   /** The model's output as the last frame saw it (vehicle-features.ts stepSignature): whether the fleet still moves. */
@@ -1364,7 +1376,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const [loaded, network, factory] = await Promise.all([
       loadMaplibre().then((m) => m, () => null),
       options.loadNetwork ? options.loadNetwork().catch(() => null) : Promise.resolve(null),
-      import('../motion/integrator').then((m) => m.createIntegrator, () => null),
+      deps.createModel ? Promise.resolve(deps.createModel) : import('../motion/integrator').then((m) => m.createIntegrator, () => null),
     ]);
     if (disposed) return;
     // Load the model independently of MapLibre: a missing WebGL renderer still leaves motion for the plain lists.
@@ -1621,6 +1633,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     }
     created.addLayer({id:'ambient-highlight-line',type:'line',source:'ambient-highlight',filter:['!=',['geometry-type'],'Point'],paint:{'line-color':palette.selection,'line-width':3*scale}});
     created.addLayer({id:'ambient-highlight-point',type:'circle',source:'ambient-highlight',filter:['==',['geometry-type'],'Point'],paint:{'circle-radius':18*scale,'circle-opacity':0,'circle-stroke-color':palette.selection,'circle-stroke-width':2*scale}});
+    if (ghosts !== null) putGhosts(created, l);
     styled = true;
     refreshTileLabels();
     // A resize or a deliberate presentation can arrive before the library or
@@ -1803,6 +1816,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     focusedApplied = focusRouteId();
     fadeInLit(map, l, litRouteOf(options));
     writeFocusProbe(map, l);
+    if (ghostsOnStyle) applyOps(map, [{ id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-color', value: palette.rail }, { id: l.LAYERS.ghosts, kind: 'paint', key: 'circle-radius', value: l.GHOST_RADIUS_PX * scale }]);
+  }
+
+  /** The ghost source and layer (overlays.ts ghostLayer), added once, under the vehicle bodies and dots
+   *  and over the city's own marks; set from whatever setGhosts last handed in. */
+  function putGhosts(m: MapApi, l: MaplibreModule): void {
+    if (!ghostsOnStyle) {
+      m.addSource(l.SOURCES.ghosts, { type: 'geojson', data: l.ghostsToGeoJson(ghosts ?? []) });
+      m.addLayer(l.ghostLayer(l.overlayPalette(theme), scale) as unknown as Record<string, unknown>, l.LAYERS.vehicleBodies);
+      ghostsOnStyle = true;
+      return;
+    }
+    m.getSource(l.SOURCES.ghosts)?.setData(l.ghostsToGeoJson(ghosts ?? []));
   }
 
   /** The route the lit layers draw for these options: the focused one under line focus, else the selected route. */
@@ -2137,6 +2163,10 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
       applyOverlays();
     },
     setCityPaths(next) { cityPaths=next; if(styled&&lib?.CITY_PATHS)setData(lib.CITY_PATHS,lib.linesToGeoJson(next,wallLabels)); },
+    setGhosts(next) {
+      ghosts = next;
+      if (styled && map && lib) putGhosts(map, lib);
+    },
     setHighlight(next) {
       if(JSON.stringify(next)===JSON.stringify(highlight))return;
       highlight=next;

@@ -1,1 +1,96 @@
-/* Kaj ima? / Snimka: the stage (map, clock plate, controls, scrubber, side column). Owner: lane S2 (app/src/snimka/stage.ts); page level is in snimka.css. */
+/* Kaj ima? / Snimka: the stage (map, clock plate, controls, scrubber, side column). Owner: lane S2 (app/src/snimka/stage.ts); page level is in snimka.css.
+   Layer-2 tokens only. Desktop: the map and its controls on the left, a 20rem side column on the right; under 60rem the column stacks
+   beneath. The map box is min(58vh, 36rem) tall, 56vh on a phone, with the clock plate laid over its top-left corner. Every control
+   is at least 44 px (--target) and takes the page's own focus ring from base.css. */
+
+.sn-stage { position: relative; }
+.sn-stage[aria-busy='true'] .sn-stage-grid { visibility: hidden; }
+.sn-stage-grid { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: var(--sp-5); align-items: start; padding: var(--sp-4); }
+.sn-stage-main { display: grid; gap: var(--sp-4); min-inline-size: 0; }
+.sn-side { display: grid; gap: var(--sp-3); min-inline-size: 0; }
+
+/* The map box and the clock plate over it. */
+.sn-map-box { position: relative; block-size: min(58vh, 36rem); min-block-size: 18rem; border-radius: var(--r-lg); overflow: hidden; background: var(--tone-surface-3); isolation: isolate; }
+/* A block filling its box, not an absolute inset: MapLibre's own sheet makes its container position: relative, which an inset would lose, leaving a 300 px canvas in a 522 px box. */
+.sn-map { inline-size: 100%; block-size: 100%; }
+.sn-map .maplibregl-canvas { outline-offset: -2px; }
+.sn-map[data-map-status='unavailable'] { background: var(--tone-surface-2); }
+.sn-plate { position: absolute; inset-block-start: var(--sp-3); inset-inline-start: var(--sp-3); z-index: 2; display: grid; gap: 0; padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); background: var(--tone-glass-bg, color-mix(in oklab, var(--tone-surface-1) 88%, transparent)); border: 1px solid var(--tone-glass-stroke, var(--tone-stroke)); box-shadow: var(--tone-shadow-soft); pointer-events: none; }
+.sn-plate-day { font-size: var(--type-secondary); font-weight: var(--weight-bold); color: var(--tone-text-muted); letter-spacing: 0.02em; }
+.sn-plate-time { font-size: clamp(2rem, 1.4rem + 2vw, 2.75rem); font-weight: var(--weight-bold); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--tone-text-primary); }
+
+/* The lightweight variant: the fleet numbers where the map would be. */
+.sn-lagano { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: var(--sp-2); padding: var(--sp-6) var(--sp-4); text-align: center; }
+.sn-lagano-num { font-size: clamp(3rem, 2rem + 6vw, 6rem); font-weight: var(--weight-bold); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.sn-lagano-label { font-size: var(--type-head); font-weight: var(--weight-bold); }
+.sn-lagano-expected { font-size: var(--type-body); color: var(--tone-text-muted); min-block-size: 1.4em; }
+.sn-lagano-note { margin-block-start: var(--sp-3); max-inline-size: 36ch; }
+
+/* The controls row. */
+.sn-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.sn-play { min-inline-size: 7.5rem; }
+.sn-chapters { display: inline-flex; gap: var(--sp-2); }
+.sn-chapter { inline-size: var(--target); padding: 0; font-size: var(--type-head); line-height: 1; }
+.sn-speed { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: 0.125rem; border-radius: var(--r-md); background: var(--tone-surface-2); }
+.sn-speed .segment { flex: 1 1 auto; min-block-size: var(--target); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--tone-text-muted); font: inherit; font-size: var(--type-control); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation; }
+.sn-speed .segment[aria-pressed='true'] { background: var(--tone-surface-1); color: var(--tone-text-primary); font-weight: var(--weight-bold); box-shadow: var(--tone-shadow-soft); }
+@media (hover: hover) { .sn-speed .segment:not([aria-pressed='true']):hover { color: var(--tone-text-primary); } }
+.sn-speed-pick { display: none; }
+.sn-speed-select { min-block-size: var(--target); padding-inline: var(--sp-3); font-size: var(--type-control); font-weight: var(--weight-bold); border-radius: var(--r-md); background: var(--tone-surface-2); border: 1px solid transparent; color: var(--tone-text-primary); }
+
+/* The scrubber: a native range, with the chapter ticks and the day lines drawn beside it, never inside the input. */
+.sn-scrub { display: grid; grid-template-rows: auto auto; gap: var(--sp-1); padding-block-start: var(--sp-2); }
+.sn-range { inline-size: 100%; min-block-size: var(--target); margin: 0; accent-color: var(--tone-action-brand); cursor: pointer; }
+.sn-scrub-marks { position: relative; block-size: 0.75rem; margin-inline: 0.5rem; }
+.sn-mark-chapter, .sn-mark-day { position: absolute; inset-block-start: 0; translate: -50% 0; }
+.sn-mark-chapter { inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
+.sn-mark-day { inline-size: 1px; block-size: 0.75rem; background: var(--tone-stroke-strong); }
+.sn-scrub-days { position: relative; block-size: 1.25rem; margin-inline: 0.5rem; }
+.sn-day-label { position: absolute; inset-block-start: 0; translate: -50% 0; font-size: var(--type-meta); color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* The layers row and the notes. */
+.sn-layers { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
+.sn-layers-label { font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-text-muted); }
+.sn-layer-note { flex-basis: 100%; margin-block-start: 0; }
+.sn-status { min-block-size: 1.4em; margin: 0; font-size: var(--type-control); color: var(--tone-text-muted); font-variant-numeric: tabular-nums; }
+.sn-reduced-note { margin-block-start: 0; }
+
+/* The side column's cards. */
+.sn-card { gap: var(--sp-2); padding: var(--sp-4); }
+.sn-card h3 { font-size: var(--type-secondary); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-label); }
+.sn-badge-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; }
+.sn-badge { min-block-size: 1.9rem; padding-inline: var(--sp-3); font-size: var(--type-control); }
+.sn-retro { font-size: var(--type-meta); font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tone-text-muted); border: 1px dashed var(--tone-stroke-strong); border-radius: var(--r-xs); padding: 0.1rem 0.4rem; }
+.sn-counts { margin: 0; font-size: var(--type-body); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.sn-holds, .sn-feed, .sn-retro-note, .sn-card-meta, .sn-none { margin: 0; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.5; }
+.sn-feed { color: var(--tone-text-primary); }
+.sn-retro-note { font-size: var(--type-meta); }
+.sn-card-body { display: grid; gap: var(--sp-2); }
+.sn-card-title { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); line-height: 1.35; }
+.sn-headline, .sn-link { color: var(--tone-text-primary); text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
+.sn-card-meta a { color: var(--tone-text-primary); }
+.sn-stage [hidden] { display: none !important; }
+
+/* Narrower than the two columns: the side column stacks under the stage. */
+@media (max-width: 60rem) {
+  .sn-stage-grid { grid-template-columns: minmax(0, 1fr); }
+  .sn-side { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+}
+/* A phone: the native select replaces the segmented speed control, the map is 56vh, the controls wrap. */
+@media (max-width: 40rem) {
+  .sn-stage-grid { padding: var(--sp-3); gap: var(--sp-4); }
+  .sn-map-box { block-size: 56vh; min-block-size: 16rem; }
+  .sn-speed { display: none; }
+  .sn-speed-pick { display: block; flex: 1 1 8rem; }
+  .sn-speed-select { inline-size: 100%; }
+  .sn-play { flex: 1 1 7rem; }
+  .sn-side { grid-template-columns: minmax(0, 1fr); }
+  .sn-day-label { font-size: 0.65rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn-range { scroll-behavior: auto; }
+}
+@media print {
+  .sn-controls, .sn-scrub, .sn-layers, .sn-status { display: none; }
+}
