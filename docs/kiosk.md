@@ -23,20 +23,23 @@ upute o pretraživanju dodirom. Ukratko:
 - Uz kartu stoji popis „U blizini · 2 km · ~15 min” (naslov ispisuje
   izmjereni polumjer kruga i vrijeme hoda; primjer vrijedi za krug od 2 km):
   prvi je redak polazaka, s najviše tri polaska jedan do drugoga, svaki s
-  brojem linije, vremenom i odredištem, plavo „za N min” za praćeno vozilo i
-  sivi sat za vozni red; zatim retci s vremenom i na kraju jedan redak
-  „uvijek”. Kad tri odredišta ne stanu, drugi i treći polazak ostaju bez
-  odredišta. Telefon zadržava tri zasebna retka polazaka.
-- Popis je poredan po vrijednosti retka: koliko je njegov trenutak blizu, koje
-  je vrste i koliko dugo nije bio prikazan. U ritmu rečenice u zaglavlju
-  (Ritam 20, 30 ili 60 sekundi) zaslon povremeno otkrije ono što ne stane:
-  svaki treći takt najviše dva retka, koji nisu rezervirani i nisu unutar pola
-  sata od svojeg trenutka, zamijene se retcima s druge stranice, a kad je prvi
-  polazak dalje od deset minuta, redak polazaka svaki četvrti takt pokaže
-  sljedeće polaske s oznakom „zatim”. Odjednom se mijenja najviše jedan dio
-  zaslona i nijedan se ne pomiče dok je otvorena ploča na dodir, dok je zaslon
-  uparen ili dok zaglavlje drži stanje usluge; uz smanjeno kretanje i u
-  laganom prikazu retci se mijenjaju bez klizanja.
+  brojem linije i vremenom, a s odredištem kad za njega stane; plavo „za N
+  min” za praćeno vozilo, odnosno plavo vrijeme sata kad odbroj ne stane u
+  ćeliju, i sivi sat za vozni red; zatim retci s vremenom i na kraju jedan
+  redak „uvijek”. Telefon zadržava tri zasebna retka polazaka.
+- Popis je poredan po vrijednosti retka: koliko je njegov trenutak blizu i
+  koje je vrste. Prva stranica zadržava taj statični redoslijed, a retci koji
+  nisu bili prikazani deset minuta dobivaju prednost samo na drugoj stranici.
+  U ritmu rečenice u zaglavlju (Ritam 20, 30 ili 60 sekundi) zaslon povremeno
+  otkrije ono što ne stane: za okretanje stranice podoban je svaki treći takt,
+  kada se najviše dva retka koji nisu rezervirani i nisu unutar pola sata od
+  svojeg trenutka zamijene retcima s druge stranice, a kad je prvi polazak
+  dalje od deset minuta, redak polazaka na svakom četvrtom podobnom taktu
+  pokaže sljedeće polaske s oznakom „zatim”. Između početaka dvaju otkrivanja
+  prolaze najmanje tri takta. Odjednom se mijenja najviše jedan dio zaslona i
+  nijedan se ne pomiče dok je otvorena ploča na dodir, dok je zaslon uparen ili
+  dok zaglavlje drži stanje usluge; uz smanjeno kretanje i u laganom prikazu
+  retci se mijenjaju bez klizanja.
 - Ispod popisa trajno je rezerviran QR s uvodom
   „Skeniraj za 10 minuta grada.”, kodom i adresom za upis koda. Sam QR kod
   ima 226 CSS piksela na zaslonu 1920 × 1080 (113 mm na panelu od 43 inča)
@@ -251,12 +254,13 @@ točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
 grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
 ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
 
-Kad radar DHMZ-a pokazuje kišu unutar kvadrata od 30 km oko Zagreba, ili satna
-prognoza najbliže postaje najavljuje kišu unutar dva sata, u donjem lijevom
-kutu karte stoji isječak DHMZ-ova radarskog kompozita oko Zagreba, 240 × 240
-piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se osvježava kad DHMZ objavi
-novu sliku; kad slika nije svježa ili se ne može pročitati, isječka nema, a
-zaslon ne tvrdi da kiše nema. U laganom prikazu isječka nema.
+Kad se R3 spoji u DR3, radar DHMZ-a pokazuje kišu unutar kvadrata od 30 km oko
+Zagreba, ili satna prognoza najbliže postaje najavljuje kišu unutar dva sata,
+u donjem lijevom kutu karte stoji isječak DHMZ-ova radarskog kompozita oko
+Zagreba, 240 × 240 piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se
+osvježava kad DHMZ objavi novu sliku; kad slika nije svježa ili se ne može
+pročitati, isječka nema, a zaslon ne tvrdi da kiše nema. U laganom prikazu
+isječka nema.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
@@ -662,7 +666,8 @@ nisu polasci zaslon pokazao tijekom promatranja, a isto po satima ispisuje
 `node scripts/shown-facts.mjs <mapa promatranja> [--json <datoteka>]`. Promatranje nakon
 isporuke čita DEV zaslon mreže s koje se pokreće (`POST /api/dev/screen`, opisano u zaglavlju
 `worker/routes/dev.ts`), koji se nigdje ne broji; promatrač učitava samo njegov fragment, pa
-zaslon izgleda kao svaki drugi.
+zaslon izgleda kao svaki drugi. Na DEV zaslonu redak `phone-expiry` nije ocjenjiv; dok promatrač
+ne dobije tu oznaku, njegov crveni ishod ne tumači se kao kvar.
 
 Snimke i automatizirani rezultati nisu dokaz da je QR fizički skeniran s nekoliko
 metara ili da je aplikacija provjerena na iPhoneu i Androidu. Takva mjerenja
