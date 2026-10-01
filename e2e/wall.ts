@@ -604,7 +604,7 @@ export function revealEpisodes(samples: readonly Pick<WallSample, 'at' | 'reveal
   const close = (i: number): void => {
     if (!open) return;
     const m = REVEAL_VALUE_RE.exec(open.value);
-    if (m) {
+    if (m && Number.isSafeInteger(Number(m[2]))) {
       out.push({
         region: open.region, kind: m[1] as 'page' | 'advance', beat: Number(m[2]),
         firstAt: samples[open.first]!.at, lastAt: samples[open.last]!.at,
@@ -638,6 +638,14 @@ export function revealCadenceFailures(samples: readonly Pick<WallSample, 'at' | 
   const out: string[] = [];
   for (const s of samples) {
     if (!s.reveal) continue;
+    for (const region of ['list', 'line'] as const) {
+      const value = s.reveal[region];
+      if (!value) continue;
+      const match = REVEAL_VALUE_RE.exec(value);
+      if (!match || !Number.isSafeInteger(Number(match[2]))) {
+        out.push(`reading at ${atIso(s.at)}: malformed reveal value on ${region} (${value}; target page:<beat> or advance:<beat>)`);
+      }
+    }
     if (s.reveal.list && s.reveal.line) out.push(`reading at ${atIso(s.at)}: both regions carry a reveal (list ${s.reveal.list}, line ${s.reveal.line}; target one region per beat)`);
     if (s.reveal.list?.startsWith('advance:')) out.push(`reading at ${atIso(s.at)}: an advance value on the list (${s.reveal.list})`);
     if (s.reveal.line?.startsWith('page:')) out.push(`reading at ${atIso(s.at)}: a page value on the line (${s.reveal.line})`);
@@ -1307,7 +1315,11 @@ export function calmMotionFailures(r: CalmMotionReading): string[] {
     out.push(...revealPairFailures(r, pairs, r.recordsBySeg!, 'structural mutations'));
     const inPairs = new Set(pairs);
     const rest = r.mutations - pairs.reduce((n, seg) => n + r.recordsBySeg![seg]!, 0);
-    const outside: CalmMotionReading = { ...r, mutations: rest, detail: { ...r.detail!, records: r.detail!.records.filter((x) => !inPairs.has(x.seg)) } };
+    const outside: CalmMotionReading = {
+      ...r, mutations: rest,
+      churn: r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0),
+      detail: { ...r.detail!, records: r.detail!.records.filter((x) => !inPairs.has(x.seg)) },
+    };
     if (rest > IDLE_MUTATIONS_MAX && !calmRestoreBeat(outside)) out.push(`${rest} structural mutations under the timeline in an idle minute outside its ${pairs.length} reveal pair(s) (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
   } else if (r.mutations > IDLE_MUTATIONS_MAX && !calmRestoreBeat(r)) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);

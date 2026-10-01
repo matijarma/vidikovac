@@ -314,6 +314,11 @@ describe('the thresholds are one table with a stage per row', () => {
       expect(wall.REVEAL_MUTATIONS_MAX).toBe(6);
     });
 
+    it.each(['page:NaN', 'page:12x', 'unknown:12', 'page:9007199254740992'])('rejects malformed reveal values instead of treating %s as no reveal', (value) => {
+      const rot = rotation(1, () => ({ list: value }));
+      expect(wall.revealCadenceFailures(rot)).toEqual([expect.stringContaining('malformed reveal value')]);
+    });
+
     it('reads a clean page episode of ten readings at Ritam 20 as one episode with no failure', () => {
       const rot = rotation(40, episode(10, 19, (b) => ({ list: `page:${b}` })));
       const episodes = wall.revealEpisodes(rot);
