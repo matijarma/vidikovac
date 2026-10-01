@@ -174,6 +174,31 @@ Izvedeni podatak, mrežni artefakt za model kretanja (area T, `docs/arhitektura.
 
 Drugi izvedeni artefakt: `app/public/data/zet-trips.json` (artefakt gradi `scripts/gtfs-trips.mjs` iz istog statičnog GTFS-a, s istom `feed_version` kao mrežni artefakt, što provjerava test): indeks vožnji koji blizanac (`worker/do/twin-do.ts`, `docs/arhitektura.md` §"Model kretanja vozila") jednom po verziji feeda učita i kopira u svoj SQLite, da bi svaki `tripId` iz feeda u stvarnom vremenu u jednom upitu dobio smjer, odredište, oblik i blok. Sirovi okviri ZET-ova feeda u stvarnom vremenu spremaju se u R2 spremnik `vidikovac-feed` (sedam dana, pravilo isteka na samom spremniku) za ponavljanje i ocjenu modela kretanja; ni jedno ni drugo nije objavljeno pod `/open`. Worker jednom na sat provjeri zaglavljem (`HEAD`, bez preuzimanja) je li statični GTFS noviji od ugrađenih artefakata i broji to na `/stats`; tada se oba artefakta grade iznova (`npm run build:network && npm run build:trips`) i objavljuju.
 
+### Snimka na `/snimka/`, odluka od 1. listopada 2026.
+
+Stranica `/snimka/` („Tri dana bez tramvaja”) ponavlja na jednoj vremenskoj osi razdoblje od nedjelje 27. rujna u 20:00 do četvrtka 1. listopada 2026. u 08:00 po zagrebačkom vremenu: u tom su razdoblju, od 28. do 30. rujna, radnici ZET-a i Zagrebačkog holdinga štrajkali, vozni park ZET-a gotovo je nestao s ulica, a svaki izvor aplikacije i dalje je odgovarao. Ponavlja se ono što je snimljeno, istim motorom koji aplikacija koristi; ništa nije izmišljeno. Stranica nikad ne zove živi izvor: sve čita iz izvedenog skupa podataka. Opis stranice je u `docs/snimka-2026-10.md`.
+
+**Vlasnikova odluka od 1. listopada 2026. (S-1 u tom opisu).** Izvedeni ZET-ovi položaji smiju se objaviti za razdoblje od nedjelje 27. rujna u 20:00 do četvrtka 1. listopada u 08:00 po zagrebačkom vremenu i za cijeli običan radni dan, četvrtak 24. rujna 2026., kao usporedbu. Sirovi GTFS-RT okviri i dalje se nikad ne poslužuju. Time se mijenja odluka O-73 (22. rujna 2026.: ZET-ovi okviri ostaju ispitni primjeri u repozitoriju i ne poslužuju se klijentima), i to samo za izvedene povijesne položaje. Skup se poslužuje iz R2 spremnika `vidikovac-feed`, iz prefiksa `archive/strike-2026-09/public/v1/`, kroz `/api/snimka/v1/` (`worker/routes/snimka.ts`). Ruta preslikava samo taj prefiks, pa ne može doseći sirove okvire pod `zet-rt/`; prefiks je izvan sedmodnevnog pravila isteka. U skupu nema nijedne brojke o ljudima, ni zaokružene ni sažete.
+
+**Ovo nije vraćanje vijesti.** Stranica je jednokratni povijesni zapis, a ne novi izvor vijesti: odluka od 16. rujna 2026. („Ovo nije aplikacija za vijesti”) i dalje vrijedi za proizvod. Tri medija navode se kao izvori povijesnog zapisa, svaki naslov s poveznicom na izvorni članak, bez ijedne riječi teksta ili opisa. HRT, Index i 24sata ostaju izvan stranice.
+
+Riječ „štrajk” stoji samo u tekstu stranice, uz izvore: ZET-ovu obavijest od 27. rujna 2026. u 16:27 (10164) i presude Županijskog suda u Zagrebu od 30. rujna 2026., prema izvještajima medija i ZET-ovoj obavijesti (10167). Zaslon u snimci nikad je ne ispisuje: aplikacija je znala stanje voznog parka, ne i njegov uzrok, a katalozi, rečenice i stanje usluge proizvoda ostaju bez riječi o uzroku.
+
+| Skup na stranici | Izvor | Osnova i ograničenje | Atribucija (doslovno, kako je nosi stranica) |
+|---|---|---|---|
+| Položaji vozila | ZET, GTFS-RT, https://www.zet.hr/gtfs-rt-protobuf, okviri snimljeni svakih 10 s | Otvorena dozvola; sirovi okviri se ne objavljuju, samo položaji izvedeni modelom kretanja | Public dataset by ZET provided under Open license, dataset source http://www.zet.hr/odredbe/datoteke-u-gtfs-formatu/669. Prilagodba: položaji vozila izvedeni modelom kretanja iz snimljenih GTFS-RT okvira, 10-sekundni korak; sirovi okviri se ne objavljuju |
+| ZET-ove obavijesti | ZET, RSS, https://www.zet.hr/rss_promet.aspx i https://www.zet.hr/rss_novosti.aspx, obavijesti 10164 do 10168 | Naslov, datum i poveznica; uvjeti ponovne uporabe nisu objavljeni (upit ZET-u je zadatak M2 i ostaje otvoren) | Izvor: ZET |
+| Bicikli i stanice | nextbike (BAJS), GBFS | CC0-1.0; snimljeno stanje 200 stanica, na stranici svakih pet minuta; nedostajući podatak nije nula | Bicikli: nextbike (BAJS), GBFS, CC0 1.0. |
+| Zatvorene ulice | Grad Zagreb, data.zagreb.hr, skup „Zatvaranje prometnica na području Grada Zagreba” | Otvorena dozvola; svaka različita kopija skupa čuva se s krajem kako je tada bio objavljen | Sadrži informacije Grada Zagreba (data.zagreb.hr) u skladu s Otvorenom dozvolom |
+| Temperatura i vrijeme | DHMZ, trenutna mjerenja, postaja Zagreb-Maksimir | Otvorena dozvola; jedno mjerenje po satu | Izvor: DHMZ, Otvorena dozvola |
+| Naslovi, Jutarnji list | https://www.jutarnji.hr/feed | naslovi i poveznice uz atribuciju, bez teksta; odabrane stavke iz snimki RSS-a 27. 9. do 1. 10. 2026. | Naslovi: Jutarnji list. Svaki naslov vodi na izvorni članak; ovdje se prenose samo naslovi. |
+| Naslovi, Večernji list | https://www.vecernji.hr/rss | naslovi i poveznice uz atribuciju, bez teksta; odabrane stavke iz snimki RSS-a 27. 9. do 1. 10. 2026. | Naslovi: Večernji list. Svaki naslov vodi na izvorni članak; ovdje se prenose samo naslovi. |
+| Naslovi, N1 | https://n1info.hr/feed/ | naslovi i poveznice uz atribuciju, bez teksta; odabrane stavke iz snimki RSS-a 27. 9. do 1. 10. 2026. | Naslovi: N1. Svaki naslov vodi na izvorni članak; ovdje se prenose samo naslovi. |
+| Osnovna karta | OpenStreetMap, preko Protomaps arhive `zagreb-v1` koju aplikacija sama poslužuje; isti su pločice i na snimkama zaslona | ODbL 1.0 | © OpenStreetMap contributors |
+| Snimke javnog zaslona i objavljeni brojevi | Kaj ima?, snimljeni zaslon i stanje koje je aplikacija objavljivala; kod za uparivanje na snimkama je zamućen | Kod je AGPL-3.0-or-later | Kaj ima? |
+
+Brojke na stranici (sati bez vozila, vozila u 07:45, bicikli, minute povratka) izračunava sama stranica iz skupa, čistim funkcijama, a uz svaku piše kako je izračunata. Stanje usluge prije 29. rujna 2026. u 23:17 po zagrebačkom vremenu, kad ga je aplikacija počela objavljivati, izračunano je naknadno, istim pravilima, nad snimljenim podacima i tako je označeno.
+
 ## Izvori planirani za financirano razdoblje
 
 | Izvor | Adresa | Stanje | Licenca ili uvjet | Kako ćemo navesti izvor |

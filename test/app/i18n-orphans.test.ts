@@ -157,9 +157,10 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // The reveal pass R3 +14: kiosk.nearby.rainRadar, cut.plin, cut.plinDay, kiosk.sentence.utility.plin, the six families
     // (rainNow, bioToday, heatWave, coldWave, dryUntil, hourlyTemp), kiosk.map.radarCredit, weather.bio, weather.waves,
     // events.filter.kids: 1,141 hr, 1,112 en.
+    // The snimka pass S4 +1 landing.actions.snimka, the landing's link to /snimka/ (app/index.html): 1,142 hr, 1,113 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1141);
-    expect(leafKeys(en).length).toBe(1112);
+    expect(leaves.length).toBe(1142);
+    expect(leafKeys(en).length).toBe(1113);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });
