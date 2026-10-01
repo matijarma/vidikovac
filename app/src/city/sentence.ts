@@ -506,9 +506,9 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
     for (const rowId of input.reveal.ids) {
       const fact = facts.find(f => f.id === rowId || f.id.startsWith(`${rowId}:`));
       if (!fact) continue;
-      const validUntil = Math.min(fact.validUntil, until);
+      const validUntil = Math.min(fact.validUntil ?? until, until);
       if (validUntil <= now) continue;
-      revealed.push({ ...fact, id: `reveal:${fact.id}`, factKey: fact.factKey ?? fact.id, validUntil, formUntil: Math.min(fact.formUntil ?? fact.validUntil, until) });
+      revealed.push({ ...fact, id: `reveal:${fact.id}`, factKey: fact.factKey ?? fact.id, validUntil, formUntil: Math.min(fact.formUntil ?? fact.validUntil ?? until, until) });
     }
     facts.splice(lead === -1 ? facts.length : lead, 0, ...revealed);
   }
