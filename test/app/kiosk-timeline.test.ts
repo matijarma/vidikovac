@@ -497,6 +497,63 @@ describe('calm motion (principle 7)', () => {
     }
   });
 
+  it.each([false, true])('R2 observation: preserves the exact two-reorder sequence and every surviving trip, reduced=%s', (reduced) => {
+    // observe-DR2/calm.jsonl, readings 120 to 150: 12 leaves, 17 enters, then two real order changes.
+    // A same-node replaceChildren is not a one-record batch in Chromium: it removes each live argument first.
+    // Keep the single-turnover path and minimal keyed moves; the idle-budget conflict needs an owner decision.
+    const start = 1790820742095;
+    const tripIds = ['dep:0_30_1201_12_10005', 'dep:0_30_3202_32_10107', 'dep:0_30_601_6_10014', 'dep:0_30_1701_17_10007'];
+    const routes = ['12', '32', '6', '17'];
+    const departures = routes.map((route, index) => dep(index + 1, {
+      id: tripIds[index]!, title: 'Dubrava', live: false, atMs: start + (index + 1) * MIN,
+      arrival: { routeId: route, routeName: route },
+    }));
+    const fixed = [
+      row({ id: 'notice:zet-promet:9564', kind: 'notice', title: 'ZET javlja', atMs: start }),
+      row({ id: 'first:2026-10-01', kind: 'first', title: 'Prvi tramvaj', atMs: start + 2 * 3_600_000 }),
+      row({ id: 'closure:grada-vukovara:2026-04-18T07:00:00.000Z', kind: 'closure', title: 'Vukovarska', atMs: start + 3 * 3_600_000 }),
+      always({ id: 'always:pharmacy', kind: 'pharmacy', title: '24/7', sub: '' }),
+    ];
+    const rows = (order: number[]): TimelineRow[] => [...order.map((index) => departures[index]!), ...fixed];
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    const t = mount({ measure: simulated(WALL_1920), reduced });
+    t.update(rows([0, 1, 2]), 2200, start);
+    const originalLine = line()!;
+    const survivors = new Map([...items(), ...cells()].map((node) => [node.dataset.id!, node]));
+    const replace = vi.spyOn(originalLine, 'replaceChildren');
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(section(), { subtree: true, childList: true });
+    let previousAt = start;
+    for (const [at, order, turnover] of [
+      [1790820764094, [1, 2, 3], true],
+      [1790820800153, [2, 1, 3], false],
+      [1790820805094, [2, 3, 1], false],
+    ] as const) {
+      vi.advanceTimersByTime(at - previousAt);
+      previousAt = at;
+      t.update(rows([...order]), 2200, at);
+      expect(cellIds()).toEqual(order.map((index) => tripIds[index]));
+      expect(line()).toBe(originalLine);
+      for (const node of [...items(), ...cells()]) {
+        if (survivors.has(node.dataset.id!)) expect(node).toBe(survivors.get(node.dataset.id!));
+        else survivors.set(node.dataset.id!, node);
+      }
+      cells().forEach((node, index) => {
+        expect(node.dataset.cell).toBe(String(index + 1));
+        expect(node.dataset.key).toBe(tripIds[order[index]!]);
+        expect(node.hasAttribute('data-enter')).toBe(!reduced && turnover && order[index] === 3);
+      });
+      expect(host.querySelector('[data-slide], [data-reveal]')).toBeNull();
+      // Both an actual turnover and a minimal same-parent move cost two records, never a full-line rebuild.
+      expect(observer.takeRecords().filter((r) => [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))).toHaveLength(2);
+      expect(replace).not.toHaveBeenCalled();
+      t.update(rows([...order]), 2200, at);
+      expect(observer.takeRecords()).toHaveLength(0);
+    }
+    observer.disconnect();
+  });
+
   it('keeps ten idle minutes within the recorder budget when rejected rows change on every poll', () => {
     const measure = simulated(WALL_1920);
     const t = mount({ measure });
