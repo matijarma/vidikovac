@@ -111,7 +111,7 @@ export interface SceneTeaser { generatedAt: string; modules: ModuleSnapshot[] }
 /** /api/teaser as the wall reads it at `at`, from snapshots stamped for `stampedAt`. */
 export function sceneTeaser(snapshots: Readonly<Record<ModuleId, ModuleSnapshot>>, stampedAt: number, at: number): SceneTeaser {
   const shifted = restampSnapshots(snapshots, stampedAt, at);
-  return { generatedAt: new Date(at).toISOString(), modules: Object.values(shifted).map((s) => teaserSubset(s, FIXTURE_STOP)) };
+  return { generatedAt: new Date(at).toISOString(), modules: Object.values(shifted).map((s) => teaserSubset(s, FIXTURE_STOP, at)) };
 }
 
 /**

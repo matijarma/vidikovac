@@ -7,7 +7,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Page, Route } from '@playwright/test';
 import {
   ACCEPT_ARTEFACTS, ALWAYS_WORD, attrOf, AXE_BLOCKING, AXE_TAGS, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE,
@@ -120,6 +120,25 @@ describe('the numbers the specs hold', () => {
 
 // --- the scene clock and the teaser ---------------------------------------------------------
 describe('the scene clock and the re-stamped teaser', () => {
+  it('uses the scene clock, not the host date, to filter hourly and culture items', () => {
+    const at = PEAK.now;
+    const hostClock = vi.spyOn(Date, 'now').mockReturnValue(at + 20 * 86_400_000);
+    const modules = Object.fromEntries(['dhmz-hourly', 'kultura-zg'].map(module => [module, {
+      module, tier: 'session', status: 'live', fetchedAt: new Date(at).toISOString(),
+      attribution: { text: 'fixture', url: 'https://example.test', licence: 'fixture' },
+      items: [{ id: `${module}:scene`, module, tier: 'session', kind: module === 'dhmz-hourly' ? 'forecast' : 'event', title: 'Scene fact',
+        at: new Date(at + 90 * MIN).toISOString(), until: new Date(at + 150 * MIN).toISOString() }],
+    }])) as Record<ModuleId, ModuleSnapshot>;
+    try {
+      expect(sceneTeaser(modules, at, at).modules.map(module => module.items.map(item => item.id))).toEqual([
+        ['dhmz-hourly:scene'], ['kultura-zg:scene'],
+      ]);
+      expect(sceneTeaser(modules, at, at + 2 * 86_400_000).modules.map(module => module.items)).toEqual([[], []]);
+    } finally {
+      hostClock.mockRestore();
+    }
+  });
+
   it('runs from the scene\'s instant in real time and jumps with every sync to the page\'s clock', () => {
     let real = 1_000;
     const clock = sceneClock(PEAK.now, () => real);
