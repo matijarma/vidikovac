@@ -244,12 +244,10 @@ export function checkCalibration(raster, stored) {
   }
   const markers = findMarkers(raster);
   for (const landmark of stored.landmarks) {
-    const [x, y] = project(stored.affine, landmark.lon, landmark.lat);
+    const { x, y } = landmark;
     const nearest = markers.reduce((best, m) => Math.min(best, Math.hypot(m.x - x, m.y - y)), Infinity);
-    // The existing residual-plus-CHECK_PX envelope is radial error from the affine, not a bound on marker
-    // displacement from the saved image. Its difference from the package's literal 2 px check needs a decision.
-    const allowed = landmark.residualPx + CHECK_PX;
-    if (nearest > allowed) problems.push(`${landmark.name}: no marker within ${allowed.toFixed(2)} px of ${x.toFixed(1)}, ${y.toFixed(1)} (nearest ${nearest.toFixed(1)} px)`);
+    // Decision 15: measure actual movement from the saved detection, not its known affine fitting error.
+    if (nearest > CHECK_PX) problems.push(`${landmark.name}: no marker within ${CHECK_PX.toFixed(2)} px of stored ${x.toFixed(1)}, ${y.toFixed(1)} (nearest ${nearest.toFixed(1)} px)`);
   }
   return problems;
 }

@@ -42,6 +42,28 @@ describe('the radar calibration fit', () => {
     for (const file of bad) expect(checkCalibration(raster, file)).not.toEqual([]);
   });
 
+  it('decision 15: checks displacement from saved markers, not the affine residual envelope', () => {
+    const image = (zgShift: number) => {
+      const width = 720, height = 751;
+      const data = new Uint8Array(width * height * 3).fill(220);
+      for (const landmark of calibration.landmarks) {
+        const x = landmark.x + (landmark.name === 'Zagreb' ? zgShift : 0), y = landmark.y;
+        for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+          const distance = Math.abs(dx) + Math.abs(dy);
+          if (distance === 3 || distance === 4) {
+            const offset = ((y + dy) * width + x + dx) * 3;
+            data.fill(0, offset, offset + 3);
+          }
+        }
+      }
+      return { width, height, data };
+    };
+    expect(checkCalibration(image(0), calibration)).toEqual([]);
+    expect(checkCalibration(image(2), calibration)).toEqual([]);
+    // Moving toward the affine prediction used to pass even though the real marker moved three pixels.
+    expect(checkCalibration(image(3), calibration)).toEqual([expect.stringContaining('Zagreb')]);
+  });
+
   it('recovers a known affine from four synthetic landmarks exactly', () => {
     const affine = [81.4, -0.07, -952.3, 0.29, -117.47, 5603.56];
     const points = [[15.98, 45.81], [14.5, 46.05], [17.19, 44.77], [15.44, 47.07]].map(([lon, lat]) => {
