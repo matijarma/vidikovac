@@ -131,6 +131,8 @@ describe('ghostInflation', () => {
     expect(r.minutes).toBe(10);
     expect(r.fromSec).toBe(at(40));
     expect(r.toSec).toBe(at(50));
+    // Per day: only Sunday has minutes compared; it said more in ten of them, by twelve at most.
+    expect(r.byDay).toEqual([{ day: midnightOf(T0), minutes: 10, max: 12 }]);
   });
   it('a series with nothing published is null; equal numbers are zero minutes, a real count', () => {
     expect(ghostInflation({ ...blank(), published: null })).toBeNull();
@@ -195,15 +197,17 @@ describe('feedHealth', () => {
     fillRange(s.feed.entities, 0, N, 100);
     fillRange(s.feed.headerAgeS, 0, N, 12);
     fillRange(s.feed.entities, 100, 160, 0);
+    fillRange(s.feed.entities, 700, 710, 0); // a second, shorter empty stretch
     fillRange(s.feed.headerAgeS, 200, 320, (m) => 360 + (m - 200) * 60);
     fillRange(s.feed.headerAgeS, 400, 410, FROZEN_AFTER_S + 1);
     s.feed.headerAgeS[500] = FROZEN_AFTER_S; // at the threshold is still changing
     fillRange(s.feed.entities, 600, 605, null);
     fillRange(s.feed.headerAgeS, 600, 605, null);
     const r = feedHealth(s);
-    expect(r.emptyMinutes).toBe(60);
+    expect(r.emptyMinutes).toBe(70);
     expect(r.emptyFrom).toBe(at(100));
-    expect(r.emptyTo).toBe(at(160));
+    expect(r.emptyTo).toBe(at(710));
+    expect(r.emptyLongest).toEqual({ minutes: 60, fromSec: at(100) });
     expect(r.frozenMinutes).toBe(130);
     expect(r.frozenLongest).toEqual({ minutes: 120, fromSec: at(200) + 60 - 360 });
     expect(r.missingMinutes).toBe(5);

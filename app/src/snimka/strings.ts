@@ -187,7 +187,6 @@ export const SN = {
     ghostsMax: 'Najveća razlika',
     ghostsMaxValue: '{count} više nego s položajem, {day} u {time}',
     ghostsMinutes: 'Minute s razlikom',
-    ghostsSpan: 'Razdoblje',
     returnFrom: 'Prvih deset vozila u pokretu',
     returnTo: 'Prva minuta uobičajenog stanja',
     feedEmpty: 'ZET ne šalje nijedno vozilo',

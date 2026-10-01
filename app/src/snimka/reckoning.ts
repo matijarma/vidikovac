@@ -141,11 +141,15 @@ export function bikeDrain(s: SeriesFile): BikeResult | null {
   };
 }
 
-export interface GhostResult { max: number; maxAt: number | null; publishedAtMax: number | null; seenAtMax: number | null; minutes: number; fromSec: number | null; toSec: number | null }
+export interface GhostResult {
+  max: number; maxAt: number | null; publishedAtMax: number | null; seenAtMax: number | null; minutes: number; fromSec: number | null; toSec: number | null;
+  /** Per Zagreb day with both numbers: the minutes it said more and the most it said more. */
+  byDay: { day: number; minutes: number; max: number }[];
+}
 
 /** The number the product published against the vehicles with a position, minute by minute: how many minutes it
- *  said more, by how much at most, and when. Only minutes where both numbers exist count. Null without a
- *  published series (the comparison day). */
+ *  said more, by how much at most, and when, in all and per day. Only minutes where both numbers exist count. Null
+ *  without a published series (the comparison day). */
 export function ghostInflation(s: SeriesFile): GhostResult | null {
   const p = s.published;
   if (!p) return null;
@@ -155,14 +159,19 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
   let first = -1;
   let last = -1;
   let compared = 0;
+  const days = daysOf(s);
+  const byDay = days.map((day) => ({ day, minutes: 0, max: 0, compared: 0 }));
   for (let m = 0; m < s.n; m++) {
     const pub = p.vehicles[m];
     const seen = s.seen.all[m];
     if (pub === null || pub === undefined || seen === null || seen === undefined) continue;
     compared++;
+    const row = byDay[days.indexOf(midnightOf(atOf(s, m)))];
+    if (row) row.compared++;
     const diff = pub - seen;
     if (diff <= 0) continue;
     minutes++;
+    if (row) { row.minutes++; row.max = Math.max(row.max, diff); }
     if (first < 0) first = m;
     last = m;
     if (diff > max) { max = diff; maxM = m; }
@@ -172,6 +181,7 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
     max, maxAt: maxM < 0 ? null : atOf(s, maxM),
     publishedAtMax: maxM < 0 ? null : p.vehicles[maxM]!, seenAtMax: maxM < 0 ? null : s.seen.all[maxM]!,
     minutes, fromSec: first < 0 ? null : atOf(s, first), toSec: last < 0 ? null : atOf(s, last) + 60,
+    byDay: byDay.filter((d) => d.compared > 0).map(({ day, minutes: dm, max: dmax }) => ({ day, minutes: dm, max: dmax })),
   };
 }
 
@@ -228,17 +238,25 @@ export function returnDuration(s: SeriesFile): ReturnResult | null {
 }
 
 export interface FeedResult {
-  emptyMinutes: number; emptyFrom: number | null; emptyTo: number | null;
+  emptyMinutes: number; emptyFrom: number | null; emptyTo: number | null; emptyLongest: { minutes: number; fromSec: number } | null;
   frozenMinutes: number; frozenLongest: { minutes: number; fromSec: number } | null;
   missingMinutes: number;
 }
 
-/** Minutes in which ZET's data carried no vehicle at all, minutes in which it did not change (the newest header
- *  older than five minutes), the longest such stretch from the moment the data stopped, and minutes with no frame. */
+/** Minutes in which ZET's data carried no vehicle at all and the longest such stretch, minutes in which it did not
+ *  change (the newest header older than five minutes) and the longest such stretch from the moment the data
+ *  stopped, and minutes with no frame. */
 export function feedHealth(s: SeriesFile): FeedResult {
   let emptyMinutes = 0;
   let emptyFirst = -1;
   let emptyLast = -1;
+  let emptyLongest: { minutes: number; fromSec: number } | null = null;
+  let emptyStart = -1;
+  const closeEmpty = (end: number): void => {
+    if (emptyStart < 0) return;
+    if (!emptyLongest || end - emptyStart > emptyLongest.minutes) emptyLongest = { minutes: end - emptyStart, fromSec: atOf(s, emptyStart) };
+    emptyStart = -1;
+  };
   let frozenMinutes = 0;
   let missingMinutes = 0;
   let longest: { minutes: number; fromSec: number } | null = null;
@@ -259,7 +277,8 @@ export function feedHealth(s: SeriesFile): FeedResult {
       emptyMinutes++;
       if (emptyFirst < 0) emptyFirst = m;
       emptyLast = m;
-    }
+      if (emptyStart < 0) emptyStart = m;
+    } else closeEmpty(m);
     const frozen = age !== null && age !== undefined && age > FROZEN_AFTER_S;
     if (frozen) {
       frozenMinutes++;
@@ -267,8 +286,9 @@ export function feedHealth(s: SeriesFile): FeedResult {
     } else closeRun(m);
   }
   closeRun(s.n);
+  closeEmpty(s.n);
   return {
-    emptyMinutes, emptyFrom: emptyFirst < 0 ? null : atOf(s, emptyFirst), emptyTo: emptyLast < 0 ? null : atOf(s, emptyLast) + 60,
+    emptyMinutes, emptyFrom: emptyFirst < 0 ? null : atOf(s, emptyFirst), emptyTo: emptyLast < 0 ? null : atOf(s, emptyLast) + 60, emptyLongest,
     frozenMinutes, frozenLongest: longest, missingMinutes,
   };
 }
@@ -423,9 +443,9 @@ function ghostsCard(s: SeriesFile): HTMLElement {
       figure(`+${num(r.max)}`, plural(r.max, VOZILO)),
       facts([
         [R.ghostsMax, fill(R.ghostsMaxValue, { count: count(r.max, VOZILO), day: zagrebDay(r.maxAt * 1000), time: zagrebClock(r.maxAt * 1000) })],
-        [R.ghostsMinutes, minutesText(r.minutes)],
-        [R.ghostsSpan, fill(R.span, { from: dt(r.fromSec!), to: dt(r.toSec!) })],
+        [R.ghostsMinutes, `${R.total} ${minutesText(r.minutes)}`],
       ]),
+      bars(r.byDay.map((d) => ({ key: String(d.day), label: zagrebDay(d.day * 1000), count: d.minutes })), R.ghostsMinutes, { valueText: minutesText }),
     ];
   }
   return card({ id: 'vidjelo-broj', title: R.ghosts, lede: R.ghostsLede, body, method: R.ghostsMethod });
@@ -443,7 +463,8 @@ function returnCard(s: SeriesFile): HTMLElement {
 function feedCard(s: SeriesFile): HTMLElement {
   const r = feedHealth(s);
   const rows: [string, string][] = [];
-  rows.push([R.feedEmpty, r.emptyMinutes > 0 ? `${minutesText(r.emptyMinutes)}; ${fill(R.span, { from: dt(r.emptyFrom!), to: dt(r.emptyTo!) })}` : minutesText(0)]);
+  const emptyLongest = r.emptyLongest;
+  rows.push([R.feedEmpty, emptyLongest ? `${minutesText(r.emptyMinutes)}; ${fill(R.feedLongest, { duration: minutesText(emptyLongest.minutes), from: dt(emptyLongest.fromSec) })}` : minutesText(0)]);
   const longest = r.frozenLongest;
   rows.push([R.feedFrozen, longest ? `${minutesText(r.frozenMinutes)}; ${fill(R.feedLongest, { duration: minutesText(longest.minutes), from: dt(longest.fromSec) })}` : minutesText(0)]);
   return card({ id: 'vidjelo-podaci', title: R.feed, body: [facts(rows)], method: R.feedMethod });
