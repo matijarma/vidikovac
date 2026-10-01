@@ -180,7 +180,9 @@
     "magnitude": "M {mag}",
     "depth": "dubina {depth} km",
     "reference": "Mjerenja, sunce, zrak i bilten Save",
-    "hourly": "Po satima"
+    "hourly": "Po satima",
+    "bio": "Biometeorološka prognoza",
+    "waves": "Toplinski i hladni valovi"
   },
   "safety": {
     "hitnoSame": "Ista stranica bez skeniranja: Sigurnost",
@@ -279,7 +281,10 @@
       "kultura-zagreb": "Guru za kulturu",
       "kgz": "Knjižnice grada Zagreba"
     },
-    "timeUnknown": "vrijeme nije navedeno"
+    "timeUnknown": "vrijeme nije navedeno",
+    "filter": {
+      "kids": "Za djecu"
+    }
   },
   "civic": {
     "assembly": "Gradska skupština",
@@ -917,8 +922,15 @@
       "warningUntil": "DHMZ: {event} do {until}.",
       "utility": {
         "struja": "struje",
-        "voda": "vode"
-      }
+        "voda": "vode",
+        "plin": "plina"
+      },
+      "rainNow": "Radar DHMZ: kiša u blizini Zagreba.",
+      "bioToday": "DHMZ: {text}",
+      "heatWave": "Toplinski val: {level}. stupanj, {day}.",
+      "coldWave": "Hladni val: {level}. stupanj, {day}.",
+      "dryUntil": "Suho do {time}.",
+      "hourlyTemp": "Oko {time} {temp} °C."
     },
     "handheld": {
       "info": "Za javni zaslon otvori /kiosk/ na tom uređaju i odaberi Pokreni. Ovaj kod otvara osobnu sesiju; skeniranje ne mijenja javni prikaz."
@@ -996,7 +1008,9 @@
       "cut": {
         "struja": "bez struje {from}–{until}",
         "voda": "bez vode {from}–{until}",
-        "vodaDay": "bez vode"
+        "vodaDay": "bez vode",
+        "plin": "bez plina {from}–{until}",
+        "plinDay": "bez plina"
       },
       "openKind": {
         "ljekarna": "ljekarna",
@@ -1018,7 +1032,8 @@
         "regulacija": "privremena regulacija",
         "zatvoreno": "zatvoreno za promet",
         "zastoj": "zastoj"
-      }
+      },
+      "rainRadar": "kiša u blizini"
     },
     "paired": {
       "warnings": "Upozorenja DHMZ-a",
@@ -1124,6 +1139,9 @@
       "viewSchema": "Prikaz: shema",
       "rhythm": "Ritam",
       "rhythmValue": "Ritam: {seconds} s"
+    },
+    "map": {
+      "radarCredit": "Radar · Izvor: DHMZ"
     }
   },
   "presentation": {

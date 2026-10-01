@@ -104,7 +104,8 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 
 export type SentenceSlotType = 'route' | 'stop' | 'minutes' | 'clock' | 'time' | 'until'
   | 'temperature' | 'degrees' | 'count' | 'title' | 'venue' | 'street' | 'condition' | 'vehicles' | 'about'
-  | 'percent' | 'utility' | 'roadState' | 'airIndex' | 'airWord' | 'forecastCondition';
+  | 'percent' | 'utility' | 'roadState' | 'airIndex' | 'airWord' | 'forecastCondition'
+  | 'level' | 'day' | 'dhmzText';
 interface SlotRule { max: number; pattern: RegExp; names?: ExternalTextKind }
 // Only the display's supported alphabets, not visually similar Latin letters
 // such as dotless ı or stroked ł, nor Greek/Cyrillic confusables.
@@ -128,13 +129,18 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   about: { max: 4, pattern: /^[1-9]\d{0,3}$/u },
   // The facts-breadth families (docs/history/upgrade-2026-10-plan/U3.md S4): a chance of rain, what a cut takes away, a road state.
   percent: { max: 5, pattern: /^(?:[1-9]\d?|100) %$/u },
-  utility: { max: 6, pattern: /^(?:struje|vode|power|water)$/u },
+  utility: { max: 6, pattern: /^(?:struje|vode|plina|power|water|gas)$/u },
   roadState: { max: 32, pattern: /^(?:radovi|privremena regulacija|zatvoreno za promet|zastoj|roadworks|temporary traffic regulation|closed to traffic|congestion)$/u },
   // R0's deviation families: the air index and its word (the phone's, city/air.ts, lower-cased), and tomorrow's
   // forecast in DHMZ's own legend words (shared/city/dhmz-symbols.ts) beside the short condition words.
   airIndex: { max: 1, pattern: /^[1-6]$/u },
   airWord: { max: 14, pattern: /^(?:dobra|prihvatljiva|umjerena|loša|vrlo loša|izrazito loša|good|fair|moderate|poor|very poor|extremely poor)$/u },
   forecastCondition: { max: 72, pattern: new RegExp(`^(?:${[...CONDITION_WORDS, ...DHMZ_SYMBOL_CONDITIONS.map(escapeRegExp)].join('|')})$`, 'u') },
+  // R3's more-city families: a wave's level of danger (1 to 3: DHMZ's umjerena, velika, vrlo velika opasnost), the day
+  // it falls on, and DHMZ's own first sentence of the biometeorological forecast ("DHMZ: " + text stays within 80).
+  level: { max: 1, pattern: /^[1-3]$/u },
+  day: { max: 10, pattern: /^(?:danas|sutra|ponedjeljak|utorak|srijeda|četvrtak|petak|subota|nedjelja|today|tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/u },
+  dhmzText: { max: 74, pattern: /^\p{Lu}[\p{L}\p{N} ,;:()–-]*\.$/u, names: 'register-text' },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {
   const rule = SENTENCE_SLOT_RULES[type];
@@ -204,6 +210,13 @@ export const SENTENCE_FAMILIES = {
   bikesEmpty: { hr: 'BAJS {station}: 0 bicikala; BAJS {other}: {bikes}.', en: 'BAJS {station}: 0 bikes; BAJS {other}: {bikes}.', slots: { station: 'stop', other: 'stop', bikes: 'count' }, kinds: ['bicikli'] },
   airIndex: { hr: 'Kvaliteta zraka: {word}, indeks {index}; postaja {station}.', en: 'Air quality: {word}, index {index}; station {station}.', slots: { index: 'airIndex', word: 'airWord', station: 'stop' }, kinds: ['vrijeme'] },
   warningUntil: { hr: 'DHMZ: {event} do {until}.', en: 'DHMZ: {event} until {until}.', slots: { event: 'title', until: 'until' }, kinds: ['vrijeme'] },
+  // The more-city families (docs/reveal-2026-10-plan/R3.md): DHMZ's radar, its biometeorological forecast and wave warnings, the dry spell and the temperature of an hourly step.
+  rainNow: { hr: 'Radar DHMZ: kiša u blizini Zagreba.', en: 'DHMZ radar: rain near Zagreb.', slots: {}, kinds: ['vrijeme'] },
+  bioToday: { hr: 'DHMZ: {text}', en: 'DHMZ: {text}', slots: { text: 'dhmzText' }, kinds: ['vrijeme'] },
+  heatWave: { hr: 'Toplinski val: {level}. stupanj, {day}.', en: 'Heat wave: level {level}, {day}.', slots: { level: 'level', day: 'day' }, kinds: ['vrijeme'] },
+  coldWave: { hr: 'Hladni val: {level}. stupanj, {day}.', en: 'Cold wave: level {level}, {day}.', slots: { level: 'level', day: 'day' }, kinds: ['vrijeme'] },
+  dryUntil: { hr: 'Suho do {time}.', en: 'Dry until {time}.', slots: { time: 'clock' }, kinds: ['vrijeme'] },
+  hourlyTemp: { hr: 'Oko {time} {temp} °C.', en: 'Around {time} {temp} °C.', slots: { time: 'clock', temp: 'degrees' }, kinds: ['vrijeme'] },
 } as const satisfies Record<string, TemplateFamily>;
 export type SentenceFamily = keyof typeof SENTENCE_FAMILIES;
 // Decision 18 (revised): "{name}: {text}" shows a place's register story or a

@@ -15,6 +15,7 @@ import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../lay
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import { CITY_WORK_SOURCE_ATTRIBUTION } from '../layers/uprava-i-pravo';
 import { dist, toPlane } from '../../../shared/motion/geo';
+import { distanceM } from '../../../shared/city/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
 import { zagrebHour } from '../format';
@@ -254,7 +255,9 @@ export const NEARBY_CLOSURE_M = 1500;
 function closureDistance(item: FeedItem, stop: ScreenStop): number | null {
   if (!item.geo) return null;
   const origin = toPlane(stop.lon, stop.lat);
-  const coords = item.geo.type === 'Point' ? [item.geo.coordinates as number[]] : (item.geo.coordinates as number[][]);
+  // A Polygon (the radar's square, R3) is measured by its outer ring.
+  const coords = item.geo.type === 'Point' ? [item.geo.coordinates as number[]]
+    : item.geo.type === 'Polygon' ? (item.geo.coordinates as number[][][])[0] ?? [] : (item.geo.coordinates as number[][]);
   let best: number | null = null;
   for (const [lon, lat] of coords) {
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
@@ -326,6 +329,77 @@ export function staleCopy(snapshot: ModuleSnapshot, atIso: string): ModuleSnapsh
 export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot {
   return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
 }
+// --- The weather of the area: the nearest hourly station and DHMZ's radar (R3) ---
+
+/** A dhmz-hourly step is wet by the module's own rule: a rain word, 0.2 mm or more, or a chance of 60 % or more
+ *  (worker/feed/modules/dhmz-hourly.ts WET_MM and WET_PROBABILITY; the worker module is not imported into the wall). */
+const HOURLY_WET_MM = 0.2;
+const HOURLY_WET_PROBABILITY = 60;
+/** The radar inset's look-ahead for a wet step: the rain row's RAIN_AHEAD_MS (city/nearby.ts, which imports this file). */
+export const RADAR_WET_AHEAD_MS = 2 * 3_600_000;
+
+export interface HourlyStep { item: FeedItem; at: number; until: number }
+
+export function isWetStep(item: FeedItem): boolean {
+  const precip = dataNumber(item, 'precip');
+  const prob = dataNumber(item, 'prob');
+  return dataText(item, 'weather') !== '' || (precip !== null && precip >= HOURLY_WET_MM) || (prob !== null && prob >= HOURLY_WET_PROBABILITY);
+}
+
+/**
+ * The steps of the dhmz-hourly station nearest a place, in order of time: the weather of the area, so the station is the
+ * nearest one whatever the circle (the rain row's rule; the inset, the dry spell and the hourly temperature read the same).
+ */
+export function nearestHourlySteps(snapshot: ModuleSnapshot | undefined, place: { lon: number; lat: number }): { station: string; steps: HourlyStep[] } | null {
+  if (!snapshot || snapshot.status === 'down') return null;
+  let station: string | null = null;
+  let nearest = Infinity;
+  for (const item of snapshot.items) {
+    const name = dataText(item, 'station');
+    if (!name || item.geo?.type !== 'Point') continue;
+    const [lon, lat] = item.geo.coordinates as number[];
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const d = distanceM(place, { lon: lon!, lat: lat! });
+    if (d < nearest) { nearest = d; station = name; }
+  }
+  if (station === null) return null;
+  const steps = snapshot.items
+    .filter((item) => item.kind === 'forecast' && dataText(item, 'station') === station)
+    .map((item) => ({ item, at: Date.parse(item.at ?? ''), until: Date.parse(item.until ?? '') }))
+    .filter(({ at, until }) => Number.isFinite(at) && Number.isFinite(until))
+    .sort((a, b) => a.at - b.at || a.item.id.localeCompare(b.item.id));
+  return { station, steps };
+}
+
+export interface RadarState { src: string; rainNear: boolean; atMs: number; untilMs: number }
+
+/** The fresh radar item of the teaser (until > now, not down), as the inset and the row read it; null otherwise. */
+export function radarNow(modules: readonly ModuleSnapshot[], now: number): RadarState | null {
+  const snapshot = byModule(modules)['dhmz-radar'];
+  if (!snapshot || snapshot.status === 'down') return null;
+  let best: RadarState | null = null;
+  for (const item of snapshot.items) {
+    const epoch = /^dhmz-radar:(\d+)$/.exec(item.id)?.[1];
+    const atMs = Date.parse(item.at ?? '');
+    const untilMs = Date.parse(item.until ?? '');
+    if (item.kind !== 'radar' || !epoch || !Number.isFinite(atMs) || !(untilMs > now) || atMs > now) continue;
+    if (best && best.atMs >= atMs) continue;
+    best = { src: `/api/radar/zagreb.png?v=${epoch}`, rainNear: item.data?.rainNear === true, atMs, untilMs };
+  }
+  return best;
+}
+
+/** The inset rule: rainNear on a fresh radar item, or a wet dhmz-hourly step of the nearest station that starts within 2 h
+ *  (RAIN_AHEAD_MS) and has not ended; never while lagano. Without a fresh radar item there is no image to show. */
+export function radarInsetShown(modules: readonly ModuleSnapshot[], place: { lon: number; lat: number }, now: number, lightweight: boolean): boolean {
+  if (lightweight) return false;
+  const radar = radarNow(modules, now);
+  if (!radar) return false;
+  if (radar.rainNear) return true;
+  const hourly = nearestHourlySteps(byModule(modules)['dhmz-hourly'], place);
+  return hourly?.steps.some(({ item, at, until }) => until > now && at <= now + RADAR_WET_AHEAD_MS && isWetStep(item)) ?? false;
+}
+
 /** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists, with the five of the
  *  facts-breadth package (U3) and the three DHMZ modules of the more-city package (R3). */
 export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja', 'glasnik',

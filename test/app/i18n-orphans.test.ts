@@ -154,9 +154,12 @@ describe('i18n orphans: every catalogue leaf is read (WP5 A1)', () => {
     // The reveal pass R0 +7: kiosk.sentence.airIndex, warningUntil, safety.cuts, cutsNone, roads, roadsNone,
     // weather.hourly: 1,126 hr, 1,097 en.
     // The reveal pass R2 +1 kiosk.nearby.zatim, the advanced departures line's label (kiosk/timeline.ts): 1,127 hr, 1,098 en.
+    // The reveal pass R3 +14: kiosk.nearby.rainRadar, cut.plin, cut.plinDay, kiosk.sentence.utility.plin, the six families
+    // (rainNow, bioToday, heatWave, coldWave, dryUntil, hourlyTemp), kiosk.map.radarCredit, weather.bio, weather.waves,
+    // events.filter.kids: 1,141 hr, 1,112 en.
     // A new leaf changes this number on purpose, with its reader.
-    expect(leaves.length).toBe(1127);
-    expect(leafKeys(en).length).toBe(1098);
+    expect(leaves.length).toBe(1141);
+    expect(leafKeys(en).length).toBe(1112);
     expect(leafKeys(hr.city).length).toBe(93);
   });
 });

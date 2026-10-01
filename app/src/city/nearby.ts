@@ -83,10 +83,12 @@ export type RoadState = 'radovi' | 'regulacija' | 'zatvoreno' | 'zastoj';
  *  column (kiosk/timeline.ts) never read it back from the row's words. */
 export type NearbyDetail =
   | { kind: 'rain'; word: RainWord; percent: number | null }
-  | { kind: 'cut'; utility: 'struja' | 'voda'; street: string; fromMs: number; untilMs: number; allDay: boolean }
+  | { kind: 'cut'; utility: 'struja' | 'voda' | 'plin'; street: string; fromMs: number; untilMs: number; allDay: boolean }
   | { kind: 'road'; state: RoadState }
   | { kind: 'open'; openKind: OpenKind }
-  | { kind: 'exhibit'; venue: string; openNow: boolean };
+  | { kind: 'exhibit'; venue: string; openNow: boolean }
+  /** DHMZ's radar composite shows rain near Zagreb (R3). */
+  | { kind: 'radar' };
 
 /** One line of a last-trams or first-tram row: which line leaves, and when. */
 export interface NearbyService {
