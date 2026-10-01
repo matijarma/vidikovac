@@ -352,10 +352,10 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   const liveFrom = Math.max(0, Math.min(n, Math.ceil((o.serviceLiveFromSec - s.t0) / 60)));
   const stateRuns = runsOf<StateClass>(n, (m) => stateClass(s, m));
   const retro = liveFrom > 0
-    ? `<span class="sn-retro" style="--x:0;--w:${(liveFrom / n).toFixed(5)}"></span>`
+    ? `<span class="sn-band-retro" style="--x:0;--w:${(liveFrom / n).toFixed(5)}"></span>`
     : '';
   const retroLabel = liveFrom > 0
-    ? `<div class="sn-retro-label" aria-hidden="true" style="--w:${(liveFrom / n).toFixed(5)}"><span>${escapeHtml(S.stateRetro)}</span></div>`
+    ? `<div class="sn-band-retro-label" aria-hidden="true" style="--w:${(liveFrom / n).toFixed(5)}"><span>${escapeHtml(S.stateRetro)}</span></div>`
     : '';
   const stateWord = (m: number): string => {
     const cls = stateClass(s, m);

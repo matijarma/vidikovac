@@ -143,9 +143,9 @@
 .sn-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); box-sizing: border-box; border-inline-end: 2px solid var(--tone-surface-1); background: var(--key); }
 .sn-seg:last-child { border-inline-end: 0; }
 .sn-seg.sn-state-none { background: var(--sn-hatch-none); }
-.sn-retro { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); background: var(--sn-hatch-retro); pointer-events: none; }
-.sn-retro-label { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); block-size: 1rem; border-inline: 1px solid var(--tone-stroke-strong); border-block-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1; color: var(--tone-text-muted); pointer-events: none; }
-.sn-retro-label span { position: relative; inset-block-start: 0.2rem; padding-inline: 0.35rem; white-space: nowrap; }
+.sn-band-retro { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); background: var(--sn-hatch-retro); pointer-events: none; }
+.sn-band-retro-label { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); block-size: 1rem; border-inline: 1px solid var(--tone-stroke-strong); border-block-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1; color: var(--tone-text-muted); pointer-events: none; }
+.sn-band-retro-label span { position: relative; inset-block-start: 0.2rem; padding-inline: 0.35rem; white-space: nowrap; }
 
 /* ZET's data: two lanes, the minutes with no vehicle (solid) above the minutes it did not change (hatched). */
 .sn-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
