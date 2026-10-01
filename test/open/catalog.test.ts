@@ -21,7 +21,7 @@ describe('open data catalog', () => {
     expect(isoDuration(90)).toBe('PT90S');
   });
 
-  it('lists exactly the open-tier modules', () => {
+  it('lists exactly the four open-tier modules offered for republishing', () => {
     expect(OPEN_DATASETS.map((d) => d.module)).toEqual(['dhmz-cap', 'emsc', 'prometnice', 'ckan-geo']);
     expect(findOpenDataset('prometnice')?.ttl).toBe(180);
     expect(findOpenDataset('zet-rt')).toBeUndefined();
