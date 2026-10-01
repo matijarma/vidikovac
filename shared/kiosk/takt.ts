@@ -96,3 +96,87 @@ export function candidateValue(c: TaktCandidate, now: number, history: TaktHisto
 }
 
 export const EMPTY_HISTORY: TaktHistory = Object.freeze({ beat: 0, shownAt: Object.freeze({}), lastReveal: null });
+
+// --- The scheduler (reveal pass R2) ---
+//
+// The beat scheduler of the wall (docs/reveal-2026-10-plan/R2.md §0.2 is the rule text; brief §5.2(b), seam (b)).
+// On each beat of the header's rhythm `takt` decides whether one region shows something more for exactly one beat:
+// the departures line advances to the next departures, or the list turns a page (its least valuable rows give way to
+// the most valuable ones it had no room for). Pure, like the rest of this file: `takt` never reads the clock, the
+// DOM or any store, never draws a random number, and the same inputs give the same result (a fixture day replays
+// into a committed beat log, test/fixtures/takt/beat-log.jsonl). The constants are the brief §3 numbers.
+
+export interface TaktReveal { kind: RevealKind; ids: readonly string[]; replaces: readonly string[]; beat: number; }
+export interface TaktOptions { capacity: number; rhythmMs: number; quiet: boolean; reduced: boolean; }
+export interface TaktResult { page1: readonly string[]; reveal: TaktReveal | null; history: TaktHistory; }
+
+/** Brief §3 "Reveal cadence": an advance may start on a beat `b` with `b % 4 === 0`. */
+export const ADVANCE_EVERY_BEATS = 4;
+/** Brief §3 "Reveal cadence": a page turn may start on a beat `b` with `b % 3 === 0`. */
+export const PAGE_EVERY_BEATS = 3;
+/** Brief §3 "Reveal cadence": a reveal starts only when the last one started at least 3 beats earlier (R2.md §0.5 item 1). */
+export const REVEAL_GAP_BEATS = 3;
+/** Brief §3 "Page turn": a page turn replaces at most 2 rows. */
+export const PAGE_MAX_ROWS = 2;
+/** Brief §3 "Reveal cadence": the first shown departure must be more than 10 min away for an advance. */
+export const ADVANCE_LEAD_MS = 600_000;
+/** Brief §3 "Page turn": a row within 30 min of its moment is imminent and never replaced (the imminence band's own edge, SOON_MS). */
+export const REVEAL_IMMINENT_MS = SOON_MS;
+/** Brief §3 "Freshness": the freshness window (R0's FRESH_AFTER_MS, one number); `shownAt` entries older than it are pruned. */
+export const FRESH_MS = FRESH_AFTER_MS;
+/** Brief §3 "Page turn": kinds never replaced and never revealed (R2.md §0.5 item 5: a closure is a fact about now). */
+export const REVEAL_EXEMPT_KINDS: readonly TaktKind[] = Object.freeze(['closure']);
+
+/** The beat an instant falls in on the absolute grid of the epoch (20, 30 and 60 s all divide a minute); -1 off the grid. */
+export function beatIndex(now: number, rhythmMs: number): number {
+  if (!Number.isFinite(now) || !Number.isFinite(rhythmMs) || rhythmMs <= 0) return -1;
+  return Math.floor(now / rhythmMs);
+}
+
+/** A candidate a page turn may move: not reserved, not a departure or the line, not of an exempt kind. */
+const moves = (c: TaktCandidate): boolean =>
+  !c.reserved && c.kind !== 'departure' && c.kind !== 'departures' && !REVEAL_EXEMPT_KINDS.includes(c.kind);
+
+/**
+ * One beat of the wall (R2.md §0.2, rules 1 to 11). Page 1 is the reserved candidates and the most valuable of the
+ * rest by the static value (R0's order, the fitter's), cut to `capacity`; freshness ranks page 2 only. A quiet beat,
+ * a beat off the grid or one inside the gap after the last reveal carries none; else an advance when the beat and
+ * the lead allow it, else a page turn of at most PAGE_MAX_ROWS rows. The history returned is a new object: `shownAt`
+ * holds every page-1 and revealed id at `now`, pruned to FRESH_MS, keys sorted; `reduced` changes nothing here.
+ */
+export function takt(candidates: readonly TaktCandidate[], history: TaktHistory, now: number, options: TaktOptions): TaktResult {
+  const b = beatIndex(now, options.rhythmMs);
+  const index = new Map<string, number>();
+  candidates.forEach((c, i) => { if (!index.has(c.id)) index.set(c.id, i); });
+  const order = (c: TaktCandidate): number => index.get(c.id)!;
+  const still = (c: TaktCandidate): number => candidateValue(c, now, null);
+  const fresh = (c: TaktCandidate): number => candidateValue(c, now, history);
+  const listed = candidates.filter((c) => c.kind !== 'next-departures');
+  const next = candidates.filter((c) => c.kind === 'next-departures');
+  const reserved = listed.filter((c) => c.reserved);
+  const rest = listed.filter((c) => !c.reserved).sort((x, y) => still(y) - still(x) || order(x) - order(y));
+  const room = Math.max(0, Math.floor(Number.isFinite(options.capacity) ? options.capacity : 0) - reserved.length);
+  const onPage1 = new Set([...reserved, ...rest.slice(0, room)].map((c) => c.id));
+  const page1 = listed.filter((c) => onPage1.has(c.id)).map((c) => c.id);
+  let reveal: TaktReveal | null = null;
+  const gap = history.lastReveal === null || b - history.lastReveal.beat >= REVEAL_GAP_BEATS;
+  if (!options.quiet && b >= 0 && gap) {
+    const line = listed.find((c) => c.kind === 'departures' && onPage1.has(c.id));
+    if (b % ADVANCE_EVERY_BEATS === 0 && line?.atMs !== undefined && line.atMs - now > ADVANCE_LEAD_MS && next.length > 0) {
+      reveal = { kind: 'advance', ids: next.slice(0, 3).map((c) => c.id), replaces: [line.id], beat: b };
+    } else if (b % PAGE_EVERY_BEATS === 0) {
+      const page2 = listed.filter((c) => !onPage1.has(c.id) && moves(c) && fresh(c) > 0)
+        .sort((x, y) => fresh(y) - fresh(x) || order(x) - order(y));
+      const out = listed.filter((c) => onPage1.has(c.id) && moves(c) && !c.imminent)
+        .sort((x, y) => still(x) - still(y) || order(y) - order(x));
+      const k = Math.min(PAGE_MAX_ROWS, out.length, page2.length);
+      if (k > 0) reveal = { kind: 'page', ids: page2.slice(0, k).map((c) => c.id), replaces: out.slice(0, k).map((c) => c.id), beat: b };
+    }
+  }
+  const kept: Record<string, number> = {};
+  for (const [id, at] of Object.entries(history.shownAt)) if (at <= now && now - at <= FRESH_MS) kept[id] = at;
+  for (const id of [...page1, ...(reveal?.ids ?? [])]) kept[id] = now;
+  const shownAt: Record<string, number> = {};
+  for (const id of Object.keys(kept).sort()) shownAt[id] = kept[id]!;
+  return { page1, reveal, history: { beat: b, shownAt, lastReveal: reveal ? { kind: reveal.kind, beat: b } : history.lastReveal } };
+}
