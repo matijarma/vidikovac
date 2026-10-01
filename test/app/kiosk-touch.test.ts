@@ -294,7 +294,7 @@ const theme: ThemeController = {
   onChange: (listener) => { listener({ preference: 'solar', resolved: 'light' }); return () => {}; }, destroy: () => {},
 };
 
-function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata } = {}) {
+function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata; boards?: Record<string, DepartureBoard> } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: opts.screen ?? SCREEN }) };
@@ -303,7 +303,7 @@ function mount(opts: { viewport?: { width: number; height: number }; modules?: (
   let now = NOW;
   let handlers: Parameters<NonNullable<KioskDeps['createBeacon']>>[0] | null = null;
   const map = fakeMap(opts.camera);
-  const boards = fakeBoards(BOARDS);
+  const boards = fakeBoards(opts.boards ?? BOARDS);
   const modules = opts.modules ?? (() => MODULES);
   const handle = mountKiosk(root, {
     cityStore: fakeCityStore(CITY), i18n, hash: '', storage, now: () => now, codeBase: 'https://zagreb.aningfilm.hr',
@@ -797,5 +797,59 @@ describe('the board on the 3-metre tiers (computed from the real sheets)', () =>
     expect(css).toContain('.kiosk .k-touch .sada-departure .line{font-size:inherit;');
     expect(css).toContain('.kiosk .k-touch{--k-touch-read:max(40px,var(--k-main-size));');
     expect(css).toContain('.kiosk .k-nearby-host[data-touch]>[data-testid=nearby]{visibility:hidden}');
+  });
+});
+
+describe('a touch quiets the reveals (R2)', () => {
+  // docs/reveal-2026-10-plan/R2.md step 7: nothing moves while a touch is open. An evening board, six timetable
+  // departures twelve minutes apart, makes an advance eligible on every fourth beat (the first shown departure is
+  // more than ten minutes away and three next departures exist); the line advances within 100 s of ticks, and never
+  // while a row's detail stands over the list.
+  const evening: Record<string, DepartureBoard> = {
+    '106_1': board('106_1', STOP.name, [12, 24, 36, 48, 60, 72].map((m, i) => dep(`late-${i}`, ['6', '11', '14', '17', '13', '12'][i]!, ['Črnomerec', 'Dubec', 'Mihaljevac', 'Prečko', 'Žitnjak', 'Dubrava'][i]!, m))),
+  };
+  const pointer = (el: Element, type: string, x = 0, y = 0): boolean =>
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  const click = (el: Element, x = 0, y = 0): boolean => el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+  const reveals = (k: ReturnType<typeof mount>): string[] => [k.q('[data-testid=nearby-rows]')?.dataset.reveal, k.q('[data-kind=departures]')?.dataset.reveal].filter((v): v is string => Boolean(v));
+  const run = (k: ReturnType<typeof mount>, seconds: number): string[] => {
+    const seen = new Set<string>();
+    for (let s = 1; s <= seconds; s++) {
+      k.setNow(NOW + s * 1000);
+      k.tick(CODE_TICK_MS);
+      for (const v of reveals(k)) seen.add(v);
+    }
+    return [...seen];
+  };
+
+  it('without a touch the line advances on a beat within 100 s; with a row\'s detail open nothing is revealed for its 60 s', async () => {
+    const loud = mount({ boards: evening });
+    await flush();
+    expect(loud.q('[data-kind=departures]')).not.toBeNull();
+    const seen = run(loud, 100);
+    expect(seen.some((v) => /^advance:\d+$/.test(v)), seen.join(', ')).toBe(true);
+    expect(loud.q('[data-testid=nearby-rows]')?.dataset.reveal).toBeUndefined();
+    loud.handle.destroy();
+
+    const k = mount({ boards: evening });
+    await flush();
+    const row = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=event]')!;
+    expect(row).not.toBeNull();
+    pointer(row, 'pointerdown', 1500, 500);
+    pointer(row, 'pointerup', 1500, 500);
+    click(row, 1500, 500);
+    expect(k.detail()).not.toBeNull();
+    // For the touch's whole 60 s (TOUCH_MS) no beat reveals anything, on the list or the line.
+    expect(run(k, 59)).toEqual([]);
+    expect(k.detail()).not.toBeNull();
+    // The wall returns by itself after its 60 s: the beats run again, and the advance is back within the next 100 s.
+    const after = new Set<string>();
+    for (let s = 60; s <= 160; s++) {
+      k.setNow(NOW + s * 1000);
+      k.tick(CODE_TICK_MS);
+      for (const v of reveals(k)) after.add(v);
+    }
+    expect([...after].some((v) => /^advance:\d+$/.test(v)), [...after].join(', ')).toBe(true);
+    k.handle.destroy();
   });
 });

@@ -13,6 +13,7 @@ import { fill, type KioskStrings } from './strings';
 import { serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import { serviceVars } from '../city/sentence';
 import { mountTimeline } from './timeline';
+import type { TaktReveal } from '../../../shared/kiosk/takt';
 import { MAP_MIN_HEIGHT_PX } from '../map/frame';
 
 /** The ol's design-height fallback only; its measured box wins after layout. Compact: the whole aside
@@ -73,10 +74,14 @@ export interface InvitationModel {
   note: string | null;
   modules: readonly ModuleSnapshot[]; stop: ScreenStop | null;
   now: number; composition: Composition;
+  /** R2: the beat's reveal the list draws over its fit (kiosk.ts takt), and the rows an advance draws in the line. */
+  reveal: TaktReveal | null; next: readonly NearbyRow[];
 }
 export interface InvitationHandle {
   element: HTMLElement; readonly mapHost: HTMLElement | null;
   update(model: InvitationModel): void;
+  /** How many rows the list's fit drew (the timeline's shown(), page 1 as painted; never the reveal), R2's capacity. */
+  shown(): number;
   setFrame(frame: FrameStops): void;
   measureWidth(): number; measureHeight(): number; setMajorLabels(count: number): void;
   /** The legend's entries follow what the map draws (kiosk/mapview.ts legendKinds): the others are hidden. */
@@ -201,15 +206,16 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   }
   function fit():void {
     if(!model)return;
-    timeline.update(model.items,model.radiusM,model.now);
+    const view={reveal:model.reveal,next:model.next};
+    timeline.update(model.items,model.radiusM,model.now,view);
     if(!placeCard())return;
-    timeline.update(model.items,model.radiusM,model.now);
+    timeline.update(model.items,model.radiusM,model.now,view);
     // The fit is the proof: the promises did not fit the smaller list after all, so decision 50's arrangement returns.
     if(element.dataset.card&&timeline.element.dataset.fitOverflow==='1'){
       refused=promiseKey(element.querySelector<HTMLElement>('.k-nearby-rows'));
       delete element.dataset.card;
       if(legend&&legend.parentElement!==geography)geography.insertBefore(legend,note);
-      timeline.update(model.items,model.radiusM,model.now);
+      timeline.update(model.items,model.radiusM,model.now,view);
     }
     deps.onMapBox?.();
   }
@@ -226,6 +232,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     },
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),
     setFrame,setMajorLabels:count=>field.setMajorLabels(count),fit,
+    shown:()=>timeline.shown(),
     setLegend(kinds){
       for(const span of legend?.querySelectorAll<HTMLElement>(':scope > span[data-legend]')??[]){
         const hidden=!kinds.includes(span.dataset.legend??'');
