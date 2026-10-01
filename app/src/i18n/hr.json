@@ -985,6 +985,7 @@
       "outageNote": "ZET trenutačno ne šalje položaje vozila; polasci su iz voznog reda, bez potvrde.",
       "ongoing": "u tijeku",
       "zetSays": "ZET javlja",
+      "zatim": "zatim",
       "silentNote": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Polasci su iz voznog reda, bez potvrde vozila.",
       "rainChance": "vjerojatnost {p} %",
       "rain": {
