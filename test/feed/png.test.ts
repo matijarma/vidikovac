@@ -3,20 +3,20 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { cropRaster, decodePng, encodePng, type RasterRgb } from '../../worker/feed/png';
+import { cropRaster, decodePng, encodePng, PNG_MAX_PIXELS, type RasterRgb } from '../../worker/feed/png';
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'radar', 'kompozit-20261001T020410Z.png');
 
 /** A PNG built by hand: IHDR with the given fields, one IDAT of the given filtered rows, IEND. */
+function chunk(type: string, body: Buffer): Buffer {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(body.length, 0);
+  head.write(type, 4, 'ascii');
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])) >>> 0, 0);
+  return Buffer.concat([head, body, crc]);
+}
 function png(fields: { width: number; height: number; depth?: number; colourType: number; interlace?: number }, raw: Uint8Array, extra: Buffer[] = []): Uint8Array {
-  const chunk = (type: string, body: Buffer) => {
-    const head = Buffer.alloc(8);
-    head.writeUInt32BE(body.length, 0);
-    head.write(type, 4, 'ascii');
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])) >>> 0, 0);
-    return Buffer.concat([head, body, crc]);
-  };
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(fields.width, 0);
   ihdr.writeUInt32BE(fields.height, 4);
@@ -33,6 +33,56 @@ function png(fields: { width: number; height: number; depth?: number; colourType
 }
 
 const SMALL: RasterRgb = { width: 3, height: 2, data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 10, 20, 30, 40, 50, 60, 70, 80, 90]) };
+
+describe('R3 review: bounded PNG validation', () => {
+  it('rejects huge dimensions before inflation and excess full-image scanlines', async () => {
+    await expect(decodePng(png({ width: PNG_MAX_PIXELS + 1, height: 1, colourType: 2 }, new Uint8Array()))).rejects.toThrow(/dimensions/);
+    await expect(decodePng(png({ width: 4097, height: 1, colourType: 2 }, new Uint8Array()))).rejects.toThrow(/dimensions/);
+    await expect(decodePng(png({ width: 1, height: 1, colourType: 2 }, new Uint8Array(100_000)))).rejects.toThrow(/exceeds/);
+    await expect(decodePng(png({ width: 1, height: 2, colourType: 2 }, new Uint8Array([0, 1, 2, 3])))).rejects.toThrow(/early/);
+  });
+
+  it.each([NaN, Infinity, -1, 0.5])('rejects invalid partial row count %s', async (rows) => {
+    await expect(decodePng(await encodePng(SMALL), { rows })).rejects.toThrow(/row count/);
+  });
+
+  it('rejects duplicate or misplaced headers, trailing data and malformed palettes', async () => {
+    const good = await encodePng(SMALL);
+    const doubled = new Uint8Array([...good.subarray(0, 33), ...good.subarray(8)]);
+    await expect(decodePng(doubled)).rejects.toThrow(/duplicate IHDR/);
+    await expect(decodePng(new Uint8Array([...good.subarray(0, 8), ...good.subarray(33)]))).rejects.toThrow(/IHDR must be first/);
+    await expect(decodePng(new Uint8Array([...good, 0]))).rejects.toThrow(/trailing/);
+    for (const palette of [Buffer.alloc(0), Buffer.alloc(4), Buffer.alloc(771)]) {
+      await expect(decodePng(png({ width: 1, height: 1, colourType: 3 }, new Uint8Array([0, 0]), [palette]))).rejects.toThrow(/PLTE/);
+    }
+  });
+
+  it('checks every chunk CRC even for a partial decode, and rejects invalid filters', async () => {
+    const good = await encodePng(SMALL);
+    good[good.length - 1] ^= 1;
+    await expect(decodePng(good, { rows: 1 })).rejects.toThrow(/CRC/);
+    await expect(decodePng(png({ width: 1, height: 1, colourType: 2 }, new Uint8Array([5, 1, 2, 3])))).rejects.toThrow(/filter type 5/);
+    const one = await decodePng(await encodePng(SMALL), { rows: 1 });
+    expect([...one.data]).toEqual([...SMALL.data.subarray(0, 9)]);
+  });
+
+  it('rejects unknown critical chunks, nonconsecutive IDATs, late palettes and a nonempty IEND', async () => {
+    const good = Buffer.from(await encodePng(SMALL));
+    const beforeEnd = good.subarray(0, -12);
+    const end = good.subarray(-12);
+    await expect(decodePng(Buffer.concat([beforeEnd, chunk('ABCD', Buffer.alloc(0)), end]))).rejects.toThrow(/critical/);
+    await expect(decodePng(Buffer.concat([beforeEnd, chunk('tEXt', Buffer.from('note')), chunk('IDAT', Buffer.alloc(0)), end]))).rejects.toThrow(/IDAT order/);
+    await expect(decodePng(Buffer.concat([beforeEnd, chunk('PLTE', Buffer.alloc(3)), end]))).rejects.toThrow(/PLTE/);
+    await expect(decodePng(Buffer.concat([beforeEnd, chunk('IEND', Buffer.from([0]))]))).rejects.toThrow(/IEND/);
+  });
+
+  it('rejects non-integer raster and crop dimensions or incomplete raster data', async () => {
+    await expect(encodePng({ width: 0.5, height: 2, data: new Uint8Array(3) })).rejects.toThrow(/dimensions/);
+    await expect(encodePng({ width: 0, height: 0, data: new Uint8Array() })).rejects.toThrow(/dimensions/);
+    expect(() => cropRaster(SMALL, [0.5, 0, 1, 1])).toThrow(/outside/);
+    expect(() => cropRaster({ ...SMALL, data: new Uint8Array(3) }, [0, 0, 0, 0])).toThrow(/size/);
+  });
+});
 
 describe('the PNG codec', () => {
   it('round-trips a 3 x 2 RGB image byte for byte', async () => {

@@ -7,6 +7,15 @@
 export interface RasterRgb { width: number; height: number; /** 3 bytes a pixel, row-major, top row first. */ data: Uint8Array }
 
 const SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+/** Resource bounds for untrusted images, comfortably above the 720 × 751 composite. */
+export const PNG_MAX_BYTES = 8 * 1024 * 1024;
+export const PNG_MAX_PIXELS = 4 * 1024 * 1024;
+const PNG_MAX_DIMENSION = 4096;
+
+function dimensions(width: number, height: number): void {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0
+    || width > PNG_MAX_DIMENSION || height > PNG_MAX_DIMENSION || width * height > PNG_MAX_PIXELS) throw new Error('png: invalid or oversized dimensions');
+}
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -38,19 +47,21 @@ function concat(parts: readonly Uint8Array[], total: number): Uint8Array {
   return out;
 }
 
-/** Inflates a zlib stream, reading only until `need` bytes are out (all of it when `need` is undefined). */
-async function inflate(data: Uint8Array, need?: number): Promise<Uint8Array> {
+/** A partial decode stops at its prefix; a full decode must end at exactly the declared scanline size. */
+async function inflate(data: Uint8Array, need: number, partial: boolean): Promise<Uint8Array> {
   const stream = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream('deflate'));
   const reader = stream.getReader();
   const parts: Uint8Array[] = [];
   let total = 0;
   try {
     for (;;) {
-      if (need !== undefined && total >= need) break;
+      if (partial && total >= need) break;
       const { done, value } = await reader.read();
       if (done) break;
-      parts.push(value);
-      total += value.length;
+      if (!partial && total + value.length > need) throw new Error('png: image data exceeds declared rows');
+      const kept = value.subarray(0, need - total);
+      parts.push(kept);
+      total += kept.length;
     }
   } finally {
     // Stops the inflater once the rows wanted are out; a cancel after the end is a no-op.
@@ -74,6 +85,8 @@ function paeth(a: number, b: number, c: number): number {
 
 /** 8-bit, non-interlaced PNG of colour type 2 (RGB), 6 (RGBA, alpha dropped) or 3 (palette); rows 0..rows-1 only when `rows` is given. Throws on anything else. */
 export async function decodePng(bytes: Uint8Array, options?: { rows?: number }): Promise<RasterRgb> {
+  if (bytes.length > PNG_MAX_BYTES) throw new Error('png: encoded image too large');
+  if (options?.rows !== undefined && (!Number.isSafeInteger(options.rows) || options.rows < 0)) throw new Error('png: invalid row count');
   if (bytes.length < 8 || SIGNATURE.some((value, i) => bytes[i] !== value)) throw new Error('png: not a PNG');
   let at = 8;
   let width = 0;
@@ -83,16 +96,20 @@ export async function decodePng(bytes: Uint8Array, options?: { rows?: number }):
   const idat: Uint8Array[] = [];
   let idatLength = 0;
   let ended = false;
+  let dataEnded = false;
   while (!ended) {
     if (at + 12 > bytes.length) throw new Error('png: truncated');
     const length = u32(bytes, at);
     const type = String.fromCharCode(bytes[at + 4]!, bytes[at + 5]!, bytes[at + 6]!, bytes[at + 7]!);
+    if (!/^[A-Za-z]{2}[A-Z][A-Za-z]$/.test(type)) throw new Error('png: invalid chunk type');
+    if (at === 8 && type !== 'IHDR') throw new Error('png: IHDR must be first');
     const start = at + 8;
     const end = start + length;
     if (end + 4 > bytes.length) throw new Error('png: truncated');
     if (crc32(bytes, at + 4, end) !== u32(bytes, end)) throw new Error(`png: bad CRC in ${type}`);
     const body = bytes.subarray(start, end);
     if (type === 'IHDR') {
+      if (colourType !== -1) throw new Error('png: duplicate IHDR');
       if (length !== 13) throw new Error('png: bad IHDR');
       width = u32(body, 0);
       height = u32(body, 4);
@@ -103,17 +120,24 @@ export async function decodePng(bytes: Uint8Array, options?: { rows?: number }):
       if (colourType !== 2 && colourType !== 3 && colourType !== 6) throw new Error(`png: colour type ${colourType} not supported`);
       if (body[10] !== 0 || body[11] !== 0) throw new Error('png: unknown compression or filter method');
       if (interlace !== 0) throw new Error('png: interlaced images are not supported');
-      if (width === 0 || height === 0) throw new Error('png: empty image');
+      dimensions(width, height);
     } else if (type === 'PLTE') {
+      if (palette || idat.length || length === 0 || length > 768 || length % 3 !== 0) throw new Error('png: invalid PLTE');
       palette = body;
     } else if (type === 'IDAT') {
+      if (dataEnded || (colourType === 3 && !palette)) throw new Error('png: invalid IDAT order');
       idat.push(body);
       idatLength += body.length;
     } else if (type === 'IEND') {
+      if (length !== 0) throw new Error('png: invalid IEND');
       ended = true;
+    } else if ((bytes[at + 4]! & 32) === 0) {
+      throw new Error(`png: unsupported critical chunk ${type}`);
     }
+    if (idat.length && type !== 'IDAT') dataEnded = true;
     at = end + 4;
   }
+  if (at !== bytes.length) throw new Error('png: trailing bytes after IEND');
   if (colourType < 0) throw new Error('png: no IHDR');
   if (colourType === 3 && !palette) throw new Error('png: palette image without PLTE');
   if (idatLength === 0) throw new Error('png: no image data');
@@ -121,7 +145,7 @@ export async function decodePng(bytes: Uint8Array, options?: { rows?: number }):
   const channels = colourType === 2 ? 3 : colourType === 6 ? 4 : 1;
   const stride = width * channels;
   const need = rows * (stride + 1);
-  const raw = await inflate(concat(idat, idatLength), rows < height ? need : undefined);
+  const raw = await inflate(concat(idat, idatLength), need, rows < height);
   if (raw.length < need) throw new Error('png: image data ends early');
   const data = new Uint8Array(width * rows * 3);
   let previous = new Uint8Array(stride);
@@ -181,6 +205,7 @@ function chunk(type: string, body: Uint8Array): Uint8Array {
 /** An 8-bit RGB PNG, filter 0 on every row. */
 export async function encodePng(raster: RasterRgb): Promise<Uint8Array> {
   const { width, height, data } = raster;
+  dimensions(width, height);
   if (data.length !== width * height * 3) throw new Error('png: raster size does not match its data');
   const header = new Uint8Array(13);
   const view = new DataView(header.buffer);
@@ -196,8 +221,10 @@ export async function encodePng(raster: RasterRgb): Promise<Uint8Array> {
 }
 
 export function cropRaster(raster: RasterRgb, rect: readonly [x0: number, y0: number, x1: number, y1: number]): RasterRgb { // inclusive
+  dimensions(raster.width, raster.height);
+  if (raster.data.length !== raster.width * raster.height * 3) throw new Error('png: raster size does not match its data');
   const [x0, y0, x1, y1] = rect;
-  if (x0 < 0 || y0 < 0 || x1 >= raster.width || y1 >= raster.height || x1 < x0 || y1 < y0) throw new Error('png: crop outside the image');
+  if (!rect.every(Number.isSafeInteger) || x0 < 0 || y0 < 0 || x1 >= raster.width || y1 >= raster.height || x1 < x0 || y1 < y0) throw new Error('png: crop outside the image');
   const width = x1 - x0 + 1;
   const height = y1 - y0 + 1;
   const data = new Uint8Array(width * height * 3);
