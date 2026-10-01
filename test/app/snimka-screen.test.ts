@@ -1,0 +1,238 @@
+// @vitest-environment happy-dom
+// Zaslon (app/src/snimka/screen.ts): the reading shown is the latest at or
+// before the clock in the run that covers it; between runs the board's next
+// timetable departures, never padded; the capture is the nearest within six
+// hours; the quartet takes the four slot runs at 07:45; and on the page the
+// miniature is rewritten only when the reading it shows changes.
+import { describe, expect, it } from 'vitest';
+import { SNIMKA_WINDOW, ZAGREB_OFFSET_S, type BoardSeries, type HashedRef, type ScreenIndex, type ScreenRun } from '../../shared/snimka';
+import type { SnimkaContext } from '../../app/src/snimka/context';
+import type { FrameLoop } from '../../app/src/snimka/frames';
+import {
+  badgeOf, boardAt, boardHtml, captureHtml, mountScreen, nearestCapture, nextRunAfter, quartet, readingHtml, readingIndexAt, routeKind, runAt, type IndexRun,
+} from '../../app/src/snimka/screen';
+
+const zg = (month: number, day: number, hour: number, minute = 0, second = 0): number => Date.UTC(2026, month - 1, day, hour, minute, second) / 1000 - ZAGREB_OFFSET_S;
+const ref = (name: string): HashedRef => ({ path: `${name}.0123456789abcdef.json`, bytes: 10, sha256: '0123456789abcdef'.padEnd(64, '0') });
+const capture = (name: string): HashedRef => ({ path: `${name}.0123456789abcdef.webp`, bytes: 10, sha256: '0123456789abcdef'.padEnd(64, '0') });
+
+function indexRun(id: string, kind: IndexRun['kind'], fromSec: number, minutes = 10, withCapture = true): IndexRun {
+  return {
+    id, kind, fromSec, toSec: fromSec + minutes * 60, readings: minutes * 3, file: ref(`screen/${id}`),
+    captures: { kiosk: withCapture ? capture(`captures/${id}`) : null, phone: null },
+    summary: { sentences: { solar: minutes * 3 }, departureRows: 3, liveRows: 0 },
+  };
+}
+
+function screenRun(run: IndexRun, sentence = (i: number) => `Rečenica ${i}.`): ScreenRun {
+  const readings = Array.from({ length: run.readings }, (_, i) => ({
+    at: run.fromSec + i * 20, sentence: sentence(i), kicker: 'vrijeme', kickerText: 'Vrijeme', fact: 'sunset|x', family: 'solar' as const,
+    rows: [0, 1, 2], pills: null, mapNote: i === 0 ? 'ZET: u pokretu 5 vozila, po voznom redu oko 450.' : null, fleet: null,
+  }));
+  return {
+    v: 1, id: run.id, kind: run.kind, place: 'Trg bana J. Jelačića', fromSec: run.fromSec, toSec: run.toSec,
+    rows: [
+      { id: 'dep:13', kind: 'departure', source: 'zet-gtfs', live: false, title: '13 Kvat. trg', whenText: '07:45', sub: null, caveat: false },
+      { id: 'dep:6', kind: 'departure', source: 'zet-rt', live: true, title: '6 Sopot', whenText: '07:46', sub: null, caveat: false },
+      { id: 'always:jelacic', kind: 'always', source: 'heritage', live: false, title: 'Spomenik banu Josipu Jelačiću', whenText: 'uvijek', sub: 'Trg bana Josipa Jelačića', caveat: false },
+    ],
+    readings,
+  };
+}
+
+// The four mornings, each a slot run starting a few seconds after 07:45 as the observer's did, and runs that must not count.
+const MON = indexRun('0928-0745', 'slot', zg(9, 28, 7, 45, 11));
+const TUE_EARLY = indexRun('0929-0730', 'slot', zg(9, 29, 7, 30));
+const TUE = indexRun('0929-0745', 'slot', zg(9, 29, 7, 44, 50));
+const WED_SERIES = indexRun('0930-0745-series', 'series', zg(9, 30, 7, 45));
+const WED = indexRun('0930-0745', 'slot', zg(9, 30, 7, 46, 2));
+const WED_NOON = indexRun('0930-1230', 'slot', zg(9, 30, 12, 30));
+const THU = indexRun('1001-0745', 'slot', zg(10, 1, 7, 45, 3));
+const RETURN = indexRun('0930-2000-return', 'return', zg(9, 30, 20, 0), 30, false);
+const RETURN_INNER = indexRun('0930-2010-adhoc', 'adhoc', zg(9, 30, 20, 10), 5, false);
+const INDEX: ScreenIndex = { v: 1, runs: [MON, TUE_EARLY, TUE, WED_SERIES, WED, WED_NOON, RETURN, RETURN_INNER, THU] };
+
+describe('the run and the reading at an instant', () => {
+  it('at a run\'s first reading, inside it, at its end, and between runs', () => {
+    const run = screenRun(MON);
+    expect(runAt(INDEX, MON.fromSec)?.id).toBe(MON.id);
+    expect(readingIndexAt(run, MON.fromSec)).toBe(0);
+    // Inside: the latest reading at or before the clock, never the next one.
+    expect(readingIndexAt(run, MON.fromSec + 15 * 20 + 19)).toBe(15);
+    expect(readingIndexAt(run, MON.fromSec + 15 * 20)).toBe(15);
+    expect(runAt(INDEX, MON.toSec)?.id).toBe(MON.id);
+    expect(readingIndexAt(run, MON.toSec)).toBe(29);
+    // Before the first reading and between runs there is none.
+    expect(readingIndexAt(run, MON.fromSec - 1)).toBe(-1);
+    expect(runAt(INDEX, MON.toSec + 1)).toBeNull();
+    expect(runAt(INDEX, zg(9, 28, 12, 0))).toBeNull();
+    expect(nextRunAfter(INDEX, zg(9, 28, 12, 0))?.id).toBe(TUE_EARLY.id);
+  });
+  it('where two runs overlap, the one that started last', () => {
+    expect(runAt(INDEX, zg(9, 30, 20, 5))?.id).toBe(RETURN.id);
+    expect(runAt(INDEX, zg(9, 30, 20, 12))?.id).toBe(RETURN_INNER.id);
+    expect(runAt(INDEX, zg(9, 30, 20, 20))?.id).toBe(RETURN.id);
+    expect(runAt(INDEX, zg(9, 30, 7, 50))?.id).toBe(WED.id);
+  });
+});
+
+describe('the quartet', () => {
+  it('takes the slot run nearest 07:45 on each of the four mornings, never a series run', () => {
+    const slots = quartet(INDEX, SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec);
+    expect(slots.map((s) => s.key)).toEqual(['mon', 'tue', 'wed', 'thu']);
+    expect(slots.map((s) => s.run?.id)).toEqual([MON.id, TUE.id, WED.id, THU.id]);
+    expect(slots.map((s) => s.atSec)).toEqual([zg(9, 28, 7, 45), zg(9, 29, 7, 45), zg(9, 30, 7, 45), zg(10, 1, 7, 45)]);
+  });
+  it('a morning without a slot run stays empty rather than borrowing another hour', () => {
+    const slots = quartet({ v: 1, runs: [MON, WED_NOON, WED_SERIES] }, SNIMKA_WINDOW.fromSec, SNIMKA_WINDOW.toSec);
+    expect(slots.map((s) => s.run?.id ?? null)).toEqual([MON.id, null, null, null]);
+  });
+});
+
+describe('the board between runs', () => {
+  const board: BoardSeries = {
+    v: 1, stop: '106_1', name: 'Trg bana J. Jelačića',
+    samples: [
+      { at: zg(9, 28, 12, 0), status: 'timetable', next: [['6', 'Sopot', zg(9, 28, 12, 1)], ['13', 'Kvat. trg', zg(9, 28, 12, 3)], ['228', 'Rebro', zg(9, 28, 12, 6)]] },
+      { at: zg(9, 28, 12, 5), status: 'timetable', next: [] },
+    ],
+  };
+  it('the next departures at or after the clock, never padded', () => {
+    expect(boardAt(board, zg(9, 28, 12, 2))).toEqual({ at: zg(9, 28, 12, 0), next: [['13', 'Kvat. trg', zg(9, 28, 12, 3)], ['228', 'Rebro', zg(9, 28, 12, 6)]] });
+    expect(boardAt(board, zg(9, 28, 12, 6))?.next).toEqual([]);
+    expect(boardAt(board, zg(9, 28, 11, 59))).toBeNull();
+    expect(boardAt(board, zg(9, 28, 12, 21))).toBeNull(); // a sample a quarter of an hour old is no longer "next"
+  });
+  it('draws the note, the badges in their modes and the word when nothing is due', () => {
+    const html = boardHtml(board.name, boardAt(board, zg(9, 28, 12, 0))!);
+    expect(html).toContain('Između zapisa zaslona');
+    expect(html).toContain('<span class="line" data-kind="tram" data-size="s">13</span>');
+    expect(html).toContain('<span class="line" data-kind="bus" data-size="s">228</span>');
+    expect(boardHtml(board.name, { at: board.samples[1]!.at, next: [] })).toContain('U voznom redu nema sljedećih polazaka.');
+  });
+});
+
+describe('the capture beside the miniature', () => {
+  it('is the run with a capture nearest the clock, within six hours', () => {
+    expect(nearestCapture(INDEX, MON.fromSec + 60)?.id).toBe(MON.id);
+    expect(nearestCapture(INDEX, zg(9, 28, 13, 0))?.id).toBe(MON.id);
+    expect(nearestCapture(INDEX, zg(9, 28, 20, 0))).toBeNull();
+    // The return runs have no capture: the nearest one with a capture is the noon slot, more than six hours away.
+    expect(nearestCapture(INDEX, zg(9, 30, 20, 10))).toBeNull();
+    expect(nearestCapture(INDEX, zg(9, 30, 17, 0))?.id).toBe(WED_NOON.id);
+  });
+  it('names the day and the time in its alt and caption', () => {
+    const html = captureHtml('/api/snimka/v1/captures/x.webp', MON, null);
+    expect(html).toContain('alt="Snimka zaslona, pon 28. 9. u 07:45"');
+    expect(html).toContain('type="image/webp"');
+    expect(html).toContain('<figcaption>Snimka zaslona, pon 28. 9. u 07:45</figcaption>');
+  });
+});
+
+describe('the rows', () => {
+  it('a departure gets its line badge in its mode; other rows none', () => {
+    expect(badgeOf({ kind: 'departure', title: '13 Kvat. trg' })).toEqual({ label: '13', kind: 'tram', rest: 'Kvat. trg' });
+    expect(badgeOf({ kind: 'departure', title: 'Tramvaj 6 prema Črnomercu' })).toEqual({ label: '6', kind: 'tram', rest: 'prema Črnomercu' });
+    expect(badgeOf({ kind: 'departure', title: '228 Borongaj' })).toEqual({ label: '228', kind: 'bus', rest: 'Borongaj' });
+    expect(badgeOf({ kind: 'notice', title: '228 linija' })).toBeNull();
+    expect(routeKind('31')).toBe('tram');
+    expect(routeKind('101')).toBe('bus');
+    expect(routeKind('N')).toBe('other');
+  });
+  it('the miniature carries the sentence with its kicker, the note and the rows, live times marked', () => {
+    const run = screenRun(MON);
+    const html = readingHtml(run, run.readings[0]!);
+    expect(html).toContain('data-kicker="vrijeme"');
+    expect(html).toContain('<span class="sn-mini-kicker">Vrijeme</span> <span class="sn-mini-text">Rečenica 0.</span>');
+    expect(html).toContain('ZET: u pokretu 5 vozila');
+    expect(html).toContain('<span class="sn-mini-clock">07:45</span>');
+    expect(html).toMatch(/data-live="true"[^]*07:46/);
+    expect(html).toContain('Spomenik banu Josipu Jelačiću');
+    expect(readingHtml(run, run.readings[1]!)).not.toContain('sn-mini-note');
+  });
+});
+
+// ---- on the page --------------------------------------------------------------------------
+
+function page(runs: Map<string, ScreenRun>) {
+  const subs = new Set<(t: number) => void>();
+  const frames: FrameLoop = { subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; }, kick() {}, destroy() {} };
+  let now = MON.fromSec * 1000;
+  const requested: string[] = [];
+  const objects = new Map<string, unknown>([['screen/index.json', INDEX], ['board.json', { v: 1, stop: '106_1', name: 'Trg bana J. Jelačića', samples: [] }]]);
+  for (const [id, run] of runs) objects.set(INDEX.runs.find((r) => r.id === id)!.file.path, run);
+  const ctx = {
+    manifest: { window: { ...SNIMKA_WINDOW }, files: { screenIndex: 'screen/index.json', board106: 'board.json' } },
+    clock: { now: () => now },
+    frames,
+    data: {
+      url: (r: HashedRef | string) => `/api/snimka/v1/${typeof r === 'string' ? r : r.path}`,
+      get: async <T,>(r: HashedRef | string, decode?: (raw: unknown) => T): Promise<T> => {
+        const path = typeof r === 'string' ? r : r.path;
+        requested.push(path);
+        if (!objects.has(path)) throw new Error(`404 ${path}`);
+        return decode ? decode(objects.get(path)) : (objects.get(path) as T);
+      },
+    },
+  } as unknown as SnimkaContext;
+  return { ctx, emit: (t: number) => { now = t; for (const fn of subs) fn(t); }, requested };
+}
+
+const settle = async (): Promise<void> => { for (let i = 0; i < 5; i++) await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); };
+
+describe('mountScreen', () => {
+  it('shows the reading, rewrites the miniature only when the reading changes, and prefetches the next run', async () => {
+    const { ctx, emit, requested } = page(new Map([[MON.id, screenRun(MON)], [TUE_EARLY.id, screenRun(TUE_EARLY)]]));
+    const root = document.createElement('div');
+    root.setAttribute('aria-busy', 'true');
+    document.body.append(root);
+    let handed: ScreenIndex | null | undefined;
+    const off = mountScreen(ctx, root, (ix) => { handed = ix; });
+    await settle();
+    expect(handed).toBe(INDEX);
+    const mini = root.querySelector<HTMLElement>('.sn-mini')!;
+    expect(mini.dataset.view).toBe('reading');
+    expect(mini.textContent).toContain('Rečenica 0.');
+    expect(root.querySelectorAll('.sn-mini .line').length).toBe(2);
+    // The next run is fetched while this one shows.
+    expect(requested).toContain(TUE_EARLY.file.path);
+    // A frame inside the same reading leaves the miniature's nodes alone.
+    const node = mini.firstElementChild;
+    emit(MON.fromSec * 1000 + 15_000);
+    expect(mini.firstElementChild).toBe(node);
+    // The next reading replaces them.
+    emit(MON.fromSec * 1000 + 21_000);
+    expect(mini.firstElementChild).not.toBe(node);
+    expect(mini.textContent).toContain('Rečenica 1.');
+    // The capture and the quartet: four mornings, each with its picture or the word for none.
+    expect(root.querySelector('.sn-capture img')?.getAttribute('alt')).toBe('Snimka zaslona, pon 28. 9. u 07:45');
+    const items = root.querySelectorAll('.sn-quartet-item');
+    expect(items.length).toBe(4);
+    expect([...root.querySelectorAll('.sn-quartet-item img')].every((img) => (img.getAttribute('alt') ?? '').length > 0)).toBe(true);
+    // Between runs, with an empty board: the note and the word for no departures.
+    emit(zg(9, 28, 15, 0) * 1000);
+    expect(mini.dataset.view).toBe('none');
+    expect(mini.textContent).toContain('U voznom redu nema sljedećih polazaka.');
+    expect(root.querySelector('.sn-capture')?.textContent).toContain('Za ovo doba nema snimke zaslona.');
+    off();
+  });
+  it('a run on its way shows the loading state; one that cannot load reads as between runs and is not asked for again', async () => {
+    const { ctx, emit, requested } = page(new Map([[MON.id, screenRun(MON)]]));
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountScreen(ctx, root, () => {});
+    await settle();
+    const mini = root.querySelector<HTMLElement>('.sn-mini')!;
+    emit((TUE.fromSec + 30) * 1000);
+    expect(mini.dataset.view).toBe('loading');
+    expect(mini.getAttribute('aria-busy')).toBe('true');
+    await settle();
+    expect(mini.dataset.view).toBe('none');
+    expect(mini.hasAttribute('aria-busy')).toBe(false);
+    expect(mini.textContent).not.toContain('Rečenica');
+    emit((TUE.fromSec + 50) * 1000);
+    emit((TUE.fromSec + 70) * 1000);
+    expect(requested.filter((p) => p === TUE.file.path).length).toBe(1);
+    off();
+  });
+});
