@@ -12,6 +12,47 @@ const raw = async () => readFile(FIXTURE, 'utf8');
 const parse = (text: string) => text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
 describe('shownFacts on the fixture', () => {
+  it('counts malformed JSON values, invalid dates and explicit errors as failed readings', () => {
+    const at = 1790852388000;
+    const result = shownFacts([null, false, 42, 'invalid', [], { at: 1e100, rows: [] },
+      { at, rows: [], error: '' }, { at, rows: [] }]);
+    expect(result).toMatchObject({ readings: 1, failed: 7 });
+    expect(result.hours).toHaveLength(1);
+    expect(result.hours[0]).toMatchObject({ readings: 1, failed: 1 });
+  });
+
+  it('does not invent row ids or non-finite departure bounds, and retains arbitrary kind keys in JSON', () => {
+    const at = 1790852388000;
+    const result = shownFacts([
+      { at, departures: 2, rows: [{ id: 'valid', kind: '__proto__' }, { id: {}, kind: 'open' }, { id: 'missing-kind' }, { id: '', kind: 'open' }] },
+      { at: at + 2000, departures: NaN, rows: [] },
+      { at: at + 4000, departures: Infinity, rows: [] },
+    ]);
+    expect(result.summary.nonTransit).toBe(1);
+    expect(JSON.parse(JSON.stringify(result.hours[0].rows))).toEqual(JSON.parse('{"__proto__":["valid"]}'));
+    expect(result.hours[0].departures).toEqual({ min: 2, max: 2 });
+  });
+
+  it('does not claim continuous reveal dwell across a failed reading', () => {
+    const at = 1790852388000;
+    const result = shownFacts([
+      { at, rows: [], reveal: { list: 'page:10', line: null } },
+      { at: at + 2000, error: 'timeout' },
+      { at: at + 4000, rows: [], reveal: { list: 'page:10', line: null } },
+    ]);
+    expect(result.hours[0].reveals).toMatchObject({ count: 2, maxDwellMs: 2000, minGapBeats: 0 });
+  });
+
+  it('reports backwards beat differences instead of turning them into a healthy positive gap', () => {
+    const at = 1790852388000;
+    const result = shownFacts([
+      { at, rows: [], reveal: 'page:10' },
+      { at: at + 2000, rows: [], reveal: null },
+      { at: at + 4000, rows: [], reveal: 'page:7' },
+    ]);
+    expect(result.hours[0].reveals.minGapBeats).toBe(-3);
+  });
+
   it('counts two hours', async () => {
     const r = shownFacts(parse(await raw()));
     expect(r.readings).toBe(12);
@@ -79,6 +120,13 @@ describe('revealOf', () => {
   });
   it('returns null for anything else', () => {
     for (const v of [null, undefined, '', 'page', 'page:x', 'other:5', 12, { list: null, line: null }]) expect(revealOf(v)).toBeNull();
+  });
+  it('rejects unsafe beat numbers and nested or cyclic reveal objects', () => {
+    const cyclic: { list?: unknown } = {};
+    cyclic.list = cyclic;
+    for (const value of ['page:9007199254740992', 'page::42', { list: { list: 'page:42' } }, cyclic]) {
+      expect(revealOf(value)).toBeNull();
+    }
   });
   it('counts a reveal in the R2 shape from the observer object form', () => {
     const r = shownFacts([

@@ -34,7 +34,7 @@ export function zagrebHourKey(atMs) {
  * the observer's `{ list, line }` object (the list's value first). Anything else is null.
  */
 export function revealOf(value) {
-  if (value && typeof value === 'object') return revealOf(value.list || value.line || null);
+  if (value && typeof value === 'object') value = value.list || value.line || null;
   if (typeof value !== 'string') return null;
   const parts = value.split(':');
   if (parts.length < 2) return null;
@@ -43,10 +43,13 @@ export function revealOf(value) {
   const last = parts[parts.length - 1];
   if (!/^\d+$/.test(last)) return null;
   const id = parts.length > 2 ? parts.slice(1, -1).join(':') : null;
-  return { kind, id, beat: Number(last) };
+  const beat = Number(last);
+  if (!Number.isSafeInteger(beat) || id === '') return null;
+  return { kind, id, beat };
 }
 
-const isValid = (r) => r && typeof r === 'object' && Number.isFinite(r.at) && Array.isArray(r.rows) && !r.error;
+const validInstant = (at) => Number.isFinite(at) && Number.isFinite(new Date(at).getTime());
+const isValid = (r) => r && typeof r === 'object' && validInstant(r.at) && Array.isArray(r.rows) && !('error' in r);
 const isTransitWording = (fact) => {
   const wording = String(fact).split('|')[0];
   return wording === 'text' || TRANSIT_WORDINGS.includes(wording);
@@ -70,10 +73,12 @@ export function shownFacts(readings) {
   let from = null;
   let to = null;
   const runIds = new Set();
-  const sorted = [...readings].filter((r) => r && typeof r === 'object');
-  for (const r of sorted) {
+  let previousHour = null;
+  for (const r of readings) {
     if (!isValid(r)) {
-      if (r && Number.isFinite(r.at)) hourOf(r.at).failed += 1;
+      if (r && validInstant(r.at)) hourOf(r.at).failed += 1;
+      // Missing evidence cannot establish a continuous observed dwell.
+      if (previousHour) previousHour.open = null;
       failed += 1;
       continue;
     }
@@ -81,16 +86,18 @@ export function shownFacts(readings) {
     if (from === null || r.at < from) from = r.at;
     if (to === null || r.at > to) to = r.at;
     const h = hourOf(r.at);
+    if (previousHour && previousHour !== h) previousHour.open = null;
+    previousHour = h;
     h.readings += 1;
     for (const row of r.rows) {
-      if (!row || row.id == null || TRANSIT_KINDS.includes(row.kind)) continue;
+      if (!row || typeof row.id !== 'string' || !row.id || typeof row.kind !== 'string' || !row.kind || TRANSIT_KINDS.includes(row.kind)) continue;
       const kind = String(row.kind);
       if (!h.ids.has(kind)) h.ids.set(kind, new Set());
       h.ids.get(kind).add(String(row.id));
       runIds.add(String(row.id));
     }
     if (typeof r.fact === 'string' && r.fact) h.facts.add(r.fact);
-    if (typeof r.departures === 'number') {
+    if (Number.isFinite(r.departures) && Number.isInteger(r.departures) && r.departures >= 0) {
       h.dmin = h.dmin === null ? r.departures : Math.min(h.dmin, r.departures);
       h.dmax = h.dmax === null ? r.departures : Math.max(h.dmax, r.departures);
     }
@@ -107,7 +114,7 @@ export function shownFacts(readings) {
   const out = [];
   for (const key of [...hours.keys()].sort()) {
     const h = hours.get(key);
-    const rows = {};
+    const rows = Object.create(null);
     const all = new Set();
     const city = new Set();
     for (const kind of [...h.ids.keys()].sort()) {
@@ -121,7 +128,7 @@ export function shownFacts(readings) {
     const eps = h.episodes;
     let minGapBeats = null;
     for (let i = 1; i < eps.length; i++) {
-      const gap = Math.abs(eps[i].beat - eps[i - 1].beat);
+      const gap = eps[i].beat - eps[i - 1].beat;
       if (minGapBeats === null || gap < minGapBeats) minGapBeats = gap;
     }
     const dwell = eps.length ? Math.max(...eps.map((e) => e.lastAt - e.firstAt + ROTATION_STEP_MS)) : null;
