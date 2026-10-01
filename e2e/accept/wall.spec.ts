@@ -61,8 +61,8 @@ const softly = expect.configure({ soft: true });
 
 interface OpenWall { clock: SceneClock; recorder: Recorder | null }
 
-/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns. */
-async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>> }): Promise<OpenWall> {
+/** The scene's screen, fixtures and clock, then the wall's own URL; `board` can select later real timetable trips. */
+async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>>; departuresAfter?: number }): Promise<OpenWall> {
   await isolateLocalNetwork(page.context());
   await page.clock.install({ time: scene.now });
   const clock = sceneClock(scene.now);
@@ -71,7 +71,14 @@ async function openWall(page: Page, request: APIRequestContext, scene: Scene, la
   const vehicles = snapshots['zet-rt']?.items ?? [];
   const days = serviceDays(scene.now);
   await installCityFixture(page, scene.now, {
-    departures: (stopId) => departuresBoard({ now: clock.now(), stopId, vehicles, ...(board?.headsigns ? { headsigns: board.headsigns } : {}) }),
+    departures: (stopId) => ({
+      ...departuresBoard({
+        now: Math.max(clock.now(), board?.departuresAfter ?? -Infinity), stopId, vehicles,
+        ...(board?.headsigns ? { headsigns: board.headsigns } : {}),
+        ...(board?.departuresAfter !== undefined ? { tracked: 0 } : {}),
+      }),
+      generatedAt: new Date(clock.now()).toISOString(),
+    }),
     lastRun: (stopId) => lastRunSnapshot(stopId, days),
   });
   await routeTiles(page);
@@ -365,6 +372,68 @@ const LINE_LAYOUT_IN_PAGE = (probes: { depLine: string; nearbyRows: string }): L
     departureRows: document.querySelectorAll(`${probes.nearbyRows} > .nearby-row[data-kind="departure"]`).length,
   };
 };
+
+// The ordinary scenes keep a near departure and need not advance at all. Select later *real* fixture trips,
+// without changing their ids/times, to exercise the native advance edge, geometry and exact-node return.
+test.describe('the departures advance (R2)', () => {
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }]) {
+    test(`${viewport.width}×${viewport.height}: an advance keeps three whole cells and returns their exact nodes`, async ({ page, request }) => {
+      test.setTimeout(SCENE_TIMEOUT_MS);
+      await page.setViewportSize(viewport);
+      const scene = SCENES.midday1230;
+      const label = `advance-${viewport.width}`;
+      const { clock } = await openWall(page, request, scene, label, false, { departuresAfter: scene.now + 20 * 60_000 });
+      await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: LOAD_MS });
+      await settle(page, scene, SETTLE_MS, true);
+      const first = await wallSample(page);
+      expect(first.departures).toBe(3);
+      expect(Date.parse(first.rows.find((row) => row.kind === 'departures')!.when!) - first.at).toBeGreaterThan(10 * 60_000);
+      await page.evaluate((selector) => {
+        const line = document.querySelector(selector)!;
+        (window as unknown as { __advanceNodes: { line: Element; cells: Element[] } }).__advanceNodes = {
+          line, cells: [...line.querySelectorAll('[data-cell]')],
+        };
+      }, WALL_PROBES.depLine);
+      await page.evaluate(CALM_MOTION_START_IN_PAGE, CALM_MOTION_SPEC);
+      const layouts: LineLayout[] = [];
+      let advanced = false;
+      let returned = false;
+      const rows = await sampleRotation(page, {
+        steps: 140,
+        onSample: async (sample) => {
+          if (isSampleError(sample)) return;
+          clock.sync(sample.at);
+          softly(departureFailures(sample), `${label}: departure contract at ${sample.at}`).toEqual([]);
+          if (sample.reveal?.line) {
+            advanced = true;
+            const layout = await page.evaluate(LINE_LAYOUT_IN_PAGE, { depLine: WALL_PROBES.depLine, nearbyRows: WALL_PROBES.nearbyRows });
+            layouts.push(layout);
+            softly(layout.cells.length, `${label}: advanced cells`).toBe(3);
+            softly(layout.cells.filter((cell) => cell.overflow || !cell.headsignInside), `${label}: advanced cell geometry`).toEqual([]);
+          } else if (advanced) {
+            returned = true;
+            const identity = await page.evaluate((selector) => {
+              const saved = (window as unknown as { __advanceNodes: { line: Element; cells: Element[] } }).__advanceNodes;
+              const line = document.querySelector(selector);
+              const cells = [...line?.querySelectorAll('[data-cell]') ?? []];
+              return { line: line === saved.line, cells: cells.length === saved.cells.length && cells.every((cell, i) => cell === saved.cells[i]) };
+            }, WALL_PROBES.depLine);
+            softly(identity, `${label}: exact line and trip nodes after return`).toEqual({ line: true, cells: true });
+          }
+          await page.evaluate(CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_SPEC);
+        },
+      });
+      const calm = await page.evaluate(CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC);
+      const valid = readings(rows);
+      writeArtefact(`${label}.json`, { first, rows, layouts, calm });
+      softly(advanced, `${label}: the scene actually advances`).toBe(true);
+      softly(returned, `${label}: the advance returns within the recording`).toBe(true);
+      softly(rows.filter(isSampleError), `${label}: no failed readings`).toEqual([]);
+      softly(revealCadenceFailures(valid), `${label}: cadence`).toEqual([]);
+      softly(calmMotionFailures(calm), `${label}: native edge budget and node identity`).toEqual([]);
+    });
+  }
+});
 
 // R1 (docs/reveal-2026-10-plan/R1.md, Step 14): the three departures as one row of cells, drawn per composition.
 test.describe('the departures line (R1)', () => {
