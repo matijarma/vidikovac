@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!-- Edited by hand for the parser test: the served file of 1 Oct 2026 (https://prognoza.hr/toplinskival_5.xml, fetched 02:07:25 UTC) has an empty section; it is filled with the eight stations of the archived file of 13 Sep 2024 (web.archive.org/web/20241111204612id_/https://prognoza.hr/toplinskival_5.xml: names, lon, lat, five danN each), the datatime and the creationtime are set to 30 Sep 2026 09 h, Zagreb reads Y, O, R, Y, G and every other station G. -->
+<TriVis version="1.1" creator="ask - Innovative Visualisierungslösungen GmbH - http://www.askvisual.de">
+	<metadata>
+		<datatime>300909</datatime>
+		<creationtime>Wed Sep 30 09:00:00 2026</creationtime>
+	</metadata>
+	<section name="All">
+		<station name="Osijek"  lon="18.57"  lat="45.52">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Zagreb"  lon="15.98"  lat="45.82">
+			<param name="dan1" value="Y"/>
+			<param name="dan2" value="O"/>
+			<param name="dan3" value="R"/>
+			<param name="dan4" value="Y"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Karlovac"  lon="15.57"  lat="45.5">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Gospic"  lon="15.38"  lat="44.55">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Knin"  lon="16.2"  lat="44.03">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Rijeka"  lon="14.45"  lat="45.33">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Split"  lon="16.43"  lat="43.52">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+		<station name="Dubrovnik"  lon="18.08"  lat="42.65">
+			<param name="dan1" value="G"/>
+			<param name="dan2" value="G"/>
+			<param name="dan3" value="G"/>
+			<param name="dan4" value="G"/>
+			<param name="dan5" value="G"/>
+		</station>
+	</section>
+</TriVis>

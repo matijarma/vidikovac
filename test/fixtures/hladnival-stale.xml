@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<TriVis version="1.1" creator="ask - Innovative Visualisierungslösungen GmbH - http://www.askvisual.de">
+	<metadata>
+		<datatime>240209</datatime>
+		<creationtime>Tue, 24 Feb 2026 09:27:51 +0100</creationtime>
+	</metadata>
+	<section name="All">
+		<station name="Osijek"  lon="18.57"  lat="45.52">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Zagreb"  lon="15.98"  lat="45.82">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Karlovac"  lon="15.57"  lat="45.5">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Gospic"  lon="15.38"  lat="44.55">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Knin"  lon="16.2"  lat="44.03">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Rijeka"  lon="14.45"  lat="45.33">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Split"  lon="16.43"  lat="43.52">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+		<station name="Dubrovnik"  lon="18.08"  lat="42.65">
+			<param name="dan1" value="W"/>
+			<param name="dan2" value="W"/>
+			<param name="dan3" value="W"/>
+			<param name="dan4" value="W"/>
+		</station>
+	</section>
+</TriVis>
