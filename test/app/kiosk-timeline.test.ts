@@ -2682,7 +2682,7 @@ describe('reveals on beats (R2)', () => {
     t.update(pageRows(), 2200, NOW + 20_000, { reveal: PAGE, next: [] });
     const records = w.records();
     w.stop();
-    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:9');
+    expect(host.querySelector<HTMLElement>('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:9');
     expect(ids()).toEqual(['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'opening:harmica', 'solar:sunset:2026-09-22', 'always:story:trg']);
     expect(marked('data-enter')).toEqual(['opening:harmica', 'solar:sunset:2026-09-22']);
     expect(marked('data-slide')).toEqual(['opening:harmica', 'solar:sunset:2026-09-22']);
@@ -2732,7 +2732,7 @@ describe('reveals on beats (R2)', () => {
     t.update(pageRows(), 2200, NOW + 80_000, { reveal: { ...PAGE, beat: 12 }, next: [] });
     expect(byId('opening:harmica')).toBe(revealed[0]);
     expect(byId('solar:sunset:2026-09-22')).toBe(revealed[1]);
-    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
+    expect(host.querySelector<HTMLElement>('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
   });
 
   it('under reduced motion the page turn and the advance swap the same rows and cells, and nothing fades or slides', () => {
@@ -2775,7 +2775,7 @@ describe('reveals on beats (R2)', () => {
     const records = w2.records();
     w2.stop();
     expect(ids()).toEqual(['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'road:savska', 'solar:sunset:2026-09-22', 'always:story:trg']);
-    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
+    expect(host.querySelector<HTMLElement>('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
     expect(records).toHaveLength(2);
   });
 
