@@ -22,6 +22,9 @@
 // bridges them), a local screen from the admin bypass on the stop 106_1.
 import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { cropRaster, decodePng, encodePng } from '../../worker/feed/png';
+import { CALIBRATION, parseRadar } from '../../worker/feed/modules/dhmz-radar';
 import { APP_URL, E2E_STOP_ID, isolateLocalNetwork, localContext, provisionKiosk } from '../helpers';
 import { installKioskFeedFixture } from '../experience-fixtures';
 import { installCityFixture } from '../city-fixtures';
@@ -62,11 +65,32 @@ const softly = expect.configure({ soft: true });
 interface OpenWall { clock: SceneClock; recorder: Recorder | null }
 
 /** The scene's screen, fixtures and clock, then the wall's own URL; `board` can select later real timetable trips. */
-async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>>; departuresAfter?: number }): Promise<OpenWall> {
+async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>>; departuresAfter?: number; wetRadar?: boolean }): Promise<OpenWall> {
   await isolateLocalNetwork(page.context());
   await page.clock.install({ time: scene.now });
   const clock = sceneClock(scene.now);
   const snapshots = await installKioskFeedFixture(page, scene.feedState, { now: scene.now });
+  if (board?.wetRadar) {
+    // Real saved dry composite, with an explicitly synthetic wet hourly step: the forecast half of the inset rule.
+    const bytes = new Uint8Array(readFileSync(resolve('test/fixtures/radar/kompozit-20261001T020410Z.png')));
+    const payload = await parseRadar(bytes, new Date(scene.now - 60_000).toUTCString(), new Date(scene.now));
+    expect(payload.items[0]?.data?.rainNear).toBe(false);
+    snapshots['dhmz-radar'] = {
+      ...snapshots['dhmz-radar'], status: 'live', fetchedAt: new Date(scene.now).toISOString(),
+      sourceUpdatedAt: payload.sourceUpdatedAt, validUntil: new Date(scene.now + 9 * 60_000).toISOString(),
+      items: payload.items.map(item => ({ ...item, module: 'dhmz-radar', tier: 'open' })),
+    };
+    snapshots['dhmz-hourly'] = {
+      ...snapshots['dhmz-hourly'], status: 'live', fetchedAt: new Date(scene.now).toISOString(),
+      items: [{
+        id: 'radar-coverage-wet-step', module: 'dhmz-hourly', kind: 'forecast', tier: 'session', title: 'Zagreb-Grič',
+        at: new Date(scene.now + 90 * 60_000).toISOString(), until: new Date(scene.now + 150 * 60_000).toISOString(),
+        geo: { type: 'Point', coordinates: [15.97, 45.81] }, data: { station: 'gric', temp: 18, precip: 1, prob: 80, weather: 'kiša' },
+      }],
+    };
+    const crop = await encodePng(cropRaster(await decodePng(bytes, { rows: CALIBRATION.inset.rect[3] + 1 }), CALIBRATION.inset.rect));
+    await page.route('**/api/radar/zagreb.png*', route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(crop) }));
+  }
   await routeSceneTeaser(page, snapshots, scene.now, clock);
   const vehicles = snapshots['zet-rt']?.items ?? [];
   const days = serviceDays(scene.now);
@@ -372,6 +396,53 @@ const LINE_LAYOUT_IN_PAGE = (probes: { depLine: string; nearbyRows: string }): L
     departureRows: document.querySelectorAll(`${probes.nearbyRows} > .nearby-row[data-kind="departure"]`).length,
   };
 };
+
+test.describe('the wet-forecast radar inset (R3)', () => {
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 1080, height: 1920 }]) {
+    test(`${viewport.width}×${viewport.height}: the real crop and credit fit in the map without covering the QR`, async ({ page, request }) => {
+      test.setTimeout(SCENE_TIMEOUT_MS);
+      await page.setViewportSize(viewport);
+      const scene = SCENES.midday1230;
+      const label = `radar-wet-${viewport.width}`;
+      await openWall(page, request, scene, label, false, { wetRadar: true });
+      await expect(page.getByTestId('kiosk-invitation')).toBeVisible({ timeout: LOAD_MS });
+      await settle(page, scene, SETTLE_MS, true);
+      const figure = page.getByTestId('radar-inset');
+      await expect(figure).toBeVisible();
+      await expect.poll(() => figure.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(120);
+      const layout = await figure.evaluate(el => {
+        const image = el.querySelector('img')!;
+        const caption = el.querySelector('figcaption')!;
+        const box = el.getBoundingClientRect(), imgBox = image.getBoundingClientRect(), capBox = caption.getBoundingClientRect();
+        const map = el.closest('.k-geography')!.getBoundingClientRect();
+        const qr = document.querySelector('[data-testid=kiosk-qr]')!.getBoundingClientRect();
+        const inside = (a: DOMRect, b: DOMRect) => a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
+        return {
+          image: [image.naturalWidth, image.naturalHeight], imageSquare: Math.abs(imgBox.width - imgBox.height) <= 1,
+          credit: caption.textContent, creditPx: parseFloat(getComputedStyle(caption).fontSize),
+          inMap: inside(box, map), captionInside: inside(capBox, box),
+          inViewport: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1,
+          qrOverlap: Math.max(0, Math.min(box.right, qr.right) - Math.max(box.left, qr.left))
+            * Math.max(0, Math.min(box.bottom, qr.bottom) - Math.max(box.top, qr.top)),
+          width: box.width, height: box.height,
+        };
+      });
+      const sample = await wallSample(page);
+      writeArtefact(`${label}.json`, { layout, sample });
+      await page.screenshot({ path: resolve(ACCEPT_ARTEFACTS, `${label}.png`) });
+      softly(layout.image).toEqual([120, 120]);
+      softly(layout.imageSquare).toBe(true);
+      softly(layout.credit).toBe('Radar · Izvor: DHMZ');
+      softly(layout.creditPx).toBeGreaterThanOrEqual(28);
+      softly(layout.inMap).toBe(true);
+      softly(layout.captionInside).toBe(true);
+      softly(layout.inViewport).toBe(true);
+      softly(layout.qrOverlap).toBe(0);
+      softly(sample.radar, 'the strict sampler sees the whole inset').toBe(true);
+      softly(departureFailures(sample)).toEqual([]);
+    });
+  }
+});
 
 // The ordinary scenes keep a near departure and need not advance at all. Select later *real* fixture trips,
 // without changing their ids/times, to exercise the native advance edge, geometry and exact-node return.
