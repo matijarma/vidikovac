@@ -43,7 +43,7 @@ export type ItemKind =
   | 'act'
   | 'poi'
   | 'event'
-  /** A planned power or water cut on a street (prekidi, U3). */
+  /** A planned power, water or gas cut on a street (prekidi). */
   | 'cut'
   /** A state of the road network outside the City's own closures (hak, U3). */
   | 'road'
