@@ -146,7 +146,7 @@ test.describe('/snimka/ report', () => {
     await expect(page.locator('[data-panel="ghosts"] h3')).toHaveText('Vozila koja je zaslon brojio, a nisu imala položaj');
     await expect(page.locator('[data-panel="ghosts"] .sn-scale')).toHaveText('5');
     await expect(page.locator('#vidjelo-broj .st-method')).toContainText('manje od 20 vozila u pokretu');
-    await expect(page.locator('#vidjelo-broj .st-card-lede')).toHaveText('U ponedjeljak je zaslon brojio vozila kojih nije bilo: ZET je u ponoć vozilima upisao vrijeme dan unaprijed.');
+    await expect(page.locator('#vidjelo-broj .st-card-lede')).toHaveText('U ponedjeljak je zaslon cijeli dan brojio više vozila nego što ih je imalo položaj: dva tramvaja kojima je ZET u ponoć upisao vrijeme dan unaprijed i vozila bez položaja.');
     // A table twin opens with a row per hour.
     const table = page.locator('[data-panel="fleet"] .st-table');
     await table.locator('summary').click();
