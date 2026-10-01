@@ -224,7 +224,7 @@ export function cropRaster(raster: RasterRgb, rect: readonly [x0: number, y0: nu
   dimensions(raster.width, raster.height);
   if (raster.data.length !== raster.width * raster.height * 3) throw new Error('png: raster size does not match its data');
   const [x0, y0, x1, y1] = rect;
-  if (!rect.every(Number.isSafeInteger) || x0 < 0 || y0 < 0 || x1 >= raster.width || y1 >= raster.height || x1 < x0 || y1 < y0) throw new Error('png: crop outside the image');
+  if (rect.length !== 4 || !rect.every(Number.isSafeInteger) || x0 < 0 || y0 < 0 || x1 >= raster.width || y1 >= raster.height || x1 < x0 || y1 < y0) throw new Error('png: crop outside the image');
   const width = x1 - x0 + 1;
   const height = y1 - y0 + 1;
   const data = new Uint8Array(width * height * 3);

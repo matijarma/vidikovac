@@ -5,12 +5,43 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findMarkers, fitAffine, project, rectangles } from '../../scripts/radar-calibrate.mjs';
+import { checkCalibration, findMarkers, fitAffine, project, rectangles } from '../../scripts/radar-calibrate.mjs';
+import { decodePng } from '../../worker/feed/png';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const calibration = JSON.parse(readFileSync(join(ROOT, 'worker/data/radar-calibration.json'), 'utf8'));
 
 describe('the radar calibration fit', () => {
+  it('R3 review: refuses non-finite fit inputs and impossible crop geometry', () => {
+    const points = [{ lon: 15, lat: 45, x: 10, y: 10 }, { lon: 16, lat: 46, x: 20, y: 20 }, { lon: 17, lat: 45, x: NaN, y: 30 }];
+    expect(() => fitAffine(points)).toThrow(/non-finite/);
+    expect(() => rectangles(calibration.affine, [100, 100])).toThrow(/too small/);
+    expect(() => rectangles([81, 0, 1e6, 0, -117, 5600], [720, 751])).toThrow(/outside/);
+    expect(() => rectangles([NaN, 0, 0, 0, 1, 0], [720, 751])).toThrow(/invalid/);
+  });
+
+  it('R3 review: clamps the inset to the actual image height, not only the historical map bottom', () => {
+    const affine = [...calibration.affine];
+    affine[5] -= 50;
+    const rects = rectangles(affine, [720, 205]);
+    expect(rects.inset[3]).toBeLessThan(205);
+    expect(rects.inset[1]).toBeGreaterThanOrEqual(20);
+    expect(rects.near[3]).toBeLessThanOrEqual(rects.inset[3]);
+  });
+
+  it('R3 review: check fails closed on missing landmarks, non-finite allowances and inconsistent geometry', async () => {
+    const raster = await decodePng(new Uint8Array(readFileSync(join(ROOT, 'test/fixtures/radar/kompozit-20261001T020410Z.png'))));
+    expect(checkCalibration(raster, calibration)).toEqual([]);
+    const bad = [
+      { ...calibration, landmarks: [] },
+      { ...calibration, affine: [NaN, 0, 0, 0, 1, 0] },
+      { ...calibration, residualPx: NaN },
+      { ...calibration, landmarks: calibration.landmarks.map((p: object) => ({ ...p, residualPx: NaN })) },
+      { ...calibration, near: { ...calibration.near, rect: [0, 0, 1, 1] } },
+    ];
+    for (const file of bad) expect(checkCalibration(raster, file)).not.toEqual([]);
+  });
+
   it('recovers a known affine from four synthetic landmarks exactly', () => {
     const affine = [81.4, -0.07, -952.3, 0.29, -117.47, 5603.56];
     const points = [[15.98, 45.81], [14.5, 46.05], [17.19, 44.77], [15.44, 47.07]].map(([lon, lat]) => {

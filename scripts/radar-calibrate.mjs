@@ -115,6 +115,7 @@ function solve3(m, rhs) {
  */
 export function fitAffine(points) {
   if (points.length < 3) throw new Error(`radar-calibrate: ${points.length} landmarks, at least 3 are needed`);
+  if (!points.every((p) => [p.lon, p.lat, p.x, p.y].every(Number.isFinite))) throw new Error('radar-calibrate: non-finite landmark');
   const mLon = points.reduce((s, p) => s + p.lon, 0) / points.length;
   const mLat = points.reduce((s, p) => s + p.lat, 0) / points.length;
   const rows = points.map((p) => [p.lon - mLon, p.lat - mLat, 1]);
@@ -134,6 +135,7 @@ export function fitAffine(points) {
     return Math.hypot(x - p.x, y - p.y);
   });
   const rms = Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length);
+  if (![...affine, ...residuals, rms].every(Number.isFinite)) throw new Error('radar-calibrate: non-finite fit');
   return { affine, residuals, rms, max: Math.max(...residuals) };
 }
 
@@ -162,6 +164,12 @@ const round2 = (value) => Math.round(value * 100) / 100;
 
 /** The near square (half side 15 km around NEAR.centre) through the affine, rounded outward; the inset around its centre. */
 export function rectangles(affine, imageSize) {
+  if (!Array.isArray(affine) || affine.length !== 6 || !affine.every(Number.isFinite)
+    || !Array.isArray(imageSize) || imageSize.length !== 2 || !imageSize.every((n) => Number.isSafeInteger(n) && n > 0)) {
+    throw new Error('radar-calibrate: invalid affine or image size');
+  }
+  const bottom = Math.min(MAP_ROWS[1], imageSize[1] - 1);
+  if (imageSize[0] < INSET_SIDE_PX || bottom - MAP_ROWS[0] + 1 < INSET_SIDE_PX) throw new Error('radar-calibrate: image too small for inset');
   const [lon, lat] = NEAR.centre;
   const half = NEAR.sideKm / 2;
   const dLat = half / 111.32;
@@ -171,11 +179,15 @@ export function rectangles(affine, imageSize) {
   const xs = corners.map(([x]) => x);
   const ys = corners.map(([, y]) => y);
   const near = [Math.floor(Math.min(...xs)), Math.floor(Math.min(...ys)), Math.ceil(Math.max(...xs)), Math.ceil(Math.max(...ys))];
+  if (!near.every(Number.isSafeInteger) || near[0] < 0 || near[1] < MAP_ROWS[0] || near[2] >= imageSize[0] || near[3] > bottom) {
+    throw new Error('radar-calibrate: near square outside map');
+  }
   const [cx, cy] = project(affine, lon, lat);
   const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
   const x0 = clamp(Math.round(cx) - INSET_SIDE_PX / 2, 0, imageSize[0] - INSET_SIDE_PX);
-  const y0 = clamp(Math.round(cy) - INSET_SIDE_PX / 2, MAP_ROWS[0], MAP_ROWS[1] - INSET_SIDE_PX + 1);
+  const y0 = clamp(Math.round(cy) - INSET_SIDE_PX / 2, MAP_ROWS[0], bottom - INSET_SIDE_PX + 1);
   const inset = [x0, y0, x0 + INSET_SIDE_PX - 1, y0 + INSET_SIDE_PX - 1];
+  if (near[0] < inset[0] || near[1] < inset[1] || near[2] > inset[2] || near[3] > inset[3]) throw new Error('radar-calibrate: near square outside inset');
   const bounds = { west: lon - dLon, east: lon + dLon, north: lat + dLat, south: lat - dLat };
   return { near, inset, bounds };
 }
@@ -214,6 +226,18 @@ export function calibrate(raster, { derivedAt, imageLastModified }) {
 /** --check: the reasons a new image does not agree with a stored calibration (empty when it does). */
 export function checkCalibration(raster, stored) {
   const problems = [];
+  try {
+    if (stored?.version !== 1 || ![stored.residualPx, stored.residualMaxPx].every((n) => Number.isFinite(n) && n >= 0)
+      || stored.residualPx > MAX_RMS_PX || stored.residualMaxPx > MAX_RESIDUAL_PX
+      || !Array.isArray(stored.landmarks) || stored.landmarks.length < 3
+      || !stored.landmarks.every((p) => [p.lon, p.lat, p.x, p.y, p.residualPx].every(Number.isFinite) && p.residualPx >= 0 && p.residualPx <= MAX_RESIDUAL_PX)) {
+      throw new Error('invalid stored landmarks');
+    }
+    const expected = rectangles(stored.affine, stored.imageSize);
+    if (JSON.stringify(stored.near?.centre) !== JSON.stringify(NEAR.centre) || stored.near?.sideKm !== NEAR.sideKm
+      || stored.inset?.sidePx !== INSET_SIDE_PX || JSON.stringify(stored.near?.rect) !== JSON.stringify(expected.near)
+      || JSON.stringify(stored.inset?.rect) !== JSON.stringify(expected.inset)) throw new Error('stored crop geometry disagrees with affine');
+  } catch (error) { return [`invalid calibration: ${error instanceof Error ? error.message : error}`]; }
   if (raster.width !== stored.imageSize[0] || raster.height !== stored.imageSize[1]) {
     problems.push(`image size ${raster.width} × ${raster.height}, the calibration's ${stored.imageSize[0]} × ${stored.imageSize[1]}`);
     return problems;
@@ -222,8 +246,8 @@ export function checkCalibration(raster, stored) {
   for (const landmark of stored.landmarks) {
     const [x, y] = project(stored.affine, landmark.lon, landmark.lat);
     const nearest = markers.reduce((best, m) => Math.min(best, Math.hypot(m.x - x, m.y - y)), Infinity);
-    // The fit itself leaves each landmark its residual (up to 2.45 px on the calibrating image), so the allowance is
-    // that residual plus CHECK_PX: a diamond that moved more than 2 px from where the fit left it.
+    // The existing residual-plus-CHECK_PX envelope is radial error from the affine, not a bound on marker
+    // displacement from the saved image. Its difference from the package's literal 2 px check needs a decision.
     const allowed = landmark.residualPx + CHECK_PX;
     if (nearest > allowed) problems.push(`${landmark.name}: no marker within ${allowed.toFixed(2)} px of ${x.toFixed(1)}, ${y.toFixed(1)} (nearest ${nearest.toFixed(1)} px)`);
   }

@@ -80,6 +80,7 @@ describe('R3 review: bounded PNG validation', () => {
     await expect(encodePng({ width: 0.5, height: 2, data: new Uint8Array(3) })).rejects.toThrow(/dimensions/);
     await expect(encodePng({ width: 0, height: 0, data: new Uint8Array() })).rejects.toThrow(/dimensions/);
     expect(() => cropRaster(SMALL, [0.5, 0, 1, 1])).toThrow(/outside/);
+    expect(() => cropRaster(SMALL, [0, 0, 1] as unknown as [number, number, number, number])).toThrow(/outside/);
     expect(() => cropRaster({ ...SMALL, data: new Uint8Array(3) }, [0, 0, 0, 0])).toThrow(/size/);
   });
 });
