@@ -2306,3 +2306,24 @@ Mjerenja su alatom `node scripts/shown-facts.mjs <mapa promatranja> --json <dato
 ### KPI nakon listopadske nadogradnje
 
 `node scripts/thin-spot.mjs review.local/companion/data-calendar --from 2026-10-01 --hours 48 --json review.local/upgrade/kpi/after.json > review.local/upgrade/kpi/after.md`, zatim usporedba s pragovima retka U3-9 (`minDay` najmanje 1, `minEvening` najmanje 1, `dayMedian` najmanje 3, `eveningMedian` najmanje 3, `cityPerDayMedian` najmanje 30): na čekanju.
+
+## Prihvaćanje, snimka 2026-10
+
+Prihvaćanje prolaza za stranicu `/snimka/` iz `docs/snimka-2026-10.md` (odjeljak 10, redci SN-1 do SN-14) na jednom mjestu, u istom obliku kao za nadogradnju i za prolaz otkrivanja: za svaki redak mjera, naredba, prag, izmjerena vrijednost i ocjena. Naredbe i pragovi preuzeti su iz tog odjeljka bez promjene (pragovi ostaju na izvornom jeziku), a prag se ne prilagođava izmjerenom, pa crveni redak ostaje crven dok vrijednost ne dosegne prag. Stupci „Izmjereno” i „Ocjena” pune se nakon objave, iz zapisa u `review.local/snimka/run/logs/` i iz izvještaja u `review.local/snimka/run/reports/`; do tada u njima piše „na čekanju”. Redak SN-14 traži produkciju: izvodi se samo čitanjem, nakon objave, jednim prolazom preglednika, i nikad ga ne pokreće agent iz paketa. Ručne provjere na uređaju iz tablice „Ručne provjere na uređaju” gore ostaju kakve jesu; njezin zadnji redak, vlasnikovo čitanje svakog novog hrvatskog teksta, vrijedi i za sve stranice ovog prolaza (popis rečenica stoji u izvještajima paketa S0 do S4).
+
+| Redak | Mjera | Naredba | Prag | Izmjereno | Ocjena |
+|---|---|---|---|---|---|
+| SN-1 | Niz po minutama prema snimkama | `node scripts/snimka/build.mjs --stage verify` | `seen.all` at most 6 at Mon 03:00 and at least 200 at Wed 20:30; replayed state `silent` at every judged minute from Mon 04:30 to Wed 18:00; `reduced` first at Wed 19:05 ± 3 min; `normal` first between Wed 20:15 and 20:30; `published.vehicles` 5 at Mon 19:27 with `feed.entities` 0; the day's highest `bikes.empty` on Wed at least 100; `expected.all` never null | na čekanju | na čekanju |
+| SN-2 | Veličina pokretnog dijela | isto kao SN-1 | every chunk at most 150,000 bytes gzip; at least 300 vehicles in the 24 Sep chunk of 12:00 | na čekanju | na čekanju |
+| SN-3 | Usporedni dan je običan | isto kao SN-1 | no judged minute of 24 Sep `reduced` or `silent` | na čekanju | na čekanju |
+| SN-4 | Ugovor, kodiranje i natrag | `npx vitest run test/snimka` | green | na čekanju | na čekanju |
+| SN-5 | Podrijetlo naslova | `node scripts/snimka/build.mjs --stage news` | every curated link found in the recordings | na čekanju | na čekanju |
+| SN-6 | Snimke zaslona su maskirane | dnevnik stupnja `captures` | a located and blurred code in every kiosk capture, or the capture is named in the log and checked by eye | na čekanju | na čekanju |
+| SN-7 | Ruta | `npx vitest run --project workers test/snimka` | headers per §7; 404 for `..`, `.pb` and anything outside the prefix | na čekanju | na čekanju |
+| SN-8 | Logika stranice | `npx vitest run test/app/snimka-*.test.ts` | green | na čekanju | na čekanju |
+| SN-9 | Pozornica u pregledniku | `npx playwright test e2e/snimka-stage.spec.ts` | green | na čekanju | na čekanju |
+| SN-10 | Izvještaj u pregledniku | `npx playwright test e2e/snimka-report.spec.ts` | green, including axe in both themes and no horizontal overflow at 360 px | na čekanju | na čekanju |
+| SN-11 | Proračuni prijenosa | `npx vitest run test/app/budget.test.ts` | the `/snimka/` rows of §8 | na čekanju | na čekanju |
+| SN-12 | Tekst | `npx vitest run test/app/snimka-strings.test.ts test/app/copy-guards.test.ts` | green | na čekanju | na čekanju |
+| SN-13 | Predana stranica je ponovna gradnja | `npx vitest run test/docs/prijava.test.ts` | green | na čekanju | na čekanju |
+| SN-14 | Produkcija | `curl -sI https://zagreb.aningfilm.hr/api/snimka/v1/manifest.json` i prolaz preglednikom samo čitanjem | 200 with the manifest's cache headers; the page plays on the real dataset in both themes at 1366 and 390 px | na čekanju | na čekanju |
