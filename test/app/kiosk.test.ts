@@ -3555,6 +3555,37 @@ describe('the wall carries no disclaimer, caveat or fetch time', () => {
 
 // R3: DHMZ's radar inset in the map's lower left (docs/reveal-2026-10-plan/R3.md step 13): made once, then only toggled.
 describe('the radar inset', () => {
+  it('R3 review: handhelds never fetch a radar image, and destroyed insets stop handling errors and updates', async () => {
+    const { mountInvitation } = await import('../../app/src/kiosk/invitation');
+    const { kioskStrings } = await import('../../app/src/kiosk/strings');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const invitation = mountInvitation(host, { strings: kioskStrings('hr'), i18n: createDefaultI18n('hr'), locale: 'hr', lightweight: false, reducedMotion: true });
+    const figure = host.querySelector<HTMLElement>('[data-testid=radar-inset]')!;
+    const img = figure.querySelector('img')!;
+    const model = { items: [], radiusM: 2200, frame: 6 as const, note: null, modules: [], stop: null, now: NOW,
+      composition: 'handheld' as const, reveal: null, next: [], radar: { src: '/api/radar/zagreb.png?v=1', shown: true } };
+    invitation.update(model);
+    expect(figure.hidden).toBe(true);
+    expect(img.getAttribute('src')).toBeNull();
+    invitation.update({ ...model, composition: 'wide' });
+    expect(figure.hidden).toBe(false);
+    img.dispatchEvent(new Event('error'));
+    expect(figure.hidden).toBe(true);
+    const set = vi.spyOn(img, 'setAttribute');
+    invitation.update({ ...model, composition: 'wide' });
+    expect(set).not.toHaveBeenCalled();
+    invitation.update({ ...model, composition: 'wide', radar: { src: '/api/radar/zagreb.png?v=2', shown: true } });
+    expect(figure.hidden).toBe(false);
+    invitation.destroy();
+    set.mockClear();
+    img.dispatchEvent(new Event('error'));
+    expect(figure.hidden).toBe(false);
+    invitation.update({ ...model, composition: 'wide' });
+    expect(set).not.toHaveBeenCalled();
+    host.remove();
+  });
+
   it.each(['heat', 'cold'] as const)('R3 review: the weather page and header agree on %s freshness, dates and item bounds', async wave => {
     const { renderZrakINebo } = await import('../../app/src/layers/zrak-i-nebo');
     const { sentenceFacts } = await import('../../app/src/city/sentence');

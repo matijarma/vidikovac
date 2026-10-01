@@ -108,6 +108,7 @@ export function cardMarkup(s: KioskStrings, codeBase?: string): string {
 }
 export function mountInvitation(host: HTMLElement, deps: InvitationDeps): InvitationHandle {
   const {strings:s,i18n,locale,lightweight}=deps;
+  let disposed=false;
   const element=document.createElement('section');
   element.className='k-city-window';
   element.dataset.testid='kiosk-invitation';
@@ -135,6 +136,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   let radar:{figure:HTMLElement;img:HTMLImageElement}|null=null;
   /** A src whose image failed to load: not tried again until a new composite names another. */
   let radarFailed:string|null=null;
+  let disposeRadar=()=>{};
   if(!lightweight){
     const figure=document.createElement('figure');
     figure.className='k-radar';
@@ -142,7 +144,9 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
     figure.hidden=true;
     figure.innerHTML=`<img alt="" width="240" height="240" decoding="async"><figcaption class="k-legend k-radar-credit">${e(s.map.radarCredit)}</figcaption>`;
     const img=figure.querySelector('img')!;
-    img.addEventListener('error',()=>{radarFailed=img.getAttribute('src');figure.hidden=true;});
+    const onError=()=>{radarFailed=img.getAttribute('src');figure.hidden=true;};
+    img.addEventListener('error',onError);
+    disposeRadar=()=>img.removeEventListener('error',onError);
     geography.appendChild(figure);
     radar={figure,img};
   }
@@ -240,6 +244,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   return {
     element,mapHost:field.mapHost,
     update(next){
+      if(disposed)return;
       model=next;
       field.update({modules:model.modules,stop:model.stop,strings:s,i18n,locale});
       setFrame(model.frame);
@@ -247,7 +252,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
       if(model.note!==null&&note.textContent!==model.note)note.textContent=model.note;
       if(note.hidden!==hidden)note.hidden=hidden;
       if(radar){
-        const want=model.radar&&model.radar.shown&&model.radar.src!==radarFailed?model.radar.src:null;
+        const want=model.composition!=='handheld'&&model.radar&&model.radar.shown&&model.radar.src!==radarFailed?model.radar.src:null;
         // The image loads only while it is shown, and only when a new composite names a new src.
         if(want!==null&&radar.img.getAttribute('src')!==want)radar.img.setAttribute('src',want);
         const off=want===null;
@@ -264,6 +269,6 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
         if(span.hidden!==hidden)span.hidden=hidden;
       }
     },
-    destroy(){timeline.destroy();field.destroy();element.remove();},
+    destroy(){if(disposed)return;disposed=true;disposeRadar();timeline.destroy();field.destroy();element.remove();},
   };
 }

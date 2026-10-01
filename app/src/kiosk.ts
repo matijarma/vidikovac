@@ -1210,7 +1210,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   }
   /** R3: DHMZ's radar inset: none under lagano or without a fresh radar item; shown while rain is near or two hours off. */
   function radarState(): InvitationModel['radar'] {
-    if (lightweight) return null;
+    if (lightweight || compositionOf(layout) === 'handheld') return null;
     const at = now();
     const radar = radarNow(teaser, at);
     return radar ? { src: radar.src, shown: radarInsetShown(teaser, placeForNearby(), at, lightweight) } : null;
