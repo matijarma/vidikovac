@@ -204,6 +204,8 @@ export interface SentenceFactsInput {
   radiusM?: number;
   /** The facts of the sentence on screen: never cut by the cap while the rows still produce them, so its dwell and refreshes hold. */
   pinned?: readonly string[];
+  /** R2: the rows a page turn reveals on this beat, and the beat's end (kiosk.ts; docs/reveal-2026-10-plan/R2.md step 3). */
+  reveal?: { ids: readonly string[]; until: number };
 }
 
 /** A BAJS station's own name, without the operator's prefix the feed writes before it. */
@@ -492,6 +494,24 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
       }), nextMidnight(now), { wording: 'forecastTomorrow' });
     }
   }
+  // R2: the rows a page turn reveals are said on the beat, in the row's own words (its family and slots: no new
+  // family), as a copy of the row's fact that lasts exactly the beat (validUntil and formUntil at the beat's end, so
+  // the lasting rule takes it and the beat's end ends it) and keeps the row's fact key (one fact to the no-repeat
+  // rule). It goes right after the service or outage fact, where the cap and templateSentences' text dedupe keep it
+  // over the row's own; and never while ZET's state pins the header (quiet in the sentence as on the list).
+  if (input.reveal && !numbers && !input.outage) {
+    const { until } = input.reveal;
+    const lead = facts.findIndex(fact => fact.id !== 'service:zet' && fact.id !== 'outage:zet');
+    const revealed: CitySentenceFact[] = [];
+    for (const rowId of input.reveal.ids) {
+      const fact = facts.find(f => f.id === rowId || f.id.startsWith(`${rowId}:`));
+      if (!fact) continue;
+      const validUntil = Math.min(fact.validUntil, until);
+      if (validUntil <= now) continue;
+      revealed.push({ ...fact, id: `reveal:${fact.id}`, factKey: fact.factKey ?? fact.id, validUntil, formUntil: Math.min(fact.formUntil ?? fact.validUntil, until) });
+    }
+    facts.splice(lead === -1 ? facts.length : lead, 0, ...revealed);
+  }
   const pinned = new Set(input.pinned ?? []);
   return [...facts.slice(0, MAX_FACTS), ...facts.slice(MAX_FACTS).filter(fact => pinned.has(fact.id))];
 }
@@ -504,10 +524,10 @@ export function serviceVars(i18n: Pick<I18n, 't'>, numbers: { seen: number; expe
   return { seen: i18n.t('kiosk.sentence.vehicles', { count: numbers.seen }), expected: aboutExpected(numbers.expected) };
 }
 
-/** Only stable facts go to AI; countdowns must never enter a twenty-minute cache. */
+/** Only stable facts go to AI; countdowns must never enter a twenty-minute cache, nor a beat-long reveal fact (R2). */
 export function modelSentenceFacts(facts: readonly SentenceFact[], now?: number): SentenceFact[] {
   // The wire shape only: a client-side factKey is the rotation's, not the request's.
-  return stableSentenceFacts(facts, now).map(({ id, kind, text, validUntil }) => ({ id, kind, text, validUntil }));
+  return stableSentenceFacts(facts.filter(fact => !fact.id.startsWith('reveal:')), now).map(({ id, kind, text, validUntil }) => ({ id, kind, text, validUntil }));
 }
 
 /** Three solar phrasings keep the cold/offline path useful without inventing facts. */
@@ -542,6 +562,8 @@ export interface SentenceSequence {
   /** A new cadence for the same rotation: the sentence on screen, its dwell start and the ten-minute
    *  memory of shown wordings and facts stay (decision 29); only the next boundary moves. */
   setRhythm(rhythmMs: number): void;
+  /** R2: the earliest instant the sentence on screen may turn, its dwell start plus the rhythm; -Infinity with none. */
+  turnAt(): number;
 }
 
 /** Cadence is a chance to change, not permission to repeat or to show expired data.
@@ -668,5 +690,6 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       return current;
     },
     setRhythm(rhythmMs) { rhythm = cadence(rhythmMs); },
+    turnAt() { return current ? heldSince + rhythm : -Infinity; },
   };
 }

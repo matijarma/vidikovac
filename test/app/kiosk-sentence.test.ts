@@ -1463,3 +1463,97 @@ describe('the air and a warning\'s end in the header (R0)', () => {
     expect(warning(items.map((entry) => ({ ...entry, severity: 'minor' as const })))).toBeUndefined();
   });
 });
+
+describe('reveal facts (R2)', () => {
+  // docs/reveal-2026-10-plan/R2.md step 3: the rows a page turn reveals are said on the beat, in the row's own words,
+  // as a copy of the row's fact that lasts exactly the beat and keeps the row's fact key.
+  const RHYTHM = 20_000;
+  const rows = (): SentenceNearbyRow[] => [
+    row({ id: 'closure:ilica', kind: 'closure', title: 'Ilica', atMs: NOW + 5 * 3_600_000 }),
+    row({ id: 'event:gavella', kind: 'event', title: 'Gospoda Glembajevi', sub: 'Gavella · tramvaj 6', atMs: NOW + 2 * 3_600_000, source: 'dogadanja' }),
+  ];
+  const reveal = (at: number, ids: readonly string[] = ['event:gavella']) => ({ reveal: { ids, until: at + RHYTHM } });
+  const factsAt = (at: number, over: Partial<SentenceFactsInput> = {}) => sentenceFacts(input({ rows: rows(), now: at, ...over }));
+  const poolAt = (at: number, over: Partial<SentenceFactsInput> = {}) => templateSentences(factsAt(at, over), i18n, 80, at);
+  const silentZet = (): ModuleSnapshot => {
+    const source = new Date(NOW - 5_000).toISOString();
+    const service = { state: 'silent' as const, since: '2026-09-22T09:27:18Z', observedAt: source, expected: 38, seen: 0, ratio: 0,
+      confidence: 0, baseline: 'declared' as const, byMode: { tram: [0, 17] as [number, number], bus: [0, 21] as [number, number] } };
+    return { ...snapshot('zet-rt', []), fetchedAt: source, sources: { zet: { status: 'live', itemCount: 0, fetchedAt: source, sourceUpdatedAt: source, service } } };
+  };
+
+  it('a reveal fact is the row\'s own fact copied to the beat: first in the list, the row\'s text and key, valid and in form until the beat\'s end', () => {
+    const own = factsAt(NOW).find(f => f.id === 'event:gavella') as RotatingSentence & SentenceFact & { factKey?: string; formUntil?: number };
+    expect(own).toBeDefined();
+    const facts = factsAt(NOW, reveal(NOW));
+    const first = facts[0] as SentenceFact & { factKey?: string; formUntil?: number; wording?: string };
+    expect(first.id).toBe('reveal:event:gavella');
+    expect(first.text).toBe(own.text);
+    expect(first.kind).toBe(own.kind);
+    expect(first.factKey).toBe(own.factKey ?? own.id);
+    expect(first.validUntil).toBe(NOW + RHYTHM);
+    expect(first.formUntil).toBe(NOW + RHYTHM);
+    expect(first.wording).toBe((own as { wording?: string }).wording);
+    // The row's own fact is still there, after it; a first or last tram's fact (id `${row.id}:${routeId}`) is found by prefix.
+    expect(facts.some(f => f.id === 'event:gavella')).toBe(true);
+    const night = Date.parse('2026-09-22T22:48:10+02:00');
+    const last = row({ id: 'last:2026-09-22', kind: 'last', title: 'Zadnji tramvaji', atMs: Date.parse('2026-09-22T23:31:00+02:00'), source: 'zet-gtfs',
+      services: [{ routeId: '1', routeName: '1', atMs: Date.parse('2026-09-22T23:31:00+02:00') }] });
+    const nightFacts = sentenceFacts(input({ rows: [last], now: night, reveal: { ids: ['last:2026-09-22'], until: night + RHYTHM } }));
+    expect(nightFacts[0]!.id).toBe('reveal:last:2026-09-22:1');
+    // A row with no fact, or a fact already past the beat's start, yields nothing.
+    expect(factsAt(NOW, reveal(NOW, ['always:story:trg'])).some(f => f.id.startsWith('reveal:'))).toBe(false);
+  });
+
+  it('a reveal sentence lasts exactly one rhythm: taken on the beat, held through it, gone at its end', () => {
+    const seq = createSentenceSequence({ rhythmMs: RHYTHM });
+    const before = seq.read(poolAt(NOW - RHYTHM), NOW - RHYTHM)!;
+    expect(before.text).not.toContain('Glembajevi');
+    const onBeat = seq.read(poolAt(NOW, reveal(NOW)), NOW)!;
+    expect(onBeat.text).toContain('Glembajevi');
+    expect(onBeat.refs).toEqual(['reveal:event:gavella']);
+    expect(seq.read(poolAt(NOW + 19_000, reveal(NOW)), NOW + 19_000)!.text).toBe(onBeat.text);
+    const after = seq.read(poolAt(NOW + RHYTHM), NOW + RHYTHM)!;
+    expect(after.text).not.toBe(onBeat.text);
+    expect(after.text).not.toContain('Glembajevi');
+    // The beat's deadline ends the reveal copy even where the row's own fact lasts hours.
+    expect(templateSentences(factsAt(NOW, reveal(NOW)), i18n, 80, NOW + RHYTHM + 1).some(s => s.refs[0] === 'reveal:event:gavella')).toBe(false);
+  });
+
+  it('is not repeated within ten minutes: neither the same row revealed again nor the row\'s own fact sentence', () => {
+    const seq = createSentenceSequence({ rhythmMs: RHYTHM, noRepeatMs: SENTENCE_NO_REPEAT_MS });
+    const onBeat = seq.read(poolAt(NOW, reveal(NOW)), NOW)!;
+    expect(onBeat.text).toContain('Glembajevi');
+    const next = seq.read(poolAt(NOW + RHYTHM), NOW + RHYTHM)!;
+    expect(next.text).not.toContain('Glembajevi');
+    expect(seq.read(poolAt(NOW + 60_000, reveal(NOW + 60_000)), NOW + 60_000)!.text).not.toContain('Glembajevi');
+    // The event's own sentence stays out until strictly more than ten minutes after it last showed (the turn at NOW + 20 s).
+    expect(seq.read(poolAt(NOW + RHYTHM + 600_000), NOW + RHYTHM + 600_000)!.text).not.toContain('Glembajevi');
+    expect(seq.read(poolAt(NOW + RHYTHM + 600_001), NOW + RHYTHM + 600_001)!.text).toContain('Glembajevi');
+  });
+
+  it('is quiet in the sentence: no reveal fact during an outage or while the fleet is silent', () => {
+    expect(factsAt(NOW, { ...reveal(NOW), outage: true }).some(f => f.id.startsWith('reveal:'))).toBe(false);
+    const silent = factsAt(NOW, { ...reveal(NOW), snapshots: { 'zet-rt': silentZet() } });
+    expect(silent[0]!.id).toBe('service:zet');
+    expect(silent.some(f => f.id.startsWith('reveal:'))).toBe(false);
+  });
+
+  it('never goes to the model', () => {
+    const facts = factsAt(NOW, reveal(NOW));
+    expect(facts.some(f => f.id.startsWith('reveal:'))).toBe(true);
+    expect(modelSentenceFacts(facts, NOW).some(f => f.id.startsWith('reveal:'))).toBe(false);
+    expect(modelSentenceFacts(facts, NOW).some(f => f.id === 'event:gavella')).toBe(true);
+  });
+
+  it('turnAt: -Infinity before any sentence, the dwell start plus the rhythm after, re-timed by setRhythm without moving the dwell', () => {
+    const seq = createSentenceSequence({ rhythmMs: RHYTHM });
+    expect(seq.turnAt()).toBe(-Infinity);
+    seq.read(poolAt(NOW), NOW);
+    expect(seq.turnAt()).toBe(NOW + 20_000);
+    seq.read(poolAt(NOW + 5_000), NOW + 5_000);
+    expect(seq.turnAt()).toBe(NOW + 20_000);
+    seq.setRhythm(30_000);
+    expect(seq.turnAt()).toBe(NOW + 30_000);
+  });
+});
