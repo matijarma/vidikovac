@@ -326,10 +326,10 @@ export function staleCopy(snapshot: ModuleSnapshot, atIso: string): ModuleSnapsh
 export function downPlaceholder(module: ModuleId, atIso: string): ModuleSnapshot {
   return { module, tier: 'open', status: 'down', fetchedAt: atIso, attribution: { text: '', url: '', licence: '' }, items: [] };
 }
-/** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists. The five of the
- *  facts-breadth package (docs/history/upgrade-2026-10-plan/U3.md §0.2(a)) are named by id: the schema that types them is U3-modules'. */
+/** What /api/teaser carries for a screen: the modules a failed fetch leaves down when no copy exists, with the five of the
+ *  facts-breadth package (U3) and the three DHMZ modules of the more-city package (R3). */
 export const KIOSK_TEASER_MODULES: readonly ModuleId[] = ['zet-rt', 'prometnice', 'dhmz-now', 'dhmz-forecast', 'dhmz-cap', 'emsc', 'ckan-geo', 'dogadanja', 'glasnik',
-  'kultura-zg' as ModuleId, 'programi' as ModuleId, 'dhmz-hourly' as ModuleId, 'hak' as ModuleId, 'prekidi' as ModuleId];
+  'kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi', 'dhmz-radar', 'dhmz-bio', 'dhmz-waves'];
 
 export function closuresNear(modules: readonly ModuleSnapshot[], stop: ScreenStop | null, now: number): ClosuresNear {
   return summariseClosures(closuresByDistance(byModule(modules).prometnice, stop, now), sourceState(byModule(modules).prometnice), stop);

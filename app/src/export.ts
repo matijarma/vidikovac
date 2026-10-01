@@ -278,10 +278,11 @@ export function geojsonForClosures(snapshot: ModuleSnapshot): ClosureFeatureColl
     adapted: true,
     attribution,
     features: snapshot.items
-      .filter((item) => item.geo !== undefined)
+      // A closure is a point or a line; the Polygon of the schema is the radar's square (R3), never a closure's.
+      .filter((item) => item.geo !== undefined && item.geo.type !== 'Polygon')
       .map((item) => ({
         type: 'Feature' as const,
-        geometry: { type: item.geo!.type, coordinates: item.geo!.coordinates },
+        geometry: { type: item.geo!.type as ClosureFeature['geometry']['type'], coordinates: item.geo!.coordinates as ClosureFeature['geometry']['coordinates'] },
         properties: {
           ...Object.fromEntries(Object.entries(item.data ?? {}).filter(([key, value]) =>
             !['id', 'title', 'summary', 'at', 'until'].includes(key) &&

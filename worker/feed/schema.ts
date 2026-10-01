@@ -23,7 +23,12 @@ export type ModuleId =
   | 'programi'
   | 'dhmz-hourly'
   | 'hak'
-  | 'prekidi';
+  | 'prekidi'
+  // The more-city modules (R3): DHMZ's radar composite around Zagreb, its biometeorological forecast and its heat
+  // and cold wave warnings.
+  | 'dhmz-radar'
+  | 'dhmz-bio'
+  | 'dhmz-waves';
 
 /** open: readable without a session (safety tier, kiosk teaser). session: needs a data token. */
 export type Tier = 'open' | 'session';

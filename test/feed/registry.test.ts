@@ -24,8 +24,8 @@ describe('module registry', () => {
       expect(Object.values(snapshot.sources!).reduce((sum, source) => sum + source.itemCount, 0)).toBe(snapshot.items.length);
     }
   });
-  it('carries all fourteen modules with the refresh windows the plan fixes', () => {
-    expect(MODULE_IDS).toHaveLength(14);
+  it('carries all seventeen modules with the refresh windows the plan fixes', () => {
+    expect(MODULE_IDS).toHaveLength(17);
     const windows: Record<ModuleId, [number, number]> = {
       'zet-rt': [10, 300], // R-TE4: the twin's tick; the Cache API entry actually lasts until validUntil
       prometnice: [180, 1800],
@@ -42,6 +42,10 @@ describe('module registry', () => {
       'dhmz-hourly': [3600, 21600],
       hak: [600, 21600],
       prekidi: [3600, 172800],
+      // The more-city modules (R3): the radar every five minutes, the bio forecast and the waves once an hour.
+      'dhmz-radar': [300, 1800],
+      'dhmz-bio': [3600, 86400],
+      'dhmz-waves': [3600, 86400],
     };
     for (const [id, [ttl, maxStale]] of Object.entries(windows) as [ModuleId, [number, number]][]) {
       expect(MODULES[id].ttl, `ttl of ${id}`).toBe(ttl);
@@ -51,12 +55,12 @@ describe('module registry', () => {
   });
 
   it('puts the safety tier in the open tier and everything else behind a session', () => {
-    expect([...OPEN_MODULES].sort()).toEqual(['ckan-geo', 'dhmz-cap', 'emsc', 'prometnice']);
+    expect([...OPEN_MODULES].sort()).toEqual(['ckan-geo', 'dhmz-bio', 'dhmz-cap', 'dhmz-radar', 'dhmz-waves', 'emsc', 'prometnice']);
     expect(MODULE_IDS.filter((id) => MODULES[id].tier === 'session').sort()).toEqual(
       ['dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi', 'zet-rt'].sort(),
     );
     expect([...WARM_MODULES].sort()).toEqual(
-      ['ckan-geo', 'dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi'].sort(),
+      ['ckan-geo', 'dhmz-bio', 'dhmz-cap', 'dhmz-forecast', 'dhmz-hourly', 'dhmz-now', 'dhmz-radar', 'dhmz-waves', 'dogadanja', 'glasnik', 'hak', 'kultura-zg', 'prekidi', 'programi'].sort(),
     );
     expect(isModuleId('zet-rt')).toBe(true);
     expect(isModuleId('nepostojeci')).toBe(false);
@@ -115,11 +119,19 @@ describe('module registry', () => {
       url: 'https://www.hak.hr/info/stanje-na-cestama/',
       licence: 'Uvjeti korištenja HAK-a, čl. 8: ograničen izbor uz izvor, vrijeme i poveznicu',
     });
+    // R3: Gradska plinara Zagreb joins as the third publisher.
     expect(ATTRIBUTION.prekidi).toEqual({
-      text: 'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+      text: 'Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz',
       url: 'https://www.hep.hr/ods/bez-struje/19?dp=zagreb',
       licence: 'Licenca nije navedena',
     });
+  });
+
+  // R3: the three DHMZ modules of the more-city package, verbatim (docs/reveal-2026-10-plan/R3.md, registry rows).
+  it('carries the attribution, address and licence of the three DHMZ modules of R3 verbatim', () => {
+    expect(ATTRIBUTION['dhmz-radar']).toEqual({ text: 'Izvor: DHMZ, radarski kompozit', url: 'https://meteo.hr/podaci.php?section=podaci_mjerenja&param=radari', licence: OPEN_LICENCE });
+    expect(ATTRIBUTION['dhmz-bio']).toEqual({ text: 'Izvor: DHMZ, biometeorološka prognoza', url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=bio', licence: OPEN_LICENCE });
+    expect(ATTRIBUTION['dhmz-waves']).toEqual({ text: 'Izvor: DHMZ, upozorenja na toplinske i hladne valove', url: 'https://meteo.hr/prognoze.php?section=prognoze_specp&param=toplinskival_5', licence: OPEN_LICENCE });
   });
 
   it('reads each October module through the registry on its saved response, with items of the kind it declares', async () => {
@@ -132,7 +144,7 @@ describe('module registry', () => {
     }
     // The composite one reports each publisher, as dogadanja does.
     const prekidi = await MODULES.prekidi.fetcher(FIXTURE_CONTEXTS.prekidi);
-    expect(Object.keys(prekidi.sources ?? {}).sort()).toEqual(['hep-ods', 'vio']);
+    expect(Object.keys(prekidi.sources ?? {}).sort()).toEqual(['gpz', 'hep-ods', 'vio']);
   });
 });
 

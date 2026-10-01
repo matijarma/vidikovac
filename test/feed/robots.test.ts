@@ -95,6 +95,12 @@ describe('assertRobotsAllow (the guard itself)', () => {
       'https://www.hak.hr/info/stanje-na-cestama/',
       'https://www.hep.hr/ods/bez-struje/19?dp=zagreb&datum=29.09.2026',
       'https://www.vio.hr/zona-za-medije/obavijesti/1832',
+      // The more-city sources (R3): robots.txt answers 404 on all three hosts (review.local/reveal/analysis/sources.md).
+      'https://vrijeme.hr/kompozit-stat.png',
+      'https://prognoza.hr/bio_novo.xml',
+      'https://prognoza.hr/toplinskival_5.xml',
+      'https://prognoza.hr/hladnival.xml',
+      'https://www.plinara-zagreb.hr/novosti/50',
     ];
     for (const url of realUrls) expect(() => assertRobotsAllow(url), url).not.toThrow();
   });

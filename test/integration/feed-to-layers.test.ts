@@ -247,7 +247,7 @@ describe('the October 2026 modules reach the phone from their real fixtures', ()
       'Izvor: Knjižnice grada Zagreba; neslužbeni prikaz',
       'Izvor: DHMZ, Otvorena dozvola,',
       'Izvor: HAK, stanje na cestama,',
-      'Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz',
+      'Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz',
     ]) expect(provenance, credit).toContain(credit);
     expect(provenance).not.toMatch(/[{}]/);
     // HAK\'s credit names the update its lines stand on (17:39 in Zagreb), as article 8 of its terms asks.
@@ -256,6 +256,11 @@ describe('the October 2026 modules reach the phone from their real fixtures', ()
 
   it('sends all five to the public screen, the two large ones cut to the hours the wall can name', () => {
     for (const id of ['kultura-zg', 'programi', 'dhmz-hourly', 'hak', 'prekidi'] as const) expect(TEASER_MODULES).toContain(id);
+    // R3's three DHMZ modules are open: /api/teaser carries them through OPEN_MODULES, so TEASER_MODULES does not list them twice.
+    for (const id of ['dhmz-radar', 'dhmz-bio', 'dhmz-waves'] as const) {
+      expect(OPEN_MODULES).toContain(id);
+      expect(TEASER_MODULES).not.toContain(id);
+    }
     const cut = teaserSubset(snapshots['dhmz-hourly']!, undefined, at);
     expect(cut.items.length).toBeGreaterThan(0);
     expect(cut.items.length).toBeLessThan(snapshots['dhmz-hourly']!.items.length);

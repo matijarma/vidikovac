@@ -60,8 +60,8 @@ describe('app/src/data/izvori.json carries a dogadanjaSources entry per data.sou
     }
   });
 
-  it('lists exactly the fourteen ModuleId rows in "sources" (nine and the five of October 2026, U3; the count is test/app/izvori.test.ts\'s too)', () => {
-    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(14);
+  it('lists exactly the seventeen ModuleId rows in "sources" (nine, the five of October 2026 (U3) and the three DHMZ modules of R3; the count is test/app/izvori.test.ts\'s too)', () => {
+    expect((izvoriJson as { sources: unknown[] }).sources).toHaveLength(17);
   });
 });
 
@@ -179,6 +179,25 @@ describe('the October modules are documented as module rows, and hak quotes arti
     expect(statics).toContain('Ulice za smještaj prekida i cestovnih obavijesti');
     expect(statics).toContain('worker/data/street-points.json');
     expect(statics).toContain('npm run build:street-points');
+  });
+
+  // R3: the three DHMZ modules of the more-city package, and GPZ inside prekidi.
+  it('has a row for each of R3\'s DHMZ modules with its window and its attribution, and GPZ in the prekidi row', () => {
+    for (const [id, pair, credit] of [
+      ['dhmz-radar', '300 / 1800', 'Izvor: DHMZ, radarski kompozit'],
+      ['dhmz-bio', '3600 / 86400', 'Izvor: DHMZ, biometeorološka prognoza'],
+      ['dhmz-waves', '3600 / 86400', 'Izvor: DHMZ, upozorenja na toplinske i hladne valove'],
+    ] as const) {
+      expect(row(id), id).toBeDefined();
+      expect(row(id), id).toContain(` ${pair} |`);
+      expect(row(id), id).toContain(credit);
+      expect(izvori.indexOf(row(id))).toBeGreaterThan(izvori.indexOf('## Moduli uvedeni u listopadu 2026.'));
+    }
+    expect(row('prekidi')).toContain('https://www.plinara-zagreb.hr/novosti/50');
+    expect(row('prekidi')).toContain('Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz');
+    expect(izvori).toContain('(Izvor: Gradska plinara Zagreb, neslužbeni prikaz)');
+    const statics = izvori.slice(izvori.indexOf('### Statički skupovi'), izvori.indexOf('### ZET-ova shema tramvajskih linija'));
+    expect(statics).toContain('worker/data/radar-calibration.json');
   });
 
   it('uses no em dash in the lines this round added', () => {

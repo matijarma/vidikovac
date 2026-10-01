@@ -106,11 +106,35 @@
     },
     {
       "module": "prekidi",
-      "naziv": "HEP ODS i Vodoopskrba i odvodnja, najavljeni prekidi struje i vode",
+      "naziv": "HEP ODS, Vodoopskrba i odvodnja i Gradska plinara Zagreb, najavljeni prekidi struje, vode i plina",
       "tier": "session",
       "url": "https://www.hep.hr/ods/bez-struje/19?dp=zagreb",
-      "text": "Izvor: HEP ODS Elektra Zagreb i Vodoopskrba i odvodnja; neslužbeni prikaz",
+      "text": "Izvor: HEP ODS Elektra Zagreb, Vodoopskrba i odvodnja i Gradska plinara Zagreb; neslužbeni prikaz",
       "licence": "Licenca nije navedena"
+    },
+    {
+      "module": "dhmz-radar",
+      "naziv": "DHMZ, radarski kompozit oko Zagreba",
+      "tier": "open",
+      "url": "https://meteo.hr/podaci.php?section=podaci_mjerenja&param=radari",
+      "text": "Izvor: DHMZ, radarski kompozit",
+      "licence": "Otvorena dozvola (NN 67/17)"
+    },
+    {
+      "module": "dhmz-bio",
+      "naziv": "DHMZ, biometeorološka prognoza",
+      "tier": "open",
+      "url": "https://meteo.hr/prognoze.php?section=prognoze_specp&param=bio",
+      "text": "Izvor: DHMZ, biometeorološka prognoza",
+      "licence": "Otvorena dozvola (NN 67/17)"
+    },
+    {
+      "module": "dhmz-waves",
+      "naziv": "DHMZ, upozorenja na toplinske i hladne valove",
+      "tier": "open",
+      "url": "https://meteo.hr/prognoze.php?section=prognoze_specp&param=toplinskival_5",
+      "text": "Izvor: DHMZ, upozorenja na toplinske i hladne valove",
+      "licence": "Otvorena dozvola (NN 67/17)"
     }
   ],
   "dogadanjaSources": [

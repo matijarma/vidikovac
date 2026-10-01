@@ -40,7 +40,7 @@ function concat(parts: readonly Uint8Array[], total: number): Uint8Array {
 
 /** Inflates a zlib stream, reading only until `need` bytes are out (all of it when `need` is undefined). */
 async function inflate(data: Uint8Array, need?: number): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate'));
+  const stream = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream('deflate'));
   const reader = stream.getReader();
   const parts: Uint8Array[] = [];
   let total = 0;
@@ -60,7 +60,7 @@ async function inflate(data: Uint8Array, need?: number): Promise<Uint8Array> {
 }
 
 async function deflate(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('deflate'));
+  const stream = new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new CompressionStream('deflate'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
