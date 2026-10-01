@@ -187,7 +187,7 @@ describe('mountStrip', () => {
     expect(root.querySelector('[data-panel="fleet"] .st-legend')?.textContent).toContain('po voznom redu');
     expect(root.querySelector('[data-panel="state"] .st-legend')?.textContent).toContain('izračunano naknadno');
     // The comparison day is a layer: off by default.
-    expect(root.querySelector('[data-panel="fleet"] li[data-layer="compare"]')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('[data-panel="fleet"] li[data-series="compare"]')?.hasAttribute('hidden')).toBe(true);
     off();
   });
   it('moves every cursor by one transform per frame, from 0 % at the start to 100 % at the end', () => {
@@ -249,7 +249,7 @@ describe('mountStrip', () => {
     const root = document.createElement('div');
     document.body.append(root);
     const off = mountStrip(ctx, root);
-    const path = root.querySelector('path[data-layer="compare"]')!;
+    const path = root.querySelector('path[data-series="compare"]')!;
     expect(path.hasAttribute('hidden')).toBe(true);
     ctx.layers.set({ compare: true });
     expect(path.hasAttribute('hidden')).toBe(false);

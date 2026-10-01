@@ -224,7 +224,7 @@ function legend(items: readonly LegendItem[]): HTMLElement {
   ul.className = 'st-legend sn-legend';
   for (const it of items) {
     const li = document.createElement('li');
-    if (it.layer) li.dataset.layer = it.layer;
+    if (it.layer) li.dataset.series = it.layer;
     const key = document.createElement('span');
     key.className = `sn-key sn-key-${it.kind} ${it.tone}`;
     key.setAttribute('aria-hidden', 'true');
@@ -247,7 +247,7 @@ function svg(n: number, paths: readonly { d: string; cls: string; layer?: string
     const path = document.createElementNS(SVG_NS, 'path');
     path.setAttribute('d', p.d);
     path.setAttribute('class', p.cls);
-    if (p.layer) path.dataset.layer = p.layer;
+    if (p.layer) path.dataset.series = p.layer;
     el.append(path);
   }
   return el;
@@ -474,7 +474,7 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   const readoutInput = (): ReadoutInput => ({ series: s, comparison: o.comparison, compare, serviceLiveFromSec: o.serviceLiveFromSec });
   const applyCompare = (): void => {
     frame.dataset.compare = compare ? 'on' : 'off';
-    for (const el of frame.querySelectorAll<Element>('[data-layer="compare"]')) {
+    for (const el of frame.querySelectorAll<Element>('[data-series="compare"]')) {
       if (compare) el.removeAttribute('hidden');
       else el.setAttribute('hidden', '');
     }
