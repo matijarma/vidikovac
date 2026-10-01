@@ -993,7 +993,9 @@ export function requestKioskMap(maps: MapSlots, input: KioskMapInput, adapter?: 
     const pick = input.selection;
     const item = input.snapshots[pick.module]?.items.find(item => publicItemKey(pick.module, item.id) === pick.id);
     if (item?.geo) {
-      const coordinates = item.geo.type === 'Point' ? [item.geo.coordinates as number[]] : item.geo.coordinates as number[][];
+      // A Polygon (the radar's square, R3) is framed by its outer ring.
+      const coordinates = item.geo.type === 'Point' ? [item.geo.coordinates as number[]]
+        : item.geo.type === 'Polygon' ? (item.geo.coordinates as number[][][])[0] ?? [] : item.geo.coordinates as number[][];
       const lons = coordinates.map(p => p[0]!), lats = coordinates.map(p => p[1]!);
       const lon = (Math.min(...lons) + Math.max(...lons)) / 2, lat = (Math.min(...lats) + Math.max(...lats)) / 2;
       view.center = [lon, lat];
