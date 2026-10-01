@@ -7,6 +7,7 @@
 // and there is nothing" (a true empty), because a public screen that prints
 // zero for an outage is lying (PRODUCT.md, principle 4).
 import type { Attribution, FeedItem, ModuleId, ModuleSnapshot, SnapshotStatus } from '../../../worker/feed/schema';
+import { zagrebIso } from '../../../worker/feed/time';
 import { fillAttribution } from '../attribution';
 import type { ScreenStop } from '../core/contracts';
 import type { I18n } from '../i18n/i18n';
@@ -21,7 +22,7 @@ import { sunTimes } from '../ui/solar';
 import { zagrebHour } from '../format';
 import type { LastRunSnapshot } from '../core/lastrun';
 import { lastDeparture } from '../core/lastrun';
-import { clock, dayTime, fmtNumber, fmtTemp, sameZagrebDay, weekdayDayMonth } from './format';
+import { clock, dayKey, dayTime, fmtNumber, fmtTemp, sameZagrebDay, weekdayDayMonth } from './format';
 import { routeLongName, routeType, sortRouteIds, stopDistanceM } from './stops';
 import { fill, plural, type KioskStrings } from './strings';
 import { aboutExpected, serviceNumbers } from '../../../shared/city/service-state';
@@ -356,7 +357,7 @@ export function nearestHourlySteps(snapshot: ModuleSnapshot | undefined, place: 
   let nearest = Infinity;
   for (const item of snapshot.items) {
     const name = dataText(item, 'station');
-    if (!name || item.geo?.type !== 'Point') continue;
+    if (item.kind !== 'forecast' || !name || item.geo?.type !== 'Point') continue;
     const [lon, lat] = item.geo.coordinates as number[];
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     const d = distanceM(place, { lon: lon!, lat: lat! });
@@ -366,9 +367,58 @@ export function nearestHourlySteps(snapshot: ModuleSnapshot | undefined, place: 
   const steps = snapshot.items
     .filter((item) => item.kind === 'forecast' && dataText(item, 'station') === station)
     .map((item) => ({ item, at: Date.parse(item.at ?? ''), until: Date.parse(item.until ?? '') }))
-    .filter(({ at, until }) => Number.isFinite(at) && Number.isFinite(until))
+    .filter(({ at, until }) => Number.isFinite(at) && Number.isFinite(until) && until > at)
     .sort((a, b) => a.at - b.at || a.item.id.localeCompare(b.item.id));
   return { station, steps };
+}
+
+/** Calendar arithmetic in Zagreb, including month/year rollover and 23/25-hour days. */
+export function forecastDayStart(at: number, days = 0, hour = 0): number {
+  if (!Number.isFinite(at)) return Number.NaN;
+  const [year, month, day] = dayKey(at).split('-').map(Number);
+  return Date.parse(zagrebIso(year!, month!, day! + days, hour));
+}
+
+/** The same day word on the weather page and in its header fact. */
+export function forecastDayWord(i18n: I18n, at: number, now: number): string {
+  if (sameZagrebDay(at, now)) return i18n.t('kiosk.say.today');
+  if (sameZagrebDay(at, forecastDayStart(now, 1))) return i18n.t('kiosk.say.tomorrow');
+  const locale = i18n.getLocale();
+  const word = new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'Europe/Zagreb' }).format(at);
+  return locale.startsWith('en') ? word : word.toLocaleLowerCase('hr');
+}
+
+export interface WaveDay { id: string; wave: 'heat' | 'cold'; level: number; at: number; until: number }
+
+/** R3 D-G: only today's or yesterday's run, and only danger days inside that item's validity. */
+export function waveDays(snapshot: ModuleSnapshot | undefined, now: number): WaveDay[] {
+  if (!snapshot || snapshot.status === 'down' || !Number.isFinite(now)) return [];
+  const out: WaveDay[] = [];
+  const today = forecastDayStart(now);
+  const yesterday = forecastDayStart(now, -1);
+  for (const wave of ['heat', 'cold'] as const) {
+    const item = snapshot.items.find(entry => entry.kind === 'forecast' && dataText(entry, 'wave') === wave);
+    const first = Date.parse(item?.at ?? '');
+    const end = Date.parse(item?.until ?? '');
+    if (!item || !Number.isFinite(first) || !(end > now)
+      || (!sameZagrebDay(first, today) && !sameZagrebDay(first, yesterday))) continue;
+    const raw = dataText(item, 'levels');
+    if (!/^[0-3](?:,[0-3])*$/.test(raw)) continue;
+    raw.split(',').map(Number).forEach((level, i) => {
+      const at = forecastDayStart(first, i);
+      if (level === 0 || at < today || at >= end) return;
+      out.push({ id: `dhmz-waves:${wave}:${dayKey(at)}`, wave, level, at,
+        until: Math.min(forecastDayStart(at, 1), end) });
+    });
+  }
+  return out;
+}
+
+/** Today's bio forecast only while its own interval holds, shared by the page and sentence. */
+export function bioForecastToday(snapshot: ModuleSnapshot | undefined, now: number): FeedItem | undefined {
+  if (!snapshot || snapshot.status === 'down' || !Number.isFinite(now)) return undefined;
+  return snapshot.items.find(item => item.kind === 'forecast' && sameZagrebDay(item.at ?? '', now)
+    && Date.parse(item.at ?? '') <= now && Date.parse(item.until ?? '') > now);
 }
 
 export interface RadarState { src: string; rainNear: boolean; atMs: number; untilMs: number }

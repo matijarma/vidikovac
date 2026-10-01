@@ -21,6 +21,7 @@ import { iconMarkup } from '../ui/icons';
 import { sunTimes } from '../ui/solar';
 import type { LayerContext } from './types';
 import { conditionsMarkup } from '../city/conditions';
+import { bioForecastToday, forecastDayWord, waveDays } from '../kiosk/local';
 
 const QUAKE_RADIUS_KM = 150;
 const QUAKE_WINDOW_MS = 7 * 86_400_000;
@@ -233,23 +234,13 @@ function warningsSection(i18n: I18n, ctx: LayerContext): string {
 /** R3: DHMZ's biometeorological forecast for today, its own text in Croatian, with the day it is for; absent without one. */
 function bioSection(i18n: I18n, ctx: LayerContext): string {
   const bio = ctx.snapshots['dhmz-bio'];
-  const today = bio && bio.status !== 'down'
-    ? bio.items.find((item) => item.kind === 'forecast' && item.summary && zagrebDayKey(item.at) === zagrebDayKey(ctx.now))
-    : undefined;
-  if (!today) return '';
+  const today = bioForecastToday(bio, ctx.now);
+  if (!today?.summary) return '';
   return wxSection({
     id: 'wx-bio', tone: 'weather',
     body: sectionHead(i18n, { title: i18n.t('weather.bio'), snapshot: bio, error: ctx.errors?.['dhmz-bio'], id: 'wx-bio-title' })
       + `<p class="wx-prose" lang="hr">${escapeHtml(today.summary!)}</p><p class="sec-note">${escapeHtml(zagrebWeekdayDate(today.at))}</p>`,
   });
-}
-
-/** "danas", "sutra" or the weekday, as the wave sentences say the day (city/sentence.ts dayWord). */
-function waveDayWord(i18n: I18n, at: number, now: number): string {
-  if (zagrebDayKey(at) === zagrebDayKey(now)) return i18n.t('kiosk.say.today');
-  if (zagrebDayKey(at) === zagrebDayKey(now + DAY_MS)) return i18n.t('kiosk.say.tomorrow');
-  const weekday = new Intl.DateTimeFormat(i18n.getLocale(), { weekday: 'long', timeZone: 'Europe/Zagreb' }).format(at + 12 * 3_600_000);
-  return i18n.getLocale().startsWith('en') ? weekday : weekday.toLocaleLowerCase('hr');
 }
 
 /**
@@ -259,20 +250,10 @@ function waveDayWord(i18n: I18n, at: number, now: number): string {
  */
 function wavesSection(i18n: I18n, ctx: LayerContext): string {
   const waves = ctx.snapshots['dhmz-waves'];
-  if (!waves || waves.status === 'down') return '';
-  const today = Date.parse(`${zagrebDayKey(ctx.now)}T12:00:00Z`);
-  const lines: string[] = [];
-  for (const wave of ['heat', 'cold'] as const) {
-    const item = waves.items.find((entry) => entry.kind === 'forecast' && dataText(entry, 'wave') === wave);
-    const first = Date.parse(item?.at ?? '');
-    if (!item || !Number.isFinite(first) || !(Date.parse(item.until ?? '') > ctx.now)) continue;
-    dataText(item, 'levels').split(',').map(Number).forEach((level, i) => {
-      const at = first + i * DAY_MS + 3 * 3_600_000;
-      if (!Number.isInteger(level) || level < 1 || level > 3 || zagrebDayKey(at) < zagrebDayKey(today)) return;
-      const key = wave === 'heat' ? 'kiosk.sentence.heatWave' : 'kiosk.sentence.coldWave';
-      lines.push(`<li class="wx-wave" data-key="${escapeAttribute(`${item.id}:${i}`)}">${escapeHtml(i18n.t(key, { level, day: waveDayWord(i18n, at, ctx.now) }))}</li>`);
-    });
-  }
+  const lines = waveDays(waves, ctx.now).map(day => {
+    const key = day.wave === 'heat' ? 'kiosk.sentence.heatWave' : 'kiosk.sentence.coldWave';
+    return `<li class="wx-wave" data-key="${escapeAttribute(day.id)}">${escapeHtml(i18n.t(key, { level: day.level, day: forecastDayWord(i18n, day.at, ctx.now) }))}</li>`;
+  });
   if (lines.length === 0) return '';
   return wxSection({
     id: 'wx-waves', tone: 'urgency',

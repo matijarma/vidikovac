@@ -16,7 +16,7 @@ import { fmtDistance, fmtNumber, fmtTemp, mmss, weekdayDayMonth } from '../../ap
 import { KIOSK_HANDHELD_MAX_PX } from '../../app/src/core/breakpoints';
 import { decideLayout, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, HANDHELD_MAX_WIDTH, MIN_ZOOM, PORTRAIT } from '../../app/src/kiosk/layout';
 import { RAIN_AHEAD_MS } from '../../app/src/city/nearby';
-import { radarInsetShown, radarNow, RADAR_WET_AHEAD_MS } from '../../app/src/kiosk/local';
+import { nearestHourlySteps, radarInsetShown, radarNow, RADAR_WET_AHEAD_MS } from '../../app/src/kiosk/local';
 import { cityDateLine, closuresNear, closuresNearby, compassLabel, downPlaceholder, eventsTonight, KIOSK_TEASER_MODULES, kioskQuakes, lastDeparturesAhead, linesAtStop, nearbyVehicleCount, nearestPharmacy, nextSession, pharmaciesByDistance, quakeLine, recentQuakes, safetyStrip, staleCopy, stories, sunToday, weatherNow, windowOf, worksInKvart } from '../../app/src/kiosk/local';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { busesVisible, CITY_DETAIL_ZOOM, cityWindowView, createKioskMapAdapter, FIELD_MIN_ZOOM, FIELD_SPAN_M, fieldZoom, HANDHELD_SPAN_M, KIOSK_BASEMAP_PROFILE, KIOSK_EMPHASIS, KIOSK_HIT_TOLERANCE_PX, KIOSK_MAP_SLOT_ID, KIOSK_SYMBOL_SCALE, kioskQuakePoints, labelPadding, metresPerPixel, PAIRED_ZOOM, pharmacyPoint, requestKioskMap, majorStreetNames, placeTitles, STOP_LABEL_MIN_RANK, THIN_NAMES_ZOOM, stopLabelTramInterchanges } from '../../app/src/kiosk/mapview';
@@ -1387,5 +1387,25 @@ describe('radarNow and radarInsetShown (R3)', () => {
       src: '/api/radar/zagreb.png?v=1790091600', rainNear: true, atMs: NOW_R - 240_000, untilMs: NOW_R + 360_000,
     });
     expect(radarNow([radar(11, true)], NOW_R)).toBeNull();
+  });
+
+  it('R3 review: invalid intervals and non-forecast items cannot choose the hourly station or show the inset', () => {
+    const source = wetIn(90);
+    const bad = { ...source.items[0]!, until: source.items[0]!.at };
+    expect(nearestHourlySteps({ ...source, items: [bad] }, PLACE)?.steps ?? []).toEqual([]);
+    expect(radarInsetShown([radar(4, false), { ...source, items: [bad] }], PLACE, NOW_R, false)).toBe(false);
+    const noise = { ...source.items[0]!, id: 'not-a-step', kind: 'warning' as const,
+      geo: { type: 'Point' as const, coordinates: [PLACE.lon, PLACE.lat] }, data: { station: 'not-a-station' } };
+    expect(nearestHourlySteps({ ...source, items: [noise, ...source.items] }, PLACE)?.station).toBe('gric');
+  });
+
+  it('R3 review: the radar predicate is deterministic and expires on the exact item boundary', () => {
+    const source = radar(4, true, 'stale');
+    const copy = JSON.stringify(source);
+    expect(radarNow([source], NOW_R)).toEqual(radarNow([source], NOW_R));
+    expect(radarNow([source], NOW_R + 360_000)).toBeNull();
+    expect(radarNow([source], NOW_R - 300_000)).toBeNull();
+    expect(radarNow([source], Number.NaN)).toBeNull();
+    expect(JSON.stringify(source)).toBe(copy);
   });
 });

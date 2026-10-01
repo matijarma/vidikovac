@@ -3555,6 +3555,49 @@ describe('the wall carries no disclaimer, caveat or fetch time', () => {
 
 // R3: DHMZ's radar inset in the map's lower left (docs/reveal-2026-10-plan/R3.md step 13): made once, then only toggled.
 describe('the radar inset', () => {
+  it.each(['heat', 'cold'] as const)('R3 review: the weather page and header agree on %s freshness, dates and item bounds', async wave => {
+    const { renderZrakINebo } = await import('../../app/src/layers/zrak-i-nebo');
+    const { sentenceFacts } = await import('../../app/src/city/sentence');
+    const i18n = createDefaultI18n('hr');
+    const cases = [
+      { first: '2026-09-20T00:00:00+02:00', until: '2026-09-25T00:00:00+02:00', now: '2026-09-22T12:00:00+02:00', levels: '2,2,2,2,2', expected: null },
+      { first: '2026-09-23T00:00:00+02:00', until: '2026-09-28T00:00:00+02:00', now: '2026-09-22T12:00:00+02:00', levels: '2,2,2,2,2', expected: null },
+      { first: '2026-09-22T00:00:00+02:00', until: '2026-09-23T00:00:00+02:00', now: '2026-09-22T12:00:00+02:00', levels: '0,2,0,0,0', expected: null },
+      { first: '2026-03-28T00:00:00+01:00', until: '2026-04-02T00:00:00+02:00', now: '2026-03-28T23:30:00+01:00', levels: '0,2,0,0,0', expected: 'Toplinski val: 2. stupanj, sutra.' },
+      { first: '2026-12-31T00:00:00+01:00', until: '2027-01-05T00:00:00+01:00', now: '2026-12-31T23:30:00+01:00', levels: '0,2,0,0,0', expected: 'Toplinski val: 2. stupanj, sutra.' },
+    ];
+    for (const c of cases) {
+      const now = Date.parse(c.now);
+      const expected = wave === 'cold' ? c.expected?.replace('Toplinski', 'Hladni') ?? null : c.expected;
+      const levels = wave === 'cold' ? c.levels.split(',').slice(0, 4).join(',') : c.levels;
+      const snapshots = { 'dhmz-waves': snap('dhmz-waves', [item('dhmz-waves', `dhmz-waves:${wave}:${c.first.slice(0, 10)}`, 'forecast', wave === 'cold' ? 'Hladni val' : 'Toplinski val',
+        { at: c.first, until: c.until, data: { wave, levels, station: 'Zagreb' } })]) };
+      const page = renderZrakINebo({ i18n, snapshots, now });
+      const header = sentenceFacts({ i18n, locale: 'hr', snapshots, now, place: { kind: 'tram', stopId: STOP.id, ...STOP },
+        city: emptyCity(), rows: [], outage: false }).find(f => f.id.startsWith('dhmz-waves:'));
+      if (expected === null) {
+        expect(page.querySelector('[data-testid=waves]'), c.now).toBeNull();
+        expect(header, c.now).toBeUndefined();
+      } else {
+        expect(page.querySelector('[data-testid=waves]')?.textContent, c.now).toContain(expected);
+        expect(header?.text, c.now).toBe(expected);
+      }
+    }
+  });
+
+  it('R3 review: bio prose respects its item expiry and never appears before its interval', async () => {
+    const { renderZrakINebo } = await import('../../app/src/layers/zrak-i-nebo');
+    const i18n = createDefaultI18n('hr');
+    const bio = item('dhmz-bio', 'dhmz-bio:2026-09-11', 'forecast', 'Biometeorološka prognoza',
+      { at: '2026-09-10T22:00:00Z', until: new Date(NOW + 60_000).toISOString(),
+        summary: 'Nastavlja se razdoblje povoljnih biometeoroloških prilika.', data: { region: 'sredisnja', level: 3 } });
+    const page = (at: number) => renderZrakINebo({ i18n, now: at, snapshots: { 'dhmz-bio': snap('dhmz-bio', [bio]) } });
+    expect(page(NOW).querySelector('.wx-bio .wx-prose')?.textContent).toBe(bio.summary);
+    expect(page(NOW + 60_000).querySelector('.wx-bio')).toBeNull();
+    bio.at = new Date(NOW + 1).toISOString();
+    expect(page(NOW).querySelector('.wx-bio')).toBeNull();
+  });
+
   it('mounts one hidden figure, shows it with its credit, and does not reassign an unchanged src', async () => {
     const { mountInvitation } = await import('../../app/src/kiosk/invitation');
     const { kioskStrings } = await import('../../app/src/kiosk/strings');

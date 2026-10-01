@@ -16,7 +16,7 @@ import { zagrebHour } from '../format';
 import type { I18n } from '../i18n/i18n';
 import { kindOfRoute } from '../kiosk/exceptions';
 import { clock, dayKey, dayMonth, fmtNumber, sameZagrebDay } from '../kiosk/format';
-import { activeWarnings, cleanCondition, isWetStep, nearestHourlySteps, radarNow, weatherNow } from '../kiosk/local';
+import { activeWarnings, bioForecastToday, cleanCondition, forecastDayStart, forecastDayWord, isWetStep, nearestHourlySteps, radarNow, waveDays, weatherNow } from '../kiosk/local';
 import { airIndexLabel } from './air';
 import { kioskStrings } from '../kiosk/strings';
 import { dataNumber, dataText } from '../panels/panel';
@@ -254,21 +254,6 @@ function timedLabel(at: number, input: SentenceFactsInput): string {
 
 interface ComputedFact { id: string; text: string; validUntil: number; wording: SentenceWording }
 
-/** The start of the Zagreb day `days` after the day of `at` (local midnight). */
-function dayStart(at: number, days: number): number {
-  const [year, month, day] = dayKey(at).split('-').map(Number);
-  return Date.parse(zagrebIso(year!, month!, day! + days));
-}
-
-/** "danas", "sutra" or the weekday ("srijeda"; English keeps its capital, "Wednesday"). */
-function dayWord(input: SentenceFactsInput, at: number): string {
-  const words = kioskStrings(input.i18n.getLocale()).say;
-  if (sameZagrebDay(at, input.now)) return words.today;
-  if (dayKey(at) === dayKey(dayStart(input.now, 1))) return words.tomorrow;
-  const weekday = new Intl.DateTimeFormat(input.locale, { weekday: 'long', timeZone: 'Europe/Zagreb' }).format(at + 12 * 3_600_000);
-  return input.locale.startsWith('en') ? weekday : weekday.toLocaleLowerCase('hr');
-}
-
 /**
  * The heat and cold wave facts (R3): the fresh dhmz-waves item of each wave (not down; its first day today or yesterday),
  * the first day from today to the item's end whose level is 1 to 3. The fact lasts to the next midnight (the day word
@@ -276,26 +261,14 @@ function dayWord(input: SentenceFactsInput, at: number): string {
  */
 function waveFacts(input: SentenceFactsInput): ComputedFact[] {
   const { now, i18n } = input;
-  const snapshot = input.snapshots['dhmz-waves'];
-  if (!snapshot || snapshot.status === 'down') return [];
+  const days = waveDays(input.snapshots['dhmz-waves'], now);
   const out: ComputedFact[] = [];
   for (const wave of ['heat', 'cold'] as const) {
-    const item = snapshot.items.find(entry => entry.kind === 'forecast' && dataText(entry, 'wave') === wave);
-    const first = Date.parse(item?.at ?? '');
-    const end = Date.parse(item?.until ?? '');
-    if (!item || !Number.isFinite(first) || !(end > now)) continue;
-    const offset = sameZagrebDay(first, now) ? 0 : dayKey(dayStart(first, 1)) === dayKey(now) ? 1 : -1;
-    if (offset < 0) continue;
-    const levels = dataText(item, 'levels').split(',').map(Number);
-    for (let i = offset; i < levels.length; i += 1) {
-      const level = levels[i]!;
-      if (!Number.isInteger(level) || level < 1 || level > 3) continue;
-      const at = dayStart(first, i);
-      if (at >= end) break;
-      const wording = wave === 'heat' ? 'heatWave' : 'coldWave';
-      out.push({ id: `dhmz-waves:${wave}:${dayKey(at)}`, text: copy(i18n, wording, { level, day: dayWord(input, at) }), validUntil: nextMidnight(now), wording });
-      break;
-    }
+    const day = days.find(day => day.wave === wave);
+    if (!day) continue;
+    const wording = wave === 'heat' ? 'heatWave' : 'coldWave';
+    out.push({ id: day.id, text: copy(i18n, wording, { level: day.level, day: forecastDayWord(i18n, day.at, now) }),
+      validUntil: Math.min(day.until, nextMidnight(now)), wording });
   }
   return out;
 }
@@ -321,14 +294,19 @@ function hourlyFacts(input: SentenceFactsInput): ComputedFact[] {
   if (running && running.at <= now && !radar?.rainNear) {
     const wetAt = ahead.findIndex(step => isWetStep(step.item));
     const wet = wetAt > 0 ? ahead[wetAt]! : undefined;
-    const dryBefore = wet !== undefined && ahead.slice(0, wetAt).every(step => dataNumber(step.item, 'precip') === 0 && (dataNumber(step.item, 'prob') ?? 100) < 30);
+    let coveredUntil = now;
+    const dryBefore = wet !== undefined && ahead.slice(0, wetAt).every(step => {
+      if (step.at > coveredUntil || dataNumber(step.item, 'precip') !== 0 || (dataNumber(step.item, 'prob') ?? 100) >= 30) return false;
+      // These are hourly forecast steps: a missing hour cannot be filled by stretching its predecessor to the next one.
+      coveredUntil = Math.max(coveredUntil, Math.min(step.until, step.at + HOUR_MS));
+      return true;
+    }) && coveredUntil >= wet.at;
     if (wet && dryBefore && wet.at - now > 2 * HOUR_MS && wet.at - now <= 12 * HOUR_MS) {
       out.push({ id: `dry:${hourly.station}:${new Date(wet.at).toISOString()}`, text: copy(i18n, 'dryUntil', { time: clock(wet.at) }),
         validUntil: Math.min(wet.at, now + 6 * HOUR_MS), wording: 'dryUntil' });
     }
   }
-  const target = [0, 1].flatMap(days => HOURLY_TEMP_HOURS.map(hour => dayStart(now, days) + hour * HOUR_MS))
-    // dayStart + hours is the local clock hour on every day but the two of a clock change; the step must start there.
+  const target = [0, 1].flatMap(days => HOURLY_TEMP_HOURS.map(hour => forecastDayStart(now, days, hour)))
     .find(at => at - now >= 2 * HOUR_MS && at - now <= 12 * HOUR_MS);
   const step = target === undefined ? undefined : hourly.steps.find(entry => entry.at === target);
   const temp = step ? dataNumber(step.item, 'temp') : null;
@@ -607,11 +585,10 @@ export function sentenceFacts(input: SentenceFactsInput): SentenceFact[] {
   // characters are the contract ("DHMZ: " + text within 80), so the text goes in after the slot check rather than through
   // copy(), whose generic value cap of 64 would cut the slot short.
   if (!locale.startsWith('en')) {
-    const bio = input.snapshots['dhmz-bio'];
-    const today = bio && bio.status !== 'down' ? bio.items.find(item => item.kind === 'forecast' && item.at && sameZagrebDay(item.at, now)) : undefined;
+    const today = bioForecastToday(input.snapshots['dhmz-bio'], now);
     const text = dataText(today, 'text');
     if (today && text && validateSentenceSlot('dhmzText', text) === null) {
-      add(today.id, 'vrijeme', copy(i18n, 'bioToday').replace('{text}', text), nextMidnight(now), { wording: 'bioToday' });
+      add(today.id, 'vrijeme', copy(i18n, 'bioToday').replace('{text}', text), Math.min(Date.parse(today.until!), nextMidnight(now)), { wording: 'bioToday' });
     }
   }
   // R3: how long it stays dry and the temperature later in the day, from the nearest station's hourly steps.
