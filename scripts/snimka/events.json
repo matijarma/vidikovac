@@ -65,7 +65,7 @@
    "at": "2026-09-28T07:45:00+02:00",
    "kind": "recording",
    "title": "Prvo jutro",
-   "text": "Jutarnja špica bez tramvaja i autobusa.",
+   "text": "Jutarnja špica gotovo bez tramvaja i autobusa.",
    "sources": [],
    "chapter": true
   },
@@ -182,7 +182,7 @@
    "at": "2026-09-30T10:20:00+02:00",
    "kind": "court",
    "title": "Sud: štrajk u Holdingu nije zakonit",
-   "text": "Županijski sud u Zagrebu odlučuje o štrajku u Zagrebačkom holdingu.",
+   "text": "Županijski sud u Zagrebu proglašava nezakonitim štrajk u Zagrebačkom holdingu.",
    "sources": [
     {
      "label": "N1",
