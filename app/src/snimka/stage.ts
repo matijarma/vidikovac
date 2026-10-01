@@ -232,7 +232,11 @@ export const mountStage: Mount = (ctx, root) => {
     const entities = series.feed.entities[i];
     const headerAge = series.feed.headerAgeS[i];
     const retro = atSec < ctx.manifest.serviceLiveFromSec;
-    const missing = motion === 'missing';
+    // A chunk is missing either because the recording has a hole or because ZET sent no new frame (its data did not
+    // change, or it sent none with a vehicle): only the first is "Bez snimke"; in the second the state stays the
+    // word and the feed line says what ZET did (Tue 29 Sep 06:28 to 07:56 on the real data).
+    const zetQuiet = entities === 0 || (headerAge !== null && headerAge !== undefined && headerAge >= FROZEN_AFTER_S);
+    const missing = motion === 'missing' && !zetQuiet;
     const loading = !motionSettled && motion !== 'idle';
     const key = [i, state, seen, expected, since, entities, headerAge, retro, missing, loading].join('|');
     if (key === shownBadge) return;

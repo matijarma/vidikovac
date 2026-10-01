@@ -77,9 +77,10 @@ test.describe('/snimka/ stage', () => {
     await expect(page.locator('[data-sn="retro-note"]')).toContainText('od uto 29. 9. u 23:17');
     await expect(page.locator('[data-sn="feed"]')).toContainText('ZET-ovi podaci nisu se mijenjali od');
     await expect(page.locator('[data-sn="holds"]')).toHaveText(/^traje \d+ h( \d+ min)?$/);
-    // The fixture records motion for Monday 07:40 to 08:00 only: here the badge says the recording has no chunk and withholds the fleet number.
-    await expect(badge(page)).toHaveText('Bez snimke', { timeout: 30_000 });
-    await expect(page.locator('[data-sn="counts"]')).toBeHidden();
+    // No chunk here (the fixture records motion for Monday 07:40 to 08:00 only) while ZET's data is not changing: the
+    // recording has no hole, ZET was quiet, so the badge keeps the state word beside the frozen-feed line. "Bez snimke"
+    // is for a real hole in the recording (the gapped fixture below).
+    await expect(badge(page)).toHaveText('Gotovo bez vozila', { timeout: 30_000 });
     // Inside the recorded chunks the series speaks: the state word and the counts.
     await open(page, '/snimka/?t=2026-09-28T07:52');
     await expect(badge(page)).toHaveText('Gotovo bez vozila', { timeout: 30_000 });
