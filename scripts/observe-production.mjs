@@ -1316,13 +1316,14 @@ export const THRESHOLDS = Object.freeze([
   T('pills-drawn', 'd2', 'kiosk', 'kiosk.pillsEmptyReadings', NONE, 'vehicle pills drawn (data-pills non-empty) in every reading whose data-feed is live while the twin reports vehicles (from {PILLS_DRAW_GRACE_S} s after they appear); an outage (stale, down) or a twin reporting none needs none', '[O-71], §16.3'),
   T('outage', 'd2', 'kiosk', 'kiosk.outageDishonest', NONE, 'while data-feed is down: no vehicle pill, no live countdown row, data-markers > 0, every departure a clock time', '§16.3 outage0800'),
   T('outage-heading', 'd2', 'kiosk', 'kiosk.outageHeadline', NONE, 'while data-feed is down: no heading (h1, h2) or sentence matches the outage scene\'s headline rule, and the map note shows exactly once', '§16.3 outage0800, principle 9'),
-  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond row turnovers (a row entering or leaving between two consecutive readings, counted apart), and every row that stays keeps its node', '§16.3, principle 7'),
+  T('calm-motion', 'd2', 'kiosk', 'kiosk.calmMotion', NONE, 'every minute of the rotation: at most {IDLE_MUTATIONS_MAX} structural mutations under the timeline beyond row turnovers (a row entering or leaving between two consecutive readings, counted apart), and at most {REVEAL_MUTATIONS_MAX} beyond turnovers across a reveal\'s start or return, and every row that stays keeps its node', '§16.3, principle 7'),
   T('sentence-length', 'd2', 'kiosk', 'kiosk.sentenceOutOfRange', NONE, 'the sentence has 1–{SENTENCE_MAX_CHARS} characters in every reading', '§16.3, §12'),
   T('sentence-ellipsis', 'd2', 'kiosk', 'kiosk.sentenceEllipses', NONE, 'no sentence cut by an ellipsis', '§16.3'),
   T('sentence-overflow', 'd2', 'kiosk', 'kiosk.sentenceOverflows', NONE, 'no sentence overflowing its box', '§16.3'),
   T('sentence-repeat', 'd2', 'kiosk', 'kiosk.sentenceRepeats', NONE, 'no sentence repeated verbatim within ten minutes', '§12'),
   T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired; short only when even the upper bound (the dwell plus the actual gaps to the readings either side) is under it', 'decision 29'),
   T('sentence-distinct', 'd2', 'kiosk', 'kiosk.sentencesTooFew', NONE, 'at least {DISTINCT_SENTENCES_MIN} distinct sentences in every ten minutes of the rotation (a shorter run in proportion, at least 1)', '§16.3, §12'),
+  T('reveal-cadence', 'd2', 'kiosk', 'kiosk.revealCadence', NONE, 'at most one reveal per {REVEAL_GAP_BEATS} beats, one region at a time, each standing at least one beat and ending by the second (beats from the page\'s data-rhythm)', 'reveal pass D2'),
   T('solar', 'd2', 'kiosk', 'kiosk.solarOverMax', NONE, 'at most {SOLAR_ROWS_MAX} solar row per reading', '§16.3, §12'),
   T('rows-timed', 'd2', 'kiosk', 'kiosk.untimedReadings', NONE, 'every row carries data-when or data-always', '§16.3'),
   T('caveats', 'd2', 'kiosk', 'kiosk.caveatRows', NONE, 'no row reads as a caveat', '§16.3, principle 5'),
@@ -1575,6 +1576,15 @@ export const METRICS = Object.freeze({
     const range = judged.length ? `dwells ${(Math.min(...judged) / 1000).toFixed(1)} to ${(Math.max(...judged) / 1000).toFixed(1)} s` : 'no judged dwell';
     return { value: r.short.length, detail: [`${r.turns} turns per fact (${r.factSource}), ${r.refreshes} refreshes, ${range}`, ...r.short.slice(0, 3).map((d) => `${d.at} ${sec(d.dwellMs)} s, ${sec(d.dwellMinMs)} to ${sec(d.dwellMaxMs)} s between readings (gaps ${sec(d.gapBeforeMs)} / ${sec(d.gapAfterMs)} s, ${d.refreshes} refreshes): ${quote(d.sentence, 90)}`)] };
   },
+  'kiosk.revealCadence': (obs, k) => {
+    const rot = valid(obs.kiosk?.rotation ?? []);
+    const probed = rot.filter((s) => s.reveal !== undefined);
+    if (!probed.length) return { value: null, detail: ['no reading carries the reveal probe'] };
+    const failures = k.wall.revealCadenceFailures(rot);
+    const episodes = k.wall.revealEpisodes(rot);
+    const rhythm = probed.find((s) => s.rhythm)?.rhythm ?? '?';
+    return { value: failures.length, detail: [...failures.slice(0, 5), `${episodes.filter((e) => e.kind === 'page').length} page turns, ${episodes.filter((e) => e.kind === 'advance').length} advances in ${probed.length} readings at Ritam ${rhythm} s`] };
+  },
   'kiosk.sentencesTooFew': (obs, k) => {
     if (!obs.kiosk || !(obs.kiosk.rotation ?? []).length) return { value: null, detail: ['no rotation reading'] };
     const d = distinctPerWindow(obs.kiosk.rotation, plannedRotationSteps(obs.meta.minutes, k.wall.ROTATION_STEP_MS), k.wall.ROTATION_STEP_MS, REPEAT_WINDOW_MS, k.wall.DISTINCT_SENTENCES_MIN);
@@ -1817,6 +1827,7 @@ export const EVIDENCE_POINTERS = Object.freeze({
   'no-screen': 'recorders.json (screenCreations per page)',
   redemptions: 'recorders.json (scanTimes per page) and the run log below',
   'pills-drawn': 'rotation.jsonl (data-pills, data-feed and the twin\'s fleet per reading)',
+  'reveal-cadence': 'rotation.jsonl (reveal and rhythm per reading)',
   'wall-read': 'rotation.jsonl (each failed reading keeps its error) and the run log below',
   legibility: 'legibility.json and captures/kiosk-1920x1080.png, captures/kiosk-1080x1920.png',
   proxy: 'the run log below',
@@ -1901,6 +1912,9 @@ export function renderReport(observation, verdict, instruments) {
     lines.push(`| ${s.samples} | ${s.errors} | ${rep.turns} | ${rep.refreshes} | ${rep.short.length} | ${rep.distinct} | ${rep.repeats.length} | ${s.minDepartures}–${s.maxDepartures} | ${s.solarRowsMax} | ${s.liveRowsMax} | ${s.plusPills} | ${s.unlabelledMax ?? '—'} | ${cell(Object.entries(s.kinds).map(([kind, n]) => `${kind} ${n}`).join(', '))} | ${cell(Object.entries(s.themes).map(([t, n]) => `${t} ${n}`).join(', '))} |`, '');
     const probed = valid(rot).filter((r) => Array.isArray(r.fitDropped)).length;
     lines.push(`Rows the fit left out of the list (data-fit-dropped, ${probed} of ${s.samples} readings carried the probe; monitored, no threshold): ${Object.entries(s.fitDroppedByKind).map(([kind, n]) => `${kind} ${n}`).join(', ') || 'none'}, each reading counting its own; readings with data-fit-overflow=1: ${s.fitOverflowReadings}.`, '');
+    const episodes = instruments.wall.revealEpisodes(valid(rot));
+    const revealed = valid(rot).filter((r) => r.reveal !== undefined).length;
+    lines.push(`Reveals (R2, data-reveal per reading, ${revealed} of ${s.samples} readings carried the probe): ${s.reveals.page} page turn(s), ${s.reveals.advance} advance(s)${episodes.length ? ` on beats ${episodes.slice(0, 40).map((e) => `${e.kind === 'page' ? 'p' : 'a'}${e.beat}`).join(' ')}${episodes.length > 40 ? ` and ${episodes.length - 40} more` : ''}` : ''}; the cadence is the reveal-cadence row.`, '');
     if (rep.dwells.length) {
       lines.push('Sentence turns per fact: the point dwell (first reading to the next fact\'s), its bounds from the actual reading gaps either side, and the verdict (decision 29).', '');
       lines.push('| At (UTC) | Dwell s | Bounds s | Gap before / after s | Refreshes | Verdict | Sentence |', '|---|---:|---|---|---:|---|---|');
