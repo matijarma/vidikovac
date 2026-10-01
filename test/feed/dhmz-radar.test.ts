@@ -11,7 +11,7 @@ vi.mock('../../worker/feed/png', async (importOriginal) => {
 });
 
 const png = await import('../../worker/feed/png');
-const { CALIBRATION, fetchDhmzRadar, isRainPixel, parseRadar, rainCells, resetRadarMemo } = await import('../../worker/feed/modules/dhmz-radar');
+const { CALIBRATION, fetchDhmzRadar, isRainPixel, latestComposite, parseRadar, rainCells, resetRadarMemo } = await import('../../worker/feed/modules/dhmz-radar');
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'radar', 'kompozit-20261001T020410Z.png');
 const LAST_MODIFIED = 'Thu, 01 Oct 2026 02:04:10 GMT';
@@ -33,6 +33,52 @@ async function painted(count: number, where: 'inside' | 'outside' = 'inside'): P
 
 describe('dhmz-radar on the saved composite', () => {
   beforeEach(() => resetRadarMemo());
+
+  it('R3 review: parses a new 200 body even when its Last-Modified is unchanged', async () => {
+    const wet = await painted(40);
+    let calls = 0;
+    const ctx: FetchContext = { now: () => NOW, fetch: async () => new Response(++calls === 1 ? bytes() : wet, { headers: { 'last-modified': LAST_MODIFIED } }) };
+    expect((await fetchDhmzRadar(ctx)).items[0]!.data?.rainNear).toBe(false);
+    expect((await fetchDhmzRadar(ctx)).items[0]!.data).toMatchObject({ rainNear: true, rainCells: 40 });
+  });
+
+  it('R3 review: never reuses a parsed payload for corrupt replacement bytes and retries unconditionally', async () => {
+    const body = bytes();
+    const corrupt = body.slice();
+    corrupt[corrupt.length - 1] ^= 1;
+    const since: (string | null)[] = [];
+    const ctx: FetchContext = { now: () => NOW, fetch: async (_url, init) => {
+      since.push(new Headers(init?.headers).get('if-modified-since'));
+      return new Response(since.length === 2 ? corrupt : body, { headers: { 'last-modified': LAST_MODIFIED } });
+    } };
+    await fetchDhmzRadar(ctx);
+    await expect(fetchDhmzRadar(ctx)).rejects.toThrow(/CRC/);
+    await fetchDhmzRadar(ctx);
+    expect(since).toEqual([null, LAST_MODIFIED, null]);
+  });
+
+  it('R3 review: coalesces concurrent composite downloads and permits retry after rejection', async () => {
+    let resolve!: (response: Response) => void;
+    const fetch = vi.fn(() => new Promise<Response>((done) => { resolve = done; }));
+    const ctx: FetchContext = { now: () => NOW, fetch };
+    const one = latestComposite(ctx);
+    const two = latestComposite(ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    resolve(new Response(bytes(), { headers: { 'last-modified': LAST_MODIFIED } }));
+    expect(await one).toBe(await two);
+    const bad: FetchContext = { now: () => NOW, fetch: async () => { throw new Error('offline'); } };
+    await expect(latestComposite(bad)).rejects.toThrow('offline');
+    await expect(latestComposite({ now: () => NOW, fetch: async () => new Response(null, { status: 304 }) })).resolves.toBe(await one);
+  });
+
+  it('R3 review: rejects unsolicited 304, partial responses, future observations and expired 304 payloads', async () => {
+    await expect(fetchDhmzRadar({ now: () => NOW, fetch: async () => new Response(null, { status: 304 }) })).rejects.toThrow(/304 without/);
+    await expect(fetchDhmzRadar({ now: () => NOW, fetch: async () => new Response(bytes(), { status: 206 }) })).rejects.toThrow(/206/);
+    await expect(parseRadar(bytes(), new Date(NOW.getTime() + 1000).toUTCString(), NOW)).rejects.toThrow(/future/);
+    await expect(parseRadar(bytes(), LAST_MODIFIED, new Date(NaN))).rejects.toThrow(/clock/);
+    await fetchDhmzRadar({ now: () => NOW, fetch: async () => new Response(bytes(), { headers: { 'last-modified': LAST_MODIFIED } }) });
+    await expect(fetchDhmzRadar({ now: () => new Date(Date.parse(LAST_MODIFIED) + 30 * 60_000 + 1), fetch: async () => new Response(null, { status: 304 }) })).rejects.toThrow(/30 minutes/);
+  });
 
   it('gives one dry item with the id of its Last-Modified, ten minutes long, over a closed square', async () => {
     const payload = await parseRadar(bytes(), LAST_MODIFIED, NOW);

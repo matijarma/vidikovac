@@ -1,6 +1,6 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload } from '../payload';
-import { cropRaster, decodePng, encodePng, type RasterRgb } from '../png';
+import { cropRaster, decodePng, encodePng, PNG_MAX_BYTES, type RasterRgb } from '../png';
 import calibrationFile from '../../data/radar-calibration.json' with { type: 'json' };
 
 // DHMZ's radar composite, https://vrijeme.hr/kompozit-stat.png (Otvorena dozvola, "Izvor: DHMZ"), read for one fact:
@@ -70,10 +70,16 @@ function pngSize(bytes: Uint8Array): [number, number] {
 }
 
 /** The checks of D-C, before any decode: the image is fresh and has the calibrated size. */
-function checkComposite(bytes: Uint8Array, lastModified: string, now: Date, calibration: RadarCalibration): number {
+export function radarTimestamp(lastModified: string, now: Date): number {
   const at = Date.parse(lastModified);
   if (!Number.isFinite(at)) throw new Error(`dhmz-radar: unreadable Last-Modified ${lastModified}`);
+  if (!Number.isFinite(now.getTime()) || at > now.getTime()) throw new Error('dhmz-radar: future composite or invalid clock');
   if (now.getTime() - at > RADAR_MAX_AGE_MS) throw new Error(`dhmz-radar: composite of ${new Date(at).toISOString()} is over 30 minutes old`);
+  return at;
+}
+
+function checkComposite(bytes: Uint8Array, lastModified: string, now: Date, calibration: RadarCalibration): number {
+  const at = radarTimestamp(lastModified, now);
   const [width, height] = pngSize(bytes);
   if (width !== calibration.imageSize[0] || height !== calibration.imageSize[1]) {
     throw new Error(`dhmz-radar: composite is ${width} × ${height}, the calibration's ${calibration.imageSize.join(' × ')}`);
@@ -117,46 +123,83 @@ interface Composite { lastModified: string; bytes: Uint8Array }
 
 /** The isolate's last composite; the module and the image route share it. */
 let memo: Composite | null = null;
-/** The last payload parsed, by the composite's Last-Modified: a 304 is not decoded again. */
-let parsed: { lastModified: string; payload: FeedPayload } | null = null;
+/** The last payload is tied to the actual composite object: only a 304 can reuse it without decoding. */
+let parsed: { composite: Composite; payload: FeedPayload } | null = null;
+let pending: Promise<Composite> | null = null;
 
 /** Test seam: forget the isolate memo. */
 export function resetRadarMemo(): void {
   memo = null;
   parsed = null;
+  pending = null;
 }
 
 /** The newest composite: If-Modified-Since against the memo; a 304 returns the memo, a 200 must carry Last-Modified. */
 export async function latestComposite(ctx: FetchContext): Promise<Composite> {
-  const response = await ctx.fetch(RADAR_URL, memo ? { headers: { 'if-modified-since': memo.lastModified } } : undefined);
+  if (pending) return pending;
+  const base = memo;
+  const request = downloadComposite(ctx, base);
+  pending = request;
+  try { return await request; } finally { if (pending === request) pending = null; }
+}
+
+async function downloadComposite(ctx: FetchContext, base: Composite | null): Promise<Composite> {
+  const response = await ctx.fetch(RADAR_URL, base ? { headers: { 'if-modified-since': base.lastModified } } : undefined);
   if (response.status === 304) {
-    if (!memo) throw new Error('dhmz-radar: 304 without a composite in hand');
-    return memo;
+    if (!base) throw new Error('dhmz-radar: 304 without a composite in hand');
+    return base;
   }
-  if (!response.ok) throw new Error(`dhmz-radar: upstream ${response.status}`);
+  if (response.status !== 200) throw new Error(`dhmz-radar: upstream ${response.status}`);
   const lastModified = response.headers.get('last-modified');
   if (!lastModified) throw new Error('dhmz-radar: the composite came without Last-Modified');
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  radarTimestamp(lastModified, ctx.now());
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('dhmz-radar: empty composite');
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > PNG_MAX_BYTES) throw new Error('dhmz-radar: composite too large');
+      parts.push(value);
+    }
+  } finally { await reader.cancel().catch(() => undefined); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const part of parts) { bytes.set(part, offset); offset += part.length; }
+  checkComposite(bytes, lastModified, ctx.now(), CALIBRATION);
   memo = { lastModified, bytes };
   return memo;
 }
 
 export async function fetchDhmzRadar(ctx: FetchContext): Promise<FeedPayload> {
   const composite = await latestComposite(ctx);
-  if (parsed && parsed.lastModified === composite.lastModified) {
+  if (parsed && parsed.composite === composite) {
     // Same image: only its age is judged again.
     checkComposite(composite.bytes, composite.lastModified, ctx.now(), CALIBRATION);
     return parsed.payload;
   }
-  const payload = await parseRadar(composite.bytes, composite.lastModified, ctx.now());
-  parsed = { lastModified: composite.lastModified, payload };
-  return payload;
+  try {
+    const payload = await parseRadar(composite.bytes, composite.lastModified, ctx.now());
+    parsed = { composite, payload };
+    return payload;
+  } catch (error) {
+    if (memo === composite) memo = null; // Do not condition the next request on a body that failed validation.
+    throw error;
+  }
 }
 
 /** The image route's body: the 120-pixel crop around Zagreb, as a PNG, with the composite's Last-Modified. Throws on any failure (D-C). */
 export async function radarCrop(ctx: FetchContext): Promise<{ png: Uint8Array; lastModified: string }> {
   const composite = await latestComposite(ctx);
   checkComposite(composite.bytes, composite.lastModified, ctx.now(), CALIBRATION);
-  const raster = await decodePng(composite.bytes, { rows: CALIBRATION.inset.rect[3] + 1 });
-  return { png: await encodePng(cropRaster(raster, CALIBRATION.inset.rect)), lastModified: composite.lastModified };
+  try {
+    const raster = await decodePng(composite.bytes, { rows: CALIBRATION.inset.rect[3] + 1 });
+    return { png: await encodePng(cropRaster(raster, CALIBRATION.inset.rect)), lastModified: composite.lastModified };
+  } catch (error) {
+    if (memo === composite) memo = null;
+    throw error;
+  }
 }

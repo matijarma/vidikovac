@@ -44,6 +44,20 @@ describe('upstreamFetch', () => {
     await expect(upstreamFetch('https://example.test/down')).rejects.toThrow(/503/);
   });
 
+  it('R3 review: permits conditional 304 only with a nonempty validator, retaining identification', async () => {
+    globalThis.fetch = vi.fn(async (_input: unknown, init: RequestInit = {}) => {
+      seen.push({ url: '', init });
+      return new Response(null, { status: 304 });
+    }) as unknown as typeof fetch;
+    const validators: HeadersInit[] = [{ 'if-modified-since': 'Thu, 01 Oct 2026 02:04:10 GMT' }, { 'if-none-match': '"radar"' }];
+    for (const headers of validators) {
+      expect((await upstreamFetch('https://example.test/radar', { headers })).status).toBe(304);
+      expect(new Headers(seen.at(-1)!.init.headers).get('user-agent')).toBe(USER_AGENT);
+    }
+    await expect(upstreamFetch('https://example.test/radar')).rejects.toThrow(/304/);
+    await expect(upstreamFetch('https://example.test/radar', { headers: { 'if-modified-since': '  ' } })).rejects.toThrow(/304/);
+  });
+
   it('makeFetchContext carries the injected clock', async () => {
     const fixed = new Date('2026-09-11T10:00:00.000Z');
     const ctx = makeFetchContext(() => fixed);

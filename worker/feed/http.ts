@@ -22,7 +22,7 @@ async function identifiedFetch(url: string, init: RequestInit, extraHeaders: Rec
 /** Whether the caller sent a conditional header itself (the radar's If-Modified-Since, R3). */
 function conditional(init: RequestInit): boolean {
   const headers = new Headers(init.headers as HeadersInit | undefined);
-  return headers.has('if-modified-since') || headers.has('if-none-match');
+  return Boolean(headers.get('if-modified-since')?.trim() || headers.get('if-none-match')?.trim());
 }
 
 export async function upstreamFetch(url: string, init: RequestInit = {}): Promise<Response> {

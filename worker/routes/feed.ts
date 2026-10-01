@@ -3,7 +3,7 @@ import type { FetchContext, ModuleId, ModuleSnapshot } from '../feed/schema';
 import { json } from '../http';
 import { CACHE_ORIGIN, getModules } from '../feed/cache';
 import { makeFetchContext } from '../feed/http';
-import { RADAR_IMAGE_PATH, radarCrop } from '../feed/modules/dhmz-radar';
+import { RADAR_IMAGE_PATH, RADAR_MAX_AGE_MS, radarCrop, radarTimestamp } from '../feed/modules/dhmz-radar';
 import { MODULES, MODULE_IDS, OPEN_MODULES, TEASER_MODULES, isModuleId, teaserSubset } from '../feed/registry';
 import { verifyDataToken } from '../pairing/tokens';
 import { screenStop } from '../pairing/stops';
@@ -40,21 +40,30 @@ export async function handleRadar(request: Request, ctx: ExecutionContext, deps:
   if (request.method !== 'GET') return json({ error: 'method-not-allowed' }, 405, { allow: 'GET' });
   const cache = (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default;
   const key = new Request(RADAR_CACHE_KEY);
-  const cached = cache ? await cache.match(key) : undefined;
-  if (cached) return cached;
   try {
     const now = deps.now ?? (() => new Date());
+    const cached = cache ? await cache.match(key) : undefined;
+    if (cached) {
+      try {
+        const at = radarTimestamp(cached.headers.get('last-modified') ?? '', now());
+        const headers = new Headers(cached.headers);
+        headers.set('cache-control', `public, max-age=${Math.max(0, Math.min(300, Math.floor((at + RADAR_MAX_AGE_MS - now().getTime()) / 1000)))}`);
+        return new Response(cached.body, { status: cached.status, headers });
+      } catch { await cache?.delete(key); }
+    }
     const context = deps.radarContext?.() ?? makeFetchContext(now);
     const { png, lastModified } = await radarCrop(context);
+    const at = radarTimestamp(lastModified, now());
+    const maxAge = Math.max(0, Math.min(300, Math.floor((at + RADAR_MAX_AGE_MS - now().getTime()) / 1000)));
     const response = new Response(png, {
       headers: {
         'content-type': 'image/png',
-        'cache-control': RADAR_CACHE_CONTROL,
+        'cache-control': maxAge === 300 ? RADAR_CACHE_CONTROL : `public, max-age=${maxAge}`,
         'x-attribution': 'Izvor: DHMZ',
         'last-modified': lastModified,
       },
     });
-    if (cache) ctx.waitUntil(cache.put(key, response.clone()));
+    if (cache && maxAge > 0) ctx.waitUntil(cache.put(key, response.clone()));
     return response;
   } catch {
     return json({ error: 'radar-unavailable' }, 503, { 'cache-control': 'no-store' });

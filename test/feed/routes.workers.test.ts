@@ -330,4 +330,42 @@ describe('GET /api/radar/zagreb.png', () => {
     const response = await radarCall(async () => new Response(null), { method: 'POST' });
     expect(response.status).toBe(405);
   });
+
+  it('R3 review: rejects an over-age edge image and refetches instead of returning the cached body', async () => {
+    resetRadarMemo();
+    const key = new Request(RADAR_CACHE_KEY);
+    await caches.default.put(key, new Response('old image', { headers: {
+      'content-type': 'image/png', 'cache-control': 'public, max-age=300',
+      'last-modified': new Date(NOW.getTime() - 31 * 60_000).toUTCString(),
+    } }));
+    const body = await composite();
+    const fetch = vi.fn(async () => new Response(body, { headers: { 'last-modified': LAST_MODIFIED } }));
+    const url = new URL('https://vidikovac.test/api/radar/zagreb.png');
+    const ctx = createExecutionContext();
+    const response = await handleFeed(new Request(url), testEnv, ctx, url, deps({ radarContext: () => ({ now: () => NOW, fetch }) }));
+    await waitOnExecutionContext(ctx);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(response!.status).toBe(200);
+    expect(response!.headers.get('last-modified')).toBe(LAST_MODIFIED);
+    expect((await decodePng(new Uint8Array(await response!.arrayBuffer()))).width).toBe(120);
+  });
+
+  it('R3 review: never caches a near-expiry composite past the existing thirty-minute limit', async () => {
+    const body = await composite();
+    const response = await radarCall(async () => new Response(body, { headers: {
+      'last-modified': new Date(NOW.getTime() - 29 * 60_000).toUTCString(),
+    } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=60');
+  });
+
+  it('R3 review: does not store an edge response with no freshness lifetime remaining', async () => {
+    const body = await composite();
+    const response = await radarCall(async () => new Response(body, { headers: {
+      'last-modified': new Date(NOW.getTime() - 30 * 60_000).toUTCString(),
+    } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0');
+    expect(await caches.default.match(new Request(RADAR_CACHE_KEY))).toBeUndefined();
+  });
 });
