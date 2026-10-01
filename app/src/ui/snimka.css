@@ -1,0 +1,42 @@
+/* Kaj ima? / Snimka: the page level of /snimka/. The chrome, the hero, the
+   number tiles, the cards and the tables come from statistika.css; this
+   sheet holds what is the replay's own at page level: the rhythm of its
+   sections, the minimum height of every slot a later script fills (so the
+   page never jumps while the dataset loads), the error card and the
+   sources. The stage's own parts live in snimka-stage.css (lane S2), the
+   report's in snimka-report.css (lane S3). Layer-2 tokens only. */
+
+.sn-body { --sn-stage-h: min(72vh, 46rem); }
+
+/* Phones: a 16 px gutter and never a horizontal scroll (statistika.css clips the body; the slots clip themselves). */
+.sn-main [data-sn-mount] { min-inline-size: 0; max-inline-size: 100%; overflow-x: clip; }
+
+/* Slots the scripts fill, each at least as tall as what will stand there. */
+.sn-stage { min-block-size: var(--sn-stage-h); border-radius: var(--r-xl); background: var(--tone-surface-2); }
+.sn-screen { min-block-size: 24rem; }
+.sn-strip { min-block-size: 32rem; }
+.sn-reckoning { min-block-size: 18rem; }
+.sn-attribution-slot { min-block-size: 6rem; }
+.sn-screen[aria-busy='true'], .sn-strip[aria-busy='true'], .sn-reckoning[aria-busy='true'] { border-radius: var(--r-lg); background: var(--tone-surface-2); }
+.sn-stage[aria-busy='true'] { background: linear-gradient(90deg, var(--tone-surface-2), var(--tone-surface-3), var(--tone-surface-2)); background-size: 200% 100%; animation: skeleton 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .sn-stage[aria-busy='true'] { animation: none; } }
+@media (max-width: 40rem) { .sn-body { --sn-stage-h: min(80vh, 40rem); } .sn-strip { min-block-size: 28rem; } }
+
+/* The dataset did not load: one card in the stage's slot, the rest of the page unchanged. */
+.sn-stage:has(> .sn-error) { display: grid; place-content: center; padding: var(--sp-6); }
+.sn-error { max-inline-size: 32rem; font-size: var(--type-body); }
+.sn-error .state-actions { display: flex; }
+
+/* Sources: the static list, then the manifest's attribution and footnotes. */
+.sn-sources { list-style: none; margin: 0 0 var(--sp-6); padding: 0; display: grid; gap: var(--sp-3); max-inline-size: 70ch; }
+.sn-sources li { line-height: 1.55; padding-inline-start: 1.25rem; position: relative; }
+.sn-sources li::before { content: ''; position: absolute; inset-inline-start: 0; inset-block-start: 0.7em; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
+.sn-attribution, .sn-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); max-inline-size: 70ch; font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.55; }
+.sn-attribution a { color: var(--tone-text-primary); }
+.sn-adaptation { display: block; }
+.sn-notes-title { margin-block: var(--sp-5) var(--sp-2); font-size: var(--type-head); letter-spacing: -0.01em; }
+.sn-links { margin-block-start: clamp(2rem, 4vw, 3rem); }
+
+@media print {
+  .sn-stage, .sn-error { display: none; }
+}

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaj ima? · Snimka</title>
+<meta name="description" content="Snimka triju dana bez tramvaja i autobusa u Zagrebu, od 27. rujna do 1. listopada 2026., iz podataka aplikacije Kaj ima?">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/src/ui/tokens.css">
+<link rel="stylesheet" href="/src/ui/base.css">
+<script type="module" src="/src/entries/theme-init.ts"></script>
+<link rel="stylesheet" href="/src/ui/statistika.css">
+<link rel="stylesheet" href="/src/ui/snimka.css">
+<link rel="stylesheet" href="/src/ui/snimka-stage.css">
+<link rel="stylesheet" href="/src/ui/snimka-report.css">
+</head>
+<body class="st-body sn-body">
+<a class="skip-link" href="#sadrzaj">Prijeđi na sadržaj</a>
+<header class="st-top" data-st-chrome>
+  <div class="st-bound st-top-row">
+    <a class="st-brand" href="/">Kaj ima<span class="mark">?</span></a>
+    <span class="st-top-name" data-sn-text="page.name">Snimka</span>
+  </div>
+</header>
+<nav class="st-nav" aria-label="Na ovoj stranici">
+  <div class="st-bound st-nav-row">
+    <div class="st-sections" data-st="sections">
+      <a href="#ukratko" data-sn-text="nav.summary">Ukratko</a>
+      <a href="#snimka" data-sn-text="nav.stage">Snimka</a>
+      <a href="#zaslon" data-sn-text="nav.screen">Zaslon</a>
+      <a href="#tijek" data-sn-text="nav.strip">Tijek</a>
+      <a href="#vidjelo" data-sn-text="nav.reckoning">Što se vidjelo</a>
+      <a href="#izvori" data-sn-text="nav.sources">Izvori</a>
+    </div>
+  </div>
+</nav>
+
+<main id="sadrzaj" class="st-main sn-main">
+  <section id="ukratko" class="st-hero st-bound" aria-labelledby="ukratko-h">
+    <p class="st-eyebrow" data-sn-text="hero.eyebrow">Snimka · 27. rujna do 1. listopada 2026.</p>
+    <div class="st-hero-top">
+      <h1 id="ukratko-h" data-sn-text="hero.title"><span>Tri dana</span> <span class="st-accent">bez tramvaja</span></h1>
+      <div class="st-hero-copy">
+        <p class="st-lead" data-sn-text="narration.lede1">Radnici ZET-a i Zagrebačkog holdinga stupili su u štrajk u ponedjeljak 28. rujna u 03:30. Županijski sud u Zagrebu u srijedu 30. rujna proglasio je oba štrajka nezakonitima, a iste su se večeri tramvaji i autobusi vratili na ulice.</p>
+        <p class="st-intro" data-sn-text="narration.lede2">Ova je stranica snimka tih dana iz podataka koje je aplikacija tada imala: vozila u pokretu, bicikli na stanicama, zatvorene ulice i rečenice s javnog zaslona. Zaslon nije znao za štrajk; vidio je samo da vozila nema.</p>
+      </div>
+    </div>
+    <div class="st-kpis" data-sn="kpis" aria-busy="true">
+      <div class="st-kpi" data-sn="kpi-silent"><span class="skeleton"></span></div>
+      <div class="st-kpi" data-sn="kpi-peak"><span class="skeleton"></span></div>
+      <div class="st-kpi" data-sn="kpi-bikes"><span class="skeleton"></span></div>
+      <div class="st-kpi" data-sn="kpi-return"><span class="skeleton"></span></div>
+    </div>
+    <noscript><p class="state" data-sn-text="noscript">Snimka treba JavaScript. Izvori i opis skupa podataka nalaze se ispod.</p></noscript>
+  </section>
+
+  <section id="snimka" class="st-section sn-section-stage" aria-labelledby="snimka-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="nav.stage">Snimka</p>
+        <h2 id="snimka-h" data-sn-text="stage.title">Grad na jednom satu</h2>
+        <p data-sn-text="stage.lede">Vozila na karti, stanje usluge, obavijesti ZET-a i naslovi iz medija, sve na istom satu. Pokreni, zaustavi ili povuci klizač na bilo koji trenutak.</p>
+      </div>
+      <div class="sn-stage" data-sn-mount="stage" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="zaslon" class="st-section" aria-labelledby="zaslon-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="nav.screen">Zaslon</p>
+        <h2 id="zaslon-h" data-sn-text="screen.title">Što je pisalo na zaslonu</h2>
+        <p data-sn-text="screen.lede">Javni zaslon na Trgu bana J. Jelačića: rečenica u zaglavlju i popis U blizini, iz zapisa svakih 20 sekundi.</p>
+      </div>
+      <div class="sn-screen" data-sn-mount="screen" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="tijek" class="st-section st-section-tint" aria-labelledby="tijek-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="nav.strip">Tijek</p>
+        <h2 id="tijek-h" data-sn-text="strip.title">Tijek</h2>
+        <p data-sn-text="strip.lede">Tri i pol dana na jednoj osi. Crta prati sat; klik ili povlačenje premješta snimku.</p>
+      </div>
+      <div class="sn-strip" data-sn-mount="strip" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="vidjelo" class="st-section" aria-labelledby="vidjelo-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="nav.reckoning">Što se vidjelo</p>
+        <h2 id="vidjelo-h" data-sn-text="reckoning.title">Što se vidjelo</h2>
+        <p data-sn-text="reckoning.lede">Brojevi izračunati iz ove snimke. Ispod svakog piše kako.</p>
+      </div>
+      <div class="sn-reckoning" data-sn-mount="reckoning" aria-busy="true"></div>
+    </div>
+  </section>
+
+  <section id="izvori" class="st-section" aria-labelledby="izvori-h">
+    <div class="st-bound">
+      <div class="st-section-head">
+        <p class="st-eyebrow" data-sn-text="nav.sources">Izvori</p>
+        <h2 id="izvori-h" data-sn-text="sources.title">Izvori i zasluge</h2>
+        <p data-sn-text="sources.strike">Riječ štrajk stoji samo u tekstu ove stranice. Zaslon u snimci nikada je ne ispisuje: aplikacija zna stanje voznog parka, ne i njegov uzrok.</p>
+      </div>
+      <ul class="sn-sources">
+        <li data-sn-text="sources.zet">Položaji vozila: ZET, javni GTFS-RT, izvedeni modelom kretanja aplikacije iz snimljenih podataka; sirovi podaci ZET-a ovdje se ne objavljuju. Obavijesti ZET-a: zet.hr.</li>
+        <li data-sn-text="sources.nextbike">Bicikli: nextbike (BAJS), GBFS, CC0 1.0.</li>
+        <li data-sn-text="sources.city">Zatvorene ulice: Grad Zagreb, data.zagreb.hr, Otvorena dozvola.</li>
+        <li data-sn-text="sources.dhmz">Temperatura i vrijeme: DHMZ, postaja Zagreb-Maksimir, Otvorena dozvola.</li>
+        <li data-sn-text="sources.news">Naslovi: Jutarnji list, Večernji list i N1. Svaki naslov vodi na izvorni članak; ovdje se prenose samo naslovi.</li>
+        <li data-sn-text="sources.court">Presude: Županijski sud u Zagrebu, 30. rujna 2026., prema izvještajima medija i obavijesti ZET-a.</li>
+        <li data-sn-text="sources.map">Karta: © OpenStreetMap contributors · Protomaps.</li>
+      </ul>
+      <div class="sn-attribution-slot" data-sn="attribution" aria-busy="true"></div>
+      <ul class="st-open sn-links">
+        <li><a class="st-link" href="https://github.com/matijarma/vidikovac/blob/main/docs/izvori.md" rel="noopener noreferrer" target="_blank"><span data-sn-text="sources.dataset">Opis skupa podataka</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/statistika/"><span data-sn-text="sources.statistika">Statistika</span><span aria-hidden="true">↗</span></a></li>
+        <li><a class="st-link" href="/prijava/"><span data-sn-text="sources.prijava">Prijava projekta</span><span aria-hidden="true">↗</span></a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="st-foot" data-st-chrome>
+  <div class="st-bound">
+    <nav class="page-nav" aria-label="Stranice"><a href="/hitno">Sigurnost</a> <a href="/s/">Upiši kod</a> <a href="/izvori/">Izvori</a> <a href="/open/">Otvoreni podaci</a> <a href="/privatnost/">Privatnost</a> <a href="/pristupacnost/">Pristupačnost</a></nav>
+  </div>
+</footer>
+<script type="module" src="/src/entries/snimka.ts"></script>
+</body>
+</html>
