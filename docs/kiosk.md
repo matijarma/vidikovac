@@ -254,13 +254,13 @@ točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
 grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
 ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
 
-Nakon spajanja R3 u DR3 isječak DHMZ-ova radarskog kompozita prikazuje se kad
-radar pokazuje kišu unutar kvadrata od 30 km oko Zagreba ili satna prognoza
-najbliže postaje najavljuje kišu unutar dva sata. Stoji u donjem lijevom kutu
-karte, 240 × 240 piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se
-osvježava kad DHMZ objavi novu sliku; kad slika nije svježa ili se ne može
-pročitati, isječka nema, a zaslon ne tvrdi da kiše nema. U laganom prikazu
-isječka nema.
+Isječak DHMZ-ova radarskog kompozita prikazuje se kad radar pokazuje kišu
+unutar kvadrata od 30 km oko Zagreba ili satna prognoza najbliže postaje
+najavljuje kišu unutar dva sata, a postoji svježa slika radara. Stoji u donjem
+lijevom kutu karte, kvadratnog je oblika, širok 240 piksela, s navodom „Radar ·
+Izvor: DHMZ”. Isječak se osvježava kad DHMZ objavi novu sliku; kad slika nije
+svježa (starija od pola sata) ili se ne može pročitati, isječka nema, a zaslon
+ne tvrdi da kiše nema. U laganom prikazu i na telefonu isječka nema.
 
 Gradska četvrt više se ne bira. Dodir na karti služi samo za čitanje.
 Stajališta su dodirljivi prstenovi i na gradskom kadru, uz toleranciju
@@ -485,8 +485,10 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
 - Svaka rečenica u zaglavlju odobreni je predložak ispunjen jednom
   činjenicom samog zaslona (polasci, zatvaranja, događanja, sunce, vremenske
   prilike, BAJS stanice, ljekarna, broj vozila u pokretu, ZET-ove obavijesti,
-  vlakovi, kiša, sutrašnja prognoza, prekidi struje i vode, stanje na
-  cestama, radno vrijeme mjesta), ne izvornim tekstom. Poslužitelj
+  vlakovi, kiša i radar DHMZ-a, sutrašnja prognoza, biometeorološka
+  prognoza, toplinski i hladni valovi, dokad će biti suho, temperatura u
+  idućim satima, kvaliteta zraka, upozorenja, prekidi struje, vode i plina,
+  stanje na cestama, radno vrijeme mjesta), ne izvornim tekstom. Poslužitelj
   (`POST /api/kiosk/sentences`) modelu Workers AI nudi samo provjerene
   predloške s vrijednostima; model smije samo birati među ponuđenima i ne
   piše vlastite riječi. Poslužitelj prihvaća rečenicu samo ako ima najviše 80
@@ -652,13 +654,12 @@ prikriveni. Izlazni kod je 1 čim ne prođe bilo koji prag iz odjeljaka 16.3 i 1
 dokumenta `docs/companion-2026-09-22.md`. Pragovi su jedna tablica u skripti i
 svaki redak nosi oznaku isporuke: `--stage d1` provjerava samo oznake vozila, na
 kojima ne smije biti „+N”, i greške u pregledniku i na mreži, a bez te zastavice
-primjenjuju se svi pragovi. Redak `departures` traži od jedan do tri polaska u svakom
+primjenjuju se svi pragovi. Redak `departures` traži od jedan do tri polaska, brojena kao ćelije retka polazaka, u svakom
 očitanju i barem onoliko polazaka koliko ih uklapanje zadržava od ponuđenih: tri, a dva uz
 prvi, zadnji ili redak obavijesti, za jedan manje za svaki vlak koji stoji ispred polazaka, a
 manje samo kad puni popis ne može više. Popis bez oznake `data-fit-dropped` računa se kao
 neuspjeh. Redak `silent-departures` traži da nijedna rečenica u zaglavlju ne najavi polazak
 (osim vlaka) dok dvojnik javlja da ZET ne šalje položaje; u dan bez takvog stanja ostaje na nuli.
-Redak `departures` broji polaske u retku polazaka, od jedan do tri u svakom očitanju.
 Redak `reveal-cadence` traži najviše jedno otkrivanje u tri takta i da svako stoji barem jedan
 takt, a mirno kretanje na taktu s otkrivanjem dopušta do šest strukturnih promjena. Redak
 `shown-facts` samo se prati i ne mijenja izlazni kod: bilježi koliko je različitih redaka koji

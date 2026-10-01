@@ -24,7 +24,7 @@ When time runs out, updates stop—and the content clears, leaving the invitatio
 
 ## One city, three experiences
 
-- **On the wall:** the screen's place and one written sentence in the header, a map framed around the place with every tram and bike station, and, when R3 joins DR3, DHMZ's radar around Zagreb in its corner while rain is near, and **U blizini**, one list: a single line with the next departures, then what happens nearby, such as a closure ending, an event, a place open now or the last trams tonight. On the sentence's beat the list now and then shows what did not fit. The scanning invitation has its own card; safety and the on-duty pharmacy stay in the footer.
+- **On the wall:** the screen's place and one written sentence in the header, a map framed around the place with every tram and bike station, and DHMZ's radar around Zagreb in its corner while rain is near, and **U blizini**, one list: a single line with the next departures, then what happens nearby, such as a closure ending, an event, a place open now or the last trams tonight. On the sentence's beat the list now and then shows what did not fit. The scanning invitation has its own card; safety and the on-duty pharmacy stay in the footer.
 - **In your hand:** the place as the title, one sentence, the next three departures and the same **U blizini** rows, under three tabs: **Sada · Karta · Još**. Karta is the map of that list, with vehicles at once and one search field; the week's events are one row in Još. Saved stops and places stay on your device.
 - **At your desk:** the phone, wider: Sada with the departures as one line and the Karta map side by side, with room to explore the map and its details.
 
@@ -34,16 +34,16 @@ These share data and a visual language, not an identical layout stretched to thr
 
 ## What is in the city window?
 
-Fourteen feed modules, a reference catalogue and live city services bring together:
+Seventeen feed modules, a reference catalogue and live city services bring together:
 
 | Explore | What you can find | Sources |
 |---|---|---|
 | Transport | Moving trams and buses, routes, stops, departures, closures, rail timetables; rail departures on the first screen when a station is near, ZET's own notices and cancellations, the fleet against the timetable | ZET, City, HŽPP |
 | Places | BAJS bikes, drinking water, toilets, markets, Wi-Fi, sports grounds, cycling, opening hours | BAJS / nextbike, City, OpenStreetMap contributors |
-| Conditions | Weather, forecasts, rain in the next two hours, tomorrow's range, warnings, air quality, Sava bulletin, sunrise/sunset | DHMZ, national air-quality service |
-| Culture | Events, exhibitions, venues, street histories, protected heritage, the City's culture calendar, library programmes | Kulturpunkt, Guru za kulturu, Ethnographic Museum, Zagreb City Libraries, City, Ministry of Culture |
+| Conditions | Weather, forecasts, rain in the next two hours and on DHMZ's radar near Zagreb, tomorrow's range, the biometeorological forecast, heat and cold waves in season, warnings, air quality, Sava bulletin, sunrise/sunset | DHMZ, national air-quality service |
+| Culture | Events, exhibitions, venues, street histories, protected heritage, the City's culture calendar, library programmes, children's programmes, the libraries' multi-day programmes | Kulturpunkt, Guru za kulturu, Ethnographic Museum, Zagreb City Libraries, City, Ministry of Culture |
 | Civic life | Assembly meetings, works, gazette acts and originals, consultations | City, eSavjetovanja |
-| Daily life | Road state, planned power and water cuts, as unofficial relays | HAK, HEP ODS, VIO |
+| Daily life | Road state, planned power, water and gas cuts, as unofficial relays | HAK, HEP ODS, VIO, Gradska plinara Zagreb |
 | Safety | Warnings, earthquakes, assembly points, emergency contacts, pharmacies | DHMZ, EMSC, city and maintained references |
 
 These are different kinds of knowledge. ZET countdowns are **derived estimates** for tracked vehicles, using timetable and delay information with next-stop refinement from the motion model. Other departures retain clock times; HŽ Passenger Transport boards are schedule-only. A mapped garage does not imply available spaces. Heritage boundaries are not entrances. An undated notice is not a calendar event. Yellow sources, the ones without an open licence, carry “neslužbeni prikaz” (unofficial). Opening hours are OpenStreetMap's, not a confirmation that a place is open. A service state never names a cause.
