@@ -28,6 +28,8 @@ const ENTRIES = ['kiosk/index.html', 'd/index.html'] as const;
 const LIGHTWEIGHT_ENTRIES = ['index.html', ...ENTRIES] as const;
 /** Optional map runtime still counted in the full-map budget after the lightweight split. */
 const MAP_RUNTIME_ENTRIES = ['src/motion/integrator.ts', '../shared/motion/network.ts'] as const;
+/** DR2's touch split, including its lazy phone-row graph, remains in the full-map accounting. */
+const TOUCH_RUNTIME_ENTRY = 'src/kiosk/touch-content.ts';
 /** Manifest keys of the chunks the lightweight path must never reference. */
 const FORBIDDEN_CHUNKS = ['src/ui/fonts.css', 'src/map/maplibre-entry.ts', 'src/motion/schema-map.ts'] as const;
 const NETWORK_ARTEFACT = 'zet-network.json';
@@ -78,8 +80,8 @@ function measure(path: string): Measured {
   return { path, bytes: raw.byteLength, gzip: gzipSync(raw, { level: GZIP_LEVEL }).byteLength };
 }
 
-/** Every manifest key reachable from `entry` over static imports only. */
-function staticGraph(entry: string): string[] {
+/** Static imports by default; optional runtime accounting also follows emitted dynamic-import keys. */
+function staticGraph(entry: string, includeDynamic = false): string[] {
   const seen = new Set<string>();
   const walk = (key: string): void => {
     if (seen.has(key)) return;
@@ -87,6 +89,7 @@ function staticGraph(entry: string): string[] {
     if (!chunk) throw new Error(`manifest has no chunk ${key}`);
     seen.add(key);
     for (const dep of chunk.imports ?? []) walk(dep);
+    if (includeDynamic) for (const dep of chunk.dynamicImports ?? []) walk(dep);
   };
   walk(entry);
   return [...seen];
@@ -126,7 +129,7 @@ function print(entry: string, rows: Measured[], total: number): void {
 
 describe('the lightweight promise (R-L4, R-F3): under 200 kB per screen load', () => {
   it('keeps optional sentence HTTP and presented-view code out of the initial screen graphs', () => {
-    for (const module of ['src/city/sentence-api.ts', 'src/kiosk/paired.ts', ...MAP_RUNTIME_ENTRIES]) {
+    for (const module of ['src/city/sentence-api.ts', 'src/kiosk/paired.ts', 'src/kiosk/touch-content.ts', ...MAP_RUNTIME_ENTRIES]) {
       expect(manifest[module]?.isDynamicEntry, module).toBe(true);
       for (const entry of LIGHTWEIGHT_ENTRIES) expect(staticGraph(entry), entry).not.toContain(module);
     }
@@ -198,7 +201,8 @@ describe('full map JavaScript budget, including the separate MapLibre v6 worker'
   for (const entry of ENTRIES) {
     it(`/${entry.replace('index.html', '')} stays under 600 kB compressed when the map opens`, () => {
       const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts'),
-        ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module))]);
+        ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module)),
+        ...(entry === 'kiosk/index.html' ? staticGraph(TOUCH_RUNTIME_ENTRY, true) : [])]);
       const files = new Set([...keys].map((key) => manifest[key]!.file).filter((file) => /\.m?js$/.test(file)));
       // Vite emits ?worker&url as an asset, not as a manifest import.
       // Omitting this file would undercount the real initial map payload.
