@@ -27,9 +27,10 @@ import { drawnStops, fieldPixel, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, touchAt }
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from '../../app/src/kiosk/pharmacies';
 import { kioskStrings } from '../../app/src/kiosk/strings';
 import {
-  loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, STOP_BOARD_ROWS, stopBoardVariants, TIMETABLE_LINE_TRIPS, TOUCH_MS,
-  type TimelineMeasure, type TimelineRow,
+  mountTouchPanel, TOUCH_MS, type TimelineMeasure, type TimelineRow,
 } from '../../app/src/kiosk/timeline';
+import * as touchContent from '../../app/src/kiosk/touch-content';
+import { loadStopBoardRows, pharmacyDetailVariants, rowDetailVariants, STOP_BOARD_ROWS, stopBoardVariants, TIMETABLE_LINE_TRIPS } from '../../app/src/kiosk/touch-content';
 import { STOP_DEPARTURES_FIRST } from '../../app/src/transport/view';
 import { POLL_FALLBACK_MS } from '../../app/src/motion/loop';
 import type { ThemeController } from '../../app/src/ui/theme';
@@ -296,7 +297,7 @@ const theme: ThemeController = {
   onChange: (listener) => { listener({ preference: 'solar', resolved: 'light' }); return () => {}; }, destroy: () => {},
 };
 
-function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata; boards?: Record<string, DepartureBoard> } = {}) {
+function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata; boards?: Record<string, DepartureBoard>; loadTouchContent?: KioskDeps['loadTouchContent'] } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: opts.screen ?? SCREEN }) };
@@ -314,6 +315,7 @@ function mount(opts: { viewport?: { width: number; height: number }; modules?: (
     fetchData: async (module: ModuleId) => modules().find((m) => m.module === module) ?? snap(module, []),
     mapFactory: map.factory as never, loadStops: async () => STOPS, loadStreets: async () => [], loadLastRun: async () => null,
     createBoards: boards.create, theme, loadPaired: () => import('../../app/src/kiosk/paired'),
+    loadTouchContent: opts.loadTouchContent ?? (() => touchContent),
     createBeacon: (deps) => {
       handlers = deps;
       return { connect: vi.fn(), requestMore: vi.fn(), status: () => 'live', close: vi.fn(), acknowledgePresentation: vi.fn(), setScreen: vi.fn() } as never;
@@ -345,6 +347,77 @@ function mount(opts: { viewport?: { width: number; height: number }; modules?: (
     nearbyHost: () => q('.k-nearby-host')!,
   };
 }
+
+describe('lazy touch content (DR2 budget)', () => {
+  const tapPharmacy = (k: ReturnType<typeof mount>): void => k.q('[data-testid=strip-pharmacy]')!.click();
+
+  it('keeps content off startup, shares a pending gesture load and renders the current touch', async () => {
+    let deliver!: (value: typeof touchContent) => void;
+    const pending = new Promise<typeof touchContent>((resolve) => { deliver = resolve; });
+    const load = vi.fn(() => pending);
+    const k = mount({ loadTouchContent: load });
+    await flush();
+    expect(load).not.toHaveBeenCalled();
+    tapPharmacy(k);
+    tapPharmacy(k);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(text(k.q('[data-testid=touch-loading]'))).toBe(i18n.t('status.loading'));
+    expect(k.q('[data-testid=kiosk-invitation]')).not.toBeNull();
+    expect(k.q('[data-testid=strip-pharmacy]')).not.toBeNull();
+    deliver(touchContent);
+    await flush();
+    expect(k.detail()?.dataset.kind).toBe('pharmacy');
+    expect(k.q('[data-testid=touch-loading]')).toBeNull();
+    k.handle.destroy();
+  });
+
+  it('does not resurrect a touch whose deadline passed while loading', async () => {
+    let deliver!: (value: typeof touchContent) => void;
+    const k = mount({ loadTouchContent: () => new Promise((resolve) => { deliver = resolve; }) });
+    await flush();
+    tapPharmacy(k);
+    k.setNow(NOW + TOUCH_MS);
+    deliver(touchContent);
+    await flush();
+    expect(k.q('.k-touch')).toBeNull();
+    expect(k.nearbyHost().hasAttribute('data-touch')).toBe(false);
+    k.handle.destroy();
+  });
+
+  it('does not render or load a stop-board dependency after disposal', async () => {
+    let deliver!: (value: typeof touchContent) => void;
+    const loadRows = vi.fn(async () => true);
+    const k = mount({ loadTouchContent: () => new Promise((resolve) => { deliver = resolve; }) });
+    await flush();
+    tapPharmacy(k);
+    k.handle.destroy();
+    deliver({ ...touchContent, loadStopBoardRows: loadRows });
+    await flush();
+    expect(loadRows).not.toHaveBeenCalled();
+    expect(k.root.children).toHaveLength(0);
+  });
+
+  it.each(['reject', 'throw'] as const)('reports a %s failure and retries on the next gesture, not each tick', async (failure) => {
+    let attempts = 0;
+    const load = vi.fn(() => {
+      if (++attempts > 1) return Promise.resolve(touchContent);
+      if (failure === 'throw') throw new Error('chunk unavailable');
+      return Promise.reject(new Error('chunk unavailable'));
+    });
+    const k = mount({ loadTouchContent: load });
+    await flush();
+    tapPharmacy(k);
+    await flush();
+    expect(text(k.q('[data-testid=touch-loading]'))).toBe(i18n.t('presentation.unavailable'));
+    k.tick(CODE_TICK_MS);
+    expect(load).toHaveBeenCalledTimes(1);
+    tapPharmacy(k);
+    await flush();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(k.detail()?.dataset.kind).toBe('pharmacy');
+    k.handle.destroy();
+  });
+});
 
 describe('the wall answers a touch (kiosk.ts)', () => {
   beforeAll(async () => { await loadStopBoardRows(); });
