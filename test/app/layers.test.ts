@@ -617,6 +617,18 @@ describe('kultura with the City\'s programme and the libraries\'', () => {
     expect(renderLayer('kultura', ctx({ snapshots: both, view: { layer: 'kultura', selection: { kind: 'item', id: publicItemKey('hak', 'x'), module: 'hak' }, filters: {} } })).querySelector('[data-testid=event-detail]')).toBeNull();
   });
 
+  it('shows a libraries\' programme over several days (R3 D-J) as running, with the day it ends', () => {
+    const week: ModuleSnapshot['items'][number] = {
+      ...kgz('71166', 'Dječji tjedan na krilima bajke', '2026-09-09T22:00:00Z', 'Knjižnica Ivana Gorana Kovačića'),
+      id: 'programi:kgz:71166:2026-09-10', until: '2026-09-14T21:59:00Z', data: { source: 'kgz', category: 'program', venue: 'Knjižnica Ivana Gorana Kovačića', precision: 'day' },
+    };
+    const section = renderLayer('kultura', ctx({ snapshots: { ...both, programi: { ...programi, items: [...programi.items, week] } } }));
+    const ongoing = section.querySelector('#ev-ongoing')!;
+    const row = [...ongoing.querySelectorAll('[data-testid=event-row]')].find((li) => text(li).includes('Dječji tjedan na krilima bajke'))!;
+    expect(row).toBeDefined();
+    expect(text(row.querySelector('.ev-until'))).toBe('do 14. 9.');
+  });
+
   it('names a module that is down beside the sources it lists, so a short list is not a quiet week', () => {
     const section = renderLayer('kultura', ctx({ snapshots: { ...both, programi: { ...programi, status: 'down', items: [] } } }));
     const notes = [...section.querySelectorAll(':scope > .sec-note')].map(text);
