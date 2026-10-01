@@ -71,7 +71,7 @@
 // data-kind, so no [data-kind=departure] probe ever matches one.
 import type { ArrivalRow, ArrivalsStatus } from '../../../shared/city/arrivals';
 import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
-import { candidateValue, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
+import { candidateValue, PAGE_MAX_ROWS, REVEAL_EXEMPT_KINDS, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { morph, reconcile } from '../ui/dom/reconcile';
@@ -662,7 +662,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
   const heldOut = new Map<string, number | null>();
   /** The reveal drawn over the fit (R2): for which beat and fit, the rows it displays and their labels, and what it swapped. */
-  let overlay: { key: string; display: WallRow[]; short: ReadonlyMap<string, ShortLabels>; drawn: DrawnReveal | null } | null = null;
+  let overlay: { key: string; ids: readonly string[]; short: ReadonlyMap<string, ShortLabels>; drawn: DrawnReveal | null } | null = null;
   /** The reveal the previous update drew, so its return can slide and rise. */
   let lastDrawn: DrawnReveal | null = null;
   /** Rows and cells a reveal took off the wall, by key, kept for the beat so they return on their own node (R2). */
@@ -984,14 +984,24 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
    */
   function pageOverlay(reveal: TaktReveal, shown: readonly WallRow[], wall: readonly WallRow[], now: number, box: { height: number; width: number }, base: ReadonlyMap<string, ShortLabels>, prior: DrawnReveal | null): { display: WallRow[]; short: Map<string, ShortLabels>; drawn: DrawnReveal } | null {
     const shownIds = new Set(shown.map((row) => row.id));
-    const out = reveal.replaces.map((id) => shown.find((row) => row.id === id)).filter((row): row is WallRow => row !== undefined);
-    const inn = reveal.ids.map((id) => wall.find((row) => row.id === id && !shownIds.has(id))).filter((row): row is NearbyRow => row !== undefined && !isDeparturesLine(row));
+    const candidates = new Map(taktCandidates(wall, [], now).map((c) => [c.id, c]));
+    const movable = (id: string, replacing = false): boolean => {
+      const c = candidates.get(id);
+      return Boolean(c && !c.reserved && c.kind !== 'departure' && c.kind !== 'departures'
+        && !REVEAL_EXEMPT_KINDS.includes(c.kind) && (!replacing || !c.imminent));
+    };
+    const out = [...new Set(reveal.replaces)].filter((id) => movable(id, true)).map((id) => shown.find((row) => row.id === id)).filter((row): row is WallRow => row !== undefined).slice(0, PAGE_MAX_ROWS);
+    const inn = [...new Set(reveal.ids)].filter((id) => movable(id)).map((id) => wall.find((row) => row.id === id && !shownIds.has(id))).filter((row): row is NearbyRow => row !== undefined && !isDeparturesLine(row));
     // A beat's overlay keeps its rows for the whole beat (one region moves once): where the fit changed under it (a
     // label, a departure, a box that grew so it keeps a revealed row itself), the same rows are drawn as long as they
     // still fit whole, and only when they do not is the overlay found again.
     if (prior) {
-      const leaving = new Set(prior.replaced.filter((id) => shownIds.has(id)));
-      const entering = new Set(prior.revealed.filter((id) => wall.some((row) => row.id === id)));
+      // Keep pairs, not independent sets: a cancelled incoming row gives its original row back immediately.
+      const pairs = prior.revealed.map((id, i) => ({ incoming: id, outgoing: prior.replaced[i]! }))
+        .filter(({ incoming, outgoing }) => movable(incoming) && movable(outgoing, true));
+      if (pairs.length === 0) return null;
+      const leaving = new Set(pairs.map((pair) => pair.outgoing));
+      const entering = new Set(pairs.map((pair) => pair.incoming));
       const display = wall.filter((row) => (shownIds.has(row.id) && !leaving.has(row.id)) || entering.has(row.id));
       const kept = withMeasuringList(box, (list) => {
         const short = new Map<string, ShortLabels>([...base].filter(([id]) => !entering.has(id) || shownIds.has(id)));
@@ -999,7 +1009,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         let changed = false;
         for (const row of wall) if (entering.has(row.id) && !shownIds.has(row.id) && !isDeparturesLine(row)) changed = shortenRevealed(list, row, short) || changed;
         if (changed) list.innerHTML = rowsMarkup(display, now, i18n, short);
-        return measure.box(list).overflow ? null : { display, short, drawn: prior };
+        return measure.box(list).overflow ? null : { display, short, drawn: { ...prior, replaced: [...leaving], revealed: [...entering] } };
       });
       if (kept) return kept;
     }
@@ -1036,7 +1046,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
    */
   function advanceOverlay(reveal: TaktReveal, shown: readonly WallRow[], next: readonly TimelineRow[], now: number, box: { height: number; width: number }, base: ReadonlyMap<string, ShortLabels>): { display: WallRow[]; short: Map<string, ShortLabels>; drawn: DrawnReveal } | null {
     const line = shown.find(isDeparturesLine);
-    const cells = next.filter(vettedTimelineRow).slice(0, MAX_DEPARTURES);
+    const cells = next.filter((row) => reveal.ids.includes(row.id) && row.kind === 'departure' && !isTimeless(row) && vettedTimelineRow(row)).slice(0, MAX_DEPARTURES);
     if (!line || cells.length < line.cells.length || cells.length === 0 || cells[0]!.atMs === null) return null;
     const advanced: DeparturesLine = { kind: 'departures', id: DEPARTURES_LINE_ID, cells, atMs: cells[0]!.atMs!, always: false, live: cells.some((row) => row.live) };
     const display = shown.map((row) => (row === line ? advanced : row));
@@ -1048,7 +1058,11 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       const painted = lineOf();
       const paintedPx = painted ? rowPx(painted) : 0;
       const short = new Map<string, ShortLabels>(base);
-      const was = base.get(DEPARTURES_LINE_ID) ?? {};
+      let was = base.get(DEPARTURES_LINE_ID) ?? {};
+      // "zatim" takes a column: test the countdown form in that narrower geometry too.
+      short.set(DEPARTURES_LINE_ID, { ...was, headsigns: 'none', probe: true });
+      list.innerHTML = rowsMarkup(display, now, i18n, short, advance);
+      if ([...list.querySelectorAll<HTMLElement>('.k-dep-cell')].some((cell) => measure.box(cell).overflow)) was = { ...was, clocks: true };
       const steps: (ShortLabels['headsigns'] | undefined)[] = was.headsigns === 'none' ? ['none'] : was.headsigns === 'first' ? ['first', 'none'] : [undefined, 'first', 'none'];
       const long = (cell: Element): boolean => {
         const head = cell.querySelector<HTMLElement>('.k-dep-headsign');
@@ -1063,6 +1077,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         // R1's rule on the next cells first: a destination that runs long leaves (cells 2 and 3's, then every cell's).
         const cellEls = [...li.querySelectorAll<HTMLElement>('.k-dep-cell')];
         if (cellEls.some(long) && headsigns !== 'none') continue;
+        if (cellEls.length < line.cells.length || cellEls.some((cell) => measure.box(cell).overflow)) continue;
         if (paintedPx > 0 && rowPx(li) > paintedPx) continue;
         if (measure.box(list).overflow) continue;
         return { display, short, drawn: { kind: 'advance', beat: reveal.beat, replaced: line.cells.map((row) => row.id), revealed: cells.map((row) => row.id) } };
@@ -1109,6 +1124,10 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       /** The reveal drawn this update (R2), none on a handheld or without a view. */
       let drawn: DrawnReveal | null = null;
       if (unbounded) {
+        overlay = null;
+        parked.clear();
+        heldOut.clear();
+        if (list.hasAttribute('data-reveal')) delete list.dataset.reveal;
         rowVars(budget.rowPx);
         paint(shown, new Map(), now);
       } else {
@@ -1177,15 +1196,21 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         let displayShort: ReadonlyMap<string, ShortLabels> = memo.short;
         const reveal = view?.reveal ?? null;
         if (reveal) {
-          const key = `${reveal.kind}:${reveal.beat}|${memo.sig}|${shown.map((row) => row.id).join('\u0002')}|${(view?.next ?? []).map((row) => row.id).join('\u0002')}`;
+          const next = (view?.next ?? []).filter((row) => reveal.ids.includes(row.id) && row.kind === 'departure' && !isTimeless(row) && vettedTimelineRow(row)).slice(0, MAX_DEPARTURES);
+          const protections = taktCandidates(wall, [], now).filter((c) => reveal.replaces.includes(c.id))
+            .map((c) => `${c.id}:${c.reserved}:${c.imminent}`).join('\u0002');
+          const key = `${reveal.kind}:${reveal.beat}|${memo.sig}|${shown.map((row) => row.id).join('\u0002')}|${reveal.ids.join('\u0002')}|${reveal.replaces.join('\u0002')}|${protections}|${fitSignature(groupDepartures(next), now, i18n, memo.rowPx, box, typography)}`;
           if (!overlay || overlay.key !== key) {
             const prior = overlay?.drawn && overlay.drawn.kind === reveal.kind && overlay.drawn.beat === reveal.beat ? overlay.drawn : null;
             const result = reveal.kind === 'page'
               ? pageOverlay(reveal, shown, wall, now, box, memo.short, prior)
-              : advanceOverlay(reveal, shown, view?.next ?? [], now, box, memo.short);
-            overlay = { key, display: result?.display ?? [...shown], short: result?.short ?? memo.short, drawn: result?.drawn ?? null };
+              : advanceOverlay(reveal, shown, next, now, box, memo.short);
+            overlay = { key, ids: (result?.display ?? shown).map((row) => row.id), short: result?.short ?? memo.short, drawn: result?.drawn ?? null };
           }
-          display = overlay.display;
+          // Cache only the measured selection. Timestamps, live flags and source details still come from this paint.
+          const displayed = new Set(overlay.ids);
+          display = wall.filter((row) => displayed.has(row.id)).map((row) => overlay!.drawn?.kind === 'advance' && isDeparturesLine(row)
+            ? { ...row, cells: next, atMs: next[0]!.atMs!, live: next.some((cell) => cell.live) } : row);
           displayShort = overlay.short;
           drawn = overlay.drawn;
         } else {
@@ -1223,6 +1248,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           } else if (key === DEPARTURES_LINE_ID) {
             // A line that was there: a new departure fades in its own cell, and the line never fades.
             for (const cell of li.children) {
+              if (!cell.classList.contains('k-dep-cell')) continue;
               if (beforeCells.has(cell.getAttribute('data-key') ?? '')) continue;
               cell.setAttribute('data-enter', '1');
               entered.push(cell);
@@ -1258,6 +1284,11 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       resize?.disconnect();
       fonts?.removeEventListener('loadingdone', refit);
       last = null;
+      memo = null;
+      overlay = null;
+      lastDrawn = null;
+      parked.clear();
+      heldOut.clear();
       element.remove();
     },
   };
@@ -1275,7 +1306,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   // the residual handed to the reconnect pill's layout.
   const refit = (): void => {
     memo = memo && { ...memo, sig: '' };
-    overlay = null;
+    overlay = overlay && { ...overlay, key: '' };
     if (last) handle.update(...last);
   };
   const resize = typeof ResizeObserver === 'function'
