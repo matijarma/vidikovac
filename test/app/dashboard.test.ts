@@ -17,6 +17,7 @@ import { SAVED_STORAGE_KEY } from '../../app/src/core/saved-store';
 import { createCityMap, type CityMapOptions } from '../../app/src/map/city-map';
 import type { LastRunSnapshot } from '../../app/src/core/lastrun';
 import { loadSadaFeed } from '../../app/src/city/feed';
+import * as sessionSheetRenderer from '../../app/src/experience/session-sheet';
 import { stubLocalStorage, stubSessionStorage } from './helpers';
 import type { PresentationCommand, PresentationResult, PresentationState } from '../../worker/presentation';
 import { fakeCityStore } from '../city/fake-store';
@@ -115,6 +116,7 @@ function mount(opts: MountOptions = {}) {
   const fetchData = vi.fn(async (module: ModuleId, _token: string) => (opts.snapshot ?? snapshotOf)(module));
   const handle = mountDashboard(root, {
     cityStore:fakeCityStore(),
+    loadSessionSheet: () => sessionSheetRenderer,
     createBoards:()=>({get:()=>undefined,ensure:vi.fn(),destroy:vi.fn()}),
     i18n: createDefaultI18n('hr'), session: session.client, now, fetchData: fetchData as never,
     label: 'Kavana Velebit', mapFactory: opts.mapFactory as never, lightweight: opts.lightweight ?? false,

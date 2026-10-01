@@ -28,7 +28,8 @@ import { resolvePlace } from './city/place';
 import { bannersMarkup, sessionEndedMarkup, statusLineMarkup, tabbarMarkup, type NoticeKind, type ShellNotice, type ShellState, type Surface } from './experience/chrome';
 import { directoryModules, nextLocale, nextTheme, renderDirectory } from './experience/directory';
 import { createNotifySheet } from './experience/notify-sheet';
-import { createSessionSheet, type SheetAction } from './experience/session-sheet';
+import type { SheetAction } from './experience/session-sheet';
+import { createLazySessionSheet, type SessionSheetLoader } from './experience/lazy-session-sheet';
 import { catalogueLocale, storeLocale } from './i18n/create-default-i18n';
 import type { I18n, LocaleCode } from './i18n/i18n';
 import { LAYER_MODULES, renderLayer } from './layers';
@@ -106,6 +107,8 @@ export function parseSessionHash(hash: string): SessionHashParams | null {
 export interface MediaLike { matches: boolean; addEventListener?(type: 'change', listener: () => void): void; removeEventListener?(type: 'change', listener: () => void): void }
 
 export interface DashboardDeps {
+  /** The optional session sheet, loaded on the first request, not when Karta opens. */
+  loadSessionSheet?: SessionSheetLoader;
   createBoards?: () => BoardCache;
   cityStore?: CityStore;
   i18n: I18n;
@@ -911,14 +914,14 @@ export function mountDashboard(root: HTMLElement, deps: DashboardDeps): Dashboar
     return snapshot && item ? { item, snapshot } : null;
   }
 
-  const sheet = createSessionSheet({
+  const sheet = createLazySessionSheet({
     i18n, now,
     state: () => ({
       session: session.snapshot(), frozen, paused, canShare: session.snapshot().role === 'scanner' && !shareDenied,
       label: deps.label ?? null,
     }),
     onAction: (action) => handleSheetAction(action),
-  });
+  }, deps.loadSessionSheet);
   const notifySheet = createNotifySheet({
     i18n,
     state: () => ({ flags: notifyStore.snapshot(), keys: notifyKeys }),

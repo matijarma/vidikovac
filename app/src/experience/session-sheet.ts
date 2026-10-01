@@ -9,7 +9,6 @@
 // so a pressed row keeps its focus and the body its scroll; `refresh()` updates
 // the live time.
 import { zagrebTime } from '../format';
-import type { Role } from '../../../worker/protocol';
 import type { I18n } from '../i18n/i18n';
 import type { SessionSnapshot } from '../session';
 import { createDialog, type DialogHandle } from '../ui/dialog';
@@ -17,6 +16,8 @@ import { createElementFromHTML, escapeHtml } from '../ui/dom/escape';
 import { reconcileChildren } from '../ui/dom/reconcile';
 import { iconMarkup, type IconName } from '../ui/icons';
 import { dayLabel } from './text';
+import { originSentence } from './session-origin';
+export { originSentence, type SessionOrigin } from './session-origin';
 
 export type SheetAction = 'share-city' | 'refresh';
 
@@ -43,27 +44,6 @@ export interface SessionSheet {
   refresh(): void;
   isOpen(): boolean;
   destroy(): void;
-}
-
-/** What the origin sentence is said from: the session's role, the screen's label and the screen's stop. */
-export interface SessionOrigin {
-  role: Role | null;
-  label: string | null;
-  stop: string | null;
-}
-
-/** Where the session came from, as one sentence; a peer session says whose five minutes these are.
- *  The label lives in the hash /s/ hands over and a reload drops it (the entry keeps only the room),
- *  so a view without a label still names its origin: a screen nearby. Nothing before the join.
- *  `short` (the Još session row) names the screen by its label alone when it has one, the stop otherwise. */
-export function originSentence(i18n: I18n, origin: SessionOrigin, short = false): string {
-  if (!origin.role) return '';
-  if (origin.role === 'phone') return i18n.t('session.sheetPeer');
-  const { label, stop } = origin;
-  if (label && stop && !short) return i18n.t('session.sheetScreen', { label, stop });
-  if (label) return i18n.t('session.sheetScreenOnly', { label });
-  if (stop) return i18n.t('session.sheetStop', { stop });
-  return i18n.t('session.sheetScreenNearby');
 }
 
 function actionRow(key: string, action: SheetAction, icon: IconName, label: string, testid: string, sub?: string): string {

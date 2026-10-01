@@ -26,7 +26,7 @@ import { THEME_PREFERENCES, type ThemePreference } from '../ui/theme';
 import { LAYER_ICONS, MORE_LAYERS, type Surface } from './chrome';
 import { safetyState } from './safety-state';
 import { unusable } from './status';
-import { originSentence } from './session-sheet';
+import { originSentence } from './session-origin';
 import { conditionText } from './text';
 import { sourceForPlaceId, dynamicPlaces } from '../city/discovery';
 import { routeEntry } from '../transport/catalogue';
