@@ -2313,17 +2313,17 @@ Prihvaćanje prolaza za stranicu `/snimka/` iz `docs/snimka-2026-10.md` (odjelja
 
 | Redak | Mjera | Naredba | Prag | Izmjereno | Ocjena |
 |---|---|---|---|---|---|
-| SN-1 | Niz po minutama prema snimkama | `node scripts/snimka/build.mjs --stage verify` | `seen.all` at most 6 at Mon 03:00 and at least 200 at Wed 20:30; replayed state `silent` at every judged minute from Mon 04:30 to Wed 18:00; `reduced` first at Wed 19:05 ± 3 min; `normal` first between Wed 20:15 and 20:30; `published.vehicles` 5 at Mon 19:27 with `feed.entities` 0; the day's highest `bikes.empty` on Wed at least 100; `expected.all` never null | na čekanju | na čekanju |
-| SN-2 | Veličina pokretnog dijela | isto kao SN-1 | every chunk at most 150,000 bytes gzip; at least 300 vehicles in the 24 Sep chunk of 12:00 | na čekanju | na čekanju |
-| SN-3 | Usporedni dan je običan | isto kao SN-1 | no judged minute of 24 Sep `reduced` or `silent` | na čekanju | na čekanju |
-| SN-4 | Ugovor, kodiranje i natrag | `npx vitest run test/snimka` | green | na čekanju | na čekanju |
-| SN-5 | Podrijetlo naslova | `node scripts/snimka/build.mjs --stage news` | every curated link found in the recordings | na čekanju | na čekanju |
-| SN-6 | Snimke zaslona su maskirane | dnevnik stupnja `captures` | a located and blurred code in every kiosk capture, or the capture is named in the log and checked by eye | na čekanju | na čekanju |
-| SN-7 | Ruta | `npx vitest run --project workers test/snimka` | headers per §7; 404 for `..`, `.pb` and anything outside the prefix | na čekanju | na čekanju |
-| SN-8 | Logika stranice | `npx vitest run test/app/snimka-*.test.ts` | green | na čekanju | na čekanju |
-| SN-9 | Pozornica u pregledniku | `npx playwright test e2e/snimka-stage.spec.ts` | green | na čekanju | na čekanju |
-| SN-10 | Izvještaj u pregledniku | `npx playwright test e2e/snimka-report.spec.ts` | green, including axe in both themes and no horizontal overflow at 360 px | na čekanju | na čekanju |
-| SN-11 | Proračuni prijenosa | `npx vitest run test/app/budget.test.ts` | the `/snimka/` rows of §8 | na čekanju | na čekanju |
-| SN-12 | Tekst | `npx vitest run test/app/snimka-strings.test.ts test/app/copy-guards.test.ts` | green | na čekanju | na čekanju |
-| SN-13 | Predana stranica je ponovna gradnja | `npx vitest run test/docs/prijava.test.ts` | green | na čekanju | na čekanju |
-| SN-14 | Produkcija | `curl -sI https://zagreb.aningfilm.hr/api/snimka/v1/manifest.json` i prolaz preglednikom samo čitanjem | 200 with the manifest's cache headers; the page plays on the real dataset in both themes at 1366 and 390 px | na čekanju | na čekanju |
+| SN-1 | Niz po minutama prema snimkama | `node scripts/snimka/build.mjs --stage verify` | `seen.all` at most 6 at Mon 03:00 and at least 200 at Wed 20:30; replayed state `silent` at every judged minute from Mon 04:30 to Wed 18:00; `reduced` first at Wed 19:05 ± 3 min; `normal` first between Wed 20:15 and 20:30; `published.vehicles` 5 at Mon 19:27 with `feed.entities` 0; the day's highest `bikes.empty` on Wed at least 100; `expected.all` never null | seen.all 0 u pon 03:00 i 234 u sri 20:30; 3.038 od 3.038 procijenjenih minuta `silent`; prvo `reduced` sri 19:03; prvo `normal` sri 20:16; objavljeno 5 uz 0 entiteta u pon 19:27; najviše praznih stanica u sri 126; `expected.all` bez praznih minuta | prošlo |
+| SN-2 | Veličina pokretnog dijela | isto kao SN-1 | every chunk at most 150,000 bytes gzip; at least 300 vehicles in the 24 Sep chunk of 12:00 | najveći komad 32.025 B gzip (24. 9. u 07:20), nijedan iznad praga; 326 vozila u komadu 24. 9. u 12:00 | prošlo |
+| SN-3 | Usporedni dan je običan | isto kao SN-1 | no judged minute of 24 Sep `reduced` or `silent` | 0 od 1.202 procijenjene minute | prošlo |
+| SN-4 | Ugovor, kodiranje i natrag | `npx vitest run test/snimka` | green | zeleno (u punom paketu 1. 10.) | prošlo |
+| SN-5 | Podrijetlo naslova | `node scripts/snimka/build.mjs --stage news` | every curated link found in the recordings | 65 od 65 odabranih poveznica pronađeno u snimkama (Jutarnji 22, Večernji 23, N1 20) | prošlo |
+| SN-6 | Snimke zaslona su maskirane | dnevnik stupnja `captures` | a located and blurred code in every kiosk capture, or the capture is named in the log and checked by eye | 60 od 60 kodova pronađeno i zamućeno zajedno s cijelom karticom za uparivanje; nijedna snimka za ručnu provjeru | prošlo |
+| SN-7 | Ruta | `npx vitest run --project workers test/snimka` | headers per §7; 404 for `..`, `.pb` and anything outside the prefix | zeleno, 54 testa | prošlo |
+| SN-8 | Logika stranice | `npx vitest run test/app/snimka-*.test.ts` | green | zeleno, 318 testova | prošlo |
+| SN-9 | Pozornica u pregledniku | `npx playwright test e2e/snimka-stage.spec.ts` | green | zeleno, 12 od 12 | prošlo |
+| SN-10 | Izvještaj u pregledniku | `npx playwright test e2e/snimka-report.spec.ts` | green, including axe in both themes and no horizontal overflow at 360 px | zeleno, 11 od 11 (snimanje zaslona za pregled preskočeno); axe za `/snimka/` 4 od 4 | prošlo |
+| SN-11 | Proračuni prijenosa | `npx vitest run test/app/budget.test.ts` | the `/snimka/` rows of §8 | 15 od 15; ulaz oko 33 KB gzip, otvorena karta oko 500 KB gzip, bez integratora | prošlo |
+| SN-12 | Tekst | `npx vitest run test/app/snimka-strings.test.ts test/app/copy-guards.test.ts` | green | zeleno | prošlo |
+| SN-13 | Predana stranica je ponovna gradnja | `npx vitest run test/docs/prijava.test.ts` | green | zeleno | prošlo |
+| SN-14 | Produkcija | `curl -sI https://zagreb.aningfilm.hr/api/snimka/v1/manifest.json` i prolaz preglednikom samo čitanjem | 200 with the manifest's cache headers; the page plays on the real dataset in both themes at 1366 and 390 px | na čekanju: prijenos skupa na R2 i objavu pokreće vlasnik, jer na repozitoriju rade i drugi poslovi | na čekanju |
