@@ -14,9 +14,18 @@ export interface RefCache {
   url(ref: HashedRef | string): string;
 }
 
+/**
+ * A refused answer's body is read to its end before the error is thrown: Chromium keeps a fetch whose body nobody reads
+ * in flight, so a 404 manifest left the page short of network idle for good (the gate's axe runs of 1 Oct timed out).
+ */
+async function refuse(res: Response, what: string): Promise<never> {
+  await res.text().catch(() => '');
+  throw new SnimkaError(`${what} ${res.status}`);
+}
+
 export async function loadManifest(fetchImpl: FetchLike = fetch): Promise<SnimkaManifest> {
   const res = await fetchImpl(`${SNIMKA_API}manifest.json`, { cache: 'no-cache', headers: { accept: 'application/json' } });
-  if (!res.ok) throw new SnimkaError(`manifest ${res.status}`);
+  if (!res.ok) return refuse(res, 'manifest');
   return decodeManifest(await res.json());
 }
 
@@ -27,7 +36,7 @@ export function createRefCache(fetchImpl: FetchLike = fetch): RefCache {
   const url = (ref: HashedRef | string): string => `${SNIMKA_API}${pathOf(ref)}`;
   const fetchJson = async (path: string): Promise<unknown> => {
     const res = await fetchImpl(url(path), { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new SnimkaError(`${path} ${res.status}`);
+    if (!res.ok) return refuse(res, path);
     return res.json();
   };
   return {
