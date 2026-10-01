@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import {experienceSnapshots,installExperienceFixture,installWallFixture,FIXTURE_DASHBOARD,FIXTURE_STOP} from './experience-fixtures';
+import {experienceSnapshots,installExperienceFixture,installKioskFeedFixture,installWallFixture,FIXTURE_DASHBOARD,FIXTURE_STOP} from './experience-fixtures';
 import {installCityFixture,cityEvents,CITY_VENUE} from './city-fixtures';
 import {fulfillPublicMap} from '../scripts/review-maps.mjs';
 import {APP_URL,E2E_STOP_ID,provisionKiosk} from './helpers';
@@ -168,7 +168,7 @@ test('passive kiosk keeps whole rows, one short sentence and a scannable QR thro
   const now=Date.now();
   // How far page.clock has been moved past the real clock: the departures board reads the page's time.
   let ahead=0;
-  const snapshots=await experienceSnapshots();
+  const snapshots=await installKioskFeedFixture(page,'ready',{now});
   cityEvents(snapshots.dogadanja,now);
   snapshots.dogadanja.items[0]!.title='Večer u Gavelli: '+Array(25).fill('razgovor o gradu i kulturnoj baštini').join(' ');
   snapshots['dhmz-cap'].items=[{
@@ -188,6 +188,8 @@ test('passive kiosk keeps whole rows, one short sentence and a scannable QR thro
   await page.goto(kioskUrl);
   await expect(page.getByTestId('kiosk-code')).toHaveAttribute('data-state','live');
   await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-map-status','ready',{timeout:30000});
+  await expect(page.getByTestId('kiosk-map')).toHaveAttribute('data-feed','live');
+  await expect(page.getByTestId('map-note')).toBeHidden();
   await page.evaluate(()=>document.fonts.ready);
   const fastForward=async(ms:number)=>{await page.clock.fastForward(ms);ahead+=ms;};
   const texts:string[]=[];
