@@ -35,7 +35,7 @@ import {
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
   EVIDENCE_FILES, HIT_TEST_IN_PAGE, act, evidenceFor, readingGaps, watchBoards, type ActionRecord, type BoardAnswer,
   MAX_HOST_LOAD, USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
-  plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
+  plannedRotationSteps, redemptionBudget, renderReport, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObservedRotationRow, type SkippedTextEntry, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
 } from '../../scripts/observe-production.mjs';
 
@@ -295,6 +295,7 @@ describe('the thresholds are one table with a stage per row', () => {
     expect(target('pills-plus')).toContain(String(wall.PLUS_PILL_RE));
     expect(target('qr')).toContain(`${wall.QR_MIN_PX} × ${wall.QR_MIN_PX}`);
     expect(target('reveal-cadence')).toContain('3 beats');
+    expect(target('shown-facts')).toContain('at least 6 distinct non-transit row ids');
     expect(target('calm-motion')).toContain(`at most ${wall.REVEAL_MUTATIONS_MAX} beyond turnovers across a reveal's start or return`);
     expect(() => fillTarget('{NO_SUCH_CONSTANT}', instruments)).toThrow(/NO_SUCH_CONSTANT/);
   });
@@ -383,6 +384,61 @@ describe('the thresholds are one table with a stage per row', () => {
     const m = METRICS['kiosk.sentenceShortTurns'](bad, instruments);
     expect(m.value).toBe(1);
     expect(m.detail[1]).toContain('9.3 to 15.5 s between readings (gaps 3.1 / 3.1 s');
+  });
+
+  // R4: the monitored shown-facts row (docs/reveal-2026-10-plan/R4.md A2).
+  describe('the monitored shown-facts row', () => {
+    const NON_TRANSIT_KINDS = ['event', 'open', 'rain', 'cut', 'always', 'notice', 'first'];
+    /** A rotation whose readings carry `distinct` different non-transit row ids between them. */
+    const rotationWith = (distinct: number, readings = 12): WallSample[] =>
+      Array.from({ length: readings }, (_, n) => {
+        const base = wallReading(n);
+        const extra = Array.from({ length: distinct }, (_, i) => i).filter((i) => i % readings === n % readings || n >= distinct).map((i) => row({ id: `${NON_TRANSIT_KINDS[i % NON_TRANSIT_KINDS.length]}:r${i}`, kind: NON_TRANSIT_KINDS[i % NON_TRANSIT_KINDS.length] }));
+        return { ...base, rows: [...base.rows.filter((r) => r.kind !== 'solar'), ...extra] };
+      });
+    const observationWith = (rotation: WallSample[]) => {
+      const config = configFrom({ argv: ['--surfaces', 'kiosk'], env: ENV, root, now: new Date(T0) });
+      const obs = newObservation(config, null);
+      obs.kiosk = { rotation: rotation.map((x, n) => ({ ...x, n })) } as never;
+      return obs;
+    };
+
+    it('is a monitored d2 row with the bound 6', () => {
+      const t = THRESHOLDS.find((x) => x.id === 'shown-facts')!;
+      expect(t).toMatchObject({ stage: 'd2', surface: 'kiosk', metric: 'kiosk.shownFactsNonTransit', min: 6, monitored: true });
+    });
+
+    it('5 distinct non-transit ids: monitored, does not hold, the verdict stays ok and the row is not applied', () => {
+      const obs = observationWith(rotationWith(5));
+      const v = judge(obs, instruments, 'full');
+      const r = v.rows.find((x) => x.id === 'shown-facts')!;
+      expect(r).toMatchObject({ status: 'monitored', value: 5, holds: false });
+      expect(v.failures.map((f) => f.id)).not.toContain('shown-facts');
+      const applied = v.rows.filter((x) => x.status === 'pass' || x.status === 'fail').length;
+      expect(v.applied).toBe(applied);
+      expect(v.rows.filter((x) => x.status === 'monitored')).toHaveLength(1);
+    });
+
+    it('6 distinct non-transit ids: it holds', () => {
+      const r = judge(observationWith(rotationWith(6)), instruments, 'full').rows.find((x) => x.id === 'shown-facts')!;
+      expect(r).toMatchObject({ status: 'monitored', value: 6, holds: true });
+    });
+
+    it('is above the stage at d1 (information) and measures null without a wall', () => {
+      const obs = observationWith(rotationWith(6));
+      expect(judge(obs, instruments, 'd1').rows.find((x) => x.id === 'shown-facts')!.status).toBe('info');
+      const none = newObservation(configFrom({ argv: ['--surfaces', 'kiosk'], env: ENV, root, now: new Date(T0) }), null);
+      expect(METRICS['kiosk.shownFactsNonTransit'](none, instruments).value).toBeNull();
+    });
+
+    it('report.md lists it under Monitored, carries the Shown facts section and the radar line', () => {
+      const obs = observationWith(rotationWith(5).map((s, n) => ({ ...s, radar: n < 3 ? true : null })));
+      const text = renderReport(obs, judge(obs, instruments, 'full'), instruments);
+      expect(text).toContain('### Monitored (no threshold)');
+      expect(text).toContain('## Shown facts (scripts/shown-facts.mjs)');
+      expect(text).toContain('Readings with the radar inset shown: 3 of 12 (R3; monitored, no threshold).');
+      expect(text).toMatch(/Fewest non-transit facts: 2026-09-22 \d\d:00 \(5\)\.\s*$/m);
+    });
   });
 
   it('a row applied at its stage fails when it could not be measured; above the stage it is information', () => {
@@ -611,7 +667,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
     departures: 1, fitDropped: [], fitOverflow: false, reveal: { list: null, line: null }, rhythm: 20, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
-    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: ['U blizini'],
+    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, radar: null, headings: ['U blizini'],
   };
 }
 const EMPTY_INVENTORY = (vw: number, vh: number): PageInventory => ({ vw, vh, scrollY: 0, url: 'https://zagreb.example/kiosk/#ABCDEFGH.s3cr3t-part', title: 'Kaj ima?', theme: 'light', map: null, elements: [] });

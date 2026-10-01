@@ -9,7 +9,8 @@
 //                                       [--max-load 8|N|off]
 //
 // E2E_KIOSK_URL is the provisioning URL of a screen that already exists (…/kiosk/#<beacon>.<secret>): the
-// day's temporary screen, made by hand through /kiosk/ (one per verification day, Q15). It is required;
+// day's temporary screen, made by hand through /kiosk/ (one per verification day, Q15), or the network's DEV
+// screen (the `provisionUrl` of POST /api/dev/screen, counted nowhere; the run keeps only its fragment). It is required;
 // without it the run exits 2 before it loads a module or opens a connection. E2E_APP_URL, when set, moves
 // the same screen onto another origin (a local wrangler dev run). The URL is never printed or written: its
 // secret, every pairing code and every ticket are masked in each file the run writes.
@@ -59,6 +60,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { shownFacts, shownFactsMarkdown } from './lib/shown-facts.mjs';
 
 // --- run constants -------------------------------------------------------------------------------
 export const DEFAULT_MINUTES = 10;
@@ -154,7 +156,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export const USAGE = `Read-only production observer (master brief §16.7).
 
-  E2E_KIOSK_URL=<provisioning URL of the day's screen> npm run observe:production -- --minutes 10
+  E2E_KIOSK_URL=<provisioning URL of the day's screen or of the network's DEV screen> npm run observe:production -- --minutes 10
 
 Options:
   --minutes N         real-time wall rotation, 0 < N ≤ ${MAX_MINUTES} (default ${DEFAULT_MINUTES})
@@ -238,7 +240,7 @@ export function kioskFromEnv(env) {
   const raw = String(env.E2E_KIOSK_URL ?? '').trim();
   if (!raw) {
     throw new ObserverRefusal(
-      'observe-production: E2E_KIOSK_URL is not set. Set it to the provisioning URL of an existing screen (…/kiosk/#<beacon>.<secret>, the day\'s temporary screen); this script never creates a screen.',
+      'observe-production: E2E_KIOSK_URL is not set. Set it to the provisioning URL of an existing screen (…/kiosk/#<beacon>.<secret>, the day\'s temporary screen or the network\'s DEV screen); this script never creates a screen.',
     );
   }
   let url;
@@ -1290,7 +1292,7 @@ export async function observeAll(browser, ctx, observation) {
 }
 
 // --- thresholds: one table, each row tagged with its deploy -------------------------------------------
-const T = (id, stage, surface, metric, bound, target, source) => Object.freeze({ id, stage, surface, metric, ...bound, target, source });
+const T = (id, stage, surface, metric, bound, target, source) => Object.freeze({ id, stage, surface, metric, ...bound, target, source }); // a bound may carry `monitored: true` (judge: status 'monitored')
 const NONE = { max: 0 };
 /**
  * Every row the observer judges. `metric` names a METRICS entry (a count of offences, or of readings); a row
@@ -1324,6 +1326,7 @@ export const THRESHOLDS = Object.freeze([
   T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired; short only when even the upper bound (the dwell plus the actual gaps to the readings either side) is under it', 'decision 29'),
   T('sentence-distinct', 'd2', 'kiosk', 'kiosk.sentencesTooFew', NONE, 'at least {DISTINCT_SENTENCES_MIN} distinct sentences in every ten minutes of the rotation (a shorter run in proportion, at least 1)', '§16.3, §12'),
   T('reveal-cadence', 'd2', 'kiosk', 'kiosk.revealCadence', NONE, 'at most one reveal per {REVEAL_GAP_BEATS} beats, one region at a time, each standing at least one beat and ending by the second (beats from the page\'s data-rhythm)', 'reveal pass D2'),
+  T('shown-facts', 'd2', 'kiosk', 'kiosk.shownFactsNonTransit', { min: 6, monitored: true }, 'at least {SHOWN_FACTS_MIN} distinct non-transit row ids (kinds other than departure, departures) over the rotation; monitored: reported, never in the exit code', 'brief §6 DR3, §5.2 (g)'),
   T('solar', 'd2', 'kiosk', 'kiosk.solarOverMax', NONE, 'at most {SOLAR_ROWS_MAX} solar row per reading', '§16.3, §12'),
   T('rows-timed', 'd2', 'kiosk', 'kiosk.untimedReadings', NONE, 'every row carries data-when or data-always', '§16.3'),
   T('caveats', 'd2', 'kiosk', 'kiosk.caveatRows', NONE, 'no row reads as a caveat', '§16.3, principle 5'),
@@ -1585,6 +1588,13 @@ export const METRICS = Object.freeze({
     const rhythm = probed.find((s) => s.rhythm)?.rhythm ?? '?';
     return { value: failures.length, detail: [...failures.slice(0, 5), `${episodes.filter((e) => e.kind === 'page').length} page turns, ${episodes.filter((e) => e.kind === 'advance').length} advances in ${probed.length} readings at Ritam ${rhythm} s`] };
   },
+  'kiosk.shownFactsNonTransit': (obs) => {
+    const rot = obs.kiosk?.rotation ?? [];
+    if (!obs.kiosk || !valid(rot).length) return { value: null, detail: ['no rotation reading'] };
+    const r = shownFacts(rot);
+    const f = r.summary.fewest;
+    return { value: r.summary.nonTransit, detail: [`${r.summary.nonTransit} distinct non-transit row ids in ${r.readings} readings${f ? `; fewest in ${f.hour}:00 (${f.nonTransit})` : ''}`] };
+  },
   'kiosk.sentencesTooFew': (obs, k) => {
     if (!obs.kiosk || !(obs.kiosk.rotation ?? []).length) return { value: null, detail: ['no rotation reading'] };
     const d = distinctPerWindow(obs.kiosk.rotation, plannedRotationSteps(obs.meta.minutes, k.wall.ROTATION_STEP_MS), k.wall.ROTATION_STEP_MS, REPEAT_WINDOW_MS, k.wall.DISTINCT_SENTENCES_MIN);
@@ -1781,9 +1791,10 @@ export function judge(observation, instruments, stage = observation.meta.stage) 
   const rows = THRESHOLDS.map((t) => {
     const observed = t.surface === 'all' || observation.meta.surfaces.includes(t.surface);
     const m = observed ? METRICS[t.metric](observation, instruments) : { value: null, detail: [] };
-    const status = !observed ? 'not observed' : stageIndex(t.stage) > applied ? 'info' : m.value !== null && holds(t, m.value) ? 'pass' : 'fail';
     const ok = m.value !== null && holds(t, m.value);
-    return { id: t.id, stage: t.stage, surface: t.surface, metric: t.metric, min: t.min, max: t.max, source: t.source, target: fillTarget(t.target, instruments), value: m.value, holds: ok, detail: m.detail, status };
+    // A monitored row (R4) is measured and printed like any other and never fails: not in `failures`, not in `applied`.
+    const status = !observed ? 'not observed' : stageIndex(t.stage) > applied ? 'info' : t.monitored ? 'monitored' : ok ? 'pass' : 'fail';
+    return { id: t.id, stage: t.stage, surface: t.surface, metric: t.metric, min: t.min, max: t.max, monitored: t.monitored === true, source: t.source, target: fillTarget(t.target, instruments), value: m.value, holds: ok, detail: m.detail, status };
   });
   const failures = rows.filter((r) => r.status === 'fail');
   return { stage, rows, failures, applied: rows.filter((r) => r.status === 'pass' || r.status === 'fail').length, ok: failures.length === 0 };
@@ -1891,6 +1902,13 @@ export function renderReport(observation, verdict, instruments) {
   lines.push('| Row | Stage | Surface | Target | Bound | Observed | Result |', '|---|---|---|---|---|---:|---|');
   for (const r of verdict.rows) lines.push(`| ${r.id} | ${r.stage} | ${r.surface} | ${cell(r.target)} | ${bound(r)} | ${r.value === null ? '—' : r.value} | ${r.status === 'fail' ? '**fail**' : r.status} |`);
   lines.push('');
+  const monitoredRows = verdict.rows.filter((r) => r.status === 'monitored');
+  if (monitoredRows.length) {
+    lines.push('### Monitored (no threshold)', '');
+    lines.push('| Row | Target | Observed | Holds |', '|---|---|---:|---|');
+    for (const r of monitoredRows) lines.push(`| ${r.id} | ${cell(r.target)} | ${r.value === null ? '—' : r.value} | ${r.holds ? 'yes' : 'no'} |`);
+    lines.push('');
+  }
   // Failed rows, and rows above the stage that would fail once applied.
   // Each failing row carries a pointer to the file that holds its evidence.
   const noted = verdict.rows.filter((r) => r.status === 'fail' || (r.status === 'info' && !r.holds && r.detail.length));
@@ -1915,6 +1933,7 @@ export function renderReport(observation, verdict, instruments) {
     const episodes = instruments.wall.revealEpisodes(valid(rot));
     const revealed = valid(rot).filter((r) => r.reveal !== undefined).length;
     lines.push(`Reveals (R2, data-reveal per reading, ${revealed} of ${s.samples} readings carried the probe): ${s.reveals.page} page turn(s), ${s.reveals.advance} advance(s)${episodes.length ? ` on beats ${episodes.slice(0, 40).map((e) => `${e.kind === 'page' ? 'p' : 'a'}${e.beat}`).join(' ')}${episodes.length > 40 ? ` and ${episodes.length - 40} more` : ''}` : ''}; the cadence is the reveal-cadence row.`, '');
+    lines.push(`Readings with the radar inset shown: ${s.radarShownReadings} of ${s.samples} (R3; monitored, no threshold).`, '');
     if (rep.dwells.length) {
       lines.push('Sentence turns per fact: the point dwell (first reading to the next fact\'s), its bounds from the actual reading gaps either side, and the verdict (decision 29).', '');
       lines.push('| At (UTC) | Dwell s | Bounds s | Gap before / after s | Refreshes | Verdict | Sentence |', '|---|---:|---|---|---:|---|---|');
@@ -1966,6 +1985,11 @@ export function renderReport(observation, verdict, instruments) {
       lines.push('| Readings with a census | Without | With a skip | Total skipped | Max per reading | Per surface | Reasons |', '|---:|---:|---:|---:|---|---|---|');
       lines.push(`| ${skip.withCensus} | ${skip.readings - skip.withCensus} | ${skip.withSkip} | ${skip.total} | ${skip.max}${skip.max ? ` (reading ${skip.maxReading}: ${cell(skip.maxSurfaces.map((x) => `${x.surface} ${x.count ?? '?'}`).join(', '))})` : ''} | ${cell(pairs(skip.bySurface))} | ${cell(pairs(skip.reasons))} |`, '');
       lines.push(`Total skipped sums the counts over the readings, so a row left out in consecutive readings counts in each. ${skip.withSkip ? `Readings with a skip, for the owner: ${skip.flagged.slice(0, 30).join(', ')}${skip.flagged.length > 30 ? ` and ${skip.flagged.length - 30} more` : ''} (rotation.jsonl, \`skippedText\`).` : 'No reading left a row out.'} No threshold reads this census, so it never changes the exit code.`, '');
+    }
+    if (valid(rot).length) {
+      lines.push('## Shown facts (scripts/shown-facts.mjs)', '');
+      const md = shownFactsMarkdown(shownFacts(rot), 'this rotation').split('\n').slice(2).join('\n').replace(/^## /gm, '### ');
+      lines.push(md, '');
     }
   }
 

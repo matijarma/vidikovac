@@ -250,7 +250,7 @@ export function newObservation(config: ObserverConfig, health: unknown): Observa
 export function newPhone(): PhoneObservation;
 export function newDesktop(): DesktopObservation;
 
-export interface Threshold { id: string; stage: Stage; surface: Surface | 'all'; metric: string; min?: number; max?: number; target: string; source: string }
+export interface Threshold { id: string; stage: Stage; surface: Surface | 'all'; metric: string; min?: number; max?: number; monitored?: boolean; target: string; source: string }
 export const THRESHOLDS: readonly Threshold[];
 export function stageIndex(stage: StageChoice): number;
 export function thresholdsFor(stage: StageChoice): Threshold[];
@@ -271,7 +271,7 @@ export function repeatsWithin(readings: readonly Wall.WallSample[], windowMs: nu
   turns: number; refreshes: number; distinct: number; repeats: { at: string; afterMs: number; sentence: string }[];
   short: SentenceDwell[]; dwells: SentenceDwell[]; factSource: Wall.SentenceTurns['factSource'];
 };
-export type RowStatus = 'pass' | 'fail' | 'info' | 'not observed';
+export type RowStatus = 'pass' | 'fail' | 'info' | 'monitored' | 'not observed';
 export interface VerdictRow extends Omit<Threshold, 'target'> { target: string; value: number | null; holds: boolean; detail: string[]; status: RowStatus }
 export interface Verdict { stage: StageChoice; rows: VerdictRow[]; failures: VerdictRow[]; applied: number; ok: boolean }
 export function judge(observation: Observation, instruments: Instruments, stage?: StageChoice): Verdict;
