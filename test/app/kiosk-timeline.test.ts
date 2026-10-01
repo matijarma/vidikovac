@@ -26,7 +26,7 @@ import { cellLines, cellOverflow, lineHeight, LINE_1366, LINE_1920, LINE_PORTRAI
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, NOTICE_TITLE_MAX_LINES, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
-  FIT_RESTORE_HOLD_MS, byValue, departuresLineMarkup, groupDepartures, isDeparturesLine, type DeparturesLine, type WallRow,
+  FIT_RESTORE_HOLD_MS, byValue, departuresLineMarkup, groupDepartures, isDeparturesLine, taktCandidates, type DeparturesLine, type WallRow,
 } from '../../app/src/kiosk/timeline';
 
 // kiosk.nearby.* is WP1-D's key group (WP1-A adds it too); until it lands the
@@ -1126,6 +1126,7 @@ function simulated(layout: Layout): TimelineMeasure & { rowHeight(li: Element): 
       return { height: heightOf(el), width: layout.titleChars, overflow: sum(el) > heightOf(el) };
     },
     lines: (el) => lines(el),
+    height: rowHeight,
     rowHeight,
     sum,
   };
@@ -2556,5 +2557,294 @@ describe('the facts-breadth rows on the wall (U3 S2)', () => {
     // Hostile words before a clock range are still read as prose.
     t.update([dep(1), { ...cut, sub: 'nazovi 091 234 5678 08:00–14:00' }], 2000, NOW);
     expect(ids()).toEqual(['dep:1']);
+  });
+});
+
+describe('reveals on beats (R2)', () => {
+  // docs/reveal-2026-10-plan/R2.md step 4: the beat's reveal drawn over the fit. A page turn swaps the rows takt named
+  // for the rows it had no room for, at their time positions, and they return on the next beat on the very nodes that
+  // left; an advance shows the next departures in the line's cells under "zatim". The simulated 1920 x 1080 layout.
+  const H = 3_600_000;
+  const trams = (): TimelineRow[] => [
+    dep(1, { atMs: NOW + 2 * MIN, title: 'Črnomerec', arrival: { routeId: '6', routeName: '6' } }),
+    dep(2, { atMs: NOW + 5 * MIN, title: 'Dubrava', arrival: { routeId: '12', routeName: '12' } }),
+    dep(3, { atMs: NOW + 8 * MIN, title: 'Prečko', arrival: { routeId: '17', routeName: '17' } }),
+  ];
+  const nextTrams = (): TimelineRow[] => [
+    dep(4, { atMs: NOW + 12 * MIN, title: 'Sopot', arrival: { routeId: '7', routeName: '7' } }),
+    dep(5, { atMs: NOW + 15 * MIN, title: 'Borongaj', arrival: { routeId: '1', routeName: '1' } }),
+    dep(6, { atMs: NOW + 18 * MIN, title: 'Dubec', arrival: { routeId: '11', routeName: '11' } }),
+  ];
+  /** Seven one-line rows beside the line, by value: the closure 72, the train 60 (imminent), the event 57.6, the road
+   *  state 48, the bakery 36, the opening 18, the sunset 12, and the timeless row (reserved). At 486 px the fit paints
+   *  the line and six rows at 64 px (96 + 6 × 64 = 480) and drops the opening and the sunset: page 2. */
+  const pageRows = (opening: Partial<TimelineRow> = {}): TimelineRow[] => [
+    ...trams(),
+    row({ id: 'closure:ilica', kind: 'closure', atMs: NOW + 4 * H, title: 'Ilica', source: 'prometnice' }),
+    row({ id: 'rail:hz:1', kind: 'rail', atMs: NOW + 20 * MIN, title: 'Dugo Selo', source: 'hz' }),
+    row({ id: 'event:b', kind: 'event', atMs: NOW + 1 * H, title: 'Koncert u parku', source: 'dogadanja' }),
+    row({ id: 'road:savska', kind: 'road', atMs: NOW + 2 * H, title: 'Savska cesta', source: 'hak' }),
+    row({ id: 'opennow:pekara', kind: 'open', atMs: NOW + 2 * H, title: 'Pekara Dubravica', source: 'osm' }),
+    row({ id: 'opening:harmica', kind: 'opening', atMs: NOW + 3 * H, title: 'Galerija Harmica', source: 'dogadanja', ...opening }),
+    row({ id: 'solar:sunset:2026-09-22', kind: 'solar', atMs: NOW + 5 * H, title: 'Zalazak sunca', source: 'solar' }),
+    always({ title: 'Zakladni blok', sub: '' }),
+  ];
+  const PAGE = { kind: 'page' as const, ids: ['opening:harmica', 'solar:sunset:2026-09-22'], replaces: ['opennow:pekara', 'road:savska'], beat: 9 };
+  const ADVANCE = { kind: 'advance' as const, ids: ['dep:4', 'dep:5', 'dep:6'], replaces: ['departures'], beat: 8 };
+  const FIT_IDS = ['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'road:savska', 'opennow:pekara', 'always:story:trg'];
+  const nodes = (): Map<string, Element> => new Map([...items(), ...cells()].map((el) => [el.dataset.id!, el]));
+  const marked = (attr: string): string[] => [...host.querySelectorAll<HTMLElement>(`[${attr}]`)].map((el) => el.dataset.id ?? el.className);
+  /** childList records under the section that add or remove an element: what the recorder counts, node by node. */
+  function structure(): { records(): { added: string[]; removed: string[] }[]; stop(): void } {
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(section(), { subtree: true, childList: true });
+    const keyed = (list: NodeList): string[] => [...list].filter((n): n is Element => n.nodeType === 1).map((n) => `${n.tagName.toLowerCase()}[${n.getAttribute('data-key') ?? ''}]`);
+    return {
+      records: () => observer.takeRecords().filter((r) => r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1))
+        .map((r) => ({ added: keyed(r.addedNodes), removed: keyed(r.removedNodes) })),
+      stop: () => observer.disconnect(),
+    };
+  }
+
+  it('an advance: the line keeps its node and shows the next three departures under "zatim" in one record, each cell fading in', () => {
+    const t = mount({ measure: simulated(WALL_1920) });
+    const rows = [...trams(), ...pageRows().slice(3, 7), always({ title: 'Zakladni blok', sub: '' })];
+    t.update(rows, 2200, NOW);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    const before = nodes();
+    const texts = new Map(items().map((li) => [li.dataset.id!, li.textContent]));
+    // The atomic replacement of R1 (run decision 3): one replaceChildren, one childList record in a browser (happy-dom
+    // emits one record per child; the accept scene reads the native count).
+    const replace = vi.spyOn(line()!, 'replaceChildren');
+    const w = structure();
+    t.update(rows, 2200, NOW + 20_000, { reveal: ADVANCE, next: nextTrams() });
+    const records = w.records();
+    w.stop();
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(line()).toBe(before.get('departures'));
+    expect(line()!.dataset.reveal).toBe('advance:8');
+    expect(line()!.firstElementChild!.className).toBe('k-dep-then');
+    expect(text(line()!.firstElementChild)).toBe('zatim');
+    expect(line()!.firstElementChild!.getAttribute('data-key')).toBe('then');
+    expect(cellIds()).toEqual(['dep:4', 'dep:5', 'dep:6']);
+    expect(cells().map((c) => c.dataset.route)).toEqual(['7', '1', '11']);
+    expect(cells().map((c) => text(c.querySelector('.nearby-when')))).toEqual(['17:57', '18:00', '18:03']);
+    expect(cells().every((c) => c.dataset.enter === '1')).toBe(true);
+    expect(line()!.dataset.cells).toBe('3');
+    for (const li of items()) {
+      if (li.dataset.id === 'departures') continue;
+      expect(li, li.dataset.id).toBe(before.get(li.dataset.id!));
+      expect(li.textContent).toBe(texts.get(li.dataset.id!));
+    }
+    // Exactly the cells that left and the label and cells that entered: no row touched, no node moved or rebuilt.
+    expect(records.flatMap((r) => r.removed)).toEqual(['span[dep:1]', 'span[dep:2]', 'span[dep:3]']);
+    expect(records.flatMap((r) => r.added)).toEqual(['span[then]', 'span[dep:4]', 'span[dep:5]', 'span[dep:6]']);
+    expect(host.querySelector('[data-testid=nearby-rows]')!.hasAttribute('data-reveal')).toBe(false);
+    expect(t.shown()).toBe(6);
+    // A steady beat writes nothing more.
+    replace.mockClear();
+    const w1 = structure();
+    t.update(rows, 2200, NOW + 21_000, { reveal: ADVANCE, next: nextTrams() });
+    expect(w1.records()).toEqual([]);
+    w1.stop();
+    expect(replace).not.toHaveBeenCalled();
+    // The return: the original cells come back on their own nodes, fading in, and the label leaves; one replacement again.
+    const w2 = structure();
+    t.update(rows, 2200, NOW + 40_000);
+    const back = w2.records();
+    w2.stop();
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    for (const id of ['dep:1', 'dep:2', 'dep:3']) expect(cell(id), id).toBe(before.get(id));
+    expect(cells().every((c) => c.dataset.enter === '1')).toBe(true);
+    expect(line()!.hasAttribute('data-reveal')).toBe(false);
+    expect(line()!.querySelector('.k-dep-then')).toBeNull();
+    expect(back.flatMap((r) => r.removed)).toEqual(['span[then]', 'span[dep:4]', 'span[dep:5]', 'span[dep:6]']);
+    expect(back.flatMap((r) => r.added)).toEqual(['span[dep:1]', 'span[dep:2]', 'span[dep:3]']);
+  });
+
+  it('speaks English where the wall does: "then"', () => {
+    const t = mount({ measure: simulated(WALL_1920), i18n: i18nFor('en') });
+    const rows = [...trams(), always({ title: 'Zakladni blok', sub: '' })];
+    t.update(rows, 2200, NOW);
+    t.update(rows, 2200, NOW + 20_000, { reveal: ADVANCE, next: nextTrams() });
+    expect(text(line()!.querySelector('.k-dep-then'))).toBe('then');
+  });
+
+  it('a page turn: two rows the fit painted leave, the two it had no room for enter at their time positions with the slide, four records, the fit\'s probes unchanged', () => {
+    const t = mount({ measure: simulated(WALL_1920) });
+    t.update(pageRows(), 2200, NOW);
+    expect(ids()).toEqual(FIT_IDS);
+    expect(section().dataset.fitDropped).toBe('opening solar');
+    expect(t.shown()).toBe(7);
+    const before = nodes();
+    const w = structure();
+    t.update(pageRows(), 2200, NOW + 20_000, { reveal: PAGE, next: [] });
+    const records = w.records();
+    w.stop();
+    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:9');
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'opening:harmica', 'solar:sunset:2026-09-22', 'always:story:trg']);
+    expect(marked('data-enter')).toEqual(['opening:harmica', 'solar:sunset:2026-09-22']);
+    expect(marked('data-slide')).toEqual(['opening:harmica', 'solar:sunset:2026-09-22']);
+    for (const id of ['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'always:story:trg']) expect(byId(id), id).toBe(before.get(id));
+    expect(records).toHaveLength(4);
+    // The leaving rows go in their list order, the entering ones at their time positions.
+    expect(records.flatMap((r) => r.removed)).toEqual(['li[road:savska]', 'li[opennow:pekara]']);
+    expect(records.flatMap((r) => r.added)).toEqual(['li[opening:harmica]', 'li[solar:sunset:2026-09-22]']);
+    expect(section().dataset.fitDropped).toBe('opening solar');
+    expect(section().dataset.skippedFit).toBe('2');
+    expect(t.shown()).toBe(7);
+    expect(section().dataset.fitOverflow).toBe('0');
+    // A steady beat writes nothing more.
+    const w1 = structure();
+    t.update(pageRows(), 2200, NOW + 21_000, { reveal: PAGE, next: [] });
+    expect(w1.records()).toEqual([]);
+    w1.stop();
+    // The return: the replaced rows come back on their own nodes, sliding in, the revealed ones leave; four records.
+    const w2 = structure();
+    t.update(pageRows(), 2200, NOW + 40_000);
+    const back = w2.records();
+    w2.stop();
+    expect(host.querySelector('[data-testid=nearby-rows]')!.hasAttribute('data-reveal')).toBe(false);
+    expect(ids()).toEqual(FIT_IDS);
+    expect(byId('opennow:pekara')).toBe(before.get('opennow:pekara'));
+    expect(byId('road:savska')).toBe(before.get('road:savska'));
+    expect(marked('data-enter')).toEqual(['road:savska', 'opennow:pekara']);
+    expect(marked('data-slide')).toEqual(['road:savska', 'opennow:pekara']);
+    expect(back).toHaveLength(4);
+    expect(back.flatMap((r) => r.removed)).toEqual(['li[opening:harmica]', 'li[solar:sunset:2026-09-22]']);
+    expect(back.flatMap((r) => r.added)).toEqual(['li[road:savska]', 'li[opennow:pekara]']);
+    // One second later they are still painted: no restore hold for a replaced row.
+    const w3 = structure();
+    t.update(pageRows(), 2200, NOW + 41_000);
+    expect(w3.records()).toEqual([]);
+    w3.stop();
+    expect(ids()).toEqual(FIT_IDS);
+  });
+
+  it('a page turn revealed again later brings the revealed rows back on the nodes they left on', () => {
+    const t = mount({ measure: simulated(WALL_1920) });
+    t.update(pageRows(), 2200, NOW);
+    t.update(pageRows(), 2200, NOW + 20_000, { reveal: PAGE, next: [] });
+    const revealed = [byId('opening:harmica'), byId('solar:sunset:2026-09-22')];
+    t.update(pageRows(), 2200, NOW + 40_000);
+    expect(byId('opening:harmica')).toBeNull();
+    t.update(pageRows(), 2200, NOW + 80_000, { reveal: { ...PAGE, beat: 12 }, next: [] });
+    expect(byId('opening:harmica')).toBe(revealed[0]);
+    expect(byId('solar:sunset:2026-09-22')).toBe(revealed[1]);
+    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
+  });
+
+  it('under reduced motion the page turn and the advance swap the same rows and cells, and nothing fades or slides', () => {
+    const t = mount({ measure: simulated(WALL_1920), reduced: true });
+    t.update(pageRows(), 2200, NOW);
+    t.update(pageRows(), 2200, NOW + 20_000, { reveal: PAGE, next: [] });
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'opening:harmica', 'solar:sunset:2026-09-22', 'always:story:trg']);
+    expect(marked('data-enter')).toEqual([]);
+    expect(marked('data-slide')).toEqual([]);
+    t.update(pageRows(), 2200, NOW + 40_000);
+    expect(ids()).toEqual(FIT_IDS);
+    expect(marked('data-enter')).toEqual([]);
+    expect(marked('data-slide')).toEqual([]);
+    t.update(pageRows(), 2200, NOW + 80_000, { reveal: ADVANCE, next: nextTrams() });
+    expect(cellIds()).toEqual(['dep:4', 'dep:5', 'dep:6']);
+    expect(line()!.dataset.reveal).toBe('advance:8');
+    expect(marked('data-enter')).toEqual([]);
+    t.update(pageRows(), 2200, NOW + 100_000);
+    expect(cellIds()).toEqual(['dep:1', 'dep:2', 'dep:3']);
+    expect(marked('data-enter')).toEqual([]);
+  });
+
+  it('a revealed row that does not fit is not drawn: alone, no overlay and no record; beside a short one, only the short one for one replaced row', () => {
+    const tall = { title: 'Promocija kataloga izložbe iz fundusa Nacionalnog muzeja moderne umjetnosti i Etnografskog muzeja u Zagrebu danas' };
+    // The tall opening alone on page 2: the sunset left out of the list.
+    const alone = (): TimelineRow[] => pageRows(tall).filter((r) => r.kind !== 'solar');
+    const t = mount({ measure: simulated(WALL_1920) });
+    t.update(alone(), 2200, NOW);
+    expect(ids()).toEqual(FIT_IDS);
+    const w = structure();
+    t.update(alone(), 2200, NOW + 20_000, { reveal: { ...PAGE, ids: ['opening:harmica'], replaces: ['opennow:pekara'] }, next: [] });
+    expect(w.records()).toEqual([]);
+    w.stop();
+    expect(ids()).toEqual(FIT_IDS);
+    expect(host.querySelector('[data-testid=nearby-rows]')!.hasAttribute('data-reveal')).toBe(false);
+    // Beside the sunset: the tall opening is passed over, the sunset takes the one replaced row.
+    t.update(pageRows(tall), 2200, NOW + 40_000);
+    const w2 = structure();
+    t.update(pageRows(tall), 2200, NOW + 60_000, { reveal: { ...PAGE, beat: 12 }, next: [] });
+    const records = w2.records();
+    w2.stop();
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'road:savska', 'solar:sunset:2026-09-22', 'always:story:trg']);
+    expect(host.querySelector('[data-testid=nearby-rows]')!.dataset.reveal).toBe('page:12');
+    expect(records).toHaveLength(2);
+  });
+
+  it('the rise: a row held out by the fit that a page turn reveals, while the box grows so the fit keeps it, stays on its node at the reveal\'s end', () => {
+    // 440 px holds the line and five rows (96 + 5 × 64 = 416), not six: the opening, the lowest value, is dropped and held out.
+    const layout: Layout = { ...WALL_1920, boxPx: 440 };
+    const rows = (): TimelineRow[] => pageRows().filter((r) => r.kind !== 'solar' && r.kind !== 'rail');
+    const t = mount({ measure: simulated(layout), designHeightPx: layout.boxPx });
+    t.update(rows(), 2200, NOW);
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'event:b', 'road:savska', 'opennow:pekara', 'always:story:trg']);
+    expect(section().dataset.fitDropped).toBe('opening');
+    const reveal = { kind: 'page' as const, ids: ['opening:harmica'], replaces: ['opennow:pekara'], beat: 12 };
+    t.update(rows(), 2200, NOW + 20_000, { reveal, next: [] });
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'event:b', 'road:savska', 'opening:harmica', 'always:story:trg']);
+    const node = byId('opening:harmica');
+    // The box grows mid-beat: the fit now keeps all six, the overlay stands as it is.
+    layout.boxPx = 486;
+    t.update(rows(), 2200, NOW + 30_000, { reveal, next: [] });
+    expect(byId('opening:harmica')).toBe(node);
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'event:b', 'road:savska', 'opening:harmica', 'always:story:trg']);
+    expect(section().dataset.fitDropped).toBe('');
+    // The beat's end: the bakery returns, the opening stays where it stood, on its node, with no hold against it.
+    const w = structure();
+    t.update(rows(), 2200, NOW + 40_000);
+    const records = w.records();
+    w.stop();
+    expect(ids()).toEqual(['departures', 'closure:ilica', 'event:b', 'road:savska', 'opennow:pekara', 'opening:harmica', 'always:story:trg']);
+    expect(byId('opening:harmica')).toBe(node);
+    expect(records).toEqual([{ added: ['li[opennow:pekara]'], removed: [] }]);
+    for (let s = 1; s <= 70; s++) {
+      t.update(rows(), 2200, NOW + 40_000 + s * 1000);
+      expect(byId('opening:harmica'), `${s} s`).toBe(node);
+    }
+  });
+
+  it('taktCandidates: the line, a stray departure, the notice, first, last and the first timeless row reserved, imminence at 30 minutes, the next departures only when they are at least the cells', () => {
+    const rows: TimelineRow[] = [
+      dep(1, { atMs: NOW + 2 * MIN }), dep(2, { atMs: NOW + 5 * MIN }),
+      row({ id: 'notice:zet:1', kind: 'notice', atMs: NOW - 3 * H, title: 'Linija 6 ne vozi', source: 'zet' }),
+      dep(3, { atMs: NOW + 8 * MIN }),
+      row({ id: 'first:2026-09-23', kind: 'first', atMs: NOW + 11 * H, title: 'Prvi tramvaj', source: 'zet-gtfs' }),
+      row({ id: 'last:2026-09-22', kind: 'last', atMs: NOW + 6 * H, title: 'Zadnji tramvaji', source: 'zet-gtfs' }),
+      row({ id: 'event:on', kind: 'event', atMs: NOW + 30 * MIN, title: 'Koncert', source: 'dogadanja' }),
+      row({ id: 'event:off', kind: 'event', atMs: NOW + 30 * MIN + 1, title: 'Koncert', source: 'dogadanja' }),
+      row({ id: 'closure:ilica', kind: 'closure', atMs: NOW + 4 * H, title: 'Ilica', source: 'prometnice' }),
+      always({ id: 'always:one', title: 'Zakladni blok', sub: '' }),
+      always({ id: 'always:two', title: 'Trg', sub: '' }),
+    ];
+    const wall = groupDepartures(rows);
+    expect(wall.map((r) => r.id)).toEqual(['departures', 'notice:zet:1', 'dep:3', 'first:2026-09-23', 'last:2026-09-22', 'event:on', 'event:off', 'closure:ilica', 'always:one', 'always:two']);
+    const candidates = taktCandidates(wall, nextTrams(), NOW);
+    const by = (id: string) => candidates.find((c) => c.id === id)!;
+    for (const id of ['departures', 'dep:3', 'notice:zet:1', 'first:2026-09-23', 'last:2026-09-22', 'always:one']) expect(by(id).reserved, id).toBe(true);
+    for (const id of ['always:two', 'event:on', 'event:off', 'closure:ilica']) expect(by(id).reserved, id).toBe(false);
+    expect(by('departures')).toMatchObject({ kind: 'departures', atMs: NOW + 2 * MIN, imminent: true });
+    expect(by('event:on').imminent).toBe(true);
+    expect(by('event:off').imminent).toBe(false);
+    expect(by('closure:ilica')).toMatchObject({ untilMs: NOW + 4 * H, imminent: false });
+    expect(by('always:two')).toMatchObject({ imminent: false });
+    expect(by('always:two').atMs).toBeUndefined();
+    // The next departures, in order, never reserved; only where they are at least as many as the line's cells.
+    expect(candidates.slice(-3)).toEqual([
+      { id: 'dep:4', kind: 'next-departures', atMs: NOW + 12 * MIN, reserved: false, imminent: false },
+      { id: 'dep:5', kind: 'next-departures', atMs: NOW + 15 * MIN, reserved: false, imminent: false },
+      { id: 'dep:6', kind: 'next-departures', atMs: NOW + 18 * MIN, reserved: false, imminent: false },
+    ]);
+    expect(taktCandidates(wall, nextTrams().slice(0, 1), NOW).some((c) => c.kind === 'next-departures')).toBe(false);
+    expect(taktCandidates(wall, [], NOW).some((c) => c.kind === 'next-departures')).toBe(false);
+    expect(taktCandidates(groupDepartures(rows.slice(2)), nextTrams(), NOW).some((c) => c.kind === 'next-departures')).toBe(true);
+    expect(taktCandidates(rows.filter((r) => r.kind !== 'departure'), nextTrams(), NOW).some((c) => c.kind === 'next-departures')).toBe(false);
   });
 });

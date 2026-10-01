@@ -24,7 +24,17 @@
 // would show something false. The mutation budget counts structure: an idle
 // update writes nothing, an idle minute at most two childList records (one
 // row leaving, one entering); the text of a <time> that counts down is
-// content and changes as often as it is true.
+// content and changes as often as it is true. On a beat that carries a
+// reveal (R2, shared/kiosk/takt.ts; the view the controller passes to
+// update) the list swaps at most two rows for two it had no room for (four
+// records: two leaving, two entering at their time positions), or the line
+// shows the next three departures in its cells in place under "zatim" (the
+// atomic replacement, one record); on the next beat the rows and cells return
+// the same way, on the very nodes that left (kept aside for the beat, so no
+// staying row is ever re-created), and only a reveal's rows slide in (the
+// fade with a rise of one row, data-slide); a reduced wall cuts. The beat's
+// budget is six records (e2e/wall.ts REVEAL_MUTATIONS_MAX), the idle
+// minute's two hold everywhere else.
 //
 // Whole rows, whole words: nothing on the wall is cut with an ellipsis or
 // clipped (principles 4 and 5). Titles and subs wrap; a row takes the height
@@ -64,7 +74,7 @@ import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, rowBudget, type NearbyKin
 import { candidateValue, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
-import { reconcile } from '../ui/dom/reconcile';
+import { morph, reconcile } from '../ui/dom/reconcile';
 import { kindOfRoute } from './exceptions';
 import { clock, dayKey, dayMonth } from './format';
 import { kBadge } from './markup';
@@ -112,6 +122,8 @@ export interface TimelineMeasure {
   box(list: HTMLElement): { height: number; width: number; overflow: boolean };
   /** How many lines an element's text takes; 0 before layout or when it is empty. */
   lines(el: HTMLElement): number;
+  /** A row's laid-out height in CSS px (the advance's line against the painted line, R2); the DOM's offsetHeight. */
+  height?(li: HTMLElement): number;
 }
 
 export interface TimelineDeps {
@@ -132,10 +144,19 @@ export interface TimelineDeps {
   measure?: TimelineMeasure;
 }
 
+/** What the beat scheduler decided for this paint (R2): the reveal on, and the rows an advance draws in the line. */
+export interface TimelineView {
+  /** The beat's reveal (takt), or null when none is on. */
+  reveal: TaktReveal | null;
+  /** The rows an advance draws in the line (nextDepartures, seam (d)); [] otherwise. */
+  next: readonly TimelineRow[];
+}
+
 export interface TimelineHandle {
   element: HTMLElement;
-  /** Draws `rows` (selectNearby's order) under the head for the measured circle, timed against `now`. */
-  update(rows: readonly TimelineRow[], radiusM: number, now: number): void;
+  /** Draws `rows` (selectNearby's order) under the head for the measured circle, timed against `now`; `view` (R2) is
+   *  the beat's reveal to draw over them, none when absent. */
+  update(rows: readonly TimelineRow[], radiusM: number, now: number, view?: TimelineView): void;
   /** The list box's height in design px (the zoom divided out); 0 before layout. */
   measureHeight(): number;
   /** How many rows the last update drew. */
@@ -166,9 +187,12 @@ export const NOTICE_TITLE_MAX_LINES = 2;
 const titleMaxLines = (row: NearbyRow): number => (row.kind === 'notice' ? NOTICE_TITLE_MAX_LINES : TITLE_MAX_LINES);
 /** A notice's sub is a closure's rule: one line or none, so the wall shows the title and the phone and the touch detail the summary. */
 const subMaxLines = (row: NearbyRow): number => (row.kind === 'closure' || row.kind === 'notice' ? CLOSURE_SUB_MAX_LINES : SUB_MAX_LINES);
-/** The entrance fade (kiosk-city.css k-nearby-in) and the moment data-enter is cleared if no animationend came. */
+/** The entrance fade (kiosk-city.css k-nearby-in) and the moment data-enter is cleared if no animationend came. A row
+ *  entering at a reveal's edge (R2) slides too (data-slide, kiosk-city.css k-nearby-slide) under the same ENTER_MS. */
 export const ENTER_MS = 220;
 export const ENTER_CLEAR_MS = 260;
+/** The key of the advanced line's "zatim" label (R2); never a row or a cell, so no probe counts it. */
+export const THEN_KEY = 'then';
 /**
  * A discretionary row the measured fit dropped comes back only after the list has fitted with it for this long
  * without a break. A list at the edge of its box (D5.16 observer: seven candidates in 483 px, the seventh fitting
@@ -501,8 +525,12 @@ export function departureCellMarkup(row: TimelineRow, index: number, now: number
   return `<span ${attrs}>${badge}<time class="nearby-when" datetime="${iso}">${e(cellTime(row, now, i18n, short))}</time><span class="k-dep-headsign">${e(headsign)}</span></span>`;
 }
 
-/** The departures line: one li of up to three cells in the rows' order; no cell drawn, no line. */
-export function departuresLineMarkup(line: DeparturesLine, now: number, i18n: I18n, short?: ShortLabels): string {
+/** The advance drawn on the line (R2): the beat it belongs to, written as data-reveal="advance:<beat>". */
+export interface LineAdvance { beat: number }
+
+/** The departures line: one li of up to three cells in the rows' order; no cell drawn, no line. Advanced (R2), the li
+ *  carries data-reveal="advance:<beat>" and the "zatim" label (kiosk.nearby.zatim) as its first child, before cell 1. */
+export function departuresLineMarkup(line: DeparturesLine, now: number, i18n: I18n, short?: ShortLabels, advance?: LineAdvance): string {
   const cells: string[] = [];
   const drawn: NearbyRow[] = [];
   for (const row of line.cells) {
@@ -522,13 +550,15 @@ export function departuresLineMarkup(line: DeparturesLine, now: number, i18n: I1
     `data-when="${new Date(first.atMs!).toISOString()}"`,
     drawn.some((row) => row.live) ? 'data-live="1"' : '',
     `data-source="${a(first.source)}"`,
+    advance ? `data-reveal="advance:${advance.beat}"` : '',
   ].filter(Boolean).join(' ');
-  return `<li ${attrs}>${cells.join('')}</li>`;
+  const then = advance ? `<span class="k-dep-then" data-key="${THEN_KEY}">${e(i18n.t('kiosk.nearby.zatim'))}</span>` : '';
+  return `<li ${attrs}>${then}${cells.join('')}</li>`;
 }
 
 /** One row's markup: time cell (the time, the day word under it), the spine mark, title and sub (always present, empty when there is none). */
-export function rowMarkup(row: WallRow, now: number, i18n: I18n, short?: ShortLabels): string {
-  if (isDeparturesLine(row)) return departuresLineMarkup(row, now, i18n, short);
+export function rowMarkup(row: WallRow, now: number, i18n: I18n, short?: ShortLabels, advance?: LineAdvance): string {
+  if (isDeparturesLine(row)) return departuresLineMarkup(row, now, i18n, short, advance);
   if (!vettedTimelineRow(row)) return '';
   const timeless = isTimeless(row);
   const text = e(timeLabel(row, now, i18n));
@@ -553,8 +583,8 @@ export function rowMarkup(row: WallRow, now: number, i18n: I18n, short?: ShortLa
 }
 
 /** The rows' markup in order; the phone (WP4) can draw the same list with its own sheet. */
-export function rowsMarkup(rows: readonly WallRow[], now: number, i18n: I18n, short?: ReadonlyMap<string, ShortLabels>): string {
-  return rows.map((row) => rowMarkup(row, now, i18n, short?.get(row.id))).join('');
+export function rowsMarkup(rows: readonly WallRow[], now: number, i18n: I18n, short?: ReadonlyMap<string, ShortLabels>, advance?: LineAdvance): string {
+  return rows.map((row) => rowMarkup(row, now, i18n, short?.get(row.id), advance)).join('');
 }
 
 /** How a row's type grows with its height: 1 up to GROW_FROM_PX, 1 + TYPE_GROWTH at 92 px. */
@@ -580,6 +610,9 @@ export const DOM_MEASURE: TimelineMeasure = {
     return { height: list.clientHeight, width: list.clientWidth,
       overflow: (!sideways && list.scrollHeight > list.clientHeight + 1) || list.scrollWidth > list.clientWidth + 1 };
   },
+  height(li) {
+    return li.offsetHeight;
+  },
   lines(el) {
     // A block clamped by CSS (the notice title, -webkit-line-clamp) reports its whole text in scrollHeight while its
     // offsetHeight stops at the clamp; an inline span reports 0 there and keeps offsetHeight.
@@ -600,6 +633,15 @@ function fitSignature(rows: readonly WallRow[], now: number, i18n: I18n, rowPx: 
   return `${parts.join('\u0002')}|${rowPx}|${typography}|${box.height}|${box.width}`;
 }
 
+/** A reveal as the list drew it (R2): its kind and beat, the rows it took off the wall and the ones it put on. */
+interface DrawnReveal { kind: RevealKind; beat: number; replaced: readonly string[]; revealed: readonly string[] }
+type RevealKind = TaktReveal['kind'];
+/** What paint needs of a reveal: the advance to write on the line, and which leaving rows and cells to keep aside. */
+interface PaintReveal { advance?: LineAdvance; park: ReadonlySet<string>; parkCells: boolean }
+const NO_REVEAL: PaintReveal = { park: new Set(), parkCells: false };
+/** The most rows and cells kept aside at once: a page turn's two rows and their two, the line's three cells. */
+const PARKED_MAX = 8;
+
 export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHandle {
   const { i18n } = deps;
   const measure = deps.measure ?? DOM_MEASURE;
@@ -614,14 +656,23 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let headText: string | null = null;
   let painted = false;
   let count = 0;
-  let last: [readonly TimelineRow[], number, number] | null = null;
+  let last: [readonly TimelineRow[], number, number, TimelineView | undefined] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
   let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
   /** Discretionary rows the fit dropped, with the moment they have fitted again without a break since (null while they do not). */
   const heldOut = new Map<string, number | null>();
+  /** The reveal drawn over the fit (R2): for which beat and fit, the rows it displays and their labels, and what it swapped. */
+  let overlay: { key: string; display: WallRow[]; short: ReadonlyMap<string, ShortLabels>; drawn: DrawnReveal | null } | null = null;
+  /** The reveal the previous update drew, so its return can slide and rise. */
+  let lastDrawn: DrawnReveal | null = null;
+  /** Rows and cells a reveal took off the wall, by key, kept for the beat so they return on their own node (R2). */
+  const parked = new Map<string, Element>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
-  const clearEnter = (li: Element): void => { if (li.hasAttribute('data-enter')) li.removeAttribute('data-enter'); };
+  const clearEnter = (li: Element): void => {
+    if (li.hasAttribute('data-enter')) li.removeAttribute('data-enter');
+    if (li.hasAttribute('data-slide')) li.removeAttribute('data-slide');
+  };
   const onAnimationEnd = (event: Event): void => {
     // A row, or a cell of the departures line (a new departure fades in its cell, the line stays).
     const el = event.target instanceof Element ? event.target.closest('.k-dep-cell, .nearby-row') : null;
@@ -648,19 +699,24 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
    * a row that enters is then inserted once, at its time position, and stays
    * there. One childList record per changed row is the whole budget.
    */
-  function paint(shown: readonly WallRow[], short: ReadonlyMap<string, ShortLabels>, now: number): void {
+  function paint(shown: readonly WallRow[], short: ReadonlyMap<string, ShortLabels>, now: number, reveal: PaintReveal = NO_REVEAL): void {
     const next = document.createElement('ol');
-    next.innerHTML = rowsMarkup(shown, now, i18n, short);
+    next.innerHTML = rowsMarkup(shown, now, i18n, short, reveal.advance);
     const live = new Map<string, Element>();
     for (const li of list.children) live.set(li.getAttribute('data-key') ?? '', li);
     const wanted = new Map<string, Element>();
     for (const li of next.children) {
       const key = li.getAttribute('data-key') ?? '';
       wanted.set(key, li);
-      // A row still fading in keeps its data-enter, or the morph would cut the fade short.
-      if (live.get(key)?.hasAttribute('data-enter')) li.setAttribute('data-enter', '1');
+      // A row still fading in keeps its data-enter (and its slide), or the morph would cut the fade short.
+      if (live.get(key)?.hasAttribute('data-enter')) {
+        li.setAttribute('data-enter', '1');
+        if (live.get(key)!.hasAttribute('data-slide')) li.setAttribute('data-slide', '1');
+      }
     }
-    for (const [key, li] of live) if (!wanted.has(key)) li.remove();
+    // A row a reveal takes off the wall is kept aside (R2) and comes back on its own node at the reveal's edge.
+    for (const [key, li] of live) if (!wanted.has(key)) { if (reveal.park.has(key)) parked.set(key, li); li.remove(); }
+    restoreParked(list, [...wanted.keys()]);
     // A single departing cell uses the keyed path. Multiple departures use the approved atomic batch below.
     const liveLine = live.get(DEPARTURES_LINE_ID);
     const nextLine = wanted.get(DEPARTURES_LINE_ID);
@@ -674,31 +730,61 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         if (liveCells.get(key)?.hasAttribute('data-enter')) cell.setAttribute('data-enter', '1');
       }
       const departing = [...liveCells].filter(([key]) => !nextCells.has(key));
-      if (departing.length > 1) {
+      const park = (key: string, cell: Element): void => { if (reveal.parkCells) parked.set(key, cell); };
+      if (departing.filter(([key]) => key !== THEN_KEY).length > 1) {
         // At most one of three cells survives. Keep that exact object and trip identity; never recycle a departed
         // cell as another trip. Native replaceChildren batches the change, while a single turnover stays unchanged.
+        // A cell an advance took off the line (R2) returns on its own node, morphed to its words of now.
+        for (const [key, cell] of departing) park(key, cell);
         const replacement = [...nextLine.children].map((cell) => {
-          const survivor = liveCells.get(cell.getAttribute('data-key') ?? '');
-          if (!survivor) return cell.cloneNode(true);
+          const key = cell.getAttribute('data-key') ?? '';
+          const survivor = liveCells.get(key);
+          if (!survivor) {
+            const kept = parked.get(key);
+            if (!kept) return cell.cloneNode(true);
+            parked.delete(key);
+            return morph(kept, cell.cloneNode(true) as Element);
+          }
           survivor.removeAttribute('data-enter');
           cell.removeAttribute('data-enter');
           return survivor;
         });
         liveLine.replaceChildren(...replacement);
       } else {
-        for (const [, cell] of departing) cell.remove();
+        for (const [key, cell] of departing) { park(key, cell); cell.remove(); }
+        restoreParked(liveLine, [...nextCells]);
       }
     }
     reconcile(list, next);
   }
 
+  /** Puts the parked nodes among `wantedKeys` back at their positions, before reconcile meets them, so no node moves. */
+  function restoreParked(parent: Element, wantedKeys: readonly string[]): void {
+    if (parked.size === 0) return;
+    const childByKey = (key: string): Element | null => {
+      for (const child of parent.children) if (child.getAttribute('data-key') === key) return child;
+      return null;
+    };
+    for (let i = 0; i < wantedKeys.length; i++) {
+      const key = wantedKeys[i]!;
+      const node = parked.get(key);
+      if (!node || childByKey(key)) continue;
+      parked.delete(key);
+      let before: Element | null = null;
+      for (let j = i + 1; j < wantedKeys.length && !before; j++) before = childByKey(wantedKeys[j]!);
+      parent.insertBefore(node, before);
+    }
+  }
+
   /** Shortens the labels that run long, then the rest while the rows overflow, then drops whole rows until they fit. */
   /** Fits `candidates` (the estimate's, fitRows) into the box; `pool` is the whole vetted list they were taken from, in
    *  list order, whose other rows are tried where the measured rows leave room. */
-  function fit(candidates: readonly WallRow[], pool: readonly WallRow[], now: number, box: { height: number; width: number }): { shown: WallRow[]; short: Map<string, ShortLabels>; overflow: boolean } {
-    // A detached tree has no layout. This hidden sibling inherits the same
-    // kiosk/aside styles and variables but is outside the live timeline. Give
-    // its list exactly the live content box, then dispose of it before paint.
+  /**
+   * A detached tree has no layout. This hidden sibling inherits the same kiosk/aside styles and variables but is
+   * outside the live timeline. Its list gets exactly the live content box; `fn` measures in it, and it is disposed
+   * of before any paint. The fit and the reveal overlay (R2) measure here.
+   */
+  function withMeasuringList<T>(box: { height: number; width: number }, fn: (list: HTMLOListElement) => T): T {
     const measuring = element.cloneNode(false) as HTMLElement;
     measuring.removeAttribute('data-testid');
     measuring.removeAttribute('aria-labelledby');
@@ -713,10 +799,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     measuring.appendChild(measuringList);
     element.parentElement!.appendChild(measuring);
     try {
-      return fitIn(measuringList);
+      return fn(measuringList);
     } finally {
       measuring.remove();
     }
+  }
+
+  function fit(candidates: readonly WallRow[], pool: readonly WallRow[], now: number, box: { height: number; width: number }): { shown: WallRow[]; short: Map<string, ShortLabels>; overflow: boolean } {
+    return withMeasuringList(box, fitIn);
 
     function fitIn(list: HTMLOListElement): { shown: WallRow[]; short: Map<string, ShortLabels>; overflow: boolean } {
       let shown = [...candidates];
@@ -869,10 +959,122 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     }
   }
 
+  /** The label rule of the fit's first pass for one revealed row drawn in `list`: short where the full label runs long. */
+  function shortenRevealed(list: HTMLOListElement, row: NearbyRow, short: Map<string, ShortLabels>): boolean {
+    const li = [...list.children].find((el) => el.getAttribute('data-key') === row.id);
+    if (!li) return false;
+    const title = li.querySelector<HTMLElement>('.nearby-title');
+    const sub = li.querySelector<HTMLElement>('.nearby-sub');
+    let changed = false;
+    if (title && measure.lines(title) > titleMaxLines(row) && row.titleShort !== undefined && row.titleShort !== row.title) {
+      short.set(row.id, { ...short.get(row.id), title: true });
+      changed = true;
+    }
+    if (sub && measure.lines(sub) > subMaxLines(row)) {
+      if (row.subShort !== undefined && row.subShort !== row.sub) { short.set(row.id, { ...short.get(row.id), sub: true }); changed = true; }
+      else if (row.kind === 'closure' || row.kind === 'notice') { short.set(row.id, { ...short.get(row.id), subOff: true }); changed = true; }
+    }
+    return changed;
+  }
+
+  /**
+   * A page turn over the painted rows (R2.md §0.5 item 14): the painted rows among `replaces` leave and the unpainted
+   * rows among `ids` enter, pairwise, as many as the box holds whole (measured in the hidden clone, the most first).
+   * Null when none fits: the list paints the fit alone.
+   */
+  function pageOverlay(reveal: TaktReveal, shown: readonly WallRow[], wall: readonly WallRow[], now: number, box: { height: number; width: number }, base: ReadonlyMap<string, ShortLabels>, prior: DrawnReveal | null): { display: WallRow[]; short: Map<string, ShortLabels>; drawn: DrawnReveal } | null {
+    const shownIds = new Set(shown.map((row) => row.id));
+    const out = reveal.replaces.map((id) => shown.find((row) => row.id === id)).filter((row): row is WallRow => row !== undefined);
+    const inn = reveal.ids.map((id) => wall.find((row) => row.id === id && !shownIds.has(id))).filter((row): row is NearbyRow => row !== undefined && !isDeparturesLine(row));
+    // A beat's overlay keeps its rows for the whole beat (one region moves once): where the fit changed under it (a
+    // label, a departure, a box that grew so it keeps a revealed row itself), the same rows are drawn as long as they
+    // still fit whole, and only when they do not is the overlay found again.
+    if (prior) {
+      const leaving = new Set(prior.replaced.filter((id) => shownIds.has(id)));
+      const entering = new Set(prior.revealed.filter((id) => wall.some((row) => row.id === id)));
+      const display = wall.filter((row) => (shownIds.has(row.id) && !leaving.has(row.id)) || entering.has(row.id));
+      const kept = withMeasuringList(box, (list) => {
+        const short = new Map<string, ShortLabels>([...base].filter(([id]) => !entering.has(id) || shownIds.has(id)));
+        list.innerHTML = rowsMarkup(display, now, i18n, short);
+        let changed = false;
+        for (const row of wall) if (entering.has(row.id) && !shownIds.has(row.id) && !isDeparturesLine(row)) changed = shortenRevealed(list, row, short) || changed;
+        if (changed) list.innerHTML = rowsMarkup(display, now, i18n, short);
+        return measure.box(list).overflow ? null : { display, short, drawn: prior };
+      });
+      if (kept) return kept;
+    }
+    if (out.length === 0 || inn.length === 0) return null;
+    return withMeasuringList(box, (list) => {
+      // The revealed rows in their order, each kept only while the list still holds every row whole (a tall one is
+      // passed over, the next tried); each takes one replaced row, in `replaces` order.
+      const chosen: NearbyRow[] = [];
+      let display: WallRow[] = [...shown];
+      let short = new Map<string, ShortLabels>(base);
+      for (const row of inn) {
+        if (chosen.length >= out.length) break;
+        const entering = [...chosen, row];
+        const enteringIds = new Set(entering.map((r) => r.id));
+        const leaving = new Set(out.slice(0, entering.length).map((r) => r.id));
+        const tryDisplay = wall.filter((r) => (shownIds.has(r.id) && !leaving.has(r.id)) || enteringIds.has(r.id));
+        const tryShort = new Map<string, ShortLabels>([...short].filter(([id]) => id !== row.id));
+        list.innerHTML = rowsMarkup(tryDisplay, now, i18n, tryShort);
+        if (shortenRevealed(list, row, tryShort)) list.innerHTML = rowsMarkup(tryDisplay, now, i18n, tryShort);
+        if (measure.box(list).overflow) continue;
+        chosen.push(row);
+        display = tryDisplay;
+        short = tryShort;
+      }
+      if (chosen.length === 0) return null;
+      return { display, short, drawn: { kind: 'page', beat: reveal.beat, replaced: out.slice(0, chosen.length).map((r) => r.id), revealed: chosen.map((r) => r.id) } };
+    });
+  }
+
+  /**
+   * The advance (R2.md step 4d): the line's cells become the next departures under "zatim", drawn only where the
+   * advanced line is no taller than the painted one (its destinations leave from the last cell back, R1's rule) and
+   * the list still fits whole. Null otherwise: the line stays as painted this beat.
+   */
+  function advanceOverlay(reveal: TaktReveal, shown: readonly WallRow[], next: readonly TimelineRow[], now: number, box: { height: number; width: number }, base: ReadonlyMap<string, ShortLabels>): { display: WallRow[]; short: Map<string, ShortLabels>; drawn: DrawnReveal } | null {
+    const line = shown.find(isDeparturesLine);
+    const cells = next.filter(vettedTimelineRow).slice(0, MAX_DEPARTURES);
+    if (!line || cells.length < line.cells.length || cells.length === 0 || cells[0]!.atMs === null) return null;
+    const advanced: DeparturesLine = { kind: 'departures', id: DEPARTURES_LINE_ID, cells, atMs: cells[0]!.atMs!, always: false, live: cells.some((row) => row.live) };
+    const display = shown.map((row) => (row === line ? advanced : row));
+    const advance: LineAdvance = { beat: reveal.beat };
+    return withMeasuringList(box, (list) => {
+      const lineOf = (): HTMLElement | undefined => [...list.children].find((el) => el.getAttribute('data-key') === DEPARTURES_LINE_ID) as HTMLElement | undefined;
+      list.innerHTML = rowsMarkup(shown, now, i18n, base);
+      const rowPx = (li: HTMLElement): number => (measure.height ? measure.height(li) : 0);
+      const painted = lineOf();
+      const paintedPx = painted ? rowPx(painted) : 0;
+      const short = new Map<string, ShortLabels>(base);
+      const was = base.get(DEPARTURES_LINE_ID) ?? {};
+      const steps: (ShortLabels['headsigns'] | undefined)[] = was.headsigns === 'none' ? ['none'] : was.headsigns === 'first' ? ['first', 'none'] : [undefined, 'first', 'none'];
+      const long = (cell: Element): boolean => {
+        const head = cell.querySelector<HTMLElement>('.k-dep-headsign');
+        return Boolean(head && (head.textContent ?? '') !== '' && (measure.lines(head) > 1 || measure.box(head).overflow));
+      };
+      for (const headsigns of steps) {
+        short.set(DEPARTURES_LINE_ID, { ...was, ...(headsigns ? { headsigns } : {}), probe: false });
+        if (!headsigns) short.set(DEPARTURES_LINE_ID, { ...was, probe: false });
+        list.innerHTML = rowsMarkup(display, now, i18n, short, advance);
+        const li = lineOf();
+        if (!li) return null;
+        // R1's rule on the next cells first: a destination that runs long leaves (cells 2 and 3's, then every cell's).
+        const cellEls = [...li.querySelectorAll<HTMLElement>('.k-dep-cell')];
+        if (cellEls.some(long) && headsigns !== 'none') continue;
+        if (paintedPx > 0 && rowPx(li) > paintedPx) continue;
+        if (measure.box(list).overflow) continue;
+        return { display, short, drawn: { kind: 'advance', beat: reveal.beat, replaced: line.cells.map((row) => row.id), revealed: cells.map((row) => row.id) } };
+      }
+      return null;
+    });
+  }
+
   const handle: TimelineHandle = {
     element,
-    update(rows, radiusM, now) {
-      last = [rows, radiusM, now];
+    update(rows, radiusM, now, view) {
+      last = [rows, radiusM, now, view];
       const inputCount = rows.length;
       rows = rows.filter(vettedTimelineRow);
       const skippedText = String(inputCount - rows.length);
@@ -904,6 +1106,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         if (key === DEPARTURES_LINE_ID) for (const cell of li.children) beforeCells.add(cell.getAttribute('data-key') ?? '');
       }
       let shown: WallRow[] = candidates;
+      /** The reveal drawn this update (R2), none on a handheld or without a view. */
+      let drawn: DrawnReveal | null = null;
       if (unbounded) {
         rowVars(budget.rowPx);
         paint(shown, new Map(), now);
@@ -950,8 +1154,14 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         // candidates is forgotten.
         const fits = new Set(shown.map((row) => row.id));
         const holdable = (row: WallRow): boolean => row.kind !== 'departure' && row.kind !== 'departures' && row.kind !== 'first' && row.kind !== 'last' && !isTimeless(row);
+        // R2, the rise: at a page turn's end a revealed row the fit now keeps leaves the hold at once (it has stood on
+        // the wall for a whole beat, so it stays instead of leaving and coming back after a minute); while revealed,
+        // its hold is frozen, so the overlay is the same for the whole beat.
+        const pageOn = view?.reveal?.kind === 'page' ? view.reveal : null;
+        if (lastDrawn?.kind === 'page' && !(pageOn && pageOn.beat === lastDrawn.beat)) for (const id of lastDrawn.revealed) if (fits.has(id)) heldOut.delete(id);
+        const revealed = new Set(pageOn?.ids ?? []);
         for (const row of candidates) {
-          if (!holdable(row)) continue;
+          if (!holdable(row) || (revealed.has(row.id) && heldOut.has(row.id))) continue;
           if (!fits.has(row.id)) { heldOut.set(row.id, null); continue; }
           if (!heldOut.has(row.id)) continue;
           const since = heldOut.get(row.id) ?? now;
@@ -961,16 +1171,54 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         const present = new Set(candidates.map((row) => row.id));
         for (const id of [...heldOut.keys()]) if (!present.has(id)) heldOut.delete(id);
         shown = shown.filter((row) => !heldOut.has(row.id));
+        // R2: the beat's reveal over the fit, measured once per beat and fit (the overlay memo); the DOM says what was
+        // drawn (data-reveal), the scheduler's history what was decided.
+        let display: readonly WallRow[] = shown;
+        let displayShort: ReadonlyMap<string, ShortLabels> = memo.short;
+        const reveal = view?.reveal ?? null;
+        if (reveal) {
+          const key = `${reveal.kind}:${reveal.beat}|${memo.sig}|${shown.map((row) => row.id).join('\u0002')}|${(view?.next ?? []).map((row) => row.id).join('\u0002')}`;
+          if (!overlay || overlay.key !== key) {
+            const prior = overlay?.drawn && overlay.drawn.kind === reveal.kind && overlay.drawn.beat === reveal.beat ? overlay.drawn : null;
+            const result = reveal.kind === 'page'
+              ? pageOverlay(reveal, shown, wall, now, box, memo.short, prior)
+              : advanceOverlay(reveal, shown, view?.next ?? [], now, box, memo.short);
+            overlay = { key, display: result?.display ?? [...shown], short: result?.short ?? memo.short, drawn: result?.drawn ?? null };
+          }
+          display = overlay.display;
+          displayShort = overlay.short;
+          drawn = overlay.drawn;
+        } else {
+          overlay = null;
+        }
+        const pageMark = drawn?.kind === 'page' ? `page:${drawn.beat}` : undefined;
+        if (list.dataset.reveal !== pageMark) { if (pageMark === undefined) delete list.dataset.reveal; else list.dataset.reveal = pageMark; }
+        // What leaves at a reveal's edge is kept for its return: a page turn's replaced rows at its start, its revealed
+        // rows at its end; the line's cells across an advance's start and end.
+        const park = new Set<string>();
+        if (drawn?.kind === 'page') for (const id of drawn.replaced) park.add(id);
+        if (lastDrawn?.kind === 'page' && !(drawn?.kind === 'page' && drawn.beat === lastDrawn.beat)) for (const id of lastDrawn.revealed) park.add(id);
+        const parkCells = drawn?.kind === 'advance' || lastDrawn?.kind === 'advance';
         // The only live-list commit. No rejected row ever enters this tree.
-        paint(shown, memo.short, now);
+        paint(display, displayShort, now, { ...(drawn?.kind === 'advance' ? { advance: { beat: drawn.beat } } : {}), park, parkCells });
+        // Kept-aside nodes outlive one reveal only where their row may return: a replaced row the fit dropped meanwhile
+        // is let go at the return, and nothing is kept for a row the wall no longer offers.
+        if (lastDrawn?.kind === 'page' && !(drawn?.kind === 'page' && drawn.beat === lastDrawn.beat)) for (const id of lastDrawn.replaced) parked.delete(id);
+        const offered = new Set<string>([...wall.map((row) => row.id), ...wall.flatMap((row) => (isDeparturesLine(row) ? row.cells.map((cell) => cell.id) : [])), ...(view?.next ?? []).map((row) => row.id)]);
+        for (const id of [...parked.keys()]) if (!offered.has(id)) parked.delete(id);
+        while (parked.size > PARKED_MAX) parked.delete(parked.keys().next().value!);
       }
 
       if (painted && !deps.reduced) {
         const entered: Element[] = [];
+        // A row entering at a page turn's edge slides (R2): one revealed at its start, one replaced at its return.
+        const slides = new Set<string>(drawn?.kind === 'page' ? drawn.revealed : []);
+        if (lastDrawn?.kind === 'page' && !(drawn?.kind === 'page' && drawn.beat === lastDrawn.beat)) for (const id of lastDrawn.replaced) slides.add(id);
         for (const li of list.children) {
           const key = li.getAttribute('data-key') ?? '';
           if (!before.has(key)) {
             li.setAttribute('data-enter', '1');
+            if (slides.has(key)) li.setAttribute('data-slide', '1');
             entered.push(li);
           } else if (key === DEPARTURES_LINE_ID) {
             // A line that was there: a new departure fades in its own cell, and the line never fades.
@@ -990,6 +1238,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         }
       }
       painted = true;
+      lastDrawn = drawn;
       count = shown.length;
       const skippedFit = String(wall.length - count);
       if (element.dataset.skippedFit !== skippedFit) element.dataset.skippedFit = skippedFit;
@@ -1026,6 +1275,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   // the residual handed to the reconnect pill's layout.
   const refit = (): void => {
     memo = memo && { ...memo, sig: '' };
+    overlay = null;
     if (last) handle.update(...last);
   };
   const resize = typeof ResizeObserver === 'function'
