@@ -15,6 +15,8 @@ import type { ScreenMetadata } from '../../worker/protocol';
 import type { ArrivalRow } from '../../shared/city/arrivals';
 import { emptyCity, type DepartureBoard, type ScheduledDeparture } from '../../shared/city/types';
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
+import * as scheduler from '../../shared/kiosk/takt';
+import * as sentenceRuntime from '../../app/src/city/sentence';
 import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
 import type { ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -294,7 +296,7 @@ const theme: ThemeController = {
   onChange: (listener) => { listener({ preference: 'solar', resolved: 'light' }); return () => {}; }, destroy: () => {},
 };
 
-function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata } = {}) {
+function mount(opts: { viewport?: { width: number; height: number }; modules?: () => ModuleSnapshot[]; mapMode?: KioskDeps['mapMode']; lightweight?: boolean; camera?: () => { center: [number, number]; zoom: number } | null; screen?: ScreenMetadata; boards?: Record<string, DepartureBoard> } = {}) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const raw: Record<string, string> = { [BEACON_STORAGE_KEY]: JSON.stringify({ beaconId: 'BEACON01', secret: 'tajna', screen: opts.screen ?? SCREEN }) };
@@ -303,7 +305,7 @@ function mount(opts: { viewport?: { width: number; height: number }; modules?: (
   let now = NOW;
   let handlers: Parameters<NonNullable<KioskDeps['createBeacon']>>[0] | null = null;
   const map = fakeMap(opts.camera);
-  const boards = fakeBoards(BOARDS);
+  const boards = fakeBoards(opts.boards ?? BOARDS);
   const modules = opts.modules ?? (() => MODULES);
   const handle = mountKiosk(root, {
     cityStore: fakeCityStore(CITY), i18n, hash: '', storage, now: () => now, codeBase: 'https://zagreb.aningfilm.hr',
@@ -797,5 +799,223 @@ describe('the board on the 3-metre tiers (computed from the real sheets)', () =>
     expect(css).toContain('.kiosk .k-touch .sada-departure .line{font-size:inherit;');
     expect(css).toContain('.kiosk .k-touch{--k-touch-read:max(40px,var(--k-main-size));');
     expect(css).toContain('.kiosk .k-nearby-host[data-touch]>[data-testid=nearby]{visibility:hidden}');
+  });
+});
+
+describe('a touch quiets the reveals (R2)', () => {
+  // docs/reveal-2026-10-plan/R2.md step 7: nothing moves while a touch is open. An evening board, six timetable
+  // departures twelve minutes apart, makes an advance eligible on every fourth beat (the first shown departure is
+  // more than ten minutes away and three next departures exist); the line advances within 100 s of ticks, and never
+  // while a row's detail stands over the list.
+  const evening: Record<string, DepartureBoard> = {
+    '106_1': board('106_1', STOP.name, [12, 24, 36, 48, 60, 72].map((m, i) => dep(`late-${i}`, ['6', '11', '14', '17', '13', '12'][i]!, ['Črnomerec', 'Dubec', 'Mihaljevac', 'Prečko', 'Žitnjak', 'Dubrava'][i]!, m))),
+  };
+  const pointer = (el: Element, type: string, x = 0, y = 0): boolean =>
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  const click = (el: Element, x = 0, y = 0): boolean => el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
+  const reveals = (k: ReturnType<typeof mount>): string[] => [k.q('[data-testid=nearby-rows]')?.dataset.reveal, k.q('[data-kind=departures]')?.dataset.reveal].filter((v): v is string => Boolean(v));
+  const run = (k: ReturnType<typeof mount>, seconds: number): string[] => {
+    const seen = new Set<string>();
+    for (let s = 1; s <= seconds; s++) {
+      k.setNow(NOW + s * 1000);
+      k.tick(CODE_TICK_MS);
+      for (const v of reveals(k)) seen.add(v);
+    }
+    return [...seen];
+  };
+
+  const serviceZet = (state: 'silent' | 'reduced'): ModuleSnapshot => ({
+    ...ZET_LIVE,
+    sources: { zet: { status: 'live', itemCount: 1, fetchedAt: iso(NOW), sourceUpdatedAt: iso(NOW),
+      service: { state, since: iso(NOW), observedAt: iso(NOW), expected: 38, seen: state === 'silent' ? 0 : 8,
+        ratio: state === 'silent' ? 0 : 8 / 38, confidence: 1, baseline: 'declared', byMode: { tram: [0, 17], bus: [0, 21] } } } },
+  });
+
+  it.each(['down', 'silent', 'reduced'] as const)('R2 review: the first paint of %s service is already quiet', async state => {
+    let zet = ZET_LIVE;
+    const k = mount({ boards: evening, modules: () => [zet, ...MODULES.slice(1)] });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      zet = state === 'down' ? { ...ZET_LIVE, status: 'down', items: [] } : serviceZet(state);
+      k.setNow(NOW + 80_000); // An advance-eligible beat, before the next tick.
+      k.poll();
+      await flush();
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls.every(args => args[3].quiet)).toBe(true);
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a recovered service does not lose its first eligible beat to the old header flag', async () => {
+    let zet = serviceZet('silent');
+    const k = mount({ boards: evening, modules: () => [zet, ...MODULES.slice(1)] });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      expect(k.q('[data-testid=kiosk]')?.dataset.sentenceLines).toBe('2');
+      zet = ZET_LIVE;
+      k.setNow(NOW + 80_000);
+      k.poll();
+      await flush();
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls[0]![3].quiet).toBe(false);
+      expect(reveals(k).some(v => v.startsWith('advance:'))).toBe(true);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: opening a touch cancels an active reveal on that paint', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    try {
+      let found = false;
+      for (let s = 1; s <= 100 && !found; s++) {
+        k.setNow(NOW + s * 1000);
+        k.tick(CODE_TICK_MS);
+        found = reveals(k).length > 0;
+      }
+      expect(found).toBe(true);
+      k.q('[data-testid=strip-pharmacy]')!.click();
+      expect(k.detail()).not.toBeNull();
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: changing the screen place cancels the old stop advance immediately', async () => {
+    const k = mount({ boards: { ...evening, '107_1': BOARDS['107_1']! } });
+    await flush();
+    try {
+      let found = false;
+      for (let s = 1; s <= 100 && !found; s++) {
+        k.setNow(NOW + s * 1000);
+        k.tick(CODE_TICK_MS);
+        found = reveals(k).length > 0;
+      }
+      expect(found).toBe(true);
+      k.handlers.onContext?.({ ...SCREEN, stop: ZRINJEVAC });
+      expect(reveals(k)).toEqual([]);
+    } finally {
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a page proposal the fitter cannot draw produces no reveal sentence fact', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    const realTakt = scheduler.takt;
+    const eventId = k.q('[data-testid=nearby-rows] > [data-kind=event]')!.dataset.id!;
+    const calls = vi.spyOn(sentenceRuntime, 'sentenceFacts');
+    // The scheduler and measured fit may disagree (R2 §0.5(14)): the proposed incoming row is already painted.
+    const proposal = vi.spyOn(scheduler, 'takt').mockImplementation((candidates, history, at, options) => ({
+      ...realTakt(candidates, history, at, options),
+      reveal: { kind: 'page', ids: [eventId], replaces: [candidates.find(c => c.kind === 'solar')!.id],
+        beat: scheduler.beatIndex(at, options.rhythmMs) },
+    }));
+    try {
+      k.setNow(NOW + 20_000);
+      k.tick(CODE_TICK_MS);
+      expect(proposal).toHaveBeenCalled();
+      expect(reveals(k)).toEqual([]);
+      expect(calls.mock.results.flatMap(result => result.value as sentenceRuntime.SentenceFact[])
+        .some(fact => fact.id.startsWith('reveal:'))).toBe(false);
+    } finally {
+      proposal.mockRestore();
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: an advance dwells for one rhythm and a Ritam change reindexes its gap', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    const calls = vi.spyOn(scheduler, 'takt');
+    try {
+      let start = NOW;
+      for (let s = 1; s <= 100 && reveals(k).length === 0; s++) {
+        start = NOW + s * 1000;
+        k.setNow(start);
+        k.tick(CODE_TICK_MS);
+      }
+      const active = reveals(k);
+      expect(active).toHaveLength(1);
+      k.setNow(start + 19_999);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual(active);
+      k.setNow(start + 20_000);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual([]);
+      k.q('[data-testid=kiosk]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      k.q('[data-testid=toggle-rhythm]')!.click();
+      expect(k.q('[data-testid=kiosk]')?.dataset.rhythm).toBe('30');
+      calls.mockClear();
+      k.setNow(start + 50_000);
+      k.tick(CODE_TICK_MS);
+      expect(calls).toHaveBeenCalled();
+      expect(calls.mock.calls[0]![1].lastReveal?.beat).toBe(scheduler.beatIndex(start, 30_000));
+      expect(calls.mock.calls[0]![3].rhythmMs).toBe(30_000);
+    } finally {
+      calls.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('R2 review: a backwards clock rebases the reveal gap instead of waiting for the old future beat', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    try {
+      expect(run(k, 80).some(v => v.startsWith('advance:'))).toBe(true);
+      const back = NOW - 3_600_000;
+      k.setNow(back);
+      k.tick(CODE_TICK_MS);
+      expect(reveals(k)).toEqual([]);
+      const seen = new Set<string>();
+      for (let s = 1; s <= 120; s++) {
+        k.setNow(back + s * 1000);
+        k.tick(CODE_TICK_MS);
+        for (const v of reveals(k)) seen.add(v);
+      }
+      expect([...seen].some(v => v.startsWith('advance:'))).toBe(true);
+    } finally {
+      k.handle.destroy();
+    }
+  });
+
+  it('without a touch the line advances on a beat within 100 s; with a row\'s detail open nothing is revealed for its 60 s', async () => {
+    const loud = mount({ boards: evening });
+    await flush();
+    expect(loud.q('[data-kind=departures]')).not.toBeNull();
+    const seen = run(loud, 100);
+    expect(seen.some((v) => /^advance:\d+$/.test(v)), seen.join(', ')).toBe(true);
+    expect(loud.q('[data-testid=nearby-rows]')?.dataset.reveal).toBeUndefined();
+    loud.handle.destroy();
+
+    const k = mount({ boards: evening });
+    await flush();
+    const row = k.q<HTMLElement>('[data-testid=nearby-rows] > .nearby-row[data-kind=event]')!;
+    expect(row).not.toBeNull();
+    pointer(row, 'pointerdown', 1500, 500);
+    pointer(row, 'pointerup', 1500, 500);
+    click(row, 1500, 500);
+    expect(k.detail()).not.toBeNull();
+    // For the touch's whole 60 s (TOUCH_MS) no beat reveals anything, on the list or the line.
+    expect(run(k, 59)).toEqual([]);
+    expect(k.detail()).not.toBeNull();
+    // The wall returns by itself after its 60 s: the beats run again, and the advance is back within the next 100 s.
+    const after = new Set<string>();
+    for (let s = 60; s <= 160; s++) {
+      k.setNow(NOW + s * 1000);
+      k.tick(CODE_TICK_MS);
+      for (const v of reveals(k)) after.add(v);
+    }
+    expect([...after].some((v) => /^advance:\d+$/.test(v)), [...after].join(', ')).toBe(true);
+    k.handle.destroy();
   });
 });

@@ -75,6 +75,14 @@
 .kiosk[data-portrait='1'] .k-nearby .k-dep-cell{grid-template-areas:'badge time' 'head head'}
 .kiosk .k-nearby .nearby-row[data-kind='departures']+.nearby-row .k-nearby-mark::before{top:50%}
 .k-nearby .k-dep-cell[data-enter='1']{animation:k-nearby-in 220ms var(--ease-enter) both}
+/* R2: a page turn's rows slide in from one row below under the fade's own 220 ms (ENTER_MS); cells fade in place (above). */
+.k-nearby .nearby-row[data-enter='1'][data-slide='1']{animation:k-nearby-slide 220ms var(--ease-enter) both}
+@keyframes k-nearby-slide{from{opacity:0;transform:translateY(calc(var(--k-nearby-row,64px) * var(--k-zoom,1)))}}
+/* The slide never paints past the list's box (over the QR card), and clips only while it runs. */
+.k-nearby .k-nearby-rows:has(> .nearby-row[data-slide='1']){clip-path:inset(0)}
+/* The advanced line (R2, data-reveal="advance:<beat>"): "zatim" in a column of its own before the three cells, the line's cell gap between. */
+.kiosk .k-nearby .nearby-row[data-kind='departures'][data-reveal]{grid-template-columns:max-content repeat(3,minmax(0,1fr))}
+.kiosk .k-nearby .k-dep-then{font-size:max(28px,var(--k-sup-size));line-height:1.1;color:var(--k-ink-2);white-space:nowrap;align-self:center}
 .kiosk .k-map-canvas{pointer-events:none}
 .kiosk .k-map-canvas .maplibregl-ctrl-group{display:none}
 .kiosk .k-present-board .city-detail{padding:var(--k-pad);font-size:var(--k-hint-size);max-height:100%;overflow:auto}

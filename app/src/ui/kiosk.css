@@ -771,11 +771,13 @@ button.k-strip-verdict { cursor: pointer; }
   .kiosk .k-code[data-swap='1'], .kiosk .k-sentence[data-swap='1'] { animation: none; }
   .kiosk .k-code-ghost { display: none; }
   .kiosk .k-nearby .nearby-row[data-enter='1'], .kiosk .k-nearby .k-dep-cell[data-enter='1'] { animation: none; }
+  .kiosk .k-nearby .nearby-row[data-enter='1'][data-slide='1'] { animation: none; }
 }
 :root[data-lagano='1'] .kiosk * { transition: none !important; }
 :root[data-lagano='1'] .k-code[data-swap='1'], :root[data-lagano='1'] .k-sentence[data-swap='1'] { animation: none; }
 :root[data-lagano='1'] .k-code-ghost { display: none; }
 :root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'], :root[data-lagano='1'] .kiosk .k-nearby .k-dep-cell[data-enter='1'] { animation: none; }
+:root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'][data-slide='1'] { animation: none; }
 
 /* --- Handheld: /kiosk/ opened on a phone --------------------------------------------
    Below core/breakpoints.ts KIOSK_HANDHELD_MAX_PX (kiosk/layout.ts writes

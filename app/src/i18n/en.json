@@ -959,6 +959,7 @@
       "outageNote": "ZET is not sending vehicle positions right now; departures are from the timetable, unconfirmed.",
       "ongoing": "ongoing",
       "zetSays": "ZET reports",
+      "zatim": "then",
       "silentNote": "ZET: {seen} moving, about {expected} by the timetable. Departures are from the timetable, not confirmed by vehicles.",
       "rainChance": "chance {p} %",
       "rain": {

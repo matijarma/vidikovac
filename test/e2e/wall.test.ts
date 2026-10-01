@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
-  CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ENTRY_SETTLE_MS, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
+  CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ENTRY_SETTLE_MS, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, departureReads, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type FitReading, type RotationRow, type WallPage, type WallRow, type WallSample,
@@ -489,6 +489,25 @@ describe('one reading of the wall', () => {
       expect(r).toMatchObject({ mutations: 3, churn: 0, rebuilt: [], left: ['departure|dep:101_1'], entered: ['departure|dep:103_1', 'departure|dep:1301_13'] });
       expect(r.detail!.marks.map((m) => m.fitDropped)).toEqual(['departure departure closure solar', 'departure closure solar']);
       expect(calmRestoreBeat(r)).toBe(true);
+      expect(calmMotionFailures(r)).toEqual([]);
+    });
+
+    it('judges a restored departure outside a reveal independently of that reveal\'s churn', async () => {
+      const { section, ol } = wall();
+      start(CALM_MOTION_SPEC);
+      // The reveal's label is one allowed structural record without a row key.
+      ol.dataset.reveal = 'page:8';
+      ol.appendChild(document.createElement('span'));
+      await Promise.resolve();
+      CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
+      // Later, outside the reveal edge, the original departure-restore exception.
+      ol.firstElementChild!.remove();
+      ol.insertBefore(li('dep:103_1'), ol.firstElementChild);
+      ol.insertBefore(li('dep:1301_13'), ol.children[1]!);
+      section.dataset.fitDropped = 'departure closure solar';
+      await Promise.resolve();
+      const r = read(CALM_MOTION_SPEC);
+      expect(r).toMatchObject({ mutations: 4, churn: 1, recordsBySeg: [1, 3], churnBySeg: [1, 0] });
       expect(calmMotionFailures(r)).toEqual([]);
     });
 

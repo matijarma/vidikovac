@@ -141,6 +141,11 @@ describe('public-screen design invariants', () => {
     expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'], :root[data-lagano='1'] .kiosk .k-nearby .k-dep-cell[data-enter='1'] { animation: none; }");
     // R1: a new departure fades in its cell of the line, with the same fade.
     expect(windowRule(".k-nearby .k-dep-cell[data-enter='1']")).toContain('animation:k-nearby-in 220ms var(--ease-enter) both');
+    // R2: a page turn's rows slide in under the same 220 ms, clipped to the list while they run; the cut under reduced motion and lagano.
+    expect(windowRule(".k-nearby .nearby-row[data-enter='1'][data-slide='1']")).toContain('animation:k-nearby-slide 220ms var(--ease-enter) both');
+    expect(windowRule(".k-nearby .k-nearby-rows:has(> .nearby-row[data-slide='1'])")).toContain('clip-path:inset(0)');
+    expect(reduced).toContain(".kiosk .k-nearby .nearby-row[data-enter='1'][data-slide='1'] { animation: none; }");
+    expect(css).toContain(":root[data-lagano='1'] .kiosk .k-nearby .nearby-row[data-enter='1'][data-slide='1'] { animation: none; }");
   });
   // R1 (docs/reveal-2026-10-plan/R1.md §0.2(e)): the wall's one departures line, three equal cells, drawn per composition.
   it('draws the departures line as three equal cells of whole words: no ellipsis, no clamp, no clipping', () => {

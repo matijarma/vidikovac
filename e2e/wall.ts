@@ -41,6 +41,8 @@ export const WALL_PROBES = Object.freeze({
   depLine: '[data-testid=nearby] .nearby-row[data-kind="departures"]',
   /** `span.k-dep-cell[data-id][data-cell=1..3][data-when][data-live="1"?][data-route][data-source][data-headsign="0"?]`. */
   depCell: '[data-testid=nearby] .nearby-row[data-kind="departures"] [data-cell]',
+  /** The kiosk root: `data-rhythm` (Ritam, seconds) among its attributes (R2 reads it for the beat). */
+  kioskRoot: '[data-testid=kiosk]',
   rowTitle: '.nearby-title',
   rowWhen: '.nearby-when',
   rowSub: '.nearby-sub',
@@ -220,6 +222,13 @@ export interface WallSample {
   departuresOffered?: number | null;
   /** A departure cell is in its short entrance fade; never makes an invisible cell count as visible. */
   departuresEntering?: boolean;
+  /**
+   * R2: the reveal drawn, `page:<beat>` as the list's `data-reveal` and `advance:<beat>` as the departures line's
+   * (docs/reveal-2026-10-plan/R2.md §0.2); null without one, absent in a reading recorded before R2.
+   */
+  reveal?: { list: string | null; line: string | null };
+  /** R2: the wall's Ritam in seconds (the kiosk root's data-rhythm); null without the probe, absent before R2. */
+  rhythm?: number | null;
   /**
    * `data-fit-dropped` on the list: the kinds of the vetted rows the list did not paint, in list order; `[]` when it
    * dropped none, null when the probe is missing (a wall before it, or a reading recorded earlier).
@@ -414,6 +423,8 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     departures: rows.reduce((n, r) => n + (r.cells ? r.cells.length : r.kind === 'departure' ? 1 : 0), 0),
     departuresOffered: offered,
     departuresEntering: Boolean(lineEl?.querySelector('[data-cell][data-enter="1"]')),
+    reveal: { list: listEl?.dataset.reveal ?? null, line: lineEl?.dataset.reveal ?? null },
+    rhythm: Number(q(p.kioskRoot)?.dataset.rhythm) || null,
     fitDropped: fitDroppedIn(fit?.fitDropped),
     fitOverflow: fit?.fitOverflow === '1' ? true : fit?.fitOverflow === '0' ? false : null,
     listRoom,
@@ -570,6 +581,109 @@ export interface RotationSummary {
   kinds: Record<string, number>;
   themes: Record<string, number>;
   emptyPlaceSamples: number;
+  /** R2: the reveal cadence over the rotation (revealCadenceFailures); [] before the probe existed. */
+  revealFailures: string[];
+  /** R2: the reveal episodes seen, by kind. */
+  reveals: { page: number; advance: number };
+}
+
+// --- the reveals (R2, docs/reveal-2026-10-plan/R2.md step 9) ------------------------------------------------
+/** One reveal as the readings saw it: consecutive readings carrying the same `data-reveal` value in one region. */
+export interface RevealEpisode {
+  region: 'list' | 'line';
+  kind: 'page' | 'advance';
+  /** The beat index the value names (`page:<beat>`, `advance:<beat>`). */
+  beat: number;
+  /** The page clock of the first and last reading that carried it. */
+  firstAt: number;
+  lastAt: number;
+  /** The real gap to the reading before the first and after the last (0 at the rotation's ends). */
+  gapBeforeMs: number;
+  gapAfterMs: number;
+  /** The rhythm the first reading reported, ms (20 s where the reading carries none). */
+  rhythmMs: number;
+  /** The episode touches the rotation's first or last reading: its length is not judged. */
+  truncated: boolean;
+}
+
+const REVEAL_VALUE_RE = /^(page|advance):(\d+)$/;
+const DEFAULT_RHYTHM_MS = 20_000;
+
+/** The reveal a reading carries, the list's first: its region and value, or null. */
+function revealOf(s: Pick<WallSample, 'reveal'>): { region: 'list' | 'line'; value: string } | null {
+  if (s.reveal?.list) return { region: 'list', value: s.reveal.list };
+  if (s.reveal?.line) return { region: 'line', value: s.reveal.line };
+  return null;
+}
+
+/** The reveal episodes of a rotation: consecutive readings with the same non-null value in one region. */
+export function revealEpisodes(samples: readonly Pick<WallSample, 'at' | 'reveal' | 'rhythm'>[]): RevealEpisode[] {
+  const out: RevealEpisode[] = [];
+  let open: { region: 'list' | 'line'; value: string; first: number; last: number; rhythmMs: number } | null = null;
+  const close = (i: number): void => {
+    if (!open) return;
+    const m = REVEAL_VALUE_RE.exec(open.value);
+    if (m && Number.isSafeInteger(Number(m[2]))) {
+      out.push({
+        region: open.region, kind: m[1] as 'page' | 'advance', beat: Number(m[2]),
+        firstAt: samples[open.first]!.at, lastAt: samples[open.last]!.at,
+        gapBeforeMs: open.first > 0 ? samples[open.first]!.at - samples[open.first - 1]!.at : 0,
+        gapAfterMs: i < samples.length ? samples[i]!.at - samples[open.last]!.at : 0,
+        rhythmMs: open.rhythmMs, truncated: open.first === 0 || open.last === samples.length - 1,
+      });
+    }
+    open = null;
+  };
+  samples.forEach((s, i) => {
+    const r = revealOf(s);
+    if (open && (!r || r.region !== open.region || r.value !== open.value)) close(i);
+    if (r && !open) open = { region: r.region, value: r.value, first: i, last: i, rhythmMs: (s.rhythm ?? 0) > 0 ? s.rhythm! * 1000 : DEFAULT_RHYTHM_MS };
+    if (r && open) open.last = i;
+  });
+  close(samples.length);
+  return out;
+}
+
+const atIso = (ms: number): string => new Date(ms).toISOString().slice(11, 19);
+
+/**
+ * The reveal cadence of a rotation against brief §3 and D2 (the observer's `reveal-cadence` row and the accept
+ * scenes): one region per reading; a page value only on the list and an advance only on the line; consecutive
+ * episodes at least REVEAL_GAP_BEATS apart; a judged episode standing at least one beat (its upper bound, as the
+ * sentence-dwell rule reads it) and ending by the second (its lower bound); a value whose beat is the reading's own
+ * or the one before. `[]` means it holds, and `[]` where no reading carries the probe.
+ */
+export function revealCadenceFailures(samples: readonly Pick<WallSample, 'at' | 'reveal' | 'rhythm'>[]): string[] {
+  const out: string[] = [];
+  for (const s of samples) {
+    if (!s.reveal) continue;
+    for (const region of ['list', 'line'] as const) {
+      const value = s.reveal[region];
+      if (!value) continue;
+      const match = REVEAL_VALUE_RE.exec(value);
+      if (!match || !Number.isSafeInteger(Number(match[2]))) {
+        out.push(`reading at ${atIso(s.at)}: malformed reveal value on ${region} (${value}; target page:<beat> or advance:<beat>)`);
+      }
+    }
+    if (s.reveal.list && s.reveal.line) out.push(`reading at ${atIso(s.at)}: both regions carry a reveal (list ${s.reveal.list}, line ${s.reveal.line}; target one region per beat)`);
+    if (s.reveal.list?.startsWith('advance:')) out.push(`reading at ${atIso(s.at)}: an advance value on the list (${s.reveal.list})`);
+    if (s.reveal.line?.startsWith('page:')) out.push(`reading at ${atIso(s.at)}: a page value on the line (${s.reveal.line})`);
+  }
+  const episodes = revealEpisodes(samples);
+  episodes.forEach((e, i) => {
+    const name = `reveal ${e.kind}:${e.beat} at ${atIso(e.firstAt)}`;
+    const previous = episodes[i - 1];
+    if (previous && e.beat - previous.beat < REVEAL_GAP_BEATS) out.push(`${name} started ${e.beat - previous.beat} beat(s) after ${previous.kind}:${previous.beat} (target ≥ ${REVEAL_GAP_BEATS} beats)`);
+    if (!e.truncated) {
+      const upper = e.lastAt - e.firstAt + e.gapBeforeMs + e.gapAfterMs;
+      const lower = e.lastAt - e.firstAt;
+      if (upper < e.rhythmMs) out.push(`${name} stood at most ${(upper / 1000).toFixed(1)} s (target ≥ one beat, ${(e.rhythmMs / 1000).toFixed(0)} s)`);
+      if (lower > 2 * e.rhythmMs) out.push(`${name} stood at least ${(lower / 1000).toFixed(1)} s (target: ends by the second beat, ${((2 * e.rhythmMs) / 1000).toFixed(0)} s)`);
+    }
+    const b = Math.floor(e.firstAt / e.rhythmMs);
+    if (b - e.beat !== 0 && b - e.beat !== 1) out.push(`${name} carries beat ${e.beat} while its first reading falls in beat ${b} (target 0 or 1 apart: a stale value)`);
+  });
+  return out;
 }
 
 /** One sentence turn: one fact on the header from its first reading to the next fact's. */
@@ -733,6 +847,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
   const unlabelled = valid.map((s) => s.unlabelled).filter((n): n is number => n !== null);
   const max = (xs: number[]): number => (xs.length ? Math.max(...xs) : 0);
   const min = (xs: number[]): number => (xs.length ? Math.min(...xs) : 0);
+  const episodes = revealEpisodes(valid);
   return {
     samples: valid.length,
     errors: rows.length - valid.length,
@@ -771,6 +886,8 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     kinds,
     themes,
     emptyPlaceSamples: valid.filter((s) => !s.place).length,
+    revealFailures: revealCadenceFailures(valid),
+    reveals: { page: episodes.filter((e) => e.kind === 'page').length, advance: episodes.filter((e) => e.kind === 'advance').length },
   };
 }
 
@@ -890,12 +1007,20 @@ export const IDLE_MUTATIONS_MAX = 2;
  * had dropped beside it entered, two departures again beside the reserved rows and the closure.
  */
 export const IDLE_MUTATIONS_RESTORE_MAX = 3;
+/** R2 (brief §3): the structural records a reading pair across a reveal's start or return may hold: a page turn of two
+ *  rows is four, the line's label and a changed cell count the rest; never a rebuilt row. */
+export const REVEAL_MUTATIONS_MAX = 6;
+/** R2: a mirror of shared/kiosk/takt.ts REVEAL_GAP_BEATS (test/scripts/observe-production.test.ts pins them equal). */
+export const REVEAL_GAP_BEATS = 3;
 
 export interface CalmMotionSpec {
   /** The subtree watched for structural mutations. */
   root: string;
   /** The rows that must keep their node. */
   row: string;
+  /** The list and the departures line, whose `data-reveal` marks a reveal pair (R2). */
+  list: string;
+  line: string;
   /** The window and element property the watcher uses. */
   key: string;
   /** How many records the detail keeps (CALM_DETAIL_RECORDS_MAX). */
@@ -925,6 +1050,9 @@ export interface CalmMotionReading {
    * and went inside the minute, any other element added or removed. The production observer's budget.
    */
   churn: number;
+  /** R2: the records and the churn per reading pair, so a reveal pair (detail.marks[].reveal differing across it) is judged apart. Absent before the probe. */
+  recordsBySeg?: number[];
+  churnBySeg?: number[];
   /** childList records that only swap text nodes (a countdown's digits): content, not structure. */
   textSwaps: number;
   /** Rows whose `kind|id` was on the list before and after, on the same node. */
@@ -965,7 +1093,7 @@ export interface CalmMotionDetail {
    * The row keys at each reading that bounded a pair (the start, every mark, the read), with the page clock and the
    * timeline's `data-fit-dropped` then (null without the probe; absent in a reading recorded before it).
    */
-  marks: { at: number; keys: string[]; fitDropped?: string | null }[];
+  marks: { at: number; keys: string[]; fitDropped?: string | null; reveal?: string }[];
   /** The structural records in order; at most CALM_DETAIL_RECORDS_MAX, `dropped` counts the rest. */
   records: CalmMutationRecord[];
   dropped: number;
@@ -974,7 +1102,7 @@ export interface CalmMotionDetail {
 export const CALM_DETAIL_RECORDS_MAX = 400;
 /** The rows and the departures line's cells (R1): a cell leaving and one entering are a turnover, not churn, and a
  *  staying cell re-created is caught. A cell has no data-kind, so its key is `|<id>`. */
-export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: `${WALL_PROBES.row}, ${WALL_PROBES.depCell}`, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
+export const CALM_MOTION_SPEC: CalmMotionSpec = Object.freeze({ root: WALL_PROBES.nearby, row: `${WALL_PROBES.row}, ${WALL_PROBES.depCell}`, list: WALL_PROBES.nearbyRows, line: WALL_PROBES.depLine, key: '__acceptCalmMotion', detailMax: CALM_DETAIL_RECORDS_MAX });
 
 /** Tag every row and start counting mutations under the root. Returns the number of rows tagged. */
 export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
@@ -989,6 +1117,8 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
   const seen = new WeakSet<Node>(root ? [root, ...Array.from(root.querySelectorAll('*'))] : []);
   const tagOf = (n: Node): string => ((n as Element).tagName || '').toLowerCase();
   const standing = (key: string): boolean => Array.from(document.querySelectorAll<HTMLElement>(spec.row)).some((el) => keyOf(el) === key);
+  /** The reveal drawn now (R2): the list's data-reveal and the line's, "" each where none. */
+  const revealNow = (): string => `${document.querySelector<HTMLElement>(spec.list)?.dataset?.reveal ?? ''}|${document.querySelector<HTMLElement>(spec.line)?.dataset?.reveal ?? ''}`;
   const state = {
     rootFound: Boolean(root),
     before: rows.map((el, i) => ({ key: keyOf(el), tag: i })),
@@ -1000,6 +1130,8 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
     markTimes: [Date.now()] as number[],
     /** The timeline's data-fit-dropped at each reading (calmRestoreBeat reads it). */
     markDrops: [(root as HTMLElement | null)?.dataset?.fitDropped ?? null] as (string | null)[],
+    /** The reveal drawn at each reading (R2): a pair across which it changes is a reveal pair. */
+    markReveals: [revealNow()] as string[],
     /** The same records with what each node did (CalmMotionDetail), capped. */
     log: [] as { at: number; seg: number; adds: { key: string | null; tag: string; kind: string }[]; removes: { key: string | null; tag: string; kind: string }[] }[],
     dropped: 0,
@@ -1009,6 +1141,7 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
       state.marks.push(Array.from(document.querySelectorAll<HTMLElement>(spec.row)).map(keyOf).filter((k): k is string => k !== null));
       state.markTimes.push(Date.now());
       state.markDrops.push(document.querySelector<HTMLElement>(spec.root)?.dataset?.fitDropped ?? null);
+      state.markReveals.push(revealNow());
     },
     count(records: MutationRecord[]): void {
       for (const m of records) {
@@ -1060,7 +1193,7 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
   const state = w[spec.key] as {
     rootFound: boolean; before: { key: string | null; tag: number }[]; mutations: number; textSwaps: number;
     records: { adds: (string | null)[]; removes: (string | null)[]; seg?: number }[]; marks?: string[][];
-    markTimes?: number[]; markDrops?: (string | null)[]; log?: CalmMutationRecord[]; dropped?: number;
+    markTimes?: number[]; markDrops?: (string | null)[]; markReveals?: string[]; log?: CalmMutationRecord[]; dropped?: number;
     observer: MutationObserver | null; count: (r: MutationRecord[]) => void; mark?: () => void;
   } | undefined;
   if (!state) return { rootFound: false, before: 0, after: 0, mutations: 0, turnovers: 0, marks: 0, churn: 0, textSwaps: 0, kept: 0, rebuilt: [], left: [], entered: [], untracked: 0 };
@@ -1096,6 +1229,8 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
     keys.every((k) => k !== null && pool.has(k) && !taken.has(k)) && new Set(keys).size === keys.length;
   let excused = 0;
   let turnovers = 0;
+  const recordsBySeg: number[] = [];
+  const churnBySeg: number[] = [];
   for (let seg = 0; seg + 1 < marks.length; seg++) {
     const a = new Set(marks[seg]);
     const b = new Set(marks[seg + 1]);
@@ -1103,25 +1238,52 @@ export const CALM_MOTION_READ_IN_PAGE = (spec: CalmMotionSpec): CalmMotionReadin
     const leaving = new Set([...a].filter((k) => !b.has(k)));
     const addsTaken = new Set<string>();
     const removesTaken = new Set<string>();
+    let inSeg = 0;
+    let excusedInSeg = 0;
     for (const r of state.records ?? []) {
       if ((r.seg ?? 0) !== seg) continue;
+      inSeg++;
       if (!free(r.adds, entering, addsTaken) || !free(r.removes, leaving, removesTaken)) continue;
       for (const k of r.adds) addsTaken.add(k as string);
       for (const k of r.removes) removesTaken.add(k as string);
-      excused++;
+      excusedInSeg++;
     }
+    excused += excusedInSeg;
+    recordsBySeg.push(inSeg);
+    churnBySeg.push(inSeg - excusedInSeg);
     turnovers += Math.max(addsTaken.size, removesTaken.size);
   }
   delete w[spec.key];
   const times = state.markTimes ?? [];
   const drops = state.markDrops;
+  const reveals = state.markReveals;
   return {
     rootFound: state.rootFound, before: state.before.length, after: rows.length, mutations: state.mutations,
     turnovers, marks: marks.length, churn: state.mutations - excused,
+    ...(reveals ? { recordsBySeg, churnBySeg } : {}),
     textSwaps: state.textSwaps, kept, rebuilt, left, entered, untracked,
-    ...(state.log ? { detail: { marks: marks.map((keys, i) => ({ at: times[i] ?? 0, keys, ...(drops ? { fitDropped: drops[i] ?? null } : {}) })), records: state.log, dropped: state.dropped ?? 0 } } : {}),
+    ...(state.log ? { detail: { marks: marks.map((keys, i) => ({ at: times[i] ?? 0, keys, ...(drops ? { fitDropped: drops[i] ?? null } : {}), ...(reveals ? { reveal: reveals[i] ?? '' } : {}) })), records: state.log, dropped: state.dropped ?? 0 } } : {}),
   };
 };
+
+/**
+ * The reading pairs across which the drawn reveal changed (R2): a reveal's start or its return, each allowed
+ * REVEAL_MUTATIONS_MAX records; [] in a reading recorded before the probe, which is judged as before.
+ */
+export function revealPairs(r: CalmMotionReading): number[] {
+  const marks = r.detail?.marks ?? [];
+  if (marks.length < 2 || marks.some((m) => m.reveal === undefined) || !r.recordsBySeg || !r.churnBySeg) return [];
+  const out: number[] = [];
+  for (let seg = 0; seg + 1 < marks.length; seg++) if (marks[seg]!.reveal !== marks[seg + 1]!.reveal) out.push(seg);
+  return out;
+}
+
+/** The records of a reveal pair over its budget, as one message each; the budget's name is the beat's. */
+function revealPairFailures(r: CalmMotionReading, pairs: readonly number[], counts: readonly number[], what: string): string[] {
+  const marks = r.detail!.marks;
+  return pairs.filter((seg) => counts[seg]! > REVEAL_MUTATIONS_MAX)
+    .map((seg) => `${counts[seg]} ${what} under the timeline across the reveal at reading pair ${seg} (${marks[seg]!.reveal || 'none'} to ${marks[seg + 1]!.reveal || 'none'}; target ≤ ${REVEAL_MUTATIONS_MAX} on a beat that carries a reveal)`);
+}
 
 /** What makes a calm-motion reading unmeasurable, or a staying row that lost its node: shared by both rules below. */
 function calmMotionBasics(r: CalmMotionReading): { unmeasurable: string | null; rebuilt: string | null } {
@@ -1166,7 +1328,19 @@ export function calmMotionFailures(r: CalmMotionReading): string[] {
   const b = calmMotionBasics(r);
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
-  if (r.mutations > IDLE_MUTATIONS_MAX && !calmRestoreBeat(r)) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  const pairs = revealPairs(r);
+  if (pairs.length) {
+    // R2: a reveal's start or return may spend REVEAL_MUTATIONS_MAX records; the rest of the minute keeps its two.
+    out.push(...revealPairFailures(r, pairs, r.recordsBySeg!, 'structural mutations'));
+    const inPairs = new Set(pairs);
+    const rest = r.mutations - pairs.reduce((n, seg) => n + r.recordsBySeg![seg]!, 0);
+    const outside: CalmMotionReading = {
+      ...r, mutations: rest,
+      churn: r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0),
+      detail: { ...r.detail!, records: r.detail!.records.filter((x) => !inPairs.has(x.seg)) },
+    };
+    if (rest > IDLE_MUTATIONS_MAX && !calmRestoreBeat(outside)) out.push(`${rest} structural mutations under the timeline in an idle minute outside its ${pairs.length} reveal pair(s) (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  } else if (r.mutations > IDLE_MUTATIONS_MAX && !calmRestoreBeat(r)) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
@@ -1181,7 +1355,12 @@ export function calmChurnFailures(r: CalmMotionReading): string[] {
   const b = calmMotionBasics(r);
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
-  if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
+  const pairs = revealPairs(r);
+  if (pairs.length) {
+    out.push(...revealPairFailures(r, pairs, r.churnBySeg!, 'structural mutations beyond row turnovers'));
+    const rest = r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0);
+    if (rest > IDLE_MUTATIONS_MAX) out.push(`${rest} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute outside its ${pairs.length} reveal pair(s) (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
+  } else if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
@@ -1249,5 +1428,7 @@ export function rotationFailures(r: RotationSummary, targets: RotationTargets = 
   } else if (r.verbatimRepeats > 0) {
     out.push(`${r.verbatimRepeats} sentence wording(s) shown again verbatim within ten minutes (§12): ${[...new Set(r.turns.verbatimRepeats.map((x) => x.sentence))].slice(0, 3).join(', ')}`);
   }
+  // R2: the reveal cadence over the same ten minutes (one region per beat, the gap, a beat's dwell).
+  out.push(...r.revealFailures);
   return out;
 }

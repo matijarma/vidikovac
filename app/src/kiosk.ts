@@ -20,7 +20,7 @@ import { arrivalsAt } from '../../shared/city/arrivals';
 import type { DepartureBoard } from '../../shared/city/types';
 import { createBoardCache, type BoardCache } from './city/boards';
 import { dynamicPlaces } from './city/discovery';
-import { selectNearby, skippedTextCensus, type NearbyRow, DEPARTED_HOLD_MS } from './city/nearby';
+import { nextDepartures, selectNearby, skippedTextCensus, type NearbyInput, type NearbyRow, DEPARTED_HOLD_MS } from './city/nearby';
 import { createSentenceSequence, modelSentenceFacts, sentenceFacts, templateSentences, SENTENCE_BUDGET, SENTENCE_NO_REPEAT_MS, SENTENCE_REFRESH_MS, isSameSentence, sentenceFactKeys, sentencePool, type RotatingSentence } from './city/sentence';
 import { DEFAULT_PLACE_STOP_ID, placeFromStop, type ScreenPlace } from '../../shared/city/place';
 import { readWrittenSentences, typedSentenceFact, type SentenceFact, type SentenceRequest, type WrittenSentence } from '../../shared/kiosk/sentence';
@@ -58,7 +58,8 @@ import { applyLayout, compositionOf, FIELD_DESIGN_HEIGHT, FIELD_DESIGN_WIDTH, me
 import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, staleCopy } from './kiosk/local';
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
-import { loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
+import { groupDepartures, loadStopBoardRows, mountTouchPanel, pharmacyDetailVariants, rowDetailVariants, stopBoardVariants, STOP_BOARD_TIMETABLE_ROWS, taktCandidates, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
+import { beatIndex, EMPTY_HISTORY, takt, type TaktHistory, type TaktReveal } from '../../shared/kiosk/takt';
 import { cancelledTrips, liveFixes, railStationsNear } from './city/feed';
 import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venueNameFor, venuePointFor } from './core/open-hours';
 import { openPlacesNear, type OsmHoursIndex } from '../../shared/city/osm-hours';
@@ -303,6 +304,16 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let wallItems: NearbyRow[] = [];
   /** Departure rows that left the wall, by row id, and when (selectNearby's departedDepartures). */
   const departedAt = new Map<string, number>();
+  // R2 (docs/reveal-2026-10-plan/R2.md): the reveal scheduler's state. The beat is the paint at which the header may
+  // turn (sentenceSequence.turnAt), at least a rhythm after the last; takt runs once per beat and its reveal stands
+  // until the next; the history is the scheduler's own, re-indexed on a Ritam change.
+  let taktHistory: TaktHistory = EMPTY_HISTORY;
+  let taktReveal: TaktReveal | null = null;
+  let taktNext: NearbyRow[] = [];
+  let taktPageBase: ReadonlySet<string> = new Set();
+  let beatAt = -Infinity;
+  let revealAt = -Infinity;
+  let taktPaintAt = -Infinity;
   let facts: SentenceFact[] = [];
   let modelSentences: WrittenSentence[] = [];
   /** A model answer waiting for the rhythm's end (decision 29): never swapped in mid-dwell. */
@@ -466,10 +477,33 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       sentenceSwapTimer = oneShot(() => { sentenceSwapTimer = null; delete sentenceEl.dataset.swap; }, SENTENCE_SWAP_MS);
     }
   }
+  function paintedRowIds(): Set<string> {
+    const list = invitation?.element.querySelector('[data-testid=nearby-rows]');
+    return new Set([...list?.children ?? []].map(row => row.getAttribute('data-id') ?? ''));
+  }
+  /** The measured overlay may decline some or all proposed rows; only actual incoming rows are reveal facts. */
+  function drawnRevealIds(): string[] {
+    if (taktReveal?.kind !== 'page'
+      || invitation?.element.querySelector<HTMLElement>('[data-testid=nearby-rows]')?.dataset.reveal !== `page:${taktReveal.beat}`) return [];
+    const painted = paintedRowIds();
+    return taktReveal.ids.filter(id => !taktPageBase.has(id) && painted.has(id));
+  }
+  /** R2: a page turn's revealed row takes the map's emphasis for its beat (an advance keeps the sentence's: the next
+   *  departures belong to the wall's own stop). Data only, as setHighlight is: the camera never moves. */
+  function revealHighlight(): MapHighlight | null {
+    if (sentenceSuspended() || taktReveal?.kind !== 'page') return null;
+    for (const id of drawnRevealIds()) {
+      const row = wallItems.find(item => item.id === id);
+      if (row?.map) return row.map;
+    }
+    return null;
+  }
   /** Geometry follows the accepted sentence's refs; it never chooses a camera. */
   function sentenceHighlight(): MapHighlight | null {
     if (sentenceSuspended() || !currentSentence) return null;
-    for (const ref of currentSentence.refs) {
+    for (const raw of currentSentence.refs) {
+      // A reveal fact (R2, city/sentence.ts) names the row under its own prefix: the same row as the list's.
+      const ref = raw.startsWith('reveal:') ? raw.slice('reveal:'.length) : raw;
       const row = wallItems.find(item => item.id === ref || ref.startsWith(`${item.id}:`));
       if (row?.map) return row.map;
       const city = cityStore.snapshot();
@@ -489,6 +523,18 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
    * without live fixes during an outage; grey never means a relabelled ETA. */
   function paintWall(): void {
     const at = now();
+    if (at < taktPaintAt) {
+      // Keep elapsed history on a clock correction, rather than waiting for a reveal beat now in the future.
+      const shift = at - taktPaintAt;
+      beatAt += shift;
+      revealAt += shift;
+      taktHistory = { ...taktHistory, beat: beatIndex(beatAt, rhythm * 1000),
+        shownAt: Object.fromEntries(Object.entries(taktHistory.shownAt).map(([id, shownAt]) => [id, shownAt + shift])),
+        lastReveal: taktHistory.lastReveal && { ...taktHistory.lastReveal, beat: beatIndex(revealAt, rhythm * 1000) } };
+      taktReveal = null;
+      taktNext = [];
+    }
+    taktPaintAt = at;
     const budget = SENTENCE_BUDGET[compositionOf(layout)];
     if (phase === 'invitation' && !presentation?.target) {
       const place = placeForNearby();
@@ -508,7 +554,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // The trains of the two nearest HŽ stations inside the circle, never live (U3 S3).
       const railBoards = railStationsNear(city.places, place, radiusM)
         .map(station => boards.get('hz', station.sourceRecord)).filter((board): board is DepartureBoard => board !== undefined);
-      wallItems = selectNearby({
+      // One input for the selection and the next departures (R2), so the line's advance reads what the wall read.
+      const nearbyInput: NearbyInput = {
         place, radiusM, now: at, boards: held, fixes: outage() ? [] : liveFixes(snapshots['zet-rt'], at),
         snapshots, city, lastRun, locale, i18n, stops: stops ?? undefined, onSkip: reason => skipped.push(reason), heldDepartures, departedDepartures,
         ...(policy ? { policy } : {}),
@@ -517,18 +564,48 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
         openPlaces: openPlacesNear(openHours, place, radiusM, at, isPublicHoliday(zagrebDayKey(at))),
         venuePoint: venuePointFor(city.places, snapshots, openHours),
         venueName: venueNameFor(city.places, snapshots, openHours),
-      });
+      };
+      wallItems = selectNearby(nearbyInput);
       // A departure that just left is remembered for DEPARTED_HOLD_MS so a flapping estimate cannot bring it straight back.
       for (const row of heldDepartures) if (!wallItems.some(item => item.id === row.id)) departedAt.set(row.id, at);
       for (const [id, leftAt] of departedAt) if (at - leftAt > DEPARTED_HOLD_MS) departedAt.delete(id);
+      // Read this paint's service facts before scheduling: a previous DOM flag lags an outage by one paint.
+      const factInput = { place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
+        ...(currentSentence ? { pinned: currentSentence.refs } : {}) };
+      facts = sentenceFacts(factInput);
+      // R2 (docs/reveal-2026-10-plan/R2.md): the reveal scheduler runs once per beat, on the paint at which the header
+      // may turn; the 1 s paint between beats only counts down. One region moves per beat; a quiet wall moves none.
+      // Quiet: a touch open, ZET's current state pinning the header, the sentence suspended, the handheld composition,
+      // the list not yet painted.
+      const rhythmMs = rhythm * 1000;
+      const capacity = invitation?.shown() ?? 0;
+      const quiet = at < touchUntil || facts.some(fact => fact.id === 'service:zet' || fact.id === 'outage:zet') || sentenceSuspended()
+        || compositionOf(layout) === 'handheld' || capacity === 0;
+      if (quiet) { taktReveal = null; taktNext = []; }
+      const due = taktReveal ? beatAt + rhythmMs : Math.max(sentenceSequence.turnAt(), beatAt + rhythmMs);
+      if (at >= due) {
+        const shownDepartures = wallItems.filter((row) => row.kind === 'departure');
+        const next = nextDepartures(nearbyInput, shownDepartures);
+        const result = takt(taktCandidates(groupDepartures(wallItems), next, at), taktHistory, at,
+          { capacity, rhythmMs, quiet, reduced: reducedMotion || lightweight });
+        taktHistory = result.history;
+        beatAt = at;
+        if (result.reveal?.kind === 'page') taktPageBase = paintedRowIds();
+        taktReveal = result.reveal;
+        taktNext = result.reveal?.kind === 'advance' ? next : [];
+        if (result.reveal) revealAt = at;
+      }
       paintSkippedText(skipped);
-      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
-      facts = sentenceFacts({ place, radiusM, rows: wallItems, snapshots, city, now: at, outage: outage(), locale, i18n,
-        ...(currentSentence ? { pinned: currentSentence.refs } : {}) });
       invitation?.update(invitationModel());
+      // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
+      const revealed = drawnRevealIds();
+      if (revealed.length > 0) facts = sentenceFacts({ ...factInput,
+        reveal: { ids: revealed, until: beatAt + rhythmMs } });
     } else {
       wallItems = [];
       facts = [];
+      taktReveal = null;
+      taktNext = [];
       paintSkippedText([]);
     }
     // ZET's state (the fleet deviating, U2; no positions, U0) is said first, and its sentence is wider than one header
@@ -562,7 +639,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     currentSentence = next;
     if (next && !sentenceSuspended()) shownSentences.set(next.text, at);
     paintSentence();
-    mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
+    mapAdapter.handle()?.setHighlight?.(revealHighlight() ?? sentenceHighlight());
     // Templates above paint synchronously, including the cold and failed-network paths.
     ensureSentences();
     // A touch's board follows the same beat, and its deadline is read on it too.
@@ -805,7 +882,7 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     container.inert=true;
     // The legend explains what the map draws, and nothing it does not (mapview.ts legendKinds).
     invitation?.setLegend((container.dataset.legend ?? 'tram bikes culture').split(' '));
-    mapAdapter.handle()?.setHighlight?.(sentenceHighlight());
+    mapAdapter.handle()?.setHighlight?.(revealHighlight() ?? sentenceHighlight());
     mapContainer = container;
     if (container.parentElement !== host) {
       // The box changed while the container sat outside the layout; resumeMap re-measures it.
@@ -992,7 +1069,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       boards.ensure('zet', platformIds(next.stop, stops), onBoardSettled);
       void loadStopBoardRows().then(() => { if (!disposed) paintTouch(); });
     }
-    paintTouch();
+    // A touch makes the wall quiet immediately, including an already active reveal and its map emphasis.
+    paintWall();
   }
   function touchVariants(current: Touch): string[] {
     const at = now();
@@ -1096,7 +1174,8 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
     // for the list and the departures [O-52], [O-65].
     return { items: wallItems, radiusM: wallRadiusM(), frame: wall.frame,
       note: wallMapNote({ zet: byModule(teaser)['zet-rt'], now: now(), outage: outage(), strings: s, i18n }),
-      modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout) };
+      modules: teaser, stop: wall.placeSet ? stopForNearby() : stop, now: now(), composition: compositionOf(layout),
+      reveal: taktReveal, next: taktNext };
   }
   function pairedContext(): PairedContext {
     // The paired compositions are drawn for a wall; a handheld that is unlocked gets the compact drawing and scrolls it.
@@ -1392,6 +1471,12 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       setRhythm: (next) => {
         rhythm = next;
         writeRhythm(storage, next);
+        // R2: the operator's act is a cut: the reveal on screen ends at once, and the scheduler's history is re-indexed
+        // to the new rhythm so the gap rule keeps counting real beats.
+        taktReveal = null;
+        taktNext = [];
+        taktHistory = { ...taktHistory, beat: beatIndex(beatAt, next * 1000),
+          lastReveal: taktHistory.lastReveal && { ...taktHistory.lastReveal, beat: beatIndex(revealAt, next * 1000) } };
         // Re-time the same rotation (review-w-fix6 P2): a new sequence would drop the sentence on
         // screen mid-dwell and forget which facts it has shown (decision 29).
         sentenceSequence.setRhythm(rhythm * 1000);
@@ -1566,10 +1651,19 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   function applyScreen(screen: ScreenMetadata): void {
     if (!credentials) return;
     const before = stop?.id;
+    const beforePlace = placeForNearby();
+    const beforeFrame = wall.frame;
     credentials = withScreen(credentials, screen);
     storeBeacon(storage, credentials);
     stop = screen.stop;
     wall = wallPlaceOf(screen, isTram);
+    const place = placeForNearby();
+    if (before !== stop?.id || beforeFrame !== wall.frame || beforePlace.stopId !== place.stopId
+      || beforePlace.lon !== place.lon || beforePlace.lat !== place.lat) {
+      // The operator's new context cannot inherit next departures or a page overlay from the old place.
+      taktReveal = null;
+      taktNext = [];
+    }
     paintContext();
     settings?.paint();
     // The panel may be waiting for exactly this: the frame it sent has landed. It stays open.

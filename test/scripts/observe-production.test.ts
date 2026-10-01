@@ -26,6 +26,7 @@ import type { PageInventory, RawInventory } from '../../e2e/inventory';
 import type { ExpiryReading } from '../../e2e/inventory';
 import type { CalmMotionReading } from '../../e2e/wall';
 import { skippedTextCensus } from '../../app/src/city/nearby';
+import { REVEAL_GAP_BEATS } from '../../shared/kiosk/takt';
 import {
   ANY_PRESENT_IN_PAGE, CENSUS_TIMEOUT_MS, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_CENSUS_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
   PILLS_DRAWN_IN_PAGE, PILLS_DRAW_GRACE_MS, VEHICLES_TIMEOUT_MS, fleetAt, fleetOf, pillsOwed, type FleetRecord, type ObservedSample,
@@ -293,7 +294,65 @@ describe('the thresholds are one table with a stage per row', () => {
     expect(target('phone-share')).toContain('"Podijeli grad"');
     expect(target('pills-plus')).toContain(String(wall.PLUS_PILL_RE));
     expect(target('qr')).toContain(`${wall.QR_MIN_PX} × ${wall.QR_MIN_PX}`);
+    expect(target('reveal-cadence')).toContain('3 beats');
+    expect(target('calm-motion')).toContain(`at most ${wall.REVEAL_MUTATIONS_MAX} beyond turnovers across a reveal's start or return`);
     expect(() => fillTarget('{NO_SUCH_CONSTANT}', instruments)).toThrow(/NO_SUCH_CONSTANT/);
+  });
+
+  // R2: the reveal cadence (docs/reveal-2026-10-plan/R2.md step 9 e): the harness's helpers on synthetic readings.
+  describe('the reveal cadence (R2)', () => {
+    const STEP = 2_000;
+    const RHYTHM_MS = 20_000;
+    /** Readings 2 s apart from T0; `at(n)` lists the reveal each carries, by its index. */
+    const rotation = (count: number, at: (n: number) => { list?: string; line?: string } | null): WallSample[] =>
+      Array.from({ length: count }, (_, n) => ({ ...wallReading(n), reveal: { list: at(n)?.list ?? null, line: at(n)?.line ?? null } }));
+    const beatOf = (n: number): number => Math.floor((T0 + n * STEP) / RHYTHM_MS);
+    const episode = (from: number, to: number, value: (b: number) => { list?: string; line?: string }) => (n: number) => (n >= from && n <= to ? value(beatOf(from)) : null);
+
+    it('the gap the harness reads is the scheduler\'s own', () => {
+      expect(wall.REVEAL_GAP_BEATS).toBe(REVEAL_GAP_BEATS);
+      expect(wall.REVEAL_MUTATIONS_MAX).toBe(6);
+    });
+
+    it.each(['page:NaN', 'page:12x', 'unknown:12', 'page:9007199254740992'])('rejects malformed reveal values instead of treating %s as no reveal', (value) => {
+      const rot = rotation(1, () => ({ list: value }));
+      expect(wall.revealCadenceFailures(rot)).toEqual([expect.stringContaining('malformed reveal value')]);
+    });
+
+    it('reads a clean page episode of ten readings at Ritam 20 as one episode with no failure', () => {
+      const rot = rotation(40, episode(10, 19, (b) => ({ list: `page:${b}` })));
+      const episodes = wall.revealEpisodes(rot);
+      expect(episodes).toHaveLength(1);
+      expect(episodes[0]).toMatchObject({ region: 'list', kind: 'page', beat: beatOf(10), firstAt: T0 + 10 * STEP, lastAt: T0 + 19 * STEP, gapBeforeMs: STEP, gapAfterMs: STEP, rhythmMs: RHYTHM_MS, truncated: false });
+      expect(wall.revealCadenceFailures(rot)).toEqual([]);
+      expect(wall.summariseRotation(rot)).toMatchObject({ revealFailures: [], reveals: { page: 1, advance: 0 } });
+      expect(wall.rotationFailures(wall.summariseRotation(rot)).some((f) => /reveal/.test(f))).toBe(false);
+      // Readings recorded before the probe judge nothing.
+      expect(wall.revealCadenceFailures(rot.map(({ reveal: _r, rhythm: _h, ...s }) => s))).toEqual([]);
+    });
+
+    it('fails both regions in one reading, a value on the wrong region, a gap of two beats, a short episode, one that did not end, and a stale beat, each with its message', () => {
+      const both = rotation(40, (n) => (n === 12 ? { list: `page:${beatOf(10)}`, line: `advance:${beatOf(10)}` } : episode(10, 19, (b) => ({ list: `page:${b}` }))(n)));
+      expect(wall.revealCadenceFailures(both)).toEqual([expect.stringContaining('both regions carry a reveal')]);
+      const wrong = rotation(40, episode(10, 19, (b) => ({ line: `page:${b}` })));
+      expect(wall.revealCadenceFailures(wrong).some((f) => /a page value on the line/.test(f))).toBe(true);
+      // Episodes at readings 10 and 30: beats b and b + 2.
+      const gap = rotation(60, (n) => episode(10, 19, (b) => ({ list: `page:${b}` }))(n) ?? episode(30, 39, (b) => ({ line: `advance:${b}` }))(n));
+      expect(wall.revealEpisodes(gap).map((e) => e.beat)).toEqual([beatOf(10), beatOf(30)]);
+      expect(beatOf(30) - beatOf(10)).toBe(2);
+      expect(wall.revealCadenceFailures(gap)).toEqual([expect.stringContaining(`started 2 beat(s) after page:${beatOf(10)} (target ≥ ${REVEAL_GAP_BEATS} beats)`)]);
+      // Four readings, 6 s, between full readings: at most 10 s on the wall.
+      const short = rotation(40, episode(10, 13, (b) => ({ list: `page:${b}` })));
+      expect(wall.revealCadenceFailures(short)).toEqual([expect.stringContaining('stood at most 10.0 s (target ≥ one beat, 20 s)')]);
+      // Twenty-six readings, 50 s: it did not end by the second beat.
+      const long = rotation(60, episode(10, 35, (b) => ({ list: `page:${b}` })));
+      expect(wall.revealCadenceFailures(long)).toEqual([expect.stringContaining('stood at least 50.0 s (target: ends by the second beat, 40 s)')]);
+      const stale = rotation(40, episode(10, 19, (b) => ({ list: `page:${b - 5}` })));
+      expect(wall.revealCadenceFailures(stale)).toEqual([expect.stringContaining(`carries beat ${beatOf(10) - 5} while its first reading falls in beat ${beatOf(10)}`)]);
+      // A truncated episode (the rotation's last readings) is not judged for its length.
+      const open = rotation(40, episode(38, 39, (b) => ({ list: `page:${b}` })));
+      expect(wall.revealCadenceFailures(open)).toEqual([]);
+    });
   });
 
   it('§12 counts a turn whose sentence was shown less than ten minutes before, not one shown earlier', () => {
@@ -549,7 +608,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
   return {
     at, place: 'Trg bana J. Jelačića', sentence, kicker: 'promet', kickerText: 'Promet', validUntil: new Date(at + 1_000).toISOString(),
     sentenceChars: [...sentence].length, sentenceOverflow: false, sentenceEllipsis: false, head: wall.NEARBY_HEAD_2KM, rows, hiddenRows: 0,
-    departures: 1, fitDropped: [], fitOverflow: false, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
+    departures: 1, fitDropped: [], fitOverflow: false, reveal: { list: null, line: null }, rhythm: 20, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
     retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: ['U blizini'],
@@ -1352,6 +1411,24 @@ describe('a run over a fake browser', () => {
     expect(report).toContain('readings 210–240: 1 row(s) stayed on the list but were re-created: departure\\|trip-2');
     const gone = await observe(['--stage', 'd2'], { calm: () => ({ ...GOOD_CALM, rootFound: false }) });
     expect(gone.lines.join('\n')).toContain('FAIL calm-motion');
+  });
+
+  // R2: the reveal-cadence row over a run: a clean page episode passes; two episodes two beats apart fail, named.
+  it('reveal cadence: a clean page episode passes d2; a gap of two beats fails it, and the row names it', async () => {
+    const RHYTHM_MS = 20_000;
+    const STEP = 2_000;
+    const beatAt = (n: number): number => Math.floor((T0 + n * STEP) / RHYTHM_MS);
+    const clean = await observe(['--minutes', '10', '--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), reveal: { list: n >= 10 && n <= 19 ? `page:${beatAt(10)}` : null, line: null } }) });
+    expect(clean.code, clean.lines.join('\n')).toBe(0);
+    expect(read(clean.out, 'report.md')).toMatch(/\| reveal-cadence \| d2 \| kiosk \| .* \| ≤ 0 \| 0 \| pass \|/);
+    expect(read(clean.out, 'report.md')).toContain('1 page turn(s), 0 advance(s)');
+    const gap = await observe(['--minutes', '10', '--stage', 'd2'], { reading: (n, at, code) => ({ ...wallReading(n, at, code), reveal: { list: n >= 10 && n <= 19 ? `page:${beatAt(10)}` : null, line: n >= 30 && n <= 39 ? `advance:${beatAt(30)}` : null } }) });
+    expect(gap.lines.join('\n')).toContain('FAIL reveal-cadence');
+    const report = read(gap.out, 'report.md');
+    expect(report).toMatch(/\| reveal-cadence \| d2 \| kiosk \| .* \| ≤ 0 \| 1 \| \*\*fail\*\* \|/);
+    expect(report).toContain(`started 2 beat(s) after page:${beatAt(10)} (target ≥ ${REVEAL_GAP_BEATS} beats)`);
+    const none = await observe(['--minutes', '10', '--stage', 'd2'], { reading: (n, at, code) => { const { reveal: _r, rhythm: _h, ...s } = wallReading(n, at, code); return s as WallSample; } });
+    expect(read(none.out, 'report.md')).toContain('no reading carries the reveal probe');
   });
 
   // §16.3 outage0800: while the feed is down no headline reads "unavailable" and the map note shows once.
