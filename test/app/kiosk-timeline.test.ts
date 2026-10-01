@@ -26,7 +26,7 @@ import { cellLines, cellOverflow, lineHeight, LINE_1366, LINE_1920, LINE_PORTRAI
 import {
   COUNTDOWN_HORIZON_MIN, ENTER_CLEAR_MS, EVENT_TITLE_MAX_LINES, GROW_FROM_PX, IMMINENT_ROW_MIN, NOTICE_TITLE_MAX_LINES, SUB_MAX_LINES, TITLE_MAX_LINES, dayLabel, dropCandidate, fitRows, mountTimeline, onLaterDay, rowsMarkup,
   timeLabel, typeScale, type TimelineHandle, type TimelineMeasure, type TimelineRow,
-  FIT_RESTORE_HOLD_MS, byValue, departuresLineMarkup, groupDepartures, isDeparturesLine, taktCandidates, type DeparturesLine, type WallRow,
+  FIT_RESTORE_HOLD_MS, byValue, departuresLineMarkup, groupDepartures, groupRail, isDeparturesLine, taktCandidates, type DeparturesLine, type WallRow,
 } from '../../app/src/kiosk/timeline';
 
 // kiosk.nearby.* is WP1-D's key group (WP1-A adds it too); until it lands the
@@ -219,6 +219,73 @@ describe('the probe markup (§15.6)', () => {
 });
 
 // R1 (docs/reveal-2026-10-plan/R1.md): the wall's three departure rows become one row of up to three cells.
+describe('the rail line: every train in one row', () => {
+  const train = (id: string, minutes: number, to: string) => ({ id, atMs: NOW + minutes * MIN, to });
+  const rail = (trains = [train('2201', 12, 'Savski Marof'), train('2203', 25, 'Dugo Selo'), train('9001', 40, 'Zagreb Glavni kolodvor')]): TimelineRow =>
+    row({ id: 'rail:HZ-GK', kind: 'rail', atMs: trains[0]!.atMs, title: trains[0]!.to, sub: 'Zagreb Glavni kolodvor', subShort: 'Glavni kolodvor', source: 'hz',
+      arrival: { routeId: 'i-tr1', routeName: 'Vlak', tripId: trains[0]!.id, headsign: trains[0]!.to, atMs: trains[0]!.atMs, live: false, minutes: null },
+      detail: { kind: 'rail', trains } });
+  const railLi = (): HTMLLIElement => host.querySelector<HTMLLIElement>('li.nearby-row[data-kind="rail"]')!;
+  const railCells = (): HTMLElement[] => [...railLi().querySelectorAll<HTMLElement>('.k-dep-cell')];
+
+  it('draws the wall\'s rail row as one line: the train badge, the station, a destination over a time per train', () => {
+    expect(groupRail([rail(), always()]).map((r) => ('asLine' in r ? r.asLine : undefined))).toEqual([true, undefined]);
+    // A rail row without its trains (older callers) stays a row.
+    expect('asLine' in groupRail([row({ id: 'rail:x', kind: 'rail', source: 'hz' })])[0]!).toBe(false);
+    mount();
+    handle!.update([dep(1), dep(2), dep(3), rail(), always()], 2000, NOW);
+    const li = railLi();
+    expect([li.dataset.id, li.dataset.cells, li.dataset.source, li.hasAttribute('data-live')]).toEqual(['rail:HZ-GK', '3', 'hz', false]);
+    expect(li.querySelector('.k-nearby-at .k-line-badge')?.getAttribute('data-kind')).toBe('other');
+    expect(text(li.querySelector('.k-nearby-at .k-line-badge'))).toBe('Vlak');
+    expect(li.querySelector('.k-nearby-mark')).not.toBeNull();
+    expect(text(li.querySelector('.k-nearby-at .k-rail-station'))).toBe('Glavni kolodvor');
+    expect(railCells().map((c) => [c.dataset.id, text(c.querySelector('.k-dep-headsign')), text(c.querySelector('.nearby-when'))])).toEqual([
+      ['rail:2201', 'Savski Marof', '17:57'], ['rail:2203', 'Dugo Selo', '18:10'], ['rail:9001', 'Glavni kolodvor', '18:25'],
+    ]);
+    expect(host.querySelectorAll('li.nearby-row[data-kind="rail"]')).toHaveLength(1);
+  });
+
+  it('draws the same row as a row where the list is not the wall\'s (the phone, the handheld wall): the later trains after "zatim"', () => {
+    const html = rowsMarkup([rail()], NOW, i18n);
+    const ol = document.createElement('ol');
+    ol.innerHTML = html;
+    expect(text(ol.querySelector('.nearby-title'))).toBe('Vlak Savski Marof');
+    expect(text(ol.querySelector('.nearby-sub'))).toBe('Zagreb Glavni kolodvor · zatim 18:10 Dugo Selo, 18:25 Glavni kolodvor');
+    ol.innerHTML = rowsMarkup([rail([train('2201', 12, 'Savski Marof')])], NOW, i18n);
+    expect(text(ol.querySelector('.nearby-sub'))).toBe('Zagreb Glavni kolodvor');
+    mount({ departuresLine: () => false });
+    handle!.update([dep(1), rail(), always()], 2000, NOW);
+    expect(railLi().querySelector('.k-dep-cell')).toBeNull();
+    expect(text(railLi().querySelector('.nearby-sub'))).toContain('zatim 18:10 Dugo Selo');
+  });
+
+  it('keeps its node when a train leaves: the leaving cell goes, the new one fades in its own cell', () => {
+    mount();
+    handle!.update([dep(1), rail(), always()], 2000, NOW);
+    const li = railLi();
+    const kept = railCells()[1]!;
+    handle!.update([dep(1), rail([train('2203', 25, 'Dugo Selo'), train('9001', 40, 'Zagreb Glavni kolodvor'), train('2205', 55, 'Harmica')]), always()], 2000, NOW + MIN);
+    expect(railLi()).toBe(li);
+    expect(railCells().map((c) => c.dataset.id)).toEqual(['rail:2203', 'rail:9001', 'rail:2205']);
+    expect(railCells()[0]).toBe(kept);
+    expect(railCells()[2]!.dataset.enter).toBe('1');
+    expect(li.dataset.enter).toBeUndefined();
+  });
+
+  it('takes trains off the line where a destination does not fit its cell on one line, never a word of it', () => {
+    // A destination takes three lines in a cell of three, two in a cell of two (whole words, the most a cell holds).
+    const measure: TimelineMeasure = {
+      box: () => ({ height: 520, width: 900, overflow: false }),
+      lines: (el) => (el.classList.contains('k-dep-headsign') ? (el.closest('li')?.getAttribute('data-cells') === '3' ? 3 : 2) : 1),
+    };
+    mount({ measure });
+    handle!.update([dep(1), rail(), always()], 2000, NOW);
+    expect(railLi().dataset.cells).toBe('2');
+    expect(railCells().map((c) => text(c.querySelector('.k-dep-headsign')))).toEqual(['Savski Marof', 'Dugo Selo']);
+  });
+});
+
 describe('the departures line (R1)', () => {
   const lineOf = (rows: readonly WallRow[]): DeparturesLine => rows.find(isDeparturesLine)!;
 

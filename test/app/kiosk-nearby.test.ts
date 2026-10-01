@@ -1377,30 +1377,56 @@ describe('the trains (rail, S3): a Glavni kolodvor scene', () => {
     city: { ...CITY, places: [...PLACES, STATION, FAR] }, snapshots: { 'zet-rt': snap('zet-rt', []) }, ...extra,
   });
 
-  it('lists two trains (RAIL_MAX_DEFAULT, brief §3), from the timetable and never live, and the trams keep their three', () => {
+  it('lists the trains as ONE row of up to three (RAIL_MAX_DEFAULT), from the timetable and never live, and the trams keep their three', () => {
     const rows = selectNearby(gk());
-    expect(RAIL_MAX_DEFAULT).toBe(2);
+    expect(RAIL_MAX_DEFAULT).toBe(3);
     expect(rows.filter((r) => r.kind === 'departure')).toHaveLength(MAX_DEPARTURES);
-    const rails = rows.filter((r) => r.kind === 'rail');
-    expect(rails.map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
-    expect(rails.every((r) => !r.live && r.arrival?.live === false)).toBe(true);
-    expect(rails[0]).toMatchObject({
-      id: 'rail:2201', atMs: NOW_GK + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', live: false, source: 'hz',
-      selection: { kind: 'place', id: 'rail-hz-gk' }, arrival: { routeName: 'R1', live: false, minutes: null },
+    const rail = one(rows, 'rail');
+    expect(rail).toMatchObject({
+      // The station's id: a train leaving changes the row, it does not replace it.
+      id: 'rail:HZ-GK', atMs: NOW_GK + 12 * MIN, title: 'Savski Marof', sub: 'Zagreb Glavni kolodvor', subShort: 'Glavni kolodvor',
+      live: false, source: 'hz', selection: { kind: 'place', id: 'rail-hz-gk' }, arrival: { routeName: 'R1', live: false, minutes: null },
     });
-    // By default timed rows like the rest, after the departures.
-    for (const rail of rails) expect(rows.indexOf(rail)).toBeGreaterThanOrEqual(MAX_DEPARTURES);
+    expect(rail.detail).toEqual({ kind: 'rail', trains: [
+      { id: '2201', atMs: NOW_GK + 12 * MIN, to: 'Savski Marof' },
+      { id: '2203', atMs: NOW_GK + 25 * MIN, to: 'Dugo Selo' },
+      { id: '9001', atMs: NOW_GK + 40 * MIN, to: 'Sisak' },
+    ] });
+    // By default a timed row like the rest, after the departures.
+    expect(rows.indexOf(rail)).toBeGreaterThanOrEqual(MAX_DEPARTURES);
   });
 
-  it('puts the trains first under railFirst and lists railMax of them, without touching the trams', () => {
+  it('puts the train row first under railFirst and carries railMax trains, without touching the trams', () => {
     const first = selectNearby(gk({ policy: { railFirst: true } }));
-    expect(first.slice(0, 2).map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
-    expect(first.slice(2, 5).map((r) => r.kind)).toEqual(['departure', 'departure', 'departure']);
-    const two = selectNearby(gk({ policy: { railMax: 2 } })).filter((r) => r.kind === 'rail');
-    expect(two.map((r) => r.id)).toEqual(['rail:2201', 'rail:2203']);
-    const single = selectNearby(gk({ policy: { railMax: 1 } })).filter((r) => r.kind === 'rail');
-    expect(single.map((r) => r.id)).toEqual(['rail:2201']);
-    expect(selectNearby(gk({ policy: { railMax: 0 } })).some((r) => r.kind === 'rail')).toBe(false);
+    expect(first[0]!.id).toBe('rail:HZ-GK');
+    expect(first.slice(1, 4).map((r) => r.kind)).toEqual(['departure', 'departure', 'departure']);
+    const trainsOf = (policy: NearbyInput['policy']) => {
+      const rails = selectNearby(gk({ policy })).filter((r) => r.kind === 'rail');
+      expect(rails.length).toBeLessThanOrEqual(1);
+      return rails.flatMap((r) => (r.detail?.kind === 'rail' ? r.detail.trains.map((t) => t.id) : []));
+    };
+    expect(trainsOf({ railMax: 2 })).toEqual(['2201', '2203']);
+    expect(trainsOf({ railMax: 1 })).toEqual(['2201']);
+    expect(trainsOf({ railMax: 0 })).toEqual([]);
+  });
+
+  it('reads the nearest station only, a farther one where the nearest has no train left, and never the same train twice', () => {
+    const NEAR = place('rail-hz-near', 'rail', 'Zagreb Klara', 15.9850, 45.8046, { sourceId: 'hz-schedule', sourceRecord: 'HZ-NEAR' });
+    const city = { ...CITY, places: [...PLACES, STATION, NEAR, FAR] };
+    const near = trains('HZ-NEAR', [['2201', 'R1', 'Savski Marof', 18]]);
+    const rows = selectNearby(gk({ city, railBoards: [near, HZ] }));
+    expect(rows.filter((r) => r.kind === 'rail').map((r) => r.id)).toEqual(['rail:HZ-GK']);
+    expect(one(rows, 'rail').detail).toMatchObject({ trains: [{ id: '2201' }, { id: '2203' }, { id: '9001' }] });
+    const empty = trains('HZ-GK', []);
+    expect(one(selectNearby(gk({ city, railBoards: [empty, near] })), 'rail')).toMatchObject({ id: 'rail:HZ-NEAR', sub: 'Zagreb Klara', subShort: 'Klara' });
+  });
+
+  it('leaves out a train that leaves before the walk to its station is over', () => {
+    // The station is about 300 m from the place: some two and a half minutes on foot.
+    const AWAY = place('rail-hz-away', 'rail', 'Zagreb Glavni kolodvor', 15.9831, 45.8046, { sourceId: 'hz-schedule', sourceRecord: 'HZ-GK' });
+    const city = { ...CITY, places: [...PLACES, AWAY] };
+    const board = trains('HZ-GK', [['2199', 'R1', 'Savski Marof', 1], ['2201', 'R1', 'Dugo Selo', 4]]);
+    expect(one(selectNearby(gk({ city, railBoards: [board] })), 'rail').detail).toMatchObject({ trains: [{ id: '2201' }] });
   });
 
   it('reads "Vlak" on the badge where HŽ has no short name, and nothing from a station outside the circle', () => {

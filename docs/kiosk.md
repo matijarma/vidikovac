@@ -26,7 +26,10 @@ upute o pretraživanju dodirom. Ukratko:
   brojem linije i vremenom, a s odredištem kad za njega stane; plavo „za N
   min” za praćeno vozilo, odnosno plavo vrijeme sata kad odbroj ne stane u
   ćeliju, i sivi sat za vozni red; zatim retci s vremenom i na kraju jedan
-  redak „uvijek”. Telefon zadržava tri zasebna retka polazaka.
+  redak „uvijek”. Telefon zadržava tri zasebna retka polazaka. Vlakovi
+  uvijek zauzimaju jedan redak: na zaslonu oznaka „Vlak” i kolodvor, a do njih
+  do tri vlaka, svaki s odredištem iznad vremena; na telefonu prvi vlak, a
+  sljedeći iza riječi „zatim”.
 - Retci za prvu stranicu biraju se po statičnoj vrijednosti: koliko je njihov
   trenutak blizu i koje su vrste. U popisu stoje po vremenu, a retci koji
   nisu bili prikazani deset minuta dobivaju prednost samo na drugoj stranici.
@@ -293,7 +296,8 @@ obavijest iz ZET-ovih novosti kad govori o prometu, obje najviše četiri dana
 od objave i ne nakon dana koji naslov imenuje. Zatim slijede retci s
 vremenom: kraj zatvaranja prometnice (zatvaranje nepoznatog kraja ispisuje
 „u tijeku”), događanje s mjestom održavanja i tramvajem do mjesta događanja,
-prvi polazak vlaka kad je kolodvor u krugu (sivi sat), kiša u iduća dva sata,
+redak vlakova kad je kolodvor u krugu (do tri sljedeća vlaka s najbližeg
+kolodvora do kojih se stigne pješice, sivi sat), kiša u iduća dva sata,
 planirani prekid struje ili vode, stanje ceste s krajem i najbliže otvoreno
 mjesto s vremenom zatvaranja, sljedeći zalazak ili izlazak
 sunca (nikad oba), večerašnji zadnji polasci kao jedan redak, četiri sata
@@ -313,7 +317,7 @@ cjeloviti naziv iz izvora ili se prelama u cijelosti. Jedine su iznimke naslov
 događanja bez kraćeg naziva i naslov ZET-ove obavijesti, koji se režu na dva
 retka. Kad retci ne stanu, s popisa izlaze cijeli retci: najprije retci za
 sutra (sutrašnje otvaranje ili događanje, sutrašnji izlazak sunca),
-najkasniji prvi; zatim retci vlaka (osim vlakova koje stanje usluge stavlja
+najkasniji prvi; zatim redak vlakova (osim kad ga stanje usluge stavlja
 ispred polazaka), kiše, prekida struje ili vode, stanja ceste i najbližeg
 otvorenog mjesta, najkasniji prvi; zatim zadnji od drugog i
 trećeg polaska, osim kad je dalje od njega izlazak ili zalazak sunca,
@@ -478,10 +482,12 @@ Sigurnosni `/hitno` također radi bez sesije i bez JavaScripta, javno.
   cijeli grad. Arhivska građa nije implementirana integracija ovog
   prototipa. HŽ-ove ploče prikazuju samo vrijeme po voznom redu: za vlakove
   nema praćenih vozila, pa nema ni procjene dolaska. Kad je kolodvor u
-  krugu, prvi polazak vlaka stoji i na popisu „U blizini”, kao siv sat, a
-  kad ZET šalje znatno manje vozila nego što ih predviđa vozni red ili
-  gotovo nijedno, vlakovi stoje ispred polazaka (najviše dva u smanjenoj, a
-  najviše tri u tihoj usluzi).
+  krugu, vlakovi stoje i na popisu „U blizini”, u jednom retku i kao siv
+  sat: do tri sljedeća vlaka s najbližeg kolodvora, bez onih koji krenu
+  prije nego što se do kolodvora stigne pješice. Odredište je posljednja
+  postaja vlaka. Kad ZET šalje znatno manje vozila nego što ih predviđa
+  vozni red ili gotovo nijedno, redak vlakova stoji ispred polazaka, i dalje
+  kao jedan redak.
 - „Zadnji polazak” je posljednji polazak po voznom redu ZET-a, ne procjena
   dolaska.
 - Svaka rečenica u zaglavlju odobreni je predložak ispunjen jednom
@@ -658,7 +664,7 @@ svaki redak nosi oznaku isporuke: `--stage d1` provjerava samo oznake vozila, na
 kojima ne smije biti „+N”, i greške u pregledniku i na mreži, a bez te zastavice
 primjenjuju se svi pragovi. Redak `departures` traži od jedan do tri polaska, brojena kao ćelije retka polazaka, u svakom
 očitanju i barem onoliko polazaka koliko ih uklapanje zadržava od ponuđenih: tri, a dva uz
-prvi, zadnji ili redak obavijesti, za jedan manje za svaki vlak koji stoji ispred polazaka, a
+prvi, zadnji ili redak obavijesti, za jedan manje kad redak vlakova stoji ispred polazaka, a
 manje samo kad puni popis ne može više. Popis bez oznake `data-fit-dropped` računa se kao
 neuspjeh. Redak `silent-departures` traži da nijedna rečenica u zaglavlju ne najavi polazak
 (osim vlaka) dok dvojnik javlja da ZET ne šalje položaje; u dan bez takvog stanja ostaje na nuli.

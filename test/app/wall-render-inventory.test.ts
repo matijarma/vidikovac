@@ -37,6 +37,8 @@ const INDIRECT_GUARDS: Record<string, string> = {
   'app/src/kiosk/timeline.ts#rowMarkup': 'if (!vettedTimelineRow(row)) return',
   // R1: a cell of the departures line is its departure row, under the same row check.
   'app/src/kiosk/timeline.ts#departureCellMarkup': 'if (!vettedTimelineRow(row)) return',
+  // The rail line: the rail row's station and its trains' destinations, under the same row check (which reads each train).
+  'app/src/kiosk/timeline.ts#railLineMarkup': 'if (!vettedTimelineRow(row)) return',
   'app/src/transport/view.ts#departureRow': 'if (!vettedArrival(row)) return',
 };
 // This renderer is used by phone discovery only. The wall calls placeDetail
