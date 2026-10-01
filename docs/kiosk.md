@@ -27,15 +27,15 @@ upute o pretraživanju dodirom. Ukratko:
   min” za praćeno vozilo, odnosno plavo vrijeme sata kad odbroj ne stane u
   ćeliju, i sivi sat za vozni red; zatim retci s vremenom i na kraju jedan
   redak „uvijek”. Telefon zadržava tri zasebna retka polazaka.
-- Popis je poredan po vrijednosti retka: koliko je njegov trenutak blizu i
-  koje je vrste. Prva stranica zadržava taj statični redoslijed, a retci koji
+- Retci za prvu stranicu biraju se po statičnoj vrijednosti: koliko je njihov
+  trenutak blizu i koje su vrste. U popisu stoje po vremenu, a retci koji
   nisu bili prikazani deset minuta dobivaju prednost samo na drugoj stranici.
   U ritmu rečenice u zaglavlju (Ritam 20, 30 ili 60 sekundi) zaslon povremeno
   otkrije ono što ne stane: za okretanje stranice podoban je svaki treći takt,
   kada se najviše dva retka koji nisu rezervirani i nisu unutar pola sata od
   svojeg trenutka zamijene retcima s druge stranice, a kad je prvi polazak
-  dalje od deset minuta, redak polazaka na svakom četvrtom podobnom taktu
-  pokaže sljedeće polaske s oznakom „zatim”. Između početaka dvaju otkrivanja
+  dalje od deset minuta, za prikaz sljedećih polazaka s oznakom „zatim”
+  podoban je svaki četvrti takt. Između početaka dvaju otkrivanja
   prolaze najmanje tri takta. Odjednom se mijenja najviše jedan dio zaslona i
   nijedan se ne pomiče dok je otvorena ploča na dodir, dok je zaslon uparen ili
   dok zaglavlje drži stanje usluge; uz smanjeno kretanje i u laganom prikazu
@@ -254,10 +254,10 @@ točku prazne stanice „BAJS: prazna stanica”, uz točku na prozoru cijeloga
 grada „BAJS stanica” i „Kultura večeras”; stavke kojih na karti nema legenda
 ne ispisuje, a pod `?lagano=1`, gdje karte nema, nema ni legende.
 
-Kad se R3 spoji u DR3, radar DHMZ-a pokazuje kišu unutar kvadrata od 30 km oko
-Zagreba, ili satna prognoza najbliže postaje najavljuje kišu unutar dva sata,
-u donjem lijevom kutu karte stoji isječak DHMZ-ova radarskog kompozita oko
-Zagreba, 240 × 240 piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se
+Nakon spajanja R3 u DR3 isječak DHMZ-ova radarskog kompozita prikazuje se kad
+radar pokazuje kišu unutar kvadrata od 30 km oko Zagreba ili satna prognoza
+najbliže postaje najavljuje kišu unutar dva sata. Stoji u donjem lijevom kutu
+karte, 240 × 240 piksela, s navodom „Radar · Izvor: DHMZ”. Isječak se
 osvježava kad DHMZ objavi novu sliku; kad slika nije svježa ili se ne može
 pročitati, isječka nema, a zaslon ne tvrdi da kiše nema. U laganom prikazu
 isječka nema.
