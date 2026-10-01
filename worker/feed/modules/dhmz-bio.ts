@@ -1,7 +1,7 @@
 import type { FetchContext } from '../schema';
 import type { FeedPayload, ItemInput } from '../payload';
 import { parseXml, xmlArray, xmlText } from '../xml';
-import { addZagrebDays, zagrebDate, zagrebDayKey, zagrebIso } from '../time';
+import { addZagrebDays, isCalendarDate, zagrebDate, zagrebDayKey, zagrebIso } from '../time';
 
 // DHMZ's biometeorological forecast, https://prognoza.hr/bio_novo.xml (Otvorena dozvola, "Izvor: DHMZ"): three days
 // or fewer, each one text for the whole country (`<Tekst>`) and a number per region (`<station name="sredisnja">3`).
@@ -30,7 +30,8 @@ export function firstSentence(text: string): string | undefined {
 
 function day(value: string): { year: number; month: number; day: number } | undefined {
   const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})\.?$/.exec(value);
-  return match ? { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) } : undefined;
+  const parsed = match ? { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) } : undefined;
+  return parsed && isCalendarDate(parsed) ? parsed : undefined;
 }
 
 /** "29.09.2026 u 09:34", Zagreb time, to ISO. */
@@ -38,6 +39,7 @@ function forecastAt(value: string): string | undefined {
   const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})\.?\s+u\s+(\d{1,2}):(\d{2})$/.exec(value);
   if (!match) return undefined;
   const [d, m, y, h, min] = match.slice(1).map(Number) as [number, number, number, number, number];
+  if (!isCalendarDate({ year: y, month: m, day: d }) || h > 23 || min > 59) return undefined;
   return zagrebIso(y, m, d, h, min);
 }
 

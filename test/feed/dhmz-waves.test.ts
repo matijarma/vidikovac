@@ -64,6 +64,30 @@ describe('dhmz-waves', () => {
     expect(payload.coverage).toEqual({ shown: 1, total: 2, limited: true });
   });
 
+  it.each([
+    ['missing day', '<param name="dan3" value="R"/>', ''],
+    ['duplicate day', '<param name="dan3" value="R"/>', '<param name="dan2" value="R"/>'],
+    ['zero day', '<param name="dan1" value="Y"/>', '<param name="dan0" value="Y"/>'],
+  ])('does not shift warnings across dates when there is a %s', (_name, before, after) => {
+    const parsed = parseWaves(file('toplinskival_5.xml').replace(before, after), 'heat', new Date('2026-09-30T15:00:00Z'));
+    expect(parsed.items).toEqual([]);
+    expect(parsed.dropped).toBe(1);
+  });
+
+  it('does not turn a missing station coordinate into zero', () => {
+    const xml = file('toplinskival_5.xml').replace(/(name="Zagreb"\s+lon=)"15.98"/, '$1""');
+    expect(xml).toContain('lon=""');
+    expect(parseWaves(xml, 'heat', new Date('2026-09-30T15:00:00Z')).items[0]?.geo).toBeUndefined();
+  });
+
+  it('preserves ctime seconds and rejects malformed creation clocks', () => {
+    expect(creationInstant('Sun Sep 13 14:42:59 2026')).toEqual({ year: 2026, iso: '2026-09-13T12:42:59.000Z' });
+    expect(creationInstant('Sun Sep 31 14:42:59 2026')).toBeUndefined();
+    expect(creationInstant('Sun Sep 13 25:42:59 2026')).toBeUndefined();
+    expect(creationInstant('unknown 2026')).toBeUndefined();
+    expect(creationInstant('unknown 2026 +0200')).toBeUndefined();
+  });
+
   it('leaves one file\'s item when the other fails, and throws only when both do', async () => {
     const failing = () => { throw new Error('upstream 500'); };
     const payload = await fetchDhmzWaves(context('2026-09-30T15:00:00Z', failing, () => new Response(raw('hladnival.xml'))));
@@ -75,6 +99,6 @@ describe('dhmz-waves', () => {
   it('throws on a foreign root and reads both forms of creationtime', () => {
     expect(() => parseWaves('<?xml version="1.0"?><Bioprognoza/>', 'heat', new Date())).toThrow(/TriVis/);
     expect(creationInstant('Tue, 24 Feb 2026 09:27:51 +0100')).toEqual({ year: 2026, iso: '2026-02-24T08:27:51.000Z' });
-    expect(creationInstant('Sun Sep 13 14:42:59 2026')).toEqual({ year: 2026, iso: '2026-09-13T12:42:00.000Z' });
+    expect(creationInstant('Sun Sep 13 14:42:59 2026')).toEqual({ year: 2026, iso: '2026-09-13T12:42:59.000Z' });
   });
 });

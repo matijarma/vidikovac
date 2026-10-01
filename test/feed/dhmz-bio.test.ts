@@ -48,6 +48,14 @@ describe('dhmz-bio', () => {
     expect(parseBio(SEP_30, new Date('2026-10-01T10:00:00Z')).items.map((item) => item.id)).toEqual(['dhmz-bio:2026-10-01', 'dhmz-bio:2026-10-02']);
   });
 
+  it('does not normalize an impossible source date or forecast clock into another instant', () => {
+    const xml = SEP_30.replace('30.09.2026</Datum>', '31.09.2026</Datum>')
+      .replace('29.09.2026 u 09:34', '29.09.2026 u 25:75');
+    const payload = parseBio(xml, new Date('2026-09-30T08:00:00Z'));
+    expect(payload.items.map(item => item.id)).toEqual(['dhmz-bio:2026-10-01', 'dhmz-bio:2026-10-02']);
+    expect(payload.sourceUpdatedAt).toBeUndefined();
+  });
+
   it('reads the saved file of 1 October', () => {
     const payload = parseBio(SAVED, new Date('2026-10-01T02:10:00Z'));
     expect(payload.items).toHaveLength(2);
