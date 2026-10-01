@@ -1,1 +1,186 @@
 /* Kaj ima? / Snimka: the report (hero numbers, Zaslon, Tijek, Što se vidjelo). Owner: lane S3 (app/src/snimka/report.ts); page level is in snimka.css. */
+/* The chart roles, from the layer-2 tokens alone, so both themes follow the
+   page's own switch. Validated with the dataviz validator against the strip's
+   surface (surface-1) in light and dark: seen against the comparison grey
+   (normal vision 28.0 / 22.3), the screen's number against seen (26.1 / 22.2),
+   the service ramp normal 45 %, reduced 75 %, silent 100 % (monotone L,
+   adjacent CVD 9.2 / 9.6, normal vision 16.0 / 15.3; status hues, never
+   without their words). */
+.sn-body {
+  --sn-seen: var(--tone-action-brand);
+  --sn-expected-fill: color-mix(in oklab, var(--tone-text-muted) 16%, transparent);
+  --sn-expected-key: color-mix(in oklab, var(--tone-text-muted) 30%, var(--tone-surface-1));
+  --sn-compare: color-mix(in oklab, var(--tone-text-muted) 55%, var(--tone-surface-1));
+  --sn-screen: var(--tone-text-primary);
+  --sn-ghost: color-mix(in oklab, var(--tone-urgency) 14%, transparent);
+  --sn-bike: var(--tone-bike);
+  --sn-bike-fill: color-mix(in oklab, var(--tone-bike) 12%, transparent);
+  --sn-state-normal: color-mix(in oklab, var(--tone-state-success) 45%, var(--tone-surface-1));
+  --sn-state-reduced: color-mix(in oklab, var(--tone-state-warning) 75%, var(--tone-surface-1));
+  --sn-state-silent: var(--tone-state-danger);
+  --sn-state-unknown: var(--tone-surface-3);
+  --sn-feed-mark: color-mix(in oklab, var(--tone-text-primary) 72%, var(--tone-surface-1));
+  --sn-hatch-none: repeating-linear-gradient(135deg, var(--tone-stroke-strong) 0 1.5px, transparent 1.5px 5px);
+  --sn-hatch-retro: repeating-linear-gradient(45deg, color-mix(in oklab, var(--tone-surface-1) 62%, transparent) 0 2px, transparent 2px 6px);
+}
+/* Hero numbers stand alone: proportional figures (tabular only where numbers line up in columns). */
+.sn-body .st-kpi-value { font-variant-numeric: normal; }
+.sn-body .st-kpi-sub { font-variant-numeric: tabular-nums; }
+
+/* ---- Zaslon: the miniature, the capture beside it, the quartet ----------------- */
+.sn-screen-grid { display: grid; gap: var(--sp-5); align-items: start; }
+@media (min-width: 64rem) { .sn-screen-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+.sn-mini { container: sn-mini / inline-size; display: grid; align-content: start; gap: var(--sp-3); min-inline-size: 0; min-block-size: 18rem; padding: clamp(0.875rem, 2vw, 1.25rem); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); box-shadow: var(--tone-shadow-soft); }
+.sn-mini-skeleton { display: block; min-block-size: 16rem; }
+.sn-mini-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'where time' 'sentence sentence'; gap: var(--sp-2) var(--sp-3); align-items: baseline; padding-block-end: var(--sp-3); border-block-end: 1px solid var(--tone-stroke); }
+@container sn-mini (min-width: 42rem) { .sn-mini-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'where sentence time'; } }
+.sn-mini-where { grid-area: where; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); min-inline-size: 0; }
+.sn-mini-brand { font-size: var(--type-control); font-weight: var(--weight-bold); letter-spacing: -0.04em; }
+.sn-mini-place { font-size: var(--type-head); color: var(--tone-text-muted); overflow-wrap: anywhere; }
+.sn-mini-sentence { grid-area: sentence; margin: 0; font-size: var(--type-head); font-weight: var(--weight-bold); line-height: 1.3; overflow-wrap: anywhere; }
+@container sn-mini (min-width: 42rem) { .sn-mini-sentence { text-align: center; } }
+.sn-mini-kicker { font-size: var(--type-control); font-weight: var(--weight-bold); color: var(--tone-transit); }
+/* The kicker's colour, as the phone maps it (overview.css .sada-kicker). BAJS teal fails as text, so its word keeps the ink and a dot carries the colour. */
+.sn-mini-sentence[data-kicker='kultura'] .sn-mini-kicker { color: var(--tone-events); }
+.sn-mini-sentence[data-kicker='vrijeme'] .sn-mini-kicker, .sn-mini-sentence[data-kicker='radovi'] .sn-mini-kicker { color: var(--tone-weather); }
+.sn-mini-sentence[data-kicker='bicikli'] .sn-mini-kicker { color: var(--tone-text-primary); }
+.sn-mini-sentence[data-kicker='bicikli'] .sn-mini-kicker::before { content: ''; display: inline-block; inline-size: 0.5rem; block-size: 0.5rem; margin-inline-end: 0.35rem; border-radius: 50%; background: var(--tone-bike); vertical-align: 0.1em; }
+.sn-mini-sentence[data-kicker='nocas'] .sn-mini-kicker { color: var(--tone-text-secondary); }
+.sn-mini-between { font-size: var(--type-control); font-weight: var(--weight-medium); color: var(--tone-text-muted); text-align: start; }
+.sn-mini-time { grid-area: time; justify-self: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sn-mini-date { font-size: var(--type-control); color: var(--tone-text-muted); }
+.sn-mini-clock { font-size: var(--type-head); font-weight: var(--weight-bold); }
+.sn-mini-note { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--tone-surface-2); font-size: var(--type-control); line-height: 1.45; }
+.sn-mini-nearby { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-mini-nearby-title { margin: 0; font-size: var(--type-control); font-weight: var(--weight-bold); }
+.sn-mini-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.sn-mini-row { display: grid; grid-template-columns: minmax(3.5rem, 6rem) 0.5rem minmax(0, 1fr); align-items: baseline; column-gap: var(--sp-3); }
+.sn-mini-when { text-align: end; font-size: var(--type-body); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; color: var(--tone-text-muted); overflow-wrap: anywhere; }
+.sn-mini-row[data-live='true'] .sn-mini-when { color: var(--tone-text-brand); }
+.sn-mini-dot { align-self: start; margin-block-start: 0.45rem; inline-size: 0.5rem; block-size: 0.5rem; border-radius: 50%; background: var(--tone-action-brand); }
+.sn-mini-dot[data-timed='false'] { background: transparent; box-shadow: inset 0 0 0 2px var(--tone-text-muted); }
+.sn-mini-main { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.sn-mini-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--type-body); font-weight: var(--weight-medium); line-height: 1.35; overflow-wrap: anywhere; }
+.sn-mini-sub { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.4; }
+.sn-mini-row[data-caveat='true'] .sn-mini-title { font-style: italic; }
+.sn-mini-empty { margin: 0; font-size: var(--type-control); color: var(--tone-text-muted); }
+.sn-mini[data-view='error'] { place-content: center; }
+
+.sn-capture { margin: 0; display: grid; align-content: start; gap: var(--sp-2); min-inline-size: 0; }
+.sn-capture picture { display: block; }
+.sn-capture img { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); }
+.sn-capture figcaption { font-size: var(--type-secondary); color: var(--tone-text-muted); line-height: 1.45; }
+.sn-capture-none { display: grid; place-content: center; aspect-ratio: 16 / 9; margin: 0; padding: var(--sp-4); border: 1px solid var(--tone-stroke); border-radius: var(--r-md); background: var(--tone-surface-2); color: var(--tone-text-muted); font-size: var(--type-control); text-align: center; }
+
+.sn-quartet { display: grid; gap: var(--sp-3); margin-block-start: clamp(2rem, 4vw, 3rem); }
+.sn-quartet h3 { font-size: var(--type-title); letter-spacing: -0.02em; }
+.sn-quartet-lede { color: var(--tone-text-muted); line-height: 1.5; }
+.sn-quartet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.sn-quartet-day { color: var(--tone-text-primary); font-weight: var(--weight-bold); }
+
+/* ---- Tijek: the small multiples on one axis --------------------------------------- */
+.sn-strip-frame { container: sn-strip / inline-size; display: grid; gap: var(--sp-4); min-inline-size: 0; padding: clamp(0.875rem, 2.5vw, 1.5rem); border: 1px solid var(--tone-stroke); border-radius: var(--r-lg); background: var(--tone-surface-1); }
+.sn-strip-frame:focus-visible { outline: 3px solid var(--tone-focus-ring); outline-offset: 3px; }
+.sn-strip-readout { margin-block-start: var(--sp-3); }
+
+.sn-axis { position: relative; block-size: 1.25rem; }
+.sn-axis-day { position: absolute; inset-block-start: 0; inset-inline-start: calc(var(--x) * 100%); padding-inline-start: 0.3rem; border-inline-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1.25rem; color: var(--tone-text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Under 40rem a day's 24 hours are under a hundred pixels: the date goes, the weekday stays. */
+@container sn-strip (max-width: 40rem) { .sn-axis-day { font-size: 0; } .sn-axis-day::before { content: attr(data-short); font-size: var(--type-meta); } .sn-axis-start { display: none; } }
+
+.sn-panel { display: grid; gap: var(--sp-2); min-inline-size: 0; }
+.sn-panel + .sn-panel { padding-block-start: var(--sp-4); border-block-start: 1px solid var(--tone-stroke); }
+.sn-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-4); }
+.sn-panel-title { font-size: var(--type-control); font-weight: var(--weight-bold); letter-spacing: 0; }
+.sn-subplot-title { display: inline-flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--type-meta); color: var(--tone-text-muted); }
+.sn-legend li[hidden] { display: none; }
+
+/* Legend keys mirror their marks: a stroke for a line, a block for a band or an area, a hatch for no verdict. */
+.sn-key { display: inline-block; flex: none; inline-size: 0.875rem; block-size: 0.875rem; border-radius: 3px; background: var(--key, var(--tone-stroke-strong)); }
+.sn-key-line { inline-size: 1rem; block-size: 0; border-radius: 0; border-block-start: 2px solid var(--key); background: none; }
+.sn-key-hatch { background: var(--sn-hatch-none); box-shadow: inset 0 0 0 1px var(--tone-stroke-strong); }
+.sn-key-retro { background: var(--sn-hatch-retro), var(--sn-state-silent); }
+.sn-key-mark { block-size: 0.625rem; border-radius: 2px; }
+.sn-tone-seen { --key: var(--sn-seen); }
+.sn-tone-expected { --key: var(--sn-expected-key); }
+.sn-tone-compare { --key: var(--sn-compare); }
+.sn-tone-screen { --key: var(--sn-screen); }
+.sn-tone-ghost { --key: color-mix(in oklab, var(--tone-urgency) 28%, var(--tone-surface-1)); }
+.sn-tone-bike-empty { --key: var(--sn-bike); }
+.sn-tone-feed-empty { --key: var(--sn-feed-mark); }
+.sn-tone-feed-frozen { background: repeating-linear-gradient(135deg, var(--sn-feed-mark) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-feed-mark); }
+.sn-state-normal { --key: var(--sn-state-normal); }
+.sn-state-reduced { --key: var(--sn-state-reduced); }
+.sn-state-silent { --key: var(--sn-state-silent); }
+.sn-state-unknown { --key: var(--sn-state-unknown); }
+
+/* A plot: marks over a hairline baseline, midnight lines, the cursor; the press column chart joins the same rules. */
+.sn-plot, .sn-cols-plot { position: relative; overflow: clip visible; overflow-clip-margin: 2px; touch-action: pan-y; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.sn-plot { block-size: 7rem; border-block: 1px solid var(--tone-stroke); }
+.sn-plot-short { block-size: 4.25rem; }
+.sn-plot-band { block-size: 2.75rem; border-block: 0; }
+.sn-plot-lane { block-size: 2.25rem; border-block: 0; }
+.sn-curves { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; }
+.sn-curves path { fill: none; stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.sn-curves [hidden] { display: none; }
+.sn-line-seen { stroke: var(--sn-seen); }
+.sn-line-compare { stroke: var(--sn-compare); }
+.sn-line-screen { stroke: var(--sn-screen); }
+.sn-line-bike { stroke: var(--sn-bike); }
+.sn-curves .sn-area-expected { fill: var(--sn-expected-fill); stroke: none; }
+.sn-curves .sn-area-bike { fill: var(--sn-bike-fill); stroke: none; }
+.sn-curves .sn-wash-ghost { fill: var(--sn-ghost); stroke: none; }
+.sn-scale { position: absolute; z-index: 1; inset-block-start: 0.15rem; inset-inline-start: 0.15rem; padding: 0 0.25rem; border-radius: 3px; background: color-mix(in oklab, var(--tone-surface-1) 82%, transparent); font-size: var(--type-meta); line-height: 1.3; color: var(--tone-text-muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+.sn-dayline { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: 1px; background: var(--tone-stroke); pointer-events: none; }
+/* The cursor is a full-width box moved by one transform per frame (a percent of its own width: no layout read). */
+.sn-cursor, .sn-hover { position: absolute; z-index: 2; inset-block: -0.25rem; inset-inline-start: 0; inline-size: 100%; pointer-events: none; will-change: transform; }
+.sn-cursor::before, .sn-hover::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: -1px; inline-size: 2px; background: var(--tone-text-primary); }
+.sn-hover::before { inset-inline-start: 0; inline-size: 1px; background: var(--tone-text-muted); }
+.sn-hover[hidden] { display: none; }
+
+/* The service band: the state in its colour, a hatch where the machine held its verdict, a lighter hatch over the hours computed afterwards. */
+.sn-band { position: absolute; inset-inline: 0; inset-block-end: 0; block-size: 1.5rem; border-radius: 3px; background: var(--tone-surface-2); }
+.sn-seg { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 100%); inline-size: calc(var(--w) * 100%); box-sizing: border-box; border-inline-end: 2px solid var(--tone-surface-1); background: var(--key); }
+.sn-seg:last-child { border-inline-end: 0; }
+.sn-seg.sn-state-none { background: var(--sn-hatch-none); }
+.sn-retro { position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); background: var(--sn-hatch-retro); pointer-events: none; }
+.sn-retro-label { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: calc(var(--w) * 100%); block-size: 1rem; border-inline: 1px solid var(--tone-stroke-strong); border-block-start: 1px solid var(--tone-stroke-strong); font-size: var(--type-meta); line-height: 1; color: var(--tone-text-muted); pointer-events: none; }
+.sn-retro-label span { position: relative; inset-block-start: 0.2rem; padding-inline: 0.35rem; white-space: nowrap; }
+
+/* ZET's data: two lanes, the minutes with no vehicle (solid) above the minutes it did not change (hatched). */
+.sn-lane { position: absolute; inset-inline: 0; block-size: 0.75rem; border-radius: 2px; background: var(--tone-surface-2); }
+.sn-lane[data-lane='empty'] { inset-block-start: 0.25rem; }
+.sn-lane[data-lane='frozen'] { inset-block-end: 0.25rem; }
+.sn-lane .sn-seg { border: 0; min-inline-size: 1px; }
+.sn-feed-empty-on { background: var(--sn-feed-mark); }
+.sn-feed-frozen-on { background: repeating-linear-gradient(135deg, var(--sn-feed-mark) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--sn-feed-mark); }
+
+/* The press columns: statistika's chart, shorter, on the strip's axis (its own tick row gives way to the shared one). */
+.sn-columns .st-cols { grid-template-rows: auto 4.25rem 0; }
+.sn-columns .st-cols-scale { border-block-start-style: solid; border-color: var(--tone-stroke); }
+.sn-columns .st-cols-scale span { position: relative; z-index: 1; transform: none; margin: 0.15rem 0 0 0.15rem; padding: 0 0.25rem; border-radius: 3px; background: color-mix(in oklab, var(--tone-surface-1) 82%, transparent); line-height: 1.3; }
+.sn-columns .st-cols-axis { display: none; }
+.sn-columns .st-readout { font-size: var(--type-secondary); color: var(--tone-text-muted); }
+
+@media (forced-colors: active) {
+  .sn-cursor::before { background: CanvasText; }
+  .sn-seg, .sn-key, .sn-lane { forced-color-adjust: none; }
+}
+
+/* ---- Što se vidjelo -------------------------------------------------------------- */
+.sn-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); margin: 0; }
+.sn-figure-value { font-size: clamp(2rem, 1.5rem + 1.6vw, 2.75rem); font-weight: var(--weight-bold); line-height: 1; letter-spacing: -0.035em; }
+.sn-figure-label { font-size: var(--type-control); color: var(--tone-text-muted); line-height: 1.4; }
+.sn-facts { margin: 0; display: grid; gap: var(--sp-3); }
+.sn-facts > div { display: grid; gap: 0.15rem; }
+.sn-facts dt { font-size: var(--type-meta); font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+.sn-facts dd { margin: 0; font-size: var(--type-control); font-weight: var(--weight-bold); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.sn-bar-null .st-bar-track { background: var(--sn-hatch-none); border-radius: 2px; }
+.sn-bar-null .st-bar-value { font-weight: var(--weight-medium); color: var(--tone-text-muted); }
+.sn-small-table .st-table-scroll { max-block-size: none; }
+.sn-skeleton-card { display: block; min-block-size: 10rem; }
+
+@media print {
+  .sn-cursor, .sn-hover { display: none; }
+  .sn-strip-frame { break-inside: avoid; }
+}
