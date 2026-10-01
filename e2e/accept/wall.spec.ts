@@ -31,9 +31,10 @@ import { legibilityReport, WALL_1920 } from '../legibility';
 import { attachRecorders, TILE_REQUESTS, type Recorder } from '../recorders';
 import { PORTRAIT_SCENES, PROXY_DEVICE_SCALE_FACTOR, SCENE_IDS, SCENES, WALL_LANDSCAPE, WALL_PORTRAIT, type Scene } from '../scenes';
 import {
-  CLOCK_RE, ELLIPSIS_RE, isSampleError, LEAD_TEXT, ROTATION_SETTLE_MS, ROTATION_STEP_MS, rotationFailures, sampleFailures, sampleRotation, SETTINGS_HOLD_MS,
-  summariseRotation, WALL_PROBES, wallSample, type WallSample,
+  CLOCK_RE, departureFailures, ELLIPSIS_RE, isSampleError, LEAD_TEXT, revealCadenceFailures, revealEpisodes, ROTATION_SETTLE_MS, ROTATION_STEP_MS, rotationFailures,
+  sampleFailures, sampleRotation, SETTINGS_HOLD_MS, summariseRotation, WALL_PROBES, wallSample, type WallSample,
 } from '../wall';
+import type { FeedItem } from '../../worker/feed/schema';
 import {
   ACCEPT_ARTEFACTS, attrOf, CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, HEADINGS, HEADINGS_IN_PAGE,
   IDLE_MINUTE_MS, nearbyHeadFailures, pageNow, rotationSceneFailures, routeSceneTeaser, routeTiles, sceneClock, sceneReadingFailures,
@@ -61,12 +62,14 @@ const softly = expect.configure({ soft: true });
 
 interface OpenWall { clock: SceneClock; recorder: Recorder | null }
 
-/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns. */
-async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>> }): Promise<OpenWall> {
+/** The scene's screen, fixtures and clock, then the wall's own URL; `board` overrides the departures fixture's headsigns,
+ *  and `events` adds items to the scene's dogadanja snapshot before the teaser is routed (the reveal scene, R2). */
+async function openWall(page: Page, request: APIRequestContext, scene: Scene, label: string, record: boolean, board?: { headsigns?: Readonly<Record<string, string>>; events?: readonly FeedItem[] }): Promise<OpenWall> {
   await isolateLocalNetwork(page.context());
   await page.clock.install({ time: scene.now });
   const clock = sceneClock(scene.now);
   const snapshots = await installKioskFeedFixture(page, scene.feedState, { now: scene.now });
+  if (board?.events?.length) snapshots.dogadanja.items.unshift(...board.events);
   await routeSceneTeaser(page, snapshots, scene.now, clock);
   const vehicles = snapshots['zet-rt']?.items ?? [];
   const days = serviceDays(scene.now);
@@ -273,6 +276,61 @@ test.describe('wall at 1920×1080: eight scenes', () => {
       expect(zoomAfter, `${label}: a touch never moves the camera (data-zoom unchanged)`).toBe(zoom);
     });
   }
+
+  // R2 (docs/reveal-2026-10-plan/R2.md, step 11): on the header's beat the list swaps its least valuable rows for the
+  // ones it had no room for, for exactly one beat, then they return; one region per beat, within the beat budget.
+  // Two located events inside the circle make sure the midday wall has a page 2 whatever the fixture's rows are.
+  test('reveal (midday1230, Ritam 20 s): one page turn and its return over four beats', async ({ page, request }) => {
+    test.setTimeout(SCENE_TIMEOUT_MS);
+    const scene = SCENES.midday1230;
+    const label = 'reveal-midday1230';
+    const RHYTHM_S = 20;
+    const BEATS = 5;
+    const event = (id: string, title: string, hours: number, lon: number, lat: number): FeedItem => ({
+      id, module: 'dogadanja', kind: 'event', tier: 'open', title, at: new Date(scene.now + hours * 3_600_000).toISOString(), dateBasis: 'event',
+      geo: { type: 'Point', coordinates: [lon, lat] }, data: { source: 'kulturpunkt', precision: 'time' },
+    });
+    const events = [event('reveal:zrinjevac', 'Koncert na Zrinjevcu', 3, 15.9778, 45.8097), event('reveal:kavana', 'Razgovor u Gradskoj kavani', 4, 15.9769, 45.8135)];
+    const { clock } = await openWall(page, request, scene, label, false, { events });
+    await expect(page.getByTestId('kiosk-invitation'), `${label}: the wall paints its invitation within ${LOAD_MS / 1000} s`).toBeVisible({ timeout: LOAD_MS });
+    await settle(page, scene, SETTLE_MS, true);
+    softly(await attrOf(page, WALL_PROBES.kioskRoot, 'data-rhythm'), `${label}: the wall runs at the default Ritam (${WALL_PROBES.kioskRoot} data-rhythm)`).toBe(String(RHYTHM_S));
+    const first = await wallSample(page);
+    const page2 = (first.fitDropped ?? []).filter((kind) => kind !== 'departure' && kind !== 'closure');
+    softly(page2.length, `${label}: the list has a page 2 (data-fit-dropped ${JSON.stringify(first.fitDropped)} names a kind beside departure and closure)`).toBeGreaterThan(0);
+
+    await test.step(`${BEATS} beats of ${RHYTHM_S} s: a reading every ${ROTATION_STEP_MS / 1000} s with the calm recorder running`, async () => {
+      await page.evaluate(CALM_MOTION_START_IN_PAGE, CALM_MOTION_SPEC);
+      const readings: WallSample[] = [];
+      for (let t = 0; t < BEATS * RHYTHM_S * 1000; t += ROTATION_STEP_MS) {
+        await page.clock.runFor(ROTATION_STEP_MS);
+        await page.waitForTimeout(ROTATION_SETTLE_MS);
+        readings.push(await wallSample(page));
+        await page.evaluate(CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_SPEC);
+      }
+      clock.sync(await pageNow(page));
+      const calm = await page.evaluate(CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC);
+      writeArtefact(`reveal-${label}.json`, { first, readings: readings.map((r) => ({ at: r.at, reveal: r.reveal, rhythm: r.rhythm, sentence: r.sentence, fact: r.fact, rows: r.rows.map((row) => row.id), fitDropped: r.fitDropped, departures: r.departures })), calm });
+      const episodes = revealEpisodes(readings);
+      const pages = episodes.filter((e) => e.region === 'list' && e.kind === 'page');
+      softly(pages.length, `${label}: at least one page turn (${WALL_PROBES.nearbyRows} data-reveal="page:<beat>") in ${BEATS} beats; episodes ${JSON.stringify(episodes.map((e) => `${e.region} ${e.kind}:${e.beat}`))}`).toBeGreaterThanOrEqual(1);
+      for (const e of pages) {
+        const i = readings.findIndex((r) => r.at === e.firstAt);
+        const j = readings.findIndex((r) => r.at === e.lastAt);
+        const before = readings[i - 1];
+        const after = readings[j + 1];
+        if (!before || !after) continue;
+        softly(after.rows.map((row) => row.id), `${label}: the rows return after page:${e.beat} (the reading before it and the first after it list the same ids)`).toEqual(before.rows.map((row) => row.id));
+        const swapped = readings[i]!.rows.map((row) => row.id).filter((id) => !before.rows.some((row) => row.id === id));
+        softly(swapped.length, `${label}: page:${e.beat} shows rows the reading before did not (${swapped.join(', ')})`).toBeGreaterThanOrEqual(1);
+      }
+      softly(revealCadenceFailures(readings), `${label}: the reveal cadence (one region per beat, ${BEATS} beats, each standing a beat and ending by the second)`).toEqual([]);
+      softly(readings.filter((r) => r.reveal?.list && r.reveal?.line).length, `${label}: no reading carries a reveal on both the list and the line`).toBe(0);
+      softly(calmMotionFailures(calm), `${label}: the beat budget (${CALM_MOTION_SPEC.root}: at most 6 records across a reveal's start or return, 2 elsewhere, every staying row on its node)`).toEqual([]);
+      for (const r of readings) softly(departureFailures(r), `${label}: 1 to 3 departures and the fitted count at ${new Date(r.at).toISOString()}`).toEqual([]);
+      softly(readings.flatMap((r) => r.rows).filter((row) => ELLIPSIS_RE.test(row.text)).map((row) => row.text), `${label}: no row's text is cut by an ellipsis`).toEqual([]);
+    });
+  });
 });
 
 /** Every line's destination the same words (the departures fixture keys its headsigns by route). */
