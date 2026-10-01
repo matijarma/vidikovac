@@ -87,7 +87,7 @@ describe('the scrub debounce', () => {
     h.advance(SCRUB_DEBOUNCE_MS);
     await h.settle();
     h.store.want('396', T0 + 300, 60, true);
-    expect(h.store.at('396', T0 + 300)?.current.t0).toBe(T0);
+    expect(h.store.at('396', T0 + 300)?.current?.t0).toBe(T0);
     expect(h.load).toHaveBeenCalledTimes(1);
   });
 });
@@ -130,7 +130,7 @@ describe('prefetch and hold by speed', () => {
       h.runIdle();
       await h.settle();
       expect(h.store.held()).toBeLessThanOrEqual(CHUNK_POLICY[1].hold);
-      expect(h.store.at('396', t0s[i]!)?.current.t0).toBe(t0s[i]);
+      expect(h.store.at('396', t0s[i]!)?.current?.t0).toBe(t0s[i]);
       expect(h.store.at('396', t0s[i]!)?.next?.t0).toBe(t0s[i + 1]);
     }
     expect(h.store.state('396', t0s[0]!)).toBe('idle');

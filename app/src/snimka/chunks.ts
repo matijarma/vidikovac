@@ -40,6 +40,8 @@ export interface ChunkStoreDeps {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
   now?: () => number;
+  /** A chunk became ready or missing: a paused map redraws, the badge re-reads the state. */
+  onChange?: () => void;
 }
 
 export interface ChunkStore {
@@ -94,12 +96,14 @@ export function createChunkStore(deps: ChunkStoreDeps): ChunkStore {
         const net = k.split(':')[0] as SegmentNet;
         const want = lastWant.get(net);
         if (want) evict(net, want.keep, want.hold);
+        deps.onChange?.();
       },
       () => {
         if (destroyed) return;
         if (attempt === 0) { fetchChunk(k, 1); return; }
         const e = entries.get(k);
         if (e && e.state === 'loading') { e.state = 'missing'; e.chunk = null; }
+        deps.onChange?.();
       },
     );
   }
