@@ -166,13 +166,19 @@ test.describe('/snimka/ stage', () => {
     const pillsPlaced = async (): Promise<string[]> => ((await map.getAttribute('data-pills')) ?? '').split('|');
     await expect.poll(pillsPlaced, { timeout: 30_000, message: 'lines 13 and 33 placed' }).toEqual(expect.arrayContaining(['13', '33']));
     expect(await pillsPlaced()).not.toContain('17');
-    // Panned west and south by MapLibre's own keys (100 px a press), the stage places line 17 too: the fleet is drawn
-    // wherever the camera goes. The census re-reads the pills on a change of its key (zoom, selection, evidence), not on
-    // a pan, so a layer toggled off and on (two updates) asks it again.
+    // Panned west and south by MapLibre's own keys, the stage places line 17 too: the fleet is drawn wherever the
+    // camera goes. Each key is a 100 px easeTo of about 300 ms from the camera's current centre, and a press during
+    // the ease restarts it from there, so back-to-back presses collapse into a step or two: each press gets its ease,
+    // and the camera is read back (data-center) first. The census (name-census.ts) re-reads the pills on a change of
+    // its key (zoom, selection, marks, evidence version), never on a pan alone, so a layer toggled off and on (two
+    // updates) asks it again.
     await map.locator('canvas').focus();
-    for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowLeft');
-    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(800);
+    for (let i = 0; i < 6; i++) { await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(400); }
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(400); }
+    await expect.poll(async () => {
+      const [lon, lat] = ((await map.getAttribute('data-center')) ?? '').split(',').map(Number);
+      return lon < 15.93 && lat < 45.795;
+    }, { timeout: 15_000, message: 'the camera west and south of Jelačić' }).toBe(true);
     await page.locator('[data-layer="closures"]').click();
     await page.locator('[data-layer="closures"]').click();
     await expect(page.locator('[data-layer="closures"]')).toHaveAttribute('aria-pressed', 'true');
