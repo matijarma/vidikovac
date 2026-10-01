@@ -139,7 +139,8 @@ export const SENTENCE_SLOT_RULES: Readonly<Record<SentenceSlotType, SlotRule>> =
   // R3's more-city families: a wave's level of danger (1 to 3: DHMZ's umjerena, velika, vrlo velika opasnost), the day
   // it falls on, and DHMZ's own first sentence of the biometeorological forecast ("DHMZ: " + text stays within 80).
   level: { max: 1, pattern: /^[1-3]$/u },
-  day: { max: 10, pattern: /^(?:danas|sutra|ponedjeljak|utorak|srijeda|četvrtak|petak|subota|nedjelja|today|tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/u },
+  // Reveal decision 14: the already-whitelisted "ponedjeljak" is eleven characters.
+  day: { max: 11, pattern: /^(?:danas|sutra|ponedjeljak|utorak|srijeda|četvrtak|petak|subota|nedjelja|today|tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/u },
   dhmzText: { max: 74, pattern: /^\p{Lu}[\p{L}\p{N} ,;:()–-]*\.$/u, names: 'register-text' },
 };
 export function validateSentenceSlot(type: SentenceSlotType, value: string): SentenceRejection | null {

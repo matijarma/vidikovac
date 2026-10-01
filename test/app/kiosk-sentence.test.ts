@@ -1610,6 +1610,14 @@ describe('the more-city facts (R3)', () => {
     data: { wave: 'heat', levels, level: Number(levels.split(',')[0]), station: 'Zagreb' },
   }]) });
 
+  it('R3 review: the already-whitelisted eleven-character Monday word fits its slot', () => {
+    expect('ponedjeljak').toHaveLength(11);
+    expect(validateSentenceSlot('day', 'ponedjeljak')).toBeNull();
+    const facts = sentenceFacts(input({ now: at('2026-10-01T10:00:00+02:00'), snapshots: waves('0,0,0,0,2', '2026-10-01') }));
+    expect(text(facts, 'dhmz-waves:heat:2026-10-05')).toBe('Toplinski val: 2. stupanj, ponedjeljak.');
+    expect(validateSentenceSlot('day', 'ponedjeljak!')).not.toBeNull();
+  });
+
   it('a heat wave: the first day from today with a level, "sutra" on Tuesday and "danas" on Wednesday', () => {
     // 22 September 2026 is a Tuesday.
     const tuesday = sentenceFacts(input({ snapshots: waves('0,2,3,0,0', '2026-09-22') }));
