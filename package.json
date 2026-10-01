@@ -12,6 +12,8 @@
     "build:streets": "node scripts/streets-geo.mjs",
     "build:street-points": "node scripts/street-points.mjs",
     "build:prijava": "node scripts/build-prijava.mjs",
+    "build:snimka": "node scripts/snimka/build.mjs",
+    "snimka:upload": "node scripts/snimka/upload.mjs",
     "build": "node scripts/build-hitno-style.mjs && vite build && tsc --noEmit -p worker/tsconfig.json",
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit -p worker/tsconfig.json && tsc --noEmit -p app/tsconfig.json",

@@ -1,0 +1,312 @@
+{
+ "note": "Chapters and markers of /snimka/ (lane S1, for the owner's read-through). Croatian titles and texts; the word štrajk is allowed here. `at` is a fixed instant with its source; `rule` is resolved by the events stage against the replayed window series (fleet-below, entities-zero, header-age-over, seen-rising-past, first-state) and the event is marked derived. Every source link is one the recordings hold (ZET's RSS, the three outlets) or the product's own public repository for its own changes.",
+ "events": [
+  {
+   "id": "vecer-prije",
+   "at": "2026-09-27T20:00:00+02:00",
+   "kind": "recording",
+   "title": "Večer prije",
+   "text": "Nedjelja navečer: vozni park je uobičajen, a ZET je u 16:27 najavio štrajk od ponedjeljka.",
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "obavijest-zet",
+   "at": "2026-09-27T16:27:00+02:00",
+   "kind": "zet",
+   "title": "ZET najavljuje štrajk",
+   "text": "Obavijest građanima, poslodavcima i ustanovama o najavljenom štrajku u ZET-u.",
+   "sources": [
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10164"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "povlacenje",
+   "rule": {
+    "kind": "fleet-below",
+    "value": 20,
+    "after": "2026-09-27T22:00:00+02:00",
+    "holdMin": 10
+   },
+   "kind": "service",
+   "title": "Vozila se povlače u spremišta",
+   "text": "U pokretu je manje od 20 vozila.",
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "pocetak",
+   "at": "2026-09-28T03:30:00+02:00",
+   "kind": "zet",
+   "title": "Početak štrajka",
+   "text": "Radnici ZET-a i Zagrebačkog holdinga stupaju u štrajk u 03:30.",
+   "sources": [
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10164"
+    },
+    {
+     "label": "Jutarnji list",
+     "url": "https://www.jutarnji.hr/vijesti/zagreb/opci-strajk-zet-zagrebacki-holding-zagreb-3-30-jutro-15750510"
+    },
+    {
+     "label": "Večernji list",
+     "url": "https://www.vecernji.hr/zagreb/uzivo-poceo-je-strajk-u-zagrebu-tramvaju-nisu-krenuli-ocekuje-se-da-ce-ih-velika-vecina-strajkati-1999079"
+    }
+   ],
+   "chapter": true
+  },
+  {
+   "id": "prvo-jutro",
+   "at": "2026-09-28T07:45:00+02:00",
+   "kind": "recording",
+   "title": "Prvo jutro",
+   "text": "Jutarnja špica gotovo bez tramvaja i autobusa.",
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "feed-prazan",
+   "rule": {
+    "kind": "entities-zero",
+    "after": "2026-09-28T17:00:00+02:00",
+    "holdMin": 60
+   },
+   "kind": "zet",
+   "title": "ZET šalje podatke bez ijednog vozila",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "feed-stoji",
+   "rule": {
+    "kind": "header-age-over",
+    "value": 300,
+    "after": "2026-09-29T05:00:00+02:00"
+   },
+   "kind": "zet",
+   "title": "ZET-ovi podaci se ne mijenjaju",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "linija-228",
+   "at": "2026-09-29T09:56:42+02:00",
+   "kind": "zet",
+   "title": "Autobusna linija 228 do Rebra",
+   "text": "Uspostavljena autobusna linija 228 (Borongaj – Rebro – Borongaj).",
+   "sources": [
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10166"
+    },
+    {
+     "label": "Večernji list",
+     "url": "https://www.vecernji.hr/zagreb/sindikat-i-zet-se-uspjeli-dogovoriti-uspostavljena-jedna-redovna-autobusna-linija-1999556"
+    }
+   ],
+   "chapter": true
+  },
+  {
+   "id": "feed-stoji-opet",
+   "rule": {
+    "kind": "header-age-over",
+    "value": 300,
+    "after": "2026-09-29T20:00:00+02:00"
+   },
+   "kind": "zet",
+   "title": "ZET-ovi podaci opet se ne mijenjaju",
+   "text": null,
+   "sources": [],
+   "chapter": false
+  },
+  {
+   "id": "nadogradnja-1",
+   "at": "2026-09-29T22:41:00+02:00",
+   "kind": "recording",
+   "title": "Nadogradnja aplikacije",
+   "text": "Aplikacija broji samo vozila s položajem i odbacuje položaje s vremenom iz budućnosti.",
+   "sources": [
+    {
+     "label": "Kaj ima?, izvorni kod",
+     "url": "https://github.com/matijarma/vidikovac/commit/72e498c3"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "nadogradnja-2",
+   "at": "2026-09-29T22:55:00+02:00",
+   "kind": "recording",
+   "title": "Nadogradnja aplikacije: stanje voznog parka",
+   "text": "Aplikacija uspoređuje vozila u pokretu s voznim redom i to govori na zaslonu.",
+   "sources": [
+    {
+     "label": "Kaj ima?, izvorni kod",
+     "url": "https://github.com/matijarma/vidikovac/commit/44e8ac14"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "stanje-usluge",
+   "at": "2026-09-29T23:17:09+02:00",
+   "kind": "recording",
+   "title": "Aplikacija dobiva stanje usluge",
+   "text": "Od ove minute stanje usluge objavljuje sama aplikacija; ranije je izračunano naknadno, istim pravilima.",
+   "sources": [
+    {
+     "label": "Kaj ima?, izvorni kod",
+     "url": "https://github.com/matijarma/vidikovac/commit/44e8ac14"
+    }
+   ],
+   "chapter": true
+  },
+  {
+   "id": "trece-jutro",
+   "at": "2026-09-30T07:45:00+02:00",
+   "kind": "recording",
+   "title": "Treće jutro",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "sud-holding",
+   "at": "2026-09-30T10:20:00+02:00",
+   "kind": "court",
+   "title": "Sud: štrajk u Holdingu nije zakonit",
+   "text": "Županijski sud u Zagrebu proglašava nezakonitim štrajk u Zagrebačkom holdingu.",
+   "sources": [
+    {
+     "label": "N1",
+     "url": "https://n1info.hr/vijesti/strajk-zagrebacki-holding-sud-odlucuje-o-zakonitosti-30-02-2026/"
+    },
+    {
+     "label": "Jutarnji list",
+     "url": "https://www.jutarnji.hr/vijesti/hrvatska/sud-je-presudio-da-je-strajk-u-holdingu-nezakonit-ali-agonija-u-zagrebu-bi-mogla-trajati-jos-20-dana-15751279"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "sud-zet",
+   "at": "2026-09-30T11:13:00+02:00",
+   "kind": "court",
+   "title": "Sud: štrajk u ZET-u nije zakonit",
+   "text": "Županijski sud u Zagrebu proglašava nezakonitim i štrajk u ZET-u.",
+   "sources": [
+    {
+     "label": "N1",
+     "url": "https://n1info.hr/vijesti/strajk-zet-odluka-suda-o-zakonitosti-30-09-2026/"
+    },
+    {
+     "label": "Večernji list",
+     "url": "https://www.vecernji.hr/zagreb/strajk-proglasen-nezakonitim-zet-pozvao-sindikate-odmah-ga-obustavite-1999934"
+    },
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10167"
+    }
+   ],
+   "chapter": true
+  },
+  {
+   "id": "zet-poziv",
+   "at": "2026-09-30T11:26:11+02:00",
+   "kind": "zet",
+   "title": "ZET poziva na povratak na posao",
+   "text": "Uprava ZET-a poziva sindikate da obustave štrajk.",
+   "sources": [
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10167"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "povratak",
+   "rule": {
+    "kind": "seen-rising-past",
+    "value": 10,
+    "after": "2026-09-30T17:00:00+02:00",
+    "holdMin": 5
+   },
+   "kind": "return",
+   "title": "Vozila se vraćaju",
+   "text": "U pokretu je ponovno više od deset vozila.",
+   "sources": [
+    {
+     "label": "Večernji list",
+     "url": "https://www.vecernji.hr/zagreb/krenuli-prvi-busevi-pripremaju-se-i-tramvaji-2-5-i-17-pogledajte-na-kojim-trasama-2000089"
+    }
+   ],
+   "chapter": true
+  },
+  {
+   "id": "puni-opseg",
+   "at": "2026-09-30T18:20:57+02:00",
+   "kind": "return",
+   "title": "ZET: promet ponovno u punom opsegu",
+   "text": null,
+   "sources": [
+    {
+     "label": "ZET",
+     "url": "https://www.zet.hr/default.aspx?id=10168"
+    }
+   ],
+   "chapter": false
+  },
+  {
+   "id": "smanjeno",
+   "rule": {
+    "kind": "first-state",
+    "value": "reduced",
+    "after": "2026-09-30T18:00:00+02:00"
+   },
+   "kind": "service",
+   "title": "Stanje usluge: smanjeno",
+   "text": null,
+   "sources": [],
+   "chapter": false
+  },
+  {
+   "id": "uobicajeno",
+   "rule": {
+    "kind": "first-state",
+    "value": "normal",
+    "after": "2026-09-30T18:00:00+02:00"
+   },
+   "kind": "service",
+   "title": "Uobičajeno stanje",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  },
+  {
+   "id": "prekid-snimanja",
+   "at": "2026-09-30T22:41:00+02:00",
+   "kind": "recording",
+   "title": "Prekid lokalnog snimanja",
+   "text": "Od 22:41 do 22:54 lokalni snimači nisu radili; ZET-ovi podaci snimljeni su bez prekida.",
+   "sources": [],
+   "chapter": false
+  },
+  {
+   "id": "prvo-uobicajeno-jutro",
+   "at": "2026-10-01T07:45:00+02:00",
+   "kind": "recording",
+   "title": "Prvo uobičajeno jutro",
+   "text": null,
+   "sources": [],
+   "chapter": true
+  }
+ ]
+}
