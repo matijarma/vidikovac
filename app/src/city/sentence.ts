@@ -614,7 +614,8 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       // a countdown's next minute) is the same sentence. It keeps its dwell and its wording; only a
       // fact that can no longer be said in that wording ends the dwell early.
       if (!held && current) {
-        const leased = current.refs.some(ref => ref.startsWith('always:')) && current.kicker === 'kultura';
+        const leased = current.refs.some(ref => ref.startsWith('reveal:')
+          || (ref.startsWith('always:') && current!.kicker === 'kultura'));
         const refreshed = sentences.find(s => s.text !== current!.text && isSameSentence(s, current) && valid(s)
           && (!leased || current!.validUntil! > now));
         if (refreshed) {
@@ -661,7 +662,11 @@ export function createSentenceSequence(options: SentenceSequenceOptions): Senten
       // seconds before its minute rounds to 0 would stand ten seconds (decision 29).
       const lasting = (s: WrittenSentence) => ((s as RotatingSentence).formUntil ?? s.validUntil!) - now >= rhythm;
       const lasts = (s: WrittenSentence) => lasting(s) ? 0 : 1;
-      const order = (a: WrittenSentence, b: WrittenSentence) => (lasts(a) - lasts(b)) || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b));
+      // A fresh reveal names this beat's row before ordinary kicker variety or an equal model wording.
+      // It still passes the same no-repeat, validity and full-rhythm gates as every other candidate.
+      const revealRank = (s: WrittenSentence) => s.refs.some(ref => ref.startsWith('reveal:')) ? 0 : 1;
+      const order = (a: WrittenSentence, b: WrittenSentence) => (lasts(a) - lasts(b)) || (revealRank(a) - revealRank(b))
+        || (factAge(a) - factAge(b)) || (kickerAge(a) - kickerAge(b));
       choices.sort(order);
       // No restatement in another wording: with three facts at hand the header waits for a fact it has
       // not shown rather than say the one that just left in other words.

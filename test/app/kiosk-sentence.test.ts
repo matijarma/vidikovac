@@ -1520,6 +1520,31 @@ describe('reveal facts (R2)', () => {
     expect(templateSentences(factsAt(NOW, reveal(NOW)), i18n, 80, NOW + RHYTHM + 1).some(s => s.refs[0] === 'reveal:event:gavella')).toBe(false);
   });
 
+  it('R2 review: an unseen reveal beats kicker variety and an equal model sentence', () => {
+    const seq = createSentenceSequence({ rhythmMs: RHYTHM });
+    const previous = templateSentences([{ id: 'opening:kino', kind: 'kultura', text: 'Kino: rad počinje u 13:00.', validUntil: NOW + 3_600_000 }], i18n, 80, NOW - RHYTHM);
+    expect(seq.read(previous, NOW - RHYTHM)?.kicker).toBe('kultura');
+    const own = poolAt(NOW).find(s => s.refs.includes('event:gavella'))!;
+    const model: WrittenSentence = { ...own, origin: 'model' };
+    const onBeat = seq.read([model, ...poolAt(NOW, reveal(NOW))], NOW)!;
+    expect(onBeat.refs).toEqual(['reveal:event:gavella']);
+    expect(onBeat.validUntil).toBe(NOW + RHYTHM);
+    expect(seq.read([model, ...poolAt(NOW + RHYTHM)], NOW + RHYTHM)?.text).not.toBe(own.text);
+  });
+
+  it('R2 review: a changed row cannot refresh an expired reveal lease past its beat', () => {
+    const seq = createSentenceSequence({ rhythmMs: RHYTHM });
+    seq.read(poolAt(NOW - 2 * RHYTHM), NOW - 2 * RHYTHM);
+    seq.read(poolAt(NOW - RHYTHM).filter(s => !s.refs.includes('event:gavella')), NOW - RHYTHM);
+    const onBeat = seq.read(poolAt(NOW, reveal(NOW)), NOW)!;
+    expect(onBeat.refs).toEqual(['reveal:event:gavella']);
+    const changed = poolAt(NOW + RHYTHM, {
+      rows: rows().map(r => r.kind === 'event' ? { ...r, atMs: NOW + 3 * 3_600_000 } : r),
+    });
+    const after = seq.read(changed, NOW + RHYTHM);
+    expect(after?.text ?? '').not.toContain('Glembajevi');
+  });
+
   it('is not repeated within ten minutes: neither the same row revealed again nor the row\'s own fact sentence', () => {
     const seq = createSentenceSequence({ rhythmMs: RHYTHM, noRepeatMs: SENTENCE_NO_REPEAT_MS });
     const onBeat = seq.read(poolAt(NOW, reveal(NOW)), NOW)!;
