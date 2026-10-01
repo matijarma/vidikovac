@@ -422,6 +422,20 @@ describe('the full map draws the model, never the report (R-P2)', () => {
     expect(fc.features[2]!.properties).toMatchObject({ short: '', bearing: 180, hasHeading: false, held: true });
   });
 
+  // A pull-in (shared/city/depot-run.ts) shows no line number: the tram's sign says the depot, so its pill says ST or SD,
+  // in the neutral ink, under its own route id so a lit line 5 dims it and no cluster merges it into a 5.
+  it('labels a pull-in ST or SD, as its own route, in the neutral ink', () => {
+    expect(vehicleLabel({ short: '5', routeId: '5', headsign: 'Spr. Trešnj.' })).toBe('ST');
+    expect(vehicleLabel({ routeId: '6', headsign: 'Spr.Dubrava' })).toBe('SD');
+    expect(vehicleLabel({ short: '6', routeId: '6', headsign: 'Sopot' })).toBe('6');
+    const drawn: Drawn[] = [
+      { id: 'st', type: 0, routeId: '5', short: '5', headsign: 'Spr. Trešnj.', p: toPlane(15.97, 45.81), heading: null, speed: 5, confidence: 1, onShape: null },
+      { id: 'five', type: 0, routeId: '5', short: '5', headsign: 'Prečko', p: toPlane(15.98, 45.82), heading: null, speed: 5, confidence: 1, onShape: null },
+    ];
+    const fc = vehiclesToGeoJson(drawn);
+    expect(fc.features.map((f) => [f.properties.short, f.properties.routeId, f.properties.depot])).toEqual([['ST', 'ST', true], ['5', '5', false]]);
+  });
+
   it('omits oversized external route text instead of cutting it, including selected pills', () => {
     const long = '9'.repeat(45);
     const omitted = '';
@@ -965,7 +979,7 @@ describe('the vehicle bodies under the pills', () => {
     const fc = bodies().calls.at(-1) as BodyFC;
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0]!.geometry.type).toBe('LineString');
-    expect(fc.features[0]!.properties).toEqual({ id: 'vehicle:1', kind: 'tram', routeId: '6', alpha: expect.any(Number) });
+    expect(fc.features[0]!.properties).toEqual({ id: 'vehicle:1', kind: 'tram', routeId: '6', depot: false, alpha: expect.any(Number) });
     // One tram length, on the plane the model reckons in.
     const [a, b] = fc.features[0]!.geometry.coordinates.map(([lon, lat]) => toPlane(lon, lat));
     expect(Math.hypot(b!.x - a!.x, b!.y - a!.y)).toBeCloseTo(32, 6);

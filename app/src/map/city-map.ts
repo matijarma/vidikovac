@@ -17,6 +17,7 @@
 // lightweight path never loads either (R-L2).
 import type { ScreenStop } from '../core/contracts';
 import { ZET_ROUTES } from '../data/routes';
+import { depotRunOf, type DepotCode } from '../../../shared/city/depot-run';
 import { toLonLat } from '../../../shared/motion/geo';
 import { createLoop, type Loop } from '../motion/loop';
 import type { VisibleMarks } from './vehicle-features';
@@ -169,7 +170,10 @@ export interface VehicleFeatureCollection {
       kind: VehicleKind;
       /** The number on the front of the vehicle; '' when the route is unknown. */
       short: string;
+      /** The line's route id, or ST or SD on a pull-in: selecting the line it left dims it. */
       routeId: string;
+      /** A pull-in, drawn in the neutral ink: on a merged mark, when every member is one. */
+      depot: boolean;
       /** Degrees clockwise from north, the `icon-rotate` convention. */
       bearing: number;
       /** True when the model knows which way the vehicle faces (decision 5). */
@@ -230,12 +234,15 @@ export function bearingOf(dir: { x: number; y: number } | null | undefined): num
   return Math.round(((deg % 360) + 360) % 360);
 }
 
-/** The number on the front of the vehicle: the network's own short name,
- *  else the static GTFS table's, else the route id itself; '' for a vehicle
- *  whose route nobody knows. Held to the widest capsule (pills.ts's
- *  pillLabel), so a standalone or selected pill obeys the same cap as a
- *  cluster's name. */
-export function vehicleLabel(v: { short?: string; routeId?: string }): string {
+/** The number on the front of the vehicle: ST or SD on a pull-in (shared/
+ *  city/depot-run.ts: the tram no longer shows its line), else the network's
+ *  own short name, else the static GTFS table's, else the route id itself;
+ *  '' for a vehicle whose route nobody knows. Held to the widest capsule
+ *  (pills.ts's pillLabel), so a standalone or selected pill obeys the same
+ *  cap as a cluster's name. */
+export function vehicleLabel(v: { short?: string; routeId?: string; headsign?: string }): string {
+  const depot = depotRunOf(v.headsign);
+  if (depot) return depot;
   if (v.short) return vetExternal('headsign', v.short, 'row') === null ? '' : pillLabel(v.short);
   if (v.routeId === undefined) return '';
   const text = ZET_ROUTES[v.routeId]?.shortName || v.routeId;
@@ -248,7 +255,8 @@ export interface NetworkFeatureCollection {
     type: 'Feature';
     geometry: { type: 'LineString'; coordinates: [number, number][] };
     /** `main`: the shape is on its route's normal route (network.ts mainShapes), what a selection lights. */
-    properties: { shape: number; route: string; short: string; kind: VehicleKind; main: boolean };
+    /** `sid`: the shape's own index in the network (`shape` counts the drawn features), what a pull-in's lit trip names. */
+    properties: { shape: number; sid: number; route: string; short: string; kind: VehicleKind; main: boolean };
   }[];
 }
 
@@ -331,6 +339,12 @@ export interface VehicleInfo {
   onShape: number | null;
   /** The trip's headsign from the twin's join, when known (R-TE2). */
   headsign?: string;
+  /** A pull-in (shared/city/depot-run.ts): then `short` is ST or SD. */
+  depot?: DepotCode;
+  /** The rail path the mark rides and its arc on it, metres: what names the
+   *  stops a pull-in still calls at (transport/detail.ts vehicleAhead). */
+  path?: number;
+  s?: number;
   /** The realtime trip id from the twin's join, when known: what shared/city/
    *  arrivals.ts matches a scheduled departure against (WP5). */
   tripId?: string;
@@ -811,6 +825,8 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
   /** The focused route the overlays on the style were last built for, so a
    *  vehicle arriving (or leaving) re-derives them once, not every frame. */
   let focusedApplied: string | null = null;
+  /** The pull-in shape the overlays were last built for (tripShape), on the same once-per-change rule. */
+  let tripApplied: number | null = null;
   let prozor: ProzorOptions | null = options.prozor ?? null;
   let markZoom: number | null = options.markZoom ?? null;
   /** The desk's presented frame (round 4 kiosk lane, D-F4): the circle the workspace framed the camera on, read
@@ -885,7 +901,19 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     if (selection?.kind === 'route') return selection.id;
     const id = selection?.kind === 'vehicle' ? selection.id : typeof following === 'string' ? following : null;
     if (id === null) return null;
-    return lastDrawn.find((v) => v.id === id)?.routeId ?? null;
+    const drawn = lastDrawn.find((v) => v.id === id);
+    // A pull-in is no longer its line (shared/city/depot-run.ts): it is about ST or SD, never the line it left.
+    return depotRunOf(drawn?.headsign) ?? drawn?.routeId ?? null;
+  }
+
+  /** The shape a selected or followed pull-in rides, which the map lights as
+   *  its route whatever the line focus says: the way to the depot down streets
+   *  its line never takes. Null for every other vehicle, and off a real shape. */
+  function tripShape(): number | null {
+    const id = selection?.kind === 'vehicle' ? selection.id : typeof following === 'string' ? following : null;
+    if (id === null) return null;
+    const drawn = lastDrawn.find((v) => v.id === id);
+    return drawn && depotRunOf(drawn.headsign) && drawn.onShape !== null && drawn.onShape >= 0 ? drawn.onShape : null;
   }
 
   /** The line the overlays are built for, or null on a surface that never
@@ -912,7 +940,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     const focus = routeId === null
       ? null
       : { routeId, colour: l.lineColour(routeId, vehicleKind(type ?? ROUTE_TYPE_TRAM) === 'bus' ? p.routeBus : p.routeTram) };
+    const shape = tripShape();
     return { scale, modes, closuresVisible, selection, emphasis, prozor, markZoom, screenStopId: stop?.id ?? null, lineFocus: lineFocus === true, focus, heldNames,
+      ...(shape !== null ? { trip: { shape } } : {}),
       // Decision 58: a placed wall's frame draws the stops inside it alone; the desk's presented frame the same (D-F4).
       ...(prozor?.frame ? { frameStopIds: idsInFrame(stopsData.features, prozor.frame) }
         : prozor === null && deskFrame && profile === MAP_PRESENTATIONS.desktop ? { frameStopIds: idsInFrame(stopsData.features, deskFrame) } : {}) };
@@ -1100,7 +1130,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     // The selected vehicle's line becomes knowable the moment the model first
     // places it, and stops being so when it goes quiet: one re-derive on the
     // change, never a styleDiff per frame.
-    if (focusRouteId() !== focusedApplied) applyOverlays();
+    if (focusRouteId() !== focusedApplied || tripShape() !== tripApplied) applyOverlays();
     // What a frame costs when nothing is pushed: one string over the drawn
     // marks (vehicle-features.ts stepSignature), which says whether the fleet
     // still moves at all -- the loop parks when it does not. The clustering is
@@ -1608,6 +1638,7 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     created.addLayer({id:'ambient-highlight-area',type:'fill',source:'ambient-highlight',filter:['==',['geometry-type'],'Polygon'],paint:{'fill-color':palette.selection,'fill-opacity':0.12}});
     overlays = l.overlayLayers(palette, overlayOptions(l, palette));
     focusedApplied = focusRouteId();
+    tripApplied = tripShape();
     const beforeId = l.firstSymbolLayer(basemap);
     for (const layer of overlays) created.addLayer(layer as unknown as Record<string, unknown>, l.BELOW_LABELS.has(layer.id) ? beforeId : undefined);
     if (l.cityLayers) {
@@ -1801,12 +1832,14 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
     applyOps(map, l.styleDiff(overlays, next));
     overlays = next;
     focusedApplied = focusRouteId();
+    tripApplied = tripShape();
     fadeInLit(map, l, litRouteOf(options));
     writeFocusProbe(map, l);
   }
 
   /** The route the lit layers draw for these options: the focused one under line focus, else the selected route. */
   function litRouteOf(options: OverlayOptions): string | null {
+    if (options.trip) return `shape:${options.trip.shape}`;
     return (options.lineFocus === true ? options.focus?.routeId : undefined) ?? (options.selection?.kind === 'route' ? options.selection.id : null);
   }
   /** The lit route the map last drew, so only a change fades. */
@@ -2014,7 +2047,9 @@ export function createCityMap(options: CityMapOptions, deps: CityMapDeps = {}): 
         confidence: v.confidence,
         held: v.held === true,
         onShape: v.onShape,
+        ...(v.path !== undefined && v.s !== undefined ? { path: v.path, s: v.s } : {}),
         ...(v.headsign !== undefined ? { headsign: v.headsign } : {}),
+        ...(depotRunOf(v.headsign) ? { depot: depotRunOf(v.headsign)! } : {}),
         ...(v.tripId !== undefined ? { tripId: v.tripId } : {}),
         ...(v.nextStopId !== undefined ? { nextStopId: v.nextStopId } : {}),
         ...(v.delaySeconds !== undefined ? { delaySeconds: v.delaySeconds } : {}),

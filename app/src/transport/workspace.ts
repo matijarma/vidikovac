@@ -64,7 +64,7 @@ import { cancelledTrips, externalTextReady, feedLive } from '../city/feed';
 import { vetExternal } from '../../../shared/kiosk/external-text-boundary';
 import { aboutExpected, positionsUnavailable, serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import type { ExternalTextKind } from '../../../shared/kiosk/external-text';
-import { closureItems, countByRoute, plausibleDelays, vehicleDirection, vehicleNextStop, vehiclesOnRoute } from './detail';
+import { closureItems, countByRoute, plausibleDelays, vehicleDirection, depotVia, vehicleAhead, vehicleNextStop, vehiclesOnRoute } from './detail';
 import type { StopGroup } from './search';
 import { createSheet, type SheetController } from './sheet';
 import { tr, trPlural } from './strings';
@@ -966,7 +966,14 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         // One frozen moment for the sheet: the shell's own, else now when only the session flag says so.
         const frozenAt = c.frozenAt ?? (c.session?.frozen ? c.now : undefined);
         const serviceNote = stopServiceNote(i18n, c.snapshots['zet-rt'], c.now);
-        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, timetable, arrivalsStatus: next.status, cancelledRoutes: next.cancelledRoutes, frozenAt, now: c.now, serviceNote, positionsUnavailable: positionsUnavailable(c.snapshots['zet-rt'], c.now) });
+        // Where each pull-in among the rows leaves its line (shared/city/depot-run.ts).
+        const via = new Map<string, string>();
+        for (const r of [...next.rows, ...timetable]) {
+          if (!r.depot || via.has(r.tripId)) continue;
+          const words = depotVia(i18n, net, r, group.ids, vehicles);
+          if (words) via.set(r.tripId, words);
+        }
+        const html = stopDetailMarkup(i18n, { stop: group, routes: group.routes.map(routeEntry), counts: countByRoute(vehicles), delays: delays(), isScreenStop: screen !== undefined && group.ids.includes(screen.id), kiosk: k, saved: c.saved?.has('stop', group.id) ?? false, cast: c.cast, arrivals: next.rows, via, timetable, arrivalsStatus: next.status, cancelledRoutes: next.cancelledRoutes, frozenAt, now: c.now, serviceNote, positionsUnavailable: positionsUnavailable(c.snapshots['zet-rt'], c.now) });
         return [html, `${tr(i18n, 'stop')} ${group.name}`, 'name'];
       }
       case 'vehicle': {
@@ -975,10 +982,12 @@ export function createTransportWorkspace(deps: WorkspaceDeps = {}): TransportWor
         const direction = vehicleDirection(i18n, net, v);
         const html = vehicleDetailMarkup(i18n, {
           vehicle: v,
-          route: v.routeId === undefined ? null : routeEntry(v.routeId),
+          // A pull-in has no line (shared/city/depot-run.ts): no route name, its own delay rather than the line's.
+          route: v.routeId === undefined || v.depot ? null : routeEntry(v.routeId),
           direction,
           nextStop: vehicleNextStop(i18n, net, v),
-          delay: v.routeId === undefined ? undefined : delays().get(v.routeId),
+          ahead: vehicleAhead(i18n, net, v),
+          delay: v.depot ? v.delaySeconds : v.routeId === undefined ? undefined : delays().get(v.routeId),
           following: following === v.id,
           kiosk: k,
           lineFocus: lineFocusRow(),

@@ -12,7 +12,7 @@ import { fullestShape } from '../../app/src/transport/catalogue';
 import type { ArrivalRow, ArrivalsStatus } from '../../shared/city/arrivals';
 import { parsePrometnice } from '../../worker/feed/modules/prometnice';
 import { closureDetailMarkup, departureRow, stopDetailMarkup } from '../../app/src/transport/view';
-import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
+import { closureItems, countByRoute, headingFromBearing, runningRoutes, terminusName, depotVia, vehicleAhead, vehicleDirection, vehiclesAtStop, vehiclesOfModes, vehiclesOnRoute, zetNotices } from '../../app/src/transport/detail';
 
 const i18n = createDefaultI18n('hr');
 const ROLLING_COPY_AT = Date.parse('2026-09-28T08:00:01Z');
@@ -387,5 +387,60 @@ describe('the stop sheet says what comes next, first', () => {
     expect(stop([], 'none')).toContain(i18n.t('status.loading'));
     // The note explains rows; with none it has nothing to explain.
     expect(stop([])).not.toContain('Procjena iz ZET-ovih podataka');
+  });
+});
+
+// A pull-in (shared/city/depot-run.ts) is ST or SD on the map and on the
+// boards: it heads for its depot down streets its line never takes, so the
+// card names the depot and the stops still ahead, and it counts under no line.
+describe('a tram on its way to the depot', () => {
+  const net = decodeNetwork(JSON.parse(readFileSync(resolve(import.meta.dirname, '../../app/public/data/zet-network.json'), 'utf8')));
+  // Line 17's pull-in to Trešnjevka: off the line from Tehnički muzej on, to Ljubljanica, in its path's served order.
+  const pathIdx = net.paths.findIndex((p, i) => p.route === '17' && net.stopsOnPath(i).at(-1)?.stop.name === 'Ljubljanica'
+    && net.stopsOnPath(i).some((e) => e.stop.name === 'Tehnički muzej'));
+  const museum = net.stopsOnPath(pathIdx).find((e) => e.stop.name === 'Tehnički muzej')!;
+  const st = v('st', '17', 0, { short: 'ST', depot: 'ST', headsign: 'Spr. Trešnj.', onShape: net.paths[pathIdx].shape ?? -1, path: pathIdx, s: museum.s - 10, nextStopId: museum.stop.id, bearing: 180 });
+
+  it('heads for Spremište Trešnjevka and names the stops still ahead, to Ljubljanica', () => {
+    expect(vehicleDirection(i18n, net, st)).toBe('smjer Spremište Trešnjevka');
+    const ahead = vehicleAhead(i18n, net, st)!;
+    expect(ahead).toMatch(/^dalje: /);
+    expect(ahead).toBe('dalje: Badalićeva, Trešnjevački trg, Nehajska, Selska, Ljubljanica');
+  });
+
+  it('says nothing ahead for a tram of a line, nor where the next stop is not on its shape', () => {
+    expect(vehicleAhead(i18n, net, { ...st, depot: undefined })).toBeNull();
+    expect(vehicleAhead(i18n, net, { ...st, path: undefined })).toBeNull();
+    expect(vehicleAhead(i18n, null, st)).toBeNull();
+  });
+
+  it('says where a pull-in leaves its line after this stop, and nothing for one that stays on it', () => {
+    const ids = (name: string) => net.stops.filter((s) => s.name === name).map((s) => s.id);
+    const row = (routeId: string, depot: 'ST' | 'SD'): ArrivalRow => ({ tripId: 't', routeId, routeName: depot, headsign: '', atMs: 0, live: false, minutes: null, depot });
+    // Both 17s for Trešnjevka pass Tehnički muzej from Vodnikova, the one that loops round Zrinjevac first included.
+    expect(depotVia(i18n, net, row('17', 'ST'), ids('Vodnikova'), [])).toBe('preko stajališta Tehnički muzej');
+    expect(depotVia(i18n, net, row('6', 'SD'), ids('Branim. tržnica'), [])).toBe('preko stajališta Trg P. Krešimira');
+    // The 4 from Dubec to Dubrava never leaves its line.
+    expect(depotVia(i18n, net, row('4', 'SD'), ids('Dubec'), [])).toBeNull();
+    // A line's own departure, and a sheet without the rail graph, say nothing.
+    expect(depotVia(i18n, net, { ...row('17', 'ST'), depot: undefined, routeName: '17' }, ids('Vodnikova'), [])).toBeNull();
+    expect(depotVia(i18n, null, row('17', 'ST'), ids('Vodnikova'), [])).toBeNull();
+    // A live row reads the tram's own path.
+    const viaVodnikova = net.paths.findIndex((p, i) => p.route === '17' && net.stopsOnPath(i).at(-1)?.stop.name === 'Ljubljanica'
+      && net.stopsOnPath(i).some((e) => e.stop.name === 'Vodnikova'));
+    expect(depotVia(i18n, net, { ...row('17', 'ST'), vehicleId: 'st', live: true }, ids('Vodnikova'), [{ ...st, path: viaVodnikova }])).toBe('preko stajališta Tehnički muzej');
+  });
+
+  it('draws the turn as a quiet second line under the depot on the stop sheet row', () => {
+    const html = departureRow(i18n, { tripId: 't', routeId: '17', routeName: 'ST', headsign: 'Spremište Trešnjevka', atMs: ROLLING_COPY_AT, live: false, minutes: null, depot: 'ST' }, () => 'tram', undefined, 'departure', ROLLING_COPY_AT, 'preko stajališta Tehnički muzej');
+    expect(html).toContain('data-depot="ST"');
+    expect(html).toContain('<span class="sada-dest">Spremište Trešnjevka<small class="sada-via">preko stajališta Tehnički muzej</small></span>');
+  });
+
+  it('counts under ST, never under the line it left', () => {
+    const fleet = [v('a', '17', 0), st];
+    expect([...countByRoute(fleet)]).toEqual([['17', 1], ['ST', 1]]);
+    expect(vehiclesOnRoute(fleet, '17').map((x) => x.id)).toEqual(['a']);
+    expect(runningRoutes(fleet, new Map([['17', 60]]), i18n).map((r) => [r.routeId, r.label, r.count])).toEqual([['17', '17', 1], ['ST', 'ST', 1]]);
   });
 });

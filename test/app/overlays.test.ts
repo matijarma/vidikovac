@@ -175,7 +175,8 @@ describe('the overlay layer list', () => {
     // A vehicle ends flat: round caps would add a width to the length.
     expect(body.layout).toEqual({ 'line-cap': 'butt', 'line-join': 'round' });
     expect(body.filter).toEqual(kindFilter(null));
-    expect(body.paint!['line-color']).toEqual(['match', ['get', 'kind'], 'tram', OVERLAY_LIGHT.tram, 'bus', OVERLAY_LIGHT.bus, OVERLAY_LIGHT.other]);
+    // A pull-in's body (ST, SD: shared/city/depot-run.ts) takes the neutral ink, as its pill does.
+    expect(body.paint!['line-color']).toEqual(['case', ['==', ['get', 'depot'], true], OVERLAY_LIGHT.other, ['match', ['get', 'kind'], 'tram', OVERLAY_LIGHT.tram, 'bus', OVERLAY_LIGHT.bus, OVERLAY_LIGHT.other]]);
     expect(body.paint!['line-opacity']).toEqual(['*', ['get', 'alpha'], 0.9]);
     // Metres as pixels: the width doubles with every zoom, so it is one exponential ramp between two pinned zooms.
     const width = body.paint!['line-width'] as unknown[];
@@ -677,6 +678,17 @@ describe('filters and the selection', () => {
     expect(styleDiff(light, overlayLayers(OVERLAY_LIGHT, { closuresVisible: false })).map((op) => `${op.id}:${op.kind}`).sort()).toEqual([`${LAYERS.closuresCasing}:layout`, `${LAYERS.closures}:layout`]);
   });
 
+  // A selected or followed pull-in lights its own way to the depot (network feature `sid`), never its line's.
+  it('lights a pull-in trip by its own shape, in the neutral ink, with the line focus on or off', () => {
+    for (const lineFocus of [false, true]) {
+      const layers = overlayLayers(OVERLAY_LIGHT, { selection: { kind: 'vehicle', id: 'vehicle:102105' }, trip: { shape: 41 }, lineFocus, focus: { routeId: 'ST', colour: '#000000' } });
+      const lit = layers.find((l) => l.id === LAYERS.networkSelected)!;
+      expect(lit.filter).toEqual(['==', ['get', 'sid'], 41]);
+      expect(lit.paint!['line-color']).toBe(OVERLAY_LIGHT.other);
+      expect(layers.find((l) => l.id === LAYERS.networkSelectedCasing)!.filter).toEqual(['==', ['get', 'sid'], 41]);
+    }
+  });
+
   it('a pill and its number are always opaque; while a route is selected the other routes invert (surface fill, own colour as number and outline) instead of fading, and the dots and noses carry the confidence', () => {
     for (const p of [OVERLAY_LIGHT, OVERLAY_DARK]) {
       const plain = overlayLayers(p);
@@ -690,7 +702,7 @@ describe('filters and the selection', () => {
       const pills = lit.find((l) => l.id === LAYERS.vehicles)!;
       expect(pills.paint!['icon-opacity']).toBe(1);
       expect(JSON.stringify(pills.paint!['icon-color'])).toContain(JSON.stringify(p.stopFill));
-      expect(pillInks(p, '6').halo).toEqual(['case', ['==', ['get', 'routeId'], '6'], p.halo, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]);
+      expect(pillInks(p, '6').halo).toEqual(['case', ['==', ['get', 'routeId'], '6'], p.halo, ['case', ['==', ['get', 'depot'], true], p.other, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]]);
       expect(lit.find((l) => l.id === LAYERS.vehicleDots)!.paint!['circle-opacity']).toEqual(['*', ['get', 'alpha'], ['case', ['==', ['get', 'routeId'], '6'], 1, 0.35]]);
     }
   });

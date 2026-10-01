@@ -87,7 +87,7 @@ export function networkToGeoJson(net: Network): NetworkFeatureCollection {
       return {
         type: 'Feature' as const,
         geometry: { type: 'LineString' as const, coordinates: shape.pts.map(toLonLat) },
-        properties: { shape: i, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1), main: main.has(idx) },
+        properties: { shape: i, sid: idx, route: shape.route, short: vetExternal('headsign', route?.short ?? shape.route, 'row') ?? '', kind: vehicleKind(route?.type ?? -1), main: main.has(idx) },
       };
     }),
   };

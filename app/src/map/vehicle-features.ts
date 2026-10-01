@@ -5,6 +5,7 @@
 // drawn map ever builds them, so the pill geometry and the clustering stay
 // off the lightweight graph (test/app/budget.test.ts); city-map.ts reaches
 // them through the loaded module, as it does the layers.
+import { depotRunOf } from '../../../shared/city/depot-run';
 import { toLonLat } from '../../../shared/motion/geo';
 import type { Drawn } from '../motion/integrator';
 import { clusterPills, deflectMarks, noseCentrePx, type Cluster, type DeflectableMark, type DiscObstacle, type PillPoint } from '../motion/pills';
@@ -123,6 +124,7 @@ function clusterToFeature(cluster: Cluster<VehiclePillPoint>, focusedRoute?: str
       kind,
       short: cluster.label,
       routeId,
+      depot: members.every((f) => f.properties.depot),
       bearing: facing[0] ?? 0,
       hasHeading: false,
       twoWay,
@@ -168,7 +170,9 @@ export function vehiclesToGeoJson(drawn: readonly Drawn[], options: VehicleGeoJs
         icon: kind === 'tram' ? 'vehicle-tram' : 'vehicle-bus',
         kind,
         short,
-        routeId: v.routeId ?? '',
+        // A pull-in is not its line any more (shared/city/depot-run.ts): never merged into it, dimmed with it.
+        routeId: depotRunOf(v.headsign) ?? v.routeId ?? '',
+        depot: depotRunOf(v.headsign) !== null,
         bearing,
         hasHeading: v.heading !== null,
         twoWay: false,

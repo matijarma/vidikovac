@@ -127,3 +127,5 @@
 /* Read at arm's length or more, the desk's secondary lines (a day under a clock, a row's detail, the sentence's kicker)
    take the control size, 14 px (round 2, desktop F20: 12 to 13 px beside a 16 px feed). */
 .ki[data-stage='desk'] .ws-sada { --type-secondary: var(--type-control); }
+/* A pull-in's turn off its line (ST, SD; transport/detail.ts depotVia): a quiet second line under the depot. */
+.sada-via { display: block; font-size: var(--type-secondary); font-weight: var(--weight-normal); color: var(--tone-text-muted); }

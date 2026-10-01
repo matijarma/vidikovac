@@ -70,12 +70,12 @@ describe('bodiesToGeoJson: one LineString per vehicle, never per cluster', () =>
     expect(fc.features[0]!.geometry.coordinates).toHaveLength(3); // the bend, kept
   });
 
-  it('carries the properties the layer reads -- id, kind, routeId and the same alpha the pills carry -- and nothing else', () => {
+  it('carries the properties the layer reads -- id, kind, routeId, the pull-in flag and the same alpha the pills carry -- and nothing else', () => {
     const fc = bodiesToGeoJson(drawn, NET);
     const pills = vehiclesToGeoJson(drawn);
     for (const f of fc.features) {
       const pill = pills.features.find((p) => p.properties.id === f.properties.id)!;
-      expect(f.properties).toEqual({ id: pill.properties.id, kind: pill.properties.kind, routeId: pill.properties.routeId, alpha: pill.properties.alpha });
+      expect(f.properties).toEqual({ id: pill.properties.id, kind: pill.properties.kind, routeId: pill.properties.routeId, depot: pill.properties.depot, alpha: pill.properties.alpha });
     }
     expect(fc.features.map((f) => f.properties.kind)).toEqual(['tram', 'tram', 'bus', 'other']);
     expect(fc.features.find((f) => f.properties.id === 'u')!.properties.routeId).toBe('');

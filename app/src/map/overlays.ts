@@ -444,10 +444,12 @@ const NOSE_ROTATE_AFT: Expr = ['+', ['get', 'bearing'], 90];
  *  dropped any more, so this is now purely who covers whom. */
 const SORT_KEY: Expr = ['get', 'sort'];
 
+/** A mark's ink by its mode; a pull-in (ST, SD: shared/city/depot-run.ts) in
+ *  the neutral one, as its badge on the boards (ui/signage.css [data-depot]). */
 function kindColor(p: OverlayPalette, role: 'fill' | 'text'): Expr {
   return role === 'fill'
-    ? ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]
-    : ['match', ['get', 'kind'], 'tram', p.tramText, 'bus', p.busText, p.otherText];
+    ? ['case', ['==', ['get', 'depot'], true], p.other, ['match', ['get', 'kind'], 'tram', p.tram, 'bus', p.bus, p.other]]
+    : ['case', ['==', ['get', 'depot'], true], p.otherText, ['match', ['get', 'kind'], 'tram', p.tramText, 'bus', p.busText, p.otherText]];
 }
 
 /** The vehicle kinds `modes` (GTFS route types) admits; null admits every kind, unknown included. */
@@ -620,6 +622,10 @@ export interface OverlayOptions {
    *  means nothing is in focus -- nothing is selected, or the selected vehicle
    *  has not been drawn yet. */
   focus?: { routeId: string; colour: string } | null;
+  /** A selected or followed pull-in's own shape (network feature `sid`;
+   *  shared/city/depot-run.ts): the lit layers draw its way to the depot in
+   *  the neutral ink, in place of any line, with the line focus on or off. */
+  trip?: { shape: number } | null;
   /** The reader's "only this line" switch (core/line-focus-store.ts), off by
    *  default here: a surface that never asks for it (the kiosk) draws the
    *  whole network exactly as before. On, and with a `focus`, the rest of the
@@ -800,9 +806,11 @@ export function overlayLayers(p: OverlayPalette, options: OverlayOptions = {}): 
   const inks = pillInks(p, litRoute);
   const filters = selectionFilters(sel);
   /** The lit line's own geometry: the selection's, or the focused route's under a vehicle. */
-  const litLine: Expr = litRoute ? ['all', ['==', ['get', 'route'], litRoute], ['get', 'main']] : NEVER;
-  /** The colour it is drawn in: ZET's own where the build's table knows the route, the mode's ink otherwise. */
-  const litColour: string | Expr = options.focus && options.focus.routeId === litRoute
+  /** A pull-in's own way to the depot, when one is selected or followed, in place of any line. */
+  const trip = options.trip ?? null;
+  const litLine: Expr = trip ? ['==', ['get', 'sid'], trip.shape] : litRoute ? ['all', ['==', ['get', 'route'], litRoute], ['get', 'main']] : NEVER;
+  /** The colour it is drawn in: ZET's own where the build's table knows the route, the mode's ink otherwise; a pull-in's the neutral one. */
+  const litColour: string | Expr = trip ? p.other : options.focus && options.focus.routeId === litRoute
     ? options.focus.colour
     : ['match', ['get', 'kind'], 'tram', p.routeTram, 'bus', p.routeBus, p.other];
   const kinds = vehicleKinds(modes);

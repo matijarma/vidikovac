@@ -264,6 +264,8 @@ export interface VehicleDetailData {
   direction: string;
   /** vehicleNextStop()'s sentence, or null. */
   nextStop?: string | null;
+  /** vehicleAhead()'s "dalje: …" on a pull-in, or null. */
+  ahead?: string | null;
   delay: number | undefined;
   following: boolean;
   kiosk: boolean;
@@ -284,6 +286,7 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
   const line = [vetExternal('name', d.route?.long ?? '', 'row') ?? '', delayLine(i18n, d.delay)].filter(Boolean).join(' · ');
   const direction = vetExternal('title', d.direction, 'row') ?? i18n.t('motion.directionUnknown');
   const nextStop = d.nextStop ? vetExternal('title', d.nextStop, 'row') : null;
+  const ahead = d.ahead ? vetExternal('title', d.ahead, 'row') : null;
   const state = vehicleState(i18n, v);
   const follow = d.kiosk
     ? ''
@@ -295,15 +298,17 @@ export function vehicleDetailMarkup(i18n: I18n, d: VehicleDetailData): string {
         pressed: d.following,
         className: d.following ? 'btn-ghost t-action' : 'btn btn-primary',
       });
-  const route = d.route ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
+  // A pull-in is no longer its line (shared/city/depot-run.ts): no "Prikaži liniju", no line-only switch.
+  const route = d.route && !v.depot ? button({ action: 'select-route', label: tr(i18n, 'showRoute'), data: { id: d.route.id } }) : '';
   return (
     detailHead(i18n, `<h3 class="t-title" data-testid="vehicle-title">${badge(v.short, v.type, 'l')}<span>${esc(vehicleTitle(i18n, v))}</span></h3>`, d.kiosk) +
     `<p class="t-lead" data-testid="vehicle-direction">${esc(capital(direction, locale))}</p>` +
     (nextStop ? `<p class="t-meta" data-testid="vehicle-next-stop">${esc(capital(nextStop, locale))}</p>` : '') +
+    (ahead ? `<p class="t-meta" data-testid="vehicle-ahead">${esc(capital(ahead, locale))}</p>` : '') +
     `<p class="t-meta">${esc(line)}</p>` +
     (state ? `<p class="t-meta">${esc(capital(state, locale))}</p>` : '') +
     (d.kiosk ? '' : actions([follow, route])) +
-    (d.kiosk || d.lineFocus === null ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
+    (d.kiosk || d.lineFocus === null || v.depot ? '' : lineFocusSwitch(i18n, d.lineFocus)) +
     (d.following ? `<p class="t-hint" data-testid="following-note">${esc(tr(i18n, 'followingNote'))}</p>` : '')
   );
 }
@@ -389,6 +394,8 @@ export interface StopDetailData {
    *  sorted (shared/city/arrivals.ts). Never computed in this file: the view
    *  only says, row by row, whether a time is an estimate or the timetable. */
   arrivals: readonly ArrivalRow[];
+  /** "preko stajališta …" per trip id, for the pull-ins among the rows (transport/detail.ts depotVia). */
+  via?: ReadonlyMap<string, string>;
   /** How much of the answer is trustworthy: 'none' is "no board in hand yet",
    *  'down' is "every platform's board failed". */
   arrivalsStatus: ArrivalsStatus;
@@ -464,12 +471,12 @@ export function arrivalTime(i18n: I18n, row: ArrivalRow, frozenAt: number | unde
  * line and the headsign are ZET's text: a row that fails the row-surface check
  * (kiosk/arrivals.ts vettedArrival) is not drawn at all.
  */
-export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number): string {
+export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: string) => 'tram' | 'bus' | 'other', frozenAt?: number, kind: 'departure' | 'timetable' = 'departure', now?: number, via?: string): string {
   if (!vettedArrival(row)) return '';
   const live = row.live && frozenAt === undefined;
   // Keyed by the trip, so a poll that moves its estimate by a few seconds changes the time in place instead of drawing
   // the row again (a trip passes a stop once; a row without a trip id falls back to its line and time).
-  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(row.tripId || `${row.routeId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
+  return `<li class="sada-departure" data-kind="${kind}" data-key="${attr(row.tripId || `${row.routeId}|${row.atMs}`)}" data-live="${live}">${lineBadge(row.routeName, kindOf(row.routeId), 'm')}<span class="sada-dest">${esc(row.headsign || row.routeName)}${via ? `<small class="sada-via">${esc(via)}</small>` : ''}</span>${arrivalTime(i18n, row, frozenAt, now)}</li>`;
 }
 
 /** What comes next here, departures first [O-50]: the first three trips as
@@ -479,8 +486,8 @@ export function departureRow(i18n: I18n, row: ArrivalRow, kindOf: (routeId: stri
  *  the sheet under the stop's name with no heading of their own. */
 function arrivalsSection(i18n: I18n, d: StopDetailData): string {
   const kindOf = (routeId: string): 'tram' | 'bus' | 'other' => vehicleKind(routeTypeAt(d.routes, routeId));
-  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'departure', d.now);
-  const timetableRow = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'timetable', d.now);
+  const row = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'departure', d.now, d.via?.get(r.tripId));
+  const timetableRow = (r: ArrivalRow): string => departureRow(i18n, r, kindOf, d.frozenAt, 'timetable', d.now, d.via?.get(r.tripId));
   const key = (r: ArrivalRow): string => r.tripId || `${r.routeId}|${r.atMs}`;
   // Every row's line and headsign are ZET's text: a row that fails the check is left out (departureRow draws none).
   const vetted = d.arrivals.filter(vettedArrival);

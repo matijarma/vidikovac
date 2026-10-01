@@ -16,6 +16,7 @@ import { summariseRoutes, type RouteSummaryRow, type RouteVehicle } from '../lay
 import { MAX_ROUTE_DELAY_SECONDS, plausibleRouteDelay } from '../layers/shared';
 import { CITY_WORK_SOURCE_ATTRIBUTION } from '../layers/uprava-i-pravo';
 import { dist, toPlane } from '../../../shared/motion/geo';
+import { depotRunOf } from '../../../shared/city/depot-run';
 import { distanceM } from '../../../shared/city/geo';
 import { dataNumber, dataText } from '../panels/panel';
 import { sunTimes } from '../ui/solar';
@@ -168,7 +169,9 @@ export function nearbyVehicles(zet: ModuleSnapshot | undefined): RouteVehicle[] 
     if (!item.id.startsWith('vehicle:')) continue;
     const routeId = dataText(item, 'routeId');
     if (!routeId) continue;
-    out.push({ routeId, label: dataText(item, 'routeShortName') || routeId, type: dataNumber(item, 'routeType') ?? routeType(routeId) ?? -1 });
+    // A pull-in is ST or SD, never one of its line's vehicles (shared/city/depot-run.ts).
+    const depot = depotRunOf(dataText(item, 'headsign'));
+    out.push({ routeId: depot ?? routeId, label: depot ?? (dataText(item, 'routeShortName') || routeId), type: dataNumber(item, 'routeType') ?? routeType(routeId) ?? -1 });
   }
   return out;
 }
