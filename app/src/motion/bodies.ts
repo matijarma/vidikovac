@@ -5,6 +5,7 @@
 // because 12 m does not bend visibly. Pure -- no DOM, no MapLibre -- so the
 // geometry is unit-tested in node; city-map.ts pushes the result as a GeoJSON
 // source beside the vehicles.
+import { depotRunOf } from '../../../shared/city/depot-run';
 import { toLonLat, type XY } from '../../../shared/motion/geo';
 import type { GraphNetwork } from '../../../shared/motion/network';
 import { slice } from '../../../shared/motion/polyline';
@@ -18,7 +19,8 @@ export interface BodyFeatureCollection {
     type: 'Feature';
     geometry: { type: 'LineString'; coordinates: [number, number][] };
     /** What the body layer reads: its kind for the ink and the mode filter, its route for line focus, its alpha with the dots'. */
-    properties: { id: string; kind: VehicleKind; routeId: string; alpha: number };
+    /** `routeId` is ST or SD on a pull-in, and `depot` says so: its body takes the neutral ink (shared/city/depot-run.ts). */
+    properties: { id: string; kind: VehicleKind; routeId: string; depot: boolean; alpha: number };
   }[];
 }
 
@@ -66,7 +68,7 @@ export function bodiesToGeoJson(drawn: readonly Drawn[], net: GraphNetwork | nul
     features.push({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: body.map(toLonLat) },
-      properties: { id: v.id, kind, routeId: v.routeId ?? '', alpha: markAlpha(v.confidence) },
+      properties: { id: v.id, kind, routeId: depotRunOf(v.headsign) ?? v.routeId ?? '', depot: depotRunOf(v.headsign) !== null, alpha: markAlpha(v.confidence) },
     });
   }
   return { type: 'FeatureCollection', features };

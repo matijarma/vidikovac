@@ -398,7 +398,7 @@ describe('TwinDO', () => {
       expect(report.learnedFlushed).toBe(true);
       const lines = logged.mock.calls.flat().map(String).filter((line) => line.includes('twin_state_size'));
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatch(/twin_state_size bytes=\d+ vehicles=1 pins=1 hidden=0 depot=0 parked=0 noServiceAlerts=0 tripEntities=0 stopEntities=0 routeEntities=0 canceledUpdates=0 skippedStops=0 textAlerts=0$/);
+      expect(lines[0]).toMatch(/twin_state_size bytes=\d+ vehicles=1 pins=1 hidden=0 depot=0 parked=0 bed=0 noServiceAlerts=0 tripEntities=0 stopEntities=0 routeEntities=0 canceledUpdates=0 skippedStops=0 textAlerts=0$/);
       // The same number the tick report carries, so /stats and the log agree.
       expect(lines[0]).toContain(`bytes=${report.stateBytes}`);
     } finally {

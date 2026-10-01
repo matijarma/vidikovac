@@ -16,6 +16,8 @@
    base.css's other components. */
 .line { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 0 0.45rem; border-radius: 0.3125rem; background: var(--tone-text-muted); color: var(--tone-action-brand-fg); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; line-height: 1; }
 .line[data-kind='tram'] { background: var(--tone-action-brand); }
+/* A tram on its way to the depot (ST, SD) is no line's tram any more: its shape, the neutral ink. */
+.line[data-kind='tram'][data-depot] { background: var(--tone-text-muted); }
 .line[data-kind='bus'] { background: var(--tone-transit); border-radius: var(--r-pill); }
 /* xs is 13 px, not the spec's 10: the type floor applies to badges too. */
 .line[data-size='xs'] { block-size: 1.125rem; min-inline-size: 1.5rem; padding: 0 0.3rem; border-radius: 0.1875rem; font-size: var(--type-secondary); }

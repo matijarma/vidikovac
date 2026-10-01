@@ -12,7 +12,8 @@
 // tick against the ring of plans published earlier, then the plans of this
 // tick join the ring.
 
-import { inDepot, isParked, noteStand } from '../../shared/motion/depots';
+import { depotRunOf } from '../../shared/city/depot-run';
+import { inDepot, isInBed, isParked, noteStand, reachedLastPlatform } from '../../shared/motion/depots';
 import { dist, toPlane, type XY } from '../../shared/motion/geo';
 import { countGrades, countSignGrades, emptyCounts, emptySignCounts, gradeFix, rememberPlan, type HindsightCounts, type HindsightSignCounts, type PublishedPlan } from '../../shared/motion/hindsight';
 import { enforceOrder, type OrderReport } from '../../shared/motion/order';
@@ -79,9 +80,10 @@ export interface TickResult {
    *  Object (`twin_future_fixes`), never counted into `twin_plan`. */
   rejectedFuture: number;
   /** Tracks kept in the state but not published after this tick: standing
-   *  inside a tram depot, or parked past their mode's limit elsewhere
-   *  (shared/motion/depots.ts). A vehicle in a depot counts as depot only. */
-  hidden: { depot: number; parked: number };
+   *  inside a tram depot, parked past their mode's limit elsewhere, or in bed
+   *  after a pull-in (shared/motion/depots.ts). A vehicle in a depot counts as
+   *  depot only, a parked one as parked only. */
+  hidden: { depot: number; parked: number; bed: number };
   /** What ZET's alerts and markers said in the frame this state holds (U1);
    *  the Durable Object logs it once a minute. */
   operator: OperatorCounts;
@@ -253,6 +255,10 @@ export function runTick(input: TickInput): TickResult {
         newFixes++;
         fresh.add(raw.vehicleId);
         noteStand(track, newest);
+        // A pull-in at its last platform has set down its last passenger: the
+        // tram is in bed from here while it keeps the trip (depots.ts isInBed).
+        if (engine && prior && prior.pathIdx !== null && tripId !== null && track.tripId === tripId && track.bedTripId !== tripId
+          && depotRunOf(join?.headsign) !== null && reachedLastPlatform(engine.net, prior.pathIdx, track.match, plane)) track.bedTripId = tripId;
       }
     }
   }
@@ -268,13 +274,15 @@ export function runTick(input: TickInput): TickResult {
     }
   }
   // What stays in the state but off the map (publish.ts fleetSeen): a
-  // vehicle in a tram depot, or one parked past its mode's limit.
-  const hidden = { depot: 0, parked: 0 };
+  // vehicle in a tram depot, one parked past its mode's limit, or a tram in
+  // bed after its pull-in.
+  const hidden = { depot: 0, parked: 0, bed: 0 };
   for (const track of Object.values(tracks)) {
     const last = lastFix(track);
     if (!last) continue;
     if (inDepot(last.lon, last.lat)) hidden.depot++;
     else if (isParked(track)) hidden.parked++;
+    else if (isInBed(track)) hidden.bed++;
   }
 
   // The city's fleet against the timetable (service.ts, upgrade U2): judged

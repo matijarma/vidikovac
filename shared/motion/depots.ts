@@ -8,7 +8,8 @@
 // STOP_ZONE_M away publishes it again. Whether a vehicle ought to be moving is
 // the expectation layer's question, not this one's.
 
-import { dist } from './geo';
+import { dist, type XY } from './geo';
+import type { GraphNetwork } from './network';
 import { STOP_ZONE_M } from './speed';
 import { lastFix, type PlaneFix, type Track, type VehicleKind } from './track';
 
@@ -69,4 +70,27 @@ export function noteStand(track: Track, fix: PlaneFix): void {
 export function isParked(track: Track): boolean {
   const last = lastFix(track);
   return track.stand !== null && last !== null && last.atSec - track.stand.sinceSec >= PARKED_AFTER_S_BY_MODE[track.kind];
+}
+
+/** How close to its trip's last platform a pull-in must come to have arrived,
+ *  when its arc does not say so: a platform zone and a half. A tram on a
+ *  pull-in on 24 Sep came within 20 m of the last platform at the median and
+ *  within 60 m at the 75th percentile of 30-second samples. */
+export const BED_ARRIVE_M = 60;
+
+/** Has a tram on a pull-in reached its trip's last platform? On the trip's
+ *  own path: its arc at or past that platform's zone. Anywhere: a fix within
+ *  BED_ARRIVE_M of it. A path that serves no stop has no last platform. */
+export function reachedLastPlatform(net: GraphNetwork, pathIdx: number, match: { pathIdx: number | null; s: number }, at: XY): boolean {
+  const last = net.stopsOnPath(pathIdx).at(-1);
+  if (last === undefined) return false;
+  if (match.pathIdx === pathIdx && match.s >= last.s - STOP_ZONE_M) return true;
+  return dist(last.stop.p, at) <= BED_ARRIVE_M;
+}
+
+/** Is this tram in bed: still on the pull-in it carried to its last
+ *  platform? A new trip (ZET's flip to the block's first trip of the day)
+ *  wakes it; the stand and the depot box still hold it then. */
+export function isInBed(track: Track): boolean {
+  return track.bedTripId !== undefined && track.bedTripId === track.tripId;
 }

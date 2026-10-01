@@ -416,6 +416,8 @@ export class TwinDO extends DurableObject<Env> {
         // A stand is plane positions and report times, no graph in it: a
         // new network must not publish every parked tram for half an hour.
         track.stand = old.stand ?? null;
+        // So is a pull-in's bed: the trip it was carried to the end of.
+        if (old.bedTripId !== undefined) track.bedTripId = old.bedTripId;
         const join = old.tripId === null ? undefined : joins.get(old.tripId);
         const prior = this.engine?.matcher.priorFor(join?.shapeId ?? null, old.routeId, join?.direction ?? null, join?.pathId ?? null);
         for (const report of old.fixes) {
@@ -470,8 +472,8 @@ export class TwinDO extends DurableObject<Env> {
     // are spread, not nested.
     if (learnedFlushed) {
       const pins = result.payload.items.filter((item) => item.id.startsWith('vehicle:')).length;
-      const { depot, parked } = result.hidden;
-      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked, depot, parked, ...result.operator });
+      const { depot, parked, bed } = result.hidden;
+      logInfo('twin_state_size', { bytes: stateBytes, vehicles: Object.keys(result.state.tracks).length, pins, hidden: depot + parked + bed, depot, parked, bed, ...result.operator });
     }
 
     let hindsightSamples = 0;

@@ -32,7 +32,7 @@ import { join } from 'node:path';
 
 import { vehicleFixes } from '../app/src/motion/fixes';
 import { createIntegrator } from '../app/src/motion/integrator';
-import { inDepot, isParked, PARKED_AFTER_S_BY_MODE } from '../shared/motion/depots';
+import { inDepot, isInBed, isParked, PARKED_AFTER_S_BY_MODE } from '../shared/motion/depots';
 import { dist, toPlane } from '../shared/motion/geo';
 import { BUCKETS, emptyCounts, emptySignCounts, gradeFix, HORIZONS_S, SIGN_BAND_M, SIGN_BUCKETS, type Bucket, type HindsightSignCounts, type Horizon } from '../shared/motion/hindsight';
 import { parseDwellOverrides, pushDwellRecent, trimDwellRecent } from '../shared/motion/dwell';
@@ -338,8 +338,8 @@ export interface FleetFrame {
   ids: string[];
   /** Pins stamped more than FUTURE_TOLERANCE_S after the payload's source time. */
   futurePins: number;
-  /** Tracks in the state but off the wire: in a depot, else parked. */
-  hidden: { depot: string[]; parked: string[] };
+  /** Tracks in the state but off the wire: in a depot, else parked, else in bed after a pull-in. */
+  hidden: { depot: string[]; parked: string[]; bed: string[] };
   /** Reports the tick refused for a stamp after the header (TickResult.rejectedFuture). */
   rejectedFuture: number;
 }
@@ -398,15 +398,17 @@ function fleetFrameOf(state: TwinState, payload: FeedPayload, headerSec: number,
   const pins = payload.items.filter((item) => item.id.startsWith('vehicle:'));
   const sourceMs = payload.sourceUpdatedAt !== undefined ? Date.parse(payload.sourceUpdatedAt) : null;
   const futurePins = sourceMs === null ? 0 : pins.filter((item) => item.at !== undefined && Date.parse(item.at) > sourceMs + FUTURE_TOLERANCE_S * 1000).length;
-  const hidden: FleetFrame['hidden'] = { depot: [], parked: [] };
+  const hidden: FleetFrame['hidden'] = { depot: [], parked: [], bed: [] };
   for (const track of Object.values(state.tracks)) {
     const last = lastFix(track);
     if (!last) continue;
     if (inDepot(last.lon, last.lat)) hidden.depot.push(track.id);
     else if (isParked(track)) hidden.parked.push(track.id);
+    else if (isInBed(track)) hidden.bed.push(track.id);
   }
   hidden.depot.sort();
   hidden.parked.sort();
+  hidden.bed.sort();
   return {
     h: headerSec,
     pins: pins.length,

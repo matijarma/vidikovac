@@ -345,7 +345,8 @@
     "timetable": "Vozni red",
     "cancelledRoute": "Linija {route}: ZET javlja otkazane polaske.",
     "noteReduced": "ZET: u pokretu {seen}, po voznom redu oko {expected}. Vremena su iz voznog reda, bez potvrde vozila.",
-    "train": "Vlak"
+    "train": "Vlak",
+    "depotVia": "preko stajališta {stop}"
   },
   "transport": {
     "searchHint": "Upiši broj linije ili ime stajališta. Strelicama biraj, Enter otvara, Escape briše.",
@@ -1185,6 +1186,7 @@
     "direction": "smjer {towards}",
     "directionUnknown": "smjer nepoznat",
     "nextStop": "sljedeće stajalište {stop}",
+    "ahead": "dalje: {stops}",
     "delay": "kašnjenje linije: {word}",
     "delayUnknown": "kašnjenje linije nepoznato",
     "lineUnknown": "linija nepoznata",

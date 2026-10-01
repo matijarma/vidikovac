@@ -336,7 +336,8 @@
     "timetable": "Timetable",
     "cancelledRoute": "Line {route}: ZET reports cancelled departures.",
     "noteReduced": "ZET: {seen} moving, about {expected} by the timetable. Times are from the timetable, not confirmed by vehicles.",
-    "train": "Train"
+    "train": "Train",
+    "depotVia": "via {stop}"
   },
   "transport": {
     "searchHint": "Type a route number or a stop name. Arrow keys choose, Enter opens, Escape clears.",
@@ -1157,6 +1158,7 @@
     "direction": "towards {towards}",
     "directionUnknown": "direction unknown",
     "nextStop": "next stop {stop}",
+    "ahead": "then: {stops}",
     "delay": "route delay: {word}",
     "delayUnknown": "route delay unknown",
     "lineUnknown": "line unknown",

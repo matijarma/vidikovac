@@ -21,6 +21,14 @@ describe('lineBadge', () => {
     expect(lineBadge('268', 'bus', 'xs')).toBe('<span class="line" data-kind="bus" data-size="xs">268</span>');
   });
 
+  // A pull-in (shared/city/depot-run.ts) is ST or SD: the tram's shape, the neutral ink, never a line's colour.
+  it('marks a tram badge reading ST or SD as a pull-in, and nothing else', () => {
+    expect(lineBadge('ST', 'tram')).toBe('<span class="line" data-kind="tram" data-size="m" data-depot="ST">ST</span>');
+    expect(lineBadge('SD', 'tram', 's')).toBe('<span class="line" data-kind="tram" data-size="s" data-depot="SD">SD</span>');
+    expect(lineBadge('ST', 'bus')).not.toContain('data-depot');
+    expect(lineBadge('5', 'tram')).not.toContain('data-depot');
+  });
+
   it('carries further attributes a caller needs, values escaped', () => {
     expect(lineBadge('4', 'tram', 'l', { 'data-testid': 'route-badge', 'aria-hidden': 'true' }))
       .toBe('<span class="line" data-kind="tram" data-size="l" data-testid="route-badge" aria-hidden="true">4</span>');

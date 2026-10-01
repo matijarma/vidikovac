@@ -2,6 +2,7 @@
 // action buttons and the list/detail shell. Interactions are declared as
 // `data-action` attributes and handled by delegation on the workspace root,
 // so the reconciler can keep nodes without keeping stale closures.
+import { isDepotCode } from '../../../shared/city/depot-run';
 import type { FeedItem, ModuleId, ModuleSnapshot } from '../../../worker/feed/schema';
 import type { LayerId } from '../../../worker/protocol';
 import { publicItemKey, selectionParams, type PublicSelection } from '../core/contracts';
@@ -129,13 +130,15 @@ export function findSelected(snapshot: ModuleSnapshot | undefined, selection: Pu
  * vehicle, in its mode's shape and colour. `xs` where a line is only
  * mentioned (an event's nearest stop, the last tram), `s` in dense rows and
  * the peek, `m` on boards, `l` on a detail head, `k` on a public screen.
- * `extra` are further attributes on the badge, written as they are named.
+ * `extra` are further attributes on the badge, written as they are named. A
+ * tram badge reading ST or SD is a pull-in (shared/city/depot-run.ts) and
+ * carries data-depot: the tram's shape in the neutral ink, no line's colour.
  */
 export function lineBadge(label: string, kind: 'tram' | 'bus' | 'other', size: 'xs' | 's' | 'm' | 'l' | 'k' = 'm', extra: Record<string, string> = {}): string {
   // A `class` among the extras joins the component's own class list; writing it
   // as a second class attribute would make the parser drop one of the two.
   const { class: extraClass, ...others } = extra;
-  const rest = attrs(others);
+  const rest = attrs(kind === 'tram' && isDepotCode(label) ? { ...others, 'data-depot': label } : others);
   const cls = extraClass ? `line ${extraClass}` : 'line';
   return `<span class="${escapeAttribute(cls)}" data-kind="${kind}" data-size="${size}"${rest ? ` ${rest}` : ''}>${escapeHtml(label)}</span>`;
 }

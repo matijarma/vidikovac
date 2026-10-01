@@ -162,6 +162,30 @@ describe('buildPayload publishes the fleet seen now', () => {
   });
 });
 
+// A pull-in (shared/city/depot-run.ts) is no longer its line: its tram is not
+// one of the line's vehicles nor a witness to the line's delay, and once it has
+// reached its last platform (depots.ts isInBed) it is not on the map at all.
+describe('buildPayload and the pull-ins', () => {
+  const pullIns = new Map<string, TripJoin>([...joins, ['TD', { direction: 0, headsign: 'Spr.Dubrava', shapeId: '6_24' }]]);
+  it('pins a tram on its way to the depot, but counts it and its delay under no line', () => {
+    const payload = buildPayload(
+      state([track({ id: 'M', tripId: 'T1' }), track({ id: 'D', tripId: 'TD' })], { T1: update({ delays: [60] }), TD: update({ delays: [600] }) }),
+      pullIns, routes, NOW_MS, NOW_MS + 10_000, null,
+    );
+    expect(payload.items.filter((i) => i.id.startsWith('vehicle:')).map((i) => i.id)).toEqual(['vehicle:D', 'vehicle:M']);
+    expect(payload.sources?.zet.itemCount).toBe(2);
+    const rows = payload.items.filter((i) => i.id.startsWith('route:'));
+    expect(rows.map((r) => r.data)).toEqual([expect.objectContaining({ routeId: '6', vehicles: 1, medianDelaySeconds: 60 })]);
+  });
+
+  it('takes the tram off the map once it is in bed, and puts it back on a new trip', () => {
+    const bed: Track = { ...track({ id: 'D', tripId: 'TD' }), bedTripId: 'TD' };
+    const pins = (t: Track) => buildPayload(state([t]), pullIns, routes, NOW_MS, NOW_MS + 10_000, null).items.filter((i) => i.id.startsWith('vehicle:'));
+    expect(pins(bed)).toEqual([]);
+    expect(pins({ ...bed, tripId: 'T1' }).map((i) => i.id)).toEqual(['vehicle:D']);
+  });
+});
+
 describe('buildPayload names no next stop past the last platform of a path (rail round 3)', () => {
   const net = syntheticNetwork(corridorSpec());
   const pinOn = (tracks: Track[], tripUpdates?: Record<string, TripNext>) =>
