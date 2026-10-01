@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { inDepot, isParked, noteStand, PARKED_AFTER_S_BY_MODE } from '../../shared/motion/depots';
+import { BED_ARRIVE_M, inDepot, isInBed, isParked, noteStand, PARKED_AFTER_S_BY_MODE, reachedLastPlatform } from '../../shared/motion/depots';
+import { STOP_ZONE_M } from '../../shared/motion/speed';
+import { corridorSpec, syntheticNetwork } from './synthetic-network';
 import { toPlane } from '../../shared/motion/geo';
 import { newTrack, type PlaneFix, type Track, type VehicleKind } from '../../shared/motion/track';
 
@@ -62,5 +64,33 @@ describe('the stand and the parked rule', () => {
     expect(isParked(standing('bus', 2759))).toBe(false);
     expect(isParked(standing('bus', 2760))).toBe(true);
     expect(isParked(newTrack('v', '6', 't', 'tram'))).toBe(false);
+  });
+});
+
+// A pull-in (shared/city/depot-run.ts) at its last platform has set down its
+// last passenger: from there the tram is in bed and off the map while it
+// keeps that trip, whether it rolls on into the yard or goes silent where it
+// stands (102105, 1 Oct 17:28 at Ljubljanica). A new trip wakes it.
+describe('the pull-in bed', () => {
+  const net = syntheticNetwork(corridorSpec());
+  // Path 2's last platform, D900, lies at 2,400 m: the rails beyond it are the terminus loop's run-out.
+  const last = net.stopsOnPath(2).at(-1)!;
+  const far = { x: last.stop.p.x + 500, y: last.stop.p.y + 500 };
+
+  it('is reached on the trip own path at the last platform zone, and anywhere within BED_ARRIVE_M of it', () => {
+    expect(reachedLastPlatform(net, 2, { pathIdx: 2, s: last.s - STOP_ZONE_M }, far)).toBe(true);
+    expect(reachedLastPlatform(net, 2, { pathIdx: 2, s: last.s + 200 }, far)).toBe(true);
+    expect(reachedLastPlatform(net, 2, { pathIdx: 2, s: last.s - STOP_ZONE_M - 1 }, far)).toBe(false);
+    expect(reachedLastPlatform(net, 2, { pathIdx: null, s: 0 }, { x: last.stop.p.x + BED_ARRIVE_M - 1, y: last.stop.p.y })).toBe(true);
+    expect(reachedLastPlatform(net, 2, { pathIdx: null, s: 0 }, { x: last.stop.p.x + BED_ARRIVE_M + 1, y: last.stop.p.y })).toBe(false);
+  });
+
+  it('holds while the tram keeps the pull-in, and a new trip wakes it', () => {
+    const track = newTrack('102105', '5', 'pull-in', 'tram');
+    expect(isInBed(track)).toBe(false);
+    track.bedTripId = 'pull-in';
+    expect(isInBed(track)).toBe(true);
+    track.tripId = 'first-of-the-block';
+    expect(isInBed(track)).toBe(false);
   });
 });

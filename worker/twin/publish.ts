@@ -10,7 +10,8 @@
 
 import { toLonLat } from '../../shared/motion/geo';
 import type { GraphNetwork } from '../../shared/motion/network';
-import { inDepot, isParked } from '../../shared/motion/depots';
+import { depotRunOf } from '../../shared/city/depot-run';
+import { inDepot, isInBed, isParked } from '../../shared/motion/depots';
 import { evalFreePlan, evalPathPlan, EVICT_S, FUTURE_TOLERANCE_S } from '../../shared/motion/plan';
 import { at } from '../../shared/motion/polyline';
 import { STOP_ZONE_M } from '../../shared/motion/speed';
@@ -101,7 +102,7 @@ interface Placed {
 /**
  * The vehicles the twin publishes as pins, sorted by id: a last fix stamped
  * inside (nowSec - EVICT_S, nowSec + FUTURE_TOLERANCE_S], not inside a tram
- * depot, not parked (shared/motion/depots.ts). The one answer to "how many
+ * depot, not parked, not in bed after a pull-in (shared/motion/depots.ts). The one answer to "how many
  * vehicles are out there now": it is the payload's `itemCount` and the count
  * on the `route:` rows. Trip updates count nothing here: a trip ZET estimates
  * without a position is not a vehicle anyone can see.
@@ -111,7 +112,7 @@ export function fleetSeen(tracks: readonly Track[], nowSec: number): Track[] {
     .filter((track) => {
       const last = lastFix(track);
       if (last === null || last.atSec <= nowSec - EVICT_S || last.atSec > nowSec + FUTURE_TOLERANCE_S) return false;
-      return !inDepot(last.lon, last.lat) && !isParked(track);
+      return !inDepot(last.lon, last.lat) && !isParked(track) && !isInBed(track);
     })
     .sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -237,11 +238,14 @@ export function buildPayload(
   // route with a vehicle on the map, and `vehicles` counts those pins: ZET's
   // trip updates outnumber the positioned vehicles, and a count that read
   // them promised vehicles nobody could see. The delay stays ZET's median.
+  // A tram on a pull-in is no longer its line (shared/city/depot-run.ts): it
+  // is neither one of the 5's vehicles nor a witness to the 5's delay.
+  const pullIn = (tripId: string | null): boolean => tripId !== null && depotRunOf(joins.get(tripId)?.headsign) !== null;
   const pinsByRoute = new Map<string, number>();
-  for (const track of tracks) if (track.routeId) pinsByRoute.set(track.routeId, (pinsByRoute.get(track.routeId) ?? 0) + 1);
+  for (const track of tracks) if (track.routeId && !pullIn(track.tripId)) pinsByRoute.set(track.routeId, (pinsByRoute.get(track.routeId) ?? 0) + 1);
   const delaysByRoute = new Map<string, number[]>();
-  for (const update of Object.values(state.tripUpdates)) {
-    if (!update.routeId || !pinsByRoute.has(update.routeId)) continue;
+  for (const [tripId, update] of Object.entries(state.tripUpdates)) {
+    if (!update.routeId || !pinsByRoute.has(update.routeId) || pullIn(tripId)) continue;
     const delays = delaysByRoute.get(update.routeId) ?? [];
     delays.push(...update.delays);
     delaysByRoute.set(update.routeId, delays);

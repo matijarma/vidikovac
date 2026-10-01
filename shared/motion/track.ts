@@ -120,6 +120,11 @@ export interface Track {
    *  it when the new fix lies within the stand's zone. Null on a state row
    *  written before October 2026. */
   stand: Stand | null;
+  /** The pull-in (shared/city/depot-run.ts) this tram has carried to its
+   *  last platform: from there it is in bed, off the map while it keeps that
+   *  trip, whether it rolls on into the yard or goes silent at the platform.
+   *  Absent before its first, and on a state row written before October 2026. */
+  bedTripId?: string;
 }
 
 /** As many fixes as the wire's history carries (wire.ts): about three
