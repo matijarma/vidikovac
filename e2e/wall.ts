@@ -77,6 +77,8 @@ export const WALL_PROBES = Object.freeze({
   toggleRhythm: '[data-testid=toggle-rhythm]',
   /** Read-only touch: a stop ring opens its departures for 60 s (WP2, D3). */
   stopBoard: '[data-testid=stop-board]',
+  /** The radar inset in the map's corner while rain is near (R3); absent on lagano and on a wall before R3. */
+  radarInset: '[data-testid=radar-inset]',
   /** What a finger can press. */
   controls: 'button, a[href], input, select, summary',
   /** Where a passer-by must find none (principle 8). */
@@ -95,6 +97,8 @@ export const SENTENCE_MAX_CHARS = 80;
 /** Departure rows at most (principle 3); at least one in every sample ([O-65]: the whole-city screen has departures too). */
 export const DEPARTURES_MIN = 1;
 export const DEPARTURES_MAX = 3;
+/** Distinct non-transit row ids the wall shows over an observation (brief §6 DR3; the observer's monitored `shown-facts` row, R4). */
+export const SHOWN_FACTS_MIN = 6;
 /**
  * The fitted count (upgrade U4): of the departures the list offered, the fit keeps at least this many. September's
  * measurements at 1920×1080 and 1366×768 (smoke run 3, review-iter4-kiosk.md): three by day, two at night beside the
@@ -270,6 +274,8 @@ export interface WallSample {
   retiredChrome: number;
   settingsOpen: boolean;
   stopBoardOpen: boolean;
+  /** R4: the radar inset (R3): true while it is on the page and not hidden, false while hidden, null when it does not exist (lagano, or a wall before R3). */
+  radar: boolean | null;
   /** Visible h1 and h2 texts (the accept spec's HEADINGS_IN_PAGE filter): an outage never headlines "unavailable". */
   headings: string[];
 }
@@ -405,6 +411,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     .filter((el, i, all) => all.indexOf(el) === i && !exempt(el) && shown(el));
   const settings = q(p.settingsPanel);
   const board = q(p.stopBoard);
+  const radarEl = q(p.radarInset);
 
   return {
     at: Date.now(),
@@ -455,6 +462,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     retiredChrome: document.querySelectorAll(p.retiredChrome).length,
     settingsOpen: Boolean(settings && shown(settings)),
     stopBoardOpen: Boolean(board && shown(board)),
+    radar: radarEl ? onWall(radarEl) : null,
     headings: Array.from(document.querySelectorAll<HTMLElement>(p.headings))
       .filter((el) => !el.hidden && !el.closest('[hidden]') && el.getBoundingClientRect().height > 1)
       .map((el) => words(el))
@@ -585,6 +593,8 @@ export interface RotationSummary {
   revealFailures: string[];
   /** R2: the reveal episodes seen, by kind. */
   reveals: { page: number; advance: number };
+  /** R4: readings in which the radar inset (R3) was shown; monitored, no threshold. */
+  radarShownReadings: number;
 }
 
 // --- the reveals (R2, docs/reveal-2026-10-plan/R2.md step 9) ------------------------------------------------
@@ -888,6 +898,7 @@ export function summariseRotation(rows: readonly (WallSample | WallSampleError)[
     emptyPlaceSamples: valid.filter((s) => !s.place).length,
     revealFailures: revealCadenceFailures(valid),
     reveals: { page: episodes.filter((e) => e.kind === 'page').length, advance: episodes.filter((e) => e.kind === 'advance').length },
+    radarShownReadings: valid.filter((s) => s.radar === true).length,
   };
 }
 

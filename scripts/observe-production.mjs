@@ -9,7 +9,8 @@
 //                                       [--max-load 8|N|off]
 //
 // E2E_KIOSK_URL is the provisioning URL of a screen that already exists (…/kiosk/#<beacon>.<secret>): the
-// day's temporary screen, made by hand through /kiosk/ (one per verification day, Q15). It is required;
+// day's temporary screen, made by hand through /kiosk/ (one per verification day, Q15), or the network's DEV
+// screen (the `provisionUrl` of POST /api/dev/screen, counted nowhere; the run keeps only its fragment). It is required;
 // without it the run exits 2 before it loads a module or opens a connection. E2E_APP_URL, when set, moves
 // the same screen onto another origin (a local wrangler dev run). The URL is never printed or written: its
 // secret, every pairing code and every ticket are masked in each file the run writes.
@@ -27,7 +28,8 @@
 // and a 1440×900 desktop each redeem one code and are read the same way (Sada, the share code, Karta cold
 // open, the stop board by search, axe); after the rotation the wall in portrait (1080×1920), a DPR 0.25 proxy
 // screenshot, and the phone once its ten minutes are over (session-ended, no content row, no further
-// /api/data request). The instruments are the TypeScript modules the accept specs use, loaded through a
+// /api/data request). A server-confirmed DEV screen is the exception (RUN decision 6): phone expiry is explicitly
+// not judgeable, not applied, and never waited for; missing DEV metadata stays strict. The instruments are the TypeScript modules the accept specs use, loaded through a
 // throwaway Vite loader (the pattern of scripts/audit-production.mjs), so a production verdict and a local one
 // read the same selectors and numbers. Every planned reading is judged: a reading that failed or never
 // happened fails its row, it never drops out of the verdict.
@@ -59,6 +61,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { shownFacts, shownFactsMarkdown } from './lib/shown-facts.mjs';
 
 // --- run constants -------------------------------------------------------------------------------
 export const DEFAULT_MINUTES = 10;
@@ -132,6 +135,8 @@ export const SESSION_LENGTH_MS = SESSION_MINUTES * 60_000;
 export const EXPIRY_MARGIN_MS = 90_000;
 /** Past the shell's 30 s data poll: no /api/data request may follow once the session has ended (the phone spec's AFTER_EXPIRY_MS). */
 export const AFTER_EXPIRY_MS = 31_000;
+/** RUN decision 6: DEV rooms renew while a socket holds them (worker/do/room-do.ts). */
+export const DEV_EXPIRY_REASON = 'DEV screen (screen.dev=true): phone expiry is not judgeable; the server renews the session while a socket holds it. No expiry wait or expiry checks were applied.';
 /** A data-feed that says the vehicles are not live: during it the wall need draw no pill (§16.3 outage0800). */
 export const OUTAGE_FEEDS = Object.freeze(['stale', 'down']);
 /** The wall's data-feed before its first poll has answered (app/src/kiosk/mapview.ts feedStateOf): no outage, and no vehicle to draw yet. */
@@ -154,7 +159,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export const USAGE = `Read-only production observer (master brief §16.7).
 
-  E2E_KIOSK_URL=<provisioning URL of the day's screen> npm run observe:production -- --minutes 10
+  E2E_KIOSK_URL=<provisioning URL of the day's screen or of the network's DEV screen> npm run observe:production -- --minutes 10
 
 Options:
   --minutes N         real-time wall rotation, 0 < N ≤ ${MAX_MINUTES} (default ${DEFAULT_MINUTES})
@@ -238,7 +243,7 @@ export function kioskFromEnv(env) {
   const raw = String(env.E2E_KIOSK_URL ?? '').trim();
   if (!raw) {
     throw new ObserverRefusal(
-      'observe-production: E2E_KIOSK_URL is not set. Set it to the provisioning URL of an existing screen (…/kiosk/#<beacon>.<secret>, the day\'s temporary screen); this script never creates a screen.',
+      'observe-production: E2E_KIOSK_URL is not set. Set it to the provisioning URL of an existing screen (…/kiosk/#<beacon>.<secret>, the day\'s temporary screen or the network\'s DEV screen); this script never creates a screen.',
     );
   }
   let url;
@@ -821,6 +826,7 @@ export async function redeem(page, kioskPage, surface, ctx) {
   }
   const { pathOf } = ctx.instruments.recorders;
   let answeredAt = null;
+  let screenRead = Promise.resolve();
   let timedOut = false;
   page.on('response', (res) => {
     try {
@@ -833,6 +839,16 @@ export async function redeem(page, kioskPage, surface, ctx) {
       return;
     }
     if (ctx.budget.redeemed(surface, at)) answeredAt = at;
+    // ScanOk.screen is server metadata (worker/protocol.ts; BeaconDO.grant), not a URL's stripped ?DEV flag.
+    // Read the response the phone already received. Retain only a boolean, never its room, ticket or screen details.
+    if (surface === 'phone') {
+      try {
+        const url = new URL(res.url());
+        if (url.origin === ctx.origin && url.pathname === '/api/scan' && res.status() >= 200 && res.status() < 300) {
+          screenRead = Promise.resolve().then(() => res.json()).then(body => { ctx.phoneScreenDev = screenDevOf(body); }, () => {});
+        }
+      } catch { /* missing or malformed metadata stays unknown and strict */ }
+    }
   });
   ctx.budget.take(surface, ctx.now());
   const t0 = ctx.now();
@@ -855,6 +871,7 @@ export async function redeem(page, kioskPage, surface, ctx) {
       ctx.note(`${surface}: no /api/scan answer within ${SESSION_TIMEOUT_MS / 1000} s; the redemption failed${cancelError ? ', and leaving its page to cancel the scan failed' : ' and its page was left, so the scan is cancelled'}`);
     }
   }
+  await screenRead;
   return ctx.now() - t0;
 }
 
@@ -864,8 +881,21 @@ async function axeOf(page, ctx, label) {
 }
 
 /** What a phone phase fills; a failure part way keeps what was read. */
-export const newPhone = () => ({ landingMs: null, sada: null, share: null, karta: null, stopBoard: null, expiry: null, axe: { sada: null, karta: null }, viewports: [] });
+export const newPhone = () => ({ landingMs: null, screenDev: null, sada: null, share: null, karta: null, stopBoard: null, expiry: null, axe: { sada: null, karta: null }, viewports: [] });
 export const newDesktop = () => ({ landingMs: null, read: null, viewports: [] });
+
+/** Only ScanOk's real screen metadata can exempt expiry; absent or malformed metadata is unknown. */
+export function screenDevOf(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.roomId !== 'string'
+    || body.roomId.length === 0 || typeof body.ticket !== 'string' || body.ticket.length === 0 || !['kiosk', 'phone'].includes(body.beaconType)
+    || !Number.isFinite(body.expiresAt)) return null;
+  const screen = body.screen;
+  if (!screen || typeof screen !== 'object' || Array.isArray(screen) || !['temporary', 'venue'].includes(screen.kind)
+    || !(screen.expiresAt === null || Number.isFinite(screen.expiresAt))
+    || !(screen.stop === null || (screen.stop && typeof screen.stop === 'object' && !Array.isArray(screen.stop)))) return null;
+  // The protocol omits dev on ordinary screens. Never coerce a string or another truthy value.
+  return screen.dev === undefined ? false : typeof screen.dev === 'boolean' ? screen.dev : null;
+}
 
 /**
  * "Podijeli grad", once: one tap when the button is at rest in the header (Sada's reading says so; before WP4 it
@@ -1130,6 +1160,10 @@ const fleetNow = (ctx, page, at) => fleetAt(ctx.fleets?.get(page) ?? [], at);
  * expiryFailures, the phone spec's own). The request watcher has run since the redemption.
  */
 export async function observeExpiry(page, ctx, out) {
+  if (out.screenDev === true) {
+    ctx.note(`phone: ${DEV_EXPIRY_REASON}`);
+    return null;
+  }
   const { inventory } = ctx.instruments;
   const P = inventory.PHONE_PROBES;
   const redeemedAt = ctx.budget.times().find((t) => t.surface === 'phone')?.at ?? ctx.now();
@@ -1161,8 +1195,11 @@ export async function observePhone(page, kioskPage, ctx, out = newPhone()) {
   const P = inventory.PHONE_PROBES;
   // Every /api/data request from the redemption on, so none made after the session's end can slip past.
   ctx.phoneDataRequests = watchDataRequests(page, ctx);
+  ctx.phoneScreenDev = null;
   out.landingMs = await redeem(page, kioskPage, 'phone', ctx);
-  ctx.expiryWatch = await page.evaluate(EXPIRY_WATCH_IN_PAGE, { ended: P.sessionEnded, key: EXPIRY_KEY }).then(() => true, (e) => { ctx.error('phone expiry watch', e); return false; });
+  out.screenDev = ctx.phoneScreenDev ?? null;
+  ctx.expiryWatch = out.screenDev === true ? false
+    : await page.evaluate(EXPIRY_WATCH_IN_PAGE, { ended: P.sessionEnded, key: EXPIRY_KEY }).then(() => true, (e) => { ctx.error('phone expiry watch', e); return false; });
   await page.waitForFunction(ANY_PRESENT_IN_PAGE, { selectors: [P.sadaPlace, P.sadaDepartures] }, { timeout: SADA_TIMEOUT_MS })
     .catch(() => ctx.note(`phone: neither ${P.sadaPlace} nor ${P.sadaDepartures} within ${SADA_TIMEOUT_MS / 1000} s`));
   await ctx.sleep(SETTLE_MS);
@@ -1290,7 +1327,7 @@ export async function observeAll(browser, ctx, observation) {
 }
 
 // --- thresholds: one table, each row tagged with its deploy -------------------------------------------
-const T = (id, stage, surface, metric, bound, target, source) => Object.freeze({ id, stage, surface, metric, ...bound, target, source });
+const T = (id, stage, surface, metric, bound, target, source) => Object.freeze({ id, stage, surface, metric, ...bound, target, source }); // a bound may carry `monitored: true` (judge: status 'monitored')
 const NONE = { max: 0 };
 /**
  * Every row the observer judges. `metric` names a METRICS entry (a count of offences, or of readings); a row
@@ -1324,6 +1361,7 @@ export const THRESHOLDS = Object.freeze([
   T('sentence-dwell', 'd2', 'kiosk', 'kiosk.sentenceShortTurns', NONE, 'every sentence turn (per fact: a rewording of the same fact is a refresh, not a turn) stands at least {SENTENCE_DWELL_MIN_MS} ms unless its own fact expired; short only when even the upper bound (the dwell plus the actual gaps to the readings either side) is under it', 'decision 29'),
   T('sentence-distinct', 'd2', 'kiosk', 'kiosk.sentencesTooFew', NONE, 'at least {DISTINCT_SENTENCES_MIN} distinct sentences in every ten minutes of the rotation (a shorter run in proportion, at least 1)', '§16.3, §12'),
   T('reveal-cadence', 'd2', 'kiosk', 'kiosk.revealCadence', NONE, 'at most one reveal per {REVEAL_GAP_BEATS} beats, one region at a time, each standing at least one beat and ending by the second (beats from the page\'s data-rhythm)', 'reveal pass D2'),
+  T('shown-facts', 'd2', 'kiosk', 'kiosk.shownFactsNonTransit', { min: 6, monitored: true }, 'at least {SHOWN_FACTS_MIN} distinct non-transit row ids (kinds other than departure, departures) over the rotation; monitored: reported, never in the exit code', 'brief §6 DR3, §5.2 (g)'),
   T('solar', 'd2', 'kiosk', 'kiosk.solarOverMax', NONE, 'at most {SOLAR_ROWS_MAX} solar row per reading', '§16.3, §12'),
   T('rows-timed', 'd2', 'kiosk', 'kiosk.untimedReadings', NONE, 'every row carries data-when or data-always', '§16.3'),
   T('caveats', 'd2', 'kiosk', 'kiosk.caveatRows', NONE, 'no row reads as a caveat', '§16.3, principle 5'),
@@ -1585,6 +1623,13 @@ export const METRICS = Object.freeze({
     const rhythm = probed.find((s) => s.rhythm)?.rhythm ?? '?';
     return { value: failures.length, detail: [...failures.slice(0, 5), `${episodes.filter((e) => e.kind === 'page').length} page turns, ${episodes.filter((e) => e.kind === 'advance').length} advances in ${probed.length} readings at Ritam ${rhythm} s`] };
   },
+  'kiosk.shownFactsNonTransit': (obs) => {
+    const rot = obs.kiosk?.rotation ?? [];
+    if (!obs.kiosk || !valid(rot).length) return { value: null, detail: ['no rotation reading'] };
+    const r = shownFacts(rot);
+    const f = r.summary.fewest;
+    return { value: r.summary.nonTransit, detail: [`${r.summary.nonTransit} distinct non-transit row ids in ${r.readings} readings${f ? `; fewest in ${f.hour}:00 (${f.nonTransit})` : ''}`] };
+  },
   'kiosk.sentencesTooFew': (obs, k) => {
     if (!obs.kiosk || !(obs.kiosk.rotation ?? []).length) return { value: null, detail: ['no rotation reading'] };
     const d = distinctPerWindow(obs.kiosk.rotation, plannedRotationSteps(obs.meta.minutes, k.wall.ROTATION_STEP_MS), k.wall.ROTATION_STEP_MS, REPEAT_WINDOW_MS, k.wall.DISTINCT_SENTENCES_MIN);
@@ -1685,6 +1730,9 @@ export const METRICS = Object.freeze({
     return { value: f.length, detail: f.length ? f : [`the board after ${b.taps} taps, ${b.inViewport} departures inside the viewport`] };
   },
   'phone.expiryFailures': (obs, k) => {
+    if (obs.phone?.screenDev === true && obs.phone.landingMs !== null) {
+      return { value: null, detail: [DEV_EXPIRY_REASON], notJudgeable: true };
+    }
     const x = obs.phone?.expiry;
     if (!x) return notMeasured('the end of the phone\'s session');
     const f = [...new Set([...k.inventory.expiryFailures(x.ended), ...k.inventory.expiryFailures(x.later, x.requestsAfter)])];
@@ -1781,9 +1829,11 @@ export function judge(observation, instruments, stage = observation.meta.stage) 
   const rows = THRESHOLDS.map((t) => {
     const observed = t.surface === 'all' || observation.meta.surfaces.includes(t.surface);
     const m = observed ? METRICS[t.metric](observation, instruments) : { value: null, detail: [] };
-    const status = !observed ? 'not observed' : stageIndex(t.stage) > applied ? 'info' : m.value !== null && holds(t, m.value) ? 'pass' : 'fail';
     const ok = m.value !== null && holds(t, m.value);
-    return { id: t.id, stage: t.stage, surface: t.surface, metric: t.metric, min: t.min, max: t.max, source: t.source, target: fillTarget(t.target, instruments), value: m.value, holds: ok, detail: m.detail, status };
+    // A monitored row (R4) is measured and printed like any other and never fails: not in `failures`, not in `applied`.
+    const status = !observed ? 'not observed' : m.notJudgeable ? 'not judgeable'
+      : stageIndex(t.stage) > applied ? 'info' : t.monitored ? 'monitored' : ok ? 'pass' : 'fail';
+    return { id: t.id, stage: t.stage, surface: t.surface, metric: t.metric, min: t.min, max: t.max, monitored: t.monitored === true, source: t.source, target: fillTarget(t.target, instruments), value: m.value, holds: ok, detail: m.detail, status };
   });
   const failures = rows.filter((r) => r.status === 'fail');
   return { stage, rows, failures, applied: rows.filter((r) => r.status === 'pass' || r.status === 'fail').length, ok: failures.length === 0 };
@@ -1891,6 +1941,19 @@ export function renderReport(observation, verdict, instruments) {
   lines.push('| Row | Stage | Surface | Target | Bound | Observed | Result |', '|---|---|---|---|---|---:|---|');
   for (const r of verdict.rows) lines.push(`| ${r.id} | ${r.stage} | ${r.surface} | ${cell(r.target)} | ${bound(r)} | ${r.value === null ? '—' : r.value} | ${r.status === 'fail' ? '**fail**' : r.status} |`);
   lines.push('');
+  const unjudgeable = verdict.rows.filter(r => r.status === 'not judgeable');
+  if (unjudgeable.length) {
+    lines.push('### Not judgeable (not applied)', '');
+    for (const r of unjudgeable) lines.push(`- ${r.id}: ${r.detail.map(cell).join(' ')}`);
+    lines.push('');
+  }
+  const monitoredRows = verdict.rows.filter((r) => r.status === 'monitored');
+  if (monitoredRows.length) {
+    lines.push('### Monitored (no threshold)', '');
+    lines.push('| Row | Target | Observed | Holds |', '|---|---|---:|---|');
+    for (const r of monitoredRows) lines.push(`| ${r.id} | ${cell(r.target)} | ${r.value === null ? '—' : r.value} | ${r.holds ? 'yes' : 'no'} |`);
+    lines.push('');
+  }
   // Failed rows, and rows above the stage that would fail once applied.
   // Each failing row carries a pointer to the file that holds its evidence.
   const noted = verdict.rows.filter((r) => r.status === 'fail' || (r.status === 'info' && !r.holds && r.detail.length));
@@ -1915,6 +1978,7 @@ export function renderReport(observation, verdict, instruments) {
     const episodes = instruments.wall.revealEpisodes(valid(rot));
     const revealed = valid(rot).filter((r) => r.reveal !== undefined).length;
     lines.push(`Reveals (R2, data-reveal per reading, ${revealed} of ${s.samples} readings carried the probe): ${s.reveals.page} page turn(s), ${s.reveals.advance} advance(s)${episodes.length ? ` on beats ${episodes.slice(0, 40).map((e) => `${e.kind === 'page' ? 'p' : 'a'}${e.beat}`).join(' ')}${episodes.length > 40 ? ` and ${episodes.length - 40} more` : ''}` : ''}; the cadence is the reveal-cadence row.`, '');
+    lines.push(`Readings with the radar inset shown: ${s.radarShownReadings} of ${s.samples} (R3; monitored, no threshold).`, '');
     if (rep.dwells.length) {
       lines.push('Sentence turns per fact: the point dwell (first reading to the next fact\'s), its bounds from the actual reading gaps either side, and the verdict (decision 29).', '');
       lines.push('| At (UTC) | Dwell s | Bounds s | Gap before / after s | Refreshes | Verdict | Sentence |', '|---|---:|---|---|---:|---|---|');
@@ -1967,6 +2031,11 @@ export function renderReport(observation, verdict, instruments) {
       lines.push(`| ${skip.withCensus} | ${skip.readings - skip.withCensus} | ${skip.withSkip} | ${skip.total} | ${skip.max}${skip.max ? ` (reading ${skip.maxReading}: ${cell(skip.maxSurfaces.map((x) => `${x.surface} ${x.count ?? '?'}`).join(', '))})` : ''} | ${cell(pairs(skip.bySurface))} | ${cell(pairs(skip.reasons))} |`, '');
       lines.push(`Total skipped sums the counts over the readings, so a row left out in consecutive readings counts in each. ${skip.withSkip ? `Readings with a skip, for the owner: ${skip.flagged.slice(0, 30).join(', ')}${skip.flagged.length > 30 ? ` and ${skip.flagged.length - 30} more` : ''} (rotation.jsonl, \`skippedText\`).` : 'No reading left a row out.'} No threshold reads this census, so it never changes the exit code.`, '');
     }
+    if (valid(rot).length) {
+      lines.push('## Shown facts (scripts/shown-facts.mjs)', '');
+      const md = shownFactsMarkdown(shownFacts(rot), 'this rotation').split('\n').slice(2).join('\n').replace(/^## /gm, '### ');
+      lines.push(md, '');
+    }
   }
 
   const views = [...(k?.viewports ?? []), ...(observation.phone?.viewports ?? []), ...(observation.desktop?.viewports ?? [])];
@@ -1989,6 +2058,7 @@ export function renderReport(observation, verdict, instruments) {
   if (observation.phone) {
     const p = observation.phone;
     lines.push('## Phone and desktop', '');
+    lines.push(`- Server screen.dev: ${p.screenDev === true ? 'true' : p.screenDev === false ? 'false (ordinary screen)' : 'unknown (expiry remains strict)'}.`);
     if (p.sada) lines.push(`- Sada: place ${quote(p.sada.place ?? '—')}, sentence ${quote(p.sada.sentence ?? '—', 90)}, departures ${p.sada.departures.inViewport} in the viewport of ${p.sada.departures.total}; landed ${p.landingMs ?? '?'} ms after the scan URL.`);
     if (p.share) lines.push(`- Share: ${p.share.code ? `a code ${p.share.afterMs} ms after the tap` : cell(p.share.detail ?? 'no code')}.`);
     if (p.karta) lines.push(`- Karta cold open: status ${p.karta.status ?? '—'}, first pill ${p.karta.pillsAfterMs === null ? 'none' : `${p.karta.pillsAfterMs} ms`} after ready (${p.karta.fleet ? `the twin: ${p.karta.fleet.pins} vehicle(s), ${p.karta.fleet.status ?? '?'}` : 'no zet-rt snapshot read'}), unlabelled ${p.karta.unlabelled ?? '—'}, markers ${p.karta.markers ?? '—'}, disclosures ${p.karta.disclosures}.`);

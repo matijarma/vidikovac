@@ -13,6 +13,7 @@ Kaj ima? je jedan Cloudflare Worker (`worker/index.ts`) sa statičkim datotekama
 - **Karta:** Protomaps v4 regionalni PMTiles arhiv u `vidikovac-maps`; dopuštene verzionirane putanje `/maps/zagreb-v1/{z}/{x}/{y}.mvt`. MapLibre 6.4.1, vlastiti glifovi i spriteovi, odvojena geometrija ZET mreže. Gibanje i dalje računa postojeći model.
 - **Mjerenje:** aktivnosti privremenih zaslona vode se kao `evaluation`, odvojeno od brojača lokacija i izvoza Gradu. Nepripisiva odbijanja koda ne tumače se kao neuspjeh pilot-lokacije.
 - **Postavljanje:** postojeći GitHub-povezani build; `workers_dev` i javni preview URL-ovi isključeni. Od 14. rujna 2026. adresa je javna, bez Cloudflare Accessa; `/api/admin/*` i `/stats` i dalje prihvaćaju samo zahtjev s valjanim Access JWT-om i svima ostalima odgovaraju 404. `/statistika/` je javna: brojeve o ljudima prikazuje samo kao zbrojeve ćelija koje bi nosio skup za Grad (`worker/stats/public.ts` preko `foldCells` iz `worker/stats/export.ts`), evaluacijski promet istim pravilom ali odvojeno, a dohvate izvora i mjerenja modela tramvaja točno; JSON se na rubu čuva pet minuta po razdoblju i ograničen je po IP-u kao ostale otvorene rute. To je jedina stranica koju smije uokviriti stranica istog izvora (dijalog na `/prijava/`).
+- **Takt javnog zaslona:** `shared/kiosk/takt.ts` je čista funkcija koja na svaki takt rečenice odlučuje što popis pokazuje: prvu stranicu po statičnoj vrijednosti retka (osnovna vrijednost vrste pomnožena blizinom njegova trenutka), drugu stranicu kojoj prednost daje i svježina te najviše jedno otkrivanje po taktu. Ne čita sat ni DOM, pa isti ulaz uvijek daje isti rezultat; dnevnik taktova jednog dana čuva `test/app/takt.test.ts`.
 
 ```mermaid
 flowchart LR
@@ -59,6 +60,8 @@ flowchart LR
 ## Tok podataka (feed)
 
 Svaki izvor je modul (`worker/feed/modules/*.ts`) koji dohvaća, parsira i normalizira u `ModuleSnapshot` (`worker/feed/schema.ts`): `{ module, tier, status: live|stale|down, fetchedAt, sourceUpdatedAt, attribution, items[], sources?, coverage? }`. Cache API i KV `feed:<id>` čuvaju posljednje valjane podatke do `maxStale`. Neovisni izvori unutar modula imaju vlastita vremena i statuse; njihova uspješna prazna kolekcija nije isto što i nedostupan izvor. Klijent i `/hitno` razlikuju nepoznato stanje od potvrde da nema upozorenja. Cron (`*/5`) grije spore module. Tablica TTL-ova je u `docs/izvori.md`.
+
+Kad se R3 spoji u DR3, modula je od listopada 2026. sedamnaest. Uz devet iz rujna i pet iz nadogradnje (`kultura-zg`, `programi`, `dhmz-hourly`, `hak`, `prekidi`) to su DHMZ-ov radarski kompozit oko Zagreba (`dhmz-radar`: uvjetni zahtjev `If-Modified-Since`, broj piksela kiše u kvadratu od 30 km preko preslikavanja iz `worker/data/radar-calibration.json`, isječak na `GET /api/radar/zagreb.png`), biometeorološka prognoza (`dhmz-bio`) i upozorenja na toplinske i hladne valove (`dhmz-waves`), sva tri razine `open` i bez objave na `/open`; `prekidi` čita i obavijesti Gradske plinare Zagreb.
 
 Dvije razine: `open` (sigurnosni sloj `/hitno`, teaser zaslona, `/open/*`) ne traži ništa; `session` traži `Authorization: Bearer <dataToken>`. Token je `base64url(roomId).expiresAt.base64url(HMAC-SHA256(SESSION_SECRET, roomId|expiresAt))` i provjerava se bez ijednog poziva u DO, pa anketiranje s telefona ne budi ništa.
 

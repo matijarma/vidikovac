@@ -25,17 +25,18 @@ import type { WallRow, WallSample } from '../../e2e/wall';
 import type { PageInventory, RawInventory } from '../../e2e/inventory';
 import type { ExpiryReading } from '../../e2e/inventory';
 import type { CalmMotionReading } from '../../e2e/wall';
+import type { ScanOk } from '../../worker/protocol';
 import { skippedTextCensus } from '../../app/src/city/nearby';
 import { REVEAL_GAP_BEATS } from '../../shared/kiosk/takt';
 import {
   ANY_PRESENT_IN_PAGE, CENSUS_TIMEOUT_MS, DESKTOP_READ_IN_PAGE, INVITATION_READY_IN_PAGE, KARTA_READ_IN_PAGE, MAP_CENSUS_IN_PAGE, MAP_SETTLED_IN_PAGE, METRICS, MAX_MINUTES,
   PILLS_DRAWN_IN_PAGE, PILLS_DRAW_GRACE_MS, VEHICLES_TIMEOUT_MS, fleetAt, fleetOf, pillsOwed, type FleetRecord, type ObservedSample,
   ObserverRefusal, PAIRING_IN_PAGE, PAIRING_PROBES, PHONE_READ_IN_PAGE, REDEMPTION_SPACING_MS, SESSION_LIVE, SESSION_TIMEOUT_MS, SHARE_CODE_IN_PAGE, STAGES, STOP_BOARD_READ_IN_PAGE, STOP_BOARD_TIMEOUT_MS, SURFACES, THRESHOLDS,
-  EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES,
+  EXPIRY_STAMP_IN_PAGE, EXPIRY_WATCH_IN_PAGE, SESSION_LENGTH_MS, SESSION_MINUTES, DEV_EXPIRY_REASON, screenDevOf, newPhone,
   SKIPPED_TEXT_IN_PAGE, SKIPPED_TEXT_SPEC, parseSkippedText, skippedTextOf, summariseSkippedText,
   EVIDENCE_FILES, HIT_TEST_IN_PAGE, act, evidenceFor, readingGaps, watchBoards, type ActionRecord, type BoardAnswer,
   MAX_HOST_LOAD, USER_AGENT_SUFFIX, configFrom, distinctPerWindow, fillTarget, judge, kioskFromEnv, main, makeScrubber, newObservation, outDirFor, parseArgs,
-  plannedRotationSteps, redemptionBudget, repeatsWithin, run, stageIndex, thresholdsFor,
+  plannedRotationSteps, redemptionBudget, renderReport, repeatsWithin, run, stageIndex, thresholdsFor,
   type Instruments, type KartaRead, type ObservedRotationRow, type SkippedTextEntry, type ObserverConfig, type PhoneRead, type DesktopRead, type Runtime, type StopBoardRead,
 } from '../../scripts/observe-production.mjs';
 
@@ -295,6 +296,7 @@ describe('the thresholds are one table with a stage per row', () => {
     expect(target('pills-plus')).toContain(String(wall.PLUS_PILL_RE));
     expect(target('qr')).toContain(`${wall.QR_MIN_PX} × ${wall.QR_MIN_PX}`);
     expect(target('reveal-cadence')).toContain('3 beats');
+    expect(target('shown-facts')).toContain('at least 6 distinct non-transit row ids');
     expect(target('calm-motion')).toContain(`at most ${wall.REVEAL_MUTATIONS_MAX} beyond turnovers across a reveal's start or return`);
     expect(() => fillTarget('{NO_SUCH_CONSTANT}', instruments)).toThrow(/NO_SUCH_CONSTANT/);
   });
@@ -383,6 +385,61 @@ describe('the thresholds are one table with a stage per row', () => {
     const m = METRICS['kiosk.sentenceShortTurns'](bad, instruments);
     expect(m.value).toBe(1);
     expect(m.detail[1]).toContain('9.3 to 15.5 s between readings (gaps 3.1 / 3.1 s');
+  });
+
+  // R4: the monitored shown-facts row (docs/reveal-2026-10-plan/R4.md A2).
+  describe('the monitored shown-facts row', () => {
+    const NON_TRANSIT_KINDS = ['event', 'open', 'rain', 'cut', 'always', 'notice', 'first'];
+    /** A rotation whose readings carry `distinct` different non-transit row ids between them. */
+    const rotationWith = (distinct: number, readings = 12): WallSample[] =>
+      Array.from({ length: readings }, (_, n) => {
+        const base = wallReading(n);
+        const extra = Array.from({ length: distinct }, (_, i) => i).filter((i) => i % readings === n % readings || n >= distinct).map((i) => row({ id: `${NON_TRANSIT_KINDS[i % NON_TRANSIT_KINDS.length]}:r${i}`, kind: NON_TRANSIT_KINDS[i % NON_TRANSIT_KINDS.length] }));
+        return { ...base, rows: [...base.rows.filter((r) => r.kind !== 'solar'), ...extra] };
+      });
+    const observationWith = (rotation: WallSample[]) => {
+      const config = configFrom({ argv: ['--surfaces', 'kiosk'], env: ENV, root, now: new Date(T0) });
+      const obs = newObservation(config, null);
+      obs.kiosk = { rotation: rotation.map((x, n) => ({ ...x, n })) } as never;
+      return obs;
+    };
+
+    it('is a monitored d2 row with the bound 6', () => {
+      const t = THRESHOLDS.find((x) => x.id === 'shown-facts')!;
+      expect(t).toMatchObject({ stage: 'd2', surface: 'kiosk', metric: 'kiosk.shownFactsNonTransit', min: 6, monitored: true });
+    });
+
+    it('5 distinct non-transit ids: monitored, does not hold, the verdict stays ok and the row is not applied', () => {
+      const obs = observationWith(rotationWith(5));
+      const v = judge(obs, instruments, 'full');
+      const r = v.rows.find((x) => x.id === 'shown-facts')!;
+      expect(r).toMatchObject({ status: 'monitored', value: 5, holds: false });
+      expect(v.failures.map((f) => f.id)).not.toContain('shown-facts');
+      const applied = v.rows.filter((x) => x.status === 'pass' || x.status === 'fail').length;
+      expect(v.applied).toBe(applied);
+      expect(v.rows.filter((x) => x.status === 'monitored')).toHaveLength(1);
+    });
+
+    it('6 distinct non-transit ids: it holds', () => {
+      const r = judge(observationWith(rotationWith(6)), instruments, 'full').rows.find((x) => x.id === 'shown-facts')!;
+      expect(r).toMatchObject({ status: 'monitored', value: 6, holds: true });
+    });
+
+    it('is above the stage at d1 (information) and measures null without a wall', () => {
+      const obs = observationWith(rotationWith(6));
+      expect(judge(obs, instruments, 'd1').rows.find((x) => x.id === 'shown-facts')!.status).toBe('info');
+      const none = newObservation(configFrom({ argv: ['--surfaces', 'kiosk'], env: ENV, root, now: new Date(T0) }), null);
+      expect(METRICS['kiosk.shownFactsNonTransit'](none, instruments).value).toBeNull();
+    });
+
+    it('report.md lists it under Monitored, carries the Shown facts section and the radar line', () => {
+      const obs = observationWith(rotationWith(5).map((s, n) => ({ ...s, radar: n < 3 ? true : null })));
+      const text = renderReport(obs, judge(obs, instruments, 'full'), instruments);
+      expect(text).toContain('### Monitored (no threshold)');
+      expect(text).toContain('## Shown facts (scripts/shown-facts.mjs)');
+      expect(text).toContain('Readings with the radar inset shown: 3 of 12 (R3; monitored, no threshold).');
+      expect(text).toMatch(/Fewest non-transit facts: 2026-09-22 \d\d:00 \(5\)\.\s*$/m);
+    });
   });
 
   it('a row applied at its stage fails when it could not be measured; above the stage it is information', () => {
@@ -611,7 +668,7 @@ function wallReading(n: number, at = T0 + n * 2_000, code = CODES[0].replace('-'
     departures: 1, fitDropped: [], fitOverflow: false, reveal: { list: null, line: null }, rhythm: 20, solarRows: 1, liveRows: 0, pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0,
     markers: 12, frame: '6', mapNotes: 0, theme: 'light', code, codeState: 'live', qr: { w: 240, h: 240 }, lead: wall.LEAD_TEXT,
     strip: 'Mirno · DHMZ · EMSC', stripHasClock: false, pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [],
-    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: ['U blizini'],
+    retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, radar: null, headings: ['U blizini'],
   };
 }
 const EMPTY_INVENTORY = (vw: number, vh: number): PageInventory => ({ vw, vh, scrollY: 0, url: 'https://zagreb.example/kiosk/#ABCDEFGH.s3cr3t-part', title: 'Kaj ima?', theme: 'light', map: null, elements: [] });
@@ -655,6 +712,10 @@ const zetResponse = (path: string, pins: number, teaser: boolean, service?: stri
   return { url: () => `https://zagreb.example${path}`, status: () => 200, request: () => ({ method: () => 'GET' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => body, body: async () => Buffer.from(JSON.stringify(body)) };
 };
 interface FakeOptions {
+  /** Real ScanOk body received passively by the phone; no additional observer request. */
+  phoneScanBody?: unknown;
+  phoneScanStatus?: number;
+  phoneScanUrl?: string;
   reading?: (n: number, at: number, code: string) => WallSample;
   inventories?: Partial<Record<'kiosk' | 'portrait' | 'phone-sada' | 'phone-karta' | 'desktop', PageInventory>>;
   phone?: PhoneRead;
@@ -738,7 +799,7 @@ function fakeRuntime(options: FakeOptions = {}) {
   const log = {
     contexts: [] as { kind: Kind; options: Record<string, unknown> }[], gotos: [] as { kind: Kind; url: string; at: number }[], clicks: [] as { kind: Kind; selector: string }[],
     keys: [] as { kind: Kind; key: string }[], fills: [] as { kind: Kind; selector: string; value: string }[], scans: [] as { kind: Kind; at: number }[], readings: 0,
-    cancelled: [] as Kind[], watches: [] as Kind[], calmMarks: 0,
+    cancelled: [] as Kind[], watches: [] as Kind[], calmMarks: 0, expiryWaits: 0,
   };
   const codeNow = (): string => CODES[Math.floor((t - T0) / (options.codeWindowMs ?? 30_000)) % CODES.length];
   const kindOf = (o: Record<string, unknown>): Kind => {
@@ -792,7 +853,7 @@ function fakeRuntime(options: FakeOptions = {}) {
           const answer = (): void => {
             log.scans.push({ kind, at: t });
             answered = true;
-            emit('response', { url: () => 'https://zagreb.example/api/scan', status: () => 200, request: () => ({ method: () => 'POST' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => ({ ticket: 'T-secret', room: 'R-secret' }), body: async () => Buffer.from('') });
+            emit('response', { url: () => kind === 'phone' ? options.phoneScanUrl ?? 'https://zagreb.example/api/scan' : 'https://zagreb.example/api/scan', status: () => kind === 'phone' ? options.phoneScanStatus ?? 200 : 200, request: () => ({ method: () => 'POST' }), headers: () => ({ 'content-type': 'application/json' }), json: async () => kind === 'phone' && options.phoneScanBody !== undefined ? options.phoneScanBody : ({ ticket: 'T-secret', room: 'R-secret' }), body: async () => Buffer.from('') });
             for (const r of kind === 'phone' ? options.phoneRequests ?? [] : []) {
               due.push({ at: t + r.afterScanMs, kind, fire: () => emit('request', { url: () => `https://zagreb.example${r.path}`, method: () => 'GET' }) });
             }
@@ -809,6 +870,7 @@ function fakeRuntime(options: FakeOptions = {}) {
       },
       async waitForFunction(fn: unknown, arg?: unknown) {
         const waitsForEnd = fn === EXPIRY_STAMP_IN_PAGE || (fn === ANY_PRESENT_IN_PAGE && (arg as { selectors: string[] }).selectors.includes(inventory.PHONE_PROBES.sessionEnded));
+        if (kind === 'phone' && waitsForEnd) log.expiryWaits++;
         if (kind === 'phone' && waitsForEnd && options.expirySeenAfterScanMs !== undefined) {
           const scan = log.scans.find((x) => x.kind === 'phone')!.at;
           advance(Math.max(0, scan + options.expirySeenAfterScanMs - t));
@@ -931,6 +993,95 @@ function observe(argv: string[], options: FakeOptions = {}) {
 }
 const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? files(join(dir, f)).map((g) => `${f}/${g}`) : [f]));
 const read = (dir: string, f: string): string => readFileSync(join(dir, f), 'utf8');
+
+describe('R4 DEV expiry', () => {
+  // worker/protocol.ts ScanOk; worker/do/beacon-do.ts grant returns screenMetadata() here.
+  const scan = (dev?: true): ScanOk => ({
+    roomId: 'fixture-room-private', ticket: 'fixture-ticket-private', beaconType: 'kiosk', venueType: 'ostalo',
+    area: 'zagreb', expiresAt: T0 + SESSION_LENGTH_MS, participants: 1, screenLabel: 'Fixture',
+    screen: { kind: 'temporary', expiresAt: T0 + 86_400_000, stop: null, ...(dev ? { dev } : {}) },
+  });
+
+  it('reads the real ScanOk.screen schema, never a URL flag, a string flag or an unrelated envelope', () => {
+    expect(screenDevOf(scan(true))).toBe(true);
+    expect(screenDevOf(scan())).toBe(false); // Ordinary server metadata omits dev.
+    expect(screenDevOf({ ...scan(), screen: { ...scan().screen, dev: false } })).toBe(false);
+    for (const body of [null, [], {}, { dev: true }, { screen: { dev: true } },
+      { ...scan(true), screen: undefined }, { ...scan(true), screen: { dev: true } },
+      { ...scan(true), screen: { ...scan().screen, dev: 'true' } },
+      { ...scan(true), roomId: undefined }, { ...scan(true), roomId: '' }, { ...scan(true), ticket: '' },
+      { ...scan(true), screen: { ...scan(true).screen, stop: undefined } }, { ...scan(true), expiresAt: 'tomorrow' }]) {
+      expect(screenDevOf(body)).toBeNull();
+    }
+    const target = kioskFromEnv({ E2E_KIOSK_URL: KIOSK_URL.replace('/kiosk/', '/kiosk/?DEV') });
+    expect(target.kioskUrl).not.toContain('?DEV');
+    expect(screenDevOf({ ...scan(), provisionUrl: target.kioskUrl + '?DEV' })).toBe(false);
+  });
+
+  it('skips the DEV expiry watch, 690-second wait and checks, reporting not judgeable rather than pass', async () => {
+    const r = await observe([], { phoneScanBody: scan(true), expiryWatch: 'no-stamp', expirySeenAfterScanMs: 700_000,
+      expiry: { ...GOOD_EXPIRY, ended: false, rows: 3 } });
+    expect(r.code, r.lines.join('\n')).toBe(0);
+    expect(r.log.expiryWaits).toBe(0);
+    expect(r.log.watches).toEqual([]);
+    expect(r.clock.now() - T0).toBeLessThan(SESSION_LENGTH_MS);
+    expect(files(r.out)).not.toContain('captures/phone-expired.png');
+    const report = read(r.out, 'report.md');
+    expect(report).toMatch(/\| phone-expiry \| d3 \| phone \| .* \| ≤ 0 \| — \| not judgeable \|/);
+    expect(report).toContain('### Not judgeable (not applied)');
+    expect(report).toContain(DEV_EXPIRY_REASON);
+    expect(report).toContain('Server screen.dev: true');
+    for (const f of files(r.out)) {
+      expect(read(r.out, f)).not.toContain('fixture-room-private');
+      expect(read(r.out, f)).not.toContain('fixture-ticket-private');
+    }
+    expect(r.lines.join('\n')).not.toMatch(/fixture-(room|ticket)-private/);
+    expect(r.log.gotos.some(g => /\/api\/(?:dev|admin|screens)/.test(g.url))).toBe(false);
+  });
+
+  it.each(['ordinary', 'explicit false', 'unknown', 'malformed', 'failed response', 'foreign origin', 'wrong path'] as const)(
+    '%s metadata retains every strict expiry check', async kind => {
+      const body = kind === 'ordinary' ? scan()
+        : kind === 'explicit false' ? { ...scan(), screen: { ...scan().screen, dev: false } }
+        : kind === 'unknown' ? { ...scan(), screen: undefined }
+        : kind === 'malformed' ? { ...scan(), screen: { ...scan().screen, dev: 'true' } } : scan(true);
+      const r = await observe([], { phoneScanBody: body, phoneScanStatus: kind === 'failed response' ? 503 : 200,
+        phoneScanUrl: kind === 'foreign origin' ? 'https://other.example/api/scan'
+          : kind === 'wrong path' ? 'https://zagreb.example/api/scan-extra' : undefined,
+        expiryWatch: 'no-stamp', expirySeenAfterScanMs: 700_000,
+        expiry: { ...GOOD_EXPIRY, ended: false, scanLinks: 0, hitnoLinks: 0, rows: 3, exportControls: 1 },
+        phoneRequests: [{ path: '/api/data/zet-rt', afterScanMs: 610_000 }] });
+      expect(r.code).toBe(1);
+      expect(r.log.expiryWaits).toBe(1);
+      expect(r.log.watches).toEqual(['phone']);
+      expect(files(r.out)).toContain('captures/phone-expired.png');
+      const report = read(r.out, 'report.md');
+      expect(r.lines.join('\n')).toContain('FAIL phone-expiry');
+      expect(report).toContain('the page kept no stamp');
+      expect(report).toContain('no [data-testid=session-ended] once the session ended');
+      expect(report).toContain('no link to scan again');
+      expect(report).toContain('no /hitno link');
+      expect(report).toContain('3 content row(s) kept');
+      expect(report).toContain('1 export, copy, print or calendar control(s)');
+      expect(report).toContain('1 /api/data request(s) after the session ended');
+      expect(report).not.toContain('not judgeable');
+    });
+
+  it('does not exempt unrelated thresholds or change the monitored shown-facts row', () => {
+    const obs = newObservation(configFrom({ argv: [], env: ENV, root, now: new Date(T0) }), null);
+    obs.phone = { ...newPhone(), landingMs: 0, screenDev: null };
+    const strict = judge(obs, instruments);
+    obs.phone.screenDev = true;
+    const dev = judge(obs, instruments);
+    expect(dev.rows.find(r => r.id === 'phone-expiry')).toMatchObject({ status: 'not judgeable', value: null, holds: false });
+    expect(dev.applied).toBe(strict.applied - 1);
+    expect(dev.rows.filter(r => r.id !== 'phone-expiry')).toEqual(strict.rows.filter(r => r.id !== 'phone-expiry'));
+    expect(dev.failures.length).toBeGreaterThan(0);
+    expect(dev.rows.find(r => r.id === 'shown-facts')).toMatchObject({ status: 'monitored', monitored: true, min: 6 });
+    obs.phone.landingMs = null;
+    expect(judge(obs, instruments).rows.find(r => r.id === 'phone-expiry')?.status).toBe('fail');
+  });
+});
 
 describe('a run over a fake browser', () => {
   it('a wall, phone and desktop that hold every row: exit 0, the four files and the extras written', async () => {

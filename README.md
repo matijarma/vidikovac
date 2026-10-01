@@ -24,9 +24,9 @@ When time runs out, updates stop—and the content clears, leaving the invitatio
 
 ## One city, three experiences
 
-- **On the wall:** the screen's place and one written sentence in the header, a map framed around the place with every tram and bike station, and **U blizini**, one time-ordered list: the next departures, then what happens nearby, such as a closure ending, an event or the last trams tonight. The scanning invitation has its own card; safety and the on-duty pharmacy stay in the footer.
+- **On the wall:** the screen's place and one written sentence in the header, a map framed around the place with every tram and bike station, and, when R3 joins DR3, DHMZ's radar around Zagreb in its corner while rain is near, and **U blizini**, one list: a single line with the next departures, then what happens nearby, such as a closure ending, an event, a place open now or the last trams tonight. On the sentence's beat the list now and then shows what did not fit. The scanning invitation has its own card; safety and the on-duty pharmacy stay in the footer.
 - **In your hand:** the place as the title, one sentence, the next three departures and the same **U blizini** rows, under three tabs: **Sada · Karta · Još**. Karta is the map of that list, with vehicles at once and one search field; the week's events are one row in Još. Saved stops and places stay on your device.
-- **At your desk:** the phone, wider: Sada and the Karta map side by side, with room to explore the map and its details.
+- **At your desk:** the phone, wider: Sada with the departures as one line and the Karta map side by side, with room to explore the map and its details.
 
 These share data and a visual language, not an identical layout stretched to three sizes.
 

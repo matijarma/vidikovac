@@ -50,7 +50,7 @@ function sample(over: Partial<WallSample> = {}): WallSample {
     hiddenRows: 0, departures: rows.filter((r) => r.kind === 'departure').length, fitDropped: [], fitOverflow: false, solarRows: rows.filter((r) => r.kind === 'solar').length, liveRows: rows.filter((r) => r.live).length,
     pills: '6|12|17', bodies: 41, zoom: '14.20', feed: 'live', mapStatus: 'ready', unlabelled: 0, markers: 12, frame: '6', mapNotes: 0,
     theme: 'light', code: 'ABCD·EFGH', codeState: 'live', qr: { w: 240, h: 240 }, lead: LEAD_TEXT, strip: 'Mirno · DHMZ · EMSC', stripHasClock: false,
-    pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, headings: [],
+    pharmacy: '24/7 Ilica 1', pharmacySymbols: 1, controls: 0, controlNames: [], retiredChrome: 0, settingsOpen: false, stopBoardOpen: false, radar: null, headings: [],
     ...over,
     rows,
   };
@@ -266,6 +266,24 @@ describe('one reading of the wall', () => {
       ]);
       document.querySelector('[data-testid=strip-sources]')!.textContent = 'DHMZ 17:30 · EMSC';
       expect(shippedFn(WALL_SAMPLE_SPEC).stripHasClock).toBe(true);
+      // R4: the radar inset reads null while absent, true while on the page, false while hidden.
+      expect(s.radar).toBeNull();
+      const host = document.querySelector<HTMLElement>('[data-testid=kiosk-map-host]')!;
+      host.insertAdjacentHTML('beforeend', '<figure data-testid="radar-inset"><img alt=""></figure>');
+      const radar = document.querySelector<HTMLElement>('[data-testid=radar-inset]')!;
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false); // no painted box yet
+      radar.getBoundingClientRect = () => rect(100, 40);
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(true);
+      for (const style of ['opacity:0', 'display:none', 'visibility:hidden']) {
+        radar.style.cssText = style;
+        expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
+      }
+      radar.style.cssText = '';
+      host.style.opacity = '0';
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
+      host.style.opacity = '';
+      radar.hidden = true;
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
     } finally {
       delete document.documentElement.dataset.themeResolved;
     }
