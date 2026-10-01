@@ -7,7 +7,7 @@ import { Window } from 'happy-dom';
 import { describe, expect, it } from 'vitest';
 import { SNIMKA_COMPARISON, SNIMKA_WINDOW, type Col, type ScreenIndex, type SeriesFile, type SnimkaState } from '../../shared/snimka';
 import {
-  FROZEN_AFTER_S, bikeDrain, ghostExcess, feedHealth, ghostInflation, heroTiles, longestSilent, midnightOf, minutesText, peakAt0745, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
+  FROZEN_AFTER_S, GHOST_SETTLED_MIN, bikeDrain, ghostExcess, ghostSeries, feedHealth, ghostInflation, heroTiles, longestSilent, midnightOf, minutesText, peakAt0745, renderReckoning, returnDuration, sentenceFamilies, silentMinutes,
 } from '../../app/src/snimka/reckoning';
 import { MARKS, buildComparisonSeries, buildWindowSeries } from '../../e2e/snimka-fixtures';
 
@@ -153,6 +153,24 @@ describe('ghostExcess', () => {
     expect(ghostExcess(3, 5)).toBeNull();
     expect(ghostExcess(null, 0)).toBeNull();
     expect(ghostExcess(4, null)).toBeNull();
+  });
+});
+
+describe('ghostSeries', () => {
+  it('counts a surplus only once the small fleet has settled: a shrinking fleet is the hold, not a ghost', () => {
+    const s = blank();
+    // A collapse: 150 in motion, then 15 from minute 20; the product still says 31 (the 180 s hold).
+    fillRange(s.seen.all, 0, 20, 150);
+    fillRange(s.published!.vehicles, 0, 20, 150);
+    fillRange(s.seen.all, 20, 60, 15);
+    fillRange(s.published!.vehicles, 20, 60, 31);
+    s.seen.all[40] = null; // a minute without a frame neither breaks nor extends the run
+    const g = ghostSeries(s);
+    for (let m = 20; m < 20 + GHOST_SETTLED_MIN; m++) expect(g[m], `minute ${m}`).toBeNull();
+    expect(g[20 + GHOST_SETTLED_MIN]).toBe(16);
+    expect(g[40]).toBeNull();
+    expect(g[59]).toBe(16);
+    expect(ghostSeries({ ...blank(), published: null }).every((v) => v === null)).toBe(true);
   });
 });
 

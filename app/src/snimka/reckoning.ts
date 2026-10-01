@@ -34,6 +34,27 @@ export function ghostExcess(published: number | null | undefined, seen: number |
   return seen < GHOST_SMALL_FLEET && diff >= GHOST_MIN_EXCESS ? diff : null;
 }
 
+/** ...and only once the small fleet has held for more than this many minutes with data: while the fleet shrinks or
+ *  grows, the difference is the twin's 180 s hold on vehicles that just stopped reporting (Mon 00:25 on the real
+ *  data: 31 published against 15 during the collapse), not a vehicle that was not there. */
+export const GHOST_SETTLED_MIN = 10;
+
+/** Per minute, the ghosts under ghostExcess, counted only in a settled small fleet (GHOST_SETTLED_MIN); null where
+ *  the minute does not count. A minute without a seen value neither breaks nor extends the settled run. */
+export function ghostSeries(s: SeriesFile): (number | null)[] {
+  const out = new Array<number | null>(s.n).fill(null);
+  const p = s.published;
+  if (!p) return out;
+  let run = 0;
+  for (let m = 0; m < s.n; m++) {
+    const seen = s.seen.all[m];
+    if (seen === null || seen === undefined) continue;
+    run = seen < GHOST_SMALL_FLEET ? run + 1 : 0;
+    if (run > GHOST_SETTLED_MIN) out[m] = ghostExcess(p.vehicles[m], seen);
+  }
+  return out;
+}
+
 /** ZET's data did not change at this minute (the newest header older than five minutes). */
 export function frozenAt(s: SeriesFile, m: number): boolean {
   const age = s.feed.headerAgeS[m];
@@ -170,8 +191,8 @@ export interface GhostResult {
 }
 
 /** The number the product published against the vehicles with a position, minute by minute: how many minutes it
- *  counted vehicles that were not there (ghostExcess: a small fleet and at least two more, or any while none had a
- *  position), by how much at most, and when, in all and per day. Only minutes where both numbers exist are compared.
+ *  counted vehicles that were not there (ghostSeries: a settled small fleet and at least two more, or any while none
+ *  had a position), by how much at most, and when, in all and per day. Only minutes where both numbers exist are compared.
  *  Null without a published series (the comparison day). */
 export function ghostInflation(s: SeriesFile): GhostResult | null {
   const p = s.published;
@@ -184,6 +205,7 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
   let compared = 0;
   const days = daysOf(s);
   const byDay = days.map((day) => ({ day, minutes: 0, max: 0, compared: 0 }));
+  const excess = ghostSeries(s);
   for (let m = 0; m < s.n; m++) {
     const pub = p.vehicles[m];
     const seen = s.seen.all[m];
@@ -191,7 +213,7 @@ export function ghostInflation(s: SeriesFile): GhostResult | null {
     compared++;
     const row = byDay[days.indexOf(midnightOf(atOf(s, m)))];
     if (row) row.compared++;
-    const diff = ghostExcess(pub, seen);
+    const diff = excess[m] ?? null;
     if (diff === null) continue;
     minutes++;
     if (row) { row.minutes++; row.max = Math.max(row.max, diff); }

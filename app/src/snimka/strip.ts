@@ -14,7 +14,7 @@ import { columns, hideTip, showTip, tableDetails } from '../statistika/charts';
 import { escapeHtml } from '../ui/dom/escape';
 import type { SnimkaContext } from './context';
 import { num, zagrebClock, zagrebDateTime, zagrebDay } from './format';
-import { FROZEN_AFTER_S, frozenAt, ghostExcess, midnightOf } from './reckoning';
+import { FROZEN_AFTER_S, frozenAt, ghostSeries, midnightOf } from './reckoning';
 import { SN, fill } from './strings';
 
 /** The viewBox height of every curve; x runs in minutes. */
@@ -423,11 +423,11 @@ export function renderStrip(root: HTMLElement, o: { series: SeriesFile; comparis
   ]), S.table));
 
   // 5. The vehicles the screen counted that had no position: published minus seen, on its own small scale, only in
-  // the minutes where the difference cannot be the lag between two samples (reckoning.ts ghostExcess).
+  // the minutes where the difference cannot be the lag between two samples or the hold of a shrinking fleet (reckoning.ts ghostSeries).
   let ghosts: HTMLElement | null = null;
   if (s.published) {
     const pub = s.published.vehicles;
-    const excess = Array.from({ length: n }, (_, m) => ghostExcess(pub[m], s.seen.all[m]));
+    const excess = ghostSeries(s);
     const max = colMax(excess);
     const R = SN.reckoning;
     const hourGhosts = (m0: number): string[] => {
