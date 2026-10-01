@@ -462,7 +462,7 @@ export const WALL_SAMPLE_IN_PAGE = (spec: WallSampleSpec): WallSample => {
     retiredChrome: document.querySelectorAll(p.retiredChrome).length,
     settingsOpen: Boolean(settings && shown(settings)),
     stopBoardOpen: Boolean(board && shown(board)),
-    radar: radarEl ? !(radarEl as HTMLElement).hidden && !radarEl.closest('[hidden]') : null,
+    radar: radarEl ? onWall(radarEl) : null,
     headings: Array.from(document.querySelectorAll<HTMLElement>(p.headings))
       .filter((el) => !el.hidden && !el.closest('[hidden]') && el.getBoundingClientRect().height > 1)
       .map((el) => words(el))

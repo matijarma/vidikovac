@@ -149,8 +149,19 @@ describe('one reading of the wall', () => {
       expect(s.radar).toBeNull();
       const host = document.querySelector('[data-testid=kiosk-map-host]')!;
       host.insertAdjacentHTML('beforeend', '<figure data-testid="radar-inset"><img alt=""></figure>');
+      const radar = document.querySelector<HTMLElement>('[data-testid=radar-inset]')!;
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false); // no painted box yet
+      radar.getBoundingClientRect = () => rect(100, 40);
       expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(true);
-      document.querySelector<HTMLElement>('[data-testid=radar-inset]')!.hidden = true;
+      for (const style of ['opacity:0', 'display:none', 'visibility:hidden']) {
+        radar.style.cssText = style;
+        expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
+      }
+      radar.style.cssText = '';
+      host.style.opacity = '0';
+      expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
+      host.style.opacity = '';
+      radar.hidden = true;
       expect(shippedFn(WALL_SAMPLE_SPEC).radar).toBe(false);
     } finally {
       delete document.documentElement.dataset.themeResolved;
