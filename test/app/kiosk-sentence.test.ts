@@ -1644,13 +1644,13 @@ describe('the more-city facts (R3)', () => {
   });
 
   /** Gric's hourly steps from `from` (Zagreb ISO), one an hour; `wet` names the hours of the wet ones. */
-  const hourly = (from: string, count: number, step: (hour: number) => Record<string, number | string>) => ({ 'dhmz-hourly': snapshot('dhmz-hourly',
+  const hourly = (from: string, count: number, step: (hour: number) => Partial<Record<string, number | string>>) => ({ 'dhmz-hourly': snapshot('dhmz-hourly',
     Array.from({ length: count }, (_, k) => {
       const start = at(from) + k * 3_600_000;
       const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Europe/Zagreb' }).format(start));
       return { id: `dhmz-hourly:gric:${new Date(start).toISOString()}`, module: 'dhmz-hourly' as const, kind: 'forecast' as const, tier: 'session' as const,
         title: 'Zagreb-Grič', at: new Date(start).toISOString(), until: new Date(start + 3_600_000).toISOString(),
-        geo: { type: 'Point' as const, coordinates: [15.97, 45.81] }, data: { station: 'gric', temp: 18, precip: 0, prob: 10, ...step(hour) } };
+        geo: { type: 'Point' as const, coordinates: [15.97, 45.81] }, data: { station: 'gric', temp: 18, precip: 0, prob: 10, ...step(hour) } as Record<string, number | string> };
     })) });
 
   it('dryUntil: a dry run to a wet step at 18:00 seen at 12:00, and none while the radar sees rain near', () => {
