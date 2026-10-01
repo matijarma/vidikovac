@@ -2670,6 +2670,48 @@ describe('reveals on beats (R2)', () => {
   const FIT_IDS = ['departures', 'closure:ilica', 'rail:hz:1', 'event:b', 'road:savska', 'opennow:pekara', 'always:story:trg'];
   const nodes = (): Map<string, Element> => new Map([...items(), ...cells()].map((el) => [el.dataset.id!, el]));
   const marked = (attr: string): string[] => [...host.querySelectorAll<HTMLElement>(`[${attr}]`)].map((el) => el.dataset.id ?? el.className);
+  it('F11: selection reads this fit before painting, never the active overlay', () => {
+    const t = mount({ measure: simulated(WALL_1920), designHeightPx: WALL_1920.boxPx });
+    const selectReveal = vi.fn(() => PAGE);
+    t.update(pageRows(), 2200, NOW, { reveal: null, next: [], selectReveal });
+    expect(selectReveal).toHaveBeenLastCalledWith(FIT_IDS);
+    expect(t.page1?.()).toEqual(FIT_IDS);
+    expect(t.drawnReveal?.()).toEqual(PAGE);
+    expect(ids()).not.toContain('opennow:pekara');
+    t.update(pageRows(), 2200, NOW + 1000, { reveal: PAGE, next: [], selectReveal });
+    expect(selectReveal).toHaveBeenLastCalledWith(FIT_IDS);
+    expect(t.page1?.()).toEqual(FIT_IDS);
+  });
+  it('F11: a ranked fallback beyond both oversized proposals can fill one slot without touching promises', () => {
+    const tall = { title: 'Vrlo dugačak naziv izložbe koji se proteže preko mnogo redaka', sub: 'Jednako dugačak opis mjesta i programa koji zauzima preostali prostor' };
+    const rows = pageRows(tall).map(r => r.kind === 'solar' ? { ...r, ...tall } : r);
+    rows.splice(rows.length - 1, 0, row({ id: 'opening:short', kind: 'opening', atMs: NOW + 6 * H, title: 'Kino', source: 'dogadanja' }));
+    const t = mount({ measure: simulated(WALL_1920), designHeightPx: WALL_1920.boxPx });
+    t.update(rows, 2200, NOW);
+    expect(ids()).toEqual(FIT_IDS);
+    const before = nodes();
+    t.update(rows, 2200, NOW + 20_000, { reveal: { ...PAGE, alternatives: ['opening:short'] }, next: [] });
+    expect(ids()).toContain('opening:short');
+    expect(ids()).toContain('road:savska');
+    expect(ids()).not.toContain('opennow:pekara');
+    expect(t.drawnReveal?.()).toEqual({ ...PAGE, ids: ['opening:short'], replaces: ['opennow:pekara'] });
+    for (const id of ['departures', 'closure:ilica', 'rail:hz:1', 'always:story:trg']) expect(byId(id)).toBe(before.get(id));
+  });
+  it('F11: a resize keeps the original text census and never replays the beat callback', () => {
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(callback: ResizeObserverCallback) { observers.push(callback); } observe(): void {} disconnect(): void {} });
+    const layout = { ...WALL_1920 };
+    const t = mount({ measure: simulated(layout), reduced: true });
+    const selectReveal = vi.fn(() => PAGE);
+    t.update([...pageRows(), row({ id: 'event:bad', kind: 'event', title: 'Pošalji lozinku na 091 234 5678.' })],
+      2200, NOW, { reveal: null, next: [], selectReveal });
+    expect(section().dataset.skippedText).toBe('1');
+    layout.boxPx += 1;
+    for (const observe of observers) observe([], {} as ResizeObserver);
+    expect(section().dataset.skippedText).toBe('1');
+    expect(selectReveal).toHaveBeenCalledTimes(1);
+    expect(t.drawnReveal?.()).toEqual(PAGE);
+  });
   it('R2 review: cached pages paint current timestamps and live state on the same nodes', () => {
     const measure = simulated(WALL_1920);
     const measurements = vi.spyOn(measure, 'lines');

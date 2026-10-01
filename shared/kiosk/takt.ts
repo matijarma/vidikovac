@@ -106,8 +106,16 @@ export const EMPTY_HISTORY: TaktHistory = Object.freeze({ beat: 0, shownAt: Obje
 // DOM or any store, never draws a random number, and the same inputs give the same result (a fixture day replays
 // into a committed beat log, test/fixtures/takt/beat-log.jsonl). The constants are the brief §3 numbers.
 
-export interface TaktReveal { kind: RevealKind; ids: readonly string[]; replaces: readonly string[]; beat: number; }
-export interface TaktOptions { capacity: number; rhythmMs: number; quiet: boolean; reduced: boolean; }
+export interface TaktReveal {
+  kind: RevealKind; ids: readonly string[]; replaces: readonly string[]; beat: number;
+  /** Ranked, eligible fallbacks for measured fitting only, not additional rows to display. */
+  alternatives?: readonly string[];
+}
+export interface TaktOptions {
+  capacity: number; rhythmMs: number; quiet: boolean; reduced: boolean;
+  /** This paint's baseline measured fit, before any reveal. Omitted: the legacy count/value approximation. */
+  measuredPage1?: readonly string[];
+}
 export interface TaktResult { page1: readonly string[]; reveal: TaktReveal | null; history: TaktHistory; }
 
 /** Brief §3 "Reveal cadence": an advance may start on a beat `b` with `b % 4 === 0`. */
@@ -118,6 +126,8 @@ export const PAGE_EVERY_BEATS = 3;
 export const REVEAL_GAP_BEATS = 3;
 /** Brief §3 "Page turn": a page turn replaces at most 2 rows. */
 export const PAGE_MAX_ROWS = 2;
+/** F11: bound hidden-list trials to 12 eligible rows (the observed backlog was ten), never more live swaps. */
+export const PAGE_FIT_CANDIDATES = 12;
 /** Brief §3 "Reveal cadence": the first shown departure must be more than 10 min away for an advance. */
 export const ADVANCE_LEAD_MS = 600_000;
 /** Brief §3 "Page turn": a row within 30 min of its moment is imminent and never replaced (the imminence band's own edge, SOON_MS). */
@@ -138,12 +148,13 @@ const moves = (c: TaktCandidate): boolean =>
   !c.reserved && c.kind !== 'departure' && c.kind !== 'departures' && !REVEAL_EXEMPT_KINDS.includes(c.kind);
 
 /**
- * One beat of the wall (R2.md §0.2, rules 1 to 11). Page 1 is the reserved candidates and the most valuable of the
- * rest by the static value (R0's order, the fitter's), cut to `capacity`; freshness ranks page 2 only, and a page-2
+ * One beat of the wall (R2.md §0.2, rules 1 to 11). Page 1 is the supplied measured fit; without it, the reserved
+ * candidates and the most valuable of the rest by static value, cut to `capacity`. Freshness ranks page 2 only; a page-2
  * candidate seen in the last FRESH_MS waits while page 2 holds another (the repeat gate of R2.md Risks). A quiet beat,
  * a beat off the grid or one inside the gap after the last reveal carries none; else an advance when the beat and
  * the lead allow it, else a page turn of at most PAGE_MAX_ROWS rows. The history returned is a new object: `shownAt`
- * holds every page-1 and revealed id at `now`, pruned to FRESH_MS, keys sorted; `reduced` changes nothing here.
+ * holds every page-1 and proposed id at `now`, pruned to FRESH_MS, keys sorted; measured callers commit with
+ * recordTaktShown after drawing instead. `reduced` changes nothing here.
  */
 export function takt(candidates: readonly TaktCandidate[], history: TaktHistory, now: number, options: TaktOptions): TaktResult {
   const b = beatIndex(now, options.rhythmMs);
@@ -159,7 +170,7 @@ export function takt(candidates: readonly TaktCandidate[], history: TaktHistory,
   const reserved = listed.filter((c) => c.reserved);
   const rest = listed.filter((c) => !c.reserved).sort((x, y) => still(y) - still(x) || order(x) - order(y));
   const room = Math.max(0, Math.floor(Number.isFinite(options.capacity) ? options.capacity : 0) - reserved.length);
-  const onPage1 = new Set([...reserved, ...rest.slice(0, room)].map((c) => c.id));
+  const onPage1 = new Set(options.measuredPage1 ?? [...reserved, ...rest.slice(0, room)].map((c) => c.id));
   const page1 = listed.filter((c) => onPage1.has(c.id)).map((c) => c.id);
   let reveal: TaktReveal | null = null;
   const gap = history.lastReveal === null || b - history.lastReveal.beat >= REVEAL_GAP_BEATS;
@@ -179,13 +190,21 @@ export function takt(candidates: readonly TaktCandidate[], history: TaktHistory,
       const out = listed.filter((c) => onPage1.has(c.id) && moves(c) && !c.imminent)
         .sort((x, y) => still(x) - still(y) || order(y) - order(x));
       const k = Math.min(PAGE_MAX_ROWS, out.length, page2.length);
-      if (k > 0) reveal = { kind: 'page', ids: page2.slice(0, k).map((c) => c.id), replaces: out.slice(0, k).map((c) => c.id), beat: b };
+      if (k > 0) reveal = { kind: 'page', ids: page2.slice(0, k).map((c) => c.id), replaces: out.slice(0, k).map((c) => c.id), beat: b,
+        ...(options.measuredPage1 !== undefined ? { alternatives: page2.slice(k, PAGE_FIT_CANDIDATES).map((c) => c.id) } : {}) };
     }
   }
+  return { page1, reveal, history: recordTaktShown(history, page1, reveal, now, options.rhythmMs) };
+}
+
+/** Commit a measured paint, not a proposal. A rejected overlay consumes no gap; partial overlays stamp only their ids.
+ * Legacy takt calls this with its approximation; the controller calls it with the actual visible baseline and overlay. */
+export function recordTaktShown(history: TaktHistory, shown: readonly string[], reveal: TaktReveal | null, now: number, rhythmMs: number): TaktHistory {
+  const b = beatIndex(now, rhythmMs);
   const kept: Record<string, number> = {};
   for (const [id, at] of Object.entries(history.shownAt)) if (at <= now && now - at <= FRESH_MS) kept[id] = at;
-  for (const id of [...page1, ...(reveal?.ids ?? [])]) kept[id] = now;
+  for (const id of [...shown, ...(reveal?.ids ?? [])]) kept[id] = now;
   const shownAt: Record<string, number> = {};
   for (const id of Object.keys(kept).sort()) shownAt[id] = kept[id]!;
-  return { page1, reveal, history: { beat: b, shownAt, lastReveal: reveal ? { kind: reveal.kind, beat: b } : history.lastReveal } };
+  return { beat: b, shownAt, lastReveal: reveal ? { kind: reveal.kind, beat: b } : history.lastReveal };
 }

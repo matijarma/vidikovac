@@ -17,6 +17,9 @@ import { emptyCity, type DepartureBoard, type ScheduledDeparture } from '../../s
 import { BEACON_STORAGE_KEY } from '../../app/src/beacon';
 import * as scheduler from '../../shared/kiosk/takt';
 import * as sentenceRuntime from '../../app/src/city/sentence';
+import * as nearbyRuntime from '../../app/src/city/nearby';
+import * as timelineRuntime from '../../app/src/kiosk/timeline';
+import { simulated, WALL_1920 } from './timeline-measure';
 import { createBoardCache, type BoardCache } from '../../app/src/city/boards';
 import type { ScreenStop } from '../../app/src/core/contracts';
 import { createDefaultI18n } from '../../app/src/i18n/create-default-i18n';
@@ -1003,6 +1006,107 @@ describe('a touch quiets the reveals (R2)', () => {
       proposal.mockRestore();
       calls.mockRestore();
       k.handle.destroy();
+    }
+  });
+
+  it('F11: a rejected proposal neither stamps unseen ids nor consumes the reveal gap', async () => {
+    const k = mount({ boards: evening });
+    await flush();
+    const realTakt = scheduler.takt;
+    const proposal = vi.spyOn(scheduler, 'takt').mockImplementation((candidates, history, at, options) => {
+      const r = realTakt(candidates, history, at, options);
+      const beat = scheduler.beatIndex(at, options.rhythmMs);
+      return { ...r, reveal: { kind: 'page', ids: ['event:unpainted'], replaces: ['solar:missing'], beat },
+        history: { ...r.history, shownAt: { ...r.history.shownAt, 'event:unpainted': at }, lastReveal: { kind: 'page', beat } } };
+    });
+    try {
+      k.setNow(NOW + 20_000);
+      k.tick(CODE_TICK_MS);
+      expect(proposal).toHaveBeenCalled();
+      expect(reveals(k)).toEqual([]);
+      const before = proposal.mock.calls[0]![1].lastReveal;
+      proposal.mockClear();
+      k.setNow(NOW + 40_000);
+      k.tick(CODE_TICK_MS);
+      expect(proposal).toHaveBeenCalled();
+      expect(proposal.mock.calls[0]![1].shownAt['event:unpainted']).toBeUndefined();
+      expect(proposal.mock.calls[0]![1].lastReveal).toEqual(before);
+      expect(proposal.mock.calls[0]![3].measuredPage1).toEqual(
+        [...k.q('[data-testid=nearby-rows]')!.children].map(row => row.getAttribute('data-id')));
+    } finally {
+      proposal.mockRestore();
+      k.handle.destroy();
+    }
+  });
+
+  it('F11: the controller schedules the changed pool on the same measured paint and records only the partial overlay', async () => {
+    const H = 3_600_000;
+    const tall = 'Vrlo dugačak naziv izložbe koji se proteže preko mnogo redaka';
+    let pool: TimelineRow[] = [
+      ...[1, 2, 3].map(n => row({ id: `dep:${n}`, kind: 'departure', title: 'Dubec', atMs: NOW + n * 60_000,
+        arrival: { tripId: `t${n}`, routeId: '6', routeName: '6', headsign: 'Dubec', atMs: NOW + n * 60_000, live: false, minutes: null } })),
+      row({ id: 'notice:zet', kind: 'notice', title: 'ZET javlja' }),
+      row({ id: 'closure:ilica', kind: 'closure', title: 'Ilica', atMs: NOW + 4 * H }),
+      row({ id: 'event:kept', kind: 'event', title: 'Koncert', atMs: NOW + H }),
+      row({ id: 'opennow:old', kind: 'open', title: 'Pekara', atMs: NOW + 2 * H }),
+      row({ id: 'opennow:second', kind: 'open', title: 'Kavana', atMs: NOW + 2 * H }),
+      row({ id: 'opening:tall', kind: 'opening', title: tall, atMs: NOW + 3 * H }),
+      row({ id: 'solar:tall', kind: 'solar', title: tall, atMs: NOW + 5 * H }),
+      row({ id: 'solar:short', kind: 'solar', title: 'Zalazak', atMs: NOW + 7 * H }),
+      row({ id: 'always:story', kind: 'always', title: 'Trg', always: true, atMs: null }),
+    ];
+    const selection = vi.spyOn(nearbyRuntime, 'selectNearby').mockImplementation(() => pool);
+    const realMount = timelineRuntime.mountTimeline;
+    const fitter = vi.spyOn(timelineRuntime, 'mountTimeline').mockImplementation((host, deps) => realMount(host, {
+      ...deps, measure: simulated(() => host.querySelector<HTMLElement>('[data-testid=nearby]')!, WALL_1920),
+    }));
+    const realTakt = scheduler.takt;
+    let enable = false;
+    const calls = vi.spyOn(scheduler, 'takt').mockImplementation((c, h, at, opts) => realTakt(c, h, at, { ...opts, quiet: !enable || opts.quiet }));
+    const k = mount();
+    await flush();
+    try {
+      const fitted = ['departures', 'notice:zet', 'closure:ilica', 'event:kept', 'opennow:new', 'opennow:second', 'always:story'];
+      expect([...k.q('[data-testid=nearby-rows]')!.children].map(r => r.getAttribute('data-id')))
+        .toEqual(fitted.map(id => id === 'opennow:new' ? 'opennow:old' : id));
+      pool = pool.map(r => r.id === 'opennow:old' ? { ...r, id: 'opennow:new', title: 'Nova pekara' } : r);
+      enable = true;
+      calls.mockClear();
+      k.setNow(NOW + 60_000);
+      k.tick(CODE_TICK_MS);
+      expect(calls.mock.calls[0]![3].measuredPage1).toEqual(fitted);
+      expect(calls.mock.calls[0]![3].capacity).toBe(7);
+      expect(calls.mock.results[0]!.value.reveal.ids).toEqual(['opening:tall', 'solar:tall']);
+      expect(k.q('[data-id="solar:short"]')).not.toBeNull();
+      expect(k.q('[data-id="opening:tall"]')).toBeNull();
+      expect(k.q('[data-id="solar:tall"]')).toBeNull();
+      expect(k.q('[data-id="opennow:second"]')).toBeNull();
+      const startBeat = scheduler.beatIndex(NOW + 60_000, 20_000);
+      expect(reveals(k)).toEqual([`page:${startBeat}`]);
+      // A steady paint retains the accepted fallback, without another scheduler call or an early return.
+      const count = calls.mock.calls.length;
+      k.setNow(NOW + 61_000);
+      k.tick(CODE_TICK_MS);
+      expect(calls).toHaveBeenCalledTimes(count);
+      expect(k.q('[data-id="solar:short"]')).not.toBeNull();
+      calls.mockClear();
+      k.setNow(NOW + 80_000);
+      k.tick(CODE_TICK_MS);
+      const [, history, , opts] = calls.mock.calls[0]!;
+      expect(opts.measuredPage1).toEqual(fitted);
+      expect(opts.capacity).toBe(7);
+      expect(history.shownAt['solar:short']).toBe(NOW + 60_000);
+      expect(history.shownAt['opening:tall']).toBeUndefined();
+      expect(history.shownAt['solar:tall']).toBeUndefined();
+      expect(history.shownAt['opennow:new']).toBe(NOW + 60_000);
+      expect(history.lastReveal).toEqual({ kind: 'page', beat: startBeat });
+      expect(reveals(k)).toEqual([]);
+      expect(k.q('[data-id="opennow:second"]')).not.toBeNull();
+    } finally {
+      k.handle.destroy();
+      calls.mockRestore();
+      fitter.mockRestore();
+      selection.mockRestore();
     }
   });
 

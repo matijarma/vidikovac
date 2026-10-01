@@ -59,7 +59,7 @@ import { byModule, downPlaceholder, KIOSK_TEASER_MODULES, radarInsetShown, radar
 import { busesVisible, createKioskMapAdapter, drawnStops, feedStateOf, KIOSK_HIT_TOLERANCE_PX, pharmacyRing, requestKioskMap, touchAt, vehiclePoints } from './kiosk/mapview';
 import { nearestPharmacy, pharmaciesByDistance, type OnDutyPharmacy } from './kiosk/pharmacies';
 import { groupDepartures, mountTouchPanel, taktCandidates, TOUCH_MS, type TouchPanelHandle } from './kiosk/timeline';
-import { beatIndex, EMPTY_HISTORY, takt, type TaktHistory, type TaktReveal } from '../../shared/kiosk/takt';
+import { beatIndex, EMPTY_HISTORY, recordTaktShown, takt, type TaktHistory, type TaktReveal } from '../../shared/kiosk/takt';
 import { cancelledTrips, liveFixes, railStationsNear } from './city/feed';
 import { loadOpenHours as loadOpenHoursImpl, OPEN_HOURS_RETRY_MS, venueNameFor, venuePointFor } from './core/open-hours';
 import { openPlacesNear, type OsmHoursIndex } from '../../shared/city/osm-hours';
@@ -313,7 +313,6 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
   let taktHistory: TaktHistory = EMPTY_HISTORY;
   let taktReveal: TaktReveal | null = null;
   let taktNext: NearbyRow[] = [];
-  let taktPageBase: ReadonlySet<string> = new Set();
   let beatAt = -Infinity;
   let revealAt = -Infinity;
   let taktPaintAt = -Infinity;
@@ -480,16 +479,10 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       sentenceSwapTimer = oneShot(() => { sentenceSwapTimer = null; delete sentenceEl.dataset.swap; }, SENTENCE_SWAP_MS);
     }
   }
-  function paintedRowIds(): Set<string> {
-    const list = invitation?.element.querySelector('[data-testid=nearby-rows]');
-    return new Set([...list?.children ?? []].map(row => row.getAttribute('data-id') ?? ''));
-  }
   /** The measured overlay may decline some or all proposed rows; only actual incoming rows are reveal facts. */
   function drawnRevealIds(): string[] {
-    if (taktReveal?.kind !== 'page'
-      || invitation?.element.querySelector<HTMLElement>('[data-testid=nearby-rows]')?.dataset.reveal !== `page:${taktReveal.beat}`) return [];
-    const painted = paintedRowIds();
-    return taktReveal.ids.filter(id => !taktPageBase.has(id) && painted.has(id));
+    const drawn = invitation?.drawnReveal?.();
+    return taktReveal?.kind === 'page' && drawn?.kind === 'page' && drawn.beat === taktReveal.beat ? [...drawn.ids] : [];
   }
   /** R2: a page turn's revealed row takes the map's emphasis for its beat (an advance keeps the sentence's: the next
    *  departures belong to the wall's own stop). Data only, as setHighlight is: the camera never moves. */
@@ -581,25 +574,36 @@ export function mountKiosk(root: HTMLElement, deps: KioskDeps): KioskHandle {
       // Quiet: a touch open, ZET's current state pinning the header, the sentence suspended, the handheld composition,
       // the list not yet painted.
       const rhythmMs = rhythm * 1000;
-      const capacity = invitation?.shown() ?? 0;
       const quiet = at < touchUntil || facts.some(fact => fact.id === 'service:zet' || fact.id === 'outage:zet') || sentenceSuspended()
-        || compositionOf(layout) === 'handheld' || capacity === 0;
+        || compositionOf(layout) === 'handheld';
       if (quiet) { taktReveal = null; taktNext = []; }
       const due = taktReveal ? beatAt + rhythmMs : Math.max(sentenceSequence.turnAt(), beatAt + rhythmMs);
-      if (at >= due) {
+      const scheduled = at >= due;
+      let selectReveal: InvitationModel['selectReveal'];
+      if (scheduled) {
         const shownDepartures = wallItems.filter((row) => row.kind === 'departure');
         const next = nextDepartures(nearbyInput, shownDepartures);
-        const result = takt(taktCandidates(groupDepartures(wallItems), next, at), taktHistory, at,
-          { capacity, rhythmMs, quiet, reduced: reducedMotion || lightweight });
-        taktHistory = result.history;
         beatAt = at;
-        if (result.reveal?.kind === 'page') taktPageBase = paintedRowIds();
-        taktReveal = result.reveal;
-        taktNext = result.reveal?.kind === 'advance' ? next : [];
-        if (result.reveal) revealAt = at;
+        taktReveal = null;
+        taktNext = next;
+        selectReveal = measuredPage1 => {
+          const result = takt(taktCandidates(groupDepartures(wallItems), next, at), taktHistory, at,
+            { capacity: measuredPage1.length, measuredPage1, rhythmMs, quiet: quiet || measuredPage1.length === 0, reduced: reducedMotion || lightweight });
+          taktReveal = result.reveal;
+          return result.reveal;
+        };
       }
       paintSkippedText(skipped);
-      invitation?.update(invitationModel());
+      invitation?.update({ ...invitationModel(), ...(selectReveal ? { selectReveal } : {}) });
+      if (scheduled) {
+        const drawn = invitation?.drawnReveal?.() ?? null;
+        const page1 = invitation?.page1?.() ?? [];
+        const visible = drawn?.kind === 'page' ? page1.filter(id => !drawn.replaces.includes(id)) : page1;
+        taktHistory = recordTaktShown(taktHistory, visible, drawn, at, rhythmMs);
+        taktReveal = drawn;
+        if (drawn) revealAt = at;
+        if (drawn?.kind !== 'advance') taktNext = [];
+      }
       // The sentence on screen keeps its facts through the cap, so it can refresh and hold its dwell (decision 29).
       const revealed = drawnRevealIds();
       if (revealed.length > 0) facts = sentenceFacts({ ...factInput,

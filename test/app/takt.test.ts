@@ -82,6 +82,30 @@ describe('beatIndex: the absolute grid of the epoch', () => {
 });
 
 describe('page 1 by the static value', () => {
+  it('F11: measured page 1 replaces the count approximation without inventing painted rows', () => {
+    const rows = wall();
+    const measuredPage1 = ['departures', 'notice:zet:1', 'solar:sunset:2026-09-30', 'closure:ilica', 'always:heritage:x'];
+    const r = takt(rows, EMPTY_HISTORY, at(B0 + 3), options({ capacity: 5, measuredPage1 }));
+    expect(r.page1).toEqual(rows.filter(c => measuredPage1.includes(c.id)).map(c => c.id));
+    expect(r.reveal?.replaces).toEqual(['solar:sunset:2026-09-30']);
+    expect(r.reveal?.ids).toEqual(['rail:hz:1215']);
+    expect(r.reveal?.alternatives).toContain('event:b');
+    expect(r.history.shownAt['first:2026-10-01']).toBeUndefined();
+    expect(takt(rows, EMPTY_HISTORY, NOW, options({ measuredPage1: [] })).page1).toEqual([]);
+  });
+  it('F11: measured fallback candidates retain the repeat gate, protections and bounded value order', () => {
+    const rows = wall();
+    const measuredPage1 = ['departures', 'notice:zet:1', 'solar:sunset:2026-09-30', 'always:heritage:x'];
+    const history = { ...EMPTY_HISTORY, shownAt: { 'rail:hz:1215': NOW } };
+    const r = takt(rows, history, at(B0 + 3), options({ measuredPage1 }));
+    const offered = [...r.reveal!.ids, ...r.reveal!.alternatives ?? []];
+    expect(offered[0]).toBe('event:b');
+    expect(offered).not.toContain('rail:hz:1215');
+    expect(offered).not.toContain('closure:ilica');
+    expect(offered).not.toContain('first:2026-10-01');
+    expect(offered.length).toBeGreaterThan(2);
+    expect(offered.length).toBeLessThanOrEqual(12);
+  });
   it('holds every reserved candidate, then the most valuable of the rest, in candidate order', () => {
     const rows = wall();
     const { page1 } = takt(rows, EMPTY_HISTORY, NOW, options({ capacity: 7 }));

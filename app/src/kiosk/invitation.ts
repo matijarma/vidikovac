@@ -12,7 +12,7 @@ import { codeBlockMarkup, hintMarkup } from './markup';
 import { fill, type KioskStrings } from './strings';
 import { serviceNumbers, serviceStateOf } from '../../../shared/city/service-state';
 import { serviceVars } from '../city/sentence';
-import { mountTimeline } from './timeline';
+import { mountTimeline, type TimelineView } from './timeline';
 import type { TaktReveal } from '../../../shared/kiosk/takt';
 import { MAP_MIN_HEIGHT_PX } from '../map/frame';
 
@@ -76,6 +76,8 @@ export interface InvitationModel {
   now: number; composition: Composition;
   /** R2: the beat's reveal the list draws over its fit (kiosk.ts takt), and the rows an advance draws in the line. */
   reveal: TaktReveal | null; next: readonly NearbyRow[];
+  /** One synchronous beat decision using the current fit; not retained for later layout refits. */
+  selectReveal?: TimelineView['selectReveal'];
   /** R3: DHMZ's radar crop around Zagreb in the map's lower left (kiosk/local.ts radarNow, radarInsetShown); null without a fresh radar item or under lagano. */
   radar: { src: string; shown: boolean } | null;
 }
@@ -84,6 +86,8 @@ export interface InvitationHandle {
   update(model: InvitationModel): void;
   /** How many rows the list's fit drew (the timeline's shown(), page 1 as painted; never the reveal), R2's capacity. */
   shown(): number;
+  page1?(): readonly string[];
+  drawnReveal?(): TaktReveal | null;
   setFrame(frame: FrameStops): void;
   measureWidth(): number; measureHeight(): number; setMajorLabels(count: number): void;
   /** The legend's entries follow what the map draws (kiosk/mapview.ts legendKinds): the others are hidden. */
@@ -228,7 +232,7 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
   }
   function fit():void {
     if(!model)return;
-    const view={reveal:model.reveal,next:model.next};
+    const view={reveal:model.reveal,next:model.next,selectReveal:model.selectReveal};
     timeline.update(model.items,model.radiusM,model.now,view);
     if(!placeCard())return;
     timeline.update(model.items,model.radiusM,model.now,view);
@@ -259,10 +263,14 @@ export function mountInvitation(host: HTMLElement, deps: InvitationDeps): Invita
         if(radar.figure.hidden!==off)radar.figure.hidden=off;
       }
       fit();
+      // Later ResizeObserver/legend fits must not re-run a beat with stale captured inputs.
+      if(model.selectReveal)model={...model,selectReveal:undefined,reveal:timeline.drawnReveal?.()??null};
     },
     measureWidth:()=>field.measureWidth(),measureHeight:()=>field.measureHeight(),
     setFrame,setMajorLabels:count=>field.setMajorLabels(count),fit,
     shown:()=>timeline.shown(),
+    page1:()=>timeline.page1?.()??[],
+    drawnReveal:()=>timeline.drawnReveal?.()??null,
     setLegend(kinds){
       for(const span of legend?.querySelectorAll<HTMLElement>(':scope > span[data-legend]')??[]){
         const hidden=!kinds.includes(span.dataset.legend??'');

@@ -71,7 +71,7 @@
 // data-kind, so no [data-kind=departure] probe ever matches one.
 import type { ArrivalRow } from '../../../shared/city/arrivals';
 import { CLOCK_RANGE_TAIL, MAX_DEPARTURES, nearbyHead, rowBudget, type NearbyKind, type NearbyRow, ROW_MIN_PX } from '../city/nearby';
-import { candidateValue, PAGE_MAX_ROWS, REVEAL_EXEMPT_KINDS, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
+import { candidateValue, PAGE_FIT_CANDIDATES, PAGE_MAX_ROWS, REVEAL_EXEMPT_KINDS, REVEAL_IMMINENT_MS, type TaktCandidate, type TaktKind, type TaktReveal } from '../../../shared/kiosk/takt';
 import type { I18n } from '../i18n/i18n';
 import { escapeAttribute as a, escapeHtml as e } from '../ui/dom/escape';
 import { morph, reconcile } from '../ui/dom/reconcile';
@@ -148,6 +148,8 @@ export interface TimelineView {
   reveal: TaktReveal | null;
   /** The rows an advance draws in the line (nextDepartures, seam (d)); [] otherwise. */
   next: readonly TimelineRow[];
+  /** F11: choose on this update's measured baseline, before the single live paint. Never replayed by a refit. */
+  selectReveal?: (page1: readonly string[]) => TaktReveal | null;
 }
 
 export interface TimelineHandle {
@@ -159,6 +161,10 @@ export interface TimelineHandle {
   measureHeight(): number;
   /** How many rows the last update drew. */
   shown(): number;
+  /** Baseline fit after the restore hold, never the overlay's rows. */
+  page1?(): readonly string[];
+  /** Only the overlay actually drawn, without rejected proposals or fallbacks. */
+  drawnReveal?(): TaktReveal | null;
   destroy(): void;
 }
 
@@ -656,6 +662,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
   let headText: string | null = null;
   let painted = false;
   let count = 0;
+  let fittedIds: readonly string[] = [];
   let last: [readonly TimelineRow[], number, number, TimelineView | undefined] | null = null;
   /** The last fit: for which content and box, which rows it kept and which labels it shortened. */
   let memo: { sig: string; ids: ReadonlySet<string>; short: ReadonlyMap<string, ShortLabels>; rowPx: number } | null = null;
@@ -991,7 +998,8 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         && !REVEAL_EXEMPT_KINDS.includes(c.kind) && (!replacing || !c.imminent));
     };
     const out = [...new Set(reveal.replaces)].filter((id) => movable(id, true)).map((id) => shown.find((row) => row.id === id)).filter((row): row is WallRow => row !== undefined).slice(0, PAGE_MAX_ROWS);
-    const inn = [...new Set(reveal.ids)].filter((id) => movable(id)).map((id) => wall.find((row) => row.id === id && !shownIds.has(id))).filter((row): row is NearbyRow => row !== undefined && !isDeparturesLine(row));
+    const inn = [...new Set([...reveal.ids, ...reveal.alternatives ?? []])].slice(0, PAGE_FIT_CANDIDATES)
+      .filter((id) => movable(id)).map((id) => wall.find((row) => row.id === id && !shownIds.has(id))).filter((row): row is NearbyRow => row !== undefined && !isDeparturesLine(row));
     // A beat's overlay keeps its rows for the whole beat (one region moves once): where the fit changed under it (a
     // label, a departure, a box that grew so it keeps a revealed row itself), the same rows are drawn as long as they
     // still fit whole, and only when they do not is the overlay found again.
@@ -1124,6 +1132,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       /** The reveal drawn this update (R2), none on a handheld or without a view. */
       let drawn: DrawnReveal | null = null;
       if (unbounded) {
+        view?.selectReveal?.(shown.map(row => row.id));
         overlay = null;
         parked.clear();
         heldOut.clear();
@@ -1190,8 +1199,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
         const present = new Set(candidates.map((row) => row.id));
         for (const id of [...heldOut.keys()]) if (!present.has(id)) heldOut.delete(id);
         shown = shown.filter((row) => !heldOut.has(row.id));
-        // R2: the beat's reveal over the fit, measured once per beat and fit (the overlay memo); the DOM says what was
-        // drawn (data-reveal), the scheduler's history what was decided.
+        // F11: schedule against this exact fit, not a count or the previous paint's pool. No live row has moved yet.
+        if (view?.selectReveal) view = { reveal: view.selectReveal(shown.map(row => row.id)), next: view.next };
+        // The controller commits history only after reading the overlay actually drawn.
         let display: readonly WallRow[] = shown;
         let displayShort: ReadonlyMap<string, ShortLabels> = memo.short;
         const reveal = view?.reveal ?? null;
@@ -1199,7 +1209,7 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
           const next = (view?.next ?? []).filter((row) => reveal.ids.includes(row.id) && row.kind === 'departure' && !isTimeless(row) && vettedTimelineRow(row)).slice(0, MAX_DEPARTURES);
           const protections = taktCandidates(wall, [], now).filter((c) => reveal.replaces.includes(c.id))
             .map((c) => `${c.id}:${c.reserved}:${c.imminent}`).join('\u0002');
-          const key = `${reveal.kind}:${reveal.beat}|${memo.sig}|${shown.map((row) => row.id).join('\u0002')}|${reveal.ids.join('\u0002')}|${reveal.replaces.join('\u0002')}|${protections}|${fitSignature(groupDepartures(next), now, i18n, memo.rowPx, box, typography)}`;
+          const key = `${reveal.kind}:${reveal.beat}|${memo.sig}|${shown.map((row) => row.id).join('\u0002')}|${reveal.ids.join('\u0002')}|${reveal.alternatives?.join('\u0002') ?? ''}|${reveal.replaces.join('\u0002')}|${protections}|${fitSignature(groupDepartures(next), now, i18n, memo.rowPx, box, typography)}`;
           if (!overlay || overlay.key !== key) {
             const prior = overlay?.drawn && overlay.drawn.kind === reveal.kind && overlay.drawn.beat === reveal.beat ? overlay.drawn : null;
             const result = reveal.kind === 'page'
@@ -1266,6 +1276,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
       painted = true;
       lastDrawn = drawn;
       count = shown.length;
+      fittedIds = shown.map(row => row.id);
+      // Resize/font refits retain the resolved view, never a callback closed over an earlier clock/history.
+      last = [last[0], radiusM, now, view ? { reveal: handle.drawnReveal?.() ?? null, next: view.next } : undefined];
       const skippedFit = String(wall.length - count);
       if (element.dataset.skippedFit !== skippedFit) element.dataset.skippedFit = skippedFit;
       // The kinds of the vetted rows the list did not paint, in list order (U4's fitted-departures observer row reads it).
@@ -1277,6 +1290,9 @@ export function mountTimeline(host: HTMLElement, deps: TimelineDeps): TimelineHa
     },
     measureHeight,
     shown: () => count,
+    page1: () => [...fittedIds],
+    drawnReveal: () => lastDrawn ? { kind: lastDrawn.kind, beat: lastDrawn.beat, ids: [...lastDrawn.revealed],
+      replaces: lastDrawn.kind === 'advance' ? [DEPARTURES_LINE_ID] : [...lastDrawn.replaced] } : null,
     destroy() {
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
