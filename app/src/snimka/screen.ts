@@ -33,6 +33,18 @@ export function runAt(index: ScreenIndex, tSec: number): IndexRun | null {
   return best;
 }
 
+/** A run whose first reading comes at most this soon after the clock is shown from that reading: the observer's
+ *  07:45 slots started a few seconds into their minute, and the replay opens and lands on chapters at :00. */
+export const RUN_LEAD_S = 90;
+
+/** The run the miniature shows: the one covering the instant, else one starting within RUN_LEAD_S after it. */
+export function runShownAt(index: ScreenIndex, tSec: number): IndexRun | null {
+  const covering = runAt(index, tSec);
+  if (covering) return covering;
+  const next = nextRunAfter(index, tSec);
+  return next && next.fromSec - tSec <= RUN_LEAD_S ? next : null;
+}
+
 /** The first run that starts after the instant (prefetched while the current one shows). */
 export function nextRunAfter(index: ScreenIndex, tSec: number): IndexRun | null {
   let best: IndexRun | null = null;
@@ -247,7 +259,7 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
   const update = (tMs: number): void => {
     if (!index) return;
     const tSec = Math.floor(tMs / 1000);
-    const covering = runAt(index, tSec);
+    const covering = runShownAt(index, tSec);
     const run = covering && !failed.has(covering.id) ? covering : null;
     if (run) {
       const loaded = runs.get(run.id);
@@ -255,8 +267,9 @@ export function mountScreen(ctx: SnimkaContext, root: HTMLElement, onIndex: (ind
         load(run);
         setMini(`loading:${run.id}`, 'loading', '<span class="skeleton sn-mini-skeleton"></span>');
       } else {
-        const i = readingIndexAt(loaded, tSec);
-        const reading = loaded.readings[i < 0 ? 0 : i];
+        // Before the first reading (a run starting within RUN_LEAD_S) the first one shows, with its own time.
+        const i = Math.max(0, readingIndexAt(loaded, tSec));
+        const reading = loaded.readings[i];
         if (reading) setMini(`run:${run.id}:${i}`, 'reading', readingHtml(loaded, reading));
       }
       const next = nextRunAfter(index, tSec);

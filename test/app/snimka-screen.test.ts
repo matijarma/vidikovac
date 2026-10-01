@@ -9,7 +9,7 @@ import { SNIMKA_WINDOW, ZAGREB_OFFSET_S, type BoardSeries, type HashedRef, type 
 import type { SnimkaContext } from '../../app/src/snimka/context';
 import type { FrameLoop } from '../../app/src/snimka/frames';
 import {
-  badgeOf, boardAt, boardHtml, captureHtml, mountScreen, nearestCapture, nextRunAfter, quartet, readingHtml, readingIndexAt, routeKind, runAt, type IndexRun,
+  RUN_LEAD_S, badgeOf, boardAt, boardHtml, captureHtml, mountScreen, nearestCapture, nextRunAfter, quartet, readingHtml, readingIndexAt, routeKind, runAt, runShownAt, type IndexRun,
 } from '../../app/src/snimka/screen';
 
 const zg = (month: number, day: number, hour: number, minute = 0, second = 0): number => Date.UTC(2026, month - 1, day, hour, minute, second) / 1000 - ZAGREB_OFFSET_S;
@@ -67,6 +67,19 @@ describe('the run and the reading at an instant', () => {
     expect(runAt(INDEX, MON.toSec + 1)).toBeNull();
     expect(runAt(INDEX, zg(9, 28, 12, 0))).toBeNull();
     expect(nextRunAfter(INDEX, zg(9, 28, 12, 0))?.id).toBe(TUE_EARLY.id);
+  });
+  it('at 07:45 sharp on each of the four mornings the slot run shows, though it starts a few seconds into the minute', () => {
+    // (A run already covering the minute wins: here Wednesday's series run, started at 07:45:00.)
+    expect(runShownAt(INDEX, zg(9, 30, 7, 45))?.id).toBe(WED_SERIES.id);
+    const slots: ScreenIndex = { v: 1, runs: INDEX.runs.filter((r) => r.kind === 'slot') };
+    for (const [run, day] of [[MON, 28], [TUE, 29], [WED, 30], [THU, 1]] as const) {
+      const at = zg(day === 1 ? 10 : 9, day, 7, 45);
+      expect(runShownAt(slots, at)?.id, run.id).toBe(run.id);
+    }
+    // Only within the lead: earlier, the clock is between runs.
+    expect(runShownAt(INDEX, MON.fromSec - RUN_LEAD_S)?.id).toBe(MON.id);
+    expect(runShownAt(INDEX, MON.fromSec - RUN_LEAD_S - 1)).toBeNull();
+    expect(runAt(INDEX, zg(9, 28, 7, 45))).toBeNull();
   });
   it('where two runs overlap, the one that started last', () => {
     expect(runAt(INDEX, zg(9, 30, 20, 5))?.id).toBe(RETURN.id);
@@ -214,6 +227,34 @@ describe('mountScreen', () => {
     expect(mini.dataset.view).toBe('none');
     expect(mini.textContent).toContain('U voznom redu nema sljedećih polazaka.');
     expect(root.querySelector('.sn-capture')?.textContent).toContain('Za ovo doba nema snimke zaslona.');
+    off();
+  });
+  it('at 07:45 sharp the miniature shows the run\'s first reading with its own time, not the board', async () => {
+    const { ctx, emit } = page(new Map([[MON.id, screenRun(MON)], [TUE_EARLY.id, screenRun(TUE_EARLY)]]));
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountScreen(ctx, root, () => {});
+    await settle();
+    emit(zg(9, 28, 7, 45) * 1000);
+    await settle();
+    const mini = root.querySelector<HTMLElement>('.sn-mini')!;
+    expect(mini.dataset.view).toBe('reading');
+    expect(mini.textContent).toContain('Rečenica 0.');
+    expect(mini.querySelector('.sn-mini-clock')!.textContent).toBe('07:45');
+    // Reaching the first reading changes nothing on screen.
+    const node = mini.firstElementChild;
+    emit(MON.fromSec * 1000);
+    expect(mini.firstElementChild).toBe(node);
+    off();
+  });
+  it('the quartet\'s four pictures point at their own captures', async () => {
+    const { ctx } = page(new Map([[MON.id, screenRun(MON)]]));
+    const root = document.createElement('div');
+    document.body.append(root);
+    const off = mountScreen(ctx, root, () => {});
+    await settle();
+    const srcs = [...root.querySelectorAll('.sn-quartet-item img')].map((img) => img.getAttribute('src'));
+    expect(srcs).toEqual([MON, TUE, WED, THU].map((r) => `/api/snimka/v1/${r.captures.kiosk!.path}`));
     off();
   });
   it('a run on its way shows the loading state; one that cannot load reads as between runs and is not asked for again', async () => {
