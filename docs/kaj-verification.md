@@ -2270,7 +2270,7 @@ Prihvaćanje paketa R0 do R4 iz `docs/reveal-2026-10.md` (odjeljak 6) na jednom 
 | R4-7 | README, odjeljak prihvaćanja i `shown-facts.mjs` u dokumentu zaslona (dio B) | `grep -c "Fourteen feed modules" README.md; grep -c "Seventeen feed modules" README.md; grep -c "](docs/reveal-2026-10.md)" README.md; grep -c "^## Prihvaćanje, prolaz otkrivanja 2026-10" docs/kaj-verification.md; grep -c "shown-facts.mjs" docs/kiosk.md` | `0`, `1`, `1`, `1`, ≥ `1` |  |  |
 | R4-8 | Tipovi | `npm run typecheck && npm run typecheck:tests` | exit 0 (part A in `wt/R4`; part B on the integrated tree) |  |  |
 | R4-9 | Popis mjesta iscrtavanja, katalog jezika (dio B) | (part B, integrated tree) `npx vitest run --maxWorkers=4 test/app/wall-render-inventory.test.ts test/app/i18n-orphans.test.ts test/app/i18n.test.ts` | green after the regeneration of B5 |  |  |
-| R4-10 | Produkcija nakon DR3, prikazane činjenice (orkestrator) | (orchestrator, after the DR3 push) the recipe of §0.3 D-D at 12:30 or 18:00, else at push time | `observe:production` exit 0 on every applied row; `shown-facts.md` for the hour reads at least 6 non-transit rows (monitored: a lower value is recorded, not a red deploy) |  |  |
+| R4-10 | Produkcija nakon DR3, prikazane činjenice (orkestrator) | (orchestrator, after the DR3 push) the recipe of §0.3 D-D at 12:30 or 18:00, else at push time | `observe:production` exit 0 on every applied row; `shown-facts.md` for the hour reads at least 6 non-transit rows (monitored: a lower value is recorded, not a red deploy) | `observe-DR3` (jutro, 1. 10. u 06:15, DEV zaslon): 0 od 58 primijenjenih redaka crveno; `shown-facts` 4 retka u satu 06:00 (praćeno, ispod 6); dnevno očitanje u 12:30 slijedi | prošlo za jutro (praćeno: 4 od 6, zapisano); dnevno očitanje na čekanju |
 | R4-11 | KPI nakon listopadske nadogradnje (dio C) | (part C, after 3 Oct) C1, then `node scripts/thin-spot.mjs review.local/companion/data-calendar --from 2026-10-01 --hours 48 --json review.local/upgrade/kpi/after.json > review.local/upgrade/kpi/after.md && node -e "const s=require('./review.local/upgrade/kpi/after.json').summary;process.exit(s.minDay>=1&&s.minEvening>=1&&s.dayMedian>=3&&s.eveningMedian>=3&&s.cityPerDayMedian>=30?0:1)"` | the numbers recorded whatever the exit code; U3-9 graded by it |  |  |
 
 ### Isporuke DR1 do DR3
@@ -2297,6 +2297,10 @@ Skripta `node scripts/shown-facts.mjs <mapa promatranja>` čita `rotation.jsonl`
 
 | Promatranje | Mjesto, vrijeme | Očitanja | Retci koji nisu polasci | Bez obećanja (first, last, notice, rail) | Činjenice rečenice | Otkrivanja |
 |---|---|---|---|---|---|---|
+| `observe-2026-09-25-d527` (prije obje nadogradnje) | Trg bana J. Jelačića, 25. 9. 2026. 17:55 do 18:08, večer | 300 | 6 u promatranju: 4 u satu 17:00, 5 u satu 18:00 (always, closure, solar) | 4 u satu 17:00, 5 u satu 18:00 | 8 različitih (2 ne o prometu) u satu 17:00, 10 (1) u satu 18:00 | nijedno |
+| `observe-DR3` (DEV zaslon) | Trg bana J. Jelačića, 1. 10. 2026. 06:15 do 06:27, jutro | 300 | 4 u satu 06:00 (always 2, closure 1, notice 1) | 3 | 13 različitih, 5 ne o prometu (među njima `hourlyTemp`) | nijedno |
+
+Mjerenja su alatom `node scripts/shown-facts.mjs <mapa promatranja> --json <datoteka>` (JSON u `review.local/reveal/observe-DR3/shown-facts.json` i `review.local/reveal/analysis/shown-facts-before.json`). Jutarnje očitanje DR3 (4) ostaje ispod 6 koje provjera DR3 traži za 12:30 ili 18:00 i nije usporedivo s večernjim očitanjem od 25. rujna (6 u promatranju, 4 i 5 po satu): jutarnji popis čine obavijest, jedno zatvaranje i dva bezvremenska retka, bez otkrivanja. Redak je samo praćen, pa niža vrijednost je zapisana, ne crvena isporuka; broj koji vrijedi daje dnevno očitanje u 12:30, koje slijedi.
 
 ### KPI nakon listopadske nadogradnje
 
