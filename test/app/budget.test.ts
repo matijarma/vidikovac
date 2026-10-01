@@ -24,6 +24,8 @@ const BUDGET_BYTES = 200_000;
 /** Reveal-pass decision 10, after one measured touch split: kiosk 201260 bytes, comparable map 603030 bytes. */
 const KIOSK_BUDGET_BYTES = 210_000;
 const KIOSK_MAP_BUDGET_BYTES = 620_000;
+/** Decision 16 after the measured sheet split: 603102 comparable bytes, 601643 immediate map-open bytes. */
+const PHONE_MAP_BUDGET_BYTES = 620_000;
 const GZIP_LEVEL = 6;
 
 /** The two screens a lightweight device loads: the public screen and the phone. */
@@ -210,7 +212,7 @@ describe('lightweight transfer: 200 kB, kiosk 210 kB under reveal-pass decision 
 
 describe('full map JavaScript budget, including the separate MapLibre v6 worker', () => {
   for (const entry of ENTRIES) {
-    const budget = entry === 'kiosk/index.html' ? KIOSK_MAP_BUDGET_BYTES : 600_000;
+    const budget = entry === 'kiosk/index.html' ? KIOSK_MAP_BUDGET_BYTES : PHONE_MAP_BUDGET_BYTES;
     it(`/${entry.replace('index.html', '')} stays under ${budget / 1000} kB compressed when the map opens`, () => {
       const keys = new Set([...staticGraph(entry), ...staticGraph('src/map/maplibre-entry.ts'),
         ...MAP_RUNTIME_ENTRIES.flatMap((module) => staticGraph(module)),
