@@ -8,6 +8,7 @@
 // the comparison day's ghosts go through setGhosts at most twelve times a
 // second while the layer is on. Loaded by stage.ts with one dynamic import,
 // so the page's entry graph never carries the map library.
+import { toLonLat } from '../../../shared/motion/geo';
 import { decodeNetwork, type GraphNetwork, type Network } from '../../../shared/motion/network';
 import {
   BAJS_STEP_S, isBajsFile, isClosuresFile, isMotionIndex, isStationsFile,
@@ -18,6 +19,7 @@ import { createCityMap, ZAGREB_CENTER, type CityMapHandle, type MapLine, type Ma
 import type { Model } from '../motion/integrator';
 import { PLACE_NAMES_ZOOM } from '../map/city-layers';
 import { PILL_ZOOM } from '../map/overlays';
+import { cameraFor, FIT_MIN_ZOOM, FIT_PADDING_PX, fitDecision, viewBounds } from './camera';
 import { createChunkStore, type ChunkState, type ChunkStore } from './chunks';
 import type { SnimkaContext } from './context';
 import { compareInstant, createReplayModel, ghostsAt } from './positions';
@@ -112,6 +114,11 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
   let indexFailed = false;
   let lastGhostAt = -Infinity;
   let ghostsShown = false;
+  /** The small-fleet camera (camera.ts): owed on load and after a seek while paused, never during play, never once
+   *  the reader has moved the map; settled by the first step that draws anything. */
+  let fitPending = true;
+  let userMoved = false;
+  let fitTimer: ReturnType<typeof setTimeout> | null = null;
 
   const network396 = data.get(manifest.networks['396'], decodeNetwork);
   const network395 = data.get(manifest.networks['395'], decodeNetwork);
@@ -136,6 +143,7 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
         const next = camera.zoom < PLACE_NAMES_ZOOM;
         if (next !== far) { far = next; frames.kick(); }
       },
+      onUserMove: () => { userMoved = true; fitPending = false; },
     },
     {
       createModel: (net) => {
@@ -154,6 +162,13 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
             const drawn = m.step(now);
             const count = String(drawn.length);
             if (container.dataset.snDrawn !== count) container.dataset.snDrawn = count;
+            if (fitPending && drawn.length > 0) {
+              fitPending = false;
+              const points = drawn.map((d) => toLonLat(d.p));
+              // Outside the map's own frame: a camera move from inside its draw would re-enter MapLibre.
+              if (fitTimer !== null) clearTimeout(fitTimer);
+              fitTimer = setTimeout(() => { fitTimer = null; fitSmallFleet(points); }, 0);
+            }
             return drawn;
           },
         };
@@ -178,6 +193,26 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
     closures = c;
     frames.kick();
   }, () => { /* no closures file: nothing drawn for them */ });
+
+  /** On load and after a seek while paused: a fleet of at most SMALL_FLEET_MAX vehicles, none of them on screen, brings
+   *  the camera to it (camera.ts fitDecision); the move is the map's own ease, a jump under reduced motion. */
+  function fitSmallFleet(points: [number, number][]): void {
+    if (disposed || userMoved) return;
+    const camera = handle.camera?.();
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    if (!camera || width < 1 || height < 1) return;
+    const decision = fitDecision(points, viewBounds(camera.center, camera.zoom, width, height), userMoved);
+    container.dataset.snFit = decision.fit ? 'fit' : decision.reason;
+    // A normal fleet draws pills from the map's own threshold again; a small one keeps the mark zoom of its last fit.
+    if (!decision.fit) { if (decision.reason === 'many') handle.setMarkZoom?.(null); return; }
+    const target = cameraFor(decision.bounds, width, height, { paddingPx: FIT_PADDING_PX, minZoom: FIT_MIN_ZOOM, maxZoom: STAGE_ZOOM });
+    // A fit may land under the pill threshold (two trams ten kilometres apart): the marks are then pills from the
+    // fitted zoom, as on a surface that frames its field below the thresholds (CityMapOptions.markZoom), so the one
+    // tram that ran reads as "17", not as a dot.
+    handle.setMarkZoom?.(Math.min(target.zoom, STAGE_ZOOM));
+    handle.setView?.({ center: target.center, zoom: target.zoom });
+  }
 
   /** The BAJS points and closure lines for the instant, or null when neither sample moved since the last push. */
   function staticAt(atSec: number): { points: MapPoint[]; lines: MapLine[] } | null {
@@ -228,7 +263,11 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
     }
   });
 
-  const offTick = clock.onTick(() => { nudgeDue = true; });
+  const offTick = clock.onTick((_, reason) => {
+    nudgeDue = true;
+    if (reason === 'seek' && !clock.playing()) fitPending = !userMoved;
+    else if (reason === 'play') fitPending = false;
+  });
   const offLayers = layers.onChange((next, previous) => {
     if (next.closures !== previous.closures) handle.setClosuresVisible?.(next.closures);
     nudgeDue = true;
@@ -238,6 +277,7 @@ export function mountMapLayer(ctx: SnimkaContext, container: HTMLElement, hooks:
 
   return () => {
     disposed = true;
+    if (fitTimer !== null) clearTimeout(fitTimer);
     offTheme();
     offLayers();
     offTick();

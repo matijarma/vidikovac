@@ -164,7 +164,10 @@ test.describe('/snimka/ stage', () => {
     // The pills MapLibre placed (name-census.ts data-pills) in the opening view, 7.6 by 4.6 km around Trg bana Jelačića at
     // 1366 by 900: lines 13 and 33 of the fixture (1.5 and 1.2 km south, under 3.5 km east); line 17 sits 4.7 km west.
     const pillsPlaced = async (): Promise<string[]> => ((await map.getAttribute('data-pills')) ?? '').split('|');
+    await expect.poll(async () => ((await map.getAttribute('data-pills')) ?? '') !== '', { timeout: 30_000, message: 'a pill placed after load' }).toBe(true);
     await expect.poll(pillsPlaced, { timeout: 30_000, message: 'lines 13 and 33 placed' }).toEqual(expect.arrayContaining(['13', '33']));
+    // Three of the five are on screen, so the small-fleet camera (camera.ts) left the opening view alone.
+    await expect(map).toHaveAttribute('data-sn-fit', 'inView');
     expect(await pillsPlaced()).not.toContain('17');
     // Panned west and south by MapLibre's own keys, the stage places line 17 too: the fleet is drawn wherever the
     // camera goes. Each key is a 100 px easeTo of about 300 ms from the camera's current centre, and a press during
