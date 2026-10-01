@@ -500,7 +500,7 @@ describe('calm motion (principle 7)', () => {
   it.each([false, true])('R2 observation: preserves the exact two-reorder sequence and every surviving trip, reduced=%s', (reduced) => {
     // observe-DR2/calm.jsonl, readings 120 to 150: 12 leaves, 17 enters, then two real order changes.
     // A same-node replaceChildren is not a one-record batch in Chromium: it removes each live argument first.
-    // Keep the single-turnover path and minimal keyed moves; the idle-budget conflict needs an owner decision.
+    // Decision 11 credits the first two proven re-sorts, without changing these six raw records or four churn.
     const start = 1790820742095;
     const tripIds = ['dep:0_30_1201_12_10005', 'dep:0_30_3202_32_10107', 'dep:0_30_601_6_10014', 'dep:0_30_1701_17_10007'];
     const routes = ['12', '32', '6', '17'];
@@ -524,6 +524,7 @@ describe('calm motion (principle 7)', () => {
     const replace = vi.spyOn(originalLine, 'replaceChildren');
     const observer = new MutationObserver(() => undefined);
     observer.observe(section(), { subtree: true, childList: true });
+    CALM_MOTION_START_IN_PAGE(CALM_MOTION_SPEC);
     let previousAt = start;
     for (const [at, order, turnover] of [
       [1790820764094, [1, 2, 3], true],
@@ -550,8 +551,26 @@ describe('calm motion (principle 7)', () => {
       expect(replace).not.toHaveBeenCalled();
       t.update(rows([...order]), 2200, at);
       expect(observer.takeRecords()).toHaveLength(0);
+      CALM_MOTION_MARK_IN_PAGE(CALM_MOTION_SPEC);
     }
     observer.disconnect();
+    const reading = CALM_MOTION_READ_IN_PAGE(CALM_MOTION_SPEC);
+    expect(reading).toMatchObject({ mutations: 6, churn: 4, turnovers: 1, kept: 7, rebuilt: [] });
+    const raw = JSON.stringify(reading);
+    expect(calmMotionFailures(reading)).toEqual([]);
+    expect(calmChurnFailures(reading)).toEqual([]);
+    expect(JSON.stringify(reading)).toBe(raw);
+    // Historical recordings had no batch or node tokens: paired move tags and the ordered marks are their proof.
+    const legacy: CalmMotionReading = JSON.parse(raw);
+    for (const record of legacy.detail!.records) {
+      delete record.batch;
+      delete record.departureOrder;
+      delete record.previous;
+      delete record.next;
+      for (const node of [...record.adds, ...record.removes]) { delete node.node; delete node.departureCell; }
+    }
+    expect(calmMotionFailures(legacy)).toEqual([]);
+    expect(calmChurnFailures(legacy)).toEqual([]);
   });
 
   it('keeps ten idle minutes within the recorder budget when rejected rows change on every poll', () => {

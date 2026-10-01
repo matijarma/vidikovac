@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Page } from '@playwright/test';
 import {
-  CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmRestoreBeat, DEPARTURE_ENTRY_SETTLE_MS, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
+  CALM_MOTION_MARK_IN_PAGE, CALM_MOTION_READ_IN_PAGE, CALM_MOTION_SPEC, CALM_MOTION_START_IN_PAGE, calmMotionFailures, calmChurnFailures, calmRestoreBeat, departureResortCredits, DEPARTURE_ENTRY_SETTLE_MS, DEPARTURE_ROW_MIN_PX, FIT_FULL_KEEPS_KINDS, IDLE_MUTATIONS_RESTORE_MAX,
   DEPARTURES_FIT_FULL, DEPARTURES_FIT_RESERVED, DEPARTURES_MAX, DEPARTURES_MIN, DEPARTURE_SENTENCE_RE, FIT_RAIL_FIRST_KIND, railsFirst, DISTINCT_SENTENCES_MIN, FIT_RESERVED_KINDS, LEAD_TEXT, NEARBY_HEAD_2KM, NEARBY_HEAD_RE, QR_MIN_PX, ROTATION_STEPS, ROTATION_STEP_MS,
   RAIL_SENTENCE_RE, SENTENCE_MAX_CHARS, SETTINGS_HOLD_MS, WALL_PROBES, WALL_SAMPLE_IN_PAGE, WALL_SAMPLE_SPEC, departureFailures, departureReads, fitDroppedOf, fittedDepartures, rotationFailures, sampleFailures,
   sampleRotation, sentenceTurns, summariseRotation, wallSample, type FitReading, type RotationRow, type WallPage, type WallRow, type WallSample,
@@ -56,6 +56,127 @@ function sample(over: Partial<WallSample> = {}): WallSample {
   };
 }
 const rect = (w: number, h: number): DOMRect => ({ x: 0, y: 0, left: 0, top: 0, right: w, bottom: h, width: w, height: h, toJSON: () => ({}) }) as DOMRect;
+
+describe('decision 11: bounded departure re-sort accounting', () => {
+  const swap = (line: HTMLElement): void => { line.insertBefore(line.children[1]!, line.children[0]!); };
+  const record = (actions: ((line: HTMLElement) => void)[], detailMax = CALM_MOTION_SPEC.detailMax) => {
+    document.body.innerHTML = '<section data-testid="nearby"><ol data-testid="nearby-rows"><li class="nearby-row" data-kind="departures" data-id="departures"></li></ol></section>';
+    const line = document.querySelector<HTMLElement>('li')!;
+    for (const id of ['32', '6', '17']) {
+      const cell = document.createElement('span');
+      cell.className = 'k-dep-cell';
+      cell.dataset.id = `dep:${id}`;
+      cell.dataset.cell = String(line.children.length + 1);
+      line.append(cell);
+    }
+    // Exercise the same self-contained functions serialized to the browser.
+    const start = new Function(`return (${String(CALM_MOTION_START_IN_PAGE)});`)() as typeof CALM_MOTION_START_IN_PAGE;
+    const read = new Function(`return (${String(CALM_MOTION_READ_IN_PAGE)});`)() as typeof CALM_MOTION_READ_IN_PAGE;
+    const spec = { ...CALM_MOTION_SPEC, detailMax };
+    start(spec);
+    for (const action of actions) { action(line); CALM_MOTION_MARK_IN_PAGE(spec); }
+    return read(spec);
+  };
+  const extra = (line: HTMLElement, n: number): void => {
+    for (let i = 0; i < n; i++) line.closest('section')!.append(document.createElement('b'));
+  };
+
+  it.each([2, 3, 4])('credits only the first two of %i distinct re-sort batches', (n) => {
+    const r = record(Array.from({ length: n }, () => swap));
+    expect(r).toMatchObject({ mutations: 2 * n, churn: 2 * n, turnovers: 0, rebuilt: [] });
+    expect(departureResortCredits(r).size).toBe(4);
+    const raw = JSON.stringify(r);
+    // A third re-sort is two churn records, permitted by the unchanged idle allowance. A fourth exceeds it.
+    expect(calmMotionFailures(r)).toHaveLength(n === 4 ? 1 : 0);
+    expect(calmChurnFailures(r)).toHaveLength(n === 4 ? 1 : 0);
+    expect(JSON.stringify(r)).toBe(raw);
+    const batches = r.detail!.records.map((entry) => entry.batch);
+    expect(new Set(batches).size).toBe(n);
+    for (let i = 0; i < r.detail!.records.length; i += 2) {
+      expect(r.detail!.records[i]!.removes[0]!.node).toBe(r.detail!.records[i + 1]!.adds[0]!.node);
+    }
+  });
+
+  it('counts two cell moves in one batch as one re-sort, not two', () => {
+    const multiple = (line: HTMLElement): void => {
+      line.insertBefore(line.children[2]!, line.children[0]!);
+      line.insertBefore(line.children[2]!, line.children[0]!);
+    };
+    const r = record([multiple, swap, swap]);
+    expect(r).toMatchObject({ mutations: 8, churn: 8 });
+    expect(departureResortCredits(r).size).toBe(6);
+    expect(calmMotionFailures(r)).toEqual([]);
+    expect(calmChurnFailures(r)).toEqual([]);
+  });
+
+  it('retains other churn beside valid re-sorts', () => {
+    const r = record([swap, (line) => { swap(line); extra(line, 3); }]);
+    expect(r).toMatchObject({ mutations: 7, churn: 7 });
+    expect(departureResortCredits(r).size).toBe(4);
+    expect(calmMotionFailures(r)).toHaveLength(1);
+    expect(calmChurnFailures(r)).toHaveLength(1);
+  });
+
+  it('does not credit non-departure moves, different objects, unpaired batches or truncated logs', () => {
+    const r = record([swap, swap]);
+    for (const change of [
+      (copy: typeof r) => { copy.detail!.dropped = 1; },
+      (copy: typeof r) => { copy.detail!.records.pop(); },
+      (copy: typeof r) => { for (const entry of copy.detail!.records) for (const node of [...entry.adds, ...entry.removes]) node.tag = 'li'; },
+      (copy: typeof r) => { for (const entry of copy.detail!.records) for (const node of [...entry.adds, ...entry.removes]) node.departureCell = false; },
+      (copy: typeof r) => { for (const entry of copy.detail!.records) for (const node of [...entry.adds, ...entry.removes]) node.key = node.key!.replace('|dep:', '|event:'); },
+      (copy: typeof r) => { for (const entry of copy.detail!.records) for (const node of entry.adds) node.node = 999; },
+      (copy: typeof r) => { copy.detail!.records.forEach((entry, i) => { entry.batch = i; }); },
+    ]) {
+      const copy: typeof r = JSON.parse(JSON.stringify(r));
+      change(copy);
+      expect(departureResortCredits(copy).size).toBe(0);
+      expect(calmMotionFailures(copy)).toHaveLength(1);
+      expect(calmChurnFailures(copy)).toHaveLength(1);
+    }
+    expect(departureResortCredits(record([swap, swap], 2)).size).toBe(0);
+  });
+
+  it('rejects no-op moves and repeated moves of one key inside a batch', () => {
+    for (const action of [
+      (line: HTMLElement) => { line.append(line.lastElementChild!); line.append(line.lastElementChild!); },
+      (line: HTMLElement) => { swap(line); swap(line); },
+      (line: HTMLElement) => { swap(line); swap(line); swap(line); },
+    ]) {
+      const r = record([action]);
+      expect(departureResortCredits(r).size).toBe(0);
+      expect(calmMotionFailures(r)).toHaveLength(1);
+      expect(calmChurnFailures(r)).toHaveLength(1);
+    }
+    const mixed = record([(line) => { line.append(line.lastElementChild!); swap(line); }]);
+    // happy-dom omits siblings on addition records. Native append of the existing last cell has the same
+    // previous sibling ("6") as its removal; supply that native evidence for the helper's no-op check.
+    mixed.detail!.records[1]!.previous = '|dep:6';
+    expect(mixed.mutations).toBe(4);
+    expect(departureResortCredits(mixed).size).toBe(2); // only the real change, not the same-position append
+    expect(calmMotionFailures(mixed)).toEqual([]);
+  });
+
+  it('keeps rebuilt-node failures strict even when other re-sorts qualify', () => {
+    const r = record([swap, swap, (line) => { line.children[2]!.replaceWith(line.children[2]!.cloneNode(true)); }]);
+    expect(r.rebuilt).toEqual(['|dep:17']);
+    expect(calmMotionFailures(r)).toEqual([expect.stringContaining('re-created: |dep:17')]);
+    expect(calmChurnFailures(r)).toEqual([expect.stringContaining('re-created: |dep:17')]);
+  });
+
+  it('does not double-credit reveal pairs or replenish the two-sort allowance after them', () => {
+    const r = record([
+      (line) => { swap(line); line.parentElement!.dataset.reveal = 'page:9'; },
+      (line) => { swap(line); delete line.parentElement!.dataset.reveal; },
+      swap, swap,
+    ]);
+    expect(calmMotionFailures(r)).toEqual([expect.stringContaining('outside its 2 reveal pair(s)')]);
+    expect(calmChurnFailures(r)).toEqual([expect.stringContaining('outside its 2 reveal pair(s)')]);
+    const over = record([(line) => { swap(line); extra(line, 5); line.parentElement!.dataset.reveal = 'page:9'; }]);
+    expect(calmMotionFailures(over)).toEqual([expect.stringContaining('7 structural mutations under the timeline across the reveal')]);
+    expect(calmChurnFailures(over)).toEqual([expect.stringContaining('7 structural mutations beyond row turnovers')]);
+  });
+});
 
 // --- the probe contract and the numbers --------------------------------------------------------
 describe('the wall probes and numbers', () => {

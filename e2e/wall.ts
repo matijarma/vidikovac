@@ -999,6 +999,8 @@ export function sampleFailures(s: WallSample): string[] {
 export const IDLE_MINUTE_MS = 60_000;
 /** Structural mutations allowed in that minute: a departure leaving at the top and one row entering (principle 7). */
 export const IDLE_MUTATIONS_MAX = 2;
+/** Reveal run decision 11: only the first two proven departure re-sorts in a window are turnover-class. */
+export const DEPARTURE_RESORTS_MAX = 2;
 /**
  * The same minute where the departure's leaving gives a row the fit had left out its room back (U0 step 7: a dropped row
  * returns once a later change leaves room): the departure leaving, the next departure entering and that one row, all
@@ -1066,7 +1068,7 @@ export interface CalmMotionReading {
   /**
    * The evidence behind the counts, so a failing minute can be read afterwards (lane v-observe6): the row keys at
    * every reading that bounded a pair, and every structural record with its nodes' keys and what each node did.
-   * Informational only: no rule reads it. Absent in a reading recorded before it existed.
+   * Read by the restore and bounded departure re-sort exceptions. Absent in older recordings.
    */
   detail?: CalmMotionDetail;
 }
@@ -1079,12 +1081,23 @@ export interface CalmMotionReading {
  * another node with its key stands (a remove).
  */
 export type CalmMutationKind = 'add' | 'remove' | 'move' | 're-create';
-export interface CalmMutationNode { key: string | null; tag: string; kind: CalmMutationKind }
+export interface CalmMutationNode {
+  key: string | null; tag: string; kind: CalmMutationKind;
+  /** Additive exact-object and departures-line membership evidence; absent in older recordings. */
+  node?: number; departureCell?: boolean;
+}
 export interface CalmMutationRecord {
   /** Page clock (Date.now()) when the observer callback saw the record. */
   at: number;
   /** The reading pair it fell in: 0 between the window's start and its first mark, and so on. */
   seg: number;
+  /** One observer delivery/takeRecords call. Older recordings group by seg and at instead. */
+  batch?: number;
+  /** Sibling keys at the mutation, for rejecting same-position remove/add no-ops. */
+  previous?: string | null;
+  next?: string | null;
+  /** The first structural record of a batch carries the line order before/after that batch. */
+  departureOrder?: { before: string[]; after: string[] };
   adds: CalmMutationNode[];
   removes: CalmMutationNode[];
 }
@@ -1116,6 +1129,14 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
   // Every element node this window has seen under the root, so an add can tell a node put back (a move) from a new one.
   const seen = new WeakSet<Node>(root ? [root, ...Array.from(root.querySelectorAll('*'))] : []);
   const tagOf = (n: Node): string => ((n as Element).tagName || '').toLowerCase();
+  const nodeIds = new WeakMap<Node, number>();
+  let nextNodeId = 0;
+  const identity = (n: Node): number => {
+    if (!nodeIds.has(n)) nodeIds.set(n, nextNodeId++);
+    return nodeIds.get(n)!;
+  };
+  const departureOrder = (): string[] => Array.from(document.querySelector(spec.line)?.querySelectorAll<HTMLElement>('.k-dep-cell[data-cell]') ?? [])
+    .map(keyOf).filter((key): key is string => key !== null);
   const standing = (key: string): boolean => Array.from(document.querySelectorAll<HTMLElement>(spec.row)).some((el) => keyOf(el) === key);
   /** The reveal drawn now (R2): the list's data-reveal and the line's, "" each where none. */
   const revealNow = (): string => `${document.querySelector<HTMLElement>(spec.list)?.dataset?.reveal ?? ''}|${document.querySelector<HTMLElement>(spec.line)?.dataset?.reveal ?? ''}`;
@@ -1133,7 +1154,9 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
     /** The reveal drawn at each reading (R2): a pair across which it changes is a reveal pair. */
     markReveals: [revealNow()] as string[],
     /** The same records with what each node did (CalmMotionDetail), capped. */
-    log: [] as { at: number; seg: number; adds: { key: string | null; tag: string; kind: string }[]; removes: { key: string | null; tag: string; kind: string }[] }[],
+    log: [] as CalmMutationRecord[],
+    batch: 0,
+    departureOrder: departureOrder(),
     dropped: 0,
     observer: null as MutationObserver | null,
     mark(): void {
@@ -1144,6 +1167,12 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
       state.markReveals.push(revealNow());
     },
     count(records: MutationRecord[]): void {
+      if (records.length === 0) return;
+      const batch = state.batch++;
+      const at = Date.now();
+      const order = { before: state.departureOrder, after: departureOrder() };
+      state.departureOrder = order.after;
+      let first = true;
       for (const m of records) {
         if (m.type !== 'childList') continue;
         const adds = Array.from(m.addedNodes).filter((n) => n.nodeType === 1);
@@ -1153,20 +1182,27 @@ export const CALM_MOTION_START_IN_PAGE = (spec: CalmMotionSpec): number => {
           const seg = state.marks.length - 1;
           state.records.push({ adds: adds.map(nodeKey), removes: removes.map(nodeKey), seg });
           const previous = state.marks[seg] ?? [];
+          const evidence = (n: Node): { node: number; departureCell: boolean } => ({
+            node: identity(n),
+            departureCell: m.target === document.querySelector(spec.line) && (n as Element).matches('span.k-dep-cell[data-cell]'),
+          });
           const added = adds.map((n) => {
             const key = nodeKey(n);
-            const kind = seen.has(n) ? 'move' : key !== null && previous.includes(key) ? 're-create' : 'add';
+            const kind: CalmMutationKind = seen.has(n) ? 'move' : key !== null && previous.includes(key) ? 're-create' : 'add';
             seen.add(n);
             if ((n as Element).querySelectorAll) for (const d of Array.from((n as Element).querySelectorAll('*'))) seen.add(d);
-            return { key, tag: tagOf(n), kind };
+            return { key, tag: tagOf(n), kind, ...evidence(n) };
           });
           const removed = removes.map((n) => {
             const key = nodeKey(n);
-            const kind = n.isConnected ? 'move' : key !== null && standing(key) ? 're-create' : 'remove';
-            return { key, tag: tagOf(n), kind };
+            const kind: CalmMutationKind = n.isConnected ? 'move' : key !== null && standing(key) ? 're-create' : 'remove';
+            return { key, tag: tagOf(n), kind, ...evidence(n) };
           });
-          if (state.log.length < spec.detailMax) state.log.push({ at: Date.now(), seg, adds: added, removes: removed });
+          if (state.log.length < spec.detailMax) state.log.push({ at, seg, batch,
+            previous: m.previousSibling ? nodeKey(m.previousSibling) : null, next: m.nextSibling ? nodeKey(m.nextSibling) : null,
+            ...(first ? { departureOrder: order } : {}), adds: added, removes: removed });
           else state.dropped++;
+          first = false;
         } else if (m.addedNodes.length || m.removedNodes.length) state.textSwaps++;
       }
     },
@@ -1298,6 +1334,63 @@ const departureKey = (key: string | null): boolean => kindOfKey(key) === 'depart
 const kindCount = (fitDropped: string | null | undefined, kind: string): number => (fitDroppedOf(fitDropped ?? undefined) ?? []).filter((k) => k === kind).length;
 
 /**
+ * Decision 11: indexes of records belonging to the first two proven re-sorts. Raw counts stay untouched.
+ * Only paired moves of kept departure spans qualify. Missing/truncated evidence fails closed. A reveal pair
+ * consumes its place in the two-sort allowance but gets no second credit against its own six-record budget.
+ */
+export function departureResortCredits(r: CalmMotionReading, revealSegs: readonly number[] = []): ReadonlySet<number> {
+  const credited = new Set<number>();
+  const d = r.detail;
+  if (!d || d.dropped !== 0 || d.records.length !== r.mutations) return credited;
+  const isCell = (key: string | null): key is string => key !== null && key.startsWith('|dep:');
+  const invalid = new Set([...r.rebuilt, ...d.records.flatMap((record) => [...record.adds, ...record.removes])
+    .filter((node) => node.kind === 're-create').map((node) => node.key)]);
+  const groups = new Map<string, number[]>();
+  d.records.forEach((record, index) => {
+    const key = `${record.seg}|${record.batch === undefined ? `t:${record.at}` : `b:${record.batch}`}`;
+    groups.set(key, [...(groups.get(key) ?? []), index]);
+  });
+  let resorts = 0;
+  for (const indexes of groups.values()) {
+    const first = d.records[indexes[0]!]!;
+    const from = d.marks[first.seg], to = d.marks[first.seg + 1];
+    if (!from || !to || !from.keys.includes('departures|departures') || !to.keys.includes('departures|departures')) continue;
+    const recordedOrder = indexes.map((index) => d.records[index]!.departureOrder).find(Boolean);
+    // Without per-batch orders, multiple deliveries inside one reading pair cannot prove which changed order.
+    if (!recordedOrder && [...groups.values()].filter((group) => d.records[group[0]!]!.seg === first.seg).length !== 1) continue;
+    const order = recordedOrder ?? { before: from.keys.filter(isCell), after: to.keys.filter(isCell) };
+    const { before, after } = order;
+    if (before.length < 2 || before.length > DEPARTURES_MAX || before.length !== after.length
+      || new Set(before).size !== before.length || new Set(after).size !== after.length
+      || !before.every((key) => after.includes(key)) || before.every((key, i) => key === after[i])) continue;
+    const eligible = (node: CalmMutationNode): boolean => node.tag === 'span' && node.kind === 'move'
+      && isCell(node.key) && node.departureCell !== false && !invalid.has(node.key)
+      && before.includes(node.key) && after.includes(node.key) && from.keys.includes(node.key) && to.keys.includes(node.key);
+    const moves = indexes.filter((index) => {
+      const record = d.records[index]!;
+      return record.adds.length + record.removes.length > 0 && [...record.adds, ...record.removes].every(eligible);
+    });
+    const adds = moves.flatMap((index) => d.records[index]!.adds);
+    const removes = moves.flatMap((index) => d.records[index]!.removes);
+    // More than one move of a key in a batch is flapping, not a single re-sort.
+    if (!adds.length || adds.length !== removes.length || new Set(adds.map((n) => n.key)).size !== adds.length
+      || new Set(removes.map((n) => n.key)).size !== removes.length
+      || !adds.every((add) => removes.some((remove) => add.key === remove.key && add.node === remove.node))) continue;
+    const changed = new Set(adds.filter((add) => {
+      const inserted = moves.map((index) => d.records[index]!).find((record) => record.adds.includes(add))!;
+      const removed = moves.map((index) => d.records[index]!).find((record) => record.removes.some((node) => node.key === add.key))!;
+      return inserted.previous === undefined || removed.previous === undefined
+        || inserted.previous !== removed.previous || inserted.next !== removed.next;
+    }).map((node) => node.key));
+    const changedRecords = moves.filter((index) => [...d.records[index]!.adds, ...d.records[index]!.removes].every((node) => changed.has(node.key)));
+    if (changedRecords.length === 0) continue;
+    resorts++;
+    if (resorts <= DEPARTURE_RESORTS_MAX && !revealSegs.includes(first.seg)) for (const index of changedRecords) credited.add(index);
+  }
+  return credited;
+}
+
+/**
  * The idle minute is one departure's beat with a restored row (IDLE_MUTATIONS_RESTORE_MAX): exactly three records, no
  * churn, all between the same two readings, one removing the departure that left and two each adding one row that
  * entered, one of them a departure (the next); and one of the two a row the fit had left out, its kind in the list's
@@ -1329,18 +1422,24 @@ export function calmMotionFailures(r: CalmMotionReading): string[] {
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
   const pairs = revealPairs(r);
+  const credit = departureResortCredits(r, pairs);
   if (pairs.length) {
     // R2: a reveal's start or return may spend REVEAL_MUTATIONS_MAX records; the rest of the minute keeps its two.
     out.push(...revealPairFailures(r, pairs, r.recordsBySeg!, 'structural mutations'));
     const inPairs = new Set(pairs);
-    const rest = r.mutations - pairs.reduce((n, seg) => n + r.recordsBySeg![seg]!, 0);
+    const rest = r.mutations - pairs.reduce((n, seg) => n + r.recordsBySeg![seg]!, 0) - credit.size;
     const outside: CalmMotionReading = {
       ...r, mutations: rest,
-      churn: r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0),
-      detail: { ...r.detail!, records: r.detail!.records.filter((x) => !inPairs.has(x.seg)) },
+      churn: r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0) - credit.size,
+      detail: { ...r.detail!, records: r.detail!.records.filter((x, index) => !inPairs.has(x.seg) && !credit.has(index)) },
     };
     if (rest > IDLE_MUTATIONS_MAX && !calmRestoreBeat(outside)) out.push(`${rest} structural mutations under the timeline in an idle minute outside its ${pairs.length} reveal pair(s) (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
-  } else if (r.mutations > IDLE_MUTATIONS_MAX && !calmRestoreBeat(r)) out.push(`${r.mutations} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  } else {
+    const rest = r.mutations - credit.size;
+    const adjusted = credit.size ? { ...r, mutations: rest, churn: r.churn - credit.size,
+      detail: { ...r.detail!, records: r.detail!.records.filter((_, index) => !credit.has(index)) } } : r;
+    if (rest > IDLE_MUTATIONS_MAX && !calmRestoreBeat(adjusted)) out.push(`${rest} structural mutations under the timeline in an idle minute (target ≤ ${IDLE_MUTATIONS_MAX}: a departure leaving and one row entering; left ${r.left.length}, entered ${r.entered.length})`);
+  }
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
@@ -1356,11 +1455,12 @@ export function calmChurnFailures(r: CalmMotionReading): string[] {
   if (b.unmeasurable) return [b.unmeasurable];
   const out: string[] = [];
   const pairs = revealPairs(r);
+  const credit = departureResortCredits(r, pairs).size;
   if (pairs.length) {
     out.push(...revealPairFailures(r, pairs, r.churnBySeg!, 'structural mutations beyond row turnovers'));
-    const rest = r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0);
+    const rest = r.churn - pairs.reduce((n, seg) => n + r.churnBySeg![seg]!, 0) - credit;
     if (rest > IDLE_MUTATIONS_MAX) out.push(`${rest} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute outside its ${pairs.length} reveal pair(s) (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
-  } else if (r.churn > IDLE_MUTATIONS_MAX) out.push(`${r.churn} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
+  } else if (r.churn - credit > IDLE_MUTATIONS_MAX) out.push(`${r.churn - credit} structural mutations under the timeline beyond ${r.turnovers} row turnover(s) in a minute (target ≤ ${IDLE_MUTATIONS_MAX}; ${r.mutations} records in all, left ${r.left.length}, entered ${r.entered.length})`);
   if (b.rebuilt) out.push(b.rebuilt);
   return out;
 }
