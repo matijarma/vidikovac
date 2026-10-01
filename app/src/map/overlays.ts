@@ -49,6 +49,8 @@ export const SOURCES = Object.freeze({
   bodies: 'bodies',
   screenStop: 'screen-stop',
   outline: 'outline',
+  /** The comparison day's positions on /snimka/ (city-map.ts setGhosts): added only when a page asks for it. */
+  ghosts: 'ghosts',
 });
 
 export const LAYERS = Object.freeze({
@@ -84,6 +86,8 @@ export const LAYERS = Object.freeze({
   vehicleSelectedNose: 'vehicle-selected-nose',
   vehicleSelected: 'vehicle-selected',
   selectionRing: 'selection-ring',
+  /** One grey circle per ghost, under the vehicle marks (ghostLayer below); never in overlayLayers. */
+  ghosts: 'ghosts',
 });
 
 /** Layers drawn under the basemap's own labels, so street names still read over the network. */
@@ -97,6 +101,37 @@ export const BELOW_LABELS: ReadonlySet<string> = new Set([
  *  one more closed road beside the closure red. */
 export const OUTLINE_DASH: readonly number[] = Object.freeze([3, 3]);
 export const OUTLINE_WIDTH_PX = 2;
+
+/** A ghost's radius in CSS px before the surface's symbol scale: a little under a vehicle dot at city zoom. */
+export const GHOST_RADIUS_PX = 3.5;
+export const GHOST_OPACITY = 0.7;
+
+/**
+ * The ghost layer of /snimka/: the comparison day's vehicles as plain grey
+ * discs in the network's own neutral (`rail`, the same in both palettes),
+ * under every vehicle mark. One layer, one source (SOURCES.ghosts), no label
+ * and no heading: a ghost is a position, never a vehicle anyone can read a
+ * line off. Not part of overlayLayers, so a surface that never calls
+ * CityMapHandle.setGhosts gets exactly the style it always had.
+ */
+export function ghostLayer(p: OverlayPalette, scale = 1): StyleLayerLike {
+  return {
+    id: LAYERS.ghosts,
+    type: 'circle',
+    source: SOURCES.ghosts,
+    paint: { 'circle-radius': GHOST_RADIUS_PX * scale, 'circle-color': p.rail, 'circle-opacity': GHOST_OPACITY },
+  };
+}
+
+/** [lon, lat] points as the ghost source's FeatureCollection; a point that is not two finite numbers is dropped. */
+export function ghostsToGeoJson(points: readonly (readonly [number, number])[]): { type: 'FeatureCollection'; features: { type: 'Feature'; geometry: { type: 'Point'; coordinates: [number, number] }; properties: Record<string, never> }[] } {
+  const features: { type: 'Feature'; geometry: { type: 'Point'; coordinates: [number, number] }; properties: Record<string, never> }[] = [];
+  for (const [lon, lat] of points) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: {} });
+  }
+  return { type: 'FeatureCollection', features };
+}
 
 /** Pills appear (dots alone below): just under basemap.ts's CITY_ZOOM, so the opening view and one step out still read numbers. */
 export const PILL_ZOOM = 12.5;
